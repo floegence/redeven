@@ -593,6 +593,216 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	return err
 }
 
+// UpsertProjectedThread stores a host-owned thread projection without assuming
+// the normal user-created thread lifecycle.
+func (s *Store) UpsertProjectedThread(ctx context.Context, t Thread) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	t.ThreadID = strings.TrimSpace(t.ThreadID)
+	t.EndpointID = strings.TrimSpace(t.EndpointID)
+	t.NamespacePublicID = strings.TrimSpace(t.NamespacePublicID)
+	t.ModelID = strings.TrimSpace(t.ModelID)
+	t.ExecutionMode = normalizeExecutionMode(t.ExecutionMode)
+	t.WorkingDir = strings.TrimSpace(t.WorkingDir)
+	t.Title = strings.TrimSpace(t.Title)
+	t.TitleSource = normalizeThreadTitleSource(t.TitleSource)
+	if t.TitleSource == "" && t.Title != "" {
+		t.TitleSource = ThreadTitleSourceUser
+	}
+	t.TitleInputMessageID = strings.TrimSpace(t.TitleInputMessageID)
+	t.TitleModelID = strings.TrimSpace(t.TitleModelID)
+	t.TitlePromptVersion = strings.TrimSpace(t.TitlePromptVersion)
+	runStatus, err := canonicalRunStatusForCreate(t.RunStatus)
+	if err != nil {
+		return err
+	}
+	t.RunStatus = runStatus
+	t.RunErrorCode = strings.TrimSpace(t.RunErrorCode)
+	t.RunError = strings.TrimSpace(t.RunError)
+	t.WaitingUserInputJSON = strings.TrimSpace(t.WaitingUserInputJSON)
+	t.LastContextRunID = strings.TrimSpace(t.LastContextRunID)
+	t.CreatedByUserPublicID = strings.TrimSpace(t.CreatedByUserPublicID)
+	t.CreatedByUserEmail = strings.TrimSpace(t.CreatedByUserEmail)
+	t.UpdatedByUserPublicID = strings.TrimSpace(t.UpdatedByUserPublicID)
+	t.UpdatedByUserEmail = strings.TrimSpace(t.UpdatedByUserEmail)
+	t.LastMessagePreview = strings.TrimSpace(t.LastMessagePreview)
+	if t.ThreadID == "" || t.EndpointID == "" {
+		return errors.New("invalid thread")
+	}
+	now := time.Now().UnixMilli()
+	if t.CreatedAtUnixMs <= 0 {
+		t.CreatedAtUnixMs = now
+	}
+	if t.UpdatedAtUnixMs <= 0 {
+		t.UpdatedAtUnixMs = t.CreatedAtUnixMs
+	}
+	if t.RunUpdatedAtUnixMs < 0 {
+		t.RunUpdatedAtUnixMs = 0
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var existing Thread
+	err = scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`
+SELECT
+%s
+FROM ai_threads
+WHERE thread_id = ?
+`, threadSelectColumnsSQL), t.ThreadID), &existing)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO ai_threads(
+  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
+  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
+  run_status, run_updated_at_unix_ms, run_error_code, run_error,
+  waiting_user_input_json, last_context_run_id,
+  created_by_user_public_id, created_by_user_email,
+  updated_by_user_public_id, updated_by_user_email,
+  created_at_unix_ms, updated_at_unix_ms,
+  last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`,
+			t.ThreadID,
+			t.EndpointID,
+			t.NamespacePublicID,
+			t.ModelID,
+			boolToInt(t.ModelLocked),
+			t.ExecutionMode,
+			t.WorkingDir,
+			t.Title,
+			t.TitleSource,
+			t.TitleGeneratedAtUnixMs,
+			t.TitleInputMessageID,
+			t.TitleModelID,
+			t.TitlePromptVersion,
+			t.RunStatus,
+			t.RunUpdatedAtUnixMs,
+			t.RunErrorCode,
+			t.RunError,
+			t.WaitingUserInputJSON,
+			t.LastContextRunID,
+			t.CreatedByUserPublicID,
+			t.CreatedByUserEmail,
+			t.UpdatedByUserPublicID,
+			t.UpdatedByUserEmail,
+			t.CreatedAtUnixMs,
+			t.UpdatedAtUnixMs,
+			t.LastMessageAtUnixMs,
+			t.LastMessagePreview,
+			nonNegativeInt64(t.PinnedAtUnixMs),
+		); err != nil {
+			return err
+		}
+		return tx.Commit()
+	}
+	if existing.EndpointID != t.EndpointID {
+		return errors.New("thread belongs to a different endpoint")
+	}
+	if t.UpdatedAtUnixMs < existing.UpdatedAtUnixMs {
+		t.UpdatedAtUnixMs = existing.UpdatedAtUnixMs
+	}
+	if t.LastMessageAtUnixMs < existing.LastMessageAtUnixMs {
+		t.LastMessageAtUnixMs = existing.LastMessageAtUnixMs
+		t.LastMessagePreview = existing.LastMessagePreview
+	} else if t.LastMessageAtUnixMs == existing.LastMessageAtUnixMs && t.LastMessagePreview == "" {
+		t.LastMessagePreview = existing.LastMessagePreview
+	}
+	if projectedThreadEqual(existing, t) {
+		return tx.Commit()
+	}
+	_, err = tx.ExecContext(ctx, `
+UPDATE ai_threads
+SET namespace_public_id = ?,
+    model_id = ?,
+    model_locked = ?,
+    execution_mode = ?,
+    working_dir = ?,
+    title = ?,
+    title_source = ?,
+    title_generated_at_unix_ms = ?,
+    title_input_message_id = ?,
+    title_model_id = ?,
+    title_prompt_version = ?,
+    run_status = ?,
+    run_updated_at_unix_ms = ?,
+    run_error_code = ?,
+    run_error = ?,
+    waiting_user_input_json = ?,
+    last_context_run_id = ?,
+    updated_by_user_public_id = ?,
+    updated_by_user_email = ?,
+    updated_at_unix_ms = ?,
+    last_message_at_unix_ms = ?,
+    last_message_preview = ?
+WHERE endpoint_id = ? AND thread_id = ?
+`,
+		t.NamespacePublicID,
+		t.ModelID,
+		boolToInt(t.ModelLocked),
+		t.ExecutionMode,
+		t.WorkingDir,
+		t.Title,
+		t.TitleSource,
+		t.TitleGeneratedAtUnixMs,
+		t.TitleInputMessageID,
+		t.TitleModelID,
+		t.TitlePromptVersion,
+		t.RunStatus,
+		t.RunUpdatedAtUnixMs,
+		t.RunErrorCode,
+		t.RunError,
+		t.WaitingUserInputJSON,
+		t.LastContextRunID,
+		t.UpdatedByUserPublicID,
+		t.UpdatedByUserEmail,
+		t.UpdatedAtUnixMs,
+		t.LastMessageAtUnixMs,
+		t.LastMessagePreview,
+		t.EndpointID,
+		t.ThreadID,
+	)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func projectedThreadEqual(existing Thread, next Thread) bool {
+	return existing.NamespacePublicID == next.NamespacePublicID &&
+		existing.ModelID == next.ModelID &&
+		existing.ModelLocked == next.ModelLocked &&
+		existing.ExecutionMode == next.ExecutionMode &&
+		existing.WorkingDir == next.WorkingDir &&
+		existing.Title == next.Title &&
+		existing.TitleSource == next.TitleSource &&
+		existing.TitleGeneratedAtUnixMs == next.TitleGeneratedAtUnixMs &&
+		existing.TitleInputMessageID == next.TitleInputMessageID &&
+		existing.TitleModelID == next.TitleModelID &&
+		existing.TitlePromptVersion == next.TitlePromptVersion &&
+		existing.RunStatus == next.RunStatus &&
+		existing.RunUpdatedAtUnixMs == next.RunUpdatedAtUnixMs &&
+		existing.RunErrorCode == next.RunErrorCode &&
+		existing.RunError == next.RunError &&
+		existing.WaitingUserInputJSON == next.WaitingUserInputJSON &&
+		existing.LastContextRunID == next.LastContextRunID &&
+		existing.UpdatedByUserPublicID == next.UpdatedByUserPublicID &&
+		existing.UpdatedByUserEmail == next.UpdatedByUserEmail &&
+		existing.UpdatedAtUnixMs == next.UpdatedAtUnixMs &&
+		existing.LastMessageAtUnixMs == next.LastMessageAtUnixMs &&
+		existing.LastMessagePreview == next.LastMessagePreview
+}
+
 func (s *Store) UpdateThreadModelID(ctx context.Context, endpointID string, threadID string, modelID string) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
@@ -1408,6 +1618,166 @@ func (s *Store) AppendMessage(ctx context.Context, endpointID string, threadID s
 		return 0, err
 	}
 
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return rowID, nil
+}
+
+// UpsertProjectedMessage stores or replaces one host-owned transcript message
+// identified by endpoint, thread, and message id.
+func (s *Store) UpsertProjectedMessage(ctx context.Context, endpointID string, threadID string, m Message, updatedByID string, updatedByEmail string) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return 0, errors.New("invalid request")
+	}
+
+	m.ThreadID = strings.TrimSpace(m.ThreadID)
+	if m.ThreadID == "" {
+		m.ThreadID = threadID
+	}
+	m.EndpointID = strings.TrimSpace(m.EndpointID)
+	if m.EndpointID == "" {
+		m.EndpointID = endpointID
+	}
+	m.MessageID = strings.TrimSpace(m.MessageID)
+	m.Role = strings.TrimSpace(m.Role)
+	m.Status = strings.TrimSpace(m.Status)
+	m.AuthorUserPublicID = strings.TrimSpace(m.AuthorUserPublicID)
+	m.AuthorUserEmail = strings.TrimSpace(m.AuthorUserEmail)
+	m.TextContent = strings.TrimSpace(m.TextContent)
+	m.MessageJSON = strings.TrimSpace(m.MessageJSON)
+	if m.MessageID == "" || m.Role == "" || m.Status == "" || m.MessageJSON == "" {
+		return 0, errors.New("invalid message")
+	}
+	now := time.Now().UnixMilli()
+	if m.CreatedAtUnixMs <= 0 {
+		m.CreatedAtUnixMs = now
+	}
+	if m.UpdatedAtUnixMs <= 0 {
+		m.UpdatedAtUnixMs = m.CreatedAtUnixMs
+	}
+
+	preview := buildPreview(m.Role, m.TextContent, m.MessageJSON)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var rowID int64
+	var existing Message
+	err = tx.QueryRowContext(ctx, `
+SELECT id, role, author_user_public_id, author_user_email, status, created_at_unix_ms, updated_at_unix_ms, text_content, message_json
+FROM transcript_messages
+WHERE endpoint_id = ? AND thread_id = ? AND message_id = ?
+`, endpointID, threadID, m.MessageID).Scan(
+		&rowID,
+		&existing.Role,
+		&existing.AuthorUserPublicID,
+		&existing.AuthorUserEmail,
+		&existing.Status,
+		&existing.CreatedAtUnixMs,
+		&existing.UpdatedAtUnixMs,
+		&existing.TextContent,
+		&existing.MessageJSON,
+	)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		rowID, err = appendMessageTx(ctx, tx, endpointID, threadID, m, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), preview)
+		if err != nil {
+			return 0, err
+		}
+	} else {
+		if existing.Role == m.Role &&
+			existing.AuthorUserPublicID == m.AuthorUserPublicID &&
+			existing.AuthorUserEmail == m.AuthorUserEmail &&
+			existing.Status == m.Status &&
+			existing.CreatedAtUnixMs == m.CreatedAtUnixMs &&
+			existing.UpdatedAtUnixMs == m.UpdatedAtUnixMs &&
+			existing.TextContent == m.TextContent &&
+			existing.MessageJSON == m.MessageJSON {
+			if err := tx.Commit(); err != nil {
+				return 0, err
+			}
+			return rowID, nil
+		}
+		_, err = tx.ExecContext(ctx, `
+UPDATE transcript_messages
+SET role = ?,
+    author_user_public_id = ?,
+    author_user_email = ?,
+    status = ?,
+    created_at_unix_ms = ?,
+    updated_at_unix_ms = ?,
+    text_content = ?,
+    message_json = ?
+WHERE endpoint_id = ? AND thread_id = ? AND message_id = ?
+`,
+			m.Role,
+			m.AuthorUserPublicID,
+			m.AuthorUserEmail,
+			m.Status,
+			m.CreatedAtUnixMs,
+			m.UpdatedAtUnixMs,
+			m.TextContent,
+			m.MessageJSON,
+			endpointID,
+			threadID,
+			m.MessageID,
+		)
+		if err != nil {
+			return 0, err
+		}
+		var currentUpdatedAt int64
+		var currentLastMessageAt int64
+		var currentPreview string
+		if err := tx.QueryRowContext(ctx, `
+SELECT updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
+FROM ai_threads
+WHERE endpoint_id = ? AND thread_id = ?
+`, endpointID, threadID).Scan(&currentUpdatedAt, &currentLastMessageAt, &currentPreview); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return 0, sql.ErrNoRows
+			}
+			return 0, err
+		}
+		nextLastMessageAt := currentLastMessageAt
+		nextPreview := strings.TrimSpace(currentPreview)
+		if m.CreatedAtUnixMs >= currentLastMessageAt {
+			nextLastMessageAt = m.CreatedAtUnixMs
+			nextPreview = preview
+		}
+		_, err = tx.ExecContext(ctx, `
+UPDATE ai_threads
+SET updated_at_unix_ms = ?,
+    updated_by_user_public_id = ?,
+    updated_by_user_email = ?,
+    last_message_at_unix_ms = ?,
+    last_message_preview = ?
+WHERE endpoint_id = ? AND thread_id = ?
+`,
+			maxInt64(m.UpdatedAtUnixMs, currentUpdatedAt),
+			strings.TrimSpace(updatedByID),
+			strings.TrimSpace(updatedByEmail),
+			nextLastMessageAt,
+			nextPreview,
+			endpointID,
+			threadID,
+		)
+		if err != nil {
+			return 0, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}

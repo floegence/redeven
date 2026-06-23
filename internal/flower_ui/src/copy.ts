@@ -203,6 +203,32 @@ export type FlowerProviderDialogCopy = Readonly<{
   effectiveContextPercent: string;
 }>;
 
+export type FlowerSubagentsCopy = Readonly<{
+  title: string;
+  description: string;
+  openLabel: string;
+  openThread: string;
+  backToChat: string;
+  backToParent: string;
+  emptyTitle: string;
+  emptyDescription: string;
+  activeLabel: string;
+  completedLabel: string;
+  threadIDLabel: string;
+  lastMessageLabel: string;
+  unavailableThread: string;
+  readOnlyComposerLabel: string;
+  statusLabels: Readonly<Record<'queued' | 'running' | 'waiting_input' | 'completed' | 'failed' | 'canceled' | 'timed_out' | 'unknown', string>>;
+  typeLabels: Readonly<Record<'explore' | 'worker' | 'reviewer' | 'unknown', string>>;
+  activity: Readonly<{
+    actions: Readonly<Record<'spawn' | 'send_input' | 'wait' | 'list' | 'inspect' | 'close' | 'close_all' | 'unknown', string>>;
+    titleVerbs: Readonly<Record<'spawn' | 'send_input' | 'wait' | 'list' | 'inspect' | 'close' | 'close_all', string>>;
+    labels: Readonly<Record<'approval' | 'action' | 'status' | 'thread' | 'subagent' | 'task' | 'title' | 'profile' | 'target' | 'targets' | 'ids' | 'accepted' | 'closed' | 'affected' | 'agents' | 'total' | 'runningOnly' | 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'canceled' | 'timedOut' | 'requested' | 'found' | 'missing' | 'missingIds' | 'lastMessage' | 'waitingPrompt' | 'canSendInput' | 'canInterrupt' | 'canClose' | 'runtime' | 'summary' | 'details' | 'errorCode' | 'errorMessage' | 'retryable', string>>;
+    values: Readonly<Record<'yes' | 'no', string>>;
+    agentsCount: (count: string) => string;
+  }>;
+}>;
+
 export type FlowerSurfaceCopy = Readonly<{
   chat: Readonly<{
     loadingSettings: string;
@@ -289,6 +315,7 @@ export type FlowerSurfaceCopy = Readonly<{
     toolApprovalReject: string;
     toolApprovalSubmitting: string;
     toolApprovalUnavailable: string;
+    readOnlyComposerLabel?: string;
     inputRequestTitle?: string;
     inputRequestDescription?: string;
     inputRequestSubmit?: string;
@@ -305,6 +332,7 @@ export type FlowerSurfaceCopy = Readonly<{
   threadList: FlowerThreadListCopy;
   emptyState: FlowerEmptyStateCopy;
   settings: FlowerSettingsCopy;
+  subagents?: FlowerSubagentsCopy;
 }>;
 
 export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
@@ -406,6 +434,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolApprovalReject: 'Reject',
     toolApprovalSubmitting: 'Submitting...',
     toolApprovalUnavailable: 'Approval is no longer available.',
+    readOnlyComposerLabel: 'Read only · Managed by parent thread',
     inputRequestTitle: 'Waiting for your reply',
     inputRequestDescription: 'Reply in the composer to continue this conversation.',
     inputRequestSubmit: 'Continue',
@@ -495,6 +524,105 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     ],
     sendKeyLabel: 'send',
     newLineKeyLabel: 'new line',
+  },
+  subagents: {
+    title: 'Subagents',
+    description: 'Delegated child threads created by the current Flower conversation.',
+    openLabel: 'Open subagents',
+    openThread: 'Open child thread',
+    backToChat: 'Back to chat',
+    backToParent: 'Back to parent thread',
+    emptyTitle: 'No subagents yet',
+    emptyDescription: 'When Flower delegates work, child threads will appear here with status and handoff details.',
+    activeLabel: 'Active',
+    completedLabel: 'Ended',
+    threadIDLabel: 'Thread',
+    lastMessageLabel: 'Latest handoff',
+    unavailableThread: 'Thread not available',
+    readOnlyComposerLabel: 'Read only · Managed by parent thread',
+    statusLabels: {
+      queued: 'Queued',
+      running: 'Running',
+      waiting_input: 'Waiting input',
+      completed: 'Completed',
+      failed: 'Failed',
+      canceled: 'Canceled',
+      timed_out: 'Timed out',
+      unknown: 'Unknown',
+    },
+    typeLabels: {
+      explore: 'Explore',
+      worker: 'Worker',
+      reviewer: 'Reviewer',
+      unknown: 'Subagent',
+    },
+    activity: {
+      actions: {
+        spawn: 'Spawn subagent',
+        send_input: 'Steer subagent',
+        wait: 'Wait for subagents',
+        list: 'List subagents',
+        inspect: 'Inspect subagents',
+        close: 'Close subagent',
+        close_all: 'Close subagents',
+        unknown: 'Subagents',
+      },
+      titleVerbs: {
+        spawn: 'Spawn',
+        send_input: 'Steer',
+        wait: 'Wait',
+        list: 'List',
+        inspect: 'Inspect',
+        close: 'Close',
+        close_all: 'Close',
+      },
+      labels: {
+        approval: 'approval',
+        action: 'action',
+        status: 'result status',
+        thread: 'thread',
+        subagent: 'subagent',
+        task: 'task',
+        title: 'title',
+        profile: 'profile',
+        target: 'target',
+        targets: 'targets',
+        ids: 'ids',
+        accepted: 'accepted',
+        closed: 'closed',
+        affected: 'affected',
+        agents: 'agents',
+        total: 'total',
+        runningOnly: 'running only',
+        queued: 'queued',
+        running: 'running',
+        waiting: 'waiting',
+        completed: 'completed',
+        failed: 'failed',
+        canceled: 'canceled',
+        timedOut: 'timed out',
+        requested: 'requested',
+        found: 'found',
+        missing: 'missing',
+        missingIds: 'missing ids',
+        lastMessage: 'last message',
+        waitingPrompt: 'waiting prompt',
+        canSendInput: 'can send input',
+        canInterrupt: 'can interrupt',
+        canClose: 'can close',
+        runtime: 'runtime',
+        summary: 'summary',
+        details: 'details',
+        errorCode: 'error code',
+        errorMessage: 'error message',
+        retryable: 'retryable',
+      },
+      values: {
+        yes: 'Yes',
+        no: 'No',
+      },
+      agentsCount: (count) => `${count} agents`,
+    },
   },
   settings: {
     title: 'Flower Settings',

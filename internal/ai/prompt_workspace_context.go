@@ -385,26 +385,23 @@ func collectPromptDelegationState(r *run) promptDelegationState {
 		return out
 	}
 	out.Enabled = r.allowSubagentDelegate
-	if r.subagentManager == nil {
+	if r.subagentRuntime == nil {
 		return out
 	}
 
-	tasks := r.subagentManager.allTasks()
-	if len(tasks) == 0 {
+	snapshots, err := r.subagentRuntime.snapshots(context.Background())
+	if err != nil || len(snapshots) == 0 {
 		return out
 	}
-	sort.Slice(tasks, func(i, j int) bool {
-		if tasks[i] == nil || tasks[j] == nil {
-			return i < j
+	sort.Slice(snapshots, func(i, j int) bool {
+		if snapshots[i].UpdatedAtMS == snapshots[j].UpdatedAtMS {
+			return snapshots[i].CreatedAtMS > snapshots[j].CreatedAtMS
 		}
-		return extractPromptDelegationUpdatedAt(tasks[i]) > extractPromptDelegationUpdatedAt(tasks[j])
+		return snapshots[i].UpdatedAtMS > snapshots[j].UpdatedAtMS
 	})
 
-	for _, task := range tasks {
-		if task == nil {
-			continue
-		}
-		status := strings.TrimSpace(task.statusSnapshot())
+	for _, snapshot := range snapshots {
+		status := strings.TrimSpace(snapshot.Status)
 		switch status {
 		case subagentStatusQueued:
 			out.QueuedCount++
@@ -429,33 +426,15 @@ func collectPromptDelegationState(r *run) promptDelegationState {
 		if isSubagentTerminalStatus(status) || len(out.Items) >= promptDelegationPreviewItems {
 			continue
 		}
-		snapshot := task.snapshot()
 		out.Items = append(out.Items, promptDelegationItem{
-			ID:        strings.TrimSpace(anyToString(snapshot["subagent_id"])),
-			AgentType: strings.TrimSpace(anyToString(snapshot["agent_type"])),
+			ID:        strings.TrimSpace(snapshot.ThreadID),
+			AgentType: strings.TrimSpace(snapshot.AgentType),
 			Status:    status,
-			Title:     strings.TrimSpace(anyToString(snapshot["title"])),
-			Objective: strings.TrimSpace(anyToString(snapshot["objective"])),
+			Title:     strings.TrimSpace(snapshot.TaskName),
+			Objective: strings.TrimSpace(snapshot.LastMessage),
 		})
 	}
 	return out
-}
-
-func extractPromptDelegationUpdatedAt(task *subagentTask) int64 {
-	if task == nil {
-		return 0
-	}
-	snapshot := task.snapshot()
-	switch v := snapshot["updated_at_ms"].(type) {
-	case int64:
-		return v
-	case int:
-		return int64(v)
-	case float64:
-		return int64(v)
-	default:
-		return 0
-	}
 }
 
 func buildPromptWorkspaceContextSection(snapshot promptRuntimeSnapshot) promptSection {

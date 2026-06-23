@@ -145,6 +145,10 @@ type ThreadView struct {
 	WorkingDir          string                       `json:"working_dir"`
 	QueuedTurnCount     int                          `json:"queued_turn_count"`
 	RunStatus           string                       `json:"run_status"`
+	ReadOnlyReason      string                       `json:"read_only_reason,omitempty"`
+	OwnerKind           string                       `json:"owner_kind,omitempty"`
+	OwnerID             string                       `json:"owner_id,omitempty"`
+	ParentThreadID      string                       `json:"parent_thread_id,omitempty"`
 	RunUpdatedAtUnixMs  int64                        `json:"run_updated_at_unix_ms"`
 	RunErrorCode        string                       `json:"run_error_code,omitempty"`
 	RunError            string                       `json:"run_error,omitempty"`

@@ -15,6 +15,7 @@ var ErrWaitingPromptChanged = errors.New("waiting prompt changed")
 var ErrWaitingUserQueueConflict = errors.New("waiting-user queue request conflicts with waiting response")
 var ErrFollowupsRevisionChanged = errors.New("followups revision changed")
 var ErrInvalidFollowupLane = errors.New("invalid followup lane")
+var ErrReadOnlyThread = errors.New("thread is read only")
 
 type SendUserTurnRequest struct {
 	ThreadID              string     `json:"thread_id"`

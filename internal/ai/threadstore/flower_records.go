@@ -195,6 +195,59 @@ WHERE endpoint_id = ? AND thread_id = ?
 	return &rec, nil
 }
 
+func (s *Store) ListFlowerThreadMetadataByParent(ctx context.Context, endpointID string, parentThreadID string) ([]FlowerThreadMetadata, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	parentThreadID = strings.TrimSpace(parentThreadID)
+	if endpointID == "" || parentThreadID == "" {
+		return nil, errors.New("invalid request")
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT endpoint_id, thread_id, owner_kind, owner_id, parent_thread_id, parent_run_id,
+       context_json, action_json, updated_at_unix_ms, home_runtime_id, home_runtime_kind,
+       origin_env_public_id, primary_target_id, active_target_ids_json
+FROM ai_flower_thread_metadata
+WHERE endpoint_id = ? AND parent_thread_id = ?
+ORDER BY updated_at_unix_ms DESC, thread_id ASC
+`, endpointID, parentThreadID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := make([]FlowerThreadMetadata, 0)
+	for rows.Next() {
+		var rec FlowerThreadMetadata
+		if err := rows.Scan(
+			&rec.EndpointID,
+			&rec.ThreadID,
+			&rec.OwnerKind,
+			&rec.OwnerID,
+			&rec.ParentThreadID,
+			&rec.ParentRunID,
+			&rec.ContextJSON,
+			&rec.ActionJSON,
+			&rec.UpdatedAtUnixMs,
+			&rec.HomeRuntimeID,
+			&rec.HomeRuntimeKind,
+			&rec.OriginEnvPublicID,
+			&rec.PrimaryTargetID,
+			&rec.ActiveTargetIDsJSON,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (s *Store) InsertFlowerTransfer(ctx context.Context, rec FlowerTransferRecord) (FlowerTransferRecord, error) {
 	if s == nil || s.db == nil {
 		return FlowerTransferRecord{}, errors.New("store not initialized")

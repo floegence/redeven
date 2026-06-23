@@ -62,7 +62,39 @@ func activeThreadEffectiveRunState(status string, runErrorCode string, runError 
 	return string(RunStateRunning), "", ""
 }
 
-func (s *Service) threadViewFromRecord(ctx context.Context, meta *session.Meta, th *threadstore.Thread, modeFallback string, queuedTurnCount int, active bool) ThreadView {
+func isFlowerSubagentProjection(meta *threadstore.FlowerThreadMetadata) bool {
+	if meta == nil {
+		return false
+	}
+	return strings.TrimSpace(strings.ToLower(meta.OwnerKind)) == flowerSubagentProjectionOwnerKind
+}
+
+func flowerSubagentProjectionReadOnlyReason(meta *threadstore.FlowerThreadMetadata) string {
+	if !isFlowerSubagentProjection(meta) {
+		return ""
+	}
+	parentID := strings.TrimSpace(meta.ParentThreadID)
+	if parentID == "" {
+		return "Subagent threads are managed by their parent Flower thread."
+	}
+	return "Subagent threads are managed by their parent Flower thread " + parentID + "."
+}
+
+func applyFlowerThreadMetadataView(view *ThreadView, meta *threadstore.FlowerThreadMetadata) {
+	if view == nil {
+		return
+	}
+	if meta != nil {
+		view.OwnerKind = strings.TrimSpace(strings.ToLower(meta.OwnerKind))
+		view.OwnerID = strings.TrimSpace(meta.OwnerID)
+		view.ParentThreadID = strings.TrimSpace(meta.ParentThreadID)
+	}
+	if reason := flowerSubagentProjectionReadOnlyReason(meta); reason != "" {
+		view.ReadOnlyReason = reason
+	}
+}
+
+func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thread, flowerMeta *threadstore.FlowerThreadMetadata, modeFallback string, queuedTurnCount int, active bool) ThreadView {
 	if th == nil {
 		return ThreadView{}
 	}
@@ -75,7 +107,7 @@ func (s *Service) threadViewFromRecord(ctx context.Context, meta *session.Meta, 
 		workingDir = strings.TrimSpace(s.agentHomeDir)
 	}
 	capability, _, _ := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
-	return ThreadView{
+	view := ThreadView{
 		ThreadID:            strings.TrimSpace(th.ThreadID),
 		Title:               strings.TrimSpace(th.Title),
 		ModelID:             strings.TrimSpace(th.ModelID),
@@ -97,6 +129,8 @@ func (s *Service) threadViewFromRecord(ctx context.Context, meta *session.Meta, 
 		LastMessageAtUnixMs: th.LastMessageAtUnixMs,
 		LastMessagePreview:  strings.TrimSpace(th.LastMessagePreview),
 	}
+	applyFlowerThreadMetadataView(&view, flowerMeta)
+	return view
 }
 
 func (s *Service) threadReasoningDefaults(ctx context.Context, modelID string) (config.AIReasoningCapability, config.AIReasoningSelection, bool) {
@@ -134,6 +168,65 @@ func (s *Service) threadReasoningDefaults(ctx context.Context, modelID string) (
 		}
 	}
 	return config.AIReasoningCapability{}, config.AIReasoningSelection{}, false
+}
+
+func (s *Service) requireThreadMutable(ctx context.Context, db *threadstore.Store, endpointID string, threadID string) error {
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid request")
+	}
+	flowerMeta, err := db.GetFlowerThreadMetadata(ctxOrBackground(ctx), endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	if isFlowerSubagentProjection(flowerMeta) {
+		return ErrReadOnlyThread
+	}
+	return nil
+}
+
+func (s *Service) deleteSubagentProjectionThreadsForParent(ctx context.Context, db *threadstore.Store, endpointID string, parentThreadID string, persistTO time.Duration) error {
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	parentThreadID = strings.TrimSpace(parentThreadID)
+	if endpointID == "" || parentThreadID == "" {
+		return errors.New("invalid request")
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+	listCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
+	children, err := db.ListFlowerThreadMetadataByParent(listCtx, endpointID, parentThreadID)
+	cancel()
+	if err != nil {
+		return err
+	}
+	for _, child := range children {
+		if !isFlowerSubagentProjection(&child) {
+			continue
+		}
+		childThreadID := strings.TrimSpace(child.ThreadID)
+		if childThreadID == "" {
+			continue
+		}
+		deleteCtx, deleteCancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
+		result, err := db.DeleteThreadResources(deleteCtx, endpointID, childThreadID)
+		deleteCancel()
+		if err != nil {
+			return err
+		}
+		if _, err := s.processUploadCleanupCandidates(ctx, result.UploadsToDelete); err != nil {
+			return err
+		}
+		s.broadcastThreadSummary(endpointID, childThreadID)
+	}
+	return nil
 }
 
 func (s *Service) activeThreadRunSet(endpointID string) map[string]struct{} {
@@ -193,12 +286,16 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	if th == nil {
 		return nil, nil
 	}
+	flowerMeta, err := db.GetFlowerThreadMetadata(ctx, endpointID, threadID)
+	if err != nil {
+		return nil, err
+	}
 	queuedTurnCount, err := db.CountFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued)
 	if err != nil {
 		return nil, err
 	}
 
-	view := s.threadViewFromRecord(ctx, meta, th, modeFallback, queuedTurnCount, s.HasActiveThreadForEndpoint(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(th.ThreadID)))
+	view := s.threadViewFromRecord(ctx, th, flowerMeta, modeFallback, queuedTurnCount, s.HasActiveThreadForEndpoint(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(th.ThreadID)))
 	return &view, nil
 }
 
@@ -240,10 +337,20 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 		return nil, err
 	}
 	activeThreads := s.activeThreadRunSet(endpointID)
+	flowerMetaByThread := make(map[string]*threadstore.FlowerThreadMetadata, len(threadIDs))
+	for _, threadID := range threadIDs {
+		meta, err := db.GetFlowerThreadMetadata(ctx, endpointID, threadID)
+		if err != nil {
+			return nil, err
+		}
+		if meta != nil {
+			flowerMetaByThread[threadID] = meta
+		}
+	}
 	out := &ListThreadsResponse{Threads: make([]ThreadView, 0, len(list)), NextCursor: strings.TrimSpace(next)}
 	for _, t := range list {
 		_, active := activeThreads[strings.TrimSpace(t.ThreadID)]
-		out.Threads = append(out.Threads, s.threadViewFromRecord(ctx, meta, &t, modeFallback, queuedTurnCounts[strings.TrimSpace(t.ThreadID)], active))
+		out.Threads = append(out.Threads, s.threadViewFromRecord(ctx, &t, flowerMetaByThread[strings.TrimSpace(t.ThreadID)], modeFallback, queuedTurnCounts[strings.TrimSpace(t.ThreadID)], active))
 	}
 	return out, nil
 }
@@ -359,7 +466,7 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		return nil, err
 	}
 
-	view := s.threadViewFromRecord(ctx, meta, &t, modeFallback, 0, false)
+	view := s.threadViewFromRecord(ctx, &t, nil, modeFallback, 0, false)
 	return &view, nil
 }
 
@@ -411,13 +518,18 @@ func (s *Service) RenameThread(ctx context.Context, meta *session.Meta, threadID
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
-	if strings.TrimSpace(threadID) == "" {
+	threadID = strings.TrimSpace(threadID)
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if threadID == "" {
 		return errors.New("missing thread_id")
 	}
-	if err := db.RenameThread(ctx, meta.EndpointID, threadID, title, meta.UserPublicID, meta.UserEmail); err != nil {
+	if err := s.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
 		return err
 	}
-	s.broadcastThreadSummary(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID))
+	if err := db.RenameThread(ctx, endpointID, threadID, title, meta.UserPublicID, meta.UserEmail); err != nil {
+		return err
+	}
+	s.broadcastThreadSummary(endpointID, threadID)
 	return nil
 }
 
@@ -438,10 +550,14 @@ func (s *Service) SetThreadPinned(ctx context.Context, meta *session.Meta, threa
 	if threadID == "" {
 		return nil, errors.New("missing thread_id")
 	}
-	if _, err := db.SetThreadPinned(ctx, meta.EndpointID, threadID, pinned, meta.UserPublicID, meta.UserEmail); err != nil {
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if err := s.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
 		return nil, err
 	}
-	s.broadcastThreadSummary(strings.TrimSpace(meta.EndpointID), threadID)
+	if _, err := db.SetThreadPinned(ctx, endpointID, threadID, pinned, meta.UserPublicID, meta.UserEmail); err != nil {
+		return nil, err
+	}
+	s.broadcastThreadSummary(endpointID, threadID)
 	return s.GetThread(ctx, meta, threadID)
 }
 
@@ -472,6 +588,9 @@ func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThre
 	}
 	if source == nil {
 		return nil, sql.ErrNoRows
+	}
+	if err := s.requireThreadMutable(ctx, db, endpointID, sourceThreadID); err != nil {
+		return nil, err
 	}
 	if s.HasActiveThreadForEndpoint(endpointID, sourceThreadID) || threadForkBlockedByRunState(source) {
 		return nil, ErrThreadForkUnavailable
@@ -570,6 +689,9 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	}
 	if th == nil {
 		return sql.ErrNoRows
+	}
+	if err := s.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
+		return err
 	}
 	currentModelID := strings.TrimSpace(th.ModelID)
 	if currentModelID == modelID {
@@ -708,6 +830,9 @@ func (s *Service) SetThreadExecutionMode(ctx context.Context, meta *session.Meta
 	if th == nil {
 		return sql.ErrNoRows
 	}
+	if err := s.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
+		return err
+	}
 	currentMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), fallbackMode)
 	if currentMode == executionMode {
 		return nil
@@ -740,6 +865,12 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 	db := s.threadsDB
 	persistTO := s.persistOpTO
 	s.mu.Unlock()
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	if err := s.requireThreadMutable(context.Background(), db, endpointID, threadID); err != nil {
+		return err
+	}
 	if runID != "" {
 		return s.CancelRun(meta, runID)
 	}
@@ -780,6 +911,12 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
+	if err := s.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
+		return err
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
 
 	if runID != "" {
 		if !force {
@@ -800,8 +937,14 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		s.mu.Unlock()
 	}
 
-	if persistTO <= 0 {
-		persistTO = defaultPersistOpTimeout
+	if runtime := s.removeThreadSubagentRuntime(runThreadKey(endpointID, threadID)); runtime != nil {
+		closeCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
+		runtime.closeAllExisting(closeCtx)
+		cancel()
+		runtime.release()
+	}
+	if err := s.deleteSubagentProjectionThreadsForParent(ctx, db, endpointID, threadID, persistTO); err != nil {
+		return err
 	}
 
 	deleteCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)

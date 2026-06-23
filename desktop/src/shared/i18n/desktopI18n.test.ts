@@ -122,7 +122,31 @@ describe('Desktop shared i18n locale metadata', () => {
     expect(localePreferenceDisplayName('system')).toBe('System default');
     expect(localePreferenceDisplayName('zh-CN')).toBe('简体中文 / Simplified Chinese');
     expect(localePreferenceDisplayName('en-US')).toBe('English');
-  });
+	});
+
+	it('keeps the en-US subagents baseline copy in English', () => {
+		const subagents = DESKTOP_I18N_DICTIONARIES['en-US'].flowerSurface.subagents;
+		expect({
+			title: subagents.title,
+			threadIDLabel: subagents.threadIDLabel,
+			action: subagents.activity.labels.action,
+			thread: subagents.activity.labels.thread,
+			agents: subagents.activity.labels.agents,
+			total: subagents.activity.labels.total,
+			runtime: subagents.activity.labels.runtime,
+			agentsCount: subagents.activity.agentsCount,
+		}).toEqual({
+			title: 'Subagents',
+			threadIDLabel: 'Thread',
+			action: 'action',
+			thread: 'thread',
+			agents: 'delegated agents',
+			total: 'total',
+			runtime: 'runtime',
+			agentsCount: '{count} delegated agents',
+		});
+		expect(JSON.stringify(subagents)).not.toMatch(/Unteragenten|opération|environnement|délégué|nombre total|\bFil\b/);
+	});
 });
 
 describe('Desktop shared i18n resolver', () => {

@@ -21,7 +21,7 @@ func (r *run) approveFloretTool(ctx context.Context, req fltools.ApprovalRequest
 		toolID = strings.TrimSpace(req.ApprovalID)
 	}
 	toolName := strings.TrimSpace(req.Name)
-	decision, reason := r.floretToolPolicyDecision(toolName, args)
+	decision, reason := r.floretToolPolicyDecision(toolName, args, req.HostContext)
 	r.persistFloretToolPolicyEvent(toolID, toolName, args, decision, reason)
 	switch decision {
 	case "allow":
@@ -53,10 +53,16 @@ func floretApprovalArgs(req fltools.ApprovalRequest) map[string]any {
 	return cloneAnyMap(call.Args)
 }
 
-func (r *run) floretToolPolicyDecision(toolName string, args map[string]any) (string, string) {
+func (r *run) floretToolPolicyDecision(toolName string, args map[string]any, hostContext ...map[string]string) (string, string) {
 	requireUserApproval := r.cfg.EffectiveRequireUserApproval()
 	blockDangerousCommands := r.cfg.EffectiveBlockDangerousCommands()
-	isPlanMode := strings.EqualFold(strings.TrimSpace(r.runMode), config.AIModePlan)
+	mode := strings.TrimSpace(r.runMode)
+	if len(hostContext) > 0 {
+		if labelMode := strings.TrimSpace(hostContext[0][subagentToolHostContextParentModeKey]); labelMode != "" {
+			mode = normalizeRunMode(labelMode, mode)
+		}
+	}
+	isPlanMode := strings.EqualFold(strings.TrimSpace(mode), config.AIModePlan)
 	commandProfile := aitools.InvocationCommandProfile(toolName, args)
 	commandRisk := strings.TrimSpace(string(commandProfile.Risk))
 	readonlyRisk := string(aitools.TerminalCommandRiskReadonly)
@@ -64,7 +70,12 @@ func (r *run) floretToolPolicyDecision(toolName string, args map[string]any) (st
 	denyDangerous := blockDangerousCommands && isDangerousInvocation(toolName, args)
 	denyPlanMutating := isPlanMode && isMutatingInvocation(toolName, args)
 	needsApproval := requiresApproval(toolName, args)
-	requireApprovalForInvocation := requireUserApproval && needsApproval && !denyReadonlyExec
+	approvedWorkerDelegation := false
+	if len(hostContext) > 0 {
+		approvedWorkerDelegation = floretInvocationHasApprovedWorkerGrant(hostContext[0])
+	}
+	delegationGrantCoversInvocation := approvedWorkerDelegation && isMutatingInvocation(toolName, args)
+	requireApprovalForInvocation := requireUserApproval && needsApproval && !denyReadonlyExec && !delegationGrantCoversInvocation
 	denyNoUserInteractionApproval := r.noUserInteraction && requireApprovalForInvocation
 	switch {
 	case denyNoUserInteractionApproval:

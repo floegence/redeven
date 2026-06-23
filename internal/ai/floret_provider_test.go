@@ -24,6 +24,14 @@ func (p *recordingFlowerProvider) StreamTurn(_ context.Context, req ModelGateway
 	return ModelGatewayResult{FinishReason: "stop", Text: "ok"}, nil
 }
 
+type toolCallFlowerProvider struct {
+	result ModelGatewayResult
+}
+
+func (p toolCallFlowerProvider) StreamTurn(context.Context, ModelGatewayRequest, func(StreamEvent)) (ModelGatewayResult, error) {
+	return p.result, nil
+}
+
 type rejectedContinuationFlowerProvider struct {
 	requests []ModelGatewayRequest
 }
@@ -177,6 +185,99 @@ func TestFloretProviderAdapter_UsesRedevenModelNameInsteadOfFloretPlaceholder(t 
 	}
 	if recorder.req.Model != "gpt-5.2" {
 		t.Fatalf("model=%q, want Redeven-owned model name", recorder.req.Model)
+	}
+}
+
+func TestFloretProviderAdapter_FiltersDisabledCoreControlToolsFromRequest(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recordingFlowerProvider{}
+	adapter := newFloretProviderAdapter(
+		recorder,
+		"openai",
+		"gpt-5-mini",
+		"act",
+		ProviderControls{},
+		TurnBudgets{},
+		"",
+		withDisabledFloretCoreControlTools("ask_user"),
+	)
+	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
+		Model:    "gpt-5-mini",
+		Messages: []flruntime.ModelMessage{{Role: "user", Content: "hello"}},
+		Tools: []fltools.ToolDefinition{
+			{Name: "ask_user"},
+			{Name: "terminal.exec"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("StreamModel: %v", err)
+	}
+	for range stream {
+	}
+	names := make([]string, 0, len(recorder.req.Tools))
+	for _, tool := range recorder.req.Tools {
+		names = append(names, strings.TrimSpace(tool.Name))
+	}
+	if containsString(names, "ask_user") {
+		t.Fatalf("provider tools=%v, disabled ask_user must not be exposed", names)
+	}
+	if !containsString(names, "terminal.exec") {
+		t.Fatalf("provider tools=%v, want terminal.exec preserved", names)
+	}
+}
+
+func TestFloretProviderAdapter_ErrorsWhenDisabledCoreControlToolIsReturned(t *testing.T) {
+	t.Parallel()
+
+	adapter := newFloretProviderAdapter(
+		toolCallFlowerProvider{result: ModelGatewayResult{
+			FinishReason: "tool_calls",
+			ToolCalls: []ToolCall{{
+				ID:   "ask_1",
+				Name: "ask_user",
+				Args: map[string]any{"question": "Need input?"},
+			}},
+		}},
+		"openai",
+		"gpt-5-mini",
+		"act",
+		ProviderControls{},
+		TurnBudgets{},
+		"",
+		withDisabledFloretCoreControlTools("ask_user"),
+	)
+	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
+		Model:    "gpt-5-mini",
+		Messages: []flruntime.ModelMessage{{Role: "user", Content: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("StreamModel: %v", err)
+	}
+	var errorEvent *flruntime.ModelEvent
+	var toolCallsEvent *flruntime.ModelEvent
+	var doneEvent *flruntime.ModelEvent
+	for event := range stream {
+		switch event.Type {
+		case flruntime.ModelEventError:
+			ev := event
+			errorEvent = &ev
+		case flruntime.ModelEventToolCalls:
+			ev := event
+			toolCallsEvent = &ev
+		case flruntime.ModelEventDone:
+			ev := event
+			doneEvent = &ev
+		}
+	}
+	if errorEvent == nil || !strings.Contains(errorEvent.Reason, "ask_user") {
+		t.Fatalf("error event=%#v, want disabled ask_user error", errorEvent)
+	}
+	if toolCallsEvent != nil {
+		t.Fatalf("tool calls event=%#v, want disabled control call suppressed", toolCallsEvent)
+	}
+	if doneEvent != nil {
+		t.Fatalf("done event=%#v, want no success terminal after disabled control call", doneEvent)
 	}
 }
 

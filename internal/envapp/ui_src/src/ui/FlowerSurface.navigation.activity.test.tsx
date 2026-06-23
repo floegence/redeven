@@ -32,6 +32,182 @@ function expectModelStatusIndicator(root: ParentNode, label = 'Thinking...'): vo
 }
 
 describe('FlowerSurface navigation activity', () => {
+  it('opens the Subagents panel from activity timeline data and navigates to a child thread', async () => {
+    const parentThread = thread({
+      thread_id: 'thread-parent-subagents',
+      title: 'Parent with subagents',
+      messages: [
+        {
+          id: 'm-parent-subagents',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 20,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-subagents',
+              turn_id: 'm-parent-subagents',
+              items: [activityItem({
+                item_id: 'tool-subagents-spawn',
+                tool_id: 'tool-subagents-spawn',
+                tool_name: 'subagents',
+                renderer: 'structured',
+                label: 'subagents',
+                status: 'running',
+                payload: {
+                  action: 'spawn',
+                  status: 'ok',
+                  snapshot: {
+                    thread_id: 'thread-child-review',
+                    subagent_id: 'thread-child-review',
+                    task_name: 'Review API contract',
+                    agent_type: 'reviewer',
+                    status: 'running',
+                    last_message: 'Reading the API boundary.',
+                    updated_at_ms: 120,
+                  },
+                },
+              })],
+            }),
+          ],
+        },
+      ],
+    });
+    const childThread = thread({
+      thread_id: 'thread-child-review',
+      title: 'Review API contract',
+      status: 'running',
+      read_only_reason: 'Subagent threads are managed by their parent Flower thread thread-parent-subagents.',
+      messages: [
+        {
+          id: 'm-child-review',
+          role: 'assistant',
+          content: 'Child handoff ready.',
+          status: 'complete',
+          created_at_ms: 140,
+          blocks: [
+            { type: 'markdown', content: 'Child handoff ready.' },
+            activityTimeline({
+              run_id: 'turn-child-review',
+              turn_id: 'turn-child-review',
+              items: [activityItem({
+                item_id: 'subagent-lifecycle',
+                tool_id: 'subagent-lifecycle',
+                tool_name: 'subagents',
+                kind: 'control',
+                renderer: 'structured',
+                label: 'Subagent lifecycle',
+                payload: {
+                  operation: 'subagents',
+                  action: 'inspect',
+                  delegation_runtime: 'floret',
+                  thread_id: 'thread-child-review',
+                  subagent_id: 'thread-child-review',
+                  task_name: 'Review API contract',
+                  agent_type: 'reviewer',
+                  status: 'completed',
+                  last_message: 'Child handoff ready.',
+                },
+              })],
+            }),
+          ],
+        },
+      ],
+    });
+    const loadThread = vi.fn(async (threadID: string) => liveBootstrap(threadID === childThread.thread_id ? childThread : parentThread));
+    const stopThread = vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, status: 'canceled' })));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [parentThread]),
+      loadThread,
+      stopThread,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-parent-subagents"] button')));
+    (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-subagents-spawn"]')));
+
+    (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-subagents-surface')));
+
+    expect(runtime.textContent).toContain('Review API contract');
+    expect(runtime.textContent).toContain('Reading the API boundary.');
+    expect(runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]')).toBeTruthy();
+
+    (Array.from(runtime.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Open child thread')) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-chat-header-title')?.textContent === 'Review API contract');
+
+    expect(loadThread).toHaveBeenCalledWith('thread-child-review');
+    expect(runtime.textContent).toContain('Child handoff ready.');
+    expect(runtime.querySelector('.flower-header-icon-badge')).toBeNull();
+    expect(runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]')).toBeNull();
+    const hiddenSubagentsPanel = runtime.querySelector('.flower-subagents-surface')?.parentElement;
+    expect(hiddenSubagentsPanel?.getAttribute('aria-hidden')).toBe('true');
+    expect(hiddenSubagentsPanel?.classList.contains('hidden')).toBe(true);
+    const composer = runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement;
+    expect(composer.disabled).toBe(true);
+    expect(composer.placeholder).toBe('Read only · Managed by parent thread');
+    expect(runtime.textContent).toContain('Read only · Managed by parent thread');
+    const submitButton = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.getAttribute('aria-label')).toBe('Send');
+    submitButton.click();
+    await waitFor(() => true, 20);
+    expect(stopThread).not.toHaveBeenCalled();
+  });
+
+  it('prioritizes read-only child state over waiting input submission', async () => {
+    const submitInput = vi.fn(async () => liveBootstrap(thread({ status: 'running' })));
+    const waitingChild = thread({
+      thread_id: 'thread-child-waiting',
+      title: 'Waiting child',
+      status: 'waiting_user',
+      read_only_reason: 'Subagent threads are managed by their parent Flower thread thread-parent.',
+      input_request: inputRequest(),
+      messages: [
+        {
+          id: 'm-child-waiting',
+          role: 'assistant',
+          content: 'Need parent steering.',
+          status: 'complete',
+          created_at_ms: 20,
+          blocks: [{ type: 'markdown', content: 'Need parent steering.' }],
+        },
+      ],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [waitingChild]),
+      loadThread: vi.fn(async () => {
+        const bootstrap = liveBootstrap(waitingChild);
+        const request = inputRequest();
+        return {
+          ...bootstrap,
+          live_state: {
+            ...bootstrap.live_state,
+            input_requests: {
+              [request.prompt_id]: request,
+            },
+          },
+        };
+      }),
+      submitInput,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-child-waiting"] button')));
+    (runtime.querySelector('[data-thread-id="thread-child-waiting"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-readonly-chip')));
+
+    const continueButton = Array.from(runtime.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Continue')) as HTMLButtonElement;
+    expect(continueButton.disabled).toBe(true);
+    continueButton.click();
+    await waitFor(() => true, 20);
+    expect(submitInput).not.toHaveBeenCalled();
+    expect(runtime.textContent).toContain('Read only · Managed by parent thread');
+  });
+
   it('renders file activity actions and unified patch lines inline', async () => {
     const previewFile = vi.fn(async () => {});
     const browseFolder = vi.fn(async () => {});

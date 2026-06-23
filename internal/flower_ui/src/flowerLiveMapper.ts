@@ -115,6 +115,8 @@ function runStatus(raw: unknown): FlowerThreadStatus {
       return 'failed';
     case 'canceled':
       return 'canceled';
+    case 'read_only':
+      return 'read_only';
     case 'success':
       return 'success';
     default:
@@ -788,6 +790,10 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
     ...(trim(patch.last_message_preview) ? { last_message_preview: trim(patch.last_message_preview) } : {}),
     ...(reasoningSelection !== undefined ? { reasoning_selection: reasoningSelection } : {}),
     ...(reasoningCapability !== undefined ? { reasoning_capability: reasoningCapability } : {}),
+    ...(trim(patch.read_only_reason) ? { read_only_reason: trim(patch.read_only_reason) } : {}),
+    ...(trim(patch.owner_kind) ? { owner_kind: trim(patch.owner_kind).toLowerCase() } : {}),
+    ...(trim(patch.owner_id) ? { owner_id: trim(patch.owner_id) } : {}),
+    ...(trim(patch.parent_thread_id) ? { parent_thread_id: trim(patch.parent_thread_id) } : {}),
     ...(readStatus ? { read_status: readStatus } : {}),
   };
 }
@@ -864,6 +870,10 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     ...(activeRunID ? { active_run_id: activeRunID } : {}),
     source_label: options.sourceLabel,
     target_labels: options.targetLabels,
+    ...(trim(record.read_only_reason) ? { read_only_reason: trim(record.read_only_reason) } : {}),
+    ...(trim(record.owner_kind) ? { owner_kind: trim(record.owner_kind).toLowerCase() } : {}),
+    ...(trim(record.owner_id) ? { owner_id: trim(record.owner_id) } : {}),
+    ...(trim(record.parent_thread_id) ? { parent_thread_id: trim(record.parent_thread_id) } : {}),
     messages,
     ...(normalizeFlowerReasoningSelection(record.reasoning_selection) ? { reasoning_selection: normalizeFlowerReasoningSelection(record.reasoning_selection) } : {}),
     ...(normalizeFlowerReasoningCapability(record.reasoning_capability) ? { reasoning_capability: normalizeFlowerReasoningCapability(record.reasoning_capability) } : {}),

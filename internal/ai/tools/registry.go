@@ -263,10 +263,10 @@ var builtinDefinitions = map[string]Definition{
 		Presentation: withPresentationOptions(
 			presentation(ToolPresentationDelegation, "readonly", "structured", "delegation", "args", "result", "error"),
 			operation("subagents"),
-			labelFields("action"),
-			callPayloadFields("action", "limit"),
-			resultPayloadFields("action", "agents", "result", "truncated"),
-			chipFields("action", "agent_count", "truncated"),
+			labelFields("task_name", "title", "action"),
+			callPayloadFields("action", "task_name", "agent_type", "target", "thread_id", "ids", "interrupt", "limit", "running_only"),
+			resultPayloadFields("action", "status", "subagent_id", "thread_id", "task_id", "task_name", "title", "agent_type", "target", "target_ids", "ids", "accepted", "closed", "closed_count", "affected_ids", "agent_count", "total", "running_only", "queued", "running", "waiting_input", "completed", "failed", "canceled", "timed_out", "requested_ids", "requested_count", "found_count", "missing_count", "missing_ids", "snapshot", "subagent", "items", "subagents", "snapshots", "snapshots_by_id", "truncated"),
+			chipFields("action", "agent_type", "status", "agent_count", "total", "timed_out", "closed_count", "truncated"),
 		),
 	},
 }
@@ -335,6 +335,9 @@ func RequiresApprovalForInvocation(toolName string, args map[string]any) bool {
 		profile := InvocationCommandProfile(name, args)
 		return profile.Risk != TerminalCommandRiskReadonly
 	}
+	if name == "subagents" {
+		return subagentInvocationRequiresApproval(args)
+	}
 	return RequiresApproval(name)
 }
 
@@ -343,6 +346,9 @@ func IsMutatingForInvocation(toolName string, args map[string]any) bool {
 	if name == "terminal.exec" {
 		profile := InvocationCommandProfile(name, args)
 		return profile.Risk != TerminalCommandRiskReadonly
+	}
+	if name == "subagents" {
+		return subagentInvocationRequiresApproval(args)
 	}
 	return IsMutating(name)
 }
@@ -371,9 +377,36 @@ func InvocationCommandProfile(toolName string, args map[string]any) TerminalComm
 }
 
 func InvocationRiskInfo(toolName string, args map[string]any) (string, string) {
+	if strings.TrimSpace(toolName) == "subagents" {
+		if subagentInvocationRequiresApproval(args) {
+			return "approval", subagentInvocationAction(args)
+		}
+		return "readonly", subagentInvocationAction(args)
+	}
 	profile := InvocationCommandProfile(toolName, args)
 	if profile.Risk == "" {
 		return "", ""
 	}
 	return string(profile.Risk), profile.NormalizedCommand
+}
+
+func subagentInvocationAction(args map[string]any) string {
+	return strings.ToLower(strings.TrimSpace(fmt.Sprint(args["action"])))
+}
+
+func subagentInvocationAgentType(args map[string]any) string {
+	return strings.ToLower(strings.TrimSpace(fmt.Sprint(args["agent_type"])))
+}
+
+func subagentInvocationRequiresApproval(args map[string]any) bool {
+	switch subagentInvocationAction(args) {
+	case "spawn":
+		return subagentInvocationAgentType(args) == "worker"
+	case "send_input":
+		return true
+	case "close", "close_all":
+		return true
+	default:
+		return false
+	}
 }

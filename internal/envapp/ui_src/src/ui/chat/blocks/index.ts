@@ -15,4 +15,3 @@ export { ThinkingBlock, type ThinkingBlockProps } from './ThinkingBlock';
 export { ActivityTimelineBlock, type ActivityTimelineBlockProps } from './ActivityTimelineBlock';
 export { TodosBlock, type TodosBlockProps } from './TodosBlock';
 export { SourcesBlock, type SourcesBlockProps } from './SourcesBlock';
-export { SubagentBlock, type SubagentBlockProps } from './SubagentBlock';

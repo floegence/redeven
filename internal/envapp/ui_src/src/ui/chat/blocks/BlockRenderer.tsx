@@ -12,7 +12,6 @@ import { ShellBlock } from './ShellBlock';
 import { ThinkingBlock } from './ThinkingBlock';
 import { TodosBlock } from './TodosBlock';
 import { SourcesBlock } from './SourcesBlock';
-import { SubagentBlock } from './SubagentBlock';
 import { ActivityTimelineBlock } from './ActivityTimelineBlock';
 import { useI18n } from '../../i18n';
 import { useChatContext } from '../ChatProvider';
@@ -291,10 +290,6 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
 
       <Match when={props.block.type === 'sources'}>
         <SourcesBlock sources={(props.block as import('../types').SourcesBlock).sources} />
-      </Match>
-
-      <Match when={props.block.type === 'subagent'}>
-        <SubagentBlock block={props.block as import('../types').SubagentBlock} />
       </Match>
 
       <Match when={props.block.type === 'activity-timeline'}>

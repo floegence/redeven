@@ -54,16 +54,18 @@ func (r *run) activateSkill(name string) (SkillActivation, bool, error) {
 	return activation, alreadyActive, nil
 }
 
-func (r *run) ensureSubagentManager() *subagentManager {
+func (r *run) ensureSubagentRuntime() subagentRuntime {
 	if r == nil {
 		return nil
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.subagentManager == nil {
-		r.subagentManager = newSubagentManager(r)
+	if r.subagentRuntime == nil {
+		r.subagentRuntime = newFloretSubagentRuntime(r)
+	} else if runtime, ok := r.subagentRuntime.(*floretSubagentRuntime); ok {
+		runtime.attachParentRun(r)
 	}
-	return r.subagentManager
+	return r.subagentRuntime
 }
 
 func (r *run) manageSubagents(ctx context.Context, args map[string]any) (map[string]any, error) {
@@ -102,11 +104,11 @@ func (r *run) manageSubagents(ctx context.Context, args map[string]any) (map[str
 		r.persistRunEvent("delegation.manage.validation_error", RealtimeStreamKindLifecycle, eventPayload)
 		return nil, err
 	}
-	mgr := r.ensureSubagentManager()
-	if mgr == nil {
-		return nil, errors.New("subagent manager unavailable")
+	runtime := r.ensureSubagentRuntime()
+	if runtime == nil {
+		return nil, errors.New("subagent runtime unavailable")
 	}
-	return mgr.manage(ctx, args)
+	return runtime.manage(ctx, args)
 }
 
 type subagentArgumentsError struct {
@@ -141,36 +143,23 @@ func invalidSubagentArguments(code string, msg string, meta map[string]any) erro
 
 func validateSubagentsArgsByAction(action string, args map[string]any) error {
 	switch action {
-	case subagentActionCreate:
-		if strings.TrimSpace(anyToString(args["objective"])) == "" {
-			return invalidSubagentArguments("invalid_arguments.subagents.create_requires_objective", "create requires objective", nil)
+	case subagentActionSpawn:
+		if strings.TrimSpace(anyToString(args["message"])) == "" && strings.TrimSpace(anyToString(args["objective"])) == "" {
+			return invalidSubagentArguments("invalid_arguments.subagents.spawn_requires_message", "spawn requires message", nil)
 		}
 		agentType := strings.ToLower(strings.TrimSpace(anyToString(args["agent_type"])))
 		if !isValidSubagentAgentType(agentType) {
 			return invalidSubagentArguments(
-				"invalid_arguments.subagents.create_invalid_agent_type",
+				"invalid_arguments.subagents.spawn_invalid_agent_type",
 				fmt.Sprintf("invalid agent_type %q", strings.TrimSpace(anyToString(args["agent_type"]))),
 				nil,
 			)
 		}
-		if strings.TrimSpace(anyToString(args["trigger_reason"])) == "" {
-			return invalidSubagentArguments("invalid_arguments.subagents.create_requires_trigger_reason", "create requires trigger_reason", nil)
-		}
-		if len(extractStringSlice(args["deliverables"])) == 0 {
-			return invalidSubagentArguments("invalid_arguments.subagents.create_requires_deliverables", "create requires deliverables", nil)
-		}
-		if len(extractStringSlice(args["definition_of_done"])) == 0 {
-			return invalidSubagentArguments("invalid_arguments.subagents.create_requires_definition_of_done", "create requires definition_of_done", nil)
-		}
-		outputSchema, ok := args["output_schema"].(map[string]any)
-		if !ok || len(outputSchema) == 0 {
-			return invalidSubagentArguments("invalid_arguments.subagents.create_requires_output_schema", "create requires output_schema", nil)
-		}
-		if err := validateSubagentOutputSchemaDefinition(outputSchema); err != nil {
-			return invalidSubagentArguments("invalid_arguments.subagents.invalid_output_schema", err.Error(), nil)
-		}
 		return nil
 	case subagentActionWait:
+		if len(extractStringSlice(args["ids"])) == 0 {
+			return invalidSubagentArguments("invalid_arguments.subagents.wait_requires_ids", "wait requires ids", nil)
+		}
 		return nil
 	case subagentActionList:
 		return nil
@@ -181,31 +170,31 @@ func validateSubagentsArgsByAction(action string, args map[string]any) error {
 			return invalidSubagentArguments("invalid_arguments.subagents.inspect_requires_target_or_ids", "inspect requires target or ids", nil)
 		}
 		return nil
-	case subagentActionSteer:
+	case subagentActionSendInput:
 		if strings.TrimSpace(anyToString(args["target"])) == "" {
-			return invalidSubagentArguments("invalid_arguments.subagents.steer_requires_target", "steer requires target", nil)
+			return invalidSubagentArguments("invalid_arguments.subagents.send_input_requires_target", "send_input requires target", nil)
 		}
 		message := strings.TrimSpace(anyToString(args["message"]))
 		if message == "" {
-			return invalidSubagentArguments("invalid_arguments.subagents.steer_requires_message", "steer requires message", nil)
+			return invalidSubagentArguments("invalid_arguments.subagents.send_input_requires_message", "send_input requires message", nil)
 		}
 		if len(message) > 4000 {
-			return invalidSubagentArguments("invalid_arguments.subagents.steer_message_too_long", "steer message too long", nil)
+			return invalidSubagentArguments("invalid_arguments.subagents.send_input_message_too_long", "send_input message too long", nil)
 		}
 		return nil
-	case subagentActionTerminate:
+	case subagentActionClose:
 		if strings.TrimSpace(anyToString(args["target"])) == "" {
-			return invalidSubagentArguments("invalid_arguments.subagents.terminate_requires_target", "terminate requires target", nil)
+			return invalidSubagentArguments("invalid_arguments.subagents.close_requires_target", "close requires target", nil)
 		}
 		return nil
-	case subagentActionTerminateAll:
+	case subagentActionCloseAll:
 		scope := strings.ToLower(strings.TrimSpace(anyToString(args["scope"])))
 		if scope == "" {
 			scope = "current_run"
 		}
 		if scope != "current_run" {
 			return invalidSubagentArguments(
-				"invalid_arguments.subagents.terminate_all_invalid_scope",
+				"invalid_arguments.subagents.close_all_invalid_scope",
 				fmt.Sprintf("invalid scope %q", strings.TrimSpace(anyToString(args["scope"]))),
 				nil,
 			)

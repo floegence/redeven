@@ -19,6 +19,22 @@ type allowlistModeToolFilter struct {
 	allowlist map[string]struct{}
 }
 
+func (r *run) withToolAllowlistFilter(base ModeToolFilter) ModeToolFilter {
+	if r == nil || len(r.toolAllowlist) == 0 {
+		return base
+	}
+	allow := make(map[string]struct{}, len(r.toolAllowlist))
+	for name := range r.toolAllowlist {
+		if name = strings.TrimSpace(name); name != "" {
+			allow[name] = struct{}{}
+		}
+	}
+	if len(allow) == 0 {
+		return base
+	}
+	return allowlistModeToolFilter{base: base, allowlist: allow}
+}
+
 func (f allowlistModeToolFilter) FilterToolsForMode(mode string, all []ToolDef) []ToolDef {
 	base := f.base
 	if base == nil {

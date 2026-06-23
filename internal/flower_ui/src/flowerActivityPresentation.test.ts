@@ -149,6 +149,82 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.label).toBe('Resolve workspace status');
   });
 
+  it('renders subagent tool activity as delegation instead of raw structured payload', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'subagents',
+      renderer: 'structured',
+      label: 'subagents',
+      payload: {
+        action: 'spawn',
+        status: 'ok',
+        snapshot: {
+          thread_id: 'child-thread-1',
+          subagent_id: 'child-thread-1',
+          task_name: 'Review API boundary',
+          agent_type: 'reviewer',
+          status: 'running',
+          last_message: 'Reading contracts',
+          delegation_runtime: 'floret',
+        },
+      },
+    }));
+
+    expect(presentation.label).toBe('Spawn Review API boundary');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Spawn Review API boundary' });
+    expect(presentation.meta).toContain('Spawn subagent');
+    expect(presentation.meta).toContain('Running');
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('thread:child-thread-1');
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('profile:Reviewer');
+    expect(presentation.detailLines.some((line) => line.value.includes('"snapshot"'))).toBe(false);
+  });
+
+  it('localizes unknown subagent status, type, and boolean detail values', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'subagents',
+      renderer: 'structured',
+      label: 'subagents',
+      payload: {
+        action: 'inspect',
+        snapshot: {
+          thread_id: 'child-thread-unknown',
+          agent_type: 'custom-profile',
+          status: 'paused_elsewhere',
+          accepted: true,
+          can_close: false,
+          delegation_runtime: 'floret',
+        },
+      },
+    }));
+
+    const rows = presentation.detailLines.map((line) => `${line.label}:${line.value}`);
+    expect(presentation.meta).toContain('Subagent');
+    expect(presentation.meta).toContain('Unknown');
+    expect(rows).toContain('profile:Subagent');
+    expect(rows).toContain('result status:Unknown');
+    expect(rows).toContain('accepted:Yes');
+    expect(rows).toContain('can close:No');
+    expect(rows.join('\n')).not.toContain('custom-profile');
+    expect(rows.join('\n')).not.toContain('paused_elsewhere');
+    expect(rows.join('\n')).not.toContain(':true');
+    expect(rows.join('\n')).not.toContain(':false');
+  });
+
+  it('does not render unrelated nested result ids as delegation', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'web.search',
+      renderer: 'structured',
+      label: 'Search docs',
+      payload: {
+        items: [{ id: 'result-1', title: 'Search result' }],
+      },
+    }));
+
+    expect(presentation.label).toBe('Search docs');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Search docs' });
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('thread');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('profile');
+  });
+
   it('renders web search error records as separate detail lines', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'web.search',

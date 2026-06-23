@@ -19,6 +19,10 @@ type floretToolRuntimeState struct {
 	state runtimeState
 }
 
+const subagentToolHostContextAgentTypeKey = "subagent_agent_type"
+const subagentToolHostContextApprovedWorkerKey = "subagent_worker_delegate_approved"
+const subagentToolHostContextParentModeKey = "subagent_parent_mode"
+
 func newFloretToolRuntimeState(state runtimeState) *floretToolRuntimeState {
 	return &floretToolRuntimeState{state: state}
 }
@@ -96,7 +100,15 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 				if call.Name == "" {
 					call.Name = strings.TrimSpace(def.Name)
 				}
-				handler := &builtInToolHandler{r: r, toolName: call.Name}
+				if rejectReadonlySubagentMutatingTool(call.Name, call.Args, inv.HostContext) {
+					return fltools.ErrorResult(
+						call.ID,
+						call.Name,
+						"subagent readonly policy blocks mutating tools for explore and reviewer profiles",
+					), nil
+				}
+				execRun := floretInvocationRunContext(r, inv)
+				handler := &builtInToolHandler{r: execRun, toolName: call.Name}
 				result, err := handler.Execute(ctx, call)
 				if err != nil {
 					return fltools.Result{}, err
@@ -107,7 +119,7 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 				if state != nil {
 					state.updateFromToolResult(call, result, inv.Step)
 				}
-				toolResult, err := floretToolResultFromFlower(r, result)
+				toolResult, err := floretToolResultFromFlower(execRun, result)
 				if err != nil {
 					return fltools.Result{}, err
 				}
@@ -119,6 +131,115 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 		}
 	}
 	return registry, nil
+}
+
+func floretInvocationRunContext(base *run, inv fltools.Invocation[map[string]any]) *run {
+	if base == nil {
+		return nil
+	}
+	runID := strings.TrimSpace(inv.RunID)
+	threadID := strings.TrimSpace(inv.ThreadID)
+	turnID := strings.TrimSpace(inv.TurnID)
+	if runID == "" && threadID == "" && turnID == "" {
+		return base
+	}
+	if runID == "" {
+		runID = strings.TrimSpace(base.id)
+	}
+	if threadID == "" {
+		threadID = strings.TrimSpace(base.threadID)
+	}
+	if turnID == "" {
+		turnID = strings.TrimSpace(base.messageID)
+	}
+	if runID == strings.TrimSpace(base.id) &&
+		threadID == strings.TrimSpace(base.threadID) &&
+		turnID == strings.TrimSpace(base.messageID) {
+		return base
+	}
+	child := newRun(runOptions{
+		Log:                   base.log,
+		StateDir:              base.stateDir,
+		AgentHomeDir:          base.agentHomeDir,
+		WorkingDir:            base.workingDir,
+		FilesystemScope:       base.scope,
+		Shell:                 base.shell,
+		AIConfig:              base.cfg,
+		SessionMeta:           base.sessionMeta,
+		ResolveProviderKey:    base.resolveProviderKey,
+		ResolveWebSearchKey:   base.resolveWebSearchKey,
+		DesktopModelSource:    base.desktopModelSource,
+		RunID:                 runID,
+		ChannelID:             base.channelID,
+		EndpointID:            base.endpointID,
+		ThreadID:              threadID,
+		UserPublicID:          base.userPublicID,
+		MessageID:             turnID,
+		UploadsDir:            base.uploadsDir,
+		ThreadsDB:             base.threadsDB,
+		PersistOpTimeout:      base.persistOpTimeout,
+		MaxWallTime:           base.maxWallTime,
+		IdleTimeout:           base.idleTimeout,
+		ToolApprovalTimeout:   base.toolApprovalTO,
+		SubagentDepth:         base.subagentDepth,
+		AllowSubagentDelegate: base.allowSubagentDelegate,
+		ToolAllowlist:         mapKeys(base.toolAllowlist),
+		ForceReadonlyExec:     base.forceReadonlyExec,
+		NoUserInteraction:     base.noUserInteraction,
+		WebSearchToolEnabled:  base.webSearchToolEnabled,
+		WebSearchMode:         base.webSearchMode,
+		SkillManager:          base.skillManager,
+		ToolTargetPolicy:      base.toolTargetPolicy,
+		TargetToolExecutor:    base.targetToolExecutor,
+		terminalExecRunner:    base.terminalExecRunner,
+	})
+	child.runMode = base.runMode
+	if mode := strings.TrimSpace(inv.HostContext[subagentToolHostContextParentModeKey]); mode != "" {
+		child.runMode = normalizeRunMode(mode, child.runMode)
+	}
+	child.currentModelID = base.currentModelID
+	return child
+}
+
+func mapKeys(in map[string]struct{}) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(in))
+	for key := range in {
+		key = strings.TrimSpace(key)
+		if key != "" {
+			out = append(out, key)
+		}
+	}
+	return out
+}
+
+func floretInvocationHasApprovedWorkerGrant(hostContext map[string]string) bool {
+	if normalizeSubagentAgentType(hostContext[subagentToolHostContextAgentTypeKey]) != subagentAgentTypeWorker {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(hostContext[subagentToolHostContextApprovedWorkerKey])) {
+	case "1", "true", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+func rejectReadonlySubagentMutatingTool(toolName string, args map[string]any, hostContext map[string]string) bool {
+	rawAgentType := strings.TrimSpace(hostContext[subagentToolHostContextAgentTypeKey])
+	if rawAgentType == "" {
+		return false
+	}
+	agentType := normalizeSubagentAgentType(rawAgentType)
+	if agentType == subagentAgentTypeWorker {
+		return false
+	}
+	if !isMutatingInvocation(toolName, args) {
+		return false
+	}
+	return true
 }
 
 func floretToolApproverForRun(r *run) fltools.Approver {
@@ -723,6 +844,9 @@ func activityPayloadFieldValue(r *run, field string, source map[string]any) (any
 		}
 	case "agent_count":
 		if count := len(toAnySlice(source["agents"])); count > 0 {
+			return count, true
+		}
+		if count := len(toAnySlice(source["items"])); count > 0 {
 			return count, true
 		}
 	case "total", "pending", "in_progress", "completed", "cancelled":
