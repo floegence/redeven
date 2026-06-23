@@ -413,6 +413,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.runErrors.providerModelUnavailable;
       case 'floret_engine_failed':
         return copy().chat.runErrors.floretEngineFailed;
+      case 'runtime_restarted':
+        return copy().chat.runErrors.runtimeRestarted;
       default:
         return trimString(error?.message);
     }

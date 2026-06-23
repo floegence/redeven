@@ -7504,14 +7504,75 @@ function runtimeFlowerMethod(rawMethod: unknown): RuntimeFlowerRequest['method']
   }
 }
 
+function pendingLocalHostRuntimeStartForEnvironment(environmentID: string): PendingLocalHostRuntimeStart | null {
+  const targetEnvironmentID = compact(environmentID);
+  if (!targetEnvironmentID) {
+    return null;
+  }
+  for (const pendingStart of pendingLocalHostRuntimeStartByTargetID.values()) {
+    if (compact(pendingStart.environment_id) === targetEnvironmentID) {
+      return pendingStart;
+    }
+  }
+  return null;
+}
+
+function assertRuntimeFlowerRecordOpenable(record: LocalEnvironmentRuntimeRecord): void {
+  if (!runtimeServiceIsOpenable(record.startup.runtime_service)) {
+    throw new Error(runtimeServiceOpenReadinessLabel(record.startup.runtime_service) || 'Local Environment is not ready to open Flower.');
+  }
+}
+
+async function waitForRuntimeFlowerPendingStart(pendingStart: PendingLocalHostRuntimeStart): Promise<LocalEnvironmentRuntimeRecord> {
+  launcherOperations.update(pendingStart.operation_key, {
+    presentation_context: 'flower_warmup',
+    title: 'Waiting for local runtime',
+    detail: 'Flower will open after Desktop finishes preparing the local runtime.',
+  });
+  const record = await pendingStart.task;
+  runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(record));
+  assertRuntimeFlowerRecordOpenable(record);
+  return record;
+}
+
 async function ensureRuntimeFlowerRecord(): Promise<LocalEnvironmentRuntimeRecord> {
   const preferences = await loadDesktopPreferencesCached();
   const environment = preferences.local_environment;
+  const pendingStart = pendingLocalHostRuntimeStartForEnvironment(environment.id);
+  if (pendingStart) {
+    return waitForRuntimeFlowerPendingStart(pendingStart);
+  }
   const attached = await attachLocalEnvironmentRuntime(environment);
   if (attached) {
-    if (!runtimeServiceIsOpenable(attached.startup.runtime_service)) {
-      throw new Error(runtimeServiceOpenReadinessLabel(attached.startup.runtime_service) || 'Local Environment is not ready to open Flower.');
+    const runtimePlan = buildDesktopLocalRuntimeOpenPlan(
+      { kind: 'local_environment' },
+      attached.startup,
+      {
+        desktopOwnerID: await desktopRuntimeOwnerID(),
+      },
+    );
+    if (runtimePlan.requires_restart) {
+      if (!runtimePlan.can_prepare) {
+        throw new Error(runtimePlan.message || 'Local Runtime must restart before Flower can open.');
+      }
+      const restarted = await startLocalHostRuntimeWithLifecycleProgress({
+        environment,
+        action: 'restart_environment_runtime',
+        presentationContext: 'flower_warmup',
+      });
+      runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(restarted));
+      assertRuntimeFlowerRecordOpenable(restarted);
+      resetLauncherIssueState();
+      void syncLinkedProviderRuntimeHealthFromService(restarted.startup.runtime_service)
+        .finally(() => broadcastDesktopWelcomeSnapshots())
+        .catch(() => undefined);
+      broadcastDesktopWelcomeSnapshots();
+      return restarted;
     }
+    if (!runtimePlan.can_open) {
+      throw new Error(runtimePlan.message || 'Local Runtime is not ready to open Flower.');
+    }
+    assertRuntimeFlowerRecordOpenable(attached);
     return attached;
   }
   const record = await startLocalHostRuntimeWithLifecycleProgress({
@@ -7519,9 +7580,7 @@ async function ensureRuntimeFlowerRecord(): Promise<LocalEnvironmentRuntimeRecor
     action: 'start_environment_runtime',
     presentationContext: 'flower_warmup',
   });
-  if (!runtimeServiceIsOpenable(record.startup.runtime_service)) {
-    throw new Error(runtimeServiceOpenReadinessLabel(record.startup.runtime_service) || 'Local Environment is not ready to open Flower.');
-  }
+  assertRuntimeFlowerRecordOpenable(record);
   resetLauncherIssueState();
   void syncLinkedProviderRuntimeHealthFromService(record.startup.runtime_service)
     .finally(() => broadcastDesktopWelcomeSnapshots())

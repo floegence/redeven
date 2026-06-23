@@ -851,6 +851,11 @@ func isPersistedContextRunEventType(eventType string) bool {
 	return eventType == "context.usage.updated" || strings.HasPrefix(eventType, "context.compaction.")
 }
 
+const (
+	RuntimeRestartedRunErrorCode    = "runtime_restarted"
+	RuntimeRestartedRunErrorMessage = "The local runtime restarted before this reply finished."
+)
+
 // ResetStaleActiveThreadRunStates marks startup-orphaned active thread states as canceled.
 //
 // Why this exists:
@@ -866,15 +871,15 @@ func (s *Store) ResetStaleActiveThreadRunStates(ctx context.Context) (int64, err
 	}
 	now := time.Now().UnixMilli()
 	res, err := s.db.ExecContext(ctx, `
-	UPDATE ai_threads
-	SET run_status = 'canceled',
-	    run_updated_at_unix_ms = ?,
-	    run_error_code = '',
-	    run_error = '',
-	    waiting_user_input_json = '',
-	    updated_at_unix_ms = ?
-	WHERE run_status IN ('accepted', 'running', 'waiting_approval', 'recovering', 'finalizing')
-	`, now, now)
+		UPDATE ai_threads
+		SET run_status = 'canceled',
+		    run_updated_at_unix_ms = ?,
+		    run_error_code = ?,
+		    run_error = ?,
+		    waiting_user_input_json = '',
+		    updated_at_unix_ms = ?
+		WHERE run_status IN ('accepted', 'running', 'waiting_approval', 'recovering', 'finalizing')
+		`, now, RuntimeRestartedRunErrorCode, RuntimeRestartedRunErrorMessage, now)
 	if err != nil {
 		return 0, err
 	}

@@ -950,11 +950,26 @@ describe('main routing', () => {
     expect(unlockSrc).toContain('throw (error ?? runtimeFlowerError(');
     expect(unlockSrc).not.toContain('throw new Error(error?.message');
 
+    const pendingFlowerStart = mainSrc.indexOf('async function waitForRuntimeFlowerPendingStart(');
+    const pendingFlowerEnd = mainSrc.indexOf('async function ensureRuntimeFlowerRecord()', pendingFlowerStart);
+    expect(pendingFlowerStart).toBeGreaterThanOrEqual(0);
+    expect(pendingFlowerEnd).toBeGreaterThan(pendingFlowerStart);
+    const pendingFlowerSrc = mainSrc.slice(pendingFlowerStart, pendingFlowerEnd);
+    expect(pendingFlowerSrc).toContain("presentation_context: 'flower_warmup'");
+    expect(pendingFlowerSrc).toContain('const record = await pendingStart.task;');
+    expect(pendingFlowerSrc).toContain('assertRuntimeFlowerRecordOpenable(record);');
+
     const ensureStart = mainSrc.indexOf('async function ensureRuntimeFlowerRecord()');
     const ensureEnd = mainSrc.indexOf('type RuntimeFlowerHTTPResponse', ensureStart);
     expect(ensureStart).toBeGreaterThanOrEqual(0);
     expect(ensureEnd).toBeGreaterThan(ensureStart);
     const ensureSrc = mainSrc.slice(ensureStart, ensureEnd);
+    expect(ensureSrc).toContain('pendingLocalHostRuntimeStartForEnvironment(environment.id)');
+    expect(ensureSrc).toContain('return waitForRuntimeFlowerPendingStart(pendingStart);');
+    expect(ensureSrc).toContain('buildDesktopLocalRuntimeOpenPlan(');
+    expect(ensureSrc).toContain('if (runtimePlan.requires_restart)');
+    expect(ensureSrc).toContain("action: 'restart_environment_runtime'");
+    expect(ensureSrc).toContain('assertRuntimeFlowerRecordOpenable(attached);');
     expect(ensureSrc).toContain('startLocalHostRuntimeWithLifecycleProgress({');
     expect(ensureSrc).toContain("action: 'start_environment_runtime'");
     expect(ensureSrc).toContain("presentationContext: 'flower_warmup'");

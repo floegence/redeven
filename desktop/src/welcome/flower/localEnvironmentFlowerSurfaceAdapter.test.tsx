@@ -211,6 +211,17 @@ describe('Local Environment Flower surface adapter', () => {
       code: 'provider_auth_failed',
       message: 'The selected AI provider rejected the saved credentials.',
     });
+
+    const interrupted = mapRuntimeFlowerThread(threadView({
+      run_status: 'canceled',
+      run_error_code: 'runtime_restarted',
+      run_error: 'The local runtime restarted before this reply finished.',
+    }));
+    expect(interrupted.status).toBe('canceled');
+    expect(interrupted.error).toEqual({
+      code: 'runtime_restarted',
+      message: 'The local runtime restarted before this reply finished.',
+    });
   });
 
   it('loads settings, models, threads, live bootstrap, and sends runs through runtime Flower IPC', async () => {
