@@ -16,6 +16,8 @@ Floret owns the permission lifecycle. Redeven still decides product policy, incl
 
 Provider adapters are model gateways, not Flower renderers. `floretProviderAdapter` maps provider stream bytes into Floret `ModelEvent` values. Assistant text, reasoning deltas, and model-generated tool-call stream observations are emitted as provider-neutral Floret model events before Redeven projects them into Flower live state. `ToolCallStream` identifies a tool call while the model is still generating it; final executable tool calls remain the separate `ToolCalls` batch. Redeven applies assistant text, reasoning deltas, tool-call stream observations, retry/done/abort markers, and source observations only from Floret runtime events in the event sink. Provider continuation persistence reads the complete opaque provider state from the Floret turn result, stores it as a state JSON envelope including `Attributes`, and only matches provider id, model, base URL, and state kind before passing it back to Floret.
 
+Context pressure and compaction presentation also come from structured Floret runtime observations. Redeven maps Floret context status into `context.usage.updated` and maps Floret compaction lifecycle events into `context.compaction.updated`; those product events are persisted as run events and projected into Flower live materialized state. Redeven supplies a projected compaction summarizer to Floret so the reusable Floret lifecycle still owns the compaction decision, operation id, start/complete/failed phases, active history rewrite, and continuation.
+
 Flower UI tool activity comes from Floret `ActivityTimeline` projection. Redeven can key detail lookups from timeline item ids, but it must not synthesize chat activity rows from `ai_tool_calls`, `tool.call`, `tool.result`, execution spans, handler outcomes, or provider-adapter side effects.
 
 Control signal projection is separate from Redeven waiting UI persistence. Floret signal projection emits engine signal facts for `ask_user`, `task_complete`, and Redeven's `exit_plan_mode`; Flower `RequestUserInputPrompt` objects and product actions such as `set_mode=act` are created only by Redeven's waiting projection and persistence layer.
@@ -32,7 +34,7 @@ Tool names are not aliases for deleted knowledge-era tools. Current repository k
 
 Target provenance is part of the tool contract, not a UI hint. Flower must not infer remote execution from thread context alone; it can only claim remote or target execution when a tool result or Redeven product command returns explicit execution provenance.
 
-Redeven must consume published Floret releases. Repository builds, tests, Desktop runs, and release validation must not depend on a sibling checkout, Go workspace, local replace directive, or package-manager local link. The current runtime boundary depends on `github.com/floegence/floret v0.3.19`, including Floret's public reasoning selection API for model-level capability driven requests.
+Redeven must consume published Floret releases. Repository builds, tests, Desktop runs, and release validation must not depend on a sibling checkout, Go workspace, local replace directive, or package-manager local link. The current runtime boundary depends on `github.com/floegence/floret v0.3.20`, including Floret's public reasoning selection API, structured context observations, and projected compaction summary lifecycle.
 
 # Citations
 
@@ -51,10 +53,13 @@ Redeven must consume published Floret releases. Repository builds, tests, Deskto
 [13] redeven:internal/ai/floret_approval.go:14 - Redeven product policy is returned through the Floret tool approver.
 [14] redeven:internal/ai/floret_provider.go:55 - Provider stream deltas are sent to Floret as model events rather than mutating Flower state directly.
 [15] redeven:internal/ai/floret_events.go:42 - Flower applies streaming and source observations from Floret runtime events.
-[16] redeven:internal/ai/floret_runtime.go:170 - Flower execution runs through Floret projected turns with a Floret approver and event sink.
-[17] redeven:internal/ai/model_gateway.go:37 - Redeven's remaining hard execution protection is the tool-call count constant.
-[18] redeven:internal/ai/floret_runtime.go:192 - Redeven passes `MaxToolCalls` into the Floret turn limits.
-[19] redeven:internal/ai/floret_runtime.go:203 - Provider continuation candidates are built from the Floret turn result provider state.
-[20] redeven:internal/ai/provider_continuation.go:30 - Previous provider state is loaded as the full Floret model state envelope after provider/profile matching.
-[21] redeven:internal/ai/floret_runtime.go:417 - `exit_plan_mode` waiting prompts are built during Redeven result projection, not signal projection.
-[22] redeven:go.mod:9 - Redeven depends on the published Floret module version.
+[16] redeven:internal/ai/floret_events.go:123 - Structured context status observations are persisted and streamed as `context.usage.updated`.
+[17] redeven:internal/ai/floret_events.go:139 - Structured compaction observations are persisted and streamed as `context.compaction.updated`.
+[18] redeven:internal/ai/floret_compaction.go:19 - Redeven implements the projected Floret compaction summarizer without taking over Floret's compaction lifecycle.
+[19] redeven:internal/ai/floret_runtime.go:171 - Flower execution runs through Floret projected turns with a Floret approver and event sink.
+[20] redeven:internal/ai/model_gateway.go:37 - Redeven's remaining hard execution protection is the tool-call count constant.
+[21] redeven:internal/ai/floret_runtime.go:193 - Redeven passes `MaxToolCalls` into the Floret turn limits.
+[22] redeven:internal/ai/floret_runtime.go:204 - Provider continuation candidates are built from the Floret turn result provider state.
+[23] redeven:internal/ai/provider_continuation.go:30 - Previous provider state is loaded as the full Floret model state envelope after provider/profile matching.
+[24] redeven:internal/ai/floret_runtime.go:419 - `exit_plan_mode` waiting prompts are built during Redeven result projection, not signal projection.
+[25] redeven:go.mod:9 - Redeven depends on the published Floret module version.

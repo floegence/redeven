@@ -202,9 +202,29 @@ func TestStore_AppendRunEvent_ContextEventsUpdateLastContextRunID(t *testing.T) 
 	if err := s.AppendRunEvent(ctx, RunEventRecord{
 		EndpointID:  "env_1",
 		ThreadID:    "th_1",
-		RunID:       "run_context_2",
+		RunID:       "run_context_old",
 		StreamKind:  "context",
 		EventType:   "context.compaction.applied",
+		PayloadJSON: "{}",
+		AtUnixMs:    1150,
+	}); err != nil {
+		t.Fatalf("AppendRunEvent old context compaction: %v", err)
+	}
+
+	th, err = s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread after old context compaction: %v", err)
+	}
+	if got := strings.TrimSpace(th.LastContextRunID); got != "run_context_1" {
+		t.Fatalf("LastContextRunID=%q, want %q after old context compaction", got, "run_context_1")
+	}
+
+	if err := s.AppendRunEvent(ctx, RunEventRecord{
+		EndpointID:  "env_1",
+		ThreadID:    "th_1",
+		RunID:       "run_context_2",
+		StreamKind:  "context",
+		EventType:   "context.compaction.updated",
 		PayloadJSON: "{}",
 		AtUnixMs:    1200,
 	}); err != nil {
@@ -217,6 +237,98 @@ func TestStore_AppendRunEvent_ContextEventsUpdateLastContextRunID(t *testing.T) 
 	}
 	if got := strings.TrimSpace(th.LastContextRunID); got != "run_context_2" {
 		t.Fatalf("LastContextRunID=%q, want %q", got, "run_context_2")
+	}
+}
+
+func TestStore_AppendRunEvent_ContextCompactionDoesNotPolluteTranscript(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_context", EndpointID: "env_1", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if _, err := s.AppendMessage(ctx, "env_1", "th_context", Message{
+		ThreadID:        "th_context",
+		EndpointID:      "env_1",
+		MessageID:       "msg_user",
+		Role:            "user",
+		Status:          "complete",
+		TextContent:     "keep this transcript clean",
+		MessageJSON:     `{"id":"msg_user","role":"user","content":"keep this transcript clean"}`,
+		CreatedAtUnixMs: 1000,
+		UpdatedAtUnixMs: 1000,
+	}, "u1", "u1@example.com"); err != nil {
+		t.Fatalf("AppendMessage: %v", err)
+	}
+
+	now := time.Now().UnixMilli()
+	for _, rec := range []RunEventRecord{
+		{
+			EndpointID:  "env_1",
+			ThreadID:    "th_context",
+			RunID:       "run_context",
+			StreamKind:  "context",
+			EventType:   "context.usage.updated",
+			PayloadJSON: `{"usage":{"phase":"projected_request","input_tokens":620,"context_window_tokens":1000,"pressure_status":"stable"}}`,
+			AtUnixMs:    now,
+		},
+		{
+			EndpointID:  "env_1",
+			ThreadID:    "th_context",
+			RunID:       "run_context",
+			StreamKind:  "context",
+			EventType:   "context.compaction.updated",
+			PayloadJSON: `{"compaction":{"operation_id":"compact-1","phase":"complete","status":"compacted","tokens_before":920,"tokens_after_estimate":210}}`,
+			AtUnixMs:    now + 1,
+		},
+	} {
+		if err := s.AppendRunEvent(ctx, rec); err != nil {
+			t.Fatalf("AppendRunEvent(%s): %v", rec.EventType, err)
+		}
+	}
+
+	if got := countRowsForTest(t, s.db, `
+SELECT COUNT(1)
+FROM ai_run_events
+WHERE endpoint_id = ? AND thread_id = ? AND run_id = ?
+  AND event_type IN ('context.usage.updated', 'context.compaction.updated')
+`, "env_1", "th_context", "run_context"); got != 2 {
+		t.Fatalf("context run events=%d, want 2", got)
+	}
+	if got := countRowsForTest(t, s.db, `
+SELECT COUNT(1)
+FROM transcript_messages
+WHERE endpoint_id = ? AND thread_id = ?
+  AND (
+    text_content LIKE '%Context compressed%'
+    OR text_content LIKE '%上下文已压缩%'
+    OR text_content LIKE '%上下文压缩中%'
+    OR message_json LIKE '%context_compaction%'
+    OR message_json LIKE '%context.compaction.updated%'
+  )
+`, "env_1", "th_context"); got != 0 {
+		t.Fatalf("polluted transcript rows=%d, want 0", got)
+	}
+	if got := countRowsForTest(t, s.db, `
+SELECT COUNT(1)
+FROM ai_messages
+WHERE endpoint_id = ? AND thread_id = ?
+  AND (
+    text_content LIKE '%Context compressed%'
+    OR text_content LIKE '%上下文已压缩%'
+    OR text_content LIKE '%上下文压缩中%'
+    OR message_json LIKE '%context_compaction%'
+    OR message_json LIKE '%context.compaction.updated%'
+  )
+`, "env_1", "th_context"); got != 0 {
+		t.Fatalf("polluted legacy message rows=%d, want 0", got)
 	}
 }
 
@@ -2346,7 +2458,7 @@ func TestStore_ListRunEventsPage_ContextCategory(t *testing.T) {
 	appendEvent("context.integrity.repair_applied")
 	appendEvent("context.compaction.started")
 	appendEvent("context.usage.updated")
-	appendEvent("context.compaction.skipped")
+	appendEvent("context.compaction.updated")
 	appendEvent("floret.projected_turn.result")
 
 	firstPage, nextCursor, hasMore, err := s.ListRunEventsPage(ctx, "env_1", "run_1", RunEventsQuery{
@@ -2359,14 +2471,14 @@ func TestStore_ListRunEventsPage_ContextCategory(t *testing.T) {
 	if len(firstPage) != 2 {
 		t.Fatalf("len(firstPage)=%d, want 2", len(firstPage))
 	}
-	if !hasMore {
-		t.Fatalf("hasMore=%v, want true", hasMore)
+	if hasMore {
+		t.Fatalf("hasMore=%v, want false", hasMore)
 	}
-	if strings.TrimSpace(firstPage[0].EventType) != "context.compaction.started" {
-		t.Fatalf("firstPage[0].EventType=%q, want context.compaction.started", firstPage[0].EventType)
+	if strings.TrimSpace(firstPage[0].EventType) != "context.usage.updated" {
+		t.Fatalf("firstPage[0].EventType=%q, want context.usage.updated", firstPage[0].EventType)
 	}
-	if strings.TrimSpace(firstPage[1].EventType) != "context.usage.updated" {
-		t.Fatalf("firstPage[1].EventType=%q, want context.usage.updated", firstPage[1].EventType)
+	if strings.TrimSpace(firstPage[1].EventType) != "context.compaction.updated" {
+		t.Fatalf("firstPage[1].EventType=%q, want context.compaction.updated", firstPage[1].EventType)
 	}
 	if nextCursor <= 0 {
 		t.Fatalf("nextCursor=%d, want > 0", nextCursor)
@@ -2383,11 +2495,8 @@ func TestStore_ListRunEventsPage_ContextCategory(t *testing.T) {
 	if secondHasMore {
 		t.Fatalf("secondHasMore=%v, want false", secondHasMore)
 	}
-	if len(secondPage) != 1 {
-		t.Fatalf("len(secondPage)=%d, want 1", len(secondPage))
-	}
-	if strings.TrimSpace(secondPage[0].EventType) != "context.compaction.skipped" {
-		t.Fatalf("secondPage[0].EventType=%q, want context.compaction.skipped", secondPage[0].EventType)
+	if len(secondPage) != 0 {
+		t.Fatalf("len(secondPage)=%d, want 0", len(secondPage))
 	}
 	if secondCursor < nextCursor {
 		t.Fatalf("secondCursor=%d, want >= %d", secondCursor, nextCursor)
@@ -2435,7 +2544,7 @@ func TestStore_AppendRunEvent_AgeRetention(t *testing.T) {
 		ThreadID:    "th_1",
 		RunID:       "run_1",
 		StreamKind:  "context",
-		EventType:   "context.compaction.started",
+		EventType:   "context.compaction.updated",
 		PayloadJSON: "{}",
 		AtUnixMs:    time.Now().UnixMilli(),
 	}); err != nil {
@@ -2449,8 +2558,8 @@ func TestStore_AppendRunEvent_AgeRetention(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("len(events)=%d, want 1", len(events))
 	}
-	if strings.TrimSpace(events[0].EventType) != "context.compaction.started" {
-		t.Fatalf("EventType=%q, want context.compaction.started", events[0].EventType)
+	if strings.TrimSpace(events[0].EventType) != "context.compaction.updated" {
+		t.Fatalf("EventType=%q, want context.compaction.updated", events[0].EventType)
 	}
 }
 

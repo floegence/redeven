@@ -55,9 +55,11 @@ describe('aiContextTelemetryState', () => {
       eventId: 7,
       atUnixMs: 700,
     });
-    state = applyContextCompactionToRun(state, 'run_2', 'context.compaction.started', {
-      compaction_id: 'cmp_1',
+    state = applyContextCompactionToRun(state, 'run_2', 'context.compaction.updated', {
+      operation_id: 'cmp_1',
       step_index: 0,
+      phase: 'start',
+      status: 'compacting',
     }, {
       eventId: 8,
       atUnixMs: 710,
@@ -66,6 +68,53 @@ describe('aiContextTelemetryState', () => {
     expect(getContextTelemetryRun(state, 'run_2')?.usage?.eventId).toBe(7);
     expect(getContextTelemetryRun(state, 'run_2')?.compactions).toHaveLength(1);
     expect(hasContextTelemetryData(getContextTelemetryRun(state, 'run_2'))).toBe(true);
+  });
+
+  it('normalizes structured context usage payloads from Flower live events', () => {
+    const state = applyContextUsageToRun({}, 'run_structured', {
+      usage: {
+        phase: 'projected_request',
+        input_tokens: 620,
+        context_window_tokens: 1000,
+        used_ratio: 0.62,
+        source: 'full_request_estimate',
+        pressure_status: 'stable',
+      },
+    }, {
+      eventId: 17,
+      atUnixMs: 1700,
+    });
+
+    const usage = getContextTelemetryRun(state, 'run_structured')?.usage;
+    expect(usage?.estimateTokens).toBe(620);
+    expect(usage?.contextLimit).toBe(1000);
+    expect(usage?.usagePercent).toBe(62);
+    expect(usage?.estimateSource).toBe('full_request_estimate');
+  });
+
+  it('normalizes structured context compaction updates from Flower live events', () => {
+    const state = applyContextCompactionToRun({}, 'run_structured', 'context.compaction.updated', {
+      compaction: {
+        operation_id: 'op_1',
+        phase: 'complete',
+        status: 'compacted',
+        trigger: 'pre_request',
+        reason: 'threshold',
+        tokens_before: 920,
+        tokens_after_estimate: 210,
+      },
+    }, {
+      eventId: 18,
+      atUnixMs: 1800,
+    });
+
+    const compaction = getContextTelemetryRun(state, 'run_structured')?.compactions[0];
+    expect(compaction?.compactionId).toBe('op_1');
+    expect(compaction?.eventType).toBe('context.compaction.updated');
+    expect(compaction?.stage).toBe('applied');
+    expect(compaction?.strategy).toBe('pre_request');
+    expect(compaction?.estimateTokensBefore).toBe(920);
+    expect(compaction?.estimateTokensAfter).toBe(210);
   });
 
   it('keeps the same state object when an identical usage payload is replayed', () => {
@@ -99,9 +148,11 @@ describe('aiContextTelemetryState', () => {
   });
 
   it('keeps the same state object when an identical compaction replay arrives', () => {
-    const state = applyContextCompactionToRun({}, 'run_5', 'context.compaction.completed', {
-      compaction_id: 'cmp_5',
+    const state = applyContextCompactionToRun({}, 'run_5', 'context.compaction.updated', {
+      operation_id: 'cmp_5',
       step_index: 1,
+      phase: 'complete',
+      status: 'compacted',
       strategy: 'summarize_history',
       estimate_tokens_before: 1200,
       estimate_tokens_after: 800,
@@ -110,9 +161,11 @@ describe('aiContextTelemetryState', () => {
       atUnixMs: 3100,
     });
 
-    const replayed = applyContextCompactionToRun(state, 'run_5', 'context.compaction.completed', {
-      compaction_id: 'cmp_5',
+    const replayed = applyContextCompactionToRun(state, 'run_5', 'context.compaction.updated', {
+      operation_id: 'cmp_5',
       step_index: 1,
+      phase: 'complete',
+      status: 'compacted',
       strategy: 'summarize_history',
       estimate_tokens_before: 1200,
       estimate_tokens_after: 800,

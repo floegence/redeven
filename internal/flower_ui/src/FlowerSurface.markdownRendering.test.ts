@@ -65,6 +65,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('const selectedThreadHasModelStatus = createMemo(() => selectedModelIOStatus() != null)');
     expect(src).toContain('<Show when={selectedThreadHasModelStatus()}>');
     expect(src).toContain('{modelStatusIndicator()}');
+    expect(src).toContain('<Show when={selectedContextUsage()}>');
+    expect(src).toContain('{contextMeter()}');
     expect(src).toContain('role="status"');
     expect(src).toContain('aria-live="polite"');
     expect(src).toContain('aria-atomic="true"');
@@ -75,6 +77,16 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain('thinkingIndicator');
     expect(src).not.toContain('flower-message-streaming-tail');
     expect(src).not.toContain('flower-streaming-cursor');
+  });
+
+  it('renders context compaction timeline decorations as non-message divider entries', () => {
+    const src = surfaceSource();
+
+    expect(src).toContain("case 'context_compaction':");
+    expect(src).toContain('compactionDividerEntry');
+    expect(src).toContain('flower-compaction-divider');
+    expect(src).toContain('data-flower-compaction-status={compaction().status}');
+    expect(src).not.toContain("case 'decoration':");
   });
 
   it('renders the scroll-to-latest control as a floating dock affordance above the composer', () => {

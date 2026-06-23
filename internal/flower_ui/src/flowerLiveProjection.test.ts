@@ -167,6 +167,281 @@ describe('Flower live projection', () => {
     });
   });
 
+  it('projects context usage and compaction decorations from bootstrap state', () => {
+    const projected = projectFlowerLiveBootstrap(bootstrap({
+      live_state: {
+        thread_patch: {},
+        runs: {
+          'run-1': { run_id: 'run-1', status: 'running', message_id: 'assistant-live' },
+        },
+        context_usage: {
+          run_id: 'run-1',
+          step_index: 1,
+          phase: 'projected_request',
+          input_tokens: 620,
+          context_window_tokens: 1000,
+          threshold_tokens: 900,
+          used_ratio: 0.62,
+          threshold_ratio: 0.9,
+          pressure_status: 'stable',
+          source: 'full_request_estimate',
+          updated_at_ms: 3100,
+        },
+        context_compactions: [{
+          operation_id: 'compact-1',
+          run_id: 'run-1',
+          step_index: 1,
+          phase: 'complete',
+          status: 'compacted',
+          tokens_before: 920,
+          tokens_after_estimate: 210,
+          updated_at_ms: 3200,
+        }],
+        timeline_decorations: [{
+          decoration_id: 'context-compaction:compact-1',
+          kind: 'context_compaction',
+          anchor_message_id: 'assistant-live',
+          placement: 'before',
+          ordinal: 0,
+          compaction: {
+            operation_id: 'compact-1',
+            run_id: 'run-1',
+            phase: 'complete',
+            status: 'compacted',
+            tokens_before: 920,
+            tokens_after_estimate: 210,
+            updated_at_ms: 3200,
+          },
+        }],
+        approval_actions: {},
+        input_requests: {},
+      },
+    }));
+
+    expect(projected.context_usage).toMatchObject({
+      run_id: 'run-1',
+      input_tokens: 620,
+      pressure_status: 'stable',
+    });
+    expect(projected.context_compactions?.[0]?.operation_id).toBe('compact-1');
+    expect(projected.timeline_decorations?.[0]?.anchor_message_id).toBe('assistant-live');
+  });
+
+  it('maps and applies live context usage and compaction events', () => {
+    const initial = thread({
+      status: 'running',
+      active_run_id: 'run-1',
+      messages: [
+        message(),
+        {
+          id: 'assistant-live',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 2000,
+          active_cursor: true,
+        },
+      ],
+    });
+
+    const mapped = mapFlowerLiveEvents({
+      events: [
+        {
+          schema_version: 1,
+          seq: 1,
+          endpoint_id: 'runtime',
+          thread_id: 'th-live',
+          run_id: 'run-1',
+          at_unix_ms: 4000,
+          kind: 'context.usage.updated',
+          payload: {
+            usage: {
+              run_id: 'run-1',
+              step_index: 1,
+              phase: 'projected_request',
+              input_tokens: 700,
+              context_window_tokens: 1000,
+              used_ratio: 0.7,
+              pressure_status: 'near_threshold',
+              updated_at_ms: 4000,
+            },
+          },
+        },
+        {
+          schema_version: 1,
+          seq: 2,
+          endpoint_id: 'runtime',
+          thread_id: 'th-live',
+          run_id: 'run-1',
+          at_unix_ms: 4100,
+          kind: 'context.compaction.updated',
+          payload: {
+            compaction: {
+              operation_id: 'compact-live',
+              run_id: 'run-1',
+              anchor_message_id: 'assistant-live',
+              step_index: 1,
+              phase: 'start',
+              status: 'compacting',
+              trigger: 'pre_request',
+              reason: 'threshold',
+              tokens_before: 910,
+              updated_at_ms: 4100,
+            },
+          },
+        },
+      ],
+      next_cursor: 2,
+      retained_from_seq: 1,
+    });
+    const result = applyEvents(initial, 0, mapped.events);
+
+    expect(result.thread.context_usage).toMatchObject({
+      run_id: 'run-1',
+      input_tokens: 700,
+      pressure_status: 'near_threshold',
+    });
+    expect(result.thread.context_compactions?.[0]?.operation_id).toBe('compact-live');
+    expect(result.thread.timeline_decorations?.[0]).toMatchObject({
+      decoration_id: 'context-compaction:compact-live',
+      anchor_message_id: 'assistant-live',
+      compaction: {
+        status: 'compacting',
+      },
+    });
+  });
+
+  it('keeps compaction dividers anchored to the compaction payload message id', () => {
+    const initial = thread({
+      messages: [
+        message(),
+        {
+          id: 'assistant-live',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 2000,
+          active_cursor: true,
+        },
+      ],
+    });
+
+    const applied = applyFlowerLiveEvent(initial, 0, event(1, 'context.compaction.updated', {
+      compaction: {
+        operation_id: 'compact-anchor',
+        run_id: 'run-1',
+        anchor_message_id: 'assistant-live',
+        phase: 'start',
+        status: 'compacting',
+        tokens_before: 910,
+        updated_at_ms: 4100,
+      },
+    }));
+
+    expect(applied.thread.timeline_decorations?.[0]).toMatchObject({
+      decoration_id: 'context-compaction:compact-anchor',
+      anchor_message_id: 'assistant-live',
+    });
+  });
+
+  it('clamps context usage ratios and ignores the obsolete usage event name', () => {
+    const mapped = mapFlowerLiveEvents({
+      events: [
+        {
+          schema_version: 1,
+          seq: 1,
+          endpoint_id: 'runtime',
+          thread_id: 'th-live',
+          run_id: 'run-1',
+          at_unix_ms: 4000,
+          kind: 'context.usage.updated',
+          payload: {
+            usage: {
+              run_id: 'run-1',
+              phase: 'projected_request',
+              input_tokens: 1400,
+              context_window_tokens: 1000,
+              used_ratio: 1.4,
+              threshold_ratio: 1.2,
+              pressure_status: 'hard_limit',
+              updated_at_ms: 4000,
+            },
+          },
+        },
+        {
+          schema_version: 1,
+          seq: 2,
+          endpoint_id: 'runtime',
+          thread_id: 'th-live',
+          run_id: 'run-1',
+          at_unix_ms: 4100,
+          kind: 'usage.updated',
+          payload: {
+            usage: {
+              phase: 'projected_request',
+              pressure_status: 'stable',
+              updated_at_ms: 4100,
+            },
+          },
+        },
+      ],
+      next_cursor: 2,
+      retained_from_seq: 1,
+    });
+
+    expect(mapped.events).toHaveLength(1);
+    expect(mapped.events[0]?.kind).toBe('context.usage.updated');
+    if (mapped.events[0]?.kind !== 'context.usage.updated') throw new Error('expected context usage event');
+    expect(mapped.events[0].payload.usage.used_ratio).toBe(1);
+    expect(mapped.events[0].payload.usage.threshold_ratio).toBe(1);
+  });
+
+  it('updates an existing compaction divider by operation id', () => {
+    const initial = thread({
+      messages: [
+        message(),
+        {
+          id: 'assistant-live',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 2000,
+          active_cursor: true,
+        },
+      ],
+    });
+    const started = applyFlowerLiveEvent(initial, 0, event(1, 'context.compaction.updated', {
+      compaction: {
+        operation_id: 'compact-live',
+        run_id: 'run-1',
+        anchor_message_id: 'assistant-live',
+        phase: 'start',
+        status: 'compacting',
+        tokens_before: 910,
+        updated_at_ms: 4100,
+      },
+    }));
+    const completed = applyFlowerLiveEvent(started.thread, started.cursor, event(2, 'context.compaction.updated', {
+      compaction: {
+        operation_id: 'compact-live',
+        run_id: 'run-1',
+        phase: 'complete',
+        status: 'compacted',
+        tokens_before: 910,
+        tokens_after_estimate: 220,
+        updated_at_ms: 4200,
+      },
+    }));
+
+    expect(completed.thread.context_compactions).toHaveLength(1);
+    expect(completed.thread.timeline_decorations).toHaveLength(1);
+    expect(completed.thread.timeline_decorations?.[0]?.anchor_message_id).toBe('assistant-live');
+    expect(completed.thread.timeline_decorations?.[0]?.compaction).toMatchObject({
+      status: 'compacted',
+      tokens_after_estimate: 220,
+    });
+  });
+
   it('accepts model io updates only from the active live run', () => {
     const initial = thread();
     const staleBeforeRun = applyFlowerLiveEvent(initial, 0, event(1, 'model_io.updated', {

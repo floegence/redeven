@@ -2,6 +2,8 @@ import type {
   FlowerApprovalAction,
   FlowerChatMessage,
   FlowerChatMessageBlock,
+  FlowerContextCompaction,
+  FlowerTimelineDecoration,
   FlowerInputRequest,
   FlowerLiveBootstrap,
   FlowerLiveBlock,
@@ -147,12 +149,59 @@ function withModelIOStatus(thread: FlowerThreadSnapshot, status: FlowerModelIOSt
   return { ...thread, model_io_status: status };
 }
 
+function contextCompactionDecorationID(compaction: FlowerContextCompaction): string {
+  return `context-compaction:${trim(compaction.operation_id)}`;
+}
+
+function timelineDecorationForCompaction(thread: FlowerThreadSnapshot, compaction: FlowerContextCompaction): FlowerTimelineDecoration {
+  const existing = (thread.timeline_decorations ?? []).find((decoration) => decoration.decoration_id === contextCompactionDecorationID(compaction));
+  const anchorMessageID = trim(compaction.anchor_message_id) || trim(existing?.anchor_message_id);
+  return {
+    decoration_id: contextCompactionDecorationID(compaction),
+    kind: 'context_compaction',
+    placement: 'before',
+    ordinal: existing?.ordinal ?? thread.timeline_decorations?.length ?? 0,
+    ...(anchorMessageID ? { anchor_message_id: anchorMessageID } : {}),
+    compaction,
+  };
+}
+
+function upsertContextCompaction(thread: FlowerThreadSnapshot, compaction: FlowerContextCompaction): FlowerThreadSnapshot {
+  const operationID = trim(compaction.operation_id);
+  if (!operationID) return thread;
+  const compactions = [...(thread.context_compactions ?? [])];
+  const compactionIndex = compactions.findIndex((item) => trim(item.operation_id) === operationID);
+  if (compactionIndex >= 0) {
+    compactions[compactionIndex] = compaction;
+  } else {
+    compactions.push(compaction);
+  }
+
+  const decoration = timelineDecorationForCompaction(thread, compaction);
+  const decorations = [...(thread.timeline_decorations ?? [])];
+  const decorationIndex = decorations.findIndex((item) => trim(item.decoration_id) === decoration.decoration_id);
+  if (decorationIndex >= 0) {
+    decorations[decorationIndex] = decoration;
+  } else {
+    decorations.push(decoration);
+  }
+
+  return {
+    ...thread,
+    context_compactions: compactions,
+    timeline_decorations: decorations,
+  };
+}
+
 export function projectFlowerLiveBootstrap(bootstrap: FlowerLiveBootstrap): FlowerThreadSnapshot {
   let thread: FlowerThreadSnapshot = {
     ...bootstrap.thread,
     read_status: bootstrap.read_status,
     messages: [...bootstrap.timeline_messages],
     model_io_status: bootstrap.live_state.model_io ?? null,
+    context_usage: bootstrap.live_state.context_usage ?? bootstrap.thread.context_usage ?? null,
+    context_compactions: bootstrap.live_state.context_compactions ?? bootstrap.thread.context_compactions ?? [],
+    timeline_decorations: bootstrap.live_state.timeline_decorations ?? bootstrap.thread.timeline_decorations ?? [],
     approval_actions: approvalsFromRecord(bootstrap.live_state.approval_actions),
   };
   thread = applyThreadPatch(thread, bootstrap.live_state.thread_patch);
@@ -357,7 +406,11 @@ export function applyFlowerLiveEvent(
     case 'model_io.updated':
       next = withModelIOStatus(next, event.payload.status ?? null, event.run_id);
       break;
-    case 'usage.updated':
+    case 'context.usage.updated':
+      next = { ...next, context_usage: event.payload.usage };
+      break;
+    case 'context.compaction.updated':
+      next = upsertContextCompaction(next, event.payload.compaction);
       break;
     case 'timeline.replaced':
       next = {

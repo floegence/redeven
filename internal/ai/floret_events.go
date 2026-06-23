@@ -3,6 +3,7 @@ package ai
 import (
 	"strings"
 
+	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 )
 
@@ -44,6 +45,8 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	}
 	r.applyFloretStreamObservation(ev.Stream)
 	r.applyFloretSourceObservation(ev.Sources)
+	r.applyFloretContextStatus(ev.ContextStatus)
+	r.applyFloretCompaction(ev.Compaction)
 	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
 	case floretEventProviderRequest:
@@ -68,18 +71,13 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"message":    strings.TrimSpace(ev.Message),
 		})
 	case floretEventContextCompact:
-		payload := map[string]any{
-			"step_index": ev.Step,
-			"message":    strings.TrimSpace(ev.Message),
-			"metadata":   ev.Metadata,
+		if ev.Compaction == nil {
+			r.persistRunEvent("floret.context.compact", RealtimeStreamKindLifecycle, map[string]any{
+				"step_index": ev.Step,
+				"message":    strings.TrimSpace(ev.Message),
+				"metadata":   ev.Metadata,
+			})
 		}
-		if strings.TrimSpace(ev.Error) != "" {
-			payload["error"] = strings.TrimSpace(ev.Error)
-		}
-		if strings.TrimSpace(ev.Result) != "" {
-			payload["result"] = strings.TrimSpace(ev.Result)
-		}
-		r.emitContextCompactionEvent("context.compaction.floret", payload)
 	case floretEventContextContinue:
 		r.persistRunEvent("floret.context.continue", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index":          ev.Step,
@@ -117,6 +115,138 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"tool_name": strings.TrimSpace(ev.ToolName),
 			"metadata":  ev.Metadata,
 		})
+	}
+}
+
+func (r *run) applyFloretContextStatus(status *observation.ContextStatus) {
+	if r == nil || status == nil {
+		return
+	}
+	if !r.acceptsPresentationUpdates() {
+		return
+	}
+	usage := flowerContextUsageFromFloret(status, strings.TrimSpace(r.id))
+	r.persistRunEvent("context.usage.updated", RealtimeStreamKindContext, flowerContextUsagePayload(usage))
+	r.sendStreamEvent(streamEventContextUsage{
+		Type:  "context-usage",
+		Usage: usage,
+	})
+}
+
+func (r *run) applyFloretCompaction(compaction *observation.CompactionEvent) {
+	if r == nil || compaction == nil {
+		return
+	}
+	if !r.acceptsPresentationUpdates() {
+		return
+	}
+	projected := flowerContextCompactionFromFloret(compaction, strings.TrimSpace(r.id))
+	r.persistRunEvent("context.compaction.updated", RealtimeStreamKindContext, flowerContextCompactionPayload(projected))
+	r.sendStreamEvent(streamEventContextCompaction{
+		Type:            "context-compaction",
+		Compaction:      projected,
+		AnchorMessageID: strings.TrimSpace(compaction.TurnID),
+	})
+}
+
+func flowerContextUsageFromFloret(status *observation.ContextStatus, fallbackRunID string) FlowerContextUsage {
+	if status == nil {
+		return FlowerContextUsage{}
+	}
+	pressure := status.ContextPressure
+	usage := status.Usage
+	inputTokens := usage.WindowInputTokens
+	if inputTokens <= 0 {
+		inputTokens = usage.InputTokens + usage.CacheReadTokens + usage.CacheWriteTokens
+	}
+	if inputTokens <= 0 {
+		inputTokens = pressure.WindowInputTokens
+	}
+	if inputTokens <= 0 {
+		inputTokens = pressure.ProjectedInputTokens
+	}
+	source := strings.TrimSpace(string(pressure.Source))
+	if source == "" {
+		source = strings.TrimSpace(usage.Source)
+	}
+	updatedAt := status.ObservedAt.UnixMilli()
+	if updatedAt <= 0 {
+		updatedAt = 0
+	}
+	runID := strings.TrimSpace(status.RunID)
+	if runID == "" {
+		runID = fallbackRunID
+	}
+	return FlowerContextUsage{
+		RunID:                  runID,
+		StepIndex:              status.Step,
+		Phase:                  strings.TrimSpace(status.Phase),
+		InputTokens:            inputTokens,
+		ContextWindowTokens:    pressure.ContextWindowTokens,
+		ThresholdTokens:        pressure.ThresholdTokens,
+		RequestSafeLimitTokens: pressure.RequestSafeLimit,
+		OutputHeadroomTokens:   pressure.OutputHeadroomTokens,
+		UsedRatio:              status.UsedRatio,
+		ThresholdRatio:         status.ThresholdRatio,
+		PressureStatus:         strings.TrimSpace(status.Status),
+		Source:                 source,
+		UpdatedAtMs:            updatedAt,
+	}
+}
+
+func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent, fallbackRunID string) FlowerContextCompaction {
+	if compaction == nil {
+		return FlowerContextCompaction{}
+	}
+	updatedAt := compaction.ObservedAt.UnixMilli()
+	if updatedAt <= 0 {
+		updatedAt = 0
+	}
+	runID := strings.TrimSpace(compaction.RunID)
+	if runID == "" {
+		runID = fallbackRunID
+	}
+	return FlowerContextCompaction{
+		OperationID:          strings.TrimSpace(compaction.OperationID),
+		RunID:                runID,
+		AnchorMessageID:      strings.TrimSpace(compaction.TurnID),
+		StepIndex:            compaction.Step,
+		Phase:                strings.TrimSpace(compaction.Phase),
+		Status:               normalizeFlowerContextCompactionStatus(compaction.Status),
+		Trigger:              strings.TrimSpace(compaction.Trigger),
+		Reason:               strings.TrimSpace(compaction.Reason),
+		CompactionID:         strings.TrimSpace(compaction.CompactionID),
+		CompactionGeneration: compaction.CompactionGeneration,
+		CompactionWindowID:   strings.TrimSpace(compaction.CompactionWindowID),
+		TokensBefore:         compaction.TokensBefore,
+		TokensAfterEstimate:  compaction.TokensAfterEstimate,
+		Error:                strings.TrimSpace(compaction.Error),
+		UpdatedAtMs:          updatedAt,
+	}
+}
+
+func normalizeFlowerContextCompactionStatus(status string) string {
+	switch strings.TrimSpace(status) {
+	case observation.CompactionStatusRunning:
+		return "compacting"
+	case observation.CompactionStatusCompacted:
+		return "compacted"
+	case observation.CompactionStatusFailed:
+		return "failed"
+	default:
+		return strings.TrimSpace(status)
+	}
+}
+
+func flowerContextUsagePayload(usage FlowerContextUsage) map[string]any {
+	return map[string]any{
+		"usage": usage,
+	}
+}
+
+func flowerContextCompactionPayload(compaction FlowerContextCompaction) map[string]any {
+	return map[string]any{
+		"compaction": compaction,
 	}
 }
 

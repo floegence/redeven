@@ -16,6 +16,8 @@ Live streaming uses small message updates only when the target message id is alr
 
 Active cursor ownership belongs to Redeven's live projection. The projection marks at most one live assistant draft with `active_cursor` while the selected thread is running, and canceled, completed, idle, background, or merely streaming-shaped messages are not treated as active unless the projection marks them active. The visible model status affordance is a localized bottom dock lane driven by `model_io.updated`, not by `active_cursor` or thread running status. `model_io` is derived from Floret provider lifecycle and stream observations: provider request maps to waiting for model response; assistant, reasoning, and model tool-call stream observations map to thinking; provider retry maps to retrying; provider finish maps to finalizing. The indicator is not a timeline message and does not depend on a visible assistant block. The indicator's readable text is the base rendered text; shimmer is a decorative overlay and must not be the only mechanism that makes the label visible.
 
+Context usage and compaction state share that presentation lane and canonical projection model. Redeven stores the latest `context_usage` plus historical `context_compactions` and `timeline_decorations` in Flower live materialized state. `context.usage.updated` updates the compact context meter beside the model status. `context.compaction.updated` upserts a `context_compaction` timeline decoration keyed by `operation_id`; the UI renders it as a non-interactive divider such as compression in progress, compressed, or failed. The divider is not a transcript message and does not affect message ordering, copying, read state, or model-visible history.
+
 Selected-thread live polling treats `model_io.updated` as a presentation boundary. Even when one live-events response contains a short provider stream followed by finalizing or clearing events, Flower commits the model status lane and yields a render frame at each model I/O boundary. This keeps brief but real provider streaming phases visible to the user without inventing timeline rows, fallback timers, or thread-status heuristics.
 
 Thread read state is a user-scoped appserver projection over the Redeven thread snapshot. Live bootstrap returns the current `read_status`, and live `thread.patched` events returned through appserver carry the current `read_status` when thread metadata changes. A selected running thread that completes while the user keeps it selected is therefore marked read from the final snapshot by the Flower surface; background completions remain unread until selected.
@@ -26,6 +28,8 @@ Flower does not sort messages, infer insertion points from timestamps, pair rece
 
 Flower does not infer read snapshots from run status or timestamps. It applies `read_status` delivered by bootstrap/list/patch payloads and only persists read state for the currently selected thread.
 
+Flower does not parse provider request metadata, database rows, or transcript text to estimate context pressure. It renders context usage and compaction only from typed live/bootstrap fields projected by Redeven from structured Floret observations.
+
 Redeven may publish `timeline.replaced` after run start, assistant commit, stop materialization, and resync recovery. Desktop and Env App adapters both refresh the live bootstrap after thread-level stop operations, so the surface receives the same canonical timeline after a stop-only or stop+send interaction.
 
 # Citations
@@ -33,18 +37,23 @@ Redeven may publish `timeline.replaced` after run start, assistant commit, stop 
 [1] redeven:internal/ai/flower_live_projection.go:79 - Live bootstrap builds `timeline_messages` before returning the thread snapshot.
 [2] redeven:internal/ai/flower_live_projection.go:173 - The server-side timeline builder combines persisted messages, turn anchors, and live drafts.
 [3] redeven:internal/ai/flower_live_projection.go:276 - Active cursor ownership is derived from active live run state.
-[4] redeven:internal/ai/flower_live_projection.go:884 - `streamEventModelIOStatus` projects into `model_io.updated`.
+[4] redeven:internal/ai/flower_live_projection.go:882 - `streamEventModelIOStatus` projects into `model_io.updated`.
 [5] redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:385 - The shared Flower live bootstrap contract exposes `timeline_messages`.
 [6] redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:456 - `timeline.replaced` carries a full replacement message array.
 [7] redeven:internal/flower_ui/src/flowerLiveReducer.ts:109 - Bootstrap projection uses `timeline_messages` as the thread message array.
 [8] redeven:internal/flower_ui/src/flowerLiveReducer.ts:166 - Strict live message updates require the target message to already exist.
 [9] redeven:internal/flower_ui/src/flowerLiveReducer.ts:262 - Missing committed messages require resync instead of local row creation.
 [10] redeven:internal/flower_ui/src/flowerLiveReducer.ts:347 - `model_io.updated` is applied as thread presentation state rather than a timeline message.
-[11] redeven:internal/flower_ui/src/FlowerSurface.tsx:1046 - Local pending state is limited to the turn launch request.
-[12] redeven:internal/flower_ui/src/FlowerSurface.tsx:1225 - Visible timeline entries are built from the selected thread snapshot.
-[13] redeven:internal/flower_ui/src/FlowerSurface.tsx:1388 - The visible model status lane reads `model_io_status` and localized model status copy rather than synthesizing a timeline message.
-[14] redeven:internal/flower_ui/src/FlowerSurface.tsx:128 - Flower recognizes `model_io.updated` as a model-status presentation boundary.
-[15] redeven:internal/flower_ui/src/FlowerSurface.tsx:994 - Selected-thread live polling commits and yields at model I/O presentation boundaries.
-[16] redeven:internal/codeapp/appserver/thread_read_state.go:156 - Appserver decorates live events with user-scoped Flower read status.
-[17] redeven:internal/flower_ui/src/FlowerSurface.tsx:873 - Selected-thread live events drive read persistence for unread snapshots.
-[18] redeven:internal/flower_ui/src/flowerLiveReducer.ts:84 - Thread patches update the thread read status delivered by appserver.
+[11] redeven:internal/ai/flower_live_projection.go:998 - Context usage updates live materialized state.
+[12] redeven:internal/ai/flower_live_projection.go:1010 - Context compaction updates upsert timeline decorations.
+[13] redeven:internal/flower_ui/src/flowerLiveReducer.ts:407 - `context.usage.updated` is applied as thread presentation state.
+[14] redeven:internal/flower_ui/src/flowerLiveReducer.ts:410 - `context.compaction.updated` upserts context compactions and decorations.
+[15] redeven:internal/flower_ui/src/flowerTimelineProjection.ts:140 - Context compaction decorations become timeline divider entries, not messages.
+[16] redeven:internal/flower_ui/src/FlowerSurface.tsx:1046 - Local pending state is limited to the turn launch request.
+[17] redeven:internal/flower_ui/src/FlowerSurface.tsx:1225 - Visible timeline entries are built from the selected thread snapshot.
+[18] redeven:internal/flower_ui/src/FlowerSurface.tsx:1388 - The visible model status lane reads `model_io_status` and localized model status copy rather than synthesizing a timeline message.
+[19] redeven:internal/flower_ui/src/FlowerSurface.tsx:128 - Flower recognizes `model_io.updated` as a model-status presentation boundary.
+[20] redeven:internal/flower_ui/src/FlowerSurface.tsx:994 - Selected-thread live polling commits and yields at model I/O presentation boundaries.
+[21] redeven:internal/codeapp/appserver/thread_read_state.go:156 - Appserver decorates live events with user-scoped Flower read status.
+[22] redeven:internal/flower_ui/src/FlowerSurface.tsx:873 - Selected-thread live events drive read persistence for unread snapshots.
+[23] redeven:internal/flower_ui/src/flowerLiveReducer.ts:84 - Thread patches update the thread read status delivered by appserver.

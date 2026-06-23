@@ -2,6 +2,7 @@ import type {
   FlowerActivityTimelineBlock,
   FlowerChatMessage,
   FlowerInputRequest,
+  FlowerTimelineDecoration,
   FlowerThreadError,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
@@ -33,6 +34,11 @@ export type FlowerTimelineEntry =
     type: 'input_request';
     key: string;
     request: FlowerInputRequest;
+  }>
+  | Readonly<{
+    type: 'context_compaction';
+    key: string;
+    decoration: FlowerTimelineDecoration;
   }>
   | Readonly<{
     type: 'error';
@@ -123,12 +129,58 @@ function contentBlocksFromMessage(message: FlowerChatMessage): readonly FlowerRe
     : [];
 }
 
+function decorationSortKey(decoration: FlowerTimelineDecoration): string {
+  return [
+    String(Math.max(0, Math.floor(Number(decoration.ordinal ?? 0))).toString().padStart(8, '0')),
+    trimString(decoration.decoration_id),
+  ].join(':');
+}
+
+function timelineDecorationEntry(decoration: FlowerTimelineDecoration): FlowerTimelineEntry | null {
+  if (decoration.kind !== 'context_compaction') return null;
+  if (!trimString(decoration.decoration_id) || !trimString(decoration.compaction.operation_id)) return null;
+  return {
+    type: 'context_compaction',
+    key: `timeline-decoration:${decoration.decoration_id}`,
+    decoration,
+  };
+}
+
+function decorationsByAnchor(
+  decorations: readonly FlowerTimelineDecoration[],
+): Readonly<{
+  before: ReadonlyMap<string, readonly FlowerTimelineEntry[]>;
+  after: ReadonlyMap<string, readonly FlowerTimelineEntry[]>;
+  unanchored: readonly FlowerTimelineEntry[];
+}> {
+  const before = new Map<string, FlowerTimelineEntry[]>();
+  const after = new Map<string, FlowerTimelineEntry[]>();
+  const unanchored: FlowerTimelineEntry[] = [];
+  const entries = decorations
+    .map(timelineDecorationEntry)
+    .filter((entry): entry is Extract<FlowerTimelineEntry, { type: 'context_compaction' }> => entry != null)
+    .sort((left, right) => decorationSortKey(left.decoration).localeCompare(decorationSortKey(right.decoration)));
+
+  for (const entry of entries) {
+    const anchor = trimString(entry.decoration.anchor_message_id);
+    if (!anchor) {
+      unanchored.push(entry);
+      continue;
+    }
+    const target = entry.decoration.placement === 'after' ? after : before;
+    target.set(anchor, [...(target.get(anchor) ?? []), entry]);
+  }
+
+  return { before, after, unanchored };
+}
+
 export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined): readonly FlowerTimelineEntry[] {
   if (!thread) return [];
   const threadRunning = thread.status === 'running';
   const activeCursorMessageID = threadRunning
     ? [...thread.messages].reverse().find((message) => message.role === 'assistant' && message.active_cursor === true)?.id ?? ''
     : '';
+  const decorations = decorationsByAnchor(thread.timeline_decorations ?? []);
   const entries: FlowerTimelineEntry[] = thread.messages.flatMap((message): readonly FlowerTimelineEntry[] => {
     const activeCursor = message.id === activeCursorMessageID;
     const projectedMessage = activeCursor === message.active_cursor
@@ -138,13 +190,18 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
     if (blocks.length === 0 && !activeCursor && message.status !== 'error') {
       return [];
     }
-    return [{
-      type: 'message',
-      key: `message:${message.id}`,
-      message: projectedMessage,
-      blocks,
-    }];
+    return [
+      ...(decorations.before.get(message.id) ?? []),
+      {
+        type: 'message',
+        key: `message:${message.id}`,
+        message: projectedMessage,
+        blocks,
+      },
+      ...(decorations.after.get(message.id) ?? []),
+    ];
   });
+  entries.push(...decorations.unanchored);
   if (thread.status === 'waiting_user' && thread.input_request) {
     entries.push({
       type: 'input_request',

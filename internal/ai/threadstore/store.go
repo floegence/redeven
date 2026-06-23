@@ -914,7 +914,7 @@ func normalizeWaitingUserInputJSONForStatus(runStatus string, waitingUserInputJS
 
 func isPersistedContextRunEventType(eventType string) bool {
 	eventType = strings.TrimSpace(strings.ToLower(eventType))
-	return eventType == "context.usage.updated" || strings.HasPrefix(eventType, "context.compaction.")
+	return eventType == "context.usage.updated" || eventType == "context.compaction.updated"
 }
 
 const (
@@ -2474,7 +2474,7 @@ func (s *Store) ListRunEventsPage(ctx context.Context, endpointID string, runID 
 		whereCategory = `
 AND (
   event_type = 'context.usage.updated'
-  OR event_type LIKE 'context.compaction.%'
+  OR event_type = 'context.compaction.updated'
 )`
 	}
 	args = append(args, limit+1)
@@ -2512,6 +2512,54 @@ LIMIT ?
 		nextCursor = out[len(out)-1].ID
 	}
 	return out, nextCursor, hasMore, nil
+}
+
+func (s *Store) ListThreadContextRunEvents(ctx context.Context, endpointID string, threadID string, limit int) ([]RunEventRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return nil, errors.New("invalid request")
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+	if limit > 2000 {
+		limit = 2000
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT id, endpoint_id, thread_id, run_id, stream_kind, event_type, payload_json, at_unix_ms
+FROM ai_run_events
+WHERE endpoint_id = ? AND thread_id = ?
+  AND event_type IN ('context.usage.updated', 'context.compaction.updated')
+ORDER BY id DESC
+LIMIT ?
+`, endpointID, threadID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	reversed := make([]RunEventRecord, 0, limit)
+	for rows.Next() {
+		var rec RunEventRecord
+		if err := rows.Scan(&rec.ID, &rec.EndpointID, &rec.ThreadID, &rec.RunID, &rec.StreamKind, &rec.EventType, &rec.PayloadJSON, &rec.AtUnixMs); err != nil {
+			return nil, err
+		}
+		reversed = append(reversed, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]RunEventRecord, len(reversed))
+	for i := range reversed {
+		out[len(reversed)-1-i] = reversed[i]
+	}
+	return out, nil
 }
 
 func (s *Store) pruneRunEventsForThread(ctx context.Context, endpointID string, threadID string) error {

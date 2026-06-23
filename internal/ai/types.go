@@ -435,14 +435,17 @@ type streamEventLifecyclePhase struct {
 }
 
 type streamEventContextUsage struct {
-	Type    string         `json:"type"`
-	Payload map[string]any `json:"payload,omitempty"`
+	Type    string             `json:"type"`
+	Usage   FlowerContextUsage `json:"usage,omitempty"`
+	Payload map[string]any     `json:"payload,omitempty"`
 }
 
 type streamEventContextCompaction struct {
-	Type      string         `json:"type"`
-	EventType string         `json:"eventType"`
-	Payload   map[string]any `json:"payload,omitempty"`
+	Type            string                  `json:"type"`
+	Compaction      FlowerContextCompaction `json:"compaction,omitempty"`
+	AnchorMessageID string                  `json:"anchorMessageId,omitempty"`
+	EventType       string                  `json:"eventType,omitempty"`
+	Payload         map[string]any          `json:"payload,omitempty"`
 }
 
 type streamEventModelIOStatus struct {
