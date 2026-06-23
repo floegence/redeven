@@ -3874,12 +3874,12 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   background: var(--warning, #f59e0b);
 }
 
-[data-flower-thread-unread='true'] .flower-thread-status-dot,
-[data-flower-thread-unread='true'] .flower-thread-wave {
+[data-flower-thread-unread-dot='true'] .flower-thread-status-dot,
+[data-flower-thread-unread-dot='true'] .flower-thread-wave {
   filter: drop-shadow(0 0 0.28rem color-mix(in srgb, var(--primary) 46%, transparent));
 }
 
-[data-flower-thread-unread='true'] .flower-thread-status-dot::after {
+[data-flower-thread-unread-dot='true'] .flower-thread-status-dot::after {
   content: '';
   position: absolute;
   inset: -4px;

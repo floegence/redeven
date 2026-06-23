@@ -87,7 +87,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       data-flower-thread-active={props.active ? 'true' : 'false'}
       data-flower-thread-busy={props.busy ? 'true' : 'false'}
       data-flower-thread-indicator={indicator().visual}
-      data-flower-thread-unread={indicator().attention === 'unread' ? 'true' : 'false'}
+      data-flower-thread-unread-dot={indicator().attention === 'unread' ? 'true' : 'false'}
       data-flower-thread-action-required={indicator().actionRequired ? 'true' : 'false'}
       onContextMenu={(event) => props.onContextMenu?.(event, props.item)}
       class={cn(

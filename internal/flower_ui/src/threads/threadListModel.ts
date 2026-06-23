@@ -1,5 +1,5 @@
 import { DEFAULT_FLOWER_SURFACE_COPY, type FlowerThreadListCopy, type FlowerThreadTimeGroup } from '../copy';
-import type { FlowerThreadListItem } from '../contracts/flowerSurfaceContracts';
+import type { FlowerThreadListItem, FlowerThreadStatus } from '../contracts/flowerSurfaceContracts';
 
 type TimeGroup = FlowerThreadTimeGroup;
 
@@ -76,22 +76,30 @@ export function filterFlowerThreadItems(threads: readonly FlowerThreadListItem[]
   ].join(' ').toLowerCase().includes(needle));
 }
 
+function threadCanShowUnreadDot(status: FlowerThreadStatus): boolean {
+  return status === 'success' || status === 'failed' || status === 'canceled';
+}
+
+function threadShowsUnreadDot(item: FlowerThreadListItem, active: boolean): boolean {
+  return !active && item.read_status.is_unread === true && threadCanShowUnreadDot(item.status);
+}
+
 export function flowerThreadIndicator(
   item: FlowerThreadListItem,
   active: boolean,
   copy: FlowerThreadListCopy = DEFAULT_FLOWER_SURFACE_COPY.threadList,
 ): FlowerThreadIndicator {
-  const unread = item.read_status.is_unread === true;
+  const showUnreadDot = threadShowsUnreadDot(item, active);
   const statusIndicator = (
     ariaStatus: string,
     visual: FlowerThreadIndicator['visual'],
     actionRequired = false,
   ): FlowerThreadIndicator => ({
     visual,
-    attention: unread ? 'unread' : 'none',
+    attention: showUnreadDot ? 'unread' : 'none',
     actionRequired,
     ariaStatus,
-    title: unread ? `${ariaStatus}, ${copy.unread}` : ariaStatus,
+    title: showUnreadDot ? `${ariaStatus}, ${copy.unread}` : ariaStatus,
   });
   switch (item.status) {
     case 'running':
@@ -103,16 +111,18 @@ export function flowerThreadIndicator(
         title: copy.statuses.running,
       };
     case 'waiting_user':
-      return statusIndicator(copy.statuses.waiting_user, !active && unread ? 'dot' : 'none', true);
+      return statusIndicator(copy.statuses.waiting_user, 'none', true);
     case 'waiting_approval':
-      return statusIndicator(copy.statuses.waiting_approval, !active && unread ? 'dot' : 'none', true);
+      return statusIndicator(copy.statuses.waiting_approval, 'none', true);
     case 'success':
-      return statusIndicator(copy.statuses.success, unread ? 'dot' : 'none');
+      return statusIndicator(copy.statuses.success, showUnreadDot ? 'dot' : 'none');
     case 'failed':
-      return statusIndicator(copy.statuses.failed, unread ? 'dot' : 'none');
+      return statusIndicator(copy.statuses.failed, showUnreadDot ? 'dot' : 'none');
     case 'canceled':
-      return statusIndicator(copy.statuses.canceled, unread ? 'dot' : 'none');
+      return statusIndicator(copy.statuses.canceled, showUnreadDot ? 'dot' : 'none');
+    case 'read_only':
+      return statusIndicator(copy.statuses.read_only, 'none');
     default:
-      return statusIndicator(copy.statuses.idle, unread ? 'dot' : 'none');
+      return statusIndicator(copy.statuses.idle, 'none');
   }
 }

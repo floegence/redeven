@@ -446,21 +446,13 @@ describe('FlowerSurface navigation threads', () => {
     const unreadThread = thread({
       thread_id: 'thread-unread',
       title: 'Unread thread',
+      status: 'success',
       read_status: readStatus(true, 3, 'success'),
     });
-    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => liveBootstrap({
-      ...unreadThread,
-      read_status: {
-        is_unread: false,
-        snapshot,
-        read_state: {
-          last_seen_activity_revision: snapshot.activity_revision,
-          last_read_message_at_unix_ms: snapshot.last_message_at_unix_ms,
-          last_seen_activity_signature: snapshot.activity_signature,
-        },
-      },
-    }));
-    const loadThread = vi.fn(async () => liveBootstrap({
+    const readResponse = deferred<FlowerLiveBootstrap>();
+    const loadResponse = deferred<FlowerLiveBootstrap>();
+    const markThreadRead = vi.fn((_threadID: string, _snapshot) => readResponse.promise);
+    const loadedThread = {
       ...unreadThread,
       read_status: readStatus(false, 3, 'success'),
       messages: [
@@ -473,7 +465,8 @@ describe('FlowerSurface navigation threads', () => {
           created_at_ms: 3,
         },
       ],
-    }));
+    };
+    const loadThread = vi.fn(() => loadResponse.promise);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [unreadThread]),
@@ -481,16 +474,35 @@ describe('FlowerSurface navigation threads', () => {
       markThreadRead,
     });
 
-    await waitFor(() => runtime.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread') === 'true');
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread-dot') === 'true');
     expect(runtime.querySelector('[data-thread-id="thread-unread"] .flower-thread-status-dot')).toBeTruthy();
+    expect(runtime.querySelector('[data-thread-id="thread-unread"] button')?.getAttribute('aria-label')).toContain(', Unread');
+    expect(runtime.querySelector('[data-thread-id="thread-unread"] .flower-thread-indicator')?.getAttribute('title')).toContain('Unread');
 
     (runtime.querySelector('[data-thread-id="thread-unread"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread') === 'false');
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread-dot') === 'false');
+    expect(runtime.querySelector('[data-thread-id="thread-unread"] button')?.getAttribute('aria-label')).not.toContain(', Unread');
+    expect(runtime.querySelector('[data-thread-id="thread-unread"] .flower-thread-indicator')?.getAttribute('title')).not.toContain('Unread');
     await waitFor(() => markThreadRead.mock.calls.length > 0);
+    expect(loadThread).toHaveBeenCalledWith('thread-unread');
 
     expect(markThreadRead.mock.calls[0]?.[0]).toBe('thread-unread');
     expect(markThreadRead.mock.calls[0]?.[1]).toMatchObject(unreadThread.read_status.snapshot);
-    expect(loadThread).toHaveBeenCalledWith('thread-unread');
+
+    loadResponse.resolve(liveBootstrap(loadedThread));
+    readResponse.resolve(liveBootstrap({
+      ...loadedThread,
+      read_status: {
+        is_unread: false,
+        snapshot: unreadThread.read_status.snapshot,
+        read_state: {
+          last_seen_activity_revision: unreadThread.read_status.snapshot.activity_revision,
+          last_read_message_at_unix_ms: unreadThread.read_status.snapshot.last_message_at_unix_ms,
+          last_seen_activity_signature: unreadThread.read_status.snapshot.activity_signature,
+        },
+      },
+    }));
+    await waitFor(() => runtime.textContent?.includes('Fresh result.') ?? false);
     expect(runtime.textContent).toContain('Fresh result.');
   });
 
@@ -550,7 +562,7 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-wave"] button')));
     const cardBeforeClick = runtime.querySelector('[data-thread-id="thread-running-wave"]') as HTMLElement;
     expect(cardBeforeClick.getAttribute('data-flower-thread-status')).toBe('running');
-    expect(cardBeforeClick.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(cardBeforeClick.getAttribute('data-flower-thread-unread-dot')).toBe('false');
     expect(cardBeforeClick.getAttribute('data-flower-thread-indicator')).toBe('wave');
     const waveBeforeClick = cardBeforeClick.querySelector('.flower-thread-wave');
     expect(waveBeforeClick).toBeTruthy();
@@ -560,7 +572,7 @@ describe('FlowerSurface navigation threads', () => {
     const waveAfterSelect = runtime.querySelector('[data-thread-id="thread-running-wave"] .flower-thread-wave');
     expect(waveAfterSelect).toBeTruthy();
     expect(waveAfterSelect).toBe(waveBeforeClick);
-    expect(runtime.querySelector('[data-thread-id="thread-running-wave"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(runtime.querySelector('[data-thread-id="thread-running-wave"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
 
     liveUpdateReady = true;
     await waitFor(() => runtime.textContent?.includes('Working... still flowing') ?? false, 2500);
@@ -691,7 +703,7 @@ describe('FlowerSurface navigation threads', () => {
     (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
     await waitFor(() => markThreadRead.mock.calls.length >= 1, 2500);
 
-    expect(runtime.querySelector('[data-thread-id="thread-running-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(runtime.querySelector('[data-thread-id="thread-running-read"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
     expect(runtime.textContent).toContain('Fresh selected update');
   });
 
@@ -752,7 +764,7 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => runtime.textContent?.includes('Working with fresh output') ?? false);
     await waitFor(() => markThreadRead.mock.calls.length > 0);
     expect(runtime.querySelector('[data-thread-id="thread-selected-live-snapshot"] .flower-thread-wave')).toBe(waveBeforeFreshSnapshot);
-    expect(runtime.querySelector('[data-thread-id="thread-selected-live-snapshot"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(runtime.querySelector('[data-thread-id="thread-selected-live-snapshot"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
   });
 
   it('queues a final read persistence when unread detail arrives before an in-flight mark-read completes', async () => {
@@ -816,7 +828,7 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => runtime.textContent?.includes('Final selected update') ?? false, 2500);
     expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('success');
     expect(runtime.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-indicator')).toBe('none');
-    expect(runtime.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(runtime.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
     expect(markThreadRead).toHaveBeenCalledTimes(1);
 
     firstRead.resolve(liveBootstrap({
@@ -825,7 +837,7 @@ describe('FlowerSurface navigation threads', () => {
     }));
     await waitFor(() => markThreadRead.mock.calls.length >= 2);
 
-    expect(runtime.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(runtime.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
   });
 
   it('persists a queued final read even after the user leaves the thread', async () => {
@@ -976,7 +988,7 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => markThreadRead.mock.calls.length === 1);
     expect(markThreadRead.mock.calls[0]?.[0]).toBe('thread-live-complete-read');
     expect(markThreadRead.mock.calls[0]?.[1]).toMatchObject(finalReadStatus.snapshot);
-    expect(runtime.querySelector('[data-thread-id="thread-live-complete-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(runtime.querySelector('[data-thread-id="thread-live-complete-read"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
     expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(0);
   });
 
@@ -984,6 +996,7 @@ describe('FlowerSurface navigation threads', () => {
     const unreadThread = thread({
       thread_id: 'thread-refresh-race',
       title: 'Refresh race',
+      status: 'success',
       updated_at_ms: 7_000,
       read_status: readStatus(true, 7_000, 'success'),
     });
@@ -1001,19 +1014,19 @@ describe('FlowerSurface navigation threads', () => {
       markThreadRead,
     });
 
-    await waitFor(() => runtime.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread') === 'true');
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread-dot') === 'true');
     (runtime.querySelector('[data-thread-id="thread-refresh-race"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread') === 'false');
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread-dot') === 'false');
 
     (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
     await flush();
-    expect(runtime.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(runtime.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
 
     (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
     await flush();
     listSnapshot = [newerUnreadThread];
     (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread') === 'true');
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread-dot') === 'true');
   });
 
   it('keeps target labels searchable without rendering them as sidebar badges', async () => {
@@ -1046,10 +1059,11 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stable-wave-labels"]')));
   });
 
-  it('restores the unread dot when mark-read persistence fails', async () => {
+  it('keeps a selected thread free of unread dots when mark-read persistence fails', async () => {
     const unreadThread = thread({
       thread_id: 'thread-mark-read-error',
       title: 'Unread failure',
+      status: 'success',
       read_status: readStatus(true, 9_000, 'success'),
     });
     const markThreadRead = vi.fn(async () => {
@@ -1062,12 +1076,18 @@ describe('FlowerSurface navigation threads', () => {
       markThreadRead,
     });
 
-    await waitFor(() => runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread') === 'true');
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread-dot') === 'true');
     (runtime.querySelector('[data-thread-id="thread-mark-read-error"] button') as HTMLButtonElement).click();
     await waitFor(() => markThreadRead.mock.calls.length > 0);
+    await waitFor(() => runtime.querySelector('.flower-thread-action-error')?.textContent?.includes('read state unavailable') ?? false);
 
-    expect(runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread')).toBe('true');
+    expect(runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-active')).toBe('true');
+    expect(runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
     expect(runtime.querySelector('.flower-thread-action-error')?.textContent).toContain('read state unavailable');
+
+    (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-active') === 'false');
+    expect(runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('true');
   });
 
   it('uses thread id as a stable tie breaker when conversations share a creation time', async () => {
@@ -1991,10 +2011,12 @@ describe('FlowerSurface navigation threads', () => {
         : backgroundRunning;
       return liveBootstrap(detail);
     });
+    const markThreadRead = vi.fn(async () => liveBootstrap(backgroundDone));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads,
       loadThread,
+      markThreadRead,
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-selected-live"] button')));
@@ -2007,7 +2029,8 @@ describe('FlowerSurface navigation threads', () => {
     await flush();
     expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
     await waitFor(() => runtime.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-indicator') === 'dot');
-    expect(runtime.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-unread')).toBe('true');
+    expect(runtime.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('true');
+    expect(markThreadRead).not.toHaveBeenCalled();
   });
 
   it('renders one bottom model status indicator for a running thread with backend active cursor metadata', async () => {
