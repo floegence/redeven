@@ -5,6 +5,7 @@ import {
   normalizeRuntimeServiceSnapshot,
   runtimeServiceAllowsOpenAttempt,
   runtimeServiceDesktopModelSourceBindingState,
+  runtimeServiceHasActiveWork,
   runtimeServiceIsOpenable,
   runtimeServiceMatchesIdentity,
   runtimeServiceNeedsDesktopUpdate,
@@ -46,6 +47,22 @@ describe('runtimeService', () => {
     expect(runtimeServiceIsOpenable(snapshot)).toBe(true);
     expect(snapshot.open_readiness).toEqual({ state: 'openable' });
     expect(runtimeServiceNeedsRuntimeUpdate(snapshot)).toBe(false);
+  });
+
+  it('counts active AI tasks as runtime work', () => {
+    const snapshot = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v1.2.3',
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      active_workload: {
+        terminal_count: 0,
+        session_count: 0,
+        task_count: 1,
+        port_forward_count: 0,
+      },
+    });
+
+    expect(runtimeServiceHasActiveWork(snapshot)).toBe(true);
   });
 
   it('allows Open attempts for compatibility update blocks while preserving the update type', () => {

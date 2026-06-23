@@ -770,18 +770,19 @@ func TestStore_ResetStaleActiveThreadRunStates(t *testing.T) {
 
 	ctx := context.Background()
 	type threadCase struct {
-		threadID   string
-		status     string
-		runError   string
-		wantStatus string
-		wantRunErr string
+		threadID         string
+		status           string
+		runError         string
+		wantStatus       string
+		wantRunErrorCode string
+		wantRunErr       string
 	}
 	cases := []threadCase{
-		{threadID: "th_accepted", status: "accepted", wantStatus: "canceled"},
-		{threadID: "th_running", status: "running", wantStatus: "canceled"},
-		{threadID: "th_waiting_approval", status: "waiting_approval", wantStatus: "canceled"},
-		{threadID: "th_recovering", status: "recovering", wantStatus: "canceled"},
-		{threadID: "th_finalizing", status: "finalizing", wantStatus: "canceled"},
+		{threadID: "th_accepted", status: "accepted", wantStatus: "canceled", wantRunErrorCode: RuntimeRestartedRunErrorCode, wantRunErr: RuntimeRestartedRunErrorMessage},
+		{threadID: "th_running", status: "running", wantStatus: "canceled", wantRunErrorCode: RuntimeRestartedRunErrorCode, wantRunErr: RuntimeRestartedRunErrorMessage},
+		{threadID: "th_waiting_approval", status: "waiting_approval", wantStatus: "canceled", wantRunErrorCode: RuntimeRestartedRunErrorCode, wantRunErr: RuntimeRestartedRunErrorMessage},
+		{threadID: "th_recovering", status: "recovering", wantStatus: "canceled", wantRunErrorCode: RuntimeRestartedRunErrorCode, wantRunErr: RuntimeRestartedRunErrorMessage},
+		{threadID: "th_finalizing", status: "finalizing", wantStatus: "canceled", wantRunErrorCode: RuntimeRestartedRunErrorCode, wantRunErr: RuntimeRestartedRunErrorMessage},
 		{threadID: "th_waiting_user", status: "waiting_user", wantStatus: "waiting_user"},
 		{threadID: "th_success", status: "success", wantStatus: "success"},
 		{threadID: "th_failed", status: "failed", runError: "boom", wantStatus: "failed", wantRunErr: "boom"},
@@ -814,6 +815,9 @@ func TestStore_ResetStaleActiveThreadRunStates(t *testing.T) {
 		}
 		if got := strings.TrimSpace(th.RunStatus); got != tc.wantStatus {
 			t.Fatalf("thread %s run_status=%q, want %q", tc.threadID, got, tc.wantStatus)
+		}
+		if gotCode := strings.TrimSpace(th.RunErrorCode); gotCode != tc.wantRunErrorCode {
+			t.Fatalf("thread %s run_error_code=%q, want %q", tc.threadID, gotCode, tc.wantRunErrorCode)
 		}
 		if gotErr := strings.TrimSpace(th.RunError); gotErr != tc.wantRunErr {
 			t.Fatalf("thread %s run_error=%q, want %q", tc.threadID, gotErr, tc.wantRunErr)

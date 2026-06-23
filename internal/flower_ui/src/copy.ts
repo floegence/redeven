@@ -243,6 +243,7 @@ export type FlowerSurfaceCopy = Readonly<{
       providerUnreachable: string;
       providerModelUnavailable: string;
       floretEngineFailed: string;
+      runtimeRestarted: string;
     }>;
     messageErrorTitle: string;
     messageErrorFallback: string;
@@ -328,6 +329,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       providerUnreachable: 'The selected AI provider could not be reached. Check the provider endpoint and network connection.',
       providerModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',
       floretEngineFailed: 'Flower could not finish this turn because the orchestration engine failed.',
+      runtimeRestarted: 'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',
     },
     messageErrorTitle: 'Message failed',
     messageErrorFallback: 'This message failed before Flower produced visible text.',

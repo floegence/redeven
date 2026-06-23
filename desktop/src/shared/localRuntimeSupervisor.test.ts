@@ -228,4 +228,34 @@ describe('localRuntimeSupervisor', () => {
       requires_confirmation: true,
     });
   });
+
+  it('treats active AI tasks as active work before reclaiming an unowned runtime', () => {
+    const runtimeService = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v0.5.11',
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      active_workload: {
+        task_count: 1,
+      },
+    });
+    const plan = buildDesktopLocalRuntimeOpenPlan(
+      { kind: 'local_environment' },
+      {
+        local_ui_url: 'http://127.0.0.1:24001/',
+        desktop_managed: true,
+        desktop_owner_id: '',
+        runtime_service: runtimeService,
+      },
+      {
+        desktopOwnerID: 'desktop-owner',
+      },
+    );
+
+    expect(plan).toMatchObject({
+      state: 'blocked_active_work',
+      can_open: false,
+      requires_restart: true,
+      requires_confirmation: true,
+    });
+  });
 });

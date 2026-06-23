@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -85,8 +86,11 @@ func TestNewService_ResetsStaleActiveThreadRunStateAfterRestart(t *testing.T) {
 	if got := strings.TrimSpace(gotRunning.RunStatus); got != "canceled" {
 		t.Fatalf("running thread run_status=%q, want canceled", got)
 	}
-	if got := strings.TrimSpace(gotRunning.RunError); got != "" {
-		t.Fatalf("running thread run_error=%q, want empty", got)
+	if got := strings.TrimSpace(gotRunning.RunErrorCode); got != threadstore.RuntimeRestartedRunErrorCode {
+		t.Fatalf("running thread run_error_code=%q, want %q", got, threadstore.RuntimeRestartedRunErrorCode)
+	}
+	if got := strings.TrimSpace(gotRunning.RunError); got != threadstore.RuntimeRestartedRunErrorMessage {
+		t.Fatalf("running thread run_error=%q, want %q", got, threadstore.RuntimeRestartedRunErrorMessage)
 	}
 
 	gotWaitingUser, err := restarted.GetThread(ctx, &meta, waitingUserThread.ThreadID)

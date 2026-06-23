@@ -75,6 +75,30 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toBe('Deploy plan');
   });
 
+  it('explains when a reply was interrupted by a runtime restart', async () => {
+    const interruptedThread = thread({
+      status: 'canceled',
+      error: {
+        code: 'runtime_restarted',
+        message: 'The local runtime restarted before this reply finished.',
+      },
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [interruptedThread]),
+      loadThread: vi.fn(async () => liveBootstrap(interruptedThread)),
+    });
+    await flush();
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-1"] button')));
+    (runtime.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('.flower-error-card').length > 0);
+
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain(
+      'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',
+    );
+    expect(runtime.querySelector('.flower-error-actions')).toBeNull();
+  });
+
   it('shows the Local AI Profile editor without a separate Flower enable switch', async () => {
     const surfaceAdapter = mutableSettingsAdapter(false);
     const runtime = renderSurfaceWithAdapter(surfaceAdapter);

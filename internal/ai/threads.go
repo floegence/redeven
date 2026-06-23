@@ -41,7 +41,12 @@ func normalizeThreadRunState(status string, runErrorCode string, runError string
 	switch s {
 	case RunStateFailed, RunStateTimedOut:
 		return string(s), runErrorCode, runError
-	case RunStateAccepted, RunStateRunning, RunStateWaitingApproval, RunStateRecovering, RunStateFinalizing, RunStateWaitingUser, RunStateSuccess, RunStateCanceled:
+	case RunStateCanceled:
+		if runErrorCode == threadstore.RuntimeRestartedRunErrorCode {
+			return string(s), runErrorCode, runError
+		}
+		return string(s), "", ""
+	case RunStateAccepted, RunStateRunning, RunStateWaitingApproval, RunStateRecovering, RunStateFinalizing, RunStateWaitingUser, RunStateSuccess:
 		return string(s), "", ""
 	default:
 		return string(RunStateIdle), "", ""
