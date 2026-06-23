@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -16,6 +17,8 @@ import (
 	"testing"
 	"time"
 
+	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -331,11 +334,8 @@ func (m *subagentOpenAISimpleMock) handle(w http.ResponseWriter, r *http.Request
 			"status": "completed",
 			"output": []any{
 				map[string]any{
-					"type":      "function_call",
-					"id":        "fc_subagent_complete_1",
-					"call_id":   "call_subagent_complete_1",
-					"name":      "task_complete",
-					"arguments": `{"result":"{\"summary\":\"Subagent completed.\"}","evidence_refs":["https://example.com/source"]}`,
+					"type": "message",
+					"id":   "msg_subagent_complete_1",
 				},
 			},
 			"usage": map[string]any{
@@ -360,7 +360,7 @@ func (m *subagentOpenAISimpleMock) firstRequest() map[string]any {
 	return cloneAnyMap(m.requests[0])
 }
 
-func TestSubagentManager_DelegateAndWait(t *testing.T) {
+func TestFloretSubagents_DelegateAndWait(t *testing.T) {
 	t.Parallel()
 
 	workspace := t.TempDir()
@@ -388,6 +388,7 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 	}
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:     workspace,
 		AgentHomeDir: workspace,
 		Shell:        "bash",
 		AIConfig:     cfg,
@@ -409,44 +410,26 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 	r.currentReasoning = config.AIReasoningSelection{Level: config.AIReasoningLevelMedium}
 
 	created, err := r.manageSubagents(context.Background(), map[string]any{
-		"action":             "create",
-		"title":              "Workspace status summary",
-		"objective":          "Summarize current workspace status.",
-		"agent_type":         "explore",
-		"trigger_reason":     "Need an isolated exploration result before deciding the next parent step.",
-		"deliverables":       []any{"summary", "key risks"},
-		"definition_of_done": []any{"Include a concise summary and at least one evidence reference."},
-		"output_schema": map[string]any{
-			"type":     "object",
-			"required": []any{"summary"},
-			"properties": map[string]any{
-				"summary": map[string]any{"type": "string", "minLength": 10},
-			},
-		},
-		"mode": "plan",
-		"budget": map[string]any{
-			"timeout_sec": 60,
-		},
+		"action":     "spawn",
+		"task_name":  "Workspace status summary",
+		"message":    "Summarize current workspace status and cite concrete evidence.",
+		"objective":  "Summarize current workspace status.",
+		"agent_type": "explore",
 	})
 	if err != nil {
-		t.Fatalf("manageSubagents(create): %v", err)
+		t.Fatalf("manageSubagents(spawn): %v", err)
 	}
 	id := strings.TrimSpace(anyToString(created["subagent_id"]))
 	if id == "" {
 		t.Fatalf("missing subagent_id in result: %#v", created)
 	}
-	if strings.TrimSpace(anyToString(created["spec_id"])) == "" {
-		t.Fatalf("missing spec_id in create result: %#v", created)
+	if strings.TrimSpace(anyToString(created["thread_id"])) != id {
+		t.Fatalf("thread_id must match subagent_id: %#v", created)
 	}
 	if strings.TrimSpace(anyToString(created["title"])) == "" {
-		t.Fatalf("missing title in create result: %#v", created)
+		t.Fatalf("missing title in spawn result: %#v", created)
 	}
-	if !strings.Contains(strings.TrimSpace(anyToString(created["delegation_prompt_markdown"])), "# Mission") {
-		t.Fatalf("missing canonical delegation prompt in create result: %#v", created)
-	}
-	if !strings.Contains(strings.TrimSpace(anyToString(created["delegation_prompt_markdown"])), "Timeout: 60 seconds") {
-		t.Fatalf("expected requested timeout in delegation prompt: %#v", created)
-	}
+	assertNoRecursiveKey(t, created, "path")
 
 	waited, err := r.manageSubagents(context.Background(), map[string]any{
 		"action":     "wait",
@@ -476,14 +459,8 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 		t.Fatalf("unexpected subagent result: %#v", entry)
 	}
 	stats, _ := entry["stats"].(map[string]any)
-	if parseIntRaw(stats["steps"], 0) < 1 {
-		t.Fatalf("unexpected subagent steps stats: %#v", stats)
-	}
-	if parseIntRaw(stats["tokens"], 0) <= 0 {
-		t.Fatalf("unexpected subagent token stats: %#v", stats)
-	}
-	if strings.TrimSpace(anyToString(entry["spec_id"])) == "" {
-		t.Fatalf("missing spec_id in wait snapshot: %#v", entry)
+	if strings.TrimSpace(anyToString(stats["outcome"])) != subagentStatusCompleted {
+		t.Fatalf("unexpected subagent stats: %#v", stats)
 	}
 	if strings.TrimSpace(anyToString(entry["title"])) == "" {
 		t.Fatalf("missing title in wait snapshot: %#v", entry)
@@ -496,6 +473,7 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 	if reasoning == nil || strings.TrimSpace(anyToString(reasoning["effort"])) != "medium" {
 		t.Fatalf("subagent request reasoning=%#v, want medium effort in provider request %#v", reasoning, firstRequest)
 	}
+	assertNoRecursiveKey(t, waited, "path")
 
 	managedList, err := r.manageSubagents(context.Background(), map[string]any{
 		"action": "list",
@@ -506,6 +484,7 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 	if strings.TrimSpace(anyToString(managedList["status"])) != "ok" {
 		t.Fatalf("unexpected list payload: %#v", managedList)
 	}
+	assertNoRecursiveKey(t, managedList, "path")
 
 	inspected, err := r.manageSubagents(context.Background(), map[string]any{
 		"action": "inspect",
@@ -535,17 +514,251 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 	if len(items) != 1 || strings.TrimSpace(anyToString(items[0]["subagent_id"])) != id {
 		t.Fatalf("unexpected inspect items payload: %#v", inspected)
 	}
+	assertNoRecursiveKey(t, inspected, "path")
 
-	terminated, err := r.manageSubagents(context.Background(), map[string]any{
-		"action": "terminate",
+	closed, err := r.manageSubagents(context.Background(), map[string]any{
+		"action": "close",
 		"target": id,
 	})
 	if err != nil {
-		t.Fatalf("manageSubagents(terminate): %v", err)
+		t.Fatalf("manageSubagents(close): %v", err)
 	}
-	finalStatus := strings.TrimSpace(anyToString(terminated["status"]))
-	if finalStatus != "already_terminal" {
-		t.Fatalf("unexpected terminate status=%q payload=%#v", finalStatus, terminated)
+	if strings.TrimSpace(anyToString(closed["status"])) != "ok" || closed["closed"] != true {
+		t.Fatalf("unexpected close payload: %#v", closed)
+	}
+}
+
+func TestFloretSubagents_ProjectChildThreadForFlowerNavigation(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	mock := &subagentOpenAISimpleMock{}
+	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
+	t.Cleanup(srv.Close)
+
+	cfg := &config.AIConfig{
+		Providers: []config.AIProvider{{
+			ID:      "openai",
+			Type:    "openai",
+			BaseURL: strings.TrimSuffix(srv.URL, "/") + "/v1",
+			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+		}},
+	}
+	meta := &session.Meta{
+		EndpointID:        "env_test_projection",
+		NamespacePublicID: "ns_test_projection",
+		ChannelID:         "ch_test_projection",
+		UserPublicID:      "u_test_projection",
+		UserEmail:         "u_test_projection@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+	svc, err := NewService(Options{
+		Logger:           slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:         workspace,
+		AgentHomeDir:     workspace,
+		Shell:            "bash",
+		Config:           cfg,
+		PersistOpTimeout: 2 * time.Second,
+		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
+			if strings.TrimSpace(providerID) == "openai" {
+				return "sk-test", true, nil
+			}
+			return "", false, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:     workspace,
+		AgentHomeDir: workspace,
+		WorkingDir:   workspace,
+		Shell:        "bash",
+		AIConfig:     cfg,
+		SessionMeta:  meta,
+		ResolveProviderKey: func(providerID string) (string, bool, error) {
+			if strings.TrimSpace(providerID) == "openai" {
+				return "sk-test", true, nil
+			}
+			return "", false, nil
+		},
+		RunID:        "run_parent_projection",
+		ChannelID:    meta.ChannelID,
+		EndpointID:   meta.EndpointID,
+		ThreadID:     "th_parent_projection",
+		UserPublicID: meta.UserPublicID,
+		MessageID:    "m_parent_projection",
+		ThreadsDB:    svc.threadsDB,
+	})
+	r.currentModelID = "openai/gpt-5-mini"
+
+	created, err := r.manageSubagents(context.Background(), map[string]any{
+		"action":     "spawn",
+		"task_name":  "Review API contract",
+		"message":    "Review the API contract and return a concise handoff.",
+		"agent_type": "reviewer",
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(spawn): %v", err)
+	}
+	id := strings.TrimSpace(anyToString(created["thread_id"]))
+	if id == "" {
+		t.Fatalf("missing child thread_id in result: %#v", created)
+	}
+	if _, err := r.manageSubagents(context.Background(), map[string]any{
+		"action":     "wait",
+		"ids":        []string{id},
+		"timeout_ms": 20_000,
+	}); err != nil {
+		t.Fatalf("manageSubagents(wait): %v", err)
+	}
+
+	thread, err := svc.GetThread(context.Background(), meta, id)
+	if err != nil {
+		t.Fatalf("GetThread(child): %v", err)
+	}
+	if thread == nil {
+		t.Fatalf("missing projected child thread")
+	}
+	if strings.TrimSpace(thread.ReadOnlyReason) == "" {
+		t.Fatalf("projected child should be read-only: %#v", thread)
+	}
+	if thread.RunStatus != string(RunStateSuccess) {
+		t.Fatalf("projected child run_status=%q, want %q", thread.RunStatus, RunStateSuccess)
+	}
+
+	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(context.Background(), meta, id)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadLiveBootstrap(child): %v", err)
+	}
+	if bootstrap.Thread.ThreadID != id {
+		t.Fatalf("bootstrap thread_id=%q, want %q", bootstrap.Thread.ThreadID, id)
+	}
+	if strings.TrimSpace(bootstrap.Thread.ReadOnlyReason) == "" {
+		t.Fatalf("bootstrap child should expose read_only_reason: %#v", bootstrap.Thread)
+	}
+	if len(bootstrap.TimelineMessages) == 0 {
+		t.Fatalf("bootstrap should include projected child timeline messages")
+	}
+
+	messagesBefore, _, _, err := svc.threadsDB.ListMessages(context.Background(), meta.EndpointID, id, 500, 0)
+	if err != nil {
+		t.Fatalf("ListMessages before resync: %v", err)
+	}
+	threadBefore, err := svc.threadsDB.GetThread(context.Background(), meta.EndpointID, id)
+	if err != nil {
+		t.Fatalf("GetThread before resync: %v", err)
+	}
+	if err := r.subagentRuntime.(*floretSubagentRuntime).syncProjectedSubagentThreadByID(context.Background(), id); err != nil {
+		t.Fatalf("syncProjectedSubagentThreadByID: %v", err)
+	}
+	messagesAfter, _, _, err := svc.threadsDB.ListMessages(context.Background(), meta.EndpointID, id, 500, 0)
+	if err != nil {
+		t.Fatalf("ListMessages after resync: %v", err)
+	}
+	threadAfter, err := svc.threadsDB.GetThread(context.Background(), meta.EndpointID, id)
+	if err != nil {
+		t.Fatalf("GetThread after resync: %v", err)
+	}
+	if len(messagesAfter) != len(messagesBefore) {
+		t.Fatalf("projected resync duplicated messages: before=%d after=%d", len(messagesBefore), len(messagesAfter))
+	}
+	if threadBefore != nil && threadAfter != nil && threadAfter.UpdatedAtUnixMs != threadBefore.UpdatedAtUnixMs {
+		t.Fatalf("idempotent projected resync bumped thread updated_at: before=%d after=%d", threadBefore.UpdatedAtUnixMs, threadAfter.UpdatedAtUnixMs)
+	}
+
+	_, err = svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
+		ThreadID: id,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{Text: "try to write to child"},
+		Options:  RunOptions{Mode: "act"},
+	})
+	if !errors.Is(err, ErrReadOnlyThread) {
+		t.Fatalf("SendUserTurn(child) err=%v, want %v", err, ErrReadOnlyThread)
+	}
+}
+
+func TestFloretSubagents_ProjectChildThreadRejectsProductThreadCollision(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	db, err := threadstore.Open(filepath.Join(workspace, "threads.sqlite"))
+	if err != nil {
+		t.Fatalf("threadstore.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	const endpointID = "env_subagent_collision"
+	const parentThreadID = "th_parent_collision"
+	if err := db.CreateThread(context.Background(), threadstore.Thread{
+		ThreadID:          parentThreadID,
+		EndpointID:        endpointID,
+		NamespacePublicID: "ns_test",
+		ModelID:           "openai/gpt-5-mini",
+		ExecutionMode:     "act",
+		Title:             "Parent",
+	}); err != nil {
+		t.Fatalf("CreateThread parent: %v", err)
+	}
+	if err := db.CreateThread(context.Background(), threadstore.Thread{
+		ThreadID:          "th_existing_product",
+		EndpointID:        endpointID,
+		NamespacePublicID: "ns_test",
+		ModelID:           "openai/gpt-5-mini",
+		ExecutionMode:     "act",
+		Title:             "Existing product thread",
+	}); err != nil {
+		t.Fatalf("CreateThread existing: %v", err)
+	}
+
+	r := newRun(runOptions{
+		Log:              slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:         workspace,
+		AgentHomeDir:     workspace,
+		AIConfig:         &config.AIConfig{CurrentModelID: "openai/gpt-5-mini"},
+		SessionMeta:      &session.Meta{EndpointID: endpointID, NamespacePublicID: "ns_test", UserPublicID: "u_test", CanRead: true, CanWrite: true, CanExecute: true},
+		EndpointID:       endpointID,
+		ThreadID:         parentThreadID,
+		MessageID:        "m_parent_collision",
+		ThreadsDB:        db,
+		UserPublicID:     "u_test",
+		PersistOpTimeout: time.Second,
+	})
+	r.currentModelID = "openai/gpt-5-mini"
+	runtime := newFloretSubagentRuntime(r)
+
+	err = runtime.syncProjectedSubagentThread(context.Background(), subagentSnapshot{
+		ThreadID:       "th_existing_product",
+		TaskName:       "collision",
+		ParentThreadID: parentThreadID,
+		AgentType:      subagentAgentTypeReviewer,
+		Status:         subagentStatusRunning,
+		CreatedAtMS:    time.Now().UnixMilli(),
+		UpdatedAtMS:    time.Now().UnixMilli(),
+	})
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "collides") {
+		t.Fatalf("syncProjectedSubagentThread err=%v, want collision", err)
+	}
+
+	existing, err := db.GetThread(context.Background(), endpointID, "th_existing_product")
+	if err != nil {
+		t.Fatalf("GetThread existing: %v", err)
+	}
+	if existing == nil || existing.Title != "Existing product thread" {
+		t.Fatalf("existing product thread was overwritten: %#v", existing)
+	}
+	meta, err := db.GetFlowerThreadMetadata(context.Background(), endpointID, "th_existing_product")
+	if err != nil {
+		t.Fatalf("GetFlowerThreadMetadata: %v", err)
+	}
+	if meta != nil {
+		t.Fatalf("collision must not create subagent metadata: %#v", meta)
 	}
 }
 
@@ -666,11 +879,8 @@ func (m *subagentWebSearchResolverMock) handle(w http.ResponseWriter, r *http.Re
 				"status": "completed",
 				"output": []any{
 					map[string]any{
-						"type":      "function_call",
-						"id":        "fc_subagent_complete_2",
-						"call_id":   "call_subagent_complete_2",
-						"name":      "task_complete",
-						"arguments": `{"result":"{\"summary\":\"Subagent completed.\"}","evidence_refs":["https://example.com/source"]}`,
+						"type": "message",
+						"id":   "msg_subagent_complete_2",
 					},
 				},
 				"usage": map[string]any{
@@ -685,7 +895,7 @@ func (m *subagentWebSearchResolverMock) handle(w http.ResponseWriter, r *http.Re
 	f.Flush()
 }
 
-func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
+func TestFloretSubagents_InheritsWebSearchResolver(t *testing.T) {
 	t.Parallel()
 
 	workspace := t.TempDir()
@@ -719,6 +929,7 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 	var resolverCalled atomic.Bool
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:     workspace,
 		AgentHomeDir: workspace,
 		Shell:        "bash",
 		AIConfig:     cfg,
@@ -746,34 +957,18 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 	r.currentModelID = "compat/gpt-5-mini"
 
 	created, err := r.manageSubagents(context.Background(), map[string]any{
-		"action":             "create",
-		"title":              "Web source summary",
-		"objective":          "Search the web and summarize the results.",
-		"agent_type":         "explore",
-		"trigger_reason":     "Need independent source lookup before drafting the final response.",
-		"deliverables":       []any{"summary", "sources"},
-		"definition_of_done": []any{"Summary must cite source URLs through evidence_refs."},
-		"output_schema": map[string]any{
-			"type":     "object",
-			"required": []any{"summary"},
-			"properties": map[string]any{
-				"summary": map[string]any{"type": "string", "minLength": 10},
-			},
-		},
-		"mode": "plan",
-		"budget": map[string]any{
-			"timeout_sec": 60,
-		},
+		"action":     "spawn",
+		"task_name":  "Web source summary",
+		"message":    "Search the web and summarize the results with source URLs.",
+		"objective":  "Search the web and summarize the results.",
+		"agent_type": "explore",
 	})
 	if err != nil {
-		t.Fatalf("manageSubagents(create): %v", err)
+		t.Fatalf("manageSubagents(spawn): %v", err)
 	}
 	id := strings.TrimSpace(anyToString(created["subagent_id"]))
 	if id == "" {
 		t.Fatalf("missing subagent_id in result: %#v", created)
-	}
-	if !strings.Contains(strings.TrimSpace(anyToString(created["delegation_prompt_markdown"])), "Timeout: 60 seconds") {
-		t.Fatalf("expected requested timeout in delegation prompt: %#v", created)
 	}
 
 	waited, err := r.manageSubagents(context.Background(), map[string]any{
@@ -803,15 +998,8 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 		t.Fatalf("invalid status payload type: %T", entryRaw)
 	}
 	stats, _ := entry["stats"].(map[string]any)
-	if parseIntRaw(stats["tool_calls"], 0) < 1 {
-		mock.mu.Lock()
-		mockStep := mock.step
-		firstRequestToolNames := append([]string(nil), mock.firstRequestToolNames...)
-		mock.mu.Unlock()
-		t.Fatalf("unexpected subagent tool call stats: %#v step=%d tools=%v", stats, mockStep, firstRequestToolNames)
-	}
-	if parseIntRaw(stats["tokens"], 0) <= 0 {
-		t.Fatalf("unexpected subagent token stats: %#v", stats)
+	if strings.TrimSpace(anyToString(stats["outcome"])) != subagentStatusCompleted {
+		t.Fatalf("unexpected subagent stats: %#v", stats)
 	}
 
 	if !resolverCalled.Load() {
@@ -819,7 +1007,123 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 	}
 }
 
-func TestSubagentManager_ManageActions(t *testing.T) {
+type fakeManageSubagentRuntime struct {
+	items []subagentSnapshot
+}
+
+func (f *fakeManageSubagentRuntime) manage(ctx context.Context, args map[string]any) (map[string]any, error) {
+	action := strings.ToLower(strings.TrimSpace(anyToString(args["action"])))
+	switch action {
+	case subagentActionList:
+		items := make([]map[string]any, 0, len(f.items))
+		for _, snapshot := range f.items {
+			if parseBoolArg(args, "running_only", false) && isSubagentTerminalStatus(snapshot.Status) {
+				continue
+			}
+			items = append(items, subagentListPayload(snapshot))
+		}
+		return map[string]any{"status": "ok", "action": action, "total": len(f.items), "items": items, "agent_count": len(items)}, nil
+	case subagentActionInspect:
+		targets := collectInspectTargets(args)
+		items := make([]map[string]any, 0, len(targets))
+		missing := make([]string, 0)
+		for _, target := range targets {
+			found := false
+			for _, snapshot := range f.items {
+				if target == snapshot.ThreadID {
+					items = append(items, subagentSnapshotPayload(snapshot))
+					found = true
+					break
+				}
+			}
+			if !found {
+				missing = append(missing, target)
+			}
+		}
+		status := "ok"
+		if len(items) == 0 {
+			status = "not_found"
+		} else if len(missing) > 0 {
+			status = "partial"
+		}
+		return map[string]any{"status": status, "action": action, "requested_count": len(targets), "found_count": len(items), "missing_count": len(missing), "missing_ids": missing, "items": items}, nil
+	case subagentActionSendInput:
+		return map[string]any{"status": "ok", "action": action, "target": strings.TrimSpace(anyToString(args["target"])), "accepted": true}, nil
+	case subagentActionClose:
+		return map[string]any{"status": "ok", "action": action, "target": strings.TrimSpace(anyToString(args["target"])), "closed": true}, nil
+	case subagentActionCloseAll:
+		items := make([]map[string]any, 0, len(f.items))
+		affected := make([]string, 0, len(f.items))
+		closed := 0
+		for index := range f.items {
+			snapshot := f.items[index]
+			affected = append(affected, snapshot.ThreadID)
+			if snapshot.CanClose {
+				snapshot.Status = subagentStatusCanceled
+				snapshot.Closed = true
+				snapshot.CanClose = false
+				f.items[index] = snapshot
+				closed++
+			}
+			items = append(items, subagentSnapshotPayload(f.items[index]))
+		}
+		return map[string]any{
+			"status":          "ok",
+			"action":          action,
+			"closed_count":    closed,
+			"affected_ids":    affected,
+			"items":           items,
+			"subagents":       items,
+			"snapshots":       snapshotsByID(items),
+			"snapshots_by_id": snapshotsByID(items),
+		}, nil
+	default:
+		return nil, fmt.Errorf("unexpected fake action %q", action)
+	}
+}
+
+func (f *fakeManageSubagentRuntime) release() {}
+
+func (f *fakeManageSubagentRuntime) snapshots(context.Context) ([]subagentSnapshot, error) {
+	return append([]subagentSnapshot(nil), f.items...), nil
+}
+
+func assertNoRecursiveKey(t *testing.T, value any, forbidden string) {
+	t.Helper()
+	if recursiveKeyPath(value, forbidden, "$") != "" {
+		t.Fatalf("payload contains forbidden key %q at %s: %#v", forbidden, recursiveKeyPath(value, forbidden, "$"), value)
+	}
+}
+
+func recursiveKeyPath(value any, forbidden string, path string) string {
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			childPath := path + "." + key
+			if key == forbidden {
+				return childPath
+			}
+			if found := recursiveKeyPath(child, forbidden, childPath); found != "" {
+				return found
+			}
+		}
+	case []any:
+		for index, child := range typed {
+			if found := recursiveKeyPath(child, forbidden, fmt.Sprintf("%s[%d]", path, index)); found != "" {
+				return found
+			}
+		}
+	case []map[string]any:
+		for index, child := range typed {
+			if found := recursiveKeyPath(child, forbidden, fmt.Sprintf("%s[%d]", path, index)); found != "" {
+				return found
+			}
+		}
+	}
+	return ""
+}
+
+func TestSubagentsTool_ManageActions(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{
@@ -827,52 +1131,10 @@ func TestSubagentManager_ManageActions(t *testing.T) {
 		AgentHomeDir: t.TempDir(),
 		RunID:        "run_manage_actions",
 	})
-	mgr := newSubagentManager(r)
-	r.subagentManager = mgr
-
-	runningTask := &subagentTask{
-		id:            "tool_running",
-		taskID:        "task_running",
-		agentType:     subagentAgentTypeWorker,
-		triggerReason: "Validate management actions",
-		ctx:           context.Background(),
-		doneCh:        make(chan struct{}),
-		input:         make(chan string, 2),
-		status:        subagentStatusRunning,
-		result:        defaultSubagentResult(),
-	}
-	runningTask.startedAt = time.Now().Add(-5 * time.Second).UnixMilli()
-	runningTask.updatedAt = time.Now().Add(-3 * time.Second).UnixMilli()
-	runningTask.recalculateDerivedStatsLocked()
-	runningTask.cancel = func() {
-		runningTask.setStatus(subagentStatusCanceled)
-		select {
-		case <-runningTask.doneCh:
-		default:
-			close(runningTask.doneCh)
-		}
-	}
-	mgr.addTask(runningTask)
-
-	completedTask := &subagentTask{
-		id:            "tool_completed",
-		taskID:        "task_completed",
-		agentType:     subagentAgentTypeExplore,
-		triggerReason: "Already done",
-		ctx:           context.Background(),
-		cancel:        func() {},
-		doneCh:        make(chan struct{}),
-		input:         make(chan string, 1),
-		status:        subagentStatusCompleted,
-		result:        defaultSubagentResult(),
-	}
-	completedTask.result.Summary = "done"
-	completedTask.startedAt = time.Now().Add(-10 * time.Second).UnixMilli()
-	completedTask.endedAt = time.Now().Add(-8 * time.Second).UnixMilli()
-	completedTask.updatedAt = time.Now().Add(-8 * time.Second).UnixMilli()
-	completedTask.recalculateDerivedStatsLocked()
-	close(completedTask.doneCh)
-	mgr.addTask(completedTask)
+	r.subagentRuntime = &fakeManageSubagentRuntime{items: []subagentSnapshot{
+		{ThreadID: "tool_running", TaskName: "task_running", AgentType: subagentAgentTypeWorker, Status: subagentStatusRunning, UpdatedAtMS: time.Now().Add(-3 * time.Second).UnixMilli(), CreatedAtMS: time.Now().Add(-5 * time.Second).UnixMilli(), CanClose: true, CanSendInput: true},
+		{ThreadID: "tool_completed", TaskName: "task_completed", AgentType: subagentAgentTypeExplore, Status: subagentStatusCompleted, LastMessage: "done", UpdatedAtMS: time.Now().Add(-8 * time.Second).UnixMilli(), CreatedAtMS: time.Now().Add(-10 * time.Second).UnixMilli()},
+	}}
 
 	listOut, err := r.manageSubagents(context.Background(), map[string]any{
 		"action":       "list",
@@ -888,10 +1150,22 @@ func TestSubagentManager_ManageActions(t *testing.T) {
 	if parseIntRaw(listOut["total"], 0) != 2 {
 		t.Fatalf("unexpected list total payload: %#v", listOut)
 	}
+	assertNoRecursiveKey(t, listOut, "path")
+
+	taskInspectOut, err := r.manageSubagents(context.Background(), map[string]any{
+		"action": "inspect",
+		"target": "task_running",
+	})
+	if err != nil {
+		t.Fatalf("manageSubagents(inspect task): %v", err)
+	}
+	if strings.TrimSpace(anyToString(taskInspectOut["status"])) != "not_found" {
+		t.Fatalf("task-name inspect must not match child thread: %#v", taskInspectOut)
+	}
 
 	inspectOut, err := r.manageSubagents(context.Background(), map[string]any{
 		"action": "inspect",
-		"target": "task_running",
+		"target": "tool_running",
 	})
 	if err != nil {
 		t.Fatalf("manageSubagents(inspect): %v", err)
@@ -914,13 +1188,14 @@ func TestSubagentManager_ManageActions(t *testing.T) {
 		t.Fatalf("inspect items payload mismatch: %#v", inspectOut)
 	}
 	item, _ := itemsRaw[0].(map[string]any)
-	if strings.TrimSpace(anyToString(item["subagent_id"])) != runningTask.id {
+	if strings.TrimSpace(anyToString(item["subagent_id"])) != "tool_running" {
 		t.Fatalf("inspect item mismatch: %#v", inspectOut)
 	}
+	assertNoRecursiveKey(t, inspectOut, "path")
 
 	bulkInspectOut, err := r.manageSubagents(context.Background(), map[string]any{
 		"action": "inspect",
-		"ids":    []string{runningTask.id, "tool_missing", completedTask.id},
+		"ids":    []string{"tool_running", "tool_missing", "tool_completed"},
 	})
 	if err != nil {
 		t.Fatalf("manageSubagents(inspect bulk): %v", err)
@@ -937,6 +1212,7 @@ func TestSubagentManager_ManageActions(t *testing.T) {
 	if parseIntRaw(bulkInspectOut["missing_count"], 0) != 1 {
 		t.Fatalf("unexpected bulk inspect missing_count payload: %#v", bulkInspectOut)
 	}
+	assertNoRecursiveKey(t, bulkInspectOut, "path")
 
 	_, err = r.manageSubagents(context.Background(), map[string]any{
 		"action": "inspect",
@@ -948,122 +1224,292 @@ func TestSubagentManager_ManageActions(t *testing.T) {
 		t.Fatalf("unexpected inspect validation error: %v", err)
 	}
 
-	steerOut, err := r.manageSubagents(context.Background(), map[string]any{
-		"action":    "steer",
-		"target":    runningTask.id,
+	sendInputOut, err := r.manageSubagents(context.Background(), map[string]any{
+		"action":    "send_input",
+		"target":    "tool_running",
 		"message":   "continue with deeper validation",
 		"interrupt": false,
 	})
 	if err != nil {
-		t.Fatalf("manageSubagents(steer): %v", err)
+		t.Fatalf("manageSubagents(send_input): %v", err)
 	}
-	if strings.TrimSpace(anyToString(steerOut["status"])) != "ok" {
-		t.Fatalf("unexpected steer payload: %#v", steerOut)
-	}
-	select {
-	case got := <-runningTask.input:
-		if strings.TrimSpace(got) != "continue with deeper validation" {
-			t.Fatalf("unexpected steer message: %q", got)
-		}
-	default:
-		t.Fatalf("expected steer message to be delivered")
+	if strings.TrimSpace(anyToString(sendInputOut["status"])) != "ok" || sendInputOut["accepted"] != true {
+		t.Fatalf("unexpected send_input payload: %#v", sendInputOut)
 	}
 
-	rateLimitedOut, err := r.manageSubagents(context.Background(), map[string]any{
-		"action":  "steer",
-		"target":  runningTask.id,
-		"message": "second steer too soon",
+	closeOut, err := r.manageSubagents(context.Background(), map[string]any{
+		"action": "close",
+		"target": "tool_running",
 	})
 	if err != nil {
-		t.Fatalf("manageSubagents(steer rate limit): %v", err)
+		t.Fatalf("manageSubagents(close): %v", err)
 	}
-	if strings.TrimSpace(anyToString(rateLimitedOut["status"])) != "rate_limited" {
-		t.Fatalf("unexpected rate-limited payload: %#v", rateLimitedOut)
-	}
-
-	terminateOut, err := r.manageSubagents(context.Background(), map[string]any{
-		"action": "terminate",
-		"target": runningTask.taskID,
-	})
-	if err != nil {
-		t.Fatalf("manageSubagents(terminate): %v", err)
-	}
-	if strings.TrimSpace(anyToString(terminateOut["status"])) != "ok" {
-		t.Fatalf("unexpected terminate payload: %#v", terminateOut)
+	if strings.TrimSpace(anyToString(closeOut["status"])) != "ok" || closeOut["closed"] != true {
+		t.Fatalf("unexpected close payload: %#v", closeOut)
 	}
 
-	terminateAgainOut, err := r.manageSubagents(context.Background(), map[string]any{
-		"action": "terminate",
-		"target": runningTask.id,
-	})
-	if err != nil {
-		t.Fatalf("manageSubagents(terminate again): %v", err)
-	}
-	if strings.TrimSpace(anyToString(terminateAgainOut["status"])) != "already_terminal" {
-		t.Fatalf("unexpected terminate-again payload: %#v", terminateAgainOut)
-	}
-
-	terminateAllOut, err := r.manageSubagents(context.Background(), map[string]any{
-		"action": "terminate_all",
+	closeAllOut, err := r.manageSubagents(context.Background(), map[string]any{
+		"action": "close_all",
 		"scope":  "current_run",
 	})
 	if err != nil {
-		t.Fatalf("manageSubagents(terminate_all): %v", err)
+		t.Fatalf("manageSubagents(close_all): %v", err)
 	}
-	if strings.TrimSpace(anyToString(terminateAllOut["status"])) != "ok" {
-		t.Fatalf("unexpected terminate_all payload: %#v", terminateAllOut)
+	if strings.TrimSpace(anyToString(closeAllOut["status"])) != "ok" {
+		t.Fatalf("unexpected close_all payload: %#v", closeAllOut)
 	}
-	if parseIntRaw(terminateAllOut["killed_count"], 0) != 0 {
-		t.Fatalf("unexpected terminate_all killed_count payload: %#v", terminateAllOut)
+	if parseIntRaw(closeAllOut["closed_count"], 0) != 1 {
+		t.Fatalf("unexpected close_all closed_count payload: %#v", closeAllOut)
+	}
+	snapshotsByIDRaw, ok := closeAllOut["snapshots_by_id"].(map[string]any)
+	if !ok || len(snapshotsByIDRaw) != 2 {
+		t.Fatalf("close_all missing snapshots_by_id payload: %#v", closeAllOut)
+	}
+	runningRaw, ok := snapshotsByIDRaw["tool_running"].(map[string]any)
+	if !ok {
+		t.Fatalf("close_all missing running snapshot: %#v", closeAllOut)
+	}
+	if strings.TrimSpace(anyToString(runningRaw["status"])) != subagentStatusCanceled {
+		t.Fatalf("close_all running snapshot status=%#v payload=%#v", runningRaw["status"], closeAllOut)
+	}
+	assertNoRecursiveKey(t, closeAllOut, "path")
+}
+
+type fakeCloseAllFloretHost struct {
+	mu        sync.Mutex
+	snapshots []flruntime.SubAgentSnapshot
+}
+
+func (h *fakeCloseAllFloretHost) StartThread(context.Context, flruntime.StartThreadRequest) (flruntime.ThreadSnapshot, error) {
+	return flruntime.ThreadSnapshot{}, nil
+}
+
+func (h *fakeCloseAllFloretHost) ReadThread(context.Context, flruntime.ThreadID) (flruntime.ThreadSnapshot, error) {
+	return flruntime.ThreadSnapshot{}, nil
+}
+
+func (h *fakeCloseAllFloretHost) RunTurn(context.Context, flruntime.RunTurnRequest) (flruntime.TurnResult, error) {
+	return flruntime.TurnResult{}, nil
+}
+
+func (h *fakeCloseAllFloretHost) RetryTurn(context.Context, flruntime.RetryTurnRequest) (flruntime.TurnResult, error) {
+	return flruntime.TurnResult{}, nil
+}
+
+func (h *fakeCloseAllFloretHost) CompletePendingTool(context.Context, flruntime.PendingToolCompletionRequest) (flruntime.TurnResult, error) {
+	return flruntime.TurnResult{}, nil
+}
+
+func (h *fakeCloseAllFloretHost) SpawnSubAgent(context.Context, flruntime.SpawnSubAgentRequest) (flruntime.SubAgentSnapshot, error) {
+	return flruntime.SubAgentSnapshot{}, nil
+}
+
+func (h *fakeCloseAllFloretHost) SendSubAgentInput(context.Context, flruntime.SendSubAgentInputRequest) (flruntime.SubAgentSnapshot, error) {
+	return flruntime.SubAgentSnapshot{}, nil
+}
+
+func (h *fakeCloseAllFloretHost) WaitSubAgents(context.Context, flruntime.WaitSubAgentsRequest) (flruntime.WaitSubAgentsResult, error) {
+	return flruntime.WaitSubAgentsResult{}, nil
+}
+
+func (h *fakeCloseAllFloretHost) ListSubAgents(context.Context, flruntime.ThreadID) ([]flruntime.SubAgentSnapshot, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]flruntime.SubAgentSnapshot(nil), h.snapshots...), nil
+}
+
+func (h *fakeCloseAllFloretHost) CloseSubAgent(_ context.Context, req flruntime.CloseSubAgentRequest) (flruntime.SubAgentSnapshot, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for index := range h.snapshots {
+		if strings.TrimSpace(string(h.snapshots[index].ThreadID)) != strings.TrimSpace(string(req.ChildThreadID)) {
+			continue
+		}
+		h.snapshots[index].Status = flruntime.SubAgentStatusCancelled
+		h.snapshots[index].Closed = true
+		h.snapshots[index].CanClose = false
+		h.snapshots[index].CanSendInput = false
+		h.snapshots[index].CanInterrupt = false
+		h.snapshots[index].UpdatedAt = time.Now()
+		return h.snapshots[index], nil
+	}
+	return flruntime.SubAgentSnapshot{}, fmt.Errorf("missing subagent %q", req.ChildThreadID)
+}
+
+func (h *fakeCloseAllFloretHost) DeleteThread(context.Context, flruntime.ThreadID) error {
+	return nil
+}
+
+func (h *fakeCloseAllFloretHost) Close() error {
+	return nil
+}
+
+func TestFloretSubagents_CloseAllActionReturnsTerminalSnapshots(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	host := &fakeCloseAllFloretHost{snapshots: []flruntime.SubAgentSnapshot{
+		{
+			ThreadID:       "child_running",
+			TaskName:       "running child",
+			ParentThreadID: "parent_close_all",
+			HostProfileRef: subagentAgentTypeWorker,
+			Status:         flruntime.SubAgentStatusRunning,
+			CreatedAt:      now.Add(-2 * time.Minute),
+			UpdatedAt:      now.Add(-1 * time.Minute),
+			CanSendInput:   true,
+			CanInterrupt:   true,
+			CanClose:       true,
+		},
+		{
+			ThreadID:       "child_completed",
+			TaskName:       "completed child",
+			ParentThreadID: "parent_close_all",
+			HostProfileRef: subagentAgentTypeReviewer,
+			Status:         flruntime.SubAgentStatusCompleted,
+			CreatedAt:      now.Add(-4 * time.Minute),
+			UpdatedAt:      now.Add(-3 * time.Minute),
+			CanClose:       false,
+		},
+	}}
+	runtime := &floretSubagentRuntime{
+		parent: newRun(runOptions{
+			Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+			AgentHomeDir: t.TempDir(),
+			ThreadID:     "parent_close_all",
+		}),
+		host: host,
+	}
+
+	out, err := runtime.closeAllAction(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("closeAllAction: %v", err)
+	}
+	if strings.TrimSpace(anyToString(out["status"])) != "ok" {
+		t.Fatalf("unexpected close_all payload: %#v", out)
+	}
+	if parseIntRaw(out["closed_count"], 0) != 1 {
+		t.Fatalf("unexpected closed_count payload: %#v", out)
+	}
+	snapshotsByIDRaw, ok := out["snapshots_by_id"].(map[string]any)
+	if !ok || len(snapshotsByIDRaw) != 2 {
+		t.Fatalf("missing snapshots_by_id payload: %#v", out)
+	}
+	runningRaw, ok := snapshotsByIDRaw["child_running"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing child_running terminal snapshot: %#v", out)
+	}
+	if strings.TrimSpace(anyToString(runningRaw["status"])) != subagentStatusCanceled {
+		t.Fatalf("child_running status=%#v payload=%#v", runningRaw["status"], out)
+	}
+	if runningRaw["can_close"] == true || runningRaw["can_send_input"] == true || runningRaw["can_interrupt"] == true {
+		t.Fatalf("closed child should not expose active controls: %#v", runningRaw)
+	}
+	completedRaw, ok := snapshotsByIDRaw["child_completed"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing child_completed snapshot: %#v", out)
+	}
+	if strings.TrimSpace(anyToString(completedRaw["status"])) != subagentStatusCompleted {
+		t.Fatalf("child_completed status=%#v payload=%#v", completedRaw["status"], out)
 	}
 }
 
-func TestSubagentManager_CreateRejectsLegacyTaskID(t *testing.T) {
+func TestFloretSubagents_ChildRunInheritsParentToolAllowlist(t *testing.T) {
+	t.Parallel()
+
+	parent := newRun(runOptions{
+		Log:           slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir:  t.TempDir(),
+		ToolAllowlist: []string{"subagents", "terminal.exec", "apply_patch"},
+	})
+	child := parent.subagentChildRun()
+	if child == nil {
+		t.Fatal("subagentChildRun returned nil")
+	}
+	if _, ok := child.toolAllowlist["terminal.exec"]; !ok {
+		t.Fatalf("child tool allowlist missing terminal.exec: %#v", child.toolAllowlist)
+	}
+	if _, ok := child.toolAllowlist["apply_patch"]; !ok {
+		t.Fatalf("child tool allowlist missing apply_patch: %#v", child.toolAllowlist)
+	}
+	if _, ok := child.toolAllowlist["subagents"]; !ok {
+		t.Fatalf("child tool allowlist missing subagents: %#v", child.toolAllowlist)
+	}
+
+	registry := NewInMemoryToolRegistry()
+	if err := registerBuiltInTools(registry, child); err != nil {
+		t.Fatalf("registerBuiltInTools: %v", err)
+	}
+	modeFilter := newModeToolFilter(child.cfg, false)
+	modeFilter = child.withToolAllowlistFilter(modeFilter)
+	activeTools := filterSubagentChildTools(modeFilter.FilterToolsForMode("act", registry.Snapshot()))
+	names := toolDefNames(activeTools)
+	if !containsString(names, "terminal.exec") || !containsString(names, "apply_patch") {
+		t.Fatalf("active child tools=%v, want terminal.exec and apply_patch", names)
+	}
+	if containsString(names, "subagents") {
+		t.Fatalf("active child tools=%v, must not include subagents", names)
+	}
+}
+
+func TestFloretSubagents_ChildToolsRespectParentPlanMode(t *testing.T) {
+	t.Parallel()
+
+	parent := newRun(runOptions{
+		Log:           slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir:  t.TempDir(),
+		ToolAllowlist: []string{"terminal.exec", "apply_patch"},
+	})
+	parent.runMode = "plan"
+
+	child := parent.subagentChildRun()
+	registry := NewInMemoryToolRegistry()
+	if err := registerBuiltInTools(registry, child); err != nil {
+		t.Fatalf("registerBuiltInTools: %v", err)
+	}
+	modeFilter := newModeToolFilter(child.cfg, false)
+	modeFilter = child.withToolAllowlistFilter(modeFilter)
+	activeTools := filterSubagentChildTools(modeFilter.FilterToolsForMode(subagentToolModeLimit(parent), registry.Snapshot()))
+	names := toolDefNames(activeTools)
+	if !containsString(names, "terminal.exec") {
+		t.Fatalf("active child tools=%v, want terminal.exec", names)
+	}
+	if containsString(names, "apply_patch") {
+		t.Fatalf("active child tools=%v, parent plan mode must hide mutating tools", names)
+	}
+}
+
+func TestSubagentsTool_RejectsOldActions(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), AgentHomeDir: t.TempDir()})
-	mgr := newSubagentManager(r)
-	r.subagentManager = mgr
-
-	_, err := mgr.create(context.Background(), map[string]any{
-		"task_id":            "task_existing",
-		"objective":          "continue with new detail",
-		"agent_type":         "explore",
-		"trigger_reason":     "legacy resume input should be rejected",
-		"deliverables":       []any{"summary"},
-		"definition_of_done": []any{"Provide a summary."},
-		"output_schema": map[string]any{
-			"type":     "object",
-			"required": []any{"summary"},
-			"properties": map[string]any{
-				"summary": map[string]any{"type": "string"},
-			},
-		},
-	})
+	_, err := r.manageSubagents(context.Background(), map[string]any{"action": "create", "message": "legacy action", "agent_type": "explore"})
 	if err == nil {
-		t.Fatalf("expected create to reject task_id")
+		t.Fatalf("expected old create action to be rejected")
 	}
-	if !strings.Contains(err.Error(), "task_id is not supported") {
+	if !strings.Contains(err.Error(), "unsupported action") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestSubagentManager_CreateRequiresPromptContract(t *testing.T) {
+func TestSubagentsTool_SpawnRequiresMessageAndAgentType(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), AgentHomeDir: t.TempDir()})
-	mgr := newSubagentManager(r)
-	r.subagentManager = mgr
 
-	_, err := mgr.create(context.Background(), map[string]any{
-		"objective":      "summarize workspace",
-		"agent_type":     "explore",
-		"trigger_reason": "need delegated summary",
-	})
+	_, err := r.manageSubagents(context.Background(), map[string]any{"action": "spawn", "agent_type": "explore"})
 	if err == nil {
-		t.Fatalf("expected missing contract fields to fail")
+		t.Fatalf("expected missing message to fail")
 	}
-	if !strings.Contains(err.Error(), "missing deliverables") {
+	if !strings.Contains(err.Error(), "spawn requires message") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	_, err = r.manageSubagents(context.Background(), map[string]any{"action": "spawn", "message": "summarize workspace", "agent_type": "invalid"})
+	if err == nil {
+		t.Fatalf("expected invalid agent_type to fail")
+	}
+	if !strings.Contains(err.Error(), "invalid agent_type") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

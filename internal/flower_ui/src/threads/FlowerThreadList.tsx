@@ -8,6 +8,7 @@ import type { FlowerThreadListCopy, FlowerThreadTimeGroup } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import type { FlowerThreadListItem } from '../contracts/flowerSurfaceContracts';
 import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems, type FlowerThreadGroup } from './threadListModel';
+import { canForkThreadItem, canPinThreadItem, canRenameThreadItem } from './threadListActions';
 
 type TimeGroup = FlowerThreadTimeGroup;
 export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'pin' | 'rename';
@@ -19,18 +20,6 @@ type FlowerThreadRenderGroup = Readonly<{
   group?: TimeGroup;
   threadIDs: readonly string[];
 }>;
-
-function canForkThreadItem(item: FlowerThreadListItem): boolean {
-  switch (item.status) {
-    case 'running':
-    case 'waiting_approval':
-    case 'waiting_user':
-    case 'read_only':
-      return false;
-    default:
-      return true;
-  }
-}
 
 function timeGroupLabel(group: TimeGroup, copy: FlowerThreadListCopy): string {
   return copy.groups[group] ?? copy.groups.older;
@@ -72,6 +61,8 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.threadList;
   const title = () => props.item.title.trim() || copy().untitled;
   const indicator = createMemo(() => flowerThreadIndicator(props.item, props.active, copy()));
+  const itemCanRename = createMemo(() => canRenameThreadItem(props.item));
+  const itemCanPin = createMemo(() => canPinThreadItem(props.item));
   const ariaLabel = () => [
     title(),
     indicator().ariaStatus,
@@ -103,6 +94,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
         onClick={props.onSelect}
         onDblClick={(event) => {
           event.preventDefault();
+          if (!itemCanRename()) return;
           props.onRename?.(props.item);
         }}
         onKeyDown={(event) => {
@@ -147,7 +139,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           </button>
         </Show>
       </div>
-      <Show when={props.onPin}>
+      <Show when={props.onPin && itemCanPin()}>
         <button
           type="button"
           class="flower-thread-card-pin-button"
@@ -267,6 +259,9 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
     });
   });
   const action = (kind: FlowerThreadMenuAction) => {
+    if (kind === 'fork' && !canForkThreadItem(props.item)) return;
+    if (kind === 'pin' && !canPinThreadItem(props.item)) return;
+    if (kind === 'rename' && !canRenameThreadItem(props.item)) return;
     props.onAction(kind, props.item);
   };
   const workdir = () => String(props.item.working_dir ?? '').trim();
@@ -301,8 +296,8 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
       {itemButton('fork', props.copy.fork, <GitBranch class="h-3.5 w-3.5" />, !props.canFork || !canForkThreadItem(props.item))}
       {itemButton('copy_workdir', props.copy.copyWorkingDirectory, <Folder class="h-3.5 w-3.5" />, workdir() === '')}
       <div class="flower-thread-menu-separator" />
-      {itemButton('pin', props.item.pinned ? props.copy.unpin : props.copy.pin, <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />, !props.canPin)}
-      {itemButton('rename', props.copy.rename, <Pencil class="h-3.5 w-3.5" />, !props.canRename)}
+      {itemButton('pin', props.item.pinned ? props.copy.unpin : props.copy.pin, <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />, !props.canPin || !canPinThreadItem(props.item))}
+      {itemButton('rename', props.copy.rename, <Pencil class="h-3.5 w-3.5" />, !props.canRename || !canRenameThreadItem(props.item))}
     </div>
   );
 };
@@ -452,8 +447,8 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                                 onDelete={props.onDelete ? () => props.onDelete?.(threadID) : undefined}
                                 onContextMenu={openMenu}
                                 onKeyboardMenu={openMenu}
-                                onRename={props.onMenuAction ? (value) => props.onMenuAction?.('rename', value) : undefined}
-                                onPin={props.canPin && props.onMenuAction ? (value) => props.onMenuAction?.('pin', value) : undefined}
+                                onRename={props.onMenuAction && canRenameThreadItem(item()) ? (value) => props.onMenuAction?.('rename', value) : undefined}
+                                onPin={props.canPin && props.onMenuAction && canPinThreadItem(item()) ? (value) => props.onMenuAction?.('pin', value) : undefined}
                               />
                             )}
                           </Show>

@@ -222,6 +222,61 @@ func TestNormalizeTruncatedToolPayload_PreservesTodosStructure(t *testing.T) {
 	}
 }
 
+func TestNormalizeTruncatedToolPayload_PreservesSubagentLifecycleSnapshot(t *testing.T) {
+	t.Parallel()
+
+	payload := map[string]any{
+		"status":      "ok",
+		"action":      "close",
+		"target":      "subagent-1",
+		"closed":      true,
+		"subagent_id": "subagent-1",
+		"thread_id":   "subagent-1",
+		"snapshot": map[string]any{
+			"subagent_id":     "subagent-1",
+			"thread_id":       "subagent-1",
+			"task_name":       "Review prompt contract",
+			"agent_type":      "reviewer",
+			"status":          "canceled",
+			"subagent_status": "canceled",
+			"last_message":    strings.Repeat("review evidence ", 800),
+			"updated_at_ms":   1782219585489,
+			"closed":          true,
+			"can_close":       false,
+		},
+	}
+
+	normalized, truncated := normalizeTruncatedToolPayload("subagents", payload)
+	if !truncated {
+		t.Fatal("large subagent handoff should be field-truncated")
+	}
+	root, ok := normalized.(map[string]any)
+	if !ok {
+		t.Fatalf("normalized type=%T, want map", normalized)
+	}
+	if _, ok := root["raw"]; ok {
+		t.Fatalf("subagents payload must not collapse to raw: %#v", root)
+	}
+	snapshot, ok := root["snapshot"].(map[string]any)
+	if !ok {
+		t.Fatalf("snapshot type=%T, want map", root["snapshot"])
+	}
+	for _, field := range []string{"subagent_id", "thread_id", "task_name", "agent_type", "status", "updated_at_ms", "closed", "can_close"} {
+		if _, ok := snapshot[field]; !ok {
+			t.Fatalf("snapshot missing %s: %#v", field, snapshot)
+		}
+	}
+	if anyToString(snapshot["status"]) != "canceled" || anyToString(root["action"]) != "close" {
+		t.Fatalf("unexpected lifecycle status payload: %#v", root)
+	}
+	if len([]rune(anyToString(snapshot["last_message"]))) > 3000 {
+		t.Fatalf("subagent last_message was not field-truncated: %d", len([]rune(anyToString(snapshot["last_message"]))))
+	}
+	if !readBoolField(root, "truncated") {
+		t.Fatalf("root missing truncated marker: %#v", root)
+	}
+}
+
 func TestNormalizeTruncatedToolPayload_PreservesFileReadWindowTruncated(t *testing.T) {
 	t.Parallel()
 

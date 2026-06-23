@@ -211,56 +211,6 @@ export interface RequestUserInputResponseBlock {
   contains_secret?: boolean;
 }
 
-export type SubagentStatus =
-  | 'queued'
-  | 'running'
-  | 'waiting_input'
-  | 'completed'
-  | 'failed'
-  | 'canceled'
-  | 'timed_out'
-  | 'unknown';
-
-export interface SubagentBlock {
-  type: 'subagent';
-  subagentId: string;
-  taskId: string;
-  specId?: string;
-  title?: string;
-  objective?: string;
-  contextMode?: string;
-  promptHash?: string;
-  delegationPromptMarkdown?: string;
-  deliverables?: string[];
-  definitionOfDone?: string[];
-  outputSchema?: Record<string, unknown>;
-  agentType: string;
-  triggerReason: string;
-  status: SubagentStatus;
-  summary: string;
-  evidenceRefs: string[];
-  keyFiles: Array<{
-    path: string;
-    line?: number;
-    purpose?: string;
-  }>;
-  openRisks: string[];
-  nextActions: string[];
-  history: Array<{
-    role: 'user' | 'assistant' | 'system';
-    text: string;
-  }>;
-  stats: {
-    steps: number;
-    toolCalls: number;
-    tokens: number;
-    elapsedMs: number;
-    outcome: string;
-  };
-  updatedAtUnixMs: number;
-  error?: string;
-}
-
 export type MessageBlock =
   | TextBlock
   | MarkdownBlock
@@ -276,8 +226,7 @@ export type MessageBlock =
   | ActivityTimelineBlock
   | TodosBlock
   | SourcesBlock
-  | RequestUserInputResponseBlock
-  | SubagentBlock;
+  | RequestUserInputResponseBlock;
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 export type MessageStatus = 'sending' | 'streaming' | 'complete' | 'error';

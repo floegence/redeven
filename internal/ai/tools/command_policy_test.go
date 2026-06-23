@@ -381,6 +381,92 @@ func TestInvocationPolicies_WriteTodos(t *testing.T) {
 	}
 }
 
+func TestInvocationPolicies_Subagents(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		args     map[string]any
+		approval bool
+		risk     string
+		detail   string
+	}{
+		{
+			name:     "explore spawn stays readonly",
+			args:     map[string]any{"action": "spawn", "agent_type": "explore"},
+			approval: false,
+			risk:     "readonly",
+			detail:   "spawn",
+		},
+		{
+			name:     "reviewer spawn stays readonly",
+			args:     map[string]any{"action": "spawn", "agent_type": "reviewer"},
+			approval: false,
+			risk:     "readonly",
+			detail:   "spawn",
+		},
+		{
+			name:     "worker spawn requires approval",
+			args:     map[string]any{"action": "spawn", "agent_type": "worker"},
+			approval: true,
+			risk:     "approval",
+			detail:   "spawn",
+		},
+		{
+			name:     "send input requires approval",
+			args:     map[string]any{"action": "send_input", "interrupt": false},
+			approval: true,
+			risk:     "approval",
+			detail:   "send_input",
+		},
+		{
+			name:     "interrupt requires approval",
+			args:     map[string]any{"action": "send_input", "interrupt": "true"},
+			approval: true,
+			risk:     "approval",
+			detail:   "send_input",
+		},
+		{
+			name:     "close requires approval",
+			args:     map[string]any{"action": "close"},
+			approval: true,
+			risk:     "approval",
+			detail:   "close",
+		},
+		{
+			name:     "close all requires approval",
+			args:     map[string]any{"action": "close_all"},
+			approval: true,
+			risk:     "approval",
+			detail:   "close_all",
+		},
+		{
+			name:     "list stays readonly",
+			args:     map[string]any{"action": "list"},
+			approval: false,
+			risk:     "readonly",
+			detail:   "list",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := RequiresApprovalForInvocation("subagents", tc.args); got != tc.approval {
+				t.Fatalf("RequiresApprovalForInvocation=%v, want %v", got, tc.approval)
+			}
+			if got := IsMutatingForInvocation("subagents", tc.args); got != tc.approval {
+				t.Fatalf("IsMutatingForInvocation=%v, want %v", got, tc.approval)
+			}
+			risk, detail := InvocationRiskInfo("subagents", tc.args)
+			if risk != tc.risk || detail != tc.detail {
+				t.Fatalf("InvocationRiskInfo=(%q, %q), want (%q, %q)", risk, detail, tc.risk, tc.detail)
+			}
+		})
+	}
+}
+
 func TestInvocationPolicies_StructuredFileTools(t *testing.T) {
 	t.Parallel()
 

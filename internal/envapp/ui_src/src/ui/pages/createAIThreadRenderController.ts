@@ -9,7 +9,6 @@ import {
 
 import { upsertMessageById } from '../chat/messageState';
 import type { Message, StreamEvent } from '../chat/types';
-import type { SubagentView } from './aiDataNormalizers';
 import {
   applyStreamEventBatchToLiveRunMessage,
   clearLiveRunMessageIfTranscriptCaughtUp,
@@ -17,7 +16,6 @@ import {
   resolveRenderableLiveRunMessage,
 } from './flowerLiveRunState';
 import { projectThreadTranscriptMessages } from './aiThreadRenderProjection';
-import { deriveSubagentViewsFromMessages } from './aiSubagentState';
 
 export interface CreateAIThreadRenderControllerArgs {
   previousRenderedMessages: Accessor<Message[]>;
@@ -29,8 +27,6 @@ export interface AIThreadRenderController {
   transcriptMessages: Accessor<Message[]>;
   liveRunMessage: Accessor<Message | null>;
   projectedMessages: Accessor<Message[]>;
-  threadSubagentsById: Accessor<Record<string, SubagentView>>;
-  activeThreadSubagents: Accessor<SubagentView[]>;
   liveAssistantTailMessage: Accessor<Message | null>;
   hasStreamingAssistantMessage: Accessor<boolean>;
   reset: () => void;
@@ -46,9 +42,6 @@ export function createAIThreadRenderController(
 ): AIThreadRenderController {
   const [transcriptMessages, setTranscriptMessages] = createSignal<Message[]>([]);
   const [liveRunMessage, setLiveRunMessage] = createSignal<Message | null>(null);
-  const threadSubagentsById = createMemo<Record<string, SubagentView>>(() => (
-    deriveSubagentViewsFromMessages(transcriptMessages())
-  ));
 
   let pendingLiveRunEvents: StreamEvent[] = [];
   let liveRunRaf: number | null = null;
@@ -63,11 +56,7 @@ export function createAIThreadRenderController(
   const projectedMessages = createMemo(() => projectThreadTranscriptMessages({
     transcriptMessages: transcriptMessages(),
     previousRenderedMessages: args.previousRenderedMessages(),
-    subagentById: threadSubagentsById(),
   }));
-  const activeThreadSubagents = createMemo(() => (
-    Object.values(threadSubagentsById()).sort((left, right) => right.updatedAtUnixMs - left.updatedAtUnixMs)
-  ));
   const liveAssistantTailMessage = createMemo(() => (
     resolveRenderableLiveRunMessage(liveRunMessage(), transcriptMessages())
   ));
@@ -154,8 +143,6 @@ export function createAIThreadRenderController(
     transcriptMessages,
     liveRunMessage,
     projectedMessages,
-    threadSubagentsById,
-    activeThreadSubagents,
     liveAssistantTailMessage,
     hasStreamingAssistantMessage,
     reset,

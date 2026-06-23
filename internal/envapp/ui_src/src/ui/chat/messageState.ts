@@ -70,29 +70,6 @@ export function createEmptyBlock(blockType: MessageBlock['type']): MessageBlock 
       return { type: 'sources', sources: [] };
     case 'request_user_input_response':
       return { type: 'request_user_input_response', prompt_id: '' };
-    case 'subagent':
-      return {
-        type: 'subagent',
-        subagentId: '',
-        taskId: '',
-        agentType: '',
-        triggerReason: '',
-        status: 'unknown',
-        summary: '',
-        evidenceRefs: [],
-        keyFiles: [],
-        openRisks: [],
-        nextActions: [],
-        history: [],
-        stats: {
-          steps: 0,
-          toolCalls: 0,
-          tokens: 0,
-          elapsedMs: 0,
-          outcome: '',
-        },
-        updatedAtUnixMs: 0,
-      };
     default:
       return { type: 'text', content: '' };
   }

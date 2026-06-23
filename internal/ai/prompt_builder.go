@@ -340,13 +340,15 @@ func buildPromptSubagentSection(spec promptProfileSpec) promptSection {
 		"- Delegate only when work can be parallelized, isolated, or independently reviewed.",
 		"- Do NOT delegate trivial single-step tasks that can be completed directly.",
 		"- Do NOT use subagents for one-off local inspection work such as reading a single file, checking one command, or answering a direct question about the current workspace.",
-		"- Create subagents with subagents(action=create) and include objective, agent_type, trigger_reason, deliverables, definition_of_done, and output_schema (title/context_mode/inputs when useful).",
-		"- Minimal create contract example: {\"action\":\"create\",\"agent_type\":\"worker\",\"objective\":\"Investigate the assigned slice\",\"trigger_reason\":\"Parallelizable sidecar work will speed up the parent task\",\"deliverables\":[\"Short findings summary\"],\"definition_of_done\":[\"Findings verified\"],\"output_schema\":{\"type\":\"object\",\"required\":[\"summary\"],\"properties\":{\"summary\":{\"type\":\"string\",\"description\":\"Verified findings for the parent run.\"}}}}",
-		"- Subagent timeout is fixed at 900 seconds (15 minutes); do not customize budget.timeout_sec.",
-		"- output_schema must include type=object, a non-empty properties object, and required keys that exist in properties.",
-		"- Use subagents(action=wait) to gather child status snapshots before final decisions.",
-		"- Use subagents(action=list|inspect|steer|terminate|terminate_all) to manage child runs deterministically.",
-		"- Inspect contract: use {action:\"inspect\",target:\"<subagent_id>\"} for a single child, or {action:\"inspect\",ids:[\"<subagent_id>\",...]} for batch inspection.",
+		"- Spawn subagents with subagents(action=\"spawn\", agent_type=\"explore|worker|reviewer\", task_name=\"short stable name\", message=\"specific delegated mission\").",
+		"- Use explore for readonly investigation, worker for bounded implementation, and reviewer for independent consistency/risk review.",
+		"- Keep each delegated mission self-contained: include scope, files or modules, expected evidence, and what the parent needs back.",
+		"- Track child thread_id values returned by spawn; thread_id is the identity for send_input, wait, inspect, and close.",
+		"- Use subagents(action=\"wait\", ids:[\"<thread_id>\"], timeout_ms:60000) when you need a child result before deciding.",
+		"- Use subagents(action=\"list\") and subagents(action=\"inspect\", target:\"<thread_id>\") to monitor work and recover exact state.",
+		"- Use subagents(action=\"send_input\", target:\"<thread_id>\", message:\"...\", interrupt:true|false) to steer a child; interrupt only for a real change in direction.",
+		"- Use subagents(action=\"close\", target:\"<thread_id>\") or close_all when delegated work is no longer useful.",
+		"- Always inspect or wait for relevant subagents before relying on their output, and integrate their results into the parent thread's final reasoning.",
 	)
 }
 

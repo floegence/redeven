@@ -86,15 +86,7 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 		return r.failRun("Failed to initialize tool registry", err)
 	}
 	modeFilter := newModeToolFilter(r.cfg, !r.noUserInteraction)
-	if len(r.toolAllowlist) > 0 {
-		allow := make(map[string]struct{}, len(r.toolAllowlist))
-		for name := range r.toolAllowlist {
-			if name = strings.TrimSpace(name); name != "" {
-				allow[name] = struct{}{}
-			}
-		}
-		modeFilter = allowlistModeToolFilter{base: modeFilter, allowlist: allow}
-	}
+	modeFilter = r.withToolAllowlistFilter(modeFilter)
 	activeTools := modeFilter.FilterToolsForMode(mode, registry.Snapshot())
 	activeSignals := modeFilter.FilterToolsForMode(mode, builtInControlSignalDefinitions())
 	capabilityContract := resolveRunCapabilityContract(r, activeTools, activeSignals, req.ModelCapability.SupportsAskUserQuestionBatches)

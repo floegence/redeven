@@ -124,6 +124,7 @@ type Service struct {
 	activeRunByTh           map[string]string // <endpoint_id>:<thread_id> -> run_id
 	suppressQueuedDrainByTh map[string]bool
 	runs                    map[string]*run
+	subagentRuntimes        map[string]*floretSubagentRuntime
 
 	threadMgr *threadManager
 
@@ -288,6 +289,7 @@ func NewService(opts Options) (*Service, error) {
 		toolTargetPolicyForRun:       opts.ToolTargetPolicyForRun,
 		activeRunByTh:                make(map[string]string),
 		runs:                         make(map[string]*run),
+		subagentRuntimes:             make(map[string]*floretSubagentRuntime),
 		realtimeWriters:              make(map[*rpc.Server]*aiSinkWriter),
 		realtimeSummaryByEndpoint:    make(map[string]map[*rpc.Server]struct{}),
 		realtimeSummaryEndpointBySRV: make(map[*rpc.Server]string),
@@ -348,6 +350,21 @@ func (s *Service) Close() error {
 	maintenanceDoneCh := s.maintenanceDoneCh
 	s.maintenanceStopCh = nil
 	s.maintenanceDoneCh = nil
+	runs := make([]*run, 0, len(s.runs))
+	for _, r := range s.runs {
+		if r != nil {
+			runs = append(runs, r)
+		}
+	}
+	runtimes := make([]*floretSubagentRuntime, 0, len(s.subagentRuntimes))
+	for _, runtime := range s.subagentRuntimes {
+		if runtime != nil {
+			runtimes = append(runtimes, runtime)
+		}
+	}
+	s.runs = make(map[string]*run)
+	s.activeRunByTh = make(map[string]string)
+	s.subagentRuntimes = make(map[string]*floretSubagentRuntime)
 	s.mu.Unlock()
 
 	if coordinator != nil {
@@ -362,10 +379,55 @@ func (s *Service) Close() error {
 	for _, w := range writers {
 		w.Close()
 	}
+	for _, r := range runs {
+		r.requestCancel("canceled")
+	}
+	for _, runtime := range runtimes {
+		runtime.release()
+	}
 	if ts != nil {
 		return ts.Close()
 	}
 	return nil
+}
+
+func (s *Service) ensureThreadSubagentRuntimeLocked(thKey string, r *run) subagentRuntime {
+	if s == nil || r == nil {
+		return nil
+	}
+	thKey = strings.TrimSpace(thKey)
+	if thKey == "" {
+		thKey = runThreadKey(r.endpointID, r.threadID)
+	}
+	if thKey == "" {
+		return nil
+	}
+	if s.subagentRuntimes == nil {
+		s.subagentRuntimes = make(map[string]*floretSubagentRuntime)
+	}
+	runtime := s.subagentRuntimes[thKey]
+	if runtime == nil {
+		runtime = newFloretSubagentRuntime(r)
+		s.subagentRuntimes[thKey] = runtime
+	} else {
+		runtime.attachParentRun(r)
+	}
+	return runtime
+}
+
+func (s *Service) removeThreadSubagentRuntime(thKey string) *floretSubagentRuntime {
+	if s == nil {
+		return nil
+	}
+	thKey = strings.TrimSpace(thKey)
+	if thKey == "" {
+		return nil
+	}
+	s.mu.Lock()
+	runtime := s.subagentRuntimes[thKey]
+	delete(s.subagentRuntimes, thKey)
+	s.mu.Unlock()
+	return runtime
 }
 
 func (s *Service) Enabled() bool {
@@ -1152,13 +1214,14 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		return nil, errors.New("thread not found")
 	}
 	var flowerMeta *threadstore.FlowerThreadMetadata
-	if toolTargetPolicyForRun != nil {
-		pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
-		flowerMeta, err = db.GetFlowerThreadMetadata(pctx, endpointID, threadID)
-		cancelPersist()
-		if err != nil {
-			return nil, err
-		}
+	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
+	flowerMeta, err = db.GetFlowerThreadMetadata(pctx, endpointID, threadID)
+	cancelPersist()
+	if err != nil {
+		return nil, err
+	}
+	if isFlowerSubagentProjection(flowerMeta) {
+		return nil, ErrReadOnlyThread
 	}
 
 	runWorkingDir := strings.TrimSpace(th.WorkingDir)
@@ -1253,6 +1316,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		},
 		Writer: w,
 	})
+	r.subagentRuntime = s.ensureThreadSubagentRuntimeLocked(thKey, r)
 	s.activeRunByTh[thKey] = runID
 	s.runs[runID] = r
 	s.mu.Unlock()

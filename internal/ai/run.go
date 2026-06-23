@@ -72,6 +72,7 @@ type runOptions struct {
 	WebSearchToolEnabled  bool
 	WebSearchMode         string
 	SkillManager          *skillManager
+	SubagentRuntime       subagentRuntime
 	ToolTargetPolicy      ToolTargetPolicy
 	TargetToolExecutor    TargetToolExecutor
 
@@ -181,7 +182,7 @@ type run struct {
 	targetToolExecutor    TargetToolExecutor
 
 	skillManager    *skillManager
-	subagentManager *subagentManager
+	subagentRuntime subagentRuntime
 
 	terminalExecRunner func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
 }
@@ -268,6 +269,7 @@ func newRun(opts runOptions) *run {
 		collectedWebSourceOrder:   make([]string, 0, 8),
 		webSearchToolEnabled:      opts.WebSearchToolEnabled,
 		webSearchMode:             strings.TrimSpace(opts.WebSearchMode),
+		subagentRuntime:           opts.SubagentRuntime,
 		currentThinkingBlockIndex: -1,
 		activitySegmentActive:     false,
 		activitySegmentBlockIndex: -1,
@@ -428,9 +430,6 @@ func (r *run) requestCancel(reason string) {
 	cancelFn := r.cancelFn
 	r.muCancel.Unlock()
 	if alreadyRequested || cancelFn == nil {
-		if r.subagentManager != nil {
-			r.subagentManager.closeAll()
-		}
 		return
 	}
 
@@ -438,9 +437,6 @@ func (r *run) requestCancel(reason string) {
 	// - signal: cancel context immediately to stop new sampling/tool dispatch
 	// - grace/force: re-signal after a short delay in case something is stuck
 	cancelFn()
-	if r.subagentManager != nil {
-		r.subagentManager.closeAll()
-	}
 	go func() {
 		timer := time.NewTimer(500 * time.Millisecond)
 		defer timer.Stop()
@@ -562,13 +558,6 @@ func (r *run) recordRuntimeTurnUsage(usage TurnUsage, estimateTokens int) {
 	r.runtimeTokens.Add(total)
 }
 
-func (r *run) runtimeStatsSnapshot() (toolCalls int64, tokens int64) {
-	if r == nil {
-		return 0, 0
-	}
-	return r.runtimeToolCalls.Load(), r.runtimeTokens.Load()
-}
-
 func (r *run) cancel() {
 	if r == nil {
 		return
@@ -581,9 +570,6 @@ func (r *run) cancel() {
 
 	if cancelFn != nil {
 		cancelFn()
-	}
-	if r.subagentManager != nil {
-		r.subagentManager.closeAll()
 	}
 
 }
@@ -1269,22 +1255,65 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		"objective_chars", utf8.RuneCountInString(strings.TrimSpace(taskObjective)),
 		"working_dir_abs", sanitizeLogText(workingDirAbs, 200),
 	)
+	resolved, err := r.resolveModelGatewayForModel(modelID, providerID, ok)
+	if err != nil {
+		code := runErrorCodeProviderModelUnavailable
+		if errors.Is(err, ErrNotConfigured) {
+			code = runErrorCodeProviderUnreachable
+		}
+		if errors.Is(err, errModelGatewayMissingKey) {
+			code = runErrorCodeProviderMissingKey
+		}
+		return r.failRunWithCode(code, "", err)
+	}
+	if strings.TrimSpace(resolved.userMessage) != "" {
+		return r.failRunWithCode(runErrorCodeProviderMissingKey, resolved.userMessage, resolved.err)
+	}
+	return r.runFloretProjectedTurn(execCtx, req, resolved.provider, resolved.apiKey, strings.TrimSpace(taskObjective), resolved.adapterOverride)
+}
+
+var errModelGatewayMissingKey = errors.New("missing provider key")
+
+type resolvedRunModelGateway struct {
+	provider        config.AIProvider
+	apiKey          string
+	providerType    string
+	modelName       string
+	adapterOverride ModelGateway
+	userMessage     string
+	err             error
+}
+
+func (r *run) resolveModelGatewayForModel(modelID string, providerID string, providerIDOK bool) (resolvedRunModelGateway, error) {
+	modelID = strings.TrimSpace(modelID)
+	providerID = strings.TrimSpace(providerID)
 	if isDesktopModelSourceModelID(modelID) {
 		if r.desktopModelSource == nil || !r.desktopModelSource.isConnected() {
-			return r.failRunWithCode(runErrorCodeProviderUnreachable, "", ErrNotConfigured)
+			return resolvedRunModelGateway{}, ErrNotConfigured
 		}
+		_, modelName, _ := strings.Cut(modelID, "/")
 		providerCfg := config.AIProvider{
 			ID:   DesktopModelSourceProviderType,
 			Name: "Desktop",
 			Type: DesktopModelSourceProviderType,
 		}
-		return r.runFloretProjectedTurn(execCtx, req, providerCfg, "", strings.TrimSpace(taskObjective), r.desktopModelSource.ModelGateway(modelID))
+		return resolvedRunModelGateway{
+			provider:        providerCfg,
+			providerType:    DesktopModelSourceProviderType,
+			modelName:       strings.TrimSpace(modelName),
+			adapterOverride: r.desktopModelSource.ModelGateway(modelID),
+		}, nil
 	}
-	if !ok || providerID == "" {
-		return r.failRunWithCode(runErrorCodeProviderModelUnavailable, "", fmt.Errorf("invalid model id %q", modelID))
+	if !providerIDOK || providerID == "" {
+		return resolvedRunModelGateway{}, fmt.Errorf("invalid model id %q", modelID)
+	}
+	_, modelName, _ := strings.Cut(modelID, "/")
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		return resolvedRunModelGateway{}, fmt.Errorf("invalid model id %q", modelID)
 	}
 	if r.cfg == nil {
-		return r.failRunWithCode(runErrorCodeProviderMissingKey, "", errors.New("ai not configured"))
+		return resolvedRunModelGateway{}, fmt.Errorf("%w: ai not configured", errModelGatewayMissingKey)
 	}
 	var providerCfg *config.AIProvider
 	for i := range r.cfg.Providers {
@@ -1296,7 +1325,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		break
 	}
 	if providerCfg == nil {
-		return r.failRunWithCode(runErrorCodeProviderModelUnavailable, "", fmt.Errorf("unknown provider %q", providerID))
+		return resolvedRunModelGateway{}, fmt.Errorf("unknown provider %q", providerID)
 	}
 
 	providerDisplay := providerID
@@ -1307,27 +1336,29 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	apiKey := ""
 	if strings.ToLower(strings.TrimSpace(providerCfg.Type)) != "ollama" {
 		if r.resolveProviderKey == nil {
-			return r.failRunWithCode(runErrorCodeProviderMissingKey, "", errors.New("missing provider key resolver"))
+			return resolvedRunModelGateway{}, fmt.Errorf("%w: missing provider key resolver", errModelGatewayMissingKey)
 		}
 		var ok bool
 		var err error
 		apiKey, ok, err = r.resolveProviderKey(providerID)
 		if err != nil {
-			return r.failRunWithCode(runErrorCodeProviderMissingKey, "", err)
+			return resolvedRunModelGateway{}, fmt.Errorf("%w: %v", errModelGatewayMissingKey, err)
 		}
 		if !ok || strings.TrimSpace(apiKey) == "" {
-			return r.failRunWithCode(
-				runErrorCodeProviderMissingKey,
-				fmt.Sprintf("AI provider %q is missing API key. Open Settings to configure it.", providerDisplay),
-				fmt.Errorf("missing api key for provider %q", providerID),
-			)
+			err := fmt.Errorf("missing api key for provider %q", providerID)
+			return resolvedRunModelGateway{userMessage: fmt.Sprintf("AI provider %q is missing API key. Open Settings to configure it.", providerDisplay), err: err}, nil
 		}
 	}
 
 	if !r.supportsModelGatewayProvider(providerCfg) {
-		return r.failRunWithCode(runErrorCodeProviderModelUnavailable, "", fmt.Errorf("unsupported provider type %q", strings.TrimSpace(providerCfg.Type)))
+		return resolvedRunModelGateway{}, fmt.Errorf("unsupported provider type %q", strings.TrimSpace(providerCfg.Type))
 	}
-	return r.runFloretProjectedTurn(execCtx, req, *providerCfg, strings.TrimSpace(apiKey), strings.TrimSpace(taskObjective))
+	return resolvedRunModelGateway{
+		provider:     *providerCfg,
+		apiKey:       strings.TrimSpace(apiKey),
+		providerType: strings.ToLower(strings.TrimSpace(providerCfg.Type)),
+		modelName:    modelName,
+	}, nil
 }
 
 func (r *run) appendTextDelta(delta string) error {

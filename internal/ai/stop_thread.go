@@ -139,6 +139,9 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 	if db == nil {
 		return StopThreadResponse{}, errors.New("threads store not ready")
 	}
+	if err := a.mgr.svc.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
+		return StopThreadResponse{}, err
+	}
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
 	}

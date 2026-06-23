@@ -5,8 +5,6 @@ import type {
   Message,
   MessageBlock,
 } from '../chat/types';
-import type { SubagentView } from './aiDataNormalizers';
-import { sameSubagentViewContent } from './aiSubagentState';
 
 type ActivityTimelineBlock = Extract<MessageBlock, { type: 'activity-timeline' }>;
 type ChecklistBlock = Extract<MessageBlock, { type: 'checklist' }>;
@@ -14,7 +12,6 @@ type ChecklistBlock = Extract<MessageBlock, { type: 'checklist' }>;
 export interface ProjectThreadTranscriptMessagesArgs {
   transcriptMessages: Message[];
   previousRenderedMessages: Message[];
-  subagentById: Record<string, SubagentView>;
 }
 
 export function projectThreadTranscriptMessages(args: ProjectThreadTranscriptMessagesArgs): Message[] {
@@ -33,108 +30,7 @@ export function projectThreadTranscriptMessages(args: ProjectThreadTranscriptMes
     seen.add(id);
   }
 
-  const withSubagentSync = syncSubagentBlocksWithLatest(projected, args.subagentById);
-  return carryForwardTransientMessageState(args.previousRenderedMessages, withSubagentSync);
-}
-
-export function syncSubagentBlocksWithLatest(inputMessages: Message[], latestById: Record<string, SubagentView>): Message[] {
-  let changed = false;
-
-  const patchBlocks = (blocks: MessageBlock[]): MessageBlock[] => {
-    let blockChanged = false;
-    const nextBlocks = blocks.map((block) => {
-      let nextBlock = block;
-
-      if (block.type === 'subagent') {
-        const latest = latestById[block.subagentId];
-        if (latest) {
-          const latestStatus = latest.status;
-          const same = sameSubagentViewContent(
-            {
-              subagentId: block.subagentId,
-              taskId: block.taskId,
-              specId: block.specId,
-              title: block.title,
-              objective: block.objective,
-              contextMode: block.contextMode,
-              promptHash: block.promptHash,
-              delegationPromptMarkdown: block.delegationPromptMarkdown,
-              deliverables: block.deliverables ?? [],
-              definitionOfDone: block.definitionOfDone ?? [],
-              outputSchema: block.outputSchema ?? {},
-              agentType: block.agentType,
-              triggerReason: block.triggerReason,
-              status: block.status,
-              summary: block.summary,
-              evidenceRefs: block.evidenceRefs,
-              keyFiles: block.keyFiles,
-              openRisks: block.openRisks,
-              nextActions: block.nextActions,
-              history: block.history,
-              stats: block.stats,
-              updatedAtUnixMs: block.updatedAtUnixMs,
-              error: block.error,
-            },
-            {
-              ...latest,
-              status: latestStatus,
-            },
-          );
-
-          if (!same) {
-            nextBlock = {
-              ...block,
-              subagentId: latest.subagentId,
-              taskId: latest.taskId,
-              specId: latest.specId,
-              title: latest.title,
-              objective: latest.objective,
-              contextMode: latest.contextMode,
-              promptHash: latest.promptHash,
-              delegationPromptMarkdown: latest.delegationPromptMarkdown,
-              deliverables: latest.deliverables ?? [],
-              definitionOfDone: latest.definitionOfDone ?? [],
-              outputSchema: latest.outputSchema ?? {},
-              agentType: latest.agentType,
-              triggerReason: latest.triggerReason,
-              status: latestStatus,
-              summary: latest.summary,
-              evidenceRefs: latest.evidenceRefs,
-              keyFiles: latest.keyFiles,
-              openRisks: latest.openRisks,
-              nextActions: latest.nextActions,
-              history: latest.history,
-              stats: latest.stats,
-              updatedAtUnixMs: latest.updatedAtUnixMs,
-              error: latest.error,
-            };
-            blockChanged = true;
-          }
-        }
-      }
-
-      return nextBlock;
-    });
-
-    if (!blockChanged) {
-      return blocks;
-    }
-    changed = true;
-    return nextBlocks;
-  };
-
-  const nextMessages = inputMessages.map((message) => {
-    const patchedBlocks = patchBlocks(message.blocks);
-    if (patchedBlocks === message.blocks) {
-      return message;
-    }
-    return {
-      ...message,
-      blocks: patchedBlocks,
-    };
-  });
-
-  return changed ? nextMessages : inputMessages;
+  return carryForwardTransientMessageState(args.previousRenderedMessages, projected);
 }
 
 export function carryForwardTransientMessageState(previousRenderedMessages: Message[], nextMessages: Message[]): Message[] {

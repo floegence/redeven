@@ -3,13 +3,19 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/floegence/floret/observation"
 	fltools "github.com/floegence/floret/tools"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -729,6 +735,59 @@ func TestFloretToolResultActivityPayloadsMeetFullContract(t *testing.T) {
 	}
 }
 
+func TestFloretToolResultActivityPreservesSubagentLifecycleSnapshot(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	normalized, truncated := normalizeTruncatedToolPayload("subagents", map[string]any{
+		"action":      "close",
+		"status":      "ok",
+		"target":      "subagent-1",
+		"subagent_id": "subagent-1",
+		"thread_id":   "subagent-1",
+		"closed":      true,
+		"snapshot": map[string]any{
+			"subagent_id":   "subagent-1",
+			"thread_id":     "subagent-1",
+			"task_name":     "Review prompt contract",
+			"agent_type":    "reviewer",
+			"status":        "canceled",
+			"last_message":  strings.Repeat("handoff evidence ", 800),
+			"updated_at_ms": 1782219585489,
+			"closed":        true,
+			"can_close":     false,
+		},
+	})
+	if !truncated {
+		t.Fatal("expected large subagent payload to be field-truncated")
+	}
+	activity := mustFloretToolResultActivity(t, r, ToolResult{
+		ToolID:    "call_close_subagent",
+		ToolName:  "subagents",
+		Status:    toolResultStatusSuccess,
+		Summary:   "delegation.managed",
+		Details:   "tool execution completed",
+		Data:      normalized,
+		Truncated: truncated,
+	})
+	snapshot, ok := activity.Payload["snapshot"].(map[string]any)
+	if !ok {
+		t.Fatalf("activity snapshot type=%T payload=%#v", activity.Payload["snapshot"], activity.Payload)
+	}
+	if anyToString(activity.Payload["action"]) != "close" || anyToString(snapshot["status"]) != "canceled" {
+		t.Fatalf("activity lost close lifecycle state: %#v", activity.Payload)
+	}
+	if anyToString(snapshot["thread_id"]) != "subagent-1" || anyToString(snapshot["agent_type"]) != "reviewer" {
+		t.Fatalf("activity lost subagent identity: %#v", snapshot)
+	}
+	if len([]rune(anyToString(snapshot["last_message"]))) > 3000 {
+		t.Fatalf("activity last_message was not field-truncated: %d", len([]rune(anyToString(snapshot["last_message"]))))
+	}
+	if activity.Payload["truncated"] != true {
+		t.Fatalf("activity payload truncated flag=%#v, want true", activity.Payload["truncated"])
+	}
+}
+
 func TestFloretToolResultFromFlowerUsesContractSafeStructuredAndText(t *testing.T) {
 	t.Parallel()
 
@@ -975,6 +1034,336 @@ func TestFloretToolRegistryDoesNotInjectRunTargetContext(t *testing.T) {
 	}
 	if _, ok := forwarded["target_id"]; ok {
 		t.Fatalf("forwarded target tool args must not include target_id: %#v", forwarded)
+	}
+}
+
+func TestFloretToolRegistryBlocksReadonlySubagentMutatingTools(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{
+		AgentHomeDir: t.TempDir(),
+		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+	})
+	registry, err := buildFloretToolRegistry(r, []ToolDef{{
+		Name: "file.write",
+		InputSchema: json.RawMessage(
+			`{"type":"object","properties":{"file_path":{"type":"string"},"content":{"type":"string"}},"required":["file_path","content"],"additionalProperties":false}`,
+		),
+		Mutating:         true,
+		RequiresApproval: true,
+	}}, nil)
+	if err != nil {
+		t.Fatalf("buildFloretToolRegistry: %v", err)
+	}
+
+	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
+		ID:   "call_write",
+		Name: "file.write",
+		Args: `{"file_path":"note.txt","content":"mutate"}`,
+	}, func(context.Context, fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
+		return fltools.PermissionDecisionAllow, nil
+	}, fltools.RunOptions{
+		HostContext: map[string]string{subagentToolHostContextAgentTypeKey: subagentAgentTypeReviewer},
+	})
+	if !result.IsError || !strings.Contains(strings.ToLower(result.Text), "subagent readonly policy") {
+		t.Fatalf("readonly reviewer mutation result=%#v, want readonly policy error", result)
+	}
+}
+
+func TestFloretToolRegistryAllowsReadonlySubagentReadonlyTools(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingTargetToolExecutor{}
+	r := newRun(runOptions{
+		AgentHomeDir:       t.TempDir(),
+		SessionMeta:        &session.Meta{CanRead: true, CanExecute: true},
+		EndpointID:         "env_test",
+		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
+		TargetToolExecutor: executor,
+	})
+	registry, err := buildFloretToolRegistry(r, []ToolDef{{
+		Name: "terminal.exec",
+		InputSchema: json.RawMessage(
+			`{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false}`,
+		),
+	}}, nil)
+	if err != nil {
+		t.Fatalf("buildFloretToolRegistry: %v", err)
+	}
+
+	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
+		ID:   "call_pwd",
+		Name: "terminal.exec",
+		Args: `{"command":"pwd"}`,
+	}, nil, fltools.RunOptions{
+		HostContext: map[string]string{subagentToolHostContextAgentTypeKey: subagentAgentTypeExplore},
+	})
+	if result.IsError {
+		t.Fatalf("readonly explore command result error text=%q structured=%#v", result.Text, result.Structured)
+	}
+	if executor.call.TargetID == "" {
+		t.Fatalf("terminal.exec was not forwarded")
+	}
+}
+
+func TestFloretToolRegistryAllowsWorkerSubagentMutatingTools(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingTargetToolExecutor{}
+	r := newRun(runOptions{
+		AgentHomeDir:       t.TempDir(),
+		SessionMeta:        &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+		EndpointID:         "env_test",
+		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
+		TargetToolExecutor: executor,
+	})
+	registry, err := buildFloretToolRegistry(r, []ToolDef{{
+		Name: "file.write",
+		InputSchema: json.RawMessage(
+			`{"type":"object","properties":{"file_path":{"type":"string"},"content":{"type":"string"}},"required":["file_path","content"],"additionalProperties":false}`,
+		),
+		Mutating:         true,
+		RequiresApproval: true,
+	}}, nil)
+	if err != nil {
+		t.Fatalf("buildFloretToolRegistry: %v", err)
+	}
+
+	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
+		ID:   "call_write_worker",
+		Name: "file.write",
+		Args: `{"file_path":"note.txt","content":"mutate"}`,
+	}, func(context.Context, fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
+		return fltools.PermissionDecisionAllow, nil
+	}, fltools.RunOptions{
+		HostContext: map[string]string{subagentToolHostContextAgentTypeKey: subagentAgentTypeWorker},
+	})
+	if result.IsError {
+		t.Fatalf("worker mutation result error text=%q structured=%#v", result.Text, result.Structured)
+	}
+	if executor.call.TargetID == "" {
+		t.Fatalf("file.write was not forwarded")
+	}
+}
+
+func TestFloretToolRegistryBlocksWorkerMutationsWhenParentPlanModeApplies(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{
+		AgentHomeDir:       t.TempDir(),
+		SessionMeta:        &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
+		TargetToolExecutor: &recordingTargetToolExecutor{},
+	})
+	r.runMode = config.AIModePlan
+	registry, err := buildFloretToolRegistry(r, []ToolDef{{
+		Name: "terminal.exec",
+		InputSchema: json.RawMessage(
+			`{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false}`,
+		),
+		RequiresApproval: true,
+	}}, nil)
+	if err != nil {
+		t.Fatalf("buildFloretToolRegistry: %v", err)
+	}
+
+	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
+		ID:   "call_plan_worker_mutation",
+		Name: "terminal.exec",
+		Args: `{"command":"mkdir -p should-not-run"}`,
+	}, floretToolApproverForRun(r), fltools.RunOptions{
+		HostContext: map[string]string{
+			subagentToolHostContextAgentTypeKey:      subagentAgentTypeWorker,
+			subagentToolHostContextApprovedWorkerKey: "true",
+		},
+	})
+	if !result.IsError || !strings.Contains(strings.ToLower(result.Text), "plan-mode readonly policy") {
+		t.Fatalf("plan worker mutation result=%#v, want plan-mode readonly denial", result)
+	}
+}
+
+func TestFloretToolRegistryUsesInvocationIdentityForSubagentTools(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	store, err := threadstore.Open(dbPath)
+	if err != nil {
+		t.Fatalf("threadstore.Open: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	ctx := context.Background()
+	for _, rec := range []threadstore.RunRecord{
+		{RunID: "run_parent", EndpointID: "env_test", ThreadID: "thread_parent", MessageID: "msg_parent", State: "running"},
+		{RunID: "turn_child", EndpointID: "env_test", ThreadID: "thread_child", MessageID: "turn_child", State: "running"},
+	} {
+		if err := store.UpsertRun(ctx, rec); err != nil {
+			t.Fatalf("UpsertRun(%s): %v", rec.RunID, err)
+		}
+	}
+
+	r := newRun(runOptions{
+		Log:              slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		RunID:            "run_parent",
+		EndpointID:       "env_test",
+		ThreadID:         "thread_parent",
+		MessageID:        "msg_parent",
+		AgentHomeDir:     t.TempDir(),
+		Shell:            "bash",
+		ThreadsDB:        store,
+		SessionMeta:      &session.Meta{CanRead: true, CanExecute: true},
+		PersistOpTimeout: 5 * time.Second,
+	})
+	registry, err := buildFloretToolRegistry(r, []ToolDef{{
+		Name: "terminal.exec",
+		InputSchema: json.RawMessage(
+			`{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false}`,
+		),
+	}}, nil)
+	if err != nil {
+		t.Fatalf("buildFloretToolRegistry: %v", err)
+	}
+
+	result := registry.RunWithOptions(ctx, fltools.ToolCall{
+		ID:   "call_child_pwd",
+		Name: "terminal.exec",
+		Args: `{"command":"pwd"}`,
+	}, floretToolApproverForRun(r), fltools.RunOptions{
+		RunID:    "turn_child",
+		ThreadID: "thread_child",
+		TurnID:   "turn_child",
+		Step:     1,
+		HostContext: map[string]string{
+			subagentToolHostContextAgentTypeKey: subagentAgentTypeWorker,
+		},
+	})
+	if result.IsError {
+		t.Fatalf("registry result error text=%q structured=%#v", result.Text, result.Structured)
+	}
+
+	childCall, err := store.GetToolCall(ctx, "env_test", "turn_child", "call_child_pwd")
+	if err != nil {
+		t.Fatalf("GetToolCall child: %v", err)
+	}
+	if childCall == nil || childCall.RunID != "turn_child" {
+		t.Fatalf("child tool call=%#v", childCall)
+	}
+	if _, err := store.GetToolCall(ctx, "env_test", "run_parent", "call_child_pwd"); err == nil {
+		t.Fatalf("child tool call must not be persisted under parent run")
+	}
+	childSpans, err := store.ListRecentExecutionSpansByThread(ctx, "env_test", "thread_child", 10)
+	if err != nil {
+		t.Fatalf("ListRecentExecutionSpansByThread child: %v", err)
+	}
+	if len(childSpans) == 0 {
+		t.Fatalf("missing child execution span")
+	}
+	for _, span := range childSpans {
+		if span.RunID != "turn_child" || span.ThreadID != "thread_child" {
+			t.Fatalf("child span persisted with parent identity: %#v", span)
+		}
+	}
+	parentSpans, err := store.ListRecentExecutionSpansByThread(ctx, "env_test", "thread_parent", 10)
+	if err != nil {
+		t.Fatalf("ListRecentExecutionSpansByThread parent: %v", err)
+	}
+	for _, span := range parentSpans {
+		if span.Name == "terminal.exec" && strings.Contains(span.SpanID, "call_child_pwd") {
+			t.Fatalf("child terminal span leaked to parent thread: %#v", span)
+		}
+	}
+}
+
+func TestFloretToolRegistryWorkerGrantAllowsNoUserInteractionMutations(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{
+		AgentHomeDir:       t.TempDir(),
+		SessionMeta:        &session.Meta{CanRead: true, CanWrite: true},
+		AIConfig:           &config.AIConfig{ExecutionPolicy: &config.AIExecutionPolicy{RequireUserApproval: true}},
+		NoUserInteraction:  true,
+		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
+		TargetToolExecutor: &recordingTargetToolExecutor{},
+	})
+	registry, err := buildFloretToolRegistry(r, []ToolDef{{
+		Name: "file.write",
+		InputSchema: json.RawMessage(
+			`{"type":"object","properties":{"file_path":{"type":"string"},"content":{"type":"string"}},"required":["file_path","content"],"additionalProperties":false}`,
+		),
+		Mutating:         true,
+		RequiresApproval: true,
+	}}, nil)
+	if err != nil {
+		t.Fatalf("buildFloretToolRegistry: %v", err)
+	}
+
+	withoutGrant := registry.RunWithOptions(context.Background(), fltools.ToolCall{
+		ID:   "call_write_no_grant",
+		Name: "file.write",
+		Args: `{"file_path":"note.txt","content":"mutate"}`,
+	}, floretToolApproverForRun(r), fltools.RunOptions{
+		RunID:    "turn_worker",
+		ThreadID: "thread_worker",
+		TurnID:   "turn_worker",
+		HostContext: map[string]string{
+			subagentToolHostContextAgentTypeKey: subagentAgentTypeWorker,
+		},
+	})
+	if !withoutGrant.IsError || !strings.Contains(strings.ToLower(withoutGrant.Text), "user interaction is disabled") {
+		t.Fatalf("without grant result=%#v, want no-user-interaction denial", withoutGrant)
+	}
+
+	withGrant := registry.RunWithOptions(context.Background(), fltools.ToolCall{
+		ID:   "call_write_with_grant",
+		Name: "file.write",
+		Args: `{"file_path":"note.txt","content":"mutate"}`,
+	}, floretToolApproverForRun(r), fltools.RunOptions{
+		RunID:    "turn_worker",
+		ThreadID: "thread_worker",
+		TurnID:   "turn_worker",
+		HostContext: map[string]string{
+			subagentToolHostContextAgentTypeKey:      subagentAgentTypeWorker,
+			subagentToolHostContextApprovedWorkerKey: "true",
+		},
+	})
+	if withGrant.IsError {
+		t.Fatalf("with grant result error text=%q structured=%#v", withGrant.Text, withGrant.Structured)
+	}
+}
+
+func TestSubagentsToolPermissionForDynamicActions(t *testing.T) {
+	t.Parallel()
+
+	def, err := floretToolDefinition(ToolDef{
+		Name:         "subagents",
+		Mutating:     false,
+		ParallelSafe: false,
+		InputSchema:  json.RawMessage(`{"type":"object","properties":{"action":{"type":"string"},"agent_type":{"type":"string"},"interrupt":{"type":"boolean"}},"additionalProperties":false}`),
+	})
+	if err != nil {
+		t.Fatalf("floretToolDefinition: %v", err)
+	}
+
+	readonly, err := def.PermissionFor(fltools.PermissionRequest{Name: "subagents", Args: map[string]any{"action": "spawn", "agent_type": "reviewer"}})
+	if err != nil {
+		t.Fatalf("PermissionFor readonly: %v", err)
+	}
+	if readonly.Mode != fltools.PermissionAllow {
+		t.Fatalf("reviewer spawn permission=%q, want allow", readonly.Mode)
+	}
+	worker, err := def.PermissionFor(fltools.PermissionRequest{Name: "subagents", Args: map[string]any{"action": "spawn", "agent_type": "worker"}})
+	if err != nil {
+		t.Fatalf("PermissionFor worker: %v", err)
+	}
+	if worker.Mode != fltools.PermissionAsk {
+		t.Fatalf("worker spawn permission=%q, want ask", worker.Mode)
+	}
+	interrupt, err := def.PermissionFor(fltools.PermissionRequest{Name: "subagents", Args: map[string]any{"action": "send_input", "interrupt": true}})
+	if err != nil {
+		t.Fatalf("PermissionFor interrupt: %v", err)
+	}
+	if interrupt.Mode != fltools.PermissionAsk {
+		t.Fatalf("interrupt send_input permission=%q, want ask", interrupt.Mode)
 	}
 }
 

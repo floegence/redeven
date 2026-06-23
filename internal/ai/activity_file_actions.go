@@ -423,7 +423,7 @@ func sanitizeActivityPublicValue(value any) any {
 
 func activityPayloadForbiddenKey(key string) bool {
 	switch activityPayloadKeyPolicyToken(key) {
-	case "action_path", "cwd", "directory_path", "display_path", "file_path", "original_file", "path", "preview_path", "root_dir", "stdin", "updated_file", "workdir":
+	case "action_path", "cwd", "directory_path", "display_path", "file_path", "original_file", "path", "preview_path", "private_path", "root_dir", "stdin", "updated_file", "workdir":
 		return true
 	default:
 		return false
@@ -476,7 +476,7 @@ func activityPayloadAllowedKeys(renderer observation.ActivityRenderer) map[strin
 	case observation.ActivityRendererCompletion:
 		return stringSet("result", "evidence_refs", "remaining_risks", "next_actions", "truncated", "summary", "details", "status", "error", "content_ref")
 	case observation.ActivityRendererStructured:
-		return stringSet("operation", "query", "count", "provider", "name", "action", "limit", "data", "result", "content", "content_ref", "activation_id", "already_active", "mode_hints", "dependencies", "dependency_degraded", "reason", "id", "status", "message", "agents", "created", "waiting", "terminated", "terminated_all", "timed_out", "targets", "validation", "stats", "spec", "output", "structured", "key_files", "rows", "cards", "items", "evidence_refs", "remaining_risks", "next_actions", "truncated", "summary", "details", "error")
+		return stringSet("operation", "query", "count", "provider", "name", "action", "limit", "data", "result", "content", "content_ref", "activation_id", "already_active", "mode_hints", "dependencies", "dependency_degraded", "reason", "id", "status", "message", "timed_out", "targets", "stats", "output", "structured", "key_files", "rows", "cards", "items", "item", "subagent", "subagents", "snapshot", "snapshots", "snapshots_by_id", "subagent_id", "thread_id", "task_id", "task_name", "title", "agent_type", "last_message", "updated_at_ms", "created_at_ms", "can_open", "can_send_input", "can_interrupt", "can_close", "delegation_runtime", "agent_count", "snapshot_count", "target", "target_ids", "requested_ids", "found_count", "missing_count", "missing_ids", "closed", "closed_count", "affected_ids", "accepted", "running_only", "total", "scope", "evidence_refs", "remaining_risks", "next_actions", "truncated", "summary", "details", "error")
 	default:
 		return nil
 	}

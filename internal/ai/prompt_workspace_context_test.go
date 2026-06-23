@@ -1,12 +1,28 @@
 package ai
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+type fakePromptSubagentRuntime struct {
+	items []subagentSnapshot
+}
+
+func (f fakePromptSubagentRuntime) manage(context.Context, map[string]any) (map[string]any, error) {
+	return nil, nil
+}
+
+func (f fakePromptSubagentRuntime) release() {}
+
+func (f fakePromptSubagentRuntime) snapshots(context.Context) ([]subagentSnapshot, error) {
+	out := append([]subagentSnapshot(nil), f.items...)
+	return out, nil
+}
 
 func runPromptWorkspaceGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
@@ -132,48 +148,38 @@ func TestCollectPromptRepoRuleFiles_DiscoversAndTruncates(t *testing.T) {
 func TestCollectPromptDelegationState_SummarizesActiveSubagents(t *testing.T) {
 	t.Parallel()
 
-	running := &subagentTask{
-		id:        "subagent_running",
-		objective: "Patch parser",
-		agentType: subagentAgentTypeWorker,
-		spec: subagentSpec{
-			Title:     "Parser worker",
-			Objective: "Patch parser",
-		},
-		status:    subagentStatusRunning,
-		updatedAt: 200,
-	}
-	queued := &subagentTask{
-		id:        "subagent_queued",
-		objective: "Review diff",
-		agentType: subagentAgentTypeReviewer,
-		spec: subagentSpec{
-			Title:     "Reviewer",
-			Objective: "Review diff",
-		},
-		status:    subagentStatusQueued,
-		updatedAt: 100,
-	}
-	completed := &subagentTask{
-		id:        "subagent_completed",
-		objective: "Summarize findings",
-		agentType: subagentAgentTypeExplore,
-		spec: subagentSpec{
-			Title:     "Explorer",
-			Objective: "Summarize findings",
-		},
-		status:    subagentStatusCompleted,
-		updatedAt: 50,
-	}
 	r := &run{
 		allowSubagentDelegate: true,
-		subagentManager: &subagentManager{
-			tasks: map[string]*subagentTask{
-				running.id:   running,
-				queued.id:    queued,
-				completed.id: completed,
+		subagentRuntime: fakePromptSubagentRuntime{
+			items: []subagentSnapshot{
+				{
+					ThreadID:    "subagent_running",
+					TaskName:    "Parser worker",
+					LastMessage: "Patch parser",
+					AgentType:   subagentAgentTypeWorker,
+					Status:      subagentStatusRunning,
+					UpdatedAtMS: 200,
+					CreatedAtMS: 100,
+				},
+				{
+					ThreadID:    "subagent_queued",
+					TaskName:    "Reviewer",
+					LastMessage: "Review diff",
+					AgentType:   subagentAgentTypeReviewer,
+					Status:      subagentStatusQueued,
+					UpdatedAtMS: 100,
+					CreatedAtMS: 50,
+				},
+				{
+					ThreadID:    "subagent_completed",
+					TaskName:    "Explorer",
+					LastMessage: "Summarize findings",
+					AgentType:   subagentAgentTypeExplore,
+					Status:      subagentStatusCompleted,
+					UpdatedAtMS: 50,
+					CreatedAtMS: 25,
+				},
 			},
-			taskByTaskID: map[string]string{},
 		},
 	}
 
@@ -187,8 +193,8 @@ func TestCollectPromptDelegationState_SummarizesActiveSubagents(t *testing.T) {
 	if len(state.Items) != 2 {
 		t.Fatalf("preview item count=%d, want 2", len(state.Items))
 	}
-	if state.Items[0].ID != running.id {
-		t.Fatalf("first preview item=%q, want %q", state.Items[0].ID, running.id)
+	if state.Items[0].ID != "subagent_running" {
+		t.Fatalf("first preview item=%q, want subagent_running", state.Items[0].ID)
 	}
 }
 

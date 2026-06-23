@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { FlowerThreadListItem, FlowerThreadReadStatus } from '../contracts/flowerSurfaceContracts';
 import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems } from './threadListModel';
+import { canForkThreadItem, canPinThreadItem, canRenameThreadItem } from './threadListActions';
 
 function readStatus(isUnread = false): FlowerThreadReadStatus {
   return {
@@ -59,6 +60,30 @@ describe('groupFlowerThreadItems', () => {
       threads: [{ thread_id: 'regular' }],
     });
     vi.useRealTimers();
+  });
+});
+
+describe('FlowerThreadList item actions', () => {
+  it('keeps direct mutation actions unavailable for subagent projection threads', () => {
+    const child = thread({
+      thread_id: 'child-1',
+      owner_kind: 'subagent_projection',
+      parent_thread_id: 'parent-1',
+      read_only_reason: '',
+      status: 'idle',
+    });
+
+    expect(canForkThreadItem(child)).toBe(false);
+    expect(canRenameThreadItem(child)).toBe(false);
+    expect(canPinThreadItem(child)).toBe(false);
+  });
+
+  it('keeps normal idle threads eligible for direct sidebar actions', () => {
+    const regular = thread({ thread_id: 'regular-1', status: 'idle' });
+
+    expect(canForkThreadItem(regular)).toBe(true);
+    expect(canRenameThreadItem(regular)).toBe(true);
+    expect(canPinThreadItem(regular)).toBe(true);
   });
 });
 

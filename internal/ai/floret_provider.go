@@ -20,13 +20,16 @@ type floretProviderAdapter struct {
 	mode         string
 	webSearch    string
 
-	controls              ProviderControls
-	budgets               TurnBudgets
-	continuationSupported bool
+	controls                 ProviderControls
+	budgets                  TurnBudgets
+	disabledCoreControlTools map[string]struct{}
+	continuationSupported    bool
 }
 
-func newFloretProviderAdapter(base ModelGateway, providerType string, modelName string, mode string, controls ProviderControls, budgets TurnBudgets, webSearch string) *floretProviderAdapter {
-	return &floretProviderAdapter{
+type floretProviderAdapterOption func(*floretProviderAdapter)
+
+func newFloretProviderAdapter(base ModelGateway, providerType string, modelName string, mode string, controls ProviderControls, budgets TurnBudgets, webSearch string, options ...floretProviderAdapterOption) *floretProviderAdapter {
+	adapter := &floretProviderAdapter{
 		base:                  base,
 		providerType:          strings.ToLower(strings.TrimSpace(providerType)),
 		modelName:             strings.TrimSpace(modelName),
@@ -35,6 +38,29 @@ func newFloretProviderAdapter(base ModelGateway, providerType string, modelName 
 		controls:              controls,
 		budgets:               budgets,
 		continuationSupported: isOpenAIResponsesProviderContinuationEnabled(providerType),
+	}
+	for _, option := range options {
+		if option != nil {
+			option(adapter)
+		}
+	}
+	return adapter
+}
+
+func withDisabledFloretCoreControlTools(names ...string) floretProviderAdapterOption {
+	return func(adapter *floretProviderAdapter) {
+		if adapter == nil {
+			return
+		}
+		if adapter.disabledCoreControlTools == nil {
+			adapter.disabledCoreControlTools = map[string]struct{}{}
+		}
+		for _, name := range names {
+			name = strings.TrimSpace(name)
+			if name != "" {
+				adapter.disabledCoreControlTools[name] = struct{}{}
+			}
+		}
 	}
 }
 
@@ -54,6 +80,9 @@ func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.M
 		var streamedText strings.Builder
 		var streamedReasoning strings.Builder
 		onEvent := func(ev StreamEvent) {
+			if p.isDisabledCoreControlTool(streamEventToolName(ev)) {
+				return
+			}
 			switch ev.Type {
 			case StreamEventTextDelta:
 				if ev.Text == "" {
@@ -96,6 +125,11 @@ func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.M
 			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventSources, Sources: flowerSourcesToFloret(result.Sources)})
 		}
 		if len(result.ToolCalls) > 0 {
+			if toolName := p.firstDisabledCoreControlToolCall(result.ToolCalls); toolName != "" {
+				err := fmt.Errorf("Floret core control tool %q is disabled for this run", toolName)
+				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
+				return
+			}
 			toolCalls, err := floretToolCallsFromFlower(result.ToolCalls)
 			if err != nil {
 				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
@@ -169,6 +203,7 @@ func (p *floretProviderAdapter) turnRequest(req flruntime.ModelRequest) (ModelGa
 	if err != nil {
 		return ModelGatewayRequest{}, err
 	}
+	tools = p.filterDisabledCoreControlTools(tools)
 
 	budgets := p.budgets
 	if req.MaxOutputTokens > 0 {
@@ -183,6 +218,47 @@ func (p *floretProviderAdapter) turnRequest(req flruntime.ModelRequest) (ModelGa
 		ProviderControls: controls,
 		WebSearchMode:    p.webSearch,
 	}, nil
+}
+
+func streamEventToolName(ev StreamEvent) string {
+	if ev.ToolCall == nil {
+		return ""
+	}
+	return strings.TrimSpace(ev.ToolCall.Name)
+}
+
+func (p *floretProviderAdapter) isDisabledCoreControlTool(name string) bool {
+	if p == nil || len(p.disabledCoreControlTools) == 0 {
+		return false
+	}
+	_, ok := p.disabledCoreControlTools[strings.TrimSpace(name)]
+	return ok
+}
+
+func (p *floretProviderAdapter) filterDisabledCoreControlTools(in []ToolDef) []ToolDef {
+	if p == nil || len(p.disabledCoreControlTools) == 0 || len(in) == 0 {
+		return in
+	}
+	out := make([]ToolDef, 0, len(in))
+	for _, def := range in {
+		if p.isDisabledCoreControlTool(def.Name) {
+			continue
+		}
+		out = append(out, def)
+	}
+	return out
+}
+
+func (p *floretProviderAdapter) firstDisabledCoreControlToolCall(calls []ToolCall) string {
+	if p == nil || len(p.disabledCoreControlTools) == 0 {
+		return ""
+	}
+	for _, call := range calls {
+		if name := strings.TrimSpace(call.Name); p.isDisabledCoreControlTool(name) {
+			return name
+		}
+	}
+	return ""
 }
 
 func (p *floretProviderAdapter) shouldUsePreviousState(state *flruntime.ModelState, step int) bool {

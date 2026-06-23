@@ -37,58 +37,6 @@ describe('createAIThreadRenderController', () => {
     dispose();
   });
 
-  it('derives active subagents from transcript state without projection feedback', () => {
-    const [previousRenderedMessages] = createSignal<Message[]>([]);
-    const dispose = createRoot((disposeRoot) => {
-      const controller = createAIThreadRenderController({
-        previousRenderedMessages,
-      });
-
-      controller.replaceTranscriptMessages([{
-        id: 'm_ai_subagent_1',
-        role: 'assistant',
-        status: 'complete',
-        timestamp: 20,
-        blocks: [{
-          type: 'subagent',
-          subagentId: 'sa_1',
-          taskId: 'task_1',
-          agentType: 'worker',
-          triggerReason: 'delegate',
-          status: 'running',
-          summary: 'working',
-          evidenceRefs: [],
-          keyFiles: [],
-          openRisks: [],
-          nextActions: [],
-          history: [],
-          stats: { steps: 0, toolCalls: 0, tokens: 0, elapsedMs: 0, outcome: '' },
-          updatedAtUnixMs: 200,
-        }],
-      }]);
-
-      expect(controller.activeThreadSubagents()).toHaveLength(1);
-      expect(controller.activeThreadSubagents()[0]).toMatchObject({
-        subagentId: 'sa_1',
-        status: 'running',
-      });
-
-      controller.replaceTranscriptMessages([{
-        id: 'm_ai_subagent_reset',
-        role: 'assistant',
-        status: 'complete',
-        timestamp: 30,
-        blocks: [{ type: 'markdown', content: 'no subagent blocks remain' }],
-      }]);
-
-      expect(controller.activeThreadSubagents()).toHaveLength(0);
-
-      return disposeRoot;
-    });
-
-    dispose();
-  });
-
   it('batches live-run events and clears the live tail once transcript catches up', () => {
     const [previousRenderedMessages] = createSignal<Message[]>([]);
     const scheduledCallbacks: FrameRequestCallback[] = [];

@@ -379,6 +379,15 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 	if th == nil {
 		return nil
 	}
+	tctx, cancel = context.WithTimeout(ctx, persistTO)
+	flowerMeta, err := db.GetFlowerThreadMetadata(tctx, endpointID, threadID)
+	cancel()
+	if err != nil {
+		return err
+	}
+	if isFlowerSubagentProjection(flowerMeta) {
+		return nil
+	}
 	runStatus, _, _ := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
 	if NormalizeRunState(runStatus) == RunStateWaitingUser || requestUserInputPromptFromThreadRecord(th, runStatus) != nil {
 		return nil
@@ -468,6 +477,15 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	}
 	if th == nil {
 		return SendUserTurnResponse{}, errors.New("thread not found")
+	}
+	tctx, cancel = context.WithTimeout(ctx, persistTO)
+	flowerMeta, err := db.GetFlowerThreadMetadata(tctx, endpointID, threadID)
+	cancel()
+	if err != nil {
+		return SendUserTurnResponse{}, err
+	}
+	if isFlowerSubagentProjection(flowerMeta) {
+		return SendUserTurnResponse{}, ErrReadOnlyThread
 	}
 	requestedModel := strings.TrimSpace(req.Model)
 	if th.ModelLocked {
@@ -634,6 +652,15 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 	}
 	if th == nil {
 		return SubmitRequestUserInputResponseResponse{}, errors.New("thread not found")
+	}
+	tctx, cancel = context.WithTimeout(ctx, persistTO)
+	flowerMeta, err := db.GetFlowerThreadMetadata(tctx, endpointID, threadID)
+	cancel()
+	if err != nil {
+		return SubmitRequestUserInputResponseResponse{}, err
+	}
+	if isFlowerSubagentProjection(flowerMeta) {
+		return SubmitRequestUserInputResponseResponse{}, ErrReadOnlyThread
 	}
 	requestedModel := strings.TrimSpace(req.Model)
 	if th.ModelLocked {

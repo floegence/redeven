@@ -99,6 +99,10 @@ function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadP
     ...(patch.reasoning_selection !== undefined ? { reasoning_selection: patch.reasoning_selection ?? undefined } : {}),
     ...(patch.reasoning_capability !== undefined ? { reasoning_capability: patch.reasoning_capability ?? undefined } : {}),
     ...(patch.read_status ? { read_status: patch.read_status } : {}),
+    ...(trim(patch.read_only_reason) ? { read_only_reason: trim(patch.read_only_reason) } : {}),
+    ...(trim(patch.owner_kind) ? { owner_kind: trim(patch.owner_kind).toLowerCase() } : {}),
+    ...(trim(patch.owner_id) ? { owner_id: trim(patch.owner_id) } : {}),
+    ...(trim(patch.parent_thread_id) ? { parent_thread_id: trim(patch.parent_thread_id) } : {}),
     ...(patch.waiting_prompt !== undefined ? { input_request: patch.waiting_prompt ?? null } : {}),
     ...(trim(patch.run_error) ? { error: { message: trim(patch.run_error), ...(trim(patch.run_error_code) ? { code: trim(patch.run_error_code) } : {}) } } : {}),
   };

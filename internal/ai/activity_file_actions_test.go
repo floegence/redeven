@@ -141,6 +141,52 @@ func TestSanitizeActivityTimelineMessageJSONFiltersPublicPayloadContract(t *test
 	}
 }
 
+func TestSanitizeActivityTimelineMessageJSONKeepsSubagentProjectionPayload(t *testing.T) {
+	t.Parallel()
+
+	raw := `{
+		"id":"msg_subagents",
+		"role":"assistant",
+		"status":"complete",
+		"timestamp":1700000000000,
+		"blocks":[
+			{"type":"activity-timeline","schema_version":1,"run_id":"run_subagents","thread_id":"thread_parent","turn_id":"msg_subagents","trace_id":"trace_subagents","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[
+				{"item_id":"tool_subagents_spawn","tool_id":"tool_subagents_spawn","tool_name":"subagents","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Spawn reviewer","renderer":"structured","payload":{"action":"spawn","status":"ok","subagent_id":"thread_child_review","thread_id":"thread_child_review","snapshot":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","status":"running","last_message":"Reading the API boundary.","updated_at_ms":120,"path":"/root/review_api","private_path":"/Users/alice/work/redeven/snapshot","privatePath":"/Users/alice/work/redeven/camel"},"items":[{"subagent_id":"thread_child_review","thread_id":"thread_child_review","private_path":"/Users/alice/work/redeven/item"}],"subagent":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","status":"running","last_message":"Reading the API boundary.","updated_at_ms":120},"private_path":"/Users/alice/work/redeven"}}
+			]}
+		]
+	}`
+
+	sanitized, err := SanitizeActivityTimelineMessageJSON(raw)
+	if err != nil {
+		t.Fatalf("SanitizeActivityTimelineMessageJSON: %v", err)
+	}
+	body := string(sanitized)
+	for _, required := range []string{
+		`"subagent_id":"thread_child_review"`,
+		`"thread_id":"thread_child_review"`,
+		`"snapshot"`,
+		`"items"`,
+		`"subagent"`,
+		`"task_name":"Review API"`,
+		`"agent_type":"reviewer"`,
+		`"last_message":"Reading the API boundary."`,
+	} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("sanitized subagent payload missing %q: %s", required, body)
+		}
+	}
+	for _, forbidden := range []string{
+		`"path"`,
+		`private_path`,
+		`privatePath`,
+		`/Users/alice/work/redeven`,
+	} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("sanitized subagent payload contains %q: %s", forbidden, body)
+		}
+	}
+}
+
 func TestSanitizeActivityTimelineMessageJSONFiltersRunningActivitySidecar(t *testing.T) {
 	t.Parallel()
 

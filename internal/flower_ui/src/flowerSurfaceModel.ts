@@ -7,6 +7,10 @@ export function trimString(value: string | null | undefined): string {
   return String(value ?? '').trim();
 }
 
+export function isSubagentProjectionThread(thread: Pick<FlowerThreadSnapshot, 'owner_kind'> | null | undefined): boolean {
+  return trimString(thread?.owner_kind).toLowerCase() === 'subagent_projection';
+}
+
 function messagePreviewText(message: FlowerThreadSnapshot['messages'][number]): string {
   const fromBlocks = message.blocks
     ?.map((block) => (block.type === 'markdown' || block.type === 'text' ? trimString(block.content) : ''))
@@ -30,6 +34,10 @@ export function projectFlowerThreadListItem(thread: FlowerThreadSnapshot): Flowe
     status: thread.status,
     source_label: thread.source_label,
     target_labels: thread.target_labels,
+    ...(trimString(thread.read_only_reason) ? { read_only_reason: trimString(thread.read_only_reason) } : {}),
+    ...(trimString(thread.owner_kind) ? { owner_kind: trimString(thread.owner_kind).toLowerCase() } : {}),
+    ...(trimString(thread.owner_id) ? { owner_id: trimString(thread.owner_id) } : {}),
+    ...(trimString(thread.parent_thread_id) ? { parent_thread_id: trimString(thread.parent_thread_id) } : {}),
     read_status: thread.read_status,
   };
 }

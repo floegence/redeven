@@ -385,6 +385,10 @@ export type FlowerThreadSnapshot = Readonly<{
   active_run_id?: string;
   source_label: string;
   target_labels: readonly string[];
+  read_only_reason?: string;
+  owner_kind?: string;
+  owner_id?: string;
+  parent_thread_id?: string;
   messages: readonly FlowerChatMessage[];
   model_io_status?: FlowerModelIOStatus | null;
   reasoning_selection?: FlowerReasoningSelection;
@@ -485,6 +489,10 @@ export type FlowerLiveThreadPatch = Readonly<{
   last_message_preview?: string;
   reasoning_selection?: FlowerReasoningSelection | null;
   reasoning_capability?: FlowerReasoningCapability | null;
+  read_only_reason?: string;
+  owner_kind?: string;
+  owner_id?: string;
+  parent_thread_id?: string;
   read_status?: FlowerThreadReadStatus;
 }>;
 
@@ -673,6 +681,9 @@ export type FlowerThreadListItem = Readonly<{
   source_label: string;
   target_labels: readonly string[];
   read_only_reason?: string;
+  owner_kind?: string;
+  owner_id?: string;
+  parent_thread_id?: string;
   read_status: FlowerThreadReadStatus;
 }>;
 
