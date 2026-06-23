@@ -368,8 +368,8 @@ func TestDecorateChatCompletionParams_WebSearchPayloads(t *testing.T) {
 			wantSubstr: []string{
 				`"type":"builtin_function"`,
 				`"name":"$web_search"`,
-				`"thinking":{"type":"disabled"}`,
 			},
+			denySubstr: []string{`"thinking"`},
 		},
 		{
 			name: "glm_web_search",
@@ -402,7 +402,7 @@ func TestDecorateChatCompletionParams_WebSearchPayloads(t *testing.T) {
 				Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("hello")},
 			}
 			tools := []openai.ChatCompletionToolParam{}
-			decorateChatCompletionParams(&params, tc.mode, false, &tools)
+			decorateChatCompletionParams(&params, tc.mode, &tools)
 			if len(tools) > 0 {
 				params.Tools = tools
 			}
@@ -425,7 +425,7 @@ func TestDecorateChatCompletionParams_WebSearchPayloads(t *testing.T) {
 	}
 }
 
-func TestDecorateChatCompletionParams_DisableReasoningMergesWithNativeSearch(t *testing.T) {
+func TestApplyChatReasoningMergesWithNativeSearch(t *testing.T) {
 	t.Parallel()
 
 	params := openai.ChatCompletionNewParams{
@@ -433,16 +433,67 @@ func TestDecorateChatCompletionParams_DisableReasoningMergesWithNativeSearch(t *
 		Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("标题")},
 	}
 	tools := []openai.ChatCompletionToolParam{}
-	decorateChatCompletionParams(&params, providerWebSearchModeDeepSeekNative, true, &tools)
+	if err := applyChatReasoning(&params, ProviderControls{
+		ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff},
+		ReasoningCapability: config.AIReasoningCapability{
+			Kind:             "effort",
+			SupportedLevels:  []string{"high", "max"},
+			DisableSupported: true,
+			WireShape:        "deepseek_reasoning_effort",
+			DisableShape:     "thinking.type=disabled",
+			SourceURLs:       []string{"https://api-docs.deepseek.com/guides/reasoning_model"},
+			SourceCheckedAt:  "2026-06-23",
+			Fixture:          "deepseek_v4_reasoning_effort",
+		},
+	}); err != nil {
+		t.Fatalf("applyChatReasoning: %v", err)
+	}
+	decorateChatCompletionParams(&params, providerWebSearchModeDeepSeekNative, &tools)
 	raw, err := json.Marshal(params)
 	if err != nil {
 		t.Fatalf("Marshal params: %v", err)
 	}
 	payload := string(raw)
-	for _, want := range []string{`"enable_search":true`, `"enable_thinking":false`, `"thinking":{"type":"disabled"}`} {
+	for _, want := range []string{`"enable_search":true`, `"thinking":{"type":"disabled"}`} {
 		if !strings.Contains(payload, want) {
 			t.Fatalf("payload missing %s: %s", want, payload)
 		}
+	}
+	if strings.Contains(payload, `"enable_thinking":false`) {
+		t.Fatalf("payload contains legacy enable_thinking disable flag: %s", payload)
+	}
+}
+
+func TestApplyChatReasoning_KimiToggleUsesThinkingType(t *testing.T) {
+	t.Parallel()
+
+	params := openai.ChatCompletionNewParams{
+		Model:    oshared.ChatModel("kimi-k2.6"),
+		Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("hello")},
+	}
+	if err := applyChatReasoning(&params, ProviderControls{
+		ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelOff},
+		ReasoningCapability: config.AIReasoningCapability{
+			Kind:             "toggle",
+			SupportedLevels:  []string{"off", "default"},
+			DefaultLevel:     "default",
+			DisableSupported: true,
+			WireShape:        "kimi_thinking_type",
+			DisableShape:     "thinking.type=disabled",
+			SourceURLs:       []string{"https://platform.moonshot.ai/docs/api/chat"},
+			SourceCheckedAt:  "2026-06-23",
+			Fixture:          "kimi_k2_toggle",
+		},
+	}); err != nil {
+		t.Fatalf("applyChatReasoning: %v", err)
+	}
+	raw, err := json.Marshal(params)
+	if err != nil {
+		t.Fatalf("Marshal params: %v", err)
+	}
+	payload := string(raw)
+	if !strings.Contains(payload, `"thinking":{"type":"disabled"}`) {
+		t.Fatalf("payload missing Kimi disabled thinking: %s", payload)
 	}
 }
 
@@ -598,6 +649,90 @@ func TestQwenResponsesBuiltinWebSearch_AttachesResponsesTool(t *testing.T) {
 		}
 	}
 	t.Fatalf("tools=%v, want web_search", tools)
+}
+
+func TestQwenProviderReasoningUsesChatEndpoint(t *testing.T) {
+	t.Parallel()
+
+	requestBody := make(chan string, 1)
+	requestPath := make(chan string, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/chat/completions") {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+		select {
+		case requestPath <- strings.TrimSpace(r.URL.Path):
+		default:
+		}
+		select {
+		case requestBody <- string(body):
+		default:
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		f, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_qwen_reasoning",
+			"object":  "chat.completion.chunk",
+			"choices": []any{map[string]any{"delta": map[string]any{"content": "ok"}}},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_qwen_reasoning",
+			"object":  "chat.completion.chunk",
+			"choices": []any{map[string]any{"finish_reason": "stop", "delta": map[string]any{}}},
+			"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
+	}))
+	t.Cleanup(srv.Close)
+
+	adapter, err := newProviderAdapter("qwen", strings.TrimSuffix(srv.URL, "/")+"/v1", "sk-test", nil)
+	if err != nil {
+		t.Fatalf("newProviderAdapter: %v", err)
+	}
+	res, err := adapter.StreamTurn(context.Background(), ModelGatewayRequest{
+		Model:    "qwen3.6-plus",
+		Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "reason"}}}},
+		ProviderControls: ProviderControls{
+			ReasoningSelection:  config.AIReasoningSelection{Level: config.AIReasoningLevelDefault, BudgetTokens: 4096},
+			ReasoningCapability: config.AIReasoningCapabilityForModel("qwen", "qwen3.6-plus"),
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("StreamTurn: %v", err)
+	}
+	if strings.TrimSpace(res.Text) != "ok" {
+		t.Fatalf("Text=%q, want ok", res.Text)
+	}
+	var path string
+	select {
+	case path = <-requestPath:
+	default:
+		t.Fatalf("missing request path")
+	}
+	if !strings.HasSuffix(path, "/chat/completions") {
+		t.Fatalf("path=%s, want /chat/completions", path)
+	}
+	var rawBody string
+	select {
+	case rawBody = <-requestBody:
+	default:
+		t.Fatalf("missing request body")
+	}
+	for _, want := range []string{`"enable_thinking":true`, `"thinking_budget":4096`} {
+		if !strings.Contains(rawBody, want) {
+			t.Fatalf("request body missing %s: %s", want, rawBody)
+		}
+	}
 }
 
 func TestNewProviderAdapter_OpenAIStrictPolicy(t *testing.T) {

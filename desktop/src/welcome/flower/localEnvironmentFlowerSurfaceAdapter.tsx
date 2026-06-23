@@ -30,6 +30,10 @@ import {
   mapFlowerLiveBootstrap,
 } from '../../../../internal/flower_ui/src/flowerLiveMapper';
 import { createRuntimeFlowerSurfaceAdapter } from '../../../../internal/flower_ui/src/runtimeFlowerSurfaceAdapter';
+import {
+  normalizeFlowerReasoningCapability,
+  serializeFlowerReasoningSelection,
+} from '../../../../internal/flower_ui/src/reasoning';
 
 export type DesktopSettingsBridge = Readonly<{
   save: (draft: DesktopSettingsDraft) => Promise<SaveDesktopSettingsResult>;
@@ -50,6 +54,7 @@ type ModelsResponse = Readonly<{
     context_window?: number;
     max_output_tokens?: number;
     input_modalities?: readonly string[];
+    reasoning_capability?: FlowerProviderModel['reasoning_capability'];
   }>[];
 }>;
 
@@ -131,10 +136,13 @@ function defaultConfig(): FlowerSettingsSnapshot['config'] {
 function mapProviderModel(model: NonNullable<AIConfig['providers'][number]['models']>[number]): FlowerProviderModel {
   return {
     model_name: trim(model.model_name),
+    ...(trim(model.wire_model_name) ? { wire_model_name: trim(model.wire_model_name) } : {}),
     ...(positiveInteger(model.context_window) ? { context_window: positiveInteger(model.context_window) } : {}),
     ...(positiveInteger(model.max_output_tokens) ? { max_output_tokens: positiveInteger(model.max_output_tokens) } : {}),
     ...(positiveInteger(model.effective_context_window_percent) ? { effective_context_window_percent: positiveInteger(model.effective_context_window_percent) } : {}),
     ...(Array.isArray(model.input_modalities) ? { input_modalities: model.input_modalities.map(trim).filter(Boolean) } : {}),
+    ...(normalizeFlowerReasoningCapability(model.reasoning_capability) ? { reasoning_capability: normalizeFlowerReasoningCapability(model.reasoning_capability) } : {}),
+    ...(serializeFlowerReasoningSelection(model.default_reasoning_selection) ? { default_reasoning_selection: serializeFlowerReasoningSelection(model.default_reasoning_selection) } : {}),
   };
 }
 
@@ -187,10 +195,13 @@ function draftProviderToAI(provider: FlowerProviderDraft): AIConfig['providers']
     ...(provider.web_search ? { web_search: provider.web_search } : {}),
     models: provider.models.map((model) => ({
       model_name: trim(model.model_name),
+      ...(trim(model.wire_model_name) ? { wire_model_name: trim(model.wire_model_name) } : {}),
       ...(positiveInteger(model.context_window) ? { context_window: positiveInteger(model.context_window) } : {}),
       ...(positiveInteger(model.max_output_tokens) ? { max_output_tokens: positiveInteger(model.max_output_tokens) } : {}),
       ...(positiveInteger(model.effective_context_window_percent) ? { effective_context_window_percent: positiveInteger(model.effective_context_window_percent) } : {}),
       ...(Array.isArray(model.input_modalities) ? { input_modalities: model.input_modalities.map(trim).filter(Boolean) as Array<'text' | 'image'> } : {}),
+      ...(normalizeFlowerReasoningCapability(model.reasoning_capability) ? { reasoning_capability: normalizeFlowerReasoningCapability(model.reasoning_capability) } : {}),
+      ...(serializeFlowerReasoningSelection(model.default_reasoning_selection) ? { default_reasoning_selection: serializeFlowerReasoningSelection(model.default_reasoning_selection) } : {}),
     })),
   };
 }
@@ -362,6 +373,7 @@ export async function launchLocalEnvironmentFlowerTurn(
     },
     options: {
       mode,
+      ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
     },
   });
   return loadRuntimeFlowerThread(bridge, threadID);
@@ -446,6 +458,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         },
         options: {
           mode: 'act',
+          ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
         },
       });
       return loadRuntimeFlowerThread(bridge, tid);

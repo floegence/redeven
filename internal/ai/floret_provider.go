@@ -9,6 +9,7 @@ import (
 
 	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
+	"github.com/floegence/redeven/internal/config"
 )
 
 type floretProviderAdapter struct {
@@ -156,9 +157,8 @@ func (p *floretProviderAdapter) turnRequest(req flruntime.ModelRequest) (ModelGa
 	} else {
 		controls.PreviousResponseID = ""
 	}
-	if req.DisableReasoning {
-		controls.DisableReasoning = true
-		controls.ThinkingBudgetTokens = 0
+	if reasoning := config.NormalizeAIReasoningSelection(req.Reasoning); !reasoning.IsZero() {
+		controls.ReasoningSelection = reasoning
 	}
 
 	messages, err := floretMessagesToFlower(req.Messages)

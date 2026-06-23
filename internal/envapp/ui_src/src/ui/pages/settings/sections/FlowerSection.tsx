@@ -11,6 +11,7 @@ import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { localizedProviderBuiltInWebSearchLabel } from '../providerWebSearchI18n';
 import { redevenSurfaceRoleClass } from '../../../utils/redevenSurfaceRoles';
 import { formatUnknownError } from '../../../maintenance/shared';
+import { normalizeFlowerReasoningCapability, serializeFlowerReasoningSelection } from '../../../../../../../flower_ui/src/reasoning';
 import {
   cloneAIProviderRow, defaultBaseURLForProviderType, modelID, modelSupportsImageInput,
   localizedProviderDisplayName, localizedProviderTypeLabel, normalizeAIProviderRowDraft,
@@ -89,16 +90,25 @@ function providerWebSearchSummary(provider: AIProviderRow, i18n: I18nHelpers): P
 }
 
 function normalizeProviderModelRows(type: AIProviderType, models: AIProviderModelRow[]): AIProviderModelRow[] {
-  return models.map((m) => ({ ...m, context_window: normalizeContextWindowByProvider(type, m.context_window), effective_context_window_percent: normalizeEffectiveContextPercent(m.effective_context_window_percent) }));
+  return models.map((m) => ({
+    ...m,
+    context_window: normalizeContextWindowByProvider(type, m.context_window),
+    effective_context_window_percent: normalizeEffectiveContextPercent(m.effective_context_window_percent),
+    reasoning_capability: normalizeFlowerReasoningCapability(m.reasoning_capability),
+    default_reasoning_selection: serializeFlowerReasoningSelection(m.default_reasoning_selection),
+  }));
 }
 
 function modelRowFromPreset(model: AIProviderModel): AIProviderModelRow {
   return {
     model_name: String(model.model_name ?? '').trim(),
+    wire_model_name: String(model.wire_model_name ?? '').trim() || undefined,
     context_window: normalizePositiveInteger(model.context_window),
     max_output_tokens: normalizePositiveInteger(model.max_output_tokens),
     effective_context_window_percent: normalizeEffectiveContextPercent(model.effective_context_window_percent),
     input_modalities: normalizeInputModalities(model.input_modalities),
+    reasoning_capability: normalizeFlowerReasoningCapability(model.reasoning_capability),
+    default_reasoning_selection: serializeFlowerReasoningSelection(model.default_reasoning_selection),
   };
 }
 
@@ -121,12 +131,12 @@ function validateAIValue(cfg: AIConfig, i18n: I18nHelpers) {
     if (id.includes('/')) throw new Error(i18n.t('flowerSettings.providerIdMustNotContainSlash', { provider: id }));
     if (providerIDs.has(id)) throw new Error(i18n.t('flowerSettings.duplicateProviderId', { provider: id }));
     providerIDs.add(id);
-    if (typ !== 'openai' && typ !== 'anthropic' && typ !== 'moonshot' && typ !== 'chatglm' && typ !== 'deepseek' && typ !== 'qwen' && typ !== 'openai_compatible') throw new Error(i18n.t('flowerSettings.invalidProviderType', { providerType: typ || '(empty)' }));
+    if (typ !== 'openai' && typ !== 'anthropic' && typ !== 'moonshot' && typ !== 'chatglm' && typ !== 'deepseek' && typ !== 'qwen' && typ !== 'openrouter' && typ !== 'xai' && typ !== 'groq' && typ !== 'ollama' && typ !== 'openai_compatible') throw new Error(i18n.t('flowerSettings.invalidProviderType', { providerType: typ || '(empty)' }));
     if (providerTypeRequiresBaseURL(typ as AIProviderType) && !baseURL) throw new Error(i18n.t('flowerSettings.providerRequiresBaseUrl', { provider: id }));
     if (baseURL) { let u: URL; try { u = new URL(baseURL); } catch { throw new Error(i18n.t('flowerSettings.providerInvalidBaseUrl', { provider: id })); } if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error(i18n.t('flowerSettings.providerBaseUrlMustBeHttpHttps', { provider: id })); }
     if (models.length === 0) throw new Error(i18n.t('flowerSettings.providerMissingModels', { provider: id }));
     const modelNames = new Set<string>();
-    for (const m of models) { const mn = String((m as any).model_name ?? '').trim(); const cw = Number((m as any).context_window); if (!mn) throw new Error(i18n.t('flowerSettings.providerModelNameMissing', { provider: id })); if (mn.includes('/')) throw new Error(i18n.t('flowerSettings.providerModelNameMustNotContainSlash', { provider: id })); if (modelNames.has(mn)) throw new Error(i18n.t('flowerSettings.providerDuplicateModelName', { provider: id, model: mn })); if (typ === 'openai_compatible' && (!Number.isFinite(cw) || cw <= 0)) throw new Error(i18n.t('flowerSettings.providerModelRequiresContextWindow', { provider: id, model: mn })); modelNames.add(mn); modelIDs.add(modelID(id, mn)); }
+    for (const m of models) { const mn = String((m as any).model_name ?? '').trim(); const wm = String((m as any).wire_model_name ?? '').trim(); const cw = Number((m as any).context_window); if (!mn) throw new Error(i18n.t('flowerSettings.providerModelNameMissing', { provider: id })); if (mn.includes('/')) throw new Error(i18n.t('flowerSettings.providerModelNameMustNotContainSlash', { provider: id })); if (wm.includes('\u0000')) throw new Error(i18n.t('flowerSettings.providerModelNameMissing', { provider: id })); if (modelNames.has(mn)) throw new Error(i18n.t('flowerSettings.providerDuplicateModelName', { provider: id, model: mn })); if ((typ === 'openai_compatible' || typ === 'openrouter' || typ === 'xai' || typ === 'groq' || typ === 'ollama') && (!Number.isFinite(cw) || cw <= 0)) throw new Error(i18n.t('flowerSettings.providerModelRequiresContextWindow', { provider: id, model: mn })); modelNames.add(mn); modelIDs.add(modelID(id, mn)); }
   }
   const cid = String((cfg as any).current_model_id ?? '').trim(); if (!cid) throw new Error(i18n.t('flowerSettings.missingCurrentModelId')); if (!modelIDs.has(cid)) throw new Error(i18n.t('flowerSettings.currentModelNotInProviders', { currentModelId: cid }));
 }
@@ -169,7 +179,7 @@ export function FlowerSection() {
 
   const saveAICurrentModelDirectly = async (next: string, previous: string) => { try { const pd = normalizeAIProviders(providers()).map((p) => ({ id: p.id, name: p.name, type: p.type, base_url: p.base_url, models: p.models, web_search: p.web_search })); await ctx.saveSettings({ ai: { current_model_id: next, execution_policy: { require_user_approval: requireUserApproval(), block_dangerous_commands: blockDangerousCommands() }, terminal_exec_policy: { default_timeout_ms: 120000, max_timeout_ms: 600000 }, providers: pd } }); setSavedAt(Date.now()); setError(null); } catch (e) { const message = formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage'); setCurrentModelID(previous); setError(message); ctx.notify.error(i18n.t('flowerSettings.saveFailedTitle'), message); } };
 
-  const buildAIValueFromRows = (rows: AIProviderRow[], curRaw: string): AIConfig => { const pr = normalizeAIProviders(rows); const cur = String(curRaw ?? '').trim(); const nps = pr.map((p) => { const o: any = { id: String(p.id ?? '').trim(), type: p.type, models: [] as AIProviderModel[] }; const nm = providerUsesCustomConnectionName(p.type) ? String(p.name ?? '').trim() : providerTypeLabel(p.type); if (nm) o.name = nm; const bu = String(p.base_url ?? '').trim(); if (bu) o.base_url = bu; const ws = normalizeAIProviderWebSearchForType(p.type, p.web_search); if (ws) o.web_search = ws; o.models = (p.models ?? []).map((m) => { const mo: any = { model_name: String(m.model_name ?? '').trim() }; const cw = normalizePositiveInteger(m.context_window); if (cw != null) mo.context_window = cw; const mt = normalizePositiveInteger(m.max_output_tokens); if (mt != null) mo.max_output_tokens = mt; const ec = normalizeEffectiveContextPercent(m.effective_context_window_percent); if (ec != null) mo.effective_context_window_percent = ec; mo.input_modalities = normalizeInputModalities(m.input_modalities); return mo as AIProviderModel; }); return o as AIProvider; }); return { current_model_id: cur, execution_policy: { require_user_approval: requireUserApproval(), block_dangerous_commands: blockDangerousCommands() }, terminal_exec_policy: { default_timeout_ms: 120000, max_timeout_ms: 600000 }, providers: nps }; };
+  const buildAIValueFromRows = (rows: AIProviderRow[], curRaw: string): AIConfig => { const pr = normalizeAIProviders(rows); const cur = String(curRaw ?? '').trim(); const nps = pr.map((p) => { const o: any = { id: String(p.id ?? '').trim(), type: p.type, models: [] as AIProviderModel[] }; const nm = providerUsesCustomConnectionName(p.type) ? String(p.name ?? '').trim() : providerTypeLabel(p.type); if (nm) o.name = nm; const bu = String(p.base_url ?? '').trim(); if (bu) o.base_url = bu; const ws = normalizeAIProviderWebSearchForType(p.type, p.web_search); if (ws) o.web_search = ws; o.models = (p.models ?? []).map((m) => { const mo: any = { model_name: String(m.model_name ?? '').trim() }; const wm = String(m.wire_model_name ?? '').trim(); if (wm) mo.wire_model_name = wm; const cw = normalizePositiveInteger(m.context_window); if (cw != null) mo.context_window = cw; const mt = normalizePositiveInteger(m.max_output_tokens); if (mt != null) mo.max_output_tokens = mt; const ec = normalizeEffectiveContextPercent(m.effective_context_window_percent); if (ec != null) mo.effective_context_window_percent = ec; mo.input_modalities = normalizeInputModalities(m.input_modalities); const rc = normalizeFlowerReasoningCapability(m.reasoning_capability); if (rc) mo.reasoning_capability = rc; const rs = serializeFlowerReasoningSelection(m.default_reasoning_selection); if (rs) mo.default_reasoning_selection = rs; return mo as AIProviderModel; }); return o as AIProvider; }); return { current_model_id: cur, execution_policy: { require_user_approval: requireUserApproval(), block_dangerous_commands: blockDangerousCommands() }, terminal_exec_policy: { default_timeout_ms: 120000, max_timeout_ms: 600000 }, providers: nps }; };
 
   const saveAIProviderBundle = async (nps: AIProviderRow[], nid: string, pid: string) => { const id = String(pid ?? '').trim(); if (!id) { ctx.notify.error(i18n.t('flowerSettings.invalidProviderTitle'), i18n.t('flowerSettings.providerIdRequired')); return false; } if (!ctx.canAdmin()) { ctx.notify.error(i18n.t('flowerSettings.permissionDeniedTitle'), i18n.t('flowerSettings.adminRequired')); return false; } let av: AIConfig; try { av = buildAIValueFromRows(nps, nid); validateAIValue(av, i18n); setError(null); } catch (e) { const m = formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage'); setError(m); ctx.notify.error(i18n.t('flowerSettings.saveFailedTitle'), m); return false; } const pk = String(providerKeyDraft()?.[id] ?? '').trim(); const wk = String(webSearchKeyDraft()?.[id] ?? '').trim(); setSaving(true); try { const sv = await fetchLocalApiJSON<SettingsUpdateResponse | unknown>('/_redeven_proxy/api/ai/provider_bundle', { method: 'PUT', body: JSON.stringify({ ai: av, provider_api_key_patches: pk ? [{ provider_id: id, api_key: pk }] : [], web_search_provider_key_patches: wk ? [{ provider_id: id, api_key: wk }] : [] }) }); if (isJSONObject(sv) && isJSONObject((sv as SettingsUpdateResponse).settings)) ctx.mutateSettings((sv as SettingsUpdateResponse).settings); ctx.env.bumpSettingsSeq(); setProviders(nps); setCurrentModelID(nid); setProviderKeyDraft((p) => ({ ...p, [id]: '' })); setWebSearchKeyDraft((p) => ({ ...p, [id]: '' })); setSavedAt(Date.now()); setDirty(false); setError(null); ctx.notify.success(i18n.t('flowerSettings.autosavedTitle'), i18n.t('flowerSettings.providerSaved')); return true; } catch (e) { const m = formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage'); setError(m); setDirty(true); ctx.notify.error(i18n.t('flowerSettings.autosaveFailedTitle'), i18n.t('flowerSettings.providerSaveFailed', { message: m })); return false; } finally { setSaving(false); } };
 

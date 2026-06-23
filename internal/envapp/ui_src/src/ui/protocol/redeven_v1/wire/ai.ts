@@ -1,4 +1,5 @@
 import type { ContextActionEnvelope } from '../../../contextActions/protocol';
+import type { FlowerReasoningSelection } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 export type wire_ai_attachment = {
   name: string;
@@ -36,6 +37,7 @@ export type wire_ai_waiting_prompt = {
   tool_id: string;
   tool_name: string;
   reason_code?: string;
+  reasoning_selection?: FlowerReasoningSelection;
   required_from_user?: string[];
   evidence_refs?: string[];
   public_summary?: string;
@@ -64,6 +66,7 @@ export type wire_ai_send_user_turn_req = {
   };
   options: {
     mode?: string;
+    reasoning_selection?: FlowerReasoningSelection;
   };
   expected_run_id?: string;
   queue_after_waiting_user?: boolean;
@@ -90,6 +93,7 @@ export type wire_ai_submit_request_user_input_response_req = {
   };
   options: {
     mode?: string;
+    reasoning_selection?: FlowerReasoningSelection;
   };
   expected_run_id?: string;
   source_followup_id?: string;

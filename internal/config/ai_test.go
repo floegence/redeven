@@ -57,6 +57,36 @@ func TestAIConfigValidate_RejectsInvalidCurrentModel(t *testing.T) {
 	}
 }
 
+func TestAIConfigValidate_AllowsSlashOnlyInWireModelName(t *testing.T) {
+	t.Parallel()
+
+	cfg := &AIConfig{
+		CurrentModelID: "groq/gpt-oss-120b",
+		Providers: []AIProvider{
+			{
+				ID:      "groq",
+				Name:    "Groq",
+				Type:    "groq",
+				BaseURL: "https://api.groq.com/openai/v1",
+				Models: []AIProviderModel{{
+					ModelName:     "gpt-oss-120b",
+					WireModelName: "openai/gpt-oss-120b",
+					ContextWindow: 131072,
+				}},
+			},
+		},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate with wire_model_name containing slash: %v", err)
+	}
+
+	cfg.Providers[0].Models[0].ModelName = "openai/gpt-oss-120b"
+	cfg.CurrentModelID = "groq/openai/gpt-oss-120b"
+	if err := cfg.Validate(); err == nil {
+		t.Fatalf("Validate accepted model_name containing slash")
+	}
+}
+
 func TestAIConfigValidate_MoonshotRequiresBaseURL(t *testing.T) {
 	t.Parallel()
 
@@ -98,9 +128,18 @@ func TestAIConfigValidate_ProviderTypeBaseURLRequirements(t *testing.T) {
 		{name: "chatglm_without_base_url", typ: "chatglm", baseURL: "", wantError: true},
 		{name: "deepseek_without_base_url", typ: "deepseek", baseURL: "", wantError: true},
 		{name: "qwen_without_base_url", typ: "qwen", baseURL: "", wantError: true},
+		{name: "openrouter_without_base_url", typ: "openrouter", baseURL: "", wantError: true},
+		{name: "xai_without_base_url", typ: "xai", baseURL: "", wantError: true},
+		{name: "groq_without_base_url", typ: "groq", baseURL: "", wantError: true},
+		{name: "ollama_without_base_url", typ: "ollama", baseURL: "", wantError: true},
 		{name: "chatglm_with_base_url", typ: "chatglm", baseURL: "https://open.bigmodel.cn/api/paas/v4/", modelName: "glm-5.1", wantError: false},
+		{name: "chatglm_glm52_with_base_url", typ: "chatglm", baseURL: "https://api.z.ai/api/paas/v4/", modelName: "glm-5.2", wantError: false},
 		{name: "deepseek_with_base_url", typ: "deepseek", baseURL: "https://api.deepseek.com", modelName: "deepseek-v4-pro", wantError: false},
 		{name: "qwen_with_base_url", typ: "qwen", baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", modelName: "qwen3.6-plus", wantError: false},
+		{name: "openrouter_with_base_url", typ: "openrouter", baseURL: "https://openrouter.ai/api/v1", modelName: "gpt-oss-120b", wantError: false},
+		{name: "xai_with_base_url", typ: "xai", baseURL: "https://api.x.ai/v1", modelName: "grok-4.3", wantError: false},
+		{name: "groq_with_base_url", typ: "groq", baseURL: "https://api.groq.com/openai/v1", modelName: "gpt-oss-120b", wantError: false},
+		{name: "ollama_with_base_url", typ: "ollama", baseURL: "http://127.0.0.1:11434/v1", modelName: "gpt-oss", wantError: false},
 	}
 
 	for _, tc := range tests {
@@ -111,6 +150,10 @@ func TestAIConfigValidate_ProviderTypeBaseURLRequirements(t *testing.T) {
 			if modelName == "" {
 				modelName = "test-model"
 			}
+			contextWindow := 0
+			if !tc.wantError {
+				contextWindow = 128000
+			}
 			cfg := &AIConfig{
 				CurrentModelID: "provider/" + modelName,
 				Providers: []AIProvider{
@@ -119,7 +162,7 @@ func TestAIConfigValidate_ProviderTypeBaseURLRequirements(t *testing.T) {
 						Name:    "Provider",
 						Type:    tc.typ,
 						BaseURL: tc.baseURL,
-						Models:  []AIProviderModel{{ModelName: modelName}},
+						Models:  []AIProviderModel{{ModelName: modelName, ContextWindow: contextWindow}},
 					},
 				},
 			}
@@ -171,7 +214,7 @@ func TestAIConfigValidate_CuratedNativeProviderModels(t *testing.T) {
 	}{
 		{name: "moonshot_current", typ: "moonshot", models: []string{"kimi-k2.6"}, baseURL: "https://api.moonshot.cn/v1"},
 		{name: "moonshot_legacy_removed", typ: "moonshot", models: []string{"kimi-k2.5"}, baseURL: "https://api.moonshot.cn/v1", wantError: true},
-		{name: "glm_current", typ: "chatglm", models: []string{"glm-5.1"}, baseURL: "https://api.z.ai/api/paas/v4/"},
+		{name: "glm_current", typ: "chatglm", models: []string{"glm-5.2", "glm-5.1"}, baseURL: "https://api.z.ai/api/paas/v4/"},
 		{name: "glm_legacy_removed", typ: "chatglm", models: []string{"glm-4.5"}, baseURL: "https://api.z.ai/api/paas/v4/", wantError: true},
 		{name: "deepseek_current", typ: "deepseek", models: []string{"deepseek-v4-pro", "deepseek-v4-flash"}, baseURL: "https://api.deepseek.com"},
 		{name: "deepseek_legacy_removed", typ: "deepseek", models: []string{"deepseek-chat"}, baseURL: "https://api.deepseek.com", wantError: true},

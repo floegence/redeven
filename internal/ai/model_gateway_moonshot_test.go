@@ -788,9 +788,8 @@ func TestMoonshotProvider_StreamTurn_AddsBuiltinWebSearchTool(t *testing.T) {
 		if got := strings.TrimSpace(anyString(fn["name"])); got != "$web_search" {
 			t.Fatalf("builtin tool name=%q, want $web_search", got)
 		}
-		thinking, _ := req["thinking"].(map[string]any)
-		if got := strings.TrimSpace(anyString(thinking["type"])); got != "disabled" {
-			t.Fatalf("thinking.type=%q, want disabled", got)
+		if _, ok := req["thinking"]; ok {
+			t.Fatalf("web search must not mutate reasoning controls: %v", req["thinking"])
 		}
 
 		f, ok := w.(http.Flusher)

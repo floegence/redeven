@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	aitools "github.com/floegence/redeven/internal/ai/tools"
+	"github.com/floegence/redeven/internal/config"
 )
 
 // StreamEventType is the normalized stream event kind produced by provider adapters.
@@ -60,13 +61,13 @@ type Message struct {
 }
 
 type ProviderControls struct {
-	ThinkingBudgetTokens int      `json:"thinking_budget_tokens,omitempty"`
-	DisableReasoning     bool     `json:"disable_reasoning,omitempty"`
-	CacheControl         string   `json:"cache_control,omitempty"`
-	ResponseFormat       string   `json:"response_format,omitempty"`
-	PreviousResponseID   string   `json:"previous_response_id,omitempty"`
-	Temperature          *float64 `json:"temperature,omitempty"`
-	TopP                 *float64 `json:"top_p,omitempty"`
+	ReasoningSelection  config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
+	ReasoningCapability config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
+	CacheControl        string                       `json:"cache_control,omitempty"`
+	ResponseFormat      string                       `json:"response_format,omitempty"`
+	PreviousResponseID  string                       `json:"previous_response_id,omitempty"`
+	Temperature         *float64                     `json:"temperature,omitempty"`
+	TopP                *float64                     `json:"top_p,omitempty"`
 }
 
 type TurnBudgets struct {

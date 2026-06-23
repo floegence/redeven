@@ -1,5 +1,6 @@
 import type { StreamEvent } from '../../../chat';
 import type { ContextActionEnvelope } from '../../../contextActions/protocol';
+import type { FlowerReasoningSelection } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 export type AIRealtimeEventType = 'stream_event' | 'thread_state' | 'transcript_message' | 'transcript_reset' | 'thread_summary';
 
@@ -40,6 +41,7 @@ export type AIRequestUserInputPrompt = {
   toolId: string;
   toolName: string;
   reasonCode?: string;
+  reasoningSelection?: FlowerReasoningSelection;
   requiredFromUser?: string[];
   evidenceRefs?: string[];
   publicSummary?: string;
@@ -72,6 +74,7 @@ export type AISendUserTurnRequest = {
   };
   options: {
     mode?: 'act' | 'plan';
+    reasoningSelection?: FlowerReasoningSelection;
   };
   expectedRunId?: string;
   queueAfterWaitingUser?: boolean;
@@ -102,6 +105,7 @@ export type AISubmitRequestUserInputResponseRequest = {
   };
   options: {
     mode?: 'act' | 'plan';
+    reasoningSelection?: FlowerReasoningSelection;
   };
   expectedRunId?: string;
   sourceFollowupId?: string;

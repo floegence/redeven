@@ -9,7 +9,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 )
 
-const capabilityResolverVersion = 1
+const capabilityResolverVersion = 3
 
 type explicitCapabilityMetadata struct {
 	MaxContextTokens     int
@@ -73,11 +73,16 @@ func (r *Resolver) Resolve(ctx context.Context, provider config.AIProvider, mode
 		modelName = strings.TrimSpace(modelID)
 	}
 
-	cap := defaultCapability(provider, modelName)
+	wireModelName := modelName
+	if providerModel, ok := providerModelByName(provider, modelName); ok {
+		wireModelName = providerModel.EffectiveWireModelName()
+	}
+	cap := defaultCapability(provider, modelName, wireModelName)
 	cap.ProviderID = providerID
 	cap.ProviderType = providerType
 	cap.ResolverVersion = capabilityResolverVersion
 	cap.ModelName = modelName
+	cap.WireModelName = wireModelName
 	cap = model.NormalizeCapability(cap)
 	if r != nil && r.repo != nil && r.repo.Ready() {
 		if cached, ok, err := r.repo.GetCapability(ctx, providerID, modelName); err == nil && ok {
@@ -98,6 +103,7 @@ func capabilitiesEquivalent(a model.ModelCapability, b model.ModelCapability) bo
 
 	return a.ProviderID == b.ProviderID &&
 		a.ModelName == b.ModelName &&
+		a.WireModelName == b.WireModelName &&
 		a.ProviderType == b.ProviderType &&
 		a.ResolverVersion == b.ResolverVersion &&
 		a.SupportsTools == b.SupportsTools &&
@@ -106,6 +112,7 @@ func capabilitiesEquivalent(a model.ModelCapability, b model.ModelCapability) bo
 		a.SupportsImageInput == b.SupportsImageInput &&
 		a.SupportsFileInput == b.SupportsFileInput &&
 		a.SupportsReasoningTokens == b.SupportsReasoningTokens &&
+		reasoningCapabilitiesEquivalent(a.ReasoningCapability, b.ReasoningCapability) &&
 		a.SupportsAskUserQuestionBatches == b.SupportsAskUserQuestionBatches &&
 		a.MaxContextTokens == b.MaxContextTokens &&
 		a.MaxOutputTokens == b.MaxOutputTokens &&
@@ -121,12 +128,18 @@ func modelNameFromID(modelID string) string {
 	return strings.TrimSpace(modelID)
 }
 
-func defaultCapability(provider config.AIProvider, modelName string) model.ModelCapability {
+func defaultCapability(provider config.AIProvider, modelName string, wireModelName string) model.ModelCapability {
 	providerType := strings.ToLower(strings.TrimSpace(provider.Type))
 	modelName = strings.TrimSpace(modelName)
+	wireModelName = strings.TrimSpace(wireModelName)
+	if wireModelName == "" {
+		wireModelName = modelName
+	}
 	cap := model.ModelCapability{
 		ProviderType:                   providerType,
 		ResolverVersion:                capabilityResolverVersion,
+		ModelName:                      modelName,
+		WireModelName:                  wireModelName,
 		SupportsTools:                  true,
 		SupportsParallelTools:          false,
 		SupportsStrictJSONSchema:       true,
@@ -183,7 +196,7 @@ func defaultCapability(provider config.AIProvider, modelName string) model.Model
 		cap.PreferredToolSchemaMode = "json_schema"
 	}
 
-	if metadata, ok := explicitCapabilityFor(providerType, modelName); ok {
+	if metadata, ok := explicitCapabilityFor(providerType, wireModelName); ok {
 		if metadata.MaxContextTokens > 0 {
 			cap.MaxContextTokens = metadata.MaxContextTokens
 		}
@@ -207,8 +220,51 @@ func defaultCapability(provider config.AIProvider, modelName string) model.Model
 			cap.MaxOutputTokens = providerModel.MaxOutputTokens
 		}
 		cap.SupportsImageInput = providerModel.SupportsImageInput()
+		cap.ReasoningCapability = providerModel.EffectiveReasoningCapability(providerType)
+	} else {
+		cap.ReasoningCapability = config.AIReasoningCapabilityForModel(providerType, wireModelName)
 	}
 	return cap
+}
+
+func reasoningCapabilitiesEquivalent(a config.AIReasoningCapability, b config.AIReasoningCapability) bool {
+	a = a.Normalize()
+	b = b.Normalize()
+	if a.Kind != b.Kind ||
+		a.DefaultLevel != b.DefaultLevel ||
+		a.DisableSupported != b.DisableSupported ||
+		a.WireShape != b.WireShape ||
+		a.DisableShape != b.DisableShape ||
+		a.BudgetShape != b.BudgetShape ||
+		a.MinBudgetTokens != b.MinBudgetTokens ||
+		a.MaxBudgetTokens != b.MaxBudgetTokens ||
+		a.DynamicProviderMetadata != b.DynamicProviderMetadata ||
+		a.SourceCheckedAt != b.SourceCheckedAt ||
+		a.Fixture != b.Fixture {
+		return false
+	}
+	if (a.DefaultEnabled == nil) != (b.DefaultEnabled == nil) {
+		return false
+	}
+	if a.DefaultEnabled != nil && b.DefaultEnabled != nil && *a.DefaultEnabled != *b.DefaultEnabled {
+		return false
+	}
+	return equalStringSlices(a.SupportedLevels, b.SupportedLevels) &&
+		equalStringSlices(a.ResponseReasoningFields, b.ResponseReasoningFields) &&
+		equalStringSlices(a.HistoryReplayRequirements, b.HistoryReplayRequirements) &&
+		equalStringSlices(a.SourceURLs, b.SourceURLs)
+}
+
+func equalStringSlices(a []string, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func explicitCapabilityFor(providerType string, modelName string) (explicitCapabilityMetadata, bool) {

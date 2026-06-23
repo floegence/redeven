@@ -24,9 +24,13 @@ describe('AI provider preset catalog', () => {
     expect(modelNames('openai').slice(0, 4)).toEqual(['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano']);
     expect(modelNames('anthropic').slice(0, 3)).toEqual(['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001']);
     expect(modelNames('moonshot')).toEqual(['kimi-k2.6']);
-    expect(modelNames('chatglm')[0]).toBe('glm-5.1');
+    expect(modelNames('chatglm')).toEqual(['glm-5.2', 'glm-5.1']);
     expect(modelNames('deepseek')).toEqual(['deepseek-v4-pro', 'deepseek-v4-flash']);
     expect(modelNames('qwen')).toEqual(['qwen3.6-plus', 'qwen3.6-plus-2026-04-02', 'qwen3.6-flash', 'qwen3.6-flash-2026-04-16']);
+    expect(modelNames('openrouter')).toEqual(['gpt-oss-120b']);
+    expect(modelNames('xai')).toEqual(['grok-4.3']);
+    expect(modelNames('groq')).toEqual(['qwen3-32b', 'gpt-oss-120b']);
+    expect(modelNames('ollama')).toEqual(['gpt-oss']);
   });
 
   it('does not recommend provider IDs that official docs mark as deprecated or incompatible with streaming', () => {
@@ -40,7 +44,6 @@ describe('AI provider preset catalog', () => {
     expect(allPresetNames).not.toContain('kimi-k2-thinking');
     expect(allPresetNames).not.toContain('kimi-k2-thinking-turbo');
     expect(allPresetNames).not.toContain('kimi-k2.5');
-    expect(allPresetNames).not.toContain('glm-5');
     expect(allPresetNames).not.toContain('glm-4.7');
     expect(allPresetNames).not.toContain('glm-4.5-air');
     expect(allPresetNames).not.toContain('glm-4.5-flash');
@@ -59,7 +62,7 @@ describe('AI provider preset catalog', () => {
   it('keeps provider display metadata centralized for settings UI', () => {
     const optionTypes = AI_PROVIDER_TYPE_OPTIONS.map((option) => option.value);
 
-    expect(optionTypes).toEqual(['openai', 'anthropic', 'moonshot', 'chatglm', 'deepseek', 'qwen', 'openai_compatible']);
+    expect(optionTypes).toEqual(['openai', 'anthropic', 'moonshot', 'chatglm', 'deepseek', 'qwen', 'openrouter', 'xai', 'groq', 'ollama', 'openai_compatible']);
     for (const providerType of optionTypes) {
       const brand = providerBrandForType(providerType);
       expect(brand.label).toBe(providerTypeLabel(providerType));
@@ -69,9 +72,13 @@ describe('AI provider preset catalog', () => {
     expect(providerBrandForType('deepseek').icon.title).toBe('DeepSeek');
     expect(providerUsesCustomConnectionName('openai')).toBe(false);
     expect(providerUsesCustomConnectionName('deepseek')).toBe(false);
+    expect(providerUsesCustomConnectionName('openrouter')).toBe(true);
+    expect(providerUsesCustomConnectionName('ollama')).toBe(true);
     expect(providerUsesCustomConnectionName('openai_compatible')).toBe(true);
     expect(providerSupportsCustomModelNames('openai')).toBe(true);
     expect(providerSupportsCustomModelNames('deepseek')).toBe(false);
+    expect(providerSupportsCustomModelNames('groq')).toBe(true);
+    expect(providerSupportsCustomModelNames('ollama')).toBe(true);
     expect(providerSupportsCustomModelNames('openai_compatible')).toBe(true);
     expect(providerDisplayName({ type: 'deepseek', name: 'Personal DeepSeek' })).toBe('DeepSeek');
     expect(providerDisplayName({ type: 'openai_compatible', name: 'Endpoint A' })).toBe('Endpoint A');

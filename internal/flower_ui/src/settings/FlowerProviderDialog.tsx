@@ -10,6 +10,7 @@ import {
   FLOWER_PROVIDER_TYPES,
   FlowerProviderBrandIcon,
   defaultBaseURLForFlowerProviderType,
+  defaultFlowerContextWindowForProviderType,
   flowerModelID,
   flowerModelSupportsImage,
   flowerProviderNeedsWebSearchConfig,
@@ -50,10 +51,13 @@ function cleanModelName(value: unknown): string {
 function cloneModel(model: FlowerProviderModel): FlowerProviderModel {
   return {
     model_name: model.model_name,
+    ...(model.wire_model_name ? { wire_model_name: model.wire_model_name } : {}),
     ...(model.context_window ? { context_window: model.context_window } : {}),
     ...(model.max_output_tokens ? { max_output_tokens: model.max_output_tokens } : {}),
     ...(model.effective_context_window_percent ? { effective_context_window_percent: model.effective_context_window_percent } : {}),
     ...(model.input_modalities ? { input_modalities: [...model.input_modalities] } : {}),
+    ...(model.reasoning_capability ? { reasoning_capability: model.reasoning_capability } : {}),
+    ...(model.default_reasoning_selection ? { default_reasoning_selection: model.default_reasoning_selection } : {}),
   };
 }
 
@@ -139,7 +143,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       ...current.models,
       {
         model_name: name,
-        context_window: current.type === 'openai_compatible' ? 128_000 : undefined,
+        context_window: defaultFlowerContextWindowForProviderType(current.type),
         input_modalities: ['text'],
       },
     ]);
@@ -182,9 +186,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
           const recommended = () => recommendedModelsForFlowerProviderType(current().type);
           const builtInSearch = () => {
             const type = current().type;
-            return type === 'anthropic' || type === 'openai_compatible'
-              ? ''
-              : copy().builtInWebSearch[type];
+            return copy().builtInWebSearch[type] ?? '';
           };
           return (
             <div class="space-y-5">
@@ -347,9 +349,12 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                           return (
                                             <div class={cn('rounded-lg border p-3 transition', selected() ? 'border-primary/50 bg-primary/5' : 'border-border bg-background')}>
                                               <div class="flex items-start justify-between gap-3">
-                                                <div class="min-w-0">
-                                                  <div class="break-all font-mono text-sm font-semibold text-foreground">{model.model_name}</div>
-                                                  <div class="mt-1 text-xs text-muted-foreground">
+                                              <div class="min-w-0">
+                                                <div class="break-all font-mono text-sm font-semibold text-foreground">{model.model_name}</div>
+                                                <Show when={model.wire_model_name}>
+                                                  {(wireModelName) => <div class="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">{wireModelName()}</div>}
+                                                </Show>
+                                                <div class="mt-1 text-xs text-muted-foreground">
                                                     {formatFlowerTokenCount(model.context_window)} {copy().contextSuffix}
                                                     <Show when={model.max_output_tokens}> · {formatFlowerTokenCount(model.max_output_tokens)} {copy().outputSuffix}</Show>
                                                   </div>
@@ -411,6 +416,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                             <div class="flex items-start justify-between gap-3">
                                               <div class="min-w-0">
                                                 <div class="break-all font-mono text-sm font-semibold text-foreground">{cleanModelName(model.model_name) || copy().unnamedModel}</div>
+                                                <Show when={model.wire_model_name}>
+                                                  {(wireModelName) => <div class="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">{wireModelName()}</div>}
+                                                </Show>
                                                 <div class="mt-1 text-xs text-muted-foreground">
                                                   {flowerModelSupportsImage(model.input_modalities) ? copy().textAndImage : copy().textOnly} · {formatFlowerTokenCount(model.context_window)} {copy().contextSuffix}
                                                 </div>
@@ -467,6 +475,16 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                                   value={model.model_name}
                                                   onInput={(event) => updateModel(index(), { model_name: event.currentTarget.value })}
                                                   placeholder="model-name"
+                                                  size="sm"
+                                                  class="w-full font-mono"
+                                                />
+                                              </div>
+                                              <div class="md:col-span-2">
+                                                <FlowerFieldLabel>{copy().providerModelID}</FlowerFieldLabel>
+                                                <Input
+                                                  value={model.wire_model_name ?? ''}
+                                                  onInput={(event) => updateModel(index(), { wire_model_name: event.currentTarget.value || undefined })}
+                                                  placeholder={model.model_name}
                                                   size="sm"
                                                   class="w-full font-mono"
                                                 />

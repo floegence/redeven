@@ -41,6 +41,10 @@ import type {
   FlowerThreadSnapshot,
   FlowerThreadStatus,
 } from './contracts/flowerSurfaceContracts';
+import {
+  normalizeFlowerReasoningCapability,
+  normalizeFlowerReasoningSelection,
+} from './reasoning';
 
 export type FlowerLiveThreadMapperOptions = Readonly<{
   runtimeID: string;
@@ -65,6 +69,10 @@ function plainRecordValue(value: unknown): JsonRecord | null {
 
 function isPresent<T>(value: T | null | undefined): value is T {
   return value != null;
+}
+
+function hasOwn(record: JsonRecord, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(record, key);
 }
 
 function trim(value: unknown): string {
@@ -482,17 +490,19 @@ function mapInputRequest(prompt: unknown): FlowerInputRequest | null {
   if (!promptID || !messageID || !toolID || !toolName) {
     throw new Error('Flower contract error: waiting_prompt requires prompt_id, message_id, tool_id, and tool_name.');
   }
-  if (questionsRaw.length === 0) {
-    throw new Error('Flower contract error: waiting_prompt requires at least one question.');
-  }
-  return {
-    prompt_id: promptID,
-    message_id: messageID,
-    tool_id: toolID,
-    tool_name: toolName,
-    ...(trim(record.reason_code) ? { reason_code: trim(record.reason_code) } : {}),
-    ...(Array.isArray(record.required_from_user) ? { required_from_user: record.required_from_user.map(trim).filter(Boolean) } : {}),
-    ...(Array.isArray(record.evidence_refs) ? { evidence_refs: record.evidence_refs.map(trim).filter(Boolean) } : {}),
+	if (questionsRaw.length === 0) {
+		throw new Error('Flower contract error: waiting_prompt requires at least one question.');
+	}
+	const reasoningSelection = normalizeFlowerReasoningSelection(record.reasoning_selection);
+	return {
+		prompt_id: promptID,
+		message_id: messageID,
+		tool_id: toolID,
+		tool_name: toolName,
+		...(trim(record.reason_code) ? { reason_code: trim(record.reason_code) } : {}),
+		...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {}),
+		...(Array.isArray(record.required_from_user) ? { required_from_user: record.required_from_user.map(trim).filter(Boolean) } : {}),
+		...(Array.isArray(record.evidence_refs) ? { evidence_refs: record.evidence_refs.map(trim).filter(Boolean) } : {}),
     questions: questionsRaw.map((questionValue): FlowerInputQuestion => {
       const question = recordValue(questionValue) ?? {};
       const responseMode = inputResponseMode(question.response_mode);
@@ -649,6 +659,8 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
   const patch = recordValue(record.patch) ?? record;
   const queuedTurnCount = positiveInteger(patch.queued_turn_count);
   const readStatus = patch.read_status === undefined ? null : mapFlowerReadStatus(patch.read_status);
+  const reasoningSelection = hasOwn(patch, 'reasoning_selection') ? normalizeFlowerReasoningSelection(patch.reasoning_selection) ?? null : undefined;
+  const reasoningCapability = hasOwn(patch, 'reasoning_capability') ? normalizeFlowerReasoningCapability(patch.reasoning_capability) ?? null : undefined;
   return {
     ...(trim(patch.thread_id) ? { thread_id: trim(patch.thread_id) } : {}),
     ...(trim(patch.title) ? { title: trim(patch.title) } : {}),
@@ -668,6 +680,8 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
     ...(positiveInteger(patch.updated_at_unix_ms) ? { updated_at_ms: positiveInteger(patch.updated_at_unix_ms) } : {}),
     ...(positiveInteger(patch.last_message_at_unix_ms) ? { last_message_at_ms: positiveInteger(patch.last_message_at_unix_ms) } : {}),
     ...(trim(patch.last_message_preview) ? { last_message_preview: trim(patch.last_message_preview) } : {}),
+    ...(reasoningSelection !== undefined ? { reasoning_selection: reasoningSelection } : {}),
+    ...(reasoningCapability !== undefined ? { reasoning_capability: reasoningCapability } : {}),
     ...(readStatus ? { read_status: readStatus } : {}),
   };
 }
@@ -736,6 +750,8 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     source_label: options.sourceLabel,
     target_labels: options.targetLabels,
     messages,
+    ...(normalizeFlowerReasoningSelection(record.reasoning_selection) ? { reasoning_selection: normalizeFlowerReasoningSelection(record.reasoning_selection) } : {}),
+    ...(normalizeFlowerReasoningCapability(record.reasoning_capability) ? { reasoning_capability: normalizeFlowerReasoningCapability(record.reasoning_capability) } : {}),
     ...(inputRequest ? { input_request: inputRequest } : {}),
     ...(errorMessage ? { error: { message: errorMessage, ...(errorCode ? { code: errorCode } : {}) } } : {}),
     read_status: mapFlowerReadStatus(readStatusRaw ?? record.read_status),

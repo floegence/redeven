@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 32
+	threadstoreCurrentSchemaVersion = 33
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -60,6 +60,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 29, ToVersion: 30, Apply: migrateThreadstoreToV30},
 			{FromVersion: 30, ToVersion: 31, Apply: migrateThreadstoreToV31},
 			{FromVersion: 31, ToVersion: 32, Apply: migrateThreadstoreToV32},
+			{FromVersion: 32, ToVersion: 33, Apply: migrateThreadstoreToV33},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -268,12 +269,20 @@ func migrateThreadstoreToV32(tx *sql.Tx) error {
 	return ensureAIThreadStateContinuationColumnsTx(tx)
 }
 
+func migrateThreadstoreToV33(tx *sql.Tx) error {
+	return ensureAIThreadsReasoningSelectionTx(tx)
+}
+
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "model_id", `ALTER TABLE ai_threads ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`)
 }
 
 func ensureAIThreadsModelLockedTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "model_locked", `ALTER TABLE ai_threads ADD COLUMN model_locked INTEGER NOT NULL DEFAULT 0`)
+}
+
+func ensureAIThreadsReasoningSelectionTx(tx *sql.Tx) error {
+	return ensureColumnTx(tx, "ai_threads", "reasoning_selection_json", `ALTER TABLE ai_threads ADD COLUMN reasoning_selection_json TEXT NOT NULL DEFAULT ''`)
 }
 
 func ensureAIThreadsExecutionModeTx(tx *sql.Tx) error {

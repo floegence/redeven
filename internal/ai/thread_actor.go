@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -491,8 +492,28 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		}
 	}
 	openPrompt := a.mgr.svc.threadWaitingPrompt(ctx, th, runStatus)
+	normalizeTurnReasoning := func(options *RunOptions) error {
+		if options == nil {
+			return nil
+		}
+		modelID := strings.TrimSpace(req.Model)
+		if modelID == "" {
+			modelID = strings.TrimSpace(th.ModelID)
+		}
+		capability, modelDefault, _ := a.mgr.svc.threadReasoningDefaults(ctx, modelID)
+		threadDefault := unmarshalReasoningSelection(th.ReasoningSelectionJSON)
+		resolved, err := resolveEffectiveReasoning(capability, options.ReasoningSelection, threadDefault, modelDefault)
+		if err != nil {
+			return reasoningSelectionError(modelID, err)
+		}
+		options.ReasoningSelection = resolved.Effective
+		return nil
+	}
 	if openPrompt != nil && req.QueueAfterWaitingUser {
 		req.Options.Mode = resolvedExecutionMode
+		if err := normalizeTurnReasoning(&req.Options); err != nil {
+			return SendUserTurnResponse{}, err
+		}
 		appliedExecutionMode = resolvedExecutionMode
 		queued, position, err := a.mgr.svc.enqueueQueuedTurn(ctx, meta, req)
 		if err != nil {
@@ -510,6 +531,9 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		return SendUserTurnResponse{}, ErrWaitingUserQueueConflict
 	}
 	req.Options.Mode = resolvedExecutionMode
+	if err := normalizeTurnReasoning(&req.Options); err != nil {
+		return SendUserTurnResponse{}, err
+	}
 	appliedExecutionMode = resolvedExecutionMode
 
 	if activeRunID != "" {
@@ -676,6 +700,21 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
 	}
 	req.Options.Mode = resolvedExecutionMode
+	if req.Options.ReasoningSelection.IsZero() {
+		req.Options.ReasoningSelection = config.NormalizeAIReasoningSelection(openPrompt.ReasoningSelection)
+	} else {
+		modelID := strings.TrimSpace(req.Model)
+		if modelID == "" {
+			modelID = strings.TrimSpace(th.ModelID)
+		}
+		capability, modelDefault, _ := a.mgr.svc.threadReasoningDefaults(ctx, modelID)
+		threadDefault := unmarshalReasoningSelection(th.ReasoningSelectionJSON)
+		resolved, err := resolveEffectiveReasoning(capability, req.Options.ReasoningSelection, threadDefault, modelDefault)
+		if err != nil {
+			return SubmitRequestUserInputResponseResponse{}, reasoningSelectionError(modelID, err)
+		}
+		req.Options.ReasoningSelection = resolved.Effective
+	}
 
 	if activeRunID != "" {
 		return SubmitRequestUserInputResponseResponse{}, ErrRunChanged

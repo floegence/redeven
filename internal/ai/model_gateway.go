@@ -46,6 +46,40 @@ const (
 	providerWebSearchModeExternalBrave          = "external_brave"
 )
 
+func mergeAnyFields(base map[string]any, next map[string]any) map[string]any {
+	if len(next) == 0 {
+		return base
+	}
+	out := make(map[string]any, len(base)+len(next))
+	for key, value := range base {
+		out[key] = value
+	}
+	for key, value := range next {
+		out[key] = value
+	}
+	return out
+}
+
+func reasoningEffortWireValue(level config.AIReasoningLevel) string {
+	level = config.NormalizeAIReasoningSelection(config.AIReasoningSelection{Level: level}).Level
+	if level == config.AIReasoningLevelOff {
+		return "none"
+	}
+	return string(level)
+}
+
+func providerReasoningSelection(controls ProviderControls) (config.AIReasoningSelection, config.AIReasoningCapability, error) {
+	selection := config.NormalizeAIReasoningSelection(controls.ReasoningSelection)
+	capability := controls.ReasoningCapability.Normalize()
+	if selection.IsZero() || selection.Level == config.AIReasoningLevelDefault && selection.BudgetTokens == 0 {
+		return config.AIReasoningSelection{}, capability, nil
+	}
+	if err := config.ValidateAIReasoningSelection(capability, selection); err != nil {
+		return config.AIReasoningSelection{}, capability, err
+	}
+	return selection, capability, nil
+}
+
 type providerWebSearchCapability struct {
 	Mode         string
 	Reason       string
@@ -141,7 +175,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	if strings.TrimSpace(req.Model) == "" {
 		return ModelGatewayResult{}, errors.New("missing model")
 	}
-	if p.forceChat {
+	if p.forceChat && !requiresOpenAIResponsesRoute(req) {
 		return p.streamChatTurn(ctx, req, onEvent)
 	}
 
@@ -188,6 +222,9 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 		params.Instructions = openai.String(strings.TrimSpace(instructions))
 	}
 	tools, aliasToReal := buildOpenAITools(req.Tools, p.strictToolSchema)
+	if err := applyResponsesReasoning(&params, req.ProviderControls); err != nil {
+		return ModelGatewayResult{}, err
+	}
 	decorateResponsesParams(&params, req.WebSearchMode, &tools)
 	if len(tools) > 0 {
 		params.Tools = tools
@@ -485,6 +522,19 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	return result, nil
 }
 
+func requiresOpenAIResponsesRoute(req ModelGatewayRequest) bool {
+	switch strings.TrimSpace(req.WebSearchMode) {
+	case providerWebSearchModeOpenAIResponsesBuiltin, providerWebSearchModeQwenResponsesWebSearch:
+		return true
+	}
+	for _, tool := range req.Tools {
+		if strings.TrimSpace(tool.Name) == "web.search" {
+			return true
+		}
+	}
+	return false
+}
+
 func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	if p == nil {
 		return ModelGatewayResult{}, errors.New("nil provider")
@@ -524,7 +574,10 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 	}
 
 	tools, aliasToReal := buildOpenAIChatTools(req.Tools, p.strictToolSchema)
-	decorateChatCompletionParams(&params, req.WebSearchMode, req.ProviderControls.DisableReasoning, &tools)
+	if err := applyChatReasoning(&params, req.ProviderControls); err != nil {
+		return ModelGatewayResult{}, err
+	}
+	decorateChatCompletionParams(&params, req.WebSearchMode, &tools)
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
@@ -737,7 +790,10 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 	}
 
 	tools, aliasToReal := buildOpenAIChatTools(req.Tools, p.strictToolSchema)
-	decorateChatCompletionParams(&params, req.WebSearchMode, req.ProviderControls.DisableReasoning, &tools)
+	if err := applyChatReasoning(&params, req.ProviderControls); err != nil {
+		return ModelGatewayResult{}, err
+	}
+	decorateChatCompletionParams(&params, req.WebSearchMode, &tools)
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
@@ -978,7 +1034,10 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONObject: &obj}
 	}
 	tools, aliasToReal := buildOpenAIChatTools(req.Tools, p.strictToolSchema)
-	decorateChatCompletionParams(&params, req.WebSearchMode, req.ProviderControls.DisableReasoning, &tools)
+	if err := applyChatReasoning(&params, req.ProviderControls); err != nil {
+		return ModelGatewayResult{}, err
+	}
+	decorateChatCompletionParams(&params, req.WebSearchMode, &tools)
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
@@ -1058,15 +1117,134 @@ func buildOpenAIChatTools(defs []ToolDef, strict bool) ([]openai.ChatCompletionT
 	return out, aliasToReal
 }
 
-func decorateChatCompletionParams(params *openai.ChatCompletionNewParams, webSearchMode string, disableReasoning bool, tools *[]openai.ChatCompletionToolParam) {
+func applyResponsesReasoning(params *oresponses.ResponseNewParams, controls ProviderControls) error {
+	if params == nil {
+		return nil
+	}
+	selection, capability, err := providerReasoningSelection(controls)
+	if err != nil {
+		return err
+	}
+	if selection.IsZero() {
+		return nil
+	}
+	switch capability.WireShape {
+	case "openai_responses_reasoning_effort":
+		params.Reasoning = oshared.ReasoningParam{Effort: oshared.ReasoningEffort(reasoningEffortWireValue(selection.Level))}
+	case "openrouter_reasoning_metadata":
+		params.SetExtraFields(mergeAnyFields(params.ExtraFields(), map[string]any{
+			"reasoning": map[string]any{"effort": reasoningEffortWireValue(selection.Level)},
+		}))
+	case "qwen_enable_thinking":
+		if selection.BudgetTokens > 0 {
+			return fmt.Errorf("qwen responses reasoning does not support thinking_budget")
+		}
+		if selection.Level == config.AIReasoningLevelOff {
+			params.Reasoning = oshared.ReasoningParam{Effort: oshared.ReasoningEffort("none")}
+		}
+	default:
+		return fmt.Errorf("unsupported responses reasoning wire shape %q", capability.WireShape)
+	}
+	return nil
+}
+
+func applyChatReasoning(params *openai.ChatCompletionNewParams, controls ProviderControls) error {
+	if params == nil {
+		return nil
+	}
+	selection, capability, err := providerReasoningSelection(controls)
+	if err != nil {
+		return err
+	}
+	if selection.IsZero() {
+		return nil
+	}
+	extraFields := params.ExtraFields()
+	switch capability.WireShape {
+	case "openai_chat_reasoning_effort", "openai_responses_reasoning_effort", "glm_reasoning_effort", "xai_reasoning_effort", "groq_qwen_reasoning_effort", "groq_gpt_oss_reasoning_effort", "ollama_model_family_think":
+		params.ReasoningEffort = oshared.ReasoningEffort(reasoningEffortWireValue(selection.Level))
+	case "kimi_thinking_type", "glm_thinking_type":
+		extraFields = mergeAnyFields(extraFields, map[string]any{"thinking": map[string]any{"type": thinkingTypeForSelection(selection)}})
+	case "deepseek_reasoning_effort":
+		if selection.Level == config.AIReasoningLevelOff {
+			extraFields = mergeAnyFields(extraFields, map[string]any{"thinking": map[string]any{"type": "disabled"}})
+		} else {
+			params.ReasoningEffort = oshared.ReasoningEffort(reasoningEffortWireValue(selection.Level))
+		}
+	case "qwen_enable_thinking":
+		extra := map[string]any{"enable_thinking": selection.Level != config.AIReasoningLevelOff}
+		if selection.BudgetTokens > 0 {
+			extra["thinking_budget"] = selection.BudgetTokens
+		}
+		extraFields = mergeAnyFields(extraFields, extra)
+	case "gemini_thinking_level":
+		params.ReasoningEffort = oshared.ReasoningEffort(reasoningEffortWireValue(selection.Level))
+	case "gemini_openai_thinking_budget":
+		extra := map[string]any{}
+		if selection.Level == config.AIReasoningLevelOff {
+			extra["extra_body"] = map[string]any{"google": map[string]any{"thinking_config": map[string]any{"thinking_budget": 0}}}
+		}
+		if selection.BudgetTokens > 0 {
+			extra["extra_body"] = map[string]any{"google": map[string]any{"thinking_config": map[string]any{"thinking_budget": selection.BudgetTokens}}}
+		}
+		extraFields = mergeAnyFields(extraFields, extra)
+	case "openrouter_reasoning_metadata":
+		extraFields = mergeAnyFields(extraFields, map[string]any{"reasoning": map[string]any{"effort": reasoningEffortWireValue(selection.Level)}})
+	default:
+		return fmt.Errorf("unsupported chat reasoning wire shape %q", capability.WireShape)
+	}
+	if len(extraFields) > 0 {
+		params.SetExtraFields(extraFields)
+	}
+	return nil
+}
+
+func thinkingTypeForSelection(selection config.AIReasoningSelection) string {
+	if selection.Level == config.AIReasoningLevelOff {
+		return "disabled"
+	}
+	return "enabled"
+}
+
+func applyAnthropicReasoning(params *anthropic.MessageNewParams, controls ProviderControls) error {
+	if params == nil {
+		return nil
+	}
+	selection, capability, err := providerReasoningSelection(controls)
+	if err != nil {
+		return err
+	}
+	if selection.IsZero() {
+		return nil
+	}
+	if capability.WireShape != "anthropic_output_config_effort" {
+		return fmt.Errorf("unsupported anthropic reasoning wire shape %q", capability.WireShape)
+	}
+	if selection.Level == config.AIReasoningLevelOff {
+		disabled := anthropic.NewThinkingConfigDisabledParam()
+		params.Thinking = anthropic.ThinkingConfigParamUnion{OfDisabled: &disabled}
+		return nil
+	}
+	if selection.BudgetTokens > 0 {
+		if selection.BudgetTokens >= params.MaxTokens {
+			return fmt.Errorf("anthropic reasoning budget %d must be less than max_tokens %d", selection.BudgetTokens, params.MaxTokens)
+		}
+		params.Thinking = anthropic.ThinkingConfigParamOfEnabled(selection.BudgetTokens)
+	} else if selection.Level != "" && selection.Level != config.AIReasoningLevelDefault {
+		adaptive := anthropic.NewThinkingConfigAdaptiveParam()
+		params.Thinking = anthropic.ThinkingConfigParamUnion{OfAdaptive: &adaptive}
+	}
+	if selection.Level != "" && selection.Level != config.AIReasoningLevelDefault {
+		params.OutputConfig = anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffort(selection.Level)}
+	}
+	return nil
+}
+
+func decorateChatCompletionParams(params *openai.ChatCompletionNewParams, webSearchMode string, tools *[]openai.ChatCompletionToolParam) {
 	if params == nil {
 		return
 	}
-	extraFields := map[string]any{}
-	if disableReasoning {
-		extraFields["thinking"] = map[string]any{"type": "disabled"}
-		extraFields["enable_thinking"] = false
-	}
+	extraFields := params.ExtraFields()
 	switch strings.TrimSpace(webSearchMode) {
 	case providerWebSearchModeKimiBuiltin:
 		if tools != nil {
@@ -1077,7 +1255,6 @@ func decorateChatCompletionParams(params *openai.ChatCompletionNewParams, webSea
 				},
 			}))
 		}
-		extraFields["thinking"] = map[string]any{"type": "disabled"}
 	case providerWebSearchModeGLMWebSearchTool:
 		if tools != nil {
 			*tools = append(*tools, openAIChatToolOverride(map[string]any{
@@ -1088,7 +1265,7 @@ func decorateChatCompletionParams(params *openai.ChatCompletionNewParams, webSea
 			}))
 		}
 	case providerWebSearchModeDeepSeekNative:
-		extraFields["enable_search"] = true
+		extraFields = mergeAnyFields(extraFields, map[string]any{"enable_search": true})
 	}
 	if len(extraFields) > 0 {
 		params.SetExtraFields(extraFields)
@@ -1551,8 +1728,8 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 	if req.ProviderControls.TopP != nil {
 		params.TopP = anthropic.Float(*req.ProviderControls.TopP)
 	}
-	if req.ProviderControls.ThinkingBudgetTokens >= 1024 && int64(req.ProviderControls.ThinkingBudgetTokens) < params.MaxTokens {
-		params.Thinking = anthropic.ThinkingConfigParamOfEnabled(int64(req.ProviderControls.ThinkingBudgetTokens))
+	if err := applyAnthropicReasoning(&params, req.ProviderControls); err != nil {
+		return ModelGatewayResult{}, err
 	}
 	if system := collectSystemPrompt(req.Messages); strings.TrimSpace(system) != "" {
 		params.System = []anthropic.TextBlockParam{{Text: strings.TrimSpace(system)}}
@@ -1921,7 +2098,7 @@ func (r *run) supportsModelGatewayProvider(provider *config.AIProvider) bool {
 		return false
 	}
 	switch strings.ToLower(strings.TrimSpace(provider.Type)) {
-	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible", DesktopModelSourceProviderType:
+	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible", DesktopModelSourceProviderType:
 		return true
 	default:
 		return false
@@ -1930,8 +2107,11 @@ func (r *run) supportsModelGatewayProvider(provider *config.AIProvider) bool {
 
 func newProviderAdapter(providerType string, baseURL string, apiKey string, strictToolSchemaOverride *bool) (ModelGateway, error) {
 	providerType = strings.ToLower(strings.TrimSpace(providerType))
-	if strings.TrimSpace(apiKey) == "" {
+	if strings.TrimSpace(apiKey) == "" && providerType != "ollama" {
 		return nil, errors.New("missing provider api key")
+	}
+	if providerType == "ollama" && strings.TrimSpace(apiKey) == "" {
+		apiKey = "ollama"
 	}
 	strictToolSchema := resolveStrictToolSchema(providerType, baseURL, strictToolSchemaOverride)
 	switch providerType {
@@ -1944,7 +2124,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			client:           openai.NewClient(opts...),
 			strictToolSchema: strictToolSchema,
 		}, nil
-	case "openai_compatible":
+	case "openai_compatible", "openrouter", "xai", "groq", "ollama":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
 		if strings.TrimSpace(baseURL) != "" {
 			opts = append(opts, ooption.WithBaseURL(strings.TrimSpace(baseURL)))
@@ -1952,6 +2132,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 		return &openAIProvider{
 			client:           openai.NewClient(opts...),
 			strictToolSchema: strictToolSchema,
+			forceChat:        true,
 		}, nil
 	case "chatglm", "deepseek":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
@@ -1971,6 +2152,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 		return &openAIProvider{
 			client:           openai.NewClient(opts...),
 			strictToolSchema: strictToolSchema,
+			forceChat:        true,
 		}, nil
 	case "moonshot":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
@@ -2001,7 +2183,7 @@ func resolveStrictToolSchema(providerType string, baseURL string, override *bool
 
 func shouldUseStrictOpenAIToolSchema(providerType string, baseURL string) bool {
 	providerType = strings.ToLower(strings.TrimSpace(providerType))
-	if providerType == "openai_compatible" || providerType == "chatglm" || providerType == "deepseek" || providerType == "qwen" {
+	if providerType == "openai_compatible" || providerType == "chatglm" || providerType == "deepseek" || providerType == "qwen" || providerType == "openrouter" || providerType == "xai" || providerType == "groq" || providerType == "ollama" {
 		// Compatible endpoints vary widely in strict function schema support; disable strict mode by default.
 		return false
 	}
@@ -3564,13 +3746,14 @@ func (r *run) persistAskUserWaitingSignal(signal askUserSignal, source string) (
 		toolID = "tool_ask_user_waiting"
 	}
 	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
-		MessageID:        strings.TrimSpace(r.messageID),
-		ToolID:           toolID,
-		ToolName:         "ask_user",
-		ReasonCode:       signal.ReasonCode,
-		RequiredFromUser: append([]string(nil), signal.RequiredFromUser...),
-		EvidenceRefs:     append([]string(nil), signal.EvidenceRefs...),
-		Questions:        questions,
+		MessageID:          strings.TrimSpace(r.messageID),
+		ToolID:             toolID,
+		ToolName:           "ask_user",
+		ReasonCode:         signal.ReasonCode,
+		ReasoningSelection: r.currentReasoning,
+		RequiredFromUser:   append([]string(nil), signal.RequiredFromUser...),
+		EvidenceRefs:       append([]string(nil), signal.EvidenceRefs...),
+		Questions:          questions,
 	})
 	if prompt == nil {
 		return "", 0
@@ -3613,6 +3796,11 @@ func (r *run) persistExitPlanModeWaitingSignal(toolID string, args ExitPlanModeA
 		result.Summary = args.Summary
 	}
 	prompt := buildExitPlanModeWaitingPrompt(strings.TrimSpace(r.messageID), toolID, args)
+	if prompt == nil {
+		return "", 0
+	}
+	prompt.ReasoningSelection = r.currentReasoning
+	prompt = normalizeRequestUserInputPrompt(prompt)
 	if prompt == nil {
 		return "", 0
 	}

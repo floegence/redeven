@@ -16,6 +16,10 @@ import {
   flowerProviderTypeRequiresBaseURL,
   flowerProviderUsesCustomName,
 } from '../../../../../../flower_ui/src/settings/providerCatalog';
+import {
+  normalizeFlowerReasoningCapability,
+  serializeFlowerReasoningSelection,
+} from '../../../../../../flower_ui/src/reasoning';
 import { localizedFlowerProviderTypeLabels } from '../../../../../../flower_ui/src/settings/providerTypeLabels';
 
 export const DEFAULT_OPENAI_COMPAT_CONTEXT_WINDOW = defaultFlowerContextWindowForProviderType('openai_compatible') ?? 128000;
@@ -48,10 +52,13 @@ function toAIProviderPreset(providerType: AIProviderType): AIProviderPreset {
     web_search: preset.web_search,
     models: preset.models.map((model) => ({
       model_name: model.model_name,
+      ...(model.wire_model_name ? { wire_model_name: model.wire_model_name } : {}),
       context_window: Number(model.context_window ?? 0),
       ...(model.max_output_tokens ? { max_output_tokens: model.max_output_tokens } : {}),
       ...(model.effective_context_window_percent ? { effective_context_window_percent: model.effective_context_window_percent } : {}),
       input_modalities: toAIInputModalities(model.input_modalities),
+      ...(normalizeFlowerReasoningCapability(model.reasoning_capability) ? { reasoning_capability: normalizeFlowerReasoningCapability(model.reasoning_capability) } : {}),
+      ...(serializeFlowerReasoningSelection(model.default_reasoning_selection) ? { default_reasoning_selection: serializeFlowerReasoningSelection(model.default_reasoning_selection) } : {}),
       ...(model.note_key ? { note_key: model.note_key } : {}),
     })),
   };
@@ -152,8 +159,7 @@ export function normalizePositiveInteger(raw: unknown): number | undefined {
 export function normalizeContextWindowByProvider(providerType: AIProviderType, raw: unknown): number | undefined {
   const parsed = normalizePositiveInteger(raw);
   if (parsed != null) return parsed;
-  if (providerType === 'openai_compatible') return DEFAULT_OPENAI_COMPAT_CONTEXT_WINDOW;
-  return undefined;
+  return defaultContextWindowForProviderType(providerType);
 }
 
 export function defaultContextWindowForProviderType(providerType: AIProviderType): number | undefined {
@@ -214,10 +220,13 @@ export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {
       : undefined,
     models: (Array.isArray(row?.models) ? row.models : []).map((m) => ({
       model_name: String(m?.model_name ?? ''),
+      wire_model_name: String(m?.wire_model_name ?? ''),
       context_window: normalizePositiveInteger(m?.context_window),
       max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
       effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
       input_modalities: normalizeInputModalities(m?.input_modalities),
+      reasoning_capability: normalizeFlowerReasoningCapability(m?.reasoning_capability),
+      default_reasoning_selection: serializeFlowerReasoningSelection(m?.default_reasoning_selection),
     })),
   };
 }
@@ -227,10 +236,13 @@ export function normalizeAIProviderRowDraft(row: AIProviderRow): AIProviderRow {
   const models = Array.isArray(out.models) ? out.models : [];
   out.models = models.map((m) => ({
     model_name: String(m?.model_name ?? ''),
+    wire_model_name: String(m?.wire_model_name ?? '').trim() || undefined,
     context_window: normalizeContextWindowByProvider(out.type, m?.context_window),
     max_output_tokens: normalizePositiveInteger(m?.max_output_tokens),
     effective_context_window_percent: normalizeEffectiveContextPercent(m?.effective_context_window_percent),
     input_modalities: normalizeInputModalities(m?.input_modalities),
+    reasoning_capability: normalizeFlowerReasoningCapability(m?.reasoning_capability),
+    default_reasoning_selection: serializeFlowerReasoningSelection(m?.default_reasoning_selection),
   }));
   return out;
 }

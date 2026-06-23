@@ -149,4 +149,134 @@ describe('Env local Flower surface adapter', () => {
     })).rejects.toThrow('Invalid Flower context action.');
     expect(sendUserTurn).not.toHaveBeenCalled();
   });
+
+  it('passes reasoning selection through create thread and turn launch', async () => {
+    const subscribeThread = vi.fn(async () => ({ runId: '' }));
+    const sendUserTurn = vi.fn(async () => ({ runId: 'run_reasoning', kind: 'start' }));
+    const createdBodies: unknown[] = [];
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings') {
+        return jsonResponse({
+          ai: {
+            current_model_id: 'default/gpt-5.4',
+            providers: [{
+              id: 'default',
+              type: 'openai',
+              models: [{
+                model_name: 'gpt-5.4',
+                reasoning_capability: {
+                  kind: 'effort',
+                  supported_levels: ['low', 'medium', 'high'],
+                  default_level: 'medium',
+                  wire_shape: 'openai_responses_reasoning_effort',
+                  source_urls: ['https://developers.openai.com/api/docs/guides/reasoning'],
+                  source_checked_at: '2026-06-23',
+                  fixture: 'openai_responses_reasoning_effort',
+                },
+                default_reasoning_selection: { level: 'medium' },
+              }],
+            }],
+          },
+          ai_secrets: {
+            provider_api_key_set: { default: true },
+            web_search_provider_api_key_set: {},
+          },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models') {
+        return jsonResponse({ current_model: 'default/gpt-5.4' });
+      }
+      if (url === '/_redeven_proxy/api/ai/threads' && init?.method === 'POST') {
+        createdBodies.push(JSON.parse(String(init.body ?? '{}')));
+        return jsonResponse({ thread: { thread_id: 'thread_reasoning', read_status: readStatus('idle') } });
+      }
+      if (url === '/_redeven_proxy/api/ai/threads/thread_reasoning/live/bootstrap' && init?.method === 'GET') {
+        return jsonResponse(liveBootstrap('thread_reasoning', 'running'));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: {
+        ai: {
+          subscribeThread,
+          sendUserTurn,
+        },
+      } as any,
+    });
+
+    const live = await adapter.launchTurn({
+      prompt: 'reason about this',
+      reasoning_selection: { level: 'high' },
+    });
+
+    expect(live.thread.thread_id).toBe('thread_reasoning');
+    expect(createdBodies[0]).not.toHaveProperty('reasoning_selection');
+    expect(sendUserTurn).toHaveBeenCalledWith(expect.objectContaining({
+      threadId: 'thread_reasoning',
+      options: expect.objectContaining({
+        reasoningSelection: { level: 'high' },
+      }),
+    }));
+    expect(subscribeThread).toHaveBeenCalledWith({ threadId: 'thread_reasoning' });
+  });
+
+	it('passes reasoning selection through input response continuations', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_waiting/live/bootstrap' && init?.method === 'GET') {
+        return jsonResponse(liveBootstrap('thread_waiting', 'running'));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const submitRequestUserInputResponse = vi.fn(async () => ({ runId: 'run_continue', kind: 'start' }));
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: {
+        ai: {
+          submitRequestUserInputResponse,
+        },
+      } as any,
+    });
+
+    const live = await adapter.submitInput({
+      thread_id: 'thread_waiting',
+      prompt_id: 'prompt_1',
+      answers: { next: { choice_id: 'continue' } },
+      reasoning_selection: { level: 'high' },
+    });
+
+    expect(live.thread.thread_id).toBe('thread_waiting');
+    expect(submitRequestUserInputResponse).toHaveBeenCalledWith(expect.objectContaining({
+      threadId: 'thread_waiting',
+      options: expect.objectContaining({
+        reasoningSelection: { level: 'high' },
+      }),
+		}));
+	});
+
+	it('sends null when resetting thread reasoning selection', async () => {
+		const patchBodies: unknown[] = [];
+		fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+			if (url === '/_redeven_proxy/api/ai/threads/thread_reasoning' && init?.method === 'PATCH') {
+				patchBodies.push(JSON.parse(String(init.body ?? '{}')));
+				return jsonResponse({ thread: { thread_id: 'thread_reasoning', read_status: readStatus('idle') } });
+			}
+			if (url === '/_redeven_proxy/api/ai/threads/thread_reasoning/live/bootstrap' && init?.method === 'GET') {
+				return jsonResponse(liveBootstrap('thread_reasoning', 'idle'));
+			}
+			throw new Error(`unexpected fetch: ${url}`);
+		});
+		const adapter = createEnvLocalFlowerSurfaceAdapter({
+			envPublicID: 'env_a',
+			envLabel: 'Demo Env',
+			rpc: { ai: {} } as any,
+		});
+
+		await adapter.setThreadReasoningSelection?.('thread_reasoning', undefined);
+
+		expect(patchBodies).toEqual([{ reasoning_selection: null }]);
+	});
 });

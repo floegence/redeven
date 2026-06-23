@@ -113,7 +113,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 func insertForkedThreadTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest, source Thread, title string) error {
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO ai_threads(
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
+  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, reasoning_selection_json, execution_mode, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error_code, run_error,
   waiting_user_input_json, last_context_run_id,
@@ -121,13 +121,14 @@ INSERT INTO ai_threads(
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms,
   last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `,
 		req.DestinationThreadID,
 		req.EndpointID,
 		strings.TrimSpace(source.NamespacePublicID),
 		strings.TrimSpace(source.ModelID),
 		boolToInt(source.ModelLocked),
+		strings.TrimSpace(source.ReasoningSelectionJSON),
 		normalizeExecutionMode(source.ExecutionMode),
 		strings.TrimSpace(source.WorkingDir),
 		title,

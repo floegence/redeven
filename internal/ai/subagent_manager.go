@@ -1186,13 +1186,16 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 			TargetToolExecutor:    m.parent.targetToolExecutor,
 		})
 
+		modelCapability := m.parent.resolveRunModelCapability(task.modelID)
 		req := RunRequest{
-			Model:     task.modelID,
-			Objective: task.objective,
-			History:   history,
-			Input:     RunInput{Text: attemptInput},
+			Model:           task.modelID,
+			Objective:       task.objective,
+			History:         history,
+			Input:           RunInput{Text: attemptInput},
+			ModelCapability: modelCapability,
 			Options: RunOptions{
-				Mode: task.mode,
+				Mode:               task.mode,
+				ReasoningSelection: m.parent.currentReasoning,
 			},
 		}
 

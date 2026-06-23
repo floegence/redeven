@@ -157,6 +157,7 @@ type resolvedRunModel struct {
 	ID                        string
 	ProviderID                string
 	ModelName                 string
+	WireModelName             string
 	Provider                  config.AIProvider
 	Capability                contextmodel.ModelCapability
 	DesktopModelSourceModelID string
@@ -796,7 +797,7 @@ func configModelViews(cfg *config.AIConfig) ([]Model, string, error) {
 				continue
 			}
 			seenModel[id] = struct{}{}
-			models = append(models, configModelView(id, pn+" / "+modelName, m))
+			models = append(models, configModelView(id, pn+" / "+modelName, p.Type, m))
 		}
 	}
 	if len(models) == 0 {
@@ -812,16 +813,17 @@ func configModelViews(cfg *config.AIConfig) ([]Model, string, error) {
 	return models, currentModelID, nil
 }
 
-func configModelView(id string, label string, m config.AIProviderModel) Model {
+func configModelView(id string, label string, providerType string, m config.AIProviderModel) Model {
 	return Model{
-		ID:                 strings.TrimSpace(id),
-		Label:              strings.TrimSpace(label),
-		Source:             modelSourceRuntimeConfig,
-		SourceLabel:        modelSourceRuntimeConfigLabel,
-		ContextWindow:      m.EffectiveInputWindowTokens(),
-		MaxOutputTokens:    m.MaxOutputTokens,
-		InputModalities:    m.NormalizedInputModalities(),
-		SupportsImageInput: m.SupportsImageInput(),
+		ID:                  strings.TrimSpace(id),
+		Label:               strings.TrimSpace(label),
+		Source:              modelSourceRuntimeConfig,
+		SourceLabel:         modelSourceRuntimeConfigLabel,
+		ContextWindow:       m.EffectiveInputWindowTokens(),
+		MaxOutputTokens:     m.MaxOutputTokens,
+		InputModalities:     m.NormalizedInputModalities(),
+		SupportsImageInput:  m.SupportsImageInput(),
+		ReasoningCapability: m.EffectiveReasoningCapability(providerType),
 	}
 }
 
@@ -1034,23 +1036,24 @@ func newToolID() (string, error) {
 }
 
 type preparedRun struct {
-	meta                 *session.Meta
-	req                  RunStartRequest
-	persistedUser        *persistedUserMessage
-	runID                string
-	channelID            string
-	endpointID           string
-	threadID             string
-	thKey                string
-	threadModelID        string
-	threadModelLocked    bool
-	cfg                  *config.AIConfig
-	uploadsDir           string
-	persistTO            time.Duration
-	db                   *threadstore.Store
-	messageID            string
-	r                    *run
-	updateThreadRunState func(status string, runErrorCode string, runErr string, waitingPrompt *RequestUserInputPrompt)
+	meta                         *session.Meta
+	req                          RunStartRequest
+	persistedUser                *persistedUserMessage
+	runID                        string
+	channelID                    string
+	endpointID                   string
+	threadID                     string
+	thKey                        string
+	threadModelID                string
+	threadModelLocked            bool
+	threadReasoningSelectionJSON string
+	cfg                          *config.AIConfig
+	uploadsDir                   string
+	persistTO                    time.Duration
+	db                           *threadstore.Store
+	messageID                    string
+	r                            *run
+	updateThreadRunState         func(status string, runErrorCode string, runErr string, waitingPrompt *RequestUserInputPrompt)
 }
 
 func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter) error {
@@ -1296,23 +1299,24 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	}
 
 	return &preparedRun{
-		meta:                 metaRef,
-		req:                  req,
-		persistedUser:        persistedCopy,
-		runID:                runID,
-		channelID:            channelID,
-		endpointID:           endpointID,
-		threadID:             threadID,
-		thKey:                thKey,
-		threadModelID:        strings.TrimSpace(th.ModelID),
-		threadModelLocked:    th.ModelLocked,
-		cfg:                  cfg,
-		uploadsDir:           uploadsDir,
-		persistTO:            persistTO,
-		db:                   db,
-		messageID:            messageID,
-		r:                    r,
-		updateThreadRunState: updateThreadRunState,
+		meta:                         metaRef,
+		req:                          req,
+		persistedUser:                persistedCopy,
+		runID:                        runID,
+		channelID:                    channelID,
+		endpointID:                   endpointID,
+		threadID:                     threadID,
+		thKey:                        thKey,
+		threadModelID:                strings.TrimSpace(th.ModelID),
+		threadModelLocked:            th.ModelLocked,
+		threadReasoningSelectionJSON: strings.TrimSpace(th.ReasoningSelectionJSON),
+		cfg:                          cfg,
+		uploadsDir:                   uploadsDir,
+		persistTO:                    persistTO,
+		db:                           db,
+		messageID:                    messageID,
+		r:                            r,
+		updateThreadRunState:         updateThreadRunState,
 	}, nil
 }
 
@@ -1420,6 +1424,25 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}
 	model := resolvedModel.ID
 	modelCapability := resolvedModel.Capability
+	reasoningCapability, modelDefaultReasoning := modelReasoningDefaultsFromCapability(modelCapability)
+	threadDefaultReasoning := unmarshalReasoningSelection(prepared.threadReasoningSelectionJSON)
+	reasoning, err := resolveEffectiveReasoning(reasoningCapability, req.Options.ReasoningSelection, threadDefaultReasoning, modelDefaultReasoning)
+	if err != nil {
+		return streamEarlyError(reasoningSelectionError(model, err))
+	}
+	req.Options.ReasoningSelection = reasoning.Effective
+	r.currentReasoning = reasoning.Effective
+	r.persistRunEvent("reasoning.selection.normalized", RealtimeStreamKindLifecycle, map[string]any{
+		"requested":      reasoning.Requested,
+		"effective":      reasoning.Effective,
+		"source":         reasoning.Source,
+		"adjusted":       reasoning.Adjusted,
+		"model":          model,
+		"wire_shape":     reasoningCapability.WireShape,
+		"matrix_fixture": reasoningCapability.Fixture,
+		"omitted":        reasoning.Effective.IsZero(),
+		"disabled":       reasoning.Effective.Level == config.AIReasoningLevelOff,
+	})
 	lockReasonCode := "thread_model_pending_lock"
 	if prepared.threadModelLocked {
 		lockReasonCode = "thread_model_locked"
@@ -1756,7 +1779,7 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 		}
 	}
 
-	modelCapability := defaultModelCapability(providerID, modelName)
+	modelCapability := r.resolveRunModelCapability(model)
 	if s.capabilityResolver != nil {
 		if capability, capErr := s.capabilityResolver.Resolve(ctx, providerCfg, model); capErr == nil {
 			modelCapability = capability
@@ -1769,6 +1792,7 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 		ID:                        model,
 		ProviderID:                providerID,
 		ModelName:                 modelName,
+		WireModelName:             strings.TrimSpace(modelCapability.WireModelName),
 		Provider:                  providerCfg,
 		Capability:                modelCapability,
 		DesktopModelSourceModelID: desktopModelSourceModelID,
@@ -1927,12 +1951,17 @@ func deriveEffectiveCurrentUserInput(input RunInput) effectiveCurrentUserInput {
 	return out
 }
 
-func defaultModelCapability(providerID string, modelName string) contextmodel.ModelCapability {
+func defaultModelCapability(providerID string, modelName string, wireModelName string) contextmodel.ModelCapability {
 	providerID = strings.TrimSpace(providerID)
 	modelName = strings.TrimSpace(modelName)
+	wireModelName = strings.TrimSpace(wireModelName)
+	if wireModelName == "" {
+		wireModelName = modelName
+	}
 	cap := contextmodel.ModelCapability{
 		ProviderID:                     providerID,
 		ModelName:                      modelName,
+		WireModelName:                  wireModelName,
 		SupportsTools:                  true,
 		SupportsParallelTools:          false,
 		SupportsStrictJSONSchema:       true,

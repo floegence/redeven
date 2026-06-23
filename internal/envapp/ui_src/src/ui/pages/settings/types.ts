@@ -1,4 +1,8 @@
 import type { FlowerProviderModelNoteKey } from '../../../../../../flower_ui/src/settings/providerModelNotes';
+import type {
+  FlowerReasoningCapability,
+  FlowerReasoningSelection,
+} from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 export type PermissionSet = Readonly<{ read: boolean; write: boolean; execute: boolean }>;
 
@@ -9,14 +13,17 @@ export type PermissionPolicy = Readonly<{
   by_app?: Record<string, PermissionSet>;
 }>;
 
-export type AIProviderType = 'openai' | 'anthropic' | 'moonshot' | 'chatglm' | 'deepseek' | 'qwen' | 'openai_compatible';
+export type AIProviderType = 'openai' | 'anthropic' | 'moonshot' | 'chatglm' | 'deepseek' | 'qwen' | 'openrouter' | 'xai' | 'groq' | 'ollama' | 'openai_compatible';
 
 export type AIProviderModel = Readonly<{
   model_name: string;
+  wire_model_name?: string;
   context_window?: number;
   max_output_tokens?: number;
   effective_context_window_percent?: number;
   input_modalities?: readonly AIInputModality[];
+  reasoning_capability?: FlowerReasoningCapability;
+  default_reasoning_selection?: FlowerReasoningSelection;
 }>;
 
 export type AIInputModality = 'text' | 'image';
@@ -259,10 +266,13 @@ export type PermissionRow = { key: string; read: boolean; write: boolean; execut
 
 export type AIProviderModelRow = {
   model_name: string;
+  wire_model_name?: string;
   context_window?: number;
   max_output_tokens?: number;
   effective_context_window_percent?: number;
   input_modalities?: AIInputModality[];
+  reasoning_capability?: FlowerReasoningCapability;
+  default_reasoning_selection?: FlowerReasoningSelection;
 };
 
 export type AIProviderRow = {
@@ -276,10 +286,13 @@ export type AIProviderRow = {
 
 export type AIProviderModelPreset = Readonly<{
   model_name: string;
+  wire_model_name?: string;
   context_window: number;
   max_output_tokens?: number;
   effective_context_window_percent?: number;
   input_modalities?: readonly AIInputModality[];
+  reasoning_capability?: FlowerReasoningCapability;
+  default_reasoning_selection?: FlowerReasoningSelection;
   note_key?: FlowerProviderModelNoteKey;
 }>;
 
