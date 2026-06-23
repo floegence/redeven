@@ -12,6 +12,7 @@ import (
 	fltools "github.com/floegence/floret/tools"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/config"
 )
 
 type recordingFlowerProvider struct {
@@ -32,37 +33,51 @@ func (p *rejectedContinuationFlowerProvider) StreamTurn(_ context.Context, req M
 	return ModelGatewayResult{}, errors.New("invalid previous_response_id")
 }
 
-func TestFloretProviderAdapter_DisableReasoningControlsProviderRequest(t *testing.T) {
+func TestFloretProviderAdapter_ReasoningSelectionControlsProviderRequest(t *testing.T) {
 	t.Parallel()
 
 	recorder := &recordingFlowerProvider{}
+	capability := config.AIReasoningCapability{
+		Kind:             "effort",
+		SupportedLevels:  []string{"off", "high"},
+		DefaultLevel:     "high",
+		DisableSupported: true,
+		WireShape:        "deepseek_reasoning_effort",
+		DisableShape:     "thinking.type=disabled",
+		SourceURLs:       []string{"https://api-docs.deepseek.com/guides/reasoning_model"},
+		SourceCheckedAt:  "2026-06-23",
+		Fixture:          "deepseek_v4_reasoning_effort",
+	}
 	adapter := newFloretProviderAdapter(
 		recorder,
 		"deepseek",
 		"deepseek-v4-pro",
 		"plan",
-		ProviderControls{ThinkingBudgetTokens: 4096},
+		ProviderControls{
+			ReasoningSelection:  config.AIReasoningSelection{Level: config.AIReasoningLevelHigh, BudgetTokens: 4096},
+			ReasoningCapability: capability,
+		},
 		TurnBudgets{},
 		"",
 	)
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
-		ThreadID:         "thread",
-		PromptScopeID:    "thread",
-		Model:            "deepseek-v4-pro",
-		Messages:         []flruntime.ModelMessage{{Role: "user", Content: "请生成标题"}},
-		MaxOutputTokens:  64,
-		DisableReasoning: true,
+		ThreadID:        "thread",
+		PromptScopeID:   "thread",
+		Model:           "deepseek-v4-pro",
+		Messages:        []flruntime.ModelMessage{{Role: "user", Content: "请生成标题"}},
+		MaxOutputTokens: 64,
+		Reasoning:       flruntime.ReasoningSelection{Level: flruntime.ReasoningLevelOff},
 	})
 	if err != nil {
 		t.Fatalf("StreamModel: %v", err)
 	}
 	for range stream {
 	}
-	if !recorder.req.ProviderControls.DisableReasoning {
-		t.Fatalf("DisableReasoning=false, want true")
+	if got := recorder.req.ProviderControls.ReasoningSelection; got.Level != config.AIReasoningLevelOff || got.BudgetTokens != 0 {
+		t.Fatalf("ReasoningSelection=%+v, want off with no budget", got)
 	}
-	if recorder.req.ProviderControls.ThinkingBudgetTokens != 0 {
-		t.Fatalf("ThinkingBudgetTokens=%d, want 0", recorder.req.ProviderControls.ThinkingBudgetTokens)
+	if recorder.req.ProviderControls.ReasoningCapability.WireShape != capability.WireShape {
+		t.Fatalf("ReasoningCapability=%+v, want %q wire shape", recorder.req.ProviderControls.ReasoningCapability, capability.WireShape)
 	}
 	if recorder.req.Budgets.MaxOutputToken != 64 {
 		t.Fatalf("MaxOutputToken=%d, want 64", recorder.req.Budgets.MaxOutputToken)

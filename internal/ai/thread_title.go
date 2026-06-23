@@ -81,13 +81,16 @@ func (s *Service) initResolvedProviderAdapter(resolved resolvedRunModel) (resolv
 		return resolvedProviderAdapter{}, errors.New("nil service")
 	}
 	providerType := strings.ToLower(strings.TrimSpace(resolved.Provider.Type))
-	modelName := strings.TrimSpace(resolved.ModelName)
+	modelName := strings.TrimSpace(resolved.WireModelName)
+	if modelName == "" {
+		modelName = strings.TrimSpace(resolved.ModelName)
+	}
 	if modelName == "" {
 		modelName = strings.TrimSpace(resolved.ID)
 	}
 
 	switch providerType {
-	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible":
+	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible":
 	case DesktopModelSourceProviderType:
 		s.mu.Lock()
 		modelSource := s.desktopModelSource
@@ -110,15 +113,20 @@ func (s *Service) initResolvedProviderAdapter(resolved resolvedRunModel) (resolv
 	default:
 		return resolvedProviderAdapter{}, fmt.Errorf("unsupported provider type %q", strings.TrimSpace(resolved.Provider.Type))
 	}
-	if s.resolveProviderKey == nil {
-		return resolvedProviderAdapter{}, errors.New("missing provider key resolver")
-	}
-	apiKey, ok, err := s.resolveProviderKey(resolved.ProviderID)
-	if err != nil {
-		return resolvedProviderAdapter{}, fmt.Errorf("resolve provider key failed: %w", err)
-	}
-	if !ok || strings.TrimSpace(apiKey) == "" {
-		return resolvedProviderAdapter{}, fmt.Errorf("missing api key for provider %q", resolved.ProviderID)
+	apiKey := ""
+	if providerType != "ollama" {
+		if s.resolveProviderKey == nil {
+			return resolvedProviderAdapter{}, errors.New("missing provider key resolver")
+		}
+		var ok bool
+		var err error
+		apiKey, ok, err = s.resolveProviderKey(resolved.ProviderID)
+		if err != nil {
+			return resolvedProviderAdapter{}, fmt.Errorf("resolve provider key failed: %w", err)
+		}
+		if !ok || strings.TrimSpace(apiKey) == "" {
+			return resolvedProviderAdapter{}, fmt.Errorf("missing api key for provider %q", resolved.ProviderID)
+		}
 	}
 	adapter, err := newProviderAdapter(providerType, strings.TrimSpace(resolved.Provider.BaseURL), strings.TrimSpace(apiKey), resolved.Provider.StrictToolSchema)
 	if err != nil {
@@ -138,7 +146,7 @@ func (s *Service) initStructuredOutputProvider(resolved resolvedRunModel) (Model
 	}
 	responseFormat := "json_object"
 	switch adapter.ProviderType {
-	case "openai_compatible", "moonshot", "chatglm", "deepseek", "qwen":
+	case "openai_compatible", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama":
 		// Some OpenAI-compatible endpoints return empty/incomplete outputs under forced
 		// json_object mode. Keep prompt-level JSON constraints and parse the text payload.
 		//
@@ -171,9 +179,12 @@ func (s *Service) generateAutoThreadTitleByModel(ctx context.Context, resolved r
 			{Role: "system", Content: []ContentPart{{Type: "text", Text: autoThreadTitleSystemPrompt}}},
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: buildAutoThreadTitleUserPrompt(threadID, messageID, userInput)}}},
 		},
-		Budgets:          TurnBudgets{MaxOutputToken: autoThreadTitleMaxTokens},
-		ModeFlags:        ModeFlags{Mode: config.AIModePlan},
-		ProviderControls: ProviderControls{DisableReasoning: true},
+		Budgets:   TurnBudgets{MaxOutputToken: autoThreadTitleMaxTokens},
+		ModeFlags: ModeFlags{Mode: config.AIModePlan},
+		ProviderControls: ProviderControls{
+			ReasoningSelection:  shortRequestReasoningSelection(resolved.Capability.ReasoningCapability),
+			ReasoningCapability: resolved.Capability.ReasoningCapability,
+		},
 	}, nil)
 	if err != nil {
 		return autoThreadTitleDecision{}, err
@@ -183,6 +194,23 @@ func (s *Service) generateAutoThreadTitleByModel(ctx context.Context, resolved r
 		return autoThreadTitleDecision{}, errors.New("empty generated thread title")
 	}
 	return autoThreadTitleDecision{Title: title, Source: autoThreadTitleSourceModel}, nil
+}
+
+func shortRequestReasoningSelection(capability config.AIReasoningCapability) config.AIReasoningSelection {
+	capability = capability.Normalize()
+	if capability.IsZero() {
+		return config.AIReasoningSelection{}
+	}
+	if capability.SupportsLevel(config.AIReasoningLevelOff) {
+		return config.AIReasoningSelection{Level: config.AIReasoningLevelOff}
+	}
+	if capability.SupportsLevel(config.AIReasoningLevelMinimal) {
+		return config.AIReasoningSelection{Level: config.AIReasoningLevelMinimal}
+	}
+	if capability.SupportsLevel(config.AIReasoningLevelLow) {
+		return config.AIReasoningSelection{Level: config.AIReasoningLevelLow}
+	}
+	return config.AIReasoningSelection{}
 }
 
 func buildAutoThreadTitleUserPrompt(threadID string, messageID string, userInput string) string {

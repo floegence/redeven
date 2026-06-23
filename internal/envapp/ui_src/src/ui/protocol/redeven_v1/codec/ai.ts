@@ -45,6 +45,7 @@ import type {
   wire_ai_request_user_input_question,
   wire_ai_waiting_prompt,
 } from '../wire/ai';
+import { serializeFlowerReasoningSelection } from '../../../../../../../flower_ui/src/reasoning';
 
 function toAIActiveRun(raw: wire_ai_active_run): AIActiveRun {
   return {
@@ -168,15 +169,16 @@ function fromWireAIWaitingPrompt(raw: wire_ai_waiting_prompt | undefined): AIReq
     ? raw.questions.map(fromWireAIRequestUserInputQuestion).filter(Boolean) as AIRequestUserInputQuestion[]
     : [];
   if (questions.length === 0) return undefined;
-  return {
-    promptId,
-    messageId,
-    toolId,
-    toolName,
-    reasonCode: String(raw?.reason_code ?? '').trim() || undefined,
-    requiredFromUser: Array.isArray(raw?.required_from_user)
-      ? raw.required_from_user.map((item) => String(item ?? '').trim()).filter(Boolean)
-      : undefined,
+	return {
+		promptId,
+		messageId,
+		toolId,
+		toolName,
+		reasonCode: String(raw?.reason_code ?? '').trim() || undefined,
+		reasoningSelection: serializeFlowerReasoningSelection(raw?.reasoning_selection),
+		requiredFromUser: Array.isArray(raw?.required_from_user)
+			? raw.required_from_user.map((item) => String(item ?? '').trim()).filter(Boolean)
+			: undefined,
     evidenceRefs: Array.isArray(raw?.evidence_refs)
       ? raw.evidence_refs.map((item) => String(item ?? '').trim()).filter(Boolean)
       : undefined,
@@ -194,6 +196,7 @@ function toWireAIRequestUserInputAnswer(answer: AIRequestUserInputAnswer): wire_
 }
 
 export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai_send_user_turn_req {
+  const reasoningSelection = serializeFlowerReasoningSelection(req.options?.reasoningSelection);
   return {
     thread_id: String(req.threadId ?? '').trim(),
     model: req.model?.trim() ? req.model.trim() : undefined,
@@ -213,6 +216,7 @@ export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai
     },
     options: {
       mode: req.options?.mode ? String(req.options.mode).trim() : undefined,
+      ...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {}),
     },
     expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
     queue_after_waiting_user: Boolean(req.queueAfterWaitingUser),
@@ -239,6 +243,7 @@ export function toWireAISubmitRequestUserInputResponseRequest(req: AISubmitReque
     if (!qid) continue;
     answers[qid] = toWireAIRequestUserInputAnswer(answer);
   }
+  const reasoningSelection = serializeFlowerReasoningSelection(req.options?.reasoningSelection);
   return {
     thread_id: String(req.threadId ?? '').trim(),
     model: req.model?.trim() ? req.model.trim() : undefined,
@@ -261,6 +266,7 @@ export function toWireAISubmitRequestUserInputResponseRequest(req: AISubmitReque
     },
     options: {
       mode: req.options?.mode ? String(req.options.mode).trim() : undefined,
+      ...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {}),
     },
     expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
     source_followup_id: req.sourceFollowupId?.trim() ? String(req.sourceFollowupId).trim() : undefined,

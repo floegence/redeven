@@ -930,7 +930,7 @@ func TestFlowerLiveThreadSummaryUpdateIncludesThreadPatch(t *testing.T) {
 	}
 	svc := newRealtimeTestService(t, 0)
 	ctx := context.Background()
-	th, err := svc.CreateThread(ctx, &meta, "before title", "", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "before title", "openai/gpt-5-mini", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -961,6 +961,78 @@ func TestFlowerLiveThreadSummaryUpdateIncludesThreadPatch(t *testing.T) {
 	}
 	if strings.TrimSpace(payload.Patch.Title) != "after title" {
 		t.Fatalf("thread patch title=%q, want after title", payload.Patch.Title)
+	}
+	if want := strings.TrimSpace(th.ModelID); strings.TrimSpace(payload.Patch.ModelID) != want {
+		t.Fatalf("thread patch model_id=%q, want %q", payload.Patch.ModelID, want)
+	}
+	if !payload.Patch.ReasoningSelectionSet {
+		t.Fatalf("thread patch missing reasoning_selection presence")
+	}
+	if payload.Patch.ReasoningSelection == nil || payload.Patch.ReasoningSelection.Level != config.AIReasoningLevelMedium {
+		t.Fatalf("thread patch reasoning_selection=%+v, want medium", payload.Patch.ReasoningSelection)
+	}
+	if !payload.Patch.ReasoningCapabilitySet || payload.Patch.ReasoningCapability == nil {
+		t.Fatalf("thread patch missing reasoning_capability")
+	}
+}
+
+func TestFlowerLiveThreadSummaryClearsReasoningForUnsupportedModel(t *testing.T) {
+	t.Parallel()
+
+	meta := session.Meta{
+		EndpointID:        "env_live_reasoning_clear",
+		NamespacePublicID: "ns_live_reasoning_clear",
+		ChannelID:         "ch_live_reasoning_clear",
+		UserPublicID:      "u_live_reasoning_clear",
+		UserEmail:         "live-reasoning-clear@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+	svc := newRealtimeTestService(t, 0)
+	svc.mu.Lock()
+	svc.cfg = &config.AIConfig{
+		Providers: []config.AIProvider{{
+			ID:      "compat",
+			Type:    "openai_compatible",
+			BaseURL: "https://example.invalid/v1",
+			Models:  []config.AIProviderModel{{ModelName: "plain-model"}},
+		}},
+	}
+	svc.mu.Unlock()
+
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "plain", "compat/plain-model", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if err := svc.RenameThread(ctx, &meta, th.ThreadID, "plain renamed"); err != nil {
+		t.Fatalf("RenameThread: %v", err)
+	}
+	resp, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, 0, 10)
+	if err != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents: %v", err)
+	}
+	var payload FlowerLiveThreadPatchedPayload
+	found := false
+	for i := range resp.Events {
+		if resp.Events[i].Kind != FlowerLiveThreadPatched {
+			continue
+		}
+		if decodeFlowerPayload(resp.Events[i].Payload, &payload) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("events=%#v, want thread.patched", resp.Events)
+	}
+	if !payload.Patch.ReasoningSelectionSet || payload.Patch.ReasoningSelection != nil {
+		t.Fatalf("reasoning_selection=%+v set=%v, want explicit null", payload.Patch.ReasoningSelection, payload.Patch.ReasoningSelectionSet)
+	}
+	if !payload.Patch.ReasoningCapabilitySet || payload.Patch.ReasoningCapability != nil {
+		t.Fatalf("reasoning_capability=%+v set=%v, want explicit null", payload.Patch.ReasoningCapability, payload.Patch.ReasoningCapabilitySet)
 	}
 }
 

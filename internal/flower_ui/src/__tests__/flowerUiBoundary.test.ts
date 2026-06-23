@@ -139,6 +139,33 @@ describe('shared Flower UI boundary', () => {
     expect(launcherSrc).not.toContain('onSend');
   });
 
+	it('sends only explicit per-turn reasoning overrides from the composer', () => {
+		const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
+
+		expect(surfaceSrc).toContain('const selectedWaitingReasoningSelection = createMemo');
+		expect(surfaceSrc).toContain('const composerReasoningOverride = createMemo');
+		expect(surfaceSrc).toContain('const composerReasoningSelection = createMemo(() => composerReasoningOverride() ?? selectedWaitingReasoningSelection() ?? selectedThreadReasoningSelection())');
+		expect(surfaceSrc).toContain('const reasoningOverride = serializeFlowerReasoningSelection(composerReasoningOverride())');
+		expect(surfaceSrc).toContain('...(reasoningOverride ? { reasoning_selection: reasoningOverride } : {})');
+		expect(surfaceSrc).toContain('const reasoningSelection = serializeFlowerReasoningSelection(composerReasoningOverride() ?? selectedWaitingReasoningSelection())');
+		expect(surfaceSrc).toContain('...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {})');
+		expect(surfaceSrc).not.toContain('const reasoningSelection = serializeFlowerReasoningSelection(composerReasoningSelection())');
+		expect(surfaceSrc).not.toContain('serializeFlowerReasoningSelection(composerReasoningSelection()) ? { reasoning_selection');
+  });
+
+  it('exposes a reset affordance for thread reasoning defaults', () => {
+    const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
+    const controlSrc = readText(path.join(flowerRoot, 'ReasoningControl.tsx'));
+    const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));
+
+		expect(surfaceSrc).toContain('resetLabel="Reset thread reasoning"');
+		expect(controlSrc).toContain('class="flower-reasoning-reset"');
+		expect(controlSrc).toContain('onClick={() => props.onChange?.(undefined)}');
+		expect(readText(path.join(flowerRoot, 'runtimeFlowerSurfaceAdapter.ts'))).toContain('reasoning_selection: selection ?? null');
+		expect(cssSrc).toContain('.flower-reasoning-reset');
+		expect(cssSrc).toContain('cursor: pointer;');
+	});
+
   it('keeps thread sidebar indicators as visual primitives instead of lifecycle color dots', () => {
     const modelSrc = readText(path.join(flowerRoot, 'threads', 'threadListModel.ts'));
     const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));

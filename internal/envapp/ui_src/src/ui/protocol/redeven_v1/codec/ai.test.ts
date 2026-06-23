@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   fromWireAIEventNotify,
+  toWireAISubmitRequestUserInputResponseRequest,
   toWireAISendUserTurnRequest,
 } from './ai';
 
@@ -58,21 +59,95 @@ describe('Redeven v1 AI codec', () => {
     expect(JSON.stringify(req.input.context_action)).not.toContain('grant');
   });
 
-  it('preserves request_user_input tool_name in realtime waiting prompts', () => {
-    const event = fromWireAIEventNotify({
+  it('encodes reasoning selection in turn options', () => {
+    const req = toWireAISendUserTurnRequest({
+      threadId: 'th_reasoning',
+      input: {
+        text: 'Think carefully',
+        attachments: [],
+      },
+      options: {
+        mode: 'act',
+        reasoningSelection: { level: 'high', budget_tokens: 4096 },
+      },
+    });
+
+    expect(req.options?.reasoning_selection).toEqual({
+      level: 'high',
+      budget_tokens: 4096,
+    });
+  });
+
+  it('omits reasoning selection from turn options when no override is provided', () => {
+    const req = toWireAISendUserTurnRequest({
+      threadId: 'th_reasoning',
+      input: {
+        text: 'Use the thread default',
+        attachments: [],
+      },
+      options: {
+        mode: 'act',
+      },
+    });
+
+    expect(req.options).not.toHaveProperty('reasoning_selection');
+  });
+
+  it('encodes reasoning selection in input response options', () => {
+    const req = toWireAISubmitRequestUserInputResponseRequest({
+      threadId: 'th_reasoning',
+      response: {
+        promptId: 'prompt_1',
+        answers: { next: { choiceId: 'continue' } },
+      },
+      input: {
+        text: '',
+        attachments: [],
+      },
+      options: {
+        mode: 'act',
+        reasoningSelection: { level: 'high' },
+      },
+    });
+
+    expect(req.options?.reasoning_selection).toEqual({ level: 'high' });
+  });
+
+  it('omits reasoning selection from input response options when no stored selection is provided', () => {
+    const req = toWireAISubmitRequestUserInputResponseRequest({
+      threadId: 'th_reasoning',
+      response: {
+        promptId: 'prompt_1',
+        answers: { next: { choiceId: 'continue' } },
+      },
+      input: {
+        text: '',
+        attachments: [],
+      },
+      options: {
+        mode: 'act',
+      },
+    });
+
+    expect(req.options).not.toHaveProperty('reasoning_selection');
+  });
+
+	it('preserves request_user_input tool_name in realtime waiting prompts', () => {
+		const event = fromWireAIEventNotify({
       event_type: 'thread_state',
       endpoint_id: 'env-1',
       thread_id: 'thread-1',
       run_id: 'run-1',
       at_unix_ms: 1000,
       run_status: 'waiting_user',
-      waiting_prompt: {
-        prompt_id: 'prompt-1',
-        message_id: 'message-1',
-        tool_id: 'tool-1',
-        tool_name: 'ask_user',
-        questions: [{
-          id: 'next_step',
+			waiting_prompt: {
+				prompt_id: 'prompt-1',
+				message_id: 'message-1',
+				tool_id: 'tool-1',
+				tool_name: 'ask_user',
+				reasoning_selection: { level: 'high' },
+				questions: [{
+					id: 'next_step',
           header: 'Need input',
           question: 'Choose the next step.',
           is_secret: false,
@@ -82,13 +157,14 @@ describe('Redeven v1 AI codec', () => {
       },
     });
 
-    expect(event?.waitingPrompt).toEqual(expect.objectContaining({
-      promptId: 'prompt-1',
-      messageId: 'message-1',
-      toolId: 'tool-1',
-      toolName: 'ask_user',
-    }));
-  });
+		expect(event?.waitingPrompt).toEqual(expect.objectContaining({
+			promptId: 'prompt-1',
+			messageId: 'message-1',
+			toolId: 'tool-1',
+			toolName: 'ask_user',
+			reasoningSelection: { level: 'high' },
+		}));
+	});
 
   it('decodes thread run error codes from realtime events', () => {
     const event = fromWireAIEventNotify({

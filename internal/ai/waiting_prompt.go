@@ -603,6 +603,7 @@ func normalizeRequestUserInputPrompt(prompt *RequestUserInputPrompt) *RequestUse
 	out.ToolID = strings.TrimSpace(out.ToolID)
 	out.ToolName = strings.TrimSpace(out.ToolName)
 	out.PromptID = strings.TrimSpace(out.PromptID)
+	out.ReasoningSelection = config.NormalizeAIReasoningSelection(out.ReasoningSelection)
 	if out.PromptID == "" {
 		out.PromptID = buildRequestUserInputPromptID(out.MessageID, out.ToolID)
 	}
@@ -648,16 +649,17 @@ func parseRequestUserInputPromptJSON(raw string) *RequestUserInputPrompt {
 		return nil
 	}
 	var payload struct {
-		PromptID         string           `json:"prompt_id"`
-		MessageID        string           `json:"message_id"`
-		ToolID           string           `json:"tool_id"`
-		ToolName         string           `json:"tool_name"`
-		ReasonCode       string           `json:"reason_code"`
-		RequiredFromUser []string         `json:"required_from_user"`
-		EvidenceRefs     []string         `json:"evidence_refs"`
-		Questions        []map[string]any `json:"questions"`
-		PublicSummary    string           `json:"public_summary"`
-		ContainsSecret   bool             `json:"contains_secret"`
+		PromptID           string                      `json:"prompt_id"`
+		MessageID          string                      `json:"message_id"`
+		ToolID             string                      `json:"tool_id"`
+		ToolName           string                      `json:"tool_name"`
+		ReasonCode         string                      `json:"reason_code"`
+		ReasoningSelection config.AIReasoningSelection `json:"reasoning_selection"`
+		RequiredFromUser   []string                    `json:"required_from_user"`
+		EvidenceRefs       []string                    `json:"evidence_refs"`
+		Questions          []map[string]any            `json:"questions"`
+		PublicSummary      string                      `json:"public_summary"`
+		ContainsSecret     bool                        `json:"contains_secret"`
 	}
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		return nil
@@ -671,16 +673,17 @@ func parseRequestUserInputPromptJSON(raw string) *RequestUserInputPrompt {
 		questions = append(questions, question)
 	}
 	return strictRequestUserInputPrompt(&RequestUserInputPrompt{
-		PromptID:         payload.PromptID,
-		MessageID:        payload.MessageID,
-		ToolID:           payload.ToolID,
-		ToolName:         payload.ToolName,
-		ReasonCode:       payload.ReasonCode,
-		RequiredFromUser: payload.RequiredFromUser,
-		EvidenceRefs:     payload.EvidenceRefs,
-		Questions:        questions,
-		PublicSummary:    payload.PublicSummary,
-		ContainsSecret:   payload.ContainsSecret,
+		PromptID:           payload.PromptID,
+		MessageID:          payload.MessageID,
+		ToolID:             payload.ToolID,
+		ToolName:           payload.ToolName,
+		ReasonCode:         payload.ReasonCode,
+		ReasoningSelection: payload.ReasoningSelection,
+		RequiredFromUser:   payload.RequiredFromUser,
+		EvidenceRefs:       payload.EvidenceRefs,
+		Questions:          questions,
+		PublicSummary:      payload.PublicSummary,
+		ContainsSecret:     payload.ContainsSecret,
 	})
 }
 

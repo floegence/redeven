@@ -5,16 +5,49 @@ export type FlowerProviderType =
   | 'chatglm'
   | 'deepseek'
   | 'qwen'
+  | 'openrouter'
+  | 'xai'
+  | 'groq'
+  | 'ollama'
   | 'openai_compatible';
 
 export type FlowerWebSearchMode = 'disabled' | 'openai_builtin' | 'brave';
 
+export type FlowerReasoningLevel = 'default' | 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+export type FlowerReasoningSelection = Readonly<{
+  level?: FlowerReasoningLevel;
+  budget_tokens?: number;
+}>;
+
+export type FlowerReasoningCapability = Readonly<{
+  kind?: string;
+  supported_levels?: readonly FlowerReasoningLevel[];
+  default_level?: FlowerReasoningLevel;
+  disable_supported?: boolean;
+  default_enabled?: boolean;
+  wire_shape?: string;
+  disable_shape?: string;
+  budget_shape?: string;
+  min_budget_tokens?: number;
+  max_budget_tokens?: number;
+  dynamic_provider_metadata?: boolean;
+  response_reasoning_fields?: readonly string[];
+  history_replay_requirements?: readonly string[];
+  source_urls?: readonly string[];
+  source_checked_at?: string;
+  fixture?: string;
+}>;
+
 export type FlowerProviderModel = Readonly<{
   model_name: string;
+  wire_model_name?: string;
   context_window?: number;
   max_output_tokens?: number;
   effective_context_window_percent?: number;
   input_modalities?: readonly string[];
+  reasoning_capability?: FlowerReasoningCapability;
+  default_reasoning_selection?: FlowerReasoningSelection;
 }>;
 
 export type FlowerProvider = Readonly<{
@@ -245,6 +278,7 @@ export type FlowerInputRequest = Readonly<{
   tool_id: string;
   tool_name: string;
   reason_code?: string;
+  reasoning_selection?: FlowerReasoningSelection;
   required_from_user?: readonly string[];
   evidence_refs?: readonly string[];
   questions: readonly FlowerInputRequestQuestion[];
@@ -261,6 +295,7 @@ export type FlowerSubmitInputRequest = Readonly<{
   thread_id: string;
   prompt_id: string;
   answers: Readonly<Record<string, FlowerInputAnswer>>;
+  reasoning_selection?: FlowerReasoningSelection;
 }>;
 
 export type FlowerThreadActivitySnapshot = Readonly<{
@@ -300,6 +335,8 @@ export type FlowerThreadSnapshot = Readonly<{
   target_labels: readonly string[];
   messages: readonly FlowerChatMessage[];
   model_io_status?: FlowerModelIOStatus | null;
+  reasoning_selection?: FlowerReasoningSelection;
+  reasoning_capability?: FlowerReasoningCapability;
   approval_actions?: readonly FlowerApprovalAction[];
   input_request?: FlowerInputRequest | null;
   error?: FlowerThreadError | null;
@@ -390,6 +427,8 @@ export type FlowerLiveThreadPatch = Readonly<{
   updated_at_ms?: number;
   last_message_at_ms?: number;
   last_message_preview?: string;
+  reasoning_selection?: FlowerReasoningSelection | null;
+  reasoning_capability?: FlowerReasoningCapability | null;
   read_status?: FlowerThreadReadStatus;
 }>;
 
@@ -649,6 +688,7 @@ export type FlowerTurnLaunchInput = Readonly<{
   pending_files?: readonly File[];
   working_dir?: string;
   mode?: 'act' | 'plan';
+  reasoning_selection?: FlowerReasoningSelection;
 }>;
 
 export type FlowerTurnLaunchFailure = Error & Readonly<{
@@ -755,6 +795,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerLiveBootstrap>;
   renameThread?: (threadID: string, title: string) => Promise<FlowerLiveBootstrap>;
   setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerLiveBootstrap>;
+  setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerLiveBootstrap>;
   forkThread?: (threadID: string) => Promise<FlowerLiveBootstrap>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerLiveBootstrap>;

@@ -285,7 +285,7 @@ func TestFloretEventSinkRecordsSourceObservations(t *testing.T) {
 func TestRedevenFloretGatewayConfigDoesNotCarryProviderConfiguration(t *testing.T) {
 	t.Parallel()
 
-	cfg := redevenFloretAdapterConfig("system", floretContextPolicy(1000, 800, 200))
+	cfg := redevenFloretAdapterConfig("system", floretContextPolicy(1000, 800, 200), config.AIReasoningSelection{Level: config.AIReasoningLevelLow})
 	if cfg.Provider != flconfig.ProviderFake {
 		t.Fatalf("provider=%q, want fake adapter identity", cfg.Provider)
 	}
@@ -294,6 +294,9 @@ func TestRedevenFloretGatewayConfigDoesNotCarryProviderConfiguration(t *testing.
 	}
 	if cfg.BaseURL != "" || cfg.APIKey != "" {
 		t.Fatalf("Floret config must not carry Redeven provider endpoint or secret: base_url=%q api_key=%q", cfg.BaseURL, cfg.APIKey)
+	}
+	if cfg.Reasoning.Level != config.AIReasoningLevelLow {
+		t.Fatalf("reasoning=%+v, want low selection", cfg.Reasoning)
 	}
 }
 

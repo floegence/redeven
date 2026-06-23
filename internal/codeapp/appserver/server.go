@@ -3587,7 +3587,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		th, err := g.ai.CreateThread(r.Context(), meta, body.Title, body.ModelID, body.ExecutionMode, body.WorkingDir)
+		th, err := g.ai.CreateThreadWithOptions(r.Context(), meta, body)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
@@ -3730,7 +3730,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			if body.Title == nil && body.ModelID == nil && body.ExecutionMode == nil && body.Pinned == nil {
+			if body.Title == nil && body.ModelID == nil && body.ExecutionMode == nil && body.Pinned == nil && body.ReasoningSelection == nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 				return
 			}
@@ -3758,6 +3758,28 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			if body.ExecutionMode != nil {
 				if err := g.ai.SetThreadExecutionMode(r.Context(), meta, threadID, *body.ExecutionMode); err != nil {
+					status := http.StatusBadRequest
+					if errors.Is(err, sql.ErrNoRows) {
+						status = http.StatusNotFound
+					}
+					writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+					return
+				}
+			}
+			if body.ReasoningSelection != nil {
+				raw := bytes.TrimSpace(body.ReasoningSelection)
+				var err error
+				if bytes.Equal(raw, []byte("null")) {
+					err = g.ai.ClearThreadReasoningSelection(r.Context(), meta, threadID)
+				} else {
+					var selection config.AIReasoningSelection
+					if len(raw) == 0 || raw[0] != '{' || json.Unmarshal(raw, &selection) != nil {
+						writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid reasoning_selection"})
+						return
+					}
+					err = g.ai.SetThreadReasoningSelection(r.Context(), meta, threadID, selection)
+				}
+				if err != nil {
 					status := http.StatusBadRequest
 					if errors.Is(err, sql.ErrNoRows) {
 						status = http.StatusNotFound

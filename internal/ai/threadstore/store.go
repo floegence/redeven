@@ -106,6 +106,7 @@ type Thread struct {
 	NamespacePublicID      string `json:"namespace_public_id"`
 	ModelID                string `json:"model_id"`
 	ModelLocked            bool   `json:"model_locked"`
+	ReasoningSelectionJSON string `json:"reasoning_selection_json"`
 	ExecutionMode          string `json:"execution_mode"`
 	WorkingDir             string `json:"working_dir"`
 	Title                  string `json:"title"`
@@ -190,7 +191,7 @@ type ThreadsCursor struct {
 }
 
 const threadSelectColumnsSQL = `
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
+  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, reasoning_selection_json, execution_mode, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error_code, run_error,
   waiting_user_input_json, last_context_run_id, pinned_at_unix_ms,
@@ -214,6 +215,7 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 		&t.NamespacePublicID,
 		&t.ModelID,
 		&modelLockedInt,
+		&t.ReasoningSelectionJSON,
 		&t.ExecutionMode,
 		&t.WorkingDir,
 		&t.Title,
@@ -241,6 +243,7 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 		return err
 	}
 	t.ModelLocked = modelLockedInt != 0
+	t.ReasoningSelectionJSON = strings.TrimSpace(t.ReasoningSelectionJSON)
 	t.TitleSource = normalizeThreadTitleSource(t.TitleSource)
 	t.TitleInputMessageID = strings.TrimSpace(t.TitleInputMessageID)
 	t.TitleModelID = strings.TrimSpace(t.TitleModelID)
@@ -506,6 +509,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	t.EndpointID = strings.TrimSpace(t.EndpointID)
 	t.NamespacePublicID = strings.TrimSpace(t.NamespacePublicID)
 	t.ModelID = strings.TrimSpace(t.ModelID)
+	t.ReasoningSelectionJSON = strings.TrimSpace(t.ReasoningSelectionJSON)
 	t.ExecutionMode = normalizeExecutionMode(t.ExecutionMode)
 	t.WorkingDir = strings.TrimSpace(t.WorkingDir)
 	t.Title = strings.TrimSpace(t.Title)
@@ -545,8 +549,8 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	}
 
 	_, err = s.db.ExecContext(ctx, `
-	INSERT INTO ai_threads(
-	  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
+		INSERT INTO ai_threads(
+		  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, reasoning_selection_json, execution_mode, working_dir, title,
 	  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
 	  run_status, run_updated_at_unix_ms, run_error_code, run_error,
 	  waiting_user_input_json, last_context_run_id,
@@ -554,13 +558,14 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	  updated_by_user_public_id, updated_by_user_email,
 	  created_at_unix_ms, updated_at_unix_ms,
 	  last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
-	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		t.ThreadID,
 		t.EndpointID,
 		t.NamespacePublicID,
 		t.ModelID,
 		boolToInt(t.ModelLocked),
+		t.ReasoningSelectionJSON,
 		t.ExecutionMode,
 		t.WorkingDir,
 		t.Title,
@@ -610,6 +615,67 @@ UPDATE ai_threads
 SET model_id = ?
 WHERE endpoint_id = ? AND thread_id = ?
 `, modelID, endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Store) UpdateThreadModelAndReasoningSelection(ctx context.Context, endpointID string, threadID string, modelID string, reasoningSelectionJSON string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	modelID = strings.TrimSpace(modelID)
+	reasoningSelectionJSON = strings.TrimSpace(reasoningSelectionJSON)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid request")
+	}
+	if modelID == "" {
+		return errors.New("missing model_id")
+	}
+	res, err := s.db.ExecContext(ctx, `
+UPDATE ai_threads
+SET model_id = ?,
+    reasoning_selection_json = ?
+WHERE endpoint_id = ? AND thread_id = ?
+`, modelID, reasoningSelectionJSON, endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+func (s *Store) UpdateThreadReasoningSelection(ctx context.Context, endpointID string, threadID string, reasoningSelectionJSON string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	reasoningSelectionJSON = strings.TrimSpace(reasoningSelectionJSON)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid request")
+	}
+	res, err := s.db.ExecContext(ctx, `
+UPDATE ai_threads
+SET reasoning_selection_json = ?
+WHERE endpoint_id = ? AND thread_id = ?
+`, reasoningSelectionJSON, endpointID, threadID)
 	if err != nil {
 		return err
 	}

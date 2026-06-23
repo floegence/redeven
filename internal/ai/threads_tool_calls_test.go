@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -173,5 +174,30 @@ func TestMarshalQueuedTurnOptions_PreservesNoUserInteraction(t *testing.T) {
 	}
 	if opts.Mode != "plan" {
 		t.Fatalf("mode=%q, want plan", opts.Mode)
+	}
+}
+
+func TestQueuedTurnRecordToRunStartRequest_PreservesStoredReasoningSelection(t *testing.T) {
+	t.Parallel()
+
+	rec := threadstore.QueuedTurn{
+		ThreadID:    "th_queue_reasoning",
+		ModelID:     "openai/gpt-5.5",
+		MessageID:   "m_queue_reasoning",
+		TextContent: "continue later",
+		OptionsJSON: marshalQueuedTurnOptions(RunOptions{
+			Mode:               "act",
+			ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelHigh},
+		}),
+	}
+	req, err := queuedTurnRecordToRunStartRequest(rec, "plan")
+	if err != nil {
+		t.Fatalf("queuedTurnRecordToRunStartRequest: %v", err)
+	}
+	if req.Options.Mode != "act" {
+		t.Fatalf("mode=%q, want stored act mode", req.Options.Mode)
+	}
+	if req.Options.ReasoningSelection.Level != config.AIReasoningLevelHigh {
+		t.Fatalf("reasoning_selection=%+v, want stored high selection", req.Options.ReasoningSelection)
 	}
 }

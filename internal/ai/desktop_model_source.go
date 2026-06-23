@@ -60,14 +60,15 @@ type AIRuntimeStatus struct {
 }
 
 type DesktopModelSourceModel struct {
-	ID                            string   `json:"id"`
-	Label                         string   `json:"label,omitempty"`
-	Provider                      string   `json:"provider,omitempty"`
-	ContextWindow                 int      `json:"context_window,omitempty"`
-	MaxOutputTokens               int      `json:"max_output_tokens,omitempty"`
-	EffectiveContextWindowPercent int      `json:"effective_context_window_percent,omitempty"`
-	InputModalities               []string `json:"input_modalities,omitempty"`
-	SupportsImageInput            bool     `json:"supports_image_input,omitempty"`
+	ID                            string                       `json:"id"`
+	Label                         string                       `json:"label,omitempty"`
+	Provider                      string                       `json:"provider,omitempty"`
+	ContextWindow                 int                          `json:"context_window,omitempty"`
+	MaxOutputTokens               int                          `json:"max_output_tokens,omitempty"`
+	EffectiveContextWindowPercent int                          `json:"effective_context_window_percent,omitempty"`
+	InputModalities               []string                     `json:"input_modalities,omitempty"`
+	SupportsImageInput            bool                         `json:"supports_image_input,omitempty"`
+	ReasoningCapability           config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
 }
 
 type DesktopModelSourceModelSnapshot struct {
@@ -1136,6 +1137,7 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 				EffectiveContextWindowPercent: m.EffectiveContextWindowPercent,
 				InputModalities:               m.NormalizedInputModalities(),
 				SupportsImageInput:            m.SupportsImageInput(),
+				ReasoningCapability:           m.EffectiveReasoningCapability(strings.TrimSpace(p.Type)),
 			}
 			out.Models = append(out.Models, model)
 			registry[publicID] = desktopModelSourceRegistryEntry{

@@ -18,6 +18,11 @@ export const FLOWER_PROVIDER_MODEL_NOTE_KEYS = [
   'qwen36_plus_snapshot',
   'qwen36_flash',
   'qwen36_flash_snapshot',
+  'openrouter_dynamic_metadata',
+  'xai_grok_43',
+  'groq_qwen_reasoning',
+  'groq_gpt_oss',
+  'ollama_local_reasoning_metadata',
 ] as const;
 
 export type FlowerProviderModelNoteKey = typeof FLOWER_PROVIDER_MODEL_NOTE_KEYS[number];
@@ -42,6 +47,11 @@ const EN_US_MODEL_NOTES: Readonly<Record<FlowerProviderModelNoteKey, string>> = 
   qwen36_plus_snapshot: 'Pinned Qwen3.6 Plus snapshot with built-in web search',
   qwen36_flash: 'Current Qwen3.6 Flash with built-in web search',
   qwen36_flash_snapshot: 'Pinned Qwen3.6 Flash snapshot with built-in web search',
+  openrouter_dynamic_metadata: 'Uses OpenRouter model metadata for reasoning controls',
+  xai_grok_43: 'xAI Grok model with official reasoning effort controls',
+  groq_qwen_reasoning: 'Groq Qwen reasoning model with default/off reasoning',
+  groq_gpt_oss: 'Groq GPT-OSS model with low, medium, and high reasoning',
+  ollama_local_reasoning_metadata: 'Local Ollama model family with dynamic thinking support',
 };
 
 const ZH_CN_MODEL_NOTES: Readonly<Record<FlowerProviderModelNoteKey, string>> = {
@@ -64,6 +74,11 @@ const ZH_CN_MODEL_NOTES: Readonly<Record<FlowerProviderModelNoteKey, string>> = 
   qwen36_plus_snapshot: '内置 web search 的 Qwen3.6 Plus 固定快照',
   qwen36_flash: '内置 web search 的当前 Qwen3.6 Flash',
   qwen36_flash_snapshot: '内置 web search 的 Qwen3.6 Flash 固定快照',
+  openrouter_dynamic_metadata: '使用 OpenRouter model metadata 展示 reasoning 控制',
+  xai_grok_43: '支持官方 reasoning effort 控制的 xAI Grok model',
+  groq_qwen_reasoning: '支持 default/off reasoning 的 Groq Qwen reasoning model',
+  groq_gpt_oss: '支持 low、medium、high reasoning 的 Groq GPT-OSS model',
+  ollama_local_reasoning_metadata: '通过动态 thinking 支持识别的本地 Ollama model family',
 };
 
 const ZH_TW_MODEL_NOTES: Readonly<Record<FlowerProviderModelNoteKey, string>> = {
@@ -86,6 +101,11 @@ const ZH_TW_MODEL_NOTES: Readonly<Record<FlowerProviderModelNoteKey, string>> = 
   qwen36_plus_snapshot: '內建 web search 的 Qwen3.6 Plus 固定快照',
   qwen36_flash: '內建 web search 的目前 Qwen3.6 Flash',
   qwen36_flash_snapshot: '內建 web search 的 Qwen3.6 Flash 固定快照',
+  openrouter_dynamic_metadata: '使用 OpenRouter model metadata 顯示 reasoning 控制',
+  xai_grok_43: '支援官方 reasoning effort 控制的 xAI Grok model',
+  groq_qwen_reasoning: '支援 default/off reasoning 的 Groq Qwen reasoning model',
+  groq_gpt_oss: '支援 low、medium、high reasoning 的 Groq GPT-OSS model',
+  ollama_local_reasoning_metadata: '透過動態 thinking 支援識別的本機 Ollama model family',
 };
 
 function modelNotesForLocale(locale: string | undefined): Readonly<Record<FlowerProviderModelNoteKey, string>> {

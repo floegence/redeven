@@ -92,6 +92,10 @@ type AIProvider struct {
 	// - "chatglm"
 	// - "deepseek"
 	// - "qwen"
+	// - "openrouter"
+	// - "xai"
+	// - "groq"
+	// - "ollama"
 	// - "openai_compatible"
 	Type string `json:"type"`
 
@@ -103,6 +107,10 @@ type AIProvider struct {
 	// - chatglm
 	// - deepseek
 	// - qwen
+	// - openrouter
+	// - xai
+	// - groq
+	// - ollama
 	// - openai_compatible
 	BaseURL string `json:"base_url,omitempty"`
 
@@ -136,11 +144,14 @@ type AIProviderWebSearch struct {
 }
 
 type AIProviderModel struct {
-	ModelName                     string   `json:"model_name"`
-	ContextWindow                 int      `json:"context_window,omitempty"`
-	MaxOutputTokens               int      `json:"max_output_tokens,omitempty"`
-	EffectiveContextWindowPercent int      `json:"effective_context_window_percent,omitempty"`
-	InputModalities               []string `json:"input_modalities,omitempty"`
+	ModelName                     string                `json:"model_name"`
+	WireModelName                 string                `json:"wire_model_name,omitempty"`
+	ContextWindow                 int                   `json:"context_window,omitempty"`
+	MaxOutputTokens               int                   `json:"max_output_tokens,omitempty"`
+	EffectiveContextWindowPercent int                   `json:"effective_context_window_percent,omitempty"`
+	InputModalities               []string              `json:"input_modalities,omitempty"`
+	ReasoningCapability           AIReasoningCapability `json:"reasoning_capability,omitempty"`
+	DefaultReasoningSelection     AIReasoningSelection  `json:"default_reasoning_selection,omitempty"`
 }
 
 const (
@@ -180,6 +191,7 @@ var curatedNativeAIProviderModels = map[string]map[string]struct{}{
 	},
 	"chatglm": {
 		"glm-5.1": {},
+		"glm-5.2": {},
 	},
 	"deepseek": {
 		"deepseek-v4-pro":   {},
@@ -248,6 +260,13 @@ func (m AIProviderModel) SupportsImageInput() bool {
 	return false
 }
 
+func (m AIProviderModel) EffectiveWireModelName() string {
+	if wireModelName := strings.TrimSpace(m.WireModelName); wireModelName != "" {
+		return wireModelName
+	}
+	return strings.TrimSpace(m.ModelName)
+}
+
 func validateAIInputModalities(modalities []string) error {
 	if len(modalities) == 0 {
 		return nil
@@ -279,7 +298,7 @@ func validateAIInputModalities(modalities []string) error {
 
 func requiresExplicitAIProviderBaseURL(providerType string) bool {
 	switch strings.ToLower(strings.TrimSpace(providerType)) {
-	case "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible":
+	case "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible":
 		return true
 	default:
 		return false
@@ -293,6 +312,28 @@ func IsCuratedNativeAIProviderModel(providerType string, modelName string) bool 
 	}
 	_, ok = models[strings.TrimSpace(modelName)]
 	return ok
+}
+
+func (m AIProviderModel) EffectiveReasoningCapability(providerType string) AIReasoningCapability {
+	if !m.ReasoningCapability.IsZero() {
+		return m.ReasoningCapability.Normalize()
+	}
+	return AIReasoningCapabilityForModel(providerType, m.EffectiveWireModelName())
+}
+
+func (m AIProviderModel) EffectiveDefaultReasoningSelection(providerType string) AIReasoningSelection {
+	capability := m.EffectiveReasoningCapability(providerType)
+	selection := NormalizeAIReasoningSelection(m.DefaultReasoningSelection)
+	if !selection.IsZero() {
+		return selection
+	}
+	if capability.IsZero() {
+		return AIReasoningSelection{}
+	}
+	if strings.TrimSpace(capability.DefaultLevel) != "" {
+		return AIReasoningSelection{Level: AIReasoningLevel(capability.DefaultLevel)}
+	}
+	return AIReasoningSelection{}
 }
 
 func (c *AIConfig) Validate() error {
@@ -350,7 +391,7 @@ func (c *AIConfig) Validate() error {
 
 		t := strings.ToLower(strings.TrimSpace(p.Type))
 		switch t {
-		case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible":
+		case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible":
 		default:
 			return fmt.Errorf("providers[%d]: invalid type %q", i, t)
 		}
@@ -402,6 +443,9 @@ func (c *AIConfig) Validate() error {
 			if strings.Contains(name, "/") {
 				return fmt.Errorf("providers[%d].models[%d]: invalid model_name %q (must not contain /)", i, j, name)
 			}
+			if strings.Contains(strings.TrimSpace(m.WireModelName), "\x00") {
+				return fmt.Errorf("providers[%d].models[%d]: invalid wire_model_name", i, j)
+			}
 			if _, ok := modelNames[name]; ok {
 				return fmt.Errorf("providers[%d].models[%d]: duplicate model_name %q", i, j, name)
 			}
@@ -411,7 +455,7 @@ func (c *AIConfig) Validate() error {
 			}
 
 			contextWindow := m.ContextWindow
-			if t == "openai_compatible" {
+			if t == "openai_compatible" || t == "openrouter" || t == "xai" || t == "groq" || t == "ollama" {
 				if contextWindow <= 0 {
 					return fmt.Errorf("providers[%d].models[%d]: context_window is required for %s", i, j, t)
 				}
@@ -438,6 +482,13 @@ func (c *AIConfig) Validate() error {
 			if err := validateAIInputModalities(m.InputModalities); err != nil {
 				return fmt.Errorf("providers[%d].models[%d]: invalid input_modalities: %w", i, j, err)
 			}
+			reasoningCapability := m.EffectiveReasoningCapability(t)
+			if err := reasoningCapability.Validate(); err != nil {
+				return fmt.Errorf("providers[%d].models[%d]: invalid reasoning_capability: %w", i, j, err)
+			}
+			if err := ValidateAIReasoningSelection(reasoningCapability, m.EffectiveDefaultReasoningSelection(t)); err != nil {
+				return fmt.Errorf("providers[%d].models[%d]: invalid default_reasoning_selection: %w", i, j, err)
+			}
 		}
 	}
 
@@ -450,6 +501,31 @@ func (c *AIConfig) Validate() error {
 	}
 
 	return nil
+}
+
+func (c *AIConfig) ProviderModelByID(modelID string) (AIProvider, AIProviderModel, bool) {
+	if c == nil {
+		return AIProvider{}, AIProviderModel{}, false
+	}
+	raw := strings.TrimSpace(modelID)
+	pid, mn, ok := strings.Cut(raw, "/")
+	pid = strings.TrimSpace(pid)
+	mn = strings.TrimSpace(mn)
+	if !ok || pid == "" || mn == "" {
+		return AIProvider{}, AIProviderModel{}, false
+	}
+	for _, p := range c.Providers {
+		if strings.TrimSpace(p.ID) != pid {
+			continue
+		}
+		for _, m := range p.Models {
+			if strings.TrimSpace(m.ModelName) == mn {
+				return p, m, true
+			}
+		}
+		return AIProvider{}, AIProviderModel{}, false
+	}
+	return AIProvider{}, AIProviderModel{}, false
 }
 
 // IsAllowedModelID reports whether the given model wire id (<provider_id>/<model_name>) exists in the config allow-list.

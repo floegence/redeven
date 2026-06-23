@@ -224,6 +224,37 @@ func TestResolver_Resolve_UsesProviderModelContextWindow(t *testing.T) {
 	}
 }
 
+func TestResolver_Resolve_UsesProviderModelWireNameForReasoningCatalog(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver(nil)
+	provider := config.AIProvider{
+		ID:   "groq",
+		Type: "groq",
+		Models: []config.AIProviderModel{
+			{
+				ModelName:     "gpt-oss-120b",
+				WireModelName: "openai/gpt-oss-120b",
+				ContextWindow:  131072,
+			},
+		},
+	}
+
+	cap, err := resolver.Resolve(context.Background(), provider, "groq/gpt-oss-120b")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cap.ModelName != "gpt-oss-120b" {
+		t.Fatalf("ModelName=%q, want local model name", cap.ModelName)
+	}
+	if cap.WireModelName != "openai/gpt-oss-120b" {
+		t.Fatalf("WireModelName=%q, want official provider model id", cap.WireModelName)
+	}
+	if cap.ReasoningCapability.WireShape != "groq_gpt_oss_reasoning_effort" {
+		t.Fatalf("ReasoningCapability=%+v, want Groq GPT-OSS reasoning catalog row", cap.ReasoningCapability)
+	}
+}
+
 func TestResolver_Resolve_UsesExplicitProviderModelModalities(t *testing.T) {
 	t.Parallel()
 

@@ -507,6 +507,8 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 	}
 	executionMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback)
 	waitingPrompt := s.threadWaitingPrompt(ctx, th, runStatus)
+	reasoningCapability, _, _ := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
+	reasoningSelection := unmarshalReasoningSelection(th.ReasoningSelectionJSON)
 	cancel()
 
 	ev := RealtimeEvent{
@@ -519,6 +521,7 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 		RunErrorCode:        runErrorCode,
 		RunError:            runError,
 		Title:               strings.TrimSpace(th.Title),
+		ModelID:             strings.TrimSpace(th.ModelID),
 		UpdatedAtUnixMs:     th.UpdatedAtUnixMs,
 		LastMessagePreview:  strings.TrimSpace(th.LastMessagePreview),
 		LastMessageAtUnixMs: th.LastMessageAtUnixMs,
@@ -526,6 +529,8 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 		LastContextRunID:    strings.TrimSpace(th.LastContextRunID),
 		ExecutionMode:       executionMode,
 		QueuedTurnCount:     queuedTurnCount,
+		ReasoningSelection:  reasoningSelection,
+		ReasoningCapability: reasoningCapability,
 		WaitingPrompt:       waitingPrompt,
 	}
 	s.broadcastRealtimeEvent(ev)

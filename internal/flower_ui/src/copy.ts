@@ -112,7 +112,7 @@ export type FlowerSettingsCopy = Readonly<{
   braveSearch: string;
   needsBraveKey: string;
   providerTypeLabels: FlowerProviderTypeLabels;
-  builtInWebSearch: Readonly<Record<Exclude<FlowerProviderType, 'anthropic' | 'openai_compatible'>, string>>;
+  builtInWebSearch: Readonly<Partial<Record<FlowerProviderType, string>>>;
   autoSave: FlowerAutoSaveCopy;
   validation: Readonly<{
     providerIDRequired: string;
@@ -168,7 +168,7 @@ export type FlowerProviderDialogCopy = Readonly<{
   needsKey: string;
   braveKeyReady: string;
   needsBraveKey: string;
-  builtInWebSearch: Readonly<Record<Exclude<FlowerProviderType, 'anthropic' | 'openai_compatible'>, string>>;
+  builtInWebSearch: Readonly<Partial<Record<FlowerProviderType, string>>>;
   recommendedModelsTitle: string;
   recommendedModelsDescription: string;
   modelNote: (noteKey: FlowerProviderModelNoteKey | undefined) => string;
@@ -197,6 +197,7 @@ export type FlowerProviderDialogCopy = Readonly<{
   hide: string;
   providerIDPending: string;
   modelName: string;
+  providerModelID: string;
   contextWindow: string;
   maxOutput: string;
   effectiveContextPercent: string;
@@ -486,7 +487,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     managedByLocalAIProfileMissingKeys: (providers) => `Missing local keys: ${providers}`,
     managedByLocalAIProfileOpenLocal: 'Open Local Environment Settings on this Mac to change providers, models, or keys.',
     addProvider: 'Add provider',
-    noProviders: 'No providers yet. Add OpenAI, Anthropic, Kimi, ChatGLM, DeepSeek, Qwen, or a OpenAI-compatible endpoint.',
+    noProviders: 'No providers yet. Add OpenAI, Anthropic, Kimi, ChatGLM, DeepSeek, Qwen, OpenRouter, xAI, Groq, Ollama, or a custom endpoint.',
     defaultProvider: 'Default',
     editProvider: 'Edit provider',
     removeProvider: 'Remove provider',
@@ -557,6 +558,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         chatglm: 'Native connection',
         deepseek: 'Native connection',
         qwen: 'Native connection',
+        openrouter: 'Dynamic model metadata',
+        xai: 'OpenAI-compatible native endpoint',
+        groq: 'OpenAI-compatible native endpoint',
+        ollama: 'Local OpenAI-compatible endpoint',
         openai_compatible: 'Custom endpoint',
       },
       connectionTitle: 'Connection',
@@ -615,6 +620,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       hide: 'Hide',
       providerIDPending: 'Provider ID pending',
       modelName: 'Model name',
+      providerModelID: 'Provider model ID',
       contextWindow: 'Context window',
       maxOutput: 'Max output',
       effectiveContextPercent: 'Effective context %',

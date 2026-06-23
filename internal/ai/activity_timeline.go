@@ -7,6 +7,7 @@ import (
 
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/redeven/internal/config"
 )
 
 const activityTimelineBlockType = "activity-timeline"
@@ -520,6 +521,7 @@ func (r *run) setWaitingPrompt(prompt *RequestUserInputPrompt) {
 		return
 	}
 	cp := *normalized
+	cp.ReasoningSelection = config.NormalizeAIReasoningSelection(normalized.ReasoningSelection)
 	cp.RequiredFromUser = append([]string(nil), normalized.RequiredFromUser...)
 	cp.EvidenceRefs = append([]string(nil), normalized.EvidenceRefs...)
 	cp.Questions = normalizeRequestUserInputQuestions(normalized.Questions)
@@ -536,6 +538,7 @@ func (r *run) snapshotWaitingPrompt() *RequestUserInputPrompt {
 		return nil
 	}
 	cp := *r.waitingPrompt
+	cp.ReasoningSelection = config.NormalizeAIReasoningSelection(r.waitingPrompt.ReasoningSelection)
 	cp.RequiredFromUser = append([]string(nil), r.waitingPrompt.RequiredFromUser...)
 	cp.EvidenceRefs = append([]string(nil), r.waitingPrompt.EvidenceRefs...)
 	cp.Questions = normalizeRequestUserInputQuestions(r.waitingPrompt.Questions)

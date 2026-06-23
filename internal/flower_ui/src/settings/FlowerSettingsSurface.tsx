@@ -8,6 +8,7 @@ import type { FlowerSettingsCopy } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import type {
   FlowerProviderDraft,
+  FlowerReasoningSelection,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerWebSearchMode,
@@ -31,6 +32,8 @@ import {
 import { FlowerProviderDialog, type FlowerProviderDialogMode } from './FlowerProviderDialog';
 import { FlowerAutoSaveIndicator, FlowerSubSectionHeader } from './FlowerSettingsPrimitives';
 import type { FlowerProviderTypeLabels } from './providerTypeLabels';
+import { FlowerReasoningControl } from '../ReasoningControl';
+import { reasoningCapabilitySupportsControl } from '../reasoning';
 
 type FlowerModelOption = Readonly<{
   id: string;
@@ -131,9 +134,7 @@ function providerWebSearchLabel(
   copy: FlowerSettingsCopy,
 ): Readonly<{ supported: boolean; enabled: boolean; label: string }> {
   const type = provider.type;
-  const builtIn = type === 'anthropic' || type === 'openai_compatible'
-    ? ''
-    : copy.builtInWebSearch[type];
+  const builtIn = copy.builtInWebSearch[type] ?? '';
   if (builtIn) return { supported: true, enabled: true, label: builtIn };
   if (!flowerProviderNeedsWebSearchConfig(provider.type)) return { supported: false, enabled: false, label: copy.webSearchNotSupported };
   switch (provider.web_search?.mode ?? 'disabled') {
@@ -168,6 +169,8 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
       ...(normalizeFlowerPositiveInteger(model.max_output_tokens) ? { max_output_tokens: normalizeFlowerPositiveInteger(model.max_output_tokens) } : {}),
       ...(normalizeFlowerEffectiveContextPercent(model.effective_context_window_percent) ? { effective_context_window_percent: normalizeFlowerEffectiveContextPercent(model.effective_context_window_percent) } : {}),
       input_modalities: normalizeFlowerInputModalities(model.input_modalities),
+      ...(model.reasoning_capability ? { reasoning_capability: model.reasoning_capability } : {}),
+      ...(model.default_reasoning_selection ? { default_reasoning_selection: model.default_reasoning_selection } : {}),
     })),
   };
 }
@@ -214,6 +217,14 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
 
   const modelOptions = createMemo(() => collectModelOptions(providers(), copy().providerTypeLabels));
   const activeModelOption = createMemo(() => modelOptions().find((option) => option.id === currentModelID()) ?? null);
+  const activeProviderModel = createMemo(() => {
+    const current = trim(currentModelID());
+    const [providerID, ...modelParts] = current.split('/');
+    const modelName = modelParts.join('/');
+    if (!providerID || !modelName) return null;
+    const provider = providers().find((item) => trim(item.id) === providerID);
+    return provider?.models.find((model) => trim(model.model_name) === modelName) ?? null;
+  });
   const normalizedProviders = createMemo(() => providers().map(normalizeProviderForSave));
   const externalModelSource = createMemo(() => {
     const source = props.snapshot?.model_source ?? null;
@@ -225,6 +236,24 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const updateProviders = (next: readonly FlowerProviderDraft[]) => {
     setProviders(next);
     setDirty(true);
+  };
+
+  const updateCurrentModelReasoning = (selection: FlowerReasoningSelection | undefined) => {
+    const current = trim(currentModelID());
+    const [providerID, ...modelParts] = current.split('/');
+    const modelName = modelParts.join('/');
+    if (!providerID || !modelName) return;
+    updateProviders(providers().map((provider) => {
+      if (trim(provider.id) !== providerID) return provider;
+      return {
+        ...provider,
+        models: provider.models.map((model) => (
+          trim(model.model_name) === modelName
+            ? { ...model, default_reasoning_selection: selection }
+            : model
+        )),
+      };
+    }));
   };
 
   const openAddProviderDialog = () => {
@@ -295,7 +324,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
         if (modelNames.has(modelName)) {
           return { ok: false, error: copy().validation.duplicateModel(providerDisplayName(provider, copy().providerTypeLabels), modelName) };
         }
-        if (provider.type === 'openai_compatible' && !model.context_window && !defaultFlowerContextWindowForProviderType(provider.type)) {
+        if ((provider.type === 'openai_compatible' || provider.type === 'openrouter' || provider.type === 'xai' || provider.type === 'groq' || provider.type === 'ollama') && !model.context_window && !defaultFlowerContextWindowForProviderType(provider.type)) {
           return { ok: false, error: copy().validation.modelNeedsContextWindow(model.model_name) };
         }
         modelNames.add(modelName);
@@ -514,6 +543,16 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                           <span class="flower-settings-dot-pill flower-settings-dot-pill-active">{copy().imageInput}</span>
                         </Show>
                       </div>
+                      <Show when={activeProviderModel()?.reasoning_capability && reasoningCapabilitySupportsControl(activeProviderModel()?.reasoning_capability)}>
+                        <div class="mt-3">
+                          <FlowerReasoningControl
+                            capability={activeProviderModel()?.reasoning_capability}
+                            selection={activeProviderModel()?.default_reasoning_selection}
+                            label="Default reasoning"
+                            onChange={updateCurrentModelReasoning}
+                          />
+                        </div>
+                      </Show>
                   </div>
                 </Show>
               </div>

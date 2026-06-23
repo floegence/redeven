@@ -286,7 +286,10 @@ func filterSkillMetaByName(items []SkillMeta, name string) []SkillMeta {
 	return out
 }
 
-type subagentOpenAISimpleMock struct{}
+type subagentOpenAISimpleMock struct {
+	mu       sync.Mutex
+	requests []map[string]any
+}
 
 func (m *subagentOpenAISimpleMock) handle(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -300,6 +303,16 @@ func (m *subagentOpenAISimpleMock) handle(w http.ResponseWriter, r *http.Request
 	if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/responses") {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
+	}
+	body, _ := io.ReadAll(r.Body)
+	_ = r.Body.Close()
+	if len(body) > 0 {
+		var req map[string]any
+		if err := json.Unmarshal(body, &req); err == nil {
+			m.mu.Lock()
+			m.requests = append(m.requests, req)
+			m.mu.Unlock()
+		}
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
@@ -336,6 +349,15 @@ func (m *subagentOpenAISimpleMock) handle(w http.ResponseWriter, r *http.Request
 	})
 	_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	f.Flush()
+}
+
+func (m *subagentOpenAISimpleMock) firstRequest() map[string]any {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.requests) == 0 {
+		return nil
+	}
+	return cloneAnyMap(m.requests[0])
 }
 
 func TestSubagentManager_DelegateAndWait(t *testing.T) {
@@ -384,6 +406,7 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 		MessageID:    "m_parent",
 	})
 	r.currentModelID = "openai/gpt-5-mini"
+	r.currentReasoning = config.AIReasoningSelection{Level: config.AIReasoningLevelMedium}
 
 	created, err := r.manageSubagents(context.Background(), map[string]any{
 		"action":             "create",
@@ -464,6 +487,14 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 	}
 	if strings.TrimSpace(anyToString(entry["title"])) == "" {
 		t.Fatalf("missing title in wait snapshot: %#v", entry)
+	}
+	firstRequest := mock.firstRequest()
+	if firstRequest == nil {
+		t.Fatalf("missing subagent provider request")
+	}
+	reasoning, _ := firstRequest["reasoning"].(map[string]any)
+	if reasoning == nil || strings.TrimSpace(anyToString(reasoning["effort"])) != "medium" {
+		t.Fatalf("subagent request reasoning=%#v, want medium effort in provider request %#v", reasoning, firstRequest)
 	}
 
 	managedList, err := r.manageSubagents(context.Background(), map[string]any{

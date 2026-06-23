@@ -12,30 +12,33 @@ import (
 	"strings"
 
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
+	"github.com/floegence/redeven/internal/config"
 )
 
 type Model struct {
-	ID                 string   `json:"id"`
-	Label              string   `json:"label,omitempty"`
-	Source             string   `json:"source,omitempty"`
-	SourceLabel        string   `json:"source_label,omitempty"`
-	ContextWindow      int      `json:"context_window,omitempty"`
-	MaxOutputTokens    int      `json:"max_output_tokens,omitempty"`
-	InputModalities    []string `json:"input_modalities,omitempty"`
-	SupportsImageInput bool     `json:"supports_image_input,omitempty"`
+	ID                  string                       `json:"id"`
+	Label               string                       `json:"label,omitempty"`
+	Source              string                       `json:"source,omitempty"`
+	SourceLabel         string                       `json:"source_label,omitempty"`
+	ContextWindow       int                          `json:"context_window,omitempty"`
+	MaxOutputTokens     int                          `json:"max_output_tokens,omitempty"`
+	InputModalities     []string                     `json:"input_modalities,omitempty"`
+	SupportsImageInput  bool                         `json:"supports_image_input,omitempty"`
+	ReasoningCapability config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
 }
 
 type RequestUserInputPrompt struct {
-	PromptID         string                     `json:"prompt_id"`
-	MessageID        string                     `json:"message_id"`
-	ToolID           string                     `json:"tool_id"`
-	ToolName         string                     `json:"tool_name"`
-	ReasonCode       string                     `json:"reason_code,omitempty"`
-	RequiredFromUser []string                   `json:"required_from_user,omitempty"`
-	EvidenceRefs     []string                   `json:"evidence_refs,omitempty"`
-	Questions        []RequestUserInputQuestion `json:"questions,omitempty"`
-	PublicSummary    string                     `json:"public_summary,omitempty"`
-	ContainsSecret   bool                       `json:"contains_secret,omitempty"`
+	PromptID           string                      `json:"prompt_id"`
+	MessageID          string                      `json:"message_id"`
+	ToolID             string                      `json:"tool_id"`
+	ToolName           string                      `json:"tool_name"`
+	ReasonCode         string                      `json:"reason_code,omitempty"`
+	ReasoningSelection config.AIReasoningSelection `json:"reasoning_selection,omitempty"`
+	RequiredFromUser   []string                    `json:"required_from_user,omitempty"`
+	EvidenceRefs       []string                    `json:"evidence_refs,omitempty"`
+	Questions          []RequestUserInputQuestion  `json:"questions,omitempty"`
+	PublicSummary      string                      `json:"public_summary,omitempty"`
+	ContainsSecret     bool                        `json:"contains_secret,omitempty"`
 }
 
 type RequestUserInputQuestion struct {
@@ -134,24 +137,26 @@ func NewModelsResponse(runtime *AIRuntimeStatus) *ModelsResponse {
 }
 
 type ThreadView struct {
-	ThreadID            string                  `json:"thread_id"`
-	Title               string                  `json:"title"`
-	ModelID             string                  `json:"model_id"`
-	ModelLocked         bool                    `json:"model_locked"`
-	ExecutionMode       string                  `json:"execution_mode"`
-	WorkingDir          string                  `json:"working_dir"`
-	QueuedTurnCount     int                     `json:"queued_turn_count"`
-	RunStatus           string                  `json:"run_status"`
-	RunUpdatedAtUnixMs  int64                   `json:"run_updated_at_unix_ms"`
-	RunErrorCode        string                  `json:"run_error_code,omitempty"`
-	RunError            string                  `json:"run_error,omitempty"`
-	WaitingPrompt       *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
-	LastContextRunID    string                  `json:"last_context_run_id,omitempty"`
-	PinnedAtUnixMs      int64                   `json:"pinned_at_unix_ms,omitempty"`
-	CreatedAtUnixMs     int64                   `json:"created_at_unix_ms"`
-	UpdatedAtUnixMs     int64                   `json:"updated_at_unix_ms"`
-	LastMessageAtUnixMs int64                   `json:"last_message_at_unix_ms"`
-	LastMessagePreview  string                  `json:"last_message_preview"`
+	ThreadID            string                       `json:"thread_id"`
+	Title               string                       `json:"title"`
+	ModelID             string                       `json:"model_id"`
+	ModelLocked         bool                         `json:"model_locked"`
+	ExecutionMode       string                       `json:"execution_mode"`
+	WorkingDir          string                       `json:"working_dir"`
+	QueuedTurnCount     int                          `json:"queued_turn_count"`
+	RunStatus           string                       `json:"run_status"`
+	RunUpdatedAtUnixMs  int64                        `json:"run_updated_at_unix_ms"`
+	RunErrorCode        string                       `json:"run_error_code,omitempty"`
+	RunError            string                       `json:"run_error,omitempty"`
+	WaitingPrompt       *RequestUserInputPrompt      `json:"waiting_prompt,omitempty"`
+	LastContextRunID    string                       `json:"last_context_run_id,omitempty"`
+	ReasoningSelection  config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
+	ReasoningCapability config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
+	PinnedAtUnixMs      int64                        `json:"pinned_at_unix_ms,omitempty"`
+	CreatedAtUnixMs     int64                        `json:"created_at_unix_ms"`
+	UpdatedAtUnixMs     int64                        `json:"updated_at_unix_ms"`
+	LastMessageAtUnixMs int64                        `json:"last_message_at_unix_ms"`
+	LastMessagePreview  string                       `json:"last_message_preview"`
 }
 
 type ListThreadsResponse struct {
@@ -160,10 +165,11 @@ type ListThreadsResponse struct {
 }
 
 type CreateThreadRequest struct {
-	Title         string `json:"title"`
-	ModelID       string `json:"model_id,omitempty"`
-	ExecutionMode string `json:"execution_mode,omitempty"`
-	WorkingDir    string `json:"working_dir,omitempty"`
+	Title              string                      `json:"title"`
+	ModelID            string                      `json:"model_id,omitempty"`
+	ExecutionMode      string                      `json:"execution_mode,omitempty"`
+	WorkingDir         string                      `json:"working_dir,omitempty"`
+	ReasoningSelection config.AIReasoningSelection `json:"reasoning_selection,omitempty"`
 }
 
 type CreateThreadResponse struct {
@@ -171,10 +177,11 @@ type CreateThreadResponse struct {
 }
 
 type PatchThreadRequest struct {
-	Title         *string `json:"title,omitempty"`
-	ModelID       *string `json:"model_id,omitempty"`
-	ExecutionMode *string `json:"execution_mode,omitempty"`
-	Pinned        *bool   `json:"pinned,omitempty"`
+	Title              *string         `json:"title,omitempty"`
+	ModelID            *string         `json:"model_id,omitempty"`
+	ExecutionMode      *string         `json:"execution_mode,omitempty"`
+	Pinned             *bool           `json:"pinned,omitempty"`
+	ReasoningSelection json.RawMessage `json:"reasoning_selection,omitempty"`
 }
 
 type ListThreadMessagesResponse struct {
@@ -300,11 +307,11 @@ type RunOptions struct {
 	Mode string `json:"mode,omitempty"`
 
 	// Provider controls.
-	ThinkingBudgetTokens int      `json:"thinking_budget_tokens,omitempty"`
-	CacheControl         string   `json:"cache_control,omitempty"`
-	ResponseFormat       string   `json:"response_format,omitempty"`
-	Temperature          *float64 `json:"temperature,omitempty"`
-	TopP                 *float64 `json:"top_p,omitempty"`
+	ReasoningSelection config.AIReasoningSelection `json:"reasoning_selection,omitempty"`
+	CacheControl       string                      `json:"cache_control,omitempty"`
+	ResponseFormat     string                      `json:"response_format,omitempty"`
+	Temperature        *float64                    `json:"temperature,omitempty"`
+	TopP               *float64                    `json:"top_p,omitempty"`
 
 	// Optional hard budgets (0 means unset).
 	MaxInputTokens  int     `json:"max_input_tokens,omitempty"`
@@ -500,14 +507,17 @@ type RealtimeEvent struct {
 	MessageJSON  json.RawMessage `json:"message_json,omitempty"`
 
 	// Thread summary events (EventType=thread_summary).
-	Title               string `json:"title,omitempty"`
-	UpdatedAtUnixMs     int64  `json:"updated_at_unix_ms,omitempty"`
-	LastMessagePreview  string `json:"last_message_preview,omitempty"`
-	LastMessageAtUnixMs int64  `json:"last_message_at_unix_ms,omitempty"`
-	ActiveRunID         string `json:"active_run_id,omitempty"`
-	LastContextRunID    string `json:"last_context_run_id,omitempty"`
-	ExecutionMode       string `json:"execution_mode,omitempty"`
-	QueuedTurnCount     int    `json:"queued_turn_count,omitempty"`
+	Title               string                       `json:"title,omitempty"`
+	ModelID             string                       `json:"model_id,omitempty"`
+	UpdatedAtUnixMs     int64                        `json:"updated_at_unix_ms,omitempty"`
+	LastMessagePreview  string                       `json:"last_message_preview,omitempty"`
+	LastMessageAtUnixMs int64                        `json:"last_message_at_unix_ms,omitempty"`
+	ActiveRunID         string                       `json:"active_run_id,omitempty"`
+	LastContextRunID    string                       `json:"last_context_run_id,omitempty"`
+	ExecutionMode       string                       `json:"execution_mode,omitempty"`
+	QueuedTurnCount     int                          `json:"queued_turn_count,omitempty"`
+	ReasoningSelection  config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
+	ReasoningCapability config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
 
 	// Transcript reset events (EventType=transcript_reset).
 	ResetReason       string `json:"reset_reason,omitempty"`

@@ -14,6 +14,7 @@ import (
 
 	"github.com/floegence/floret/observation"
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -1233,21 +1234,32 @@ func upsertFlowerLiveBlock(state *FlowerLiveMaterializedState, messageID string,
 
 func flowerLiveThreadPatchFromSummary(ev RealtimeEvent) FlowerLiveThreadPatch {
 	queued := ev.QueuedTurnCount
-	return FlowerLiveThreadPatch{
-		ThreadID:            strings.TrimSpace(ev.ThreadID),
-		Title:               strings.TrimSpace(ev.Title),
-		ModelID:             "",
-		ExecutionMode:       strings.TrimSpace(ev.ExecutionMode),
-		QueuedTurnCount:     &queued,
-		RunStatus:           strings.TrimSpace(ev.RunStatus),
-		RunErrorCode:        strings.TrimSpace(ev.RunErrorCode),
-		RunError:            strings.TrimSpace(ev.RunError),
-		WaitingPrompt:       ev.WaitingPrompt,
-		LastContextRunID:    strings.TrimSpace(ev.LastContextRunID),
-		UpdatedAtUnixMs:     ev.UpdatedAtUnixMs,
-		LastMessageAtUnixMs: ev.LastMessageAtUnixMs,
-		LastMessagePreview:  strings.TrimSpace(ev.LastMessagePreview),
+	reasoningSelection := config.NormalizeAIReasoningSelection(ev.ReasoningSelection)
+	reasoningCapability := ev.ReasoningCapability.Normalize()
+	patch := FlowerLiveThreadPatch{
+		ThreadID:               strings.TrimSpace(ev.ThreadID),
+		Title:                  strings.TrimSpace(ev.Title),
+		ModelID:                strings.TrimSpace(ev.ModelID),
+		ExecutionMode:          strings.TrimSpace(ev.ExecutionMode),
+		QueuedTurnCount:        &queued,
+		RunStatus:              strings.TrimSpace(ev.RunStatus),
+		RunErrorCode:           strings.TrimSpace(ev.RunErrorCode),
+		RunError:               strings.TrimSpace(ev.RunError),
+		WaitingPrompt:          ev.WaitingPrompt,
+		LastContextRunID:       strings.TrimSpace(ev.LastContextRunID),
+		UpdatedAtUnixMs:        ev.UpdatedAtUnixMs,
+		LastMessageAtUnixMs:    ev.LastMessageAtUnixMs,
+		LastMessagePreview:     strings.TrimSpace(ev.LastMessagePreview),
+		ReasoningSelectionSet:  true,
+		ReasoningCapabilitySet: true,
 	}
+	if !reasoningSelection.IsZero() {
+		patch.ReasoningSelection = &reasoningSelection
+	}
+	if !reasoningCapability.IsZero() {
+		patch.ReasoningCapability = &reasoningCapability
+	}
+	return patch
 }
 
 func mergeFlowerLiveThreadPatch(current FlowerLiveThreadPatch, patch FlowerLiveThreadPatch) FlowerLiveThreadPatch {
@@ -1299,6 +1311,32 @@ func mergeFlowerLiveThreadPatch(current FlowerLiveThreadPatch, patch FlowerLiveT
 	}
 	if strings.TrimSpace(patch.LastMessagePreview) != "" {
 		current.LastMessagePreview = strings.TrimSpace(patch.LastMessagePreview)
+	}
+	if patch.ReasoningSelectionSet {
+		current.ReasoningSelectionSet = true
+		if patch.ReasoningSelection == nil {
+			current.ReasoningSelection = nil
+		} else {
+			selection := config.NormalizeAIReasoningSelection(*patch.ReasoningSelection)
+			current.ReasoningSelection = &selection
+		}
+	} else if patch.ReasoningSelection != nil {
+		selection := config.NormalizeAIReasoningSelection(*patch.ReasoningSelection)
+		current.ReasoningSelection = &selection
+		current.ReasoningSelectionSet = true
+	}
+	if patch.ReasoningCapabilitySet {
+		current.ReasoningCapabilitySet = true
+		if patch.ReasoningCapability == nil {
+			current.ReasoningCapability = nil
+		} else {
+			capability := patch.ReasoningCapability.Normalize()
+			current.ReasoningCapability = &capability
+		}
+	} else if patch.ReasoningCapability != nil {
+		capability := patch.ReasoningCapability.Normalize()
+		current.ReasoningCapability = &capability
+		current.ReasoningCapabilitySet = true
 	}
 	return current
 }
@@ -1582,6 +1620,14 @@ func cloneFlowerLiveThreadPatch(in FlowerLiveThreadPatch) FlowerLiveThreadPatch 
 	if in.ModelLocked != nil {
 		value := *in.ModelLocked
 		out.ModelLocked = &value
+	}
+	if in.ReasoningSelection != nil {
+		value := config.NormalizeAIReasoningSelection(*in.ReasoningSelection)
+		out.ReasoningSelection = &value
+	}
+	if in.ReasoningCapability != nil {
+		value := in.ReasoningCapability.Normalize()
+		out.ReasoningCapability = &value
 	}
 	return out
 }

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -59,6 +60,80 @@ func activeThreadEffectiveRunState(status string, runErrorCode string, runError 
 		return runStatus, "", ""
 	}
 	return string(RunStateRunning), "", ""
+}
+
+func (s *Service) threadViewFromRecord(ctx context.Context, meta *session.Meta, th *threadstore.Thread, modeFallback string, queuedTurnCount int, active bool) ThreadView {
+	if th == nil {
+		return ThreadView{}
+	}
+	runStatus, runErrorCode, runError := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
+	if active {
+		runStatus, runErrorCode, runError = activeThreadEffectiveRunState(th.RunStatus, th.RunErrorCode, th.RunError)
+	}
+	workingDir := strings.TrimSpace(th.WorkingDir)
+	if workingDir == "" && s != nil {
+		workingDir = strings.TrimSpace(s.agentHomeDir)
+	}
+	capability, _, _ := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
+	return ThreadView{
+		ThreadID:            strings.TrimSpace(th.ThreadID),
+		Title:               strings.TrimSpace(th.Title),
+		ModelID:             strings.TrimSpace(th.ModelID),
+		ModelLocked:         th.ModelLocked,
+		ExecutionMode:       normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback),
+		WorkingDir:          workingDir,
+		QueuedTurnCount:     queuedTurnCount,
+		RunStatus:           runStatus,
+		RunUpdatedAtUnixMs:  th.RunUpdatedAtUnixMs,
+		RunErrorCode:        runErrorCode,
+		RunError:            runError,
+		WaitingPrompt:       s.threadWaitingPrompt(ctx, th, runStatus),
+		LastContextRunID:    strings.TrimSpace(th.LastContextRunID),
+		ReasoningSelection:  unmarshalReasoningSelection(th.ReasoningSelectionJSON),
+		ReasoningCapability: capability,
+		PinnedAtUnixMs:      th.PinnedAtUnixMs,
+		CreatedAtUnixMs:     th.CreatedAtUnixMs,
+		UpdatedAtUnixMs:     th.UpdatedAtUnixMs,
+		LastMessageAtUnixMs: th.LastMessageAtUnixMs,
+		LastMessagePreview:  strings.TrimSpace(th.LastMessagePreview),
+	}
+}
+
+func (s *Service) threadReasoningDefaults(ctx context.Context, modelID string) (config.AIReasoningCapability, config.AIReasoningSelection, bool) {
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" || s == nil {
+		return config.AIReasoningCapability{}, config.AIReasoningSelection{}, false
+	}
+	s.mu.Lock()
+	cfg := s.cfg
+	modelSource := s.desktopModelSource
+	s.mu.Unlock()
+	if capability, selection, ok := modelReasoningDefaultsFromConfig(cfg, modelID); ok {
+		return capability, selection, true
+	}
+	if isDesktopModelSourceModelID(modelID) && modelSource != nil {
+		checkCtx := ctx
+		if checkCtx == nil {
+			checkCtx = context.Background()
+		}
+		snapshot, err := modelSource.ListModels(checkCtx)
+		if err == nil && snapshot != nil {
+			for _, model := range snapshot.Models {
+				if strings.TrimSpace(model.ID) != modelID {
+					continue
+				}
+				capability := model.ReasoningCapability.Normalize()
+				if capability.IsZero() {
+					return capability, config.AIReasoningSelection{}, true
+				}
+				if strings.TrimSpace(capability.DefaultLevel) != "" {
+					return capability, config.AIReasoningSelection{Level: config.AIReasoningLevel(capability.DefaultLevel)}, true
+				}
+				return capability, config.AIReasoningSelection{}, true
+			}
+		}
+	}
+	return config.AIReasoningCapability{}, config.AIReasoningSelection{}, false
 }
 
 func (s *Service) activeThreadRunSet(endpointID string) map[string]struct{} {
@@ -123,36 +198,8 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 		return nil, err
 	}
 
-	runStatus, runErrorCode, runError := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
-	if s.HasActiveThreadForEndpoint(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(th.ThreadID)) {
-		runStatus, runErrorCode, runError = activeThreadEffectiveRunState(th.RunStatus, th.RunErrorCode, th.RunError)
-	}
-
-	workingDir := strings.TrimSpace(th.WorkingDir)
-	if workingDir == "" {
-		workingDir = strings.TrimSpace(s.agentHomeDir)
-	}
-
-	return &ThreadView{
-		ThreadID:            strings.TrimSpace(th.ThreadID),
-		Title:               strings.TrimSpace(th.Title),
-		ModelID:             strings.TrimSpace(th.ModelID),
-		ModelLocked:         th.ModelLocked,
-		ExecutionMode:       normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback),
-		WorkingDir:          workingDir,
-		QueuedTurnCount:     queuedTurnCount,
-		RunStatus:           runStatus,
-		RunUpdatedAtUnixMs:  th.RunUpdatedAtUnixMs,
-		RunErrorCode:        runErrorCode,
-		RunError:            runError,
-		WaitingPrompt:       s.threadWaitingPrompt(ctx, th, runStatus),
-		LastContextRunID:    strings.TrimSpace(th.LastContextRunID),
-		PinnedAtUnixMs:      th.PinnedAtUnixMs,
-		CreatedAtUnixMs:     th.CreatedAtUnixMs,
-		UpdatedAtUnixMs:     th.UpdatedAtUnixMs,
-		LastMessageAtUnixMs: th.LastMessageAtUnixMs,
-		LastMessagePreview:  strings.TrimSpace(th.LastMessagePreview),
-	}, nil
+	view := s.threadViewFromRecord(ctx, meta, th, modeFallback, queuedTurnCount, s.HasActiveThreadForEndpoint(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(th.ThreadID)))
+	return &view, nil
 }
 
 func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int, cursor string) (*ListThreadsResponse, error) {
@@ -195,39 +242,22 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	activeThreads := s.activeThreadRunSet(endpointID)
 	out := &ListThreadsResponse{Threads: make([]ThreadView, 0, len(list)), NextCursor: strings.TrimSpace(next)}
 	for _, t := range list {
-		runStatus, runErrorCode, runError := normalizeThreadRunState(t.RunStatus, t.RunErrorCode, t.RunError)
-		if _, ok := activeThreads[strings.TrimSpace(t.ThreadID)]; ok {
-			runStatus, runErrorCode, runError = activeThreadEffectiveRunState(t.RunStatus, t.RunErrorCode, t.RunError)
-		}
-		workingDir := strings.TrimSpace(t.WorkingDir)
-		if workingDir == "" {
-			workingDir = strings.TrimSpace(s.agentHomeDir)
-		}
-		out.Threads = append(out.Threads, ThreadView{
-			ThreadID:            strings.TrimSpace(t.ThreadID),
-			Title:               strings.TrimSpace(t.Title),
-			ModelID:             strings.TrimSpace(t.ModelID),
-			ModelLocked:         t.ModelLocked,
-			ExecutionMode:       normalizeRunMode(strings.TrimSpace(t.ExecutionMode), modeFallback),
-			WorkingDir:          workingDir,
-			QueuedTurnCount:     queuedTurnCounts[strings.TrimSpace(t.ThreadID)],
-			RunStatus:           runStatus,
-			RunUpdatedAtUnixMs:  t.RunUpdatedAtUnixMs,
-			RunErrorCode:        runErrorCode,
-			RunError:            runError,
-			WaitingPrompt:       s.threadWaitingPrompt(ctx, &t, runStatus),
-			LastContextRunID:    strings.TrimSpace(t.LastContextRunID),
-			PinnedAtUnixMs:      t.PinnedAtUnixMs,
-			CreatedAtUnixMs:     t.CreatedAtUnixMs,
-			UpdatedAtUnixMs:     t.UpdatedAtUnixMs,
-			LastMessageAtUnixMs: t.LastMessageAtUnixMs,
-			LastMessagePreview:  strings.TrimSpace(t.LastMessagePreview),
-		})
+		_, active := activeThreads[strings.TrimSpace(t.ThreadID)]
+		out.Threads = append(out.Threads, s.threadViewFromRecord(ctx, meta, &t, modeFallback, queuedTurnCounts[strings.TrimSpace(t.ThreadID)], active))
 	}
 	return out, nil
 }
 
 func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title string, modelID string, executionMode string, workingDir string) (*ThreadView, error) {
+	return s.CreateThreadWithOptions(ctx, meta, CreateThreadRequest{
+		Title:         title,
+		ModelID:       modelID,
+		ExecutionMode: executionMode,
+		WorkingDir:    workingDir,
+	})
+}
+
+func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Meta, req CreateThreadRequest) (*ThreadView, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -247,12 +277,12 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 		return nil, err
 	}
 
-	modelID = strings.TrimSpace(modelID)
+	modelID := strings.TrimSpace(req.ModelID)
 	modeFallback := "act"
 	if cfg != nil {
 		modeFallback = cfg.EffectiveMode()
 	}
-	executionMode = normalizeRunMode(strings.TrimSpace(executionMode), modeFallback)
+	executionMode := normalizeRunMode(strings.TrimSpace(req.ExecutionMode), modeFallback)
 	if modelID != "" {
 		if _, _, ok := strings.Cut(modelID, "/"); !ok && !isDesktopModelSourceModelID(modelID) {
 			return nil, errors.New("invalid model")
@@ -281,8 +311,20 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 		}
 	}
 
+	reasoningCapability, modelDefaultReasoning, _ := s.threadReasoningDefaults(ctx, modelID)
+	reasoningSelection, err := normalizeRequestedReasoningOrReject(reasoningCapability, req.ReasoningSelection)
+	if err != nil {
+		return nil, reasoningSelectionError(modelID, err)
+	}
+	if reasoningSelection.IsZero() {
+		reasoningSelection = modelDefaultReasoning
+	}
+	if err := config.ValidateAIReasoningSelection(reasoningCapability, reasoningSelection); err != nil {
+		return nil, reasoningSelectionError(modelID, err)
+	}
+
 	fallbackWorkingDir := strings.TrimSpace(s.agentHomeDir)
-	workingDir = strings.TrimSpace(workingDir)
+	workingDir := strings.TrimSpace(req.WorkingDir)
 	if workingDir == "" {
 		workingDir = fallbackWorkingDir
 	}
@@ -293,48 +335,32 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 
 	now := time.Now().UnixMilli()
 	t := threadstore.Thread{
-		ThreadID:              id,
-		EndpointID:            strings.TrimSpace(meta.EndpointID),
-		NamespacePublicID:     strings.TrimSpace(meta.NamespacePublicID),
-		ModelID:               modelID,
-		ExecutionMode:         executionMode,
-		WorkingDir:            workingDirClean,
-		Title:                 strings.TrimSpace(title),
-		RunStatus:             "idle",
-		RunUpdatedAtUnixMs:    0,
-		RunError:              "",
-		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),
-		CreatedByUserEmail:    strings.TrimSpace(meta.UserEmail),
-		UpdatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),
-		UpdatedByUserEmail:    strings.TrimSpace(meta.UserEmail),
-		CreatedAtUnixMs:       now,
-		UpdatedAtUnixMs:       now,
-		LastMessageAtUnixMs:   0,
-		LastMessagePreview:    "",
+		ThreadID:               id,
+		EndpointID:             strings.TrimSpace(meta.EndpointID),
+		NamespacePublicID:      strings.TrimSpace(meta.NamespacePublicID),
+		ModelID:                modelID,
+		ReasoningSelectionJSON: marshalReasoningSelection(reasoningSelection),
+		ExecutionMode:          executionMode,
+		WorkingDir:             workingDirClean,
+		Title:                  strings.TrimSpace(req.Title),
+		RunStatus:              "idle",
+		RunUpdatedAtUnixMs:     0,
+		RunError:               "",
+		CreatedByUserPublicID:  strings.TrimSpace(meta.UserPublicID),
+		CreatedByUserEmail:     strings.TrimSpace(meta.UserEmail),
+		UpdatedByUserPublicID:  strings.TrimSpace(meta.UserPublicID),
+		UpdatedByUserEmail:     strings.TrimSpace(meta.UserEmail),
+		CreatedAtUnixMs:        now,
+		UpdatedAtUnixMs:        now,
+		LastMessageAtUnixMs:    0,
+		LastMessagePreview:     "",
 	}
 	if err := db.CreateThread(ctx, t); err != nil {
 		return nil, err
 	}
 
-	return &ThreadView{
-		ThreadID:            id,
-		Title:               strings.TrimSpace(t.Title),
-		ModelID:             modelID,
-		ModelLocked:         false,
-		ExecutionMode:       executionMode,
-		WorkingDir:          workingDirClean,
-		QueuedTurnCount:     0,
-		RunStatus:           "idle",
-		RunUpdatedAtUnixMs:  0,
-		RunError:            "",
-		WaitingPrompt:       nil,
-		LastContextRunID:    "",
-		PinnedAtUnixMs:      0,
-		CreatedAtUnixMs:     t.CreatedAtUnixMs,
-		UpdatedAtUnixMs:     t.UpdatedAtUnixMs,
-		LastMessageAtUnixMs: 0,
-		LastMessagePreview:  "",
-	}, nil
+	view := s.threadViewFromRecord(ctx, meta, &t, modeFallback, 0, false)
+	return &view, nil
 }
 
 func (s *Service) ValidateWorkingDir(workingDir string) (string, error) {
@@ -556,10 +582,92 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 		return ErrModelSwitchRequiresExplicitRestart
 	}
 
-	if err := db.UpdateThreadModelID(ctx, endpointID, threadID, modelID); err != nil {
+	reasoningCapability, modelDefaultReasoning, _ := s.threadReasoningDefaults(ctx, modelID)
+	normalizedReasoning, _, err := normalizeReasoningForModelSwitch(reasoningCapability, unmarshalReasoningSelection(th.ReasoningSelectionJSON), modelDefaultReasoning)
+	if err != nil {
+		return reasoningSelectionError(modelID, err)
+	}
+	if err := config.ValidateAIReasoningSelection(reasoningCapability, normalizedReasoning); err != nil {
+		return reasoningSelectionError(modelID, err)
+	}
+	if err := db.UpdateThreadModelAndReasoningSelection(ctx, endpointID, threadID, modelID, marshalReasoningSelection(normalizedReasoning)); err != nil {
 		return err
 	}
 	s.broadcastThreadSummary(strings.TrimSpace(endpointID), strings.TrimSpace(threadID))
+	return nil
+}
+
+func (s *Service) SetThreadReasoningSelection(ctx context.Context, meta *session.Meta, threadID string, selection config.AIReasoningSelection) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if err := requireRWX(meta); err != nil {
+		return err
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return errors.New("missing thread_id")
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if endpointID == "" {
+		return errors.New("invalid request")
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	th, err := db.GetThread(ctx, endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	if th == nil {
+		return sql.ErrNoRows
+	}
+	capability, modelDefault, _ := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
+	normalized, err := normalizeRequestedReasoningOrReject(capability, selection)
+	if err != nil {
+		return reasoningSelectionError(th.ModelID, err)
+	}
+	if normalized.IsZero() {
+		normalized = modelDefault
+	}
+	if err := config.ValidateAIReasoningSelection(capability, normalized); err != nil {
+		return reasoningSelectionError(th.ModelID, err)
+	}
+	if err := db.UpdateThreadReasoningSelection(ctx, endpointID, threadID, marshalReasoningSelection(normalized)); err != nil {
+		return err
+	}
+	s.broadcastThreadSummary(endpointID, threadID)
+	return nil
+}
+
+func (s *Service) ClearThreadReasoningSelection(ctx context.Context, meta *session.Meta, threadID string) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if err := requireRWX(meta); err != nil {
+		return err
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return errors.New("missing thread_id")
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if endpointID == "" {
+		return errors.New("invalid request")
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	if err := db.UpdateThreadReasoningSelection(ctx, endpointID, threadID, ""); err != nil {
+		return err
+	}
+	s.broadcastThreadSummary(endpointID, threadID)
 	return nil
 }
 

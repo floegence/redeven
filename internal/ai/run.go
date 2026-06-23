@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/floegence/floret/observation"
+	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
@@ -162,6 +163,7 @@ type run struct {
 
 	finalizationReason string
 	currentModelID     string
+	currentReasoning   config.AIReasoningSelection
 
 	webSearchToolEnabled bool
 	webSearchMode        string
@@ -305,6 +307,41 @@ func newRun(opts runOptions) *run {
 		r.stream = newNDJSONStream(r.w, opts.StreamWriteTimeout)
 	}
 	return r
+}
+
+func (r *run) resolveRunModelCapability(modelID string) contextmodel.ModelCapability {
+	modelID = strings.TrimSpace(modelID)
+	providerID, modelName, ok := strings.Cut(modelID, "/")
+	providerID = strings.TrimSpace(providerID)
+	modelName = strings.TrimSpace(modelName)
+	if !ok || providerID == "" || modelName == "" {
+		if isDesktopModelSourceModelID(modelID) {
+			providerID = DesktopModelSourceProviderType
+			modelName = modelID
+		} else {
+			modelName = modelID
+		}
+	}
+	providerType := providerID
+	wireModelName := modelName
+	if r != nil && r.cfg != nil {
+		if provider, providerModel, ok := r.cfg.ProviderModelByID(modelID); ok {
+			providerID = strings.TrimSpace(provider.ID)
+			providerType = strings.ToLower(strings.TrimSpace(provider.Type))
+			modelName = strings.TrimSpace(providerModel.ModelName)
+			wireModelName = providerModel.EffectiveWireModelName()
+		}
+	}
+	capability := defaultModelCapability(providerID, modelName, wireModelName)
+	if strings.TrimSpace(providerType) != "" {
+		capability.ProviderType = strings.ToLower(strings.TrimSpace(providerType))
+	}
+	if r != nil && r.cfg != nil {
+		if provider, providerModel, ok := r.cfg.ProviderModelByID(modelID); ok {
+			capability.ReasoningCapability = providerModel.EffectiveReasoningCapability(provider.Type)
+		}
+	}
+	return contextmodel.NormalizeCapability(capability)
 }
 
 func (r *run) touchActivity() {
@@ -1267,19 +1304,24 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		providerDisplay = n + " (" + providerID + ")"
 	}
 
-	if r.resolveProviderKey == nil {
-		return r.failRunWithCode(runErrorCodeProviderMissingKey, "", errors.New("missing provider key resolver"))
-	}
-	apiKey, ok, err := r.resolveProviderKey(providerID)
-	if err != nil {
-		return r.failRunWithCode(runErrorCodeProviderMissingKey, "", err)
-	}
-	if !ok || strings.TrimSpace(apiKey) == "" {
-		return r.failRunWithCode(
-			runErrorCodeProviderMissingKey,
-			fmt.Sprintf("AI provider %q is missing API key. Open Settings to configure it.", providerDisplay),
-			fmt.Errorf("missing api key for provider %q", providerID),
-		)
+	apiKey := ""
+	if strings.ToLower(strings.TrimSpace(providerCfg.Type)) != "ollama" {
+		if r.resolveProviderKey == nil {
+			return r.failRunWithCode(runErrorCodeProviderMissingKey, "", errors.New("missing provider key resolver"))
+		}
+		var ok bool
+		var err error
+		apiKey, ok, err = r.resolveProviderKey(providerID)
+		if err != nil {
+			return r.failRunWithCode(runErrorCodeProviderMissingKey, "", err)
+		}
+		if !ok || strings.TrimSpace(apiKey) == "" {
+			return r.failRunWithCode(
+				runErrorCodeProviderMissingKey,
+				fmt.Sprintf("AI provider %q is missing API key. Open Settings to configure it.", providerDisplay),
+				fmt.Errorf("missing api key for provider %q", providerID),
+			)
+		}
 	}
 
 	if !r.supportsModelGatewayProvider(providerCfg) {

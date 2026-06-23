@@ -31,14 +31,14 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 	if capability.ModelName == "" {
 		capability.ModelName = modelName
 	}
+	if capability.WireModelName == "" {
+		capability.WireModelName = modelName
+	}
 	if capability.ProviderID == "" {
 		providerID, _, _ := strings.Cut(strings.TrimSpace(req.Model), "/")
 		capability.ProviderID = strings.TrimSpace(providerID)
 	}
 	req.ModelCapability = capability
-	if !capability.SupportsReasoningTokens {
-		req.Options.ThinkingBudgetTokens = 0
-	}
 	if !capability.SupportsStrictJSONSchema && strings.EqualFold(strings.TrimSpace(req.Options.ResponseFormat), "json_schema") {
 		req.Options.ResponseFormat = "json_object"
 	}
@@ -139,14 +139,15 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 	flProvider := newFloretProviderAdapter(
 		adapter,
 		providerType,
-		modelName,
+		capability.WireModelName,
 		mode,
 		ProviderControls{
-			ThinkingBudgetTokens: req.Options.ThinkingBudgetTokens,
-			CacheControl:         req.Options.CacheControl,
-			ResponseFormat:       req.Options.ResponseFormat,
-			Temperature:          req.Options.Temperature,
-			TopP:                 req.Options.TopP,
+			ReasoningSelection:  req.Options.ReasoningSelection,
+			ReasoningCapability: req.ModelCapability.ReasoningCapability,
+			CacheControl:        req.Options.CacheControl,
+			ResponseFormat:      req.Options.ResponseFormat,
+			Temperature:         req.Options.Temperature,
+			TopP:                req.Options.TopP,
 		},
 		TurnBudgets{
 			MaxInputTokens: req.Options.MaxInputTokens,
@@ -166,7 +167,7 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 	if maxTotalTokens <= 0 {
 		maxTotalTokens = 0
 	}
-	floretCfg := redevenFloretAdapterConfig(systemPrompt, floretContextPolicy(contextWindow, inputContextLimit, req.Options.MaxOutputTokens))
+	floretCfg := redevenFloretAdapterConfig(systemPrompt, floretContextPolicy(contextWindow, inputContextLimit, req.Options.MaxOutputTokens), req.Options.ReasoningSelection)
 
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
 	result, err := flruntime.RunProjectedTurn(ctx, flruntime.ProjectedTurnOptions{
@@ -196,6 +197,7 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 			MaxCostUSD:             req.Options.MaxCostUSD,
 			MaxLengthContinuations: 2,
 		},
+		Reasoning: req.Options.ReasoningSelection,
 	})
 	if err != nil && result.Status == "" {
 		return r.failRunWithCode(classifyRunFailureCode(err, runErrorCodeFloretEngineFailed), "", err)
@@ -310,12 +312,13 @@ func enableFlowerWebSearchTool(providerCfg config.AIProvider, capability provide
 	return strings.EqualFold(strings.TrimSpace(providerCfg.Type), "openai_compatible")
 }
 
-func redevenFloretAdapterConfig(systemPrompt string, contextPolicy flconfig.ContextPolicy) flconfig.Config {
+func redevenFloretAdapterConfig(systemPrompt string, contextPolicy flconfig.ContextPolicy, reasoning config.AIReasoningSelection) flconfig.Config {
 	return flconfig.Config{
 		Provider:      flconfig.ProviderFake,
 		Model:         "redeven-model-adapter",
 		SystemPrompt:  systemPrompt,
 		ContextPolicy: contextPolicy,
+		Reasoning:     reasoning,
 	}
 }
 

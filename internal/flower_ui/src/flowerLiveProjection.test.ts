@@ -261,9 +261,9 @@ describe('Flower live projection', () => {
     expect(matchingTerminal.thread.model_io_status).toBeNull();
   });
 
-  it('hides bootstrap model io status for waiting and terminal threads', () => {
-    for (const status of ['waiting_user', 'waiting_approval', 'success', 'failed', 'canceled'] as const) {
-      const projected = projectFlowerLiveBootstrap(bootstrap({
+	it('hides bootstrap model io status for waiting and terminal threads', () => {
+		for (const status of ['waiting_user', 'waiting_approval', 'success', 'failed', 'canceled'] as const) {
+			const projected = projectFlowerLiveBootstrap(bootstrap({
         thread: thread({ status }),
         live_state: {
           thread_patch: {},
@@ -281,11 +281,40 @@ describe('Flower live projection', () => {
       }));
 
       expect(projected.model_io_status).toBeNull();
-    }
-  });
+		}
+	});
 
-  it('hides model io status when thread patches enter waiting or terminal status without run identity', () => {
-    const initial = thread({
+	it('projects waiting prompt reasoning selection', () => {
+		const projected = projectFlowerLiveBootstrap(bootstrap({
+			thread: thread({ status: 'waiting_user' }),
+			live_state: {
+				thread_patch: {},
+				runs: {},
+				approval_actions: {},
+				input_requests: {
+					'prompt-1': {
+						prompt_id: 'prompt-1',
+						message_id: 'msg-wait',
+						tool_id: 'tool-wait',
+						tool_name: 'request_user_input',
+						reasoning_selection: { level: 'high' },
+						questions: [{
+							id: 'next',
+							header: 'Continue',
+							question: 'Continue?',
+							response_mode: 'select',
+							choices: [{ choice_id: 'yes', label: 'Yes', kind: 'select' }],
+						}],
+					},
+				},
+			},
+		}));
+
+		expect(projected.input_request?.reasoning_selection).toEqual({ level: 'high' });
+	});
+
+	it('hides model io status when thread patches enter waiting or terminal status without run identity', () => {
+		const initial = thread({
       active_run_id: 'run-new',
       model_io_status: {
         phase: 'streaming',
@@ -500,6 +529,105 @@ describe('Flower live projection', () => {
     expect(result.thread.status).toBe('success');
     expect(result.thread.read_status.is_unread).toBe(true);
     expect(result.thread.read_status.snapshot.activity_signature).toBe('sig-20');
+  });
+
+  it('applies normalized reasoning fields from thread patches', () => {
+    const initial = thread({
+      reasoning_selection: { level: 'medium' },
+    });
+
+    const mapped = mapFlowerLiveEvents({
+      events: [{
+        schema_version: 1,
+        seq: 1,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        run_id: 'run-1',
+        at_unix_ms: 4000,
+        kind: 'thread.patched',
+        payload: {
+          patch: {
+            reasoning_selection: { level: 'high' },
+            reasoning_capability: {
+              kind: 'effort',
+              supported_levels: ['low', 'medium', 'high'],
+              default_level: 'medium',
+              wire_shape: 'openai_responses_reasoning_effort',
+              source_urls: ['https://developers.openai.com/api/docs/guides/reasoning'],
+              source_checked_at: '2026-06-23',
+              fixture: 'openai_responses_reasoning_effort',
+            },
+          },
+        },
+      }],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+    const result = applyFlowerLiveEvent(initial, 0, mapped.events[0]);
+
+    expect(result.thread.reasoning_selection).toEqual({ level: 'high' });
+    expect(result.thread.reasoning_capability?.supported_levels).toEqual(['low', 'medium', 'high']);
+  });
+
+  it('clears reasoning fields from live thread patches', () => {
+    const initial = thread({
+      reasoning_selection: { level: 'medium' },
+      reasoning_capability: {
+        kind: 'effort',
+        supported_levels: ['low', 'medium', 'high'],
+        default_level: 'medium',
+        wire_shape: 'openai_responses_reasoning_effort',
+      },
+    });
+
+    const mapped = mapFlowerLiveEvents({
+      events: [{
+        schema_version: 1,
+        seq: 1,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        run_id: 'run-1',
+        at_unix_ms: 4000,
+        kind: 'thread.patched',
+        payload: {
+          patch: {
+            model_id: 'custom/plain-model',
+            reasoning_selection: null,
+            reasoning_capability: null,
+          },
+        },
+      }],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+    const result = applyFlowerLiveEvent(initial, 0, mapped.events[0]);
+
+    expect(result.thread.model_id).toBe('custom/plain-model');
+    expect(result.thread.reasoning_selection).toBeUndefined();
+    expect(result.thread.reasoning_capability).toBeUndefined();
+  });
+
+  it('rejects unsupported inbound reasoning levels instead of falling back', () => {
+    for (const level of ['turbo', 'none']) {
+      expect(() => mapFlowerLiveEvents({
+        events: [{
+          schema_version: 1,
+          seq: 1,
+          endpoint_id: 'runtime',
+          thread_id: 'th-live',
+          run_id: 'run-1',
+          at_unix_ms: 4000,
+          kind: 'thread.patched',
+          payload: {
+            patch: {
+              reasoning_selection: { level },
+            },
+          },
+        }],
+        next_cursor: 1,
+        retained_from_seq: 1,
+      })).toThrow(/reasoning level is unsupported/);
+    }
   });
 
   it('maps persisted user message context actions into transcript messages', () => {

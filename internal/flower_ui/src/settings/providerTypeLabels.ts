@@ -9,6 +9,10 @@ const EN_US_PROVIDER_TYPE_LABELS: FlowerProviderTypeLabels = {
   chatglm: 'ChatGLM',
   deepseek: 'DeepSeek',
   qwen: 'Qwen',
+  openrouter: 'OpenRouter',
+  xai: 'xAI',
+  groq: 'Groq',
+  ollama: 'Ollama',
   openai_compatible: 'OpenAI-compatible',
 };
 

@@ -1,6 +1,10 @@
 package ai
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/floegence/redeven/internal/config"
+)
 
 const FlowerLiveSchemaVersion int64 = 1
 
@@ -95,25 +99,179 @@ type FlowerLiveRunStatusChangedPayload struct {
 }
 
 type FlowerLiveThreadPatch struct {
-	ThreadID            string                  `json:"thread_id,omitempty"`
-	Title               string                  `json:"title,omitempty"`
-	ModelID             string                  `json:"model_id,omitempty"`
-	ModelLocked         *bool                   `json:"model_locked,omitempty"`
-	ExecutionMode       string                  `json:"execution_mode,omitempty"`
-	WorkingDir          string                  `json:"working_dir,omitempty"`
-	QueuedTurnCount     *int                    `json:"queued_turn_count,omitempty"`
-	RunStatus           string                  `json:"run_status,omitempty"`
-	RunUpdatedAtUnixMs  int64                   `json:"run_updated_at_unix_ms,omitempty"`
-	RunErrorCode        string                  `json:"run_error_code,omitempty"`
-	RunError            string                  `json:"run_error,omitempty"`
-	WaitingPrompt       *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
-	LastContextRunID    string                  `json:"last_context_run_id,omitempty"`
-	PinnedAtUnixMs      int64                   `json:"pinned_at_unix_ms,omitempty"`
-	CreatedAtUnixMs     int64                   `json:"created_at_unix_ms,omitempty"`
-	UpdatedAtUnixMs     int64                   `json:"updated_at_unix_ms,omitempty"`
-	LastMessageAtUnixMs int64                   `json:"last_message_at_unix_ms,omitempty"`
-	LastMessagePreview  string                  `json:"last_message_preview,omitempty"`
-	ReadStatus          *FlowerThreadReadView   `json:"read_status,omitempty"`
+	ThreadID               string                        `json:"thread_id,omitempty"`
+	Title                  string                        `json:"title,omitempty"`
+	ModelID                string                        `json:"model_id,omitempty"`
+	ModelLocked            *bool                         `json:"model_locked,omitempty"`
+	ExecutionMode          string                        `json:"execution_mode,omitempty"`
+	WorkingDir             string                        `json:"working_dir,omitempty"`
+	QueuedTurnCount        *int                          `json:"queued_turn_count,omitempty"`
+	RunStatus              string                        `json:"run_status,omitempty"`
+	RunUpdatedAtUnixMs     int64                         `json:"run_updated_at_unix_ms,omitempty"`
+	RunErrorCode           string                        `json:"run_error_code,omitempty"`
+	RunError               string                        `json:"run_error,omitempty"`
+	WaitingPrompt          *RequestUserInputPrompt       `json:"waiting_prompt,omitempty"`
+	LastContextRunID       string                        `json:"last_context_run_id,omitempty"`
+	PinnedAtUnixMs         int64                         `json:"pinned_at_unix_ms,omitempty"`
+	CreatedAtUnixMs        int64                         `json:"created_at_unix_ms,omitempty"`
+	UpdatedAtUnixMs        int64                         `json:"updated_at_unix_ms,omitempty"`
+	LastMessageAtUnixMs    int64                         `json:"last_message_at_unix_ms,omitempty"`
+	LastMessagePreview     string                        `json:"last_message_preview,omitempty"`
+	ReasoningSelection     *config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
+	ReasoningCapability    *config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
+	ReasoningSelectionSet  bool                          `json:"-"`
+	ReasoningCapabilitySet bool                          `json:"-"`
+	ReadStatus             *FlowerThreadReadView         `json:"read_status,omitempty"`
+}
+
+func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
+	type patchJSON struct {
+		ThreadID            string                        `json:"thread_id,omitempty"`
+		Title               string                        `json:"title,omitempty"`
+		ModelID             string                        `json:"model_id,omitempty"`
+		ModelLocked         *bool                         `json:"model_locked,omitempty"`
+		ExecutionMode       string                        `json:"execution_mode,omitempty"`
+		WorkingDir          string                        `json:"working_dir,omitempty"`
+		QueuedTurnCount     *int                          `json:"queued_turn_count,omitempty"`
+		RunStatus           string                        `json:"run_status,omitempty"`
+		RunUpdatedAtUnixMs  int64                         `json:"run_updated_at_unix_ms,omitempty"`
+		RunErrorCode        string                        `json:"run_error_code,omitempty"`
+		RunError            string                        `json:"run_error,omitempty"`
+		WaitingPrompt       *RequestUserInputPrompt       `json:"waiting_prompt,omitempty"`
+		LastContextRunID    string                        `json:"last_context_run_id,omitempty"`
+		PinnedAtUnixMs      int64                         `json:"pinned_at_unix_ms,omitempty"`
+		CreatedAtUnixMs     int64                         `json:"created_at_unix_ms,omitempty"`
+		UpdatedAtUnixMs     int64                         `json:"updated_at_unix_ms,omitempty"`
+		LastMessageAtUnixMs int64                         `json:"last_message_at_unix_ms,omitempty"`
+		LastMessagePreview  string                        `json:"last_message_preview,omitempty"`
+		ReasoningSelection  *config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
+		ReasoningCapability *config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
+		ReadStatus          *FlowerThreadReadView         `json:"read_status,omitempty"`
+	}
+	out := patchJSON{
+		ThreadID:            p.ThreadID,
+		Title:               p.Title,
+		ModelID:             p.ModelID,
+		ModelLocked:         p.ModelLocked,
+		ExecutionMode:       p.ExecutionMode,
+		WorkingDir:          p.WorkingDir,
+		QueuedTurnCount:     p.QueuedTurnCount,
+		RunStatus:           p.RunStatus,
+		RunUpdatedAtUnixMs:  p.RunUpdatedAtUnixMs,
+		RunErrorCode:        p.RunErrorCode,
+		RunError:            p.RunError,
+		WaitingPrompt:       p.WaitingPrompt,
+		LastContextRunID:    p.LastContextRunID,
+		PinnedAtUnixMs:      p.PinnedAtUnixMs,
+		CreatedAtUnixMs:     p.CreatedAtUnixMs,
+		UpdatedAtUnixMs:     p.UpdatedAtUnixMs,
+		LastMessageAtUnixMs: p.LastMessageAtUnixMs,
+		LastMessagePreview:  p.LastMessagePreview,
+		ReasoningSelection:  p.ReasoningSelection,
+		ReasoningCapability: p.ReasoningCapability,
+		ReadStatus:          p.ReadStatus,
+	}
+	if p.ReasoningSelectionSet && p.ReasoningSelection == nil {
+		data, err := json.Marshal(out)
+		if err != nil {
+			return nil, err
+		}
+		var record map[string]json.RawMessage
+		if err := json.Unmarshal(data, &record); err != nil {
+			return nil, err
+		}
+		record["reasoning_selection"] = json.RawMessage("null")
+		if p.ReasoningCapabilitySet && p.ReasoningCapability == nil {
+			record["reasoning_capability"] = json.RawMessage("null")
+		}
+		return json.Marshal(record)
+	}
+	if p.ReasoningCapabilitySet && p.ReasoningCapability == nil {
+		data, err := json.Marshal(out)
+		if err != nil {
+			return nil, err
+		}
+		var record map[string]json.RawMessage
+		if err := json.Unmarshal(data, &record); err != nil {
+			return nil, err
+		}
+		record["reasoning_capability"] = json.RawMessage("null")
+		return json.Marshal(record)
+	}
+	return json.Marshal(out)
+}
+
+func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		ThreadID            string                  `json:"thread_id,omitempty"`
+		Title               string                  `json:"title,omitempty"`
+		ModelID             string                  `json:"model_id,omitempty"`
+		ModelLocked         *bool                   `json:"model_locked,omitempty"`
+		ExecutionMode       string                  `json:"execution_mode,omitempty"`
+		WorkingDir          string                  `json:"working_dir,omitempty"`
+		QueuedTurnCount     *int                    `json:"queued_turn_count,omitempty"`
+		RunStatus           string                  `json:"run_status,omitempty"`
+		RunUpdatedAtUnixMs  int64                   `json:"run_updated_at_unix_ms,omitempty"`
+		RunErrorCode        string                  `json:"run_error_code,omitempty"`
+		RunError            string                  `json:"run_error,omitempty"`
+		WaitingPrompt       *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
+		LastContextRunID    string                  `json:"last_context_run_id,omitempty"`
+		PinnedAtUnixMs      int64                   `json:"pinned_at_unix_ms,omitempty"`
+		CreatedAtUnixMs     int64                   `json:"created_at_unix_ms,omitempty"`
+		UpdatedAtUnixMs     int64                   `json:"updated_at_unix_ms,omitempty"`
+		LastMessageAtUnixMs int64                   `json:"last_message_at_unix_ms,omitempty"`
+		LastMessagePreview  string                  `json:"last_message_preview,omitempty"`
+		ReasoningSelection  json.RawMessage         `json:"reasoning_selection"`
+		ReasoningCapability json.RawMessage         `json:"reasoning_capability"`
+		ReadStatus          *FlowerThreadReadView   `json:"read_status,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	*p = FlowerLiveThreadPatch{
+		ThreadID:            raw.ThreadID,
+		Title:               raw.Title,
+		ModelID:             raw.ModelID,
+		ModelLocked:         raw.ModelLocked,
+		ExecutionMode:       raw.ExecutionMode,
+		WorkingDir:          raw.WorkingDir,
+		QueuedTurnCount:     raw.QueuedTurnCount,
+		RunStatus:           raw.RunStatus,
+		RunUpdatedAtUnixMs:  raw.RunUpdatedAtUnixMs,
+		RunErrorCode:        raw.RunErrorCode,
+		RunError:            raw.RunError,
+		WaitingPrompt:       raw.WaitingPrompt,
+		LastContextRunID:    raw.LastContextRunID,
+		PinnedAtUnixMs:      raw.PinnedAtUnixMs,
+		CreatedAtUnixMs:     raw.CreatedAtUnixMs,
+		UpdatedAtUnixMs:     raw.UpdatedAtUnixMs,
+		LastMessageAtUnixMs: raw.LastMessageAtUnixMs,
+		LastMessagePreview:  raw.LastMessagePreview,
+		ReadStatus:          raw.ReadStatus,
+	}
+	if raw.ReasoningSelection != nil {
+		p.ReasoningSelectionSet = true
+		if string(raw.ReasoningSelection) != "null" {
+			var selection config.AIReasoningSelection
+			if err := json.Unmarshal(raw.ReasoningSelection, &selection); err != nil {
+				return err
+			}
+			selection = config.NormalizeAIReasoningSelection(selection)
+			p.ReasoningSelection = &selection
+		}
+	}
+	if raw.ReasoningCapability != nil {
+		p.ReasoningCapabilitySet = true
+		if string(raw.ReasoningCapability) != "null" {
+			var capability config.AIReasoningCapability
+			if err := json.Unmarshal(raw.ReasoningCapability, &capability); err != nil {
+				return err
+			}
+			capability = capability.Normalize()
+			p.ReasoningCapability = &capability
+		}
+	}
+	return nil
 }
 
 type FlowerLiveThreadPatchedPayload struct {

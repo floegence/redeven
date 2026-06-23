@@ -1,23 +1,29 @@
 package model
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/floegence/redeven/internal/config"
+)
 
 // ModelCapability defines model/runtime feature support for prompt adaptation.
 type ModelCapability struct {
-	ProviderID                     string `json:"provider_id"`
-	ProviderType                   string `json:"provider_type,omitempty"`
-	ResolverVersion                int    `json:"resolver_version,omitempty"`
-	ModelName                      string `json:"model_name"`
-	SupportsTools                  bool   `json:"supports_tools"`
-	SupportsParallelTools          bool   `json:"supports_parallel_tools"`
-	SupportsStrictJSONSchema       bool   `json:"supports_strict_json_schema"`
-	SupportsImageInput             bool   `json:"supports_image_input"`
-	SupportsFileInput              bool   `json:"supports_file_input"`
-	SupportsReasoningTokens        bool   `json:"supports_reasoning_tokens"`
-	SupportsAskUserQuestionBatches bool   `json:"supports_ask_user_question_batches"`
-	MaxContextTokens               int    `json:"max_context_tokens"`
-	MaxOutputTokens                int    `json:"max_output_tokens"`
-	PreferredToolSchemaMode        string `json:"preferred_tool_schema_mode"`
+	ProviderID                     string                       `json:"provider_id"`
+	ProviderType                   string                       `json:"provider_type,omitempty"`
+	ResolverVersion                int                          `json:"resolver_version,omitempty"`
+	ModelName                      string                       `json:"model_name"`
+	WireModelName                  string                       `json:"wire_model_name,omitempty"`
+	SupportsTools                  bool                         `json:"supports_tools"`
+	SupportsParallelTools          bool                         `json:"supports_parallel_tools"`
+	SupportsStrictJSONSchema       bool                         `json:"supports_strict_json_schema"`
+	SupportsImageInput             bool                         `json:"supports_image_input"`
+	SupportsFileInput              bool                         `json:"supports_file_input"`
+	SupportsReasoningTokens        bool                         `json:"supports_reasoning_tokens"`
+	ReasoningCapability            config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
+	SupportsAskUserQuestionBatches bool                         `json:"supports_ask_user_question_batches"`
+	MaxContextTokens               int                          `json:"max_context_tokens"`
+	MaxOutputTokens                int                          `json:"max_output_tokens"`
+	PreferredToolSchemaMode        string                       `json:"preferred_tool_schema_mode"`
 }
 
 type MemoryScope string
@@ -232,7 +238,12 @@ func NormalizeCapability(in ModelCapability) ModelCapability {
 	out := in
 	out.ProviderID = strings.TrimSpace(out.ProviderID)
 	out.ModelName = strings.TrimSpace(out.ModelName)
+	out.WireModelName = strings.TrimSpace(out.WireModelName)
+	if out.WireModelName == "" {
+		out.WireModelName = out.ModelName
+	}
 	out.ProviderType = strings.ToLower(strings.TrimSpace(out.ProviderType))
+	out.ReasoningCapability = out.ReasoningCapability.Normalize()
 	if out.ResolverVersion < 0 {
 		out.ResolverVersion = 0
 	}

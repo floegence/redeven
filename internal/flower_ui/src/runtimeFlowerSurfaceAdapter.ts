@@ -1,5 +1,6 @@
 import type {
   FlowerFileOpenRequest,
+  FlowerReasoningSelection,
   FlowerResolveHandlerInput,
   FlowerRouterDecision,
   FlowerTurnLaunchInput,
@@ -51,6 +52,7 @@ type MarkThreadReadInput = Readonly<{
 type ThreadPatchInput = Readonly<{
   title?: string;
   pinned?: boolean;
+  reasoning_selection?: FlowerReasoningSelection | null;
 }>;
 
 type RuntimeApprovalSubmitInput = Readonly<{
@@ -162,6 +164,12 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       const tid = trim(threadID);
       if (!tid) throw new Error(missingThreadIDMessage(options));
       const threadResp = await options.transport.patchThread(tid, { pinned });
+      return loadThread(trim(threadResp.thread?.thread_id) || tid);
+    },
+    setThreadReasoningSelection: async (threadID, selection) => {
+      const tid = trim(threadID);
+      if (!tid) throw new Error(missingThreadIDMessage(options));
+      const threadResp = await options.transport.patchThread(tid, { reasoning_selection: selection ?? null });
       return loadThread(trim(threadResp.thread?.thread_id) || tid);
     },
     forkThread: async (threadID) => {
