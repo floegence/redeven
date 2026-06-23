@@ -26,7 +26,7 @@ Checked-in generated OKF dist files must match source. Release automation should
 [6] redeven:.github/workflows/ci-check.yml:98 - Runtime compatibility contract source checks run in CI.
 [7] redeven:.github/workflows/ci-check.yml:101 - CI runs the Gateway protocol contract guard.
 [8] redeven:.github/workflows/ci-check.yml:107 - CI runs the Flower UI behavior contract script.
-[9] redeven:scripts/check_flower_ui.sh:16 - The local Flower UI gate runs stop/send interaction and shared timeline projection tests.
+[9] redeven:scripts/check_flower_ui.sh:16 - The local Flower UI gate runs stop/send interaction, shared timeline projection, and markdown readability tests.
 [10] redeven:.github/workflows/ci-check.yml:116 - Embedded assets are built before Go tests and lint.
 [11] redeven:.github/workflows/release.yml:48 - Release tags validate the runtime compatibility contract for the tag.
 [12] redeven:.github/workflows/release.yml:51 - Release tags validate the Gateway protocol contract before packaging.

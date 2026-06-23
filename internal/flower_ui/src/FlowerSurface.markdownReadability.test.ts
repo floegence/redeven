@@ -37,18 +37,39 @@ describe('Flower markdown readability', () => {
     const css = flowerStyles();
     const blockRule = cssRule(css, '.flower-chat-md-block');
     const dividerRule = cssRule(css, '.flower-chat-md-block hr');
+    const headingRule = cssRule(css, '.flower-chat-md-block :is(h1, h2, h3, h4, h5, h6)');
     const inlineCodeRule = cssRule(css, '.flower-chat-md-inline-code');
     const codeBlockRule = cssRule(css, '.flower-chat-md-code-block');
+    const framedCodeBlockRule = cssRule(css, '.flower-chat-md-code-frame > .flower-chat-md-code-block');
 
     expect(blockRule).toContain("--flower-chat-md-code-font: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono'");
     expect(blockRule).not.toContain('Iosevka');
     expect(dividerRule).toContain('margin: 1.7rem 0 1.05rem');
     expect(dividerRule).toContain('var(--flower-chat-surface-border) 58%');
+    expect(headingRule).toContain('margin: 1.35rem 0 0.55rem');
     expect(inlineCodeRule).toContain('var(--flower-chat-surface-elevated) 66%, var(--foreground) 24%');
     expect(inlineCodeRule).toContain('font-family: var(--flower-chat-md-code-font)');
     expect(inlineCodeRule).toContain('font-weight: 560');
     expect(codeBlockRule).toContain('font-family: var(--flower-chat-md-code-font)');
     expect(codeBlockRule).toContain('font-size: 0.8125rem');
     expect(codeBlockRule).toContain('line-height: 1.68');
+    expect(framedCodeBlockRule).toContain('margin-top: 0');
+  });
+
+  it('limits top-margin resets to the first rendered markdown block', () => {
+    const css = flowerStyles();
+    const resetSelectors = [
+      '.flower-chat-md-block > .flower-chat-md-committed-segment:first-child > :first-child',
+      '.flower-chat-md-block > .flower-chat-md-tail-frame:first-child .flower-chat-md-tail > :first-child',
+      '.flower-chat-md-blockquote > :first-child',
+      '.flower-chat-md-block li > :first-child',
+    ];
+    const rootResetRule = cssRule(css, resetSelectors.join(',\n'));
+
+    expect(css).not.toContain('.flower-chat-md-block :first-child');
+    expect(rootResetRule).toContain('margin-top: 0');
+    for (const selector of resetSelectors) {
+      expect(rootResetRule).toContain(selector);
+    }
   });
 });

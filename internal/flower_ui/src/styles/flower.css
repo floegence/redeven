@@ -1257,9 +1257,10 @@ html.dark .flower-component-shell {
   border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 58%, transparent);
 }
 
-.flower-chat-md-block :first-child,
-.flower-chat-md-committed-segment:first-child > :first-child,
-.flower-chat-md-tail:first-child > :first-child {
+.flower-chat-md-block > .flower-chat-md-committed-segment:first-child > :first-child,
+.flower-chat-md-block > .flower-chat-md-tail-frame:first-child .flower-chat-md-tail > :first-child,
+.flower-chat-md-blockquote > :first-child,
+.flower-chat-md-block li > :first-child {
   margin-top: 0;
 }
 
@@ -1385,6 +1386,10 @@ html.dark .flower-component-shell {
   white-space: pre;
   word-break: normal;
   overflow-wrap: normal;
+}
+
+.flower-chat-md-code-frame > .flower-chat-md-code-block {
+  margin-top: 0;
 }
 
 .flower-message-bubble-user .flower-chat-md-code-block {
