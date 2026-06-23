@@ -154,6 +154,58 @@ export type FlowerModelIOStatus = Readonly<{
   updated_at_ms: number;
 }>;
 
+export type FlowerContextPressureStatus =
+  | 'stable'
+  | 'near_threshold'
+  | 'will_compact'
+  | 'hard_limit'
+  | 'estimated';
+
+export type FlowerContextUsage = Readonly<{
+  run_id?: string;
+  step_index?: number;
+  phase: 'projected_request' | 'provider_usage' | string;
+  input_tokens?: number;
+  context_window_tokens?: number;
+  threshold_tokens?: number;
+  request_safe_limit_tokens?: number;
+  output_headroom_tokens?: number;
+  used_ratio?: number;
+  threshold_ratio?: number;
+  pressure_status: FlowerContextPressureStatus | string;
+  source?: string;
+  updated_at_ms: number;
+}>;
+
+export type FlowerContextCompactionStatus = 'compacting' | 'compacted' | 'failed';
+
+export type FlowerContextCompaction = Readonly<{
+  operation_id: string;
+  run_id?: string;
+  anchor_message_id?: string;
+  step_index?: number;
+  phase: 'start' | 'complete' | 'failed' | string;
+  status: FlowerContextCompactionStatus | string;
+  trigger?: string;
+  reason?: string;
+  compaction_id?: string;
+  compaction_generation?: number;
+  compaction_window_id?: string;
+  tokens_before?: number;
+  tokens_after_estimate?: number;
+  error?: string;
+  updated_at_ms: number;
+}>;
+
+export type FlowerTimelineDecoration = Readonly<{
+  decoration_id: string;
+  kind: 'context_compaction' | string;
+  anchor_message_id?: string;
+  placement: 'before' | 'after' | string;
+  ordinal: number;
+  compaction: FlowerContextCompaction;
+}>;
+
 export type FlowerActivityStatus =
   | 'pending'
   | 'running'
@@ -337,6 +389,9 @@ export type FlowerThreadSnapshot = Readonly<{
   model_io_status?: FlowerModelIOStatus | null;
   reasoning_selection?: FlowerReasoningSelection;
   reasoning_capability?: FlowerReasoningCapability;
+  context_usage?: FlowerContextUsage | null;
+  context_compactions?: readonly FlowerContextCompaction[];
+  timeline_decorations?: readonly FlowerTimelineDecoration[];
   approval_actions?: readonly FlowerApprovalAction[];
   input_request?: FlowerInputRequest | null;
   error?: FlowerThreadError | null;
@@ -389,7 +444,8 @@ export type FlowerLiveKind =
   | 'input.requested'
   | 'input.resolved'
   | 'model_io.updated'
-  | 'usage.updated'
+  | 'context.usage.updated'
+  | 'context.compaction.updated'
   | 'timeline.replaced'
   | 'stream.resync_required';
 
@@ -436,6 +492,9 @@ export type FlowerLiveMaterializedState = Readonly<{
   thread_patch: FlowerLiveThreadPatch;
   runs: Readonly<Record<string, FlowerLiveRunState>>;
   model_io?: FlowerModelIOStatus | null;
+  context_usage?: FlowerContextUsage | null;
+  context_compactions?: readonly FlowerContextCompaction[];
+  timeline_decorations?: readonly FlowerTimelineDecoration[];
   approval_actions: Readonly<Record<string, FlowerApprovalAction>>;
   input_requests: Readonly<Record<string, FlowerInputRequest>>;
 }>;
@@ -508,7 +567,11 @@ export type FlowerLiveInputResolvedPayload = Readonly<{
 }>;
 
 export type FlowerLiveUsageUpdatedPayload = Readonly<{
-  usage: Readonly<Record<string, unknown>>;
+  usage: FlowerContextUsage;
+}>;
+
+export type FlowerLiveContextCompactionUpdatedPayload = Readonly<{
+  compaction: FlowerContextCompaction;
 }>;
 
 export type FlowerLiveModelIOUpdatedPayload = Readonly<{
@@ -559,7 +622,8 @@ export type FlowerLiveEventPayloadByKind = Readonly<{
   'input.requested': FlowerLiveInputRequestedPayload;
   'input.resolved': FlowerLiveInputResolvedPayload;
   'model_io.updated': FlowerLiveModelIOUpdatedPayload;
-  'usage.updated': FlowerLiveUsageUpdatedPayload;
+  'context.usage.updated': FlowerLiveUsageUpdatedPayload;
+  'context.compaction.updated': FlowerLiveContextCompactionUpdatedPayload;
   'timeline.replaced': FlowerLiveTimelineReplacedPayload;
   'stream.resync_required': FlowerLiveResyncRequiredPayload;
 }>;

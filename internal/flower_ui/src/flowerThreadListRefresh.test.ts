@@ -6,7 +6,7 @@ import type {
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
-import { mergeFlowerThreadListRefresh } from './flowerThreadListRefresh';
+import { mergeFlowerThreadListRefresh, sameThreadSnapshot } from './flowerThreadListRefresh';
 
 function readStatus(waitingPromptID = ''): FlowerThreadReadStatus {
   return {
@@ -74,10 +74,6 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     ...overrides,
   };
 }
-
-const sameThreadSnapshot = (left: FlowerThreadSnapshot, right: FlowerThreadSnapshot): boolean => (
-  JSON.stringify(left) === JSON.stringify(right)
-);
 
 describe('mergeFlowerThreadListRefresh', () => {
   it('keeps selected transcript detail while applying list-owned metadata', () => {
@@ -151,6 +147,119 @@ describe('mergeFlowerThreadListRefresh', () => {
     expect(merged).toBe(refreshed);
     expect(merged?.messages).toBe(refreshedMessages);
     expect(merged?.messages[0]?.content).toBe('Fresh transcript detail');
+  });
+
+  it('preserves running live presentation state when a selected list summary omits it', () => {
+    const existing = thread({
+      thread_id: 'thread-selected',
+      status: 'running',
+      active_run_id: 'run-1',
+      model_io_status: {
+        phase: 'streaming',
+        run_id: 'run-1',
+        updated_at_ms: 20,
+      },
+      context_usage: {
+        run_id: 'run-1',
+        phase: 'projected_request',
+        input_tokens: 700,
+        context_window_tokens: 1000,
+        used_ratio: 0.7,
+        pressure_status: 'near_threshold',
+        updated_at_ms: 21,
+      },
+      context_compactions: [{
+        operation_id: 'compact-1',
+        run_id: 'run-1',
+        phase: 'start',
+        status: 'compacting',
+        updated_at_ms: 22,
+      }],
+      timeline_decorations: [{
+        decoration_id: 'context-compaction:compact-1',
+        kind: 'context_compaction',
+        anchor_message_id: 'assistant-live',
+        placement: 'before',
+        ordinal: 0,
+        compaction: {
+          operation_id: 'compact-1',
+          run_id: 'run-1',
+          phase: 'start',
+          status: 'compacting',
+          updated_at_ms: 22,
+        },
+      }],
+      messages: [{
+        id: 'assistant-live',
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        created_at_ms: 10,
+        active_cursor: true,
+      }],
+    });
+    const summary = thread({
+      ...existing,
+      updated_at_ms: 30,
+      messages: [],
+      active_run_id: undefined,
+      model_io_status: undefined,
+      context_usage: undefined,
+      context_compactions: undefined,
+      timeline_decorations: undefined,
+    });
+
+    const [merged] = mergeFlowerThreadListRefresh([existing], [summary], {
+      selectedThreadID: existing.thread_id,
+      sameThreadSnapshot,
+    });
+
+    expect(merged?.messages).toBe(existing.messages);
+    expect(merged?.active_run_id).toBe(existing.active_run_id);
+    expect(merged?.model_io_status).toBe(existing.model_io_status);
+    expect(merged?.context_usage).toBe(existing.context_usage);
+    expect(merged?.context_compactions).toBe(existing.context_compactions);
+    expect(merged?.timeline_decorations).toBe(existing.timeline_decorations);
+  });
+
+  it('keeps only the active run context usage when a summary reflects a new run', () => {
+    const existing = thread({
+      thread_id: 'thread-selected',
+      status: 'running',
+      active_run_id: 'run-old',
+      context_usage: {
+        run_id: 'run-old',
+        phase: 'projected_request',
+        input_tokens: 700,
+        context_window_tokens: 1000,
+        used_ratio: 0.7,
+        pressure_status: 'near_threshold',
+        updated_at_ms: 21,
+      },
+    });
+    const summary = thread({
+      ...existing,
+      active_run_id: 'run-new',
+      context_usage: {
+        run_id: 'run-new',
+        phase: 'projected_request',
+        input_tokens: 100,
+        context_window_tokens: 1000,
+        used_ratio: 0.1,
+        pressure_status: 'stable',
+        updated_at_ms: 31,
+      },
+      messages: [],
+    });
+
+    const [merged] = mergeFlowerThreadListRefresh([existing], [summary], {
+      selectedThreadID: existing.thread_id,
+      sameThreadSnapshot,
+    });
+
+    expect(merged?.active_run_id).toBe('run-new');
+    expect(merged?.context_usage?.run_id).toBe('run-new');
+    expect(merged?.context_usage?.used_ratio).toBe(0.1);
   });
 
   it('clears old errors when a terminal summary no longer carries one', () => {
@@ -361,5 +470,70 @@ describe('mergeFlowerThreadListRefresh', () => {
     expect(retained.map((item) => item.thread_id)).toEqual(['thread-other', 'thread-pending-selected']);
     expect(retained[1]).toBe(selected);
     expect(dropped.map((item) => item.thread_id)).toEqual(['thread-other']);
+  });
+});
+
+describe('sameThreadSnapshot', () => {
+  it('treats live model and context presentation changes as distinct snapshots', () => {
+    const base = thread({
+      status: 'running',
+      active_run_id: 'run-1',
+      messages: [{
+        id: 'assistant-live',
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        created_at_ms: 10,
+        active_cursor: true,
+      }],
+    });
+
+    expect(sameThreadSnapshot(base, {
+      ...base,
+      model_io_status: {
+        phase: 'waiting_response',
+        run_id: 'run-1',
+        updated_at_ms: 20,
+      },
+    })).toBe(false);
+    expect(sameThreadSnapshot(base, {
+      ...base,
+      context_usage: {
+        run_id: 'run-1',
+        phase: 'projected_request',
+        input_tokens: 700,
+        context_window_tokens: 1000,
+        used_ratio: 0.7,
+        pressure_status: 'near_threshold',
+        updated_at_ms: 21,
+      },
+    })).toBe(false);
+    expect(sameThreadSnapshot(base, {
+      ...base,
+      context_compactions: [{
+        operation_id: 'compact-1',
+        run_id: 'run-1',
+        phase: 'start',
+        status: 'compacting',
+        updated_at_ms: 22,
+      }],
+    })).toBe(false);
+    expect(sameThreadSnapshot(base, {
+      ...base,
+      timeline_decorations: [{
+        decoration_id: 'context-compaction:compact-1',
+        kind: 'context_compaction',
+        anchor_message_id: 'assistant-live',
+        placement: 'before',
+        ordinal: 0,
+        compaction: {
+          operation_id: 'compact-1',
+          run_id: 'run-1',
+          phase: 'start',
+          status: 'compacting',
+          updated_at_ms: 22,
+        },
+      }],
+    })).toBe(false);
   });
 });

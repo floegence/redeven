@@ -27,6 +27,8 @@ import type {
   FlowerThreadStatus,
   FlowerThreadSnapshot,
   FlowerChatMessage,
+  FlowerContextCompaction,
+  FlowerContextUsage,
   FlowerActivityStatus,
   FlowerLiveBootstrap,
   FlowerActivityApprovalState,
@@ -55,13 +57,12 @@ import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { FlowerSettingsSurface } from './settings/FlowerSettingsSurface';
 import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerThreadList';
 import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
-import { mergeFlowerThreadListRefresh } from './flowerThreadListRefresh';
+import { flowerThreadReadSnapshotKey, mergeFlowerThreadListRefresh, sameThreadSnapshot } from './flowerThreadListRefresh';
 import { FlowerReasoningControl } from './ReasoningControl';
 import {
   defaultReasoningSelectionForCapability,
   normalizeFlowerReasoningSelection,
   reasoningCapabilitySupportsControl,
-  sameFlowerReasoningCapability,
   sameFlowerReasoningSelection,
   serializeFlowerReasoningSelection,
 } from './reasoning';
@@ -444,51 +445,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!tid) return true;
     return liveCursorValue(live.cursor) >= liveCursorValue(liveCursors.get(tid));
   };
-  const readSnapshotKey = (snapshot: FlowerThreadActivitySnapshot | null | undefined): string => [
-    String(Math.max(0, Math.floor(Number(snapshot?.activity_revision ?? 0)))),
-    String(Math.max(0, Math.floor(Number(snapshot?.last_message_at_unix_ms ?? 0)))),
-    trimString(snapshot?.activity_signature),
-    trimString(snapshot?.waiting_prompt_id),
-  ].join('\x1e');
-  const readStateKey = (thread: FlowerThreadSnapshot): string => [
-    String(thread.read_status.is_unread),
-    readSnapshotKey(thread.read_status.snapshot),
-    String(Math.max(0, Math.floor(Number(thread.read_status.read_state.last_seen_activity_revision ?? 0)))),
-    String(Math.max(0, Math.floor(Number(thread.read_status.read_state.last_read_message_at_unix_ms ?? 0)))),
-    trimString(thread.read_status.read_state.last_seen_activity_signature),
-    trimString(thread.read_status.read_state.last_seen_waiting_prompt_id),
-  ].join('\x1e');
-  const sameStringArray = (left: readonly string[] | undefined, right: readonly string[] | undefined): boolean => {
-    if (left === right) return true;
-    const leftValues = left ?? [];
-    const rightValues = right ?? [];
-    return leftValues.length === rightValues.length && leftValues.every((value, index) => value === rightValues[index]);
-  };
-  const sameReferenceOrEmpty = <T,>(left: readonly T[] | undefined, right: readonly T[] | undefined): boolean => (
-    left === right || ((left?.length ?? 0) === 0 && (right?.length ?? 0) === 0)
-  );
-  const sameThreadSnapshot = (left: FlowerThreadSnapshot, right: FlowerThreadSnapshot): boolean => (
-    left === right
-    || (
-      left.thread_id === right.thread_id
-      && left.title === right.title
-      && left.model_id === right.model_id
-      && left.working_dir === right.working_dir
-      && Number(left.pinned_at_ms ?? 0) === Number(right.pinned_at_ms ?? 0)
-      && left.created_at_ms === right.created_at_ms
-      && left.updated_at_ms === right.updated_at_ms
-      && left.status === right.status
-      && left.source_label === right.source_label
-      && sameFlowerReasoningSelection(left.reasoning_selection, right.reasoning_selection)
-      && sameFlowerReasoningCapability(left.reasoning_capability, right.reasoning_capability)
-      && sameStringArray(left.target_labels, right.target_labels)
-      && readStateKey(left) === readStateKey(right)
-      && sameReferenceOrEmpty(left.messages, right.messages)
-      && sameReferenceOrEmpty(left.approval_actions, right.approval_actions)
-      && left.input_request === right.input_request
-      && left.error === right.error
-    )
-  );
   const readStatusWithUnread = (thread: FlowerThreadSnapshot, isUnread: boolean): FlowerThreadSnapshot => (
     thread.read_status.is_unread === isUnread
       ? thread
@@ -497,7 +453,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const threadWithLocalReadVisibility = (thread: FlowerThreadSnapshot): FlowerThreadSnapshot => {
     if (!thread.read_status.is_unread) return thread;
     const localKey = locallyReadSnapshots.get(thread.thread_id);
-    if (!localKey || localKey !== readSnapshotKey(thread.read_status.snapshot)) {
+    if (!localKey || localKey !== flowerThreadReadSnapshotKey(thread.read_status.snapshot)) {
       return thread;
     }
     return readStatusWithUnread(thread, false);
@@ -517,7 +473,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       t.target_labels?.join('\x1e') ?? '',
       t.working_dir ?? '',
       stableLiveSidebar ? 'live' : String(visibleThread.read_status.is_unread),
-      stableLiveSidebar ? 'live' : readSnapshotKey(t.read_status.snapshot),
+      stableLiveSidebar ? 'live' : flowerThreadReadSnapshotKey(t.read_status.snapshot),
     ].join('\x1f');
   };
   const sidebarItemSignature = (t: FlowerThreadListItem): string => [
@@ -532,7 +488,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     t.target_labels.join('\x1e'),
     t.working_dir,
     SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : String(t.read_status.is_unread),
-    SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : readSnapshotKey(t.read_status.snapshot),
+    SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : flowerThreadReadSnapshotKey(t.read_status.snapshot),
   ].join('\x1f');
   const threadItems = createMemo(() => {
     localReadVisibilityRevision();
@@ -747,7 +703,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const markThreadReadLocally = (threadID: string, snapshot: FlowerThreadActivitySnapshot) => {
     const tid = trimString(threadID);
     if (!tid) return;
-    const key = readSnapshotKey(snapshot);
+    const key = flowerThreadReadSnapshotKey(snapshot);
     if (!key) return;
     locallyReadSnapshots.set(tid, key);
     setLocalReadVisibilityRevision((revision) => revision + 1);
@@ -987,7 +943,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         && (
           previousSelected.updated_at_ms !== selectedSummary.updated_at_ms
           || previousSelected.status !== selectedSummary.status
-          || readSnapshotKey(previousSelected.read_status.snapshot) !== readSnapshotKey(selectedSummary.read_status.snapshot)
+          || flowerThreadReadSnapshotKey(previousSelected.read_status.snapshot) !== flowerThreadReadSnapshotKey(selectedSummary.read_status.snapshot)
         )
       ) {
         void refreshSelectedThread(selectedID);
@@ -1578,6 +1534,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || fallback;
 
   const selectedModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => selectedThread()?.model_io_status ?? null);
+  const selectedContextUsage = createMemo<FlowerContextUsage | null>(() => {
+    const thread = selectedThread();
+    const usage = thread?.context_usage ?? null;
+    if (!thread || !usage) return null;
+    const activeRunID = trimString(thread.active_run_id);
+    if (!activeRunID) return usage;
+    return trimString(usage.run_id) === activeRunID ? usage : null;
+  });
   const selectedThreadHasModelStatus = createMemo(() => selectedModelIOStatus() != null);
   const showScrollToLatestButton = createMemo(() => (
     (selectedThreadHasContent() || selectedThreadHasModelStatus())
@@ -1607,6 +1571,102 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const status = selectedModelIOStatus();
     return status ? modelStatusLabel(status.phase) : '';
   });
+  const formatTokenCount = (tokens: number | undefined): string => {
+    const value = Math.max(0, Math.floor(Number(tokens ?? 0)));
+    if (!Number.isFinite(value) || value <= 0) return '';
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
+    if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`;
+    return String(value);
+  };
+  const contextUsageRatio = (usage: FlowerContextUsage): number => {
+    const direct = Number(usage.used_ratio);
+    if (Number.isFinite(direct) && direct >= 0) return Math.min(1, direct);
+    const input = Number(usage.input_tokens ?? 0);
+    const windowTokens = Number(usage.context_window_tokens ?? 0);
+    return Number.isFinite(input) && Number.isFinite(windowTokens) && input > 0 && windowTokens > 0 ? Math.min(1, input / windowTokens) : 0;
+  };
+  const hasContextUsageRatio = (usage: FlowerContextUsage): boolean => (
+    (Number.isFinite(Number(usage.used_ratio)) && Number(usage.used_ratio) >= 0)
+    || (Number(usage.input_tokens ?? 0) > 0 && Number(usage.context_window_tokens ?? 0) > 0)
+  );
+  const contextUsagePercent = (usage: FlowerContextUsage): number => Math.max(0, Math.round(contextUsageRatio(usage) * 100));
+  const contextPressureTone = (pressure: string): 'stable' | 'warning' | 'danger' | 'estimated' => {
+    switch (trimString(pressure)) {
+      case 'near_threshold':
+      case 'will_compact':
+        return 'warning';
+      case 'hard_limit':
+        return 'danger';
+      case 'estimated':
+        return 'estimated';
+      default:
+        return 'stable';
+    }
+  };
+  const contextPressureLabel = (pressure: string): string => {
+    const labels = copy().chat.contextMeter ?? DEFAULT_FLOWER_SURFACE_COPY.chat.contextMeter;
+    const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.contextMeter;
+    switch (trimString(pressure)) {
+      case 'stable':
+        return trimString(labels.stable) || fallback.stable;
+      case 'near_threshold':
+        return trimString(labels.nearThreshold) || fallback.nearThreshold;
+      case 'will_compact':
+        return trimString(labels.willCompact) || fallback.willCompact;
+      case 'hard_limit':
+        return trimString(labels.hardLimit) || fallback.hardLimit;
+      case 'estimated':
+        return trimString(labels.estimated) || fallback.estimated;
+      default:
+        return trimString(labels.unknown) || fallback.unknown;
+    }
+  };
+  const contextMeter = () => {
+    const usage = selectedContextUsage();
+    if (!usage) return null;
+    const labels = copy().chat.contextMeter ?? DEFAULT_FLOWER_SURFACE_COPY.chat.contextMeter;
+    const label = trimString(labels.label) || DEFAULT_FLOWER_SURFACE_COPY.chat.contextMeter.label;
+    if (!hasContextUsageRatio(usage)) {
+      return (
+        <div
+          class="flower-context-meter flower-context-meter-text-only"
+          data-context-pressure={contextPressureTone(usage.pressure_status)}
+          title={`${label}: ${contextPressureLabel(usage.pressure_status)}`}
+        >
+          <span class="flower-context-meter-label">{label}</span>
+          <span class="flower-context-meter-value">{contextPressureLabel(usage.pressure_status)}</span>
+        </div>
+      );
+    }
+    const percent = contextUsagePercent(usage);
+    const used = formatTokenCount(usage.input_tokens);
+    const total = formatTokenCount(usage.context_window_tokens);
+    const detail = used && total
+      ? labels.usage(used, total)
+      : contextPressureLabel(usage.pressure_status);
+    return (
+      <div
+        class="flower-context-meter"
+        data-context-pressure={contextPressureTone(usage.pressure_status)}
+        title={`${label}: ${detail}`}
+      >
+        <div class="flower-context-meter-copy">
+          <span class="flower-context-meter-label">{label}</span>
+          <span class="flower-context-meter-value">{labels.percent(percent)}</span>
+        </div>
+        <div
+          class="flower-context-meter-track"
+          role="progressbar"
+          aria-label={`${label}: ${detail}`}
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow={Math.min(100, percent)}
+        >
+          <span class="flower-context-meter-fill" style={{ width: `${Math.min(100, percent)}%` }} />
+        </div>
+      </div>
+    );
+  };
   const modelStatusIndicator = () => {
     const label = selectedModelStatusLabel();
     return (
@@ -2709,6 +2769,52 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
+  const compactionDividerLabel = (compaction: FlowerContextCompaction): string => {
+    const labels = copy().chat.compactionDivider ?? DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider;
+    const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider;
+    switch (trimString(compaction.status)) {
+      case 'compacting':
+        return trimString(labels.compacting) || fallback.compacting;
+      case 'compacted':
+        return trimString(labels.compacted) || fallback.compacted;
+      case 'failed':
+        return trimString(labels.failed) || fallback.failed;
+      default:
+        return trimString(labels.fallback) || fallback.fallback;
+    }
+  };
+
+  const compactionDividerDetail = (compaction: FlowerContextCompaction): string => {
+    const before = formatTokenCount(compaction.tokens_before);
+    const after = formatTokenCount(compaction.tokens_after_estimate);
+    const labels = copy().chat.compactionDivider ?? DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider;
+    if (before && after) return labels.tokenChange(before, after);
+    return trimString(compaction.error) || trimString(compaction.reason) || trimString(compaction.trigger);
+  };
+
+  const compactionDividerEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'context_compaction' }>>) => {
+    const decoration = createMemo(() => entry().decoration);
+    const compaction = createMemo(() => decoration().compaction);
+    const detail = createMemo(() => compactionDividerDetail(compaction()));
+    return (
+      <div
+        class="flower-compaction-divider"
+        data-flower-decoration-id={decoration().decoration_id}
+        data-flower-compaction-status={compaction().status}
+      >
+        <div class="flower-compaction-divider-rule" aria-hidden="true" />
+        <div class="flower-compaction-divider-pill">
+          <Clock class="h-3.5 w-3.5" />
+          <span class="flower-compaction-divider-label">{compactionDividerLabel(compaction())}</span>
+          <Show when={detail()}>
+            {(value) => <span class="flower-compaction-divider-detail">{value()}</span>}
+          </Show>
+        </div>
+        <div class="flower-compaction-divider-rule" aria-hidden="true" />
+      </div>
+    );
+  };
+
   const inputRequestEntry = (entry: Accessor<FlowerTimelineEntry>) => {
     const request = createMemo(() => {
       const value = entry();
@@ -2737,6 +2843,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     switch (entry().type) {
       case 'message':
         return messageEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'message' }>);
+      case 'context_compaction':
+        return compactionDividerEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'context_compaction' }>);
       case 'input_request':
         return inputRequestEntry(entry);
       case 'error':
@@ -2859,6 +2967,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
               <Show when={selectedThreadHasModelStatus()}>
                 {modelStatusIndicator()}
+              </Show>
+              <Show when={selectedContextUsage()}>
+                {contextMeter()}
               </Show>
             </div>
             <div class="flower-composer flower-chat-input-floating chat-input-container p-3">

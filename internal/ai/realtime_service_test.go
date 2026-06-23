@@ -508,6 +508,190 @@ func TestFlowerLiveModelIOStatusIgnoresStaleRunClear(t *testing.T) {
 	}
 }
 
+func TestFlowerLiveContextUsageAndCompactionMaterializedState(t *testing.T) {
+	t.Parallel()
+
+	state := FlowerLiveMaterializedState{}
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID:    "run-context",
+		AtUnixMs: 10_000,
+		Kind:     FlowerLiveContextUsageUpdated,
+		Payload: mustFlowerPayload(FlowerLiveUsageUpdatedPayload{Usage: FlowerContextUsage{
+			RunID:                  "run-context",
+			StepIndex:              1,
+			Phase:                  "projected_request",
+			InputTokens:            620,
+			ContextWindowTokens:    1000,
+			ThresholdTokens:        900,
+			RequestSafeLimitTokens: 800,
+			OutputHeadroomTokens:   200,
+			UsedRatio:              0.62,
+			ThresholdRatio:         0.9,
+			PressureStatus:         "stable",
+			Source:                 "full_request_estimate",
+		}}),
+	})
+	if state.ContextUsage == nil || state.ContextUsage.InputTokens != 620 || state.ContextUsage.UpdatedAtMs != 10_000 {
+		t.Fatalf("context usage=%#v", state.ContextUsage)
+	}
+
+	start := FlowerContextCompaction{
+		OperationID:     "run-context:compact:1:pre_request:threshold",
+		RunID:           "run-context",
+		AnchorMessageID: "msg_context_projection",
+		StepIndex:       1,
+		Phase:           "start",
+		Status:          "compacting",
+		Trigger:         "pre_request",
+		Reason:          "threshold",
+		TokensBefore:    920,
+	}
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID:    "run-context",
+		AtUnixMs: 10_001,
+		Kind:     FlowerLiveContextCompactionUpdated,
+		Payload:  mustFlowerPayload(FlowerLiveContextCompactionUpdatedPayload{Compaction: start}),
+	})
+	if len(state.ContextCompactions) != 1 || state.ContextCompactions[0].Status != "compacting" {
+		t.Fatalf("context compactions after start=%#v", state.ContextCompactions)
+	}
+	if len(state.TimelineDecorations) != 1 || state.TimelineDecorations[0].DecorationID == "" || state.TimelineDecorations[0].Compaction.Status != "compacting" {
+		t.Fatalf("timeline decorations after start=%#v", state.TimelineDecorations)
+	}
+
+	complete := start
+	complete.Phase = "complete"
+	complete.Status = "compacted"
+	complete.CompactionID = "compact-1"
+	complete.CompactionGeneration = 1
+	complete.CompactionWindowID = "window-1"
+	complete.TokensAfterEstimate = 210
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID:    "run-context",
+		AtUnixMs: 10_002,
+		Kind:     FlowerLiveContextCompactionUpdated,
+		Payload:  mustFlowerPayload(FlowerLiveContextCompactionUpdatedPayload{Compaction: complete}),
+	})
+	if len(state.ContextCompactions) != 1 || state.ContextCompactions[0].Status != "compacted" || state.ContextCompactions[0].CompactionID != "compact-1" {
+		t.Fatalf("context compactions after complete=%#v", state.ContextCompactions)
+	}
+	if len(state.TimelineDecorations) != 1 || state.TimelineDecorations[0].Compaction.Status != "compacted" || state.TimelineDecorations[0].Compaction.TokensAfterEstimate != 210 {
+		t.Fatalf("timeline decorations after complete=%#v", state.TimelineDecorations)
+	}
+	if got := strings.TrimSpace(state.TimelineDecorations[0].AnchorMessageID); got != "msg_context_projection" {
+		t.Fatalf("timeline decoration anchor=%q, want msg_context_projection", got)
+	}
+	clone := cloneFlowerLiveMaterializedState(state)
+	clone.ContextCompactions[0].Status = "mutated"
+	if state.ContextCompactions[0].Status != "compacted" {
+		t.Fatalf("clone mutated source context compactions: %#v", state.ContextCompactions)
+	}
+}
+
+func TestFlowerLiveBootstrapRestoresPersistedContextState(t *testing.T) {
+	t.Parallel()
+
+	meta := session.Meta{
+		EndpointID:        "env_live_context_restore",
+		NamespacePublicID: "ns_live_context_restore",
+		ChannelID:         "ch_live_context_restore",
+		UserPublicID:      "u_live_context_restore",
+		UserEmail:         "context-restore@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+	svc := newRealtimeTestService(t, 0)
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "context restore", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_context_restore"
+	now := time.Now().UnixMilli()
+	if err := svc.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
+		EndpointID: meta.EndpointID,
+		ThreadID:   th.ThreadID,
+		RunID:      runID,
+		StreamKind: "context",
+		EventType:  "context.usage.updated",
+		PayloadJSON: string(mustFlowerPayload(FlowerLiveUsageUpdatedPayload{Usage: FlowerContextUsage{
+			RunID:               runID,
+			StepIndex:           1,
+			Phase:               "projected_request",
+			InputTokens:         910,
+			ContextWindowTokens: 1000,
+			UsedRatio:           0.91,
+			PressureStatus:      "near_threshold",
+			UpdatedAtMs:         10_000,
+		}})),
+		AtUnixMs: now,
+	}); err != nil {
+		t.Fatalf("AppendRunEvent usage: %v", err)
+	}
+	if err := svc.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
+		EndpointID: meta.EndpointID,
+		ThreadID:   th.ThreadID,
+		RunID:      "run_old_context",
+		StreamKind: "context",
+		EventType:  "context.compaction.started",
+		PayloadJSON: string(mustFlowerPayload(FlowerLiveContextCompactionUpdatedPayload{Compaction: FlowerContextCompaction{
+			OperationID: "old-ignored",
+			RunID:       "run_old_context",
+			Phase:       "start",
+			Status:      "compacting",
+			UpdatedAtMs: 10_001,
+		}})),
+		AtUnixMs: now + 1,
+	}); err != nil {
+		t.Fatalf("AppendRunEvent old compaction: %v", err)
+	}
+	if err := svc.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
+		EndpointID: meta.EndpointID,
+		ThreadID:   th.ThreadID,
+		RunID:      runID,
+		StreamKind: "context",
+		EventType:  "context.compaction.updated",
+		PayloadJSON: string(mustFlowerPayload(FlowerLiveContextCompactionUpdatedPayload{Compaction: FlowerContextCompaction{
+			OperationID:         "compact-restore",
+			RunID:               runID,
+			AnchorMessageID:     "msg_context_restore",
+			StepIndex:           1,
+			Phase:               "complete",
+			Status:              "compacted",
+			TokensBefore:        920,
+			TokensAfterEstimate: 240,
+			UpdatedAtMs:         10_002,
+		}})),
+		AtUnixMs: now + 2,
+	}); err != nil {
+		t.Fatalf("AppendRunEvent compaction: %v", err)
+	}
+
+	svc.mu.Lock()
+	delete(svc.flowerLiveByThread, runThreadKey(meta.EndpointID, th.ThreadID))
+	svc.mu.Unlock()
+
+	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
+	}
+	if bootstrap.LiveState.ContextUsage == nil || bootstrap.LiveState.ContextUsage.InputTokens != 910 {
+		t.Fatalf("bootstrap context usage=%#v", bootstrap.LiveState.ContextUsage)
+	}
+	if len(bootstrap.LiveState.ContextCompactions) != 1 || bootstrap.LiveState.ContextCompactions[0].OperationID != "compact-restore" {
+		t.Fatalf("bootstrap context compactions=%#v", bootstrap.LiveState.ContextCompactions)
+	}
+	if len(bootstrap.LiveState.TimelineDecorations) != 1 || bootstrap.LiveState.TimelineDecorations[0].Compaction.Status != "compacted" {
+		t.Fatalf("bootstrap timeline decorations=%#v", bootstrap.LiveState.TimelineDecorations)
+	}
+	if got := strings.TrimSpace(bootstrap.LiveState.TimelineDecorations[0].AnchorMessageID); got != "msg_context_restore" {
+		t.Fatalf("bootstrap timeline decoration anchor=%q, want msg_context_restore", got)
+	}
+}
+
 func TestFlowerLiveResyncSignalDoesNotConsumeEventSequence(t *testing.T) {
 	t.Parallel()
 

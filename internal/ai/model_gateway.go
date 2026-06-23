@@ -2538,25 +2538,6 @@ func estimateTextTokens(text string) int {
 	return len([]rune(text))/4 + 1
 }
 
-func (r *run) emitContextCompactionEvent(eventType string, payload map[string]any) {
-	if r == nil {
-		return
-	}
-	eventType = strings.TrimSpace(eventType)
-	if eventType == "" {
-		return
-	}
-	if payload == nil {
-		payload = map[string]any{}
-	}
-	r.persistRunEvent(eventType, RealtimeStreamKindContext, payload)
-	r.sendStreamEvent(streamEventContextCompaction{
-		Type:      "context-compaction",
-		EventType: eventType,
-		Payload:   cloneAnyMap(payload),
-	})
-}
-
 func normalizeCompactionThreshold(input float64) float64 {
 	if input <= 0 {
 		return modelGatewayDefaultCompactThreshold

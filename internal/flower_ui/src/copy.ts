@@ -263,6 +263,24 @@ export type FlowerSurfaceCopy = Readonly<{
       retrying: string;
       finalizing: string;
     }>;
+    contextMeter: Readonly<{
+      label: string;
+      stable: string;
+      nearThreshold: string;
+      willCompact: string;
+      hardLimit: string;
+      estimated: string;
+      unknown: string;
+      usage: (used: string, total: string) => string;
+      percent: (percent: number) => string;
+    }>;
+    compactionDivider: Readonly<{
+      compacting: string;
+      compacted: string;
+      failed: string;
+      fallback: string;
+      tokenChange: (before: string, after: string) => string;
+    }>;
     toolStatuses: Readonly<Record<'pending' | 'running' | 'waiting' | 'success' | 'error' | 'canceled', string>>;
     toolApprovalRequired: string;
     toolApprovalStates: Readonly<Record<FlowerActivityApprovalState, string>>;
@@ -348,6 +366,24 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       streaming: 'Thinking...',
       retrying: 'Retrying model request...',
       finalizing: 'Finalizing reply...',
+    },
+    contextMeter: {
+      label: 'Context',
+      stable: 'Stable',
+      nearThreshold: 'Near limit',
+      willCompact: 'Compacting soon',
+      hardLimit: 'At limit',
+      estimated: 'Estimated',
+      unknown: 'Tracking',
+      usage: (used, total) => `${used} of ${total}`,
+      percent: (percent) => `${percent}%`,
+    },
+    compactionDivider: {
+      compacting: 'Compacting context',
+      compacted: 'Context compacted',
+      failed: 'Context compaction failed',
+      fallback: 'Context checkpoint',
+      tokenChange: (before, after) => `${before} to ${after}`,
     },
     toolStatuses: {
       pending: 'Pending',

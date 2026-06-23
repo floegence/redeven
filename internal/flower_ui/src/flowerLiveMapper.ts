@@ -34,7 +34,11 @@ import type {
   FlowerLiveInputResolvedPayload,
   FlowerLiveModelIOUpdatedPayload,
   FlowerLiveUsageUpdatedPayload,
+  FlowerLiveContextCompactionUpdatedPayload,
   FlowerLiveResyncRequiredPayload,
+  FlowerContextCompaction,
+  FlowerContextUsage,
+  FlowerTimelineDecoration,
   FlowerModelIOPhase,
   FlowerModelIOStatus,
   FlowerThreadReadStatus,
@@ -167,6 +171,108 @@ function mapModelIOStatus(raw: unknown): FlowerModelIOStatus | null {
     ...(stepIndex > 0 ? { step_index: stepIndex } : {}),
     updated_at_ms: integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms),
   };
+}
+
+function clampRatio(raw: unknown): number | undefined {
+  const value = Number(raw ?? Number.NaN);
+  if (!Number.isFinite(value) || value < 0) return undefined;
+  return Math.min(1, value);
+}
+
+function optionalInteger(raw: unknown): number | undefined {
+  const value = Number(raw ?? 0);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
+}
+
+function mapContextUsage(raw: unknown): FlowerContextUsage | null {
+  const record = recordValue(raw);
+  if (!record) return null;
+  const phase = trim(record.phase);
+  const pressureStatus = trim(record.pressure_status);
+  const updatedAt = integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms);
+  if (!phase || !pressureStatus) return null;
+  const stepIndex = optionalInteger(record.step_index);
+  const inputTokens = optionalInteger(record.input_tokens);
+  const contextWindowTokens = optionalInteger(record.context_window_tokens);
+  const thresholdTokens = optionalInteger(record.threshold_tokens);
+  const requestSafeLimitTokens = optionalInteger(record.request_safe_limit_tokens);
+  const outputHeadroomTokens = optionalInteger(record.output_headroom_tokens);
+  const usedRatio = clampRatio(record.used_ratio);
+  const thresholdRatio = clampRatio(record.threshold_ratio);
+  return {
+    ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
+    ...(stepIndex ? { step_index: stepIndex } : {}),
+    phase,
+    ...(inputTokens ? { input_tokens: inputTokens } : {}),
+    ...(contextWindowTokens ? { context_window_tokens: contextWindowTokens } : {}),
+    ...(thresholdTokens ? { threshold_tokens: thresholdTokens } : {}),
+    ...(requestSafeLimitTokens ? { request_safe_limit_tokens: requestSafeLimitTokens } : {}),
+    ...(outputHeadroomTokens ? { output_headroom_tokens: outputHeadroomTokens } : {}),
+    ...(usedRatio !== undefined ? { used_ratio: usedRatio } : {}),
+    ...(thresholdRatio !== undefined ? { threshold_ratio: thresholdRatio } : {}),
+    pressure_status: pressureStatus,
+    ...(trim(record.source) ? { source: trim(record.source) } : {}),
+    updated_at_ms: updatedAt,
+  };
+}
+
+function mapContextCompaction(raw: unknown): FlowerContextCompaction | null {
+  const record = recordValue(raw);
+  if (!record) return null;
+  const operationID = trim(record.operation_id);
+  const phase = trim(record.phase);
+  const status = trim(record.status);
+  const updatedAt = integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms);
+  if (!operationID || !phase || !status) return null;
+  const stepIndex = optionalInteger(record.step_index);
+  const compactionGeneration = optionalInteger(record.compaction_generation);
+  const tokensBefore = optionalInteger(record.tokens_before);
+  const tokensAfterEstimate = optionalInteger(record.tokens_after_estimate);
+  return {
+    operation_id: operationID,
+    ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
+    ...(trim(record.anchor_message_id) ? { anchor_message_id: trim(record.anchor_message_id) } : {}),
+    ...(stepIndex ? { step_index: stepIndex } : {}),
+    phase,
+    status,
+    ...(trim(record.trigger) ? { trigger: trim(record.trigger) } : {}),
+    ...(trim(record.reason) ? { reason: trim(record.reason) } : {}),
+    ...(trim(record.compaction_id) ? { compaction_id: trim(record.compaction_id) } : {}),
+    ...(compactionGeneration ? { compaction_generation: compactionGeneration } : {}),
+    ...(trim(record.compaction_window_id) ? { compaction_window_id: trim(record.compaction_window_id) } : {}),
+    ...(tokensBefore ? { tokens_before: tokensBefore } : {}),
+    ...(tokensAfterEstimate ? { tokens_after_estimate: tokensAfterEstimate } : {}),
+    ...(trim(record.error) ? { error: trim(record.error) } : {}),
+    updated_at_ms: updatedAt,
+  };
+}
+
+function mapTimelineDecoration(raw: unknown): FlowerTimelineDecoration | null {
+  const record = recordValue(raw);
+  if (!record) return null;
+  const compaction = mapContextCompaction(record.compaction);
+  const decorationID = trim(record.decoration_id) || (compaction ? `context-compaction:${compaction.operation_id}` : '');
+  if (!decorationID || !compaction) return null;
+  return {
+    decoration_id: decorationID,
+    kind: trim(record.kind) || 'context_compaction',
+    ...(trim(record.anchor_message_id) ? { anchor_message_id: trim(record.anchor_message_id) } : {}),
+    placement: trim(record.placement) || 'before',
+    ordinal: integerOrZero(record.ordinal),
+    compaction,
+  };
+}
+
+function mapContextCompactions(raw: unknown): readonly FlowerContextCompaction[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const compactions = raw.map(mapContextCompaction).filter(isPresent);
+  return compactions.length > 0 ? compactions : undefined;
+}
+
+function mapTimelineDecorations(raw: unknown): readonly FlowerTimelineDecoration[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const decorations = raw.map(mapTimelineDecoration).filter(isPresent);
+  return decorations.length > 0 ? decorations : undefined;
 }
 
 function stringRecord(raw: unknown): Readonly<Record<string, string>> | undefined {
@@ -715,11 +821,17 @@ function mapLiveState(raw: unknown): FlowerLiveMaterializedState {
     if (input) inputRequests[promptID] = input;
   }
   const modelIO = mapModelIOStatus(record.model_io);
+  const contextUsage = mapContextUsage(record.context_usage);
+  const contextCompactions = mapContextCompactions(record.context_compactions);
+  const timelineDecorations = mapTimelineDecorations(record.timeline_decorations);
 
   return {
     thread_patch: mapThreadPatch(record.thread_patch) ?? {},
     runs,
     ...(modelIO ? { model_io: modelIO } : {}),
+    ...(contextUsage ? { context_usage: contextUsage } : {}),
+    ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
+    ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     approval_actions: approvals,
     input_requests: inputRequests,
   };
@@ -734,6 +846,9 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   const inputRequest = status === 'waiting_user' ? waitingPrompt : null;
   const errorMessage = trim(record.run_error);
   const errorCode = trim(record.run_error_code);
+  const contextUsage = mapContextUsage(record.context_usage);
+  const contextCompactions = mapContextCompactions(record.context_compactions);
+  const timelineDecorations = mapTimelineDecorations(record.timeline_decorations);
   return {
     thread_id: threadID,
     title: trim(record.title) || trim(record.last_message_preview) || 'Ask Flower',
@@ -752,6 +867,9 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     messages,
     ...(normalizeFlowerReasoningSelection(record.reasoning_selection) ? { reasoning_selection: normalizeFlowerReasoningSelection(record.reasoning_selection) } : {}),
     ...(normalizeFlowerReasoningCapability(record.reasoning_capability) ? { reasoning_capability: normalizeFlowerReasoningCapability(record.reasoning_capability) } : {}),
+    ...(contextUsage ? { context_usage: contextUsage } : {}),
+    ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
+    ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     ...(inputRequest ? { input_request: inputRequest } : {}),
     ...(errorMessage ? { error: { message: errorMessage, ...(errorCode ? { code: errorCode } : {}) } } : {}),
     read_status: mapFlowerReadStatus(readStatusRaw ?? record.read_status),
@@ -844,8 +962,22 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
       return { prompt_id: trim(record.prompt_id) } as FlowerLiveInputResolvedPayload;
     case 'model_io.updated':
       return { status: mapModelIOStatus(record.status) } as FlowerLiveModelIOUpdatedPayload;
-    case 'usage.updated':
-      return { usage: record.usage && typeof record.usage === 'object' ? record.usage as Record<string, unknown> : {} } as FlowerLiveUsageUpdatedPayload;
+    case 'context.usage.updated':
+      {
+        const usage = mapContextUsage(record.usage);
+        if (!usage) {
+          throw new Error('Flower contract error: context.usage.updated requires a valid context usage payload.');
+        }
+        return { usage } as FlowerLiveUsageUpdatedPayload;
+      }
+    case 'context.compaction.updated':
+      {
+        const compaction = mapContextCompaction(record.compaction);
+        if (!compaction) {
+          throw new Error('Flower contract error: context.compaction.updated requires a valid context compaction payload.');
+        }
+        return { compaction } as FlowerLiveContextCompactionUpdatedPayload;
+      }
     case 'timeline.replaced':
       return {
         messages: Array.isArray(record.messages) ? record.messages.map(mapFlowerMessage).filter(isPresent) : [],
@@ -873,7 +1005,8 @@ const liveKinds = new Set<FlowerLiveKind>([
   'input.requested',
   'input.resolved',
   'model_io.updated',
-  'usage.updated',
+  'context.usage.updated',
+  'context.compaction.updated',
   'timeline.replaced',
   'stream.resync_required',
 ]);

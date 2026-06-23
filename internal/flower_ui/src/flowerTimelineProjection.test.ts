@@ -176,6 +176,80 @@ describe('buildFlowerTimelineEntries', () => {
     expect(first.blocks[0]?.type).toBe('activity');
   });
 
+  it('inserts context compaction decorations before their anchored message', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        {
+          id: 'user-1',
+          role: 'user',
+          content: 'Hello',
+          status: 'complete',
+          created_at_ms: 1,
+        },
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'Working.',
+          status: 'complete',
+          created_at_ms: 2,
+          blocks: [{ type: 'markdown', content: 'Working.' }],
+        },
+      ],
+      timeline_decorations: [{
+        decoration_id: 'context-compaction:compact-1',
+        kind: 'context_compaction',
+        anchor_message_id: 'assistant-1',
+        placement: 'before',
+        ordinal: 0,
+        compaction: {
+          operation_id: 'compact-1',
+          run_id: 'run-1',
+          phase: 'complete',
+          status: 'compacted',
+          tokens_before: 900,
+          tokens_after_estimate: 200,
+          updated_at_ms: 3,
+        },
+      }],
+    }));
+
+    expect(entries.map((entry) => entry.type)).toEqual(['message', 'context_compaction', 'message']);
+    const divider = entries[1];
+    expect(divider?.type).toBe('context_compaction');
+    if (divider?.type !== 'context_compaction') throw new Error('expected context compaction entry');
+    expect(divider.decoration.compaction.status).toBe('compacted');
+  });
+
+  it('keeps unanchored context compaction decorations visible at the end of the transcript', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'Done.',
+          status: 'complete',
+          created_at_ms: 2,
+          blocks: [{ type: 'markdown', content: 'Done.' }],
+        },
+      ],
+      timeline_decorations: [{
+        decoration_id: 'context-compaction:compact-unanchored',
+        kind: 'context_compaction',
+        placement: 'before',
+        ordinal: 3,
+        compaction: {
+          operation_id: 'compact-unanchored',
+          phase: 'start',
+          status: 'compacting',
+          updated_at_ms: 3,
+        },
+      }],
+    }));
+
+    expect(entries.map((entry) => entry.type)).toEqual(['message', 'context_compaction']);
+    expect(entries[1]?.key).toBe('timeline-decoration:context-compaction:compact-unanchored');
+  });
+
   it('does not render empty activity timeline blocks', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [

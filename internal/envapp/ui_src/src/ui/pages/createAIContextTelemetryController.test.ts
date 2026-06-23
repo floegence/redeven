@@ -36,9 +36,11 @@ describe('createAIContextTelemetryController', () => {
       const controller = createAIContextTelemetryController();
 
       controller.setLiveRun('run_2');
-      controller.applyCompactionPayload('run_2', 'context.compaction.applied', {
-        compaction_id: 'cmp_1',
+      controller.applyCompactionPayload('run_2', 'context.compaction.updated', {
+        operation_id: 'cmp_1',
         step_index: 2,
+        phase: 'complete',
+        status: 'compacted',
         estimate_tokens_before: 3200,
         estimate_tokens_after: 1800,
       }, {

@@ -186,6 +186,81 @@ func TestFloretEventSinkProjectsToolCallStreamObservationToModelIO(t *testing.T)
 	}
 }
 
+func TestFloretEventSinkProjectsContextObservations(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 2)
+	r := &run{
+		id:            "run_context_projection",
+		threadID:      "thread_context_projection",
+		messageID:     "msg_context_projection",
+		onStreamEvent: func(ev any) { events = append(events, ev) },
+	}
+	sink := floretEventSink{run: r}
+	sink.EmitEvent(flruntime.Event{
+		RunID: "run_context_projection",
+		ContextStatus: &observation.ContextStatus{
+			RunID:    "run_context_projection",
+			ThreadID: "thread_context_projection",
+			TurnID:   "msg_context_projection",
+			Step:     1,
+			Phase:    observation.ContextPhaseProjectedRequest,
+			ContextPressure: flconfig.ContextPressure{
+				ProjectedInputTokens: 600,
+				ContextWindowTokens:  1000,
+				ThresholdTokens:      900,
+				RequestSafeLimit:     800,
+				OutputHeadroomTokens: 200,
+				Source:               flconfig.PressureSourceFullRequestEstimate,
+			},
+			UsedRatio:      0.6,
+			ThresholdRatio: 0.9,
+			Status:         observation.ContextStatusStable,
+			ObservedAt:     time.UnixMilli(10_000),
+		},
+	})
+	sink.EmitEvent(flruntime.Event{
+		RunID: "run_context_projection",
+		Compaction: &observation.CompactionEvent{
+			RunID:               "run_context_projection",
+			ThreadID:            "thread_context_projection",
+			TurnID:              "msg_context_projection",
+			Step:                1,
+			OperationID:         "run_context_projection:compact:1:pre_request:threshold",
+			Phase:               observation.CompactionPhaseStart,
+			Status:              observation.CompactionStatusRunning,
+			Trigger:             "pre_request",
+			Reason:              "threshold",
+			TokensBefore:        920,
+			TokensAfterEstimate: 0,
+			ObservedAt:          time.UnixMilli(10_001),
+		},
+	})
+
+	if len(events) != 2 {
+		t.Fatalf("events=%#v, want context usage and compaction", events)
+	}
+	usage, ok := events[0].(streamEventContextUsage)
+	if !ok {
+		t.Fatalf("events[0]=%T, want streamEventContextUsage", events[0])
+	}
+	if usage.Usage.Phase != observation.ContextPhaseProjectedRequest ||
+		usage.Usage.InputTokens != 600 ||
+		usage.Usage.ContextWindowTokens != 1000 ||
+		usage.Usage.PressureStatus != observation.ContextStatusStable {
+		t.Fatalf("usage=%#v", usage.Usage)
+	}
+	compaction, ok := events[1].(streamEventContextCompaction)
+	if !ok {
+		t.Fatalf("events[1]=%T, want streamEventContextCompaction", events[1])
+	}
+	if compaction.Compaction.OperationID == "" ||
+		compaction.Compaction.Status != "compacting" ||
+		compaction.Compaction.Phase != observation.CompactionPhaseStart {
+		t.Fatalf("compaction=%#v", compaction.Compaction)
+	}
+}
+
 func TestFloretActivityClearsModelIOBeforeLocalToolExecution(t *testing.T) {
 	t.Parallel()
 

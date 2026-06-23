@@ -174,12 +174,15 @@ function normalizeOptionalInteger(raw: unknown): number | undefined {
   return Math.max(0, Math.floor(n as number));
 }
 
-function normalizeCompactionStage(eventType: string): ContextCompactionEventView['stage'] {
-  const normalized = String(eventType ?? '').trim().toLowerCase();
-  if (normalized.endsWith('.started')) return 'started';
-  if (normalized.endsWith('.applied')) return 'applied';
-  if (normalized.endsWith('.skipped')) return 'skipped';
-  if (normalized.endsWith('.failed')) return 'failed';
+function normalizeStructuredCompactionStage(statusRaw: unknown, phaseRaw: unknown): ContextCompactionEventView['stage'] {
+  const status = String(statusRaw ?? '').trim().toLowerCase();
+  if (status === 'compacting') return 'started';
+  if (status === 'compacted') return 'applied';
+  if (status === 'failed') return 'failed';
+  const phase = String(phaseRaw ?? '').trim().toLowerCase();
+  if (phase === 'start') return 'started';
+  if (phase === 'complete') return 'applied';
+  if (phase === 'failed') return 'failed';
   return 'unknown';
 }
 
@@ -190,35 +193,43 @@ export function normalizeContextUsage(
     atUnixMs?: unknown;
   },
 ): ContextUsageView | null {
-  const payload = asRecord(payloadRaw);
-  const estimateTokens = Math.max(0, Math.floor(readNumber(payload.estimate_tokens, -1)));
-  const contextLimit = Math.max(0, Math.floor(readNumber(payload.context_limit, -1)));
+  const source = asRecord(payloadRaw);
+  const payload = asRecord(source.usage);
+  const normalizedPayload = Object.keys(payload).length > 0 ? payload : source;
+  const estimateTokens = Math.max(0, Math.floor(readNumber(
+    normalizedPayload.estimate_tokens ?? normalizedPayload.input_tokens,
+    -1,
+  )));
+  const contextLimit = Math.max(0, Math.floor(readNumber(
+    normalizedPayload.context_limit ?? normalizedPayload.context_window_tokens ?? normalizedPayload.request_safe_limit_tokens,
+    -1,
+  )));
   if (estimateTokens < 0 || contextLimit <= 0) return null;
 
-  const pressureRaw = readNumber(payload.pressure, NaN);
+  const pressureRaw = readNumber(normalizedPayload.pressure ?? normalizedPayload.used_ratio, NaN);
   const pressure = Number.isFinite(pressureRaw) && pressureRaw >= 0 ? pressureRaw : estimateTokens / contextLimit;
-  const usagePercentRaw = readNumber(payload.usage_percent, NaN);
+  const usagePercentRaw = readNumber(normalizedPayload.usage_percent, NaN);
   const usagePercent = Number.isFinite(usagePercentRaw) && usagePercentRaw >= 0 ? usagePercentRaw : pressure * 100;
 
-  const sectionsTokens = normalizeSectionTokens(payload.sections_tokens);
-  const sectionsTokensTotalRaw = Math.floor(readNumber(payload.sections_tokens_total, -1));
+  const sectionsTokens = normalizeSectionTokens(normalizedPayload.sections_tokens);
+  const sectionsTokensTotalRaw = Math.floor(readNumber(normalizedPayload.sections_tokens_total, -1));
   const sectionsTokensTotal = sectionsTokensTotalRaw >= 0
     ? sectionsTokensTotalRaw
     : Object.values(sectionsTokens).reduce((sum, value) => sum + value, 0);
 
-  const unattributedTokensRaw = Math.floor(readNumber(payload.unattributed_tokens, -1));
+  const unattributedTokensRaw = Math.floor(readNumber(normalizedPayload.unattributed_tokens, -1));
   const unattributedTokens = unattributedTokensRaw >= 0
     ? unattributedTokensRaw
     : Math.max(0, estimateTokens - sectionsTokensTotal);
 
   const atUnixMs = Math.max(0, Math.floor(readNumber(meta?.atUnixMs, 0)));
   const eventId = normalizeOptionalInteger(meta?.eventId);
-  const stepIndex = Math.max(0, Math.floor(readNumber(payload.step_index, 0)));
-  const estimateSource = String(payload.estimate_source ?? '').trim();
-  const contextWindow = normalizeOptionalInteger(payload.context_window);
-  const turnMessages = normalizeOptionalInteger(payload.turn_messages);
-  const historyMessages = normalizeOptionalInteger(payload.history_messages);
-  const promptPackEstimate = normalizeOptionalInteger(payload.prompt_pack_estimate);
+  const stepIndex = Math.max(0, Math.floor(readNumber(normalizedPayload.step_index, 0)));
+  const estimateSource = String(normalizedPayload.estimate_source ?? normalizedPayload.source ?? normalizedPayload.phase ?? '').trim();
+  const contextWindow = normalizeOptionalInteger(normalizedPayload.context_window ?? normalizedPayload.context_window_tokens);
+  const turnMessages = normalizeOptionalInteger(normalizedPayload.turn_messages);
+  const historyMessages = normalizeOptionalInteger(normalizedPayload.history_messages);
+  const promptPackEstimate = normalizeOptionalInteger(normalizedPayload.prompt_pack_estimate);
 
   return {
     eventId,
@@ -230,9 +241,9 @@ export function normalizeContextUsage(
     contextLimit,
     pressure,
     usagePercent,
-    effectiveThreshold: normalizeOptionalNumber(payload.effective_threshold),
-    configuredThreshold: normalizeOptionalNumber(payload.configured_threshold),
-    windowBasedThreshold: normalizeOptionalNumber(payload.window_based_threshold),
+    effectiveThreshold: normalizeOptionalNumber(normalizedPayload.effective_threshold ?? normalizedPayload.threshold_ratio),
+    configuredThreshold: normalizeOptionalNumber(normalizedPayload.configured_threshold),
+    windowBasedThreshold: normalizeOptionalNumber(normalizedPayload.window_based_threshold),
     turnMessages,
     historyMessages,
     promptPackEstimate,
@@ -250,17 +261,23 @@ export function normalizeContextCompactionEvent(
     atUnixMs?: unknown;
   },
 ): ContextCompactionEventView | null {
-  const eventType = String(eventTypeRaw ?? '').trim();
+  const rawEventType = String(eventTypeRaw ?? '').trim();
+  if (!rawEventType) return null;
+  const source = asRecord(payloadRaw);
+  const structured = asRecord(source.compaction);
+  const payload = Object.keys(structured).length > 0 ? structured : source;
+  const eventType = rawEventType;
   if (!eventType) return null;
-  const payload = asRecord(payloadRaw);
-  const compactionId = String(payload.compaction_id ?? '').trim();
+  const compactionId = String(payload.compaction_id ?? payload.operation_id ?? '').trim();
   if (!compactionId) return null;
 
   const stepIndex = Math.max(0, Math.floor(readNumber(payload.step_index, 0)));
   const eventId = normalizeOptionalInteger(meta?.eventId);
   const atUnixMs = Math.max(0, Math.floor(readNumber(meta?.atUnixMs, 0)));
-  const stage = normalizeCompactionStage(eventType);
-  const strategy = String(payload.strategy ?? '').trim();
+  const stage = rawEventType === 'context.compaction.updated'
+    ? normalizeStructuredCompactionStage(payload.status, payload.phase)
+    : 'unknown';
+  const strategy = String(payload.strategy ?? payload.trigger ?? '').trim();
   const reason = String(payload.reason ?? '').trim();
   const error = String(payload.error ?? '').trim();
   const effectiveThreshold = normalizeOptionalNumber(payload.effective_threshold);
@@ -280,10 +297,10 @@ export function normalizeContextCompactionEvent(
     strategy: strategy || undefined,
     reason: reason || undefined,
     error: error || undefined,
-    estimateTokensBefore: normalizeOptionalInteger(payload.estimate_tokens_before ?? payload.estimate_tokens),
-    estimateTokensAfter: normalizeOptionalInteger(payload.estimate_tokens_after),
-    contextWindow: normalizeOptionalInteger(payload.context_window),
-    contextLimit: normalizeOptionalInteger(payload.context_limit),
+    estimateTokensBefore: normalizeOptionalInteger(payload.estimate_tokens_before ?? payload.estimate_tokens ?? payload.tokens_before),
+    estimateTokensAfter: normalizeOptionalInteger(payload.estimate_tokens_after ?? payload.tokens_after_estimate),
+    contextWindow: normalizeOptionalInteger(payload.context_window ?? payload.context_window_tokens),
+    contextLimit: normalizeOptionalInteger(payload.context_limit ?? payload.request_safe_limit_tokens),
     pressure: normalizeOptionalNumber(payload.pressure),
     effectiveThreshold,
     configuredThreshold,

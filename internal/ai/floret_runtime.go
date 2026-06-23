@@ -176,6 +176,12 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 		Tools:        flTools,
 		Approver:     floretToolApproverForRun(r),
 		Sink:         floretEventSink{run: r},
+		CompactionSummarizer: floretProjectedCompactionSummarizer{
+			gateway:  flProvider,
+			provider: providerType,
+			model:    modelName,
+			labels:   labels,
+		},
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,

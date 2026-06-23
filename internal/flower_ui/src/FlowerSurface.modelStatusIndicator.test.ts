@@ -28,7 +28,9 @@ describe('Flower model status indicator', () => {
     const shimmerRule = cssRule(css, '.flower-model-status-text::after');
 
     expect(laneRule).toContain('min-height: 1.35rem');
+    expect(laneRule).toContain('flex-wrap: wrap');
     expect(laneRule).toContain('align-items: center');
+    expect(laneRule).toContain('gap: 0.38rem 0.62rem');
     expect(indicatorRule).toContain('display: inline-flex');
     expect(indicatorRule).toContain('align-items: center');
     expect(textRule).toContain('font-size: 0.75rem');
@@ -55,6 +57,42 @@ describe('Flower model status indicator', () => {
     expect(css).toContain('.flower-model-status-text::after {\n    content: none !important;');
     expect(indicatorRule).not.toContain('width: 1.65rem');
     expect(indicatorRule).not.toContain('height: 0.82rem');
+  });
+
+  it('keeps context usage meter compact, responsive, and tied to the status lane', () => {
+    const css = flowerStyles();
+    const laneRule = cssRule(css, '.flower-model-status-lane');
+    const meterRule = cssRule(css, '.flower-context-meter');
+    const textOnlyRule = cssRule(css, '.flower-context-meter-text-only');
+    const trackRule = cssRule(css, '.flower-context-meter-track');
+    const fillRule = cssRule(css, '.flower-context-meter-fill');
+
+    expect(laneRule).toContain('container: flower-model-status / inline-size');
+    expect(meterRule).toContain('display: grid');
+    expect(meterRule).toContain('width: clamp(7.25rem, 22vw, 11.75rem)');
+    expect(meterRule).toContain('min-width: 5.75rem');
+    expect(meterRule).toContain('flex: 0 1 11.75rem');
+    expect(textOnlyRule).toContain('display: inline-flex');
+    expect(trackRule).toContain('width: clamp(3.5rem, 8vw, 6rem)');
+    expect(fillRule).toContain('position: absolute');
+    expect(css).toContain("@container flower-model-status (max-width: 390px)");
+    expect(css).toContain('.flower-context-meter-track {\n    display: none;');
+    expect(css).toContain(".flower-context-meter[data-context-pressure='warning'] .flower-context-meter-fill");
+    expect(css).toContain(".flower-context-meter[data-context-pressure='danger'] .flower-context-meter-fill");
+  });
+
+  it('renders compaction dividers as non-interactive timeline separators', () => {
+    const css = flowerStyles();
+    const dividerRule = cssRule(css, '.flower-compaction-divider');
+    const pillRule = cssRule(css, '.flower-compaction-divider-pill');
+
+    expect(dividerRule).toContain('display: grid');
+    expect(dividerRule).toContain('grid-template-columns: minmax(1.5rem, 1fr) auto minmax(1.5rem, 1fr)');
+    expect(dividerRule).toContain('pointer-events: none');
+    expect(dividerRule).not.toContain('cursor: pointer');
+    expect(pillRule).toContain('display: inline-flex');
+    expect(pillRule).toContain('max-width: min(100%, 28rem)');
+    expect(css).toContain(".flower-compaction-divider[data-flower-compaction-status='failed'] .flower-compaction-divider-pill");
   });
 
   it('keeps the composer action button shape unified for send and stop', () => {

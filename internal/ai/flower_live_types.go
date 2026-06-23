@@ -31,24 +31,25 @@ type FlowerThreadReadView struct {
 type FlowerLiveKind string
 
 const (
-	FlowerLiveRunStarted        FlowerLiveKind = "run.started"
-	FlowerLiveRunStatusChanged  FlowerLiveKind = "run.status_changed"
-	FlowerLiveThreadPatched     FlowerLiveKind = "thread.patched"
-	FlowerLiveMessageStarted    FlowerLiveKind = "message.started"
-	FlowerLiveMessageBlockStart FlowerLiveKind = "message.block_started"
-	FlowerLiveMessageBlockDelta FlowerLiveKind = "message.block_delta"
-	FlowerLiveMessageBlockSet   FlowerLiveKind = "message.block_set"
-	FlowerLiveMessageCommitted  FlowerLiveKind = "message.committed"
-	FlowerLiveMessageFailed     FlowerLiveKind = "message.failed"
-	FlowerLiveActivityUpdated   FlowerLiveKind = "activity.updated"
-	FlowerLiveApprovalRequested FlowerLiveKind = "approval.requested"
-	FlowerLiveApprovalResolved  FlowerLiveKind = "approval.resolved"
-	FlowerLiveInputRequested    FlowerLiveKind = "input.requested"
-	FlowerLiveInputResolved     FlowerLiveKind = "input.resolved"
-	FlowerLiveModelIOUpdated    FlowerLiveKind = "model_io.updated"
-	FlowerLiveUsageUpdated      FlowerLiveKind = "usage.updated"
-	FlowerLiveTimelineReplaced  FlowerLiveKind = "timeline.replaced"
-	FlowerLiveResyncRequired    FlowerLiveKind = "stream.resync_required"
+	FlowerLiveRunStarted               FlowerLiveKind = "run.started"
+	FlowerLiveRunStatusChanged         FlowerLiveKind = "run.status_changed"
+	FlowerLiveThreadPatched            FlowerLiveKind = "thread.patched"
+	FlowerLiveMessageStarted           FlowerLiveKind = "message.started"
+	FlowerLiveMessageBlockStart        FlowerLiveKind = "message.block_started"
+	FlowerLiveMessageBlockDelta        FlowerLiveKind = "message.block_delta"
+	FlowerLiveMessageBlockSet          FlowerLiveKind = "message.block_set"
+	FlowerLiveMessageCommitted         FlowerLiveKind = "message.committed"
+	FlowerLiveMessageFailed            FlowerLiveKind = "message.failed"
+	FlowerLiveActivityUpdated          FlowerLiveKind = "activity.updated"
+	FlowerLiveApprovalRequested        FlowerLiveKind = "approval.requested"
+	FlowerLiveApprovalResolved         FlowerLiveKind = "approval.resolved"
+	FlowerLiveInputRequested           FlowerLiveKind = "input.requested"
+	FlowerLiveInputResolved            FlowerLiveKind = "input.resolved"
+	FlowerLiveModelIOUpdated           FlowerLiveKind = "model_io.updated"
+	FlowerLiveContextUsageUpdated      FlowerLiveKind = "context.usage.updated"
+	FlowerLiveContextCompactionUpdated FlowerLiveKind = "context.compaction.updated"
+	FlowerLiveTimelineReplaced         FlowerLiveKind = "timeline.replaced"
+	FlowerLiveResyncRequired           FlowerLiveKind = "stream.resync_required"
 )
 
 type FlowerModelIOPhase string
@@ -383,11 +384,58 @@ type FlowerLiveInputResolvedPayload struct {
 }
 
 type FlowerLiveUsageUpdatedPayload struct {
-	Usage map[string]any `json:"usage"`
+	Usage FlowerContextUsage `json:"usage"`
+}
+
+type FlowerLiveContextCompactionUpdatedPayload struct {
+	Compaction FlowerContextCompaction `json:"compaction"`
 }
 
 type FlowerLiveModelIOUpdatedPayload struct {
 	Status *FlowerModelIOStatus `json:"status"`
+}
+
+type FlowerContextUsage struct {
+	RunID                  string  `json:"run_id,omitempty"`
+	StepIndex              int     `json:"step_index,omitempty"`
+	Phase                  string  `json:"phase"`
+	InputTokens            int64   `json:"input_tokens,omitempty"`
+	ContextWindowTokens    int64   `json:"context_window_tokens,omitempty"`
+	ThresholdTokens        int64   `json:"threshold_tokens,omitempty"`
+	RequestSafeLimitTokens int64   `json:"request_safe_limit_tokens,omitempty"`
+	OutputHeadroomTokens   int64   `json:"output_headroom_tokens,omitempty"`
+	UsedRatio              float64 `json:"used_ratio,omitempty"`
+	ThresholdRatio         float64 `json:"threshold_ratio,omitempty"`
+	PressureStatus         string  `json:"pressure_status"`
+	Source                 string  `json:"source,omitempty"`
+	UpdatedAtMs            int64   `json:"updated_at_ms"`
+}
+
+type FlowerContextCompaction struct {
+	OperationID          string `json:"operation_id"`
+	RunID                string `json:"run_id,omitempty"`
+	AnchorMessageID      string `json:"anchor_message_id,omitempty"`
+	StepIndex            int    `json:"step_index,omitempty"`
+	Phase                string `json:"phase"`
+	Status               string `json:"status"`
+	Trigger              string `json:"trigger,omitempty"`
+	Reason               string `json:"reason,omitempty"`
+	CompactionID         string `json:"compaction_id,omitempty"`
+	CompactionGeneration int    `json:"compaction_generation,omitempty"`
+	CompactionWindowID   string `json:"compaction_window_id,omitempty"`
+	TokensBefore         int64  `json:"tokens_before,omitempty"`
+	TokensAfterEstimate  int64  `json:"tokens_after_estimate,omitempty"`
+	Error                string `json:"error,omitempty"`
+	UpdatedAtMs          int64  `json:"updated_at_ms"`
+}
+
+type FlowerTimelineDecoration struct {
+	DecorationID    string                  `json:"decoration_id"`
+	Kind            string                  `json:"kind"`
+	AnchorMessageID string                  `json:"anchor_message_id,omitempty"`
+	Placement       string                  `json:"placement"`
+	Ordinal         int                     `json:"ordinal"`
+	Compaction      FlowerContextCompaction `json:"compaction"`
 }
 
 type FlowerTimelineMessage struct {
@@ -434,12 +482,15 @@ type FlowerLiveRunState struct {
 }
 
 type FlowerLiveMaterializedState struct {
-	ThreadPatch     FlowerLiveThreadPatch             `json:"thread_patch"`
-	Messages        map[string]FlowerLiveMessageDraft `json:"-"`
-	Runs            map[string]FlowerLiveRunState     `json:"runs"`
-	ModelIO         *FlowerModelIOStatus              `json:"model_io,omitempty"`
-	ApprovalActions map[string]FlowerApprovalAction   `json:"approval_actions"`
-	InputRequests   map[string]RequestUserInputPrompt `json:"input_requests"`
+	ThreadPatch         FlowerLiveThreadPatch             `json:"thread_patch"`
+	Messages            map[string]FlowerLiveMessageDraft `json:"-"`
+	Runs                map[string]FlowerLiveRunState     `json:"runs"`
+	ModelIO             *FlowerModelIOStatus              `json:"model_io,omitempty"`
+	ContextUsage        *FlowerContextUsage               `json:"context_usage,omitempty"`
+	ContextCompactions  []FlowerContextCompaction         `json:"context_compactions,omitempty"`
+	TimelineDecorations []FlowerTimelineDecoration        `json:"timeline_decorations,omitempty"`
+	ApprovalActions     map[string]FlowerApprovalAction   `json:"approval_actions"`
+	InputRequests       map[string]RequestUserInputPrompt `json:"input_requests"`
 }
 
 type FlowerLiveBootstrapResponse struct {
