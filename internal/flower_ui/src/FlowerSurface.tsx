@@ -591,22 +591,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         : { ...draft, reasoningOverride: normalized }
     ));
   };
-  const persistThreadReasoningSelection = async (selection: FlowerReasoningSelection | undefined) => {
-    const threadID = trimString(selectedThreadID());
-    if (!threadID || !props.adapter.setThreadReasoningSelection) {
-      updateComposerReasoningOverride(selection);
-      return;
-    }
-    setThreadActionError('');
-    try {
-      const next = await props.adapter.setThreadReasoningSelection(threadID, serializeFlowerReasoningSelection(selection));
-      const nextThread = applyLiveBootstrap(next);
-      setSelectedThreadID(nextThread.thread_id);
-      updateComposerReasoningOverride(undefined);
-    } catch (error) {
-      setThreadActionError(getErrorMessage(error));
-    }
-  };
   const activeProviderSecrets = createMemo(() => {
     const provider = activeProvider();
     if (!provider) return null;
@@ -3265,29 +3249,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                               <span class={cn('flower-model-chip', surfaceWarmupActive() && 'flower-model-chip-warmup')}>
                                 {surfaceWarmupActive() ? warmupModelLabel() : selectedThreadModelLabel()}
                               </span>
-                            </div>
-                          </Show>
-                          <Show when={composerReasoningEnabled()}>
-                            <div class="flower-reasoning-stack">
-                              <Show when={!selectedInputRequest() && selectedThreadID()}>
+                              <Show when={composerReasoningEnabled()}>
                                 <FlowerReasoningControl
                                   compact
+                                  variant="badge"
                                   capability={selectedReasoningCapability()}
-                                  selection={selectedThreadReasoningSelection()}
-                                  label="Thread"
-                                  readOnly={!props.adapter.setThreadReasoningSelection}
-                                  resettable={Boolean(props.adapter.setThreadReasoningSelection)}
-                                  resetLabel="Reset thread reasoning"
-                                  onChange={(selection) => void persistThreadReasoningSelection(selection)}
+                                  selection={composerReasoningSelection()}
+                                  label="Reasoning"
+                                  onChange={updateComposerReasoningOverride}
                                 />
                               </Show>
-                              <FlowerReasoningControl
-                                compact
-                                capability={selectedReasoningCapability()}
-                                selection={composerReasoningSelection()}
-                                label="This turn"
-                                onChange={updateComposerReasoningOverride}
-                              />
                             </div>
                           </Show>
                         </>

@@ -153,15 +153,25 @@ describe('shared Flower UI boundary', () => {
 		expect(surfaceSrc).not.toContain('serializeFlowerReasoningSelection(composerReasoningSelection()) ? { reasoning_selection');
   });
 
-  it('exposes a reset affordance for thread reasoning defaults', () => {
+  it('keeps composer reasoning as a compact badge menu', () => {
     const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
     const controlSrc = readText(path.join(flowerRoot, 'ReasoningControl.tsx'));
     const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));
 
-		expect(surfaceSrc).toContain('resetLabel="Reset thread reasoning"');
+		expect(surfaceSrc).toContain('variant="badge"');
+		expect(surfaceSrc).toContain('label="Reasoning"');
+		expect(surfaceSrc).not.toContain('label="Thread"');
+		expect(surfaceSrc).not.toContain('label="This turn"');
+		expect(surfaceSrc).not.toContain('resetLabel="Reset thread reasoning"');
+		expect(surfaceSrc).not.toContain('persistThreadReasoningSelection');
+		expect(controlSrc).toContain("variant?: 'full' | 'badge'");
+		expect(controlSrc).toContain('class={cn(\'flower-reasoning-badge-button\'');
+		expect(controlSrc).toContain("normalizeFlowerReasoningLevel(level) === 'default' ? 'On'");
 		expect(controlSrc).toContain('class="flower-reasoning-reset"');
 		expect(controlSrc).toContain('onClick={() => props.onChange?.(undefined)}');
 		expect(readText(path.join(flowerRoot, 'runtimeFlowerSurfaceAdapter.ts'))).toContain('reasoning_selection: selection ?? null');
+		expect(cssSrc).toContain('.flower-reasoning-badge-button');
+		expect(cssSrc).toContain('.flower-reasoning-menu');
 		expect(cssSrc).toContain('.flower-reasoning-reset');
 		expect(cssSrc).toContain('cursor: pointer;');
 	});
