@@ -83,7 +83,12 @@ describe('FlowerSurface context telemetry', () => {
     expect(indicator?.textContent).toContain('Near limit');
     expect(indicator?.getAttribute('data-context-pressure')).toBe('warning');
     expect(progress?.getAttribute('aria-valuenow')).toBe('91');
-    expect(progress?.getAttribute('aria-describedby')).toBeTruthy();
+    expect(progress?.hasAttribute('aria-describedby')).toBe(false);
+    (progress as HTMLElement | null)?.focus();
+    await waitFor(() => Boolean(progress?.getAttribute('aria-describedby')));
+    const tooltipID = progress?.getAttribute('aria-describedby');
+    expect(tooltipID).toBeTruthy();
+    expect(indicator?.querySelector(`#${tooltipID}`)?.getAttribute('aria-hidden')).toBeNull();
     expect(indicator && submit ? Array.from(actions?.children ?? []).indexOf(indicator) : -1).toBeLessThan(indicator && submit ? Array.from(actions?.children ?? []).indexOf(submit) : 0);
     expect(runtime.querySelector('.flower-model-status-lane .flower-composer-context-indicator')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-lane')?.textContent).toContain('Thinking...');

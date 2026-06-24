@@ -1,4 +1,4 @@
-import { Show, createMemo, createUniqueId } from 'solid-js';
+import { Show, createMemo, createSignal, createUniqueId } from 'solid-js';
 
 import type { FlowerContextUsage } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
@@ -9,6 +9,7 @@ export function FlowerComposerContextIndicator(props: {
   copy: FlowerSurfaceCopy;
 }) {
   const view = createMemo(() => buildFlowerComposerContextIndicatorView(props.usage, props.copy));
+  const [tooltipOpen, setTooltipOpen] = createSignal(false);
   const tooltipID = `flower-composer-context-${createUniqueId()}`;
   const progressStyle = createMemo(() => ({
     '--flower-composer-context-progress': `${view().progressValue ?? 0}%`,
@@ -22,6 +23,8 @@ export function FlowerComposerContextIndicator(props: {
       class="flower-composer-context-indicator"
       data-context-pressure={view().tone}
       data-context-ratio={dataRatio()}
+      onPointerEnter={() => setTooltipOpen(true)}
+      onPointerLeave={() => setTooltipOpen(false)}
     >
       <div
         class="flower-composer-context-progress"
@@ -31,13 +34,21 @@ export function FlowerComposerContextIndicator(props: {
         aria-valuemax="100"
         aria-valuenow={view().progressValue ?? undefined}
         aria-valuetext={view().ariaValueText}
-        aria-describedby={tooltipID}
+        aria-describedby={tooltipOpen() ? tooltipID : undefined}
         tabIndex={0}
         style={progressStyle()}
+        onFocus={() => setTooltipOpen(true)}
+        onBlur={() => setTooltipOpen(false)}
       >
         <span class="flower-composer-context-percent">{view().percentLabel}</span>
       </div>
-      <div id={tooltipID} role="tooltip" class="flower-composer-context-tooltip">
+      <div
+        id={tooltipID}
+        role="tooltip"
+        class="flower-composer-context-tooltip"
+        data-open={tooltipOpen() ? 'true' : undefined}
+        aria-hidden={tooltipOpen() ? undefined : 'true'}
+      >
         <div class="flower-composer-context-tooltip-title">{view().tooltipTitle}</div>
         <div class="flower-composer-context-tooltip-row">
           <span>{view().usedLabel}</span>
