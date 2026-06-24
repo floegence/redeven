@@ -34,6 +34,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Check: Icon,
     ChevronDown: Icon,
     ChevronLeft: Icon,
+    ChevronRight: Icon,
     Clock: Icon,
     Code: Icon,
     Copy: Icon,
@@ -110,6 +111,24 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
           <Show when={props.footer}>{props.footer}</Show>
         </div>
       </Show>
+    );
+  },
+  SurfaceFloatingLayer: (props: any) => {
+    const { children, layerRef, position, class: className, style, ...rest } = props;
+    return (
+      <div
+        ref={(node) => layerRef?.(node)}
+        class={className}
+        style={{
+          ...(style ?? {}),
+          left: `${position?.x ?? 0}px`,
+          top: `${position?.y ?? 0}px`,
+        }}
+        data-floe-local-interaction-surface="true"
+        {...rest}
+      >
+        {children}
+      </div>
     );
   },
   Checkbox: (props: any) => (
@@ -383,6 +402,32 @@ export function subagentDetail(overrides: Partial<FlowerSubagentDetail> = {}): F
         message: {
           role: 'user',
           text: 'Review the API boundary.',
+        },
+      },
+      {
+        ordinal: 2,
+        kind: 'tool_call',
+        created_at_ms: 130,
+        activity: activityTimeline({
+          run_id: 'subagent:thread-child-review:running',
+          turn_id: 'child-row-2',
+          items: [activityItem({
+            item_id: 'call-terminal-running',
+            tool_id: 'call-terminal-running',
+            tool_name: 'terminal.exec',
+            renderer: 'terminal',
+            label: 'go test ./internal/ui',
+            status: 'running',
+            payload: {
+              command: 'go test ./internal/ui',
+              status: 'running',
+            },
+          })],
+        }),
+        tool_call: {
+          id: 'call-terminal-running',
+          name: 'terminal.exec',
+          args_preview: 'go test ./internal/ui',
         },
       },
       {

@@ -217,6 +217,10 @@ html.dark .flower-component-shell {
   --flower-chat-surface-soft: var(--redeven-surface-panel-soft, var(--card));
   --flower-chat-surface-elevated: var(--redeven-surface-panel-elevated, var(--card));
   --flower-chat-surface-border: var(--redeven-surface-panel-border, var(--border));
+  --flower-layer-chat-main: 0;
+  --flower-layer-chat-header: 30;
+  --flower-layer-subagent-dropdown: 120;
+  --flower-layer-subagent-window: 160;
   --flower-chat-dock-track-max-width: 112rem;
   --flower-chat-text-column-width: 58rem;
   --flower-chat-user-bubble-width: 44rem;
@@ -226,10 +230,13 @@ html.dark .flower-component-shell {
   height: 100%;
   flex-direction: column;
   position: relative;
+  isolation: isolate;
   background: var(--flower-chat-surface);
 }
 
 .flower-chat-header {
+  position: relative;
+  z-index: var(--flower-layer-chat-header);
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -753,6 +760,8 @@ html.dark .flower-component-shell {
 }
 
 .flower-chat-main {
+  position: relative;
+  z-index: var(--flower-layer-chat-main);
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -3502,26 +3511,27 @@ html.dark .flower-component-shell {
   flex: 0 0 auto;
 }
 
+.flower-subagents-dropdown-layer {
+  z-index: var(--flower-layer-subagent-dropdown);
+}
+
 .flower-subagents-dropdown {
   --flower-subagents-panel: var(--redeven-surface-panel, var(--card));
   --flower-subagents-panel-soft: var(--redeven-surface-panel-soft, var(--card));
   --flower-subagents-panel-elevated: var(--redeven-surface-panel-elevated, var(--card));
   --flower-subagents-border: var(--redeven-surface-panel-border, var(--border));
-  position: absolute;
-  z-index: 50;
-  top: calc(100% + 0.5rem);
-  right: 0;
   display: grid;
   width: min(23rem, calc(100vw - 1rem));
   max-height: min(28rem, calc(100vh - 5rem));
   min-width: 18rem;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--flower-subagents-border) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--flower-subagents-border) 88%, var(--foreground) 12%);
   border-radius: 0.625rem;
-  background: color-mix(in srgb, var(--flower-subagents-panel) 96%, transparent);
+  background: var(--flower-subagents-panel);
   box-shadow:
-    0 1px 0 color-mix(in srgb, white 35%, transparent) inset,
-    0 20px 50px -28px color-mix(in srgb, var(--foreground) 48%, transparent);
+    0 1px 0 color-mix(in srgb, white 48%, transparent) inset,
+    0 22px 56px -28px color-mix(in srgb, black 72%, transparent),
+    0 10px 24px -22px color-mix(in srgb, var(--foreground) 54%, transparent);
 }
 
 .flower-subagents-dropdown-header {
@@ -3564,20 +3574,23 @@ html.dark .flower-component-shell {
 .flower-subagents-dropdown-list {
   display: grid;
   min-height: 0;
+  gap: 0.125rem;
   overflow-y: auto;
+  border-top: 1px solid color-mix(in srgb, var(--flower-subagents-border) 58%, transparent);
+  background: color-mix(in srgb, var(--flower-subagents-panel-soft) 42%, var(--flower-subagents-panel) 58%);
   padding: 0.25rem;
 }
 
 .flower-subagent-dropdown-row {
   display: grid;
-  grid-template-columns: 0.65rem minmax(0, 1fr) auto;
+  grid-template-columns: 1rem minmax(0, 1fr) 1rem;
   min-width: 0;
   cursor: pointer;
   align-items: start;
   gap: 0.625rem;
   border: 0;
   border-radius: 0.5rem;
-  background: transparent;
+  background: color-mix(in srgb, var(--flower-subagents-panel-elevated) 38%, transparent);
   color: inherit;
   padding: 0.625rem;
   text-align: left;
@@ -3590,35 +3603,42 @@ html.dark .flower-component-shell {
   outline: none;
 }
 
-.flower-subagent-status-dot {
-  width: 0.5rem;
-  height: 0.5rem;
-  margin-top: 0.28rem;
-  border-radius: 9999px;
-  background: var(--muted-foreground);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--muted-foreground) 12%, transparent);
+.flower-subagent-dropdown-status {
+  display: inline-flex;
+  width: 1rem;
+  height: 1rem;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.125rem;
 }
 
-.flower-subagent-status-dot-running {
-  background: #2563eb;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #2563eb 13%, transparent);
+.flower-subagent-status-indicator {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
 }
 
-.flower-subagent-status-dot-waiting_input,
-.flower-subagent-status-dot-queued {
-  background: #d97706;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #d97706 13%, transparent);
+.flower-subagent-status-indicator-running {
+  color: color-mix(in srgb, var(--primary) 74%, var(--foreground) 26%);
 }
 
-.flower-subagent-status-dot-completed {
-  background: #16a34a;
-  box-shadow: 0 0 0 3px color-mix(in srgb, #16a34a 13%, transparent);
+.flower-subagent-status-loader {
+  width: 0.82rem;
+  height: 0.82rem;
 }
 
-.flower-subagent-status-dot-failed,
-.flower-subagent-status-dot-timed_out {
-  background: var(--destructive);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--destructive) 13%, transparent);
+.flower-subagent-status-indicator-completed {
+  color: #15803d;
+}
+
+.flower-subagent-status-indicator-failed {
+  color: var(--destructive);
+}
+
+.flower-subagent-status-indicator-canceled,
+.flower-subagent-status-indicator-unknown {
+  color: var(--muted-foreground);
 }
 
 .flower-subagent-dropdown-copy {
@@ -3649,10 +3669,13 @@ html.dark .flower-component-shell {
 }
 
 .flower-subagent-dropdown-action {
+  display: inline-flex;
+  width: 1rem;
+  height: 1rem;
   align-self: center;
-  color: color-mix(in srgb, var(--primary) 76%, var(--foreground) 24%);
-  font-size: 0.7rem;
-  font-weight: 740;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--muted-foreground) 76%, var(--foreground) 24%);
 }
 
 .flower-subagents-dropdown-empty {
@@ -3670,6 +3693,7 @@ html.dark .flower-component-shell {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
+  gap: 0.32rem;
   border-radius: 9999px;
   border: 1px solid color-mix(in srgb, var(--flower-subagents-border) 70%, transparent);
   padding: 0.18rem 0.5rem;
@@ -3752,19 +3776,26 @@ html.dark .flower-component-shell {
 }
 
 .flower-subagent-detail-transcript {
+  position: relative;
   min-height: 0;
   overflow-y: auto;
-  padding: 0.25rem 0.125rem 0.75rem;
+  padding: 0.25rem 0.125rem 1rem;
 }
 
 .flower-subagent-detail-transcript-stack {
   padding: 0;
 }
 
-.flower-subagent-detail-load-more {
+.flower-subagent-detail-bottom-dock {
   display: flex;
-  justify-content: center;
-  padding: 0.25rem 0 0.125rem;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  border-top: 1px solid color-mix(in srgb, var(--flower-subagents-border) 58%, transparent);
+  padding: 0.55rem 0 0;
 }
 
 .flower-subagent-detail-load-more-button {
@@ -3789,6 +3820,45 @@ html.dark .flower-component-shell {
   cursor: not-allowed;
   color: var(--muted-foreground);
   opacity: 0.7;
+}
+
+.flower-subagent-detail-live-lane {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.flower-subagent-detail-tail-state,
+.flower-subagent-detail-tail-error {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.32rem;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 620;
+}
+
+.flower-subagent-detail-tail-error {
+  color: var(--destructive);
+}
+
+.flower-subagent-detail-scroll-to-latest {
+  position: sticky;
+  bottom: 0.7rem;
+  display: flex;
+  height: 0;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.flower-subagent-detail-scroll-to-latest .flower-scroll-to-latest-button {
+  pointer-events: auto;
+  transform: translateY(-2.4rem);
 }
 
 .flower-subagent-detail-empty {
@@ -4458,7 +4528,6 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   }
 
   .flower-subagents-dropdown {
-    right: 0;
     width: min(21rem, calc(100vw - 0.75rem));
     min-width: 0;
   }
@@ -4694,6 +4763,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   .flower-model-status-text::after,
   .flower-activity-inline-row-running .flower-activity-inline-button::before,
   .flower-activity-inline-loader-square,
+  .flower-subagent-status-loader .flower-activity-inline-loader-square,
   .flower-thread-warmup-card::after,
   .flower-model-chip-warmup::after,
   .redeven-flower-icon-spin,

@@ -89,4 +89,36 @@ describe('Flower activity running sheen', () => {
     expect(css).not.toContain('.flower-activity-inline-details::before');
     expect(css).not.toContain('.flower-activity-inline-row-running::before');
   });
+
+  it('uses the shared running loader and named layers for subagent overlays', () => {
+    const css = flowerStyles();
+    const shellRule = cssRule(css, '.flower-chat-shell');
+    const mainRule = cssRule(css, '.flower-chat-main');
+    const headerRule = cssRule(css, '.flower-chat-header');
+    const dropdownLayerRule = cssRule(css, '.flower-subagents-dropdown-layer');
+    const dropdownRule = cssRule(css, '.flower-subagents-dropdown');
+    const indicatorRule = cssRule(css, '.flower-subagent-status-indicator-running');
+    const detailDockRule = cssRule(css, '.flower-subagent-detail-bottom-dock');
+    const detailScrollRule = cssRule(css, '.flower-subagent-detail-scroll-to-latest');
+
+    expect(shellRule).toContain('isolation: isolate');
+    expect(shellRule).toContain('--flower-layer-chat-main: 0');
+    expect(shellRule).toContain('--flower-layer-chat-header: 30');
+    expect(shellRule).toContain('--flower-layer-subagent-dropdown: 120');
+    expect(shellRule).toContain('--flower-layer-subagent-window: 160');
+    expect(mainRule).toContain('z-index: var(--flower-layer-chat-main)');
+    expect(headerRule).toContain('z-index: var(--flower-layer-chat-header)');
+    expect(dropdownLayerRule).toContain('z-index: var(--flower-layer-subagent-dropdown)');
+    expect(dropdownRule).toContain('background: var(--flower-subagents-panel)');
+    expect(dropdownRule).toContain('box-shadow:');
+    expect(indicatorRule).toContain('color: color-mix');
+    expect(detailDockRule).toContain('border-top:');
+    expect(detailScrollRule).toContain('position: sticky');
+    expect(css).toContain('.flower-subagent-status-loader');
+    expect(css).toContain('.flower-subagent-status-loader .flower-activity-inline-loader-square');
+    expect(css).not.toContain('z-index: 50');
+    expect(detailScrollRule).not.toContain('z-index: ');
+    expect(dropdownRule).not.toContain('right: 0');
+    expect(css).not.toContain('.flower-subagent-status-dot-running');
+  });
 });
