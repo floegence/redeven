@@ -5,16 +5,24 @@ import { trimString } from '../flowerSurfaceModel';
 
 export type FlowerContextTone = 'stable' | 'warning' | 'danger' | 'estimated';
 
-export type FlowerContextMeterView = Readonly<{
-  label: string;
+export type FlowerComposerContextIndicatorView = Readonly<{
+  ariaLabel: string;
+  ariaValueText: string;
   percentLabel: string;
-  detailLabel: string;
-  pressureLabel: string;
   tone: FlowerContextTone;
   ratio: number | null;
   progressValue: number | null;
-  title: string;
-  updatedAtMs: number;
+  tooltipTitle: string;
+  usedLabel: string;
+  usedValue: string;
+  ratioLabel: string;
+  ratioValue: string;
+  thresholdLabel: string;
+  thresholdValue: string;
+  safeLimitLabel: string;
+  safeLimitValue: string;
+  statusLabel: string;
+  statusValue: string;
 }>;
 
 export function formatContextTokenCount(tokens: number | undefined): string {
@@ -54,8 +62,8 @@ export function contextPressureTone(pressure: string): FlowerContextTone {
 }
 
 export function contextPressureLabel(pressure: string, copy: FlowerSurfaceCopy): string {
-  const labels = copy.chat.contextMeter ?? DEFAULT_FLOWER_SURFACE_COPY.chat.contextMeter;
-  const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.contextMeter;
+  const labels = copy.chat.contextIndicator ?? DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator;
+  const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator;
   switch (trimString(pressure)) {
     case 'stable':
       return trimString(labels.stable) || fallback.stable;
@@ -72,27 +80,52 @@ export function contextPressureLabel(pressure: string, copy: FlowerSurfaceCopy):
   }
 }
 
-export function buildFlowerContextMeterView(usage: FlowerContextUsage, copy: FlowerSurfaceCopy): FlowerContextMeterView {
-  const labels = copy.chat.contextMeter ?? DEFAULT_FLOWER_SURFACE_COPY.chat.contextMeter;
-  const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.contextMeter;
+export function formatFullContextTokenCount(tokens: number | undefined): string {
+  const value = Math.max(0, Math.floor(Number(tokens ?? 0)));
+  if (!Number.isFinite(value) || value <= 0) return '';
+  return value.toLocaleString('en-US');
+}
+
+function formatCompactContextPercent(percent: number): string {
+  return `${Math.max(0, Math.min(100, Math.round(percent)))}%`;
+}
+
+export function buildFlowerComposerContextIndicatorView(usage: FlowerContextUsage, copy: FlowerSurfaceCopy): FlowerComposerContextIndicatorView {
+  const labels = copy.chat.contextIndicator ?? DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator;
+  const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator;
   const label = trimString(labels.label) || fallback.label;
-  const pressureLabel = contextPressureLabel(usage.pressure_status, copy);
+  const statusValue = contextPressureLabel(usage.pressure_status, copy);
   const ratio = contextUsageRatio(usage);
   const progressValue = ratio === null ? null : Math.max(0, Math.min(100, Math.round(ratio * 100)));
-  const percentLabel = progressValue === null ? '' : labels.percent(progressValue);
-  const used = formatContextTokenCount(usage.input_tokens);
-  const total = formatContextTokenCount(usage.context_window_tokens);
-  const detailLabel = used && total ? labels.usage(used, total) : pressureLabel;
+  const unknownPercent = trimString(labels.unknownPercent) || fallback.unknownPercent;
+  const percentLabel = progressValue === null ? unknownPercent : formatCompactContextPercent(progressValue);
+  const ratioValue = progressValue === null ? unknownPercent : labels.percent(progressValue);
+  const used = formatFullContextTokenCount(usage.input_tokens);
+  const total = formatFullContextTokenCount(usage.context_window_tokens);
+  const threshold = formatFullContextTokenCount(usage.threshold_tokens);
+  const safeLimit = formatFullContextTokenCount(usage.request_safe_limit_tokens);
+  const usedValue = used && total ? labels.usage(used, total) : trimString(labels.unavailable) || fallback.unavailable;
+  const ariaValueText = progressValue === null
+    ? `${label}: ${statusValue}`
+    : `${label}: ${ratioValue}, ${usedValue}`;
   return {
-    label,
+    ariaLabel: label,
+    ariaValueText,
     percentLabel,
-    detailLabel,
-    pressureLabel,
     tone: contextPressureTone(usage.pressure_status),
     ratio,
     progressValue,
-    title: `${label}: ${detailLabel}`,
-    updatedAtMs: Math.max(0, Math.floor(Number(usage.updated_at_ms ?? 0))),
+    tooltipTitle: label,
+    usedLabel: trimString(labels.usedLabel) || fallback.usedLabel,
+    usedValue,
+    ratioLabel: trimString(labels.ratioLabel) || fallback.ratioLabel,
+    ratioValue,
+    thresholdLabel: trimString(labels.thresholdLabel) || fallback.thresholdLabel,
+    thresholdValue: threshold,
+    safeLimitLabel: trimString(labels.safeLimitLabel) || fallback.safeLimitLabel,
+    safeLimitValue: safeLimit,
+    statusLabel: trimString(labels.statusLabel) || fallback.statusLabel,
+    statusValue,
   };
 }
 

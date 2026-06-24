@@ -59,30 +59,26 @@ describe('Flower model status indicator', () => {
     expect(indicatorRule).not.toContain('height: 0.82rem');
   });
 
-  it('keeps context usage meter visible in the thread header telemetry strip', () => {
+  it('keeps the context indicator compact inside composer actions', () => {
     const css = flowerStyles();
-    const headerRule = cssRule(css, '.flower-chat-header');
-    const rowRule = cssRule(css, '.flower-chat-header-row');
-    const stripRule = cssRule(css, '.flower-chat-context-strip');
-    const meterRule = cssRule(css, '.flower-context-usage-meter');
-    const copyRule = cssRule(css, '.flower-context-usage-meter-copy');
-    const trackRule = cssRule(css, '.flower-context-usage-meter-track');
-    const fillRule = cssRule(css, '.flower-context-usage-meter-fill');
+    const actionsRule = cssRule(css, '.flower-composer-actions');
+    const indicatorRule = cssRule(css, '.flower-composer-context-indicator');
+    const progressRule = cssRule(css, '.flower-composer-context-progress');
+    const tooltipRule = cssRule(css, '.flower-composer-context-tooltip');
+    const percentRule = cssRule(css, '.flower-composer-context-percent');
 
-    expect(headerRule).toContain('flex-direction: column');
-    expect(headerRule).toContain('align-items: stretch');
-    expect(rowRule).toContain('justify-content: space-between');
-    expect(stripRule).toContain('max-width: var(--flower-chat-text-column-width)');
-    expect(meterRule).toContain('display: flex');
-    expect(meterRule).toContain('width: min(100%, 48rem)');
-    expect(copyRule).toContain('flex-wrap: wrap');
-    expect(copyRule).toContain('font-size: 0.75rem');
-    expect(trackRule).toContain('width: min(100%, 22rem)');
-    expect(fillRule).toContain('position: absolute');
-    expect(css).toContain(".flower-context-usage-meter[data-context-pressure='warning'] .flower-context-usage-meter-fill");
-    expect(css).toContain(".flower-context-usage-meter[data-context-pressure='danger'] .flower-context-usage-meter-fill");
-    expect(css).not.toContain('.flower-context-meter');
-    expect(css).not.toContain('.flower-context-usage-meter-track {\n    display: none;');
+    expect(actionsRule).toContain('display: inline-flex');
+    expect(actionsRule).toContain('justify-content: flex-end');
+    expect(indicatorRule).toContain('position: relative');
+    expect(progressRule).toContain('width: 2.1rem');
+    expect(progressRule).toContain('height: 2.1rem');
+    expect(progressRule).toContain('conic-gradient');
+    expect(progressRule).toContain('cursor: help');
+    expect(percentRule).toContain('font-size: 0.625rem');
+    expect(tooltipRule).toContain('opacity: 0');
+    expect(css).toContain(".flower-composer-context-indicator[data-context-pressure='warning'] .flower-composer-context-progress");
+    expect(css).toContain(".flower-composer-context-indicator[data-context-pressure='danger'] .flower-composer-context-progress");
+    expect(css).toContain('.flower-composer-context-indicator:focus-within .flower-composer-context-tooltip');
   });
 
   it('renders compaction dividers as non-interactive timeline separators', () => {

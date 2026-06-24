@@ -58,7 +58,7 @@ function threadWithContext(overrides: Partial<FlowerThreadSnapshot> = {}): Flowe
 }
 
 describe('FlowerSurface context telemetry', () => {
-  it('renders active run context usage in the thread header with accessible progress', async () => {
+  it('renders active run context usage beside the composer submit action with accessible progress', async () => {
     const selectedThread = threadWithContext();
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -69,18 +69,23 @@ describe('FlowerSurface context telemetry', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-context"] button')));
     (runtime.querySelector('[data-thread-id="thread-context"] button') as HTMLButtonElement).click();
 
-    await waitFor(() => Boolean(runtime.querySelector('.flower-context-usage-meter')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-context-indicator')));
     const header = runtime.querySelector('.flower-chat-header');
-    const meter = header?.querySelector('.flower-context-usage-meter');
-    const progress = meter?.querySelector('[role="progressbar"]');
+    const actions = runtime.querySelector('.flower-composer-actions');
+    const indicator = actions?.querySelector('.flower-composer-context-indicator');
+    const progress = indicator?.querySelector('[role="progressbar"]');
+    const submit = actions?.querySelector('.flower-composer-submit');
 
-    expect(meter?.textContent).toContain('Context');
-    expect(meter?.textContent).toContain('91%');
-    expect(meter?.textContent).toContain('182k of 200k');
-    expect(meter?.textContent).toContain('Near limit');
-    expect(meter?.getAttribute('data-context-pressure')).toBe('warning');
+    expect(header?.querySelector('.flower-composer-context-indicator')).toBeNull();
+    expect(indicator?.textContent).toContain('91%');
+    expect(indicator?.textContent).toContain('Context');
+    expect(indicator?.textContent).toContain('182,000 of 200,000');
+    expect(indicator?.textContent).toContain('Near limit');
+    expect(indicator?.getAttribute('data-context-pressure')).toBe('warning');
     expect(progress?.getAttribute('aria-valuenow')).toBe('91');
-    expect(runtime.querySelector('.flower-model-status-lane .flower-context-usage-meter')).toBeNull();
+    expect(progress?.getAttribute('aria-describedby')).toBeTruthy();
+    expect(indicator && submit ? Array.from(actions?.children ?? []).indexOf(indicator) : -1).toBeLessThan(indicator && submit ? Array.from(actions?.children ?? []).indexOf(submit) : 0);
+    expect(runtime.querySelector('.flower-model-status-lane .flower-composer-context-indicator')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-lane')?.textContent).toContain('Thinking...');
   });
 
@@ -108,11 +113,11 @@ describe('FlowerSurface context telemetry', () => {
     (runtime.querySelector('[data-thread-id="thread-context"] button') as HTMLButtonElement).click();
     await flush();
 
-    expect(runtime.querySelector('.flower-context-usage-meter')).toBeNull();
+    expect(runtime.querySelector('.flower-composer-context-indicator')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-lane')?.textContent).toContain('Thinking...');
   });
 
-  it('renders text-only context status when no reliable ratio exists', async () => {
+  it('renders unknown percent context status when no reliable ratio exists', async () => {
     const selectedThread = threadWithContext({
       context_usage: {
         run_id: 'run-1',
@@ -130,12 +135,14 @@ describe('FlowerSurface context telemetry', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-context"] button')));
     (runtime.querySelector('[data-thread-id="thread-context"] button') as HTMLButtonElement).click();
 
-    await waitFor(() => Boolean(runtime.querySelector('.flower-context-usage-meter')));
-    const meter = runtime.querySelector('.flower-context-usage-meter');
-    expect(meter?.textContent).toContain('Context');
-    expect(meter?.textContent).toContain('Estimated');
-    expect(meter?.textContent).not.toContain('0%');
-    expect(meter?.querySelector('[role="progressbar"]')).toBeNull();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-context-indicator')));
+    const indicator = runtime.querySelector('.flower-composer-context-indicator');
+    const progress = indicator?.querySelector('[role="progressbar"]');
+    expect(indicator?.textContent).toContain('Context');
+    expect(indicator?.textContent).toContain('Estimated');
+    expect(indicator?.textContent).toContain('--%');
+    expect(indicator?.textContent).not.toContain('0%');
+    expect(progress?.hasAttribute('aria-valuenow')).toBe(false);
   });
 
   it('renders compaction dividers as timeline decorations without creating transcript messages', async () => {

@@ -290,7 +290,7 @@ export type FlowerSurfaceCopy = Readonly<{
       retrying: string;
       finalizing: string;
     }>;
-    contextMeter: Readonly<{
+    contextIndicator: Readonly<{
       label: string;
       stable: string;
       nearThreshold: string;
@@ -298,6 +298,13 @@ export type FlowerSurfaceCopy = Readonly<{
       hardLimit: string;
       estimated: string;
       unknown: string;
+      unknownPercent: string;
+      unavailable: string;
+      usedLabel: string;
+      ratioLabel: string;
+      thresholdLabel: string;
+      safeLimitLabel: string;
+      statusLabel: string;
       usage: (used: string, total: string) => string;
       percent: (percent: number) => string;
     }>;
@@ -396,7 +403,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       retrying: 'Retrying model request...',
       finalizing: 'Finalizing reply...',
     },
-    contextMeter: {
+    contextIndicator: {
       label: 'Context',
       stable: 'Stable',
       nearThreshold: 'Near limit',
@@ -404,6 +411,13 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       hardLimit: 'At limit',
       estimated: 'Estimated',
       unknown: 'Tracking',
+      unknownPercent: '--%',
+      unavailable: 'Not available',
+      usedLabel: 'Used',
+      ratioLabel: 'Usage',
+      thresholdLabel: 'Compaction threshold',
+      safeLimitLabel: 'Request safe limit',
+      statusLabel: 'Status',
       usage: (used, total) => `${used} of ${total}`,
       percent: (percent) => `${percent}%`,
     },

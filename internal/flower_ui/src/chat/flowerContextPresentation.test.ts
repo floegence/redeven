@@ -3,11 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import type { FlowerContextCompaction, FlowerContextUsage } from '../contracts/flowerSurfaceContracts';
 import {
-  buildFlowerContextMeterView,
+  buildFlowerComposerContextIndicatorView,
   compactionDividerDetail,
   compactionDividerLabel,
   contextPressureTone,
   contextUsagePercent,
+  formatFullContextTokenCount,
   formatContextTokenCount,
 } from './flowerContextPresentation';
 
@@ -32,22 +33,27 @@ function compaction(overrides: Partial<FlowerContextCompaction> = {}): FlowerCon
 
 describe('flower context presentation', () => {
   it('builds percent and token detail from direct context usage ratios', () => {
-    const view = buildFlowerContextMeterView(usage({
+    const view = buildFlowerComposerContextIndicatorView(usage({
       input_tokens: 182_000,
       context_window_tokens: 200_000,
+      threshold_tokens: 180_000,
+      request_safe_limit_tokens: 190_000,
       used_ratio: 0.91,
       threshold_ratio: 0.9,
       pressure_status: 'near_threshold',
     }), DEFAULT_FLOWER_SURFACE_COPY);
 
     expect(view).toMatchObject({
-      label: 'Context',
+      ariaLabel: 'Context',
       percentLabel: '91%',
-      detailLabel: '182k of 200k',
-      pressureLabel: 'Near limit',
+      usedValue: '182,000 of 200,000',
+      thresholdValue: '180,000',
+      safeLimitValue: '190,000',
+      statusValue: 'Near limit',
       tone: 'warning',
       ratio: 0.91,
       progressValue: 91,
+      ariaValueText: 'Context: 91%, 182,000 of 200,000',
     });
   });
 
@@ -60,15 +66,40 @@ describe('flower context presentation', () => {
   });
 
   it('keeps unknown ratios text-only instead of fabricating zero percent', () => {
-    const view = buildFlowerContextMeterView(usage({
+    const view = buildFlowerComposerContextIndicatorView(usage({
       pressure_status: 'estimated',
     }), DEFAULT_FLOWER_SURFACE_COPY);
 
     expect(view.ratio).toBeNull();
     expect(view.progressValue).toBeNull();
-    expect(view.percentLabel).toBe('');
-    expect(view.detailLabel).toBe('Estimated');
+    expect(view.percentLabel).toBe('--%');
+    expect(view.usedValue).toBe('Not available');
+    expect(view.statusValue).toBe('Estimated');
+    expect(view.ariaValueText).toBe('Context: Estimated');
     expect(view.tone).toBe('estimated');
+  });
+
+  it('keeps the circular label compact while localizing tooltip ratio text', () => {
+    const copy = {
+      ...DEFAULT_FLOWER_SURFACE_COPY,
+      chat: {
+        ...DEFAULT_FLOWER_SURFACE_COPY.chat,
+        contextIndicator: {
+          ...DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator,
+          percent: (percent: number) => `${percent}% 已用`,
+        },
+      },
+    };
+    const view = buildFlowerComposerContextIndicatorView(usage({
+      input_tokens: 72_000,
+      context_window_tokens: 100_000,
+      used_ratio: 0.72,
+      pressure_status: 'stable',
+    }), copy);
+
+    expect(view.percentLabel).toBe('72%');
+    expect(view.ratioValue).toBe('72% 已用');
+    expect(view.ariaValueText).toBe('Context: 72% 已用, 72,000 of 100,000');
   });
 
   it('maps all pressure statuses into stable UI tones', () => {
@@ -86,6 +117,8 @@ describe('flower context presentation', () => {
     expect(formatContextTokenCount(10_200)).toBe('10k');
     expect(formatContextTokenCount(1_250_000)).toBe('1.3M');
     expect(formatContextTokenCount(0)).toBe('');
+    expect(formatFullContextTokenCount(182_000)).toBe('182,000');
+    expect(formatFullContextTokenCount(0)).toBe('');
   });
 
   it('labels compaction lifecycle states without deriving run lifecycle state', () => {
