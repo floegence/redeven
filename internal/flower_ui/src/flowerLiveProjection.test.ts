@@ -442,6 +442,107 @@ describe('Flower live projection', () => {
     });
   });
 
+  it('keeps compaction lifecycle separate from running run lifecycle', () => {
+    const initial = thread({
+      status: 'running',
+      active_run_id: 'run-1',
+      model_io_status: {
+        phase: 'streaming',
+        run_id: 'run-1',
+        updated_at_ms: 4000,
+      },
+      messages: [
+        message(),
+        {
+          id: 'assistant-live',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 2000,
+          active_cursor: true,
+        },
+      ],
+    });
+
+    const compacting = applyFlowerLiveEvent(initial, 0, event(1, 'context.compaction.updated', {
+      compaction: {
+        operation_id: 'compact-continue',
+        run_id: 'run-1',
+        anchor_message_id: 'assistant-live',
+        phase: 'start',
+        status: 'compacting',
+        tokens_before: 910,
+        updated_at_ms: 4100,
+      },
+    }));
+    const compacted = applyFlowerLiveEvent(compacting.thread, compacting.cursor, event(2, 'context.compaction.updated', {
+      compaction: {
+        operation_id: 'compact-continue',
+        run_id: 'run-1',
+        phase: 'complete',
+        status: 'compacted',
+        tokens_before: 910,
+        tokens_after_estimate: 220,
+        updated_at_ms: 4200,
+      },
+    }));
+
+    expect(compacted.thread.status).toBe('running');
+    expect(compacted.thread.active_run_id).toBe('run-1');
+    expect(compacted.thread.model_io_status).toMatchObject({
+      phase: 'streaming',
+      run_id: 'run-1',
+    });
+    expect(compacted.thread.context_compactions).toHaveLength(1);
+    expect(compacted.thread.timeline_decorations).toHaveLength(1);
+    expect(compacted.thread.timeline_decorations?.[0]?.compaction.status).toBe('compacted');
+
+    const blockStarted = applyFlowerLiveEvent(compacted.thread, compacted.cursor, event(3, 'message.block_started', {
+      message_id: 'assistant-live',
+      block_index: 0,
+      block_type: 'markdown',
+    }));
+    const continued = applyFlowerLiveEvent(blockStarted.thread, blockStarted.cursor, event(4, 'message.block_delta', {
+      message_id: 'assistant-live',
+      block_index: 0,
+      delta: 'continuing after compaction',
+    }));
+    expect(continued.thread.status).toBe('running');
+    expect(continued.thread.active_run_id).toBe('run-1');
+    expect(continued.thread.messages.find((item) => item.id === 'assistant-live')?.content).toContain('continuing after compaction');
+  });
+
+  it('keeps failed compaction separate from failed run lifecycle', () => {
+    const initial = thread({
+      status: 'running',
+      active_run_id: 'run-1',
+      model_io_status: {
+        phase: 'streaming',
+        run_id: 'run-1',
+        updated_at_ms: 4000,
+      },
+    });
+
+    const failedCompaction = applyFlowerLiveEvent(initial, 0, event(1, 'context.compaction.updated', {
+      compaction: {
+        operation_id: 'compact-failed',
+        run_id: 'run-1',
+        phase: 'failed',
+        status: 'failed',
+        error: 'summary failed',
+        updated_at_ms: 4100,
+      },
+    }));
+
+    expect(failedCompaction.thread.status).toBe('running');
+    expect(failedCompaction.thread.active_run_id).toBe('run-1');
+    expect(failedCompaction.thread.model_io_status?.run_id).toBe('run-1');
+    expect(failedCompaction.thread.timeline_decorations?.[0]?.compaction).toMatchObject({
+      status: 'failed',
+      error: 'summary failed',
+    });
+  });
+
   it('accepts model io updates only from the active live run', () => {
     const initial = thread();
     const staleBeforeRun = applyFlowerLiveEvent(initial, 0, event(1, 'model_io.updated', {

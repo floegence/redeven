@@ -6,9 +6,14 @@ import { describe, expect, it } from 'vitest';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const surfacePath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'FlowerSurface.tsx');
+const compactionDividerPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'chat', 'FlowerContextCompactionDivider.tsx');
 
 function surfaceSource(): string {
   return fs.readFileSync(surfacePath, 'utf8');
+}
+
+function compactionDividerSource(): string {
+  return fs.readFileSync(compactionDividerPath, 'utf8');
 }
 
 describe('FlowerSurface markdown rendering boundary', () => {
@@ -50,13 +55,22 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain("case 'running':\n        return <Terminal");
   });
 
-  it('renders the model status indicator in the bottom dock outside timeline entries', () => {
+  it('renders context usage in the header and model status in the bottom dock outside timeline entries', () => {
     const src = surfaceSource();
     const timelineListIndex = src.indexOf('<For each={visibleTimelineEntryKeys()}>');
+    const headerIndex = src.indexOf('flower-chat-header flower-chat-header');
+    const headerRowIndex = src.indexOf('flower-chat-header-row');
+    const contextStripIndex = src.indexOf('flower-chat-context-strip');
+    const contextMeterIndex = src.indexOf('<FlowerContextUsageMeter');
     const dockIndex = src.indexOf('flower-chat-bottom-dock-track');
     const statusLaneIndex = src.indexOf('flower-model-status-lane');
     const composerIndex = src.indexOf('flower-composer flower-chat-input-floating');
 
+    expect(headerIndex).toBeGreaterThanOrEqual(0);
+    expect(headerRowIndex).toBeGreaterThan(headerIndex);
+    expect(contextStripIndex).toBeGreaterThan(headerRowIndex);
+    expect(contextMeterIndex).toBeGreaterThan(contextStripIndex);
+    expect(timelineListIndex).toBeGreaterThan(contextMeterIndex);
     expect(timelineListIndex).toBeGreaterThanOrEqual(0);
     expect(dockIndex).toBeGreaterThan(timelineListIndex);
     expect(statusLaneIndex).toBeGreaterThan(dockIndex);
@@ -66,13 +80,14 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('<Show when={selectedThreadHasModelStatus()}>');
     expect(src).toContain('{modelStatusIndicator()}');
     expect(src).toContain('<Show when={selectedContextUsage()}>');
-    expect(src).toContain('{contextMeter()}');
+    expect(src).toContain('<FlowerContextUsageMeter usage={usage()} copy={copy()} />');
     expect(src).toContain('role="status"');
     expect(src).toContain('aria-live="polite"');
     expect(src).toContain('aria-atomic="true"');
     expect(src).toContain('copy().chat.modelStatus');
     expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus');
     expect(src).toContain('data-text={label}');
+    expect(src).not.toContain('contextMeter()');
     expect(src).not.toContain('selectedThreadThinking');
     expect(src).not.toContain('thinkingIndicator');
     expect(src).not.toContain('flower-message-streaming-tail');
@@ -81,11 +96,13 @@ describe('FlowerSurface markdown rendering boundary', () => {
 
   it('renders context compaction timeline decorations as non-message divider entries', () => {
     const src = surfaceSource();
+    const dividerSrc = compactionDividerSource();
 
     expect(src).toContain("case 'context_compaction':");
     expect(src).toContain('compactionDividerEntry');
-    expect(src).toContain('flower-compaction-divider');
-    expect(src).toContain('data-flower-compaction-status={compaction().status}');
+    expect(src).toContain('<FlowerContextCompactionDivider');
+    expect(dividerSrc).toContain('flower-compaction-divider');
+    expect(dividerSrc).toContain('data-flower-compaction-status={compaction().status}');
     expect(src).not.toContain("case 'decoration':");
   });
 
