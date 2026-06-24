@@ -394,15 +394,8 @@ html.dark .flower-component-shell {
   line-height: 1.25;
 }
 
-.flower-reasoning-stack {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.375rem;
-}
-
 .flower-reasoning-control {
+  position: relative;
   display: inline-flex;
   min-width: 0;
   align-items: center;
@@ -411,6 +404,10 @@ html.dark .flower-component-shell {
 
 .flower-reasoning-control-compact {
   gap: 0.25rem;
+}
+
+.flower-reasoning-control-badge {
+  flex: 0 0 auto;
 }
 
 .flower-reasoning-label {
@@ -434,6 +431,108 @@ html.dark .flower-component-shell {
   font-weight: 750;
   line-height: 1.2;
   white-space: nowrap;
+}
+
+.flower-reasoning-badge-button {
+  display: inline-flex;
+  height: 1.375rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1875rem;
+  border: 1px solid color-mix(in srgb, var(--border) 56%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+  color: color-mix(in srgb, var(--foreground) 80%, var(--primary) 20%);
+  padding: 0 0.42rem 0 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 760;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.flower-reasoning-badge-button:hover,
+.flower-reasoning-badge-button:focus-visible,
+.flower-reasoning-badge-button-open {
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--border));
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
+  outline: none;
+}
+
+.flower-reasoning-badge-icon {
+  width: 0.75rem;
+  height: 0.75rem;
+  color: color-mix(in srgb, currentColor 72%, transparent);
+}
+
+.flower-reasoning-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.375rem);
+  z-index: 40;
+  display: grid;
+  min-width: 7rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 0.625rem;
+  background: color-mix(in srgb, var(--popover, var(--background)) 96%, transparent);
+  box-shadow:
+    0 1rem 2rem color-mix(in srgb, var(--foreground) 13%, transparent),
+    0 0 0 1px color-mix(in srgb, white 28%, transparent) inset;
+  padding: 0.25rem;
+}
+
+.flower-reasoning-menu-item {
+  display: flex;
+  height: 1.75rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: flex-start;
+  border: 0;
+  border-radius: 0.4375rem;
+  background: transparent;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+  padding: 0 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 720;
+  line-height: 1;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.flower-reasoning-menu-item:hover,
+.flower-reasoning-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  color: var(--foreground);
+  outline: none;
+}
+
+.flower-reasoning-menu-item-active {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: color-mix(in srgb, var(--primary) 76%, var(--foreground) 24%);
+}
+
+.flower-reasoning-menu-budget {
+  height: 1.75rem;
+  width: 100%;
+  min-width: 8rem;
+  border: 0;
+  border-radius: 0.4375rem;
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+  color: var(--foreground);
+  padding: 0 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.flower-reasoning-menu-budget:focus {
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--primary) 36%, transparent);
 }
 
 .flower-reasoning-actions {
@@ -603,10 +702,18 @@ html.dark .flower-component-shell {
     grid-template-columns: 1.5rem minmax(0, 1fr);
   }
 
-  .flower-reasoning-stack,
   .flower-reasoning-control,
   .flower-reasoning-actions {
     width: 100%;
+  }
+
+  .flower-reasoning-control-badge {
+    width: auto;
+  }
+
+  .flower-reasoning-control-badge .flower-reasoning-menu {
+    right: auto;
+    left: 0;
   }
 
   .flower-reasoning-segmented {
