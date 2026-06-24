@@ -1,5 +1,7 @@
 import type {
   AIActiveRun,
+  AICompactThreadContextRequest,
+  AICompactThreadContextResponse,
   AIFollowupAttachment,
   AIFollowupItem,
   AIListMessagesRequest,
@@ -24,6 +26,8 @@ import type {
 } from '../sdk/ai';
 import type {
   wire_ai_active_run,
+  wire_ai_compact_thread_context_req,
+  wire_ai_compact_thread_context_resp,
   wire_ai_event_notify,
   wire_ai_followup_attachment,
   wire_ai_followup_item,
@@ -233,6 +237,23 @@ export function fromWireAISendUserTurnResponse(resp: wire_ai_send_user_turn_resp
     consumedWaitingPromptId:
       String(resp?.consumed_waiting_prompt_id ?? '').trim() || undefined,
     appliedExecutionMode: normalizeExecutionMode(resp?.applied_execution_mode),
+  };
+}
+
+export function toWireAICompactThreadContextRequest(req: AICompactThreadContextRequest): wire_ai_compact_thread_context_req {
+  return {
+    thread_id: String(req.threadId ?? '').trim(),
+    expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
+    source: String(req.source ?? '').trim() || 'slash_command',
+  };
+}
+
+export function fromWireAICompactThreadContextResponse(resp: wire_ai_compact_thread_context_resp): AICompactThreadContextResponse {
+  return {
+    operationId: String(resp?.operation_id ?? '').trim() || undefined,
+    kind: String(resp?.kind ?? '').trim(),
+    runId: String(resp?.run_id ?? '').trim() || undefined,
+    errorCode: String(resp?.error_code ?? '').trim() || undefined,
   };
 }
 

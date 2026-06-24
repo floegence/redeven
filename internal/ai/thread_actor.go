@@ -118,6 +118,18 @@ type sendUserTurnResult struct {
 	err  error
 }
 
+type cmdCompactThreadContext struct {
+	ctx  context.Context
+	meta *session.Meta
+	req  CompactThreadContextRequest
+	resp chan compactThreadContextResult
+}
+
+type compactThreadContextResult struct {
+	resp CompactThreadContextResponse
+	err  error
+}
+
 type cmdSubmitRequestUserInputResponse struct {
 	ctx  context.Context
 	meta *session.Meta
@@ -235,6 +247,34 @@ func (a *threadActor) SendUserTurn(ctx context.Context, meta *session.Meta, req 
 	}
 }
 
+func (a *threadActor) CompactThreadContext(ctx context.Context, meta *session.Meta, req CompactThreadContextRequest) (CompactThreadContextResponse, error) {
+	if a == nil {
+		return CompactThreadContextResponse{}, errors.New("thread actor not ready")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ch := make(chan compactThreadContextResult, 1)
+	cmd := cmdCompactThreadContext{ctx: ctx, meta: meta, req: req, resp: ch}
+
+	select {
+	case <-a.stopCh:
+		return CompactThreadContextResponse{}, errors.New("thread actor closed")
+	case <-ctx.Done():
+		return CompactThreadContextResponse{}, ctx.Err()
+	case a.inbox <- cmd:
+	}
+
+	select {
+	case <-a.stopCh:
+		return CompactThreadContextResponse{}, errors.New("thread actor closed")
+	case <-ctx.Done():
+		return CompactThreadContextResponse{}, ctx.Err()
+	case res := <-ch:
+		return res.resp, res.err
+	}
+}
+
 func (a *threadActor) SubmitRequestUserInputResponse(ctx context.Context, meta *session.Meta, req SubmitRequestUserInputResponseRequest) (SubmitRequestUserInputResponseResponse, error) {
 	if a == nil {
 		return SubmitRequestUserInputResponseResponse{}, errors.New("thread actor not ready")
@@ -304,6 +344,9 @@ func (a *threadActor) loop() {
 			case cmdSendUserTurn:
 				resp, err := a.handleSendUserTurn(cmd.ctx, cmd.meta, cmd.req)
 				cmd.resp <- sendUserTurnResult{resp: resp, err: err}
+			case cmdCompactThreadContext:
+				resp, err := a.handleCompactThreadContext(cmd.ctx, cmd.meta, cmd.req)
+				cmd.resp <- compactThreadContextResult{resp: resp, err: err}
 			case cmdSubmitRequestUserInputResponse:
 				resp, err := a.handleSubmitRequestUserInputResponse(cmd.ctx, cmd.meta, cmd.req)
 				cmd.resp <- submitRequestUserInputResponseResult{resp: resp, err: err}

@@ -180,9 +180,9 @@ func clamp01(v float64, fallback float64) float64 {
 	return v
 }
 
-func (s *Store) AppendConversationTurn(ctx context.Context, rec ConversationTurn) error {
+func (s *Store) AppendConversationTurn(ctx context.Context, rec ConversationTurn) (int64, error) {
 	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
+		return 0, errors.New("store not initialized")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -194,13 +194,13 @@ func (s *Store) AppendConversationTurn(ctx context.Context, rec ConversationTurn
 	rec.UserMessageID = strings.TrimSpace(rec.UserMessageID)
 	rec.AssistantMessageID = strings.TrimSpace(rec.AssistantMessageID)
 	if rec.TurnID == "" || rec.EndpointID == "" || rec.ThreadID == "" {
-		return errors.New("invalid conversation turn")
+		return 0, errors.New("invalid conversation turn")
 	}
 	if rec.CreatedAtUnixMs <= 0 {
 		rec.CreatedAtUnixMs = time.Now().UnixMilli()
 	}
 
-	_, err := s.db.ExecContext(ctx, `
+	if _, err := s.db.ExecContext(ctx, `
 INSERT INTO conversation_turns(turn_id, endpoint_id, thread_id, run_id, user_message_id, assistant_message_id, created_at_unix_ms)
 VALUES(?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(turn_id) DO UPDATE SET
@@ -210,8 +210,18 @@ ON CONFLICT(turn_id) DO UPDATE SET
   user_message_id=excluded.user_message_id,
   assistant_message_id=excluded.assistant_message_id,
   created_at_unix_ms=excluded.created_at_unix_ms
-`, rec.TurnID, rec.EndpointID, rec.ThreadID, rec.RunID, rec.UserMessageID, rec.AssistantMessageID, rec.CreatedAtUnixMs)
-	return err
+`, rec.TurnID, rec.EndpointID, rec.ThreadID, rec.RunID, rec.UserMessageID, rec.AssistantMessageID, rec.CreatedAtUnixMs); err != nil {
+		return 0, err
+	}
+	var rowID int64
+	if err := s.db.QueryRowContext(ctx, `
+SELECT id
+FROM conversation_turns
+WHERE turn_id = ?
+`, rec.TurnID).Scan(&rowID); err != nil {
+		return 0, err
+	}
+	return rowID, nil
 }
 
 func (s *Store) ListConversationTurns(ctx context.Context, endpointID string, threadID string, limit int) ([]ConversationTurn, error) {

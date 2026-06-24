@@ -62,6 +62,9 @@ type MemoryItem struct {
 
 // DialogueTurn stores the text view needed by packer and retriever.
 type DialogueTurn struct {
+	TurnRowID          int64  `json:"turn_row_id,omitempty"`
+	UserMessageRowID   int64  `json:"user_message_row_id,omitempty"`
+	AssistantRowID     int64  `json:"assistant_row_id,omitempty"`
 	TurnID             string `json:"turn_id"`
 	RunID              string `json:"run_id"`
 	UserMessageID      string `json:"user_message_id"`
@@ -150,6 +153,7 @@ type PromptPack struct {
 	SystemContract             string                `json:"system_contract"`
 	Objective                  string                `json:"objective"`
 	ActiveConstraints          []string              `json:"active_constraints"`
+	CompactedHistory           []CompactedMessage    `json:"compacted_history,omitempty"`
 	RecentDialogue             []DialogueTurn        `json:"recent_dialogue"`
 	RecentStructuredUserInputs []StructuredUserInput `json:"recent_structured_user_inputs"`
 	ExecutionEvidence          []ExecutionEvidence   `json:"execution_evidence"`
@@ -168,6 +172,17 @@ type PromptPack struct {
 func (p PromptPack) ApproxText() string {
 	parts := []string{strings.TrimSpace(p.SystemContract), strings.TrimSpace(p.Objective), strings.TrimSpace(p.ThreadSnapshot)}
 	parts = append(parts, p.ActiveConstraints...)
+	for _, msg := range p.CompactedHistory {
+		if txt := strings.TrimSpace(msg.Content); txt != "" {
+			parts = append(parts, txt)
+		}
+		if txt := strings.TrimSpace(msg.Reasoning); txt != "" {
+			parts = append(parts, txt)
+		}
+		if txt := strings.TrimSpace(msg.ToolArgs); txt != "" {
+			parts = append(parts, txt)
+		}
+	}
 	for _, turn := range p.RecentDialogue {
 		if txt := strings.TrimSpace(turn.UserText); txt != "" {
 			parts = append(parts, txt)
@@ -232,6 +247,21 @@ func (p PromptPack) ApproxText() string {
 		}
 	}
 	return strings.TrimSpace(strings.Join(parts, "\n"))
+}
+
+type CompactedMessage struct {
+	Role                 string `json:"role"`
+	Content              string `json:"content,omitempty"`
+	Reasoning            string `json:"reasoning,omitempty"`
+	ToolCallID           string `json:"tool_call_id,omitempty"`
+	ToolName             string `json:"tool_name,omitempty"`
+	ToolArgs             string `json:"tool_args,omitempty"`
+	Kind                 string `json:"kind,omitempty"`
+	EntryID              string `json:"entry_id,omitempty"`
+	ParentEntryID        string `json:"parent_entry_id,omitempty"`
+	CompactionID         string `json:"compaction_id,omitempty"`
+	CompactionGeneration int    `json:"compaction_generation,omitempty"`
+	CompactionWindowID   string `json:"compaction_window_id,omitempty"`
 }
 
 func NormalizeCapability(in ModelCapability) ModelCapability {

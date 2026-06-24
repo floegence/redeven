@@ -12,9 +12,11 @@ Redeven Desktop treats the endpoint runtime as a managed service when it launche
 
 The CLI requires Desktop-managed Local UI runs to use machine presentation, writes startup reports, records Desktop owner metadata in the runtime lock, and exposes runtime-control only to loopback callers with the Desktop owner header and bearer token. Desktop probes `/api/local/runtime/health`, normalizes Runtime Service snapshots in TypeScript, verifies Env App shell readiness by inspecting the shell HTML and asset references, and builds the Env App entry URL from a normalized Local UI base URL. When Desktop Welcome opens Flower and the Local Environment runtime is cold, the Flower attach path starts that same local runtime lifecycle through launcher operation progress; the Flower surface uses the explicit `flower_warmup` presentation context to show runtime startup as a warmup state instead of treating the surface as stalled.
 
+Desktop Welcome uses the same Flower adapter contract as Env App for thread operations. Sending a turn posts through the runtime Flower IPC proxy, stop posts to the thread cancel route, and `/compact` posts to `/_redeven_proxy/api/ai/threads/{thread}/context/compact` before reloading the canonical live bootstrap. The Desktop bridge treats compaction as a thread action, not as a transcript message or a local UI-only marker, so Desktop and Env App receive the same live timeline decorations and read-state patches from the runtime.
+
 # Boundaries
 
-Runtime-control is not a general network API. It is scoped to the local Desktop/runtime bridge and protected by loopback, Desktop owner id, and bearer token checks. Flower warmup is a Desktop presentation context over the existing runtime lifecycle operation, not a separate readiness source or a parser for runtime terminal output.
+Runtime-control is not a general network API. It is scoped to the local Desktop/runtime bridge and protected by loopback, Desktop owner id, and bearer token checks. Flower warmup is a Desktop presentation context over the existing runtime lifecycle operation, not a separate readiness source or a parser for runtime terminal output. Desktop must not implement alternate Flower thread semantics locally; thread stop, send, compact, and live reload flow through the runtime proxy contract.
 
 # Citations
 
@@ -31,3 +33,4 @@ Runtime-control is not a general network API. It is scoped to the local Desktop/
 [11] redeven:desktop/src/main/main.ts:7524 - Welcome Flower cold-starts Local Environment through structured local runtime lifecycle progress.
 [12] redeven:desktop/src/welcome/App.tsx:3073 - The Flower warmup state only consumes lifecycle progress marked with the `flower_warmup` presentation context.
 [13] redeven:internal/flower_ui/src/FlowerSurface.tsx:315 - Flower renders the explicit warmup state without replacing selected-thread content.
+[14] redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:443 - Desktop Flower compaction posts to the runtime compact endpoint and reloads live bootstrap.

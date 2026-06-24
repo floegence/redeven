@@ -186,6 +186,12 @@ function optionalInteger(raw: unknown): number | undefined {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
 
+function optionalZeroBasedInteger(raw: unknown): number | undefined {
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : undefined;
+}
+
 function mapContextUsage(raw: unknown): FlowerContextUsage | null {
   const record = recordValue(raw);
   if (!record) return null;
@@ -233,7 +239,6 @@ function mapContextCompaction(raw: unknown): FlowerContextCompaction | null {
   return {
     operation_id: operationID,
     ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
-    ...(trim(record.anchor_message_id) ? { anchor_message_id: trim(record.anchor_message_id) } : {}),
     ...(stepIndex ? { step_index: stepIndex } : {}),
     phase,
     status,
@@ -249,17 +254,44 @@ function mapContextCompaction(raw: unknown): FlowerContextCompaction | null {
   };
 }
 
+function mapTimelineAnchor(raw: unknown) {
+  const record = recordValue(raw);
+  if (!record) return null;
+  const targetKind = trim(record.target_kind);
+  const messageID = trim(record.message_id);
+  const edge = trim(record.edge);
+  if (!messageID || (edge !== 'before' && edge !== 'after')) return null;
+  const blockIndex = optionalZeroBasedInteger(record.block_index);
+  const activityItemID = trim(record.activity_item_id);
+  if (targetKind === 'message') {
+    if (blockIndex !== undefined || activityItemID) return null;
+  } else if (targetKind === 'block') {
+    if (blockIndex === undefined || activityItemID) return null;
+  } else if (targetKind === 'activity_item') {
+    if (blockIndex === undefined || !activityItemID) return null;
+  } else {
+    return null;
+  }
+  return {
+    target_kind: targetKind,
+    message_id: messageID,
+    ...(blockIndex !== undefined ? { block_index: blockIndex } : {}),
+    ...(activityItemID ? { activity_item_id: activityItemID } : {}),
+    edge,
+  };
+}
+
 function mapTimelineDecoration(raw: unknown): FlowerTimelineDecoration | null {
   const record = recordValue(raw);
   if (!record) return null;
   const compaction = mapContextCompaction(record.compaction);
+  const anchor = mapTimelineAnchor(record.anchor);
   const decorationID = trim(record.decoration_id) || (compaction ? `context-compaction:${compaction.operation_id}` : '');
-  if (!decorationID || !compaction) return null;
+  if (!decorationID || !compaction || !anchor) return null;
   return {
     decoration_id: decorationID,
     kind: trim(record.kind) || 'context_compaction',
-    ...(trim(record.anchor_message_id) ? { anchor_message_id: trim(record.anchor_message_id) } : {}),
-    placement: trim(record.placement) || 'before',
+    anchor,
     ordinal: integerOrZero(record.ordinal),
     compaction,
   };
@@ -273,7 +305,13 @@ function mapContextCompactions(raw: unknown): readonly FlowerContextCompaction[]
 
 function mapTimelineDecorations(raw: unknown): readonly FlowerTimelineDecoration[] | undefined {
   if (!Array.isArray(raw)) return undefined;
-  const decorations = raw.map(mapTimelineDecoration).filter(isPresent);
+  const decorations = raw.map((value) => {
+    const decoration = mapTimelineDecoration(value);
+    if (!decoration) {
+      throw new Error('Flower contract error: timeline_decorations requires valid decoration payloads.');
+    }
+    return decoration;
+  });
   return decorations.length > 0 ? decorations : undefined;
 }
 
@@ -847,7 +885,9 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   const record = recordValue(raw) ?? {};
   const threadID = trim(record.thread_id);
   const status = runStatus(record.run_status);
-  const activeRunID = status === 'running' ? trim(record.last_context_run_id) : '';
+  const activeRunID = status === 'running' || status === 'waiting_approval'
+    ? trim(record.last_context_run_id)
+    : '';
   const waitingPrompt = record.waiting_prompt !== undefined ? mapInputRequest(record.waiting_prompt) : null;
   const inputRequest = status === 'waiting_user' ? waitingPrompt : null;
   const errorMessage = trim(record.run_error);
@@ -983,10 +1023,14 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
     case 'context.compaction.updated':
       {
         const compaction = mapContextCompaction(record.compaction);
+        const timelineDecoration = mapTimelineDecoration(record.timeline_decoration);
         if (!compaction) {
           throw new Error('Flower contract error: context.compaction.updated requires a valid context compaction payload.');
         }
-        return { compaction } as FlowerLiveContextCompactionUpdatedPayload;
+        if (!timelineDecoration) {
+          throw new Error('Flower contract error: context.compaction.updated requires a valid timeline decoration payload.');
+        }
+        return { compaction, timeline_decoration: timelineDecoration } as FlowerLiveContextCompactionUpdatedPayload;
       }
     case 'timeline.replaced':
       return {

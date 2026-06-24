@@ -2262,7 +2262,7 @@ type promptPackMessageBuildOptions struct {
 }
 
 func buildMessagesFromPromptPackWithOptions(pack contextmodel.PromptPack, currentUserInput string, opts promptPackMessageBuildOptions) []Message {
-	messages := make([]Message, 0, len(pack.RecentDialogue)*2+8)
+	messages := make([]Message, 0, len(pack.CompactedHistory)+len(pack.RecentDialogue)*2+8)
 	if txt := strings.TrimSpace(pack.SystemContract); txt != "" {
 		messages = append(messages, Message{Role: "system", Content: []ContentPart{{Type: "text", Text: txt}}})
 	}
@@ -2291,6 +2291,12 @@ func buildMessagesFromPromptPackWithOptions(pack contextmodel.PromptPack, curren
 
 	if txt := renderUserProvidedContext(pack.UserProvidedContext); txt != "" {
 		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: txt}}})
+	}
+
+	for _, msg := range pack.CompactedHistory {
+		if projected, ok := messageFromCompactedHistory(msg); ok {
+			messages = append(messages, projected)
+		}
 	}
 
 	if opts.IncludeRecentDialogue {
@@ -2405,6 +2411,63 @@ func buildMessagesFromPromptPackWithOptions(pack contextmodel.PromptPack, curren
 		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: txt}}})
 	}
 	return messages
+}
+
+func messageFromCompactedHistory(msg contextmodel.CompactedMessage) (Message, bool) {
+	role := strings.ToLower(strings.TrimSpace(msg.Role))
+	switch role {
+	case "user", "assistant", "tool":
+	default:
+		return Message{}, false
+	}
+	content := strings.TrimSpace(msg.Content)
+	reasoning := strings.TrimSpace(msg.Reasoning)
+	toolArgs := strings.TrimSpace(msg.ToolArgs)
+	toolName := strings.TrimSpace(msg.ToolName)
+	toolCallID := strings.TrimSpace(msg.ToolCallID)
+	switch role {
+	case "tool":
+		if content == "" && toolArgs != "" {
+			content = toolArgs
+		}
+		if content == "" {
+			return Message{}, false
+		}
+		return Message{Role: role, Content: []ContentPart{{
+			Type:       "tool_result",
+			Text:       content,
+			ToolCallID: toolCallID,
+			ToolUseID:  toolCallID,
+			ToolName:   toolName,
+		}}}, true
+	case "assistant":
+		if toolName != "" && toolArgs != "" {
+			return Message{Role: role, Content: []ContentPart{{
+				Type:       "tool_call",
+				Text:       strings.TrimSpace(firstNonEmptyString(content, "tool_call")),
+				ToolCallID: toolCallID,
+				ToolUseID:  toolCallID,
+				ToolName:   toolName,
+				ArgsJSON:   toolArgs,
+			}}}, true
+		}
+		parts := make([]ContentPart, 0, 2)
+		if reasoning != "" {
+			parts = append(parts, ContentPart{Type: "reasoning", Text: reasoning})
+		}
+		if content != "" {
+			parts = append(parts, ContentPart{Type: "text", Text: content})
+		}
+		if len(parts) == 0 {
+			return Message{}, false
+		}
+		return Message{Role: role, Content: parts}, true
+	default:
+		if content == "" {
+			return Message{}, false
+		}
+		return Message{Role: role, Content: []ContentPart{{Type: "text", Text: content}}}, true
+	}
 }
 
 func renderUserProvidedContext(ctx *contextmodel.UserProvidedContext) string {

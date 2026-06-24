@@ -101,8 +101,11 @@ describe('Env local Flower surface adapter', () => {
       timeline_decorations: [{
         decoration_id: 'context-compaction:compact-context',
         kind: 'context_compaction',
-        anchor_message_id: 'assistant-context',
-        placement: 'before',
+        anchor: {
+          target_kind: 'message',
+          message_id: 'assistant-context',
+          edge: 'after',
+        },
         ordinal: 0,
         compaction: {
           operation_id: 'compact-context',
@@ -173,6 +176,47 @@ describe('Env local Flower surface adapter', () => {
     );
     expect(bootstrap.thread.thread_id).toBe('thread_1');
     expect(bootstrap.thread.status).toBe('canceled');
+  });
+
+  it('compacts a thread through RPC and reloads the live bootstrap', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_compact/live/bootstrap' && init?.method === 'GET') {
+        return jsonResponse(liveBootstrap('thread_compact', 'running'));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const compactThreadContext = vi.fn(async () => ({
+      operationId: 'manual-compact-1',
+      kind: 'accepted',
+      runId: 'run_compact',
+    }));
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: {
+        ai: {
+          compactThreadContext,
+        },
+      } as any,
+    });
+
+    const bootstrap = await adapter.compactThreadContext({
+      thread_id: ' thread_compact ',
+      expected_run_id: ' run_compact ',
+      source: 'slash_command',
+    });
+
+    expect(compactThreadContext).toHaveBeenCalledWith({
+      threadId: 'thread_compact',
+      expectedRunId: 'run_compact',
+      source: 'slash_command',
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/_redeven_proxy/api/ai/threads/thread_compact/live/bootstrap',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(bootstrap.thread.thread_id).toBe('thread_compact');
+    expect(bootstrap.thread.status).toBe('running');
   });
 
   it('rejects invalid explicit context actions instead of dropping linked context', async () => {

@@ -20,6 +20,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/floegence/floret/observation"
+	flruntime "github.com/floegence/floret/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
@@ -161,10 +162,18 @@ type run struct {
 	activityFileActionSeq     int64
 	waitingPrompt             *RequestUserInputPrompt
 	providerContinuation      threadstore.ThreadProviderContinuation
+	compactedContext          threadstore.ThreadCompactedContext
 
 	finalizationReason string
 	currentModelID     string
 	currentReasoning   config.AIReasoningSelection
+
+	muManualCompaction          sync.Mutex
+	pendingManualCompaction     *flruntime.ManualCompactionRequest
+	activeManualCompactionID    string
+	completeManualCompactionIDs map[string]struct{}
+	contextCompactionAnchors    map[string]FlowerTimelineAnchor
+	completedContextCompaction  observation.CompactionEvent
 
 	webSearchToolEnabled bool
 	webSearchMode        string
@@ -275,6 +284,7 @@ func newRun(opts runOptions) *run {
 		activitySegmentBlockIndex: -1,
 		activitySegmentEvents:     make([]observation.Event, 0, 8),
 		activityFileActions:       make(map[string]FlowerActivityFileAction),
+		contextCompactionAnchors:  make(map[string]FlowerTimelineAnchor),
 		subagentDepth:             opts.SubagentDepth,
 		forceReadonlyExec:         opts.ForceReadonlyExec,
 		toolTargetPolicy:          normalizeToolTargetPolicy(opts.ToolTargetPolicy),
@@ -535,6 +545,157 @@ func (r *run) getProviderContinuationCandidate() threadstore.ThreadProviderConti
 	r.muAssistant.Lock()
 	defer r.muAssistant.Unlock()
 	return r.providerContinuation.Normalized()
+}
+
+func (r *run) setThreadCompactedContextCandidate(compacted threadstore.ThreadCompactedContext) {
+	if r == nil {
+		return
+	}
+	if !r.acceptsEngineResultProjection() {
+		return
+	}
+	compacted = compacted.Normalized()
+	if compacted.IsZero() {
+		return
+	}
+	r.muAssistant.Lock()
+	r.compactedContext = compacted
+	r.muAssistant.Unlock()
+}
+
+func (r *run) getThreadCompactedContextCandidate() threadstore.ThreadCompactedContext {
+	if r == nil {
+		return threadstore.ThreadCompactedContext{}
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	return r.compactedContext.Normalized()
+}
+
+func (r *run) EnqueueManualCompaction(ctx context.Context, request flruntime.ManualCompactionRequest) (flruntime.ManualCompactionRequest, error) {
+	if r == nil {
+		return flruntime.ManualCompactionRequest{}, errors.New("nil run")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if strings.TrimSpace(request.RequestID) == "" {
+		return flruntime.ManualCompactionRequest{}, errors.New("missing manual compaction request id")
+	}
+	if strings.TrimSpace(request.Source) == "" {
+		request.Source = "slash_command"
+	}
+	if request.RequestedAt.IsZero() {
+		request.RequestedAt = time.Now()
+	}
+	select {
+	case <-ctx.Done():
+		return flruntime.ManualCompactionRequest{}, ctx.Err()
+	case <-r.doneCh:
+		return flruntime.ManualCompactionRequest{}, ErrRunChanged
+	default:
+	}
+	if r.isDetached() {
+		return flruntime.ManualCompactionRequest{}, ErrRunChanged
+	}
+	r.muManualCompaction.Lock()
+	if r.pendingManualCompaction != nil {
+		r.muManualCompaction.Unlock()
+		return *r.pendingManualCompaction, ErrCompactAlreadyPending
+	}
+	if strings.TrimSpace(r.activeManualCompactionID) != "" {
+		r.muManualCompaction.Unlock()
+		return flruntime.ManualCompactionRequest{}, ErrCompactAlreadyPending
+	}
+	r.muManualCompaction.Unlock()
+
+	anchor := r.captureFlowerTimelineAnchor()
+	if !validFlowerTimelineAnchor(anchor) {
+		return flruntime.ManualCompactionRequest{}, ErrNoCompactableContext
+	}
+
+	r.muManualCompaction.Lock()
+	defer r.muManualCompaction.Unlock()
+	if r.pendingManualCompaction != nil {
+		return *r.pendingManualCompaction, ErrCompactAlreadyPending
+	}
+	if strings.TrimSpace(r.activeManualCompactionID) != "" {
+		return flruntime.ManualCompactionRequest{}, ErrCompactAlreadyPending
+	}
+	pending := request
+	requestID := strings.TrimSpace(pending.RequestID)
+	if r.contextCompactionAnchors == nil {
+		r.contextCompactionAnchors = make(map[string]FlowerTimelineAnchor)
+	}
+	r.contextCompactionAnchors[requestID] = anchor
+	r.pendingManualCompaction = &pending
+	r.touchActivity()
+	return pending, nil
+}
+
+func (r *run) PollManualCompaction(ctx context.Context, req flruntime.ManualCompactionPollRequest) (flruntime.ManualCompactionRequest, bool, error) {
+	if r == nil {
+		return flruntime.ManualCompactionRequest{}, false, nil
+	}
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			return flruntime.ManualCompactionRequest{}, false, ctx.Err()
+		default:
+		}
+	}
+	r.muManualCompaction.Lock()
+	defer r.muManualCompaction.Unlock()
+	if r.pendingManualCompaction == nil || strings.TrimSpace(r.activeManualCompactionID) != "" {
+		return flruntime.ManualCompactionRequest{}, false, nil
+	}
+	if runID := strings.TrimSpace(string(req.RunID)); runID != "" && runID != strings.TrimSpace(r.id) {
+		return flruntime.ManualCompactionRequest{}, false, nil
+	}
+	manual := *r.pendingManualCompaction
+	r.pendingManualCompaction = nil
+	r.activeManualCompactionID = strings.TrimSpace(manual.RequestID)
+	return manual, true, nil
+}
+
+func (r *run) finishManualCompaction(requestID string) {
+	if r == nil {
+		return
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return
+	}
+	r.muManualCompaction.Lock()
+	defer r.muManualCompaction.Unlock()
+	if strings.TrimSpace(r.activeManualCompactionID) == requestID {
+		r.activeManualCompactionID = ""
+	}
+	if r.completeManualCompactionIDs == nil {
+		r.completeManualCompactionIDs = map[string]struct{}{}
+	}
+	r.completeManualCompactionIDs[requestID] = struct{}{}
+}
+
+func (r *run) setCompletedContextCompaction(compaction observation.CompactionEvent) {
+	if r == nil {
+		return
+	}
+	if strings.TrimSpace(compaction.OperationID) == "" || strings.TrimSpace(compaction.CompactionID) == "" {
+		return
+	}
+	r.muManualCompaction.Lock()
+	r.completedContextCompaction = compaction
+	r.muManualCompaction.Unlock()
+}
+
+func (r *run) getCompletedContextCompaction() observation.CompactionEvent {
+	if r == nil {
+		return observation.CompactionEvent{}
+	}
+	r.muManualCompaction.Lock()
+	defer r.muManualCompaction.Unlock()
+	return r.completedContextCompaction
 }
 
 func (r *run) recordRuntimeToolCall() {

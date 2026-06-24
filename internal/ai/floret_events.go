@@ -1,10 +1,13 @@
 package ai
 
 import (
+	"context"
+	"fmt"
 	"strings"
 
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 const (
@@ -141,12 +144,251 @@ func (r *run) applyFloretCompaction(compaction *observation.CompactionEvent) {
 		return
 	}
 	projected := flowerContextCompactionFromFloret(compaction, strings.TrimSpace(r.id))
-	r.persistRunEvent("context.compaction.updated", RealtimeStreamKindContext, flowerContextCompactionPayload(projected))
+	r.bindContextCompactionOperationAnchor(projected.OperationID, compaction.RequestID)
+	decoration := r.flowerContextCompactionDecoration(projected)
+	r.persistRunEvent("context.compaction.updated", RealtimeStreamKindContext, flowerContextCompactionPayload(projected, decoration))
 	r.sendStreamEvent(streamEventContextCompaction{
-		Type:            "context-compaction",
-		Compaction:      projected,
-		AnchorMessageID: strings.TrimSpace(compaction.TurnID),
+		Type:               "context-compaction",
+		Compaction:         projected,
+		TimelineDecoration: decoration,
 	})
+	switch strings.TrimSpace(compaction.Phase) {
+	case observation.CompactionPhaseComplete:
+		r.setCompletedContextCompaction(*compaction)
+		r.finishManualCompaction(compaction.RequestID)
+	case observation.CompactionPhaseFailed:
+		r.finishManualCompaction(compaction.RequestID)
+	}
+}
+
+func (r *run) flowerContextCompactionDecoration(compaction FlowerContextCompaction) FlowerTimelineDecoration {
+	operationID := strings.TrimSpace(compaction.OperationID)
+	if operationID == "" {
+		operationID = firstNonEmptyString(strings.TrimSpace(compaction.CompactionID), fmt.Sprintf("%s:%d:%s", strings.TrimSpace(compaction.RunID), compaction.StepIndex, strings.TrimSpace(compaction.Phase)))
+		compaction.OperationID = operationID
+	}
+	anchor := r.contextCompactionAnchor(operationID)
+	return FlowerTimelineDecoration{
+		DecorationID: "context-compaction:" + operationID,
+		Kind:         "context_compaction",
+		Anchor:       anchor,
+		Ordinal:      0,
+		Compaction:   compaction,
+	}
+}
+
+func (r *run) bindContextCompactionOperationAnchor(operationID string, requestID string) {
+	if r == nil {
+		return
+	}
+	operationID = strings.TrimSpace(operationID)
+	requestID = strings.TrimSpace(requestID)
+	if operationID == "" || requestID == "" || operationID == requestID {
+		return
+	}
+	r.muManualCompaction.Lock()
+	anchor := r.contextCompactionAnchors[requestID]
+	r.muManualCompaction.Unlock()
+	if validFlowerTimelineAnchor(anchor) {
+		r.setContextCompactionAnchor(operationID, anchor)
+	}
+}
+
+func (r *run) contextCompactionAnchor(operationID string) FlowerTimelineAnchor {
+	if r == nil {
+		return FlowerTimelineAnchor{}
+	}
+	operationID = strings.TrimSpace(operationID)
+	if operationID == "" {
+		return FlowerTimelineAnchor{}
+	}
+	r.muManualCompaction.Lock()
+	if anchor := r.contextCompactionAnchors[operationID]; validFlowerTimelineAnchor(anchor) {
+		r.muManualCompaction.Unlock()
+		return anchor
+	}
+	r.muManualCompaction.Unlock()
+
+	anchor := r.captureFlowerTimelineAnchor()
+	if validFlowerTimelineAnchor(anchor) {
+		r.muManualCompaction.Lock()
+		if r.contextCompactionAnchors == nil {
+			r.contextCompactionAnchors = make(map[string]FlowerTimelineAnchor)
+		}
+		r.contextCompactionAnchors[operationID] = anchor
+		r.muManualCompaction.Unlock()
+	}
+	return anchor
+}
+
+func (r *run) setContextCompactionAnchor(operationID string, anchor FlowerTimelineAnchor) {
+	if r == nil || strings.TrimSpace(operationID) == "" || !validFlowerTimelineAnchor(anchor) {
+		return
+	}
+	r.muManualCompaction.Lock()
+	defer r.muManualCompaction.Unlock()
+	if r.contextCompactionAnchors == nil {
+		r.contextCompactionAnchors = make(map[string]FlowerTimelineAnchor)
+	}
+	r.contextCompactionAnchors[strings.TrimSpace(operationID)] = anchor
+}
+
+func (r *run) captureFlowerTimelineAnchor() FlowerTimelineAnchor {
+	if r == nil {
+		return FlowerTimelineAnchor{}
+	}
+	if anchor := r.captureAssistantDraftTimelineAnchor(); validFlowerTimelineAnchor(anchor) {
+		return anchor
+	}
+	return r.lastPersistedFlowerTimelineAnchor()
+}
+
+func (r *run) captureAssistantDraftTimelineAnchor() FlowerTimelineAnchor {
+	if r == nil {
+		return FlowerTimelineAnchor{}
+	}
+	messageID := strings.TrimSpace(r.messageID)
+	if messageID == "" {
+		return FlowerTimelineAnchor{}
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	for i := len(r.assistantBlocks) - 1; i >= 0; i-- {
+		block := r.assistantBlocks[i]
+		if itemID, ok := lastVisibleActivityItemID(block); ok {
+			blockIndex := i
+			return FlowerTimelineAnchor{
+				TargetKind:     "activity_item",
+				MessageID:      messageID,
+				BlockIndex:     &blockIndex,
+				ActivityItemID: itemID,
+				Edge:           "after",
+			}
+		}
+		if flowerBlockHasVisibleContent(block) {
+			blockIndex := i
+			return FlowerTimelineAnchor{
+				TargetKind: "block",
+				MessageID:  messageID,
+				BlockIndex: &blockIndex,
+				Edge:       "after",
+			}
+		}
+	}
+	return FlowerTimelineAnchor{}
+}
+
+func (r *run) lastPersistedFlowerTimelineAnchor() FlowerTimelineAnchor {
+	if r == nil || r.threadsDB == nil {
+		return FlowerTimelineAnchor{}
+	}
+	endpointID := strings.TrimSpace(r.endpointID)
+	threadID := strings.TrimSpace(r.threadID)
+	if endpointID == "" || threadID == "" {
+		return FlowerTimelineAnchor{}
+	}
+	persistTO := r.persistOpTimeout
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), persistTO)
+	defer cancel()
+	messages, _, _, err := r.threadsDB.ListMessages(ctx, endpointID, threadID, 500, 0)
+	if err != nil {
+		return FlowerTimelineAnchor{}
+	}
+	return lastVisibleFlowerTimelineAnchorFromMessages(messages)
+}
+
+func lastVisibleFlowerTimelineAnchorFromMessages(messages []threadstore.Message) FlowerTimelineAnchor {
+	if len(messages) == 0 {
+		return FlowerTimelineAnchor{}
+	}
+	timeline := make([]FlowerTimelineMessage, 0, len(messages))
+	for _, message := range messages {
+		projected, ok, err := flowerTimelineMessageFromTranscript(message)
+		if err != nil || !ok {
+			continue
+		}
+		timeline = append(timeline, projected)
+	}
+	return lastVisibleFlowerTimelineAnchorFromTimeline(timeline)
+}
+
+func lastVisibleFlowerTimelineAnchorFromTimeline(timeline []FlowerTimelineMessage) FlowerTimelineAnchor {
+	for messageIndex := len(timeline) - 1; messageIndex >= 0; messageIndex-- {
+		message := timeline[messageIndex]
+		messageID := strings.TrimSpace(message.MessageID)
+		if messageID == "" {
+			continue
+		}
+		for blockIndex := len(message.Blocks) - 1; blockIndex >= 0; blockIndex-- {
+			block := message.Blocks[blockIndex]
+			if itemID, ok := lastVisibleActivityItemID(block); ok {
+				index := blockIndex
+				return FlowerTimelineAnchor{
+					TargetKind:     "activity_item",
+					MessageID:      messageID,
+					BlockIndex:     &index,
+					ActivityItemID: itemID,
+					Edge:           "after",
+				}
+			}
+			if flowerBlockHasVisibleContent(block) {
+				index := blockIndex
+				return FlowerTimelineAnchor{
+					TargetKind: "block",
+					MessageID:  messageID,
+					BlockIndex: &index,
+					Edge:       "after",
+				}
+			}
+		}
+		if strings.TrimSpace(message.Content) != "" {
+			return FlowerTimelineAnchor{
+				TargetKind: "message",
+				MessageID:  messageID,
+				Edge:       "after",
+			}
+		}
+	}
+	return FlowerTimelineAnchor{}
+}
+
+func lastVisibleActivityItemID(block any) (string, bool) {
+	timeline, ok := activityTimelineFromAny(block)
+	if !ok || len(timeline.Items) == 0 {
+		return "", false
+	}
+	for i := len(timeline.Items) - 1; i >= 0; i-- {
+		if itemID := strings.TrimSpace(timeline.Items[i].ItemID); itemID != "" {
+			return itemID, true
+		}
+	}
+	return "", false
+}
+
+func flowerBlockHasVisibleContent(block any) bool {
+	switch v := block.(type) {
+	case *persistedMarkdownBlock:
+		return v != nil && strings.TrimSpace(v.Content) != ""
+	case persistedMarkdownBlock:
+		return strings.TrimSpace(v.Content) != ""
+	case *persistedThinkingBlock:
+		return v != nil && strings.TrimSpace(v.Content) != ""
+	case persistedThinkingBlock:
+		return strings.TrimSpace(v.Content) != ""
+	case map[string]any:
+		blockType := strings.TrimSpace(anyToString(v["type"]))
+		switch blockType {
+		case "markdown", "text", "thinking":
+			return strings.TrimSpace(anyToString(v["content"])) != ""
+		default:
+			return false
+		}
+	default:
+		return false
+	}
 }
 
 func flowerContextUsageFromFloret(status *observation.ContextStatus, fallbackRunID string) FlowerContextUsage {
@@ -209,7 +451,6 @@ func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent, 
 	return FlowerContextCompaction{
 		OperationID:          strings.TrimSpace(compaction.OperationID),
 		RunID:                runID,
-		AnchorMessageID:      strings.TrimSpace(compaction.TurnID),
 		StepIndex:            compaction.Step,
 		Phase:                strings.TrimSpace(compaction.Phase),
 		Status:               normalizeFlowerContextCompactionStatus(compaction.Status),
@@ -244,9 +485,10 @@ func flowerContextUsagePayload(usage FlowerContextUsage) map[string]any {
 	}
 }
 
-func flowerContextCompactionPayload(compaction FlowerContextCompaction) map[string]any {
+func flowerContextCompactionPayload(compaction FlowerContextCompaction, decoration FlowerTimelineDecoration) map[string]any {
 	return map[string]any{
-		"compaction": compaction,
+		"compaction":          compaction,
+		"timeline_decoration": decoration,
 	}
 }
 

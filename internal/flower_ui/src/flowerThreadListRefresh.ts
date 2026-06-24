@@ -161,7 +161,6 @@ function sameContextUsage(left: FlowerContextUsage | null | undefined, right: Fl
 function sameContextCompaction(left: FlowerContextCompaction, right: FlowerContextCompaction): boolean {
   return left.operation_id === right.operation_id
     && sameOptionalString(left.run_id, right.run_id)
-    && sameOptionalString(left.anchor_message_id, right.anchor_message_id)
     && sameOptionalNumber(left.step_index, right.step_index)
     && left.phase === right.phase
     && left.status === right.status
@@ -193,8 +192,11 @@ function sameContextCompactions(
 function sameTimelineDecoration(left: FlowerTimelineDecoration, right: FlowerTimelineDecoration): boolean {
   return left.decoration_id === right.decoration_id
     && left.kind === right.kind
-    && sameOptionalString(left.anchor_message_id, right.anchor_message_id)
-    && left.placement === right.placement
+    && left.anchor.target_kind === right.anchor.target_kind
+    && left.anchor.message_id === right.anchor.message_id
+    && Number(left.anchor.block_index ?? -1) === Number(right.anchor.block_index ?? -1)
+    && sameOptionalString(left.anchor.activity_item_id, right.anchor.activity_item_id)
+    && left.anchor.edge === right.anchor.edge
     && Number(left.ordinal) === Number(right.ordinal)
     && sameContextCompaction(left.compaction, right.compaction);
 }

@@ -872,7 +872,9 @@ func aiThreadActionHTTPStatus(err error) int {
 		errors.Is(err, ai.ErrWaitingPromptChanged),
 		errors.Is(err, ai.ErrModelLockViolation),
 		errors.Is(err, ai.ErrModelSwitchRequiresExplicitRestart),
-		errors.Is(err, ai.ErrFollowupsRevisionChanged):
+		errors.Is(err, ai.ErrFollowupsRevisionChanged),
+		errors.Is(err, ai.ErrCompactAlreadyPending),
+		errors.Is(err, ai.ErrNoCompactableContext):
 		return http.StatusConflict
 	}
 	msg := strings.ToLower(strings.TrimSpace(err.Error()))
@@ -3957,6 +3959,52 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				"run_id":    strings.TrimSpace(resp.RunID),
 				"kind":      strings.TrimSpace(resp.Kind),
 				"model":     strings.TrimSpace(body.Model),
+			}, nil)
+			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: resp})
+			return
+
+		case action == "context" && r.Method == http.MethodPost && len(parts) == 3 && strings.TrimSpace(parts[2]) == "compact":
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			if g.ai == nil || !g.ai.Enabled() {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body ai.CompactThreadContextRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			bodyThreadID := strings.TrimSpace(body.ThreadID)
+			if bodyThreadID != "" && bodyThreadID != threadID {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "thread id mismatch"})
+				return
+			}
+			body.ThreadID = threadID
+			resp, err := g.ai.CompactThreadContext(r.Context(), meta, body)
+			if err != nil {
+				g.appendAudit(meta, "ai_thread_context_compact", "failure", map[string]any{
+					"thread_id":       threadID,
+					"expected_run_id": strings.TrimSpace(body.ExpectedRunID),
+					"source":          strings.TrimSpace(body.Source),
+				}, err)
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			g.appendAudit(meta, "ai_thread_context_compact", "success", map[string]any{
+				"thread_id":    threadID,
+				"run_id":       strings.TrimSpace(resp.RunID),
+				"operation_id": strings.TrimSpace(resp.OperationID),
+				"kind":         strings.TrimSpace(resp.Kind),
+				"source":       strings.TrimSpace(body.Source),
 			}, nil)
 			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: resp})
 			return

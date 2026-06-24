@@ -40,6 +40,8 @@ function runStatus(raw: unknown): FlowerThreadStatus {
       return 'success';
     case 'canceled':
       return 'canceled';
+    case 'read_only':
+      return 'read_only';
     default:
       return 'idle';
   }
@@ -124,12 +126,20 @@ function activeRunIDFromRuns(runs: FlowerLiveBootstrap['live_state']['runs']): s
 }
 
 function threadStatusHidesModelIO(status: FlowerThreadStatus): boolean {
-  return status === 'waiting_approval'
-    || status === 'waiting_user'
+	return status === 'waiting_approval'
+		|| status === 'waiting_user'
     || status === 'failed'
     || status === 'success'
     || status === 'canceled'
-    || status === 'idle';
+		|| status === 'idle';
+}
+
+function threadStatusClearsActiveRunID(status: FlowerThreadStatus): boolean {
+	return status === 'waiting_user'
+		|| status === 'failed'
+		|| status === 'success'
+		|| status === 'canceled'
+		|| status === 'idle';
 }
 
 function clearModelIOForRun(thread: FlowerThreadSnapshot, runID: string | undefined): FlowerThreadSnapshot {
@@ -141,8 +151,10 @@ function clearModelIOForRun(thread: FlowerThreadSnapshot, runID: string | undefi
 }
 
 function withoutModelIO(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
-  if (!thread.model_io_status && !thread.active_run_id) return thread;
-  return { ...thread, model_io_status: null, active_run_id: undefined };
+	if (!thread.model_io_status && !thread.active_run_id) return thread;
+	return threadStatusClearsActiveRunID(thread.status)
+		? { ...thread, model_io_status: null, active_run_id: undefined }
+		: { ...thread, model_io_status: null };
 }
 
 function withModelIOStatus(thread: FlowerThreadSnapshot, status: FlowerModelIOStatus | null | undefined, runID?: string): FlowerThreadSnapshot {
@@ -153,24 +165,11 @@ function withModelIOStatus(thread: FlowerThreadSnapshot, status: FlowerModelIOSt
   return { ...thread, model_io_status: status };
 }
 
-function contextCompactionDecorationID(compaction: FlowerContextCompaction): string {
-  return `context-compaction:${trim(compaction.operation_id)}`;
-}
-
-function timelineDecorationForCompaction(thread: FlowerThreadSnapshot, compaction: FlowerContextCompaction): FlowerTimelineDecoration {
-  const existing = (thread.timeline_decorations ?? []).find((decoration) => decoration.decoration_id === contextCompactionDecorationID(compaction));
-  const anchorMessageID = trim(compaction.anchor_message_id) || trim(existing?.anchor_message_id);
-  return {
-    decoration_id: contextCompactionDecorationID(compaction),
-    kind: 'context_compaction',
-    placement: 'before',
-    ordinal: existing?.ordinal ?? thread.timeline_decorations?.length ?? 0,
-    ...(anchorMessageID ? { anchor_message_id: anchorMessageID } : {}),
-    compaction,
-  };
-}
-
-function upsertContextCompaction(thread: FlowerThreadSnapshot, compaction: FlowerContextCompaction): FlowerThreadSnapshot {
+function upsertContextCompaction(
+  thread: FlowerThreadSnapshot,
+  compaction: FlowerContextCompaction,
+  decoration: FlowerTimelineDecoration,
+): FlowerThreadSnapshot {
   const operationID = trim(compaction.operation_id);
   if (!operationID) return thread;
   const compactions = [...(thread.context_compactions ?? [])];
@@ -181,7 +180,6 @@ function upsertContextCompaction(thread: FlowerThreadSnapshot, compaction: Flowe
     compactions.push(compaction);
   }
 
-  const decoration = timelineDecorationForCompaction(thread, compaction);
   const decorations = [...(thread.timeline_decorations ?? [])];
   const decorationIndex = decorations.findIndex((item) => trim(item.decoration_id) === decoration.decoration_id);
   if (decorationIndex >= 0) {
@@ -217,10 +215,10 @@ export function projectFlowerLiveBootstrap(bootstrap: FlowerLiveBootstrap): Flow
   if (activeRunID) {
     thread = { ...thread, active_run_id: activeRunID };
   }
-  if (threadStatusHidesModelIO(thread.status)) {
-    thread = withoutModelIO(thread);
-  } else if (thread.model_io_status && trim(thread.model_io_status.run_id) !== trim(thread.active_run_id)) {
-    thread = { ...thread, model_io_status: null };
+	if (threadStatusHidesModelIO(thread.status)) {
+		thread = withoutModelIO(thread);
+	} else if (thread.model_io_status && trim(thread.model_io_status.run_id) !== trim(thread.active_run_id)) {
+		thread = { ...thread, model_io_status: null };
   }
   return thread;
 }
@@ -315,12 +313,12 @@ export function applyFlowerLiveEvent(
         ...(event.payload.waiting_prompt !== undefined ? { input_request: event.payload.waiting_prompt ?? null } : {}),
         ...(trim(event.payload.error) ? { error: { message: trim(event.payload.error), ...(trim(event.payload.error_code) ? { code: trim(event.payload.error_code) } : {}) } } : {}),
       };
-      if (threadStatusHidesModelIO(next.status)) {
-        next = clearModelIOForRun(next, event.payload.run_id);
-        if (trim(next.active_run_id) === trim(event.payload.run_id)) {
-          next = { ...next, active_run_id: undefined };
-        }
-      } else if (trim(event.payload.run_id)) {
+		if (threadStatusHidesModelIO(next.status)) {
+			next = clearModelIOForRun(next, event.payload.run_id);
+			if (threadStatusClearsActiveRunID(next.status) && trim(next.active_run_id) === trim(event.payload.run_id)) {
+				next = { ...next, active_run_id: undefined };
+			}
+		} else if (trim(event.payload.run_id)) {
         next = { ...next, active_run_id: trim(event.payload.run_id) };
       }
       break;
@@ -414,7 +412,7 @@ export function applyFlowerLiveEvent(
       next = { ...next, context_usage: event.payload.usage };
       break;
     case 'context.compaction.updated':
-      next = upsertContextCompaction(next, event.payload.compaction);
+      next = upsertContextCompaction(next, event.payload.compaction, event.payload.timeline_decoration);
       break;
     case 'timeline.replaced':
       next = {

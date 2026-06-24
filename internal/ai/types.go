@@ -549,11 +549,11 @@ type streamEventContextUsage struct {
 }
 
 type streamEventContextCompaction struct {
-	Type            string                  `json:"type"`
-	Compaction      FlowerContextCompaction `json:"compaction,omitempty"`
-	AnchorMessageID string                  `json:"anchorMessageId,omitempty"`
-	EventType       string                  `json:"eventType,omitempty"`
-	Payload         map[string]any          `json:"payload,omitempty"`
+	Type               string                   `json:"type"`
+	Compaction         FlowerContextCompaction  `json:"compaction,omitempty"`
+	TimelineDecoration FlowerTimelineDecoration `json:"timelineDecoration,omitempty"`
+	EventType          string                   `json:"eventType,omitempty"`
+	Payload            map[string]any           `json:"payload,omitempty"`
 }
 
 type streamEventModelIOStatus struct {

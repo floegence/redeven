@@ -174,6 +174,7 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 			model:    modelName,
 			labels:   labels,
 		},
+		ManualCompactions: r,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
@@ -206,6 +207,7 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 	r.publishFinalActivityTimeline(result.ActivityTimeline)
 	r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), estimateFloretHistoryTokens(systemPrompt, history, activeTools))
 	r.setProviderContinuationCandidate(providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState)))
+	r.setThreadCompactedContextCandidate(floretTurnResultToThreadCompactedContext(result, r.getCompletedContextCompaction()))
 	if ctx.Err() != nil && result.Status != flruntime.TurnStatusCompleted && result.Status != flruntime.TurnStatusWaiting {
 		return r.failRun("Floret run was canceled", ctx.Err())
 	}

@@ -82,6 +82,19 @@ export type wire_ai_send_user_turn_resp = {
   applied_execution_mode?: string;
 };
 
+export type wire_ai_compact_thread_context_req = {
+  thread_id: string;
+  expected_run_id?: string;
+  source: string;
+};
+
+export type wire_ai_compact_thread_context_resp = {
+  operation_id?: string;
+  kind: string;
+  run_id?: string;
+  error_code?: string;
+};
+
 export type wire_ai_submit_request_user_input_response_req = {
   thread_id: string;
   model?: string;

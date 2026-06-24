@@ -90,6 +90,19 @@ export type AISendUserTurnResponse = {
   appliedExecutionMode?: 'act' | 'plan';
 };
 
+export type AICompactThreadContextRequest = {
+  threadId: string;
+  expectedRunId?: string;
+  source: 'slash_command';
+};
+
+export type AICompactThreadContextResponse = {
+  operationId?: string;
+  kind: string;
+  runId?: string;
+  errorCode?: string;
+};
+
 export type AISubmitRequestUserInputResponseRequest = {
   threadId: string;
   model?: string;

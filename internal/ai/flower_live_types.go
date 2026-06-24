@@ -388,7 +388,8 @@ type FlowerLiveUsageUpdatedPayload struct {
 }
 
 type FlowerLiveContextCompactionUpdatedPayload struct {
-	Compaction FlowerContextCompaction `json:"compaction"`
+	Compaction         FlowerContextCompaction  `json:"compaction"`
+	TimelineDecoration FlowerTimelineDecoration `json:"timeline_decoration"`
 }
 
 type FlowerLiveModelIOUpdatedPayload struct {
@@ -414,7 +415,6 @@ type FlowerContextUsage struct {
 type FlowerContextCompaction struct {
 	OperationID          string `json:"operation_id"`
 	RunID                string `json:"run_id,omitempty"`
-	AnchorMessageID      string `json:"anchor_message_id,omitempty"`
 	StepIndex            int    `json:"step_index,omitempty"`
 	Phase                string `json:"phase"`
 	Status               string `json:"status"`
@@ -429,13 +429,20 @@ type FlowerContextCompaction struct {
 	UpdatedAtMs          int64  `json:"updated_at_ms"`
 }
 
+type FlowerTimelineAnchor struct {
+	TargetKind     string `json:"target_kind"`
+	MessageID      string `json:"message_id"`
+	BlockIndex     *int   `json:"block_index,omitempty"`
+	ActivityItemID string `json:"activity_item_id,omitempty"`
+	Edge           string `json:"edge"`
+}
+
 type FlowerTimelineDecoration struct {
-	DecorationID    string                  `json:"decoration_id"`
-	Kind            string                  `json:"kind"`
-	AnchorMessageID string                  `json:"anchor_message_id,omitempty"`
-	Placement       string                  `json:"placement"`
-	Ordinal         int                     `json:"ordinal"`
-	Compaction      FlowerContextCompaction `json:"compaction"`
+	DecorationID string                  `json:"decoration_id"`
+	Kind         string                  `json:"kind"`
+	Anchor       FlowerTimelineAnchor    `json:"anchor"`
+	Ordinal      int                     `json:"ordinal"`
+	Compaction   FlowerContextCompaction `json:"compaction"`
 }
 
 type FlowerTimelineMessage struct {

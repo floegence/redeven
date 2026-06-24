@@ -2,6 +2,8 @@ import type { ProtocolContract, RpcHelpers } from '@floegence/floe-webapp-protoc
 import { captureDebugConsoleProtocolCall, captureDebugConsoleProtocolNotify } from '../../services/debugConsoleCapture';
 import { redevenV1TypeIds } from './typeIds';
 import type {
+  AICompactThreadContextRequest,
+  AICompactThreadContextResponse,
   AIRealtimeEvent,
   AIListMessagesRequest,
   AIListMessagesResponse,
@@ -88,6 +90,7 @@ import type { SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgrade
 import type { TerminalClearRequest, TerminalClearResponse, TerminalHistoryRequest, TerminalHistoryResponse, TerminalNameUpdateEvent, TerminalOutputEvent, TerminalSessionAttachRequest, TerminalSessionAttachResponse, TerminalSessionCreateRequest, TerminalSessionCreateResponse, TerminalSessionDeleteRequest, TerminalSessionDeleteResponse, TerminalSessionInfo, TerminalSessionStatsRequest, TerminalSessionStatsResponse, TerminalSessionsChangedEvent } from './sdk/terminal';
 import {
   fromWireAIEventNotify,
+  fromWireAICompactThreadContextResponse,
   fromWireAIListMessagesResponse,
   fromWireAISendUserTurnResponse,
   fromWireAISubmitRequestUserInputResponseResponse,
@@ -95,6 +98,7 @@ import {
   fromWireAISubscribeThreadResponse,
   fromWireAIStopThreadResponse,
   toWireAIListMessagesRequest,
+  toWireAICompactThreadContextRequest,
   toWireAISendUserTurnRequest,
   toWireAISubmitRequestUserInputResponseRequest,
   toWireAISubscribeThreadRequest,
@@ -174,6 +178,8 @@ import { fromWireTerminalNameUpdateNotify, fromWireTerminalOutputNotify, fromWir
 import type { wire_access_resume_req, wire_access_resume_resp, wire_access_status_resp } from './wire/access';
 import type {
   wire_ai_event_notify,
+  wire_ai_compact_thread_context_req,
+  wire_ai_compact_thread_context_resp,
   wire_ai_list_messages_req,
   wire_ai_list_messages_resp,
   wire_ai_send_user_turn_req,
@@ -316,6 +322,7 @@ export type RedevenV1Rpc = {
   };
   ai: {
     sendUserTurn: (req: AISendUserTurnRequest) => Promise<AISendUserTurnResponse>;
+    compactThreadContext: (req: AICompactThreadContextRequest) => Promise<AICompactThreadContextResponse>;
     submitRequestUserInputResponse: (req: AISubmitRequestUserInputResponseRequest) => Promise<AISubmitRequestUserInputResponseResponse>;
     subscribeSummary: () => Promise<AISubscribeSummaryResponse>;
     subscribeThread: (req: AISubscribeThreadRequest) => Promise<AISubscribeThreadResponse>;
@@ -622,6 +629,11 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireAISendUserTurnRequest(req);
         const resp = await call<wire_ai_send_user_turn_req, wire_ai_send_user_turn_resp>(redevenV1TypeIds.ai.sendUserTurn, payload);
         return fromWireAISendUserTurnResponse(resp);
+      },
+      compactThreadContext: async (req) => {
+        const payload = toWireAICompactThreadContextRequest(req);
+        const resp = await call<wire_ai_compact_thread_context_req, wire_ai_compact_thread_context_resp>(redevenV1TypeIds.ai.compactThreadContext, payload);
+        return fromWireAICompactThreadContextResponse(resp);
       },
       submitRequestUserInputResponse: async (req) => {
         const payload = toWireAISubmitRequestUserInputResponseRequest(req);

@@ -1,20 +1,21 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.7.1",
+    "release_version": "unreleased",
     "previous_release": "v0.7.0",
-    "reviewed_at": "2026-06-21",
-    "review_id": "dependency-security-refresh-v0-7-1",
-    "summary": "Dependency security refresh updates Flowersec and browser UI packages without changing the Runtime Service protocol window.",
+    "reviewed_at": "2026-06-25",
+    "review_id": "flower-manual-context-compaction",
+    "summary": "Flower adds a /compact thread action, typed live timeline anchors, and Desktop Local UI routing without changing the Runtime Service compatibility window.",
     "checked_surfaces": [
-      "Runtime Service protocol_version remains redeven-runtime-v1; no runtime-control or desktop bridge payload fields changed in this dependency refresh",
-      "Flowersec Go and TypeScript dependencies are consumed from published v0.19.10 artifacts only, with no local sibling repository wiring or go.work involvement",
-      "Floe Webapp packages are consumed from published v0.36.68 artifacts only; Env App protocol and boot helpers keep the same public contract shape",
-      "Desktop and Env App package locks refresh DOMPurify and Undici patched transitive versions while preserving existing startup, attach, and Local UI health flows",
-      "Runtime binary release artifacts keep the same command surface and embedded asset build path; the release updates dependency provenance rather than Runtime Service wire semantics",
-      "Compatibility epoch, minimum Desktop version, and minimum Runtime version remain unchanged because no Runtime Service protocol fields, control methods, or minimum client requirements changed"
+      "Runtime Service protocol_version remains redeven-runtime-v1; Flower /compact is exposed through existing Local UI and Env App RPC surfaces rather than a runtime-service protocol version change",
+      "Env App redeven_v1 ai.compactThreadContext request/response codecs, SDK, and wire type ids were regenerated and tested as Env App UI protocol assets",
+      "Desktop Local Environment Flower adapter and main-process runtime request allowlist include /threads/:thread_id/context/compact while preserving startup reports, attach flows, sys.ping, and Local UI health checks",
+      "Flower live context compaction events use the single context.compaction.updated event with typed timeline anchors; old anchor_message_id plus placement and started/applied event shapes are rejected by protocol checks",
+      "Flower composer /compact command does not create transcript messages, does not stop a running or waiting-approval run, and carries expected_run_id for stale-run protection",
+      "Floret is consumed only from the published github.com/floegence/floret v0.3.27 module with GOWORK=off validation and no replace, go.work, package-manager link, or local sibling path wiring",
+      "Compatibility epoch, minimum Desktop version, and minimum Runtime version remain unchanged because Desktop-managed startup, runtime snapshot protocol, SSH bootstrap, gateway lifecycle, and Runtime Service control methods are not expanded"
     ],
-    "same_window_rationale": "This release is a dependency security refresh. The Runtime Service protocol remains redeven-runtime-v1 with compatibility_epoch 5, minimum_desktop_version v0.7.0, and minimum_runtime_version v0.7.0. Flowersec, Floe Webapp, DOMPurify, and Undici updates change dependency provenance and patched package contents, not Runtime Service request/response schemas, desktop bridge behavior, startup report format, sys.ping semantics, Env App maintenance UI protocol, or SSH runtime bootstrap compatibility."
+    "same_window_rationale": "The compatibility window is unchanged because the feature is implemented inside Flower, Env App UI protocol assets, and Desktop Local UI request routing. The Runtime Service snapshot protocol remains redeven-runtime-v1, Desktop-managed startup still uses structured machine presentation and startup reports, sys.ping and attach semantics are unchanged, and SSH/runtime bootstrap compatibility does not require a newer Desktop or Runtime binary pair."
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 5,

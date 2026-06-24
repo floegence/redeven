@@ -164,8 +164,11 @@ describe('FlowerSurface context telemetry', () => {
       timeline_decorations: [{
         decoration_id: 'context-compaction:compact-1',
         kind: 'context_compaction',
-        anchor_message_id: 'm-context-assistant',
-        placement: 'before',
+        anchor: {
+          target_kind: 'message',
+          message_id: 'm-context-assistant',
+          edge: 'after',
+        },
         ordinal: 0,
         compaction: {
           operation_id: 'compact-1',
@@ -193,7 +196,9 @@ describe('FlowerSurface context telemetry', () => {
     expect(divider?.textContent).toContain('Context compacted');
     expect(divider?.textContent).toContain('60k to 488');
     expect(divider?.querySelector('button, a')).toBeNull();
-    expect(runtime.querySelectorAll('[data-flower-message-id]')).toHaveLength(2);
+    const messageIDs = Array.from(runtime.querySelectorAll('[data-flower-message-id]'))
+      .map((node) => node.getAttribute('data-flower-message-id'));
+    expect(new Set(messageIDs)).toEqual(new Set(['m-context-user', 'm-context-assistant']));
     expect(runtime.querySelector('[data-flower-message-id] .flower-compaction-divider')).toBeNull();
   });
 });

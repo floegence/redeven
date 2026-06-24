@@ -16,6 +16,10 @@ var ErrWaitingUserQueueConflict = errors.New("waiting-user queue request conflic
 var ErrFollowupsRevisionChanged = errors.New("followups revision changed")
 var ErrInvalidFollowupLane = errors.New("invalid followup lane")
 var ErrReadOnlyThread = errors.New("thread is read only")
+var ErrCompactAlreadyPending = errors.New("context compaction already pending")
+var ErrNoCompactableContext = errors.New("no compactable context")
+
+const compactThreadContextSourceSlashCommand = "slash_command"
 
 type SendUserTurnRequest struct {
 	ThreadID              string     `json:"thread_id"`
@@ -34,6 +38,19 @@ type SendUserTurnResponse struct {
 	QueuePosition           int    `json:"queue_position,omitempty"`
 	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
 	AppliedExecutionMode    string `json:"applied_execution_mode,omitempty"`
+}
+
+type CompactThreadContextRequest struct {
+	ThreadID      string `json:"thread_id"`
+	ExpectedRunID string `json:"expected_run_id,omitempty"`
+	Source        string `json:"source"`
+}
+
+type CompactThreadContextResponse struct {
+	OperationID string `json:"operation_id,omitempty"`
+	Kind        string `json:"kind"`
+	RunID       string `json:"run_id,omitempty"`
+	ErrorCode   string `json:"error_code,omitempty"`
 }
 
 type persistedUserMessage struct {
@@ -66,6 +83,31 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 		return SendUserTurnResponse{}, errors.New("thread actor not ready")
 	}
 	return actor.SendUserTurn(ctx, meta, req)
+}
+
+func (s *Service) CompactThreadContext(ctx context.Context, meta *session.Meta, req CompactThreadContextRequest) (CompactThreadContextResponse, error) {
+	if s == nil {
+		return CompactThreadContextResponse{}, errors.New("nil service")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := requireRWX(meta); err != nil {
+		return CompactThreadContextResponse{}, err
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	threadID := strings.TrimSpace(req.ThreadID)
+	if endpointID == "" || threadID == "" {
+		return CompactThreadContextResponse{}, errors.New("invalid request")
+	}
+	if s.threadMgr == nil {
+		return CompactThreadContextResponse{}, errors.New("thread manager not ready")
+	}
+	actor := s.threadMgr.Get(endpointID, threadID)
+	if actor == nil {
+		return CompactThreadContextResponse{}, errors.New("thread actor not ready")
+	}
+	return actor.CompactThreadContext(ctx, meta, req)
 }
 
 func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *session.Meta, req SubmitRequestUserInputResponseRequest) (SubmitRequestUserInputResponseResponse, error) {

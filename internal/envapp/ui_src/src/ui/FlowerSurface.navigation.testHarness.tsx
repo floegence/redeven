@@ -599,6 +599,10 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
     })),
     resolveHandler: vi.fn(async () => decision()),
     launchTurn: vi.fn(async () => liveBootstrap(thread())),
+    compactThreadContext: vi.fn(async (input) => liveBootstrap(thread({
+      thread_id: input.thread_id,
+      status: 'running',
+    }))),
     stopThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, status: 'canceled' }))),
     submitInput: vi.fn(async () => liveBootstrap(thread({ status: 'running' }))),
     submitApproval: vi.fn(async () => undefined),
