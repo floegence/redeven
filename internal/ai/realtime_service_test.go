@@ -588,6 +588,78 @@ func TestFlowerLiveContextUsageAndCompactionMaterializedState(t *testing.T) {
 	}
 }
 
+func TestFlowerLiveContextActivityBroadcastsThreadPatch(t *testing.T) {
+	t.Parallel()
+
+	meta := session.Meta{
+		EndpointID:        "env_live_context_patch",
+		NamespacePublicID: "ns_live_context_patch",
+		ChannelID:         "ch_live_context_patch",
+		UserPublicID:      "u_live_context_patch",
+		UserEmail:         "context-patch@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+	svc := newRealtimeTestService(t, 0)
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "context patch", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_context_patch"
+	usage := FlowerContextUsage{
+		RunID:               runID,
+		StepIndex:           1,
+		Phase:               "projected_request",
+		InputTokens:         910,
+		ContextWindowTokens: 1000,
+		UsedRatio:           0.91,
+		PressureStatus:      "near_threshold",
+		UpdatedAtMs:         time.Now().UnixMilli(),
+	}
+	if err := svc.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
+		EndpointID:  meta.EndpointID,
+		ThreadID:    th.ThreadID,
+		RunID:       runID,
+		StreamKind:  "context",
+		EventType:   "context.usage.updated",
+		PayloadJSON: string(mustFlowerPayload(FlowerLiveUsageUpdatedPayload{Usage: usage})),
+		AtUnixMs:    time.Now().UnixMilli(),
+	}); err != nil {
+		t.Fatalf("AppendRunEvent usage: %v", err)
+	}
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventContextUsage{
+		Type:  "context-usage",
+		Usage: usage,
+	})
+
+	resp, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, 0, 10)
+	if err != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents: %v", err)
+	}
+	var gotKinds []FlowerLiveKind
+	for _, event := range resp.Events {
+		gotKinds = append(gotKinds, event.Kind)
+	}
+	wantKinds := []FlowerLiveKind{
+		FlowerLiveContextUsageUpdated,
+		FlowerLiveThreadPatched,
+	}
+	if !reflect.DeepEqual(gotKinds, wantKinds) {
+		t.Fatalf("event kinds=%#v, want %#v", gotKinds, wantKinds)
+	}
+	var payload FlowerLiveThreadPatchedPayload
+	if !decodeFlowerPayload(resp.Events[1].Payload, &payload) {
+		t.Fatalf("failed to decode thread patch payload: %s", string(resp.Events[1].Payload))
+	}
+	if strings.TrimSpace(payload.Patch.LastContextRunID) != runID {
+		t.Fatalf("thread patch last_context_run_id=%q, want %q", payload.Patch.LastContextRunID, runID)
+	}
+}
+
 func TestFlowerLiveContextCompactionCompleteKeepsRunActive(t *testing.T) {
 	t.Parallel()
 

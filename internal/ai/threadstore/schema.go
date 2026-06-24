@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 33
+	threadstoreCurrentSchemaVersion = 34
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -61,6 +61,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 30, ToVersion: 31, Apply: migrateThreadstoreToV31},
 			{FromVersion: 31, ToVersion: 32, Apply: migrateThreadstoreToV32},
 			{FromVersion: 32, ToVersion: 33, Apply: migrateThreadstoreToV33},
+			{FromVersion: 33, ToVersion: 34, Apply: migrateThreadstoreToV34},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -273,6 +274,13 @@ func migrateThreadstoreToV33(tx *sql.Tx) error {
 	return ensureAIThreadsReasoningSelectionTx(tx)
 }
 
+func migrateThreadstoreToV34(tx *sql.Tx) error {
+	if err := ensureAIThreadsFlowerActivitySnapshotTx(tx); err != nil {
+		return err
+	}
+	return backfillAIThreadsFlowerActivitySnapshotTx(tx)
+}
+
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "model_id", `ALTER TABLE ai_threads ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`)
 }
@@ -351,6 +359,90 @@ func ensureAIThreadsWaitingUserInputJSONTx(tx *sql.Tx) error {
 
 func ensureAIThreadsLastContextRunIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "last_context_run_id", `ALTER TABLE ai_threads ADD COLUMN last_context_run_id TEXT NOT NULL DEFAULT ''`)
+}
+
+func ensureAIThreadsFlowerActivitySnapshotTx(tx *sql.Tx) error {
+	stmts := []struct {
+		column string
+		sql    string
+	}{
+		{column: "flower_activity_revision", sql: `ALTER TABLE ai_threads ADD COLUMN flower_activity_revision INTEGER NOT NULL DEFAULT 0`},
+		{column: "flower_activity_signature", sql: `ALTER TABLE ai_threads ADD COLUMN flower_activity_signature TEXT NOT NULL DEFAULT ''`},
+		{column: "flower_activity_waiting_prompt_id", sql: `ALTER TABLE ai_threads ADD COLUMN flower_activity_waiting_prompt_id TEXT NOT NULL DEFAULT ''`},
+	}
+	for _, stmt := range stmts {
+		if err := ensureColumnTx(tx, "ai_threads", stmt.column, stmt.sql); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func backfillAIThreadsFlowerActivitySnapshotTx(tx *sql.Tx) error {
+	rows, err := tx.Query(`
+SELECT thread_id, endpoint_id, run_status, last_context_run_id, waiting_user_input_json,
+       run_updated_at_unix_ms, last_message_at_unix_ms, last_message_preview,
+       flower_activity_revision, flower_activity_signature
+FROM ai_threads
+WHERE flower_activity_revision <= 0 OR TRIM(COALESCE(flower_activity_signature, '')) = ''
+`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type row struct {
+		threadID           string
+		endpointID         string
+		runStatus          string
+		lastContextRunID   string
+		waitingJSON        string
+		runUpdatedAt       int64
+		lastMessageAt      int64
+		lastMessagePreview string
+		revision           int64
+		signature          string
+	}
+	updates := make([]row, 0)
+	for rows.Next() {
+		var item row
+		if err := rows.Scan(
+			&item.threadID,
+			&item.endpointID,
+			&item.runStatus,
+			&item.lastContextRunID,
+			&item.waitingJSON,
+			&item.runUpdatedAt,
+			&item.lastMessageAt,
+			&item.lastMessagePreview,
+			&item.revision,
+			&item.signature,
+		); err != nil {
+			return err
+		}
+		updates = append(updates, item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, item := range updates {
+		waitingPromptID := flowerActivityWaitingPromptID(item.runStatus, item.waitingJSON)
+		revision := legacyFlowerActivityRevision(item.runStatus, item.runUpdatedAt, item.lastMessageAt)
+		if item.revision > revision {
+			revision = item.revision
+		}
+		signature := flowerActivitySignatureForState(revision, item.runStatus, item.lastContextRunID, waitingPromptID, item.lastMessageAt, item.lastMessagePreview)
+		if _, err := tx.Exec(`
+UPDATE ai_threads
+SET flower_activity_revision = ?,
+    flower_activity_signature = ?,
+    flower_activity_waiting_prompt_id = ?
+WHERE endpoint_id = ? AND thread_id = ?
+`, revision, signature, waitingPromptID, item.endpointID, item.threadID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func ensureAIThreadStateContinuationColumnsTx(tx *sql.Tx) error {
@@ -938,6 +1030,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			"title_input_message_id", "title_model_id", "title_prompt_version", "followups_revision",
 			"pinned_at_unix_ms",
 			"run_status", "run_updated_at_unix_ms", "run_error_code", "run_error", "waiting_user_input_json", "last_context_run_id",
+			"flower_activity_revision", "flower_activity_signature", "flower_activity_waiting_prompt_id",
 			"created_by_user_public_id", "created_by_user_email", "updated_by_user_public_id",
 			"updated_by_user_email", "created_at_unix_ms", "updated_at_unix_ms",
 			"last_message_at_unix_ms", "last_message_preview",

@@ -99,6 +99,7 @@ describe('mergeFlowerThreadListRefresh', () => {
       title: 'Summary title',
       updated_at_ms: 20,
       messages: [],
+      read_status: readStatus('prompt-from-summary'),
       error: undefined,
     });
 
@@ -110,6 +111,7 @@ describe('mergeFlowerThreadListRefresh', () => {
     expect(merged?.title).toBe('Summary title');
     expect(merged?.updated_at_ms).toBe(20);
     expect(merged?.messages).toBe(existing.messages);
+    expect(merged?.read_status).toBe(summary.read_status);
     expect(merged?.error).toBe(existing.error);
   });
 

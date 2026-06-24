@@ -128,6 +128,12 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 		UpdatedAtUnixMs:     th.UpdatedAtUnixMs,
 		LastMessageAtUnixMs: th.LastMessageAtUnixMs,
 		LastMessagePreview:  strings.TrimSpace(th.LastMessagePreview),
+		FlowerActivity: FlowerThreadReadSnapshot{
+			ActivityRevision:    th.FlowerActivityRevision,
+			LastMessageAtUnixMs: th.LastMessageAtUnixMs,
+			ActivitySignature:   strings.TrimSpace(th.FlowerActivitySignature),
+			WaitingPromptID:     strings.TrimSpace(th.FlowerActivityWaitingPromptID),
+		},
 	}
 	applyFlowerThreadMetadataView(&view, flowerMeta)
 	return view
@@ -1157,6 +1163,7 @@ func (s *Service) AppendThreadMessage(ctx context.Context, meta *session.Meta, t
 		return err
 	}
 	s.broadcastTranscriptMessage(meta.EndpointID, threadID, "", rowID, string(b), now)
+	s.broadcastThreadSummary(meta.EndpointID, threadID)
 	return nil
 }
 

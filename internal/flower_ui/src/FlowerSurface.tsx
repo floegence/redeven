@@ -26,6 +26,7 @@ import type {
   FlowerRouterDecision,
   FlowerThreadActivitySnapshot,
   FlowerThreadListItem,
+  FlowerThreadReadStatus,
   FlowerThreadStatus,
   FlowerThreadSnapshot,
   FlowerChatMessage,
@@ -767,6 +768,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     return readStatusWithUnread(thread, false);
   };
+  const threadWithReadStatus = (thread: FlowerThreadSnapshot, readStatus: FlowerThreadReadStatus): FlowerThreadSnapshot => ({
+    ...thread,
+    read_status: readStatus,
+  });
+  const applyThreadReadStatus = (threadID: string, readStatus: FlowerThreadReadStatus) => {
+    const tid = trimString(threadID);
+    if (!tid) return;
+    setThreads((items) => items.map((thread) => (
+      thread.thread_id === tid ? threadWithReadStatus(thread, readStatus) : thread
+    )));
+  };
   const threadItemSignature = (t: FlowerThreadSnapshot): string => {
     const visibleThread = threadWithLocalReadVisibility(t);
     const stableLiveSidebar = SIDEBAR_STABLE_LIVE_STATUSES.has(t.status);
@@ -1052,28 +1064,37 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const tid = trimString(threadID);
     if (!tid) return;
     markThreadReadLocally(tid, snapshot);
+    const submittedSnapshotKey = flowerThreadReadSnapshotKey(snapshot);
     if (persistingReadThreadIDs.has(tid)) {
       pendingReadPersistenceSnapshots.set(tid, snapshot);
       return;
     }
     persistingReadThreadIDs.add(tid);
-    void props.adapter.markThreadRead(tid, snapshot)
-      .then((live) => {
+    const readPromise = props.adapter.markThreadRead(tid, snapshot)
+      .catch(() => null);
+    void readPromise
+      .then((readStatus) => {
+        if (!readStatus) {
+          clearLocalReadVisibility(tid);
+          return;
+        }
         if (sequence === threadLoadSequence && selectedThreadID() === tid) {
-          applyLiveBootstrap(live);
+          applyThreadReadStatus(tid, readStatus);
+          if (readStatus.is_unread) {
+            const nextSnapshotKey = flowerThreadReadSnapshotKey(readStatus.snapshot);
+            if (nextSnapshotKey && nextSnapshotKey !== submittedSnapshotKey) {
+              pendingReadPersistenceSnapshots.set(tid, readStatus.snapshot);
+            }
+          }
         }
         clearLocalReadVisibility(tid);
-      })
-      .catch((error) => {
-        clearLocalReadVisibility(tid);
-        if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
-        setThreadActionError(getErrorMessage(error));
       })
       .finally(() => {
         persistingReadThreadIDs.delete(tid);
         const pendingSnapshot = pendingReadPersistenceSnapshots.get(tid);
         pendingReadPersistenceSnapshots.delete(tid);
         if (!pendingSnapshot) return;
+        if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
         persistThreadRead(tid, pendingSnapshot, sequence);
       });
   };
@@ -1407,7 +1428,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             commitLiveThreadState(threadState);
           }
           if (shouldPersistRead && nextReadSnapshot) {
-            markThreadReadLocally(tid, nextReadSnapshot);
             persistThreadRead(tid, nextReadSnapshot, sequence);
           }
         }

@@ -88,11 +88,11 @@ func TestStore_EnsureFlowerSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.
 	if err != nil {
 		t.Fatalf("AdvanceFlower(same revision): %v", err)
 	}
-	if record.LastSeenActivitySignature != "status:waiting_user\u001factivity:130\u001fprompt:prompt_2" {
-		t.Fatalf("LastSeenActivitySignature=%q after same revision, want current signature", record.LastSeenActivitySignature)
+	if record.LastSeenActivitySignature != "status:waiting_user\u001factivity:130\u001fprompt:prompt_1" {
+		t.Fatalf("LastSeenActivitySignature=%q after same revision, want seeded signature", record.LastSeenActivitySignature)
 	}
-	if record.LastSeenWaitingPromptID != "prompt_2" {
-		t.Fatalf("LastSeenWaitingPromptID=%q after same revision, want=prompt_2", record.LastSeenWaitingPromptID)
+	if record.LastSeenWaitingPromptID != "prompt_1" {
+		t.Fatalf("LastSeenWaitingPromptID=%q after same revision, want=prompt_1", record.LastSeenWaitingPromptID)
 	}
 
 	record, err = store.AdvanceFlower(ctx, "env_1", "user_1", "th_1", FlowerSnapshot{
@@ -130,6 +130,45 @@ func TestStore_EnsureFlowerSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.
 	}
 	if got := userRecords["th_1"].LastReadMessageAtUnixMs; got != 180 {
 		t.Fatalf("user_1 LastReadMessageAtUnixMs=%d, want=180", got)
+	}
+}
+
+func TestStore_FlowerRevisionDoesNotDeriveFromLastMessageAt(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openTestStore(t)
+
+	records, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
+		"th_1": {
+			ActivityRevision:    2,
+			LastMessageAtUnixMs: 5000,
+			ActivitySignature:   "activity:2\u001flast_message:5000",
+		},
+	})
+	if err != nil {
+		t.Fatalf("EnsureFlower: %v", err)
+	}
+	if got := records["th_1"].LastSeenActivityRevision; got != 2 {
+		t.Fatalf("seed LastSeenActivityRevision=%d, want 2", got)
+	}
+	if got := records["th_1"].LastReadMessageAtUnixMs; got != 5000 {
+		t.Fatalf("seed LastReadMessageAtUnixMs=%d, want 5000", got)
+	}
+
+	record, err := store.AdvanceFlower(ctx, "env_1", "user_1", "th_1", FlowerSnapshot{
+		ActivityRevision:    3,
+		LastMessageAtUnixMs: 6000,
+		ActivitySignature:   "activity:3\u001flast_message:6000",
+	})
+	if err != nil {
+		t.Fatalf("AdvanceFlower: %v", err)
+	}
+	if record.LastSeenActivityRevision != 3 {
+		t.Fatalf("advance LastSeenActivityRevision=%d, want 3", record.LastSeenActivityRevision)
+	}
+	if record.LastReadMessageAtUnixMs != 6000 {
+		t.Fatalf("advance LastReadMessageAtUnixMs=%d, want 6000", record.LastReadMessageAtUnixMs)
 	}
 }
 

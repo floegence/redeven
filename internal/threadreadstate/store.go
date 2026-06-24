@@ -622,7 +622,7 @@ func normalizeFlowerSnapshot(snapshot FlowerSnapshot) FlowerSnapshot {
 	activityRevision := maxInt64(0, snapshot.ActivityRevision)
 	lastMessageAtUnixMs := maxInt64(0, snapshot.LastMessageAtUnixMs)
 	return FlowerSnapshot{
-		ActivityRevision:    maxInt64(activityRevision, lastMessageAtUnixMs),
+		ActivityRevision:    activityRevision,
 		LastMessageAtUnixMs: lastMessageAtUnixMs,
 		ActivitySignature:   strings.TrimSpace(snapshot.ActivitySignature),
 		WaitingPromptID:     strings.TrimSpace(snapshot.WaitingPromptID),
@@ -654,7 +654,7 @@ func applyCodexSeed(record Record, snapshot CodexSnapshot) Record {
 
 func applyFlowerAdvance(record Record, snapshot FlowerSnapshot) Record {
 	snapshot = normalizeFlowerSnapshot(snapshot)
-	if snapshot.ActivityRevision >= record.LastSeenActivityRevision {
+	if snapshot.ActivityRevision > record.LastSeenActivityRevision {
 		record.LastSeenActivityRevision = snapshot.ActivityRevision
 		record.LastSeenActivitySignature = snapshot.ActivitySignature
 		record.LastSeenWaitingPromptID = snapshot.WaitingPromptID

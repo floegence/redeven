@@ -161,6 +161,7 @@ type ThreadView struct {
 	UpdatedAtUnixMs     int64                        `json:"updated_at_unix_ms"`
 	LastMessageAtUnixMs int64                        `json:"last_message_at_unix_ms"`
 	LastMessagePreview  string                       `json:"last_message_preview"`
+	FlowerActivity      FlowerThreadReadSnapshot     `json:"-"`
 }
 
 type ListThreadsResponse struct {

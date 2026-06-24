@@ -115,15 +115,15 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	goMod := readRepoFile(t, root, "go.mod")
 	goSum := readRepoFile(t, root, "go.sum")
 
-	if !strings.Contains(goMod, "github.com/floegence/floret v0.3.20") {
-		t.Fatalf("go.mod must depend on floret v0.3.20")
+	if !strings.Contains(goMod, "github.com/floegence/floret v0.3.22") {
+		t.Fatalf("go.mod must depend on floret v0.3.22")
 	}
 	assertNoLocalGoModuleReference(t, "go.mod", goMod, "github.com/floegence/floret", "floret")
-	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.20 ") {
-		t.Fatalf("go.sum must include floret v0.3.20 module checksum")
+	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.22 ") {
+		t.Fatalf("go.sum must include floret v0.3.22 module checksum")
 	}
-	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.20/go.mod ") {
-		t.Fatalf("go.sum must include floret v0.3.20 go.mod checksum")
+	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.22/go.mod ") {
+		t.Fatalf("go.sum must include floret v0.3.22 go.mod checksum")
 	}
 	assertNoLocalGoModuleReference(t, "go.sum", goSum, "github.com/floegence/floret", "floret")
 }

@@ -18,17 +18,19 @@ Subagent presentation is also derived from the canonical timeline. The parent th
 
 Active cursor ownership belongs to Redeven's live projection. The projection marks at most one live assistant draft with `active_cursor` while the selected thread is running, and canceled, completed, idle, background, or merely streaming-shaped messages are not treated as active unless the projection marks them active. The visible model status affordance is a localized bottom dock lane driven by `model_io.updated`, not by `active_cursor` or thread running status. `model_io` is derived from Floret provider lifecycle and stream observations: provider request maps to waiting for model response; assistant, reasoning, and model tool-call stream observations map to thinking; provider retry maps to retrying; provider finish maps to finalizing. The indicator is not a timeline message and does not depend on a visible assistant block. The indicator's readable text is the base rendered text; shimmer is a decorative overlay and must not be the only mechanism that makes the label visible.
 
-Context usage and compaction state share that presentation lane and canonical projection model. Redeven stores the latest `context_usage` plus historical `context_compactions` and `timeline_decorations` in Flower live materialized state. `context.usage.updated` updates the compact context meter beside the model status. `context.compaction.updated` upserts a `context_compaction` timeline decoration keyed by `operation_id`; the UI renders it as a non-interactive divider such as compression in progress, compressed, or failed. The divider is not a transcript message and does not affect message ordering, copying, read state, or model-visible history.
+Context usage and compaction state share that presentation lane and canonical projection model. Redeven stores the latest `context_usage` plus historical `context_compactions` and `timeline_decorations` in Flower live materialized state. `context.usage.updated` updates the compact context meter beside the model status. `context.compaction.updated` upserts a `context_compaction` timeline decoration keyed by `operation_id`; the UI renders it as a non-interactive divider such as compression in progress, compressed, or failed. The divider is not a transcript message and does not affect message ordering, copying, or model-visible history. Because context telemetry is visible thread activity, persisted context usage and compaction events advance the canonical Flower read activity revision together with `last_context_run_id`, and broadcasting those context stream events also publishes a thread summary patch so selected live polling receives the current read status.
 
 Selected-thread live polling treats `model_io.updated` as a presentation boundary. Even when one live-events response contains a short provider stream followed by finalizing or clearing events, Flower commits the model status lane and yields a render frame at each model I/O boundary. This keeps brief but real provider streaming phases visible to the user without inventing timeline rows, fallback timers, or thread-status heuristics.
 
-Thread read state is a user-scoped appserver projection over the Redeven thread snapshot. Live bootstrap returns the current `read_status`, and live `thread.patched` events returned through appserver carry the current `read_status` when thread metadata changes. A selected running thread that completes while the user keeps it selected is therefore marked read from the final snapshot by the Flower surface; background completions remain unread until selected.
+Thread read state is a user-scoped appserver projection over a canonical Flower activity snapshot persisted on `ai_threads`. Threadstore owns `flower_activity_revision`, `flower_activity_signature`, and `flower_activity_waiting_prompt_id`, initializes them for new and migrated threads, and advances them in the same transaction as visible message changes, run-state changes, waiting prompts, persisted context usage or compaction events, projected thread or message changes, stale active-run resets, and fork initialization. Appserver builds `read_status.snapshot` from `ThreadView.FlowerActivity` rather than deriving a second clock from run status or timestamps; unread is only `current.activity_revision > record.last_seen_activity_revision`.
+
+Mark-read requests echo a snapshot previously delivered by the server. Future snapshots are rejected, current-revision signature, waiting-prompt, or last-message mismatches remain protocol errors, and stale snapshots are accepted without pretending they covered newer activity; the response still returns the current authoritative `read_status`. The shared Flower adapter returns that `read_status` directly instead of reloading the bootstrap. A selected running thread that completes while the user keeps it selected is therefore marked read from the final snapshot by the Flower surface, while background completions remain unread until selected.
 
 # Boundaries
 
 Flower does not sort messages, infer insertion points from timestamps, pair recent user messages with assistant drafts, or synthesize visible pending user or assistant rows. A local pending state may keep the transcript from falling back to an empty or warmup presentation while a turn launch request is in flight, and the selected thread may show a bottom model status lane while a matching active run has `model_io`, but every rendered chat message must come from the current thread timeline.
 
-Flower does not infer read snapshots from run status or timestamps. It applies `read_status` delivered by bootstrap/list/patch payloads and only persists read state for the currently selected thread.
+Flower does not infer read snapshots from run status, timestamps, message previews, context telemetry, or local activity tables. It applies `read_status` delivered by bootstrap/list/patch payloads and only persists read state for the currently selected thread. Selected-thread read sync updates local `read_status` from the `/read` response; if the response is still unread, Flower only queues another persistence attempt when the returned snapshot key differs and the thread remains selected.
 
 Flower does not parse provider request metadata, database rows, or transcript text to estimate context pressure. It renders context usage and compaction only from typed live/bootstrap fields projected by Redeven from structured Floret observations.
 
@@ -58,15 +60,22 @@ Redeven may publish `timeline.replaced` after run start, assistant commit, stop 
 [18] redeven:internal/flower_ui/src/FlowerSurface.tsx:1388 - The visible model status lane reads `model_io_status` and localized model status copy rather than synthesizing a timeline message.
 [19] redeven:internal/flower_ui/src/FlowerSurface.tsx:128 - Flower recognizes `model_io.updated` as a model-status presentation boundary.
 [20] redeven:internal/flower_ui/src/FlowerSurface.tsx:994 - Selected-thread live polling commits and yields at model I/O presentation boundaries.
-[21] redeven:internal/codeapp/appserver/thread_read_state.go:156 - Appserver decorates live events with user-scoped Flower read status.
-[22] redeven:internal/flower_ui/src/FlowerSurface.tsx:873 - Selected-thread live events drive read persistence for unread snapshots.
-[23] redeven:internal/flower_ui/src/flowerLiveReducer.ts:84 - Thread patches update the thread read status delivered by appserver.
-[24] redeven:internal/flower_ui/src/flowerSubagentProjection.ts:228 - Subagent dropdown entries are projected from parent activity timeline items.
-[25] redeven:internal/flower_ui/src/flowerSubagentProjection.ts:143 - The projection accepts only the current subagent envelope shapes.
-[26] redeven:internal/flower_ui/src/FlowerSurface.tsx:1555 - Opening a subagent loads parent-scoped detail without selecting the child thread.
-[27] redeven:internal/flower_ui/src/FlowerSurface.tsx:3340 - The selected parent thread header renders the Sub Agents dropdown.
-[28] redeven:internal/flower_ui/src/FlowerSurface.tsx:3420 - Subagent execution detail renders in a floating overlay on the parent thread.
-[29] redeven:internal/flower_ui/src/FlowerSurface.tsx:1844 - Active subagent detail tailing is limited to queued/running/waiting-input states.
-[30] redeven:internal/flower_ui/src/FlowerSurface.tsx:1923 - Detail tail errors use a longer retry interval and remain scoped to the detail dock.
-[31] redeven:internal/ai/threadstore/store.go:357 - Normal thread-list queries exclude `subagent_projection` rows.
-[32] redeven:internal/codeapp/appserver/server.go:3737 - Appserver exposes the parent-scoped subagent detail route.
+[21] redeven:internal/ai/threadstore/schema.go:364 - The threadstore schema adds persisted Flower activity snapshot columns and backfills legacy rows.
+[22] redeven:internal/ai/threadstore/store.go:1260 - Threadstore generates the next Flower activity snapshot from the canonical next thread state.
+[23] redeven:internal/ai/threadstore/store.go:3114 - Persisted context usage and compaction run events update `last_context_run_id` and bump Flower activity in one transaction.
+[24] redeven:internal/ai/realtime_sink.go:433 - Broadcast context stream events publish a thread summary patch after the context event.
+[25] redeven:internal/codeapp/appserver/thread_read_state.go:384 - Appserver validates mark-read snapshots against the current canonical Flower activity snapshot.
+[26] redeven:internal/codeapp/appserver/thread_read_state.go:590 - Appserver reads Flower read snapshots from `ThreadView.FlowerActivity`.
+[27] redeven:internal/codeapp/appserver/thread_read_state.go:661 - Flower unread status is computed from activity revision only.
+[28] redeven:internal/flower_ui/src/runtimeFlowerSurfaceAdapter.ts:136 - The shared runtime adapter returns `/read` `read_status` without reloading the thread.
+[29] redeven:internal/flower_ui/src/FlowerSurface.tsx:1063 - Selected-thread read persistence applies the returned read status and queues only a different current snapshot.
+[30] redeven:internal/flower_ui/src/flowerLiveReducer.ts:86 - Thread patches update the thread read status delivered by appserver.
+[31] redeven:internal/flower_ui/src/flowerSubagentProjection.ts:228 - Subagent dropdown entries are projected from parent activity timeline items.
+[32] redeven:internal/flower_ui/src/flowerSubagentProjection.ts:143 - The projection accepts only the current subagent envelope shapes.
+[33] redeven:internal/flower_ui/src/FlowerSurface.tsx:1578 - Opening a subagent loads parent-scoped detail without selecting the child thread.
+[34] redeven:internal/flower_ui/src/FlowerSurface.tsx:3600 - The selected parent thread header renders the Sub Agents dropdown.
+[35] redeven:internal/flower_ui/src/FlowerSurface.tsx:3443 - Subagent execution detail renders in a floating overlay on the parent thread.
+[36] redeven:internal/flower_ui/src/FlowerSurface.tsx:1930 - Active subagent detail tailing is limited to queued/running/waiting-input states.
+[37] redeven:internal/flower_ui/src/FlowerSurface.tsx:1946 - Detail tail errors use a longer retry interval and remain scoped to the detail dock.
+[38] redeven:internal/ai/threadstore/store.go:379 - Normal thread-list queries exclude `subagent_projection` rows.
+[39] redeven:internal/codeapp/appserver/server.go:3737 - Appserver exposes the parent-scoped subagent detail route.

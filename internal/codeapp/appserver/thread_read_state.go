@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"hash/fnv"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/floegence/redeven/internal/ai"
@@ -416,6 +414,12 @@ func (g *Server) validateFlowerReadSnapshot(
 	if snapshot.ActivityRevision == current.ActivityRevision && snapshot.WaitingPromptID != current.WaitingPromptID {
 		return threadreadstate.FlowerSnapshot{}, errors.New("read snapshot does not match current thread activity")
 	}
+	if snapshot.ActivityRevision < current.ActivityRevision {
+		return snapshot, nil
+	}
+	if snapshot.LastMessageAtUnixMs != current.LastMessageAtUnixMs {
+		return threadreadstate.FlowerSnapshot{}, errors.New("read snapshot does not match current thread activity")
+	}
 	return snapshot, nil
 }
 
@@ -584,16 +588,11 @@ func buildCodexThreadView(thread codexbridge.Thread, pending []codexbridge.Pendi
 }
 
 func flowerSnapshotFromThread(thread ai.ThreadView) threadreadstate.FlowerSnapshot {
-	waitingPromptID := ""
-	if normalizeStatusToken(thread.RunStatus) == "waiting_user" && thread.WaitingPrompt != nil {
-		waitingPromptID = strings.TrimSpace(thread.WaitingPrompt.PromptID)
-	}
-	activityRevision := flowerActivityRevision(thread)
 	return threadreadstate.FlowerSnapshot{
-		ActivityRevision:    activityRevision,
-		LastMessageAtUnixMs: thread.LastMessageAtUnixMs,
-		ActivitySignature:   flowerActivitySignature(thread.RunStatus, thread.LastContextRunID, activityRevision, waitingPromptID, thread.LastMessagePreview),
-		WaitingPromptID:     waitingPromptID,
+		ActivityRevision:    thread.FlowerActivity.ActivityRevision,
+		LastMessageAtUnixMs: thread.FlowerActivity.LastMessageAtUnixMs,
+		ActivitySignature:   strings.TrimSpace(thread.FlowerActivity.ActivitySignature),
+		WaitingPromptID:     strings.TrimSpace(thread.FlowerActivity.WaitingPromptID),
 	}
 }
 
@@ -642,9 +641,6 @@ func normalizeFlowerSnapshot(snapshot threadreadstate.FlowerSnapshot) threadread
 	if snapshot.ActivityRevision < 0 {
 		snapshot.ActivityRevision = 0
 	}
-	if snapshot.ActivityRevision < snapshot.LastMessageAtUnixMs {
-		snapshot.ActivityRevision = snapshot.LastMessageAtUnixMs
-	}
 	snapshot.ActivitySignature = strings.TrimSpace(snapshot.ActivitySignature)
 	snapshot.WaitingPromptID = strings.TrimSpace(snapshot.WaitingPromptID)
 	return snapshot
@@ -663,81 +659,7 @@ func normalizeFlowerRecord(record threadreadstate.Record) threadreadstate.Record
 }
 
 func flowerIsUnread(snapshot threadreadstate.FlowerSnapshot, record threadreadstate.Record) bool {
-	if snapshot.ActivityRevision > record.LastSeenActivityRevision {
-		return true
-	}
-	if snapshot.LastMessageAtUnixMs > record.LastReadMessageAtUnixMs {
-		return true
-	}
-	if snapshot.ActivitySignature != "" && snapshot.ActivitySignature != record.LastSeenActivitySignature {
-		return true
-	}
-	return snapshot.WaitingPromptID != "" && snapshot.WaitingPromptID != record.LastSeenWaitingPromptID
-}
-
-func flowerActivityRevision(thread ai.ThreadView) int64 {
-	base := maxInt64(thread.LastMessageAtUnixMs, thread.RunUpdatedAtUnixMs)
-	if base <= 0 {
-		return flowerRunStatusRevisionOrdinal(thread.RunStatus)
-	}
-	return base*10 + flowerRunStatusRevisionOrdinal(thread.RunStatus)
-}
-
-func flowerActivitySignature(status string, turnID string, activityRevision int64, waitingPromptID string, lastMessagePreview string) string {
-	tokens := make([]string, 0, 4)
-	normalizedStatus := normalizeStatusToken(status)
-	if normalizedStatus != "" {
-		tokens = append(tokens, "status:"+normalizedStatus)
-	}
-	if turnID = strings.TrimSpace(turnID); turnID != "" {
-		tokens = append(tokens, "turn:"+turnID)
-	}
-	tokens = append(tokens, "activity:"+formatInt64Token(activityRevision))
-	if waitingPromptID = strings.TrimSpace(waitingPromptID); waitingPromptID != "" {
-		tokens = append(tokens, "prompt:"+waitingPromptID)
-	}
-	if messageToken := flowerMessagePreviewToken(lastMessagePreview); messageToken != "" {
-		tokens = append(tokens, "message:"+messageToken)
-	}
-	return strings.Join(tokens, "\u001f")
-}
-
-func flowerMessagePreviewToken(preview string) string {
-	preview = strings.TrimSpace(preview)
-	if preview == "" {
-		return ""
-	}
-	h := fnv.New64a()
-	_, _ = h.Write([]byte(preview))
-	return strconv.FormatUint(h.Sum64(), 36)
-}
-
-func flowerRunStatusRevisionOrdinal(status string) int64 {
-	switch normalizeStatusToken(status) {
-	case "", "idle":
-		return 0
-	case "accepted":
-		return 1
-	case "running", "recovering", "finalizing":
-		return 2
-	case "waiting_approval":
-		return 3
-	case "waiting_user":
-		return 4
-	case "success", "completed":
-		return 5
-	case "failed", "timed_out", "canceled", "cancelled":
-		return 6
-	default:
-		return 0
-	}
-}
-
-func formatInt64Token(value int64) string {
-	if value < 0 {
-		value = 0
-	}
-	return strconv.FormatInt(value, 10)
+	return snapshot.ActivityRevision > record.LastSeenActivityRevision
 }
 
 func codexSnapshotFromThread(
@@ -863,11 +785,4 @@ func isLowerAlphaNumeric(r rune) bool {
 
 func isUpperAlpha(r rune) bool {
 	return r >= 'A' && r <= 'Z'
-}
-
-func maxInt64(left int64, right int64) int64 {
-	if left > right {
-		return left
-	}
-	return right
 }
