@@ -428,11 +428,13 @@ html.dark .flower-component-shell {
   box-shadow:
     0 20px 42px -28px color-mix(in srgb, black 72%, transparent),
     0 1px 0 color-mix(in srgb, white 34%, transparent) inset;
+  visibility: hidden;
   opacity: 0;
   transform: translateY(0.2rem);
   transition:
     opacity 120ms ease,
-    transform 120ms ease;
+    transform 120ms ease,
+    visibility 120ms ease;
 }
 
 .flower-composer-context-tooltip::after {
@@ -448,8 +450,8 @@ html.dark .flower-component-shell {
   transform: rotate(45deg);
 }
 
-.flower-composer-context-indicator:hover .flower-composer-context-tooltip,
-.flower-composer-context-indicator:focus-within .flower-composer-context-tooltip {
+.flower-composer-context-tooltip[data-open='true'] {
+  visibility: visible;
   opacity: 1;
   transform: translateY(0);
 }

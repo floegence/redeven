@@ -78,7 +78,7 @@ describe('Flower model status indicator', () => {
     expect(tooltipRule).toContain('opacity: 0');
     expect(css).toContain(".flower-composer-context-indicator[data-context-pressure='warning'] .flower-composer-context-progress");
     expect(css).toContain(".flower-composer-context-indicator[data-context-pressure='danger'] .flower-composer-context-progress");
-    expect(css).toContain('.flower-composer-context-indicator:focus-within .flower-composer-context-tooltip');
+    expect(css).toContain(".flower-composer-context-tooltip[data-open='true']");
   });
 
   it('renders compaction dividers as non-interactive timeline separators', () => {
