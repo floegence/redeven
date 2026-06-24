@@ -1,8 +1,8 @@
 import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, Copy, FileText, FolderOpen, GitBranch, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
-import { Button, FloatingWindow } from '@floegence/floe-webapp-core/ui';
+import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Clock, Copy, FileText, FolderOpen, GitBranch, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Button, FloatingWindow, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
@@ -115,6 +115,27 @@ type OptionalRecordString = Readonly<{
   ok: boolean;
   value: string;
 }>;
+type FlowerFloatingPoint = Readonly<{
+  x: number;
+  y: number;
+}>;
+type FlowerScrollTailController = Readonly<{
+  bind: (node: HTMLDivElement | undefined) => void;
+  nearBottom: Accessor<boolean>;
+  markNearBottom: () => void;
+  captureWasNearBottom: () => boolean;
+  onScroll: () => void;
+  measureAfterLayout: () => void;
+  scheduleTailScroll: (options?: Readonly<{ smooth?: boolean }>) => void;
+  scrollToBottom: (options?: Readonly<{ smooth?: boolean }>) => void;
+  dispose: () => void;
+}>;
+type FlowerSubagentDetailTailRequest = Readonly<{
+  parentThreadID: string;
+  childThreadID: string;
+  openedRevision: number;
+  afterOrdinal: number;
+}>;
 
 const THREAD_RAIL_WIDTH_STORAGE_KEY = 'redeven.flower.threadRailWidth';
 const THREAD_RAIL_WIDTH_DEFAULT = 272;
@@ -128,6 +149,14 @@ const MESSAGE_COPY_RESET_MS = 1600;
 const TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX = 96;
 const TRANSCRIPT_SCROLL_TO_LATEST_MS = 220;
 const SUBAGENT_DETAIL_PAGE_SIZE = 200;
+const SUBAGENT_DROPDOWN_ESTIMATED_SIZE = { width: 368, height: 448 } as const;
+const SUBAGENT_DETAIL_TAIL_RUNNING_INTERVAL_MS = 1500;
+const SUBAGENT_DETAIL_TAIL_QUEUED_INTERVAL_MS = 2500;
+const SUBAGENT_DETAIL_TAIL_ERROR_INTERVAL_MS = 4000;
+const FLOWER_SURFACE_LAYER = {
+  subagentWindow: 160,
+} as const;
+const FLOWER_SUBAGENT_TERMINAL_STATUSES = new Set<FlowerSubagentPanelStatus>(['completed', 'failed', 'canceled', 'timed_out']);
 const ASK_FLOWER_CONTEXT_TARGET_LOCALITIES = new Set(['auto', 'current_runtime', 'remote_runtime', 'local_model_remote_target']);
 const ASK_FLOWER_CONTEXT_SOURCE_SURFACES = new Set([
   'desktop_welcome_environment_card',
@@ -200,6 +229,132 @@ export {
   projectFlowerThreadListItem,
 } from './flowerSurfaceModel';
 
+function createFlowerScrollTailController(options: Readonly<{
+  reducedMotionPreferred: () => boolean;
+  requestAnimationFrame: (callback: FrameRequestCallback) => number;
+  cancelAnimationFrame: (handle: number) => void;
+  setNearBottomValue?: (nearBottom: boolean) => void;
+}>): FlowerScrollTailController {
+  const [nearBottom, setNearBottom] = createSignal(true);
+  let node: HTMLDivElement | undefined;
+  let measureFrame = 0;
+  let scrollFrame = 0;
+  let smoothScrollFrame = 0;
+  let scrollToBottomInProgress = false;
+  let nearBottomValue = true;
+
+  const setValue = (value: boolean) => {
+    nearBottomValue = value;
+    setNearBottom(value);
+    options.setNearBottomValue?.(value);
+  };
+  const isNearBottom = (): boolean => {
+    if (!node) return true;
+    return node.scrollHeight - node.scrollTop - node.clientHeight <= TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX;
+  };
+  const cancelSmoothScroll = () => {
+    if (smoothScrollFrame) {
+      options.cancelAnimationFrame(smoothScrollFrame);
+      smoothScrollFrame = 0;
+    }
+    scrollToBottomInProgress = false;
+  };
+  const setScrollTop = (target: HTMLDivElement, scrollTop: number) => {
+    target.scrollTop = scrollTop;
+  };
+  const scrollToBottom = (scrollOptions: Readonly<{ smooth?: boolean }> = {}) => {
+    const target = node;
+    if (!target) return;
+    const targetScrollTop = Math.max(0, target.scrollHeight - target.clientHeight);
+    cancelSmoothScroll();
+    if (!scrollOptions.smooth || options.reducedMotionPreferred() || typeof performance === 'undefined') {
+      scrollToBottomInProgress = false;
+      setScrollTop(target, targetScrollTop);
+      setValue(true);
+      return;
+    }
+    const startScrollTop = target.scrollTop;
+    const delta = targetScrollTop - startScrollTop;
+    if (Math.abs(delta) <= 1) {
+      setScrollTop(target, targetScrollTop);
+      setValue(true);
+      return;
+    }
+    const startedAt = performance.now();
+    const step = (timestamp: number) => {
+      const progress = Math.min(1, (timestamp - startedAt) / TRANSCRIPT_SCROLL_TO_LATEST_MS);
+      const eased = 1 - ((1 - progress) ** 3);
+      setScrollTop(target, startScrollTop + (delta * eased));
+      if (progress < 1) {
+        smoothScrollFrame = options.requestAnimationFrame(step);
+        return;
+      }
+      smoothScrollFrame = 0;
+      scrollToBottomInProgress = false;
+      setScrollTop(target, targetScrollTop);
+      setValue(true);
+    };
+    scrollToBottomInProgress = true;
+    smoothScrollFrame = options.requestAnimationFrame(step);
+    setValue(true);
+  };
+  const measureAfterLayout = () => {
+    if (measureFrame) {
+      options.cancelAnimationFrame(measureFrame);
+    }
+    measureFrame = options.requestAnimationFrame(() => {
+      measureFrame = 0;
+      if (scrollToBottomInProgress) {
+        setValue(true);
+        return;
+      }
+      setValue(isNearBottom());
+    });
+  };
+  const scheduleTailScroll = (scrollOptions: Readonly<{ smooth?: boolean }> = {}) => {
+    if (!nearBottomValue || scrollFrame) return;
+    scrollFrame = options.requestAnimationFrame(() => {
+      scrollFrame = 0;
+      scrollToBottom(scrollOptions);
+    });
+  };
+
+  return {
+    bind: (nextNode) => {
+      node = nextNode;
+      setValue(isNearBottom());
+    },
+    nearBottom,
+    markNearBottom: () => setValue(true),
+    captureWasNearBottom: () => {
+      const value = isNearBottom();
+      setValue(value);
+      return value;
+    },
+    onScroll: () => {
+      if (scrollToBottomInProgress) {
+        setValue(true);
+        return;
+      }
+      setValue(isNearBottom());
+    },
+    measureAfterLayout,
+    scheduleTailScroll,
+    scrollToBottom,
+    dispose: () => {
+      if (measureFrame) {
+        options.cancelAnimationFrame(measureFrame);
+        measureFrame = 0;
+      }
+      if (scrollFrame) {
+        options.cancelAnimationFrame(scrollFrame);
+        scrollFrame = 0;
+      }
+      cancelSmoothScroll();
+    },
+  };
+}
+
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -240,30 +395,125 @@ function loadThreadRailWidth(): number {
   return Number.isFinite(stored) ? clampThreadRailWidth(stored) : THREAD_RAIL_WIDTH_DEFAULT;
 }
 
+function hashSubagentPreview(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function subagentTimelineRowBaseIdentity(row: FlowerSubagentTimelineRow): string {
+  return [
+    'row',
+    String(Math.max(0, Math.floor(Number(row.ordinal ?? 0)))),
+    trimString(row.kind),
+    trimString(row.type ?? ''),
+  ].join(':');
+}
+
+function subagentTimelineRowIdentity(row: FlowerSubagentTimelineRow): string {
+  const base = subagentTimelineRowBaseIdentity(row);
+  const metadataID = trimString(row.metadata?.id)
+    || trimString(row.metadata?.row_id)
+    || trimString(row.metadata?.event_id)
+    || trimString(row.metadata?.activity_id);
+  if (metadataID) return `${base}:meta:${metadataID}`;
+  const toolCallID = trimString(row.tool_call?.id);
+  if (toolCallID) return `${base}:tool-call:${toolCallID}`;
+  const toolResultID = trimString(row.tool_result?.call_id);
+  if (toolResultID) return `${base}:tool-result:${toolResultID}`;
+  const activityItems = row.activity?.items.map((item) => (
+    trimString(item.item_id)
+    || trimString(item.tool_id)
+    || trimString(item.tool_name)
+    || trimString(item.label)
+  )).filter(Boolean).join('\x1e') ?? '';
+  const activityID = activityItems
+    || trimString(row.activity?.turn_id)
+    || trimString(row.activity?.trace_id)
+    || trimString(row.activity?.run_id);
+  if (activityID) return `${base}:activity:${activityID}`;
+  const preview = [
+    row.message?.text,
+    row.message?.preview,
+    row.error,
+    row.generic?.title,
+    row.generic?.body,
+  ].map((value) => trimString(value)).filter(Boolean).join('\x1e');
+  return preview ? `${base}:preview:${hashSubagentPreview(preview)}` : base;
+}
+
 function mergeSubagentDetailPage(current: FlowerSubagentDetail | null, page: FlowerSubagentDetail): FlowerSubagentDetail {
   if (!current || current.summary.thread_id !== page.summary.thread_id) return page;
-  const seen = new Set<string>();
-  const timeline: FlowerSubagentTimelineRow[] = [];
-  const keyFor = (row: FlowerSubagentTimelineRow) => `${row.ordinal}\x00${row.kind}\x00${row.type ?? ''}`;
+  const pageIsNewer = Number(page.generated_at_ms ?? 0) >= Number(current.generated_at_ms ?? 0);
+  const metadataSource = pageIsNewer ? page : current;
+  const byKey = new Map<string, FlowerSubagentTimelineRow>();
+  const order = new Map<string, number>();
   for (const row of current.timeline) {
-    const key = keyFor(row);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    timeline.push(row);
+    const key = subagentTimelineRowIdentity(row);
+    if (!order.has(key)) order.set(key, order.size);
+    byKey.set(key, row);
   }
   for (const row of page.timeline) {
-    const key = keyFor(row);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    timeline.push(row);
+    const key = subagentTimelineRowIdentity(row);
+    if (!order.has(key)) order.set(key, order.size);
+    byKey.set(key, row);
   }
-  timeline.sort((left, right) => left.ordinal - right.ordinal);
+  const timeline = Array.from(byKey.entries())
+    .sort(([leftKey, left], [rightKey, right]) => {
+      if (left.ordinal !== right.ordinal) return left.ordinal - right.ordinal;
+      return (order.get(leftKey) ?? 0) - (order.get(rightKey) ?? 0);
+    })
+    .map(([, row]) => row);
   return {
-    ...page,
-    summary: page.summary,
+    ...metadataSource,
     timeline,
-    retained_from: page.retained_from ?? current.retained_from,
+    summary: metadataSource.summary,
+    next_ordinal: Math.max(
+      Math.floor(Number(current.next_ordinal ?? 0)),
+      Math.floor(Number(page.next_ordinal ?? 0)),
+    ) || metadataSource.next_ordinal,
+    has_more: pageIsNewer ? page.has_more : current.has_more,
+    retained_from: Math.min(
+      Math.floor(Number(current.retained_from ?? page.retained_from ?? 0)),
+      Math.floor(Number(page.retained_from ?? current.retained_from ?? 0)),
+    ) || metadataSource.retained_from,
+    generated_at_ms: Math.max(Number(current.generated_at_ms ?? 0), Number(page.generated_at_ms ?? 0)),
   };
+}
+
+function normalizeSubagentPanelStatus(value: unknown): FlowerSubagentPanelStatus {
+  const raw = typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+    ? trimString(String(value)).toLowerCase()
+    : '';
+  switch (raw) {
+    case 'queued':
+      return 'queued';
+    case 'running':
+      return 'running';
+    case 'waiting':
+    case 'waiting_input':
+    case 'interrupted':
+      return 'waiting_input';
+    case 'completed':
+      return 'completed';
+    case 'failed':
+      return 'failed';
+    case 'canceled':
+    case 'cancelled':
+    case 'closed':
+      return 'canceled';
+    case 'timed_out':
+      return 'timed_out';
+    default:
+      return 'unknown';
+  }
+}
+
+function isSubagentTerminalStatus(status: FlowerSubagentPanelStatus): boolean {
+  return FLOWER_SUBAGENT_TERMINAL_STATUSES.has(status);
 }
 
 export type FlowerThreadFocusRequest = Readonly<{
@@ -318,29 +568,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
   const [approvalSubmitting, setApprovalSubmitting] = createSignal<Record<string, FlowerApprovalSubmittingState>>({});
   const [copiedMessageAction, setCopiedMessageAction] = createSignal('');
-  const [transcriptNearBottomState, setTranscriptNearBottomState] = createSignal(true);
   const [transcriptLayoutRevision, setTranscriptLayoutRevision] = createSignal(0);
   const [subagentDropdownOpen, setSubagentDropdownOpen] = createSignal(false);
+  const [subagentDropdownPosition, setSubagentDropdownPosition] = createSignal<FlowerFloatingPoint>({ x: 0, y: 0 });
   const [activeSubagentID, setActiveSubagentID] = createSignal('');
   const [subagentDetail, setSubagentDetail] = createSignal<FlowerSubagentDetail | null>(null);
   const [subagentDetailLoading, setSubagentDetailLoading] = createSignal(false);
   const [subagentDetailLoadingMore, setSubagentDetailLoadingMore] = createSignal(false);
   const [subagentDetailError, setSubagentDetailError] = createSignal('');
+  const [subagentDetailTailLoading, setSubagentDetailTailLoading] = createSignal(false);
+  const [subagentDetailTailError, setSubagentDetailTailError] = createSignal('');
+  const [subagentDetailTailRevision, setSubagentDetailTailRevision] = createSignal(0);
+  const [subagentDetailOpenedRevision, setSubagentDetailOpenedRevision] = createSignal(0);
   let threadLoadSequence = 0;
   let threadLocalMutationRevision = 0;
   let threadsRefreshSequence = 0;
   let startedFocusThreadRequestID = '';
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
-  let transcriptRef: HTMLDivElement | undefined;
   let subagentTriggerRef: HTMLButtonElement | undefined;
   let subagentDropdownRef: HTMLDivElement | undefined;
   let renameDialogRef: HTMLDivElement | undefined;
   let renameInputRef: HTMLInputElement | undefined;
   let renameRestoreRef: HTMLElement | undefined;
-  let transcriptNearBottom = true;
-  let transcriptMeasureFrame = 0;
-  let transcriptSmoothScrollFrame = 0;
-  let transcriptScrollToBottomInProgress = false;
+  let subagentDetailTailTimer: number | undefined;
+  let subagentDetailTailInFlight: FlowerSubagentDetailTailRequest | null = null;
   let backgroundThreadsRefreshInFlight = false;
   let composerFocusToken = 0;
   const [composerFocusRevision, setComposerFocusRevision] = createSignal(0);
@@ -351,11 +602,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const pendingReadPersistenceSnapshots = new Map<string, FlowerThreadActivitySnapshot>();
   const liveCursors = new Map<string, number>();
   let copiedMessageResetTimer: number | undefined;
-
-  const setTranscriptNearBottomValue = (nearBottom: boolean) => {
-    transcriptNearBottom = nearBottom;
-    setTranscriptNearBottomState(nearBottom);
-  };
 
   const reducedMotionPreferred = (): boolean => (
     typeof window !== 'undefined'
@@ -377,6 +623,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     window.clearTimeout(handle);
   };
+  const transcriptScroll = createFlowerScrollTailController({
+    reducedMotionPreferred,
+    requestAnimationFrame: requestTranscriptAnimationFrame,
+    cancelAnimationFrame: cancelTranscriptAnimationFrame,
+  });
+  const subagentDetailScroll = createFlowerScrollTailController({
+    reducedMotionPreferred,
+    requestAnimationFrame: requestTranscriptAnimationFrame,
+    cancelAnimationFrame: cancelTranscriptAnimationFrame,
+  });
 
   const selectedThread = createMemo(() => threads().find((thread) => thread.thread_id === selectedThreadID()) ?? null);
   const selectedThreadLiveStatus = createMemo(() => selectedThread()?.status ?? 'idle');
@@ -581,6 +837,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(() => {
     const dropdownOpen = subagentDropdownOpen();
     if (!dropdownOpen) return;
+    updateSubagentDropdownPosition();
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
@@ -594,11 +851,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setSubagentDropdownOpen(false);
       subagentTriggerRef?.focus();
     };
+    const onReposition = () => updateSubagentDropdownPosition();
     window.addEventListener('pointerdown', onPointerDown);
     window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('resize', onReposition);
+    window.addEventListener('scroll', onReposition, true);
     onCleanup(() => {
       window.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('resize', onReposition);
+      window.removeEventListener('scroll', onReposition, true);
     });
   });
 
@@ -930,7 +1192,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     closeSubagentOverlays();
     const sequence = ++threadLoadSequence;
     const existing = threads().find((thread) => thread.thread_id === tid) ?? null;
-    setTranscriptNearBottomValue(true);
+    transcriptScroll.markNearBottom();
     setSelectedThreadID(tid);
     setChatSubmitError('');
     setInputSubmitError('');
@@ -1249,6 +1511,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSidePanel('chat');
   };
 
+  const clearSubagentDetailTail = () => {
+    if (subagentDetailTailTimer !== undefined) {
+      window.clearTimeout(subagentDetailTailTimer);
+      subagentDetailTailTimer = undefined;
+    }
+    subagentDetailTailInFlight = null;
+    setSubagentDetailTailLoading(false);
+    setSubagentDetailTailError('');
+    subagentDetailScroll.dispose();
+    subagentDetailScroll.markNearBottom();
+  };
+
   const closeSubagentOverlays = () => {
     setSubagentDropdownOpen(false);
     setActiveSubagentID('');
@@ -1256,6 +1530,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSubagentDetailError('');
     setSubagentDetailLoading(false);
     setSubagentDetailLoadingMore(false);
+    clearSubagentDetailTail();
+    setSubagentDetailOpenedRevision((revision) => revision + 1);
   };
 
   const settingsReadOnly = createMemo(() => modelSource()?.kind === 'desktop_model_source');
@@ -1265,7 +1541,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSidePanel('settings');
   };
 
+  const updateSubagentDropdownPosition = () => {
+    const rect = subagentTriggerRef?.getBoundingClientRect();
+    if (!rect) return;
+    setSubagentDropdownPosition({
+      x: Math.max(8, rect.right - SUBAGENT_DROPDOWN_ESTIMATED_SIZE.width),
+      y: rect.bottom + 8,
+    });
+  };
+
   const openSubagents = () => {
+    updateSubagentDropdownPosition();
     setSubagentDropdownOpen((open) => !open);
   };
 
@@ -1273,22 +1559,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const parentID = trimString(selectedThread()?.thread_id);
     const childID = trimString(item.threadID || item.subagentID);
     if (!parentID || !childID) return;
-    const requestID = `${parentID}\x00${childID}`;
+    const openedRevision = untrack(subagentDetailOpenedRevision) + 1;
+    const requestID = `${parentID}\x00${childID}\x00${openedRevision}`;
+    setSubagentDetailOpenedRevision(openedRevision);
+    clearSubagentDetailTail();
     setActiveSubagentID(childID);
     setSubagentDropdownOpen(false);
     setSubagentDetail(null);
     setSubagentDetailError('');
     setSubagentDetailLoading(true);
     setSubagentDetailLoadingMore(false);
+    setSubagentDetailTailRevision(0);
     try {
       const detail = await props.adapter.loadSubagentDetail(parentID, childID, 0, SUBAGENT_DETAIL_PAGE_SIZE);
-      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}` !== requestID) return;
+      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}\x00${subagentDetailOpenedRevision()}` !== requestID) return;
       setSubagentDetail(detail);
+      setSubagentDetailTailRevision((revision) => revision + 1);
+      requestTranscriptAnimationFrame(() => subagentDetailScroll.scrollToBottom({ smooth: false }));
     } catch (error) {
-      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}` !== requestID) return;
+      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}\x00${subagentDetailOpenedRevision()}` !== requestID) return;
       setSubagentDetailError(getErrorMessage(error));
     } finally {
-      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}` === requestID) {
+      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}\x00${subagentDetailOpenedRevision()}` === requestID) {
         setSubagentDetailLoading(false);
       }
     }
@@ -1298,20 +1590,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const parentID = trimString(selectedThread()?.thread_id);
     const childID = trimString(activeSubagentID());
     const detail = subagentDetail();
-    if (!parentID || !childID || !detail?.has_more || subagentDetailLoadingMore()) return;
+    if (!parentID || !childID || !detail?.has_more || subagentDetailLoadingMore() || subagentDetailTailInFlight) return;
     const afterOrdinal = Math.max(0, Math.floor(detail.next_ordinal ?? detail.timeline[detail.timeline.length - 1]?.ordinal ?? 0));
-    const requestID = `${parentID}\x00${childID}`;
+    const openedRevision = subagentDetailOpenedRevision();
+    const requestID = `${parentID}\x00${childID}\x00${openedRevision}`;
+    const wasNearBottom = subagentDetailScroll.captureWasNearBottom();
     setSubagentDetailError('');
     setSubagentDetailLoadingMore(true);
     try {
       const page = await props.adapter.loadSubagentDetail(parentID, childID, afterOrdinal, SUBAGENT_DETAIL_PAGE_SIZE);
-      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}` !== requestID) return;
+      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}\x00${subagentDetailOpenedRevision()}` !== requestID) return;
       setSubagentDetail((current) => mergeSubagentDetailPage(current, page));
+      setSubagentDetailTailRevision((revision) => revision + 1);
+      if (wasNearBottom) {
+        requestTranscriptAnimationFrame(() => subagentDetailScroll.scheduleTailScroll());
+      }
     } catch (error) {
-      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}` !== requestID) return;
+      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}\x00${subagentDetailOpenedRevision()}` !== requestID) return;
       setSubagentDetailError(getErrorMessage(error));
     } finally {
-      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}` === requestID) {
+      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}\x00${subagentDetailOpenedRevision()}` === requestID) {
         setSubagentDetailLoadingMore(false);
       }
     }
@@ -1448,7 +1746,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const requestID = trimString(props.focusThreadRequest?.request_id);
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     threadLoadSequence += 1;
-    setTranscriptNearBottomValue(true);
+    transcriptScroll.markNearBottom();
     closeSubagentOverlays();
     setSelectedThreadID('');
     setPendingTurn(null);
@@ -1488,105 +1786,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectThread = (threadID: string) => {
     const requestID = trimString(props.focusThreadRequest?.request_id);
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
-    setTranscriptNearBottomValue(true);
+    transcriptScroll.markNearBottom();
     void loadAndSelectThread(threadID);
   };
 
-  const transcriptIsNearBottom = (): boolean => {
-    const node = transcriptRef;
-    if (!node) return true;
-    return node.scrollHeight - node.scrollTop - node.clientHeight <= TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX;
-  };
-
-  const updateTranscriptNearBottom = () => {
-    if (transcriptScrollToBottomInProgress) {
-      setTranscriptNearBottomValue(true);
-      return;
-    }
-    setTranscriptNearBottomValue(transcriptIsNearBottom());
-  };
-
-  const cancelTranscriptSmoothScroll = () => {
-    if (transcriptSmoothScrollFrame) {
-      cancelTranscriptAnimationFrame(transcriptSmoothScrollFrame);
-      transcriptSmoothScrollFrame = 0;
-    }
-    transcriptScrollToBottomInProgress = false;
-  };
-
-  const setTranscriptScrollTop = (node: HTMLDivElement, scrollTop: number) => {
-    node.scrollTop = scrollTop;
-  };
-
-  const scrollTranscriptToBottom = (options: Readonly<{ smooth?: boolean }> = {}) => {
-    const node = transcriptRef;
-    if (!node) return;
-    const targetScrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
-    cancelTranscriptSmoothScroll();
-    if (!options.smooth || reducedMotionPreferred() || typeof performance === 'undefined') {
-      transcriptScrollToBottomInProgress = false;
-      setTranscriptScrollTop(node, targetScrollTop);
-      setTranscriptNearBottomValue(true);
-      return;
-    }
-    const startScrollTop = node.scrollTop;
-    const delta = targetScrollTop - startScrollTop;
-    if (Math.abs(delta) <= 1) {
-      setTranscriptScrollTop(node, targetScrollTop);
-      setTranscriptNearBottomValue(true);
-      return;
-    }
-    const startedAt = performance.now();
-    const step = (timestamp: number) => {
-      const progress = Math.min(1, (timestamp - startedAt) / TRANSCRIPT_SCROLL_TO_LATEST_MS);
-      const eased = 1 - ((1 - progress) ** 3);
-      setTranscriptScrollTop(node, startScrollTop + (delta * eased));
-      if (progress < 1) {
-        transcriptSmoothScrollFrame = requestTranscriptAnimationFrame(step);
-        return;
-      }
-      transcriptSmoothScrollFrame = 0;
-      transcriptScrollToBottomInProgress = false;
-      setTranscriptScrollTop(node, targetScrollTop);
-      setTranscriptNearBottomValue(true);
-    };
-    transcriptScrollToBottomInProgress = true;
-    transcriptSmoothScrollFrame = requestTranscriptAnimationFrame(step);
-    setTranscriptNearBottomValue(true);
-  };
-
-  const measureTranscriptNearBottomAfterLayout = () => {
-    if (transcriptMeasureFrame) {
-      cancelTranscriptAnimationFrame(transcriptMeasureFrame);
-    }
-    transcriptMeasureFrame = requestTranscriptAnimationFrame(() => {
-      transcriptMeasureFrame = 0;
-      if (transcriptScrollToBottomInProgress) {
-        setTranscriptNearBottomValue(true);
-        return;
-      }
-      setTranscriptNearBottomValue(transcriptIsNearBottom());
-    });
-  };
-
-  let transcriptScrollFrame = 0;
-  const scheduleTranscriptTailScroll = () => {
-    if (!transcriptNearBottom || transcriptScrollFrame) return;
-    transcriptScrollFrame = requestTranscriptAnimationFrame(() => {
-      transcriptScrollFrame = 0;
-      scrollTranscriptToBottom();
-    });
-  };
+  const updateTranscriptNearBottom = () => transcriptScroll.onScroll();
+  const scrollTranscriptToBottom = (options: Readonly<{ smooth?: boolean }> = {}) => transcriptScroll.scrollToBottom(options);
+  const measureTranscriptNearBottomAfterLayout = () => transcriptScroll.measureAfterLayout();
+  const scheduleTranscriptTailScroll = () => transcriptScroll.scheduleTailScroll();
   onCleanup(() => {
-    if (transcriptMeasureFrame) {
-      cancelTranscriptAnimationFrame(transcriptMeasureFrame);
-      transcriptMeasureFrame = 0;
-    }
-    if (transcriptScrollFrame) {
-      cancelTranscriptAnimationFrame(transcriptScrollFrame);
-      transcriptScrollFrame = 0;
-    }
-    cancelTranscriptSmoothScroll();
+    transcriptScroll.dispose();
+    subagentDetailScroll.dispose();
     if (copiedMessageResetTimer !== undefined) {
       window.clearTimeout(copiedMessageResetTimer);
       copiedMessageResetTimer = undefined;
@@ -1624,6 +1834,121 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (activeSubagentItem()) return;
     closeSubagentOverlays();
   });
+
+  const subagentDetailActiveStatus = createMemo<FlowerSubagentPanelStatus>(() => {
+    const itemStatus = activeSubagentItem()?.status ?? 'unknown';
+    const detailStatus = normalizeSubagentPanelStatus(subagentDetail()?.summary.status);
+    if (isSubagentTerminalStatus(itemStatus)) return itemStatus;
+    if (isSubagentTerminalStatus(detailStatus)) return detailStatus;
+    if (detailStatus !== 'unknown') return detailStatus;
+    return itemStatus;
+  });
+
+  const subagentDetailCanTail = createMemo(() => {
+    switch (subagentDetailActiveStatus()) {
+      case 'queued':
+      case 'running':
+      case 'waiting_input':
+        return Boolean(activeSubagentID());
+      default:
+        return false;
+    }
+  });
+
+  const latestSubagentDetailOrdinal = (): number => {
+    const detail = subagentDetail();
+    if (!detail) return 0;
+    const lastOrdinal = detail.timeline.reduce((max, row) => Math.max(max, Math.floor(Number(row.ordinal ?? 0))), 0);
+    const nextOrdinal = Math.floor(Number(detail.next_ordinal ?? 0));
+    return Math.max(0, nextOrdinal, lastOrdinal);
+  };
+
+  const runSubagentDetailTailRequest = async (request: FlowerSubagentDetailTailRequest): Promise<boolean> => {
+    if (subagentDetailTailInFlight) return false;
+    subagentDetailTailInFlight = request;
+    setSubagentDetailTailLoading(true);
+    const wasNearBottom = subagentDetailScroll.captureWasNearBottom();
+    try {
+      const page = await props.adapter.loadSubagentDetail(
+        request.parentThreadID,
+        request.childThreadID,
+        request.afterOrdinal,
+        SUBAGENT_DETAIL_PAGE_SIZE,
+      );
+      const stillCurrent = trimString(selectedThread()?.thread_id) === request.parentThreadID
+        && trimString(activeSubagentID()) === request.childThreadID
+        && subagentDetailOpenedRevision() === request.openedRevision;
+      if (!stillCurrent) return false;
+      setSubagentDetail((current) => mergeSubagentDetailPage(current, page));
+      setSubagentDetailTailError('');
+      setSubagentDetailTailRevision((revision) => revision + 1);
+      if (wasNearBottom) {
+        requestTranscriptAnimationFrame(() => subagentDetailScroll.scheduleTailScroll());
+      }
+      return true;
+    } catch (error) {
+      const stillCurrent = trimString(selectedThread()?.thread_id) === request.parentThreadID
+        && trimString(activeSubagentID()) === request.childThreadID
+        && subagentDetailOpenedRevision() === request.openedRevision;
+      if (stillCurrent) {
+        setSubagentDetailTailError(getErrorMessage(error));
+      }
+      return false;
+    } finally {
+      const stillCurrent = trimString(selectedThread()?.thread_id) === request.parentThreadID
+        && trimString(activeSubagentID()) === request.childThreadID
+        && subagentDetailOpenedRevision() === request.openedRevision;
+      if (stillCurrent) {
+        setSubagentDetailTailLoading(false);
+      }
+      if (subagentDetailTailInFlight === request) {
+        subagentDetailTailInFlight = null;
+      }
+    }
+  };
+
+  createEffect(() => {
+    const parentID = trimString(selectedThread()?.thread_id);
+    const childID = trimString(activeSubagentID());
+    const openedRevision = subagentDetailOpenedRevision();
+    const canTail = subagentDetailCanTail();
+    subagentDetailTailRevision();
+    if (subagentDetailTailTimer !== undefined) {
+      window.clearTimeout(subagentDetailTailTimer);
+      subagentDetailTailTimer = undefined;
+    }
+    if (!parentID || !childID || !openedRevision || !canTail || subagentDetailLoading() || subagentDetailLoadingMore()) {
+      subagentDetailTailInFlight = null;
+      setSubagentDetailTailLoading(false);
+      return;
+    }
+    const status = subagentDetailActiveStatus();
+    const interval = subagentDetailTailError()
+      ? SUBAGENT_DETAIL_TAIL_ERROR_INTERVAL_MS
+      : status === 'queued'
+        ? SUBAGENT_DETAIL_TAIL_QUEUED_INTERVAL_MS
+        : SUBAGENT_DETAIL_TAIL_RUNNING_INTERVAL_MS;
+    subagentDetailTailTimer = window.setTimeout(() => {
+      subagentDetailTailTimer = undefined;
+      if (subagentDetailTailInFlight || subagentDetailLoadingMore()) return;
+      const request: FlowerSubagentDetailTailRequest = {
+        parentThreadID: parentID,
+        childThreadID: childID,
+        openedRevision,
+        afterOrdinal: latestSubagentDetailOrdinal(),
+      };
+      void runSubagentDetailTailRequest(request).finally(() => {
+        setSubagentDetailTailRevision((revision) => revision + 1);
+      });
+    }, interval);
+    onCleanup(() => {
+      if (subagentDetailTailTimer !== undefined) {
+        window.clearTimeout(subagentDetailTailTimer);
+        subagentDetailTailTimer = undefined;
+      }
+    });
+  });
+
   const visibleTimelineEntries = createMemo((): readonly FlowerTimelineEntry[] => {
     return selectedTimelineEntries();
   });
@@ -1707,7 +2032,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadHasModelStatus = createMemo(() => selectedModelIOStatus() != null);
   const showScrollToLatestButton = createMemo(() => (
     (selectedThreadHasContent() || selectedThreadHasModelStatus())
-    && !transcriptNearBottomState()
+    && !transcriptScroll.nearBottom()
   ));
   createEffect(() => {
     selectedThreadID();
@@ -1733,14 +2058,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const status = selectedModelIOStatus();
     return status ? modelStatusLabel(status.phase) : '';
   });
-  const modelStatusIndicator = () => {
-    const label = selectedModelStatusLabel();
+  const modelStatusIndicator = (status: FlowerModelIOStatus | null, label: string) => {
     return (
-      <div class="flower-model-status-indicator" data-model-io-phase={selectedModelIOStatus()?.phase}>
+      <div class="flower-model-status-indicator" data-model-io-phase={status?.phase}>
         <span class="flower-model-status-text" data-text={label}>{label}</span>
       </div>
     );
   };
+  const selectedModelStatusIndicator = () => modelStatusIndicator(selectedModelIOStatus(), selectedModelStatusLabel());
 
   const formatMessageTime = (createdAtMs: number): string => {
     const value = Math.floor(Number(createdAtMs ?? 0));
@@ -2235,6 +2560,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
+  const activityInlineLoader = (className = '') => (
+    <span class={cn('flower-activity-inline-loader', className)} aria-hidden="true">
+      <span class="flower-activity-inline-loader-square" />
+      <span class="flower-activity-inline-loader-square" />
+      <span class="flower-activity-inline-loader-square" />
+      <span class="flower-activity-inline-loader-square" />
+    </span>
+  );
+
   const statusIcon = (status: FlowerActivityStatus) => {
     switch (status) {
       case 'success':
@@ -2246,14 +2580,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'pending':
         return <Clock class="h-3.5 w-3.5" />;
       case 'running':
-        return (
-          <span class="flower-activity-inline-loader" aria-hidden="true">
-            <span class="flower-activity-inline-loader-square" />
-            <span class="flower-activity-inline-loader-square" />
-            <span class="flower-activity-inline-loader-square" />
-            <span class="flower-activity-inline-loader-square" />
-          </span>
-        );
+        return activityInlineLoader();
     }
   };
 
@@ -2935,6 +3262,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentMeta = (item: FlowerSubagentPanelItem): string => (
     [subagentTypeLabel(item.agentType), item.taskName && item.taskName !== item.title ? item.taskName : '', subagentActionLabel(item.action)].filter(Boolean).join(' · ')
   );
+  const subagentStatusIndicator = (status: FlowerSubagentPanelStatus) => {
+    switch (status) {
+      case 'queued':
+      case 'running':
+      case 'waiting_input':
+        return (
+          <span class={cn('flower-subagent-status-indicator', 'flower-subagent-status-indicator-running')} aria-hidden="true">
+            {activityInlineLoader('flower-subagent-status-loader')}
+          </span>
+        );
+      case 'completed':
+        return <Check class="flower-subagent-status-indicator flower-subagent-status-indicator-completed h-3.5 w-3.5" aria-hidden="true" />;
+      case 'failed':
+      case 'timed_out':
+        return <AlertTriangle class="flower-subagent-status-indicator flower-subagent-status-indicator-failed h-3.5 w-3.5" aria-hidden="true" />;
+      case 'canceled':
+        return <AlertTriangle class="flower-subagent-status-indicator flower-subagent-status-indicator-canceled h-3.5 w-3.5" aria-hidden="true" />;
+      default:
+        return <Clock class="flower-subagent-status-indicator flower-subagent-status-indicator-unknown h-3.5 w-3.5" aria-hidden="true" />;
+    }
+  };
   const subagentBadgeLabel = () => subagentsCopy().activity.agentsCount(String(selectedSubagentItems().length));
   const subagentBadgeText = () => {
     const count = selectedSubagentItems().length;
@@ -2960,9 +3308,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || subagentsCopy().typeLabels.unknown;
   });
   const subagentSummaryStatus = createMemo(() => {
-    const raw = trimString(subagentDetail()?.summary.status || activeSubagentItem()?.status);
-    const status = (raw || 'unknown') as FlowerSubagentPanelStatus;
-    return subagentStatusLabel(status);
+    return subagentStatusLabel(subagentDetailActiveStatus());
   });
   const subagentDetailMeta = createMemo(() => {
     const detail = subagentDetail();
@@ -2971,58 +3317,96 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const id = trimString(detail?.summary.thread_id || item?.threadID || item?.subagentID || activeSubagentID());
     return [agentType, id].filter(Boolean).join(' · ');
   });
+  const subagentDetailHasRunningActivity = createMemo(() => (
+    subagentDetail()?.timeline.some((row) => row.activity?.items.some((item) => item.status === 'running')) ?? false
+  ));
+  const subagentDetailModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => {
+    const now = Date.now();
+    const runID = trimString(subagentDetail()?.summary.thread_id || activeSubagentID()) || 'subagent';
+    switch (subagentDetailActiveStatus()) {
+      case 'queued':
+        return { phase: 'preparing', run_id: runID, updated_at_ms: now };
+      case 'running':
+        return {
+          phase: subagentDetailHasRunningActivity() ? 'streaming' : 'waiting_response',
+          run_id: runID,
+          updated_at_ms: now,
+        };
+      default:
+        return null;
+    }
+  });
+  const subagentDetailModelStatusLabel = createMemo(() => {
+    const status = subagentDetailModelIOStatus();
+    return status ? modelStatusLabel(status.phase) : '';
+  });
   const subagentDropdown = () => (
     <Show when={subagentDropdownOpen()}>
-      <div ref={subagentDropdownRef} class="flower-subagents-dropdown" role="dialog" aria-label={subagentsCopy().title}>
-        <div class="flower-subagents-dropdown-header">
-          <div class="flower-subagents-dropdown-title">
-            <GitBranch class="h-4 w-4" />
-            <span>{subagentsCopy().title}</span>
-          </div>
-          <span class="flower-subagents-dropdown-count">{selectedSubagentItems().length}</span>
-        </div>
-        <div class="flower-subagents-dropdown-summary">{subagentDropdownSummary()}</div>
-        <Show
-          when={selectedSubagentItems().length > 0}
-          fallback={(
-            <div class="flower-subagents-dropdown-empty">
-              <GitBranch class="h-4 w-4" />
-              <span>{subagentsCopy().emptyTitle}</span>
-            </div>
-          )}
+      <SurfaceFloatingLayer
+        position={subagentDropdownPosition()}
+        estimatedSize={SUBAGENT_DROPDOWN_ESTIMATED_SIZE}
+        class="flower-subagents-dropdown-layer"
+      >
+        <div
+          ref={subagentDropdownRef}
+          id="flower-subagents-dropdown"
+          class="flower-subagents-dropdown"
+          role="dialog"
+          aria-label={subagentsCopy().title}
+          aria-modal="false"
         >
-          <div class="flower-subagents-dropdown-list" role="list">
-            <For each={selectedSubagentItems()}>
-              {(item) => (
-                <button
-                  type="button"
-                  class={cn(
-                    'flower-subagent-dropdown-row',
-                    `flower-subagent-dropdown-row-${item.status}`,
-                    activeSubagentID() === trimString(item.threadID || item.subagentID) && 'flower-subagent-dropdown-row-active',
-                  )}
-                  data-flower-subagent-thread-id={item.threadID}
-                  data-flower-subagent-status={item.status}
-                  title={subagentsCopy().openThread}
-                  onClick={() => void openSubagentDetail(item)}
-                >
-                  <span class={cn('flower-subagent-status-dot', `flower-subagent-status-dot-${item.status}`)} aria-hidden="true" />
-                  <span class="flower-subagent-dropdown-copy">
-                    <span class="flower-subagent-dropdown-name">{subagentRowTitle(item)}</span>
-                    <span class="flower-subagent-dropdown-meta">
-                      {[subagentStatusLabel(item.status), subagentMeta(item)].filter(Boolean).join(' · ')}
-                    </span>
-                    <Show when={item.lastMessage || item.waitingPrompt}>
-                      {(message) => <span class="flower-subagent-dropdown-message">{message()}</span>}
-                    </Show>
-                  </span>
-                  <span class="flower-subagent-dropdown-action">{subagentsCopy().openThread}</span>
-                </button>
-              )}
-            </For>
+          <div class="flower-subagents-dropdown-header">
+            <div class="flower-subagents-dropdown-title">
+              <GitBranch class="h-4 w-4" />
+              <span>{subagentsCopy().title}</span>
+            </div>
+            <span class="flower-subagents-dropdown-count">{selectedSubagentItems().length}</span>
           </div>
-        </Show>
-      </div>
+          <div class="flower-subagents-dropdown-summary">{subagentDropdownSummary()}</div>
+          <Show
+            when={selectedSubagentItems().length > 0}
+            fallback={(
+              <div class="flower-subagents-dropdown-empty">
+                <GitBranch class="h-4 w-4" />
+                <span>{subagentsCopy().emptyTitle}</span>
+              </div>
+            )}
+          >
+            <div class="flower-subagents-dropdown-list" role="list">
+              <For each={selectedSubagentItems()}>
+                {(item) => (
+                  <button
+                    type="button"
+                    class={cn(
+                      'flower-subagent-dropdown-row',
+                      `flower-subagent-dropdown-row-${item.status}`,
+                      activeSubagentID() === trimString(item.threadID || item.subagentID) && 'flower-subagent-dropdown-row-active',
+                    )}
+                    data-flower-subagent-thread-id={item.threadID}
+                    data-flower-subagent-status={item.status}
+                    title={subagentsCopy().openThread}
+                    onClick={() => void openSubagentDetail(item)}
+                  >
+                    <span class="flower-subagent-dropdown-status">{subagentStatusIndicator(item.status)}</span>
+                    <span class="flower-subagent-dropdown-copy">
+                      <span class="flower-subagent-dropdown-name">{subagentRowTitle(item)}</span>
+                      <span class="flower-subagent-dropdown-meta">
+                        {[subagentStatusLabel(item.status), subagentMeta(item)].filter(Boolean).join(' · ')}
+                      </span>
+                      <Show when={item.lastMessage || item.waitingPrompt}>
+                        {(message) => <span class="flower-subagent-dropdown-message">{message()}</span>}
+                      </Show>
+                    </span>
+                    <span class="flower-subagent-dropdown-action" aria-hidden="true">
+                      <ChevronRight class="h-3.5 w-3.5" />
+                    </span>
+                  </button>
+                )}
+              </For>
+            </div>
+          </Show>
+        </div>
+      </SurfaceFloatingLayer>
     </Show>
   );
 
@@ -3031,6 +3415,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentDetailTimelineEntryKeys = createMemo(() => subagentDetailTimelineEntries().map((entry) => entry.key));
   const subagentDetailTimelineEntriesByKey = createMemo(() => new Map(subagentDetailTimelineEntries().map((entry) => [entry.key, entry] as const)));
   const subagentDetailWindowTitle = createMemo(() => [activeSubagentTitle(), subagentSummaryStatus()].filter(Boolean).join(' · '));
+  const showSubagentDetailScrollToLatestButton = createMemo(() => (
+    Boolean(subagentDetailThread())
+    && !subagentDetailScroll.nearBottom()
+  ));
 
   const subagentDetailDialog = () => (
     <FloatingWindow
@@ -3045,11 +3433,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       viewportInsets={{ top: 56, right: 12, bottom: 12, left: Math.max(12, threadRailWidth() + 12) }}
       resizable
       draggable
-      zIndex={85}
+      zIndex={FLOWER_SURFACE_LAYER.subagentWindow}
     >
       <div class="flower-subagent-detail-surface" data-flower-subagent-detail-id={activeSubagentID()}>
         <div class="flower-subagent-detail-toolbar">
-          <span class={cn('flower-subagent-status-pill', `flower-subagent-status-${activeSubagentItem()?.status ?? 'unknown'}`)}>
+          <span class={cn('flower-subagent-status-pill', `flower-subagent-status-${subagentDetailActiveStatus()}`)}>
+            {subagentStatusIndicator(subagentDetailActiveStatus())}
             {subagentSummaryStatus()}
           </span>
           <Show when={subagentDetailMeta()}>
@@ -3071,7 +3460,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           )}
         </Show>
         <Show when={subagentDetailThread()}>
-          <div class="flower-chat-transcript flower-subagent-detail-transcript" role="list" aria-label="Subagent timeline">
+          <div
+            ref={(node) => { subagentDetailScroll.bind(node); }}
+            class="flower-chat-transcript flower-subagent-detail-transcript"
+            role="list"
+            aria-label="Subagent timeline"
+            onScroll={() => subagentDetailScroll.onScroll()}
+          >
             <div class="flower-transcript-stack flower-subagent-detail-transcript-stack">
               <Show
                 when={subagentDetailTimelineEntryKeys().length > 0}
@@ -3089,20 +3484,51 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </For>
               </Show>
             </div>
+            <Show when={showSubagentDetailScrollToLatestButton()}>
+              <div class="flower-subagent-detail-scroll-to-latest">
+                <button
+                  type="button"
+                  class="flower-scroll-to-latest-button"
+                  aria-label={copy().chat.scrollToLatest}
+                  title={copy().chat.scrollToLatest}
+                  onClick={() => subagentDetailScroll.scrollToBottom({ smooth: true })}
+                >
+                  <ChevronDown class="h-4 w-4" />
+                </button>
+              </div>
+            </Show>
           </div>
         </Show>
-        <Show when={subagentDetail()?.has_more}>
-          <div class="flower-subagent-detail-load-more">
+        <div class="flower-subagent-detail-bottom-dock">
+          <Show when={subagentDetail()?.has_more}>
             <button
               type="button"
               class="flower-subagent-detail-load-more-button"
-              disabled={subagentDetailLoadingMore()}
+              disabled={subagentDetailLoadingMore() || subagentDetailTailLoading()}
               onClick={() => void loadMoreSubagentDetail()}
             >
               {subagentDetailLoadingMore() ? (subagentsCopy().loadingMore ?? 'Loading...') : (subagentsCopy().loadMore ?? 'Load more')}
             </button>
+          </Show>
+          <div class="flower-subagent-detail-live-lane" role="status" aria-live="polite" aria-atomic="true">
+            <Show when={subagentDetailModelIOStatus()}>
+              {(status) => modelStatusIndicator(status(), subagentDetailModelStatusLabel())}
+            </Show>
+            <Show when={subagentDetailTailLoading()}>
+              <span class="flower-subagent-detail-tail-state">
+                {activityInlineLoader('flower-subagent-detail-tail-loader')}
+              </span>
+            </Show>
+            <Show when={subagentDetailTailError()}>
+              {(message) => (
+                <span class="flower-subagent-detail-tail-error">
+                  <AlertTriangle class="h-3.5 w-3.5" />
+                  <span>{message()}</span>
+                </span>
+              )}
+            </Show>
           </div>
-        </Show>
+        </div>
       </div>
     </FloatingWindow>
   );
@@ -3153,8 +3579,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 class={cn('flower-header-icon-button', (subagentDropdownOpen() || activeSubagentID()) && 'flower-header-icon-button-active')}
                 aria-label={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
                 title={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
-                aria-haspopup="menu"
+                aria-haspopup="dialog"
                 aria-expanded={subagentDropdownOpen()}
+                aria-controls="flower-subagents-dropdown"
                 onClick={openSubagents}
               >
                 <GitBranch class="h-4 w-4" />
@@ -3185,7 +3612,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </div>
       {subagentDetailDialog()}
       <div class="flower-chat-main flower-chat-main">
-        <div ref={transcriptRef} class="flower-chat-transcript flower-chat-transcript" onScroll={updateTranscriptNearBottom}>
+        <div ref={(node) => { transcriptScroll.bind(node); }} class="flower-chat-transcript flower-chat-transcript" onScroll={updateTranscriptNearBottom}>
           <div class="flower-transcript-stack">
             <Show when={loadError()}>
               {(message) => errorNotice(copy().chat.loadErrorTitle, message())}
@@ -3233,7 +3660,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <div class="flower-chat-bottom-dock-track flower-chat-bottom-dock-track">
             <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
               <Show when={selectedThreadHasModelStatus()}>
-                {modelStatusIndicator()}
+                {selectedModelStatusIndicator()}
               </Show>
             </div>
             <div class="flower-composer flower-chat-input-floating chat-input-container p-3">
