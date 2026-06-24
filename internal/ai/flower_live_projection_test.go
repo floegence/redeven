@@ -79,7 +79,7 @@ func TestBuildFlowerTimelineMessagesUsesCanonicalTurnOrder(t *testing.T) {
 			CreatedAtUnixMs:    2_000,
 		},
 	} {
-		if err := store.AppendConversationTurn(ctx, turn); err != nil {
+		if _, err := store.AppendConversationTurn(ctx, turn); err != nil {
 			t.Fatalf("AppendConversationTurn(%s): %v", turn.TurnID, err)
 		}
 	}
@@ -142,7 +142,7 @@ func TestBuildFlowerTimelineMessagesKeepsLateCanceledAssistantWithItsTurn(t *tes
 	appendFlowerTimelineTestMessage(t, store, endpointID, threadID, "msg-user-1", "user", "first request", 1_000)
 	appendFlowerTimelineTestMessage(t, store, endpointID, threadID, "msg-user-2", "user", "second request", 3_000)
 	appendFlowerTimelineTestMessage(t, store, endpointID, threadID, "msg-assistant-1", "assistant", "partial first answer", 2_000)
-	if err := store.AppendConversationTurn(ctx, threadstore.ConversationTurn{
+	if _, err := store.AppendConversationTurn(ctx, threadstore.ConversationTurn{
 		TurnID:          "msg-assistant-1",
 		EndpointID:      endpointID,
 		ThreadID:        threadID,
@@ -152,7 +152,7 @@ func TestBuildFlowerTimelineMessagesKeepsLateCanceledAssistantWithItsTurn(t *tes
 	}); err != nil {
 		t.Fatalf("AppendConversationTurn(run-1): %v", err)
 	}
-	if err := store.AppendConversationTurn(ctx, threadstore.ConversationTurn{
+	if _, err := store.AppendConversationTurn(ctx, threadstore.ConversationTurn{
 		TurnID:          "msg-assistant-2",
 		EndpointID:      endpointID,
 		ThreadID:        threadID,

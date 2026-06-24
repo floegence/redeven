@@ -450,6 +450,7 @@ func ensureAIThreadStateContinuationColumnsTx(tx *sql.Tx) error {
 		column string
 		sql    string
 	}{
+		{column: "compacted_context_json", sql: `ALTER TABLE ai_thread_state ADD COLUMN compacted_context_json TEXT NOT NULL DEFAULT ''`},
 		{column: "provider_continuation_state_json", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_state_json TEXT NOT NULL DEFAULT ''`},
 		{column: "provider_continuation_provider_id", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_provider_id TEXT NOT NULL DEFAULT ''`},
 		{column: "provider_continuation_model", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_model TEXT NOT NULL DEFAULT ''`},
@@ -537,6 +538,7 @@ CREATE TABLE IF NOT EXISTS ai_thread_state (
   thread_id TEXT NOT NULL,
   open_goal TEXT NOT NULL DEFAULT '',
   last_assistant_summary TEXT NOT NULL DEFAULT '',
+  compacted_context_json TEXT NOT NULL DEFAULT '',
   provider_continuation_state_json TEXT NOT NULL DEFAULT '',
   provider_continuation_provider_id TEXT NOT NULL DEFAULT '',
   provider_continuation_model TEXT NOT NULL DEFAULT '',
@@ -1056,6 +1058,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		},
 		"ai_thread_state": {
 			"endpoint_id", "thread_id", "open_goal", "last_assistant_summary",
+			"compacted_context_json",
 			"provider_continuation_state_json", "provider_continuation_provider_id",
 			"provider_continuation_model", "provider_continuation_base_url",
 			"provider_continuation_updated_at_unix_ms", "updated_at_unix_ms",

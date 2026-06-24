@@ -83,7 +83,10 @@ function routerDecision(): FlowerRouterDecision {
   };
 }
 
-function adapterOptions(overrides: Partial<FlowerRuntimeTransport>): RuntimeFlowerSurfaceAdapterOptions {
+function adapterOptions(
+  transportOverrides: Partial<FlowerRuntimeTransport> = {},
+  optionOverrides: Partial<RuntimeFlowerSurfaceAdapterOptions> = {},
+): RuntimeFlowerSurfaceAdapterOptions {
   const transport: FlowerRuntimeTransport = {
     listThreads: vi.fn(async () => ({ threads: [] })),
     loadThread: vi.fn(async () => {
@@ -95,7 +98,7 @@ function adapterOptions(overrides: Partial<FlowerRuntimeTransport>): RuntimeFlow
     patchThread: vi.fn(async () => ({ thread: undefined })),
     forkThread: vi.fn(async () => ({ thread: undefined })),
     submitApproval: vi.fn(async () => undefined),
-    ...overrides,
+    ...transportOverrides,
   };
   return {
     runtime: {
@@ -118,12 +121,16 @@ function adapterOptions(overrides: Partial<FlowerRuntimeTransport>): RuntimeFlow
     launchTurn: vi.fn(async () => {
       throw new Error('launchTurn should not be called.');
     }),
+    compactThreadContext: vi.fn(async () => {
+      throw new Error('compactThreadContext should not be called.');
+    }),
     stopThread: vi.fn(async () => {
       throw new Error('stopThread should not be called.');
     }),
     submitInput: vi.fn(async () => {
       throw new Error('submitInput should not be called.');
     }),
+    ...optionOverrides,
   };
 }
 
@@ -200,5 +207,60 @@ describe('runtime Flower surface adapter read state', () => {
       activity_signature: 'activity:1',
       waiting_prompt_id: '',
     })).rejects.toThrow('thread.read_status.read_state is required');
+  });
+
+  it('passes compact context requests through without creating a user turn', async () => {
+    const bootstrap = {
+      schema_version: 1,
+      endpoint_id: 'runtime_1',
+      thread_id: 'thread_1',
+      cursor: 4,
+      retained_from_seq: 1,
+      thread: {
+        thread_id: 'thread_1',
+        title: 'Running thread',
+        run_status: 'running',
+        model_id: 'default/gpt-5',
+        created_at_unix_ms: 1,
+        updated_at_unix_ms: 2,
+        read_status: readStatus(),
+      },
+      timeline_messages: [],
+      live_state: {
+        thread_patch: {},
+        runs: {},
+        approval_actions: {},
+        input_requests: {},
+      },
+      read_status: readStatus(),
+      generated_at_ms: 10,
+    };
+    const compactThreadContext = vi.fn(async () => bootstrap as never);
+    const launchTurn = vi.fn(async () => {
+      throw new Error('launchTurn should not be called.');
+    });
+    const stopThread = vi.fn(async () => {
+      throw new Error('stopThread should not be called.');
+    });
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, {
+      compactThreadContext,
+      launchTurn,
+      stopThread,
+    }));
+
+    const result = await adapter.compactThreadContext({
+      thread_id: ' thread_1 ',
+      expected_run_id: ' run_1 ',
+      source: 'slash_command',
+    });
+
+    expect(result.thread.thread_id).toBe('thread_1');
+    expect(compactThreadContext).toHaveBeenCalledWith({
+      thread_id: 'thread_1',
+      expected_run_id: 'run_1',
+      source: 'slash_command',
+    });
+    expect(launchTurn).not.toHaveBeenCalled();
+    expect(stopThread).not.toHaveBeenCalled();
   });
 });

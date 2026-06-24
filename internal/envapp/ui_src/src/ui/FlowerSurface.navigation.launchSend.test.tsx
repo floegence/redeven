@@ -165,6 +165,178 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(stopThread.mock.invocationCallOrder[0]).toBeLessThan(launchTurn.mock.invocationCallOrder[0]);
   });
 
+  it('compacts a running selected thread without stopping or launching a new turn', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-running-compact',
+      title: 'Running compact',
+      status: 'running',
+      active_run_id: 'run-compact',
+      model_io_status: modelIOStatus({ run_id: 'run-compact' }),
+      messages: [
+        {
+          id: 'm-compact-user',
+          role: 'user',
+          content: 'inspect the repository',
+          status: 'complete',
+          created_at_ms: 10,
+        },
+        {
+          id: 'm-compact-assistant',
+          role: 'assistant',
+          content: 'working',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 20,
+          blocks: [{ type: 'markdown', content: 'working' }],
+        },
+      ],
+    });
+    const compactThreadContext = vi.fn(async () => liveBootstrap(runningThread, 3));
+    const stopThread = vi.fn(async () => liveBootstrap({ ...runningThread, status: 'canceled' }));
+    const launchTurn = vi.fn(async () => liveBootstrap(runningThread));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(runningThread)),
+      compactThreadContext,
+      stopThread,
+      launchTurn,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-compact"] button')));
+    (runtime.querySelector('[data-thread-id="thread-running-compact"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = '/compact';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => {
+      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return button?.getAttribute('aria-label') === 'Compact context' && !button.disabled;
+    });
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => compactThreadContext.mock.calls.length === 1);
+
+    expect(compactThreadContext).toHaveBeenCalledWith({
+      thread_id: 'thread-running-compact',
+      expected_run_id: 'run-compact',
+      source: 'slash_command',
+    });
+    expect(stopThread).not.toHaveBeenCalled();
+    expect(launchTurn).not.toHaveBeenCalled();
+    await waitFor(() => (runtime.querySelector('textarea') as HTMLTextAreaElement).value === '');
+  });
+
+  it('compacts a waiting-approval selected thread with the active run guard', async () => {
+    const waitingApprovalThread = thread({
+      thread_id: 'thread-waiting-approval-compact',
+      title: 'Waiting approval compact',
+      status: 'waiting_approval',
+      active_run_id: 'run-waiting-approval-compact',
+      model_io_status: null,
+      approval_actions: [{
+        action_id: 'approval-1',
+        run_id: 'run-waiting-approval-compact',
+        tool_id: 'tool-1',
+        tool_name: 'terminal.exec',
+        status: 'pending',
+        state: 'requested',
+        can_approve: true,
+        revision: 1,
+        requested_at_ms: 1,
+        summary: { label: 'Run command', effects: [], targets: [], flags: [] },
+      }],
+      messages: [
+        {
+          id: 'm-approval-user',
+          role: 'user',
+          content: 'inspect the repository',
+          status: 'complete',
+          created_at_ms: 10,
+        },
+        {
+          id: 'm-approval-assistant',
+          role: 'assistant',
+          content: 'I need to run a command.',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 20,
+          blocks: [{ type: 'markdown', content: 'I need to run a command.' }],
+        },
+      ],
+    });
+    const compactThreadContext = vi.fn(async () => liveBootstrap(waitingApprovalThread, 3));
+    const stopThread = vi.fn(async () => liveBootstrap({ ...waitingApprovalThread, status: 'canceled' }));
+    const launchTurn = vi.fn(async () => liveBootstrap(waitingApprovalThread));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [waitingApprovalThread]),
+      loadThread: vi.fn(async () => liveBootstrap(waitingApprovalThread)),
+      compactThreadContext,
+      stopThread,
+      launchTurn,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-waiting-approval-compact"] button')));
+    (runtime.querySelector('[data-thread-id="thread-waiting-approval-compact"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = '/compact';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await waitFor(() => compactThreadContext.mock.calls.length === 1);
+
+    expect(compactThreadContext).toHaveBeenCalledWith({
+      thread_id: 'thread-waiting-approval-compact',
+      expected_run_id: 'run-waiting-approval-compact',
+      source: 'slash_command',
+    });
+    expect(stopThread).not.toHaveBeenCalled();
+    expect(launchTurn).not.toHaveBeenCalled();
+  });
+
+  it('disables composer commands when the selected thread status is read-only', async () => {
+    const readOnlyThread = thread({
+      thread_id: 'thread-read-only-status',
+      title: 'Read-only status',
+      status: 'read_only',
+      messages: [
+        {
+          id: 'm-read-only',
+          role: 'assistant',
+          content: 'This thread is archived.',
+          status: 'complete',
+          created_at_ms: 20,
+          blocks: [{ type: 'markdown', content: 'This thread is archived.' }],
+        },
+      ],
+    });
+    const compactThreadContext = vi.fn(async () => liveBootstrap(readOnlyThread));
+    const launchTurn = vi.fn(async () => liveBootstrap(readOnlyThread));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [readOnlyThread]),
+      loadThread: vi.fn(async () => liveBootstrap(readOnlyThread)),
+      compactThreadContext,
+      launchTurn,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-read-only-status"] button')));
+    (runtime.querySelector('[data-thread-id="thread-read-only-status"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-readonly-chip')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    expect(textarea.disabled).toBe(true);
+    expect(textarea.getAttribute('placeholder')).toContain('Read only');
+    const submitButton = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement;
+    expect(submitButton.disabled).toBe(true);
+    submitButton.click();
+    await waitFor(() => true, 20);
+    expect(compactThreadContext).not.toHaveBeenCalled();
+    expect(launchTurn).not.toHaveBeenCalled();
+  });
+
   it('uses Enter as stop plus send when a running selected thread has a draft', async () => {
     const runningThread = thread({
       thread_id: 'thread-running-enter-stop-send',

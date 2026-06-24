@@ -1097,6 +1097,14 @@ func newToolID() (string, error) {
 	return "tool_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+func newManualCompactionRequestID() (string, error) {
+	b := make([]byte, 12)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "cmpreq_" + base64.RawURLEncoding.EncodeToString(b), nil
+}
+
 type preparedRun struct {
 	meta                         *session.Meta
 	req                          RunStartRequest
@@ -1348,7 +1356,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	updateThreadRunState("running", "", "", nil)
 	if persisted != nil && s.contextRepo != nil {
 		turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
-		_ = s.contextRepo.AppendTurn(turnCtx, endpointID, threadID, runID, messageID, persisted.MessageID, messageID, persisted.CreatedAtUnixMs)
+		_, _ = s.contextRepo.AppendTurn(turnCtx, endpointID, threadID, runID, messageID, persisted.MessageID, messageID, persisted.CreatedAtUnixMs)
 		cancelTurn()
 	}
 	s.broadcastThreadState(endpointID, threadID, runID, "running", "", "")
@@ -1549,7 +1557,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		s.broadcastThreadSummary(endpointID, threadID)
 		if s.contextRepo != nil {
 			turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
-			_ = s.contextRepo.AppendTurn(turnCtx, endpointID, threadID, runID, messageID, userMsgID, messageID, persisted.CreatedAtUnixMs)
+			_, _ = s.contextRepo.AppendTurn(turnCtx, endpointID, threadID, runID, messageID, userMsgID, messageID, persisted.CreatedAtUnixMs)
 			cancelTurn()
 		}
 	}
@@ -1631,6 +1639,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			promptPack = pack
 		}
 	}
+	promptPack = s.applyThreadCompactedContextToPromptPack(ctx, endpointID, threadID, promptPack)
 	historyForRun := promptPackToHistory(promptPack, effectiveCurrentInput.PublicText)
 
 	runReq := RunRequest{
@@ -1704,6 +1713,12 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		return err
 	}
 	r.markAssistantPersisted()
+	var completedTurnRowID int64
+	if s.contextRepo != nil {
+		turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
+		completedTurnRowID, _ = s.contextRepo.AppendTurn(turnCtx, endpointID, threadID, runID, messageID, userMsgID, messageID, assistantAt)
+		cancelTurn()
+	}
 	s.broadcastTranscriptMessage(endpointID, threadID, runID, assistantRowID, assistantJSON, assistantAt)
 	s.broadcastThreadSummary(endpointID, threadID)
 
@@ -1711,7 +1726,20 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	if db != nil {
 		continuationCtx, cancelContinuation := context.WithTimeout(context.Background(), persistTO)
 		continuationCandidate := r.getProviderContinuationCandidate()
-		if syncErr := persistProviderContinuationCandidate(continuationCtx, db, endpointID, threadID, continuationCandidate); syncErr != nil && finalErr == nil {
+		compactedContextCandidate := r.getThreadCompactedContextCandidate()
+		if !compactedContextCandidate.IsZero() && completedTurnRowID > 0 {
+			compactedContextCandidate.CoveredThroughTurnRowID = completedTurnRowID
+		}
+		if !compactedContextCandidate.IsZero() && assistantRowID > 0 {
+			compactedContextCandidate.CoveredThroughMessageID = assistantRowID
+		}
+		syncErr := error(nil)
+		if !compactedContextCandidate.IsZero() {
+			syncErr = db.SetThreadProviderContinuationAndCompactedContext(continuationCtx, endpointID, threadID, continuationCandidate, compactedContextCandidate)
+		} else {
+			syncErr = persistProviderContinuationCandidate(continuationCtx, db, endpointID, threadID, continuationCandidate)
+		}
+		if syncErr != nil && finalErr == nil {
 			finalErr = syncErr
 		} else if syncErr == nil {
 			eventType := "provider.continuation.cleared"
@@ -1730,6 +1758,19 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 				payload["base_url"] = continuationCandidate.BaseURL
 			}
 			r.persistRunEvent(eventType, RealtimeStreamKindLifecycle, payload)
+		}
+		if syncErr == nil && !compactedContextCandidate.IsZero() {
+			r.persistRunEvent("context.compaction.checkpoint.persisted", RealtimeStreamKindLifecycle, map[string]any{
+				"operation_id":                compactedContextCandidate.OperationID,
+				"request_id":                  compactedContextCandidate.RequestID,
+				"source":                      compactedContextCandidate.Source,
+				"compaction_id":               compactedContextCandidate.CompactionID,
+				"compaction_generation":       compactedContextCandidate.CompactionGeneration,
+				"compaction_window_id":        compactedContextCandidate.CompactionWindowID,
+				"covered_through_turn_row_id": compactedContextCandidate.CoveredThroughTurnRowID,
+				"covered_through_message_id":  compactedContextCandidate.CoveredThroughMessageID,
+				"compacted_through_entry_id":  compactedContextCandidate.CompactedThroughEntryID,
+			})
 		}
 		cancelContinuation()
 	}
@@ -1968,7 +2009,16 @@ func shouldClearOpenGoalAfterRun(existingOpenGoal string, finalReason string) bo
 }
 
 func promptPackToHistory(pack contextmodel.PromptPack, currentUserInput string) []RunHistoryMsg {
-	history := make([]RunHistoryMsg, 0, len(pack.RecentDialogue)*2+1)
+	history := make([]RunHistoryMsg, 0, len(pack.CompactedHistory)+len(pack.RecentDialogue)*2+1)
+	for _, msg := range pack.CompactedHistory {
+		role := strings.ToLower(strings.TrimSpace(msg.Role))
+		if role != "user" && role != "assistant" {
+			continue
+		}
+		if txt := strings.TrimSpace(msg.Content); txt != "" {
+			history = append(history, RunHistoryMsg{Role: role, Text: txt})
+		}
+	}
 	for _, turn := range pack.RecentDialogue {
 		if txt := strings.TrimSpace(turn.UserText); txt != "" {
 			history = append(history, RunHistoryMsg{Role: "user", Text: txt})
@@ -1986,6 +2036,54 @@ func promptPackToHistory(pack contextmodel.PromptPack, currentUserInput string) 
 		}
 	}
 	return history
+}
+
+func (s *Service) applyThreadCompactedContextToPromptPack(ctx context.Context, endpointID string, threadID string, pack contextmodel.PromptPack) contextmodel.PromptPack {
+	if s == nil {
+		return pack
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	persistTO := s.persistOpTO
+	s.mu.Unlock()
+	if db == nil {
+		return pack
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	checkCtx, cancel := context.WithTimeout(ctx, persistTO)
+	compacted, err := db.GetThreadCompactedContext(checkCtx, endpointID, threadID)
+	cancel()
+	if err != nil || compacted == nil || compacted.IsZero() {
+		return pack
+	}
+	pack.CompactedHistory = compactedContextToPromptMessages(*compacted)
+	if len(pack.CompactedHistory) == 0 {
+		return pack
+	}
+	filtered := make([]contextmodel.DialogueTurn, 0, len(pack.RecentDialogue))
+	for _, turn := range pack.RecentDialogue {
+		if dialogueTurnAfterCompactedBoundary(turn, *compacted) {
+			filtered = append(filtered, turn)
+		}
+	}
+	pack.RecentDialogue = filtered
+	return pack
+}
+
+func dialogueTurnAfterCompactedBoundary(turn contextmodel.DialogueTurn, compacted threadstore.ThreadCompactedContext) bool {
+	if turn.TurnRowID > 0 {
+		return turn.TurnRowID > compacted.CoveredThroughTurnRowID
+	}
+	maxMessageID := turn.UserMessageRowID
+	if turn.AssistantRowID > maxMessageID {
+		maxMessageID = turn.AssistantRowID
+	}
+	return maxMessageID > compacted.CoveredThroughMessageID
 }
 
 type effectiveCurrentUserInput struct {

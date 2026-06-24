@@ -322,6 +322,38 @@ describe('Local Environment Flower surface adapter', () => {
     expect(calls[0].body).toEqual({});
   });
 
+  it('compacts threads through the runtime compact endpoint and reloads live bootstrap', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/context/compact') {
+        return { operation_id: 'manual-compact-1', kind: 'accepted', run_id: 'run-1' };
+      }
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap') {
+        return liveBootstrap({ run_status: 'running' });
+      }
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+
+    const bootstrap = await adapter.compactThreadContext({
+      thread_id: ' thread-1 ',
+      expected_run_id: ' run-1 ',
+      source: 'slash_command',
+    });
+
+    expect(bootstrap.thread.status).toBe('running');
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      'POST /_redeven_proxy/api/ai/threads/thread-1/context/compact',
+      'GET /_redeven_proxy/api/ai/threads/thread-1/live/bootstrap',
+    ]);
+    expect(calls[0].body).toEqual({
+      thread_id: 'thread-1',
+      expected_run_id: 'run-1',
+      source: 'slash_command',
+    });
+  });
+
   it('loads streaming live state from the canonical live bootstrap endpoint', async () => {
     const bridge = bridgeFor((request) => {
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap') {
@@ -366,8 +398,11 @@ describe('Local Environment Flower surface adapter', () => {
             timeline_decorations: [{
               decoration_id: 'context-compaction:compact-1',
               kind: 'context_compaction',
-              anchor_message_id: 'assistant-live',
-              placement: 'before',
+              anchor: {
+                target_kind: 'message',
+                message_id: 'assistant-live',
+                edge: 'after',
+              },
               ordinal: 0,
               compaction: {
                 operation_id: 'compact-1',

@@ -446,6 +446,16 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       await options.rpc.ai.stopThread({ threadId: tid });
       return loadThread(tid);
     },
+    compactThreadContext: async (input) => {
+      const tid = trim(input.thread_id);
+      if (!tid) throw new Error(adapterCopy(options).missingThreadID);
+      await options.rpc.ai.compactThreadContext({
+        threadId: tid,
+        expectedRunId: trim(input.expected_run_id) || undefined,
+        source: 'slash_command',
+      });
+      return loadThread(tid);
+    },
     submitInput: async (input) => {
       const tid = trim(input.thread_id);
       const promptID = trim(input.prompt_id);

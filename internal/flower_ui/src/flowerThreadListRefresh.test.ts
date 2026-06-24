@@ -180,8 +180,11 @@ describe('mergeFlowerThreadListRefresh', () => {
       timeline_decorations: [{
         decoration_id: 'context-compaction:compact-1',
         kind: 'context_compaction',
-        anchor_message_id: 'assistant-live',
-        placement: 'before',
+        anchor: {
+          target_kind: 'message',
+          message_id: 'assistant-live',
+          edge: 'after',
+        },
         ordinal: 0,
         compaction: {
           operation_id: 'compact-1',
@@ -525,8 +528,11 @@ describe('sameThreadSnapshot', () => {
       timeline_decorations: [{
         decoration_id: 'context-compaction:compact-1',
         kind: 'context_compaction',
-        anchor_message_id: 'assistant-live',
-        placement: 'before',
+        anchor: {
+          target_kind: 'message',
+          message_id: 'assistant-live',
+          edge: 'after',
+        },
         ordinal: 0,
         compaction: {
           operation_id: 'compact-1',

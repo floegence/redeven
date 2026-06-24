@@ -1,4 +1,5 @@
 import type {
+  FlowerCompactThreadContextInput,
   FlowerFileOpenRequest,
   FlowerReasoningSelection,
   FlowerResolveHandlerInput,
@@ -90,6 +91,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   saveSettings: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerLiveBootstrap>;
+  compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
@@ -206,6 +208,15 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     },
     resolveHandler: options.resolveHandler,
     launchTurn: options.launchTurn,
+    compactThreadContext: async (input) => {
+      const tid = trim(input.thread_id);
+      if (!tid) throw new Error(missingThreadIDMessage(options));
+      return options.compactThreadContext({
+        thread_id: tid,
+        expected_run_id: trim(input.expected_run_id) || undefined,
+        source: 'slash_command',
+      });
+    },
     stopThread: async (threadID) => {
       const tid = trim(threadID);
       if (!tid) throw new Error(missingThreadIDMessage(options));

@@ -22,6 +22,7 @@ const (
 	TypeID_AI_SUBSCRIBE_THREAD                   uint32 = 6009
 	TypeID_AI_STOP_THREAD                        uint32 = 6011
 	TypeID_AI_SUBMIT_REQUEST_USER_INPUT_RESPONSE uint32 = 6012
+	TypeID_AI_COMPACT_THREAD_CONTEXT             uint32 = 6013
 )
 
 type aiSendUserTurnReq struct {
@@ -58,6 +59,19 @@ type aiSubmitRequestUserInputResponseResp struct {
 	Kind                    string `json:"kind"`
 	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
 	AppliedExecutionMode    string `json:"applied_execution_mode,omitempty"`
+}
+
+type aiCompactThreadContextReq struct {
+	ThreadID      string `json:"thread_id"`
+	ExpectedRunID string `json:"expected_run_id,omitempty"`
+	Source        string `json:"source"`
+}
+
+type aiCompactThreadContextResp struct {
+	OperationID string `json:"operation_id,omitempty"`
+	Kind        string `json:"kind"`
+	RunID       string `json:"run_id,omitempty"`
+	ErrorCode   string `json:"error_code,omitempty"`
 }
 
 type aiSubscribeSummaryReq struct{}
@@ -170,6 +184,36 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 			Kind:                    strings.TrimSpace(resp.Kind),
 			ConsumedWaitingPromptID: strings.TrimSpace(resp.ConsumedWaitingPromptID),
 			AppliedExecutionMode:    strings.TrimSpace(resp.AppliedExecutionMode),
+		}, nil
+	})
+
+	accessgate.RegisterTyped[aiCompactThreadContextReq, aiCompactThreadContextResp](r, TypeID_AI_COMPACT_THREAD_CONTEXT, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiCompactThreadContextReq) (*aiCompactThreadContextResp, error) {
+		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
+			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
+		}
+		if !s.Enabled() {
+			return nil, &rpc.Error{Code: 503, Message: "ai not configured"}
+		}
+		if req == nil {
+			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
+		}
+		threadID := strings.TrimSpace(req.ThreadID)
+		if threadID == "" {
+			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
+		}
+		resp, err := s.CompactThreadContext(ctx, meta, CompactThreadContextRequest{
+			ThreadID:      threadID,
+			ExpectedRunID: strings.TrimSpace(req.ExpectedRunID),
+			Source:        strings.TrimSpace(req.Source),
+		})
+		if err != nil {
+			return nil, toAIRPCError(err)
+		}
+		return &aiCompactThreadContextResp{
+			OperationID: strings.TrimSpace(resp.OperationID),
+			Kind:        strings.TrimSpace(resp.Kind),
+			RunID:       strings.TrimSpace(resp.RunID),
+			ErrorCode:   strings.TrimSpace(resp.ErrorCode),
 		}, nil
 	})
 
@@ -326,7 +370,9 @@ func toAIRPCError(err error) *rpc.Error {
 		errors.Is(err, ErrWaitingPromptChanged),
 		errors.Is(err, ErrModelLockViolation),
 		errors.Is(err, ErrModelSwitchRequiresExplicitRestart),
-		errors.Is(err, ErrFollowupsRevisionChanged):
+		errors.Is(err, ErrFollowupsRevisionChanged),
+		errors.Is(err, ErrCompactAlreadyPending),
+		errors.Is(err, ErrNoCompactableContext):
 		return &rpc.Error{Code: 409, Message: msg}
 	}
 

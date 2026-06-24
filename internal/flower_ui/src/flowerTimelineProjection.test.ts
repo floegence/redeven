@@ -198,8 +198,11 @@ describe('buildFlowerTimelineEntries', () => {
       timeline_decorations: [{
         decoration_id: 'context-compaction:compact-1',
         kind: 'context_compaction',
-        anchor_message_id: 'assistant-1',
-        placement: 'before',
+        anchor: {
+          target_kind: 'message',
+          message_id: 'assistant-1',
+          edge: 'before',
+        },
         ordinal: 0,
         compaction: {
           operation_id: 'compact-1',
@@ -220,7 +223,57 @@ describe('buildFlowerTimelineEntries', () => {
     expect(divider.decoration.compaction.status).toBe('compacted');
   });
 
-  it('keeps unanchored context compaction decorations visible at the end of the transcript', () => {
+  it('inserts context compaction decorations between activity items', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 2,
+          blocks: [activityTimeline({
+            items: [
+              activityItem({ item_id: 'tool-before', label: 'before' }),
+              activityItem({ item_id: 'tool-after', label: 'after' }),
+            ],
+          })],
+        },
+      ],
+      timeline_decorations: [{
+        decoration_id: 'context-compaction:compact-between',
+        kind: 'context_compaction',
+        anchor: {
+          target_kind: 'activity_item',
+          message_id: 'assistant-1',
+          block_index: 0,
+          activity_item_id: 'tool-before',
+          edge: 'after',
+        },
+        ordinal: 0,
+        compaction: {
+          operation_id: 'compact-between',
+          phase: 'start',
+          status: 'compacting',
+          updated_at_ms: 3,
+        },
+      }],
+    }));
+
+    expect(entries.map((entry) => entry.type)).toEqual(['message', 'context_compaction', 'message']);
+    const before = entries[0];
+    const after = entries[2];
+    expect(before?.type).toBe('message');
+    expect(after?.type).toBe('message');
+    if (before?.type !== 'message' || after?.type !== 'message') throw new Error('expected split message entries');
+    expect(before.blocks[0]?.type).toBe('activity');
+    expect(after.blocks[0]?.type).toBe('activity');
+    if (before.blocks[0]?.type !== 'activity' || after.blocks[0]?.type !== 'activity') throw new Error('expected activity blocks');
+    expect(before.blocks[0].block.items.map((item) => item.item_id)).toEqual(['tool-before']);
+    expect(after.blocks[0].block.items.map((item) => item.item_id)).toEqual(['tool-after']);
+  });
+
+  it('skips context compaction decorations without a valid anchor', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [
         {
@@ -233,12 +286,16 @@ describe('buildFlowerTimelineEntries', () => {
         },
       ],
       timeline_decorations: [{
-        decoration_id: 'context-compaction:compact-unanchored',
+        decoration_id: 'context-compaction:compact-invalid',
         kind: 'context_compaction',
-        placement: 'before',
+        anchor: {
+          target_kind: 'message',
+          message_id: '',
+          edge: 'after',
+        },
         ordinal: 3,
         compaction: {
-          operation_id: 'compact-unanchored',
+          operation_id: 'compact-invalid',
           phase: 'start',
           status: 'compacting',
           updated_at_ms: 3,
@@ -246,8 +303,7 @@ describe('buildFlowerTimelineEntries', () => {
       }],
     }));
 
-    expect(entries.map((entry) => entry.type)).toEqual(['message', 'context_compaction']);
-    expect(entries[1]?.key).toBe('timeline-decoration:context-compaction:compact-unanchored');
+    expect(entries.map((entry) => entry.type)).toEqual(['message']);
   });
 
   it('does not render empty activity timeline blocks', () => {

@@ -182,7 +182,6 @@ export type FlowerContextCompactionStatus = 'compacting' | 'compacted' | 'failed
 export type FlowerContextCompaction = Readonly<{
   operation_id: string;
   run_id?: string;
-  anchor_message_id?: string;
   step_index?: number;
   phase: 'start' | 'complete' | 'failed' | string;
   status: FlowerContextCompactionStatus | string;
@@ -197,11 +196,22 @@ export type FlowerContextCompaction = Readonly<{
   updated_at_ms: number;
 }>;
 
+export type FlowerTimelineAnchorTargetKind = 'message' | 'block' | 'activity_item';
+
+export type FlowerTimelineAnchorEdge = 'before' | 'after';
+
+export type FlowerTimelineAnchor = Readonly<{
+  target_kind: FlowerTimelineAnchorTargetKind | string;
+  message_id: string;
+  block_index?: number;
+  activity_item_id?: string;
+  edge: FlowerTimelineAnchorEdge | string;
+}>;
+
 export type FlowerTimelineDecoration = Readonly<{
   decoration_id: string;
   kind: 'context_compaction' | string;
-  anchor_message_id?: string;
-  placement: 'before' | 'after' | string;
+  anchor: FlowerTimelineAnchor;
   ordinal: number;
   compaction: FlowerContextCompaction;
 }>;
@@ -683,6 +693,7 @@ export type FlowerLiveUsageUpdatedPayload = Readonly<{
 
 export type FlowerLiveContextCompactionUpdatedPayload = Readonly<{
   compaction: FlowerContextCompaction;
+  timeline_decoration: FlowerTimelineDecoration;
 }>;
 
 export type FlowerLiveModelIOUpdatedPayload = Readonly<{
@@ -869,6 +880,12 @@ export type FlowerTurnLaunchInput = Readonly<{
   reasoning_selection?: FlowerReasoningSelection;
 }>;
 
+export type FlowerCompactThreadContextInput = Readonly<{
+  thread_id: string;
+  expected_run_id?: string;
+  source: 'slash_command';
+}>;
+
 export type FlowerTurnLaunchFailure = Error & Readonly<{
   fresh_decision?: FlowerRouterDecision;
 }>;
@@ -978,6 +995,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   forkThread?: (threadID: string) => Promise<FlowerLiveBootstrap>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerLiveBootstrap>;
+  compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;
   submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<void>;

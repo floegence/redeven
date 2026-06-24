@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   fromWireAIEventNotify,
+  fromWireAICompactThreadContextResponse,
+  toWireAICompactThreadContextRequest,
   toWireAISubmitRequestUserInputResponseRequest,
   toWireAISendUserTurnRequest,
 } from './ai';
@@ -91,6 +93,30 @@ describe('Redeven v1 AI codec', () => {
     });
 
     expect(req.options).not.toHaveProperty('reasoning_selection');
+  });
+
+  it('round trips compact thread context payloads', () => {
+    expect(toWireAICompactThreadContextRequest({
+      threadId: ' th_compact ',
+      expectedRunId: ' run_live ',
+      source: 'slash_command',
+    })).toEqual({
+      thread_id: 'th_compact',
+      expected_run_id: 'run_live',
+      source: 'slash_command',
+    });
+
+    expect(fromWireAICompactThreadContextResponse({
+      operation_id: ' op_1 ',
+      kind: ' accepted ',
+      run_id: ' run_live ',
+      error_code: '',
+    })).toEqual({
+      operationId: 'op_1',
+      kind: 'accepted',
+      runId: 'run_live',
+      errorCode: undefined,
+    });
   });
 
   it('encodes reasoning selection in input response options', () => {

@@ -338,6 +338,51 @@ html.dark .flower-component-shell {
   gap: 0.5rem;
 }
 
+.flower-composer-command-menu {
+  display: grid;
+  width: min(28rem, 100%);
+  margin: 0.35rem 0 0.25rem;
+  gap: 0.25rem;
+}
+
+.flower-composer-command-item {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--flower-chat-surface) 58%, transparent);
+  padding: 0.45rem 0.6rem;
+  color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground) 16%);
+  cursor: pointer;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.flower-composer-command-item:hover,
+.flower-composer-command-item:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 44%, var(--flower-chat-surface-border) 56%);
+  background: color-mix(in srgb, var(--primary) 8%, var(--flower-chat-surface) 92%);
+  outline: none;
+}
+
+.flower-composer-command-token {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-weight: 720;
+}
+
+.flower-composer-command-description {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .flower-composer-context-indicator {
   position: relative;
   display: inline-flex;

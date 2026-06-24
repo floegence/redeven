@@ -238,9 +238,6 @@ func mergeFlowerContextCompaction(compactions []FlowerContextCompaction, persist
 	for i, compaction := range out {
 		if strings.TrimSpace(compaction.OperationID) == operationID {
 			if persisted.UpdatedAtMs > compaction.UpdatedAtMs {
-				if persisted.AnchorMessageID == "" {
-					persisted.AnchorMessageID = compaction.AnchorMessageID
-				}
 				out[i] = persisted
 			}
 			return out
@@ -258,9 +255,7 @@ func mergeFlowerTimelineDecoration(decorations []FlowerTimelineDecoration, persi
 	for i, decoration := range out {
 		if strings.TrimSpace(decoration.DecorationID) == decorationID {
 			if persisted.Compaction.UpdatedAtMs > decoration.Compaction.UpdatedAtMs {
-				if persisted.AnchorMessageID == "" {
-					persisted.AnchorMessageID = decoration.AnchorMessageID
-				}
+				persisted.Anchor = decoration.Anchor
 				persisted.Ordinal = decoration.Ordinal
 				out[i] = persisted
 			}
@@ -687,7 +682,7 @@ func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) FlowerLiveEvent {
 func appendFlowerLiveEventLocked(stream *flowerLiveThreadStream, event FlowerLiveEvent) FlowerLiveEvent {
 	event.Seq = stream.NextSeq
 	stream.NextSeq++
-	event = flowerLiveEventWithAssignedSeqPayload(event)
+	event = flowerLiveEventWithAssignedSeqPayload(stream, event)
 	event.Payload = cloneRawMessage(event.Payload)
 	stream.Events = append(stream.Events, cloneFlowerLiveEvent(event))
 	if len(stream.Events) > flowerLiveEventBufferLimit {
@@ -783,7 +778,20 @@ func (s *Service) buildFlowerTimelineReplacedEvent(endpointID string, threadID s
 	}, true
 }
 
-func flowerLiveEventWithAssignedSeqPayload(event FlowerLiveEvent) FlowerLiveEvent {
+func flowerLiveEventWithAssignedSeqPayload(stream *flowerLiveThreadStream, event FlowerLiveEvent) FlowerLiveEvent {
+	if event.Kind == FlowerLiveContextCompactionUpdated {
+		var payload FlowerLiveContextCompactionUpdatedPayload
+		if !decodeFlowerPayload(event.Payload, &payload) {
+			return event
+		}
+		payload.Compaction = normalizeFlowerContextCompactionForEvent(payload.Compaction, event)
+		payload.TimelineDecoration = normalizeFlowerTimelineDecorationForEvent(stream, payload.Compaction, payload.TimelineDecoration)
+		if !validFlowerTimelineDecoration(payload.TimelineDecoration) {
+			return event
+		}
+		event.Payload = mustFlowerPayload(payload)
+		return event
+	}
 	if event.Kind != FlowerLiveApprovalRequested && event.Kind != FlowerLiveApprovalResolved {
 		return event
 	}
@@ -799,6 +807,46 @@ func flowerLiveEventWithAssignedSeqPayload(event FlowerLiveEvent) FlowerLiveEven
 	}
 	event.Payload = mustFlowerPayload(payload)
 	return event
+}
+
+func normalizeFlowerContextCompactionForEvent(compaction FlowerContextCompaction, event FlowerLiveEvent) FlowerContextCompaction {
+	if strings.TrimSpace(compaction.RunID) == "" {
+		compaction.RunID = strings.TrimSpace(event.RunID)
+	}
+	if strings.TrimSpace(compaction.OperationID) == "" {
+		compaction.OperationID = firstNonEmptyString(strings.TrimSpace(compaction.CompactionID), fmt.Sprintf("%s:%d:%s", compaction.RunID, compaction.StepIndex, strings.TrimSpace(compaction.Phase)))
+	}
+	if compaction.UpdatedAtMs <= 0 {
+		compaction.UpdatedAtMs = event.AtUnixMs
+	}
+	return compaction
+}
+
+func normalizeFlowerTimelineDecorationForEvent(stream *flowerLiveThreadStream, compaction FlowerContextCompaction, decoration FlowerTimelineDecoration) FlowerTimelineDecoration {
+	operationID := strings.TrimSpace(compaction.OperationID)
+	if operationID == "" {
+		return FlowerTimelineDecoration{}
+	}
+	decorationID := "context-compaction:" + operationID
+	decoration.DecorationID = decorationID
+	if strings.TrimSpace(decoration.Kind) == "" {
+		decoration.Kind = "context_compaction"
+	}
+	decoration.Compaction = compaction
+	if stream != nil {
+		for _, existing := range stream.State.TimelineDecorations {
+			if strings.TrimSpace(existing.DecorationID) == decorationID {
+				decoration.Anchor = existing.Anchor
+				decoration.Ordinal = existing.Ordinal
+				return decoration
+			}
+		}
+		decoration.Ordinal = len(stream.State.TimelineDecorations)
+	}
+	if !validFlowerTimelineAnchor(decoration.Anchor) {
+		return FlowerTimelineDecoration{}
+	}
+	return decoration
 }
 
 func (s *Service) publishFlowerLiveEventFromRealtime(ev RealtimeEvent) {
@@ -990,7 +1038,14 @@ func (s *Service) flowerLiveEventsFromStreamEvent(ev RealtimeEvent, base func(Fl
 		if !ok {
 			return nil
 		}
-		return []FlowerLiveEvent{base(FlowerLiveContextCompactionUpdated, FlowerLiveContextCompactionUpdatedPayload{Compaction: compaction})}
+		decoration := stream.TimelineDecoration
+		if strings.TrimSpace(decoration.Compaction.OperationID) == "" {
+			decoration.Compaction = compaction
+		}
+		if !validFlowerTimelineDecoration(decoration) {
+			return nil
+		}
+		return []FlowerLiveEvent{base(FlowerLiveContextCompactionUpdated, FlowerLiveContextCompactionUpdatedPayload{Compaction: compaction, TimelineDecoration: decoration})}
 	case streamEventModelIOStatus:
 		return []FlowerLiveEvent{base(FlowerLiveModelIOUpdated, FlowerLiveModelIOUpdatedPayload{Status: flowerModelIOStatusFromStream(stream, strings.TrimSpace(ev.RunID), ev.AtUnixMs)})}
 	default:
@@ -1110,7 +1165,7 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 	case FlowerLiveContextCompactionUpdated:
 		var payload FlowerLiveContextCompactionUpdatedPayload
 		if decodeFlowerPayload(event.Payload, &payload) {
-			upsertFlowerContextCompaction(state, payload.Compaction, event)
+			upsertFlowerContextCompaction(state, payload.Compaction, payload.TimelineDecoration, event)
 		}
 	case FlowerLiveMessageStarted:
 		var payload FlowerLiveMessageStartedPayload
@@ -1259,7 +1314,7 @@ func flowerModelIOStatusMatchesLiveRun(state *FlowerLiveMaterializedState, statu
 	return !flowerLiveRunStatusHidesModelIO(run.Status)
 }
 
-func upsertFlowerContextCompaction(state *FlowerLiveMaterializedState, compaction FlowerContextCompaction, event FlowerLiveEvent) {
+func upsertFlowerContextCompaction(state *FlowerLiveMaterializedState, compaction FlowerContextCompaction, decoration FlowerTimelineDecoration, event FlowerLiveEvent) {
 	if state == nil {
 		return
 	}
@@ -1272,14 +1327,10 @@ func upsertFlowerContextCompaction(state *FlowerLiveMaterializedState, compactio
 	if compaction.UpdatedAtMs <= 0 {
 		compaction.UpdatedAtMs = event.AtUnixMs
 	}
-	compaction.AnchorMessageID = strings.TrimSpace(compaction.AnchorMessageID)
 	operationID := strings.TrimSpace(compaction.OperationID)
 	replaced := false
 	for i := range state.ContextCompactions {
 		if strings.TrimSpace(state.ContextCompactions[i].OperationID) == operationID {
-			if compaction.AnchorMessageID == "" {
-				compaction.AnchorMessageID = state.ContextCompactions[i].AnchorMessageID
-			}
 			state.ContextCompactions[i] = compaction
 			replaced = true
 			break
@@ -1290,25 +1341,56 @@ func upsertFlowerContextCompaction(state *FlowerLiveMaterializedState, compactio
 	}
 
 	decorationID := "context-compaction:" + operationID
-	decoration := FlowerTimelineDecoration{
-		DecorationID: decorationID,
-		Kind:         "context_compaction",
-		Placement:    "before",
-		Ordinal:      len(state.TimelineDecorations),
-		Compaction:   compaction,
+	decoration.DecorationID = decorationID
+	if strings.TrimSpace(decoration.Kind) == "" {
+		decoration.Kind = "context_compaction"
 	}
-	decoration.AnchorMessageID = compaction.AnchorMessageID
+	if strings.TrimSpace(decoration.Compaction.OperationID) == "" || decoration.Compaction.UpdatedAtMs < compaction.UpdatedAtMs {
+		decoration.Compaction = compaction
+	}
+	if !validFlowerTimelineDecoration(decoration) {
+		return
+	}
 	for i := range state.TimelineDecorations {
 		if strings.TrimSpace(state.TimelineDecorations[i].DecorationID) == decorationID {
 			decoration.Ordinal = state.TimelineDecorations[i].Ordinal
-			if decoration.AnchorMessageID == "" {
-				decoration.AnchorMessageID = state.TimelineDecorations[i].AnchorMessageID
-			}
+			decoration.Anchor = state.TimelineDecorations[i].Anchor
 			state.TimelineDecorations[i] = decoration
 			return
 		}
 	}
 	state.TimelineDecorations = append(state.TimelineDecorations, decoration)
+}
+
+func validFlowerTimelineDecoration(decoration FlowerTimelineDecoration) bool {
+	if strings.TrimSpace(decoration.DecorationID) == "" {
+		return false
+	}
+	if strings.TrimSpace(decoration.Kind) != "context_compaction" {
+		return false
+	}
+	if strings.TrimSpace(decoration.Compaction.OperationID) == "" {
+		return false
+	}
+	return validFlowerTimelineAnchor(decoration.Anchor)
+}
+
+func validFlowerTimelineAnchor(anchor FlowerTimelineAnchor) bool {
+	messageID := strings.TrimSpace(anchor.MessageID)
+	edge := strings.TrimSpace(anchor.Edge)
+	if messageID == "" || (edge != "before" && edge != "after") {
+		return false
+	}
+	switch strings.TrimSpace(anchor.TargetKind) {
+	case "message":
+		return anchor.BlockIndex == nil && strings.TrimSpace(anchor.ActivityItemID) == ""
+	case "block":
+		return anchor.BlockIndex != nil && *anchor.BlockIndex >= 0 && strings.TrimSpace(anchor.ActivityItemID) == ""
+	case "activity_item":
+		return anchor.BlockIndex != nil && *anchor.BlockIndex >= 0 && strings.TrimSpace(anchor.ActivityItemID) != ""
+	default:
+		return false
+	}
 }
 
 func flowerModelIOStatusFromStream(stream streamEventModelIOStatus, runID string, atUnixMs int64) *FlowerModelIOStatus {
@@ -1348,9 +1430,6 @@ func flowerContextCompactionFromStream(stream streamEventContextCompaction, runI
 	compaction := stream.Compaction
 	if strings.TrimSpace(compaction.RunID) == "" {
 		compaction.RunID = runID
-	}
-	if strings.TrimSpace(compaction.AnchorMessageID) == "" {
-		compaction.AnchorMessageID = strings.TrimSpace(stream.AnchorMessageID)
 	}
 	if compaction.UpdatedAtMs <= 0 {
 		compaction.UpdatedAtMs = atUnixMs

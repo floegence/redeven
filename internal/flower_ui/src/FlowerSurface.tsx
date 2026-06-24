@@ -53,6 +53,7 @@ import {
 } from './flowerSubagentProjection';
 import { projectSubagentDetailThread } from './flowerSubagentDetailThread';
 import { formatFlowerCurrentModelLabel } from './flowerModelLabel';
+import { FLOWER_COMPACT_CONTEXT_COMMAND, parseFlowerSlashCommand } from './flowerSlashCommands';
 import {
   presentFlowerActivityItem,
   type FlowerActivityDetailBlock,
@@ -147,6 +148,7 @@ const COMPOSER_STOP_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'w
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const LIVE_EVENT_RENDER_YIELD_SIZE = 8;
 const MESSAGE_COPY_RESET_MS = 1600;
+const FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID = 'flower-composer-command-compact-context';
 const TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX = 96;
 const TRANSCRIPT_SCROLL_TO_LATEST_MS = 220;
 const SUBAGENT_DETAIL_PAGE_SIZE = 200;
@@ -547,6 +549,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [inputSubmitting, setInputSubmitting] = createSignal(false);
   const [chatRunning, setChatRunning] = createSignal(false);
   const [threadStopping, setThreadStopping] = createSignal(false);
+  const [compactSubmitting, setCompactSubmitting] = createSignal(false);
   const [pendingTurn, setPendingTurn] = createSignal<PendingFlowerTurn | null>(null);
   const [settingsSaving, setSettingsSaving] = createSignal(false);
   const [threadsRefreshing, setThreadsRefreshing] = createSignal(false);
@@ -639,11 +642,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadLiveStatus = createMemo(() => selectedThread()?.status ?? 'idle');
   const selectedThreadReadOnlyReason = createMemo(() => trimString(selectedThread()?.read_only_reason));
   const selectedThreadIsSubagentProjection = createMemo(() => isSubagentProjectionThread(selectedThread()));
-  const selectedThreadReadOnly = createMemo(() => selectedThreadIsSubagentProjection() || Boolean(selectedThreadReadOnlyReason()));
+  const selectedThreadReadOnly = createMemo(() => selectedThreadIsSubagentProjection() || selectedThreadLiveStatus() === 'read_only' || Boolean(selectedThreadReadOnlyReason()));
   const selectedThreadReadOnlyDisplay = createMemo(() => (
     selectedThreadIsSubagentProjection()
       ? subagentsCopy().readOnlyComposerLabel
-      : selectedThreadReadOnlyReason()
+      : selectedThreadReadOnlyReason() || subagentsCopy().readOnlyComposerLabel
   ));
   const visibleInputRequest = (thread: FlowerThreadSnapshot | null | undefined): FlowerInputRequest | null => (
     thread?.status === 'waiting_user' ? thread.input_request ?? null : null
@@ -1727,6 +1730,56 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return thread;
   };
 
+  const compactSelectedThreadContext = async (rawPrompt: string) => {
+    const thread = selectedThread();
+    const threadID = trimString(thread?.thread_id);
+    if (!threadID) {
+      setChatSubmitError('Choose a conversation before compacting context.');
+      return;
+    }
+    if (selectedThreadReadOnly()) {
+      setChatSubmitError(selectedThreadReadOnlyDisplay());
+      return;
+    }
+    if (selectedInputRequest()) {
+      setChatSubmitError('Finish the current input request before compacting context.');
+      return;
+    }
+    if (!selectedThreadHasContent()) {
+      setChatSubmitError('There is no context to compact yet.');
+      return;
+    }
+    if (compactSubmitting()) return;
+    const expectedRunID = COMPOSER_STOP_THREAD_STATUSES.has(selectedThreadLiveStatus())
+      ? trimString(thread?.active_run_id)
+      : '';
+    setCompactSubmitting(true);
+    try {
+      const live = await props.adapter.compactThreadContext({
+        thread_id: threadID,
+        expected_run_id: expectedRunID || undefined,
+        source: 'slash_command',
+      });
+      const updated = applyLiveBootstrap(live);
+      setSelectedThreadID(updated.thread_id);
+      updateCurrentComposerSessionDraft((draft) => ({
+        ...draft,
+        chatDraft: '',
+      }));
+      setLoadError('');
+      returnToChat();
+      await refreshSelectedThread(updated.thread_id);
+    } catch (error) {
+      updateCurrentComposerSessionDraft((draft) => ({
+        ...draft,
+        chatDraft: rawPrompt,
+      }));
+      setChatSubmitError(getErrorMessage(error));
+    } finally {
+      setCompactSubmitting(false);
+    }
+  };
+
   const submitChat = async () => {
     const prompt = trimString(composerRef?.value ?? currentComposerSessionDraft().chatDraft);
     setChatSubmitError('');
@@ -1736,6 +1789,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (selectedInputRequest()) {
       await submitInputRequest();
+      return;
+    }
+    const command = parseFlowerSlashCommand(prompt);
+    if (command.kind === 'invalid') {
+      setChatSubmitError(command.message);
+      return;
+    }
+    if (command.kind === 'suggest') {
+      updateComposerText(FLOWER_COMPACT_CONTEXT_COMMAND);
+      requestComposerFocus();
+      return;
+    }
+    if (command.kind === 'intent') {
+      await compactSelectedThreadContext(prompt);
       return;
     }
     if (selectedThreadCanStop()) {
@@ -1980,6 +2047,35 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return false;
     }
     return event.key === 'Enter' && !event.shiftKey;
+  };
+
+  const selectCompactContextCommand = () => {
+    updateComposerText(FLOWER_COMPACT_CONTEXT_COMMAND);
+    requestComposerFocus();
+  };
+
+  const handleComposerKeyDown = (event: KeyboardEvent) => {
+    const command = composerSlashCommand();
+    if (!selectedInputRequest() && command.kind === 'suggest') {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        updateComposerText('');
+        return;
+      }
+      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !isComposing()) {
+        event.preventDefault();
+        selectCompactContextCommand();
+        return;
+      }
+    }
+    if (shouldSubmitOnEnterKeydown(event)) {
+      event.preventDefault();
+      void submitChat();
+    }
   };
 
   const runErrorActionLabel = (code: string): string => {
@@ -2335,12 +2431,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const composerChatDraftText = createMemo(() => trimString(currentComposerSessionDraft().chatDraft));
+  const composerSlashCommand = createMemo(() => selectedInputRequest() ? { kind: 'none' as const } : parseFlowerSlashCommand(composerChatDraftText()));
+  const composerPrimaryActionIsCommand = createMemo(() => composerSlashCommand().kind === 'intent');
   const composerPrimaryActionIsStop = createMemo(() => selectedThreadCanStop() && !composerChatDraftText());
-  const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : ArrowUp);
-  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? copy().chat.stop : copy().chat.send);
+  const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
+  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? copy().chat.stop : composerPrimaryActionIsCommand() ? 'Compact context' : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
-    if (threadStopping() || chatRunning()) return true;
+    if (threadStopping() || chatRunning() || compactSubmitting()) return true;
     if (selectedThreadReadOnly()) return true;
+    if (composerSlashCommand().kind === 'invalid') return true;
+    if (composerPrimaryActionIsCommand()) {
+      return !readyForChat() || !!selectedInputRequest() || !selectedThreadID() || !selectedThreadHasContent();
+    }
     if (selectedThreadCanStop()) return false;
     return !readyForChat() || !handlerAllowsSubmitIntent() || !composerChatDraftText();
   });
@@ -3695,12 +3797,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       setIsComposing(false);
                       updateComposerText(event.currentTarget.value);
                     }}
-                    onKeyDown={(event) => {
-                      if (shouldSubmitOnEnterKeydown(event)) {
-                        event.preventDefault();
-                        void submitChat();
-                      }
-                    }}
+                    onKeyDown={handleComposerKeyDown}
                   />
                 )}
               >
@@ -3719,12 +3816,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     setIsComposing(false);
                     updateComposerText(event.currentTarget.value);
                   }}
-                  onKeyDown={(event) => {
-                    if (shouldSubmitOnEnterKeydown(event)) {
-                      event.preventDefault();
-                      void submitChat();
-                    }
-                  }}
+                  onKeyDown={handleComposerKeyDown}
                 />
               </Show>
               <div class="flower-composer-footer">
@@ -3790,6 +3882,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       </div>}
                     </Show>
                   </div>
+                  <Show when={!selectedInputRequest() && composerSlashCommand().kind === 'suggest'}>
+                    <div
+                      class="flower-composer-command-menu"
+                      role="listbox"
+                      aria-label="Flower commands"
+                      aria-activedescendant={FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID}
+                    >
+                      <button
+                        id={FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID}
+                        type="button"
+                        role="option"
+                        aria-selected="true"
+                        class="flower-composer-command-item"
+                        onClick={selectCompactContextCommand}
+                      >
+                        <Clock class="h-3.5 w-3.5" />
+                        <span class="flower-composer-command-token">{FLOWER_COMPACT_CONTEXT_COMMAND}</span>
+                        <span class="flower-composer-command-description">Compact current context</span>
+                      </button>
+                    </div>
+                  </Show>
                   <div class="flower-composer-actions">
                     <Show when={selectedContextUsage()}>
                       {(usage) => <FlowerComposerContextIndicator usage={usage()} copy={copy()} />}
@@ -3805,7 +3918,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           aria-label={composerPrimaryActionLabel()}
                           title={composerPrimaryActionLabel()}
                           disabled={composerPrimaryActionDisabled()}
-                          loading={chatRunning() || threadStopping()}
+                          loading={chatRunning() || threadStopping() || compactSubmitting()}
                           onClick={() => void submitChat()}
                         />
                       )}

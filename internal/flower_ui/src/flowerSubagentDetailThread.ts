@@ -85,12 +85,11 @@ function messageForActivityRow(threadID: string, row: FlowerSubagentTimelineRow)
 }
 
 function compactionDecoration(threadID: string, row: FlowerSubagentTimelineRow, anchorMessageID: string): FlowerTimelineDecoration | null {
-  if (row.kind !== 'compaction' || !row.compaction) return null;
+  if (row.kind !== 'compaction' || !row.compaction || !trimString(anchorMessageID)) return null;
   const ordinal = Math.max(0, Math.floor(Number(row.ordinal ?? 0)));
   const operationID = `${safeIDPart(threadID)}:compaction:${ordinal}`;
   const compaction: FlowerContextCompaction = {
     operation_id: operationID,
-    anchor_message_id: anchorMessageID,
     phase: trimString(row.compaction.phase) || 'complete',
     status: trimString(row.compaction.phase) === 'failed' ? 'failed' : 'compacted',
     trigger: trimString(row.compaction.trigger),
@@ -103,8 +102,11 @@ function compactionDecoration(threadID: string, row: FlowerSubagentTimelineRow, 
   return {
     decoration_id: operationID,
     kind: 'context_compaction',
-    anchor_message_id: anchorMessageID,
-    placement: anchorMessageID ? 'after' : 'before',
+    anchor: {
+      target_kind: 'message',
+      message_id: anchorMessageID,
+      edge: 'after',
+    },
     ordinal,
     compaction,
   };

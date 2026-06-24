@@ -1059,7 +1059,7 @@ func TestContextRepo_ListRecentDialogueTurns_IncludesPendingUserAfterTurns(t *te
 	}, meta.UserPublicID, meta.UserEmail); err != nil {
 		t.Fatalf("append assistant message: %v", err)
 	}
-	if err := svc.contextRepo.AppendTurn(ctx, meta.EndpointID, th.ThreadID, "run_first", "turn_first", first.MessageID, assistantID, assistantAt); err != nil {
+	if _, err := svc.contextRepo.AppendTurn(ctx, meta.EndpointID, th.ThreadID, "run_first", "turn_first", first.MessageID, assistantID, assistantAt); err != nil {
 		t.Fatalf("AppendTurn: %v", err)
 	}
 
@@ -1154,7 +1154,7 @@ func TestContextRepo_ListRecentDialogueTurns_PreservesOrphanUsersAroundReference
 	}, meta.UserPublicID, meta.UserEmail); err != nil {
 		t.Fatalf("append assistant message: %v", err)
 	}
-	if err := svc.contextRepo.AppendTurn(ctx, meta.EndpointID, th.ThreadID, "run_paired", "turn_paired", userPairedID, assistantPairedID, at3); err != nil {
+	if _, err := svc.contextRepo.AppendTurn(ctx, meta.EndpointID, th.ThreadID, "run_paired", "turn_paired", userPairedID, assistantPairedID, at3); err != nil {
 		t.Fatalf("AppendTurn: %v", err)
 	}
 

@@ -54,7 +54,7 @@ func TestBuilder_BuildPromptPack(t *testing.T) {
 	}, "u", "u@example.com"); err != nil {
 		t.Fatalf("Append assistant: %v", err)
 	}
-	if err := db.AppendConversationTurn(ctx, threadstore.ConversationTurn{
+	if _, err := db.AppendConversationTurn(ctx, threadstore.ConversationTurn{
 		TurnID:             "turn_1",
 		EndpointID:         "env_1",
 		ThreadID:           "th_1",

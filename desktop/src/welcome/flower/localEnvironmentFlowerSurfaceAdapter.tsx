@@ -440,6 +440,21 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       await runtimeJSON<unknown>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/cancel`, {});
       return loadRuntimeFlowerThread(bridge, tid);
     },
+    compactThreadContext: async (input) => {
+      const tid = trim(input.thread_id);
+      if (!tid) throw new Error('Missing thread id.');
+      await runtimeJSON<unknown>(
+        bridge,
+        'POST',
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/context/compact`,
+        {
+          thread_id: tid,
+          expected_run_id: trim(input.expected_run_id) || undefined,
+          source: 'slash_command',
+        },
+      );
+      return loadRuntimeFlowerThread(bridge, tid);
+    },
     submitInput: async (input) => {
       const tid = trim(input.thread_id);
       const promptID = trim(input.prompt_id);

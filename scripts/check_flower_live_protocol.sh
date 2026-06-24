@@ -26,3 +26,8 @@ if rg -n 'transcriptRenderSignature|getActiveRunSnapshot|ActiveRunSnapshot' inte
   echo "old Flower streaming snapshot/render signature path is still present" >&2
   exit 1
 fi
+
+if rg -n 'anchor_message_id|AnchorMessageID|context\.compaction\.(started|applied)' internal/flower_ui/src desktop/src/welcome/flower internal/envapp/ui_src/src/ui internal/ai -S; then
+  echo "old Flower context compaction timeline protocol is still present" >&2
+  exit 1
+fi

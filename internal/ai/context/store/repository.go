@@ -39,9 +39,9 @@ func (r *Repository) SetOpenGoal(ctx context.Context, endpointID string, threadI
 	return r.db.SetThreadOpenGoal(ctx, endpointID, threadID, goal)
 }
 
-func (r *Repository) AppendTurn(ctx context.Context, endpointID string, threadID string, runID string, turnID string, userMessageID string, assistantMessageID string, createdAtUnixMs int64) error {
+func (r *Repository) AppendTurn(ctx context.Context, endpointID string, threadID string, runID string, turnID string, userMessageID string, assistantMessageID string, createdAtUnixMs int64) (int64, error) {
 	if !r.Ready() {
-		return errors.New("repository not ready")
+		return 0, errors.New("repository not ready")
 	}
 	return r.db.AppendConversationTurn(ctx, threadstore.ConversationTurn{
 		TurnID:             strings.TrimSpace(turnID),
@@ -74,17 +74,24 @@ func (r *Repository) ListRecentDialogueTurns(ctx context.Context, endpointID str
 	for _, turn := range turns {
 		userText := ""
 		assistantText := ""
+		userMessageRowID := int64(0)
+		assistantRowID := int64(0)
 		if strings.TrimSpace(turn.UserMessageID) != "" {
 			if msg, err := r.db.GetTranscriptMessage(ctx, endpointID, threadID, turn.UserMessageID); err == nil && msg != nil {
+				userMessageRowID = msg.ID
 				userText = strings.TrimSpace(msg.TextContent)
 			}
 		}
 		if strings.TrimSpace(turn.AssistantMessageID) != "" {
 			if msg, err := r.db.GetTranscriptMessage(ctx, endpointID, threadID, turn.AssistantMessageID); err == nil && msg != nil {
+				assistantRowID = msg.ID
 				assistantText = strings.TrimSpace(msg.TextContent)
 			}
 		}
 		out = append(out, model.DialogueTurn{
+			TurnRowID:          turn.ID,
+			UserMessageRowID:   userMessageRowID,
+			AssistantRowID:     assistantRowID,
 			TurnID:             strings.TrimSpace(turn.TurnID),
 			RunID:              strings.TrimSpace(turn.RunID),
 			UserMessageID:      strings.TrimSpace(turn.UserMessageID),
@@ -230,6 +237,8 @@ func buildDialogueFromTranscriptMessages(messages []threadstore.Message, referen
 
 			pendingID := strings.TrimSpace(pendingUser.MessageID)
 			out = append(out, model.DialogueTurn{
+				UserMessageRowID:   pendingUser.ID,
+				AssistantRowID:     msg.ID,
 				TurnID:             "unlinked::" + pendingID,
 				RunID:              "",
 				UserMessageID:      pendingID,
@@ -251,6 +260,7 @@ func buildDialogueFromTranscriptMessages(messages []threadstore.Message, referen
 			continue
 		}
 		out = append(out, model.DialogueTurn{
+			UserMessageRowID:   pendingUser.ID,
 			TurnID:             "pending::" + pendingID,
 			RunID:              "",
 			UserMessageID:      pendingID,

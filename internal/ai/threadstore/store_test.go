@@ -261,30 +261,6 @@ func TestStore_AppendRunEvent_ContextEventsUpdateLastContextRunID(t *testing.T) 
 		t.Fatalf("context usage FlowerActivitySignature=%q, want run_context_1 turn token", th.FlowerActivitySignature)
 	}
 	contextUsageRevision := th.FlowerActivityRevision
-	contextUsageSignature := th.FlowerActivitySignature
-
-	if err := s.AppendRunEvent(ctx, RunEventRecord{
-		EndpointID:  "env_1",
-		ThreadID:    "th_1",
-		RunID:       "run_context_old",
-		StreamKind:  "context",
-		EventType:   "context.compaction.applied",
-		PayloadJSON: "{}",
-		AtUnixMs:    1150,
-	}); err != nil {
-		t.Fatalf("AppendRunEvent old context compaction: %v", err)
-	}
-
-	th, err = s.GetThread(ctx, "env_1", "th_1")
-	if err != nil {
-		t.Fatalf("GetThread after old context compaction: %v", err)
-	}
-	if got := strings.TrimSpace(th.LastContextRunID); got != "run_context_1" {
-		t.Fatalf("LastContextRunID=%q, want %q after old context compaction", got, "run_context_1")
-	}
-	if th.FlowerActivityRevision != contextUsageRevision || th.FlowerActivitySignature != contextUsageSignature {
-		t.Fatalf("legacy context event changed Flower activity: before=(%d,%q) after=(%d,%q)", contextUsageRevision, contextUsageSignature, th.FlowerActivityRevision, th.FlowerActivitySignature)
-	}
 
 	if err := s.AppendRunEvent(ctx, RunEventRecord{
 		EndpointID:  "env_1",
@@ -1797,7 +1773,7 @@ INSERT INTO ai_messages(
 	}, "u1", "u1@example.com"); err != nil {
 		t.Fatalf("AppendMessage: %v", err)
 	}
-	if err := s.AppendConversationTurn(ctx, ConversationTurn{
+	if _, err := s.AppendConversationTurn(ctx, ConversationTurn{
 		TurnID:             "turn_1",
 		EndpointID:         endpointID,
 		ThreadID:           threadID,
@@ -2499,7 +2475,7 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 	}, "u1", "u1@example.com"); err != nil {
 		t.Fatalf("AppendMessage assistant: %v", err)
 	}
-	if err := s.AppendConversationTurn(ctx, ConversationTurn{
+	if _, err := s.AppendConversationTurn(ctx, ConversationTurn{
 		TurnID:             "turn_src",
 		EndpointID:         "env_1",
 		ThreadID:           "th_src",
@@ -2873,7 +2849,6 @@ func TestStore_ListRunEventsPage_ContextCategory(t *testing.T) {
 	}
 
 	appendEvent("context.integrity.repair_applied")
-	appendEvent("context.compaction.started")
 	appendEvent("context.usage.updated")
 	appendEvent("context.compaction.updated")
 	appendEvent("floret.projected_turn.result")
@@ -3427,6 +3402,93 @@ func TestStore_ThreadProviderContinuationCRUD(t *testing.T) {
 	}
 	if got != nil {
 		t.Fatalf("continuation after clear=%+v, want nil", got)
+	}
+}
+
+func TestStore_SetThreadProviderContinuationAndCompactedContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateThread(ctx, Thread{
+		ThreadID:        "th_compacted_pair",
+		EndpointID:      "env_compacted_pair",
+		CreatedAtUnixMs: 1,
+		UpdatedAtUnixMs: 1,
+	}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	continuation := ThreadProviderContinuation{
+		State: ProviderContinuationState{
+			Kind:       "openai_responses",
+			ID:         "resp_pair",
+			Attributes: map[string]string{"cursor": "cur_pair"},
+		},
+		ProviderID:      "openai",
+		Model:           "gpt-5-mini",
+		BaseURL:         "https://api.openai.com/v1",
+		UpdatedAtUnixMs: 10,
+	}
+	compacted := ThreadCompactedContext{
+		OperationID:             "compact-pair",
+		RequestID:               "manual-pair",
+		Source:                  "slash_command",
+		CompactionID:            "cmp-pair",
+		CompactionGeneration:    2,
+		CompactionWindowID:      "window-pair",
+		CompactedThroughEntryID: "entry-pair",
+		CoveredThroughTurnRowID: 42,
+		CoveredThroughMessageID: 99,
+		Transcript: []ThreadCompactedMessage{{
+			Role:    "user",
+			Content: "summary",
+			Kind:    "compaction_summary",
+		}},
+		CreatedAtUnixMs: 100,
+		UpdatedAtUnixMs: 101,
+	}
+
+	if err := s.SetThreadProviderContinuationAndCompactedContext(ctx, "env_compacted_pair", "th_compacted_pair", continuation, compacted); err != nil {
+		t.Fatalf("SetThreadProviderContinuationAndCompactedContext: %v", err)
+	}
+	state, err := s.GetThreadState(ctx, "env_compacted_pair", "th_compacted_pair")
+	if err != nil {
+		t.Fatalf("GetThreadState: %v", err)
+	}
+	if state == nil {
+		t.Fatalf("expected thread state")
+	}
+	if !reflect.DeepEqual(state.ProviderContinuation, continuation) {
+		t.Fatalf("continuation=%+v, want %+v", state.ProviderContinuation, continuation)
+	}
+	if state.CompactedContext.CoveredThroughTurnRowID != 42 || state.CompactedContext.CoveredThroughMessageID != 99 {
+		t.Fatalf("compacted boundary=%+v", state.CompactedContext)
+	}
+
+	compacted.OperationID = "compact-pair-cleared-continuation"
+	compacted.RequestID = "manual-cleared"
+	if err := s.SetThreadProviderContinuationAndCompactedContext(ctx, "env_compacted_pair", "th_compacted_pair", ThreadProviderContinuation{}, compacted); err != nil {
+		t.Fatalf("SetThreadProviderContinuationAndCompactedContext clear continuation: %v", err)
+	}
+	state, err = s.GetThreadState(ctx, "env_compacted_pair", "th_compacted_pair")
+	if err != nil {
+		t.Fatalf("GetThreadState after clear: %v", err)
+	}
+	if state == nil {
+		t.Fatalf("expected thread state after clear")
+	}
+	if !state.ProviderContinuation.IsZero() {
+		t.Fatalf("continuation after paired clear=%+v, want zero", state.ProviderContinuation)
+	}
+	if state.CompactedContext.OperationID != "compact-pair-cleared-continuation" {
+		t.Fatalf("compacted context after paired clear=%+v", state.CompactedContext)
 	}
 }
 
