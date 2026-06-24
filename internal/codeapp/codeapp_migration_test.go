@@ -77,7 +77,7 @@ func TestAppServerThreadReadStatePathMigratesLegacyStore(t *testing.T) {
 		t.Fatalf("EnsureFlower current: %v", err)
 	}
 	record := records["thread_1"]
-	if record.LastSeenActivityRevision != 123_456 ||
+	if record.LastSeenActivityRevision != 42 ||
 		record.LastReadMessageAtUnixMs != 123_456 ||
 		record.LastSeenActivitySignature != "sig_1" ||
 		record.LastSeenWaitingPromptID != "prompt_1" {

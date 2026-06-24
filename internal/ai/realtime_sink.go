@@ -430,6 +430,18 @@ func (s *Service) broadcastStreamEvent(endpointID string, threadID string, runID
 		StreamEvent: publicStreamEvent,
 	}
 	s.broadcastRealtimeEvent(ev)
+	if isFlowerReadActivityStreamEvent(publicStreamEvent) {
+		s.broadcastThreadSummary(endpointID, threadID)
+	}
+}
+
+func isFlowerReadActivityStreamEvent(streamEvent any) bool {
+	switch streamEvent.(type) {
+	case streamEventContextUsage, streamEventContextCompaction:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) broadcastTranscriptMessage(endpointID string, threadID string, runID string, rowID int64, messageJSON string, atUnixMs int64) {

@@ -6,6 +6,8 @@ import type {
   FlowerLiveBootstrap,
   FlowerLiveEvent,
   FlowerLiveEventsResponse,
+  FlowerThreadActivitySnapshot,
+  FlowerThreadReadStatus,
   FlowerThreadSnapshot,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
@@ -70,6 +72,19 @@ function liveEvent<K extends FlowerLiveEvent['kind']>(
     kind,
     payload,
   } as FlowerLiveEvent<K>;
+}
+
+function markedReadStatus(snapshot: FlowerThreadActivitySnapshot, status = 'success'): FlowerThreadReadStatus {
+  return {
+    is_unread: false,
+    snapshot,
+    read_state: {
+      last_seen_activity_revision: snapshot.activity_revision,
+      last_read_message_at_unix_ms: snapshot.last_message_at_unix_ms,
+      last_seen_activity_signature: snapshot.activity_signature || `status:${status}\u001factivity:${snapshot.activity_revision}`,
+      ...(snapshot.waiting_prompt_id ? { last_seen_waiting_prompt_id: snapshot.waiting_prompt_id } : {}),
+    },
+  };
 }
 
 describe('FlowerSurface navigation threads', () => {
@@ -449,7 +464,7 @@ describe('FlowerSurface navigation threads', () => {
       status: 'success',
       read_status: readStatus(true, 3, 'success'),
     });
-    const readResponse = deferred<FlowerLiveBootstrap>();
+    const readResponse = deferred<FlowerThreadReadStatus>();
     const loadResponse = deferred<FlowerLiveBootstrap>();
     const markThreadRead = vi.fn((_threadID: string, _snapshot) => readResponse.promise);
     const loadedThread = {
@@ -490,18 +505,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(markThreadRead.mock.calls[0]?.[1]).toMatchObject(unreadThread.read_status.snapshot);
 
     loadResponse.resolve(liveBootstrap(loadedThread));
-    readResponse.resolve(liveBootstrap({
-      ...loadedThread,
-      read_status: {
-        is_unread: false,
-        snapshot: unreadThread.read_status.snapshot,
-        read_state: {
-          last_seen_activity_revision: unreadThread.read_status.snapshot.activity_revision,
-          last_read_message_at_unix_ms: unreadThread.read_status.snapshot.last_message_at_unix_ms,
-          last_seen_activity_signature: unreadThread.read_status.snapshot.activity_signature,
-        },
-      },
-    }));
+    readResponse.resolve(markedReadStatus(unreadThread.read_status.snapshot));
     await waitFor(() => runtime.textContent?.includes('Fresh result.') ?? false);
     expect(runtime.textContent).toContain('Fresh result.');
   });
@@ -674,18 +678,7 @@ describe('FlowerSurface navigation threads', () => {
       ],
     };
     let detailHasFreshUnread = false;
-    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => liveBootstrap({
-      ...(detailHasFreshUnread ? unreadDetail : runningThread),
-      read_status: {
-        is_unread: false,
-        snapshot,
-        read_state: {
-          last_seen_activity_revision: snapshot.activity_revision,
-          last_read_message_at_unix_ms: snapshot.last_message_at_unix_ms,
-          last_seen_activity_signature: snapshot.activity_signature,
-        },
-      },
-    }));
+    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => markedReadStatus(snapshot, 'running'));
     const loadThread = vi.fn(async () => liveBootstrap(detailHasFreshUnread ? unreadDetail : runningThread));
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
     const runtime = renderSurfaceWithAdapter({
@@ -741,10 +734,7 @@ describe('FlowerSurface navigation threads', () => {
     let detailIsFresh = false;
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
     const loadThread = vi.fn(async () => liveBootstrap(detailIsFresh ? freshUnreadDetail : runningThread));
-    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => liveBootstrap({
-      ...freshUnreadDetail,
-      read_status: readStatus(false, snapshot.activity_revision, 'running'),
-    }));
+    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => markedReadStatus(snapshot, 'running'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
@@ -799,15 +789,12 @@ describe('FlowerSurface navigation threads', () => {
         },
       ],
     };
-    const firstRead = deferred<FlowerLiveBootstrap>();
+    const firstRead = deferred<FlowerThreadReadStatus>();
     const markThreadRead = vi.fn(async () => {
       if (markThreadRead.mock.calls.length === 1) {
         return firstRead.promise;
       }
-      return liveBootstrap({
-        ...finalUnreadDetail,
-        read_status: readStatus(false, 8_500, 'success'),
-      });
+      return readStatus(false, 8_500, 'success');
     });
     let detailHasFinalUnread = false;
     const loadThread = vi.fn(async () => liveBootstrap(detailHasFinalUnread ? finalUnreadDetail : runningThread));
@@ -831,16 +818,13 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
     expect(markThreadRead).toHaveBeenCalledTimes(1);
 
-    firstRead.resolve(liveBootstrap({
-      ...runningThread,
-      read_status: readStatus(false, 8_000, 'running'),
-    }));
+    firstRead.resolve(readStatus(false, 8_000, 'running'));
     await waitFor(() => markThreadRead.mock.calls.length >= 2);
 
     expect(runtime.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
   });
 
-  it('persists a queued final read even after the user leaves the thread', async () => {
+  it('does not mark a newer unread snapshot read after the user leaves the thread', async () => {
     const runningThread = thread({
       thread_id: 'thread-running-final-after-leave',
       title: 'Final read after leave',
@@ -872,15 +856,12 @@ describe('FlowerSurface navigation threads', () => {
         },
       ],
     };
-    const firstRead = deferred<FlowerLiveBootstrap>();
+    const firstRead = deferred<FlowerThreadReadStatus>();
     const markThreadRead = vi.fn(async (_threadID: string, snapshot) => {
       if (markThreadRead.mock.calls.length === 1) {
         return firstRead.promise;
       }
-      return liveBootstrap({
-        ...finalUnreadDetail,
-        read_status: readStatus(false, snapshot.activity_revision, 'success'),
-      });
+      return markedReadStatus(snapshot, 'success');
     });
     let detailHasFinalUnread = false;
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
@@ -901,14 +882,10 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => runtime.textContent?.includes('Final before leaving') ?? false);
 
     (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
-    firstRead.resolve(liveBootstrap({
-      ...runningThread,
-      read_status: readStatus(false, 11_000, 'running'),
-    }));
-    await waitFor(() => markThreadRead.mock.calls.length >= 2);
+    firstRead.resolve(readStatus(false, 11_000, 'running'));
+    await flush();
 
-    expect(markThreadRead.mock.calls[1]?.[0]).toBe('thread-running-final-after-leave');
-    expect(markThreadRead.mock.calls[1]?.[1]).toMatchObject(finalUnreadDetail.read_status.snapshot);
+    expect(markThreadRead).toHaveBeenCalledTimes(1);
   });
 
   it('marks a selected running thread read when live events complete it', async () => {
@@ -950,10 +927,7 @@ describe('FlowerSurface navigation threads', () => {
       ],
     };
     const liveEvents = deferred<FlowerLiveEventsResponse>();
-    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => liveBootstrap({
-      ...finalThread,
-      read_status: readStatus(false, snapshot.activity_revision, 'success'),
-    }, 2));
+    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => markedReadStatus(snapshot, 'success'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
@@ -1006,7 +980,7 @@ describe('FlowerSurface navigation threads', () => {
       read_status: readStatus(true, 7_500, 'success'),
     };
     let listSnapshot: readonly FlowerThreadSnapshot[] = [unreadThread];
-    const markThreadRead = vi.fn(() => new Promise<FlowerLiveBootstrap>(() => undefined));
+    const markThreadRead = vi.fn(() => new Promise<FlowerThreadReadStatus>(() => undefined));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
@@ -1079,11 +1053,11 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread-dot') === 'true');
     (runtime.querySelector('[data-thread-id="thread-mark-read-error"] button') as HTMLButtonElement).click();
     await waitFor(() => markThreadRead.mock.calls.length > 0);
-    await waitFor(() => runtime.querySelector('.flower-thread-action-error')?.textContent?.includes('read state unavailable') ?? false);
+    await flush();
 
     expect(runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-active')).toBe('true');
     expect(runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
-    expect(runtime.querySelector('.flower-thread-action-error')?.textContent).toContain('read state unavailable');
+    expect(runtime.querySelector('.flower-thread-action-error')?.textContent ?? '').not.toContain('read state unavailable');
 
     (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-active') === 'false');
@@ -2011,7 +1985,7 @@ describe('FlowerSurface navigation threads', () => {
         : backgroundRunning;
       return liveBootstrap(detail);
     });
-    const markThreadRead = vi.fn(async () => liveBootstrap(backgroundDone));
+    const markThreadRead = vi.fn(async () => backgroundDone.read_status);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads,

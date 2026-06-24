@@ -2064,9 +2064,39 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	if mismatchedRead.Code != http.StatusBadRequest {
 		t.Fatalf("mismatched ai mark-read status=%d, want=%d body=%s", mismatchedRead.Code, http.StatusBadRequest, mismatchedRead.Body.String())
 	}
+	mismatchedPromptRead := performAIMarkRead(originUser1, aiThreadReadStatusSnapshot{
+		ActivityRevision:    detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision,
+		LastMessageAtUnixMs: detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs,
+		ActivitySignature:   detail.Data.Thread.ReadStatus.Snapshot.ActivitySignature,
+		WaitingPromptID:     detail.Data.Thread.ReadStatus.Snapshot.WaitingPromptID + "-tampered",
+	})
+	if mismatchedPromptRead.Code != http.StatusBadRequest {
+		t.Fatalf("mismatched prompt ai mark-read status=%d, want=%d body=%s", mismatchedPromptRead.Code, http.StatusBadRequest, mismatchedPromptRead.Body.String())
+	}
+	mismatchedLastMessageRead := performAIMarkRead(originUser1, aiThreadReadStatusSnapshot{
+		ActivityRevision:    detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision,
+		LastMessageAtUnixMs: detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs - 1,
+		ActivitySignature:   detail.Data.Thread.ReadStatus.Snapshot.ActivitySignature,
+		WaitingPromptID:     detail.Data.Thread.ReadStatus.Snapshot.WaitingPromptID,
+	})
+	if mismatchedLastMessageRead.Code != http.StatusBadRequest {
+		t.Fatalf("mismatched last-message ai mark-read status=%d, want=%d body=%s", mismatchedLastMessageRead.Code, http.StatusBadRequest, mismatchedLastMessageRead.Body.String())
+	}
 
 	if err := aiSvc.AppendThreadMessage(context.Background(), &creatorMeta, thread.ThreadID, "user", "Concurrent prompt", "markdown"); err != nil {
 		t.Fatalf("AppendThreadMessage(concurrent): %v", err)
+	}
+	staleTampered := markRead(originUser1, aiThreadReadStatusSnapshot{
+		ActivityRevision:    staleSnapshot.ActivityRevision,
+		LastMessageAtUnixMs: staleSnapshot.LastMessageAtUnixMs,
+		ActivitySignature:   staleSnapshot.ActivitySignature + "\u001ftampered-history",
+		WaitingPromptID:     staleSnapshot.WaitingPromptID + "-old",
+	})
+	if !staleTampered.Data.ReadStatus.IsUnread {
+		t.Fatalf("tampered stale mark-read response is_unread=false after concurrent activity, want true")
+	}
+	if staleTampered.Data.ReadStatus.Snapshot.ActivityRevision <= staleSnapshot.ActivityRevision {
+		t.Fatalf("tampered stale mark-read response activity_revision=%d, want newer than %d", staleTampered.Data.ReadStatus.Snapshot.ActivityRevision, staleSnapshot.ActivityRevision)
 	}
 	staleMarked := markRead(originUser1, staleSnapshot)
 	if !staleMarked.Data.ReadStatus.IsUnread {

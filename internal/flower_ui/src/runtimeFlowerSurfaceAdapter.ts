@@ -18,6 +18,7 @@ import type {
   FlowerLiveEventsResponse,
 } from './contracts/flowerSurfaceContracts';
 import {
+  mapFlowerReadStatus,
   mapFlowerLiveBootstrap,
   mapFlowerLiveEvents,
   mapFlowerThread,
@@ -132,10 +133,10 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     );
   };
 
-  const markThreadRead = async (threadID: string, snapshot: FlowerThreadActivitySnapshot): Promise<FlowerLiveBootstrap> => {
+  const markThreadRead = async (threadID: string, snapshot: FlowerThreadActivitySnapshot): Promise<FlowerThreadReadStatus> => {
     const tid = trim(threadID);
     if (!tid) throw new Error(missingThreadIDMessage(options));
-    await options.transport.markThreadRead(tid, {
+    const result = await options.transport.markThreadRead(tid, {
       snapshot: {
         activity_revision: Math.floor(Number(snapshot.activity_revision)),
         last_message_at_unix_ms: Math.floor(Number(snapshot.last_message_at_unix_ms)),
@@ -143,7 +144,8 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         waiting_prompt_id: trim(snapshot.waiting_prompt_id) || undefined,
       },
     });
-    return loadThread(tid);
+    if (!result.read_status) throw new Error('Missing read status.');
+    return mapFlowerReadStatus(result.read_status);
   };
 
   return {

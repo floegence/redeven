@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -36,6 +37,13 @@ const (
 	ThreadTitleSourceAuto = "auto"
 	ThreadTitleSourceUser = "user"
 )
+
+type FlowerActivitySnapshot struct {
+	ActivityRevision    int64
+	LastMessageAtUnixMs int64
+	ActivitySignature   string
+	WaitingPromptID     string
+}
 
 func Open(path string) (*Store, error) {
 	p := filepath.Clean(strings.TrimSpace(path))
@@ -123,6 +131,10 @@ type Thread struct {
 	LastContextRunID       string `json:"last_context_run_id"`
 	PinnedAtUnixMs         int64  `json:"pinned_at_unix_ms"`
 
+	FlowerActivityRevision        int64  `json:"flower_activity_revision"`
+	FlowerActivitySignature       string `json:"flower_activity_signature"`
+	FlowerActivityWaitingPromptID string `json:"flower_activity_waiting_prompt_id"`
+
 	CreatedByUserPublicID string `json:"created_by_user_public_id"`
 	CreatedByUserEmail    string `json:"created_by_user_email"`
 	UpdatedByUserPublicID string `json:"updated_by_user_public_id"`
@@ -195,6 +207,7 @@ const threadSelectColumnsSQL = `
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error_code, run_error,
   waiting_user_input_json, last_context_run_id, pinned_at_unix_ms,
+  flower_activity_revision, flower_activity_signature, flower_activity_waiting_prompt_id,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
@@ -231,6 +244,9 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 		&t.WaitingUserInputJSON,
 		&t.LastContextRunID,
 		&t.PinnedAtUnixMs,
+		&t.FlowerActivityRevision,
+		&t.FlowerActivitySignature,
+		&t.FlowerActivityWaitingPromptID,
 		&t.CreatedByUserPublicID,
 		&t.CreatedByUserEmail,
 		&t.UpdatedByUserPublicID,
@@ -248,6 +264,12 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 	t.TitleInputMessageID = strings.TrimSpace(t.TitleInputMessageID)
 	t.TitleModelID = strings.TrimSpace(t.TitleModelID)
 	t.TitlePromptVersion = strings.TrimSpace(t.TitlePromptVersion)
+	t.LastContextRunID = strings.TrimSpace(t.LastContextRunID)
+	t.FlowerActivitySignature = strings.TrimSpace(t.FlowerActivitySignature)
+	t.FlowerActivityWaitingPromptID = strings.TrimSpace(t.FlowerActivityWaitingPromptID)
+	if t.FlowerActivityRevision < 0 {
+		t.FlowerActivityRevision = 0
+	}
 	return nil
 }
 
@@ -554,6 +576,10 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	if t.RunUpdatedAtUnixMs < 0 {
 		t.RunUpdatedAtUnixMs = 0
 	}
+	initialSnapshot := initialFlowerActivitySnapshot(t)
+	t.FlowerActivityRevision = initialSnapshot.ActivityRevision
+	t.FlowerActivitySignature = initialSnapshot.ActivitySignature
+	t.FlowerActivityWaitingPromptID = initialSnapshot.WaitingPromptID
 
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO ai_threads(
@@ -561,11 +587,12 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
 	  run_status, run_updated_at_unix_ms, run_error_code, run_error,
 	  waiting_user_input_json, last_context_run_id,
+	  flower_activity_revision, flower_activity_signature, flower_activity_waiting_prompt_id,
 	  created_by_user_public_id, created_by_user_email,
 	  updated_by_user_public_id, updated_by_user_email,
 	  created_at_unix_ms, updated_at_unix_ms,
 	  last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
-		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		t.ThreadID,
 		t.EndpointID,
@@ -587,6 +614,9 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		t.RunError,
 		t.WaitingUserInputJSON,
 		t.LastContextRunID,
+		t.FlowerActivityRevision,
+		t.FlowerActivitySignature,
+		t.FlowerActivityWaitingPromptID,
 		t.CreatedByUserPublicID,
 		t.CreatedByUserEmail,
 		t.UpdatedByUserPublicID,
@@ -701,6 +731,10 @@ func normalizeProjectedThread(t Thread) (Thread, error) {
 	if t.RunUpdatedAtUnixMs < 0 {
 		t.RunUpdatedAtUnixMs = 0
 	}
+	initialSnapshot := initialFlowerActivitySnapshot(t)
+	t.FlowerActivityRevision = initialSnapshot.ActivityRevision
+	t.FlowerActivitySignature = initialSnapshot.ActivitySignature
+	t.FlowerActivityWaitingPromptID = initialSnapshot.WaitingPromptID
 	return t, nil
 }
 
@@ -725,11 +759,12 @@ INSERT INTO ai_threads(
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error_code, run_error,
   waiting_user_input_json, last_context_run_id,
+  flower_activity_revision, flower_activity_signature, flower_activity_waiting_prompt_id,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms,
   last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `,
 			t.ThreadID,
 			t.EndpointID,
@@ -750,6 +785,9 @@ INSERT INTO ai_threads(
 			t.RunError,
 			t.WaitingUserInputJSON,
 			t.LastContextRunID,
+			t.FlowerActivityRevision,
+			t.FlowerActivitySignature,
+			t.FlowerActivityWaitingPromptID,
 			t.CreatedByUserPublicID,
 			t.CreatedByUserEmail,
 			t.UpdatedByUserPublicID,
@@ -779,6 +817,10 @@ INSERT INTO ai_threads(
 	if projectedThreadEqual(existing, t) {
 		return nil
 	}
+	snapshot, err := nextFlowerActivitySnapshotForThreadTx(ctx, tx, t.EndpointID, t.ThreadID, t)
+	if err != nil {
+		return err
+	}
 	_, err = tx.ExecContext(ctx, `
 UPDATE ai_threads
 SET namespace_public_id = ?,
@@ -802,7 +844,10 @@ SET namespace_public_id = ?,
     updated_by_user_email = ?,
     updated_at_unix_ms = ?,
     last_message_at_unix_ms = ?,
-    last_message_preview = ?
+    last_message_preview = ?,
+    flower_activity_revision = ?,
+    flower_activity_signature = ?,
+    flower_activity_waiting_prompt_id = ?
 WHERE endpoint_id = ? AND thread_id = ?
 `,
 		t.NamespacePublicID,
@@ -827,6 +872,9 @@ WHERE endpoint_id = ? AND thread_id = ?
 		t.UpdatedAtUnixMs,
 		t.LastMessageAtUnixMs,
 		t.LastMessagePreview,
+		snapshot.ActivityRevision,
+		snapshot.ActivitySignature,
+		snapshot.WaitingPromptID,
 		t.EndpointID,
 		t.ThreadID,
 	)
@@ -1185,6 +1233,195 @@ func isPersistedContextRunEventType(eventType string) bool {
 	return eventType == "context.usage.updated" || eventType == "context.compaction.updated"
 }
 
+func initialFlowerActivitySnapshot(t Thread) FlowerActivitySnapshot {
+	revision := legacyFlowerActivityRevision(t.RunStatus, t.RunUpdatedAtUnixMs, t.LastMessageAtUnixMs)
+	waitingPromptID := flowerActivityWaitingPromptID(t.RunStatus, t.WaitingUserInputJSON)
+	return FlowerActivitySnapshot{
+		ActivityRevision:    revision,
+		LastMessageAtUnixMs: nonNegativeInt64(t.LastMessageAtUnixMs),
+		ActivitySignature:   flowerActivitySignatureForState(revision, t.RunStatus, t.LastContextRunID, waitingPromptID, t.LastMessageAtUnixMs, t.LastMessagePreview),
+		WaitingPromptID:     waitingPromptID,
+	}
+}
+
+func loadThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (Thread, error) {
+	var thread Thread
+	if err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`
+SELECT
+%s
+FROM ai_threads
+WHERE endpoint_id = ? AND thread_id = ?
+`, threadSelectColumnsSQL), endpointID, threadID), &thread); err != nil {
+		return Thread{}, err
+	}
+	return thread, nil
+}
+
+func nextFlowerActivitySnapshotForThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, next Thread) (FlowerActivitySnapshot, error) {
+	var currentRevision int64
+	if err := tx.QueryRowContext(ctx, `
+SELECT flower_activity_revision
+FROM ai_threads
+WHERE endpoint_id = ? AND thread_id = ?
+`, endpointID, threadID).Scan(&currentRevision); err != nil {
+		return FlowerActivitySnapshot{}, err
+	}
+	revision := maxInt64(time.Now().UnixMilli(), currentRevision+1)
+	if revision <= 0 {
+		revision = 1
+	}
+	waitingPromptID := flowerActivityWaitingPromptID(next.RunStatus, next.WaitingUserInputJSON)
+	return FlowerActivitySnapshot{
+		ActivityRevision:    revision,
+		LastMessageAtUnixMs: nonNegativeInt64(next.LastMessageAtUnixMs),
+		ActivitySignature:   flowerActivitySignatureForState(revision, next.RunStatus, next.LastContextRunID, waitingPromptID, next.LastMessageAtUnixMs, next.LastMessagePreview),
+		WaitingPromptID:     waitingPromptID,
+	}, nil
+}
+
+func bumpFlowerActivityTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (FlowerActivitySnapshot, error) {
+	thread, err := loadThreadTx(ctx, tx, endpointID, threadID)
+	if err != nil {
+		return FlowerActivitySnapshot{}, err
+	}
+	snapshot, err := nextFlowerActivitySnapshotForThreadTx(ctx, tx, endpointID, threadID, thread)
+	if err != nil {
+		return FlowerActivitySnapshot{}, err
+	}
+	if err := storeFlowerActivitySnapshotTx(ctx, tx, endpointID, threadID, snapshot); err != nil {
+		return FlowerActivitySnapshot{}, err
+	}
+	return snapshot, nil
+}
+
+func storeFlowerActivitySnapshotTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, snapshot FlowerActivitySnapshot) error {
+	_, err := tx.ExecContext(ctx, `
+UPDATE ai_threads
+SET flower_activity_revision = ?,
+    flower_activity_signature = ?,
+    flower_activity_waiting_prompt_id = ?
+WHERE endpoint_id = ? AND thread_id = ?
+`, snapshot.ActivityRevision, snapshot.ActivitySignature, snapshot.WaitingPromptID, endpointID, threadID)
+	return err
+}
+
+func legacyFlowerActivityRevision(runStatus string, runUpdatedAtUnixMs int64, lastMessageAtUnixMs int64) int64 {
+	base := maxInt64(nonNegativeInt64(lastMessageAtUnixMs), nonNegativeInt64(runUpdatedAtUnixMs))
+	ordinal := flowerRunStatusRevisionOrdinal(runStatus)
+	if base <= 0 {
+		return ordinal
+	}
+	return base*10 + ordinal
+}
+
+func flowerRunStatusRevisionOrdinal(status string) int64 {
+	switch normalizeFlowerActivityToken(status) {
+	case "", "idle":
+		return 0
+	case "accepted":
+		return 1
+	case "running", "recovering", "finalizing":
+		return 2
+	case "waiting_approval":
+		return 3
+	case "waiting_user":
+		return 4
+	case "success", "completed":
+		return 5
+	case "failed", "timed_out", "canceled", "cancelled":
+		return 6
+	default:
+		return 0
+	}
+}
+
+func flowerActivityWaitingPromptID(runStatus string, waitingUserInputJSON string) string {
+	if normalizeFlowerActivityToken(runStatus) != "waiting_user" {
+		return ""
+	}
+	raw := strings.TrimSpace(waitingUserInputJSON)
+	if raw == "" {
+		return ""
+	}
+	var payload struct {
+		PromptID string `json:"prompt_id"`
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(payload.PromptID)
+}
+
+func flowerActivitySignatureForState(
+	activityRevision int64,
+	runStatus string,
+	lastContextRunID string,
+	waitingPromptID string,
+	lastMessageAtUnixMs int64,
+	lastMessagePreview string,
+) string {
+	tokens := make([]string, 0, 6)
+	if normalizedStatus := normalizeFlowerActivityToken(runStatus); normalizedStatus != "" {
+		tokens = append(tokens, "status:"+normalizedStatus)
+	}
+	if lastContextRunID = strings.TrimSpace(lastContextRunID); lastContextRunID != "" {
+		tokens = append(tokens, "turn:"+lastContextRunID)
+	}
+	tokens = append(tokens, "activity:"+formatNonNegativeInt64(activityRevision))
+	tokens = append(tokens, "last_message:"+formatNonNegativeInt64(lastMessageAtUnixMs))
+	if waitingPromptID = strings.TrimSpace(waitingPromptID); waitingPromptID != "" {
+		tokens = append(tokens, "prompt:"+waitingPromptID)
+	}
+	if messageToken := flowerMessagePreviewToken(lastMessagePreview); messageToken != "" {
+		tokens = append(tokens, "message:"+messageToken)
+	}
+	return strings.Join(tokens, "\u001f")
+}
+
+func flowerMessagePreviewToken(preview string) string {
+	preview = strings.TrimSpace(preview)
+	if preview == "" {
+		return ""
+	}
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(preview))
+	return strconv.FormatUint(h.Sum64(), 36)
+}
+
+func normalizeFlowerActivityToken(value string) string {
+	value = strings.TrimSpace(value)
+	value = camelSplitASCII(value)
+	value = strings.ReplaceAll(value, "-", "_")
+	value = strings.ReplaceAll(value, " ", "_")
+	return strings.ToLower(value)
+}
+
+func camelSplitASCII(value string) string {
+	if value == "" {
+		return ""
+	}
+	var builder strings.Builder
+	for index, r := range value {
+		if index > 0 && isLowerAlphaNumeric(rune(value[index-1])) && isUpperAlpha(r) {
+			builder.WriteByte('_')
+		}
+		builder.WriteRune(r)
+	}
+	return builder.String()
+}
+
+func isLowerAlphaNumeric(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+}
+
+func isUpperAlpha(r rune) bool {
+	return r >= 'A' && r <= 'Z'
+}
+
+func formatNonNegativeInt64(value int64) string {
+	return strconv.FormatInt(nonNegativeInt64(value), 10)
+}
+
 const (
 	RuntimeRestartedRunErrorCode    = "runtime_restarted"
 	RuntimeRestartedRunErrorMessage = "The local runtime restarted before this reply finished."
@@ -1204,7 +1441,44 @@ func (s *Store) ResetStaleActiveThreadRunStates(ctx context.Context) (int64, err
 		ctx = context.Background()
 	}
 	now := time.Now().UnixMilli()
-	res, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	rows, err := tx.QueryContext(ctx, `
+SELECT endpoint_id, thread_id
+FROM ai_threads
+WHERE run_status IN ('accepted', 'running', 'waiting_approval', 'recovering', 'finalizing')
+`)
+	if err != nil {
+		return 0, err
+	}
+	type staleThreadID struct {
+		endpointID string
+		threadID   string
+	}
+	threadIDs := make([]staleThreadID, 0)
+	for rows.Next() {
+		var endpointID string
+		var threadID string
+		if err := rows.Scan(&endpointID, &threadID); err != nil {
+			_ = rows.Close()
+			return 0, err
+		}
+		threadIDs = append(threadIDs, staleThreadID{
+			endpointID: strings.TrimSpace(endpointID),
+			threadID:   strings.TrimSpace(threadID),
+		})
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return 0, err
+	}
+	res, err := tx.ExecContext(ctx, `
 		UPDATE ai_threads
 		SET run_status = 'canceled',
 		    run_updated_at_unix_ms = ?,
@@ -1218,6 +1492,17 @@ func (s *Store) ResetStaleActiveThreadRunStates(ctx context.Context) (int64, err
 		return 0, err
 	}
 	n, _ := res.RowsAffected()
+	for _, id := range threadIDs {
+		if id.endpointID == "" || id.threadID == "" {
+			continue
+		}
+		if _, err := bumpFlowerActivityTx(ctx, tx, id.endpointID, id.threadID); err != nil {
+			return 0, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 	return n, nil
 }
 
@@ -1260,7 +1545,12 @@ func (s *Store) UpdateThreadRunState(
 	}
 
 	now := time.Now().UnixMilli()
-	res, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `
 	UPDATE ai_threads
 	SET run_status = ?,
 	    run_updated_at_unix_ms = ?,
@@ -1279,7 +1569,10 @@ func (s *Store) UpdateThreadRunState(
 	if n == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+	if _, err := bumpFlowerActivityTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) DeleteThread(ctx context.Context, endpointID string, threadID string) error {
@@ -1835,6 +2128,9 @@ WHERE endpoint_id = ? AND thread_id = ?
 		if err != nil {
 			return 0, err
 		}
+		if _, err := bumpFlowerActivityTx(ctx, tx, endpointID, threadID); err != nil {
+			return 0, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
@@ -1903,6 +2199,9 @@ WHERE endpoint_id = ? AND thread_id = ?
 	}
 	if n, _ := updateRes.RowsAffected(); n == 0 {
 		return 0, sql.ErrNoRows
+	}
+	if _, err := bumpFlowerActivityTx(ctx, tx, endpointID, threadID); err != nil {
+		return 0, err
 	}
 	return rowID, nil
 }
@@ -2834,7 +3133,12 @@ func (s *Store) AppendRunEvent(ctx context.Context, rec RunEventRecord) error {
 	if rec.AtUnixMs <= 0 {
 		rec.AtUnixMs = time.Now().UnixMilli()
 	}
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(ctx, `
 INSERT INTO ai_run_events(endpoint_id, thread_id, run_id, stream_kind, event_type, payload_json, at_unix_ms)
 VALUES(?, ?, ?, ?, ?, ?, ?)
 `, rec.EndpointID, rec.ThreadID, rec.RunID, rec.StreamKind, rec.EventType, rec.PayloadJSON, rec.AtUnixMs)
@@ -2842,15 +3146,24 @@ VALUES(?, ?, ?, ?, ?, ?, ?)
 		return err
 	}
 	if isPersistedContextRunEventType(rec.EventType) {
-		if _, err := s.db.ExecContext(ctx, `
+		res, err := tx.ExecContext(ctx, `
 UPDATE ai_threads
 SET last_context_run_id = ?
 WHERE endpoint_id = ? AND thread_id = ?
-`, rec.RunID, rec.EndpointID, rec.ThreadID); err != nil {
+`, rec.RunID, rec.EndpointID, rec.ThreadID)
+		if err != nil {
 			return err
 		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			if _, err := bumpFlowerActivityTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
+				return err
+			}
+		}
 	}
-	return s.pruneRunEventsForThread(ctx, rec.EndpointID, rec.ThreadID)
+	if err := pruneRunEventsForThreadTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) ListRunEvents(ctx context.Context, endpointID string, runID string, limit int) ([]RunEventRecord, error) {
@@ -2990,8 +3303,8 @@ LIMIT ?
 	return out, nil
 }
 
-func (s *Store) pruneRunEventsForThread(ctx context.Context, endpointID string, threadID string) error {
-	if s == nil || s.db == nil {
+func pruneRunEventsForThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) error {
+	if tx == nil {
 		return errors.New("store not initialized")
 	}
 	if ctx == nil {
@@ -3005,7 +3318,7 @@ func (s *Store) pruneRunEventsForThread(ctx context.Context, endpointID string, 
 
 	if runEventRetentionMaxAge > 0 {
 		minAtUnixMs := time.Now().Add(-runEventRetentionMaxAge).UnixMilli()
-		if _, err := s.db.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, `
 DELETE FROM ai_run_events
 WHERE endpoint_id = ? AND thread_id = ? AND at_unix_ms > 0 AND at_unix_ms < ?
 `, endpointID, threadID, minAtUnixMs); err != nil {
@@ -3014,7 +3327,7 @@ WHERE endpoint_id = ? AND thread_id = ? AND at_unix_ms > 0 AND at_unix_ms < ?
 	}
 
 	if runEventRetentionMaxPerThread > 0 {
-		if _, err := s.db.ExecContext(ctx, `
+		if _, err := tx.ExecContext(ctx, `
 DELETE FROM ai_run_events
 WHERE id IN (
   SELECT id

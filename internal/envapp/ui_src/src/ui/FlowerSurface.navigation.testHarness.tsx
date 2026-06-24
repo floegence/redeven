@@ -587,19 +587,16 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
     loadThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID }))),
     listThreadLiveEvents: vi.fn(async () => ({ events: [], next_cursor: 0, retained_from_seq: 1 })),
     loadSubagentDetail: vi.fn(async () => subagentDetail()),
-    markThreadRead: vi.fn(async (threadID: string, snapshot) => liveBootstrap(thread({
-      thread_id: threadID,
-      read_status: {
-        is_unread: false,
-        snapshot,
-        read_state: {
-          last_seen_activity_revision: snapshot.activity_revision,
-          last_read_message_at_unix_ms: snapshot.last_message_at_unix_ms,
-          last_seen_activity_signature: snapshot.activity_signature,
-          ...(snapshot.waiting_prompt_id ? { last_seen_waiting_prompt_id: snapshot.waiting_prompt_id } : {}),
-        },
+    markThreadRead: vi.fn(async (_threadID: string, snapshot) => ({
+      is_unread: false,
+      snapshot,
+      read_state: {
+        last_seen_activity_revision: snapshot.activity_revision,
+        last_read_message_at_unix_ms: snapshot.last_message_at_unix_ms,
+        last_seen_activity_signature: snapshot.activity_signature,
+        ...(snapshot.waiting_prompt_id ? { last_seen_waiting_prompt_id: snapshot.waiting_prompt_id } : {}),
       },
-    }))),
+    })),
     resolveHandler: vi.fn(async () => decision()),
     launchTurn: vi.fn(async () => liveBootstrap(thread())),
     stopThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, status: 'canceled' }))),

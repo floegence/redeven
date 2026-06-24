@@ -41,6 +41,10 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 	if th.RunStatus != "idle" {
 		t.Fatalf("RunStatus=%q, want idle", th.RunStatus)
 	}
+	if th.FlowerActivitySignature == "" {
+		t.Fatalf("FlowerActivitySignature is empty after create")
+	}
+	prevFlowerActivityRevision := th.FlowerActivityRevision
 
 	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "running", "", "", "", "u1", "u1@example.com"); err != nil {
 		t.Fatalf("UpdateThreadRunState running: %v", err)
@@ -55,6 +59,13 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 	if th.RunUpdatedAtUnixMs <= 0 {
 		t.Fatalf("RunUpdatedAtUnixMs=%d, want > 0", th.RunUpdatedAtUnixMs)
 	}
+	if th.FlowerActivityRevision <= prevFlowerActivityRevision {
+		t.Fatalf("running FlowerActivityRevision=%d, want > %d", th.FlowerActivityRevision, prevFlowerActivityRevision)
+	}
+	if !strings.Contains(th.FlowerActivitySignature, "status:running") {
+		t.Fatalf("running FlowerActivitySignature=%q, want running status", th.FlowerActivitySignature)
+	}
+	prevFlowerActivityRevision = th.FlowerActivityRevision
 
 	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "failed", "PROVIDER_UNREACHABLE", strings.Repeat("x", 900), "", "u1", "u1@example.com"); err != nil {
 		t.Fatalf("UpdateThreadRunState failed: %v", err)
@@ -72,6 +83,13 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 	if got := len([]rune(th.RunError)); got != 600 {
 		t.Fatalf("RunError rune len=%d, want 600", got)
 	}
+	if th.FlowerActivityRevision <= prevFlowerActivityRevision {
+		t.Fatalf("failed FlowerActivityRevision=%d, want > %d", th.FlowerActivityRevision, prevFlowerActivityRevision)
+	}
+	if !strings.Contains(th.FlowerActivitySignature, "status:failed") {
+		t.Fatalf("failed FlowerActivitySignature=%q, want failed status", th.FlowerActivitySignature)
+	}
+	prevFlowerActivityRevision = th.FlowerActivityRevision
 
 	waitingPromptJSONBytes, err := json.Marshal(map[string]any{
 		"prompt_id":          "wp_1",
@@ -108,6 +126,16 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 	if strings.TrimSpace(th.WaitingUserInputJSON) != waitingPromptJSON {
 		t.Fatalf("waiting prompt mismatch: %+v", th)
 	}
+	if th.FlowerActivityRevision <= prevFlowerActivityRevision {
+		t.Fatalf("waiting_user FlowerActivityRevision=%d, want > %d", th.FlowerActivityRevision, prevFlowerActivityRevision)
+	}
+	if th.FlowerActivityWaitingPromptID != "wp_1" {
+		t.Fatalf("FlowerActivityWaitingPromptID=%q, want wp_1", th.FlowerActivityWaitingPromptID)
+	}
+	if !strings.Contains(th.FlowerActivitySignature, "prompt:wp_1") {
+		t.Fatalf("waiting_user FlowerActivitySignature=%q, want prompt token", th.FlowerActivitySignature)
+	}
+	prevFlowerActivityRevision = th.FlowerActivityRevision
 
 	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "success", "", "should be cleared", "", "u1", "u1@example.com"); err != nil {
 		t.Fatalf("UpdateThreadRunState success: %v", err)
@@ -127,6 +155,15 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 	}
 	if th.WaitingUserInputJSON != "" {
 		t.Fatalf("waiting prompt should be cleared, got %+v", th)
+	}
+	if th.FlowerActivityRevision <= prevFlowerActivityRevision {
+		t.Fatalf("success FlowerActivityRevision=%d, want > %d", th.FlowerActivityRevision, prevFlowerActivityRevision)
+	}
+	if th.FlowerActivityWaitingPromptID != "" {
+		t.Fatalf("FlowerActivityWaitingPromptID=%q, want empty after success", th.FlowerActivityWaitingPromptID)
+	}
+	if !strings.Contains(th.FlowerActivitySignature, "status:success") {
+		t.Fatalf("success FlowerActivitySignature=%q, want success status", th.FlowerActivitySignature)
 	}
 }
 
@@ -166,6 +203,15 @@ func TestStore_AppendRunEvent_ContextEventsUpdateLastContextRunID(t *testing.T) 
 	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
+	initial, err := s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread initial: %v", err)
+	}
+	if initial == nil {
+		t.Fatalf("thread missing")
+	}
+	initialRevision := initial.FlowerActivityRevision
+	initialSignature := initial.FlowerActivitySignature
 
 	if err := s.AppendRunEvent(ctx, RunEventRecord{
 		EndpointID:  "env_1",
@@ -186,6 +232,9 @@ func TestStore_AppendRunEvent_ContextEventsUpdateLastContextRunID(t *testing.T) 
 	if got := strings.TrimSpace(th.LastContextRunID); got != "" {
 		t.Fatalf("LastContextRunID=%q, want empty after non-context event", got)
 	}
+	if th.FlowerActivityRevision != initialRevision || th.FlowerActivitySignature != initialSignature {
+		t.Fatalf("non-context event changed Flower activity: before=(%d,%q) after=(%d,%q)", initialRevision, initialSignature, th.FlowerActivityRevision, th.FlowerActivitySignature)
+	}
 
 	if err := s.AppendRunEvent(ctx, RunEventRecord{
 		EndpointID:  "env_1",
@@ -198,6 +247,21 @@ func TestStore_AppendRunEvent_ContextEventsUpdateLastContextRunID(t *testing.T) 
 	}); err != nil {
 		t.Fatalf("AppendRunEvent context usage: %v", err)
 	}
+	th, err = s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread after context usage: %v", err)
+	}
+	if got := strings.TrimSpace(th.LastContextRunID); got != "run_context_1" {
+		t.Fatalf("LastContextRunID=%q, want run_context_1 after context usage", got)
+	}
+	if th.FlowerActivityRevision <= initialRevision {
+		t.Fatalf("context usage FlowerActivityRevision=%d, want > %d", th.FlowerActivityRevision, initialRevision)
+	}
+	if !strings.Contains(th.FlowerActivitySignature, "turn:run_context_1") {
+		t.Fatalf("context usage FlowerActivitySignature=%q, want run_context_1 turn token", th.FlowerActivitySignature)
+	}
+	contextUsageRevision := th.FlowerActivityRevision
+	contextUsageSignature := th.FlowerActivitySignature
 
 	if err := s.AppendRunEvent(ctx, RunEventRecord{
 		EndpointID:  "env_1",
@@ -218,6 +282,9 @@ func TestStore_AppendRunEvent_ContextEventsUpdateLastContextRunID(t *testing.T) 
 	if got := strings.TrimSpace(th.LastContextRunID); got != "run_context_1" {
 		t.Fatalf("LastContextRunID=%q, want %q after old context compaction", got, "run_context_1")
 	}
+	if th.FlowerActivityRevision != contextUsageRevision || th.FlowerActivitySignature != contextUsageSignature {
+		t.Fatalf("legacy context event changed Flower activity: before=(%d,%q) after=(%d,%q)", contextUsageRevision, contextUsageSignature, th.FlowerActivityRevision, th.FlowerActivitySignature)
+	}
 
 	if err := s.AppendRunEvent(ctx, RunEventRecord{
 		EndpointID:  "env_1",
@@ -237,6 +304,12 @@ func TestStore_AppendRunEvent_ContextEventsUpdateLastContextRunID(t *testing.T) 
 	}
 	if got := strings.TrimSpace(th.LastContextRunID); got != "run_context_2" {
 		t.Fatalf("LastContextRunID=%q, want %q", got, "run_context_2")
+	}
+	if th.FlowerActivityRevision <= contextUsageRevision {
+		t.Fatalf("context compaction FlowerActivityRevision=%d, want > %d", th.FlowerActivityRevision, contextUsageRevision)
+	}
+	if !strings.Contains(th.FlowerActivitySignature, "turn:run_context_2") {
+		t.Fatalf("context compaction FlowerActivitySignature=%q, want run_context_2 turn token", th.FlowerActivitySignature)
 	}
 }
 
@@ -432,6 +505,90 @@ func TestStore_AppendMessage_MonotonicThreadActivityTimestamp(t *testing.T) {
 	}
 	if !strings.Contains(second.LastMessagePreview, "second") {
 		t.Fatalf("LastMessagePreview=%q, want second message", second.LastMessagePreview)
+	}
+	if first.FlowerActivityRevision <= 0 {
+		t.Fatalf("first FlowerActivityRevision=%d, want > 0", first.FlowerActivityRevision)
+	}
+	if second.FlowerActivityRevision <= first.FlowerActivityRevision {
+		t.Fatalf("FlowerActivityRevision did not advance: first=%d second=%d", first.FlowerActivityRevision, second.FlowerActivityRevision)
+	}
+	if second.FlowerActivitySignature == first.FlowerActivitySignature || !strings.Contains(second.FlowerActivitySignature, "message:") {
+		t.Fatalf("second FlowerActivitySignature=%q first=%q, want updated message token", second.FlowerActivitySignature, first.FlowerActivitySignature)
+	}
+}
+
+func TestStore_UpsertProjectedMessageBumpsFlowerActivityOnVisibleChanges(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_projected_msg", EndpointID: "env_1", CreatedAtUnixMs: 100, UpdatedAtUnixMs: 100}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	initial, err := s.GetThread(ctx, "env_1", "th_projected_msg")
+	if err != nil {
+		t.Fatalf("GetThread initial: %v", err)
+	}
+	if initial == nil {
+		t.Fatalf("thread missing")
+	}
+
+	msg := Message{
+		ThreadID:        "th_projected_msg",
+		EndpointID:      "env_1",
+		MessageID:       "msg_projected",
+		Role:            "assistant",
+		Status:          "complete",
+		CreatedAtUnixMs: 200,
+		UpdatedAtUnixMs: 200,
+		TextContent:     "first projected answer",
+		MessageJSON:     `{"id":"msg_projected","role":"assistant","blocks":[{"type":"markdown","content":"first projected answer"}],"status":"complete","timestamp":200}`,
+	}
+	if _, err := s.UpsertProjectedMessage(ctx, "env_1", "th_projected_msg", msg, "u1", "u1@example.com"); err != nil {
+		t.Fatalf("UpsertProjectedMessage insert: %v", err)
+	}
+	inserted, err := s.GetThread(ctx, "env_1", "th_projected_msg")
+	if err != nil {
+		t.Fatalf("GetThread inserted: %v", err)
+	}
+	if inserted.FlowerActivityRevision <= initial.FlowerActivityRevision {
+		t.Fatalf("insert FlowerActivityRevision=%d, want > %d", inserted.FlowerActivityRevision, initial.FlowerActivityRevision)
+	}
+	if !strings.Contains(inserted.LastMessagePreview, "first projected answer") || !strings.Contains(inserted.FlowerActivitySignature, "message:") {
+		t.Fatalf("inserted projected message did not update visible activity: %+v", inserted)
+	}
+
+	if _, err := s.UpsertProjectedMessage(ctx, "env_1", "th_projected_msg", msg, "u1", "u1@example.com"); err != nil {
+		t.Fatalf("UpsertProjectedMessage idempotent: %v", err)
+	}
+	idempotent, err := s.GetThread(ctx, "env_1", "th_projected_msg")
+	if err != nil {
+		t.Fatalf("GetThread idempotent: %v", err)
+	}
+	if idempotent.FlowerActivityRevision != inserted.FlowerActivityRevision || idempotent.FlowerActivitySignature != inserted.FlowerActivitySignature {
+		t.Fatalf("idempotent projected message changed Flower activity: before=(%d,%q) after=(%d,%q)", inserted.FlowerActivityRevision, inserted.FlowerActivitySignature, idempotent.FlowerActivityRevision, idempotent.FlowerActivitySignature)
+	}
+
+	msg.TextContent = "updated projected answer"
+	msg.MessageJSON = `{"id":"msg_projected","role":"assistant","blocks":[{"type":"markdown","content":"updated projected answer"}],"status":"complete","timestamp":200}`
+	if _, err := s.UpsertProjectedMessage(ctx, "env_1", "th_projected_msg", msg, "u1", "u1@example.com"); err != nil {
+		t.Fatalf("UpsertProjectedMessage update: %v", err)
+	}
+	updated, err := s.GetThread(ctx, "env_1", "th_projected_msg")
+	if err != nil {
+		t.Fatalf("GetThread updated: %v", err)
+	}
+	if updated.FlowerActivityRevision <= idempotent.FlowerActivityRevision {
+		t.Fatalf("update FlowerActivityRevision=%d, want > %d", updated.FlowerActivityRevision, idempotent.FlowerActivityRevision)
+	}
+	if updated.FlowerActivitySignature == idempotent.FlowerActivitySignature || !strings.Contains(updated.LastMessagePreview, "updated projected answer") {
+		t.Fatalf("updated projected message did not change visible Flower activity: before=%+v after=%+v", idempotent, updated)
 	}
 }
 
@@ -728,12 +885,73 @@ func TestStore_UpsertProjectedThreadWithFlowerMetadataHidesProjectionAtomically(
 	if child == nil || child.RunStatus != "running" {
 		t.Fatalf("projected child was not stored: %#v", child)
 	}
+	initialChildRevision := child.FlowerActivityRevision
+	initialChildSignature := child.FlowerActivitySignature
 	meta, err := s.GetFlowerThreadMetadata(ctx, "env_1", "child-atomic")
 	if err != nil {
 		t.Fatalf("GetFlowerThreadMetadata: %v", err)
 	}
 	if strings.TrimSpace(meta.OwnerKind) != "subagent_projection" || strings.TrimSpace(meta.ParentThreadID) != "parent-atomic" {
 		t.Fatalf("unexpected metadata: %#v", meta)
+	}
+	if err := s.UpsertProjectedThreadWithFlowerMetadata(ctx, Thread{
+		ThreadID:         "child-atomic",
+		EndpointID:       "env_1",
+		Title:            "Child atomic",
+		ModelID:          "openai/gpt-5-mini",
+		RunStatus:        "success",
+		LastContextRunID: "run_child_2",
+		CreatedAtUnixMs:  1000,
+		UpdatedAtUnixMs:  2500,
+	}, FlowerThreadMetadata{
+		EndpointID:      "env_1",
+		ThreadID:        "child-atomic",
+		OwnerKind:       "subagent_projection",
+		OwnerID:         "child-atomic",
+		ParentThreadID:  "parent-atomic",
+		UpdatedAtUnixMs: 2500,
+	}); err != nil {
+		t.Fatalf("UpsertProjectedThreadWithFlowerMetadata update: %v", err)
+	}
+	child, err = s.GetThread(ctx, "env_1", "child-atomic")
+	if err != nil {
+		t.Fatalf("GetThread child after update: %v", err)
+	}
+	if child == nil || child.RunStatus != "success" || child.LastContextRunID != "run_child_2" {
+		t.Fatalf("projected child update was not stored: %#v", child)
+	}
+	if child.FlowerActivityRevision <= initialChildRevision {
+		t.Fatalf("projected child FlowerActivityRevision=%d, want > %d", child.FlowerActivityRevision, initialChildRevision)
+	}
+	if child.FlowerActivitySignature == initialChildSignature || !strings.Contains(child.FlowerActivitySignature, "status:success") || !strings.Contains(child.FlowerActivitySignature, "turn:run_child_2") {
+		t.Fatalf("projected child FlowerActivitySignature=%q initial=%q, want updated projected state", child.FlowerActivitySignature, initialChildSignature)
+	}
+	afterUpdateRevision := child.FlowerActivityRevision
+	if err := s.UpsertProjectedThreadWithFlowerMetadata(ctx, Thread{
+		ThreadID:         "child-atomic",
+		EndpointID:       "env_1",
+		Title:            "Child atomic",
+		ModelID:          "openai/gpt-5-mini",
+		RunStatus:        "success",
+		LastContextRunID: "run_child_2",
+		CreatedAtUnixMs:  1000,
+		UpdatedAtUnixMs:  2500,
+	}, FlowerThreadMetadata{
+		EndpointID:      "env_1",
+		ThreadID:        "child-atomic",
+		OwnerKind:       "subagent_projection",
+		OwnerID:         "child-atomic",
+		ParentThreadID:  "parent-atomic",
+		UpdatedAtUnixMs: 2500,
+	}); err != nil {
+		t.Fatalf("UpsertProjectedThreadWithFlowerMetadata idempotent update: %v", err)
+	}
+	child, err = s.GetThread(ctx, "env_1", "child-atomic")
+	if err != nil {
+		t.Fatalf("GetThread child after idempotent update: %v", err)
+	}
+	if child.FlowerActivityRevision != afterUpdateRevision {
+		t.Fatalf("idempotent projection changed FlowerActivityRevision=%d, want %d", child.FlowerActivityRevision, afterUpdateRevision)
 	}
 	if err := s.UpsertProjectedThreadWithFlowerMetadata(ctx, Thread{
 		ThreadID:   "child-atomic",
@@ -1032,6 +1250,21 @@ func TestStore_ResetStaleActiveThreadRunStates(t *testing.T) {
 			t.Fatalf("UpdateThreadRunState(%s): %v", tc.threadID, err)
 		}
 	}
+	activityBeforeReset := map[string]FlowerActivitySnapshot{}
+	for _, tc := range cases {
+		th, err := s.GetThread(ctx, "env_1", tc.threadID)
+		if err != nil {
+			t.Fatalf("GetThread before reset(%s): %v", tc.threadID, err)
+		}
+		if th == nil {
+			t.Fatalf("thread %s missing before reset", tc.threadID)
+		}
+		activityBeforeReset[tc.threadID] = FlowerActivitySnapshot{
+			ActivityRevision:  th.FlowerActivityRevision,
+			ActivitySignature: strings.TrimSpace(th.FlowerActivitySignature),
+			WaitingPromptID:   strings.TrimSpace(th.FlowerActivityWaitingPromptID),
+		}
+	}
 
 	affected, err := s.ResetStaleActiveThreadRunStates(ctx)
 	if err != nil {
@@ -1057,6 +1290,18 @@ func TestStore_ResetStaleActiveThreadRunStates(t *testing.T) {
 		}
 		if gotErr := strings.TrimSpace(th.RunError); gotErr != tc.wantRunErr {
 			t.Fatalf("thread %s run_error=%q, want %q", tc.threadID, gotErr, tc.wantRunErr)
+		}
+		before := activityBeforeReset[tc.threadID]
+		activeBeforeReset := tc.status == "accepted" || tc.status == "running" || tc.status == "waiting_approval" || tc.status == "recovering" || tc.status == "finalizing"
+		if activeBeforeReset {
+			if th.FlowerActivityRevision <= before.ActivityRevision {
+				t.Fatalf("thread %s FlowerActivityRevision=%d, want > %d after stale reset", tc.threadID, th.FlowerActivityRevision, before.ActivityRevision)
+			}
+			if !strings.Contains(th.FlowerActivitySignature, "status:canceled") {
+				t.Fatalf("thread %s FlowerActivitySignature=%q, want canceled status", tc.threadID, th.FlowerActivitySignature)
+			}
+		} else if th.FlowerActivityRevision != before.ActivityRevision || strings.TrimSpace(th.FlowerActivitySignature) != before.ActivitySignature {
+			t.Fatalf("thread %s Flower activity changed without stale reset: before=(%d,%q) after=(%d,%q)", tc.threadID, before.ActivityRevision, before.ActivitySignature, th.FlowerActivityRevision, th.FlowerActivitySignature)
 		}
 	}
 }
@@ -1101,6 +1346,13 @@ CREATE TABLE IF NOT EXISTS ai_messages (
   UNIQUE(thread_id, message_id)
 );
 CREATE INDEX IF NOT EXISTS idx_ai_messages_thread_id ON ai_messages(endpoint_id, thread_id, id ASC);
+INSERT INTO ai_threads(
+  thread_id, endpoint_id, namespace_public_id, title,
+  created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
+) VALUES(
+  'legacy_thread', 'env_legacy', 'ns_legacy', 'Legacy',
+  1000, 2000, 3000, 'legacy answer'
+);
 PRAGMA user_version=1;
 `)
 	if err != nil {
@@ -1140,10 +1392,24 @@ PRAGMA user_version=1;
 		t.Fatalf("rows err: %v", err)
 	}
 
-	for _, col := range []string{"model_id", "model_locked", "execution_mode", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error_code", "run_error", "waiting_user_input_json", "last_context_run_id", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version", "pinned_at_unix_ms"} {
+	for _, col := range []string{"model_id", "model_locked", "execution_mode", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error_code", "run_error", "waiting_user_input_json", "last_context_run_id", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version", "pinned_at_unix_ms", "flower_activity_revision", "flower_activity_signature", "flower_activity_waiting_prompt_id"} {
 		if !cols[col] {
 			t.Fatalf("missing migrated column %q", col)
 		}
+	}
+	legacy, err := s.GetThread(ctx, "env_legacy", "legacy_thread")
+	if err != nil {
+		t.Fatalf("GetThread legacy: %v", err)
+	}
+	if legacy == nil {
+		t.Fatalf("legacy thread missing after migration")
+	}
+	wantRevision := legacyFlowerActivityRevision("idle", 0, 3000)
+	if legacy.FlowerActivityRevision != wantRevision {
+		t.Fatalf("legacy FlowerActivityRevision=%d, want %d", legacy.FlowerActivityRevision, wantRevision)
+	}
+	if legacy.FlowerActivitySignature == "" || !strings.Contains(legacy.FlowerActivitySignature, "activity:30000") || !strings.Contains(legacy.FlowerActivitySignature, "message:") {
+		t.Fatalf("legacy FlowerActivitySignature=%q, want backfilled activity and message tokens", legacy.FlowerActivitySignature)
 	}
 	if !tableHasColumnForTest(t, s.db, "ai_queued_turns", "context_action_json") {
 		t.Fatalf("missing migrated queued turn column %q", "context_action_json")
@@ -1917,6 +2183,8 @@ func TestStore_UpdateTranscriptMessageJSONByRowID_DoesNotTouchThreadUpdatedAt(t 
 	if updatedAt <= 0 {
 		t.Fatalf("UpdatedAtUnixMs=%d, want > 0", updatedAt)
 	}
+	activityRevision := th.FlowerActivityRevision
+	activitySignature := th.FlowerActivitySignature
 
 	nextJSON := `{"id":"msg_1","role":"assistant","blocks":[{"type":"markdown","content":"updated"}],"status":"complete","timestamp":123}`
 	if err := s.UpdateTranscriptMessageJSONByRowID(ctx, "env_1", rowID, nextJSON, 0); err != nil {
@@ -1932,6 +2200,9 @@ func TestStore_UpdateTranscriptMessageJSONByRowID_DoesNotTouchThreadUpdatedAt(t 
 	}
 	if th2.UpdatedAtUnixMs != updatedAt {
 		t.Fatalf("UpdatedAtUnixMs changed: got=%d want=%d", th2.UpdatedAtUnixMs, updatedAt)
+	}
+	if th2.FlowerActivityRevision != activityRevision || th2.FlowerActivitySignature != activitySignature {
+		t.Fatalf("Flower activity changed: got=(%d,%q) want=(%d,%q)", th2.FlowerActivityRevision, th2.FlowerActivitySignature, activityRevision, activitySignature)
 	}
 
 	_, gotJSON, err := s.GetTranscriptMessageRowIDAndJSONByMessageID(ctx, "env_1", "th_1", "msg_1")
@@ -2338,6 +2609,16 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("UpsertFlowerThreadMetadata: %v", err)
 	}
+	source, err := s.GetThread(ctx, "env_1", "th_src")
+	if err != nil {
+		t.Fatalf("GetThread source before fork: %v", err)
+	}
+	if source == nil {
+		t.Fatalf("source thread missing before fork")
+	}
+	if source.FlowerActivityRevision <= 0 || source.FlowerActivitySignature == "" {
+		t.Fatalf("source Flower activity not initialized: %+v", source)
+	}
 
 	forked, err := s.ForkThread(ctx, ForkThreadRequest{
 		EndpointID:            "env_1",
@@ -2356,6 +2637,18 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 	}
 	if forked.RunStatus != "idle" || forked.LastContextRunID != "" || forked.WaitingUserInputJSON != "" || forked.PinnedAtUnixMs != 0 {
 		t.Fatalf("forked run state not cleared: %+v", forked)
+	}
+	if forked.FlowerActivityRevision <= 0 {
+		t.Fatalf("forked FlowerActivityRevision=%d, want > 0", forked.FlowerActivityRevision)
+	}
+	if forked.FlowerActivitySignature == "" || !strings.Contains(forked.FlowerActivitySignature, "status:idle") {
+		t.Fatalf("forked FlowerActivitySignature=%q, want idle snapshot", forked.FlowerActivitySignature)
+	}
+	if forked.FlowerActivitySignature == source.FlowerActivitySignature {
+		t.Fatalf("forked FlowerActivitySignature inherited source signature %q", forked.FlowerActivitySignature)
+	}
+	if forked.FlowerActivityWaitingPromptID != "" {
+		t.Fatalf("forked FlowerActivityWaitingPromptID=%q, want empty", forked.FlowerActivityWaitingPromptID)
 	}
 	msgs, _, _, err := s.ListMessages(ctx, "env_1", "th_fork", 10, 0)
 	if err != nil {
