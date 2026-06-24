@@ -903,6 +903,9 @@ describe('main routing', () => {
     expect(pathSrc).not.toContain("'/_redeven_proxy/api/ai/runs'");
     expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live\\/bootstrap$/u");
     expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live\\/events$/u");
+    expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/subagents\\/[^/]+\\/detail$/u");
+    expect(pathSrc).toContain('allowsSubagentDetailQuery(query)');
+    expect(pathSrc).toContain('after_ordinal');
     expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/turns$/u");
     expect(pathSrc).not.toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live$/u");
     expect(pathSrc).not.toContain('live\\/updates');

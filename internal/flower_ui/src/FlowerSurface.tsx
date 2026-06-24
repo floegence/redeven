@@ -1,8 +1,8 @@
 import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronLeft, Clock, Copy, FileText, FolderOpen, GitBranch, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
-import { Button } from '@floegence/floe-webapp-core/ui';
+import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, Copy, FileText, FolderOpen, GitBranch, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Button, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
@@ -36,6 +36,8 @@ import type {
   FlowerModelIOPhase,
   FlowerModelIOStatus,
   FlowerReasoningSelection,
+  FlowerSubagentDetail,
+  FlowerSubagentTimelineRow,
 } from './contracts/flowerSurfaceContracts';
 import { isSubagentProjectionThread, projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
 import {
@@ -48,6 +50,7 @@ import {
   type FlowerSubagentPanelItem,
   type FlowerSubagentPanelStatus,
 } from './flowerSubagentProjection';
+import { projectSubagentDetailThread } from './flowerSubagentDetailThread';
 import { formatFlowerCurrentModelLabel } from './flowerModelLabel';
 import {
   presentFlowerActivityItem,
@@ -73,7 +76,7 @@ import {
   serializeFlowerReasoningSelection,
 } from './reasoning';
 
-type FlowerSurfacePanel = 'chat' | 'settings' | 'subagents';
+type FlowerSurfacePanel = 'chat' | 'settings';
 type FlowerInputDraft = Readonly<{
   choice_id?: string;
   text?: string;
@@ -124,6 +127,7 @@ const LIVE_EVENT_RENDER_YIELD_SIZE = 8;
 const MESSAGE_COPY_RESET_MS = 1600;
 const TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX = 96;
 const TRANSCRIPT_SCROLL_TO_LATEST_MS = 220;
+const SUBAGENT_DETAIL_PAGE_SIZE = 200;
 const ASK_FLOWER_CONTEXT_TARGET_LOCALITIES = new Set(['auto', 'current_runtime', 'remote_runtime', 'local_model_remote_target']);
 const ASK_FLOWER_CONTEXT_SOURCE_SURFACES = new Set([
   'desktop_welcome_environment_card',
@@ -236,6 +240,32 @@ function loadThreadRailWidth(): number {
   return Number.isFinite(stored) ? clampThreadRailWidth(stored) : THREAD_RAIL_WIDTH_DEFAULT;
 }
 
+function mergeSubagentDetailPage(current: FlowerSubagentDetail | null, page: FlowerSubagentDetail): FlowerSubagentDetail {
+  if (!current || current.summary.thread_id !== page.summary.thread_id) return page;
+  const seen = new Set<string>();
+  const timeline: FlowerSubagentTimelineRow[] = [];
+  const keyFor = (row: FlowerSubagentTimelineRow) => `${row.ordinal}\x00${row.kind}\x00${row.type ?? ''}`;
+  for (const row of current.timeline) {
+    const key = keyFor(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    timeline.push(row);
+  }
+  for (const row of page.timeline) {
+    const key = keyFor(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    timeline.push(row);
+  }
+  timeline.sort((left, right) => left.ordinal - right.ordinal);
+  return {
+    ...page,
+    summary: page.summary,
+    timeline,
+    retained_from: page.retained_from ?? current.retained_from,
+  };
+}
+
 export type FlowerThreadFocusRequest = Readonly<{
   request_id: string;
   thread_id: string;
@@ -290,12 +320,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [copiedMessageAction, setCopiedMessageAction] = createSignal('');
   const [transcriptNearBottomState, setTranscriptNearBottomState] = createSignal(true);
   const [transcriptLayoutRevision, setTranscriptLayoutRevision] = createSignal(0);
+  const [subagentDropdownOpen, setSubagentDropdownOpen] = createSignal(false);
+  const [activeSubagentID, setActiveSubagentID] = createSignal('');
+  const [subagentDetail, setSubagentDetail] = createSignal<FlowerSubagentDetail | null>(null);
+  const [subagentDetailLoading, setSubagentDetailLoading] = createSignal(false);
+  const [subagentDetailLoadingMore, setSubagentDetailLoadingMore] = createSignal(false);
+  const [subagentDetailError, setSubagentDetailError] = createSignal('');
   let threadLoadSequence = 0;
   let threadLocalMutationRevision = 0;
   let threadsRefreshSequence = 0;
   let startedFocusThreadRequestID = '';
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
   let transcriptRef: HTMLDivElement | undefined;
+  let subagentTriggerRef: HTMLButtonElement | undefined;
+  let subagentDropdownRef: HTMLDivElement | undefined;
   let renameDialogRef: HTMLDivElement | undefined;
   let renameInputRef: HTMLInputElement | undefined;
   let renameRestoreRef: HTMLElement | undefined;
@@ -345,7 +383,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadReadOnlyReason = createMemo(() => trimString(selectedThread()?.read_only_reason));
   const selectedThreadIsSubagentProjection = createMemo(() => isSubagentProjectionThread(selectedThread()));
   const selectedThreadReadOnly = createMemo(() => selectedThreadIsSubagentProjection() || Boolean(selectedThreadReadOnlyReason()));
-  const selectedThreadParentID = createMemo(() => trimString(selectedThread()?.parent_thread_id));
   const selectedThreadReadOnlyDisplay = createMemo(() => (
     selectedThreadIsSubagentProjection()
       ? subagentsCopy().readOnlyComposerLabel
@@ -516,7 +553,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ].join('\x1f');
   const threadItems = createMemo(() => {
     localReadVisibilityRevision();
-    return threads().map((t) => {
+    return threads().filter((thread) => !isSubagentProjectionThread(thread)).map((t) => {
       const visibleThread = threadWithLocalReadVisibility(t);
       const sig = threadItemSignature(t);
       const cached = threadItemCache.get(t.thread_id);
@@ -539,6 +576,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (signature === lastSidebarListSignature) return;
     lastSidebarListSignature = signature;
     setSidebarListItems(items);
+  });
+
+  createEffect(() => {
+    const dropdownOpen = subagentDropdownOpen();
+    if (!dropdownOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (subagentTriggerRef?.contains(target) || subagentDropdownRef?.contains(target)) {
+        return;
+      }
+      setSubagentDropdownOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setSubagentDropdownOpen(false);
+      subagentTriggerRef?.focus();
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown);
+    onCleanup(() => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown);
+    });
   });
 
   const renameOriginalTitle = createMemo(() => threads().find((thread) => thread.thread_id === renameThreadID())?.title ?? '');
@@ -866,6 +927,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const loadAndSelectThread = async (threadID: string) => {
     const tid = trimString(threadID);
     if (!tid) return;
+    closeSubagentOverlays();
     const sequence = ++threadLoadSequence;
     const existing = threads().find((thread) => thread.thread_id === tid) ?? null;
     setTranscriptNearBottomValue(true);
@@ -942,7 +1004,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return mergedThreads;
       });
       setSelectedThreadID((current) => {
-        return current && !mergedThreads.some((thread) => thread.thread_id === current) ? '' : current;
+        if (current && !mergedThreads.some((thread) => thread.thread_id === current)) {
+          closeSubagentOverlays();
+          return '';
+        }
+        return current;
       });
       if (
         selectedID
@@ -1183,14 +1249,72 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSidePanel('chat');
   };
 
+  const closeSubagentOverlays = () => {
+    setSubagentDropdownOpen(false);
+    setActiveSubagentID('');
+    setSubagentDetail(null);
+    setSubagentDetailError('');
+    setSubagentDetailLoading(false);
+    setSubagentDetailLoadingMore(false);
+  };
+
   const settingsReadOnly = createMemo(() => modelSource()?.kind === 'desktop_model_source');
 
   const openSettings = () => {
+    closeSubagentOverlays();
     setSidePanel('settings');
   };
 
   const openSubagents = () => {
-    setSidePanel('subagents');
+    setSubagentDropdownOpen((open) => !open);
+  };
+
+  const openSubagentDetail = async (item: FlowerSubagentPanelItem) => {
+    const parentID = trimString(selectedThread()?.thread_id);
+    const childID = trimString(item.threadID || item.subagentID);
+    if (!parentID || !childID) return;
+    const requestID = `${parentID}\x00${childID}`;
+    setActiveSubagentID(childID);
+    setSubagentDropdownOpen(false);
+    setSubagentDetail(null);
+    setSubagentDetailError('');
+    setSubagentDetailLoading(true);
+    setSubagentDetailLoadingMore(false);
+    try {
+      const detail = await props.adapter.loadSubagentDetail(parentID, childID, 0, SUBAGENT_DETAIL_PAGE_SIZE);
+      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}` !== requestID) return;
+      setSubagentDetail(detail);
+    } catch (error) {
+      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}` !== requestID) return;
+      setSubagentDetailError(getErrorMessage(error));
+    } finally {
+      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}` === requestID) {
+        setSubagentDetailLoading(false);
+      }
+    }
+  };
+
+  const loadMoreSubagentDetail = async () => {
+    const parentID = trimString(selectedThread()?.thread_id);
+    const childID = trimString(activeSubagentID());
+    const detail = subagentDetail();
+    if (!parentID || !childID || !detail?.has_more || subagentDetailLoadingMore()) return;
+    const afterOrdinal = Math.max(0, Math.floor(detail.next_ordinal ?? detail.timeline[detail.timeline.length - 1]?.ordinal ?? 0));
+    const requestID = `${parentID}\x00${childID}`;
+    setSubagentDetailError('');
+    setSubagentDetailLoadingMore(true);
+    try {
+      const page = await props.adapter.loadSubagentDetail(parentID, childID, afterOrdinal, SUBAGENT_DETAIL_PAGE_SIZE);
+      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}` !== requestID) return;
+      setSubagentDetail((current) => mergeSubagentDetailPage(current, page));
+    } catch (error) {
+      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}` !== requestID) return;
+      setSubagentDetailError(getErrorMessage(error));
+    } finally {
+      if (`${trimString(selectedThread()?.thread_id)}\x00${activeSubagentID()}` === requestID) {
+        setSubagentDetailLoadingMore(false);
+      }
+    }
   };
 
   const launchChatTurn = async (promptInput: string) => {
@@ -1325,6 +1449,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     threadLoadSequence += 1;
     setTranscriptNearBottomValue(true);
+    closeSubagentOverlays();
     setSelectedThreadID('');
     setPendingTurn(null);
     setChatSubmitError('');
@@ -1488,6 +1613,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     item.status === 'queued' || item.status === 'running' || item.status === 'waiting_input'
   )).length);
   const selectedSettledSubagentCount = createMemo(() => selectedSubagentItems().length - selectedActiveSubagentCount());
+  const activeSubagentItem = createMemo(() => {
+    const activeID = trimString(activeSubagentID());
+    if (!activeID) return null;
+    return selectedSubagentItems().find((item) => trimString(item.threadID || item.subagentID) === activeID) ?? null;
+  });
+  createEffect(() => {
+    const activeID = trimString(activeSubagentID());
+    if (!activeID) return;
+    if (activeSubagentItem()) return;
+    closeSubagentOverlays();
+  });
   const visibleTimelineEntries = createMemo((): readonly FlowerTimelineEntry[] => {
     return selectedTimelineEntries();
   });
@@ -2804,108 +2940,171 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const count = selectedSubagentItems().length;
     return count > 99 ? '99+' : String(count);
   };
-  const openSubagentThread = (item: FlowerSubagentPanelItem) => {
-    if (!item.canOpen || !trimString(item.threadID)) return;
-    void loadAndSelectThread(item.threadID);
-  };
-  const openSelectedParentThread = () => {
-    const parentID = selectedThreadParentID();
-    if (!parentID) return;
-    void loadAndSelectThread(parentID);
-  };
-
-  const subagentCard = (item: FlowerSubagentPanelItem) => (
-    <article
-      class={cn('flower-subagent-card', `flower-subagent-card-${item.status}`)}
-      data-flower-subagent-thread-id={item.threadID}
-      data-flower-subagent-status={item.status}
-    >
-      <div class="flower-subagent-card-main">
-        <div class="flower-subagent-card-heading">
-          <div class="flower-subagent-title-group">
-            <span class={cn('flower-subagent-status-pill', `flower-subagent-status-${item.status}`)}>
-              {subagentStatusLabel(item.status)}
-            </span>
-            <h3>{item.title}</h3>
-          </div>
-          <Show when={subagentMeta(item)}>
-            {(meta) => <p class="flower-subagent-meta">{meta()}</p>}
-          </Show>
-        </div>
-        <Show when={item.lastMessage}>
-          {(message) => (
-            <div class="flower-subagent-last-message">
-              <span>{subagentsCopy().lastMessageLabel}</span>
-              <p>{message()}</p>
-            </div>
-          )}
-        </Show>
-        <Show when={item.threadID || item.subagentID}>
-          <div class="flower-subagent-thread-id">
-            <span>{subagentsCopy().threadIDLabel}</span>
-            <code>{item.threadID || item.subagentID}</code>
-          </div>
-        </Show>
-      </div>
-      <button
-        type="button"
-        class="flower-subagent-open-button"
-        disabled={!item.canOpen}
-        title={item.canOpen ? subagentsCopy().openThread : subagentsCopy().unavailableThread}
-        onClick={() => openSubagentThread(item)}
-      >
-        <GitBranch class="h-3.5 w-3.5" />
-        <span>{item.canOpen ? subagentsCopy().openThread : subagentsCopy().unavailableThread}</span>
-      </button>
-    </article>
+  const subagentRowTitle = (item: FlowerSubagentPanelItem): string => (
+    trimString(item.title) || trimString(item.taskName) || trimString(item.threadID || item.subagentID) || subagentsCopy().typeLabels.unknown
   );
-
-  const subagentsPanel = () => (
-    <div class="flower-subagents-surface">
-      <div class="flower-subagents-frame">
-        <div class="flower-subagents-title-row">
-          <button
-            type="button"
-            class="flower-subagents-back-button"
-            aria-label={subagentsCopy().backToChat}
-            title={subagentsCopy().backToChat}
-            onClick={returnToChat}
-          >
-            <ChevronLeft class="h-4 w-4" />
-          </button>
-          <div class="flower-subagents-title-copy">
-            <h2>{subagentsCopy().title}</h2>
-            <p>{subagentsCopy().description}</p>
+  const subagentDropdownSummary = (): string => (
+    [
+      `${selectedActiveSubagentCount()} ${subagentsCopy().activeLabel.toLowerCase()}`,
+      `${selectedSettledSubagentCount()} ${subagentsCopy().completedLabel.toLowerCase()}`,
+    ].join(' · ')
+  );
+  const activeSubagentTitle = createMemo(() => {
+    const item = activeSubagentItem();
+    if (item) return subagentRowTitle(item);
+    const summary = subagentDetail()?.summary;
+    return trimString(summary?.title)
+      || trimString(summary?.task_name)
+      || trimString(summary?.thread_id || summary?.subagent_id)
+      || trimString(activeSubagentID())
+      || subagentsCopy().typeLabels.unknown;
+  });
+  const subagentSummaryStatus = createMemo(() => {
+    const raw = trimString(subagentDetail()?.summary.status || activeSubagentItem()?.status);
+    const status = (raw || 'unknown') as FlowerSubagentPanelStatus;
+    return subagentStatusLabel(status);
+  });
+  const subagentDetailMeta = createMemo(() => {
+    const detail = subagentDetail();
+    const item = activeSubagentItem();
+    const agentType = subagentTypeLabel(detail?.summary.agent_type || item?.agentType || '');
+    const id = trimString(detail?.summary.thread_id || item?.threadID || item?.subagentID || activeSubagentID());
+    return [agentType, id].filter(Boolean).join(' · ');
+  });
+  const subagentDropdown = () => (
+    <Show when={subagentDropdownOpen()}>
+      <div ref={subagentDropdownRef} class="flower-subagents-dropdown" role="dialog" aria-label={subagentsCopy().title}>
+        <div class="flower-subagents-dropdown-header">
+          <div class="flower-subagents-dropdown-title">
+            <GitBranch class="h-4 w-4" />
+            <span>{subagentsCopy().title}</span>
           </div>
+          <span class="flower-subagents-dropdown-count">{selectedSubagentItems().length}</span>
         </div>
-        <div class="flower-subagents-summary" aria-label={subagentsCopy().title}>
-          <div class="flower-subagents-summary-item">
-            <span>{subagentsCopy().activeLabel}</span>
-            <strong>{selectedActiveSubagentCount()}</strong>
-          </div>
-          <div class="flower-subagents-summary-item">
-            <span>{subagentsCopy().completedLabel}</span>
-            <strong>{selectedSettledSubagentCount()}</strong>
-          </div>
-        </div>
+        <div class="flower-subagents-dropdown-summary">{subagentDropdownSummary()}</div>
         <Show
           when={selectedSubagentItems().length > 0}
           fallback={(
-            <div class="flower-subagents-empty">
-              <GitBranch class="h-5 w-5" />
-              <h3>{subagentsCopy().emptyTitle}</h3>
-              <p>{subagentsCopy().emptyDescription}</p>
+            <div class="flower-subagents-dropdown-empty">
+              <GitBranch class="h-4 w-4" />
+              <span>{subagentsCopy().emptyTitle}</span>
             </div>
           )}
         >
-          <div class="flower-subagents-list" role="list">
+          <div class="flower-subagents-dropdown-list" role="list">
             <For each={selectedSubagentItems()}>
-              {(item) => <div role="listitem">{subagentCard(item)}</div>}
+              {(item) => (
+                <button
+                  type="button"
+                  class={cn(
+                    'flower-subagent-dropdown-row',
+                    `flower-subagent-dropdown-row-${item.status}`,
+                    activeSubagentID() === trimString(item.threadID || item.subagentID) && 'flower-subagent-dropdown-row-active',
+                  )}
+                  data-flower-subagent-thread-id={item.threadID}
+                  data-flower-subagent-status={item.status}
+                  title={subagentsCopy().openThread}
+                  onClick={() => void openSubagentDetail(item)}
+                >
+                  <span class={cn('flower-subagent-status-dot', `flower-subagent-status-dot-${item.status}`)} aria-hidden="true" />
+                  <span class="flower-subagent-dropdown-copy">
+                    <span class="flower-subagent-dropdown-name">{subagentRowTitle(item)}</span>
+                    <span class="flower-subagent-dropdown-meta">
+                      {[subagentStatusLabel(item.status), subagentMeta(item)].filter(Boolean).join(' · ')}
+                    </span>
+                    <Show when={item.lastMessage || item.waitingPrompt}>
+                      {(message) => <span class="flower-subagent-dropdown-message">{message()}</span>}
+                    </Show>
+                  </span>
+                  <span class="flower-subagent-dropdown-action">{subagentsCopy().openThread}</span>
+                </button>
+              )}
             </For>
           </div>
         </Show>
       </div>
-    </div>
+    </Show>
+  );
+
+  const subagentDetailThread = createMemo(() => projectSubagentDetailThread(subagentDetail(), activeSubagentID(), activeSubagentTitle()));
+  const subagentDetailTimelineEntries = createMemo(() => buildFlowerTimelineEntries(subagentDetailThread()));
+  const subagentDetailTimelineEntryKeys = createMemo(() => subagentDetailTimelineEntries().map((entry) => entry.key));
+  const subagentDetailTimelineEntriesByKey = createMemo(() => new Map(subagentDetailTimelineEntries().map((entry) => [entry.key, entry] as const)));
+  const subagentDetailWindowTitle = createMemo(() => [activeSubagentTitle(), subagentSummaryStatus()].filter(Boolean).join(' · '));
+
+  const subagentDetailDialog = () => (
+    <FloatingWindow
+      open={Boolean(activeSubagentID())}
+      onOpenChange={(open) => {
+        if (!open) closeSubagentOverlays();
+      }}
+      title={subagentDetailWindowTitle()}
+      class="flower-subagent-detail-window"
+      defaultSize={{ width: 760, height: 640 }}
+      minSize={{ width: 420, height: 320 }}
+      viewportInsets={{ top: 56, right: 12, bottom: 12, left: Math.max(12, threadRailWidth() + 12) }}
+      resizable
+      draggable
+      zIndex={85}
+    >
+      <div class="flower-subagent-detail-surface" data-flower-subagent-detail-id={activeSubagentID()}>
+        <div class="flower-subagent-detail-toolbar">
+          <span class={cn('flower-subagent-status-pill', `flower-subagent-status-${activeSubagentItem()?.status ?? 'unknown'}`)}>
+            {subagentSummaryStatus()}
+          </span>
+          <Show when={subagentDetailMeta()}>
+            {(meta) => <span class="flower-subagent-detail-meta">{meta()}</span>}
+          </Show>
+        </div>
+        <Show when={subagentDetailLoading()}>
+          <div class="flower-subagent-detail-state" role="status">
+            <Clock class="h-4 w-4" />
+            <span>{copy().chat.threadLoading}</span>
+          </div>
+        </Show>
+        <Show when={subagentDetailError()}>
+          {(message) => (
+            <div class="flower-subagent-detail-state flower-subagent-detail-state-error" role="alert">
+              <AlertTriangle class="h-4 w-4" />
+              <span>{message()}</span>
+            </div>
+          )}
+        </Show>
+        <Show when={subagentDetailThread()}>
+          <div class="flower-chat-transcript flower-subagent-detail-transcript" role="list" aria-label="Subagent timeline">
+            <div class="flower-transcript-stack flower-subagent-detail-transcript-stack">
+              <Show
+                when={subagentDetailTimelineEntryKeys().length > 0}
+                fallback={<div class="flower-subagent-detail-empty">{subagentsCopy().emptyDescription}</div>}
+              >
+                <For each={subagentDetailTimelineEntryKeys()}>
+                  {(entryKey) => {
+                    const entry = createMemo(() => subagentDetailTimelineEntriesByKey().get(entryKey) ?? null);
+                    return (
+                      <Show when={entry()}>
+                        {(value) => <div role="listitem">{timelineEntry(value)}</div>}
+                      </Show>
+                    );
+                  }}
+                </For>
+              </Show>
+            </div>
+          </div>
+        </Show>
+        <Show when={subagentDetail()?.has_more}>
+          <div class="flower-subagent-detail-load-more">
+            <button
+              type="button"
+              class="flower-subagent-detail-load-more-button"
+              disabled={subagentDetailLoadingMore()}
+              onClick={() => void loadMoreSubagentDetail()}
+            >
+              {subagentDetailLoadingMore() ? (subagentsCopy().loadingMore ?? 'Loading...') : (subagentsCopy().loadMore ?? 'Load more')}
+            </button>
+          </div>
+        </Show>
+      </div>
+    </FloatingWindow>
   );
 
   const threadLoadingState = () => (
@@ -2947,31 +3146,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </div>
           </div>
           <div class="flower-chat-header-actions">
-            <Show when={selectedThreadIsSubagentProjection() && selectedThreadParentID()}>
+            <div class="flower-subagents-anchor">
               <button
+                ref={subagentTriggerRef}
                 type="button"
-                class="flower-header-action-button"
-                aria-label={subagentsCopy().backToParent}
-                title={subagentsCopy().backToParent}
-                onClick={openSelectedParentThread}
+                class={cn('flower-header-icon-button', (subagentDropdownOpen() || activeSubagentID()) && 'flower-header-icon-button-active')}
+                aria-label={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
+                title={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
+                aria-haspopup="menu"
+                aria-expanded={subagentDropdownOpen()}
+                onClick={openSubagents}
               >
-                <ChevronLeft class="h-3.5 w-3.5" />
-                <span>{subagentsCopy().backToParent}</span>
+                <GitBranch class="h-4 w-4" />
+                <Show when={selectedSubagentItems().length > 0}>
+                  <span class="flower-header-icon-badge" aria-hidden="true">{subagentBadgeText()}</span>
+                </Show>
               </button>
-            </Show>
-            <button
-              type="button"
-              class={cn('flower-header-icon-button', sidePanel() === 'subagents' && 'flower-header-icon-button-active')}
-              aria-label={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
-              title={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
-              aria-pressed={sidePanel() === 'subagents'}
-              onClick={openSubagents}
-            >
-              <GitBranch class="h-4 w-4" />
-              <Show when={selectedSubagentItems().length > 0}>
-                <span class="flower-header-icon-badge" aria-hidden="true">{subagentBadgeText()}</span>
-              </Show>
-            </button>
+              {subagentDropdown()}
+            </div>
             <button
               type="button"
               class="flower-header-icon-button"
@@ -2991,6 +3183,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           )}
         </Show>
       </div>
+      {subagentDetailDialog()}
       <div class="flower-chat-main flower-chat-main">
         <div ref={transcriptRef} class="flower-chat-transcript flower-chat-transcript" onScroll={updateTranscriptNearBottom}>
           <div class="flower-transcript-stack">
@@ -3138,16 +3331,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         <div class="flower-composer-readonly-chip" title={selectedThreadReadOnlyReason()}>
                           {selectedThreadReadOnlyDisplay()}
                         </div>
-                        <Show when={selectedThreadIsSubagentProjection() && selectedThreadParentID()}>
-                          <button
-                            type="button"
-                            class="flower-composer-parent-link"
-                            onClick={openSelectedParentThread}
-                          >
-                            <ChevronLeft class="h-3.5 w-3.5" />
-                            <span>{subagentsCopy().backToParent}</span>
-                          </button>
-                        </Show>
                       </div>
                     </Show>
                     <Show when={handlerNotice()}>
@@ -3358,9 +3541,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </button>
       <section class="flower-component-main">
         <Show when={sidePanel() === 'chat'}>{chatPanel()}</Show>
-        <div class={cn('h-full min-h-0', sidePanel() !== 'subagents' && 'hidden')} aria-hidden={sidePanel() !== 'subagents'}>
-          {subagentsPanel()}
-        </div>
         <div class={cn('h-full min-h-0', sidePanel() !== 'settings' && 'hidden')} aria-hidden={sidePanel() !== 'settings'}>
           <FlowerSettingsSurface
             snapshot={snapshot()}

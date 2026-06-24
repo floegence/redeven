@@ -399,6 +399,11 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         'GET',
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/events?after_seq=${afterSeq}&limit=${limit}`,
       ),
+      loadSubagentDetail: (parentThreadID, childThreadID, afterOrdinal, limit) => runtimeJSON(
+        bridge,
+        'GET',
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/detail?after_ordinal=${afterOrdinal}&limit=${limit}`,
+      ),
       markThreadRead: (threadID, body) => runtimeJSON<MarkThreadReadResponse>(
         bridge,
         'POST',

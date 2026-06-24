@@ -2,6 +2,8 @@ package ai
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/ai/threadstore"
@@ -58,6 +61,9 @@ type recordingFloretHost struct {
 	listSubagentCount  atomic.Int32
 	snapshots          []flruntime.SubAgentSnapshot
 	threads            map[flruntime.ThreadID]flruntime.ThreadSnapshot
+	detail             flruntime.SubAgentDetail
+	detailErr          error
+	detailRequests     []flruntime.ReadSubAgentDetailRequest
 }
 
 func (h *recordingFloretHost) StartThread(context.Context, flruntime.StartThreadRequest) (flruntime.ThreadSnapshot, error) {
@@ -109,6 +115,20 @@ func (h *recordingFloretHost) ListSubAgents(context.Context, flruntime.ThreadID)
 func (h *recordingFloretHost) CloseSubAgent(context.Context, flruntime.CloseSubAgentRequest) (flruntime.SubAgentSnapshot, error) {
 	h.closeSubagentCount.Add(1)
 	return flruntime.SubAgentSnapshot{}, nil
+}
+
+func (h *recordingFloretHost) ReadSubAgentDetail(_ context.Context, req flruntime.ReadSubAgentDetailRequest) (flruntime.SubAgentDetail, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.detailRequests = append(h.detailRequests, req)
+	if h.detailErr != nil {
+		return flruntime.SubAgentDetail{}, h.detailErr
+	}
+	return h.detail, nil
+}
+
+func (h *recordingFloretHost) ListSubAgentDetailEvents(context.Context, flruntime.ListSubAgentDetailEventsRequest) (flruntime.SubAgentDetailEvents, error) {
+	return flruntime.SubAgentDetailEvents{}, nil
 }
 
 func (h *recordingFloretHost) DeleteThread(context.Context, flruntime.ThreadID) error {
@@ -441,11 +461,259 @@ func TestSubagentProjectionRejectsThreadMutations(t *testing.T) {
 	}
 
 	view, err := svc.GetThread(ctx, meta, child.ThreadID)
-	if err != nil {
-		t.Fatalf("GetThread child: %v", err)
+	if !errors.Is(err, sql.ErrNoRows) || view != nil {
+		t.Fatalf("GetThread child view=%#v err=%v, want hidden projection", view, err)
 	}
-	if view == nil || strings.TrimSpace(view.ParentThreadID) != parent.ThreadID || strings.TrimSpace(view.OwnerKind) != flowerSubagentProjectionOwnerKind {
-		t.Fatalf("child thread metadata view not projected: %#v", view)
+	childMeta, err := svc.threadsDB.GetFlowerThreadMetadata(ctx, meta.EndpointID, child.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadMetadata child: %v", err)
+	}
+	if !isExpectedFlowerSubagentProjection(childMeta, parent.ThreadID, child.ThreadID) {
+		t.Fatalf("child thread metadata not projected: %#v", childMeta)
+	}
+}
+
+func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	parent, err := svc.CreateThread(ctx, meta, "parent", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread parent: %v", err)
+	}
+	now := time.Now()
+	if err := svc.threadsDB.UpsertProjectedThread(ctx, threadstore.Thread{
+		EndpointID:      meta.EndpointID,
+		ThreadID:        "child-detail",
+		Title:           "Inspect tool flow",
+		ModelID:         "openai/gpt-5-mini",
+		ExecutionMode:   config.AIModeAct,
+		RunStatus:       string(RunStateRunning),
+		CreatedAtUnixMs: now.Add(-time.Minute).UnixMilli(),
+		UpdatedAtUnixMs: now.UnixMilli(),
+	}); err != nil {
+		t.Fatalf("UpsertProjectedThread child detail: %v", err)
+	}
+	if err := svc.UpsertFlowerThreadMetadata(ctx, threadstore.FlowerThreadMetadata{
+		EndpointID:     meta.EndpointID,
+		ThreadID:       "child-detail",
+		OwnerKind:      flowerSubagentProjectionOwnerKind,
+		OwnerID:        flowerSubagentProjectionOwnerID,
+		ParentThreadID: parent.ThreadID,
+	}); err != nil {
+		t.Fatalf("UpsertFlowerThreadMetadata child detail: %v", err)
+	}
+	host := &recordingFloretHost{
+		detail: flruntime.SubAgentDetail{
+			Snapshot: flruntime.SubAgentSnapshot{
+				ThreadID:       flruntime.ThreadID("child-detail"),
+				TaskName:       "Inspect tool flow",
+				ParentThreadID: flruntime.ThreadID(parent.ThreadID),
+				ParentTurnID:   flruntime.TurnID("parent-turn"),
+				HostProfileRef: subagentAgentTypeReviewer,
+				Status:         flruntime.SubAgentStatusRunning,
+				LastMessage:    "Reading tool evidence",
+				CreatedAt:      now.Add(-time.Minute),
+				UpdatedAt:      now,
+				CanSendInput:   true,
+				CanInterrupt:   true,
+				CanClose:       true,
+			},
+			Events: []flruntime.SubAgentDetailEvent{
+				{
+					ID:        "event-user",
+					Ordinal:   1,
+					ThreadID:  flruntime.ThreadID("child-detail"),
+					TurnID:    flruntime.TurnID("child-turn"),
+					Kind:      flruntime.SubAgentDetailEventUserMessage,
+					CreatedAt: now.Add(-50 * time.Second),
+					Message:   &flruntime.SubAgentDetailMessage{Role: "user", Preview: "delegate mission"},
+					Metadata:  map[string]string{"raw_omitted": "true"},
+				},
+				{
+					ID:        "event-tool-call",
+					Ordinal:   2,
+					ThreadID:  flruntime.ThreadID("child-detail"),
+					TurnID:    flruntime.TurnID("child-turn"),
+					Kind:      flruntime.SubAgentDetailEventToolCall,
+					CreatedAt: now.Add(-40 * time.Second),
+					ToolCall:  &flruntime.SubAgentDetailToolCall{ID: "call-1", Name: "terminal.exec", ArgsPreview: "ls", ArgsHash: "hash-args"},
+				},
+				{
+					ID:        "event-tool-result",
+					Ordinal:   3,
+					ThreadID:  flruntime.ThreadID("child-detail"),
+					TurnID:    flruntime.TurnID("child-turn"),
+					Kind:      flruntime.SubAgentDetailEventToolResult,
+					CreatedAt: now.Add(-30 * time.Second),
+					ToolResult: &flruntime.SubAgentDetailToolResult{
+						CallID:        "call-1",
+						ToolName:      "terminal.exec",
+						Preview:       "total 4",
+						Truncated:     true,
+						OriginalBytes: 2000,
+						VisibleBytes:  80,
+						ContentSHA256: "hash-content",
+						FullOutput: &flruntime.ArtifactRef{
+							ID:        "raw-full-output",
+							SafeLabel: "full-output.txt",
+							URL:       "/artifacts/raw-full-output",
+							Kind:      "tool_output",
+							MIME:      "text/plain",
+							SizeBytes: 2000,
+							SHA256:    "raw-full-output-sha",
+						},
+					},
+				},
+				{
+					ID:        "event-approval",
+					Ordinal:   4,
+					ThreadID:  flruntime.ThreadID("child-detail"),
+					Kind:      flruntime.SubAgentDetailEventApproval,
+					CreatedAt: now.Add(-20 * time.Second),
+					Approval:  &flruntime.SubAgentDetailApproval{State: "denied", ToolName: "terminal.exec", ArgsHash: "hash-args", Reason: "readonly policy"},
+				},
+				{
+					ID:        "event-error",
+					Ordinal:   5,
+					ThreadID:  flruntime.ThreadID("child-detail"),
+					Kind:      flruntime.SubAgentDetailEventError,
+					CreatedAt: now.Add(-10 * time.Second),
+					Error:     "tool blocked",
+				},
+			},
+			NextOrdinal:  6,
+			HasMore:      true,
+			RetainedFrom: 1,
+			GeneratedAt:  now,
+		},
+	}
+	key := runThreadKey(meta.EndpointID, parent.ThreadID)
+	svc.mu.Lock()
+	svc.subagentRuntimes[key] = &floretSubagentRuntime{
+		parent: newRun(runOptions{
+			Log:        slog.Default(),
+			ThreadID:   parent.ThreadID,
+			EndpointID: meta.EndpointID,
+		}),
+		host: host,
+	}
+	svc.mu.Unlock()
+
+	detail, err := svc.GetFlowerSubagentDetail(ctx, meta, parent.ThreadID, "child-detail", 7, 333)
+	if err != nil {
+		t.Fatalf("GetFlowerSubagentDetail: %v", err)
+	}
+	host.mu.Lock()
+	requests := append([]flruntime.ReadSubAgentDetailRequest(nil), host.detailRequests...)
+	host.mu.Unlock()
+	if len(requests) != 1 {
+		t.Fatalf("detail request count=%d, want 1", len(requests))
+	}
+	req := requests[0]
+	if req.ParentThreadID != flruntime.ThreadID(parent.ThreadID) || req.ChildThreadID != flruntime.ThreadID("child-detail") {
+		t.Fatalf("unexpected detail request identity: %#v", req)
+	}
+	if req.AfterOrdinal != 7 || req.Limit != 333 {
+		t.Fatalf("unexpected detail pagination: %#v", req)
+	}
+	if req.IncludeRaw {
+		t.Fatalf("Flower UI detail must not request raw child transcript/tool payloads by default")
+	}
+	if detail == nil || detail.Summary.ThreadID != "child-detail" || detail.Summary.ParentThreadID != parent.ThreadID {
+		t.Fatalf("unexpected detail summary: %#v", detail)
+	}
+	if len(detail.Timeline) != 5 {
+		t.Fatalf("timeline rows=%d, want 5: %#v", len(detail.Timeline), detail.Timeline)
+	}
+	if detail.Timeline[1].ToolCall == nil || detail.Timeline[1].ToolCall.Name != "terminal.exec" || detail.Timeline[1].ToolCall.ArgsHash == "" {
+		t.Fatalf("tool call row not projected: %#v", detail.Timeline[1])
+	}
+	if detail.Timeline[1].Activity != nil {
+		t.Fatalf("paired tool call should not duplicate result activity: %#v", detail.Timeline[1].Activity)
+	}
+	if detail.Timeline[2].ToolResult == nil || detail.Timeline[2].ToolResult.Preview != "total 4" || !detail.Timeline[2].ToolResult.Truncated {
+		t.Fatalf("tool result row not projected: %#v", detail.Timeline[2])
+	}
+	if detail.Timeline[2].Activity == nil || len(detail.Timeline[2].Activity.Items) != 1 {
+		t.Fatalf("tool result activity not projected: %#v", detail.Timeline[2])
+	}
+	resultActivity := detail.Timeline[2].Activity.Items[0]
+	if resultActivity.Renderer != observation.ActivityRendererTerminal || resultActivity.Payload["stdout"] != "total 4" || resultActivity.Payload["content_ref"] != "hash-content" {
+		t.Fatalf("tool result activity does not use canonical terminal presentation: %#v", resultActivity)
+	}
+	encoded, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatalf("marshal detail: %v", err)
+	}
+	if strings.Contains(string(encoded), "raw-full-output") || strings.Contains(string(encoded), "full_output") {
+		t.Fatalf("detail leaked full output artifact reference: %s", string(encoded))
+	}
+	if detail.Timeline[3].Approval == nil || detail.Timeline[3].Approval.State != "denied" {
+		t.Fatalf("approval row not projected: %#v", detail.Timeline[3])
+	}
+	if detail.Timeline[3].Activity == nil || len(detail.Timeline[3].Activity.Items) != 1 || detail.Timeline[3].Activity.Items[0].Kind != observation.ActivityKindApproval {
+		t.Fatalf("approval activity not projected through canonical activity block: %#v", detail.Timeline[3])
+	}
+	if detail.Timeline[4].Error != "tool blocked" {
+		t.Fatalf("error row not projected: %#v", detail.Timeline[4])
+	}
+	if !detail.HasMore || detail.NextOrdinal != 6 || detail.RetainedFrom != 1 {
+		t.Fatalf("pagination metadata not projected: %#v", detail)
+	}
+}
+
+func TestServiceGetFlowerSubagentDetailRejectsWrongParentBeforeRuntime(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	parent, err := svc.CreateThread(ctx, meta, "parent", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread parent: %v", err)
+	}
+	otherParent, err := svc.CreateThread(ctx, meta, "other parent", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread other parent: %v", err)
+	}
+	child, err := svc.CreateThread(ctx, meta, "child", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread child: %v", err)
+	}
+	if err := svc.UpsertFlowerThreadMetadata(ctx, threadstore.FlowerThreadMetadata{
+		EndpointID:     meta.EndpointID,
+		ThreadID:       child.ThreadID,
+		OwnerKind:      flowerSubagentProjectionOwnerKind,
+		OwnerID:        flowerSubagentProjectionOwnerID,
+		ParentThreadID: parent.ThreadID,
+	}); err != nil {
+		t.Fatalf("UpsertFlowerThreadMetadata child: %v", err)
+	}
+	host := &recordingFloretHost{}
+	key := runThreadKey(meta.EndpointID, otherParent.ThreadID)
+	svc.mu.Lock()
+	svc.subagentRuntimes[key] = &floretSubagentRuntime{
+		parent: newRun(runOptions{
+			Log:        slog.Default(),
+			ThreadID:   otherParent.ThreadID,
+			EndpointID: meta.EndpointID,
+		}),
+		host: host,
+	}
+	svc.mu.Unlock()
+
+	_, err = svc.GetFlowerSubagentDetail(ctx, meta, otherParent.ThreadID, child.ThreadID, 0, 200)
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("GetFlowerSubagentDetail err=%v, want sql.ErrNoRows", err)
+	}
+	host.mu.Lock()
+	requests := len(host.detailRequests)
+	host.mu.Unlock()
+	if requests != 0 {
+		t.Fatalf("detail host was called for wrong parent: %d", requests)
 	}
 }
 

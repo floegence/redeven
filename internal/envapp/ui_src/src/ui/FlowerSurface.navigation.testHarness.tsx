@@ -1,4 +1,4 @@
-import { Show, createSignal } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { Dynamic, render } from 'solid-js/web';
 import { afterEach, vi } from 'vitest';
 
@@ -18,6 +18,7 @@ import type {
   FlowerModelIOStatus,
   FlowerContextCompaction,
   FlowerTimelineDecoration,
+  FlowerSubagentDetail,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -66,12 +67,49 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
         type="button"
         class={props.class}
         aria-label={props['aria-label']}
+        title={props.title}
         disabled={props.disabled}
         onClick={props.onClick}
       >
         {props.icon ? <Dynamic component={props.icon} /> : null}
         {props.children}
       </button>
+    );
+  },
+  FloatingWindow: (props: any) => {
+    createEffect(() => {
+      if (!props.open) return;
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        props.onOpenChange?.(false);
+      };
+      window.addEventListener('keydown', onKeyDown);
+      onCleanup(() => window.removeEventListener('keydown', onKeyDown));
+    });
+    return (
+      <Show when={props.open}>
+        <div
+          role="dialog"
+          data-floe-geometry-surface="floating-window"
+          class={props.class}
+          style={{
+            width: `${props.defaultSize?.width ?? 400}px`,
+            height: `${props.defaultSize?.height ?? 300}px`,
+          }}
+        >
+          <div data-floe-floating-window-titlebar="true">
+            <span>{props.title}</span>
+            <button
+              type="button"
+              aria-label="Close"
+              onClick={() => props.onOpenChange?.(false)}
+            />
+          </div>
+          <div class="flex-1 overflow-auto p-3">{props.children}</div>
+          <Show when={props.footer}>{props.footer}</Show>
+        </div>
+      </Show>
     );
   },
   Checkbox: (props: any) => (
@@ -320,6 +358,79 @@ export function activityTimeline(args: {
   };
 }
 
+export function subagentDetail(overrides: Partial<FlowerSubagentDetail> = {}): FlowerSubagentDetail {
+  return {
+    summary: {
+      parent_thread_id: 'thread-parent-subagents',
+      subagent_id: 'thread-child-review',
+      thread_id: 'thread-child-review',
+      task_name: 'Review API contract',
+      title: 'Review API contract',
+      agent_type: 'reviewer',
+      status: 'running',
+      last_message: 'Reading the API boundary.',
+      can_send_input: false,
+      can_interrupt: true,
+      can_close: true,
+      created_at_ms: 100,
+      updated_at_ms: 160,
+    },
+    timeline: [
+      {
+        ordinal: 1,
+        kind: 'user_message',
+        created_at_ms: 110,
+        message: {
+          role: 'user',
+          text: 'Review the API boundary.',
+        },
+      },
+      {
+        ordinal: 3,
+        kind: 'tool_result',
+        created_at_ms: 140,
+        activity: activityTimeline({
+          run_id: 'subagent:thread-child-review',
+          turn_id: 'child-row-3',
+          items: [activityItem({
+            item_id: 'call-terminal',
+            tool_id: 'call-terminal',
+            tool_name: 'terminal.exec',
+            renderer: 'terminal',
+            label: 'go test ./internal/ai',
+            status: 'success',
+            payload: {
+              command: 'go test ./internal/ai',
+              status: 'success',
+              stdout: 'PASS ./internal/ai',
+              content_ref: 'hash-tool-result',
+            },
+          })],
+        }),
+        tool_result: {
+          call_id: 'call-terminal',
+          tool_name: 'terminal.exec',
+          preview: 'PASS ./internal/ai',
+          truncated: false,
+          content_sha256: 'hash-tool-result',
+        },
+      },
+      {
+        ordinal: 4,
+        kind: 'assistant_message',
+        created_at_ms: 160,
+        message: {
+          role: 'assistant',
+          text: 'Child handoff ready.',
+        },
+      },
+    ],
+    next_ordinal: 5,
+    generated_at_ms: 170,
+    ...overrides,
+  };
+}
+
 export function inputRequest(overrides: Partial<FlowerInputRequest> = {}): FlowerInputRequest {
   return {
     prompt_id: 'prompt-ask-user',
@@ -430,6 +541,7 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
     ]),
     loadThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID }))),
     listThreadLiveEvents: vi.fn(async () => ({ events: [], next_cursor: 0, retained_from_seq: 1 })),
+    loadSubagentDetail: vi.fn(async () => subagentDetail()),
     markThreadRead: vi.fn(async (threadID: string, snapshot) => liveBootstrap(thread({
       thread_id: threadID,
       read_status: {

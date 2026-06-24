@@ -7441,6 +7441,11 @@ function runtimeFlowerPath(rawPath: unknown): string {
     || /^\?after_seq=\d+$/u.test(value)
     || /^\?after_seq=\d+&limit=\d{1,3}$/u.test(value)
     || /^\?limit=\d{1,3}&after_seq=\d+$/u.test(value);
+  const allowsSubagentDetailQuery = (value: string) => value === ''
+    || /^\?after_ordinal=\d+$/u.test(value)
+    || /^\?limit=\d{1,4}$/u.test(value)
+    || /^\?after_ordinal=\d+&limit=\d{1,4}$/u.test(value)
+    || /^\?limit=\d{1,4}&after_ordinal=\d+$/u.test(value);
   if (pathname === '/_redeven_proxy/api/settings' && query === '') return pathWithQuery;
   if (pathname === '/_redeven_proxy/api/ai/provider_bundle' && query === '') return pathWithQuery;
   if (pathname === '/_redeven_proxy/api/ai/models' && query === '') return pathWithQuery;
@@ -7449,6 +7454,7 @@ function runtimeFlowerPath(rawPath: unknown): string {
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/bootstrap$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/events$/u.test(pathname) && allowsLiveEventsQuery(query)) return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/subagents\/[^/]+\/detail$/u.test(pathname) && allowsSubagentDetailQuery(query)) return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/turns$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/fork$/u.test(pathname) && query === '') return pathWithQuery;
@@ -7469,6 +7475,7 @@ function runtimeFlowerMethodAllowed(path: string, method: RuntimeFlowerRequest['
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname)
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/bootstrap$/u.test(pathname)
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/events$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/subagents\/[^/]+\/detail$/u.test(pathname)
         || /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(pathname);
     case 'POST':
       return pathname === '/_redeven_proxy/api/ai/uploads'

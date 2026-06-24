@@ -214,7 +214,6 @@ function createDesktopFlowerSubagentsCopy(i18n: DesktopI18n): FlowerSurfaceCopy[
     openLabel: t(i18n, k('openLabel')),
     openThread: t(i18n, k('openThread')),
     backToChat: t(i18n, k('backToChat')),
-    backToParent: t(i18n, k('backToParent')),
     emptyTitle: t(i18n, k('emptyTitle')),
     emptyDescription: t(i18n, k('emptyDescription')),
     activeLabel: t(i18n, k('activeLabel')),

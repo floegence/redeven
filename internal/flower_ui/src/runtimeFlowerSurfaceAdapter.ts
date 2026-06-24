@@ -6,6 +6,7 @@ import type {
   FlowerTurnLaunchInput,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
+  FlowerSubagentDetail,
   FlowerSubmitApprovalRequest,
   FlowerSubmitInputRequest,
   FlowerSurfaceAdapter,
@@ -40,6 +41,10 @@ type MarkThreadReadResponse = Readonly<{
   read_status: FlowerThreadReadStatus;
 }>;
 
+type LoadSubagentDetailResponse = Readonly<{
+  detail?: FlowerSubagentDetail;
+}>;
+
 type MarkThreadReadInput = Readonly<{
   snapshot: Readonly<{
     activity_revision: number;
@@ -69,6 +74,7 @@ export type FlowerRuntimeTransport = Readonly<{
   listThreads(): Promise<ListThreadsResponse>;
   loadThread(threadID: string): Promise<unknown>;
   listThreadLiveEvents(threadID: string, afterSeq: number, limit: number): Promise<unknown>;
+  loadSubagentDetail(parentThreadID: string, childThreadID: string, afterOrdinal: number, limit: number): Promise<LoadSubagentDetailResponse>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<LoadThreadResponse>;
   forkThread(threadID: string): Promise<LoadThreadResponse>;
@@ -109,6 +115,11 @@ function mapRuntimeBootstrap(raw: unknown, options: RuntimeFlowerSurfaceAdapterO
 
 function mapRuntimeEvents(raw: unknown): FlowerLiveEventsResponse {
   return mapFlowerLiveEvents(raw);
+}
+
+function mapSubagentDetail(raw: LoadSubagentDetailResponse): FlowerSubagentDetail {
+  if (!raw.detail) throw new Error('Missing subagent detail.');
+  return raw.detail;
 }
 
 export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
@@ -152,6 +163,17 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       return mapRuntimeEvents(
         await options.transport.listThreadLiveEvents(tid, cursor, pageLimit),
       );
+    },
+    loadSubagentDetail: async (parentThreadID, childThreadID, afterOrdinal = 0, limit = 200) => {
+      const parentID = trim(parentThreadID);
+      const childID = trim(childThreadID);
+      if (!parentID || !childID) throw new Error(missingThreadIDMessage(options));
+      return mapSubagentDetail(await options.transport.loadSubagentDetail(
+        parentID,
+        childID,
+        Math.max(0, Math.floor(Number(afterOrdinal) || 0)),
+        Math.max(1, Math.min(500, Math.floor(Number(limit) || 200))),
+      ));
     },
     markThreadRead,
     renameThread: async (threadID, title) => {

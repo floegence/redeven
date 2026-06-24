@@ -623,6 +623,130 @@ func TestStore_ListThreadsUsesStableCreatedAtOrder(t *testing.T) {
 	}
 }
 
+func TestStore_ListThreadsExcludesSubagentProjectionRows(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	for _, th := range []Thread{
+		{ThreadID: "parent-new", EndpointID: "env_1", CreatedAtUnixMs: 4000, UpdatedAtUnixMs: 4000},
+		{ThreadID: "child-hidden", EndpointID: "env_1", CreatedAtUnixMs: 3000, UpdatedAtUnixMs: 5000},
+		{ThreadID: "parent-old", EndpointID: "env_1", CreatedAtUnixMs: 2000, UpdatedAtUnixMs: 2000},
+	} {
+		if err := s.CreateThread(ctx, th); err != nil {
+			t.Fatalf("CreateThread(%s): %v", th.ThreadID, err)
+		}
+	}
+	if err := s.UpsertFlowerThreadMetadata(ctx, FlowerThreadMetadata{
+		EndpointID:      "env_1",
+		ThreadID:        "child-hidden",
+		OwnerKind:       "subagent_projection",
+		OwnerID:         "child-hidden",
+		ParentThreadID:  "parent-new",
+		UpdatedAtUnixMs: 5000,
+	}); err != nil {
+		t.Fatalf("UpsertFlowerThreadMetadata child: %v", err)
+	}
+
+	firstPage, cursor, err := s.ListThreads(ctx, "env_1", 1, ThreadsCursor{})
+	if err != nil {
+		t.Fatalf("ListThreads first: %v", err)
+	}
+	if got := storeThreadIDs(firstPage); !slices.Equal(got, []string{"parent-new"}) {
+		t.Fatalf("first page ids=%v, want parent thread only", got)
+	}
+	decoded, ok := DecodeCursor(cursor)
+	if !ok {
+		t.Fatalf("DecodeCursor(%q) failed", cursor)
+	}
+	secondPage, next, err := s.ListThreads(ctx, "env_1", 1, decoded)
+	if err != nil {
+		t.Fatalf("ListThreads second: %v", err)
+	}
+	if got := storeThreadIDs(secondPage); !slices.Equal(got, []string{"parent-old"}) {
+		t.Fatalf("second page ids=%v, want hidden child skipped without cursor pollution", got)
+	}
+	if next != "" {
+		t.Fatalf("next cursor=%q, want empty", next)
+	}
+
+	child, err := s.GetThread(ctx, "env_1", "child-hidden")
+	if err != nil {
+		t.Fatalf("GetThread child: %v", err)
+	}
+	if child == nil {
+		t.Fatalf("legacy projection direct lookup should remain readable")
+	}
+}
+
+func TestStore_UpsertProjectedThreadWithFlowerMetadataHidesProjectionAtomically(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.UpsertProjectedThreadWithFlowerMetadata(ctx, Thread{
+		ThreadID:        "child-atomic",
+		EndpointID:      "env_1",
+		Title:           "Child atomic",
+		ModelID:         "openai/gpt-5-mini",
+		RunStatus:       "running",
+		CreatedAtUnixMs: 1000,
+		UpdatedAtUnixMs: 2000,
+	}, FlowerThreadMetadata{
+		EndpointID:      "env_1",
+		ThreadID:        "child-atomic",
+		OwnerKind:       "subagent_projection",
+		OwnerID:         "child-atomic",
+		ParentThreadID:  "parent-atomic",
+		UpdatedAtUnixMs: 2000,
+	}); err != nil {
+		t.Fatalf("UpsertProjectedThreadWithFlowerMetadata: %v", err)
+	}
+	threads, next, err := s.ListThreads(ctx, "env_1", 10, ThreadsCursor{})
+	if err != nil {
+		t.Fatalf("ListThreads: %v", err)
+	}
+	if len(threads) != 0 || next != "" {
+		t.Fatalf("subagent projection leaked into list threads=%#v next=%q", threads, next)
+	}
+	child, err := s.GetThread(ctx, "env_1", "child-atomic")
+	if err != nil {
+		t.Fatalf("GetThread child: %v", err)
+	}
+	if child == nil || child.RunStatus != "running" {
+		t.Fatalf("projected child was not stored: %#v", child)
+	}
+	meta, err := s.GetFlowerThreadMetadata(ctx, "env_1", "child-atomic")
+	if err != nil {
+		t.Fatalf("GetFlowerThreadMetadata: %v", err)
+	}
+	if strings.TrimSpace(meta.OwnerKind) != "subagent_projection" || strings.TrimSpace(meta.ParentThreadID) != "parent-atomic" {
+		t.Fatalf("unexpected metadata: %#v", meta)
+	}
+	if err := s.UpsertProjectedThreadWithFlowerMetadata(ctx, Thread{
+		ThreadID:   "child-atomic",
+		EndpointID: "env_1",
+		RunStatus:  "running",
+	}, FlowerThreadMetadata{
+		EndpointID: "other-env",
+		ThreadID:   "child-atomic",
+	}); err == nil {
+		t.Fatalf("expected identity mismatch error")
+	}
+}
+
 func TestStore_ListThreadsPinnedFirstWithStableCursor(t *testing.T) {
 	t.Parallel()
 

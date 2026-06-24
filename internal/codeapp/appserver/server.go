@@ -3709,6 +3709,43 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 			return
 
+		case action == "subagents" && r.Method == http.MethodGet && len(parts) == 4 && strings.TrimSpace(parts[3]) == "detail":
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			childID := strings.TrimSpace(parts[2])
+			afterOrdinal := int64(0)
+			if raw := strings.TrimSpace(r.URL.Query().Get("after_ordinal")); raw != "" {
+				v, err := strconv.ParseInt(raw, 10, 64)
+				if err != nil || v < 0 {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid after_ordinal"})
+					return
+				}
+				afterOrdinal = v
+			}
+			limit := 200
+			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+				if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+					limit = v
+				}
+			}
+			resp, err := g.ai.GetFlowerSubagentDetail(r.Context(), meta, threadID, childID, afterOrdinal, limit)
+			if err != nil {
+				status := http.StatusBadRequest
+				if errors.Is(err, sql.ErrNoRows) {
+					status = http.StatusNotFound
+				}
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"detail": resp}})
+			return
+
 		case action == "" && r.Method == http.MethodPatch:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {

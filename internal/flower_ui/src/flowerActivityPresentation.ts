@@ -142,7 +142,6 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
   result: 'result',
   thread_id: 'thread',
   subagent_id: 'subagent',
-  task_id: 'task',
   task_name: 'task',
   title: 'title',
   agent_type: 'profile',
@@ -461,8 +460,7 @@ function isSubagentsActivityItem(item: FlowerActivityItem): boolean {
   const payload = item.payload ?? {};
   return trimString(item.tool_name) === 'subagents'
     || payloadValue(payload, 'operation') === 'subagents'
-    || payloadValue(payload, 'delegation_runtime') === 'floret'
-    || (payloadValue(payload, 'subagent_id') !== '' && payloadValue(payload, 'thread_id') !== '');
+    || payloadValue(payload, 'delegation_runtime') === 'floret';
 }
 
 function detailLineTone(key: string): FlowerActivityDetailLine['tone'] {
@@ -480,7 +478,6 @@ function detailLabel(key: string, copy?: FlowerActivityPresentationCopy): string
       return subagents?.thread ?? DETAIL_LABELS[key] ?? key;
     case 'subagent_id':
       return subagents?.subagent ?? DETAIL_LABELS[key] ?? key;
-    case 'task_id':
     case 'task_name':
       return subagents?.task ?? DETAIL_LABELS[key] ?? key;
     case 'title':
@@ -597,7 +594,7 @@ function subagentDetailLineFromPayload(payload: Readonly<Record<string, unknown>
   let value = rawValue;
   if (key === 'action') {
     value = subagentActionLabel(rawValue, copy);
-  } else if (key === 'status' || key === 'subagent_status') {
+  } else if (key === 'status') {
     if (rawValue === 'ok') return null;
     value = subagentStatusLabel(rawValue, copy);
   } else if (key === 'agent_type') {
@@ -656,8 +653,7 @@ function nestedSubagentRecords(payload: Readonly<Record<string, unknown>> | unde
     if (Object.keys(record).length > 0) out.push(record);
   };
   for (const key of ['snapshot', 'subagent', 'item']) pushRecord(payload[key]);
-  for (const key of ['items', 'subagents']) asArray(payload[key]).forEach(pushRecord);
-  for (const key of ['snapshots', 'snapshots_by_id']) Object.values(asRecord(payload[key])).forEach(pushRecord);
+  for (const key of ['items']) asArray(payload[key]).forEach(pushRecord);
   return out;
 }
 
@@ -738,15 +734,16 @@ function subagentTitleText(item: FlowerActivityItem, copy?: FlowerActivityPresen
   const directTitle = payloadValue(payload, 'task_name', 'title', 'target', 'subagent_id', 'thread_id');
   const verbs = subagentsCopy(copy).activity.titleVerbs;
   if (action === 'spawn' && directTitle) return `${verbs.spawn} ${directTitle}`;
-  if ((action === 'send_input' || action === 'close') && directTitle) return `${subagentActionLabel(action, copy)} ${directTitle}`;
+  if ((action === 'send_input' || action === 'close') && directTitle) return `${verbs[action]} ${directTitle}`;
   const nested = nestedSubagentRecords(payload);
   if (nested.length === 1) {
     const title = payloadValue(nested[0], 'task_name', 'title', 'subagent_id', 'thread_id');
     if (title && action === 'spawn') return `${verbs.spawn} ${title}`;
-    if (title) return action ? `${subagentActionLabel(action, copy)} ${title}` : title;
+    if (title) return action ? `${verbs[action as keyof typeof verbs] ?? subagentActionLabel(action, copy)} ${title}` : title;
   }
-  if (nested.length > 1) return `${subagentActionLabel(action, copy)} (${nested.length})`;
-  return trimString(item.label) || subagentActionLabel(action, copy);
+  const verb = action ? verbs[action as keyof typeof verbs] ?? subagentActionLabel(action, copy) : '';
+  if (nested.length > 1) return `${verb || subagentActionLabel(action, copy)} (${nested.length})`;
+  return verb || trimString(item.label) || subagentActionLabel(action, copy);
 }
 
 function metaForSubagents(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): string {

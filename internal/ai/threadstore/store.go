@@ -349,6 +349,13 @@ SELECT
 %s
 FROM ai_threads
 WHERE endpoint_id = ?
+  AND NOT EXISTS (
+    SELECT 1
+    FROM ai_flower_thread_metadata m
+    WHERE m.endpoint_id = ai_threads.endpoint_id
+      AND m.thread_id = ai_threads.thread_id
+      AND LOWER(TRIM(COALESCE(m.owner_kind, ''))) = 'subagent_projection'
+  )
 `, threadSelectColumnsSQL)
 	if cursor.CreatedAtUnixMs > 0 && strings.TrimSpace(cursor.ThreadID) != "" {
 		cursorPinned := nonNegativeInt64(cursor.PinnedAtUnixMs)
@@ -602,6 +609,57 @@ func (s *Store) UpsertProjectedThread(ctx context.Context, t Thread) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	t, err := normalizeProjectedThread(t)
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := upsertProjectedThreadTx(ctx, tx, t); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// UpsertProjectedThreadWithFlowerMetadata atomically stores a projected thread
+// and its Flower ownership metadata, so projection-only threads cannot leak into
+// ordinary thread-list queries between separate writes.
+func (s *Store) UpsertProjectedThreadWithFlowerMetadata(ctx context.Context, t Thread, meta FlowerThreadMetadata) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	t, err := normalizeProjectedThread(t)
+	if err != nil {
+		return err
+	}
+	meta, err = normalizeFlowerThreadMetadata(meta)
+	if err != nil {
+		return err
+	}
+	if meta.EndpointID != t.EndpointID || meta.ThreadID != t.ThreadID {
+		return errors.New("projected thread metadata identity mismatch")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := upsertProjectedThreadTx(ctx, tx, t); err != nil {
+		return err
+	}
+	if err := upsertFlowerThreadMetadataExec(ctx, tx, meta); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func normalizeProjectedThread(t Thread) (Thread, error) {
 	t.ThreadID = strings.TrimSpace(t.ThreadID)
 	t.EndpointID = strings.TrimSpace(t.EndpointID)
 	t.NamespacePublicID = strings.TrimSpace(t.NamespacePublicID)
@@ -618,7 +676,7 @@ func (s *Store) UpsertProjectedThread(ctx context.Context, t Thread) error {
 	t.TitlePromptVersion = strings.TrimSpace(t.TitlePromptVersion)
 	runStatus, err := canonicalRunStatusForCreate(t.RunStatus)
 	if err != nil {
-		return err
+		return Thread{}, err
 	}
 	t.RunStatus = runStatus
 	t.RunErrorCode = strings.TrimSpace(t.RunErrorCode)
@@ -631,7 +689,7 @@ func (s *Store) UpsertProjectedThread(ctx context.Context, t Thread) error {
 	t.UpdatedByUserEmail = strings.TrimSpace(t.UpdatedByUserEmail)
 	t.LastMessagePreview = strings.TrimSpace(t.LastMessagePreview)
 	if t.ThreadID == "" || t.EndpointID == "" {
-		return errors.New("invalid thread")
+		return Thread{}, errors.New("invalid thread")
 	}
 	now := time.Now().UnixMilli()
 	if t.CreatedAtUnixMs <= 0 {
@@ -643,15 +701,15 @@ func (s *Store) UpsertProjectedThread(ctx context.Context, t Thread) error {
 	if t.RunUpdatedAtUnixMs < 0 {
 		t.RunUpdatedAtUnixMs = 0
 	}
+	return t, nil
+}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
+func upsertProjectedThreadTx(ctx context.Context, tx *sql.Tx, t Thread) error {
+	if tx == nil {
+		return errors.New("store not initialized")
 	}
-	defer func() { _ = tx.Rollback() }()
-
 	var existing Thread
-	err = scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`
+	err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`
 SELECT
 %s
 FROM ai_threads
@@ -704,7 +762,7 @@ INSERT INTO ai_threads(
 		); err != nil {
 			return err
 		}
-		return tx.Commit()
+		return nil
 	}
 	if existing.EndpointID != t.EndpointID {
 		return errors.New("thread belongs to a different endpoint")
@@ -719,7 +777,7 @@ INSERT INTO ai_threads(
 		t.LastMessagePreview = existing.LastMessagePreview
 	}
 	if projectedThreadEqual(existing, t) {
-		return tx.Commit()
+		return nil
 	}
 	_, err = tx.ExecContext(ctx, `
 UPDATE ai_threads
@@ -775,7 +833,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 	if err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 func projectedThreadEqual(existing Thread, next Thread) bool {
