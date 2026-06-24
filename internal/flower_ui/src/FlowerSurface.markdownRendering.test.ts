@@ -55,40 +55,38 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain("case 'running':\n        return <Terminal");
   });
 
-  it('renders context usage in the header and model status in the bottom dock outside timeline entries', () => {
+  it('renders context usage in the composer actions and model status in the bottom dock outside timeline entries', () => {
     const src = surfaceSource();
     const timelineListIndex = src.indexOf('<For each={visibleTimelineEntryKeys()}>');
     const headerIndex = src.indexOf('flower-chat-header flower-chat-header');
     const headerRowIndex = src.indexOf('flower-chat-header-row');
-    const contextStripIndex = src.indexOf('flower-chat-context-strip');
-    const contextMeterIndex = src.indexOf('<FlowerContextUsageMeter');
     const dockIndex = src.indexOf('flower-chat-bottom-dock-track');
     const statusLaneIndex = src.indexOf('flower-model-status-lane');
     const composerIndex = src.indexOf('flower-composer flower-chat-input-floating');
+    const composerActionsIndex = src.indexOf('flower-composer-actions');
+    const contextIndicatorIndex = src.indexOf('<FlowerComposerContextIndicator');
+    const submitIndex = src.indexOf('flower-composer-submit');
 
     expect(headerIndex).toBeGreaterThanOrEqual(0);
     expect(headerRowIndex).toBeGreaterThan(headerIndex);
-    expect(contextStripIndex).toBeGreaterThan(headerRowIndex);
-    expect(contextMeterIndex).toBeGreaterThan(contextStripIndex);
-    expect(timelineListIndex).toBeGreaterThan(contextMeterIndex);
     expect(timelineListIndex).toBeGreaterThanOrEqual(0);
     expect(dockIndex).toBeGreaterThan(timelineListIndex);
     expect(statusLaneIndex).toBeGreaterThan(dockIndex);
     expect(composerIndex).toBeGreaterThan(statusLaneIndex);
+    expect(composerActionsIndex).toBeGreaterThan(composerIndex);
+    expect(contextIndicatorIndex).toBeGreaterThan(composerActionsIndex);
+    expect(submitIndex).toBeGreaterThan(contextIndicatorIndex);
     expect(src).toContain('const selectedModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => selectedThread()?.model_io_status ?? null)');
     expect(src).toContain('const selectedThreadHasModelStatus = createMemo(() => selectedModelIOStatus() != null)');
     expect(src).toContain('<Show when={selectedThreadHasModelStatus()}>');
     expect(src).toContain('const selectedModelStatusIndicator = () => modelStatusIndicator(selectedModelIOStatus(), selectedModelStatusLabel())');
     expect(src).toContain('{selectedModelStatusIndicator()}');
     expect(src).toContain('<Show when={selectedContextUsage()}>');
-    expect(src).toContain('<FlowerContextUsageMeter usage={usage()} copy={copy()} />');
-    expect(src).toContain('role="status"');
-    expect(src).toContain('aria-live="polite"');
-    expect(src).toContain('aria-atomic="true"');
+    expect(src).toContain('<FlowerComposerContextIndicator usage={usage()} copy={copy()} />');
     expect(src).toContain('copy().chat.modelStatus');
     expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus');
     expect(src).toContain('data-text={label}');
-    expect(src).not.toContain('contextMeter()');
+    expect(src).not.toContain('contextIndicator()');
     expect(src).not.toContain('selectedThreadThinking');
     expect(src).not.toContain('thinkingIndicator');
     expect(src).not.toContain('flower-message-streaming-tail');

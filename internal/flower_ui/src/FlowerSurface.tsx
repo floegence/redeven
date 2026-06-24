@@ -6,8 +6,8 @@ import { Button, FloatingWindow, SurfaceFloatingLayer } from '@floegence/floe-we
 
 import { writeTextToClipboard } from './clipboard';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
+import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
-import { FlowerContextUsageMeter } from './chat/FlowerContextUsageMeter';
 import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
 import type { FlowerSubagentsCopy, FlowerSurfaceCopy } from './copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
@@ -3622,13 +3622,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </button>
           </div>
         </div>
-        <Show when={selectedContextUsage()}>
-          {(usage) => (
-            <div class="flower-chat-context-strip" role="status" aria-live="polite" aria-atomic="true">
-              <FlowerContextUsageMeter usage={usage()} copy={copy()} />
-            </div>
-          )}
-        </Show>
       </div>
       {subagentDetailDialog()}
       <div class="flower-chat-main flower-chat-main">
@@ -3797,37 +3790,42 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       </div>}
                     </Show>
                   </div>
-                  <Show
-                    when={selectedInputRequest()}
-                    fallback={(
+                  <div class="flower-composer-actions">
+                    <Show when={selectedContextUsage()}>
+                      {(usage) => <FlowerComposerContextIndicator usage={usage()} copy={copy()} />}
+                    </Show>
+                    <Show
+                      when={selectedInputRequest()}
+                      fallback={(
+                        <Button
+                          variant="primary"
+                          icon={composerPrimaryActionIcon()}
+                          size="icon"
+                          class="flower-composer-submit rounded-full"
+                          aria-label={composerPrimaryActionLabel()}
+                          title={composerPrimaryActionLabel()}
+                          disabled={composerPrimaryActionDisabled()}
+                          loading={chatRunning() || threadStopping()}
+                          onClick={() => void submitChat()}
+                        />
+                      )}
+                    >
                       <Button
                         variant="primary"
-                        icon={composerPrimaryActionIcon()}
-                        size="icon"
-                        class="flower-composer-submit rounded-full"
-                        aria-label={composerPrimaryActionLabel()}
-                        title={composerPrimaryActionLabel()}
-                        disabled={composerPrimaryActionDisabled()}
-                        loading={chatRunning() || threadStopping()}
+                        icon={ArrowUp}
+                        class="flower-composer-continue"
+                        disabled={selectedThreadReadOnly() || inputSubmitting() || !inputRequestReadyToSubmit()}
+                        loading={inputSubmitting()}
                         onClick={() => void submitChat()}
-                      />
-                    )}
-                  >
-                    <Button
-                      variant="primary"
-                      icon={ArrowUp}
-                      class="flower-composer-continue"
-                      disabled={selectedThreadReadOnly() || inputSubmitting() || !inputRequestReadyToSubmit()}
-                      loading={inputSubmitting()}
-                      onClick={() => void submitChat()}
-                    >
-                      {inputSubmitting()
-                        ? chatCopyValue('inputRequestSubmitting', 'Submitting...')
-                        : inputSubmitError()
-                          ? chatCopyValue('inputRequestRetry', 'Retry')
-                          : chatCopyValue('inputRequestSubmit', 'Continue')}
-                    </Button>
-                  </Show>
+                      >
+                        {inputSubmitting()
+                          ? chatCopyValue('inputRequestSubmitting', 'Submitting...')
+                          : inputSubmitError()
+                            ? chatCopyValue('inputRequestRetry', 'Retry')
+                            : chatCopyValue('inputRequestSubmit', 'Continue')}
+                      </Button>
+                    </Show>
+                  </div>
                 </Show>
               </div>
             </div>

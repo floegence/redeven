@@ -38,7 +38,7 @@ Tool names are not aliases for deleted knowledge-era tools. Current repository k
 
 Target provenance is part of the tool contract, not a UI hint. Flower must not infer remote execution from thread context alone; it can only claim remote or target execution when a tool result or Redeven product command returns explicit execution provenance.
 
-Redeven must consume published Floret releases. Repository builds, tests, Desktop runs, and release validation must not depend on a sibling checkout, Go workspace, local replace directive, or package-manager local link. The current runtime boundary depends on `github.com/floegence/floret v0.3.22`, including Floret's public reasoning selection API, structured context observations, projected compaction summary lifecycle, and parent-scoped subagent detail API.
+Redeven must consume published Floret releases. Repository builds, tests, Desktop runs, and release validation must not depend on a sibling checkout, Go workspace, local replace directive, or package-manager local link. The current runtime boundary depends on `github.com/floegence/floret v0.3.25`, including Floret's public reasoning selection API, structured context observations, projected compaction summary lifecycle, provider request budget validation before compacted completion, durable compaction commit after validation, committed compaction append recovery, and parent-scoped subagent detail API.
 
 # Citations
 
