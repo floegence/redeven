@@ -206,16 +206,17 @@ export type FlowerProviderDialogCopy = Readonly<{
 export type FlowerSubagentsCopy = Readonly<{
   title: string;
   description: string;
-  openLabel: string;
-  openThread: string;
-  backToChat: string;
-  backToParent: string;
-  emptyTitle: string;
+	openLabel: string;
+	openThread: string;
+	backToChat: string;
+	emptyTitle: string;
   emptyDescription: string;
   activeLabel: string;
   completedLabel: string;
   threadIDLabel: string;
   lastMessageLabel: string;
+  loadMore?: string;
+  loadingMore?: string;
   unavailableThread: string;
   readOnlyComposerLabel: string;
   statusLabels: Readonly<Record<'queued' | 'running' | 'waiting_input' | 'completed' | 'failed' | 'canceled' | 'timed_out' | 'unknown', string>>;
@@ -527,17 +528,18 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
   },
   subagents: {
     title: 'Subagents',
-    description: 'Delegated child threads created by the current Flower conversation.',
-    openLabel: 'Open subagents',
-    openThread: 'Open child thread',
-    backToChat: 'Back to chat',
-    backToParent: 'Back to parent thread',
-    emptyTitle: 'No subagents yet',
-    emptyDescription: 'When Flower delegates work, child threads will appear here with status and handoff details.',
+    description: 'Delegated work managed inside the current Flower conversation.',
+	    openLabel: 'Open subagents',
+	    openThread: 'View details',
+	    backToChat: 'Back to chat',
+	    emptyTitle: 'No subagents yet',
+    emptyDescription: 'When Flower delegates work, subagents will appear here with status and handoff details.',
     activeLabel: 'Active',
     completedLabel: 'Ended',
     threadIDLabel: 'Thread',
     lastMessageLabel: 'Latest handoff',
+    loadMore: 'Load more',
+    loadingMore: 'Loading...',
     unavailableThread: 'Thread not available',
     readOnlyComposerLabel: 'Read only · Managed by parent thread',
     statusLabels: {

@@ -151,7 +151,7 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentProjectionPayload(t *te
 		"timestamp":1700000000000,
 		"blocks":[
 			{"type":"activity-timeline","schema_version":1,"run_id":"run_subagents","thread_id":"thread_parent","turn_id":"msg_subagents","trace_id":"trace_subagents","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[
-				{"item_id":"tool_subagents_spawn","tool_id":"tool_subagents_spawn","tool_name":"subagents","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Spawn reviewer","renderer":"structured","payload":{"action":"spawn","status":"ok","subagent_id":"thread_child_review","thread_id":"thread_child_review","snapshot":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","status":"running","last_message":"Reading the API boundary.","updated_at_ms":120,"path":"/root/review_api","private_path":"/Users/alice/work/redeven/snapshot","privatePath":"/Users/alice/work/redeven/camel"},"items":[{"subagent_id":"thread_child_review","thread_id":"thread_child_review","private_path":"/Users/alice/work/redeven/item"}],"subagent":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","status":"running","last_message":"Reading the API boundary.","updated_at_ms":120},"private_path":"/Users/alice/work/redeven"}}
+				{"item_id":"tool_subagents_spawn","tool_id":"tool_subagents_spawn","tool_name":"subagents","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Spawn reviewer","renderer":"structured","payload":{"action":"spawn","status":"ok","subagent_id":"thread_child_review","thread_id":"thread_child_review","snapshot":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","status":"running","last_message":"Reading the API boundary.","updated_at_ms":120,"path":"/root/review_api","private_path":"/Users/alice/work/redeven/snapshot","privatePath":"/Users/alice/work/redeven/camel"},"items":[{"subagent_id":"thread_child_review","thread_id":"thread_child_review","private_path":"/Users/alice/work/redeven/item"}],"subagent":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","status":"running","last_message":"Reading the API boundary.","updated_at_ms":120},"subagents":[{"subagent_id":"legacy_child","thread_id":"legacy_child"}],"snapshots":{"legacy":{"thread_id":"legacy_snapshot"}},"snapshots_by_id":{"legacy":{"thread_id":"legacy_snapshot_by_id"}},"private_path":"/Users/alice/work/redeven"}}
 			]}
 		]
 	}`
@@ -179,6 +179,11 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentProjectionPayload(t *te
 		`"path"`,
 		`private_path`,
 		`privatePath`,
+		`"subagents":[`,
+		`"snapshots"`,
+		`snapshots_by_id`,
+		`legacy_child`,
+		`legacy_snapshot`,
 		`/Users/alice/work/redeven`,
 	} {
 		if strings.Contains(body, forbidden) {

@@ -259,6 +259,37 @@ describe('buildFlowerSubagentPanelItems', () => {
     expect(items).toEqual([]);
   });
 
+  it('does not revive legacy subagent snapshot collection fields', () => {
+    const items = buildFlowerSubagentPanelItems(thread([timeline([
+      activityItem({
+        payload: {
+          action: 'wait',
+          snapshots: {
+            legacy1: {
+              thread_id: 'legacy-child-1',
+              task_name: 'Legacy snapshot',
+              status: 'running',
+            },
+          },
+          snapshots_by_id: {
+            legacy2: {
+              thread_id: 'legacy-child-2',
+              task_name: 'Legacy snapshot map',
+              status: 'running',
+            },
+          },
+          subagents: [{
+            thread_id: 'legacy-child-3',
+            task_name: 'Legacy subagents list',
+            status: 'running',
+          }],
+        },
+      }),
+    ])]));
+
+    expect(items).toEqual([]);
+  });
+
   it('does not project a child thread lifecycle item as its own subagent', () => {
     const childThread = {
       ...thread([timeline([

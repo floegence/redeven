@@ -103,7 +103,6 @@ function createEnvFlowerSurfaceCopy(i18n: I18nHelpers): FlowerSurfaceCopy {
       openLabel: i18n.t('flowerChat.subagents.openLabel'),
       openThread: i18n.t('flowerChat.subagents.openThread'),
       backToChat: i18n.t('flowerChat.subagents.backToChat'),
-      backToParent: i18n.t('flowerChat.subagents.backToParent'),
       emptyTitle: i18n.t('flowerChat.subagents.emptyTitle'),
       emptyDescription: i18n.t('flowerChat.subagents.emptyDescription'),
       activeLabel: i18n.t('flowerChat.subagents.activeLabel'),

@@ -268,6 +268,7 @@ func normalizeSubagentsPayload(payload any) (any, bool) {
 	if !ok || record == nil {
 		return normalized, false
 	}
+	record = scrubSubagentForbiddenFields(record)
 	truncated := truncateSubagentsPayloadRecord(record)
 	if truncated {
 		record["truncated"] = true
@@ -291,21 +292,8 @@ func truncateSubagentsPayloadRecord(record map[string]any) bool {
 			truncated = truncateSubagentsPayloadRecord(nested) || truncated
 		}
 	}
-	for _, field := range []string{"items", "subagents"} {
+	for _, field := range []string{"items"} {
 		for _, raw := range toAnySlice(record[field]) {
-			nested, ok := raw.(map[string]any)
-			if !ok || nested == nil {
-				continue
-			}
-			truncated = truncateSubagentsPayloadRecord(nested) || truncated
-		}
-	}
-	for _, field := range []string{"snapshots", "snapshots_by_id"} {
-		nestedMap, ok := record[field].(map[string]any)
-		if !ok || nestedMap == nil {
-			continue
-		}
-		for _, raw := range nestedMap {
 			nested, ok := raw.(map[string]any)
 			if !ok || nested == nil {
 				continue
@@ -413,7 +401,7 @@ func subagentsToolInputSchema() map[string]any {
 				"type":  "array",
 				"items": map[string]any{"type": "string"},
 			},
-			"timeout_ms":   map[string]any{"type": "integer", "minimum": 10000, "maximum": 300000},
+			"timeout_ms":   map[string]any{"type": "integer", "minimum": 10000, "maximum": 1200000},
 			"target":       map[string]any{"type": "string"},
 			"interrupt":    map[string]any{"type": "boolean"},
 			"scope":        map[string]any{"type": "string", "enum": []string{"current_run"}},

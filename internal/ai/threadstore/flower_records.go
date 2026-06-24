@@ -55,6 +55,10 @@ type FlowerHandoffRecord struct {
 	UpdatedAtUnixMs     int64  `json:"updated_at_unix_ms"`
 }
 
+type sqlContextExecutor interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
 func normalizeFlowerJSON(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -100,13 +104,7 @@ func normalizeFlowerState(raw string, fallback string) string {
 	return raw
 }
 
-func (s *Store) UpsertFlowerThreadMetadata(ctx context.Context, rec FlowerThreadMetadata) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
+func normalizeFlowerThreadMetadata(rec FlowerThreadMetadata) (FlowerThreadMetadata, error) {
 	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
 	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
 	rec.OwnerKind = strings.TrimSpace(strings.ToLower(rec.OwnerKind))
@@ -121,13 +119,33 @@ func (s *Store) UpsertFlowerThreadMetadata(ctx context.Context, rec FlowerThread
 	rec.PrimaryTargetID = strings.TrimSpace(rec.PrimaryTargetID)
 	rec.ActiveTargetIDsJSON = normalizeFlowerStringArrayJSON(rec.ActiveTargetIDsJSON)
 	if rec.EndpointID == "" || rec.ThreadID == "" {
-		return errors.New("invalid flower thread metadata")
+		return FlowerThreadMetadata{}, errors.New("invalid flower thread metadata")
 	}
 	if rec.UpdatedAtUnixMs <= 0 {
 		rec.UpdatedAtUnixMs = time.Now().UnixMilli()
 	}
+	return rec, nil
+}
 
-	_, err := s.db.ExecContext(ctx, `
+func (s *Store) UpsertFlowerThreadMetadata(ctx context.Context, rec FlowerThreadMetadata) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rec, err := normalizeFlowerThreadMetadata(rec)
+	if err != nil {
+		return err
+	}
+	return upsertFlowerThreadMetadataExec(ctx, s.db, rec)
+}
+
+func upsertFlowerThreadMetadataExec(ctx context.Context, exec sqlContextExecutor, rec FlowerThreadMetadata) error {
+	if exec == nil {
+		return errors.New("store not initialized")
+	}
+	_, err := exec.ExecContext(ctx, `
 INSERT INTO ai_flower_thread_metadata(
   endpoint_id, thread_id, owner_kind, owner_id, parent_thread_id, parent_run_id,
   context_json, action_json, updated_at_unix_ms, home_runtime_id, home_runtime_kind,

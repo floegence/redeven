@@ -244,6 +244,11 @@ func TestNormalizeTruncatedToolPayload_PreservesSubagentLifecycleSnapshot(t *tes
 			"closed":          true,
 			"can_close":       false,
 		},
+		"subagents":       []any{map[string]any{"thread_id": "legacy-list"}},
+		"snapshots":       map[string]any{"legacy": map[string]any{"thread_id": "legacy-snapshot"}},
+		"snapshots_by_id": map[string]any{"legacy": map[string]any{"thread_id": "legacy-snapshot-by-id"}},
+		"messages":        []any{"child transcript must stay out of model results"},
+		"tool_result":     map[string]any{"stdout": "raw child output"},
 	}
 
 	normalized, truncated := normalizeTruncatedToolPayload("subagents", payload)
@@ -256,6 +261,11 @@ func TestNormalizeTruncatedToolPayload_PreservesSubagentLifecycleSnapshot(t *tes
 	}
 	if _, ok := root["raw"]; ok {
 		t.Fatalf("subagents payload must not collapse to raw: %#v", root)
+	}
+	for _, field := range []string{"subagents", "snapshots", "snapshots_by_id", "messages", "tool_result"} {
+		if _, ok := root[field]; ok {
+			t.Fatalf("subagents payload retained forbidden field %s: %#v", field, root)
+		}
 	}
 	snapshot, ok := root["snapshot"].(map[string]any)
 	if !ok {

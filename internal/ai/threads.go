@@ -290,6 +290,9 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	if err != nil {
 		return nil, err
 	}
+	if isFlowerSubagentProjection(flowerMeta) {
+		return nil, sql.ErrNoRows
+	}
 	queuedTurnCount, err := db.CountFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued)
 	if err != nil {
 		return nil, err
@@ -747,6 +750,9 @@ func (s *Service) SetThreadReasoningSelection(ctx context.Context, meta *session
 	if th == nil {
 		return sql.ErrNoRows
 	}
+	if err := s.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
+		return err
+	}
 	capability, modelDefault, _ := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
 	normalized, err := normalizeRequestedReasoningOrReject(capability, selection)
 	if err != nil {
@@ -785,6 +791,9 @@ func (s *Service) ClearThreadReasoningSelection(ctx context.Context, meta *sessi
 	s.mu.Unlock()
 	if db == nil {
 		return errors.New("threads store not ready")
+	}
+	if err := s.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
+		return err
 	}
 	if err := db.UpdateThreadReasoningSelection(ctx, endpointID, threadID, ""); err != nil {
 		return err

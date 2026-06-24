@@ -25,7 +25,13 @@ export type FlowerSubagentPanelItem = Readonly<{
   status: FlowerSubagentPanelStatus;
   lastMessage: string;
   action: string;
-  canOpen: boolean;
+	canOpen: boolean;
+	parentThreadID: string;
+	waitingPrompt: string;
+	queuedInputs: number;
+	canSendInput: boolean;
+  canInterrupt: boolean;
+  canClose: boolean;
   updatedAtMs: number;
   itemStatus: FlowerActivityItem['status'];
 }>;
@@ -125,7 +131,7 @@ function isSubagentsActivityItem(item: FlowerActivityItem): boolean {
   const operation = payloadString(payload, 'operation');
   if (operation === 'subagents') return true;
   if (payloadString(payload, 'delegation_runtime') === 'floret') return true;
-  return payloadString(payload, 'subagent_id') !== '' && payloadString(payload, 'thread_id') !== '';
+  return false;
 }
 
 function nestedSnapshots(payload: SnapshotSource): readonly SnapshotSource[] {
@@ -137,13 +143,9 @@ function nestedSnapshots(payload: SnapshotSource): readonly SnapshotSource[] {
   for (const key of ['snapshot', 'subagent', 'item']) {
     pushRecord(payload[key]);
   }
-  for (const key of ['items', 'subagents']) {
+  for (const key of ['items']) {
     const list = Array.isArray(payload[key]) ? payload[key] as readonly unknown[] : [];
     list.forEach(pushRecord);
-  }
-  for (const key of ['snapshots', 'snapshots_by_id']) {
-    const record = asRecord(payload[key]);
-    Object.values(record).forEach(pushRecord);
   }
   return out;
 }
@@ -160,13 +162,13 @@ function itemFromSnapshot(
   if (!threadID && !subagentID) return null;
   if (threadID && threadID === ownerThreadID) return null;
   const action = payloadString(activityPayload, 'action') || payloadString(source, 'action');
-  const taskName = payloadString(source, 'task_name', 'title', 'path');
-  const title = payloadString(source, 'title', 'task_name', 'path') || payloadString(activityPayload, 'task_name', 'title') || 'Subagent';
+  const taskName = payloadString(source, 'task_name', 'title');
+  const title = payloadString(source, 'title', 'task_name') || payloadString(activityPayload, 'task_name', 'title') || 'Subagent';
   const updatedAtMs = numberValue(source.updated_at_ms ?? source.updatedAtMs)
     || numberValue(source.ended_at_ms)
     || numberValue(source.created_at_ms ?? source.started_at_ms)
     || fallbackUpdatedAtMs;
-  const status = normalizeStatus(source.status ?? source.subagent_status, activityItem.status);
+  const status = normalizeStatus(source.status, activityItem.status);
   return {
     key: threadID || subagentID,
     threadID,
@@ -175,9 +177,15 @@ function itemFromSnapshot(
     title,
     agentType: payloadString(source, 'agent_type') || payloadString(activityPayload, 'agent_type'),
     status,
-    lastMessage: payloadString(source, 'last_message', 'result', 'objective', 'waiting_prompt'),
-    action,
-    canOpen: Boolean(threadID),
+    lastMessage: payloadString(source, 'last_message', 'waiting_prompt'),
+	    action,
+	    canOpen: Boolean(threadID),
+	    parentThreadID: payloadString(source, 'parent_thread_id', 'parentThreadID'),
+	    waitingPrompt: payloadString(source, 'waiting_prompt', 'waitingPrompt'),
+	    queuedInputs: numberValue(source.queued_inputs ?? source.queuedInputs),
+	    canSendInput: Boolean(source.can_send_input ?? source.canSendInput),
+    canInterrupt: Boolean(source.can_interrupt ?? source.canInterrupt),
+    canClose: Boolean(source.can_close ?? source.canClose),
     updatedAtMs,
     itemStatus: activityItem.status,
   };
@@ -205,9 +213,15 @@ function mergeItem(current: FlowerSubagentPanelItem | undefined, incoming: Flowe
     taskName: base.taskName || patch.taskName,
     title: base.title || patch.title,
     agentType: base.agentType || patch.agentType,
-    lastMessage: base.lastMessage || patch.lastMessage,
-    action: base.action || patch.action,
-    canOpen: base.canOpen || patch.canOpen,
+	    lastMessage: base.lastMessage || patch.lastMessage,
+	    action: base.action || patch.action,
+	    canOpen: base.canOpen || patch.canOpen,
+	    parentThreadID: base.parentThreadID || patch.parentThreadID,
+	    waitingPrompt: base.waitingPrompt || patch.waitingPrompt,
+	    queuedInputs: base.queuedInputs || patch.queuedInputs,
+    canSendInput: base.canSendInput || patch.canSendInput,
+    canInterrupt: base.canInterrupt || patch.canInterrupt,
+    canClose: base.canClose || patch.canClose,
   };
 }
 
