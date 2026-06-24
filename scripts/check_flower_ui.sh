@@ -24,6 +24,7 @@ main() {
     ui_pkg_log ""
     ui_pkg_log "Flower UI: Env App interaction contracts..."
     ui_pkg_run_pnpm exec vitest run --environment=node --maxWorkers=2 --testTimeout=10000 \
+      src/ui/FlowerSurface.navigation.context.test.tsx \
       src/ui/FlowerSurface.navigation.launchSend.test.tsx \
       src/ui/FlowerSurface.navigation.threads.test.tsx \
       src/ui/FlowerSurface.navigation.structuredInput.test.tsx
@@ -34,6 +35,7 @@ main() {
       internal/flower_ui/src/flowerLiveProjection.test.ts \
       internal/flower_ui/src/threads/FlowerThreadList.test.ts \
       internal/flower_ui/src/flowerTimelineProjection.test.ts \
+      internal/flower_ui/src/chat/flowerContextPresentation.test.ts \
       internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts \
       internal/flower_ui/src/FlowerSurface.modelStatusIndicator.test.ts \
       internal/flower_ui/src/FlowerSurface.markdownReadability.test.ts

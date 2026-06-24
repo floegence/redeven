@@ -340,6 +340,45 @@ describe('Local Environment Flower surface adapter', () => {
             runs: {
               'run-1': { run_id: 'run-1', status: 'running', message_id: 'assistant-live' },
             },
+            model_io: {
+              phase: 'streaming',
+              run_id: 'run-1',
+              updated_at_ms: 42_001,
+            },
+            context_usage: {
+              run_id: 'run-1',
+              phase: 'projected_request',
+              input_tokens: 620,
+              context_window_tokens: 1000,
+              used_ratio: 0.62,
+              pressure_status: 'stable',
+              updated_at_ms: 42_002,
+            },
+            context_compactions: [{
+              operation_id: 'compact-1',
+              run_id: 'run-1',
+              phase: 'complete',
+              status: 'compacted',
+              tokens_before: 900,
+              tokens_after_estimate: 200,
+              updated_at_ms: 42_003,
+            }],
+            timeline_decorations: [{
+              decoration_id: 'context-compaction:compact-1',
+              kind: 'context_compaction',
+              anchor_message_id: 'assistant-live',
+              placement: 'before',
+              ordinal: 0,
+              compaction: {
+                operation_id: 'compact-1',
+                run_id: 'run-1',
+                phase: 'complete',
+                status: 'compacted',
+                tokens_before: 900,
+                tokens_after_estimate: 200,
+                updated_at_ms: 42_003,
+              },
+            }],
             approval_actions: {},
             input_requests: {},
           },
@@ -359,6 +398,21 @@ describe('Local Environment Flower surface adapter', () => {
       content: 'working live',
       status: 'streaming',
       active_cursor: true,
+    });
+    expect(projected.active_run_id).toBe('run-1');
+    expect(projected.model_io_status?.run_id).toBe('run-1');
+    expect(projected.context_usage).toMatchObject({
+      run_id: 'run-1',
+      input_tokens: 620,
+      pressure_status: 'stable',
+    });
+    expect(projected.context_compactions?.[0]).toMatchObject({
+      operation_id: 'compact-1',
+      status: 'compacted',
+    });
+    expect(projected.timeline_decorations?.[0]).toMatchObject({
+      kind: 'context_compaction',
+      compaction: { operation_id: 'compact-1' },
     });
     expect(snapshot.cursor).toBe(9);
   });

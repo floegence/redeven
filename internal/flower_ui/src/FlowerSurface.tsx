@@ -5,7 +5,9 @@ import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronLeft, Clock, Copy, F
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
+import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
+import { FlowerContextUsageMeter } from './chat/FlowerContextUsageMeter';
 import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
 import type { FlowerSubagentsCopy, FlowerSurfaceCopy } from './copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
@@ -27,7 +29,6 @@ import type {
   FlowerThreadStatus,
   FlowerThreadSnapshot,
   FlowerChatMessage,
-  FlowerContextCompaction,
   FlowerContextUsage,
   FlowerActivityStatus,
   FlowerLiveBootstrap,
@@ -1596,102 +1597,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const status = selectedModelIOStatus();
     return status ? modelStatusLabel(status.phase) : '';
   });
-  const formatTokenCount = (tokens: number | undefined): string => {
-    const value = Math.max(0, Math.floor(Number(tokens ?? 0)));
-    if (!Number.isFinite(value) || value <= 0) return '';
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`;
-    if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}k`;
-    return String(value);
-  };
-  const contextUsageRatio = (usage: FlowerContextUsage): number => {
-    const direct = Number(usage.used_ratio);
-    if (Number.isFinite(direct) && direct >= 0) return Math.min(1, direct);
-    const input = Number(usage.input_tokens ?? 0);
-    const windowTokens = Number(usage.context_window_tokens ?? 0);
-    return Number.isFinite(input) && Number.isFinite(windowTokens) && input > 0 && windowTokens > 0 ? Math.min(1, input / windowTokens) : 0;
-  };
-  const hasContextUsageRatio = (usage: FlowerContextUsage): boolean => (
-    (Number.isFinite(Number(usage.used_ratio)) && Number(usage.used_ratio) >= 0)
-    || (Number(usage.input_tokens ?? 0) > 0 && Number(usage.context_window_tokens ?? 0) > 0)
-  );
-  const contextUsagePercent = (usage: FlowerContextUsage): number => Math.max(0, Math.round(contextUsageRatio(usage) * 100));
-  const contextPressureTone = (pressure: string): 'stable' | 'warning' | 'danger' | 'estimated' => {
-    switch (trimString(pressure)) {
-      case 'near_threshold':
-      case 'will_compact':
-        return 'warning';
-      case 'hard_limit':
-        return 'danger';
-      case 'estimated':
-        return 'estimated';
-      default:
-        return 'stable';
-    }
-  };
-  const contextPressureLabel = (pressure: string): string => {
-    const labels = copy().chat.contextMeter ?? DEFAULT_FLOWER_SURFACE_COPY.chat.contextMeter;
-    const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.contextMeter;
-    switch (trimString(pressure)) {
-      case 'stable':
-        return trimString(labels.stable) || fallback.stable;
-      case 'near_threshold':
-        return trimString(labels.nearThreshold) || fallback.nearThreshold;
-      case 'will_compact':
-        return trimString(labels.willCompact) || fallback.willCompact;
-      case 'hard_limit':
-        return trimString(labels.hardLimit) || fallback.hardLimit;
-      case 'estimated':
-        return trimString(labels.estimated) || fallback.estimated;
-      default:
-        return trimString(labels.unknown) || fallback.unknown;
-    }
-  };
-  const contextMeter = () => {
-    const usage = selectedContextUsage();
-    if (!usage) return null;
-    const labels = copy().chat.contextMeter ?? DEFAULT_FLOWER_SURFACE_COPY.chat.contextMeter;
-    const label = trimString(labels.label) || DEFAULT_FLOWER_SURFACE_COPY.chat.contextMeter.label;
-    if (!hasContextUsageRatio(usage)) {
-      return (
-        <div
-          class="flower-context-meter flower-context-meter-text-only"
-          data-context-pressure={contextPressureTone(usage.pressure_status)}
-          title={`${label}: ${contextPressureLabel(usage.pressure_status)}`}
-        >
-          <span class="flower-context-meter-label">{label}</span>
-          <span class="flower-context-meter-value">{contextPressureLabel(usage.pressure_status)}</span>
-        </div>
-      );
-    }
-    const percent = contextUsagePercent(usage);
-    const used = formatTokenCount(usage.input_tokens);
-    const total = formatTokenCount(usage.context_window_tokens);
-    const detail = used && total
-      ? labels.usage(used, total)
-      : contextPressureLabel(usage.pressure_status);
-    return (
-      <div
-        class="flower-context-meter"
-        data-context-pressure={contextPressureTone(usage.pressure_status)}
-        title={`${label}: ${detail}`}
-      >
-        <div class="flower-context-meter-copy">
-          <span class="flower-context-meter-label">{label}</span>
-          <span class="flower-context-meter-value">{labels.percent(percent)}</span>
-        </div>
-        <div
-          class="flower-context-meter-track"
-          role="progressbar"
-          aria-label={`${label}: ${detail}`}
-          aria-valuemin="0"
-          aria-valuemax="100"
-          aria-valuenow={Math.min(100, percent)}
-        >
-          <span class="flower-context-meter-fill" style={{ width: `${Math.min(100, percent)}%` }} />
-        </div>
-      </div>
-    );
-  };
   const modelStatusIndicator = () => {
     const label = selectedModelStatusLabel();
     return (
@@ -2797,50 +2702,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const compactionDividerLabel = (compaction: FlowerContextCompaction): string => {
-    const labels = copy().chat.compactionDivider ?? DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider;
-    const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider;
-    switch (trimString(compaction.status)) {
-      case 'compacting':
-        return trimString(labels.compacting) || fallback.compacting;
-      case 'compacted':
-        return trimString(labels.compacted) || fallback.compacted;
-      case 'failed':
-        return trimString(labels.failed) || fallback.failed;
-      default:
-        return trimString(labels.fallback) || fallback.fallback;
-    }
-  };
-
-  const compactionDividerDetail = (compaction: FlowerContextCompaction): string => {
-    const before = formatTokenCount(compaction.tokens_before);
-    const after = formatTokenCount(compaction.tokens_after_estimate);
-    const labels = copy().chat.compactionDivider ?? DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider;
-    if (before && after) return labels.tokenChange(before, after);
-    return trimString(compaction.error) || trimString(compaction.reason) || trimString(compaction.trigger);
-  };
-
   const compactionDividerEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'context_compaction' }>>) => {
     const decoration = createMemo(() => entry().decoration);
-    const compaction = createMemo(() => decoration().compaction);
-    const detail = createMemo(() => compactionDividerDetail(compaction()));
-    return (
-      <div
-        class="flower-compaction-divider"
-        data-flower-decoration-id={decoration().decoration_id}
-        data-flower-compaction-status={compaction().status}
-      >
-        <div class="flower-compaction-divider-rule" aria-hidden="true" />
-        <div class="flower-compaction-divider-pill">
-          <Clock class="h-3.5 w-3.5" />
-          <span class="flower-compaction-divider-label">{compactionDividerLabel(compaction())}</span>
-          <Show when={detail()}>
-            {(value) => <span class="flower-compaction-divider-detail">{value()}</span>}
-          </Show>
-        </div>
-        <div class="flower-compaction-divider-rule" aria-hidden="true" />
-      </div>
-    );
+    return <FlowerContextCompactionDivider decoration={decoration()} copy={copy()} />;
   };
 
   const inputRequestEntry = (entry: Accessor<FlowerTimelineEntry>) => {
@@ -3075,48 +2939,57 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const chatPanel = () => (
     <div class="flower-chat-shell flower-chat-shell">
       <div class="flower-chat-header flower-chat-header border-b border-border/80 backdrop-blur-md">
-        <div class="flex min-w-0 items-center gap-3">
-          <FlowerIcon class="h-5 w-5 text-primary" />
-          <div class="min-w-0 flex items-center gap-2">
-            <div class="flower-chat-header-title truncate">{selectedThread()?.title || copy().chat.titleFallback}</div>
+        <div class="flower-chat-header-row">
+          <div class="flex min-w-0 items-center gap-3">
+            <FlowerIcon class="h-5 w-5 text-primary" />
+            <div class="min-w-0 flex items-center gap-2">
+              <div class="flower-chat-header-title truncate">{selectedThread()?.title || copy().chat.titleFallback}</div>
+            </div>
           </div>
-        </div>
-        <div class="flower-chat-header-actions">
-          <Show when={selectedThreadIsSubagentProjection() && selectedThreadParentID()}>
+          <div class="flower-chat-header-actions">
+            <Show when={selectedThreadIsSubagentProjection() && selectedThreadParentID()}>
+              <button
+                type="button"
+                class="flower-header-action-button"
+                aria-label={subagentsCopy().backToParent}
+                title={subagentsCopy().backToParent}
+                onClick={openSelectedParentThread}
+              >
+                <ChevronLeft class="h-3.5 w-3.5" />
+                <span>{subagentsCopy().backToParent}</span>
+              </button>
+            </Show>
             <button
               type="button"
-              class="flower-header-action-button"
-              aria-label={subagentsCopy().backToParent}
-              title={subagentsCopy().backToParent}
-              onClick={openSelectedParentThread}
+              class={cn('flower-header-icon-button', sidePanel() === 'subagents' && 'flower-header-icon-button-active')}
+              aria-label={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
+              title={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
+              aria-pressed={sidePanel() === 'subagents'}
+              onClick={openSubagents}
             >
-              <ChevronLeft class="h-3.5 w-3.5" />
-              <span>{subagentsCopy().backToParent}</span>
+              <GitBranch class="h-4 w-4" />
+              <Show when={selectedSubagentItems().length > 0}>
+                <span class="flower-header-icon-badge" aria-hidden="true">{subagentBadgeText()}</span>
+              </Show>
             </button>
-          </Show>
-          <button
-            type="button"
-            class={cn('flower-header-icon-button', sidePanel() === 'subagents' && 'flower-header-icon-button-active')}
-            aria-label={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
-            title={selectedSubagentItems().length > 0 ? `${subagentsCopy().openLabel} · ${subagentBadgeLabel()}` : subagentsCopy().openLabel}
-            aria-pressed={sidePanel() === 'subagents'}
-            onClick={openSubagents}
-          >
-            <GitBranch class="h-4 w-4" />
-            <Show when={selectedSubagentItems().length > 0}>
-              <span class="flower-header-icon-badge" aria-hidden="true">{subagentBadgeText()}</span>
-            </Show>
-          </button>
-          <button
-            type="button"
-            class="flower-header-icon-button"
-            aria-label={copy().chat.settingsLabel}
-            title={copy().chat.settingsLabel}
-            onClick={openSettings}
-          >
-            <Settings class="h-4 w-4" />
-          </button>
+            <button
+              type="button"
+              class="flower-header-icon-button"
+              aria-label={copy().chat.settingsLabel}
+              title={copy().chat.settingsLabel}
+              onClick={openSettings}
+            >
+              <Settings class="h-4 w-4" />
+            </button>
+          </div>
         </div>
+        <Show when={selectedContextUsage()}>
+          {(usage) => (
+            <div class="flower-chat-context-strip" role="status" aria-live="polite" aria-atomic="true">
+              <FlowerContextUsageMeter usage={usage()} copy={copy()} />
+            </div>
+          )}
+        </Show>
       </div>
       <div class="flower-chat-main flower-chat-main">
         <div ref={transcriptRef} class="flower-chat-transcript flower-chat-transcript" onScroll={updateTranscriptNearBottom}>
@@ -3168,9 +3041,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
               <Show when={selectedThreadHasModelStatus()}>
                 {modelStatusIndicator()}
-              </Show>
-              <Show when={selectedContextUsage()}>
-                {contextMeter()}
               </Show>
             </div>
             <div class="flower-composer flower-chat-input-floating chat-input-container p-3">

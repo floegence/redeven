@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createEnvLocalFlowerSurfaceAdapter } from './envLocalFlowerSurfaceAdapter';
+import { projectFlowerLiveBootstrap } from '../../../../../flower_ui/src/flowerLiveReducer';
 
 vi.mock('../services/controlplaneApi', () => ({
   getLocalRuntime: vi.fn(async () => null),
@@ -69,6 +70,82 @@ function liveBootstrap(threadID: string, status = 'canceled') {
 }
 
 describe('Env local Flower surface adapter', () => {
+  it('maps live bootstrap context telemetry into the shared Flower surface state', async () => {
+    const bootstrap = liveBootstrap('thread_context', 'running');
+    bootstrap.live_state = {
+      ...bootstrap.live_state,
+      runs: { run_context: { run_id: 'run_context', status: 'running' } },
+      model_io: {
+        phase: 'streaming',
+        run_id: 'run_context',
+        updated_at_ms: 10_010,
+      },
+      context_usage: {
+        run_id: 'run_context',
+        phase: 'projected_request',
+        input_tokens: 620,
+        context_window_tokens: 1000,
+        used_ratio: 0.62,
+        pressure_status: 'stable',
+        updated_at_ms: 10_011,
+      },
+      context_compactions: [{
+        operation_id: 'compact-context',
+        run_id: 'run_context',
+        phase: 'complete',
+        status: 'compacted',
+        tokens_before: 900,
+        tokens_after_estimate: 200,
+        updated_at_ms: 10_012,
+      }],
+      timeline_decorations: [{
+        decoration_id: 'context-compaction:compact-context',
+        kind: 'context_compaction',
+        anchor_message_id: 'assistant-context',
+        placement: 'before',
+        ordinal: 0,
+        compaction: {
+          operation_id: 'compact-context',
+          run_id: 'run_context',
+          phase: 'complete',
+          status: 'compacted',
+          tokens_before: 900,
+          tokens_after_estimate: 200,
+          updated_at_ms: 10_012,
+        },
+      }],
+    } as typeof bootstrap.live_state;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_context/live/bootstrap' && init?.method === 'GET') {
+        return jsonResponse(bootstrap);
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+    });
+
+    const mapped = projectFlowerLiveBootstrap(await adapter.loadThread('thread_context'));
+
+    expect(mapped.active_run_id).toBe('run_context');
+    expect(mapped.model_io_status?.run_id).toBe('run_context');
+    expect(mapped.context_usage).toMatchObject({
+      run_id: 'run_context',
+      input_tokens: 620,
+      pressure_status: 'stable',
+    });
+    expect(mapped.context_compactions?.[0]).toMatchObject({
+      operation_id: 'compact-context',
+      status: 'compacted',
+    });
+    expect(mapped.timeline_decorations?.[0]).toMatchObject({
+      kind: 'context_compaction',
+      compaction: { operation_id: 'compact-context' },
+    });
+  });
+
   it('stops a thread through RPC and reloads the live bootstrap', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/ai/threads/thread_1/live/bootstrap' && init?.method === 'GET') {

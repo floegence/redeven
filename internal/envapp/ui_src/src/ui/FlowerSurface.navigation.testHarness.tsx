@@ -16,6 +16,8 @@ import type {
   FlowerThreadSnapshot,
   FlowerActivityStatus,
   FlowerModelIOStatus,
+  FlowerContextCompaction,
+  FlowerTimelineDecoration,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -247,6 +249,9 @@ export function liveBootstrap(threadValue: FlowerThreadSnapshot, cursor = 0): Fl
         ? { [modelIORunID]: { run_id: modelIORunID, status: 'running' } }
         : {},
       ...(threadValue.model_io_status ? { model_io: threadValue.model_io_status } : {}),
+      ...(threadValue.context_usage ? { context_usage: threadValue.context_usage } : {}),
+      ...(threadValue.context_compactions ? { context_compactions: threadValue.context_compactions as readonly FlowerContextCompaction[] } : {}),
+      ...(threadValue.timeline_decorations ? { timeline_decorations: threadValue.timeline_decorations as readonly FlowerTimelineDecoration[] } : {}),
       approval_actions: {},
       input_requests: {},
     },

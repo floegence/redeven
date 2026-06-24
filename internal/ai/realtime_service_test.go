@@ -588,6 +588,107 @@ func TestFlowerLiveContextUsageAndCompactionMaterializedState(t *testing.T) {
 	}
 }
 
+func TestFlowerLiveContextCompactionCompleteKeepsRunActive(t *testing.T) {
+	t.Parallel()
+
+	state := FlowerLiveMaterializedState{}
+	runID := "run-context-active"
+	messageID := "msg-context-active"
+
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID: runID,
+		Kind:  FlowerLiveRunStarted,
+		Payload: mustFlowerPayload(FlowerLiveRunStartedPayload{
+			RunID:     runID,
+			MessageID: messageID,
+			Status:    string(RunStateRunning),
+		}),
+	})
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID: runID,
+		Kind:  FlowerLiveModelIOUpdated,
+		Payload: mustFlowerPayload(FlowerLiveModelIOUpdatedPayload{Status: &FlowerModelIOStatus{
+			Phase:       FlowerModelIOPhaseStreaming,
+			RunID:       runID,
+			StepIndex:   1,
+			UpdatedAtMs: 10_000,
+		}}),
+	})
+
+	start := FlowerContextCompaction{
+		OperationID:     "run-context-active:compact:1:pre_request:threshold",
+		RunID:           runID,
+		AnchorMessageID: messageID,
+		StepIndex:       1,
+		Phase:           "start",
+		Status:          "compacting",
+		Trigger:         "pre_request",
+		Reason:          "threshold",
+		TokensBefore:    920,
+	}
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID:    runID,
+		AtUnixMs: 10_001,
+		Kind:     FlowerLiveContextCompactionUpdated,
+		Payload:  mustFlowerPayload(FlowerLiveContextCompactionUpdatedPayload{Compaction: start}),
+	})
+	complete := start
+	complete.Phase = "complete"
+	complete.Status = "compacted"
+	complete.TokensAfterEstimate = 210
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID:    runID,
+		AtUnixMs: 10_002,
+		Kind:     FlowerLiveContextCompactionUpdated,
+		Payload:  mustFlowerPayload(FlowerLiveContextCompactionUpdatedPayload{Compaction: complete}),
+	})
+
+	run, ok := state.Runs[runID]
+	if !ok || run.Status != string(RunStateRunning) || run.MessageID != messageID {
+		t.Fatalf("run after compacted=%#v ok=%v, want active running run", run, ok)
+	}
+	if state.ModelIO == nil || state.ModelIO.RunID != runID || state.ModelIO.Phase != FlowerModelIOPhaseStreaming {
+		t.Fatalf("model_io after compacted=%#v, want active streaming model io", state.ModelIO)
+	}
+	if len(state.ContextCompactions) != 1 || state.ContextCompactions[0].Status != "compacted" {
+		t.Fatalf("context compactions after compacted=%#v", state.ContextCompactions)
+	}
+	if len(state.TimelineDecorations) != 1 || state.TimelineDecorations[0].Compaction.Status != "compacted" {
+		t.Fatalf("timeline decorations after compacted=%#v", state.TimelineDecorations)
+	}
+
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID: runID,
+		Kind:  FlowerLiveMessageBlockStart,
+		Payload: mustFlowerPayload(FlowerLiveMessageBlockStartedPayload{
+			MessageID:  messageID,
+			BlockIndex: 0,
+			BlockType:  "markdown",
+		}),
+	})
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID: runID,
+		Kind:  FlowerLiveMessageBlockDelta,
+		Payload: mustFlowerPayload(FlowerLiveMessageBlockDeltaPayload{
+			MessageID:  messageID,
+			BlockIndex: 0,
+			Delta:      "continued after compaction",
+		}),
+	})
+
+	run, ok = state.Runs[runID]
+	if !ok || run.Status != string(RunStateRunning) {
+		t.Fatalf("run after post-compaction delta=%#v ok=%v, want still running", run, ok)
+	}
+	if state.ModelIO == nil || state.ModelIO.RunID != runID {
+		t.Fatalf("post-compaction delta cleared model_io: %#v", state.ModelIO)
+	}
+	draft := state.Messages[messageID]
+	if len(draft.Blocks) != 1 || !strings.Contains(draft.Blocks[0].Content, "continued after compaction") {
+		t.Fatalf("draft after post-compaction delta=%#v", draft)
+	}
+}
+
 func TestFlowerLiveBootstrapRestoresPersistedContextState(t *testing.T) {
 	t.Parallel()
 
