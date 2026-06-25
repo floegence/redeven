@@ -3226,12 +3226,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           >
             <div class="flower-message-block-stack flower-message-block-stack-user">
               <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-chat-context-unified-bubble">
-                <For each={blocks()}>
-                  {(block) => (
-                    <Show when={block.type === 'content'}>
-                      <span class="flower-message-plain-text">{block.content}</span>
-                    </Show>
-                  )}
+                <For each={blocks().filter((b): b is Extract<typeof b, { type: 'content' }> => b.type === 'content')}>
+                  {(block) => <span class="flower-message-plain-text">{block.content}</span>}
                 </For>
                 <FlowerChatContextChips
                   contextDisplay={contextDisplay()!}
