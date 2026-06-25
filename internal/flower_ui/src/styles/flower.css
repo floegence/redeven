@@ -4072,6 +4072,20 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--primary) 6%, var(--flower-subagents-panel-elevated) 40%, transparent);
 }
 
+.flower-subagent-dropdown-row-running .flower-subagent-dropdown-name {
+  background: linear-gradient(90deg, var(--foreground) 0%, color-mix(in srgb, var(--primary) 52%, var(--foreground) 48%) 48%, var(--foreground) 96%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: flower-running-text-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes flower-running-text-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 .flower-subagent-dropdown-status {
   display: inline-flex;
   width: 1.125rem;
