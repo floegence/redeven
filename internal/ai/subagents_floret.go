@@ -1980,7 +1980,7 @@ func flowerSubagentTimelineRows(events []flruntime.SubAgentDetailEvent) []Flower
 			continue
 		}
 		callID := strings.TrimSpace(event.ToolCall.ID)
-		command := strings.TrimSpace(event.ToolCall.ArgsPreview)
+		command := bestDisplayCommand(event.ToolCall.ArgsPreview)
 		if callID != "" && command != "" {
 			toolCommandByCallID[callID] = command
 		}
@@ -2187,12 +2187,57 @@ func flowerSubagentToolCallArgs(toolName string, argsPreview string) map[string]
 	if preview == "" {
 		return args
 	}
+	if decoded, ok := tryDecodeJSONArgs(preview); ok {
+		if strings.TrimSpace(toolName) == "terminal.exec" {
+			if cmd, _ := decoded["command"].(string); strings.TrimSpace(cmd) != "" {
+				args["command"] = strings.TrimSpace(cmd)
+			}
+		} else if summary := extractSummaryFromDecoded(decoded); summary != "" {
+			args["summary"] = summary
+		}
+		return args
+	}
 	if strings.TrimSpace(toolName) == "terminal.exec" {
 		args["command"] = preview
 		return args
 	}
 	args["summary"] = preview
 	return args
+}
+
+func tryDecodeJSONArgs(preview string) (map[string]any, bool) {
+	preview = strings.TrimSpace(preview)
+	if !strings.HasPrefix(preview, "{") {
+		return nil, false
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(preview), &decoded); err != nil {
+		return nil, false
+	}
+	return decoded, true
+}
+
+func extractSummaryFromDecoded(decoded map[string]any) string {
+	if cmd, _ := decoded["command"].(string); strings.TrimSpace(cmd) != "" {
+		return strings.TrimSpace(cmd)
+	}
+	if desc, _ := decoded["description"].(string); strings.TrimSpace(desc) != "" {
+		return strings.TrimSpace(desc)
+	}
+	return ""
+}
+
+func bestDisplayCommand(argsPreview string) string {
+	preview := strings.TrimSpace(argsPreview)
+	if preview == "" {
+		return ""
+	}
+	if decoded, ok := tryDecodeJSONArgs(preview); ok {
+		if cmd, _ := decoded["command"].(string); strings.TrimSpace(cmd) != "" {
+			return strings.TrimSpace(cmd)
+		}
+	}
+	return preview
 }
 
 func flowerSubagentToolResultPayload(toolName string, result *flruntime.SubAgentDetailToolResult, command string) map[string]any {
