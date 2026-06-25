@@ -3308,27 +3308,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const subagentStatusLabel = (status: FlowerSubagentPanelStatus): string => subagentsCopy().statusLabels[status] ?? subagentsCopy().statusLabels.unknown;
-  const subagentActionLabel = (action: string): string => {
-    const labels = subagentsCopy().activity.actions;
-    switch (trimString(action)) {
-      case 'spawn':
-        return labels.spawn;
-      case 'send_input':
-        return labels.send_input;
-      case 'wait':
-        return labels.wait;
-      case 'list':
-        return labels.list;
-      case 'inspect':
-        return labels.inspect;
-      case 'close':
-        return labels.close;
-      case 'close_all':
-        return labels.close_all;
-      default:
-        return '';
-    }
-  };
   const subagentTypeLabel = (agentType: string): string => {
     const value = trimString(agentType);
     const labels = subagentsCopy().typeLabels;
@@ -3343,8 +3322,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return labels.unknown;
     }
   };
+  const formatSubagentRelativeTime = (updatedAtMs: number): string => {
+    const diffMs = Date.now() - updatedAtMs;
+    const seconds = Math.round(diffMs / 1000);
+    if (seconds < 60) return 'Just now';
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.round(hours / 24);
+    if (days < 30) return `${days}d ago`;
+    return new Date(updatedAtMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
   const subagentMeta = (item: FlowerSubagentPanelItem): string => (
-    [subagentTypeLabel(item.agentType), item.taskName && item.taskName !== item.title ? item.taskName : '', subagentActionLabel(item.action)].filter(Boolean).join(' · ')
+    item.updatedAtMs ? formatSubagentRelativeTime(item.updatedAtMs) : ''
   );
   const subagentStatusIndicator = (status: FlowerSubagentPanelStatus) => {
     switch (status) {
