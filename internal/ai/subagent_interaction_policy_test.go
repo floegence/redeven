@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+
+	flruntime "github.com/floegence/floret/runtime"
 )
 
 func containsString(list []string, target string) bool {
@@ -30,40 +32,68 @@ func testSignalDefs(names ...string) []ToolDef {
 	return out
 }
 
-func TestDefaultSubagentToolAllowlists_ExcludeAskUser(t *testing.T) {
-	readonlyAllowlist := defaultSubagentToolAllowlistReadonly()
-	if containsString(readonlyAllowlist, "ask_user") {
-		t.Fatalf("readonly default allowlist unexpectedly contains ask_user")
+func TestSubagentHostPromptKeepsContextModeMissionScoped(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{AgentHomeDir: t.TempDir()})
+	prompt := r.buildSubagentHostSystemPrompt([]ToolDef{{Name: "terminal.exec"}}, resolveSubagentCapabilityContract(r, nil, flruntime.SubAgentForkNone))
+	if strings.Contains(prompt, "Context mode: mission_only") || strings.Contains(prompt, "Context mode: full_history") {
+		t.Fatalf("host prompt must not pin mission-level context mode: %q", prompt)
 	}
-	workerAllowlist := defaultSubagentToolAllowlistWorker()
-	if containsString(workerAllowlist, "ask_user") {
-		t.Fatalf("worker default allowlist unexpectedly contains ask_user")
+	if !strings.Contains(prompt, "mission-level context contract") {
+		t.Fatalf("host prompt missing mission-level context guidance: %q", prompt)
 	}
 }
 
-func TestSanitizeSubagentToolAllowlist_FiltersDisallowedAndDuplicates(t *testing.T) {
-	in := []string{"ask_user", "subagents", "terminal.exec", "terminal.exec", "task_complete"}
-	got := sanitizeSubagentToolAllowlist(in, defaultSubagentToolAllowlistWorker(), false)
-	if len(got) != 2 || got[0] != "terminal.exec" || got[1] != "task_complete" {
-		t.Fatalf("sanitizeSubagentToolAllowlist()=%v, want [terminal.exec task_complete]", got)
+func TestBuildFlowerSubagentPromptDoesNotExposeHiddenControlTools(t *testing.T) {
+	t.Parallel()
+
+	contract := resolveSubagentCapabilityContract(nil, []ToolDef{{Name: "terminal.exec"}}, flruntime.SubAgentForkNone)
+	prompt := buildFlowerSubagentPrompt(flowerSubagentPromptSpec{
+		AgentType:   subagentAgentTypeWorker,
+		TaskName:    "Review API",
+		Message:     "Review the API contract and return a complete final handoff.",
+		ContextMode: subagentContextModeMissionOnly,
+		Contract:    contract,
+	})
+	for _, forbidden := range []string{"ask_user", "subagents", "write_todos", "exit_plan_mode"} {
+		if strings.Contains(prompt, forbidden) {
+			t.Fatalf("subagent prompt should not expose hidden control tool %q: %q", forbidden, prompt)
+		}
+	}
+	if !strings.Contains(prompt, "Available tools: terminal.exec") {
+		t.Fatalf("subagent prompt missing visible tool list: %q", prompt)
 	}
 }
 
-func TestSanitizeReadonlyAllowlist_DropsMutatingAndAskUser(t *testing.T) {
-	got := sanitizeReadonlyAllowlist([]string{"apply_patch", "ask_user", "terminal.exec"})
-	if len(got) != 1 || got[0] != "terminal.exec" {
-		t.Fatalf("sanitizeReadonlyAllowlist()=%v, want [terminal.exec]", got)
-	}
-}
+func TestResolveSubagentCapabilityContractHidesParentOnlyTools(t *testing.T) {
+	t.Parallel()
 
-func TestSanitizeSubagentToolAllowlist_FallbacksWhenInputEmptyOrInvalid(t *testing.T) {
-	fallback := defaultSubagentToolAllowlistWorker()
-	got := sanitizeSubagentToolAllowlist([]string{"ask_user"}, fallback, false)
-	if len(got) == 0 {
-		t.Fatalf("sanitizeSubagentToolAllowlist() returned empty allowlist")
+	r := newRun(runOptions{AgentHomeDir: t.TempDir()})
+	activeTools, contract := r.subagentToolSurface([]ToolDef{
+		{Name: "terminal.exec"},
+		{Name: "subagents"},
+		{Name: "ask_user"},
+		{Name: "write_todos"},
+		{Name: "exit_plan_mode"},
+	}, flruntime.SubAgentForkFullPath)
+	names := mapToolNames(activeTools)
+	if !containsString(names, "terminal.exec") {
+		t.Fatalf("visible tools missing terminal.exec: %v", names)
 	}
-	if containsString(got, "ask_user") {
-		t.Fatalf("fallback allowlist unexpectedly contains ask_user")
+	for _, hidden := range []string{"subagents", "ask_user", "write_todos", "exit_plan_mode"} {
+		if containsString(names, hidden) {
+			t.Fatalf("hidden tool %q leaked into child surface: %v", hidden, names)
+		}
+		if _, ok := contract.HiddenToolSet[hidden]; !ok {
+			t.Fatalf("hidden tool %q missing from contract: %#v", hidden, contract.HiddenToolSet)
+		}
+	}
+	if contract.AllowSpawnSubagents || contract.AllowUserApproval || contract.AllowUserInput {
+		t.Fatalf("subagent contract should deny nested delegation/user interaction: %#v", contract)
+	}
+	if contract.ForkMode != flruntime.SubAgentForkFullPath {
+		t.Fatalf("contract fork mode=%q, want full path", contract.ForkMode)
 	}
 }
 

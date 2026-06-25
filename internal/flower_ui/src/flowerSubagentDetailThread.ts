@@ -84,6 +84,22 @@ function messageForActivityRow(threadID: string, row: FlowerSubagentTimelineRow)
   };
 }
 
+function messageForSummaryOnlyDetail(threadID: string, detail: FlowerSubagentDetail): FlowerChatMessage | null {
+  const summary = detail.summary;
+  const text = trimString(summary.waiting_prompt) || trimString(summary.last_message);
+  if (!text) return null;
+  const updatedAt = Math.max(0, Math.floor(Number(summary.updated_at_ms ?? detail.generated_at_ms ?? 0)));
+  const waiting = trimString(summary.status) === 'waiting_input' || trimString(summary.status) === 'waiting';
+  return {
+    id: `${safeIDPart(threadID)}:summary:${waiting ? 'waiting' : 'message'}`,
+    role: 'assistant',
+    content: text,
+    status: 'complete',
+    created_at_ms: updatedAt,
+    blocks: [{ type: waiting ? 'text' : 'markdown', content: text }],
+  };
+}
+
 function compactionDecoration(threadID: string, row: FlowerSubagentTimelineRow, anchorMessageID: string): FlowerTimelineDecoration | null {
   if (row.kind !== 'compaction' || !row.compaction || !trimString(anchorMessageID)) return null;
   const ordinal = Math.max(0, Math.floor(Number(row.ordinal ?? 0)));
@@ -157,17 +173,9 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null,
     messages.push(activityMessage);
     lastMessageID = activityMessage.id;
   }
-
-  if (messages.length === 0 && (trimString(summary.last_message) || trimString(summary.waiting_prompt))) {
-    const text = trimString(summary.waiting_prompt) || trimString(summary.last_message);
-    messages.push({
-      id: `${safeIDPart(threadID)}:summary`,
-      role: 'assistant',
-      content: text,
-      status: 'complete',
-      created_at_ms: Math.max(0, Math.floor(Number(summary.updated_at_ms ?? detail.generated_at_ms ?? 0))),
-      blocks: [{ type: 'markdown', content: text }],
-    });
+  if (messages.length === 0) {
+    const summaryMessage = messageForSummaryOnlyDetail(threadID, detail);
+    if (summaryMessage) messages.push(summaryMessage);
   }
 
   const status = subagentThreadStatus(summary.status);

@@ -451,11 +451,24 @@ func TestFloretSubagents_DelegateAndWait(t *testing.T) {
 	if status != subagentStatusCompleted {
 		t.Fatalf("unexpected subagent status=%q payload=%#v", status, entry)
 	}
-	if !strings.Contains(strings.TrimSpace(anyToString(entry["result_digest"])), "Subagent completed") {
-		t.Fatalf("unexpected subagent result: %#v", entry)
+	if _, ok := entry["result_digest"]; ok {
+		t.Fatalf("wait status item must not carry result_digest: %#v", entry)
+	}
+	if _, ok := entry["last_message"]; ok {
+		t.Fatalf("wait status item must not carry last_message: %#v", entry)
+	}
+	if _, ok := entry["waiting_prompt"]; ok {
+		t.Fatalf("wait status item must not carry waiting_prompt: %#v", entry)
 	}
 	if waited["detail_omitted"] != true {
 		t.Fatalf("wait must mark child detail omitted from model-facing result: %#v", waited)
+	}
+	report, ok := waited["final_handoff_report"].(map[string]any)
+	if !ok {
+		t.Fatalf("wait must return final_handoff_report: %#v", waited)
+	}
+	if !strings.Contains(fmt.Sprintf("%v", report["reports"]), "Subagent completed") {
+		t.Fatalf("final_handoff_report missing child handoff: %#v", report)
 	}
 	if strings.TrimSpace(anyToString(entry["title"])) == "" {
 		t.Fatalf("missing title in wait snapshot: %#v", entry)
@@ -597,7 +610,7 @@ func TestFloretSubagents_ProjectChildThreadForFlowerNavigation(t *testing.T) {
 	created, err := r.manageSubagents(context.Background(), map[string]any{
 		"action":     "spawn",
 		"task_name":  "Review API contract",
-		"message":    "Review the API contract and return a concise handoff.",
+		"message":    "Review the API contract and return a complete final handoff.",
 		"agent_type": "reviewer",
 	})
 	if err != nil {
@@ -1204,6 +1217,35 @@ func TestSubagentsTool_TrimmedResultHasHardCapAndDetailRefs(t *testing.T) {
 	if strings.TrimSpace(anyToString(first["detail_ref"])) == "" || first["detail_omitted"] != true {
 		t.Fatalf("trimmed item missing detail ref: %#v", first)
 	}
+	for _, forbidden := range []string{"last_message", "result_digest", "waiting_prompt"} {
+		if _, ok := first[forbidden]; ok {
+			t.Fatalf("wait status item must not include %s: %#v", forbidden, first)
+		}
+	}
+}
+
+func TestSubagentsTool_ContextModeHelpers(t *testing.T) {
+	t.Parallel()
+
+	if got := normalizeSubagentContextMode(""); got != subagentContextModeMissionOnly {
+		t.Fatalf("empty context mode=%q, want mission_only", got)
+	}
+	if got := subagentForkModeForContextMode(subagentContextModeFullHistory); got != flruntime.SubAgentForkFullPath {
+		t.Fatalf("full_history fork mode=%q, want full path", got)
+	}
+	if got := aggregateSubagentContextMode([]subagentSnapshot{
+		{ThreadID: "a", ContextMode: subagentContextModeMissionOnly},
+		{ThreadID: "b", ContextMode: subagentContextModeFullHistory},
+	}); got != subagentContextModeFullHistory {
+		t.Fatalf("aggregate context mode=%q, want full_history", got)
+	}
+	raw := projectedSubagentMetadataJSON(subagentSnapshot{
+		ThreadID:    "child-1",
+		ContextMode: subagentContextModeFullHistory,
+	})
+	if got := contextModeFromSubagentMetadataJSON(raw); got != subagentContextModeFullHistory {
+		t.Fatalf("metadata context mode=%q, want full_history raw=%s", got, raw)
+	}
 }
 
 func recursiveKeyPath(value any, forbidden string, path string) string {
@@ -1614,9 +1656,10 @@ func TestFloretSubagents_ChildRunInheritsParentToolAllowlist(t *testing.T) {
 	if err := registerBuiltInTools(registry, child); err != nil {
 		t.Fatalf("registerBuiltInTools: %v", err)
 	}
-	modeFilter := newModeToolFilter(child.cfg, false)
-	modeFilter = child.withToolAllowlistFilter(modeFilter)
-	activeTools := filterSubagentChildTools(modeFilter.FilterToolsForMode("act", registry.Snapshot()))
+	activeTools, contract := child.subagentToolSurface(registry.Snapshot(), flruntime.SubAgentForkNone)
+	if contract.AllowSpawnSubagents || contract.AllowUserApproval || contract.AllowUserInput {
+		t.Fatalf("child contract grants forbidden control surfaces: %#v", contract)
+	}
 	names := toolDefNames(activeTools)
 	if !containsString(names, "terminal.exec") || !containsString(names, "apply_patch") {
 		t.Fatalf("active child tools=%v, want terminal.exec and apply_patch", names)
@@ -1641,9 +1684,7 @@ func TestFloretSubagents_ChildToolsRespectParentPlanMode(t *testing.T) {
 	if err := registerBuiltInTools(registry, child); err != nil {
 		t.Fatalf("registerBuiltInTools: %v", err)
 	}
-	modeFilter := newModeToolFilter(child.cfg, false)
-	modeFilter = child.withToolAllowlistFilter(modeFilter)
-	activeTools := filterSubagentChildTools(modeFilter.FilterToolsForMode(subagentToolModeLimit(parent), registry.Snapshot()))
+	activeTools, _ := child.subagentToolSurface(registry.Snapshot(), flruntime.SubAgentForkNone)
 	names := toolDefNames(activeTools)
 	if !containsString(names, "terminal.exec") {
 		t.Fatalf("active child tools=%v, want terminal.exec", names)
