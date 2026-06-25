@@ -3233,19 +3233,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </Show>
                   )}
                 </For>
-                <div class="flower-chat-context-unified-footer">
-                  <div class="flower-chat-context-unified-actions">
-                    <Show when={messageTime()}>
-                      {(value) => <time class="flower-message-time" datetime={new Date(message().created_at_ms).toISOString()}>{value()}</time>}
-                    </Show>
-                    {messageCopyButton(message(), copyText(), 'user')}
-                  </div>
-                  <FlowerChatContextChips
-                    contextDisplay={contextDisplay()!}
-                    onChipClick={(chip) => setPreviewChip(chip)}
-                  />
-                </div>
+                <FlowerChatContextChips
+                  contextDisplay={contextDisplay()!}
+                  onChipClick={(chip) => setPreviewChip(chip)}
+                />
               </div>
+              <Show when={copyText() || messageTime()}>
+                <div class="flower-message-action-row flower-message-action-row-user">
+                  <Show when={messageTime()}>
+                    {(value) => <time class="flower-message-time" datetime={new Date(message().created_at_ms).toISOString()}>{value()}</time>}
+                  </Show>
+                  {messageCopyButton(message(), copyText(), 'user')}
+                </div>
+              </Show>
             </div>
           </Show>
         </div>
