@@ -3463,12 +3463,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     onClick={() => void openSubagentDetail(item)}
                   >
                     <span class="flower-subagent-dropdown-status">{subagentStatusIndicator(item.status)}</span>
-                    <span class="flower-subagent-dropdown-copy">
-                      <span class="flower-subagent-dropdown-name">{subagentRowTitle(item)}</span>
-                      <span class="flower-subagent-dropdown-meta">
-                        {[subagentStatusLabel(item.status), subagentMeta(item)].filter(Boolean).join(' · ')}
-                      </span>
-                    </span>
+                    <span class="flower-subagent-dropdown-name">{subagentRowTitle(item)}</span>
+                    <span class="flower-subagent-dropdown-time">{subagentMeta(item)}</span>
                     <span class="flower-subagent-dropdown-action" aria-hidden="true">
                       <ChevronRight class="h-3.5 w-3.5" />
                     </span>
