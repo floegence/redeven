@@ -358,14 +358,15 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-context"] button')));
     (runtime.querySelector('[data-thread-id="thread-context"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-context-action="true"]')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-chat-context-chip="true"]')));
 
-    const linkedContext = runtime.querySelector('[data-flower-message-context-action="true"]') as HTMLElement;
-    expect(linkedContext.textContent).toContain('Linked context');
-    expect(linkedContext.textContent).toContain('Local Environment');
-    expect(linkedContext.textContent).toContain('Local · Ready');
-    expect(linkedContext.getAttribute('data-flower-context-surface')).toBe('desktop_welcome_environment_card');
-    expect(linkedContext.getAttribute('data-flower-context-target')).toBe('local:local');
+    const chip = runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLElement;
+    expect(chip.textContent).toContain('Local Environment');
+    expect(chip.textContent).toContain('Local · Ready');
+
+    const container = runtime.querySelector('.flower-chat-context-chips') as HTMLElement;
+    expect(container.getAttribute('data-flower-context-surface')).toBe('desktop_welcome_environment_card');
+    expect(container.getAttribute('data-flower-context-target')).toBe('local:local');
   });
 
   it.each([
@@ -407,7 +408,7 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === 'thread-context-malformed');
     await flush();
 
-    expect(runtime.querySelector('[data-flower-message-context-action="true"]')).toBeNull();
+    expect(runtime.querySelector('[data-flower-chat-context-chip="true"]')).toBeNull();
   });
 
   it('keeps the left thread list ordered by creation time when a selected thread refreshes', async () => {
