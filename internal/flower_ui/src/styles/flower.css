@@ -338,47 +338,83 @@ html.dark .flower-component-shell {
   gap: 0.5rem;
 }
 
+.flower-composer-anchor {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
 .flower-composer-command-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.625rem);
+  left: 0;
+  z-index: 3;
   display: grid;
-  width: min(28rem, 100%);
-  margin: 0.35rem 0 0.25rem;
-  gap: 0.25rem;
+  width: min(32rem, 100%);
+  margin: 0 auto;
+  gap: 0.375rem;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 74%, transparent);
+  border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 92%, transparent);
+  padding: 0.35rem;
+  box-shadow:
+    0 24px 46px -34px color-mix(in srgb, black 48%, transparent),
+    0 2px 0 color-mix(in srgb, white 42%, transparent) inset;
+  backdrop-filter: blur(18px);
 }
 
 .flower-composer-command-item {
   display: grid;
   width: 100%;
   min-width: 0;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
   align-items: center;
-  gap: 0.5rem;
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--flower-chat-surface) 58%, transparent);
-  padding: 0.45rem 0.6rem;
-  color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground) 16%);
+  gap: 0.2rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--flower-chat-surface) 56%, transparent);
+  padding: 0.7rem 0.8rem;
+  color: color-mix(in srgb, var(--foreground) 86%, var(--muted-foreground) 14%);
   cursor: pointer;
-  font-size: 0.78rem;
+  font-size: 0.8rem;
   line-height: 1.2;
   text-align: left;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.flower-composer-command-item > svg {
+  grid-row: 1 / span 2;
 }
 
 .flower-composer-command-item:hover,
 .flower-composer-command-item:focus-visible {
-  border-color: color-mix(in srgb, var(--primary) 44%, var(--flower-chat-surface-border) 56%);
-  background: color-mix(in srgb, var(--primary) 8%, var(--flower-chat-surface) 92%);
+  border-color: color-mix(in srgb, var(--primary) 36%, var(--flower-chat-surface-border) 64%);
+  background: color-mix(in srgb, var(--primary) 9%, var(--flower-chat-surface) 91%);
+  box-shadow: 0 1px 0 color-mix(in srgb, white 46%, transparent) inset;
   outline: none;
+  transform: translateY(-0.5px);
 }
 
 .flower-composer-command-token {
+  min-width: 0;
+  color: color-mix(in srgb, var(--foreground) 92%, var(--muted-foreground) 8%);
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-weight: 720;
+  font-weight: 760;
 }
 
 .flower-composer-command-description {
   min-width: 0;
   overflow: hidden;
   color: var(--muted-foreground);
+  font-size: 0.74rem;
+  line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1409,14 +1445,72 @@ html.dark .flower-component-shell {
 .flower-compaction-divider-pill {
   display: inline-flex;
   min-width: 0;
-  max-width: min(100%, 28rem);
+  max-width: min(100%, 30rem);
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.4rem;
   border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
   border-radius: 9999px;
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 88%, transparent);
-  padding: 0.25rem 0.55rem;
-  box-shadow: 0 1px 0 color-mix(in srgb, white 46%, transparent) inset;
+  padding: 0.35rem 0.65rem;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 46%, transparent) inset,
+    0 16px 24px -22px color-mix(in srgb, black 40%, transparent);
+  overflow: hidden;
+}
+
+.flower-compaction-divider-pill-running {
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--flower-chat-surface-border) 70%);
+  background: color-mix(in srgb, var(--primary) 8%, var(--flower-chat-surface-elevated) 92%);
+}
+
+.flower-compaction-divider-status-icon {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--muted-foreground) 76%, var(--foreground) 24%);
+}
+
+.flower-compaction-divider-running-icon {
+  display: inline-grid;
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(2, 0.34rem);
+  grid-template-rows: repeat(2, 0.34rem);
+  place-content: center;
+  gap: 0.09rem;
+  color: color-mix(in srgb, var(--primary) 76%, var(--foreground) 24%);
+}
+
+.flower-compaction-divider-running-square {
+  width: 0.34rem;
+  height: 0.34rem;
+  border-radius: 0.08rem;
+  background: currentColor;
+  opacity: 0.26;
+  transform: scale(0.74);
+  animation: flower-compaction-divider-loader-square 1.3s ease-in-out infinite;
+}
+
+.flower-compaction-divider-running-square:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.flower-compaction-divider-running-square:nth-child(2) {
+  animation-delay: 130ms;
+}
+
+.flower-compaction-divider-running-square:nth-child(4) {
+  animation-delay: 260ms;
+}
+
+.flower-compaction-divider-running-square:nth-child(3) {
+  animation-delay: 390ms;
+}
+
+.flower-compaction-divider-copy {
+  display: inline-flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.1rem;
   overflow: hidden;
 }
 
@@ -1435,6 +1529,31 @@ html.dark .flower-component-shell {
   line-height: 1.1;
 }
 
+.flower-compaction-divider-label-shimmer {
+  position: relative;
+  display: inline-block;
+}
+
+.flower-compaction-divider[data-flower-compaction-status='compacting'] .flower-compaction-divider-label-shimmer::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: transparent;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 28%,
+      color-mix(in srgb, var(--foreground) 92%, var(--primary) 8%) 50%,
+      transparent 72%
+    );
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: flower-compaction-divider-shimmer 2.2s ease-in-out infinite;
+}
+
 .flower-compaction-divider-detail {
   color: color-mix(in srgb, var(--muted-foreground) 84%, transparent);
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -1443,9 +1562,37 @@ html.dark .flower-component-shell {
   line-height: 1.1;
 }
 
+.flower-compaction-divider[data-flower-compaction-status='compacting'] .flower-compaction-divider-pill {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--flower-chat-surface-border) 72%);
+  background: color-mix(in srgb, var(--primary) 10%, var(--flower-chat-surface-elevated) 90%);
+}
+
 .flower-compaction-divider[data-flower-compaction-status='failed'] .flower-compaction-divider-pill {
   border-color: color-mix(in srgb, var(--destructive) 26%, var(--flower-chat-surface-border));
   color: color-mix(in srgb, var(--destructive) 76%, var(--foreground) 24%);
+}
+
+@keyframes flower-compaction-divider-shimmer {
+  0% {
+    background-position: -120% 0;
+  }
+
+  100% {
+    background-position: 180% 0;
+  }
+}
+
+@keyframes flower-compaction-divider-loader-square {
+  0%,
+  100% {
+    opacity: 0.26;
+    transform: scale(0.74);
+  }
+
+  42% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
 }
 
 .flower-model-status-lane {
@@ -5024,6 +5171,8 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   .flower-activity-inline-row-running .flower-activity-inline-button::before,
   .flower-activity-inline-loader-square,
   .flower-subagent-status-loader .flower-activity-inline-loader-square,
+  .flower-compaction-divider-running-square,
+  .flower-compaction-divider-label-shimmer::after,
   .flower-thread-warmup-card::after,
   .flower-model-chip-warmup::after,
   .redeven-flower-icon-spin,

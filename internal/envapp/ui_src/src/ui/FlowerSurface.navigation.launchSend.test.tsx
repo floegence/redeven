@@ -227,6 +227,102 @@ describe('FlowerSurface navigation launch/send', () => {
     await waitFor(() => (runtime.querySelector('textarea') as HTMLTextAreaElement).value === '');
   });
 
+  it('executes compact from the slash menu, scrolls the transcript, and shows an immediate compaction divider', async () => {
+    const compactingThread = thread({
+      thread_id: 'thread-running-compact-menu',
+      title: 'Running compact menu',
+      status: 'running',
+      active_run_id: 'run-compact-menu',
+      model_io_status: modelIOStatus({ run_id: 'run-compact-menu' }),
+      messages: [
+        {
+          id: 'm-compact-menu-user',
+          role: 'user',
+          content: 'inspect the repository',
+          status: 'complete',
+          created_at_ms: 10,
+        },
+        {
+          id: 'm-compact-menu-assistant',
+          role: 'assistant',
+          content: 'working',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 20,
+          blocks: [{ type: 'markdown', content: 'working' }],
+        },
+      ],
+    });
+    const compactDeferred = deferred<FlowerLiveBootstrap>();
+    const compactThreadContext = vi.fn(() => compactDeferred.promise);
+    const stopThread = vi.fn(async () => liveBootstrap({ ...compactingThread, status: 'canceled' }));
+    const launchTurn = vi.fn(async () => liveBootstrap(compactingThread));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [compactingThread]),
+      loadThread: vi.fn(async () => liveBootstrap(compactingThread)),
+      compactThreadContext,
+      stopThread,
+      launchTurn,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-compact-menu"] button')));
+    (runtime.querySelector('[data-thread-id="thread-running-compact-menu"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLElement;
+    let scrollTop = 0;
+    Object.defineProperty(transcript, 'clientHeight', { configurable: true, value: 180 });
+    Object.defineProperty(transcript, 'scrollHeight', { configurable: true, value: 920 });
+    Object.defineProperty(transcript, 'scrollTop', {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value) => {
+        scrollTop = Number(value);
+      },
+    });
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = '/com';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-command-menu')));
+
+    (runtime.querySelector('.flower-composer-command-item') as HTMLButtonElement).click();
+    await waitFor(() => compactThreadContext.mock.calls.length === 1);
+    await waitFor(() => Boolean(runtime.querySelector('.flower-compaction-divider[data-flower-compaction-status="compacting"]')));
+    await waitFor(() => scrollTop === 740);
+
+    expect(compactThreadContext).toHaveBeenCalledWith({
+      thread_id: 'thread-running-compact-menu',
+      expected_run_id: 'run-compact-menu',
+      source: 'slash_command',
+    });
+    expect(stopThread).not.toHaveBeenCalled();
+    expect(launchTurn).not.toHaveBeenCalled();
+    expect(textarea.value).toBe('');
+
+    compactDeferred.resolve(liveBootstrap({
+      ...compactingThread,
+      timeline_decorations: [{
+        decoration_id: 'local-context-compaction-thread-running-compact-menu',
+        kind: 'context_compaction',
+        ordinal: 999,
+        anchor: {
+          target_kind: 'message',
+          message_id: 'm-compact-menu-assistant',
+          edge: 'after',
+        },
+        compaction: {
+          operation_id: 'compact-menu-real',
+          phase: 'start',
+          status: 'compacting',
+          updated_at_ms: Date.now() + 1_000,
+        },
+      }],
+    }));
+    await waitFor(() => compactThreadContext.mock.calls.length === 1);
+  });
+
   it('compacts a waiting-approval selected thread with the active run guard', async () => {
     const waitingApprovalThread = thread({
       thread_id: 'thread-waiting-approval-compact',

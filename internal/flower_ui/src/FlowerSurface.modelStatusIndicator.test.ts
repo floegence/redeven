@@ -92,8 +92,44 @@ describe('Flower model status indicator', () => {
     expect(dividerRule).not.toContain('pointer-events: none');
     expect(dividerRule).not.toContain('cursor: pointer');
     expect(pillRule).toContain('display: inline-flex');
-    expect(pillRule).toContain('max-width: min(100%, 28rem)');
+    expect(pillRule).toContain('max-width: min(100%, 30rem)');
     expect(css).toContain(".flower-compaction-divider[data-flower-compaction-status='failed'] .flower-compaction-divider-pill");
+  });
+
+  it('positions the slash command popover above the composer and gives compacting dividers a running treatment', () => {
+    const css = flowerStyles();
+    const anchorRule = cssRule(css, '.flower-composer-anchor');
+    const menuRule = cssRule(css, '.flower-composer-command-menu');
+    const itemRule = cssRule(css, '.flower-composer-command-item');
+    const descriptionRule = cssRule(css, '.flower-composer-command-description');
+    const pillRule = cssRule(css, '.flower-compaction-divider-pill');
+    const dividerRunningRule = cssRule(css, '.flower-compaction-divider-pill-running');
+    const dividerIconRule = cssRule(css, '.flower-compaction-divider-running-icon');
+    const dividerLabelRule = cssRule(css, '.flower-compaction-divider-label-shimmer');
+    const dividerShimmerRule = cssRule(css, ".flower-compaction-divider[data-flower-compaction-status='compacting'] .flower-compaction-divider-label-shimmer::after");
+
+    expect(anchorRule).toContain('position: relative');
+    expect(anchorRule).toContain('flex-direction: column');
+    expect(menuRule).toContain('position: absolute');
+    expect(menuRule).toContain('bottom: calc(100% + 0.625rem)');
+    expect(menuRule).toContain('backdrop-filter: blur(18px)');
+    expect(menuRule).toContain('box-shadow');
+    expect(itemRule).toContain('grid-template-columns: auto minmax(0, 1fr)');
+    expect(itemRule).toContain('grid-template-rows: auto auto');
+    expect(css).toContain('.flower-composer-command-item:hover,');
+    expect(css).toContain('transform: translateY(-0.5px);');
+    expect(descriptionRule).toContain('font-size: 0.74rem');
+    expect(descriptionRule).toContain('white-space: nowrap');
+    expect(dividerRunningRule).toContain('border-color: color-mix(in srgb, var(--primary) 30%, var(--flower-chat-surface-border) 70%)');
+    expect(dividerIconRule).toContain('display: inline-grid');
+    expect(dividerIconRule).toContain('grid-template-columns: repeat(2, 0.34rem)');
+    expect(dividerLabelRule).toContain('position: relative');
+    expect(dividerLabelRule).toContain('display: inline-block');
+    expect(dividerShimmerRule).toContain('content: attr(data-text)');
+    expect(dividerShimmerRule).toContain('animation: flower-compaction-divider-shimmer 2.2s ease-in-out infinite');
+    expect(css).toContain('@keyframes flower-compaction-divider-shimmer');
+    expect(css).toContain('@keyframes flower-compaction-divider-loader-square');
+    expect(pillRule).toContain('box-shadow');
   });
 
   it('keeps the composer action button shape unified for send and stop', () => {
