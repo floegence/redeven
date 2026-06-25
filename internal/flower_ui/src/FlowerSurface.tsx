@@ -3185,6 +3185,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const copyText = createMemo(() => messageCopyText(message(), blocks()));
     const messageTime = createMemo(() => formatMessageTime(message().created_at_ms));
     const assistantCopyBlockKey = createMemo(() => message().role === 'assistant' ? lastCopyableContentBlockKey(blocks()) : '');
+    const contextDisplay = createMemo(() => {
+      const msg = message();
+      if (msg.role !== 'user') return null;
+      return parseChatContextAction(msg.context_action);
+    });
+    const isUnifiedUserBubble = createMemo(() => message().role === 'user' && contextDisplay() !== null);
     return (
       <Show when={visible()}>
         <div
@@ -3193,38 +3199,55 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           data-flower-message-role={message().role}
           data-flower-message-status={message().status}
         >
-          <div class={cn('flower-message-block-stack', message().role === 'user' ? 'flower-message-block-stack-user' : 'flower-message-block-stack-assistant')}>
-            <For each={blockKeys()}>
-              {(blockKey) => {
-                const block = createMemo(() => blocksByKey().get(blockKey) ?? null);
-                return (
-                  <Show when={block()}>
-                    {(value) => messageBlockView(message, value, streamingBlockKey, failed, copyText, assistantCopyBlockKey)}
-                  </Show>
-                );
-              }}
-            </For>
-            <Show when={message().role === 'user' && (copyText() || messageTime())}>
-              <div class="flower-message-action-row flower-message-action-row-user">
-                <Show when={messageTime()}>
-                  {(value) => <time class="flower-message-time" datetime={new Date(message().created_at_ms).toISOString()}>{value()}</time>}
+          <Show
+            when={isUnifiedUserBubble()}
+            fallback={
+              <div class={cn('flower-message-block-stack', message().role === 'user' ? 'flower-message-block-stack-user' : 'flower-message-block-stack-assistant')}>
+                <For each={blockKeys()}>
+                  {(blockKey) => {
+                    const block = createMemo(() => blocksByKey().get(blockKey) ?? null);
+                    return (
+                      <Show when={block()}>
+                        {(value) => messageBlockView(message, value, streamingBlockKey, failed, copyText, assistantCopyBlockKey)}
+                      </Show>
+                    );
+                  }}
+                </For>
+                <Show when={message().role === 'user' && (copyText() || messageTime())}>
+                  <div class="flower-message-action-row flower-message-action-row-user">
+                    <Show when={messageTime()}>
+                      {(value) => <time class="flower-message-time" datetime={new Date(message().created_at_ms).toISOString()}>{value()}</time>}
+                    </Show>
+                    {messageCopyButton(message(), copyText(), 'user')}
+                  </div>
                 </Show>
-                {messageCopyButton(message(), copyText(), 'user')}
               </div>
-            </Show>
-            <Show when={message().role === 'user'}>
-              {(() => {
-                const display = parseChatContextAction(message().context_action);
-                if (!display) return null;
-                return (
+            }
+          >
+            <div class="flower-message-block-stack flower-message-block-stack-user">
+              <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-chat-context-unified-bubble">
+                <For each={blocks()}>
+                  {(block) => (
+                    <Show when={block.type === 'content'}>
+                      <span class="flower-message-plain-text">{block.content}</span>
+                    </Show>
+                  )}
+                </For>
+                <div class="flower-chat-context-unified-footer">
+                  <div class="flower-chat-context-unified-actions">
+                    <Show when={messageTime()}>
+                      {(value) => <time class="flower-message-time" datetime={new Date(message().created_at_ms).toISOString()}>{value()}</time>}
+                    </Show>
+                    {messageCopyButton(message(), copyText(), 'user')}
+                  </div>
                   <FlowerChatContextChips
-                    contextDisplay={display}
+                    contextDisplay={contextDisplay()!}
                     onChipClick={(chip) => setPreviewChip(chip)}
                   />
-                );
-              })()}
-            </Show>
-          </div>
+                </div>
+              </div>
+            </div>
+          </Show>
         </div>
       </Show>
     );

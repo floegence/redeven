@@ -22,8 +22,7 @@ function chipIcon(tone: string): Component<{ class?: string }> {
 export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (props) => {
   return (
     <div
-      class="flower-chat-context-chips flower-message-bubble-framed flower-message-bubble-user"
-      style="border-top-left-radius: 0; border-top-right-radius: 0;"
+      class="flower-chat-context-chips"
       data-flower-context-surface={props.contextDisplay.surface}
       data-flower-context-target={props.contextDisplay.target}
     >
