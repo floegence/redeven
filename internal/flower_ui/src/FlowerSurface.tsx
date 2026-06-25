@@ -3477,9 +3477,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       <span class="flower-subagent-dropdown-meta">
                         {[subagentStatusLabel(item.status), subagentMeta(item)].filter(Boolean).join(' · ')}
                       </span>
-                      <Show when={item.lastMessage || item.waitingPrompt}>
-                        {(message) => <span class="flower-subagent-dropdown-message">{message()}</span>}
-                      </Show>
                     </span>
                     <span class="flower-subagent-dropdown-action" aria-hidden="true">
                       <ChevronRight class="h-3.5 w-3.5" />

@@ -4041,14 +4041,14 @@ html.dark .flower-component-shell {
   grid-template-columns: auto minmax(0, 1fr) auto;
   min-width: 0;
   cursor: pointer;
-  align-items: start;
+  align-items: center;
   gap: 0.625rem;
   border: 0;
   border-left: 2px solid transparent;
   border-radius: 0.5rem;
   background: transparent;
   color: inherit;
-  padding: 0.625rem 0.625rem 0.625rem 0.5rem;
+  padding: 0.5rem 0.625rem 0.5rem 0.5rem;
   text-align: left;
   transition: background 150ms ease, transform 150ms ease, border-color 150ms ease;
   position: relative;
@@ -4164,19 +4164,6 @@ html.dark .flower-component-shell {
   font-size: 0.6875rem;
   line-height: 1;
   font-weight: 460;
-}
-
-.flower-subagent-dropdown-message {
-  min-width: 0;
-  color: var(--muted-foreground);
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  font-size: 0.6875rem;
-  line-height: 1.4;
-  opacity: 0.72;
 }
 
 .flower-subagent-dropdown-action {

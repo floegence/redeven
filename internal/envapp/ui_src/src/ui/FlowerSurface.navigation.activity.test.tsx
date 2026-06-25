@@ -202,7 +202,6 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.querySelector('.flower-subagents-dropdown-layer')).toBeTruthy();
     expect(runtime.querySelector('.flower-subagents-dropdown')?.getAttribute('role')).toBe('dialog');
     expect(runtime.textContent).toContain('Review API contract');
-    expect(runtime.textContent).toContain('Reading the API boundary.');
     expect(runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]')).toBeTruthy();
     expect(runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"] .flower-activity-inline-loader')).toBeTruthy();
     expect(runtime.querySelector('.flower-subagent-status-dot-running')).toBeNull();
