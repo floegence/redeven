@@ -1,7 +1,11 @@
 export * from './FlowerSurface';
 export * from './FlowerTurnLauncherWindow';
+export * from './chat/FlowerChatContextChips';
+export * from './chat/FlowerChatContextPreview';
+export { parseChatContextAction } from './chat/flowerChatContextModel';
 export * from './chat/FlowerEmptyState';
 export * from './copy';
+export type * from './contracts/flowerChatContextTypes';
 export type * from './contracts/flowerSurfaceContracts';
 export * from './flowerTurnLauncherCopy';
 export * from './icons/FlowerIcon';

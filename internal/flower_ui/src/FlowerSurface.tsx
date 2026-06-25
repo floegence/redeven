@@ -1,13 +1,17 @@
 import type { Accessor, Component, JSX } from 'solid-js';
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Clock, Copy, FileText, FolderOpen, GitBranch, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, FloatingWindow, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
+import { FlowerChatContextChips } from './chat/FlowerChatContextChips';
+import { FlowerChatContextPreview } from './chat/FlowerChatContextPreview';
+import { parseChatContextAction } from './chat/flowerChatContextModel';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
+import type { FlowerChatContextChip } from './contracts/flowerChatContextTypes';
 import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
 import type { FlowerSubagentsCopy, FlowerSurfaceCopy } from './copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
@@ -107,16 +111,6 @@ export type FlowerSurfaceWarmupState = Readonly<{
   modelLabel?: string;
 }>;
 type FlowerApprovalSubmittingState = 'approve' | 'reject';
-type MessageContextActionSummary = Readonly<{
-  surface: string;
-  target: string;
-  title: string;
-  detail: string;
-}>;
-type OptionalRecordString = Readonly<{
-  ok: boolean;
-  value: string;
-}>;
 type FlowerFloatingPoint = Readonly<{
   x: number;
   y: number;
@@ -158,28 +152,9 @@ const SUBAGENT_DETAIL_TAIL_QUEUED_INTERVAL_MS = 2500;
 const SUBAGENT_DETAIL_TAIL_ERROR_INTERVAL_MS = 4000;
 const FLOWER_SURFACE_LAYER = {
   subagentWindow: 160,
+  contextPreview: 162,
 } as const;
 const FLOWER_SUBAGENT_TERMINAL_STATUSES = new Set<FlowerSubagentPanelStatus>(['completed', 'failed', 'canceled', 'timed_out']);
-const ASK_FLOWER_CONTEXT_TARGET_LOCALITIES = new Set(['auto', 'current_runtime', 'remote_runtime', 'local_model_remote_target']);
-const ASK_FLOWER_CONTEXT_SOURCE_SURFACES = new Set([
-  'desktop_welcome_environment_card',
-  'file_browser',
-  'terminal',
-  'file_preview',
-  'monitoring',
-  'git_browser',
-  'editor_preview',
-]);
-const ASK_FLOWER_CONTEXT_RUNTIME_HINTS = new Set(['', 'auto', 'local_environment', 'env_local']);
-const ASK_FLOWER_CONTEXT_SESSION_SOURCES = new Set([
-  '',
-  'local_runtime',
-  'provider_environment',
-  'ssh_environment',
-  'external_local_ui',
-  'runtime_gateway',
-  'region_sandbox',
-]);
 
 function isModelIOPresentationBoundary(kind: string): boolean {
   return kind === 'model_io.updated';
@@ -362,28 +337,6 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function recordValue(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
-}
-
-function recordString(record: Record<string, unknown> | null | undefined, key: string): string {
-  const value = record?.[key];
-  return typeof value === 'string' ? trimString(value) : '';
-}
-
-function optionalRecordString(record: Record<string, unknown> | null | undefined, key: string): OptionalRecordString {
-  if (!record || !Object.prototype.hasOwnProperty.call(record, key)) return { ok: true, value: '' };
-  const value = record[key];
-  if (value === null || value === undefined) return { ok: true, value: '' };
-  if (typeof value !== 'string') return { ok: false, value: '' };
-  return { ok: true, value: trimString(value) };
-}
-
-function recordNumber(record: Record<string, unknown> | null | undefined, key: string): number {
-  const value = record?.[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
 function approvalStateLabel(state: FlowerActivityApprovalState | undefined, surfaceCopy: FlowerSurfaceCopy): string {
   return surfaceCopy.chat.toolApprovalStates[state ?? 'requested'] ?? surfaceCopy.chat.toolApprovalStates.requested;
 }
@@ -555,6 +508,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadsRefreshing, setThreadsRefreshing] = createSignal(false);
   const [historyFilter, setHistoryFilter] = createSignal('');
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
+  const [previewChip, setPreviewChip] = createSignal<FlowerChatContextChip | null>(null);
+
+  createEffect(on(
+    () => selectedThreadID(),
+    (next) => { if (next) setPreviewChip(null); },
+    { defer: false },
+  ));
+
   const [isComposing, setIsComposing] = createSignal(false);
   const [handlerState, setHandlerState] = createSignal<FlowerHandlerResolutionState>({ status: 'starting' });
   const [threadLoadError, setThreadLoadError] = createSignal('');
@@ -2191,72 +2152,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   };
 
-  const contextActionSummary = (message: FlowerChatMessage): MessageContextActionSummary | null => {
-    const action = recordValue(message.context_action);
-    if (!action) return null;
-    if (
-      recordNumber(action, 'schema_version') !== 2
-      || recordString(action, 'action_id') !== 'assistant.ask.flower'
-      || recordString(action, 'provider') !== 'flower'
-    ) {
-      return null;
-    }
-    const source = recordValue(action.source);
-    const target = recordValue(action.target);
-    const rawExecutionContext = action.execution_context;
-    if (rawExecutionContext !== null && rawExecutionContext !== undefined && !recordValue(rawExecutionContext)) {
-      return null;
-    }
-    const rawContext = action.context;
-    if (rawContext !== null && rawContext !== undefined && !Array.isArray(rawContext)) {
-      return null;
-    }
-    const executionContext = recordValue(rawExecutionContext);
-    const surface = recordString(source, 'surface');
-    const targetID = recordString(target, 'target_id');
-    const locality = recordString(target, 'locality');
-    const runtimeHint = optionalRecordString(executionContext, 'runtime_hint');
-    const sessionSource = optionalRecordString(executionContext, 'session_source');
-    if (!targetID || !runtimeHint.ok || !sessionSource.ok) {
-      return null;
-    }
-    if (
-      !ASK_FLOWER_CONTEXT_TARGET_LOCALITIES.has(locality)
-      || !ASK_FLOWER_CONTEXT_SOURCE_SURFACES.has(surface)
-      || !ASK_FLOWER_CONTEXT_RUNTIME_HINTS.has(runtimeHint.value)
-      || !ASK_FLOWER_CONTEXT_SESSION_SOURCES.has(sessionSource.value)
-    ) {
-      return null;
-    }
-    const contextItems = Array.isArray(rawContext) ? rawContext.map(recordValue) : [];
-    if (contextItems.some((item) => item == null)) {
-      return null;
-    }
-    const firstItem = contextItems[0] ?? null;
-    const titleFields = [
-      optionalRecordString(firstItem, 'title'),
-      optionalRecordString(firstItem, 'path'),
-      optionalRecordString(firstItem, 'name'),
-    ];
-    const detailField = optionalRecordString(firstItem, 'detail');
-    const contentField = optionalRecordString(firstItem, 'content');
-    if (
-      titleFields.some((field) => !field.ok)
-      || !detailField.ok
-      || !contentField.ok
-    ) {
-      return null;
-    }
-    const title = titleFields.map((field) => field.value).find(Boolean) ?? '';
-    const detail = detailField.value || contentField.value.split('\n').map(trimString).find(Boolean) || '';
-    return {
-      surface,
-      target: targetID,
-      title,
-      detail,
-    };
-  };
-
   const messageCopyText = (message: FlowerChatMessage, blocks: readonly FlowerRenderableMessageBlock[]): string => {
     const blockText = blocks
       .flatMap((block) => (
@@ -2271,31 +2166,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const messageCopyActionKey = (message: FlowerChatMessage): string => `message:${message.id}:copy`;
 
-  const messageContextActionLine = (message: FlowerChatMessage) => {
-    const summary = contextActionSummary(message);
-    if (!summary) return null;
-    const meta = [summary.surface, summary.target].filter(Boolean).join(' -> ');
-    return (
-      <div
-        class="flower-message-context-action"
-        data-flower-message-context-action="true"
-        data-flower-context-surface={summary.surface}
-        data-flower-context-target={summary.target}
-      >
-        <FileText class="h-3 w-3 shrink-0" />
-        <span class="flower-message-context-action-label">{copy().chat.linkedContextLabel}</span>
-        <Show when={summary.title}>
-          {(value) => <span class="flower-message-context-action-title">{value()}</span>}
-        </Show>
-        <Show when={summary.detail}>
-          {(value) => <span class="flower-message-context-action-detail">{value()}</span>}
-        </Show>
-        <Show when={meta}>
-          {(value) => <span class="flower-message-context-action-meta">{value()}</span>}
-        </Show>
-      </div>
-    );
-  };
 
   const copyMessageText = async (message: FlowerChatMessage, text: string) => {
     const value = trimString(text);
@@ -3279,7 +3149,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </div>
             </Show>
             <Show when={message().role === 'user'}>
-              {messageContextActionLine(message())}
+              {(() => {
+                const display = parseChatContextAction(message().context_action);
+                if (!display) return null;
+                return (
+                  <FlowerChatContextChips
+                    contextDisplay={display}
+                    onChipClick={(chip) => setPreviewChip(chip)}
+                  />
+                );
+              })()}
             </Show>
           </div>
         </div>
@@ -3726,6 +3605,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       </div>
       {subagentDetailDialog()}
+      <FlowerChatContextPreview
+        chip={previewChip()}
+        open={previewChip() !== null}
+        zIndex={FLOWER_SURFACE_LAYER.contextPreview}
+        onClose={() => setPreviewChip(null)}
+      />
       <div class="flower-chat-main flower-chat-main">
         <div ref={(node) => { transcriptScroll.bind(node); }} class="flower-chat-transcript flower-chat-transcript" onScroll={updateTranscriptNearBottom}>
           <div class="flower-transcript-stack">

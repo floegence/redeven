@@ -1,7 +1,7 @@
 import type {
-  FlowerTurnLauncherContextItem,
   FlowerTurnLauncherIntent,
 } from './contracts/flowerSurfaceContracts';
+import { compact, basenameFromPath, truncatePath, formatBytes, processLabel, processSnapshotText } from './chat/contextItemUtils';
 
 export type FlowerTurnLauncherContextTone =
   | 'environment'
@@ -198,23 +198,6 @@ export const DEFAULT_FLOWER_TURN_LAUNCHER_WINDOW_COPY: FlowerTurnLauncherWindowC
   },
 };
 
-function compact(value: unknown): string {
-  return String(value ?? '').trim();
-}
-
-function basenameFromPath(path: string, fallback: string): string {
-  const normalized = compact(path).replace(/\\/g, '/');
-  const parts = normalized.split('/').filter(Boolean);
-  return parts[parts.length - 1] || normalized || fallback;
-}
-
-function truncatePath(path: string, maxSegments = 3): string {
-  const normalized = compact(path).replace(/\\/g, '/');
-  const segments = normalized.split('/').filter(Boolean);
-  if (segments.length <= maxSegments) return normalized;
-  return `.../${segments.slice(-maxSegments).join('/')}`;
-}
-
 function formatCopy(template: string, values: Readonly<Record<string, unknown>> = {}): string {
   return template.replace(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (_match, key: string) => compact(values[key]));
 }
@@ -272,44 +255,6 @@ function resolveProjectionCopy(copy?: FlowerTurnLauncherWindowCopyInput): Flower
       default_question: compact(copy?.prompt?.default_question) || defaults.prompt.default_question,
     },
   };
-}
-
-function formatBytes(bytes: number): string {
-  const value = Number(bytes ?? 0);
-  if (!Number.isFinite(value) || value <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let size = value;
-  let index = 0;
-  while (size >= 1024 && index < units.length - 1) {
-    size /= 1024;
-    index += 1;
-  }
-  const rounded = index === 0 ? Math.round(size) : Math.round(size * 10) / 10;
-  return `${rounded} ${units[index]}`;
-}
-
-function processLabel(item: Extract<FlowerTurnLauncherContextItem, { kind: 'process_snapshot' }>): string {
-  const pid = Math.trunc(Number(item.pid ?? 0));
-  const name = compact(item.name) || `[${pid}]`;
-  return `${name} (PID ${pid})`;
-}
-
-function processSnapshotText(item: Extract<FlowerTurnLauncherContextItem, { kind: 'process_snapshot' }>): string {
-  const lines = [
-    `PID: ${Math.trunc(Number(item.pid ?? 0))}`,
-    `Name: ${compact(item.name) || `[${Math.trunc(Number(item.pid ?? 0))}]`}`,
-    `User: ${compact(item.username) || 'system'}`,
-    `CPU: ${Number(item.cpu_percent ?? 0).toFixed(1)}%`,
-    `Memory: ${formatBytes(item.memory_bytes)} (${Math.max(0, Math.round(Number(item.memory_bytes ?? 0)))} bytes)`,
-  ];
-  if (compact(item.platform)) {
-    lines.push(`Platform: ${compact(item.platform)}`);
-  }
-  const capturedAtMs = Number(item.captured_at_ms ?? 0);
-  if (capturedAtMs > 0) {
-    lines.push(`Captured at: ${new Date(capturedAtMs).toLocaleString()}`);
-  }
-  return lines.join('\n');
 }
 
 const attachmentSourcePathByFile = new WeakMap<File, string>();
