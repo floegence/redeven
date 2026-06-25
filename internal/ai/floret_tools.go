@@ -20,7 +20,6 @@ type floretToolRuntimeState struct {
 }
 
 const subagentToolHostContextAgentTypeKey = "subagent_agent_type"
-const subagentToolHostContextApprovedWorkerKey = "subagent_worker_delegate_approved"
 const subagentToolHostContextParentModeKey = "subagent_parent_mode"
 
 func newFloretToolRuntimeState(state runtimeState) *floretToolRuntimeState {
@@ -99,13 +98,6 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 				}
 				if call.Name == "" {
 					call.Name = strings.TrimSpace(def.Name)
-				}
-				if rejectReadonlySubagentMutatingTool(call.Name, call.Args, inv.HostContext) {
-					return fltools.ErrorResult(
-						call.ID,
-						call.Name,
-						"subagent readonly policy blocks mutating tools for explore and reviewer profiles",
-					), nil
 				}
 				execRun := floretInvocationRunContext(r, inv)
 				handler := &builtInToolHandler{r: execRun, toolName: call.Name}
@@ -213,33 +205,6 @@ func mapKeys(in map[string]struct{}) []string {
 		}
 	}
 	return out
-}
-
-func floretInvocationHasApprovedWorkerGrant(hostContext map[string]string) bool {
-	if normalizeSubagentAgentType(hostContext[subagentToolHostContextAgentTypeKey]) != subagentAgentTypeWorker {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(hostContext[subagentToolHostContextApprovedWorkerKey])) {
-	case "1", "true", "yes":
-		return true
-	default:
-		return false
-	}
-}
-
-func rejectReadonlySubagentMutatingTool(toolName string, args map[string]any, hostContext map[string]string) bool {
-	rawAgentType := strings.TrimSpace(hostContext[subagentToolHostContextAgentTypeKey])
-	if rawAgentType == "" {
-		return false
-	}
-	agentType := normalizeSubagentAgentType(rawAgentType)
-	if agentType == subagentAgentTypeWorker {
-		return false
-	}
-	if !isMutatingInvocation(toolName, args) {
-		return false
-	}
-	return true
 }
 
 func floretToolApproverForRun(r *run) fltools.Approver {

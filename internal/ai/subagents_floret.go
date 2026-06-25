@@ -45,6 +45,9 @@ const (
 	subagentActionClose     = "close"
 	subagentActionCloseAll  = "close_all"
 
+	subagentContextModeMissionOnly = "mission_only"
+	subagentContextModeFullHistory = "full_history"
+
 	subagentDefaultTimeoutMS = 300_000
 	subagentMaxTimeoutMS     = 1_200_000
 	subagentRunTimeout       = 20 * time.Minute
@@ -63,6 +66,53 @@ type subagentRuntime interface {
 	snapshots(context.Context) ([]subagentSnapshot, error)
 }
 
+type subagentCapabilityContract struct {
+	VisibleTools          []string
+	HiddenControlTools    []string
+	HiddenToolSet         map[string]struct{}
+	AllowSpawnSubagents   bool
+	AllowUserApproval     bool
+	AllowUserInput        bool
+	ForkMode              flruntime.SubAgentForkMode
+	FinalHandoffBudget    int
+	ProgressSummaryBudget int
+}
+
+type subagentFinalHandoffReport struct {
+	Summary                string                      `json:"summary,omitempty"`
+	Reports                []subagentHandoffReportItem `json:"reports,omitempty"`
+	Evidence               []string                    `json:"evidence,omitempty"`
+	ChangedFiles           []string                    `json:"changed_files,omitempty"`
+	Verification           []string                    `json:"verification,omitempty"`
+	OpenRisks              []string                    `json:"open_risks,omitempty"`
+	SuggestedParentActions []string                    `json:"suggested_parent_actions,omitempty"`
+}
+
+type subagentProgressSummary struct {
+	Summary                string                        `json:"summary,omitempty"`
+	Items                  []subagentProgressSummaryItem `json:"items,omitempty"`
+	CurrentState           string                        `json:"current_state,omitempty"`
+	Blockers               []string                      `json:"blockers,omitempty"`
+	NextExpectedStep       string                        `json:"next_expected_step,omitempty"`
+	SuggestedParentActions []string                      `json:"suggested_parent_actions,omitempty"`
+}
+
+type subagentHandoffReportItem struct {
+	ThreadID  string `json:"thread_id,omitempty"`
+	TaskName  string `json:"task_name,omitempty"`
+	AgentType string `json:"agent_type,omitempty"`
+	Status    string `json:"status,omitempty"`
+	Handoff   string `json:"handoff,omitempty"`
+}
+
+type subagentProgressSummaryItem struct {
+	ThreadID      string `json:"thread_id,omitempty"`
+	TaskName      string `json:"task_name,omitempty"`
+	AgentType     string `json:"agent_type,omitempty"`
+	Status        string `json:"status,omitempty"`
+	CurrentSignal string `json:"current_signal,omitempty"`
+}
+
 type subagentSnapshot struct {
 	ThreadID       string
 	Path           string
@@ -70,6 +120,7 @@ type subagentSnapshot struct {
 	ParentThreadID string
 	ParentTurnID   string
 	AgentType      string
+	ContextMode    string
 	Status         string
 	LatestTurnID   string
 	LastMessage    string
@@ -329,10 +380,7 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, stri
 	if err := registerBuiltInTools(registry, childRun); err != nil {
 		return nil, "", err
 	}
-	modeFilter := newModeToolFilter(childRun.cfg, false)
-	modeFilter = childRun.withToolAllowlistFilter(modeFilter)
-	activeTools := modeFilter.FilterToolsForMode(config.AIModeAct, registry.Snapshot())
-	activeTools = filterSubagentChildTools(activeTools)
+	activeTools, childContract := childRun.subagentToolSurface(registry.Snapshot(), flruntime.SubAgentForkNone)
 	state := newFloretToolRuntimeState(newRuntimeState("subagents"))
 	flTools, err := buildFloretToolRegistry(childRun, activeTools, state)
 	if err != nil {
@@ -349,7 +397,7 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, stri
 		},
 		TurnBudgets{},
 		parent.webSearchMode,
-		withDisabledFloretCoreControlTools("ask_user"),
+		withDisabledFloretCoreControlTools(childContract.HiddenControlTools...),
 	)
 	storePath, err := floretSubagentStorePath(parent.stateDir)
 	if err != nil {
@@ -359,7 +407,7 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, stri
 	if err != nil {
 		return nil, "", err
 	}
-	systemPrompt := parent.buildSubagentHostSystemPrompt(activeTools)
+	systemPrompt := parent.buildSubagentHostSystemPrompt(activeTools, childContract)
 	host, err := flruntime.NewHost(flruntime.HostOptions{
 		Config:             flconfig.Config{Provider: flconfig.ProviderFake, Model: modelName, SystemPrompt: systemPrompt, Reasoning: config.NormalizeAIReasoningSelection(parent.currentReasoning)},
 		ModelGateway:       flProvider,
@@ -534,6 +582,9 @@ func (r *run) subagentChildRun() *run {
 	child.runMode = subagentToolModeLimit(r)
 	child.currentModelID = r.currentModelID
 	child.currentReasoning = config.NormalizeAIReasoningSelection(r.currentReasoning)
+	child.subagentDepth = r.subagentDepth + 1
+	child.allowSubagentDelegate = false
+	child.noUserInteraction = true
 	return child
 }
 
@@ -544,16 +595,85 @@ func subagentToolModeLimit(parent *run) string {
 	return normalizeRunMode(strings.TrimSpace(parent.runMode), config.AIModeAct)
 }
 
-func filterSubagentChildTools(in []ToolDef) []ToolDef {
-	out := make([]ToolDef, 0, len(in))
-	for _, def := range in {
-		switch strings.TrimSpace(def.Name) {
-		case "", "subagents", "ask_user", "write_todos", "exit_plan_mode":
-			continue
-		default:
-			out = append(out, def)
-		}
+func (r *run) subagentToolSurface(all []ToolDef, forkMode flruntime.SubAgentForkMode) ([]ToolDef, subagentCapabilityContract) {
+	if r == nil {
+		contract := resolveSubagentCapabilityContract(nil, nil, forkMode)
+		return nil, contract
 	}
+	modeFilter := newModeToolFilter(r.cfg, false)
+	modeFilter = r.withToolAllowlistFilter(modeFilter)
+	contract := resolveSubagentCapabilityContract(r, nil, forkMode)
+	activeTools := modeFilter.FilterToolsForMode(subagentToolModeLimit(r), all)
+	activeTools = filterSubagentChildTools(activeTools, contract)
+	contract.VisibleTools = mapToolNames(activeTools)
+	return activeTools, contract
+}
+
+func filterSubagentChildTools(in []ToolDef, contract subagentCapabilityContract) []ToolDef {
+	out := make([]ToolDef, 0, len(in))
+	hidden := contract.HiddenToolSet
+	if len(hidden) == 0 {
+		hidden = subagentHiddenToolSet(contract.HiddenControlTools)
+	}
+	for _, def := range in {
+		name := strings.TrimSpace(def.Name)
+		if name == "" {
+			continue
+		}
+		if _, ok := hidden[name]; ok {
+			continue
+		}
+		out = append(out, def)
+	}
+	return out
+}
+
+func resolveSubagentCapabilityContract(parent *run, tools []ToolDef, forkMode flruntime.SubAgentForkMode) subagentCapabilityContract {
+	hidden := []string{"subagents", "ask_user", "write_todos", "exit_plan_mode"}
+	contract := subagentCapabilityContract{
+		VisibleTools:          mapToolNames(tools),
+		HiddenControlTools:    hidden,
+		HiddenToolSet:         subagentHiddenToolSet(hidden),
+		AllowSpawnSubagents:   false,
+		AllowUserApproval:     false,
+		AllowUserInput:        false,
+		ForkMode:              forkMode,
+		FinalHandoffBudget:    1800,
+		ProgressSummaryBudget: 700,
+	}
+	return contract
+}
+
+func subagentHiddenToolSet(names []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		out[name] = struct{}{}
+	}
+	return out
+}
+
+func mapToolNames(tools []ToolDef) []string {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(tools))
+	seen := map[string]struct{}{}
+	for _, tool := range tools {
+		name := strings.TrimSpace(tool.Name)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	sort.Strings(out)
 	return out
 }
 
@@ -606,12 +726,22 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, args map[string]any) 
 	if taskName == "" {
 		taskName = deriveSubagentTaskName(message)
 	}
+	contextMode := normalizeSubagentContextMode(anyToString(args["context_mode"]))
+	forkMode := subagentForkModeForContextMode(contextMode)
+	childRun := parent.subagentChildRun()
+	registry := NewInMemoryToolRegistry()
+	if err := registerBuiltInTools(registry, childRun); err != nil {
+		return nil, err
+	}
+	_, childContract := childRun.subagentToolSurface(registry.Snapshot(), forkMode)
 	prompt := buildFlowerSubagentPrompt(flowerSubagentPromptSpec{
-		AgentType:  agentType,
-		TaskName:   taskName,
-		Message:    message,
-		Objective:  objective,
-		ParentMode: subagentToolModeLimit(parent),
+		AgentType:   agentType,
+		TaskName:    taskName,
+		Message:     message,
+		Objective:   objective,
+		ParentMode:  subagentToolModeLimit(parent),
+		ContextMode: contextMode,
+		Contract:    childContract,
 	})
 	snapshot, err := host.SpawnSubAgent(ctx, flruntime.SpawnSubAgentRequest{
 		ParentThreadID: flruntime.ThreadID(strings.TrimSpace(parent.threadID)),
@@ -619,13 +749,14 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, args map[string]any) 
 		TaskName:       taskName,
 		Message:        prompt,
 		HostProfileRef: agentType,
-		ForkMode:       flruntime.SubAgentForkNone,
-		Labels:         s.runLabels(agentType, true),
+		ForkMode:       forkMode,
+		Labels:         s.runLabels(agentType),
 	})
 	if err != nil {
 		return nil, err
 	}
 	localSnapshot := subagentSnapshotFromFloret(snapshot)
+	localSnapshot.ContextMode = contextMode
 	if err := s.syncProjectedSubagentThread(ctx, localSnapshot); err != nil {
 		return nil, err
 	}
@@ -639,17 +770,18 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, args map[string]any) 
 	})
 	bounded := boundedSubagentItem(item)
 	return trimSubagentToolResult(map[string]any{
-		"status":      "ok",
-		"action":      subagentActionSpawn,
-		"accepted":    true,
-		"subagent_id": bounded["subagent_id"],
-		"thread_id":   bounded["thread_id"],
-		"agent_type":  bounded["agent_type"],
-		"task_name":   bounded["task_name"],
-		"title":       bounded["title"],
-		"subagent":    bounded,
-		"snapshot":    bounded,
-		"item":        bounded,
+		"status":       "ok",
+		"action":       subagentActionSpawn,
+		"accepted":     true,
+		"subagent_id":  bounded["subagent_id"],
+		"thread_id":    bounded["thread_id"],
+		"agent_type":   bounded["agent_type"],
+		"context_mode": bounded["context_mode"],
+		"task_name":    bounded["task_name"],
+		"title":        bounded["title"],
+		"subagent":     bounded,
+		"snapshot":     bounded,
+		"item":         bounded,
 	}), nil
 }
 
@@ -681,16 +813,38 @@ func (s *floretSubagentRuntime) wait(ctx context.Context, args map[string]any) (
 	if err := s.syncProjectedFloretSubagentThreads(ctx, result.Snapshots); err != nil {
 		return nil, err
 	}
-	snapshots := subagentPayloadsFromFloret(result.Snapshots)
-	out := subagentBoundedResult(subagentActionWait, snapshots)
-	out["status"] = "ok"
-	out["ids"] = ids
-	out["target_ids"] = ids
-	out["requested_timeout_ms"] = requestedTimeoutMS
-	out["effective_timeout_ms"] = effectiveTimeoutMS
-	out["timeout_ms"] = effectiveTimeoutMS
-	out["timeout_source"] = timeoutSource
-	out["timed_out"] = result.TimedOut
+	snapshots := make([]subagentSnapshot, 0, len(result.Snapshots))
+	for _, snapshot := range result.Snapshots {
+		local := subagentSnapshotFromFloret(snapshot)
+		local = s.withStoredSubagentContextMode(ctx, local)
+		snapshots = append(snapshots, local)
+	}
+	contextMode := aggregateSubagentContextMode(snapshots)
+	forkMode := subagentForkModeForContextMode(contextMode)
+	waitContract := resolveSubagentCapabilityContract(parent, nil, forkMode)
+	boundedSnapshots := boundedSubagentStatusItems(snapshots)
+	out := map[string]any{
+		"status":               "ok",
+		"action":               subagentActionWait,
+		"ids":                  ids,
+		"target_ids":           ids,
+		"requested_timeout_ms": requestedTimeoutMS,
+		"effective_timeout_ms": effectiveTimeoutMS,
+		"timeout_ms":           effectiveTimeoutMS,
+		"timeout_source":       timeoutSource,
+		"timed_out":            result.TimedOut,
+		"context_mode":         contextMode,
+		"detail_omitted":       true,
+		"detail_strategy":      "ui_detail_api",
+	}
+	if result.TimedOut {
+		out["progress_summary"] = buildSubagentProgressSummary(parent, snapshots, waitContract)
+	} else {
+		out["final_handoff_report"] = buildSubagentFinalHandoffReport(parent, snapshots, waitContract)
+	}
+	out["items"] = boundedSnapshots
+	out["counts"] = subagentModelStatusCounts(boundedSnapshots)
+	out["agent_count"] = len(boundedSnapshots)
 	return trimSubagentToolResult(out), nil
 }
 
@@ -846,6 +1000,50 @@ func boundedSubagentItems(items []map[string]any) []map[string]any {
 	return out
 }
 
+func boundedSubagentStatusItems(snapshots []subagentSnapshot) []map[string]any {
+	out := make([]map[string]any, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		out = append(out, boundedSubagentStatusItem(subagentSnapshotPayload(snapshot)))
+	}
+	return out
+}
+
+func boundedSubagentStatusItemsFromAny(raw any) []map[string]any {
+	items := subagentItemsFromAny(raw)
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		out = append(out, boundedSubagentStatusItem(item))
+	}
+	return out
+}
+
+func boundedSubagentStatusItem(item map[string]any) map[string]any {
+	threadID := strings.TrimSpace(anyToString(item["thread_id"]))
+	if threadID == "" {
+		threadID = strings.TrimSpace(anyToString(item["subagent_id"]))
+	}
+	taskName := truncateRunes(strings.TrimSpace(anyToString(item["task_name"])), 180)
+	title := truncateRunes(firstNonEmptyString(taskName, strings.TrimSpace(anyToString(item["title"])), threadID, "Subagent"), 180)
+	return map[string]any{
+		"subagent_id":        threadID,
+		"thread_id":          threadID,
+		"agent_type":         strings.TrimSpace(anyToString(item["agent_type"])),
+		"context_mode":       normalizeSubagentContextMode(anyToString(item["context_mode"])),
+		"title":              title,
+		"task_name":          taskName,
+		"status":             strings.TrimSpace(anyToString(item["status"])),
+		"parent_thread_id":   strings.TrimSpace(anyToString(item["parent_thread_id"])),
+		"updated_at_ms":      nonNegativeInt64Local(parseInt64Raw(item["updated_at_ms"], 0)),
+		"detail_available":   threadID != "",
+		"detail_ref":         subagentDetailRef(threadID),
+		"detail_omitted":     true,
+		"delegation_runtime": "floret",
+	}
+}
+
 func boundedSubagentItem(item map[string]any) map[string]any {
 	threadID := strings.TrimSpace(anyToString(item["thread_id"]))
 	if threadID == "" {
@@ -858,6 +1056,7 @@ func boundedSubagentItem(item map[string]any) map[string]any {
 		"subagent_id":        threadID,
 		"thread_id":          threadID,
 		"agent_type":         strings.TrimSpace(anyToString(item["agent_type"])),
+		"context_mode":       normalizeSubagentContextMode(anyToString(item["context_mode"])),
 		"title":              title,
 		"task_name":          taskName,
 		"status":             strings.TrimSpace(anyToString(item["status"])),
@@ -877,6 +1076,15 @@ func boundedSubagentItem(item map[string]any) map[string]any {
 		"detail_omitted":     true,
 		"delegation_runtime": "floret",
 	}
+	if status := strings.TrimSpace(anyToString(out["status"])); status == subagentStatusCompleted {
+		resultDigest := strings.TrimSpace(anyToString(item["result_digest"]))
+		if resultDigest == "" {
+			resultDigest = strings.TrimSpace(anyToString(item["last_message"]))
+		}
+		out["result_digest"] = truncateRunes(resultDigest, 900)
+	} else {
+		out["result_digest"] = ""
+	}
 	for {
 		body, err := json.Marshal(out)
 		if err != nil || len(body) <= subagentModelItemHardBytes {
@@ -890,7 +1098,9 @@ func boundedSubagentItem(item map[string]any) map[string]any {
 			return out
 		}
 		out["last_message"] = lastMessage
-		out["result_digest"] = lastMessage
+		if strings.TrimSpace(anyToString(out["status"])) == subagentStatusCompleted {
+			out["result_digest"] = lastMessage
+		}
 		out["truncated"] = true
 	}
 }
@@ -901,7 +1111,12 @@ func trimSubagentToolResult(out map[string]any) map[string]any {
 	if strings.TrimSpace(anyToString(out["detail_strategy"])) == "" {
 		out["detail_strategy"] = "ui_detail_api"
 	}
-	items := boundedSubagentItems(subagentItemsFromAny(out["items"]))
+	var items []map[string]any
+	if strings.TrimSpace(anyToString(out["action"])) == subagentActionWait {
+		items = boundedSubagentStatusItemsFromAny(out["items"])
+	} else {
+		items = boundedSubagentItems(subagentItemsFromAny(out["items"]))
+	}
 	if items != nil {
 		out["items"] = items
 		if len(items) == 1 {
@@ -950,6 +1165,235 @@ func trimSubagentToolResult(out map[string]any) map[string]any {
 	out["agent_count"] = 0
 	out["items_omitted"] = true
 	return out
+}
+
+func normalizeSubagentContextMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case subagentContextModeFullHistory:
+		return subagentContextModeFullHistory
+	default:
+		return subagentContextModeMissionOnly
+	}
+}
+
+func subagentForkModeForContextMode(mode string) flruntime.SubAgentForkMode {
+	switch normalizeSubagentContextMode(mode) {
+	case subagentContextModeFullHistory:
+		return flruntime.SubAgentForkFullPath
+	default:
+		return flruntime.SubAgentForkNone
+	}
+}
+
+func buildSubagentFinalHandoffReport(parent *run, snapshots []subagentSnapshot, contract subagentCapabilityContract) map[string]any {
+	report := subagentFinalHandoffReport{
+		Summary:                subagentCompletionSummary(snapshots),
+		Reports:                []subagentHandoffReportItem{},
+		Evidence:               []string{},
+		ChangedFiles:           []string{},
+		Verification:           []string{},
+		OpenRisks:              []string{},
+		SuggestedParentActions: []string{},
+	}
+	perReportBudget := 520
+	if len(snapshots) > 0 && contract.FinalHandoffBudget > 0 {
+		perReportBudget = maxInt(180, contract.FinalHandoffBudget/maxInt(1, len(snapshots)))
+	}
+	for _, item := range snapshots {
+		status := strings.TrimSpace(item.Status)
+		taskName := strings.TrimSpace(item.TaskName)
+		finalHandoff := truncateRunes(strings.TrimSpace(item.LastMessage), perReportBudget)
+		if status == subagentStatusCompleted || status == subagentStatusFailed || status == subagentStatusCanceled || status == subagentStatusTimedOut {
+			report.Reports = append(report.Reports, subagentHandoffReportItem{
+				ThreadID:  strings.TrimSpace(item.ThreadID),
+				TaskName:  taskName,
+				AgentType: strings.TrimSpace(item.AgentType),
+				Status:    status,
+				Handoff:   finalHandoff,
+			})
+		}
+		if taskName != "" && status != subagentStatusQueued {
+			report.Verification = appendLimited(report.Verification, taskName+": "+status, 5)
+		}
+		if status == subagentStatusFailed || status == subagentStatusTimedOut {
+			report.OpenRisks = appendLimited(report.OpenRisks, subagentStatusLine(item), 5)
+		}
+	}
+	if contract.ForkMode == flruntime.SubAgentForkFullPath {
+		report.SuggestedParentActions = appendLimited(report.SuggestedParentActions, "Review the inherited context and decide whether additional parent follow-up is needed.", 4)
+	}
+	if parent != nil && parent.subagentDepth > 0 {
+		report.SuggestedParentActions = appendLimited(report.SuggestedParentActions, "Keep the next parent reply concise and target the remaining blocker or verification step.", 4)
+	}
+	return trimSubagentDecisionPayload(map[string]any{
+		"summary":                  report.Summary,
+		"reports":                  report.Reports,
+		"evidence":                 report.Evidence,
+		"changed_files":            report.ChangedFiles,
+		"verification":             report.Verification,
+		"open_risks":               report.OpenRisks,
+		"suggested_parent_actions": report.SuggestedParentActions,
+	}, contract.FinalHandoffBudget)
+}
+
+func buildSubagentProgressSummary(parent *run, snapshots []subagentSnapshot, contract subagentCapabilityContract) map[string]any {
+	summary := subagentProgressSummary{
+		Summary:                subagentProgressHeadline(snapshots),
+		Items:                  []subagentProgressSummaryItem{},
+		CurrentState:           subagentAggregateCurrentState(snapshots),
+		Blockers:               []string{},
+		NextExpectedStep:       "Continue watching progress or intervene if a child is blocked.",
+		SuggestedParentActions: []string{},
+	}
+	for _, item := range snapshots {
+		status := strings.TrimSpace(item.Status)
+		currentSignal := ""
+		if status == subagentStatusWaiting {
+			currentSignal = truncateRunes(strings.TrimSpace(item.WaitingPrompt), 220)
+		}
+		summary.Items = append(summary.Items, subagentProgressSummaryItem{
+			ThreadID:      strings.TrimSpace(item.ThreadID),
+			TaskName:      strings.TrimSpace(item.TaskName),
+			AgentType:     strings.TrimSpace(item.AgentType),
+			Status:        status,
+			CurrentSignal: currentSignal,
+		})
+		if status == subagentStatusWaiting || status == subagentStatusFailed || status == subagentStatusTimedOut {
+			summary.Blockers = appendLimited(summary.Blockers, subagentStatusLine(item), 5)
+		}
+	}
+	if contract.ForkMode == flruntime.SubAgentForkFullPath {
+		summary.SuggestedParentActions = appendLimited(summary.SuggestedParentActions, "Keep the inherited context available until the child settles.", 4)
+	}
+	return trimSubagentDecisionPayload(map[string]any{
+		"summary":                  summary.Summary,
+		"items":                    summary.Items,
+		"current_state":            summary.CurrentState,
+		"blockers":                 summary.Blockers,
+		"next_expected_step":       summary.NextExpectedStep,
+		"suggested_parent_actions": summary.SuggestedParentActions,
+	}, contract.ProgressSummaryBudget)
+}
+
+func subagentCompletionSummary(snapshots []subagentSnapshot) string {
+	if len(snapshots) == 0 {
+		return "No delegated subagents matched the wait request."
+	}
+	counts := map[string]int{}
+	for _, snapshot := range snapshots {
+		counts[strings.TrimSpace(snapshot.Status)]++
+	}
+	parts := make([]string, 0, 4)
+	for _, status := range []string{subagentStatusCompleted, subagentStatusFailed, subagentStatusCanceled, subagentStatusTimedOut} {
+		if count := counts[status]; count > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", count, status))
+		}
+	}
+	if len(parts) == 0 {
+		return fmt.Sprintf("%d delegated subagent(s) returned from wait.", len(snapshots))
+	}
+	return "Delegated subagents finished wait: " + strings.Join(parts, ", ") + "."
+}
+
+func subagentProgressHeadline(snapshots []subagentSnapshot) string {
+	if len(snapshots) == 0 {
+		return "No delegated subagents matched the timed wait request."
+	}
+	active := 0
+	waiting := 0
+	for _, snapshot := range snapshots {
+		switch strings.TrimSpace(snapshot.Status) {
+		case subagentStatusRunning, subagentStatusQueued:
+			active++
+		case subagentStatusWaiting:
+			waiting++
+		}
+	}
+	if waiting > 0 {
+		return fmt.Sprintf("Timed wait returned while %d subagent(s) need attention and %d remain active.", waiting, active)
+	}
+	return fmt.Sprintf("Timed wait returned while %d subagent(s) remain active.", active)
+}
+
+func subagentAggregateCurrentState(snapshots []subagentSnapshot) string {
+	for _, snapshot := range snapshots {
+		if strings.TrimSpace(snapshot.Status) == subagentStatusWaiting {
+			return subagentStatusWaiting
+		}
+	}
+	for _, snapshot := range snapshots {
+		status := strings.TrimSpace(snapshot.Status)
+		if status == subagentStatusRunning || status == subagentStatusQueued {
+			return subagentStatusRunning
+		}
+	}
+	if len(snapshots) == 0 {
+		return "empty"
+	}
+	return "settled"
+}
+
+func subagentStatusLine(item subagentSnapshot) string {
+	taskName := strings.TrimSpace(item.TaskName)
+	if taskName == "" {
+		taskName = strings.TrimSpace(item.ThreadID)
+	}
+	status := strings.TrimSpace(item.Status)
+	if status == "" {
+		status = "unknown"
+	}
+	return strings.TrimSpace(taskName + ": " + status)
+}
+
+func trimSubagentDecisionPayload(out map[string]any, budget int) map[string]any {
+	if budget <= 0 {
+		budget = 600
+	}
+	hardBytes := maxInt(512, budget*6)
+	body, err := json.Marshal(out)
+	if err != nil || len(body) <= hardBytes {
+		return out
+	}
+	out["truncated"] = true
+	shrinkStringSlicesInMap(out, []string{"evidence", "verification", "open_risks", "suggested_parent_actions"}, 180)
+	if reports, ok := out["reports"].([]subagentHandoffReportItem); ok {
+		for i := range reports {
+			reports[i].Handoff = truncateRunes(reports[i].Handoff, 320)
+		}
+		out["reports"] = reports
+	}
+	if items, ok := out["items"].([]subagentProgressSummaryItem); ok {
+		for i := range items {
+			items[i].CurrentSignal = truncateRunes(items[i].CurrentSignal, 180)
+		}
+		out["items"] = items
+	}
+	body, err = json.Marshal(out)
+	if err != nil || len(body) <= hardBytes {
+		return out
+	}
+	if reports, ok := out["reports"].([]subagentHandoffReportItem); ok && len(reports) > 3 {
+		out["reports"] = reports[:3]
+		out["omitted_reports"] = len(reports) - 3
+	}
+	if items, ok := out["items"].([]subagentProgressSummaryItem); ok && len(items) > 5 {
+		out["items"] = items[:5]
+		out["omitted_items"] = len(items) - 5
+	}
+	return out
+}
+
+func shrinkStringSlicesInMap(out map[string]any, keys []string, limit int) {
+	for _, key := range keys {
+		values, ok := out[key].([]string)
+		if !ok {
+			continue
+		}
+		for i := range values {
+			values[i] = truncateRunes(values[i], limit)
+		}
+		out[key] = values
+	}
 }
 
 func subagentItemsFromAny(raw any) []map[string]any {
@@ -1131,7 +1575,7 @@ func (s *floretSubagentRuntime) sendInput(ctx context.Context, args map[string]a
 		ChildThreadID:  flruntime.ThreadID(target),
 		Message:        strings.TrimSpace(anyToString(args["message"])),
 		Interrupt:      parseBoolArg(args, "interrupt", false),
-		Labels:         s.runLabels(agentType, false),
+		Labels:         s.runLabels(agentType),
 	})
 	if err != nil {
 		return nil, err
@@ -1424,6 +1868,7 @@ func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Met
 	if strings.TrimSpace(resp.Summary.ParentThreadID) != parentThreadID || strings.TrimSpace(resp.Summary.ThreadID) != childThreadID {
 		return nil, errors.New("subagent identity mismatch")
 	}
+	resp.Summary.ContextMode = contextModeFromSubagentMetadataJSON(childMeta.ContextJSON)
 	return &resp, nil
 }
 
@@ -1468,7 +1913,9 @@ func (s *Service) detachedSubagentParentRun(meta *session.Meta, th threadstore.T
 		SkillManager:          s.skillManager,
 		ToolTargetPolicy:      s.toolTargetPolicy,
 		TargetToolExecutor:    s.targetToolExecutor,
-		AllowSubagentDelegate: true,
+		AllowSubagentDelegate: false,
+		NoUserInteraction:     true,
+		SubagentDepth:         1,
 	})
 	r.currentModelID = modelID
 	if r.currentModelID == "" && cfg != nil {
@@ -1503,6 +1950,7 @@ func flowerSubagentSummary(snapshot flruntime.SubAgentSnapshot) FlowerSubagentSu
 		TaskName:        local.TaskName,
 		Title:           title,
 		AgentType:       local.AgentType,
+		ContextMode:     normalizeSubagentContextMode(local.ContextMode),
 		Status:          local.Status,
 		LastMessage:     local.LastMessage,
 		WaitingPrompt:   local.WaitingPrompt,
@@ -1961,6 +2409,7 @@ func (s *floretSubagentRuntime) syncProjectedSubagentThreadOnly(ctx context.Cont
 	if err := s.ensureProjectedSubagentThreadOwner(ctx, endpointID, threadID); err != nil {
 		return err
 	}
+	snapshot = s.withStoredSubagentContextMode(ctx, snapshot)
 	var thread flruntime.ThreadSnapshot
 	if isSubagentTerminalStatus(snapshot.Status) {
 		host, err := s.ensureHost(ctx)
@@ -2104,7 +2553,63 @@ func (s *floretSubagentRuntime) ensureProjectedSubagentThreadOwner(ctx context.C
 	return fmt.Errorf("projected subagent thread id %q collides with an existing Flower thread", threadID)
 }
 
-func (s *floretSubagentRuntime) runLabels(agentType string, approvedWorkerGrant bool) flruntime.RunLabels {
+func (s *floretSubagentRuntime) withStoredSubagentContextMode(ctx context.Context, snapshot subagentSnapshot) subagentSnapshot {
+	contextMode := normalizeSubagentContextMode(snapshot.ContextMode)
+	if contextMode != subagentContextModeMissionOnly || strings.TrimSpace(snapshot.ContextMode) != "" {
+		snapshot.ContextMode = contextMode
+		return snapshot
+	}
+	if stored := s.snapshotContextMode(ctx, snapshot.ThreadID); stored != "" {
+		snapshot.ContextMode = stored
+		return snapshot
+	}
+	snapshot.ContextMode = subagentContextModeMissionOnly
+	return snapshot
+}
+
+func (s *floretSubagentRuntime) snapshotContextMode(ctx context.Context, threadID string) string {
+	parent := s.parentRun()
+	if parent == nil || parent.threadsDB == nil {
+		return ""
+	}
+	threadID = strings.TrimSpace(threadID)
+	endpointID := strings.TrimSpace(parent.endpointID)
+	if threadID == "" || endpointID == "" {
+		return ""
+	}
+	meta, err := parent.threadsDB.GetFlowerThreadMetadata(ctxOrBackground(ctx), endpointID, threadID)
+	if err != nil || meta == nil {
+		return ""
+	}
+	return contextModeFromSubagentMetadataJSON(meta.ContextJSON)
+}
+
+func contextModeFromSubagentMetadataJSON(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return ""
+	}
+	value := strings.TrimSpace(anyToString(payload["context_mode"]))
+	if value == "" {
+		return ""
+	}
+	return normalizeSubagentContextMode(value)
+}
+
+func aggregateSubagentContextMode(snapshots []subagentSnapshot) string {
+	for _, snapshot := range snapshots {
+		if normalizeSubagentContextMode(snapshot.ContextMode) == subagentContextModeFullHistory {
+			return subagentContextModeFullHistory
+		}
+	}
+	return subagentContextModeMissionOnly
+}
+
+func (s *floretSubagentRuntime) runLabels(agentType string) flruntime.RunLabels {
 	parent := s.parentRun()
 	if parent == nil {
 		return flruntime.RunLabels{}
@@ -2113,9 +2618,6 @@ func (s *floretSubagentRuntime) runLabels(agentType string, approvedWorkerGrant 
 	if rawAgentType := strings.TrimSpace(agentType); rawAgentType != "" {
 		normalized := normalizeSubagentAgentType(rawAgentType)
 		host[subagentToolHostContextAgentTypeKey] = normalized
-		if normalized == subagentAgentTypeWorker && approvedWorkerGrant {
-			host[subagentToolHostContextApprovedWorkerKey] = "true"
-		}
 	}
 	host[subagentToolHostContextParentModeKey] = subagentToolModeLimit(parent)
 	return flruntime.RunLabels{
@@ -2167,14 +2669,6 @@ func (c subagentStatusCounts) payload() map[string]any {
 		"canceled":      c.Canceled,
 		"timed_out":     c.TimedOut,
 	}
-}
-
-func subagentPayloadsFromFloret(in []flruntime.SubAgentSnapshot) []map[string]any {
-	out := make([]map[string]any, 0, len(in))
-	for _, snapshot := range in {
-		out = append(out, subagentSnapshotPayload(subagentSnapshotFromFloret(snapshot)))
-	}
-	return out
 }
 
 func buildParentSubagentActivityTimeline(parent *run, snapshots []subagentSnapshot) observation.ActivityTimeline {
@@ -2366,6 +2860,7 @@ func subagentSnapshotPayload(snapshot subagentSnapshot) map[string]any {
 		"subagent_id":        snapshot.ThreadID,
 		"thread_id":          snapshot.ThreadID,
 		"agent_type":         snapshot.AgentType,
+		"context_mode":       normalizeSubagentContextMode(snapshot.ContextMode),
 		"title":              title,
 		"task_name":          snapshot.TaskName,
 		"status":             snapshot.Status,
@@ -2419,6 +2914,7 @@ func projectedSubagentMetadataJSON(snapshot subagentSnapshot) string {
 		"parent_turn_id":     strings.TrimSpace(snapshot.ParentTurnID),
 		"task_name":          strings.TrimSpace(snapshot.TaskName),
 		"agent_type":         strings.TrimSpace(snapshot.AgentType),
+		"context_mode":       normalizeSubagentContextMode(snapshot.ContextMode),
 		"status":             strings.TrimSpace(snapshot.Status),
 		"latest_turn_id":     strings.TrimSpace(snapshot.LatestTurnID),
 		"can_send_input":     snapshot.CanSendInput,
@@ -2623,6 +3119,7 @@ func subagentListPayload(snapshot subagentSnapshot) map[string]any {
 		"title":              payload["title"],
 		"task_name":          payload["task_name"],
 		"agent_type":         payload["agent_type"],
+		"context_mode":       payload["context_mode"],
 		"status":             payload["status"],
 		"updated_at_ms":      payload["updated_at_ms"],
 		"last_message":       payload["last_message"],
@@ -2709,15 +3206,18 @@ func timeUnixMS(t time.Time) int64 {
 }
 
 type flowerSubagentPromptSpec struct {
-	AgentType  string
-	TaskName   string
-	Message    string
-	Objective  string
-	ParentMode string
+	AgentType   string
+	TaskName    string
+	Message     string
+	Objective   string
+	ParentMode  string
+	ContextMode string
+	Contract    subagentCapabilityContract
 }
 
 func buildFlowerSubagentPrompt(spec flowerSubagentPromptSpec) string {
 	agentType := normalizeSubagentAgentType(spec.AgentType)
+	contract := spec.Contract
 	lines := []string{
 		"# Delegated Mission",
 		strings.TrimSpace(firstNonEmptyString(spec.Message, spec.Objective, spec.TaskName)),
@@ -2728,8 +3228,16 @@ func buildFlowerSubagentPrompt(spec flowerSubagentPromptSpec) string {
 		"# Operating Contract",
 		"- You are working for the parent Flower thread, not directly for the end user.",
 		"- Finish the delegated slice independently and verify concrete claims with tools when needed.",
-		"- Do not create additional subagents and do not ask the user for input.",
-		"- Return a concise final handoff with: summary, evidence, changed files if any, open risks, and suggested parent actions.",
+		"- Do not delegate, spawn child work, or ask the user for input.",
+		"- Return a final handoff report with: summary, evidence, changed files if any, verification, open risks, and suggested parent actions.",
+	}
+	if normalizeSubagentContextMode(spec.ContextMode) == subagentContextModeFullHistory {
+		lines = append(lines, "- The parent explicitly granted full-history context; use it to ground decisions, but do not echo process detail back unless it is decision-relevant.")
+	} else {
+		lines = append(lines, "- The parent granted mission-only context; rely on the delegated mission, visible tools, and current evidence.")
+	}
+	if len(contract.VisibleTools) > 0 {
+		lines = append(lines, "- Available tools: "+strings.Join(contract.VisibleTools, ", "))
 	}
 	if mode := normalizeRunMode(strings.TrimSpace(spec.ParentMode), config.AIModeAct); mode == config.AIModePlan {
 		lines = append(lines, "- The parent thread is in plan mode: inspect and reason only. Mutating tool calls are blocked until the parent leaves plan mode.")
@@ -2751,7 +3259,7 @@ func subagentRolePrompt(agentType string) string {
 	}
 }
 
-func (r *run) buildSubagentHostSystemPrompt(activeTools []ToolDef) string {
+func (r *run) buildSubagentHostSystemPrompt(activeTools []ToolDef, contract subagentCapabilityContract) string {
 	toolNames := make([]string, 0, len(activeTools))
 	for _, def := range activeTools {
 		if name := strings.TrimSpace(def.Name); name != "" {
@@ -2762,13 +3270,14 @@ func (r *run) buildSubagentHostSystemPrompt(activeTools []ToolDef) string {
 	lines := []string{
 		"You are Flower operating a delegated subagent thread.",
 		"Complete only the mission given by the parent thread.",
-		"Do not create more subagents, do not ask the user for input, and keep your final handoff concise.",
+		"Do not delegate, spawn child work, or ask the user for input, and keep your final handoff complete but focused.",
 		"Use tools for evidence when needed, follow repository rules, and respect readonly constraints stated in the mission.",
 		"The visible tool list is the parent thread's maximum delegated surface; each mission may further restrict it through its profile and parent mode.",
 	}
 	if len(toolNames) > 0 {
 		lines = append(lines, "Available tools: "+strings.Join(toolNames, ", "))
 	}
+	lines = append(lines, "Each delegated mission states its own context mode. Follow that mission-level context contract.")
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 

@@ -70,15 +70,13 @@ func (r *run) floretToolPolicyDecision(toolName string, args map[string]any, hos
 	denyDangerous := blockDangerousCommands && isDangerousInvocation(toolName, args)
 	denyPlanMutating := isPlanMode && isMutatingInvocation(toolName, args)
 	needsApproval := requiresApproval(toolName, args)
-	approvedWorkerDelegation := false
-	if len(hostContext) > 0 {
-		approvedWorkerDelegation = floretInvocationHasApprovedWorkerGrant(hostContext[0])
-	}
-	delegationGrantCoversInvocation := approvedWorkerDelegation && isMutatingInvocation(toolName, args)
-	requireApprovalForInvocation := requireUserApproval && needsApproval && !denyReadonlyExec && !delegationGrantCoversInvocation
+	requireApprovalForInvocation := requireUserApproval && needsApproval && !denyReadonlyExec
 	denyNoUserInteractionApproval := r.noUserInteraction && requireApprovalForInvocation
 	switch {
 	case denyNoUserInteractionApproval:
+		if r.subagentDepth > 0 {
+			return "deny", "subagent_no_user_interaction_policy"
+		}
 		return "deny", "no_user_interaction_policy"
 	case denyReadonlyExec:
 		return "deny", "subagent_readonly_guard_blocked"
@@ -127,6 +125,8 @@ func floretPolicyDenialMessage(reason string) string {
 		return "Tool invocation requires user approval, but user interaction is disabled in this run"
 	case "subagent_readonly_guard_blocked":
 		return "terminal.exec command is blocked by subagent readonly policy"
+	case "subagent_no_user_interaction_policy":
+		return "Subagent tool invocation requires user approval, but subagents cannot request user authorization; choose an allowed non-approval path or report the blocker"
 	case "dangerous_command_blocked":
 		return "Command blocked by dangerous-command policy"
 	case "plan_mode_readonly_blocked":

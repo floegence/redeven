@@ -1037,7 +1037,7 @@ func TestFloretToolRegistryDoesNotInjectRunTargetContext(t *testing.T) {
 	}
 }
 
-func TestFloretToolRegistryBlocksReadonlySubagentMutatingTools(t *testing.T) {
+func TestFloretToolRegistryDoesNotAddProfileOnlyMutationBlock(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{
@@ -1065,8 +1065,8 @@ func TestFloretToolRegistryBlocksReadonlySubagentMutatingTools(t *testing.T) {
 	}, fltools.RunOptions{
 		HostContext: map[string]string{subagentToolHostContextAgentTypeKey: subagentAgentTypeReviewer},
 	})
-	if !result.IsError || !strings.Contains(strings.ToLower(result.Text), "subagent readonly policy") {
-		t.Fatalf("readonly reviewer mutation result=%#v, want readonly policy error", result)
+	if result.IsError {
+		t.Fatalf("reviewer profile alone must not add registry mutation block: text=%q structured=%#v", result.Text, result.Structured)
 	}
 }
 
@@ -1173,8 +1173,7 @@ func TestFloretToolRegistryBlocksWorkerMutationsWhenParentPlanModeApplies(t *tes
 		Args: `{"command":"mkdir -p should-not-run"}`,
 	}, floretToolApproverForRun(r), fltools.RunOptions{
 		HostContext: map[string]string{
-			subagentToolHostContextAgentTypeKey:      subagentAgentTypeWorker,
-			subagentToolHostContextApprovedWorkerKey: "true",
+			subagentToolHostContextAgentTypeKey: subagentAgentTypeWorker,
 		},
 	})
 	if !result.IsError || !strings.Contains(strings.ToLower(result.Text), "plan-mode readonly policy") {
@@ -1274,7 +1273,7 @@ func TestFloretToolRegistryUsesInvocationIdentityForSubagentTools(t *testing.T) 
 	}
 }
 
-func TestFloretToolRegistryWorkerGrantAllowsNoUserInteractionMutations(t *testing.T) {
+func TestFloretToolRegistryDeniesSubagentNoUserInteractionApproval(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{
@@ -1282,6 +1281,7 @@ func TestFloretToolRegistryWorkerGrantAllowsNoUserInteractionMutations(t *testin
 		SessionMeta:        &session.Meta{CanRead: true, CanWrite: true},
 		AIConfig:           &config.AIConfig{ExecutionPolicy: &config.AIExecutionPolicy{RequireUserApproval: true}},
 		NoUserInteraction:  true,
+		SubagentDepth:      1,
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 		TargetToolExecutor: &recordingTargetToolExecutor{},
 	})
@@ -1297,7 +1297,7 @@ func TestFloretToolRegistryWorkerGrantAllowsNoUserInteractionMutations(t *testin
 		t.Fatalf("buildFloretToolRegistry: %v", err)
 	}
 
-	withoutGrant := registry.RunWithOptions(context.Background(), fltools.ToolCall{
+	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
 		ID:   "call_write_no_grant",
 		Name: "file.write",
 		Args: `{"file_path":"note.txt","content":"mutate"}`,
@@ -1309,25 +1309,8 @@ func TestFloretToolRegistryWorkerGrantAllowsNoUserInteractionMutations(t *testin
 			subagentToolHostContextAgentTypeKey: subagentAgentTypeWorker,
 		},
 	})
-	if !withoutGrant.IsError || !strings.Contains(strings.ToLower(withoutGrant.Text), "user interaction is disabled") {
-		t.Fatalf("without grant result=%#v, want no-user-interaction denial", withoutGrant)
-	}
-
-	withGrant := registry.RunWithOptions(context.Background(), fltools.ToolCall{
-		ID:   "call_write_with_grant",
-		Name: "file.write",
-		Args: `{"file_path":"note.txt","content":"mutate"}`,
-	}, floretToolApproverForRun(r), fltools.RunOptions{
-		RunID:    "turn_worker",
-		ThreadID: "thread_worker",
-		TurnID:   "turn_worker",
-		HostContext: map[string]string{
-			subagentToolHostContextAgentTypeKey:      subagentAgentTypeWorker,
-			subagentToolHostContextApprovedWorkerKey: "true",
-		},
-	})
-	if withGrant.IsError {
-		t.Fatalf("with grant result error text=%q structured=%#v", withGrant.Text, withGrant.Structured)
+	if !result.IsError || !strings.Contains(strings.ToLower(result.Text), "subagents cannot request user authorization") {
+		t.Fatalf("result=%#v, want subagent no-user-interaction denial", result)
 	}
 }
 

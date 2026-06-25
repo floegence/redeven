@@ -397,6 +397,11 @@ func subagentsToolInputSchema() map[string]any {
 			"message":    map[string]any{"type": "string", "maxLength": 4000},
 			"objective":  map[string]any{"type": "string", "maxLength": 4000},
 			"agent_type": map[string]any{"type": "string", "enum": []string{"explore", "worker", "reviewer"}},
+			"context_mode": map[string]any{
+				"type":        "string",
+				"enum":        []string{subagentContextModeMissionOnly, subagentContextModeFullHistory},
+				"description": "Controls whether the child starts with only the delegated mission or the parent's full thread history.",
+			},
 			"ids": map[string]any{
 				"type":  "array",
 				"items": map[string]any{"type": "string"},

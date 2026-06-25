@@ -178,6 +178,34 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailLines.some((line) => line.value.includes('"snapshot"'))).toBe(false);
   });
 
+  it('renders subagent context mode and wait handoff fields as first-class details', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'subagents',
+      renderer: 'structured',
+      label: 'subagents',
+      payload: {
+        action: 'wait',
+        status: 'ok',
+        items: [{
+          thread_id: 'child-thread-1',
+          subagent_id: 'child-thread-1',
+          task_name: 'Review API boundary',
+          agent_type: 'reviewer',
+          context_mode: 'mission_only',
+          status: 'completed',
+          final_handoff_report: 'Reviewed API boundary. No blocking risks remain.',
+          progress_summary: 'Should not be used for completed waits.',
+        }],
+      },
+    }));
+
+    const rows = presentation.detailLines.map((line) => `${line.label}:${line.value}`);
+    expect(rows).toContain('context mode:mission_only');
+    expect(rows).toContain('final handoff:Reviewed API boundary. No blocking risks remain.');
+    expect(rows).toContain('progress summary:Should not be used for completed waits.');
+    expect(rows).not.toContain('last message:Reviewed API boundary. No blocking risks remain.');
+  });
+
   it('localizes unknown subagent status, type, and boolean detail values', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'subagents',
