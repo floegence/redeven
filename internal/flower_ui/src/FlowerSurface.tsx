@@ -97,6 +97,11 @@ type FlowerComposerSessionDraft = Readonly<{
 type PendingFlowerTurn = Readonly<{
   thread_id: string;
 }>;
+type PendingContextCompactionDecoration = Readonly<{
+  thread_id: string;
+  started_at_ms: number;
+  entry: Extract<FlowerTimelineEntry, { type: 'context_compaction' }>;
+}>;
 type FlowerHandlerResolutionState =
   | Readonly<{ status: 'starting' }>
   | Readonly<{ status: 'resolving'; decision: FlowerRouterDecision | null }>
@@ -503,6 +508,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [chatRunning, setChatRunning] = createSignal(false);
   const [threadStopping, setThreadStopping] = createSignal(false);
   const [compactSubmitting, setCompactSubmitting] = createSignal(false);
+  const [pendingContextCompaction, setPendingContextCompaction] = createSignal<PendingContextCompactionDecoration | null>(null);
   const [pendingTurn, setPendingTurn] = createSignal<PendingFlowerTurn | null>(null);
   const [settingsSaving, setSettingsSaving] = createSignal(false);
   const [threadsRefreshing, setThreadsRefreshing] = createSignal(false);
@@ -1691,9 +1697,49 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return thread;
   };
 
+  const localPendingCompaction = (thread: FlowerThreadSnapshot, startedAtMs: number): PendingContextCompactionDecoration => {
+    const threadID = trimString(thread.thread_id);
+    const lastMessageID = trimString([...thread.messages].reverse().find((message) => trimString(message.id))?.id);
+    const operationID = `local:${threadID}:${startedAtMs}`;
+    return {
+      thread_id: threadID,
+      started_at_ms: startedAtMs,
+      entry: {
+        type: 'context_compaction',
+        key: `timeline-decoration:local-context-compaction:${threadID}:${startedAtMs}`,
+        decoration: {
+          decoration_id: `local-context-compaction:${threadID}:${startedAtMs}`,
+          kind: 'context_compaction',
+          ordinal: Number.MAX_SAFE_INTEGER,
+          anchor: {
+            target_kind: 'message',
+            message_id: lastMessageID || `local:${threadID}`,
+            edge: 'after',
+          },
+          compaction: {
+            operation_id: operationID,
+            phase: 'start',
+            status: 'compacting',
+            updated_at_ms: startedAtMs,
+          },
+        },
+      },
+    };
+  };
+
+  const revealPendingCompactionDivider = () => {
+    transcriptScroll.markNearBottom();
+    scrollTranscriptToBottom({ smooth: false });
+    requestTranscriptAnimationFrame(() => scrollTranscriptToBottom({ smooth: false }));
+  };
+
   const compactSelectedThreadContext = async (rawPrompt: string) => {
     const thread = selectedThread();
-    const threadID = trimString(thread?.thread_id);
+    if (!thread) {
+      setChatSubmitError('Choose a conversation before compacting context.');
+      return;
+    }
+    const threadID = trimString(thread.thread_id);
     if (!threadID) {
       setChatSubmitError('Choose a conversation before compacting context.');
       return;
@@ -1715,6 +1761,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ? trimString(thread?.active_run_id)
       : '';
     setCompactSubmitting(true);
+    setPendingContextCompaction(localPendingCompaction(thread, Date.now()));
+    updateCurrentComposerSessionDraft((draft) => ({
+      ...draft,
+      chatDraft: '',
+    }));
+    requestComposerFocus();
+    revealPendingCompactionDivider();
     try {
       const live = await props.adapter.compactThreadContext({
         thread_id: threadID,
@@ -1729,8 +1782,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }));
       setLoadError('');
       returnToChat();
+      revealPendingCompactionDivider();
       await refreshSelectedThread(updated.thread_id);
     } catch (error) {
+      setPendingContextCompaction((pending) => (
+        pending?.thread_id === threadID ? null : pending
+      ));
       updateCurrentComposerSessionDraft((draft) => ({
         ...draft,
         chatDraft: rawPrompt,
@@ -1998,7 +2055,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const visibleTimelineEntries = createMemo((): readonly FlowerTimelineEntry[] => {
-    return selectedTimelineEntries();
+    const entries = selectedTimelineEntries();
+    const pending = pendingContextCompaction();
+    if (!pending || pending.thread_id !== selectedThreadID()) return entries;
+    const hasRealCompaction = (selectedThread()?.timeline_decorations ?? []).some((decoration) => (
+      decoration.kind === 'context_compaction'
+      && Number(decoration.compaction.updated_at_ms ?? 0) >= pending.started_at_ms
+    ));
+    return hasRealCompaction ? entries : [...entries, pending.entry];
   });
   const visibleTimelineEntryKeys = createMemo(() => visibleTimelineEntries().map((entry) => entry.key));
   const visibleTimelineEntriesByKey = createMemo(() => new Map(visibleTimelineEntries().map((entry) => [entry.key, entry] as const)));
@@ -2010,9 +2074,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return event.key === 'Enter' && !event.shiftKey;
   };
 
-  const selectCompactContextCommand = () => {
-    updateComposerText(FLOWER_COMPACT_CONTEXT_COMMAND);
-    requestComposerFocus();
+  const executeCompactContextCommand = async () => {
+    const rawPrompt = trimString(composerRef?.value ?? currentComposerSessionDraft().chatDraft) || FLOWER_COMPACT_CONTEXT_COMMAND;
+    await compactSelectedThreadContext(rawPrompt);
   };
 
   const handleComposerKeyDown = (event: KeyboardEvent) => {
@@ -2029,7 +2093,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !isComposing()) {
         event.preventDefault();
-        selectCompactContextCommand();
+        void executeCompactContextCommand();
         return;
       }
     }
@@ -3663,15 +3727,56 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 {selectedModelStatusIndicator()}
               </Show>
             </div>
-            <div class="flower-composer flower-chat-input-floating chat-input-container p-3">
-              {inputRequestPrompt(selectedInputRequest())}
-              <Show
-                when={activeInputQuestionIsSecret()}
-                fallback={(
-                  <textarea
+            <div class="flower-composer-anchor">
+              <Show when={!selectedInputRequest() && composerSlashCommand().kind === 'suggest'}>
+                <div
+                  class="flower-composer-command-menu"
+                  role="listbox"
+                  aria-label="Flower commands"
+                  aria-activedescendant={FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID}
+                >
+                  <button
+                    id={FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID}
+                    type="button"
+                    role="option"
+                    aria-selected="true"
+                    class="flower-composer-command-item"
+                    onClick={() => void executeCompactContextCommand()}
+                  >
+                    <Clock class="h-3.5 w-3.5" />
+                    <span class="flower-composer-command-token">{FLOWER_COMPACT_CONTEXT_COMMAND}</span>
+                    <span class="flower-composer-command-description">Compact current context</span>
+                  </button>
+                </div>
+              </Show>
+              <div class="flower-composer flower-chat-input-floating chat-input-container p-3">
+                {inputRequestPrompt(selectedInputRequest())}
+                <Show
+                  when={activeInputQuestionIsSecret()}
+                  fallback={(
+                    <textarea
+                      ref={(el) => {
+                        composerRef = el;
+                      }}
+                      class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"
+                      placeholder={composerPlaceholder()}
+                      value={composerTextValue()}
+                      disabled={composerTextareaDisabled()}
+                      onInput={(event) => updateComposerText(event.currentTarget.value)}
+                      onCompositionStart={() => setIsComposing(true)}
+                      onCompositionEnd={(event) => {
+                        setIsComposing(false);
+                        updateComposerText(event.currentTarget.value);
+                      }}
+                      onKeyDown={handleComposerKeyDown}
+                    />
+                  )}
+                >
+                  <input
                     ref={(el) => {
                       composerRef = el;
                     }}
+                    type="password"
                     class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"
                     placeholder={composerPlaceholder()}
                     value={composerTextValue()}
@@ -3684,147 +3789,108 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     }}
                     onKeyDown={handleComposerKeyDown}
                   />
-                )}
-              >
-                <input
-                  ref={(el) => {
-                    composerRef = el;
-                  }}
-                  type="password"
-                  class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"
-                  placeholder={composerPlaceholder()}
-                  value={composerTextValue()}
-                  disabled={composerTextareaDisabled()}
-                  onInput={(event) => updateComposerText(event.currentTarget.value)}
-                  onCompositionStart={() => setIsComposing(true)}
-                  onCompositionEnd={(event) => {
-                    setIsComposing(false);
-                    updateComposerText(event.currentTarget.value);
-                  }}
-                  onKeyDown={handleComposerKeyDown}
-                />
-              </Show>
-              <div class="flower-composer-footer">
-                <Show
-                  when={!needsSetup()}
-                  fallback={(
-                    <>
-                      <div class="flower-setup-inline">
-                        <span>{copy().chat.configureProviderBeforeChat}</span>
-                      </div>
-                      <Button variant="primary" icon={Settings} onClick={openSettings}>
-                        {copy().chat.openSettings}
-                      </Button>
-                    </>
-                  )}
-                >
-                  <div class="flower-model-stack" aria-live="polite">
-                    <Show
-                      when={selectedThreadReadOnly()}
-                      fallback={(
-                        <>
-                          <Show when={!selectedInputRequest()}>
-                            <div class="flower-model-selection">
-                              <span class="flower-model-selection-label">{copy().chat.modelLabel}</span>
-                              <span class={cn('flower-model-chip', surfaceWarmupActive() && 'flower-model-chip-warmup')}>
-                                {surfaceWarmupActive() ? warmupModelLabel() : selectedThreadModelLabel()}
-                              </span>
-                              <Show when={composerReasoningEnabled()}>
-                                <FlowerReasoningControl
-                                  compact
-                                  variant="badge"
-                                  capability={selectedReasoningCapability()}
-                                  selection={composerReasoningSelection()}
-                                  label="Reasoning"
-                                  onChange={updateComposerReasoningOverride}
-                                />
-                              </Show>
-                            </div>
-                          </Show>
-                        </>
-                      )}
-                    >
-                      <div class="flower-composer-readonly-stack">
-                        <div class="flower-composer-readonly-chip" title={selectedThreadReadOnlyReason()}>
-                          {selectedThreadReadOnlyDisplay()}
+                </Show>
+                <div class="flower-composer-footer">
+                  <Show
+                    when={!needsSetup()}
+                    fallback={(
+                      <>
+                        <div class="flower-setup-inline">
+                          <span>{copy().chat.configureProviderBeforeChat}</span>
                         </div>
-                      </div>
-                    </Show>
-                    <Show when={handlerNotice()}>
-                      {(notice) => <div role="alert" class="flower-handler-error-card">
-                        <div class="flower-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
-                        <div class="flower-handler-error-copy">
-                          <div class="flower-handler-error-title">{notice().title}</div>
-                          <div class="flower-handler-error-message">{notice().message}</div>
-                        </div>
-                        <button
-                          type="button"
-                          class="flower-handler-retry"
-                          onClick={() => void resolveHandlerDecision().catch(() => undefined)}
-                        >
-                          {copy().chat.handlerRetry}
-                        </button>
-                      </div>}
-                    </Show>
-                  </div>
-                  <Show when={!selectedInputRequest() && composerSlashCommand().kind === 'suggest'}>
-                    <div
-                      class="flower-composer-command-menu"
-                      role="listbox"
-                      aria-label="Flower commands"
-                      aria-activedescendant={FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID}
-                    >
-                      <button
-                        id={FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID}
-                        type="button"
-                        role="option"
-                        aria-selected="true"
-                        class="flower-composer-command-item"
-                        onClick={selectCompactContextCommand}
+                        <Button variant="primary" icon={Settings} onClick={openSettings}>
+                          {copy().chat.openSettings}
+                        </Button>
+                      </>
+                    )}
+                  >
+                    <div class="flower-model-stack" aria-live="polite">
+                      <Show
+                        when={selectedThreadReadOnly()}
+                        fallback={(
+                          <>
+                            <Show when={!selectedInputRequest()}>
+                              <div class="flower-model-selection">
+                                <span class="flower-model-selection-label">{copy().chat.modelLabel}</span>
+                                <span class={cn('flower-model-chip', surfaceWarmupActive() && 'flower-model-chip-warmup')}>
+                                  {surfaceWarmupActive() ? warmupModelLabel() : selectedThreadModelLabel()}
+                                </span>
+                                <Show when={composerReasoningEnabled()}>
+                                  <FlowerReasoningControl
+                                    compact
+                                    variant="badge"
+                                    capability={selectedReasoningCapability()}
+                                    selection={composerReasoningSelection()}
+                                    label="Reasoning"
+                                    onChange={updateComposerReasoningOverride}
+                                  />
+                                </Show>
+                              </div>
+                            </Show>
+                          </>
+                        )}
                       >
-                        <Clock class="h-3.5 w-3.5" />
-                        <span class="flower-composer-command-token">{FLOWER_COMPACT_CONTEXT_COMMAND}</span>
-                        <span class="flower-composer-command-description">Compact current context</span>
-                      </button>
+                        <div class="flower-composer-readonly-stack">
+                          <div class="flower-composer-readonly-chip" title={selectedThreadReadOnlyReason()}>
+                            {selectedThreadReadOnlyDisplay()}
+                          </div>
+                        </div>
+                      </Show>
+                      <Show when={handlerNotice()}>
+                        {(notice) => <div role="alert" class="flower-handler-error-card">
+                          <div class="flower-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
+                          <div class="flower-handler-error-copy">
+                            <div class="flower-handler-error-title">{notice().title}</div>
+                            <div class="flower-handler-error-message">{notice().message}</div>
+                          </div>
+                          <button
+                            type="button"
+                            class="flower-handler-retry"
+                            onClick={() => void resolveHandlerDecision().catch(() => undefined)}
+                          >
+                            {copy().chat.handlerRetry}
+                          </button>
+                        </div>}
+                      </Show>
                     </div>
-                  </Show>
-                  <div class="flower-composer-actions">
-                    <Show when={selectedContextUsage()}>
-                      {(usage) => <FlowerComposerContextIndicator usage={usage()} copy={copy()} />}
-                    </Show>
-                    <Show
-                      when={selectedInputRequest()}
-                      fallback={(
+                    <div class="flower-composer-actions">
+                      <Show when={selectedContextUsage()}>
+                        {(usage) => <FlowerComposerContextIndicator usage={usage()} copy={copy()} />}
+                      </Show>
+                      <Show
+                        when={selectedInputRequest()}
+                        fallback={(
+                          <Button
+                            variant="primary"
+                            icon={composerPrimaryActionIcon()}
+                            size="icon"
+                            class="flower-composer-submit rounded-full"
+                            aria-label={composerPrimaryActionLabel()}
+                            title={composerPrimaryActionLabel()}
+                            disabled={composerPrimaryActionDisabled()}
+                            loading={chatRunning() || threadStopping() || compactSubmitting()}
+                            onClick={() => void submitChat()}
+                          />
+                        )}
+                      >
                         <Button
                           variant="primary"
-                          icon={composerPrimaryActionIcon()}
-                          size="icon"
-                          class="flower-composer-submit rounded-full"
-                          aria-label={composerPrimaryActionLabel()}
-                          title={composerPrimaryActionLabel()}
-                          disabled={composerPrimaryActionDisabled()}
-                          loading={chatRunning() || threadStopping() || compactSubmitting()}
+                          icon={ArrowUp}
+                          class="flower-composer-continue"
+                          disabled={selectedThreadReadOnly() || inputSubmitting() || !inputRequestReadyToSubmit()}
+                          loading={inputSubmitting()}
                           onClick={() => void submitChat()}
-                        />
-                      )}
-                    >
-                      <Button
-                        variant="primary"
-                        icon={ArrowUp}
-                        class="flower-composer-continue"
-                        disabled={selectedThreadReadOnly() || inputSubmitting() || !inputRequestReadyToSubmit()}
-                        loading={inputSubmitting()}
-                        onClick={() => void submitChat()}
-                      >
-                        {inputSubmitting()
-                          ? chatCopyValue('inputRequestSubmitting', 'Submitting...')
-                          : inputSubmitError()
-                            ? chatCopyValue('inputRequestRetry', 'Retry')
-                            : chatCopyValue('inputRequestSubmit', 'Continue')}
-                      </Button>
-                    </Show>
-                  </div>
-                </Show>
+                        >
+                          {inputSubmitting()
+                            ? chatCopyValue('inputRequestSubmitting', 'Submitting...')
+                            : inputSubmitError()
+                              ? chatCopyValue('inputRequestRetry', 'Retry')
+                              : chatCopyValue('inputRequestSubmit', 'Continue')}
+                        </Button>
+                      </Show>
+                    </div>
+                  </Show>
+                </div>
               </div>
             </div>
             <Show when={composerErrorMessage()}>

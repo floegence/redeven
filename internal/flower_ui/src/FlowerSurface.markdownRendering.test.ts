@@ -62,6 +62,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const headerRowIndex = src.indexOf('flower-chat-header-row');
     const dockIndex = src.indexOf('flower-chat-bottom-dock-track');
     const statusLaneIndex = src.indexOf('flower-model-status-lane');
+    const commandMenuIndex = src.indexOf('flower-composer-command-menu', statusLaneIndex);
+    const composerAnchorIndex = src.indexOf('flower-composer-anchor', statusLaneIndex);
     const composerIndex = src.indexOf('flower-composer flower-chat-input-floating');
     const composerActionsIndex = src.indexOf('flower-composer-actions');
     const contextIndicatorIndex = src.indexOf('<FlowerComposerContextIndicator');
@@ -72,7 +74,10 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(timelineListIndex).toBeGreaterThanOrEqual(0);
     expect(dockIndex).toBeGreaterThan(timelineListIndex);
     expect(statusLaneIndex).toBeGreaterThan(dockIndex);
-    expect(composerIndex).toBeGreaterThan(statusLaneIndex);
+    expect(composerAnchorIndex).toBeGreaterThan(statusLaneIndex);
+    expect(commandMenuIndex).toBeGreaterThan(statusLaneIndex);
+    expect(commandMenuIndex).toBeLessThan(composerIndex);
+    expect(composerIndex).toBeGreaterThan(composerAnchorIndex);
     expect(composerActionsIndex).toBeGreaterThan(composerIndex);
     expect(contextIndicatorIndex).toBeGreaterThan(composerActionsIndex);
     expect(submitIndex).toBeGreaterThan(contextIndicatorIndex);
@@ -86,6 +91,9 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('copy().chat.modelStatus');
     expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus');
     expect(src).toContain('data-text={label}');
+    expect(src).toContain('class="flower-composer-anchor"');
+    expect(src).toContain('onClick={() => void executeCompactContextCommand()}');
+    expect(src).toContain('const executeCompactContextCommand = async () => {');
     expect(src).not.toContain('contextIndicator()');
     expect(src).not.toContain('selectedThreadThinking');
     expect(src).not.toContain('thinkingIndicator');
