@@ -109,7 +109,7 @@ describe('Flower activity running sheen', () => {
     expect(mainRule).toContain('z-index: var(--flower-layer-chat-main)');
     expect(headerRule).toContain('z-index: var(--flower-layer-chat-header)');
     expect(dropdownLayerRule).toContain('z-index: var(--flower-layer-subagent-dropdown)');
-    expect(dropdownRule).toContain('background: var(--flower-subagents-panel)');
+    expect(dropdownRule).toContain('background: color-mix(in srgb, var(--flower-subagents-panel)');
     expect(dropdownRule).toContain('box-shadow:');
     expect(indicatorRule).toContain('color: color-mix');
     expect(detailDockRule).toContain('border-top:');
