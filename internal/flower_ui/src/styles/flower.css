@@ -4330,6 +4330,17 @@ html.dark .flower-component-shell {
 
 .flower-subagent-detail-transcript .flower-message-bubble-user {
   max-width: min(88%, var(--flower-chat-user-bubble-width));
+  background: color-mix(in srgb, var(--primary) 6%, var(--flower-chat-surface-soft) 42%, transparent);
+  border-color: color-mix(in srgb, var(--primary) 16%, var(--flower-chat-surface-border) 44%, transparent);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--primary) 5%, transparent);
+}
+
+.flower-subagent-detail-transcript .flower-message-bubble-user .flower-chat-md-block h1 {
+  font-size: 0.95rem;
+  font-weight: 660;
+  color: color-mix(in srgb, var(--primary) 60%, var(--foreground) 40%);
+  margin: 0 0 0.45rem;
+  letter-spacing: 0.005em;
 }
 
 .flower-subagent-detail-transcript .flower-message-action-row {
