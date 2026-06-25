@@ -1167,23 +1167,6 @@ html.dark .flower-component-shell {
   min-width: 0;
 }
 
-.flower-chat-context-unified-footer {
-  margin-top: 0.35rem;
-  padding-top: 0.3rem;
-  border-top: 1px solid color-mix(in srgb, var(--primary) 16%, transparent);
-}
-
-.flower-chat-context-unified-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.45rem;
-  margin-bottom: 0.35rem;
-  opacity: 0.72;
-  font-size: 0.6875rem;
-  color: color-mix(in srgb, var(--foreground) 46%, transparent);
-}
-
 /* ---- Chat context chips ---- */
 
 .flower-chat-context-chips {
@@ -1191,18 +1174,27 @@ html.dark .flower-component-shell {
 }
 
 .flower-chat-context-chips-divider {
-  display: none;
-}
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.2rem 0 0.35rem;
 }
 
-.flower-chat-context-chips-label {
+.flower-chat-context-chips-divider::before,
+.flower-chat-context-chips-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.flower-chat-context-chips-divider-label {
   font-size: 0.625rem;
   font-weight: 650;
   text-transform: uppercase;
   letter-spacing: 0.12em;
   color: var(--muted-foreground);
-  margin-bottom: 0.2rem;
-  padding-inline: 0.1rem;
+  white-space: nowrap;
 }
 
 .flower-chat-context-chips-grid {

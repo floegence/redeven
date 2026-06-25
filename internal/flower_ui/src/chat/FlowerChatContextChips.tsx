@@ -26,8 +26,7 @@ export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (p
       data-flower-context-surface={props.contextDisplay.surface}
       data-flower-context-target={props.contextDisplay.target}
     >
-      <div class="flower-chat-context-chips-divider" />
-      <div class="flower-chat-context-chips-label">Linked context</div>
+      <div class="flower-chat-context-chips-divider"><span class="flower-chat-context-chips-divider-label">Linked context</span></div>
       <div class="flower-chat-context-chips-grid">
         <For each={props.contextDisplay.chips}>
           {(chip) => {
