@@ -1130,7 +1130,13 @@ html.dark .flower-component-shell {
 .flower-chat-context-chips {
   max-width: min(78%, var(--flower-chat-user-bubble-width));
   align-self: flex-end;
-  margin-top: 0.3rem;
+  margin-top: 0;
+}
+
+.flower-chat-context-chips-divider {
+  height: 1px;
+  margin: -0.1rem 0.25rem 0.3rem;
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
 }
 
 .flower-chat-context-chips-label {
@@ -1221,6 +1227,12 @@ html.dark .flower-component-shell {
   flex-shrink: 0;
   width: 0.875rem;
   height: 0.875rem;
+}
+
+.flower-chat-context-chip-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .flower-chat-context-chip-text {
