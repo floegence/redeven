@@ -23,6 +23,7 @@ import type {
   AISubscribeThreadResponse,
   AITranscriptMessageItem,
   AIThreadRunStatus,
+  AIPermissionType,
 } from '../sdk/ai';
 import type {
   wire_ai_active_run,
@@ -58,9 +59,9 @@ function toAIActiveRun(raw: wire_ai_active_run): AIActiveRun {
   };
 }
 
-function normalizeExecutionMode(raw: unknown): 'act' | 'plan' | undefined {
-  const mode = String(raw ?? '').trim().toLowerCase();
-  if (mode === 'act' || mode === 'plan') return mode;
+function normalizePermissionType(raw: unknown): AIPermissionType | undefined {
+  const value = String(raw ?? '').trim().toLowerCase();
+  if (value === 'readonly' || value === 'approval_required' || value === 'full_access') return value;
   return undefined;
 }
 
@@ -99,7 +100,7 @@ function fromWireAIFollowupItem(raw: wire_ai_followup_item): AIFollowupItem | nu
     messageId,
     text: String(raw?.text ?? ''),
     modelId: String(raw?.model_id ?? '').trim() || undefined,
-    executionMode: normalizeExecutionMode(raw?.execution_mode),
+    permissionType: normalizePermissionType(raw?.permission_type),
     position: Math.max(1, Math.floor(Number(raw?.position ?? 0) || 0)),
     createdAtUnixMs: Math.max(0, Math.floor(Number(raw?.created_at_unix_ms ?? 0) || 0)),
     attachments: attachments.length > 0 ? attachments : undefined,
@@ -108,11 +109,9 @@ function fromWireAIFollowupItem(raw: wire_ai_followup_item): AIFollowupItem | nu
 
 function fromWireAIRequestUserInputAction(raw: wire_ai_request_user_input_action): AIRequestUserInputAction | null {
   const type = String(raw?.type ?? '').trim().toLowerCase();
-  if (!type) return null;
-  const mode = normalizeExecutionMode(raw?.mode);
+  if (type !== 'open_subagent') return null;
   return {
     type,
-    mode,
   };
 }
 
@@ -219,7 +218,7 @@ export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai
       context_action: req.input?.contextAction,
     },
     options: {
-      mode: req.options?.mode ? String(req.options.mode).trim() : undefined,
+      permission_type: req.options?.permissionType ? String(req.options.permissionType).trim() : undefined,
       ...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {}),
     },
     expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
@@ -236,7 +235,6 @@ export function fromWireAISendUserTurnResponse(resp: wire_ai_send_user_turn_resp
     queuePosition: typeof resp?.queue_position === 'number' ? resp.queue_position : undefined,
     consumedWaitingPromptId:
       String(resp?.consumed_waiting_prompt_id ?? '').trim() || undefined,
-    appliedExecutionMode: normalizeExecutionMode(resp?.applied_execution_mode),
   };
 }
 
@@ -285,7 +283,7 @@ export function toWireAISubmitRequestUserInputResponseRequest(req: AISubmitReque
         : [],
     },
     options: {
-      mode: req.options?.mode ? String(req.options.mode).trim() : undefined,
+      permission_type: req.options?.permissionType ? String(req.options.permissionType).trim() : undefined,
       ...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {}),
     },
     expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
@@ -298,7 +296,6 @@ export function fromWireAISubmitRequestUserInputResponseResponse(resp: wire_ai_s
     runId: String(resp?.run_id ?? '').trim(),
     kind: String(resp?.kind ?? '').trim(),
     consumedWaitingPromptId: String(resp?.consumed_waiting_prompt_id ?? '').trim() || undefined,
-    appliedExecutionMode: normalizeExecutionMode(resp?.applied_execution_mode),
   };
 }
 
@@ -406,7 +403,7 @@ export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtime
     lastMessageAtUnixMs: typeof payload?.last_message_at_unix_ms === 'number' ? payload.last_message_at_unix_ms : undefined,
     activeRunId: typeof payload?.active_run_id === 'string' ? payload.active_run_id : undefined,
     lastContextRunId: typeof payload?.last_context_run_id === 'string' ? payload.last_context_run_id : undefined,
-    executionMode: normalizeExecutionMode(payload?.execution_mode),
+    permissionType: normalizePermissionType(payload?.permission_type),
     queuedTurnCount: typeof payload?.queued_turn_count === 'number' ? payload.queued_turn_count : undefined,
 
     resetReason: typeof payload?.reset_reason === 'string' ? payload.reset_reason : undefined,

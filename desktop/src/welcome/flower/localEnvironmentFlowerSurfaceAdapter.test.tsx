@@ -10,6 +10,7 @@ import {
 } from './localEnvironmentFlowerSurfaceAdapter';
 import type { RuntimeFlowerRequest } from '../../shared/runtimeFlowerIPC';
 import { projectFlowerLiveBootstrap } from '../../../../internal/flower_ui/src/flowerLiveReducer';
+import type { AgentSettingsResponse } from '../../../../internal/envapp/ui_src/src/ui/pages/settings/types';
 
 function readStatus(isUnread = false, revision = 2, status = 'idle') {
   const signature = `status:${status}\u001factivity:${revision}`;
@@ -28,7 +29,7 @@ function readStatus(isUnread = false, revision = 2, status = 'idle') {
   };
 }
 
-function settingsResponse() {
+function settingsResponse(): AgentSettingsResponse {
   return {
     config_path: '/Users/me/.redeven/local-environment/config.json',
     connection: {
@@ -52,9 +53,9 @@ function settingsResponse() {
       providers: [{
         id: 'default',
         type: 'openai_compatible' as const,
-        base_url: 'https://api.example.test/v1',
-        web_search: { mode: 'brave' as const },
-        models: [{
+      base_url: 'https://api.example.test/v1',
+      web_search: { mode: 'brave' as const },
+      models: [{
           model_name: 'gpt-4.1',
           context_window: 128000,
           max_output_tokens: 16384,
@@ -62,10 +63,7 @@ function settingsResponse() {
           input_modalities: ['text', 'image'] as const,
         }],
       }],
-      execution_policy: {
-        require_user_approval: true,
-        block_dangerous_commands: true,
-      },
+      permission_type: 'approval_required',
       terminal_exec_policy: {
         default_timeout_ms: 120000,
         max_timeout_ms: 600000,
@@ -265,7 +263,7 @@ describe('Local Environment Flower surface adapter', () => {
       thread_id: 'thread-new',
       model: 'default/gpt-4.1',
       input: { message_id: 'client_desktop-message', text: 'hello', attachments: [] },
-      options: { mode: 'act' },
+      options: { permission_type: 'approval_required' },
     });
   });
 
@@ -535,12 +533,12 @@ describe('Local Environment Flower surface adapter', () => {
         mime_type: 'text/plain',
         url: 'redeven://uploaded/notes',
       }],
-      mode: 'plan',
+      permission_type: 'readonly',
     });
 
     expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads')?.body).toMatchObject({
       working_dir: '/workspace/redeven',
-      execution_mode: 'plan',
+      permission_type: 'readonly',
     });
     expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads/thread-card/turns')?.body).toEqual({
       thread_id: 'thread-card',
@@ -555,7 +553,7 @@ describe('Local Environment Flower surface adapter', () => {
         context_action: contextAction,
       },
       options: {
-        mode: 'plan',
+        permission_type: 'readonly',
       },
     });
   });
@@ -580,7 +578,6 @@ describe('Local Environment Flower surface adapter', () => {
         context: [],
         presentation: { label: 'Ask Flower', priority: 100 },
       },
-      mode: 'act',
     })).rejects.toThrow('Invalid Flower context action.');
 
     expect(calls.map((call) => call.path)).toEqual([

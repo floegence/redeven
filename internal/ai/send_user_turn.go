@@ -37,7 +37,7 @@ type SendUserTurnResponse struct {
 	QueueID                 string `json:"queue_id,omitempty"`
 	QueuePosition           int    `json:"queue_position,omitempty"`
 	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
-	AppliedExecutionMode    string `json:"applied_execution_mode,omitempty"`
+	AppliedPermissionType   string `json:"applied_permission_type,omitempty"`
 }
 
 type CompactThreadContextRequest struct {

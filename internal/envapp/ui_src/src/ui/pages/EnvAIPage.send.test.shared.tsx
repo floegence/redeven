@@ -62,7 +62,7 @@ const mocks = vi.hoisted(() => {
       return {
         ai: {
           current_model_id: 'openai/gpt-5.2',
-          execution_policy: { require_user_approval: true, block_dangerous_commands: true },
+          permission_type: 'approval_required',
           terminal_exec_policy: { default_timeout_ms: 120000, max_timeout_ms: 600000 },
           providers: [{
             id: 'openai',

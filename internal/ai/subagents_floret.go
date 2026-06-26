@@ -390,7 +390,6 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, stri
 		adapter,
 		providerType,
 		modelName,
-		"act",
 		ProviderControls{
 			ReasoningSelection:  config.NormalizeAIReasoningSelection(parent.currentReasoning),
 			ReasoningCapability: modelCapability.ReasoningCapability,
@@ -475,11 +474,8 @@ func (r *run) subagentHostConfigKey() (string, error) {
 		"web_search_key_state": webSearchKeyState,
 		"web_search_api_key":   webSearchKeyDigest,
 		"adapter_override":     resolved.adapterOverride != nil,
-		"require_approval":     r.cfg.EffectiveRequireUserApproval(),
-		"block_dangerous":      r.cfg.EffectiveBlockDangerousCommands(),
-		"run_mode":             subagentToolModeLimit(r),
+		"permission_type":      permissionTypeString(subagentPermissionLimit(r)),
 		"tool_allowlist":       allowlist,
-		"force_readonly_exec":  r.forceReadonlyExec,
 		"no_user_interaction":  r.noUserInteraction,
 		"target_policy_mode":   targetPolicy.Mode,
 		"target_default_id":    targetPolicy.DefaultTargetID,
@@ -555,6 +551,7 @@ func (r *run) subagentChildRun() *run {
 		WorkingDir:            r.workingDir,
 		FilesystemScope:       r.scope,
 		Shell:                 r.shell,
+		Service:               r.service,
 		AIConfig:              r.cfg,
 		SessionMeta:           r.sessionMeta,
 		ResolveProviderKey:    r.resolveProviderKey,
@@ -570,7 +567,6 @@ func (r *run) subagentChildRun() *run {
 		SubagentDepth:         r.subagentDepth + 1,
 		AllowSubagentDelegate: false,
 		ToolAllowlist:         mapKeys(r.toolAllowlist),
-		ForceReadonlyExec:     r.forceReadonlyExec,
 		NoUserInteraction:     true,
 		WebSearchToolEnabled:  r.webSearchToolEnabled,
 		WebSearchMode:         r.webSearchMode,
@@ -579,20 +575,25 @@ func (r *run) subagentChildRun() *run {
 		TargetToolExecutor:    r.targetToolExecutor,
 		terminalExecRunner:    r.terminalExecRunner,
 	})
-	child.runMode = subagentToolModeLimit(r)
+	child.permissionType = subagentPermissionLimit(r)
 	child.currentModelID = r.currentModelID
 	child.currentReasoning = config.NormalizeAIReasoningSelection(r.currentReasoning)
 	child.subagentDepth = r.subagentDepth + 1
 	child.allowSubagentDelegate = false
 	child.noUserInteraction = true
+	child.allowDelegatedApproval = true
+	child.delegatedApprovalParent = r
+	if len(r.permissionSnapshot.VisibleToolNames) > 0 {
+		child.toolAllowlist = stringSet(r.permissionSnapshot.VisibleToolNames...)
+	}
 	return child
 }
 
-func subagentToolModeLimit(parent *run) string {
-	if parent == nil {
-		return config.AIModeAct
+func subagentPermissionLimit(parent *run) FlowerPermissionType {
+	if parent == nil || parent.permissionType == "" {
+		return FlowerPermissionApprovalRequired
 	}
-	return normalizeRunMode(strings.TrimSpace(parent.runMode), config.AIModeAct)
+	return parent.permissionType
 }
 
 func (r *run) subagentToolSurface(all []ToolDef, forkMode flruntime.SubAgentForkMode) ([]ToolDef, subagentCapabilityContract) {
@@ -600,10 +601,10 @@ func (r *run) subagentToolSurface(all []ToolDef, forkMode flruntime.SubAgentFork
 		contract := resolveSubagentCapabilityContract(nil, nil, forkMode)
 		return nil, contract
 	}
-	modeFilter := newModeToolFilter(r.cfg, false)
-	modeFilter = r.withToolAllowlistFilter(modeFilter)
+	permissionFilter := newPermissionToolFilter(false)
+	permissionFilter = r.withToolAllowlistFilter(permissionFilter)
 	contract := resolveSubagentCapabilityContract(r, nil, forkMode)
-	activeTools := modeFilter.FilterToolsForMode(subagentToolModeLimit(r), all)
+	activeTools := permissionFilter.FilterTools(subagentPermissionLimit(r), all)
 	activeTools = filterSubagentChildTools(activeTools, contract)
 	contract.VisibleTools = mapToolNames(activeTools)
 	return activeTools, contract
@@ -629,13 +630,13 @@ func filterSubagentChildTools(in []ToolDef, contract subagentCapabilityContract)
 }
 
 func resolveSubagentCapabilityContract(parent *run, tools []ToolDef, forkMode flruntime.SubAgentForkMode) subagentCapabilityContract {
-	hidden := []string{"subagents", "ask_user", "write_todos", "exit_plan_mode"}
+	hidden := []string{"subagents", "ask_user", "write_todos"}
 	contract := subagentCapabilityContract{
 		VisibleTools:          mapToolNames(tools),
 		HiddenControlTools:    hidden,
 		HiddenToolSet:         subagentHiddenToolSet(hidden),
 		AllowSpawnSubagents:   false,
-		AllowUserApproval:     false,
+		AllowUserApproval:     parent != nil && parent.subagentDepth > 0 && parent.allowDelegatedApproval,
 		AllowUserInput:        false,
 		ForkMode:              forkMode,
 		FinalHandoffBudget:    1800,
@@ -713,6 +714,9 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, args map[string]any) 
 	if err != nil {
 		return nil, err
 	}
+	if err := s.requireCurrentHostForSpawn(parent); err != nil {
+		return nil, err
+	}
 	agentType := normalizeSubagentAgentType(anyToString(args["agent_type"]))
 	taskName := strings.TrimSpace(anyToString(args["task_name"]))
 	if taskName == "" {
@@ -728,29 +732,38 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, args map[string]any) 
 	}
 	contextMode := normalizeSubagentContextMode(anyToString(args["context_mode"]))
 	forkMode := subagentForkModeForContextMode(contextMode)
+	childThreadID, err := NewThreadID()
+	if err != nil {
+		return nil, err
+	}
 	childRun := parent.subagentChildRun()
 	registry := NewInMemoryToolRegistry()
 	if err := registerBuiltInTools(registry, childRun); err != nil {
 		return nil, err
 	}
-	_, childContract := childRun.subagentToolSurface(registry.Snapshot(), forkMode)
+	activeChildTools, childContract := childRun.subagentToolSurface(registry.Snapshot(), forkMode)
+	childSnapshot := permissionSnapshotWithOwnerIdentity(buildPermissionSnapshot(childRun.permissionType, activeChildTools, nil), parent.endpointID, childThreadID, childThreadID)
+	childRun.permissionSnapshot = childSnapshot
+	if err := parent.insertChildPermissionSnapshot(childThreadID, childThreadID, childSnapshot); err != nil {
+		return nil, fmt.Errorf("persist child permission snapshot: %w", err)
+	}
 	prompt := buildFlowerSubagentPrompt(flowerSubagentPromptSpec{
 		AgentType:   agentType,
 		TaskName:    taskName,
 		Message:     message,
 		Objective:   objective,
-		ParentMode:  subagentToolModeLimit(parent),
 		ContextMode: contextMode,
 		Contract:    childContract,
 	})
 	snapshot, err := host.SpawnSubAgent(ctx, flruntime.SpawnSubAgentRequest{
 		ParentThreadID: flruntime.ThreadID(strings.TrimSpace(parent.threadID)),
 		ParentTurnID:   flruntime.TurnID(strings.TrimSpace(parent.messageID)),
+		ThreadID:       flruntime.ThreadID(childThreadID),
 		TaskName:       taskName,
 		Message:        prompt,
 		HostProfileRef: agentType,
 		ForkMode:       forkMode,
-		Labels:         s.runLabels(agentType),
+		Labels:         s.runLabels(agentType, childThreadID),
 	})
 	if err != nil {
 		return nil, err
@@ -1575,7 +1588,7 @@ func (s *floretSubagentRuntime) sendInput(ctx context.Context, args map[string]a
 		ChildThreadID:  flruntime.ThreadID(target),
 		Message:        strings.TrimSpace(anyToString(args["message"])),
 		Interrupt:      parseBoolArg(args, "interrupt", false),
-		Labels:         s.runLabels(agentType),
+		Labels:         s.runLabels(agentType, target),
 	})
 	if err != nil {
 		return nil, err
@@ -1597,6 +1610,23 @@ func (s *floretSubagentRuntime) sendInput(ctx context.Context, args map[string]a
 		"snapshot":    bounded,
 		"item":        bounded,
 	}), nil
+}
+
+func (s *floretSubagentRuntime) requireCurrentHostForSpawn(parent *run) error {
+	if s == nil || parent == nil {
+		return errors.New("subagent runtime unavailable")
+	}
+	want, err := parent.subagentHostConfigKey()
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	got := strings.TrimSpace(s.hostKey)
+	if s.host != nil && got != "" && strings.TrimSpace(want) != "" && got != strings.TrimSpace(want) {
+		return errors.New("subagent host configuration changed while active subagents exist; close existing subagents before spawning another child")
+	}
+	return nil
 }
 
 func (s *floretSubagentRuntime) subagentAgentTypeForTarget(ctx context.Context, host flruntime.Host, target string) (string, error) {
@@ -1922,7 +1952,11 @@ func (s *Service) detachedSubagentParentRun(meta *session.Meta, th threadstore.T
 		r.currentModelID = strings.TrimSpace(cfg.CurrentModelID)
 	}
 	r.currentReasoning = unmarshalReasoningSelection(th.ReasoningSelectionJSON)
-	r.runMode = normalizeRunMode(strings.TrimSpace(th.ExecutionMode), config.AIModeAct)
+	if permissionType, err := normalizePermissionType(threadPermissionTypeString(&th, ""), FlowerPermissionApprovalRequired); err == nil {
+		r.permissionType = permissionType
+	} else {
+		r.permissionType = FlowerPermissionApprovalRequired
+	}
 	return r
 }
 
@@ -2492,7 +2526,7 @@ func (s *floretSubagentRuntime) syncProjectedSubagentThreadOnly(ctx context.Cont
 		NamespacePublicID:     parentNamespacePublicID(parent),
 		ModelID:               modelID,
 		ModelLocked:           strings.TrimSpace(modelID) != "",
-		ExecutionMode:         "act",
+		PermissionType:        permissionTypeString(parent.permissionType),
 		WorkingDir:            strings.TrimSpace(parent.workingDir),
 		Title:                 title,
 		TitleSource:           threadstore.ThreadTitleSourceAuto,
@@ -2654,17 +2688,22 @@ func aggregateSubagentContextMode(snapshots []subagentSnapshot) string {
 	return subagentContextModeMissionOnly
 }
 
-func (s *floretSubagentRuntime) runLabels(agentType string) flruntime.RunLabels {
+func (s *floretSubagentRuntime) runLabels(agentType string, childThreadID string) flruntime.RunLabels {
 	parent := s.parentRun()
 	if parent == nil {
 		return flruntime.RunLabels{}
 	}
 	host := floretHostLabelsForRun(parent)
+	childThreadID = strings.TrimSpace(childThreadID)
+	if childThreadID != "" {
+		host[subagentToolHostContextChildThreadIDKey] = childThreadID
+		host[subagentToolHostContextSubagentIDKey] = childThreadID
+	}
 	if rawAgentType := strings.TrimSpace(agentType); rawAgentType != "" {
 		normalized := normalizeSubagentAgentType(rawAgentType)
 		host[subagentToolHostContextAgentTypeKey] = normalized
 	}
-	host[subagentToolHostContextParentModeKey] = subagentToolModeLimit(parent)
+	host[subagentToolHostContextParentPermissionKey] = permissionTypeString(subagentPermissionLimit(parent))
 	return flruntime.RunLabels{
 		Correlation: map[string]string{
 			"parent_run_id":    strings.TrimSpace(parent.id),
@@ -3255,7 +3294,6 @@ type flowerSubagentPromptSpec struct {
 	TaskName    string
 	Message     string
 	Objective   string
-	ParentMode  string
 	ContextMode string
 	Contract    subagentCapabilityContract
 }
@@ -3283,9 +3321,6 @@ func buildFlowerSubagentPrompt(spec flowerSubagentPromptSpec) string {
 	}
 	if len(contract.VisibleTools) > 0 {
 		lines = append(lines, "- Available tools: "+strings.Join(contract.VisibleTools, ", "))
-	}
-	if mode := normalizeRunMode(strings.TrimSpace(spec.ParentMode), config.AIModeAct); mode == config.AIModePlan {
-		lines = append(lines, "- The parent thread is in plan mode: inspect and reason only. Mutating tool calls are blocked until the parent leaves plan mode.")
 	}
 	if agentType != subagentAgentTypeWorker {
 		lines = append(lines, "- This profile is readonly: inspect, reason, and report; do not edit files or run mutating commands.")

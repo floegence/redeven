@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 34
+	threadstoreCurrentSchemaVersion = 36
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -62,6 +62,8 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 31, ToVersion: 32, Apply: migrateThreadstoreToV32},
 			{FromVersion: 32, ToVersion: 33, Apply: migrateThreadstoreToV33},
 			{FromVersion: 33, ToVersion: 34, Apply: migrateThreadstoreToV34},
+			{FromVersion: 34, ToVersion: 35, Apply: migrateThreadstoreToV35},
+			{FromVersion: 35, ToVersion: 36, Apply: migrateThreadstoreToV36},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -281,6 +283,14 @@ func migrateThreadstoreToV34(tx *sql.Tx) error {
 	return backfillAIThreadsFlowerActivitySnapshotTx(tx)
 }
 
+func migrateThreadstoreToV35(tx *sql.Tx) error {
+	return ensureAIThreadsPermissionTypeTx(tx)
+}
+
+func migrateThreadstoreToV36(tx *sql.Tx) error {
+	return ensureDelegatedApprovalTablesTx(tx)
+}
+
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "model_id", `ALTER TABLE ai_threads ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`)
 }
@@ -294,7 +304,22 @@ func ensureAIThreadsReasoningSelectionTx(tx *sql.Tx) error {
 }
 
 func ensureAIThreadsExecutionModeTx(tx *sql.Tx) error {
-	return ensureColumnTx(tx, "ai_threads", "execution_mode", `ALTER TABLE ai_threads ADD COLUMN execution_mode TEXT NOT NULL DEFAULT 'act'`)
+	return ensureColumnTx(tx, "ai_threads", "execution_mode", `ALTER TABLE ai_threads ADD COLUMN execution_mode TEXT NOT NULL DEFAULT ''`)
+}
+
+func ensureAIThreadsPermissionTypeTx(tx *sql.Tx) error {
+	if err := ensureColumnTx(tx, "ai_threads", "permission_type", `ALTER TABLE ai_threads ADD COLUMN permission_type TEXT NOT NULL DEFAULT 'approval_required'`); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`
+UPDATE ai_threads
+SET permission_type = CASE
+  WHEN lower(trim(COALESCE(execution_mode, ''))) = 'plan' THEN 'readonly'
+  ELSE 'approval_required'
+END
+WHERE trim(COALESCE(permission_type, '')) = '' OR permission_type = 'approval_required'
+`)
+	return err
 }
 
 func ensureAIThreadsWorkingDirTx(tx *sql.Tx) error {
@@ -943,6 +968,121 @@ CREATE INDEX IF NOT EXISTS idx_ai_flower_handoffs_destination ON ai_flower_hando
 	return nil
 }
 
+func ensureDelegatedApprovalTablesTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS ai_permission_snapshots (
+  snapshot_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  owner_thread_id TEXT NOT NULL DEFAULT '',
+  owner_run_id TEXT NOT NULL DEFAULT '',
+  permission_type TEXT NOT NULL DEFAULT 'approval_required',
+  snapshot_json TEXT NOT NULL DEFAULT '{}',
+  snapshot_hash TEXT NOT NULL DEFAULT '',
+  registry_hash TEXT NOT NULL DEFAULT '',
+  schema_hash TEXT NOT NULL DEFAULT '',
+  presentation_hash TEXT NOT NULL DEFAULT '',
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_ai_permission_snapshots_owner ON ai_permission_snapshots(endpoint_id, owner_thread_id, owner_run_id);
+
+CREATE TABLE IF NOT EXISTS ai_child_permission_snapshots (
+  child_snapshot_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  parent_snapshot_id TEXT NOT NULL DEFAULT '',
+  spawn_tool_call_id TEXT NOT NULL DEFAULT '',
+  parent_thread_id TEXT NOT NULL DEFAULT '',
+  parent_run_id TEXT NOT NULL DEFAULT '',
+  subagent_id TEXT NOT NULL DEFAULT '',
+  child_thread_id TEXT NOT NULL DEFAULT '',
+  child_run_id TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT 'provisional',
+  snapshot_json TEXT NOT NULL DEFAULT '{}',
+  snapshot_hash TEXT NOT NULL DEFAULT '',
+  registry_hash TEXT NOT NULL DEFAULT '',
+  schema_hash TEXT NOT NULL DEFAULT '',
+  presentation_hash TEXT NOT NULL DEFAULT '',
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  finalized_at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_child_permission_snapshots_spawn ON ai_child_permission_snapshots(endpoint_id, spawn_tool_call_id);
+CREATE INDEX IF NOT EXISTS idx_ai_child_permission_snapshots_parent ON ai_child_permission_snapshots(endpoint_id, parent_thread_id, parent_run_id);
+CREATE INDEX IF NOT EXISTS idx_ai_child_permission_snapshots_child ON ai_child_permission_snapshots(endpoint_id, child_thread_id);
+
+CREATE TABLE IF NOT EXISTS ai_delegated_approval_requests (
+  action_id TEXT NOT NULL,
+  endpoint_id TEXT NOT NULL,
+  parent_thread_id TEXT NOT NULL,
+  parent_run_id TEXT NOT NULL DEFAULT '',
+  parent_turn_id TEXT NOT NULL DEFAULT '',
+  subagent_id TEXT NOT NULL DEFAULT '',
+  child_thread_id TEXT NOT NULL DEFAULT '',
+  child_run_id TEXT NOT NULL DEFAULT '',
+  child_turn_id TEXT NOT NULL DEFAULT '',
+  child_tool_call_id TEXT NOT NULL DEFAULT '',
+  approval_id TEXT NOT NULL DEFAULT '',
+  ref_hash TEXT NOT NULL,
+  request_fingerprint TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT 'requested',
+  status TEXT NOT NULL DEFAULT 'pending',
+  delivery_state TEXT NOT NULL DEFAULT '',
+  child_execution_state TEXT NOT NULL DEFAULT '',
+  version INTEGER NOT NULL DEFAULT 1,
+  surface_epoch INTEGER NOT NULL DEFAULT 1,
+  requested_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  resolved_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  expires_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  action_json TEXT NOT NULL DEFAULT '{}',
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(endpoint_id, parent_thread_id, action_id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_delegated_approval_ref ON ai_delegated_approval_requests(endpoint_id, parent_thread_id, ref_hash);
+CREATE INDEX IF NOT EXISTS idx_ai_delegated_approval_thread_status ON ai_delegated_approval_requests(endpoint_id, parent_thread_id, status, updated_at_unix_ms DESC);
+
+CREATE TABLE IF NOT EXISTS ai_delegated_approval_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint_id TEXT NOT NULL,
+  parent_thread_id TEXT NOT NULL,
+  action_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 0,
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_ai_delegated_approval_events_action ON ai_delegated_approval_events(endpoint_id, action_id, id ASC);
+
+CREATE TABLE IF NOT EXISTS ai_delegated_approval_outbox (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint_id TEXT NOT NULL,
+  parent_thread_id TEXT NOT NULL,
+  action_id TEXT NOT NULL,
+  decision TEXT NOT NULL DEFAULT '',
+  delivery_state TEXT NOT NULL DEFAULT 'delivery_pending',
+  payload_json TEXT NOT NULL DEFAULT '{}',
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  delivered_at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_ai_delegated_approval_outbox_pending ON ai_delegated_approval_outbox(endpoint_id, delivery_state, id ASC);
+
+CREATE TABLE IF NOT EXISTS ai_delegated_approval_idempotency (
+  actor_scope TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  endpoint_id TEXT NOT NULL,
+  parent_thread_id TEXT NOT NULL,
+  action_id TEXT NOT NULL,
+  approved INTEGER NOT NULL DEFAULT 0,
+  response_json TEXT NOT NULL DEFAULT '{}',
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(actor_scope, idempotency_key)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_delegated_approval_idempotency_action ON ai_delegated_approval_idempotency(endpoint_id, action_id);
+	`)
+	if err != nil {
+		return err
+	}
+	return ensureColumnTx(tx, "ai_delegated_approval_requests", "request_fingerprint", `ALTER TABLE ai_delegated_approval_requests ADD COLUMN request_fingerprint TEXT NOT NULL DEFAULT ''`)
+}
+
 func ensureFlowerThreadMetadataOwnershipColumnsTx(tx *sql.Tx) error {
 	columns := []struct {
 		name string
@@ -1005,6 +1145,12 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"ai_flower_thread_metadata",
 		"ai_flower_transfers",
 		"ai_flower_handoffs",
+		"ai_permission_snapshots",
+		"ai_child_permission_snapshots",
+		"ai_delegated_approval_requests",
+		"ai_delegated_approval_events",
+		"ai_delegated_approval_outbox",
+		"ai_delegated_approval_idempotency",
 	}
 	for _, tableName := range requiredTables {
 		exists, err := sqliteutil.TableExistsTx(tx, tableName)
@@ -1028,7 +1174,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 	requiredColumns := map[string][]string{
 		"ai_threads": {
 			"thread_id", "endpoint_id", "namespace_public_id", "model_id", "model_locked",
-			"execution_mode", "working_dir", "title", "title_source", "title_generated_at_unix_ms",
+			"execution_mode", "permission_type", "working_dir", "title", "title_source", "title_generated_at_unix_ms",
 			"title_input_message_id", "title_model_id", "title_prompt_version", "followups_revision",
 			"pinned_at_unix_ms",
 			"run_status", "run_updated_at_unix_ms", "run_error_code", "run_error", "waiting_user_input_json", "last_context_run_id",
@@ -1136,6 +1282,37 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			"idempotency_key", "envelope_hash", "state", "envelope_json",
 			"created_at_unix_ms", "updated_at_unix_ms",
 		},
+		"ai_permission_snapshots": {
+			"snapshot_id", "endpoint_id", "owner_thread_id", "owner_run_id",
+			"permission_type", "snapshot_json", "snapshot_hash", "registry_hash",
+			"schema_hash", "presentation_hash", "created_at_unix_ms",
+		},
+		"ai_child_permission_snapshots": {
+			"child_snapshot_id", "endpoint_id", "parent_snapshot_id", "spawn_tool_call_id",
+			"parent_thread_id", "parent_run_id", "subagent_id", "child_thread_id",
+			"child_run_id", "state", "snapshot_json", "snapshot_hash", "registry_hash",
+			"schema_hash", "presentation_hash", "created_at_unix_ms", "finalized_at_unix_ms",
+		},
+		"ai_delegated_approval_requests": {
+			"action_id", "endpoint_id", "parent_thread_id", "parent_run_id", "parent_turn_id",
+			"subagent_id", "child_thread_id", "child_run_id", "child_turn_id",
+			"child_tool_call_id", "approval_id", "ref_hash", "request_fingerprint", "state", "status",
+			"delivery_state", "child_execution_state", "version", "surface_epoch",
+			"requested_at_unix_ms", "resolved_at_unix_ms", "expires_at_unix_ms",
+			"action_json", "created_at_unix_ms", "updated_at_unix_ms",
+		},
+		"ai_delegated_approval_events": {
+			"id", "endpoint_id", "parent_thread_id", "action_id", "event_type",
+			"version", "payload_json", "created_at_unix_ms",
+		},
+		"ai_delegated_approval_outbox": {
+			"id", "endpoint_id", "parent_thread_id", "action_id", "decision",
+			"delivery_state", "payload_json", "created_at_unix_ms", "delivered_at_unix_ms",
+		},
+		"ai_delegated_approval_idempotency": {
+			"actor_scope", "idempotency_key", "endpoint_id", "parent_thread_id",
+			"action_id", "approved", "response_json", "created_at_unix_ms",
+		},
 	}
 	for tableName, columns := range requiredColumns {
 		for _, columnName := range columns {
@@ -1186,6 +1363,15 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"idx_ai_flower_handoffs_idempotency",
 		"idx_ai_flower_handoffs_source",
 		"idx_ai_flower_handoffs_destination",
+		"idx_ai_permission_snapshots_owner",
+		"idx_ai_child_permission_snapshots_spawn",
+		"idx_ai_child_permission_snapshots_parent",
+		"idx_ai_child_permission_snapshots_child",
+		"idx_ai_delegated_approval_ref",
+		"idx_ai_delegated_approval_thread_status",
+		"idx_ai_delegated_approval_events_action",
+		"idx_ai_delegated_approval_outbox_pending",
+		"idx_ai_delegated_approval_idempotency_action",
 	}
 	for _, indexName := range requiredIndexes {
 		exists, err := sqliteutil.IndexExistsTx(tx, indexName)

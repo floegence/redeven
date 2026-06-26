@@ -3474,8 +3474,8 @@ func readAnyInt(raw any) int {
 	}
 }
 
-func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity string, round int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string, capability runCapabilityContract) string {
-	snapshot := buildPromptRuntimeSnapshot(r, objective, mode, complexity, round, isFirstRound, tools, state, exceptionOverlay, capability)
+func (r *run) buildLayeredSystemPrompt(objective string, permissionType string, complexity string, round int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string, capability runCapabilityContract) string {
+	snapshot := buildPromptRuntimeSnapshot(r, objective, permissionType, complexity, round, isFirstRound, tools, state, exceptionOverlay, capability)
 	document := buildPromptDocument(snapshot)
 	return document.render(layeredPromptStaticPrefixCache, promptStaticPrefixCacheKey(snapshot))
 }
@@ -3820,49 +3820,6 @@ func (r *run) persistAskUserWaitingSignal(signal askUserSignal, source string) (
 	}
 	toolID = r.persistSyntheticToolSuccess(toolID, "ask_user", args, result)
 	return toolID, len(questions)
-}
-
-func (r *run) persistExitPlanModeWaitingSignal(toolID string, args ExitPlanModeArgs, result ExitPlanModeResult) (string, int) {
-	if r == nil {
-		return "", 0
-	}
-	toolID = strings.TrimSpace(toolID)
-	if toolID == "" {
-		if id, err := newToolID(); err == nil {
-			toolID = id
-		} else {
-			toolID = "tool_exit_plan_mode_waiting"
-		}
-	}
-	args.Summary = truncateRunes(strings.TrimSpace(args.Summary), 280)
-	args.AllowedPrompts = normalizeExitPlanPromptRefs(args.AllowedPrompts)
-	if result.Summary == "" {
-		result.Summary = args.Summary
-	}
-	prompt := buildExitPlanModeWaitingPrompt(strings.TrimSpace(r.messageID), toolID, args)
-	if prompt == nil {
-		return "", 0
-	}
-	prompt.ReasoningSelection = r.currentReasoning
-	prompt = normalizeRequestUserInputPrompt(prompt)
-	if prompt == nil {
-		return "", 0
-	}
-	r.setWaitingPrompt(prompt)
-	blockArgs := map[string]any{}
-	if args.Summary != "" {
-		blockArgs["summary"] = args.Summary
-	}
-	if len(args.AllowedPrompts) > 0 {
-		blockArgs["allowed_prompts"] = args.AllowedPrompts
-	}
-	blockResult := map[string]any{
-		"summary":        strings.TrimSpace(result.Summary),
-		"waiting_prompt": prompt,
-		"waiting_user":   true,
-	}
-	toolID = r.persistSyntheticToolSuccess(toolID, "exit_plan_mode", blockArgs, blockResult)
-	return toolID, len(prompt.Questions)
 }
 
 func requestUserInputQuestionChoiceCount(questions []RequestUserInputQuestion) int {

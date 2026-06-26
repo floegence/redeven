@@ -1131,7 +1131,6 @@ export function EnvAppShell() {
         context_action: input.intent.context_action,
         working_dir: input.intent.suggested_working_dir,
         pending_files: input.intent.pending_attachments,
-        mode: 'act',
       });
       const threadId = trimString(bootstrap.thread.thread_id || bootstrap.thread_id);
       const handoffContext = flowerTurnLauncherHandoff();

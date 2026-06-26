@@ -89,7 +89,7 @@ export type SettingsResponse = Readonly<{
 }>;
 
 export type ThreadRunStatus = 'idle' | 'accepted' | 'running' | 'waiting_approval' | 'recovering' | 'finalizing' | 'waiting_user' | 'success' | 'failed' | 'canceled' | 'timed_out';
-export type ExecutionMode = 'act' | 'plan';
+export type PermissionType = 'readonly' | 'approval_required' | 'full_access';
 
 export type WaitingPromptActionView = AskUserAction;
 export type WaitingPromptChoiceView = AskUserChoice;
@@ -133,7 +133,7 @@ export type ThreadView = Readonly<{
   title: string;
   model_id?: string;
   model_locked?: boolean;
-  execution_mode?: ExecutionMode;
+  permission_type?: PermissionType;
   working_dir?: string;
   pinned_at_unix_ms?: number;
   queued_turn_count?: number;
@@ -217,9 +217,10 @@ function normalizeThreadRunStatus(raw: string | null | undefined): ThreadRunStat
   return 'idle';
 }
 
-function normalizeExecutionMode(raw: unknown): ExecutionMode {
-  const mode = String(raw ?? '').trim().toLowerCase();
-  return mode === 'plan' ? 'plan' : 'act';
+function normalizePermissionType(raw: unknown): PermissionType {
+  const permissionType = String(raw ?? '').trim().toLowerCase();
+  if (permissionType === 'readonly' || permissionType === 'full_access') return permissionType;
+  return 'approval_required';
 }
 
 function threadIsWaitingUser(thread: ThreadView | null | undefined): boolean {
@@ -286,8 +287,7 @@ function normalizeProtocolWaitingPrompt(raw: AIRequestUserInputPrompt | undefine
                 ? choice.actions.map((action): WaitingPromptActionView | null => {
                     const type = String(action?.type ?? '').trim().toLowerCase();
                     if (!type) return null;
-                    const mode = action?.mode === 'plan' ? 'plan' : action?.mode === 'act' ? 'act' : undefined;
-                    return { type, mode };
+                    return { type };
                   }).filter((action): action is WaitingPromptActionView => action !== null)
                 : [];
               return {
@@ -478,7 +478,7 @@ export interface AIChatContextValue {
 
   // Thread creation (only create on-demand; never create an empty thread on navigation)
   creatingThread: Accessor<boolean>;
-  ensureThreadForSend: (opts?: { executionMode?: ExecutionMode }) => Promise<string | null>;
+  ensureThreadForSend: (opts?: { permissionType?: PermissionType }) => Promise<string | null>;
 
   // Draft working dir (applies to new chats; locked after thread creation)
   draftWorkingDir: Accessor<string>;
@@ -1343,11 +1343,11 @@ export function createAIChatContextValue(): AIChatContextValue {
   // Thread creation
   const [creatingThread, setCreatingThread] = createSignal(false);
 
-  const createThread = async (opts?: { executionMode?: ExecutionMode }): Promise<ThreadView> => {
+  const createThread = async (opts?: { permissionType?: PermissionType }): Promise<ThreadView> => {
     const modelID = String(selectedCurrentModel() ?? '').trim();
     const body: any = { title: '' };
     if (modelID) body.model_id = modelID;
-    if (opts?.executionMode) body.execution_mode = normalizeExecutionMode(opts.executionMode);
+    if (opts?.permissionType) body.permission_type = normalizePermissionType(opts.permissionType);
     const workingDir = String(draftWorkingDir() ?? '').trim();
     if (workingDir) body.working_dir = workingDir;
     const resp = await fetchLocalApiJSON<CreateThreadResponse>('/_redeven_proxy/api/ai/threads', {
@@ -1357,7 +1357,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     return resp.thread;
   };
 
-  const ensureThreadForSend = async (opts?: { executionMode?: ExecutionMode }): Promise<string | null> => {
+  const ensureThreadForSend = async (opts?: { permissionType?: PermissionType }): Promise<string | null> => {
     if (protocol.status() !== 'connected') {
       notify.error('Not connected', 'Connecting to runtime...');
       return null;

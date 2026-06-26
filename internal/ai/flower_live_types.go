@@ -105,7 +105,7 @@ type FlowerLiveThreadPatch struct {
 	Title                  string                        `json:"title,omitempty"`
 	ModelID                string                        `json:"model_id,omitempty"`
 	ModelLocked            *bool                         `json:"model_locked,omitempty"`
-	ExecutionMode          string                        `json:"execution_mode,omitempty"`
+	PermissionType         string                        `json:"permission_type,omitempty"`
 	WorkingDir             string                        `json:"working_dir,omitempty"`
 	QueuedTurnCount        *int                          `json:"queued_turn_count,omitempty"`
 	RunStatus              string                        `json:"run_status,omitempty"`
@@ -132,7 +132,7 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 		Title               string                        `json:"title,omitempty"`
 		ModelID             string                        `json:"model_id,omitempty"`
 		ModelLocked         *bool                         `json:"model_locked,omitempty"`
-		ExecutionMode       string                        `json:"execution_mode,omitempty"`
+		PermissionType      string                        `json:"permission_type,omitempty"`
 		WorkingDir          string                        `json:"working_dir,omitempty"`
 		QueuedTurnCount     *int                          `json:"queued_turn_count,omitempty"`
 		RunStatus           string                        `json:"run_status,omitempty"`
@@ -155,7 +155,7 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 		Title:               p.Title,
 		ModelID:             p.ModelID,
 		ModelLocked:         p.ModelLocked,
-		ExecutionMode:       p.ExecutionMode,
+		PermissionType:      p.PermissionType,
 		WorkingDir:          p.WorkingDir,
 		QueuedTurnCount:     p.QueuedTurnCount,
 		RunStatus:           p.RunStatus,
@@ -209,7 +209,7 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 		Title               string                  `json:"title,omitempty"`
 		ModelID             string                  `json:"model_id,omitempty"`
 		ModelLocked         *bool                   `json:"model_locked,omitempty"`
-		ExecutionMode       string                  `json:"execution_mode,omitempty"`
+		PermissionType      string                  `json:"permission_type,omitempty"`
 		WorkingDir          string                  `json:"working_dir,omitempty"`
 		QueuedTurnCount     *int                    `json:"queued_turn_count,omitempty"`
 		RunStatus           string                  `json:"run_status,omitempty"`
@@ -235,7 +235,7 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 		Title:               raw.Title,
 		ModelID:             raw.ModelID,
 		ModelLocked:         raw.ModelLocked,
-		ExecutionMode:       raw.ExecutionMode,
+		PermissionType:      raw.PermissionType,
 		WorkingDir:          raw.WorkingDir,
 		QueuedTurnCount:     raw.QueuedTurnCount,
 		RunStatus:           raw.RunStatus,
@@ -325,42 +325,104 @@ type FlowerLiveActivityUpdatedPayload struct {
 type FlowerApprovalState string
 
 const (
-	FlowerApprovalStateRequested FlowerApprovalState = "requested"
-	FlowerApprovalStateApproved  FlowerApprovalState = "approved"
-	FlowerApprovalStateRejected  FlowerApprovalState = "rejected"
-	FlowerApprovalStateTimedOut  FlowerApprovalState = "timed_out"
-	FlowerApprovalStateCanceled  FlowerApprovalState = "canceled"
+	FlowerApprovalStateRequested   FlowerApprovalState = "requested"
+	FlowerApprovalStateApproved    FlowerApprovalState = "approved"
+	FlowerApprovalStateRejected    FlowerApprovalState = "rejected"
+	FlowerApprovalStateTimedOut    FlowerApprovalState = "timed_out"
+	FlowerApprovalStateCanceled    FlowerApprovalState = "canceled"
+	FlowerApprovalStateUnavailable FlowerApprovalState = "unavailable"
 )
 
 type FlowerApprovalStatus string
 
 const (
-	FlowerApprovalStatusPending  FlowerApprovalStatus = "pending"
-	FlowerApprovalStatusResolved FlowerApprovalStatus = "resolved"
+	FlowerApprovalStatusPending     FlowerApprovalStatus = "pending"
+	FlowerApprovalStatusResolved    FlowerApprovalStatus = "resolved"
+	FlowerApprovalStatusUnavailable FlowerApprovalStatus = "unavailable"
 )
 
+type FlowerApprovalOrigin string
+
+const (
+	FlowerApprovalOriginMainTool          FlowerApprovalOrigin = "main_tool"
+	FlowerApprovalOriginDelegatedSubagent FlowerApprovalOrigin = "delegated_subagent"
+)
+
+type FlowerApprovalSurfaceRole string
+
+const (
+	FlowerApprovalSurfacePrimaryAction FlowerApprovalSurfaceRole = "primary_action"
+	FlowerApprovalSurfaceLocator       FlowerApprovalSurfaceRole = "locator"
+	FlowerApprovalSurfaceMirror        FlowerApprovalSurfaceRole = "mirror"
+)
+
+type FlowerApprovalDeliveryState string
+
+const (
+	FlowerApprovalDeliveryWaiting     FlowerApprovalDeliveryState = "waiting_decision"
+	FlowerApprovalDeliveryPending     FlowerApprovalDeliveryState = "delivery_pending"
+	FlowerApprovalDeliveryDelivered   FlowerApprovalDeliveryState = "delivery_delivered"
+	FlowerApprovalDeliveryFailed      FlowerApprovalDeliveryState = "delivery_failed"
+	FlowerApprovalDeliveryAckUnknown  FlowerApprovalDeliveryState = "delivery_ack_unknown"
+	FlowerApprovalDeliveryUnavailable FlowerApprovalDeliveryState = "delivery_unavailable"
+)
+
+type FlowerApprovalChildExecutionState string
+
+const (
+	FlowerApprovalChildExecutionUnknown   FlowerApprovalChildExecutionState = "unknown"
+	FlowerApprovalChildExecutionPending   FlowerApprovalChildExecutionState = "pending"
+	FlowerApprovalChildExecutionRunning   FlowerApprovalChildExecutionState = "running"
+	FlowerApprovalChildExecutionSucceeded FlowerApprovalChildExecutionState = "succeeded"
+	FlowerApprovalChildExecutionFailed    FlowerApprovalChildExecutionState = "failed"
+	FlowerApprovalChildExecutionCanceled  FlowerApprovalChildExecutionState = "canceled"
+)
+
+type DelegatedApprovalRef struct {
+	ParentThreadID  string `json:"parent_thread_id"`
+	ParentRunID     string `json:"parent_run_id"`
+	ParentTurnID    string `json:"parent_turn_id,omitempty"`
+	SubagentID      string `json:"subagent_id"`
+	ChildThreadID   string `json:"child_thread_id"`
+	ChildRunID      string `json:"child_run_id"`
+	ChildTurnID     string `json:"child_turn_id,omitempty"`
+	ChildToolCallID string `json:"child_tool_call_id"`
+	ApprovalID      string `json:"approval_id"`
+}
+
 type FlowerApprovalAction struct {
-	ActionID       string                `json:"action_id"`
-	RunID          string                `json:"run_id"`
-	TurnID         string                `json:"turn_id,omitempty"`
-	StepID         string                `json:"step_id,omitempty"`
-	ToolID         string                `json:"tool_id"`
-	ToolName       string                `json:"tool_name"`
-	State          FlowerApprovalState   `json:"state"`
-	Status         FlowerApprovalStatus  `json:"status"`
-	Revision       int64                 `json:"revision"`
-	RequestedAtMs  int64                 `json:"requested_at_unix_ms"`
-	ResolvedAtMs   int64                 `json:"resolved_at_unix_ms,omitempty"`
-	ExpiresAtMs    int64                 `json:"expires_at_unix_ms,omitempty"`
-	CanApprove     bool                  `json:"can_approve"`
-	ExpectedSeq    int64                 `json:"expected_seq,omitempty"`
-	ReadOnlyReason string                `json:"read_only_reason,omitempty"`
-	Summary        FlowerApprovalSummary `json:"summary"`
+	ActionID            string                            `json:"action_id"`
+	Origin              FlowerApprovalOrigin              `json:"origin"`
+	RunID               string                            `json:"run_id,omitempty"`
+	TurnID              string                            `json:"turn_id,omitempty"`
+	StepID              string                            `json:"step_id,omitempty"`
+	ToolID              string                            `json:"tool_id,omitempty"`
+	ToolName            string                            `json:"tool_name"`
+	State               FlowerApprovalState               `json:"state"`
+	Status              FlowerApprovalStatus              `json:"status"`
+	Revision            int64                             `json:"revision"`
+	Version             int64                             `json:"version"`
+	SurfaceEpoch        int64                             `json:"surface_epoch,omitempty"`
+	SurfaceRole         FlowerApprovalSurfaceRole         `json:"surface_role,omitempty"`
+	Scope               string                            `json:"scope,omitempty"`
+	RequestedAtMs       int64                             `json:"requested_at_unix_ms"`
+	ResolvedAtMs        int64                             `json:"resolved_at_unix_ms,omitempty"`
+	ExpiresAtMs         int64                             `json:"expires_at_unix_ms,omitempty"`
+	CanApprove          bool                              `json:"can_approve"`
+	ExpectedSeq         int64                             `json:"expected_seq,omitempty"`
+	ReadOnlyReason      string                            `json:"read_only_reason,omitempty"`
+	DelegatedRef        *DelegatedApprovalRef             `json:"delegated_ref,omitempty"`
+	DeliveryState       FlowerApprovalDeliveryState       `json:"delivery_state,omitempty"`
+	ChildExecutionState FlowerApprovalChildExecutionState `json:"child_execution_state,omitempty"`
+	PrimaryWaitAnchor   string                            `json:"primary_wait_anchor,omitempty"`
+	Summary             FlowerApprovalSummary             `json:"summary"`
 }
 
 type FlowerApprovalSummary struct {
 	Label       string             `json:"label"`
 	Description string             `json:"description,omitempty"`
+	Command     string             `json:"command,omitempty"`
+	Cwd         string             `json:"cwd,omitempty"`
 	Effects     []string           `json:"effects,omitempty"`
 	Flags       []string           `json:"flags,omitempty"`
 	Targets     []FlowerSafeTarget `json:"targets,omitempty"`
@@ -531,13 +593,18 @@ type FlowerLiveEventsResponse struct {
 }
 
 type SubmitFlowerApprovalRequest struct {
-	ThreadID    string `json:"thread_id"`
-	RunID       string `json:"run_id"`
-	ActionID    string `json:"action_id"`
-	ToolID      string `json:"tool_id"`
-	Approved    bool   `json:"approved"`
-	ExpectedSeq int64  `json:"expected_seq"`
-	Revision    int64  `json:"revision"`
+	ThreadID       string                `json:"thread_id"`
+	Origin         FlowerApprovalOrigin  `json:"origin,omitempty"`
+	RunID          string                `json:"run_id"`
+	ActionID       string                `json:"action_id"`
+	ToolID         string                `json:"tool_id"`
+	Approved       bool                  `json:"approved"`
+	ExpectedSeq    int64                 `json:"expected_seq"`
+	Revision       int64                 `json:"revision"`
+	Version        int64                 `json:"version,omitempty"`
+	SurfaceEpoch   int64                 `json:"surface_epoch,omitempty"`
+	IdempotencyKey string                `json:"idempotency_key,omitempty"`
+	DelegatedRef   *DelegatedApprovalRef `json:"delegated_ref,omitempty"`
 }
 
 type SubmitFlowerApprovalResponse struct {

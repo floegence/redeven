@@ -109,6 +109,70 @@ var builtinDefinitions = map[string]Definition{
 			chipFields("operation", "display_name", "truncated"),
 		),
 	},
+	"read_file": {
+		Name:             "read_file",
+		Mutating:         false,
+		RequiresApproval: false,
+		Presentation: withPresentationOptions(
+			presentation(ToolPresentationContext, "readonly", "file", "context", "args", "result"),
+			operation("read"),
+			labelFields("display_name", "path"),
+			callPayloadFields("path", "offset", "limit"),
+			resultPayloadFields("display_name", "path", "content", "line_offset", "line_count", "total_lines", "truncated"),
+			chipFields("operation", "display_name", "path", "truncated"),
+		),
+	},
+	"read_files": {
+		Name:             "read_files",
+		Mutating:         false,
+		RequiresApproval: false,
+		Presentation: withPresentationOptions(
+			presentation(ToolPresentationContext, "readonly", "file", "context", "args", "result"),
+			operation("read_files"),
+			callPayloadFields("paths", "limit"),
+			resultPayloadFields("files", "summary", "truncated"),
+			chipFields("operation", "file_count", "truncated"),
+		),
+	},
+	"rgrep": {
+		Name:             "rgrep",
+		Mutating:         false,
+		RequiresApproval: false,
+		Presentation: withPresentationOptions(
+			presentation(ToolPresentationResearch, "readonly", "structured", "research", "args", "result"),
+			operation("rgrep"),
+			labelFields("query"),
+			callPayloadFields("query", "paths", "glob", "max_matches", "context_lines"),
+			resultPayloadFields("query", "matches", "truncated"),
+			chipFields("operation", "match_count", "truncated"),
+		),
+	},
+	"find": {
+		Name:             "find",
+		Mutating:         false,
+		RequiresApproval: false,
+		Presentation: withPresentationOptions(
+			presentation(ToolPresentationContext, "readonly", "structured", "context", "args", "result"),
+			operation("find"),
+			labelFields("root", "name"),
+			callPayloadFields("root", "name", "type", "max_results", "max_depth"),
+			resultPayloadFields("root", "results", "truncated"),
+			chipFields("operation", "result_count", "truncated"),
+		),
+	},
+	"web_fetch": {
+		Name:             "web_fetch",
+		Mutating:         false,
+		RequiresApproval: false,
+		Presentation: withPresentationOptions(
+			presentation(ToolPresentationResearch, "readonly", "web_search", "research", "web_fetch", "args"),
+			operation("web_fetch"),
+			labelFields("url"),
+			callPayloadFields("url", "format", "timeout_seconds"),
+			resultPayloadFields("url", "final_url", "content_type", "body", "truncated"),
+			chipFields("operation", "content_type", "truncated"),
+		),
+	},
 	"file.edit": {
 		Name:             "file.edit",
 		Mutating:         true,
@@ -208,17 +272,6 @@ var builtinDefinitions = map[string]Definition{
 			resultFallback("Update todos"),
 			resultPayloadFields("version", "summary", "todos", "truncated"),
 			chipFields("total", "pending", "in_progress", "completed", "cancelled", "truncated"),
-		),
-	},
-	"exit_plan_mode": {
-		Name:             "exit_plan_mode",
-		Mutating:         false,
-		RequiresApproval: false,
-		Presentation: withPresentationOptions(
-			presentation(ToolPresentationSignal, "blocking", "question", "interaction", "args", "result"),
-			callFallback("Exit plan mode"),
-			resultFallback("Exit plan mode"),
-			resultPayloadFields("summary", "allowed_prompts"),
 		),
 	},
 	"task_complete": {
@@ -336,7 +389,7 @@ func RequiresApprovalForInvocation(toolName string, args map[string]any) bool {
 		return profile.Risk != TerminalCommandRiskReadonly
 	}
 	if name == "subagents" {
-		return subagentInvocationRequiresApproval(args)
+		return false
 	}
 	return RequiresApproval(name)
 }
@@ -348,7 +401,7 @@ func IsMutatingForInvocation(toolName string, args map[string]any) bool {
 		return profile.Risk != TerminalCommandRiskReadonly
 	}
 	if name == "subagents" {
-		return subagentInvocationRequiresApproval(args)
+		return false
 	}
 	return IsMutating(name)
 }
@@ -378,10 +431,7 @@ func InvocationCommandProfile(toolName string, args map[string]any) TerminalComm
 
 func InvocationRiskInfo(toolName string, args map[string]any) (string, string) {
 	if strings.TrimSpace(toolName) == "subagents" {
-		if subagentInvocationRequiresApproval(args) {
-			return "approval", subagentInvocationAction(args)
-		}
-		return "readonly", subagentInvocationAction(args)
+		return "delegation", subagentInvocationAction(args)
 	}
 	profile := InvocationCommandProfile(toolName, args)
 	if profile.Risk == "" {
@@ -392,21 +442,4 @@ func InvocationRiskInfo(toolName string, args map[string]any) (string, string) {
 
 func subagentInvocationAction(args map[string]any) string {
 	return strings.ToLower(strings.TrimSpace(fmt.Sprint(args["action"])))
-}
-
-func subagentInvocationAgentType(args map[string]any) string {
-	return strings.ToLower(strings.TrimSpace(fmt.Sprint(args["agent_type"])))
-}
-
-func subagentInvocationRequiresApproval(args map[string]any) bool {
-	switch subagentInvocationAction(args) {
-	case "spawn":
-		return subagentInvocationAgentType(args) == "worker"
-	case "send_input":
-		return true
-	case "close", "close_all":
-		return true
-	default:
-		return false
-	}
 }

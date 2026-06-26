@@ -28,10 +28,6 @@ func TestBuiltInControlSignalDefinitions_UseFloretCoreSignals(t *testing.T) {
 			t.Fatalf("%s source/namespace=%s/%s, want floret/floret.core_signal", name, def.Source, def.Namespace)
 		}
 	}
-	exitPlan := defsByName["exit_plan_mode"]
-	if exitPlan.Source != "builtin" || exitPlan.Namespace != "builtin.signal" {
-		t.Fatalf("exit_plan_mode source/namespace=%s/%s, want builtin/builtin.signal", exitPlan.Source, exitPlan.Namespace)
-	}
 }
 
 func TestBuiltInToolDefinitions_AskUserDescriptionMentionsStructuredInput(t *testing.T) {

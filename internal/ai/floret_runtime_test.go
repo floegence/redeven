@@ -102,7 +102,7 @@ func TestRunFloretProjectedTurnCompletesEmptyTaskCompleteFromStreamedText(t *tes
 		Model: "compat/gpt-5-mini",
 		Input: RunInput{Text: "finish with streamed text and task_complete"},
 		Options: RunOptions{
-			Mode: config.AIModeAct,
+			PermissionType: config.AIPermissionApprovalRequired,
 		},
 	}, config.AIProvider{
 		ID:      "compat",
@@ -157,7 +157,7 @@ func TestRunFloretProjectedTurnNaturalCompactionContinuesStreaming(t *testing.T)
 		},
 		Input: RunInput{Text: "continue after compacting"},
 		Options: RunOptions{
-			Mode:            config.AIModeAct,
+			PermissionType:  config.AIPermissionApprovalRequired,
 			MaxInputTokens:  11000,
 			MaxOutputTokens: 500,
 		},
@@ -238,7 +238,7 @@ func TestRunFloretProjectedTurnProjectsWebSearchToolThroughFloretGateway(t *test
 		Model: "compat/gpt-5-mini",
 		Input: RunInput{Text: "search the web"},
 		Options: RunOptions{
-			Mode: config.AIModePlan,
+			PermissionType: config.AIPermissionReadonly,
 		},
 	}, config.AIProvider{
 		ID:      "compat",
@@ -745,7 +745,7 @@ func TestProjectFloretTaskCompleteCreatesMarkdownWhenNoVisibleTextExists(t *test
 		RunRequest{},
 		newRuntimeState(""),
 		TaskComplexityStandard,
-		config.AIModeAct,
+		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult: %v", err)
@@ -822,7 +822,7 @@ func TestProjectFloretTaskCompletePreservesStreamedMarkdownAfterActivity(t *test
 		RunRequest{},
 		newRuntimeState(""),
 		TaskComplexityStandard,
-		config.AIModeAct,
+		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult: %v", err)
@@ -884,7 +884,7 @@ func TestProjectFloretNaturalStopCreatesCanonicalMarkdownWithoutTextDelta(t *tes
 		RunRequest{},
 		newRuntimeState(""),
 		TaskComplexityStandard,
-		config.AIModeAct,
+		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult: %v", err)
@@ -942,7 +942,7 @@ func TestProjectFloretNaturalStopPreservesStreamedMarkdownAfterActivity(t *testi
 		RunRequest{},
 		newRuntimeState(""),
 		TaskComplexityStandard,
-		config.AIModeAct,
+		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult: %v", err)
@@ -1004,7 +1004,7 @@ func TestProjectFloretResultIgnoresDetachedRun(t *testing.T) {
 		RunRequest{},
 		newRuntimeState(""),
 		TaskComplexityStandard,
-		config.AIModeAct,
+		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult completed: %v", err)
@@ -1024,7 +1024,7 @@ func TestProjectFloretResultIgnoresDetachedRun(t *testing.T) {
 		RunRequest{},
 		newRuntimeState(""),
 		TaskComplexityStandard,
-		config.AIModeAct,
+		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult waiting: %v", err)
@@ -1054,15 +1054,13 @@ func TestProjectFloretResultIgnoresDetachedRun(t *testing.T) {
 	}
 }
 
-func TestProjectFloretExitPlanModeWaitingBuildsPromptFromSignalFacts(t *testing.T) {
+func TestProjectFloretUnknownWaitingSignalFailsAsUnsupportedSignal(t *testing.T) {
 	t.Parallel()
 
-	events := make([]any, 0, 4)
 	r := newRun(runOptions{})
-	r.id = "run_exit_plan_waiting"
-	r.threadID = "thread_exit_plan_waiting"
-	r.messageID = "msg_exit_plan_waiting"
-	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+	r.id = "run_unknown_waiting"
+	r.threadID = "thread_unknown_waiting"
+	r.messageID = "msg_unknown_waiting"
 
 	err := r.projectFloretResult(
 		t.Context(),
@@ -1072,54 +1070,23 @@ func TestProjectFloretExitPlanModeWaitingBuildsPromptFromSignalFacts(t *testing.
 				Steps: 1,
 			},
 			Signal: &flruntime.TurnSignal{
-				Name:   "exit_plan_mode",
-				CallID: "call_exit_plan",
+				Name:   "legacy_unknown_signal",
+				CallID: "call_unknown_waiting",
 				Payload: map[string]any{
-					"source":  "exit_plan_mode",
+					"source":  "legacy_unknown_signal",
 					"summary": "Need to edit files.",
-					"allowed_prompts": []ExitPlanPromptRef{{
-						Tool:   "apply_patch",
-						Prompt: "Allow edits",
-					}},
 				},
 			},
 		},
 		RunRequest{},
 		newRuntimeState(""),
 		TaskComplexityStandard,
-		config.AIModePlan,
+		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
-	if err != nil {
-		t.Fatalf("projectFloretResult: %v", err)
+	if err == nil {
+		t.Fatalf("projectFloretResult should reject unknown waiting signal")
 	}
-	prompt := r.snapshotWaitingPrompt()
-	if prompt == nil {
-		t.Fatalf("snapshotWaitingPrompt returned nil")
-	}
-	if prompt.ToolName != "exit_plan_mode" || prompt.ToolID != "call_exit_plan" || prompt.MessageID != "msg_exit_plan_waiting" {
-		t.Fatalf("prompt identity=%+v, want exit_plan_mode call prompt", prompt)
-	}
-	if len(prompt.Questions) != 1 {
-		t.Fatalf("questions=%+v, want one question", prompt.Questions)
-	}
-	question := prompt.Questions[0]
-	if !strings.Contains(question.Question, "Switch this thread to Act mode") {
-		t.Fatalf("question=%q, want Flower waiting prompt", question.Question)
-	}
-	if len(question.Choices) != 2 {
-		t.Fatalf("choices=%+v, want two choices", question.Choices)
-	}
-	firstChoice := question.Choices[0]
-	if len(firstChoice.Actions) != 1 || firstChoice.Actions[0].Type != requestUserInputActionSetMode || firstChoice.Actions[0].Mode != config.AIModeAct {
-		t.Fatalf("first choice actions=%+v, want set_mode act", firstChoice.Actions)
-	}
-	if r.getFinalizationReason() != finalizationReasonExitPlanModeWaiting {
-		t.Fatalf("finalization_reason=%q, want %q", r.getFinalizationReason(), finalizationReasonExitPlanModeWaiting)
-	}
-	if r.getEndReason() != "complete" {
-		t.Fatalf("end_reason=%q, want complete", r.getEndReason())
-	}
-	if len(events) == 0 {
-		t.Fatalf("stream events empty, want waiting projection events")
+	if !strings.Contains(err.Error(), "unsupported waiting control signal") {
+		t.Fatalf("error=%v, want unsupported waiting control signal", err)
 	}
 }

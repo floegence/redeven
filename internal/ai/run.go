@@ -13,6 +13,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -38,6 +40,7 @@ type runOptions struct {
 	WorkingDir      string
 	FilesystemScope *filesystemscope.Registry
 	Shell           string
+	Service         *Service
 
 	AIConfig *config.AIConfig
 
@@ -68,7 +71,6 @@ type runOptions struct {
 	SubagentDepth         int
 	AllowSubagentDelegate bool
 	ToolAllowlist         []string
-	ForceReadonlyExec     bool
 	NoUserInteraction     bool
 	WebSearchToolEnabled  bool
 	WebSearchMode         string
@@ -80,18 +82,22 @@ type runOptions struct {
 	terminalExecRunner func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
 
 	HostManagedContextCompaction bool
+
+	WebFetchHTTPClient *http.Client
+	WebFetchResolver   webFetchResolver
 }
 
 type run struct {
 	log *slog.Logger
 
-	stateDir     string
-	agentHomeDir string
-	workingDir   string
-	scope        *filesystemscope.Registry
-	shell        string
-	cfg          *config.AIConfig
-	runMode      string
+	stateDir       string
+	agentHomeDir   string
+	workingDir     string
+	scope          *filesystemscope.Registry
+	shell          string
+	service        *Service
+	cfg            *config.AIConfig
+	permissionType FlowerPermissionType
 
 	sessionMeta         *session.Meta
 	resolveProviderKey  func(providerID string) (string, bool, error)
@@ -185,18 +191,22 @@ type run struct {
 	collectedWebSourceOrder        []string
 	sourcesActivityAlreadyRecorded bool
 
-	subagentDepth         int
-	allowSubagentDelegate bool
-	toolAllowlist         map[string]struct{}
-	forceReadonlyExec     bool
-	noUserInteraction     bool
-	toolTargetPolicy      ToolTargetPolicy
-	targetToolExecutor    TargetToolExecutor
+	subagentDepth           int
+	allowSubagentDelegate   bool
+	toolAllowlist           map[string]struct{}
+	noUserInteraction       bool
+	allowDelegatedApproval  bool
+	delegatedApprovalParent *run
+	permissionSnapshot      PermissionSnapshot
+	toolTargetPolicy        ToolTargetPolicy
+	targetToolExecutor      TargetToolExecutor
 
 	skillManager    *skillManager
 	subagentRuntime subagentRuntime
 
 	terminalExecRunner func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
+	webFetchHTTPClient *http.Client
+	webFetchResolver   webFetchResolver
 }
 
 type assistantAnswerState struct {
@@ -220,6 +230,8 @@ type toolApprovalRequest struct {
 	decision      chan bool
 	toolName      string
 	argsHash      string
+	command       string
+	cwd           string
 	effects       []string
 	flags         []string
 	targets       []FlowerSafeTarget
@@ -255,7 +267,9 @@ func newRun(opts runOptions) *run {
 		workingDir:                workingDir,
 		scope:                     opts.FilesystemScope,
 		shell:                     strings.TrimSpace(opts.Shell),
+		service:                   opts.Service,
 		cfg:                       opts.AIConfig,
+		permissionType:            FlowerPermissionApprovalRequired,
 		sessionMeta:               runMeta,
 		resolveProviderKey:        opts.ResolveProviderKey,
 		resolveWebSearchKey:       opts.ResolveWebSearchKey,
@@ -289,7 +303,6 @@ func newRun(opts runOptions) *run {
 		activityFileActions:       make(map[string]FlowerActivityFileAction),
 		contextCompactionAnchors:  make(map[string]FlowerTimelineAnchor),
 		subagentDepth:             opts.SubagentDepth,
-		forceReadonlyExec:         opts.ForceReadonlyExec,
 		toolTargetPolicy:          normalizeToolTargetPolicy(opts.ToolTargetPolicy),
 		targetToolExecutor:        opts.TargetToolExecutor,
 		skillManager:              opts.SkillManager,
@@ -302,6 +315,8 @@ func newRun(opts runOptions) *run {
 		}(),
 		terminalExecRunner:           opts.terminalExecRunner,
 		hostManagedContextCompaction: opts.HostManagedContextCompaction,
+		webFetchHTTPClient:           opts.WebFetchHTTPClient,
+		webFetchResolver:             opts.WebFetchResolver,
 	}
 	if r.terminalExecRunner == nil {
 		r.terminalExecRunner = defaultTerminalExecRunner
@@ -2002,16 +2017,8 @@ func (r *run) finalizeIfContextCanceled(ctx context.Context) bool {
 	return true
 }
 
-func requiresApproval(toolName string, args map[string]any) bool {
-	return aitools.RequiresApprovalForInvocation(toolName, args)
-}
-
 func isMutatingInvocation(toolName string, args map[string]any) bool {
 	return aitools.IsMutatingForInvocation(toolName, args)
-}
-
-func isDangerousInvocation(toolName string, args map[string]any) bool {
-	return aitools.IsDangerousInvocation(toolName, args)
 }
 
 func marshalPersistJSON(v any, maxRunes int) string {
@@ -2251,6 +2258,35 @@ func cloneAnyMap(in map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+type floretToolExecutionAuthorization struct {
+	toolID   string
+	toolName string
+}
+
+type floretToolExecutionAuthorizationContextKey struct{}
+
+func contextWithFloretToolExecutionAuthorization(ctx context.Context, toolID string, toolName string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithValue(ctx, floretToolExecutionAuthorizationContextKey{}, floretToolExecutionAuthorization{
+		toolID:   strings.TrimSpace(toolID),
+		toolName: strings.TrimSpace(toolName),
+	})
+}
+
+func contextHasFloretToolExecutionAuthorization(ctx context.Context, toolID string, toolName string) bool {
+	if ctx == nil {
+		return false
+	}
+	auth, ok := ctx.Value(floretToolExecutionAuthorizationContextKey{}).(floretToolExecutionAuthorization)
+	if !ok {
+		return false
+	}
+	return strings.TrimSpace(auth.toolID) == strings.TrimSpace(toolID) &&
+		strings.TrimSpace(auth.toolName) == strings.TrimSpace(toolName)
 }
 
 func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string, args map[string]any) (*toolCallOutcome, error) {
@@ -2616,39 +2652,39 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 		r.assistantCreatedAtUnixMs = time.Now().UnixMilli()
 		r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: ""}}
 	}
-		blocks := make([]any, 0, len(r.assistantBlocks))
-		lastConcrete := -1
-		for _, blk := range r.assistantBlocks {
-			block := any(&persistedMarkdownBlock{Type: "markdown", Content: ""})
-			switch v := blk.(type) {
-			case nil:
-			case *persistedMarkdownBlock:
-				if v != nil {
-					cp := *v
-					block = &cp
-					if strings.TrimSpace(v.Content) != "" {
-						lastConcrete = len(blocks)
-					}
-				}
-			case *persistedThinkingBlock:
-				if v != nil {
-					cp := *v
-					block = &cp
+	blocks := make([]any, 0, len(r.assistantBlocks))
+	lastConcrete := -1
+	for _, blk := range r.assistantBlocks {
+		block := any(&persistedMarkdownBlock{Type: "markdown", Content: ""})
+		switch v := blk.(type) {
+		case nil:
+		case *persistedMarkdownBlock:
+			if v != nil {
+				cp := *v
+				block = &cp
+				if strings.TrimSpace(v.Content) != "" {
 					lastConcrete = len(blocks)
 				}
-			default:
-				block = v
+			}
+		case *persistedThinkingBlock:
+			if v != nil {
+				cp := *v
+				block = &cp
 				lastConcrete = len(blocks)
 			}
-			blocks = append(blocks, block)
+		default:
+			block = v
+			lastConcrete = len(blocks)
 		}
-		if lastConcrete >= 0 {
-			blocks = blocks[:lastConcrete+1]
-		} else {
-			blocks = nil
-		}
-		assistantAt := r.assistantCreatedAtUnixMs
-		r.muAssistant.Unlock()
+		blocks = append(blocks, block)
+	}
+	if lastConcrete >= 0 {
+		blocks = blocks[:lastConcrete+1]
+	} else {
+		blocks = nil
+	}
+	assistantAt := r.assistantCreatedAtUnixMs
+	r.muAssistant.Unlock()
 
 	msg := persistedMessage{
 		ID:        r.messageID,
@@ -2919,10 +2955,105 @@ func (r *run) recordSourcesActivity(_ string) {
 }
 
 func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, toolName string, args map[string]any) (any, error) {
+	if err := r.authorizeToolExecutionFromSnapshot(ctx, toolID, toolName); err != nil {
+		return nil, err
+	}
 	if r.shouldRouteTargetTool(toolName) {
 		return r.execTargetTool(ctx, toolID, toolName, args)
 	}
 	switch toolName {
+	case "read_file":
+		if !r.canExecuteReadonlyExclusiveTool() {
+			return nil, errors.New("readonly tool unavailable for current permission type")
+		}
+		if meta == nil || !meta.CanRead {
+			return nil, errors.New("read permission denied")
+		}
+		var p struct {
+			Path   string `json:"path"`
+			Offset int    `json:"offset"`
+			Limit  int    `json:"limit"`
+		}
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return r.toolFileRead(ctx, FileReadArgs{FilePath: p.Path, Offset: p.Offset, Limit: p.Limit})
+
+	case "read_files":
+		if !r.canExecuteReadonlyExclusiveTool() {
+			return nil, errors.New("readonly tool unavailable for current permission type")
+		}
+		if meta == nil || !meta.CanRead {
+			return nil, errors.New("read permission denied")
+		}
+		var p struct {
+			Paths []string `json:"paths"`
+			Limit int      `json:"limit"`
+		}
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return r.toolReadFiles(ctx, p.Paths, p.Limit)
+
+	case "find":
+		if !r.canExecuteReadonlyExclusiveTool() {
+			return nil, errors.New("readonly tool unavailable for current permission type")
+		}
+		if meta == nil || !meta.CanRead {
+			return nil, errors.New("read permission denied")
+		}
+		var p struct {
+			Root          string `json:"root"`
+			Name          string `json:"name"`
+			Type          string `json:"type"`
+			MaxResults    int    `json:"max_results"`
+			MaxDepth      int    `json:"max_depth"`
+			IncludeHidden bool   `json:"include_hidden"`
+		}
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return r.toolReadonlyFind(ctx, p.Root, p.Name, p.Type, p.MaxResults, p.MaxDepth, p.IncludeHidden)
+
+	case "rgrep":
+		if !r.canExecuteReadonlyExclusiveTool() {
+			return nil, errors.New("readonly tool unavailable for current permission type")
+		}
+		if meta == nil || !meta.CanRead {
+			return nil, errors.New("read permission denied")
+		}
+		var p struct {
+			Query         string   `json:"query"`
+			Paths         []string `json:"paths"`
+			Glob          []string `json:"glob"`
+			CaseSensitive bool     `json:"case_sensitive"`
+			FixedStrings  bool     `json:"fixed_strings"`
+			MaxMatches    int      `json:"max_matches"`
+			ContextLines  int      `json:"context_lines"`
+		}
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return r.toolReadonlyGrep(ctx, p.Query, p.Paths, p.Glob, p.CaseSensitive, p.FixedStrings, p.MaxMatches, p.ContextLines)
+
+	case "web_fetch":
+		if !r.canExecuteReadonlyExclusiveTool() {
+			return nil, errors.New("readonly tool unavailable for current permission type")
+		}
+		if meta == nil || !meta.CanRead {
+			return nil, errors.New("read permission denied")
+		}
+		var p webFetchArgs
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return r.toolWebFetch(ctx, p)
+
 	case "file.read":
 		if meta == nil || !meta.CanRead {
 			return nil, errors.New("read permission denied")
@@ -2992,8 +3123,8 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolTerminalExec(ctx, p.Command, p.Stdin, cwd, p.TimeoutMS)
 
 	case "web.search":
-		if meta == nil || !meta.CanExecute {
-			return nil, errors.New("execute permission denied")
+		if meta == nil || !meta.CanRead {
+			return nil, errors.New("read permission denied")
 		}
 		var p struct {
 			Query     string `json:"query"`
@@ -3106,13 +3237,13 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, err
 		}
 		out := map[string]any{
-			"name":           activation.Name,
-			"activation_id":  activation.ActivationID,
-			"already_active": alreadyActive,
-			"content":        activation.Content,
-			"content_ref":    activation.ContentRef,
-			"root_dir":       activation.RootDir,
-			"mode_hints":     activation.ModeHints,
+			"name":             activation.Name,
+			"activation_id":    activation.ActivationID,
+			"already_active":   alreadyActive,
+			"content":          activation.Content,
+			"content_ref":      activation.ContentRef,
+			"root_dir":         activation.RootDir,
+			"permission_hints": activation.PermissionHints,
 		}
 		if reason != "" {
 			out["reason"] = reason
@@ -3141,6 +3272,557 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)
 	}
+}
+
+func (r *run) canExecuteReadonlyExclusiveTool() bool {
+	return r != nil && r.permissionType == FlowerPermissionReadonly
+}
+
+func (r *run) authorizeToolExecutionFromSnapshot(ctx context.Context, toolID string, toolName string) error {
+	if r == nil || !permissionSnapshotActive(r.permissionSnapshot) {
+		return nil
+	}
+	toolName = strings.TrimSpace(toolName)
+	if toolName == "" {
+		return errors.New("missing tool_name")
+	}
+	policy, ok := r.permissionSnapshot.ToolPolicies[toolName]
+	if !ok || !stringSliceContains(r.permissionSnapshot.FloretToolNames, toolName) {
+		return errors.New("permission denied: tool unavailable for current permission snapshot")
+	}
+	switch policy.ApprovalDecision {
+	case ApprovalDecisionDeny:
+		return errors.New("permission denied: tool denied by current permission snapshot")
+	case ApprovalDecisionAsk:
+		if !contextHasFloretToolExecutionAuthorization(ctx, toolID, toolName) {
+			return errors.New("permission denied: tool approval required before execution")
+		}
+	}
+	return nil
+}
+
+func permissionSnapshotActive(snapshot PermissionSnapshot) bool {
+	return strings.TrimSpace(snapshot.SnapshotID) != "" ||
+		len(snapshot.FloretToolNames) > 0 ||
+		len(snapshot.ToolPolicies) > 0
+}
+
+func stringSliceContains(values []string, target string) bool {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return false
+	}
+	for _, value := range values {
+		if strings.TrimSpace(value) == target {
+			return true
+		}
+	}
+	return false
+}
+
+const (
+	readonlyReadFilesDefaultLimit   = 120
+	readonlyReadFilesMaxFiles       = 20
+	readonlyFindDefaultMaxResults   = 200
+	readonlyFindMaxResults          = 1000
+	readonlyFindDefaultMaxDepth     = 8
+	readonlyFindMaxDepth            = 32
+	readonlyGrepDefaultMaxMatches   = 200
+	readonlyGrepMaxMatches          = 1000
+	readonlyGrepDefaultContextLines = 0
+	readonlyGrepMaxContextLines     = 5
+	readonlyGrepMaxFileBytes        = 2 << 20
+)
+
+type readonlyReadFilesResult struct {
+	Files     []readonlyReadFileResult `json:"files"`
+	Truncated bool                     `json:"truncated,omitempty"`
+}
+
+type readonlyReadFileResult struct {
+	Path   string          `json:"path"`
+	Result *FileReadResult `json:"result,omitempty"`
+	Error  string          `json:"error,omitempty"`
+}
+
+func (r *run) toolReadFiles(ctx context.Context, paths []string, limit int) (readonlyReadFilesResult, error) {
+	if len(paths) == 0 {
+		return readonlyReadFilesResult{}, errors.New("paths is required")
+	}
+	truncated := false
+	if len(paths) > readonlyReadFilesMaxFiles {
+		paths = paths[:readonlyReadFilesMaxFiles]
+		truncated = true
+	}
+	if limit <= 0 {
+		limit = readonlyReadFilesDefaultLimit
+	}
+	if limit > maxFileReadLimit {
+		limit = maxFileReadLimit
+	}
+	out := readonlyReadFilesResult{
+		Files:     make([]readonlyReadFileResult, 0, len(paths)),
+		Truncated: truncated,
+	}
+	for _, path := range paths {
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
+		path = strings.TrimSpace(path)
+		item := readonlyReadFileResult{Path: path}
+		result, err := r.toolFileRead(ctx, FileReadArgs{FilePath: path, Limit: limit})
+		if err != nil {
+			item.Error = err.Error()
+		} else {
+			item.Result = &result
+		}
+		out.Files = append(out.Files, item)
+	}
+	return out, nil
+}
+
+type readonlyFindResult struct {
+	Root      string             `json:"root"`
+	Results   []readonlyFindItem `json:"results"`
+	Truncated bool               `json:"truncated,omitempty"`
+}
+
+type readonlyFindItem struct {
+	Path        string `json:"path"`
+	DisplayName string `json:"display_name"`
+	Type        string `json:"type"`
+	Size        int64  `json:"size,omitempty"`
+}
+
+func (r *run) toolReadonlyFind(ctx context.Context, root string, namePattern string, typeFilter string, maxResults int, maxDepth int, includeHidden bool) (readonlyFindResult, error) {
+	scope, err := r.runPathScope()
+	if err != nil {
+		return readonlyFindResult{}, mapToolCwdError(err)
+	}
+	root = strings.TrimSpace(root)
+	if root == "" {
+		root = scope.WorkingDirAbs
+	}
+	if strings.ContainsRune(root, 0) || strings.ContainsRune(namePattern, 0) {
+		return readonlyFindResult{}, errInvalidToolPath
+	}
+	resolvedRoot, err := scope.ResolveExistingPath(root)
+	if err != nil {
+		return readonlyFindResult{}, mapToolFilePathError(err)
+	}
+	info, err := os.Lstat(resolvedRoot)
+	if err != nil {
+		return readonlyFindResult{}, mapToolFilePathError(err)
+	}
+	if !info.IsDir() {
+		return readonlyFindResult{}, errors.New("root must be a directory")
+	}
+	typeFilter = strings.ToLower(strings.TrimSpace(typeFilter))
+	switch typeFilter {
+	case "", "any", "file", "dir", "directory", "symlink":
+	default:
+		return readonlyFindResult{}, errors.New("invalid type")
+	}
+	if maxResults <= 0 {
+		maxResults = readonlyFindDefaultMaxResults
+	}
+	if maxResults > readonlyFindMaxResults {
+		maxResults = readonlyFindMaxResults
+	}
+	if maxDepth <= 0 {
+		maxDepth = readonlyFindDefaultMaxDepth
+	}
+	if maxDepth > readonlyFindMaxDepth {
+		maxDepth = readonlyFindMaxDepth
+	}
+	matcher, err := newReadonlyNameMatcher(namePattern)
+	if err != nil {
+		return readonlyFindResult{}, err
+	}
+	out := readonlyFindResult{Root: resolvedRoot, Results: make([]readonlyFindItem, 0, min(maxResults, 64))}
+	walkErr := filepath.WalkDir(resolvedRoot, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		if path != resolvedRoot {
+			name := entry.Name()
+			if !includeHidden && strings.HasPrefix(name, ".") {
+				if entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if depthBeyondRoot(resolvedRoot, path) > maxDepth {
+				if entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
+		if path == resolvedRoot {
+			return nil
+		}
+		if len(out.Results) >= maxResults {
+			out.Truncated = true
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		resolved, err := scope.Registry.Resolve(path, filesystemscope.ResolveOptions{RequireExisting: true})
+		if err != nil || filepath.Clean(resolved.RealAbs) != filepath.Clean(path) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		itemType, size := readonlyFindEntryType(entry)
+		if !readonlyFindTypeMatches(typeFilter, itemType) || !matcher(entry.Name()) {
+			return nil
+		}
+		out.Results = append(out.Results, readonlyFindItem{
+			Path:        path,
+			DisplayName: displayNameForFilePath(path),
+			Type:        itemType,
+			Size:        size,
+		})
+		return nil
+	})
+	if walkErr != nil {
+		return out, walkErr
+	}
+	sort.SliceStable(out.Results, func(i, j int) bool {
+		return out.Results[i].Path < out.Results[j].Path
+	})
+	return out, nil
+}
+
+type readonlyGrepResult struct {
+	Query     string                 `json:"query"`
+	Matches   []readonlyGrepMatch    `json:"matches"`
+	Truncated bool                   `json:"truncated,omitempty"`
+	Stats     map[string]interface{} `json:"stats,omitempty"`
+}
+
+type readonlyGrepMatch struct {
+	Path        string                `json:"path"`
+	DisplayName string                `json:"display_name"`
+	Line        int                   `json:"line"`
+	Column      int                   `json:"column,omitempty"`
+	Text        string                `json:"text"`
+	Context     []readonlyGrepContext `json:"context,omitempty"`
+}
+
+type readonlyGrepContext struct {
+	Line int    `json:"line"`
+	Text string `json:"text"`
+}
+
+func (r *run) toolReadonlyGrep(ctx context.Context, query string, paths []string, globs []string, caseSensitive bool, fixedStrings bool, maxMatches int, contextLines int) (readonlyGrepResult, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return readonlyGrepResult{}, errors.New("query is required")
+	}
+	if strings.ContainsRune(query, 0) {
+		return readonlyGrepResult{}, errors.New("invalid query")
+	}
+	if maxMatches <= 0 {
+		maxMatches = readonlyGrepDefaultMaxMatches
+	}
+	if maxMatches > readonlyGrepMaxMatches {
+		maxMatches = readonlyGrepMaxMatches
+	}
+	if contextLines < 0 {
+		contextLines = readonlyGrepDefaultContextLines
+	}
+	if contextLines > readonlyGrepMaxContextLines {
+		contextLines = readonlyGrepMaxContextLines
+	}
+	matcher, err := newReadonlyGrepMatcher(query, caseSensitive, fixedStrings)
+	if err != nil {
+		return readonlyGrepResult{}, err
+	}
+	globMatcher, err := newReadonlyGlobMatcher(globs)
+	if err != nil {
+		return readonlyGrepResult{}, err
+	}
+	scope, err := r.runPathScope()
+	if err != nil {
+		return readonlyGrepResult{}, mapToolCwdError(err)
+	}
+	if len(paths) == 0 {
+		paths = []string{scope.WorkingDirAbs}
+	}
+	out := readonlyGrepResult{
+		Query:   query,
+		Matches: make([]readonlyGrepMatch, 0, min(maxMatches, 64)),
+		Stats:   map[string]interface{}{"engine": "go"},
+	}
+	for _, rawPath := range paths {
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
+		if strings.ContainsRune(rawPath, 0) {
+			return out, errInvalidToolPath
+		}
+		resolvedPath, err := scope.ResolveExistingPath(rawPath)
+		if err != nil {
+			return out, mapToolFilePathError(err)
+		}
+		info, err := os.Lstat(resolvedPath)
+		if err != nil {
+			return out, mapToolFilePathError(err)
+		}
+		if info.IsDir() {
+			err = filepath.WalkDir(resolvedPath, func(path string, entry os.DirEntry, err error) error {
+				if err != nil {
+					return nil
+				}
+				if ctxErr := ctx.Err(); ctxErr != nil {
+					return ctxErr
+				}
+				if path != resolvedPath && strings.HasPrefix(entry.Name(), ".") {
+					if entry.IsDir() {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+				if entry.IsDir() {
+					return nil
+				}
+				if len(out.Matches) >= maxMatches {
+					out.Truncated = true
+					return filepath.SkipAll
+				}
+				if err := r.grepReadonlyFile(ctx, scope, path, globMatcher, matcher, contextLines, maxMatches, &out); err != nil {
+					return err
+				}
+				return nil
+			})
+			if err != nil {
+				return out, err
+			}
+			continue
+		}
+		if err := r.grepReadonlyFile(ctx, scope, resolvedPath, globMatcher, matcher, contextLines, maxMatches, &out); err != nil {
+			return out, err
+		}
+	}
+	sort.SliceStable(out.Matches, func(i, j int) bool {
+		if out.Matches[i].Path == out.Matches[j].Path {
+			return out.Matches[i].Line < out.Matches[j].Line
+		}
+		return out.Matches[i].Path < out.Matches[j].Path
+	})
+	if out.Truncated {
+		out.Stats["limit_reason"] = "max_matches"
+	}
+	return out, nil
+}
+
+func (r *run) grepReadonlyFile(ctx context.Context, scope runPathScope, path string, globMatcher func(string) bool, matcher readonlyLineMatcher, contextLines int, maxMatches int, out *readonlyGrepResult) error {
+	if len(out.Matches) >= maxMatches {
+		out.Truncated = true
+		return nil
+	}
+	resolved, err := scope.Registry.Resolve(path, filesystemscope.ResolveOptions{RequireExisting: true})
+	if err != nil || filepath.Clean(resolved.RealAbs) != filepath.Clean(path) {
+		return nil
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > readonlyGrepMaxFileBytes {
+		return nil
+	}
+	if !globMatcher(path) {
+		return nil
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !utf8.Valid(content) {
+		return nil
+	}
+	lines := splitFileReadLines(string(content))
+	for idx, line := range lines {
+		if len(out.Matches) >= maxMatches {
+			out.Truncated = true
+			return nil
+		}
+		column, ok := matcher(line)
+		if !ok {
+			continue
+		}
+		match := readonlyGrepMatch{
+			Path:        path,
+			DisplayName: displayNameForFilePath(path),
+			Line:        idx + 1,
+			Column:      column,
+			Text:        strings.TrimRight(line, "\n"),
+		}
+		if contextLines > 0 {
+			match.Context = readonlyContextWindow(lines, idx, contextLines)
+		}
+		out.Matches = append(out.Matches, match)
+	}
+	return nil
+}
+
+type readonlyLineMatcher func(line string) (column int, ok bool)
+
+func newReadonlyGrepMatcher(query string, caseSensitive bool, fixedStrings bool) (readonlyLineMatcher, error) {
+	if fixedStrings {
+		needle := query
+		if !caseSensitive {
+			needle = strings.ToLower(needle)
+		}
+		return func(line string) (int, bool) {
+			haystack := line
+			if !caseSensitive {
+				haystack = strings.ToLower(haystack)
+			}
+			idx := strings.Index(haystack, needle)
+			if idx < 0 {
+				return 0, false
+			}
+			return utf8.RuneCountInString(line[:idx]) + 1, true
+		}, nil
+	}
+	pattern := query
+	if !caseSensitive {
+		pattern = "(?i)" + pattern
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+	return func(line string) (int, bool) {
+		loc := re.FindStringIndex(line)
+		if loc == nil {
+			return 0, false
+		}
+		return utf8.RuneCountInString(line[:loc[0]]) + 1, true
+	}, nil
+}
+
+func newReadonlyNameMatcher(pattern string) (func(string) bool, error) {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return func(string) bool { return true }, nil
+	}
+	if strings.ContainsRune(pattern, 0) {
+		return nil, errInvalidToolPath
+	}
+	return func(name string) bool {
+		ok, err := filepath.Match(pattern, name)
+		return err == nil && ok
+	}, nil
+}
+
+func newReadonlyGlobMatcher(globs []string) (func(string) bool, error) {
+	cleanGlobs := make([]string, 0, len(globs))
+	for _, glob := range globs {
+		glob = strings.TrimSpace(glob)
+		if glob == "" {
+			continue
+		}
+		if strings.ContainsRune(glob, 0) {
+			return nil, errInvalidToolPath
+		}
+		if _, err := filepath.Match(glob, "sample"); err != nil {
+			return nil, err
+		}
+		cleanGlobs = append(cleanGlobs, filepath.ToSlash(glob))
+	}
+	if len(cleanGlobs) == 0 {
+		return func(string) bool { return true }, nil
+	}
+	return func(path string) bool {
+		slashPath := filepath.ToSlash(path)
+		base := filepath.Base(path)
+		for _, glob := range cleanGlobs {
+			if ok, _ := filepath.Match(glob, base); ok {
+				return true
+			}
+			if ok, _ := filepath.Match(glob, slashPath); ok {
+				return true
+			}
+			if strings.HasPrefix(glob, "**/") {
+				if ok, _ := filepath.Match(strings.TrimPrefix(glob, "**/"), base); ok {
+					return true
+				}
+			}
+		}
+		return false
+	}, nil
+}
+
+func readonlyContextWindow(lines []string, matchIdx int, contextLines int) []readonlyGrepContext {
+	start := matchIdx - contextLines
+	if start < 0 {
+		start = 0
+	}
+	end := matchIdx + contextLines + 1
+	if end > len(lines) {
+		end = len(lines)
+	}
+	out := make([]readonlyGrepContext, 0, end-start-1)
+	for idx := start; idx < end; idx++ {
+		if idx == matchIdx {
+			continue
+		}
+		out = append(out, readonlyGrepContext{Line: idx + 1, Text: strings.TrimRight(lines[idx], "\n")})
+	}
+	return out
+}
+
+func readonlyFindEntryType(entry os.DirEntry) (string, int64) {
+	info, err := entry.Info()
+	size := int64(0)
+	if err == nil {
+		size = info.Size()
+	}
+	mode := entry.Type()
+	switch {
+	case mode&os.ModeSymlink != 0:
+		return "symlink", size
+	case entry.IsDir():
+		return "dir", size
+	default:
+		return "file", size
+	}
+}
+
+func readonlyFindTypeMatches(typeFilter string, itemType string) bool {
+	switch strings.ToLower(strings.TrimSpace(typeFilter)) {
+	case "", "any":
+		return true
+	case "directory":
+		return itemType == "dir"
+	default:
+		return itemType == typeFilter
+	}
+}
+
+func depthBeyondRoot(root string, path string) int {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == "." {
+		return 0
+	}
+	rel = filepath.Clean(rel)
+	depth := 1
+	for _, r := range rel {
+		if r == os.PathSeparator {
+			depth++
+		}
+	}
+	return depth
 }
 
 func (r *run) shouldRouteTargetTool(toolName string) bool {

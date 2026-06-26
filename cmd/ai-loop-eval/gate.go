@@ -23,22 +23,22 @@ type taskOutcome struct {
 }
 
 type suiteMetrics struct {
-	TaskCount            int     `json:"task_count"`
-	PassedTasks          int     `json:"passed_tasks"`
-	LoopSafeTasks        int     `json:"loop_safe_tasks"`
-	FallbackFreeTasks    int     `json:"fallback_free_tasks"`
-	RecoveryCandidates   int     `json:"recovery_candidates"`
-	RecoverySucceeded    int     `json:"recovery_succeeded"`
-	PassRate             float64 `json:"pass_rate"`
-	LoopSafetyRate       float64 `json:"loop_safety_rate"`
-	FallbackFreeRate     float64 `json:"fallback_free_rate"`
-	RecoverySuccessRate  float64 `json:"recovery_success_rate"`
-	AverageAccuracy      float64 `json:"average_accuracy"`
-	AverageNatural       float64 `json:"average_natural"`
-	AverageEfficiency    float64 `json:"average_efficiency"`
-	AverageOverall       float64 `json:"average_overall"`
-	HardFailCount        int     `json:"hard_fail_count"`
-	HasLoopUnsafeTask    bool    `json:"has_loop_unsafe_task"`
+	TaskCount           int     `json:"task_count"`
+	PassedTasks         int     `json:"passed_tasks"`
+	LoopSafeTasks       int     `json:"loop_safe_tasks"`
+	FallbackFreeTasks   int     `json:"fallback_free_tasks"`
+	RecoveryCandidates  int     `json:"recovery_candidates"`
+	RecoverySucceeded   int     `json:"recovery_succeeded"`
+	PassRate            float64 `json:"pass_rate"`
+	LoopSafetyRate      float64 `json:"loop_safety_rate"`
+	FallbackFreeRate    float64 `json:"fallback_free_rate"`
+	RecoverySuccessRate float64 `json:"recovery_success_rate"`
+	AverageAccuracy     float64 `json:"average_accuracy"`
+	AverageNatural      float64 `json:"average_natural"`
+	AverageEfficiency   float64 `json:"average_efficiency"`
+	AverageOverall      float64 `json:"average_overall"`
+	HardFailCount       int     `json:"hard_fail_count"`
+	HasLoopUnsafeTask   bool    `json:"has_loop_unsafe_task"`
 }
 
 type benchmarkMetrics struct {
@@ -166,9 +166,9 @@ func assessTaskOutcome(task evalTask, result taskResult) taskOutcome {
 		out.Passed = false
 		out.HardFailReasons = append(out.HardFailReasons, "thread_run_status_mismatch")
 	}
-	if threadAssertions.ExecutionMode != "" && threadAssertions.ExecutionMode != strings.TrimSpace(strings.ToLower(result.ThreadState.ExecutionMode)) {
+	if threadAssertions.PermissionType != "" && threadAssertions.PermissionType != strings.TrimSpace(strings.ToLower(result.ThreadState.PermissionType)) {
 		out.Passed = false
-		out.HardFailReasons = append(out.HardFailReasons, "thread_execution_mode_mismatch")
+		out.HardFailReasons = append(out.HardFailReasons, "thread_permission_type_mismatch")
 	}
 	switch threadAssertions.WaitingPrompt {
 	case "required":

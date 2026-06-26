@@ -451,22 +451,18 @@ func TestSnapshotWaitingPrompt_ExtractsStructuredQuestions(t *testing.T) {
 		ToolID:           "tool_waiting_prompt_structured",
 		ToolName:         "ask_user",
 		ReasonCode:       AskUserReasonUserDecisionRequired,
-		RequiredFromUser: []string{"Choose execution mode"},
+		RequiredFromUser: []string{"Choose the branch to inspect"},
 		EvidenceRefs:     []string{"tool_approval_1"},
 		Questions: []RequestUserInputQuestion{{
-			ID:                "mode_decision",
-			Header:            "Execution mode",
+			ID:                "branch_decision",
+			Header:            "Branch",
 			Question:          "Need your confirmation",
 			ResponseMode:      requestUserInputResponseModeSelect,
 			ChoicesExhaustive: testBoolPtr(true),
 			Choices: []RequestUserInputChoice{{
-				ChoiceID: "switch_to_act",
-				Label:    "Switch to Act mode",
+				ChoiceID: "use_main",
+				Label:    "Use main",
 				Kind:     requestUserInputChoiceKindSelect,
-				Actions: []RequestUserInputAction{{
-					Type: "set_mode",
-					Mode: "act",
-				}},
 			}},
 		}},
 	})
@@ -492,7 +488,7 @@ func TestSnapshotWaitingPrompt_ExtractsStructuredQuestions(t *testing.T) {
 	if got := strings.TrimSpace(gotPrompt.ReasonCode); got != AskUserReasonUserDecisionRequired {
 		t.Fatalf("ReasonCode=%q, want %q", got, AskUserReasonUserDecisionRequired)
 	}
-	if len(gotPrompt.RequiredFromUser) != 1 || gotPrompt.RequiredFromUser[0] != "Choose execution mode" {
+	if len(gotPrompt.RequiredFromUser) != 1 || gotPrompt.RequiredFromUser[0] != "Choose the branch to inspect" {
 		t.Fatalf("RequiredFromUser=%v", gotPrompt.RequiredFromUser)
 	}
 	if len(gotPrompt.EvidenceRefs) != 1 || gotPrompt.EvidenceRefs[0] != "tool_approval_1" {
@@ -501,26 +497,20 @@ func TestSnapshotWaitingPrompt_ExtractsStructuredQuestions(t *testing.T) {
 	if len(gotPrompt.Questions) != 1 {
 		t.Fatalf("questions len=%d, want 1", len(gotPrompt.Questions))
 	}
-	if got := strings.TrimSpace(gotPrompt.Questions[0].ID); got != "mode_decision" {
-		t.Fatalf("question id=%q, want %q", got, "mode_decision")
+	if got := strings.TrimSpace(gotPrompt.Questions[0].ID); got != "branch_decision" {
+		t.Fatalf("question id=%q, want %q", got, "branch_decision")
 	}
 	if len(prompt.Questions[0].Choices) != 1 {
 		t.Fatalf("choices len=%d, want 1", len(prompt.Questions[0].Choices))
 	}
-	if got := strings.TrimSpace(prompt.Questions[0].Choices[0].ChoiceID); got != "switch_to_act" {
-		t.Fatalf("choice id=%q, want %q", got, "switch_to_act")
+	if got := strings.TrimSpace(prompt.Questions[0].Choices[0].ChoiceID); got != "use_main" {
+		t.Fatalf("choice id=%q, want %q", got, "use_main")
 	}
-	if got := strings.TrimSpace(prompt.Questions[0].Choices[0].Label); got != "Switch to Act mode" {
-		t.Fatalf("label=%q, want %q", got, "Switch to Act mode")
+	if got := strings.TrimSpace(prompt.Questions[0].Choices[0].Label); got != "Use main" {
+		t.Fatalf("label=%q, want %q", got, "Use main")
 	}
-	if len(prompt.Questions[0].Choices[0].Actions) != 1 {
-		t.Fatalf("actions len=%d, want 1", len(prompt.Questions[0].Choices[0].Actions))
-	}
-	if got := strings.TrimSpace(prompt.Questions[0].Choices[0].Actions[0].Type); got != requestUserInputActionSetMode {
-		t.Fatalf("action type=%q, want %q", got, requestUserInputActionSetMode)
-	}
-	if got := strings.TrimSpace(prompt.Questions[0].Choices[0].Actions[0].Mode); got != "act" {
-		t.Fatalf("action mode=%q, want %q", got, "act")
+	if len(prompt.Questions[0].Choices[0].Actions) != 0 {
+		t.Fatalf("actions len=%d, want 0", len(prompt.Questions[0].Choices[0].Actions))
 	}
 }
 

@@ -58,7 +58,9 @@ func TestFloretHostLabelsExcludeTargetContext(t *testing.T) {
 }
 
 func TestFloretToolDefinitionStripsRedevenTargetSchema(t *testing.T) {
-	def, err := floretToolDefinition(ToolDef{
+	r := newRun(runOptions{})
+	r.permissionType = FlowerPermissionApprovalRequired
+	def, err := floretToolDefinition(r, ToolDef{
 		Name: "terminal.exec",
 		InputSchema: json.RawMessage(
 			`{"type":"object","properties":{"target_id":{"type":"string"},"command":{"type":"string"}},"required":["target_id","command"],"additionalProperties":false}`,
@@ -92,17 +94,20 @@ func TestFloretToolDefinitionStripsRedevenTargetSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PermissionFor: %v", err)
 	}
-	if permission.Mode != fltools.PermissionAllow {
-		t.Fatalf("readonly permission=%q, want allow", permission.Mode)
+	if permission.Mode != fltools.PermissionAsk {
+		t.Fatalf("permission=%q, want ask for approval_required shell", permission.Mode)
 	}
 }
 
-func TestFloretOpenWorldToolDefinitionKeepsApprovalLifecycle(t *testing.T) {
+func TestFloretOpenWorldToolDefinitionUsesConservativeStaticPermission(t *testing.T) {
 	t.Parallel()
 
-	def, err := floretToolDefinition(ToolDef{
+	r := newRun(runOptions{})
+	r.permissionType = FlowerPermissionApprovalRequired
+	def, err := floretToolDefinition(r, ToolDef{
 		Name:         "web.search",
 		ParallelSafe: true,
+		Visibility:   ToolVisibilitySharedReadonly,
 	})
 	if err != nil {
 		t.Fatalf("floretToolDefinition: %v", err)
@@ -117,7 +122,7 @@ func TestFloretOpenWorldToolDefinitionKeepsApprovalLifecycle(t *testing.T) {
 		t.Fatalf("web.search must be projected as open-world")
 	}
 	if def.Permission.Mode != fltools.PermissionAsk {
-		t.Fatalf("static permission=%q, want ask", def.Permission.Mode)
+		t.Fatalf("static permission=%q, want conservative ask for open-world Floret default", def.Permission.Mode)
 	}
 	permission, err := def.PermissionFor(fltools.PermissionRequest{
 		Name: "web.search",
@@ -126,15 +131,58 @@ func TestFloretOpenWorldToolDefinitionKeepsApprovalLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PermissionFor: %v", err)
 	}
-	if permission.Mode != fltools.PermissionAsk {
-		t.Fatalf("dynamic permission=%q, want ask for open-world network tool", permission.Mode)
+	if permission.Mode != fltools.PermissionAllow {
+		t.Fatalf("dynamic permission=%q, want allow for shared readonly search", permission.Mode)
+	}
+}
+
+func TestFloretUseSkillPermissionFollowsPermissionType(t *testing.T) {
+	t.Parallel()
+
+	filter := newPermissionToolFilter(true)
+	all := []ToolDef{{Name: "use_skill", Visibility: ToolVisibilityStandard, Capabilities: []ToolCapabilityClass{ToolCapabilityOpenWorld}}}
+	if got := toolNames(filter.FilterTools(FlowerPermissionReadonly, all)); len(got) != 0 {
+		t.Fatalf("readonly visible use_skill tools=%v, want hidden", got)
+	}
+
+	tests := []struct {
+		name           string
+		permissionType FlowerPermissionType
+		want           fltools.PermissionMode
+	}{
+		{name: "readonly denies direct invocation", permissionType: FlowerPermissionReadonly, want: fltools.PermissionDeny},
+		{name: "approval required asks", permissionType: FlowerPermissionApprovalRequired, want: fltools.PermissionAsk},
+		{name: "full access allows dynamically", permissionType: FlowerPermissionFullAccess, want: fltools.PermissionAllow},
+	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := newRun(runOptions{})
+			r.permissionType = tc.permissionType
+			def, err := floretToolDefinition(r, all[0])
+			if err != nil {
+				t.Fatalf("floretToolDefinition: %v", err)
+			}
+			permission, err := def.PermissionFor(fltools.PermissionRequest{
+				Name: "use_skill",
+				Args: map[string]any{"name": "frontend-design"},
+			})
+			if err != nil {
+				t.Fatalf("PermissionFor: %v", err)
+			}
+			if permission.Mode != tc.want {
+				t.Fatalf("permission=%q, want %q", permission.Mode, tc.want)
+			}
+		})
 	}
 }
 
 func TestFloretToolDefinitionRejectsInvalidSchema(t *testing.T) {
 	t.Parallel()
 
-	_, err := floretToolDefinition(ToolDef{
+	_, err := floretToolDefinition(nil, ToolDef{
 		Name:        "terminal.exec",
 		InputSchema: json.RawMessage(`{"type":"object"`),
 	})
@@ -1014,11 +1062,13 @@ func TestFloretToolRegistryDoesNotInjectRunTargetContext(t *testing.T) {
 		t.Fatalf("buildFloretToolRegistry: %v", err)
 	}
 
-	result := registry.Run(context.Background(), fltools.ToolCall{
+	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
 		ID:   "call_1",
 		Name: "terminal.exec",
 		Args: `{"command":"pwd"}`,
-	}, nil)
+	}, func(context.Context, fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
+		return fltools.PermissionDecisionAllow, nil
+	}, fltools.RunOptions{})
 	if result.IsError {
 		t.Fatalf("registry result error text=%q structured=%#v", result.Text, result.Structured)
 	}
@@ -1070,7 +1120,7 @@ func TestFloretToolRegistryDoesNotAddProfileOnlyMutationBlock(t *testing.T) {
 	}
 }
 
-func TestFloretToolRegistryAllowsReadonlySubagentReadonlyTools(t *testing.T) {
+func TestFloretToolRegistryDeniesReadonlySubagentShellTools(t *testing.T) {
 	t.Parallel()
 
 	executor := &recordingTargetToolExecutor{}
@@ -1081,6 +1131,7 @@ func TestFloretToolRegistryAllowsReadonlySubagentReadonlyTools(t *testing.T) {
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 		TargetToolExecutor: executor,
 	})
+	r.permissionType = FlowerPermissionReadonly
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{
 		Name: "terminal.exec",
 		InputSchema: json.RawMessage(
@@ -1098,11 +1149,11 @@ func TestFloretToolRegistryAllowsReadonlySubagentReadonlyTools(t *testing.T) {
 	}, nil, fltools.RunOptions{
 		HostContext: map[string]string{subagentToolHostContextAgentTypeKey: subagentAgentTypeExplore},
 	})
-	if result.IsError {
-		t.Fatalf("readonly explore command result error text=%q structured=%#v", result.Text, result.Structured)
+	if !result.IsError {
+		t.Fatalf("readonly subagent shell result=%#v, want permission denial", result)
 	}
-	if executor.call.TargetID == "" {
-		t.Fatalf("terminal.exec was not forwarded")
+	if executor.call.ToolName != "" {
+		t.Fatalf("terminal.exec must not be forwarded in readonly subagent: %#v", executor.call)
 	}
 }
 
@@ -1146,7 +1197,7 @@ func TestFloretToolRegistryAllowsWorkerSubagentMutatingTools(t *testing.T) {
 	}
 }
 
-func TestFloretToolRegistryBlocksWorkerMutationsWhenParentPlanModeApplies(t *testing.T) {
+func TestFloretToolRegistryBlocksWorkerMutationsWhenReadonlyPermissionApplies(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{
@@ -1155,9 +1206,14 @@ func TestFloretToolRegistryBlocksWorkerMutationsWhenParentPlanModeApplies(t *tes
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 		TargetToolExecutor: &recordingTargetToolExecutor{},
 	})
-	r.runMode = config.AIModePlan
+	r.permissionType = FlowerPermissionReadonly
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{
-		Name: "terminal.exec",
+		Name:       "terminal.exec",
+		Visibility: ToolVisibilityStandard,
+		Capabilities: []ToolCapabilityClass{
+			ToolCapabilityShell,
+			ToolCapabilityOpenWorld,
+		},
 		InputSchema: json.RawMessage(
 			`{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false}`,
 		),
@@ -1176,8 +1232,8 @@ func TestFloretToolRegistryBlocksWorkerMutationsWhenParentPlanModeApplies(t *tes
 			subagentToolHostContextAgentTypeKey: subagentAgentTypeWorker,
 		},
 	})
-	if !result.IsError || !strings.Contains(strings.ToLower(result.Text), "plan-mode readonly policy") {
-		t.Fatalf("plan worker mutation result=%#v, want plan-mode readonly denial", result)
+	if !result.IsError || !strings.Contains(strings.ToLower(result.Text), "rejected") {
+		t.Fatalf("readonly worker mutation result=%#v, want permission denial", result)
 	}
 }
 
@@ -1227,7 +1283,9 @@ func TestFloretToolRegistryUsesInvocationIdentityForSubagentTools(t *testing.T) 
 		ID:   "call_child_pwd",
 		Name: "terminal.exec",
 		Args: `{"command":"pwd"}`,
-	}, floretToolApproverForRun(r), fltools.RunOptions{
+	}, func(context.Context, fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
+		return fltools.PermissionDecisionAllow, nil
+	}, fltools.RunOptions{
 		RunID:    "turn_child",
 		ThreadID: "thread_child",
 		TurnID:   "turn_child",
@@ -1273,18 +1331,19 @@ func TestFloretToolRegistryUsesInvocationIdentityForSubagentTools(t *testing.T) 
 	}
 }
 
-func TestFloretToolRegistryDeniesSubagentNoUserInteractionApproval(t *testing.T) {
+func TestFloretToolRegistryDeniesNoUserInteractionApprovalWithoutDelegation(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{
 		AgentHomeDir:       t.TempDir(),
 		SessionMeta:        &session.Meta{CanRead: true, CanWrite: true},
-		AIConfig:           &config.AIConfig{ExecutionPolicy: &config.AIExecutionPolicy{RequireUserApproval: true}},
+		AIConfig:           &config.AIConfig{},
 		NoUserInteraction:  true,
 		SubagentDepth:      1,
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 		TargetToolExecutor: &recordingTargetToolExecutor{},
 	})
+	r.permissionType = FlowerPermissionApprovalRequired
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{
 		Name: "file.write",
 		InputSchema: json.RawMessage(
@@ -1309,44 +1368,61 @@ func TestFloretToolRegistryDeniesSubagentNoUserInteractionApproval(t *testing.T)
 			subagentToolHostContextAgentTypeKey: subagentAgentTypeWorker,
 		},
 	})
-	if !result.IsError || !strings.Contains(strings.ToLower(result.Text), "subagents cannot request user authorization") {
-		t.Fatalf("result=%#v, want subagent no-user-interaction denial", result)
+	if !result.IsError || !strings.Contains(strings.ToLower(result.Text), "delegated approval is unavailable") {
+		t.Fatalf("result=%#v, want no-user-interaction approval denial", result)
 	}
 }
 
 func TestSubagentsToolPermissionForDynamicActions(t *testing.T) {
 	t.Parallel()
 
-	def, err := floretToolDefinition(ToolDef{
-		Name:         "subagents",
-		Mutating:     false,
-		ParallelSafe: false,
-		InputSchema:  json.RawMessage(`{"type":"object","properties":{"action":{"type":"string"},"agent_type":{"type":"string"},"interrupt":{"type":"boolean"}},"additionalProperties":false}`),
-	})
-	if err != nil {
-		t.Fatalf("floretToolDefinition: %v", err)
+	permissionTypes := []FlowerPermissionType{
+		FlowerPermissionReadonly,
+		FlowerPermissionApprovalRequired,
+		FlowerPermissionFullAccess,
 	}
+	actions := []map[string]any{
+		{"action": "spawn", "agent_type": "reviewer"},
+		{"action": "spawn", "agent_type": "worker"},
+		{"action": "wait"},
+		{"action": "send_input", "interrupt": true},
+		{"action": "close"},
+		{"action": "list"},
+		{"action": "inspect"},
+		{"action": "close_all"},
+	}
+	for _, permissionType := range permissionTypes {
+		permissionType := permissionType
+		t.Run(permissionTypeString(permissionType), func(t *testing.T) {
+			t.Parallel()
 
-	readonly, err := def.PermissionFor(fltools.PermissionRequest{Name: "subagents", Args: map[string]any{"action": "spawn", "agent_type": "reviewer"}})
-	if err != nil {
-		t.Fatalf("PermissionFor readonly: %v", err)
-	}
-	if readonly.Mode != fltools.PermissionAllow {
-		t.Fatalf("reviewer spawn permission=%q, want allow", readonly.Mode)
-	}
-	worker, err := def.PermissionFor(fltools.PermissionRequest{Name: "subagents", Args: map[string]any{"action": "spawn", "agent_type": "worker"}})
-	if err != nil {
-		t.Fatalf("PermissionFor worker: %v", err)
-	}
-	if worker.Mode != fltools.PermissionAsk {
-		t.Fatalf("worker spawn permission=%q, want ask", worker.Mode)
-	}
-	interrupt, err := def.PermissionFor(fltools.PermissionRequest{Name: "subagents", Args: map[string]any{"action": "send_input", "interrupt": true}})
-	if err != nil {
-		t.Fatalf("PermissionFor interrupt: %v", err)
-	}
-	if interrupt.Mode != fltools.PermissionAsk {
-		t.Fatalf("interrupt send_input permission=%q, want ask", interrupt.Mode)
+			r := newRun(runOptions{})
+			r.permissionType = permissionType
+			def, err := floretToolDefinition(r, ToolDef{
+				Name:         "subagents",
+				Mutating:     false,
+				ParallelSafe: false,
+				Visibility:   ToolVisibilityDelegationControl,
+				Capabilities: []ToolCapabilityClass{ToolCapabilityDelegation},
+				InputSchema:  json.RawMessage(`{"type":"object","properties":{"action":{"type":"string"},"agent_type":{"type":"string"},"interrupt":{"type":"boolean"}},"additionalProperties":false}`),
+			})
+			if err != nil {
+				t.Fatalf("floretToolDefinition: %v", err)
+			}
+			for _, args := range actions {
+				args := args
+				t.Run(anyToString(args["action"]), func(t *testing.T) {
+					t.Parallel()
+					spec, err := def.PermissionFor(fltools.PermissionRequest{Name: "subagents", Args: args})
+					if err != nil {
+						t.Fatalf("PermissionFor: %v", err)
+					}
+					if spec.Mode != fltools.PermissionAllow {
+						t.Fatalf("subagents args=%v permission=%q, want allow for delegation control", args, spec.Mode)
+					}
+				})
+			}
+		})
 	}
 }
 

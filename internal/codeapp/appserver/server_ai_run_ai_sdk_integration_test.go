@@ -283,7 +283,7 @@ func TestServer_AI_Run_UsesModelGatewayAndPersistsAssistantMessage(t *testing.T)
 			"thread_id": threadID,
 			"model":     "openai/gpt-5-mini",
 			"input":     map[string]any{"text": "hi", "attachments": []any{}},
-			"options":   map[string]any{"mode": "act"},
+			"options":   map[string]any{"permission_type": "approval_required"},
 		}
 		b, _ := json.Marshal(body)
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads/"+threadID+"/turns", bytes.NewBuffer(b))

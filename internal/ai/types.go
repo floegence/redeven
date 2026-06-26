@@ -64,7 +64,6 @@ type RequestUserInputChoice struct {
 
 type RequestUserInputAction struct {
 	Type string `json:"type"`
-	Mode string `json:"mode,omitempty"`
 }
 
 type RequestUserInputResponse struct {
@@ -117,7 +116,7 @@ type SubmitRequestUserInputResponseResponse struct {
 	RunID                   string `json:"run_id"`
 	Kind                    string `json:"kind"`
 	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
-	AppliedExecutionMode    string `json:"applied_execution_mode,omitempty"`
+	AppliedPermissionType   string `json:"applied_permission_type,omitempty"`
 }
 
 // --- HTTP API types (snake_case, stable) ---
@@ -141,7 +140,7 @@ type ThreadView struct {
 	Title               string                       `json:"title"`
 	ModelID             string                       `json:"model_id"`
 	ModelLocked         bool                         `json:"model_locked"`
-	ExecutionMode       string                       `json:"execution_mode"`
+	PermissionType      string                       `json:"permission_type"`
 	WorkingDir          string                       `json:"working_dir"`
 	QueuedTurnCount     int                          `json:"queued_turn_count"`
 	RunStatus           string                       `json:"run_status"`
@@ -276,7 +275,7 @@ type FlowerSubagentDetailResponse struct {
 type CreateThreadRequest struct {
 	Title              string                      `json:"title"`
 	ModelID            string                      `json:"model_id,omitempty"`
-	ExecutionMode      string                      `json:"execution_mode,omitempty"`
+	PermissionType     string                      `json:"permission_type,omitempty"`
 	WorkingDir         string                      `json:"working_dir,omitempty"`
 	ReasoningSelection config.AIReasoningSelection `json:"reasoning_selection,omitempty"`
 }
@@ -288,7 +287,7 @@ type CreateThreadResponse struct {
 type PatchThreadRequest struct {
 	Title              *string         `json:"title,omitempty"`
 	ModelID            *string         `json:"model_id,omitempty"`
-	ExecutionMode      *string         `json:"execution_mode,omitempty"`
+	PermissionType     *string         `json:"permission_type,omitempty"`
 	Pinned             *bool           `json:"pinned,omitempty"`
 	ReasoningSelection json.RawMessage `json:"reasoning_selection,omitempty"`
 }
@@ -318,7 +317,7 @@ type FollowupItemView struct {
 	MessageID       string                   `json:"message_id"`
 	Text            string                   `json:"text"`
 	ModelID         string                   `json:"model_id,omitempty"`
-	ExecutionMode   string                   `json:"execution_mode,omitempty"`
+	PermissionType  string                   `json:"permission_type,omitempty"`
 	Position        int                      `json:"position"`
 	CreatedAtUnixMs int64                    `json:"created_at_unix_ms"`
 	Attachments     []FollowupAttachmentView `json:"attachments,omitempty"`
@@ -400,7 +399,8 @@ type RunOptions struct {
 	// RequireUserConfirmOnTaskComplete forces explicit user confirmation when model emits task_complete.
 	RequireUserConfirmOnTaskComplete bool `json:"require_user_confirm_on_task_complete,omitempty"`
 
-	// NoUserInteraction disables ask_user and approval waits for autonomous runs.
+	// NoUserInteraction prevents direct user-input prompts for autonomous runs.
+	// Tool approval waits are governed by the explicit approver/delegation policy.
 	NoUserInteraction bool `json:"no_user_interaction,omitempty"`
 
 	// ToolAllowlist is an internal runtime guard that limits the visible tool surface
@@ -408,12 +408,8 @@ type RunOptions struct {
 	// subagents rather than general user-facing requests.
 	ToolAllowlist []string `json:"tool_allowlist,omitempty"`
 
-	// ForceReadonlyExec is an internal runtime guard that blocks mutating
-	// terminal.exec invocations for the current run.
-	ForceReadonlyExec bool `json:"force_readonly_exec,omitempty"`
-
-	// Mode overrides runtime mode for this run (act|plan).
-	Mode string `json:"mode,omitempty"`
+	// PermissionType controls the run tool surface and approval policy.
+	PermissionType string `json:"permission_type,omitempty"`
 
 	// Provider controls.
 	ReasoningSelection config.AIReasoningSelection `json:"reasoning_selection,omitempty"`
@@ -626,7 +622,7 @@ type RealtimeEvent struct {
 	LastMessageAtUnixMs int64                        `json:"last_message_at_unix_ms,omitempty"`
 	ActiveRunID         string                       `json:"active_run_id,omitempty"`
 	LastContextRunID    string                       `json:"last_context_run_id,omitempty"`
-	ExecutionMode       string                       `json:"execution_mode,omitempty"`
+	PermissionType      string                       `json:"permission_type,omitempty"`
 	QueuedTurnCount     int                          `json:"queued_turn_count,omitempty"`
 	ReasoningSelection  config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
 	ReasoningCapability config.AIReasoningCapability `json:"reasoning_capability,omitempty"`

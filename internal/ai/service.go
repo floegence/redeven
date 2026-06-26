@@ -140,6 +140,8 @@ type Service struct {
 	flowerLiveByThread   map[string]*flowerLiveThreadStream
 	flowerLiveGeneration int64
 
+	delegatedApprovals map[string]*delegatedApprovalHandle
+
 	uploadsDir string
 	threadsDB  *threadstore.Store
 
@@ -287,6 +289,16 @@ func NewService(opts Options) (*Service, error) {
 	if resetCount > 0 {
 		logger.Info("ai: reset stale active thread run states after restart", "count", resetCount)
 	}
+	delegatedCtx, cancelDelegated := context.WithTimeout(context.Background(), persistTO)
+	delegatedUnavailableCount, delegatedUnavailableErr := ts.MarkPendingDelegatedApprovalsUnavailable(delegatedCtx, "runtime restarted before the delegated approval could be delivered", time.Now().UnixMilli())
+	cancelDelegated()
+	if delegatedUnavailableErr != nil {
+		_ = ts.Close()
+		return nil, delegatedUnavailableErr
+	}
+	if delegatedUnavailableCount > 0 {
+		logger.Info("ai: marked pending delegated approvals unavailable after restart", "count", delegatedUnavailableCount)
+	}
 
 	contextRepo := contextstore.NewRepository(ts)
 	snapshotCompactor := contextcompactor.New(contextRepo)
@@ -324,6 +336,7 @@ func NewService(opts Options) (*Service, error) {
 		realtimeThreadBySRV:          make(map[*rpc.Server]string),
 		flowerLiveByThread:           make(map[string]*flowerLiveThreadStream),
 		flowerLiveGeneration:         newFlowerLiveGeneration(),
+		delegatedApprovals:           make(map[string]*delegatedApprovalHandle),
 		suppressQueuedDrainByTh:      make(map[string]bool),
 		uploadsDir:                   uploadsDir,
 		threadsDB:                    ts,
@@ -413,6 +426,7 @@ func (s *Service) Close() error {
 	s.realtimeByThread = make(map[string]map[*rpc.Server]struct{})
 	s.realtimeThreadBySRV = make(map[*rpc.Server]string)
 	s.flowerLiveByThread = make(map[string]*flowerLiveThreadStream)
+	s.delegatedApprovals = make(map[string]*delegatedApprovalHandle)
 	maintenanceStopCh := s.maintenanceStopCh
 	maintenanceDoneCh := s.maintenanceDoneCh
 	s.maintenanceStopCh = nil
@@ -1472,11 +1486,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	}
 	cfg := s.cfg
 	desktopModelSource := s.desktopModelSource
-	modeFallback := "act"
-	if cfg != nil {
-		modeFallback = cfg.EffectiveMode()
-	}
-	req.Options.Mode = normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback)
+	req.Options.PermissionType = threadPermissionTypeString(th, "")
 	uploadsDir := s.uploadsDir
 	db = s.threadsDB
 	messageID, err := newMessageID()
@@ -1496,6 +1506,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		WorkingDir:          runWorkingDir,
 		FilesystemScope:     s.scope,
 		Shell:               s.shell,
+		Service:             s,
 		AIConfig:            cfg,
 		SessionMeta:         metaRef,
 		ResolveProviderKey:  s.resolveProviderKey,
@@ -1516,7 +1527,6 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		PersistOpTimeout:    persistTO,
 		SkillManager:        s.skillManager,
 		ToolAllowlist:       append([]string(nil), req.Options.ToolAllowlist...),
-		ForceReadonlyExec:   req.Options.ForceReadonlyExec,
 		NoUserInteraction:   req.Options.NoUserInteraction,
 		ToolTargetPolicy:    toolTargetPolicy,
 		TargetToolExecutor:  s.targetToolExecutor,
@@ -1769,7 +1779,6 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}
 	cancelPersist()
 
-	req.Options.Mode = normalizeRunMode(req.Options.Mode, cfg.EffectiveMode())
 	resolvedModel, err := s.resolveRunModel(ctx, cfg, req.Model, prepared.threadModelID, prepared.threadModelLocked, r)
 	if err != nil {
 		if errors.Is(err, ErrModelLockViolation) || errors.Is(err, ErrModelSwitchRequiresExplicitRestart) {

@@ -511,7 +511,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 		return err
 	}
 	meta := queuedTurnRecordToSessionMeta(rec, th.NamespacePublicID)
-	startReq, err := queuedTurnRecordToRunStartRequest(rec, th.ExecutionMode)
+	startReq, err := queuedTurnRecordToRunStartRequest(rec, th.PermissionType)
 	if err != nil {
 		if consumeErr := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, rec.QueueID); consumeErr != nil && !errors.Is(consumeErr, sql.ErrNoRows) {
 			err = errors.Join(err, consumeErr)
@@ -576,11 +576,10 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		return SendUserTurnResponse{}, ErrRunChanged
 	}
 
-	appliedExecutionMode := ""
+	appliedPermissionType := ""
 	a.mgr.svc.mu.Lock()
 	db := a.mgr.svc.threadsDB
 	persistTO := a.mgr.svc.persistOpTO
-	cfg := a.mgr.svc.cfg
 	a.mgr.svc.mu.Unlock()
 	if db == nil {
 		return SendUserTurnResponse{}, errors.New("threads store not ready")
@@ -617,11 +616,10 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		}
 		req.Model = lockedModelID
 	}
-	modeFallback := "act"
-	if cfg != nil {
-		modeFallback = cfg.EffectiveMode()
+	resolvedPermissionType, err := normalizePermissionType(threadPermissionTypeString(th, ""), FlowerPermissionApprovalRequired)
+	if err != nil {
+		resolvedPermissionType = FlowerPermissionApprovalRequired
 	}
-	resolvedExecutionMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback)
 	runStatus, _, _ := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
 	consumeSourceFollowup := func() {
 		if err := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, req.SourceFollowupID); err != nil && a.mgr.svc.log != nil {
@@ -647,31 +645,31 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		return nil
 	}
 	if openPrompt != nil && req.QueueAfterWaitingUser {
-		req.Options.Mode = resolvedExecutionMode
+		req.Options.PermissionType = permissionTypeString(resolvedPermissionType)
 		if err := normalizeTurnReasoning(&req.Options); err != nil {
 			return SendUserTurnResponse{}, err
 		}
-		appliedExecutionMode = resolvedExecutionMode
+		appliedPermissionType = permissionTypeString(resolvedPermissionType)
 		queued, position, err := a.mgr.svc.enqueueQueuedTurn(ctx, meta, req)
 		if err != nil {
 			return SendUserTurnResponse{}, err
 		}
 		consumeSourceFollowup()
 		return SendUserTurnResponse{
-			Kind:                 "queued",
-			QueueID:              strings.TrimSpace(queued.QueueID),
-			QueuePosition:        position,
-			AppliedExecutionMode: appliedExecutionMode,
+			Kind:                  "queued",
+			QueueID:               strings.TrimSpace(queued.QueueID),
+			QueuePosition:         position,
+			AppliedPermissionType: appliedPermissionType,
 		}, nil
 	}
 	if openPrompt != nil {
 		return SendUserTurnResponse{}, ErrWaitingUserQueueConflict
 	}
-	req.Options.Mode = resolvedExecutionMode
+	req.Options.PermissionType = permissionTypeString(resolvedPermissionType)
 	if err := normalizeTurnReasoning(&req.Options); err != nil {
 		return SendUserTurnResponse{}, err
 	}
-	appliedExecutionMode = resolvedExecutionMode
+	appliedPermissionType = permissionTypeString(resolvedPermissionType)
 
 	if activeRunID != "" {
 		queued, position, err := a.mgr.svc.enqueueQueuedTurn(ctx, meta, req)
@@ -680,10 +678,10 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		}
 		consumeSourceFollowup()
 		return SendUserTurnResponse{
-			Kind:                 "queued",
-			QueueID:              strings.TrimSpace(queued.QueueID),
-			QueuePosition:        position,
-			AppliedExecutionMode: appliedExecutionMode,
+			Kind:                  "queued",
+			QueueID:               strings.TrimSpace(queued.QueueID),
+			QueuePosition:         position,
+			AppliedPermissionType: appliedPermissionType,
 		}, nil
 	}
 	if a.mgr.svc.idleThreadCompactionOperation(endpointID, threadID) != "" {
@@ -693,10 +691,10 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		}
 		consumeSourceFollowup()
 		return SendUserTurnResponse{
-			Kind:                 "queued",
-			QueueID:              strings.TrimSpace(queued.QueueID),
-			QueuePosition:        position,
-			AppliedExecutionMode: appliedExecutionMode,
+			Kind:                  "queued",
+			QueueID:               strings.TrimSpace(queued.QueueID),
+			QueuePosition:         position,
+			AppliedPermissionType: appliedPermissionType,
 		}, nil
 	}
 	tctx, cancel = context.WithTimeout(ctx, persistTO)
@@ -712,10 +710,10 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		}
 		consumeSourceFollowup()
 		return SendUserTurnResponse{
-			Kind:                 "queued",
-			QueueID:              strings.TrimSpace(queued.QueueID),
-			QueuePosition:        position,
-			AppliedExecutionMode: appliedExecutionMode,
+			Kind:                  "queued",
+			QueueID:               strings.TrimSpace(queued.QueueID),
+			QueuePosition:         position,
+			AppliedPermissionType: appliedPermissionType,
 		}, nil
 	}
 
@@ -734,9 +732,9 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		return SendUserTurnResponse{}, err
 	}
 	return SendUserTurnResponse{
-		RunID:                runID,
-		Kind:                 "start",
-		AppliedExecutionMode: appliedExecutionMode,
+		RunID:                 runID,
+		Kind:                  "start",
+		AppliedPermissionType: appliedPermissionType,
 	}, nil
 }
 
@@ -771,7 +769,6 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 	a.mgr.svc.mu.Lock()
 	db := a.mgr.svc.threadsDB
 	persistTO := a.mgr.svc.persistOpTO
-	cfg := a.mgr.svc.cfg
 	a.mgr.svc.mu.Unlock()
 	if db == nil {
 		return SubmitRequestUserInputResponseResponse{}, errors.New("threads store not ready")
@@ -808,11 +805,10 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		}
 		req.Model = lockedModelID
 	}
-	modeFallback := "act"
-	if cfg != nil {
-		modeFallback = cfg.EffectiveMode()
+	resolvedPermissionType, err := normalizePermissionType(threadPermissionTypeString(th, ""), FlowerPermissionApprovalRequired)
+	if err != nil {
+		resolvedPermissionType = FlowerPermissionApprovalRequired
 	}
-	resolvedExecutionMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback)
 	runStatus, _, _ := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
 	openPrompt := a.mgr.svc.threadWaitingPrompt(ctx, th, runStatus)
 	if openPrompt == nil {
@@ -829,34 +825,7 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 	req.Input.StructuredResponse = &responseRecord
 	req.Input.SecretAnswers = secretAnswers
 
-	nextExecutionMode := resolvedExecutionMode
-	for _, question := range openPrompt.Questions {
-		answer := validatedResponse.Answers[question.ID]
-		choice, ok := requestUserInputChoiceByID(&question, answer.ChoiceID)
-		if !ok || choice == nil {
-			continue
-		}
-		for _, action := range choice.Actions {
-			normalizedAction, ok := normalizeRequestUserInputAction(action)
-			if !ok {
-				continue
-			}
-			if normalizedAction.Type == requestUserInputActionSetMode {
-				nextExecutionMode = normalizeRunMode(normalizedAction.Mode, resolvedExecutionMode)
-			}
-		}
-	}
-	if nextExecutionMode != resolvedExecutionMode {
-		uctx, ucancel := context.WithTimeout(ctx, persistTO)
-		if err := db.UpdateThreadExecutionMode(uctx, endpointID, threadID, nextExecutionMode); err != nil {
-			ucancel()
-			return SubmitRequestUserInputResponseResponse{}, err
-		}
-		ucancel()
-		resolvedExecutionMode = nextExecutionMode
-		a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
-	}
-	req.Options.Mode = resolvedExecutionMode
+	req.Options.PermissionType = permissionTypeString(resolvedPermissionType)
 	if req.Options.ReasoningSelection.IsZero() {
 		req.Options.ReasoningSelection = config.NormalizeAIReasoningSelection(openPrompt.ReasoningSelection)
 	} else {
@@ -893,6 +862,6 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		RunID:                   runID,
 		Kind:                    "start",
 		ConsumedWaitingPromptID: strings.TrimSpace(openPrompt.PromptID),
-		AppliedExecutionMode:    resolvedExecutionMode,
+		AppliedPermissionType:   permissionTypeString(resolvedPermissionType),
 	}, nil
 }

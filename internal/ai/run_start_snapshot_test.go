@@ -169,8 +169,7 @@ func TestPrepareRun_PropagatesInternalReadonlyRunOptions(t *testing.T) {
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hello"},
 		Options: RunOptions{
-			ToolAllowlist:     []string{"terminal.exec", "task_complete"},
-			ForceReadonlyExec: true,
+			ToolAllowlist: []string{"terminal.exec", "task_complete"},
 		},
 	}, nil, nil)
 	if err != nil {
@@ -184,9 +183,6 @@ func TestPrepareRun_PropagatesInternalReadonlyRunOptions(t *testing.T) {
 		prepared.r.markDone()
 	})
 
-	if !prepared.r.forceReadonlyExec {
-		t.Fatalf("forceReadonlyExec=false, want true")
-	}
 	if len(prepared.r.toolAllowlist) != 2 {
 		t.Fatalf("toolAllowlist size=%d, want 2", len(prepared.r.toolAllowlist))
 	}

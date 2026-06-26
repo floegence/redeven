@@ -16,7 +16,7 @@ const (
 	maxTodosPerWrite = 40
 )
 
-var controlSignalTodoNames = []string{"task_complete", "ask_user", "exit_plan_mode"}
+var controlSignalTodoNames = []string{"task_complete", "ask_user"}
 
 type TodoItem struct {
 	ID      string `json:"id"`

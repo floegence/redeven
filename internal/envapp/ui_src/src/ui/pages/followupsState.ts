@@ -12,7 +12,7 @@ export type FollowupItem = {
   message_id: string;
   text: string;
   model_id?: string;
-  execution_mode?: 'act' | 'plan';
+  permission_type?: 'readonly' | 'approval_required' | 'full_access';
   position: number;
   created_at_unix_ms: number;
   attachments?: FollowupAttachmentItem[];

@@ -1,13 +1,14 @@
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, Bot, ChevronDown, ChevronLeft, Pencil, Plus, Shield, Trash, Zap } from '@floegence/floe-webapp-core/icons';
+import { Bot, ChevronDown, ChevronLeft, Pencil, Plus, Shield, Trash, Zap } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerSettingsCopy } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import type {
   FlowerProviderDraft,
+  FlowerPermissionType,
   FlowerReasoningSelection,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
@@ -47,6 +48,7 @@ type FlowerSettingsDraftBuildResult =
   | Readonly<{ ok: false; error: string }>;
 
 const AUTO_SAVE_DELAY_MS = 700;
+const PERMISSION_TYPE_ORDER: readonly FlowerPermissionType[] = ['readonly', 'approval_required', 'full_access'];
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
@@ -189,8 +191,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.settings;
   const [providers, setProviders] = createSignal<readonly FlowerProviderDraft[]>([]);
   const [currentModelID, setCurrentModelID] = createSignal('');
-  const [requireUserApproval, setRequireUserApproval] = createSignal(true);
-  const [blockDangerousCommands, setBlockDangerousCommands] = createSignal(true);
+  const [permissionType, setPermissionType] = createSignal<FlowerPermissionType>('approval_required');
   const [defaultTimeoutMS, setDefaultTimeoutMS] = createSignal('120000');
   const [maxTimeoutMS, setMaxTimeoutMS] = createSignal('600000');
   const [localError, setLocalError] = createSignal('');
@@ -200,6 +201,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const [providerDialogMode, setProviderDialogMode] = createSignal<FlowerProviderDialogMode>('create');
   const [providerDialogProvider, setProviderDialogProvider] = createSignal<FlowerProviderDraft | null>(null);
   const [providerDialogError, setProviderDialogError] = createSignal('');
+  const permissionButtonRefs = new Map<FlowerPermissionType, HTMLButtonElement>();
 
   createEffect(() => {
     const snapshot = props.snapshot;
@@ -207,8 +209,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     const rows = snapshot.config.providers.map(cloneProviderForForm);
     setProviders(rows);
     setCurrentModelID(trim(snapshot.config.current_model_id));
-    setRequireUserApproval(snapshot.config.execution_policy.require_user_approval);
-    setBlockDangerousCommands(snapshot.config.execution_policy.block_dangerous_commands);
+    setPermissionType(snapshot.config.permission_type ?? 'approval_required');
     setDefaultTimeoutMS(String(snapshot.config.terminal_exec_policy.default_timeout_ms));
     setMaxTimeoutMS(String(snapshot.config.terminal_exec_policy.max_timeout_ms));
     setLocalError('');
@@ -232,6 +233,35 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   });
   const managedByLocalAIProfile = createMemo(() => externalModelSource() !== null);
   const markDirty = () => setDirty(true);
+  const focusPermissionType = (kind: FlowerPermissionType) => {
+    queueMicrotask(() => permissionButtonRefs.get(kind)?.focus());
+  };
+  const choosePermissionType = (kind: FlowerPermissionType, focus = false) => {
+    setPermissionType(kind);
+    markDirty();
+    if (focus) focusPermissionType(kind);
+  };
+  const movePermissionType = (delta: number) => {
+    const currentIndex = Math.max(0, PERMISSION_TYPE_ORDER.indexOf(permissionType()));
+    const nextIndex = (currentIndex + delta + PERMISSION_TYPE_ORDER.length) % PERMISSION_TYPE_ORDER.length;
+    choosePermissionType(PERMISSION_TYPE_ORDER[nextIndex], true);
+  };
+  const onPermissionTypeKeyDown = (event: KeyboardEvent) => {
+    switch (event.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+        event.preventDefault();
+        movePermissionType(1);
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        event.preventDefault();
+        movePermissionType(-1);
+        break;
+      default:
+        break;
+    }
+  };
 
   const updateProviders = (next: readonly FlowerProviderDraft[]) => {
     setProviders(next);
@@ -355,10 +385,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
         config: {
           schema_version: 1,
           current_model_id: current,
-          execution_policy: {
-            require_user_approval: requireUserApproval(),
-            block_dangerous_commands: blockDangerousCommands(),
-          },
+          permission_type: permissionType(),
           terminal_exec_policy: {
             default_timeout_ms: defaultTimeout,
             max_timeout_ms: maxTimeout,
@@ -421,8 +448,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
 
   const autosaveFingerprint = createMemo(() => JSON.stringify({
     current_model_id: currentModelID(),
-    require_user_approval: requireUserApproval(),
-    block_dangerous_commands: blockDangerousCommands(),
+    permission_type: permissionType(),
     default_timeout_ms: defaultTimeoutMS(),
     max_timeout_ms: maxTimeoutMS(),
     providers: normalizedProviders(),
@@ -559,26 +585,37 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
             </section>
 
             <section class="flower-settings-section flower-settings-policy-section">
-              <button type="button" class="flower-settings-policy-card" aria-pressed={requireUserApproval()} onClick={() => { setRequireUserApproval(!requireUserApproval()); markDirty(); }}>
+              <div class="flower-settings-policy-card flower-settings-policy-card-static">
                 <span class="flower-settings-policy-icon flower-settings-policy-icon-blue"><Shield class="h-4 w-4" /></span>
                 <span class="flower-settings-policy-copy">
-                  <span class="block text-sm font-semibold text-foreground">{copy().userApprovalTitle}</span>
-                  <span class="mt-1 block text-xs leading-relaxed text-muted-foreground">{copy().userApprovalDescription}</span>
+                  <span class="block text-sm font-semibold text-foreground">{copy().defaultPermissionTitle}</span>
+                  <span class="mt-1 block text-xs leading-relaxed text-muted-foreground">{copy().defaultPermissionDescription}</span>
                 </span>
-                <span class={cn('flower-settings-state-pill', requireUserApproval() && 'flower-settings-state-pill-active')}>
-                  {requireUserApproval() ? copy().on : copy().off}
-                </span>
-              </button>
-              <button type="button" class="flower-settings-policy-card" aria-pressed={blockDangerousCommands()} onClick={() => { setBlockDangerousCommands(!blockDangerousCommands()); markDirty(); }}>
-                <span class="flower-settings-policy-icon flower-settings-policy-icon-amber"><AlertTriangle class="h-4 w-4" /></span>
-                <span class="flower-settings-policy-copy">
-                  <span class="block text-sm font-semibold text-foreground">{copy().dangerousCommandsTitle}</span>
-                  <span class="mt-1 block text-xs leading-relaxed text-muted-foreground">{copy().dangerousCommandsDescription}</span>
-                </span>
-                <span class={cn('flower-settings-state-pill', blockDangerousCommands() && 'flower-settings-state-pill-active')}>
-                  {blockDangerousCommands() ? copy().blocked : copy().allowed}
-                </span>
-              </button>
+              </div>
+              <div class="flower-settings-permission-grid" role="radiogroup" aria-label={copy().defaultPermissionTitle}>
+                <For each={PERMISSION_TYPE_ORDER}>
+                  {(kind) => {
+                    const item = () => copy().permissionTypes[kind];
+                    return (
+                      <button
+                        ref={(el) => { permissionButtonRefs.set(kind, el); }}
+                        type="button"
+                        class={cn('flower-settings-policy-card', permissionType() === kind && 'flower-settings-policy-card-active')}
+                        role="radio"
+                        aria-checked={permissionType() === kind}
+                        tabIndex={permissionType() === kind ? 0 : -1}
+                        onKeyDown={onPermissionTypeKeyDown}
+                        onClick={() => choosePermissionType(kind)}
+                      >
+                        <span class="flower-settings-policy-copy">
+                          <span class="block text-sm font-semibold text-foreground">{item().label}</span>
+                          <span class="mt-1 block text-xs leading-relaxed text-muted-foreground">{item().description}</span>
+                        </span>
+                      </button>
+                    );
+                  }}
+                </For>
+              </div>
             </section>
 
             <section class="flower-settings-section flower-settings-providers-section">
@@ -673,12 +710,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
               </div>
             </section>
 
-            <Show when={!blockDangerousCommands()}>
-              <div class="flower-settings-warning-strip">
-                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                <div class="text-xs font-medium text-foreground">{copy().dangerousBlockingOff}</div>
-              </div>
-            </Show>
           </Show>
           <Show when={localError() || props.saveError}>
             <div role="alert" class="flower-settings-error-strip">{localError() || props.saveError}</div>

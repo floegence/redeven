@@ -165,15 +165,15 @@ func TestMarshalQueuedTurnOptions_PreservesNoUserInteraction(t *testing.T) {
 	t.Parallel()
 
 	raw := marshalQueuedTurnOptions(RunOptions{
-		Mode:              "plan",
+		PermissionType:    permissionTypeString(FlowerPermissionReadonly),
 		NoUserInteraction: true,
 	})
 	opts := unmarshalQueuedTurnOptions(raw)
 	if !opts.NoUserInteraction {
 		t.Fatalf("expected no_user_interaction to round-trip")
 	}
-	if opts.Mode != "plan" {
-		t.Fatalf("mode=%q, want plan", opts.Mode)
+	if opts.PermissionType != permissionTypeString(FlowerPermissionReadonly) {
+		t.Fatalf("permission_type=%q, want readonly", opts.PermissionType)
 	}
 }
 
@@ -186,16 +186,16 @@ func TestQueuedTurnRecordToRunStartRequest_PreservesStoredReasoningSelection(t *
 		MessageID:   "m_queue_reasoning",
 		TextContent: "continue later",
 		OptionsJSON: marshalQueuedTurnOptions(RunOptions{
-			Mode:               "act",
+			PermissionType:     permissionTypeString(FlowerPermissionFullAccess),
 			ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelHigh},
 		}),
 	}
-	req, err := queuedTurnRecordToRunStartRequest(rec, "plan")
+	req, err := queuedTurnRecordToRunStartRequest(rec, permissionTypeString(FlowerPermissionApprovalRequired))
 	if err != nil {
 		t.Fatalf("queuedTurnRecordToRunStartRequest: %v", err)
 	}
-	if req.Options.Mode != "act" {
-		t.Fatalf("mode=%q, want stored act mode", req.Options.Mode)
+	if req.Options.PermissionType != permissionTypeString(FlowerPermissionFullAccess) {
+		t.Fatalf("permission_type=%q, want full_access", req.Options.PermissionType)
 	}
 	if req.Options.ReasoningSelection.Level != config.AIReasoningLevelHigh {
 		t.Fatalf("reasoning_selection=%+v, want stored high selection", req.Options.ReasoningSelection)

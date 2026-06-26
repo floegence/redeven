@@ -1248,12 +1248,14 @@ describe('Flower live projection', () => {
     const approval = applyFlowerLiveEvent(base, 0, event(1, 'approval.requested', {
       action: {
         action_id: 'appr-1',
+        origin: 'main_tool',
         run_id: 'run-1',
         tool_id: 'tool-1',
         tool_name: 'terminal.exec',
         state: 'requested',
         status: 'pending',
         revision: 1,
+        version: 1,
         requested_at_ms: 3000,
         can_approve: true,
         summary: { label: 'terminal.exec' },
@@ -1484,6 +1486,176 @@ describe('Flower live projection', () => {
     expect(result.thread.read_status.snapshot.activity_signature).toBe('sig-20');
   });
 
+  it('keeps delegated approval delivery states and fail-closes missing surface roles', () => {
+    const initial = thread({
+      status: 'running',
+      permission_type: 'approval_required',
+    });
+    const delegatedRef = {
+      parent_thread_id: 'th-live',
+      parent_run_id: 'run-parent',
+      subagent_id: 'child-1',
+      child_thread_id: 'child-thread-1',
+      child_run_id: 'child-run-1',
+      child_tool_call_id: 'tool-child-1',
+      approval_id: 'approval-child-1',
+    };
+    const mapped = mapFlowerLiveEvents({
+      events: [{
+        schema_version: 1,
+        seq: 1,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        run_id: 'run-parent',
+        at_unix_ms: 4000,
+        kind: 'approval.requested',
+        payload: {
+          action: {
+            action_id: 'dappr-1',
+            origin: 'delegated_subagent',
+            run_id: 'run-parent',
+            tool_id: 'tool-child-1',
+            tool_name: 'terminal.exec',
+            state: 'approved',
+            status: 'resolved',
+            revision: 1,
+            version: 2,
+            requested_at_unix_ms: 3000,
+            resolved_at_unix_ms: 3500,
+            can_approve: true,
+            delivery_state: 'delivery_pending',
+            child_execution_state: 'pending',
+            delegated_ref: delegatedRef,
+            summary: { label: 'Run command' },
+          },
+        },
+      }, {
+        schema_version: 1,
+        seq: 2,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        run_id: 'run-parent',
+        at_unix_ms: 4100,
+        kind: 'thread.patched',
+        payload: {
+          patch: {
+            permission_type: 'readonly',
+          },
+        },
+      }, {
+        schema_version: 1,
+        seq: 3,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        run_id: 'run-parent',
+        at_unix_ms: 4200,
+        kind: 'approval.resolved',
+        payload: {
+          action: {
+            action_id: 'dappr-2',
+            origin: 'delegated_subagent',
+            run_id: 'run-parent',
+            tool_id: 'tool-child-2',
+            tool_name: 'terminal.exec',
+            state: 'unavailable',
+            status: 'unavailable',
+            revision: 1,
+            version: 2,
+            requested_at_unix_ms: 3000,
+            can_approve: false,
+            delivery_state: 'delivery_unavailable',
+            read_only_reason: 'Runtime restarted.',
+            delegated_ref: {
+              ...delegatedRef,
+              child_tool_call_id: 'tool-child-2',
+              approval_id: 'approval-child-2',
+            },
+            summary: { label: 'Run command' },
+          },
+        },
+      }],
+      next_cursor: 3,
+      retained_from_seq: 1,
+    });
+    const applied = applyEvents(initial, 0, mapped.events);
+
+    expect(applied.thread.permission_type).toBe('readonly');
+    expect(applied.thread.approval_actions?.map((action) => action.action_id)).toEqual(['dappr-1', 'dappr-2']);
+    expect(applied.thread.approval_actions?.[0]).toMatchObject({
+      action_id: 'dappr-1',
+      surface_role: 'mirror',
+      delivery_state: 'delivery_pending',
+      can_approve: true,
+    });
+    expect(applied.thread.approval_actions?.[1]).toMatchObject({
+      action_id: 'dappr-2',
+      surface_role: 'mirror',
+      status: 'unavailable',
+      delivery_state: 'delivery_unavailable',
+      can_approve: false,
+      read_only_reason: 'Runtime restarted.',
+    });
+  });
+
+  it('keeps delegated approvals that are keyed only by delegated ref', () => {
+    const initial = thread({
+      status: 'running',
+      permission_type: 'approval_required',
+    });
+    const delegatedRef = {
+      parent_thread_id: 'th-live',
+      parent_run_id: 'run-parent',
+      subagent_id: 'child-1',
+      child_thread_id: 'child-thread-1',
+      child_run_id: 'child-run-1',
+      child_tool_call_id: 'tool-child-1',
+      approval_id: 'approval-child-1',
+    };
+    const mapped = mapFlowerLiveEvents({
+      events: [{
+        schema_version: 1,
+        seq: 1,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        at_unix_ms: 4000,
+        kind: 'approval.requested',
+        payload: {
+          action: {
+            action_id: 'dappr-ref-only',
+            origin: 'delegated_subagent',
+            tool_name: 'terminal.exec',
+            state: 'requested',
+            status: 'pending',
+            revision: 1,
+            version: 1,
+            surface_epoch: 1,
+            surface_role: 'primary_action',
+            requested_at_unix_ms: 3000,
+            can_approve: true,
+            delivery_state: 'waiting_decision',
+            child_execution_state: 'pending',
+            delegated_ref: delegatedRef,
+            summary: { label: 'Run command' },
+          },
+        },
+      }],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+
+    const applied = applyEvents(initial, 0, mapped.events);
+
+    expect(applied.thread.approval_actions?.map((action) => action.action_id)).toEqual(['dappr-ref-only']);
+    expect(applied.thread.approval_actions?.[0]).toMatchObject({
+      origin: 'delegated_subagent',
+      delegated_ref: delegatedRef,
+      surface_role: 'primary_action',
+      can_approve: true,
+    });
+    expect(applied.thread.approval_actions?.[0].run_id).toBeUndefined();
+    expect(applied.thread.approval_actions?.[0].tool_id).toBeUndefined();
+  });
+
   it('applies normalized reasoning fields from thread patches', () => {
     const initial = thread({
       reasoning_selection: { level: 'medium' },
@@ -1687,12 +1859,14 @@ describe('Flower live projection', () => {
         approval_actions: {
           'appr-1': {
             action_id: 'appr-1',
+            origin: 'main_tool',
             run_id: 'run-1',
             tool_id: 'tool-1',
             tool_name: 'terminal.exec',
             state: 'requested',
             status: 'pending',
             revision: 1,
+            version: 1,
             requested_at_ms: 2000,
             can_approve: true,
             expected_seq: 5,

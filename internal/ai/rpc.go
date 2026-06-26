@@ -41,7 +41,7 @@ type aiSendUserTurnResp struct {
 	QueueID                 string `json:"queue_id,omitempty"`
 	QueuePosition           int    `json:"queue_position,omitempty"`
 	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
-	AppliedExecutionMode    string `json:"applied_execution_mode,omitempty"`
+	AppliedPermissionType   string `json:"applied_permission_type,omitempty"`
 }
 
 type aiSubmitRequestUserInputResponseReq struct {
@@ -58,7 +58,7 @@ type aiSubmitRequestUserInputResponseResp struct {
 	RunID                   string `json:"run_id"`
 	Kind                    string `json:"kind"`
 	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
-	AppliedExecutionMode    string `json:"applied_execution_mode,omitempty"`
+	AppliedPermissionType   string `json:"applied_permission_type,omitempty"`
 }
 
 type aiCompactThreadContextReq struct {
@@ -152,7 +152,7 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 			QueueID:                 strings.TrimSpace(resp.QueueID),
 			QueuePosition:           resp.QueuePosition,
 			ConsumedWaitingPromptID: strings.TrimSpace(resp.ConsumedWaitingPromptID),
-			AppliedExecutionMode:    strings.TrimSpace(resp.AppliedExecutionMode),
+			AppliedPermissionType:   strings.TrimSpace(resp.AppliedPermissionType),
 		}, nil
 	})
 
@@ -182,7 +182,7 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 			RunID:                   strings.TrimSpace(resp.RunID),
 			Kind:                    strings.TrimSpace(resp.Kind),
 			ConsumedWaitingPromptID: strings.TrimSpace(resp.ConsumedWaitingPromptID),
-			AppliedExecutionMode:    strings.TrimSpace(resp.AppliedExecutionMode),
+			AppliedPermissionType:   strings.TrimSpace(resp.AppliedPermissionType),
 		}, nil
 	})
 

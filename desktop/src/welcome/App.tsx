@@ -5938,7 +5938,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         prompt,
         context_action: input.intent.context_action,
         working_dir: input.intent.suggested_working_dir,
-        mode: 'act',
       });
       const threadID = trimString(bootstrap.thread.thread_id || bootstrap.thread_id);
       if (!threadID) {

@@ -64,12 +64,17 @@ type ThreadPatchInput = Readonly<{
 
 type RuntimeApprovalSubmitInput = Readonly<{
   thread_id: string;
-  run_id: string;
+  origin?: FlowerSubmitApprovalRequest['origin'];
   action_id: string;
-  tool_id: string;
   approved: boolean;
   expected_seq?: number;
   revision?: number;
+  version?: number;
+  surface_epoch?: number;
+  idempotency_key?: string;
+  delegated_ref?: FlowerSubmitApprovalRequest['delegated_ref'];
+  run_id?: string;
+  tool_id?: string;
 }>;
 
 export type FlowerRuntimeTransport = Readonly<{
@@ -228,12 +233,17 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       if (!tid) throw new Error(missingThreadIDMessage(options));
       await options.transport.submitApproval({
         thread_id: tid,
-        run_id: trim(input.run_id),
+        ...(input.origin ? { origin: input.origin } : {}),
         action_id: trim(input.action_id),
-        tool_id: trim(input.tool_id),
         approved: Boolean(input.approved),
         expected_seq: Math.max(0, Math.floor(Number(input.expected_seq ?? 0))) || undefined,
         revision: Math.max(0, Math.floor(Number(input.revision ?? 0))) || undefined,
+        version: Math.max(0, Math.floor(Number(input.version ?? 0))) || undefined,
+        surface_epoch: Math.max(0, Math.floor(Number(input.surface_epoch ?? 0))) || undefined,
+        ...(input.idempotency_key ? { idempotency_key: trim(input.idempotency_key) } : {}),
+        ...(input.delegated_ref ? { delegated_ref: input.delegated_ref } : {}),
+        ...(trim(input.run_id) ? { run_id: trim(input.run_id) } : {}),
+        ...(trim(input.tool_id) ? { tool_id: trim(input.tool_id) } : {}),
       });
     },
     ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),

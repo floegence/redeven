@@ -164,12 +164,9 @@ func followupRecordToView(rec threadstore.QueuedTurn, position int) FollowupItem
 		MessageID:       strings.TrimSpace(rec.MessageID),
 		Text:            strings.TrimSpace(rec.TextContent),
 		ModelID:         strings.TrimSpace(rec.ModelID),
-		ExecutionMode:   normalizeRunMode(options.Mode, ""),
+		PermissionType:  strings.TrimSpace(options.PermissionType),
 		Position:        position,
 		CreatedAtUnixMs: rec.CreatedAtUnixMs,
-	}
-	if view.ExecutionMode == "act" && strings.TrimSpace(options.Mode) == "" {
-		view.ExecutionMode = ""
 	}
 	if len(views) > 0 {
 		view.Attachments = views
@@ -177,9 +174,19 @@ func followupRecordToView(rec threadstore.QueuedTurn, position int) FollowupItem
 	return view
 }
 
-func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadExecutionMode string) (RunStartRequest, error) {
+func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadPermissionType string) (RunStartRequest, error) {
 	options := unmarshalQueuedTurnOptions(rec.OptionsJSON)
-	options.Mode = normalizeRunMode(options.Mode, normalizeRunMode(threadExecutionMode, "act"))
+	permissionFallback, err := normalizePermissionType(strings.TrimSpace(threadPermissionType), FlowerPermissionApprovalRequired)
+	if err != nil {
+		permissionFallback = FlowerPermissionApprovalRequired
+	}
+	if strings.TrimSpace(options.PermissionType) == "" {
+		options.PermissionType = permissionTypeString(permissionFallback)
+	} else if normalized, err := normalizePermissionType(strings.TrimSpace(options.PermissionType), permissionFallback); err == nil {
+		options.PermissionType = permissionTypeString(normalized)
+	} else {
+		options.PermissionType = permissionTypeString(permissionFallback)
+	}
 	contextAction, err := unmarshalQueuedTurnContextAction(rec.ContextActionJSON)
 	if err != nil {
 		return RunStartRequest{}, err

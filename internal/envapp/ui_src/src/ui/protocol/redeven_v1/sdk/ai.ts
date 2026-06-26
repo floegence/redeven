@@ -5,6 +5,7 @@ import type { FlowerReasoningSelection } from '../../../../../../../flower_ui/sr
 export type AIRealtimeEventType = 'stream_event' | 'thread_state' | 'transcript_message' | 'transcript_reset' | 'thread_summary';
 
 export type AIThreadRunStatus = 'idle' | 'accepted' | 'running' | 'waiting_approval' | 'recovering' | 'finalizing' | 'waiting_user' | 'success' | 'failed' | 'canceled' | 'timed_out';
+export type AIPermissionType = 'readonly' | 'approval_required' | 'full_access';
 
 export type AIActiveRun = {
   threadId: string;
@@ -13,7 +14,6 @@ export type AIActiveRun = {
 
 export type AIRequestUserInputAction = {
   type: string;
-  mode?: 'act' | 'plan';
 };
 
 export type AIRequestUserInputChoice = {
@@ -73,7 +73,7 @@ export type AISendUserTurnRequest = {
     contextAction?: ContextActionEnvelope;
   };
   options: {
-    mode?: 'act' | 'plan';
+    permissionType?: AIPermissionType;
     reasoningSelection?: FlowerReasoningSelection;
   };
   expectedRunId?: string;
@@ -87,7 +87,6 @@ export type AISendUserTurnResponse = {
   queueId?: string;
   queuePosition?: number;
   consumedWaitingPromptId?: string;
-  appliedExecutionMode?: 'act' | 'plan';
 };
 
 export type AICompactThreadContextRequest = {
@@ -116,7 +115,7 @@ export type AISubmitRequestUserInputResponseRequest = {
     }>;
   };
   options: {
-    mode?: 'act' | 'plan';
+    permissionType?: AIPermissionType;
     reasoningSelection?: FlowerReasoningSelection;
   };
   expectedRunId?: string;
@@ -127,7 +126,6 @@ export type AISubmitRequestUserInputResponseResponse = {
   runId: string;
   kind: string;
   consumedWaitingPromptId?: string;
-  appliedExecutionMode?: 'act' | 'plan';
 };
 
 export type AISubscribeSummaryResponse = {
@@ -154,7 +152,7 @@ export type AIFollowupItem = {
   messageId: string;
   text: string;
   modelId?: string;
-  executionMode?: 'act' | 'plan';
+  permissionType?: AIPermissionType;
   position: number;
   createdAtUnixMs: number;
   attachments?: AIFollowupAttachment[];
@@ -214,7 +212,7 @@ export type AIRealtimeEvent = {
   lastMessageAtUnixMs?: number;
   activeRunId?: string;
   lastContextRunId?: string;
-  executionMode?: 'act' | 'plan';
+  permissionType?: AIPermissionType;
   queuedTurnCount?: number;
 
   // transcript_reset only

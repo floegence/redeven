@@ -13,6 +13,7 @@ import type {
   FlowerActivityTimelineBlock,
   FlowerChatMessage,
   FlowerInputRequest,
+  FlowerDelegatedApprovalRef,
   FlowerLiveBootstrap,
   FlowerLiveBlock,
   FlowerLiveEvent,
@@ -44,6 +45,7 @@ import type {
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
   FlowerThreadStatus,
+  FlowerPermissionType,
 } from './contracts/flowerSurfaceContracts';
 import {
   normalizeFlowerReasoningCapability,
@@ -81,6 +83,12 @@ function hasOwn(record: JsonRecord, key: string): boolean {
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function normalizePermissionType(value: unknown): FlowerPermissionType | undefined {
+  const raw = trim(value).toLowerCase();
+  if (raw === 'readonly' || raw === 'approval_required' || raw === 'full_access') return raw;
+  return undefined;
 }
 
 function positiveInteger(raw: unknown): number | undefined {
@@ -696,7 +704,6 @@ function mapInputRequest(prompt: unknown): FlowerInputRequest | null {
                   const action = recordValue(actionValue) ?? {};
                   return {
                     type: trim(action.type),
-                    ...(trim(action.mode) ? { mode: trim(action.mode) } : {}),
                   };
                 }).filter((action) => action.type),
               } : {}),
@@ -781,28 +788,58 @@ function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
   const record = recordValue(raw);
   if (!record) return null;
   const actionID = trim(record.action_id);
+  if (!actionID) return null;
+  const origin = trim(record.origin) === 'delegated_subagent' ? 'delegated_subagent' : 'main_tool';
   const runID = trim(record.run_id);
   const toolID = trim(record.tool_id);
-  if (!actionID || !runID || !toolID) return null;
   const summary = recordValue(record.summary) ?? {};
-  return {
+  const delegatedRefRecord = recordValue(record.delegated_ref);
+  const rawSurfaceRole = trim(record.surface_role);
+  const surfaceRole = rawSurfaceRole === 'primary_action' || rawSurfaceRole === 'locator' || rawSurfaceRole === 'mirror'
+    ? rawSurfaceRole as NonNullable<FlowerApprovalAction['surface_role']>
+    : origin === 'delegated_subagent' ? 'mirror' : undefined;
+  const delegatedRef = delegatedRefRecord ? {
+    parent_thread_id: trim(delegatedRefRecord.parent_thread_id),
+    parent_run_id: trim(delegatedRefRecord.parent_run_id),
+    ...(trim(delegatedRefRecord.parent_turn_id) ? { parent_turn_id: trim(delegatedRefRecord.parent_turn_id) } : {}),
+    subagent_id: trim(delegatedRefRecord.subagent_id),
+    child_thread_id: trim(delegatedRefRecord.child_thread_id),
+    child_run_id: trim(delegatedRefRecord.child_run_id),
+    ...(trim(delegatedRefRecord.child_turn_id) ? { child_turn_id: trim(delegatedRefRecord.child_turn_id) } : {}),
+    child_tool_call_id: trim(delegatedRefRecord.child_tool_call_id),
+    approval_id: trim(delegatedRefRecord.approval_id),
+  } : null;
+  const validDelegatedRef = delegatedRef && delegatedRef.parent_thread_id && delegatedRef.parent_run_id && delegatedRef.subagent_id && delegatedRef.child_thread_id && delegatedRef.child_run_id && delegatedRef.child_tool_call_id && delegatedRef.approval_id
+    ? delegatedRef
+    : null;
+  if (origin === 'main_tool' && (!runID || !toolID)) return null;
+  const toolName = trim(record.tool_name) || 'tool';
+  const base = {
     action_id: actionID,
-    run_id: runID,
+    origin,
     ...(trim(record.turn_id) ? { turn_id: trim(record.turn_id) } : {}),
-    tool_id: toolID,
-    tool_name: trim(record.tool_name) || 'tool',
+    tool_name: toolName,
     state: trim(record.state) as FlowerApprovalAction['state'] || 'requested',
     status: trim(record.status) as FlowerApprovalAction['status'] || 'pending',
     revision: Math.max(0, Math.floor(Number(record.revision ?? 0))),
+    version: positiveInteger(record.version) ?? Math.max(1, Math.floor(Number(record.revision ?? 1))),
+    ...(positiveInteger(record.surface_epoch) ? { surface_epoch: positiveInteger(record.surface_epoch) } : {}),
+    ...(surfaceRole ? { surface_role: surfaceRole } : {}),
+    ...(trim(record.scope) ? { scope: trim(record.scope) } : {}),
     requested_at_ms: Math.max(0, Math.floor(Number(record.requested_at_unix_ms ?? 0))),
     ...(positiveInteger(record.resolved_at_unix_ms) ? { resolved_at_ms: positiveInteger(record.resolved_at_unix_ms) } : {}),
     ...(positiveInteger(record.expires_at_unix_ms) ? { expires_at_ms: positiveInteger(record.expires_at_unix_ms) } : {}),
     can_approve: Boolean(record.can_approve),
     ...(positiveInteger(record.expected_seq) ? { expected_seq: positiveInteger(record.expected_seq) } : {}),
     ...(trim(record.read_only_reason) ? { read_only_reason: trim(record.read_only_reason) } : {}),
+    ...(trim(record.delivery_state) ? { delivery_state: trim(record.delivery_state) as FlowerApprovalAction['delivery_state'] } : {}),
+    ...(trim(record.child_execution_state) ? { child_execution_state: trim(record.child_execution_state) as FlowerApprovalAction['child_execution_state'] } : {}),
+    ...(trim(record.primary_wait_anchor) ? { primary_wait_anchor: trim(record.primary_wait_anchor) } : {}),
     summary: {
-      label: trim(summary.label) || trim(record.tool_name) || 'Tool approval',
+      label: trim(summary.label) || toolName || 'Tool approval',
       ...(trim(summary.description) ? { description: trim(summary.description) } : {}),
+      ...(trim(summary.command) ? { command: trim(summary.command) } : {}),
+      ...(trim(summary.cwd) ? { cwd: trim(summary.cwd) } : {}),
       ...(Array.isArray(summary.effects) ? { effects: summary.effects.map(trim).filter(Boolean) } : {}),
       ...(Array.isArray(summary.flags) ? { flags: summary.flags.map(trim).filter(Boolean) } : {}),
       ...(Array.isArray(summary.targets) ? {
@@ -816,6 +853,23 @@ function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
         }).filter((target) => target.kind && target.label),
       } : {}),
     },
+  };
+  if (origin === 'delegated_subagent') {
+    if (!validDelegatedRef) return null;
+    const delegatedRef: FlowerDelegatedApprovalRef = validDelegatedRef;
+    return {
+      ...base,
+      origin: 'delegated_subagent',
+      delegated_ref: delegatedRef,
+      ...(runID ? { run_id: runID } : {}),
+      ...(toolID ? { tool_id: toolID } : {}),
+    };
+  }
+  return {
+    ...base,
+    origin: 'main_tool',
+    run_id: runID,
+    tool_id: toolID,
   };
 }
 
@@ -834,7 +888,7 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
     ...(trim(patch.title) ? { title: trim(patch.title) } : {}),
     ...(trim(patch.model_id) ? { model_id: trim(patch.model_id) } : {}),
     ...(patch.model_locked !== undefined ? { model_locked: Boolean(patch.model_locked) } : {}),
-    ...(trim(patch.execution_mode) ? { execution_mode: trim(patch.execution_mode) } : {}),
+    ...(normalizePermissionType(patch.permission_type) ? { permission_type: normalizePermissionType(patch.permission_type) } : {}),
     ...(trim(patch.working_dir) ? { working_dir: trim(patch.working_dir) } : {}),
     ...(queuedTurnCount !== undefined ? { queued_turn_count: queuedTurnCount } : {}),
     ...(trim(patch.run_status) ? { run_status: trim(patch.run_status) } : {}),
@@ -931,6 +985,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     status,
     ...(activeRunID ? { active_run_id: activeRunID } : {}),
     queued_turn_count: nonNegativeInteger(record.queued_turn_count ?? 0, 'thread.queued_turn_count'),
+    ...(normalizePermissionType(record.permission_type) ? { permission_type: normalizePermissionType(record.permission_type) } : {}),
     source_label: options.sourceLabel,
     target_labels: options.targetLabels,
     ...(trim(record.read_only_reason) ? { read_only_reason: trim(record.read_only_reason) } : {}),

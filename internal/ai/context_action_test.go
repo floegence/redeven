@@ -108,7 +108,7 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	if popped == nil {
 		t.Fatalf("PopNextQueuedTurn returned nil")
 	}
-	startReq, err := queuedTurnRecordToRunStartRequest(*popped, "act")
+	startReq, err := queuedTurnRecordToRunStartRequest(*popped, permissionTypeString(FlowerPermissionApprovalRequired))
 	if err != nil {
 		t.Fatalf("queuedTurnRecordToRunStartRequest: %v", err)
 	}

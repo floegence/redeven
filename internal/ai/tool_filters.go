@@ -2,24 +2,21 @@ package ai
 
 import (
 	"strings"
-
-	"github.com/floegence/redeven/internal/config"
 )
 
-func newModeToolFilter(cfg *config.AIConfig, allowUserInteraction bool) ModeToolFilter {
-	_ = cfg
-	return flowerModeToolFilter{
-		base:                 DefaultModeToolFilter{},
+func newPermissionToolFilter(allowUserInteraction bool) PermissionToolFilter {
+	return flowerPermissionToolFilter{
+		base:                 DefaultPermissionToolFilter{},
 		allowUserInteraction: allowUserInteraction,
 	}
 }
 
-type allowlistModeToolFilter struct {
-	base      ModeToolFilter
+type allowlistPermissionToolFilter struct {
+	base      PermissionToolFilter
 	allowlist map[string]struct{}
 }
 
-func (r *run) withToolAllowlistFilter(base ModeToolFilter) ModeToolFilter {
+func (r *run) withToolAllowlistFilter(base PermissionToolFilter) PermissionToolFilter {
 	if r == nil || len(r.toolAllowlist) == 0 {
 		return base
 	}
@@ -32,20 +29,21 @@ func (r *run) withToolAllowlistFilter(base ModeToolFilter) ModeToolFilter {
 	if len(allow) == 0 {
 		return base
 	}
-	return allowlistModeToolFilter{base: base, allowlist: allow}
+	return allowlistPermissionToolFilter{base: base, allowlist: allow}
 }
 
-func (f allowlistModeToolFilter) FilterToolsForMode(mode string, all []ToolDef) []ToolDef {
+func (f allowlistPermissionToolFilter) FilterTools(permissionType FlowerPermissionType, all []ToolDef) []ToolDef {
 	base := f.base
 	if base == nil {
-		base = DefaultModeToolFilter{}
+		base = DefaultPermissionToolFilter{}
 	}
-	filtered := base.FilterToolsForMode(mode, all)
+	filtered := base.FilterTools(permissionType, all)
 	if len(f.allowlist) == 0 {
 		return filtered
 	}
 	out := make([]ToolDef, 0, len(filtered))
 	for _, tool := range filtered {
+		tool = normalizeToolPermissionMetadata(tool)
 		name := strings.TrimSpace(tool.Name)
 		if name == "" {
 			continue
@@ -57,18 +55,17 @@ func (f allowlistModeToolFilter) FilterToolsForMode(mode string, all []ToolDef) 
 	return out
 }
 
-type flowerModeToolFilter struct {
-	base                 ModeToolFilter
+type flowerPermissionToolFilter struct {
+	base                 PermissionToolFilter
 	allowUserInteraction bool
 }
 
-func (f flowerModeToolFilter) FilterToolsForMode(mode string, all []ToolDef) []ToolDef {
+func (f flowerPermissionToolFilter) FilterTools(permissionType FlowerPermissionType, all []ToolDef) []ToolDef {
 	base := f.base
 	if base == nil {
-		base = DefaultModeToolFilter{}
+		base = DefaultPermissionToolFilter{}
 	}
-	filtered := base.FilterToolsForMode(mode, all)
-	mode = strings.ToLower(strings.TrimSpace(mode))
+	filtered := base.FilterTools(permissionType, all)
 	out := make([]ToolDef, 0, len(filtered))
 	for _, tool := range filtered {
 		name := strings.TrimSpace(tool.Name)
@@ -76,10 +73,6 @@ func (f flowerModeToolFilter) FilterToolsForMode(mode string, all []ToolDef) []T
 			continue
 		}
 		switch name {
-		case "exit_plan_mode":
-			if !f.allowUserInteraction || mode != config.AIModePlan {
-				continue
-			}
 		case "ask_user":
 			if !f.allowUserInteraction {
 				continue

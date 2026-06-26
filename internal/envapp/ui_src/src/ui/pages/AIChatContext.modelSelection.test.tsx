@@ -78,7 +78,7 @@ const makeThread = (overrides: Partial<ThreadView> = {}): ThreadView => ({
   title: 'Thread 1',
   model_id: 'openai/model-a',
   model_locked: false,
-  execution_mode: 'act',
+  permission_type: 'approval_required',
   working_dir: '/workspace',
   queued_turn_count: 0,
   run_status: 'idle',

@@ -3769,7 +3769,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			if body.Title == nil && body.ModelID == nil && body.ExecutionMode == nil && body.Pinned == nil && body.ReasoningSelection == nil {
+			if body.Title == nil && body.ModelID == nil && body.PermissionType == nil && body.Pinned == nil && body.ReasoningSelection == nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 				return
 			}
@@ -3795,11 +3795,13 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
-			if body.ExecutionMode != nil {
-				if err := g.ai.SetThreadExecutionMode(r.Context(), meta, threadID, *body.ExecutionMode); err != nil {
+			if body.PermissionType != nil {
+				if err := g.ai.SetThreadPermissionType(r.Context(), meta, threadID, *body.PermissionType); err != nil {
 					status := http.StatusBadRequest
 					if errors.Is(err, sql.ErrNoRows) {
 						status = http.StatusNotFound
+					} else if errors.Is(err, ai.ErrThreadBusy) {
+						status = http.StatusConflict
 					}
 					writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 					return

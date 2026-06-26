@@ -478,6 +478,69 @@ func startUserTurnRecordForTest(endpointID string, threadID string, userMessageI
 	}
 }
 
+func TestStore_CreateAndProjectThreadPermissionType(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_default", EndpointID: "env_1"}); err != nil {
+		t.Fatalf("CreateThread default: %v", err)
+	}
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_readonly", EndpointID: "env_1", PermissionType: "readonly"}); err != nil {
+		t.Fatalf("CreateThread readonly: %v", err)
+	}
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_full", EndpointID: "env_1", PermissionType: "full_access"}); err != nil {
+		t.Fatalf("CreateThread full access: %v", err)
+	}
+	if err := s.UpdateThreadPermissionType(ctx, "env_1", "th_full", "readonly"); err != nil {
+		t.Fatalf("UpdateThreadPermissionType: %v", err)
+	}
+	if err := s.UpsertProjectedThread(ctx, Thread{ThreadID: "th_projected", EndpointID: "env_1", PermissionType: "readonly", RunStatus: "idle"}); err != nil {
+		t.Fatalf("UpsertProjectedThread create: %v", err)
+	}
+	if err := s.UpsertProjectedThread(ctx, Thread{ThreadID: "th_projected", EndpointID: "env_1", PermissionType: "approval_required", RunStatus: "idle", UpdatedAtUnixMs: time.Now().UnixMilli()}); err != nil {
+		t.Fatalf("UpsertProjectedThread update: %v", err)
+	}
+
+	cases := []struct {
+		threadID string
+		want     string
+	}{
+		{threadID: "th_default", want: "approval_required"},
+		{threadID: "th_readonly", want: "readonly"},
+		{threadID: "th_full", want: "readonly"},
+		{threadID: "th_projected", want: "approval_required"},
+	}
+	for _, tc := range cases {
+		th, err := s.GetThread(ctx, "env_1", tc.threadID)
+		if err != nil {
+			t.Fatalf("GetThread(%s): %v", tc.threadID, err)
+		}
+		if th == nil {
+			t.Fatalf("thread %s missing", tc.threadID)
+		}
+		if th.PermissionType != tc.want {
+			t.Fatalf("%s PermissionType=%q, want %q", tc.threadID, th.PermissionType, tc.want)
+		}
+	}
+
+	for _, threadID := range []string{"th_readonly", "th_full", "th_projected"} {
+		var legacyMode string
+		if err := s.db.QueryRowContext(ctx, `SELECT execution_mode FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, "env_1", threadID).Scan(&legacyMode); err != nil {
+			t.Fatalf("query legacy execution_mode for %s: %v", threadID, err)
+		}
+		if legacyMode != "" {
+			t.Fatalf("%s legacy execution_mode=%q, want empty default", threadID, legacyMode)
+		}
+	}
+}
+
 func TestStore_UpdateThreadRunStateRejectsUnsupportedStatus(t *testing.T) {
 	t.Parallel()
 
@@ -1920,6 +1983,86 @@ CREATE INDEX IF NOT EXISTS idx_ai_flower_thread_metadata_parent ON ai_flower_thr
 	}
 }
 
+func TestStore_MigrateFromV34BackfillsPermissionType(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	schema := threadstoreSchemaSpec()
+	tx, err := raw.Begin()
+	if err != nil {
+		_ = raw.Close()
+		t.Fatalf("begin v34 migration setup: %v", err)
+	}
+	for _, migration := range schema.Migrations {
+		if migration.ToVersion > 34 {
+			break
+		}
+		if err := migration.Apply(tx); err != nil {
+			_ = tx.Rollback()
+			_ = raw.Close()
+			t.Fatalf("apply migration %d->%d: %v", migration.FromVersion, migration.ToVersion, err)
+		}
+	}
+	if _, err := tx.Exec(`
+INSERT INTO ai_threads(
+  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, reasoning_selection_json,
+  execution_mode, working_dir, title, title_source, title_generated_at_unix_ms, title_input_message_id,
+  title_model_id, title_prompt_version, followups_revision, pinned_at_unix_ms,
+  run_status, run_updated_at_unix_ms, run_error_code, run_error, waiting_user_input_json, last_context_run_id,
+  flower_activity_revision, flower_activity_signature, flower_activity_waiting_prompt_id,
+  created_by_user_public_id, created_by_user_email, updated_by_user_public_id, updated_by_user_email,
+  created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
+) VALUES
+  ('th_plan', 'env_1', '', '', 0, '', 'plan', '', 'plan thread', '', 0, '', '', '', 0, 0, 'idle', 0, '', '', '', '', 0, '', '', '', '', '', '', 100, 100, 0, ''),
+  ('th_act', 'env_1', '', '', 0, '', 'act', '', 'act thread', '', 0, '', '', '', 0, 0, 'idle', 0, '', '', '', '', 0, '', '', '', '', '', '', 101, 101, 0, '')
+`); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatalf("insert v34 threads: %v", err)
+	}
+	if _, err := tx.Exec(`PRAGMA user_version=34;`); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatalf("set user_version v34: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		_ = raw.Close()
+		t.Fatalf("commit v34 migration setup: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw db: %v", err)
+	}
+
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open with v35 migration: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	for _, tc := range []struct {
+		threadID string
+		want     string
+	}{
+		{threadID: "th_plan", want: "readonly"},
+		{threadID: "th_act", want: "approval_required"},
+	} {
+		th, err := s.GetThread(context.Background(), "env_1", tc.threadID)
+		if err != nil {
+			t.Fatalf("GetThread(%s): %v", tc.threadID, err)
+		}
+		if th == nil {
+			t.Fatalf("thread %s missing after migration", tc.threadID)
+		}
+		if th.PermissionType != tc.want {
+			t.Fatalf("%s PermissionType=%q, want %q", tc.threadID, th.PermissionType, tc.want)
+		}
+	}
+}
+
 func TestStore_MigrateFromV31EnsuresProviderContinuationStateEnvelope(t *testing.T) {
 	t.Parallel()
 
@@ -2766,7 +2909,7 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 		EndpointID:          "env_1",
 		NamespacePublicID:   "ns_1",
 		ModelID:             "openai/gpt-5",
-		ExecutionMode:       "plan",
+		PermissionType:      "readonly",
 		WorkingDir:          "/workspace/repo",
 		Title:               "Source",
 		RunStatus:           "success",
@@ -2953,6 +3096,9 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 	}
 	if forked.RunStatus != "idle" || forked.LastContextRunID != "" || forked.WaitingUserInputJSON != "" || forked.PinnedAtUnixMs != 0 {
 		t.Fatalf("forked run state not cleared: %+v", forked)
+	}
+	if source.PermissionType != "readonly" || forked.PermissionType != "readonly" {
+		t.Fatalf("fork permission types source=%q forked=%q, want readonly", source.PermissionType, forked.PermissionType)
 	}
 	if forked.FlowerActivityRevision <= 0 {
 		t.Fatalf("forked FlowerActivityRevision=%d, want > 0", forked.FlowerActivityRevision)
@@ -3327,7 +3473,7 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 		ModelID:               "openai/gpt-5-mini",
 		TextContent:           "first queued turn",
 		AttachmentsJSON:       `[{"name":"spec.md","mime_type":"text/markdown","url":"file:///tmp/spec.md"}]`,
-		OptionsJSON:           `{"mode":"plan"}`,
+		OptionsJSON:           `{"permission_type":"readonly"}`,
 		SessionMetaJSON:       `{"channel_id":"ch_queue","endpoint_id":"env_queue","can_read":true,"can_write":true,"can_execute":true}`,
 		CreatedByUserPublicID: "u_queue",
 		CreatedByUserEmail:    "u_queue@example.com",
@@ -3358,7 +3504,7 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 		MessageID:             "m_queue_2",
 		ModelID:               "openai/gpt-5-mini",
 		TextContent:           "second queued turn",
-		OptionsJSON:           `{"mode":"act"}`,
+		OptionsJSON:           `{"permission_type":"approval_required"}`,
 		CreatedByUserPublicID: "u_queue",
 		CreatedByUserEmail:    "u_queue@example.com",
 		CreatedAtUnixMs:       2000,
@@ -3382,7 +3528,7 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 		MessageID:             "m_draft_1",
 		ModelID:               "openai/gpt-5-mini",
 		TextContent:           "draft follow-up",
-		OptionsJSON:           `{"mode":"plan"}`,
+		OptionsJSON:           `{"permission_type":"readonly"}`,
 		CreatedByUserPublicID: "u_queue",
 		CreatedByUserEmail:    "u_queue@example.com",
 		CreatedAtUnixMs:       3000,
@@ -3553,7 +3699,7 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 		MessageID:             "m_draft_1",
 		ModelID:               "openai/gpt-5-mini",
 		TextContent:           "queued copy of draft message",
-		OptionsJSON:           `{"mode":"act"}`,
+		OptionsJSON:           `{"permission_type":"approval_required"}`,
 		CreatedByUserPublicID: "u_queue",
 		CreatedByUserEmail:    "u_queue@example.com",
 		CreatedAtUnixMs:       4000,

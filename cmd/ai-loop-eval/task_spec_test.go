@@ -24,7 +24,7 @@ tasks:
     turns:
       - "Analyze ${workspace}"
     runtime:
-      execution_mode: plan
+      permission_type: readonly
       timeout_seconds: 20
       no_user_interaction: true
     assertions:
@@ -35,7 +35,7 @@ tasks:
           - "result"
       thread:
         run_status: waiting_user
-        execution_mode: plan
+        permission_type: readonly
         waiting_prompt: required
       tools:
         must_call:
@@ -49,7 +49,7 @@ tasks:
     turns:
       - "Mutate ${workspace}"
     runtime:
-      execution_mode: act
+      permission_type: approval_required
       timeout_seconds: 15
       workspace:
         mode: fixture_copy
@@ -69,8 +69,8 @@ tasks:
 	if tasks[0].Turns[0] != "Analyze ${workspace}" {
 		t.Fatalf("turn=%q", tasks[0].Turns[0])
 	}
-	if tasks[0].Runtime.ExecutionMode != "plan" {
-		t.Fatalf("execution_mode=%q", tasks[0].Runtime.ExecutionMode)
+	if tasks[0].Runtime.PermissionType != "readonly" {
+		t.Fatalf("permission_type=%q", tasks[0].Runtime.PermissionType)
 	}
 	if !tasks[0].Runtime.NoUserInteraction {
 		t.Fatalf("expected no_user_interaction=true")

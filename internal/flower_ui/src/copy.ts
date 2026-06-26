@@ -1,4 +1,4 @@
-import type { FlowerActivityApprovalState, FlowerProviderType, FlowerThreadStatus } from './contracts/flowerSurfaceContracts';
+import type { FlowerActivityApprovalState, FlowerPermissionType, FlowerProviderType, FlowerThreadStatus } from './contracts/flowerSurfaceContracts';
 import type { FlowerProviderModelNoteKey } from './settings/providerModelNotes';
 import { localizedFlowerProviderModelNote } from './settings/providerModelNotes';
 import type { FlowerProviderTypeLabels } from './settings/providerTypeLabels';
@@ -73,14 +73,12 @@ export type FlowerSettingsCopy = Readonly<{
   text: string;
   imageInput: string;
   selectModelPlaceholder: string;
-  userApprovalTitle: string;
-  userApprovalDescription: string;
-  on: string;
-  off: string;
-  dangerousCommandsTitle: string;
-  dangerousCommandsDescription: string;
-  blocked: string;
-  allowed: string;
+  defaultPermissionTitle: string;
+  defaultPermissionDescription: string;
+  permissionTypes: Readonly<Record<FlowerPermissionType, Readonly<{
+    label: string;
+    description: string;
+  }>>>;
   providersTitle: string;
   providersDescription: string;
   managedByLocalAIProfileTitle: string;
@@ -105,7 +103,6 @@ export type FlowerSettingsCopy = Readonly<{
   terminalLimitsDescription: string;
   defaultTimeout: string;
   maximumTimeout: string;
-  dangerousBlockingOff: string;
   webSearchNotSupported: string;
   webSearchDisabled: string;
   openAIBuiltIn: string;
@@ -661,20 +658,28 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
   settings: {
     title: 'Flower Settings',
     backToChat: 'Back to chat',
-    description: 'Configure models and execution policy for the Local AI Profile.',
+    description: 'Configure models and the default Flower permission for the Local AI Profile.',
     currentModel: 'Current model',
     noModelSelected: 'No model selected',
     text: 'Text',
     imageInput: 'Image input',
     selectModelPlaceholder: 'Select model',
-    userApprovalTitle: 'User approval',
-    userApprovalDescription: 'Ask before sensitive runtime actions.',
-    on: 'On',
-    off: 'Off',
-    dangerousCommandsTitle: 'Dangerous commands',
-    dangerousCommandsDescription: 'Reject destructive terminal operations by policy.',
-    blocked: 'Blocked',
-    allowed: 'Allowed',
+    defaultPermissionTitle: 'Default permission',
+    defaultPermissionDescription: 'Applies to new Flower threads. Existing threads keep their own permission.',
+    permissionTypes: {
+      readonly: {
+        label: 'Read only',
+        description: 'Safe read tools, search, todos, ask, and delegated subagents. No shell or file edits.',
+      },
+      approval_required: {
+        label: 'Approval required',
+        description: 'Standard tools stay available, and shell or file changes ask before running.',
+      },
+      full_access: {
+        label: 'Full access',
+        description: 'Standard tools run without per-tool confirmation, while timeouts, limits, and audit still apply.',
+      },
+    },
     providersTitle: 'Providers',
     providersDescription: 'Provider cards show the Local AI Profile model sources and capability details.',
     managedByLocalAIProfileTitle: 'Local AI Profile on this Mac',
@@ -699,7 +704,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     terminalLimitsDescription: 'Timeouts are enforced before a connected runtime executes commands.',
     defaultTimeout: 'Default timeout (ms)',
     maximumTimeout: 'Maximum timeout (ms)',
-    dangerousBlockingOff: 'Dangerous command blocking is currently off.',
     webSearchNotSupported: 'Not supported',
     webSearchDisabled: 'Disabled',
     openAIBuiltIn: 'OpenAI built-in',

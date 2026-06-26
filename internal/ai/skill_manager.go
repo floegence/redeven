@@ -30,21 +30,21 @@ type SkillMeta struct {
 	Path                    string               `json:"path"`
 	Scope                   string               `json:"scope"`
 	Priority                int                  `json:"priority,omitempty"`
-	ModeHints               []string             `json:"mode_hints,omitempty"`
+	PermissionHints         []string             `json:"permission_hints,omitempty"`
 	AllowImplicitInvocation bool                 `json:"allow_implicit_invocation"`
 	Dependencies            []SkillMCPDependency `json:"dependencies,omitempty"`
 }
 
 type SkillActivation struct {
-	ActivationID string               `json:"activation_id"`
-	Name         string               `json:"name"`
-	RootDir      string               `json:"root_dir"`
-	Priority     int                  `json:"priority"`
-	Content      string               `json:"content"`
-	ContentRef   string               `json:"content_ref"`
-	ModeHints    []string             `json:"mode_hints,omitempty"`
-	Dependencies []SkillMCPDependency `json:"dependencies,omitempty"`
-	ActivatedAt  int64                `json:"activated_at_unix_ms"`
+	ActivationID    string               `json:"activation_id"`
+	Name            string               `json:"name"`
+	RootDir         string               `json:"root_dir"`
+	Priority        int                  `json:"priority"`
+	Content         string               `json:"content"`
+	ContentRef      string               `json:"content_ref"`
+	PermissionHints []string             `json:"permission_hints,omitempty"`
+	Dependencies    []SkillMCPDependency `json:"dependencies,omitempty"`
+	ActivatedAt     int64                `json:"activated_at_unix_ms"`
 }
 
 type SkillCatalog struct {
@@ -61,7 +61,7 @@ type SkillCatalogEntry struct {
 	Path                    string               `json:"path"`
 	Scope                   string               `json:"scope"`
 	Priority                int                  `json:"priority,omitempty"`
-	ModeHints               []string             `json:"mode_hints,omitempty"`
+	PermissionHints         []string             `json:"permission_hints,omitempty"`
 	AllowImplicitInvocation bool                 `json:"allow_implicit_invocation"`
 	Dependencies            []SkillMCPDependency `json:"dependencies,omitempty"`
 	DependencyState         string               `json:"dependency_state,omitempty"`
@@ -88,11 +88,11 @@ type skillDiscoveryRoot struct {
 }
 
 type skillFrontmatter struct {
-	Name        string   `yaml:"name"`
-	Description string   `yaml:"description"`
-	Priority    int      `yaml:"priority"`
-	ModeHint    []string `yaml:"mode_hint"`
-	Policy      struct {
+	Name           string   `yaml:"name"`
+	Description    string   `yaml:"description"`
+	Priority       int      `yaml:"priority"`
+	PermissionHint []string `yaml:"permission_hint"`
+	Policy         struct {
 		AllowImplicitInvocation *bool `yaml:"allow_implicit_invocation"`
 	} `yaml:"policy"`
 	Dependencies struct {
@@ -454,7 +454,7 @@ func (m *skillManager) discoverLocked() {
 				Path:                    item.Path,
 				Scope:                   item.Scope,
 				Priority:                item.Priority,
-				ModeHints:               append([]string(nil), item.ModeHints...),
+				PermissionHints:         append([]string(nil), item.PermissionHints...),
 				AllowImplicitInvocation: item.AllowImplicitInvocation,
 				Dependencies:            append([]SkillMCPDependency(nil), item.Dependencies...),
 				DependencyState:         dependencyState,
@@ -581,13 +581,13 @@ func parseSkillContent(skillPath string, scope string, raw string) (SkillMeta, s
 	if fm.Policy.AllowImplicitInvocation != nil {
 		allowImplicit = *fm.Policy.AllowImplicitInvocation
 	}
-	modeHints := make([]string, 0, len(fm.ModeHint))
-	for _, hint := range fm.ModeHint {
+	permissionHints := make([]string, 0, len(fm.PermissionHint))
+	for _, hint := range fm.PermissionHint {
 		v := strings.TrimSpace(strings.ToLower(hint))
-		if v == "" {
+		if !isKnownPermissionTypeString(v) {
 			continue
 		}
-		modeHints = append(modeHints, v)
+		permissionHints = append(permissionHints, v)
 	}
 	deps := make([]SkillMCPDependency, 0, len(fm.Dependencies.MCPServers))
 	for _, dep := range fm.Dependencies.MCPServers {
@@ -608,7 +608,7 @@ func parseSkillContent(skillPath string, scope string, raw string) (SkillMeta, s
 		Path:                    filepath.Clean(strings.TrimSpace(skillPath)),
 		Scope:                   strings.TrimSpace(scope),
 		Priority:                fm.Priority,
-		ModeHints:               modeHints,
+		PermissionHints:         permissionHints,
 		AllowImplicitInvocation: allowImplicit,
 		Dependencies:            deps,
 	}
@@ -687,15 +687,15 @@ func (m *skillManager) Activate(name string, mode string, implicit bool) (SkillA
 	}
 	activationID := fmt.Sprintf("skill_%d", time.Now().UnixNano())
 	activation := SkillActivation{
-		ActivationID: activationID,
-		Name:         meta.Name,
-		RootDir:      filepath.Dir(meta.Path),
-		Priority:     meta.Priority,
-		Content:      body,
-		ContentRef:   meta.Path,
-		ModeHints:    append([]string(nil), meta.ModeHints...),
-		Dependencies: append([]SkillMCPDependency(nil), meta.Dependencies...),
-		ActivatedAt:  time.Now().UnixMilli(),
+		ActivationID:    activationID,
+		Name:            meta.Name,
+		RootDir:         filepath.Dir(meta.Path),
+		Priority:        meta.Priority,
+		Content:         body,
+		ContentRef:      meta.Path,
+		PermissionHints: append([]string(nil), meta.PermissionHints...),
+		Dependencies:    append([]SkillMCPDependency(nil), meta.Dependencies...),
+		ActivatedAt:     time.Now().UnixMilli(),
 	}
 	m.active[name] = activation
 	return activation, false, nil
@@ -846,7 +846,7 @@ func (m *skillManager) catalogLocked() SkillCatalog {
 	entries := make([]SkillCatalogEntry, 0, len(m.catalogEntries))
 	for _, item := range m.catalogEntries {
 		cloned := item
-		cloned.ModeHints = append([]string(nil), item.ModeHints...)
+		cloned.PermissionHints = append([]string(nil), item.PermissionHints...)
 		cloned.Dependencies = append([]SkillMCPDependency(nil), item.Dependencies...)
 		entries = append(entries, cloned)
 	}
@@ -900,7 +900,7 @@ func (m *skillManager) resolveCandidateLocked(name string, mode string, implicit
 		if m.isDisabledLocked(item.Path) {
 			continue
 		}
-		if !skillMatchesMode(item.ModeHints, mode) {
+		if !skillMatchesPermission(item.PermissionHints, mode) {
 			continue
 		}
 		if implicit && !item.AllowImplicitInvocation {
@@ -911,18 +911,31 @@ func (m *skillManager) resolveCandidateLocked(name string, mode string, implicit
 	return SkillMeta{}, false
 }
 
-func skillMatchesMode(hints []string, mode string) bool {
+func skillMatchesPermission(hints []string, permission string) bool {
 	if len(hints) == 0 {
 		return true
 	}
-	mode = strings.TrimSpace(strings.ToLower(mode))
-	if mode == "" {
+	permission = strings.TrimSpace(strings.ToLower(permission))
+	if permission == "" {
 		return true
 	}
+	if !isKnownPermissionTypeString(permission) {
+		return false
+	}
 	for _, hint := range hints {
-		if strings.TrimSpace(strings.ToLower(hint)) == mode {
+		normalizedHint := strings.TrimSpace(strings.ToLower(hint))
+		if normalizedHint == permission {
 			return true
 		}
 	}
 	return false
+}
+
+func isKnownPermissionTypeString(value string) bool {
+	switch strings.TrimSpace(strings.ToLower(value)) {
+	case string(FlowerPermissionReadonly), string(FlowerPermissionApprovalRequired), string(FlowerPermissionFullAccess):
+		return true
+	default:
+		return false
+	}
 }

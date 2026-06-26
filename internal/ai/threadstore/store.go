@@ -115,7 +115,7 @@ type Thread struct {
 	ModelID                string `json:"model_id"`
 	ModelLocked            bool   `json:"model_locked"`
 	ReasoningSelectionJSON string `json:"reasoning_selection_json"`
-	ExecutionMode          string `json:"execution_mode"`
+	PermissionType         string `json:"permission_type"`
 	WorkingDir             string `json:"working_dir"`
 	Title                  string `json:"title"`
 	TitleSource            string `json:"title_source"`
@@ -217,7 +217,7 @@ type ThreadsCursor struct {
 }
 
 const threadSelectColumnsSQL = `
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, reasoning_selection_json, execution_mode, working_dir, title,
+  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, reasoning_selection_json, execution_mode, permission_type, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error_code, run_error,
   waiting_user_input_json, last_context_run_id, pinned_at_unix_ms,
@@ -236,6 +236,7 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 		return errors.New("nil thread")
 	}
 	var modelLockedInt int
+	var legacyExecutionMode string
 	if err := scan.Scan(
 		&t.ThreadID,
 		&t.EndpointID,
@@ -243,7 +244,8 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 		&t.ModelID,
 		&modelLockedInt,
 		&t.ReasoningSelectionJSON,
-		&t.ExecutionMode,
+		&legacyExecutionMode,
+		&t.PermissionType,
 		&t.WorkingDir,
 		&t.Title,
 		&t.TitleSource,
@@ -553,7 +555,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	t.NamespacePublicID = strings.TrimSpace(t.NamespacePublicID)
 	t.ModelID = strings.TrimSpace(t.ModelID)
 	t.ReasoningSelectionJSON = strings.TrimSpace(t.ReasoningSelectionJSON)
-	t.ExecutionMode = normalizeExecutionMode(t.ExecutionMode)
+	t.PermissionType = normalizePermissionType(t.PermissionType)
 	t.WorkingDir = strings.TrimSpace(t.WorkingDir)
 	t.Title = strings.TrimSpace(t.Title)
 	t.TitleSource = normalizeThreadTitleSource(t.TitleSource)
@@ -597,7 +599,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO ai_threads(
-		  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, reasoning_selection_json, execution_mode, working_dir, title,
+		  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, reasoning_selection_json, permission_type, working_dir, title,
 	  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
 	  run_status, run_updated_at_unix_ms, run_error_code, run_error,
 	  waiting_user_input_json, last_context_run_id,
@@ -614,7 +616,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		t.ModelID,
 		boolToInt(t.ModelLocked),
 		t.ReasoningSelectionJSON,
-		t.ExecutionMode,
+		t.PermissionType,
 		t.WorkingDir,
 		t.Title,
 		t.TitleSource,
@@ -708,7 +710,7 @@ func normalizeProjectedThread(t Thread) (Thread, error) {
 	t.EndpointID = strings.TrimSpace(t.EndpointID)
 	t.NamespacePublicID = strings.TrimSpace(t.NamespacePublicID)
 	t.ModelID = strings.TrimSpace(t.ModelID)
-	t.ExecutionMode = normalizeExecutionMode(t.ExecutionMode)
+	t.PermissionType = normalizePermissionType(t.PermissionType)
 	t.WorkingDir = strings.TrimSpace(t.WorkingDir)
 	t.Title = strings.TrimSpace(t.Title)
 	t.TitleSource = normalizeThreadTitleSource(t.TitleSource)
@@ -769,7 +771,7 @@ WHERE thread_id = ?
 	if errors.Is(err, sql.ErrNoRows) {
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO ai_threads(
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
+  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, permission_type, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error_code, run_error,
   waiting_user_input_json, last_context_run_id,
@@ -785,7 +787,7 @@ INSERT INTO ai_threads(
 			t.NamespacePublicID,
 			t.ModelID,
 			boolToInt(t.ModelLocked),
-			t.ExecutionMode,
+			t.PermissionType,
 			t.WorkingDir,
 			t.Title,
 			t.TitleSource,
@@ -840,7 +842,7 @@ UPDATE ai_threads
 SET namespace_public_id = ?,
     model_id = ?,
     model_locked = ?,
-    execution_mode = ?,
+    permission_type = ?,
     working_dir = ?,
     title = ?,
     title_source = ?,
@@ -867,7 +869,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		t.NamespacePublicID,
 		t.ModelID,
 		boolToInt(t.ModelLocked),
-		t.ExecutionMode,
+		t.PermissionType,
 		t.WorkingDir,
 		t.Title,
 		t.TitleSource,
@@ -902,7 +904,7 @@ func projectedThreadEqual(existing Thread, next Thread) bool {
 	return existing.NamespacePublicID == next.NamespacePublicID &&
 		existing.ModelID == next.ModelID &&
 		existing.ModelLocked == next.ModelLocked &&
-		existing.ExecutionMode == next.ExecutionMode &&
+		existing.PermissionType == next.PermissionType &&
 		existing.WorkingDir == next.WorkingDir &&
 		existing.Title == next.Title &&
 		existing.TitleSource == next.TitleSource &&
@@ -1044,7 +1046,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 	return nil
 }
 
-func (s *Store) UpdateThreadExecutionMode(ctx context.Context, endpointID string, threadID string, executionMode string) error {
+func (s *Store) UpdateThreadPermissionType(ctx context.Context, endpointID string, threadID string, permissionType string) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
 	}
@@ -1053,16 +1055,16 @@ func (s *Store) UpdateThreadExecutionMode(ctx context.Context, endpointID string
 	}
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
-	executionMode = normalizeExecutionMode(executionMode)
+	permissionType = normalizePermissionType(permissionType)
 	if endpointID == "" || threadID == "" {
 		return errors.New("invalid request")
 	}
 
 	res, err := s.db.ExecContext(ctx, `
 UPDATE ai_threads
-SET execution_mode = ?
+SET permission_type = ?
 WHERE endpoint_id = ? AND thread_id = ?
-`, executionMode, endpointID, threadID)
+`, permissionType, endpointID, threadID)
 	if err != nil {
 		return err
 	}
@@ -1226,12 +1228,16 @@ func canonicalRunStatusForWrite(status string) (string, error) {
 	return "", fmt.Errorf("unsupported run status %q", strings.TrimSpace(status))
 }
 
-func normalizeExecutionMode(mode string) string {
-	mode = strings.TrimSpace(strings.ToLower(mode))
-	if mode == "plan" {
-		return "plan"
+func normalizePermissionType(permissionType string) string {
+	switch strings.TrimSpace(strings.ToLower(permissionType)) {
+	case "readonly":
+		return "readonly"
+	case "full_access":
+		return "full_access"
+	case "approval_required":
+		return "approval_required"
 	}
-	return "act"
+	return "approval_required"
 }
 
 func normalizeWaitingUserInputJSONForStatus(runStatus string, waitingUserInputJSON string) string {

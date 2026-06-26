@@ -2,6 +2,12 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const writeTextToClipboardMock = vi.hoisted(() => vi.fn());
+
+vi.mock('../../../../flower_ui/src/clipboard', () => ({
+  writeTextToClipboard: (...args: unknown[]) => writeTextToClipboardMock(...args),
+}));
+
 import type {
   FlowerActivityStatus,
   FlowerLiveEvent,
@@ -24,6 +30,7 @@ import {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  writeTextToClipboardMock.mockReset();
 });
 
 function expectModelStatusIndicator(root: ParentNode, label = 'Thinking...'): void {
@@ -1164,12 +1171,14 @@ describe('FlowerSurface navigation activity', () => {
       status: 'waiting_approval',
       approval_actions: [{
         action_id: 'appr-terminal',
+        origin: 'main_tool',
         run_id: 'run-inline-approval',
         tool_id: 'tool-needs-approval',
         tool_name: 'terminal.exec',
         state: 'requested',
         status: 'pending',
         revision: 1,
+        version: 1,
         requested_at_ms: 6_850,
         can_approve: true,
         expected_seq: 12,
@@ -1240,6 +1249,142 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.querySelector('.flower-transcript-stack > .flower-approval-stack')).toBeNull();
   });
 
+  it('uses a single thread-level primary surface for delegated approvals', async () => {
+    const delegatedAction = {
+      action_id: 'dappr-terminal',
+      origin: 'delegated_subagent' as const,
+      run_id: 'run-parent-delegated',
+      tool_id: 'tool-child-shell',
+      tool_name: 'terminal.exec',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      revision: 1,
+      version: 3,
+      surface_epoch: 7,
+      surface_role: 'primary_action' as const,
+      scope: 'thread_delegated_wait',
+      requested_at_ms: 7_250,
+      can_approve: true,
+      expected_seq: 18,
+      delegated_ref: {
+        parent_thread_id: 'thread-delegated-approval',
+        parent_run_id: 'run-parent-delegated',
+        parent_turn_id: 'm-delegated-approval',
+        subagent_id: 'thread-child-review',
+        child_thread_id: 'thread-child-review',
+        child_run_id: 'run-child-review',
+        child_tool_call_id: 'tool-child-shell',
+        approval_id: 'approval-child-shell',
+      },
+      delivery_state: 'waiting_decision' as const,
+      child_execution_state: 'pending' as const,
+      summary: {
+        label: 'Subtask command',
+        description: 'Subtask Review API contract requests approval.',
+        command: 'npm test -- --runInBand',
+        cwd: '/repo',
+        effects: ['shell'],
+      },
+    };
+    const delegatedThread = thread({
+      thread_id: 'thread-delegated-approval',
+      title: 'Delegated approval',
+      status: 'waiting_approval',
+      approval_actions: [delegatedAction],
+      messages: [
+        {
+          id: 'm-delegated-approval',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 7_250,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-parent-delegated',
+              turn_id: 'm-delegated-approval',
+              status: 'waiting',
+              severity: 'blocking',
+              needs_attention: true,
+              items: [activityItem({
+                item_id: 'delegated-approval-item',
+                tool_id: 'tool-child-shell',
+                tool_name: 'terminal.exec',
+                kind: 'approval',
+                status: 'waiting',
+                severity: 'blocking',
+                needs_attention: true,
+                requires_approval: true,
+                approval_state: 'requested',
+                label: 'npm test',
+                renderer: 'terminal',
+                payload: { command: 'npm test' },
+              })],
+            }),
+          ],
+        },
+      ],
+    });
+    const submitApproval = vi.fn(async () => undefined);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [delegatedThread]),
+      loadThread: vi.fn(async () => ({
+        ...liveBootstrap({
+          ...delegatedThread,
+          approval_actions: [],
+        }, 18),
+        live_state: {
+          ...liveBootstrap(delegatedThread, 18).live_state,
+          approval_actions: {
+            'dappr-terminal': delegatedAction,
+          },
+        },
+      })),
+      submitApproval,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-delegated-approval"] button')));
+    (runtime.querySelector('[data-thread-id="thread-delegated-approval"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-thread-approval-panel] [data-flower-approval-action-id="dappr-terminal"]')));
+
+    const primaryCard = runtime.querySelector('[data-flower-thread-approval-panel] [data-flower-approval-action-id="dappr-terminal"]') as HTMLElement;
+    expect(primaryCard.textContent).toContain('npm test -- --runInBand');
+    expect(primaryCard.textContent).toContain('cwd: /repo');
+    writeTextToClipboardMock.mockResolvedValueOnce(undefined);
+    const copyButton = primaryCard.querySelector('.flower-approval-copy-command') as HTMLButtonElement | null;
+    expect(copyButton).toBeTruthy();
+    copyButton?.click();
+    await waitFor(() => writeTextToClipboardMock.mock.calls.length === 1);
+    expect(writeTextToClipboardMock).toHaveBeenCalledWith('npm test -- --runInBand');
+    expect(copyButton?.getAttribute('data-copied')).toBe('true');
+
+    writeTextToClipboardMock.mockResolvedValueOnce(undefined);
+    const copyCwdButton = primaryCard.querySelector('.flower-approval-chip-copy') as HTMLButtonElement | null;
+    expect(copyCwdButton).toBeTruthy();
+    copyCwdButton?.click();
+    await waitFor(() => writeTextToClipboardMock.mock.calls.length === 2);
+    expect(writeTextToClipboardMock).toHaveBeenCalledWith('/repo');
+    expect(copyCwdButton?.getAttribute('data-copied')).toBe('true');
+
+    const row = runtime.querySelector('[data-flower-activity-item-id="delegated-approval-item"]') as HTMLElement | null;
+    expect(row?.querySelector('[data-flower-approval-action-id="dappr-terminal"]')).toBeNull();
+    const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('[data-flower-thread-approval-panel] button'))
+      .find((button) => button.textContent?.trim() === 'Approve');
+    expect(approve).toBeTruthy();
+    approve?.click();
+
+    await waitFor(() => submitApproval.mock.calls.length === 1);
+    expect(submitApproval).toHaveBeenCalledWith(expect.objectContaining({
+      thread_id: 'thread-delegated-approval',
+      origin: 'delegated_subagent',
+      action_id: 'dappr-terminal',
+      version: 3,
+      surface_epoch: 7,
+      idempotency_key: 'dappr-terminal:approve:3:7',
+      delegated_ref: delegatedAction.delegated_ref,
+    }));
+  });
+
   it('refreshes canonical thread state when an approval decision is stale', async () => {
     const pendingThread = thread({
       thread_id: 'thread-stale-approval',
@@ -1247,12 +1392,14 @@ describe('FlowerSurface navigation activity', () => {
       status: 'waiting_approval',
       approval_actions: [{
         action_id: 'appr-stale',
+        origin: 'main_tool',
         run_id: 'run-stale-approval',
         tool_id: 'tool-stale-approval',
         tool_name: 'terminal.exec',
         state: 'requested',
         status: 'pending',
         revision: 1,
+        version: 1,
         requested_at_ms: 7_100,
         can_approve: true,
         expected_seq: 12,

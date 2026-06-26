@@ -56,8 +56,14 @@ function mergeMessages(messages: readonly FlowerChatMessage[], message: FlowerCh
   return next;
 }
 
+function visibleApprovalAction(action: FlowerApprovalAction): boolean {
+  if (action.status === 'pending' && action.state === 'requested') return true;
+  if (action.origin !== 'delegated_subagent') return false;
+  return action.delivery_state === 'delivery_pending' || action.status === 'unavailable';
+}
+
 function pendingApprovalActions(actions: readonly FlowerApprovalAction[] | undefined): readonly FlowerApprovalAction[] {
-  return (actions ?? []).filter((action) => action.status === 'pending' && action.state === 'requested');
+  return (actions ?? []).filter(visibleApprovalAction);
 }
 
 function blockFromLiveBlock(block: FlowerLiveBlock): FlowerChatMessageBlock | null {
@@ -98,6 +104,7 @@ function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadP
     ...(Number(patch.updated_at_ms ?? 0) > 0 ? { updated_at_ms: Number(patch.updated_at_ms) } : {}),
     status,
     ...(Number(patch.queued_turn_count ?? -1) >= 0 ? { queued_turn_count: Number(patch.queued_turn_count) } : {}),
+    ...(patch.permission_type !== undefined ? { permission_type: patch.permission_type } : {}),
     ...(patch.reasoning_selection !== undefined ? { reasoning_selection: patch.reasoning_selection ?? undefined } : {}),
     ...(patch.reasoning_capability !== undefined ? { reasoning_capability: patch.reasoning_capability ?? undefined } : {}),
     ...(patch.read_status ? { read_status: patch.read_status } : {}),
@@ -111,7 +118,9 @@ function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadP
 }
 
 function approvalsFromRecord(actions: Readonly<Record<string, FlowerApprovalAction>>): readonly FlowerApprovalAction[] {
-  return pendingApprovalActions(Object.values(actions).sort((left, right) => left.action_id.localeCompare(right.action_id)));
+  return Object.values(actions)
+    .filter(visibleApprovalAction)
+    .sort((left, right) => left.action_id.localeCompare(right.action_id));
 }
 
 function firstInputRequest(inputRequests: Readonly<Record<string, FlowerInputRequest>>): FlowerInputRequest | null {
@@ -333,7 +342,7 @@ function updateMessageStrict(
 function withApprovalAction(thread: FlowerThreadSnapshot, action: FlowerApprovalAction): FlowerThreadSnapshot {
   const current = thread.approval_actions ?? [];
   const next = current.filter((item) => item.action_id !== action.action_id);
-  if (action.status === 'pending' && action.state === 'requested') {
+  if (visibleApprovalAction(action)) {
     next.push(action);
   }
   const updated = {

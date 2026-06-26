@@ -69,7 +69,7 @@ type taskResult struct {
 
 type threadStateSummary struct {
 	ThreadID           string   `json:"thread_id,omitempty"`
-	ExecutionMode      string   `json:"execution_mode,omitempty"`
+	PermissionType     string   `json:"permission_type,omitempty"`
 	RunStatus          string   `json:"run_status,omitempty"`
 	WaitingPrompt      bool     `json:"waiting_prompt"`
 	WaitingReasonCode  string   `json:"waiting_reason_code,omitempty"`
@@ -574,10 +574,7 @@ func runTask(
 		ReasoningOnly:                    task.Runtime.ReasoningOnly,
 		RequireUserConfirmOnTaskComplete: task.Runtime.RequireUserConfirmOnTaskComplete,
 		NoUserInteraction:                task.Runtime.NoUserInteraction,
-	}
-	if sandbox.WorkspaceMode == taskWorkspaceModeSourceReadonly {
-		runOptions.ToolAllowlist = evalReadonlyToolAllowlist()
-		runOptions.ForceReadonlyExec = true
+		PermissionType:                   task.Runtime.PermissionType,
 	}
 
 	svc, err := ai.NewService(ai.Options{
@@ -608,7 +605,12 @@ func runTask(
 		CanExecute:        true,
 		CanAdmin:          false,
 	}
-	thread, err := svc.CreateThread(ctx, meta, "eval-"+task.ID, modelID, task.Runtime.ExecutionMode, sandbox.WorkspacePath)
+	thread, err := svc.CreateThreadWithOptions(ctx, meta, ai.CreateThreadRequest{
+		Title:          "eval-" + task.ID,
+		ModelID:        modelID,
+		PermissionType: task.Runtime.PermissionType,
+		WorkingDir:     sandbox.WorkspacePath,
+	})
 	if err != nil {
 		return failedTaskResult(task, sourceWorkspace, sandbox, inputs, "create_thread_failed", err)
 	}
@@ -741,19 +743,6 @@ func runTask(
 	return result
 }
 
-func evalReadonlyToolAllowlist() []string {
-	return []string{
-		"ask_user",
-		"exit_plan_mode",
-		"file.read",
-		"okf.search",
-		"task_complete",
-		"terminal.exec",
-		"web.search",
-		"write_todos",
-	}
-}
-
 func failedTaskResult(task evalTask, sourceWorkspace string, sandbox evalTaskSandbox, inputs []string, reason string, err error) taskResult {
 	msg := strings.TrimSpace(reason)
 	if err != nil {
@@ -877,7 +866,7 @@ func summarizeThreadState(thread *ai.ThreadView) threadStateSummary {
 	}
 	out := threadStateSummary{
 		ThreadID:           strings.TrimSpace(thread.ThreadID),
-		ExecutionMode:      strings.TrimSpace(thread.ExecutionMode),
+		PermissionType:     strings.TrimSpace(thread.PermissionType),
 		RunStatus:          strings.TrimSpace(thread.RunStatus),
 		WaitingPrompt:      thread.WaitingPrompt != nil,
 		LastMessagePreview: strings.TrimSpace(thread.LastMessagePreview),
@@ -1395,8 +1384,8 @@ func writeMarkdown(path string, report evalReport) error {
 			result.Outcome.RecoveryCandidate,
 			result.Outcome.RecoverySucceeded,
 		))
-		b.WriteString(fmt.Sprintf("- Thread: mode=`%s` status=`%s` waiting_prompt=%t\n",
-			result.ThreadState.ExecutionMode,
+		b.WriteString(fmt.Sprintf("- Thread: permission=`%s` status=`%s` waiting_prompt=%t\n",
+			result.ThreadState.PermissionType,
 			result.ThreadState.RunStatus,
 			result.ThreadState.WaitingPrompt,
 		))

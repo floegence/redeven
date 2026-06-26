@@ -5,8 +5,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/floegence/redeven/internal/config"
 )
 
 type promptSection struct {
@@ -34,7 +32,7 @@ type promptRuntimeSnapshot struct {
 	WorkspaceContext               promptWorkspaceContext
 	RoundIndex                     int
 	IsFirstRound                   bool
-	Mode                           string
+	PermissionType                 string
 	Objective                      string
 	TaskComplexity                 string
 	PromptProfile                  string
@@ -50,10 +48,9 @@ type promptRuntimeSnapshot struct {
 
 type cachedPromptPrefixKey struct {
 	Profile                        string
-	Mode                           string
+	PermissionType                 string
 	AllowUserInteraction           bool
 	SupportsAskUserQuestionBatches bool
-	PlanMode                       bool
 }
 
 type promptStaticPrefixCache struct {
@@ -184,7 +181,7 @@ func (d promptDocument) render(cache *promptStaticPrefixCache, key cachedPromptP
 	return strings.Join(parts, "\n\n")
 }
 
-func buildPromptRuntimeSnapshot(r *run, objective string, mode string, complexity string, round int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string, capability runCapabilityContract) promptRuntimeSnapshot {
+func buildPromptRuntimeSnapshot(r *run, objective string, permissionType string, complexity string, round int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string, capability runCapabilityContract) promptRuntimeSnapshot {
 	complexity = normalizeTaskComplexity(complexity)
 	allowUserInteraction := capability.AllowUserInteraction
 	if !allowUserInteraction && strings.TrimSpace(capability.PromptProfile) == "" {
@@ -210,7 +207,7 @@ func buildPromptRuntimeSnapshot(r *run, objective string, mode string, complexit
 		WorkspaceContext: collectPromptWorkspaceContext(r, capability),
 		RoundIndex:       round,
 		IsFirstRound:     isFirstRound,
-		Mode:             strings.TrimSpace(mode),
+		PermissionType:   strings.TrimSpace(permissionType),
 		Objective:        strings.TrimSpace(objective),
 		TaskComplexity:   complexity,
 		PromptProfile:    resolveRunPromptProfile(strings.TrimSpace(capability.PromptProfile), r, allowUserInteraction),
@@ -261,7 +258,7 @@ func buildPromptStaticSections(spec promptProfileSpec, snapshot promptRuntimeSna
 		sections = append(sections, section)
 	}
 	sections = append(sections,
-		buildPromptOnlineResearchSection(),
+		buildPromptOnlineResearchSection(snapshot),
 		buildPromptComplexitySection(),
 		buildPromptMandatoryRulesSection(snapshot),
 		buildPromptTodoDisciplineSection(),
@@ -269,15 +266,12 @@ func buildPromptStaticSections(spec promptProfileSpec, snapshot promptRuntimeSna
 		buildPromptToolFailureRecoverySection(snapshot),
 		buildPromptCommonWorkflowsSection(snapshot),
 		newPromptSection("markdown_output_contract", buildMarkdownOutputContractLines()...),
-		buildPromptSearchTemplateSection(),
+		buildPromptSearchTemplateSection(snapshot),
 	)
 	if snapshot.AllowUserInteraction {
 		sections = append(sections, buildPromptAskUserPolicySection(snapshot))
 	} else if section := buildPromptAutonomousInteractionSection(spec); !section.isEmpty() {
 		sections = append(sections, section)
-	}
-	if isPlanMode(snapshot.Mode) {
-		sections = append(sections, buildPromptPlanModeSection(spec, snapshot))
 	}
 	return sections
 }
@@ -288,11 +282,13 @@ func buildPromptDynamicSections(snapshot promptRuntimeSnapshot) []promptSection 
 	if section := buildPromptWorkspaceContextSection(snapshot); !section.isEmpty() {
 		sections = append(sections, section)
 	}
-	if section := newPromptSectionFromText("skill_catalog", buildSkillCatalogPrompt(snapshot.AvailableSkills)); !section.isEmpty() {
-		sections = append(sections, section)
-	}
-	if section := newPromptSectionFromText("skill_overlay", buildSkillOverlayPrompt(snapshot.ActiveSkills)); !section.isEmpty() {
-		sections = append(sections, section)
+	if promptToolAvailable(snapshot.AvailableToolNames, "use_skill") {
+		if section := newPromptSectionFromText("skill_catalog", buildSkillCatalogPrompt(snapshot.AvailableSkills)); !section.isEmpty() {
+			sections = append(sections, section)
+		}
+		if section := newPromptSectionFromText("skill_overlay", buildSkillOverlayPrompt(snapshot.ActiveSkills)); !section.isEmpty() {
+			sections = append(sections, section)
+		}
 	}
 	return sections
 }
@@ -309,12 +305,31 @@ func buildPromptMandateSection(spec promptProfileSpec) promptSection {
 }
 
 func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
-	lines := []string{
-		"# Tool Usage Strategy",
+	lines := []string{"# Tool Usage Strategy"}
+	if strings.TrimSpace(snapshot.PermissionType) == string(FlowerPermissionReadonly) {
+		lines = append(lines,
+			"Follow this workflow for every task:",
+			"1. **Investigate** — Use read_file/read_files, rgrep, and find for project-scoped workspace inspection. Use web.search for URL discovery and web_fetch for public text pages when network information is needed.",
+			"2. **Reason** — Identify what can be answered or verified with the readonly tools currently available.",
+			"3. **Verify** — Cross-check claims with additional readonly inspection or authoritative fetched sources. Shell commands and file mutation tools are unavailable in readonly permission.",
+			"4. **Respond** — Reply naturally when the turn is complete; use ask_user only when the next step truly depends on user input.",
+			"",
+			"Information source routing:",
+			"- Current workspace code and files -> read_file/read_files, rgrep, or find.",
+			"- Redeven repository knowledge (architecture, protocols, runtime/Desktop/gateway behavior, Workbench contracts, release automation, and maintained OKF concepts) -> okf.search.",
+			"- Source-level conclusions -> verify OKF background with readonly file/search tools before final conclusions.",
+			"- External/current/recent/news/third-party/general web facts -> authoritative URLs via web_fetch; use web.search only for discovery when the URL is unknown.",
+			"",
+			"Skill routing:",
+			"- Skills are unavailable in readonly unless explicitly listed in the current available tools.",
+		)
+		return newPromptSection("tool_usage_strategy", lines...)
+	}
+	lines = append(lines,
 		"Follow this workflow for every task:",
 		"1. **Investigate** — Use terminal.exec to inspect the workspace, relevant local paths, and device state (rg/sed/cat for code; OS probes for diagnostics; curl for network data) and gather context.",
-		"2. **Plan** — Identify what needs to be done based on the information gathered.",
-		"3. **Act** — Use the available file tools for file inspection and mutation, apply_patch for patch-shaped edits, and terminal.exec for validated command actions.",
+		"2. **Reason** — Identify what needs to be done based on the information gathered.",
+		"3. **Change** — Use the available file tools for file inspection and mutation, apply_patch for patch-shaped edits, and terminal.exec for validated command actions.",
 		"4. **Verify** — Use terminal.exec to run checks (tests/lint/build) and confirm correctness.",
 		"5. **Respond** — Reply naturally when the turn is complete; use ask_user only when the next step truly depends on user input.",
 		"",
@@ -326,7 +341,7 @@ func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
 		"",
 		"Skill routing:",
 		"- When a request clearly matches an available skill, activate it with use_skill before acting and follow the activated skill body for domain-specific operations.",
-	}
+	)
 	return newPromptSection("tool_usage_strategy", lines...)
 }
 
@@ -372,7 +387,20 @@ func buildPromptReportingSection(spec promptProfileSpec) promptSection {
 	return newPromptSection("result_reporting", lines...)
 }
 
-func buildPromptOnlineResearchSection() promptSection {
+func buildPromptOnlineResearchSection(snapshot promptRuntimeSnapshot) promptSection {
+	if strings.TrimSpace(snapshot.PermissionType) == string(FlowerPermissionReadonly) {
+		return newPromptSection(
+			"online_research_policy",
+			"# Online Research Policy",
+			"- When you need up-to-date or external information, prefer authoritative primary sources and direct URLs over web search.",
+			"- Preferred sources: official product documentation, vendor docs, standards/RFCs, official GitHub repos/releases, and other primary sources.",
+			"- Use web.search only for discovery when you cannot identify the correct authoritative URL.",
+			"- Treat search results as pointers, not evidence: fetch the underlying public text pages with web_fetch, validate key details, and reference the exact URLs you relied on.",
+			"- OKF does not access the internet and must not be used for external/current/recent/news/third-party/general web facts.",
+			"- Do not use okf.search as a fallback when web.search/web_fetch is unavailable.",
+			"- Avoid low-quality SEO content; if you must use it, corroborate with an authoritative source.",
+		)
+	}
 	return newPromptSection(
 		"online_research_policy",
 		"# Online Research Policy",
@@ -403,10 +431,26 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 		"- Use tools when they are needed for reliable evidence or actions.",
 		"- If you cannot complete safely, use the allowed completion path for this run. Do not stop silently.",
 		"- You MUST use tools to investigate before answering questions about files, code, or the workspace.",
-		"- Use okf.search only for Redeven repository knowledge; for source-level conclusions, verify OKF background with terminal.exec or file tools before final conclusions.",
 		"- Do NOT expose internal evidence path:line details to end users unless they explicitly ask for repository-level traceability.",
 	}
+	if strings.TrimSpace(snapshot.PermissionType) == string(FlowerPermissionReadonly) {
+		lines = append(lines,
+			"- Use okf.search only for Redeven repository knowledge; for source-level conclusions, verify OKF background with readonly file/search tools before final conclusions.",
+			"- Prefer read_file/read_files for direct file inspection, rgrep for content search, find for path discovery, and web_fetch for authoritative public text pages.",
+			"- Shell commands, file edits, patch application, and mutation-oriented verification are unavailable in readonly permission.",
+			"- When the task asks for verification that requires unavailable shell or mutation tools, explain the permission blocker and use ask_user only when user direction is required.",
+			"- Keep file paths inside the active project boundary; the runtime home is only the outer sandbox.",
+			"- Do NOT fabricate file contents, command outputs, or tool results. Always use available tools to get real data.",
+			"- Do NOT ask the user to gather logs, inspect files, or paste outputs that available readonly tools can obtain directly.",
+			"- Prefer autonomous continuation whenever available tools can make progress.",
+			"- If information is insufficient and tools cannot help, follow the interaction policy in runtime context.",
+			"- When the user uses relative dates such as today, tomorrow, or yesterday, resolve them against the current date and timezone in runtime context, and prefer explicit absolute dates when clarity matters.",
+			"- Prefer concrete choices over template placeholders like `YYYY-MM-DD`; the UI already provides a custom fallback input.",
+		)
+		return newPromptSection("mandatory_rules", lines...)
+	}
 	lines = append(lines,
+		"- Use okf.search only for Redeven repository knowledge; for source-level conclusions, verify OKF background with terminal.exec or file tools before final conclusions.",
 		"- Prefer the explicit file tools for direct file inspection or mutation when they are available.",
 		"- Prefer apply_patch for patch-shaped edits instead of shell redirection or ad-hoc overwrite commands.",
 		"- When the task asks for verification or a verification command, use terminal.exec for that verification; file inspection can supplement but does not replace a real verification command.",
@@ -436,7 +480,7 @@ func buildPromptTodoDisciplineSection() promptSection {
 		"- Use write_todos for meaningful multi-step execution when it clarifies current work and remaining work.",
 		"- Skip write_todos for a single trivial step that can be completed immediately.",
 		"- Do NOT call write_todos with an empty list when there is no actionable work to track.",
-		"- Track only actionable work in write_todos. Do not create todos for control signals such as task_complete, ask_user, or exit_plan_mode.",
+		"- Track only actionable work in write_todos. Do not create todos for control signals such as task_complete or ask_user.",
 		"- Keep exactly one todo as in_progress at a time.",
 		"- Update write_todos immediately when you start, complete, cancel, or discover work.",
 	)
@@ -459,6 +503,14 @@ func buildPromptToolFailureRecoverySection(snapshot promptRuntimeSnapshot) promp
 		"- Do NOT pre-probe tool availability. Choose the best tool and try it.",
 		"- On tool error: read the tool_result payload, then either repair args (once) or switch tools.",
 	}
+	if strings.TrimSpace(snapshot.PermissionType) == string(FlowerPermissionReadonly) {
+		lines = append(lines,
+			"- If read_file/read_files fails for a path, use find or rgrep to locate the correct project-scoped file and then retry with the corrected path.",
+			"- If rgrep fails because the query is too broad or invalid, narrow the query, reduce context, or switch to read_file/read_files on likely files.",
+			"- If web_fetch fails or blocks a URL, use web.search to find an authoritative alternate URL; do not try shell commands.",
+		)
+		return newPromptSection("tool_failure_recovery", lines...)
+	}
 	lines = append(lines,
 		"- If file.edit fails because the target text no longer matches, re-read the file and regenerate a fresh exact replacement once.",
 		"- If file.write would overwrite the wrong content, inspect the current file first and then rewrite deterministically.",
@@ -471,6 +523,16 @@ func buildPromptToolFailureRecoverySection(snapshot promptRuntimeSnapshot) promp
 }
 
 func buildPromptCommonWorkflowsSection(snapshot promptRuntimeSnapshot) promptSection {
+	if strings.TrimSpace(snapshot.PermissionType) == string(FlowerPermissionReadonly) {
+		return newPromptSection(
+			"common_workflows",
+			"# Common Workflows",
+			"- **Workspace questions**: rgrep/find -> read_file/read_files -> analyze -> final answer",
+			"- **External facts**: web.search when needed -> web_fetch authoritative source -> final answer with URLs",
+			"- **Code review**: rgrep/find -> read_file/read_files -> reason about risks/tests -> final answer",
+			"- **Blocked by missing mutation or shell**: explain the blocker and ask_user when user direction is needed.",
+		)
+	}
 	lines := []string{
 		"# Common Workflows",
 		"- **Shell tasks**: terminal.exec → inspect output → final answer",
@@ -481,7 +543,15 @@ func buildPromptCommonWorkflowsSection(snapshot promptRuntimeSnapshot) promptSec
 	return newPromptSection("common_workflows", lines...)
 }
 
-func buildPromptSearchTemplateSection() promptSection {
+func buildPromptSearchTemplateSection(snapshot promptRuntimeSnapshot) promptSection {
+	if strings.TrimSpace(snapshot.PermissionType) == string(FlowerPermissionReadonly) {
+		return newPromptSection(
+			"search_template",
+			"# Search Template",
+			"- Default rgrep: query=\"<PATTERN>\", paths=[\".\"], include_hidden=true, globs=[\"!.git\", \"!node_modules\", \"!.pnpm-store\", \"!dist\", \"!build\", \"!out\", \"!coverage\", \"!target\", \"!.venv\", \"!venv\", \"!.cache\", \"!.next\", \"!.turbo\"].",
+			"- If you explicitly need dependency or build output, remove the relevant glob excludes.",
+		)
+	}
 	return newPromptSection(
 		"search_template",
 		"# Search Template",
@@ -516,10 +586,7 @@ func buildPromptAskUserPolicySection(snapshot promptRuntimeSnapshot) promptSecti
 		"- When offering fixed options about the user's real situation, preference, habit, background, or other potentially non-exhaustive state, treat the set as non-exhaustive by default: use `response_mode:\"select_or_write\"` and `choices_exhaustive:false` unless the option set is genuinely exhaustive by construction.",
 		"- If the user explicitly asks for an `Other` or `None of the above` path, represent it via `response_mode:\"select_or_write\"` with `choices_exhaustive:false`.",
 		"- Keep choices concise and mutually exclusive. Put the best/default path first when that ordering matters.",
-		"- For deterministic UI actions, place actions on `questions[].choices[].actions` (for example {type:\"set_mode\",mode:\"act\"}).",
-	}
-	if promptToolAvailable(snapshot.AvailableToolNames, "exit_plan_mode") {
-		lines = append(lines, "- Do NOT use ask_user for plan-to-act switching when exit_plan_mode is available; use exit_plan_mode instead.")
+		"- For deterministic UI actions, place actions on `questions[].choices[].actions` only when the action is a true UI action in the current runtime contract.",
 	}
 	if snapshot.SupportsAskUserQuestionBatches {
 		lines = append(lines, "- Default to one question at a time. Use multiple questions only when the questions are tightly coupled and must be answered together.")
@@ -536,42 +603,6 @@ func buildPromptAutonomousInteractionSection(spec promptProfileSpec) promptSecti
 	lines := []string{"# Interaction Policy"}
 	lines = append(lines, spec.InteractionLines...)
 	return newPromptSection("interaction_policy", lines...)
-}
-
-func buildPromptPlanModeSection(spec promptProfileSpec, snapshot promptRuntimeSnapshot) promptSection {
-	lines := []string{
-		"## Plan Mode Rules (Strict Readonly)",
-		"- Prioritize investigation, reasoning, and clear execution plans.",
-		"- Plan mode is strict readonly: do NOT run any mutating action.",
-		"- Do NOT call file.edit, file.write, apply_patch, or mutating terminal.exec commands.",
-		"- Readonly terminal.exec commands include local inspection and readonly HTTP fetches that only stream to stdout (for example `curl -s URL`, `curl -I URL`, `wget -qO- URL`).",
-		"- HTTP commands that write local files/state or send request bodies/uploads are mutating (for example `curl -o`, `curl -d`, `curl -F`, `curl -T`, `wget -O file`, `wget --post-data`).",
-	}
-	if snapshot.AllowUserInteraction {
-		if promptToolAvailable(snapshot.AvailableToolNames, "exit_plan_mode") {
-			lines = append(lines,
-				"- If execution is required, call exit_plan_mode instead of constructing a manual mode-switch ask_user payload.",
-				"- Keep the summary concise and focused on why act mode is required.",
-			)
-		} else {
-			lines = append(lines,
-				"- If edits are required, call ask_user and request the user to switch this thread to act mode.",
-				"- For this switch request, use reason_code=user_decision_required and keep required_from_user concrete.",
-				"- Use a single ask_user question whose options include one label like \"Switch to Act mode\" with actions=[{type:\"set_mode\",mode:\"act\"}].",
-			)
-		}
-	} else if spec.PrefersParentFacingReporting {
-		lines = append(lines,
-			"- User interaction is disabled in this run, so do NOT call ask_user.",
-			"- If edits are required, finish with task_complete and report blockers plus suggested parent actions.",
-		)
-	} else {
-		lines = append(lines,
-			"- User interaction is disabled in this run, so do NOT call ask_user.",
-			"- If edits are required, finish with task_complete and report blockers plus concrete next-step guidance for the user-facing thread.",
-		)
-	}
-	return newPromptSection("plan_mode_rules", lines...)
 }
 
 func buildPromptRuntimeContextSection(snapshot promptRuntimeSnapshot) promptSection {
@@ -596,7 +627,6 @@ func buildPromptRuntimeContextSection(snapshot promptRuntimeSnapshot) promptSect
 	lines = append(lines, renderPromptLocalTimeContextLines(snapshot.LocalTime)...)
 	lines = append(lines,
 		fmt.Sprintf("- Current round: %d (first_round=%t)", snapshot.RoundIndex+1, snapshot.IsFirstRound),
-		fmt.Sprintf("- Mode: %s", snapshot.Mode),
 		fmt.Sprintf("- Prompt profile: %s", snapshot.PromptProfile),
 		fmt.Sprintf("- Task complexity: %s", snapshot.TaskComplexity),
 		fmt.Sprintf("- Available tools: %s", snapshot.AvailableToolNames),
@@ -612,19 +642,20 @@ func buildPromptRuntimeContextSection(snapshot promptRuntimeSnapshot) promptSect
 		lines = append(lines, "- Interaction policy: user interaction is disabled in this run. Continue autonomously or finish with task_complete including blockers plus concrete next-step guidance for the user-facing thread.")
 	}
 	if len(snapshot.AvailableSkills) > 0 {
-		lines = append(lines, fmt.Sprintf("- Available skills: %s", joinSkillNames(snapshot.AvailableSkills)))
+		if promptToolAvailable(snapshot.AvailableToolNames, "use_skill") {
+			lines = append(lines, fmt.Sprintf("- Available skills: %s", joinSkillNames(snapshot.AvailableSkills)))
+		}
 	}
 	return newPromptSection("runtime_context", lines...)
 }
 
 func promptStaticPrefixCacheKey(snapshot promptRuntimeSnapshot) cachedPromptPrefixKey {
-	mode := strings.ToLower(strings.TrimSpace(snapshot.Mode))
+	permissionType := strings.ToLower(strings.TrimSpace(snapshot.PermissionType))
 	return cachedPromptPrefixKey{
 		Profile:                        resolveRunPromptProfile(snapshot.PromptProfile, nil, snapshot.AllowUserInteraction),
-		Mode:                           mode,
+		PermissionType:                 permissionType,
 		AllowUserInteraction:           snapshot.AllowUserInteraction,
 		SupportsAskUserQuestionBatches: snapshot.SupportsAskUserQuestionBatches,
-		PlanMode:                       isPlanMode(mode),
 	}
 }
 
@@ -639,8 +670,4 @@ func promptToolAvailable(names string, want string) bool {
 		}
 	}
 	return false
-}
-
-func isPlanMode(mode string) bool {
-	return strings.EqualFold(strings.TrimSpace(mode), config.AIModePlan)
 }

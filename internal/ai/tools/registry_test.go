@@ -78,12 +78,6 @@ func TestBuiltInPresentationSpecsCarryProjectionFacts(t *testing.T) {
 			resultLabelFallback: "Update todos",
 		},
 		{
-			toolName:            "exit_plan_mode",
-			callLabelFallback:   "Exit plan mode",
-			resultLabelFallback: "Exit plan mode",
-			resultPayloadFields: []string{"summary", "allowed_prompts"},
-		},
-		{
 			toolName:            "task_complete",
 			callLabelFallback:   "Complete task",
 			resultLabelFallback: "Complete task",

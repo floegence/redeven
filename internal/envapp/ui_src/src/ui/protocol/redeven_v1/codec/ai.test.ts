@@ -47,7 +47,7 @@ describe('Redeven v1 AI codec', () => {
         },
       },
       options: {
-        mode: 'act',
+        permissionType: 'approval_required',
       },
     });
 
@@ -59,6 +59,8 @@ describe('Redeven v1 AI codec', () => {
     });
     expect(JSON.stringify(req.input.context_action)).not.toContain('can_write');
     expect(JSON.stringify(req.input.context_action)).not.toContain('grant');
+    expect(req.options?.permission_type).toBe('approval_required');
+    expect(req.options).not.toHaveProperty('mode');
   });
 
   it('encodes reasoning selection in turn options', () => {
@@ -69,7 +71,7 @@ describe('Redeven v1 AI codec', () => {
         attachments: [],
       },
       options: {
-        mode: 'act',
+        permissionType: 'approval_required',
         reasoningSelection: { level: 'high', budget_tokens: 4096 },
       },
     });
@@ -88,7 +90,7 @@ describe('Redeven v1 AI codec', () => {
         attachments: [],
       },
       options: {
-        mode: 'act',
+        permissionType: 'approval_required',
       },
     });
 
@@ -129,7 +131,7 @@ describe('Redeven v1 AI codec', () => {
         attachments: [],
       },
       options: {
-        mode: 'act',
+        permissionType: 'approval_required',
         reasoningSelection: { level: 'high' },
       },
     });
@@ -149,7 +151,7 @@ describe('Redeven v1 AI codec', () => {
         attachments: [],
       },
       options: {
-        mode: 'act',
+        permissionType: 'approval_required',
       },
     });
 
