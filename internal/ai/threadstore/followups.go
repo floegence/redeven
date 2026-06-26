@@ -419,6 +419,87 @@ LIMIT ?
 	return out, nil
 }
 
+func (s *Store) ListThreadsWithQueuedTurns(ctx context.Context, limit int) ([]QueuedThread, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+	if limit > 5000 {
+		limit = 5000
+	}
+	rows, err := s.db.QueryContext(ctx, `
+SELECT
+  t.endpoint_id,
+  t.thread_id,
+  t.run_status,
+  t.run_error_code,
+  t.run_error,
+  t.waiting_user_input_json,
+  t.namespace_public_id,
+  COUNT(q.queue_id) AS queued_turn_count,
+  MIN(q.created_at_unix_ms) AS first_queued_at_unix_ms,
+  MIN(q.sort_index) AS first_queued_sort_index,
+  COALESCE((
+    SELECT q2.queue_id
+    FROM ai_queued_turns AS q2
+    WHERE q2.endpoint_id = t.endpoint_id
+      AND q2.thread_id = t.thread_id
+      AND q2.lane = ?
+    ORDER BY q2.sort_index ASC, q2.queue_id ASC
+    LIMIT 1
+  ), '') AS first_queued_turn_id
+FROM ai_threads AS t
+JOIN ai_queued_turns AS q
+  ON q.endpoint_id = t.endpoint_id
+ AND q.thread_id = t.thread_id
+ AND q.lane = ?
+GROUP BY
+  t.endpoint_id,
+  t.thread_id,
+  t.run_status,
+  t.run_error_code,
+  t.run_error,
+  t.waiting_user_input_json,
+  t.namespace_public_id
+ORDER BY first_queued_sort_index ASC, first_queued_at_unix_ms ASC, t.thread_id ASC
+LIMIT ?
+`, FollowupLaneQueued, FollowupLaneQueued, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]QueuedThread, 0)
+	for rows.Next() {
+		var rec QueuedThread
+		if err := rows.Scan(
+			&rec.EndpointID,
+			&rec.ThreadID,
+			&rec.RunStatus,
+			&rec.RunErrorCode,
+			&rec.RunError,
+			&rec.WaitingUserInputJSON,
+			&rec.NamespacePublicID,
+			&rec.QueuedTurnCount,
+			&rec.FirstQueuedAtUnixMs,
+			&rec.FirstQueuedSortIndex,
+			&rec.FirstQueuedTurnID,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, rec)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (s *Store) UpdateFollowupText(ctx context.Context, endpointID string, threadID string, followupID string, textContent string) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, errors.New("store not initialized")

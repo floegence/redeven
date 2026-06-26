@@ -579,3 +579,26 @@ func TestSnapshotAssistantMessageJSONWithStatus_Streaming(t *testing.T) {
 		t.Fatalf("status=%q, want streaming", gotStatus)
 	}
 }
+
+func TestFinalizeIfContextCanceledPreservesCanceledFinalization(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	r := &run{messageID: "msg_cancel_finalization"}
+	r.requestCancel("canceled")
+
+	if !r.finalizeIfContextCanceled(ctx) {
+		t.Fatalf("finalizeIfContextCanceled returned false, want true")
+	}
+	if got := r.getEndReason(); got != "canceled" {
+		t.Fatalf("endReason=%q, want canceled", got)
+	}
+	if got := r.getFinalizationReason(); got != "canceled" {
+		t.Fatalf("finalizationReason=%q, want canceled", got)
+	}
+	status, code, msg := deriveThreadRunState(r.getEndReason(), r.getFinalizationReason(), r.getRunErrorCode(), nil)
+	if status != "canceled" || code != "" || msg != "" {
+		t.Fatalf("thread state=(%q,%q,%q), want canceled with no error", status, code, msg)
+	}
+}

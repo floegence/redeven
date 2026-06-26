@@ -463,12 +463,12 @@ describe('mergeFlowerThreadListRefresh', () => {
 
     const retained = mergeFlowerThreadListRefresh([selected, other], [other], {
       selectedThreadID: selected.thread_id,
-      pendingThreadID: selected.thread_id,
+      pendingThreadIDs: [selected.thread_id],
       sameThreadSnapshot,
     });
     const dropped = mergeFlowerThreadListRefresh([selected, other], [other], {
       selectedThreadID: selected.thread_id,
-      pendingThreadID: 'thread-different',
+      pendingThreadIDs: ['thread-different'],
       sameThreadSnapshot,
     });
 

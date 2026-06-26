@@ -70,6 +70,75 @@ func testSendTurnMeta() *session.Meta {
 	}
 }
 
+func prepareAndPersistUserTurnForTest(t *testing.T, svc *Service, meta *session.Meta, runID string, req RunStartRequest) (*preparedRun, persistedUserMessage, RunInput) {
+	t.Helper()
+
+	ctx := context.Background()
+	preparedUser, normalizedInput, err := svc.prepareUserMessage(ctx, meta, meta.EndpointID, req.ThreadID, req.Input)
+	if err != nil {
+		t.Fatalf("prepareUserMessage: %v", err)
+	}
+	req.Input = normalizedInput
+	persistedSeed := persistedUserMessage{
+		MessageID:       preparedUser.Message.MessageID,
+		MessageJSON:     preparedUser.Message.MessageJSON,
+		CreatedAtUnixMs: preparedUser.Message.CreatedAtUnixMs,
+	}
+	prepared, err := svc.prepareRun(meta, runID, req, nil, &persistedSeed)
+	if err != nil {
+		t.Fatalf("prepareRun: %v", err)
+	}
+	startedAt := time.Now().UnixMilli()
+	prepared.startedAtUnixMs = startedAt
+	result, err := prepared.db.StartUserTurn(ctx, threadstore.StartUserTurn{
+		EndpointID:  meta.EndpointID,
+		ThreadID:    req.ThreadID,
+		UserMessage: preparedUser.Message,
+		UploadIDs:   preparedUser.UploadIDs,
+		Run: threadstore.RunRecord{
+			RunID:           runID,
+			EndpointID:      meta.EndpointID,
+			ThreadID:        req.ThreadID,
+			MessageID:       prepared.messageID,
+			State:           string(RunStateRunning),
+			AttemptCount:    1,
+			StartedAtUnixMs: startedAt,
+			UpdatedAtUnixMs: startedAt,
+		},
+		Turn: threadstore.ConversationTurn{
+			TurnID:             prepared.messageID,
+			EndpointID:         meta.EndpointID,
+			ThreadID:           req.ThreadID,
+			RunID:              runID,
+			UserMessageID:      preparedUser.Message.MessageID,
+			AssistantMessageID: prepared.messageID,
+			CreatedAtUnixMs:    preparedUser.Message.CreatedAtUnixMs,
+		},
+		RunState: threadstore.ThreadRunStateWrite{
+			Status:                string(RunStateRunning),
+			UpdatedByUserPublicID: meta.UserPublicID,
+			UpdatedByUserEmail:    meta.UserEmail,
+			UpdatedAtUnixMs:       startedAt,
+		},
+		StructuredUserInputs:    preparedUser.StructuredInputs,
+		RequestUserInputSecrets: preparedUser.SecretAnswers,
+		UploadClaimedAtUnixMs:   preparedUser.Message.CreatedAtUnixMs,
+	})
+	if err != nil {
+		svc.releasePreparedRun(prepared)
+		t.Fatalf("StartUserTurn: %v", err)
+	}
+	persisted := persistedUserMessage{
+		MessageID:       result.UserMessageID,
+		RowID:           result.UserMessageRowID,
+		MessageJSON:     result.UserMessageJSON,
+		CreatedAtUnixMs: result.UserMessageCreatedAtUnixMs,
+	}
+	prepared.persistedUser = &persisted
+	prepared.req.Input = normalizedInput
+	return prepared, persisted, normalizedInput
+}
+
 func TestSendUserTurn_ExpectedRunChanged_DoesNotPersistMessage(t *testing.T) {
 	t.Parallel()
 
@@ -583,6 +652,105 @@ func TestExecutePreparedRun_WithPersistedUserMessage_ReusesPersistedMessageID(t 
 	}
 }
 
+func TestPromptPackExcludesPrecreatedCurrentTurn(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "precreated-current-turn", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	prepared, persisted, _ := prepareAndPersistUserTurnForTest(t, svc, meta, "run_precreated_current_turn", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			MessageID: "m_precreated_current_turn",
+			Text:      "this is the current user input",
+		},
+		Options: RunOptions{},
+	})
+	t.Cleanup(func() { svc.releasePreparedRun(prepared) })
+
+	pack, err := svc.contextPacker.BuildPromptPack(ctx, promptpacker.BuildInput{
+		EndpointID: meta.EndpointID,
+		ThreadID:   th.ThreadID,
+		RunID:      "run_precreated_current_turn",
+		UserInput:  "this is the current user input",
+		Capability: contextmodel.ModelCapability{SupportsAskUserQuestionBatches: true, MaxContextTokens: 2048},
+	})
+	if err != nil {
+		t.Fatalf("BuildPromptPack: %v", err)
+	}
+	for _, turn := range pack.RecentDialogue {
+		if turn.UserMessageID == persisted.MessageID || strings.Contains(turn.UserText, "this is the current user input") {
+			t.Fatalf("current turn leaked into recent dialogue: %+v", pack.RecentDialogue)
+		}
+	}
+}
+
+func TestExecutePreparedRun_PreEngineFailureTerminalizesRunRecord(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "pre-engine-failure", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if err := svc.threadsDB.UpdateThreadModelLock(ctx, meta.EndpointID, th.ThreadID, true); err != nil {
+		t.Fatalf("UpdateThreadModelLock: %v", err)
+	}
+
+	runID := "run_pre_engine_failure"
+	prepared, _, _ := prepareAndPersistUserTurnForTest(t, svc, meta, runID, RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-4o-mini",
+		Input: RunInput{
+			MessageID: "m_pre_engine_failure",
+			Text:      "trigger model lock failure",
+		},
+		Options: RunOptions{},
+	})
+
+	err = svc.executePreparedRun(ctx, prepared)
+	if !errors.Is(err, ErrModelSwitchRequiresExplicitRestart) {
+		t.Fatalf("executePreparedRun err=%v, want %v", err, ErrModelSwitchRequiresExplicitRestart)
+	}
+	rec, err := svc.threadsDB.GetRun(ctx, meta.EndpointID, runID)
+	if err != nil {
+		t.Fatalf("GetRun: %v", err)
+	}
+	if rec == nil {
+		t.Fatalf("run record missing")
+	}
+	if rec.State == string(RunStateRunning) || rec.State != string(RunStateFailed) {
+		t.Fatalf("run state=%q, want failed terminal", rec.State)
+	}
+	if rec.EndedAtUnixMs <= 0 {
+		t.Fatalf("EndedAtUnixMs=%d, want terminal timestamp", rec.EndedAtUnixMs)
+	}
+	msg, err := svc.threadsDB.GetTranscriptMessage(ctx, meta.EndpointID, th.ThreadID, prepared.messageID)
+	if err != nil {
+		t.Fatalf("GetTranscriptMessage assistant: %v", err)
+	}
+	if msg == nil || msg.Role != "assistant" || msg.Status != "error" || !strings.Contains(msg.TextContent, ErrModelSwitchRequiresExplicitRestart.Error()) {
+		t.Fatalf("assistant message=%+v, want persisted error assistant", msg)
+	}
+	turns, err := svc.contextRepo.ListRecentDialogueTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListRecentDialogueTurns: %v", err)
+	}
+	if len(turns) != 1 || turns[0].RunID != runID || turns[0].AssistantMessageID != prepared.messageID {
+		t.Fatalf("recent turns=%+v, want complete pre-engine failure turn", turns)
+	}
+}
+
 func TestSendUserTurn_ActiveRun_QueuesFollowUpWithoutCanceling(t *testing.T) {
 	t.Parallel()
 
@@ -697,6 +865,307 @@ func TestSendUserTurn_ActiveRun_QueuesFollowUpWithoutCanceling(t *testing.T) {
 	}
 	if len(threads.Threads) != 1 || threads.Threads[0].QueuedTurnCount != 1 {
 		t.Fatalf("ListThreads queued_turn_count mismatch: %+v", threads.Threads)
+	}
+}
+
+func TestSendUserTurn_ExistingQueuedTurnsKeepFIFOWhenThreadIdle(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "queued-fifo-idle", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	first, firstPos, err := svc.enqueueQueuedTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			MessageID: "m_fifo_first",
+			Text:      "first queued turn",
+		},
+		Options: RunOptions{},
+	})
+	if err != nil {
+		t.Fatalf("enqueueQueuedTurn first: %v", err)
+	}
+	if firstPos != 1 {
+		t.Fatalf("first position=%d, want 1", firstPos)
+	}
+
+	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			MessageID: "m_fifo_second",
+			Text:      "second queued turn",
+		},
+		Options: RunOptions{},
+	})
+	if err != nil {
+		t.Fatalf("SendUserTurn second: %v", err)
+	}
+	if resp.Kind != "queued" || strings.TrimSpace(resp.RunID) != "" || resp.QueuePosition != 2 {
+		t.Fatalf("SendUserTurn response=%+v, want queued in second position", resp)
+	}
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("messages=%+v, want no direct transcript while previous queued turn exists", msgs)
+	}
+	queued, err := svc.threadsDB.ListQueuedTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListQueuedTurns: %v", err)
+	}
+	if len(queued) != 2 || queued[0].QueueID != first.QueueID || queued[0].MessageID != "m_fifo_first" || queued[1].MessageID != "m_fifo_second" {
+		t.Fatalf("queued=%+v, want original FIFO order", queued)
+	}
+}
+
+func TestSendUserTurn_IdleCompactionQueuesUntilCompactionFinishes(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "idle-compaction-queue", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	begin, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_idle_queue", "run_idle_compaction_queue", FlowerTimelineAnchor{
+		TargetKind: "message",
+		MessageID:  "m_existing_anchor",
+		Edge:       "after",
+	}, threadstore.ThreadContextBoundary{}, func() {
+		t.Fatalf("idle compaction must not be canceled by a user turn")
+	})
+	if gateErr != nil || !begin.Started {
+		t.Fatalf("beginIdleThreadCompaction result=%+v err=%v", begin, gateErr)
+	}
+	defer svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, begin.OperationID)
+
+	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			MessageID: "m_idle_compaction_started",
+			Text:      "start now and replace compaction",
+		},
+		Options: RunOptions{},
+	})
+	if err != nil {
+		t.Fatalf("SendUserTurn: %v", err)
+	}
+	if resp.Kind != "queued" || strings.TrimSpace(resp.RunID) != "" || strings.TrimSpace(resp.QueueID) == "" || resp.QueuePosition != 1 {
+		t.Fatalf("SendUserTurn response=%+v, want queued follow-up", resp)
+	}
+	if got := svc.idleThreadCompactionOperation(meta.EndpointID, th.ThreadID); got != begin.OperationID {
+		t.Fatalf("idleThreadCompactionOperation=%q, want current operation %q", got, begin.OperationID)
+	}
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("messages=%+v, want no canonical transcript until compaction finishes", msgs)
+	}
+	queued, err := svc.threadsDB.ListQueuedTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListQueuedTurns: %v", err)
+	}
+	if len(queued) != 1 || queued[0].MessageID != "m_idle_compaction_started" {
+		t.Fatalf("queued=%+v, want queued follow-up after compaction", queued)
+	}
+	turns, err := svc.contextRepo.ListRecentDialogueTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListRecentDialogueTurns: %v", err)
+	}
+	if len(turns) != 0 {
+		t.Fatalf("turns=%+v, want no unfinished turn in recent dialogue", turns)
+	}
+}
+
+func TestQueuedDrain_WaitsForIdleCompactionThenStartsQueuedTurn(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "idle-compaction-drain", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if _, _, err := svc.enqueueQueuedTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			MessageID: "m_queued_idle_compaction_start",
+			Text:      "queued turn should start now",
+		},
+		Options: RunOptions{},
+	}); err != nil {
+		t.Fatalf("enqueueQueuedTurn: %v", err)
+	}
+
+	begin, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_idle_drain", "run_idle_compaction_drain", FlowerTimelineAnchor{
+		TargetKind: "message",
+		MessageID:  "m_existing_anchor",
+		Edge:       "after",
+	}, threadstore.ThreadContextBoundary{}, func() {
+		t.Fatalf("queued drain must not cancel idle compaction")
+	})
+	if gateErr != nil || !begin.Started {
+		t.Fatalf("beginIdleThreadCompaction result=%+v err=%v", begin, gateErr)
+	}
+
+	actor := svc.threadMgr.Get(meta.EndpointID, th.ThreadID)
+	if actor == nil {
+		t.Fatalf("thread actor missing")
+	}
+	if err := actor.handleMaybeStartQueuedTurn(ctx); err != nil {
+		t.Fatalf("handleMaybeStartQueuedTurn: %v", err)
+	}
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("messages=%+v, want no canonical transcript while compaction is running", msgs)
+	}
+	queued, err := svc.threadsDB.ListQueuedTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListQueuedTurns: %v", err)
+	}
+	if len(queued) != 1 {
+		t.Fatalf("queued=%+v, want queued turn retained while compaction is running", queued)
+	}
+
+	svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, begin.OperationID)
+	if got := svc.idleThreadCompactionOperation(meta.EndpointID, th.ThreadID); got != "" {
+		t.Fatalf("idleThreadCompactionOperation=%q, want cleared", got)
+	}
+	if err := actor.handleMaybeStartQueuedTurn(ctx); err != nil {
+		t.Fatalf("handleMaybeStartQueuedTurn after compaction: %v", err)
+	}
+	msgs, _, _, err = svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages after compaction: %v", err)
+	}
+	if len(msgs) != 1 || msgs[0].MessageID != "m_queued_idle_compaction_start" {
+		t.Fatalf("messages=%+v, want queued turn canonical transcript after compaction", msgs)
+	}
+	queued, err = svc.threadsDB.ListQueuedTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListQueuedTurns after compaction: %v", err)
+	}
+	if len(queued) != 0 {
+		t.Fatalf("queued=%+v, want queued turn consumed after compaction", queued)
+	}
+	threadView, err := svc.GetThread(ctx, meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread after drain: %v", err)
+	}
+	if threadView == nil || strings.TrimSpace(threadView.RunStatus) != string(RunStateRunning) || threadView.QueuedTurnCount != 0 {
+		t.Fatalf("threadView=%+v, want running with no queued turns", threadView)
+	}
+	threads, err := svc.ListThreads(ctx, meta, 20, "")
+	if err != nil {
+		t.Fatalf("ListThreads after drain: %v", err)
+	}
+	if len(threads.Threads) != 1 || strings.TrimSpace(threads.Threads[0].RunStatus) != string(RunStateRunning) || threads.Threads[0].QueuedTurnCount != 0 {
+		t.Fatalf("threads=%+v, want running thread with no queued turns", threads.Threads)
+	}
+}
+
+func TestStartRunDetachedRejectedWhileIdleCompactionRunning(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "idle-compaction-start-run-gate", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	begin, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_start_run_gate", "run_idle_gate", FlowerTimelineAnchor{
+		TargetKind: "message",
+		MessageID:  "m_idle_gate_anchor",
+		Edge:       "after",
+	}, threadstore.ThreadContextBoundary{}, func() {})
+	if gateErr != nil || !begin.Started || begin.OperationID == "" {
+		t.Fatalf("beginIdleThreadCompaction result=%+v err=%v", begin, gateErr)
+	}
+	defer svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, begin.OperationID)
+
+	err = svc.StartRunDetached(meta, "run_must_not_start_during_idle_compaction", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			MessageID: "m_should_not_persist",
+			Text:      "this path must respect the idle compaction gate",
+		},
+		Options: RunOptions{},
+	})
+	if !errors.Is(err, ErrThreadBusy) {
+		t.Fatalf("StartRunDetached err=%v, want %v", err, ErrThreadBusy)
+	}
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("messages=%+v, want no transcript message from rejected detached run", msgs)
+	}
+	if got := svc.idleThreadCompactionOperation(meta.EndpointID, th.ThreadID); got != begin.OperationID {
+		t.Fatalf("idleThreadCompactionOperation=%q, want %q", got, begin.OperationID)
+	}
+}
+
+func TestBeginIdleCompactionRejectedWhileActiveRunRegistered(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "active-run-idle-compaction-gate", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	thKey := runThreadKey(meta.EndpointID, th.ThreadID)
+	svc.mu.Lock()
+	svc.activeRunByTh[thKey] = "run_active_gate"
+	svc.mu.Unlock()
+
+	cancelled := false
+	begin, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_must_not_register", "run_idle_must_not_register", FlowerTimelineAnchor{
+		TargetKind: "message",
+		MessageID:  "m_active_gate_anchor",
+		Edge:       "after",
+	}, threadstore.ThreadContextBoundary{}, func() {
+		cancelled = true
+	})
+	if !errors.Is(gateErr, ErrThreadBusy) {
+		t.Fatalf("beginIdleThreadCompaction err=%v, want %v", gateErr, ErrThreadBusy)
+	}
+	if begin.Started {
+		t.Fatalf("beginIdleThreadCompaction result=%+v, want rejected", begin)
+	}
+	if !cancelled {
+		t.Fatalf("beginIdleThreadCompaction did not cancel rejected idle compaction context")
+	}
+	if existing := svc.idleThreadCompactionOperation(meta.EndpointID, th.ThreadID); existing != "" {
+		t.Fatalf("idle compaction operation=%q, want none", existing)
 	}
 }
 
@@ -987,6 +1456,102 @@ func TestThreadActor_MaybeStartQueuedTurn_DropsInvalidQueuedTurnAndLogsIt(t *tes
 	t.Fatalf("queued turn failure not logged: %s", logBuf.String())
 }
 
+func TestThreadActor_MaybeStartQueuedTurn_ConsumesPermanentDuplicateAndDrainsNext(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "duplicate queued drain", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	prepared, _, _ := prepareAndPersistUserTurnForTest(t, svc, meta, "run_existing_duplicate", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			MessageID: "m_duplicate_queue",
+			Text:      "already canonical",
+		},
+		Options: RunOptions{},
+	})
+	t.Cleanup(func() { svc.releasePreparedRun(prepared) })
+	if err := svc.threadsDB.UpdateThreadRunState(ctx, meta.EndpointID, th.ThreadID, string(RunStateSuccess), "", "", "", meta.UserPublicID, meta.UserEmail); err != nil {
+		t.Fatalf("UpdateThreadRunState success: %v", err)
+	}
+	svc.releasePreparedRun(prepared)
+
+	if _, _, _, err := svc.threadsDB.CreateFollowup(ctx, threadstore.QueuedTurn{
+		QueueID:               "q_duplicate_queue",
+		EndpointID:            meta.EndpointID,
+		ThreadID:              th.ThreadID,
+		ChannelID:             meta.ChannelID,
+		Lane:                  threadstore.FollowupLaneQueued,
+		MessageID:             "m_duplicate_queue",
+		ModelID:               "openai/gpt-5-mini",
+		TextContent:           "already canonical",
+		OptionsJSON:           marshalQueuedTurnOptions(RunOptions{}),
+		SessionMetaJSON:       marshalQueuedTurnSessionMeta(meta),
+		CreatedByUserPublicID: meta.UserPublicID,
+		CreatedByUserEmail:    meta.UserEmail,
+		SortIndex:             1,
+	}); err != nil {
+		t.Fatalf("CreateFollowup duplicate: %v", err)
+	}
+	if _, _, _, err := svc.threadsDB.CreateFollowup(ctx, threadstore.QueuedTurn{
+		QueueID:               "q_next_queue",
+		EndpointID:            meta.EndpointID,
+		ThreadID:              th.ThreadID,
+		ChannelID:             meta.ChannelID,
+		Lane:                  threadstore.FollowupLaneQueued,
+		MessageID:             "m_next_queue",
+		ModelID:               "openai/gpt-5-mini",
+		TextContent:           "start next queued turn",
+		OptionsJSON:           marshalQueuedTurnOptions(RunOptions{}),
+		SessionMetaJSON:       marshalQueuedTurnSessionMeta(meta),
+		CreatedByUserPublicID: meta.UserPublicID,
+		CreatedByUserEmail:    meta.UserEmail,
+		SortIndex:             2,
+	}); err != nil {
+		t.Fatalf("CreateFollowup next: %v", err)
+	}
+
+	actor := svc.threadMgr.Get(meta.EndpointID, th.ThreadID)
+	if actor == nil {
+		t.Fatalf("thread actor missing")
+	}
+	actor.wakeMaybeStartQueuedTurn()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		queued, listErr := svc.threadsDB.ListQueuedTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+		if listErr != nil {
+			t.Fatalf("ListQueuedTurns: %v", listErr)
+		}
+		msg, getErr := svc.threadsDB.GetTranscriptMessage(ctx, meta.EndpointID, th.ThreadID, "m_next_queue")
+		if getErr != nil {
+			t.Fatalf("GetTranscriptMessage next: %v", getErr)
+		}
+		if len(queued) == 0 && msg != nil {
+			turns, turnErr := svc.threadsDB.ListConversationTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+			if turnErr != nil {
+				t.Fatalf("ListConversationTurns: %v", turnErr)
+			}
+			if len(turns) != 2 || turns[1].UserMessageID != "m_next_queue" {
+				t.Fatalf("turns=%+v, want duplicate consumed and next queued turn started", turns)
+			}
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	queued, listErr := svc.threadsDB.ListQueuedTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if listErr != nil {
+		t.Fatalf("ListQueuedTurns final: %v", listErr)
+	}
+	t.Fatalf("queued=%+v, want duplicate consumed and next queued turn started", queued)
+}
+
 func TestSendUserTurn_ModelLockConflict_DoesNotPersistMessage(t *testing.T) {
 	t.Parallel()
 
@@ -1023,7 +1588,61 @@ func TestSendUserTurn_ModelLockConflict_DoesNotPersistMessage(t *testing.T) {
 	}
 }
 
-func TestContextRepo_ListRecentDialogueTurns_IncludesPendingUserAfterTurns(t *testing.T) {
+func TestSendUserTurn_IdleStartPersistsCanonicalTurnBeforeExecution(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "idle-start-turn", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			MessageID: "m_idle_start_user",
+			Text:      "start immediately",
+		},
+		Options: RunOptions{},
+	})
+	if err != nil {
+		t.Fatalf("SendUserTurn: %v", err)
+	}
+	if resp.Kind != "start" || strings.TrimSpace(resp.RunID) == "" {
+		t.Fatalf("SendUserTurn response=%+v, want started run", resp)
+	}
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	foundUser := false
+	for _, msg := range msgs {
+		if msg.Role == "user" && msg.MessageID == "m_idle_start_user" {
+			foundUser = true
+			break
+		}
+	}
+	if !foundUser {
+		t.Fatalf("messages=%+v, want canonical user message before execution finishes", msgs)
+	}
+	turns, err := svc.threadsDB.ListConversationTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListConversationTurns: %v", err)
+	}
+	if len(turns) != 1 {
+		t.Fatalf("turns=%+v, want one canonical turn", turns)
+	}
+	if turns[0].RunID != resp.RunID || turns[0].UserMessageID != "m_idle_start_user" || strings.TrimSpace(turns[0].AssistantMessageID) == "" {
+		t.Fatalf("turn=%+v, want turn linked to started run and assistant message", turns[0])
+	}
+}
+
+func TestContextRepo_ListRecentDialogueTurns_ExcludesPendingTranscriptUser(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -1074,23 +1693,18 @@ func TestContextRepo_ListRecentDialogueTurns_IncludesPendingUserAfterTurns(t *te
 	if err != nil {
 		t.Fatalf("ListRecentDialogueTurns: %v", err)
 	}
-	if len(turns) < 2 {
-		t.Fatalf("ListRecentDialogueTurns len=%d, want >=2", len(turns))
+	if len(turns) != 1 {
+		t.Fatalf("ListRecentDialogueTurns len=%d, want 1 canonical turn", len(turns))
 	}
-
-	last := turns[len(turns)-1]
-	if last.UserMessageID != second.MessageID {
-		t.Fatalf("last user_message_id=%q, want %q", last.UserMessageID, second.MessageID)
+	if turns[0].UserMessageID != first.MessageID || turns[0].AssistantMessageID != assistantID {
+		t.Fatalf("turn[0]=%+v, want canonical first turn", turns[0])
 	}
-	if last.UserText != "second pending" {
-		t.Fatalf("last user_text=%q, want %q", last.UserText, "second pending")
-	}
-	if last.AssistantText != "" {
-		t.Fatalf("last assistant_text=%q, want empty", last.AssistantText)
+	if turns[0].UserMessageID == second.MessageID {
+		t.Fatalf("pending transcript user %q must not be projected as dialogue", second.MessageID)
 	}
 }
 
-func TestContextRepo_ListRecentDialogueTurns_PreservesOrphanUsersAroundReferencedTurn(t *testing.T) {
+func TestContextRepo_ListRecentDialogueTurns_ExcludesOrphanTranscriptUsersAroundReferencedTurn(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -1164,18 +1778,15 @@ func TestContextRepo_ListRecentDialogueTurns_PreservesOrphanUsersAroundReference
 	if err != nil {
 		t.Fatalf("ListRecentDialogueTurns: %v", err)
 	}
-	if len(turns) != 3 {
-		t.Fatalf("ListRecentDialogueTurns len=%d, want 3", len(turns))
+	if len(turns) != 1 {
+		t.Fatalf("ListRecentDialogueTurns len=%d, want 1 canonical turn", len(turns))
 	}
 
-	if turns[0].UserMessageID != userOrphanHeadID || turns[0].AssistantMessageID != "" {
-		t.Fatalf("turn[0]=%+v, want head orphan user", turns[0])
+	if turns[0].UserMessageID != userPairedID || turns[0].AssistantMessageID != assistantPairedID {
+		t.Fatalf("turn[0]=%+v, want referenced pair", turns[0])
 	}
-	if turns[1].UserMessageID != userPairedID || turns[1].AssistantMessageID != assistantPairedID {
-		t.Fatalf("turn[1]=%+v, want referenced pair", turns[1])
-	}
-	if turns[2].UserMessageID != userOrphanTailID || turns[2].AssistantMessageID != "" {
-		t.Fatalf("turn[2]=%+v, want tail orphan user", turns[2])
+	if turns[0].UserMessageID == userOrphanHeadID || turns[0].UserMessageID == userOrphanTailID {
+		t.Fatalf("orphan transcript user projected as dialogue: %+v", turns[0])
 	}
 }
 
@@ -1227,6 +1838,58 @@ func TestPromptPackToHistory_DoesNotIncludeUserProvidedContext(t *testing.T) {
 	}
 	if history[0].Role != "user" || history[0].Text != "inspect env" {
 		t.Fatalf("history[0]=%+v, want current user input only", history[0])
+	}
+}
+
+func TestSendUserTurn_StaleSourceFollowupStillStartsTurn(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "stale-source-start", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID:         th.ThreadID,
+		Model:            "openai/gpt-5-mini",
+		SourceFollowupID: "missing_stale_draft",
+		Input: RunInput{
+			MessageID: "m_stale_source_user",
+			Text:      "continue after stale draft id",
+		},
+		Options: RunOptions{},
+	})
+	if err != nil {
+		t.Fatalf("SendUserTurn: %v", err)
+	}
+	if resp.Kind != "start" || strings.TrimSpace(resp.RunID) == "" {
+		t.Fatalf("SendUserTurn response=%+v, want started run", resp)
+	}
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	foundUser := false
+	for _, msg := range msgs {
+		if msg.Role == "user" && msg.MessageID == "m_stale_source_user" {
+			foundUser = true
+			break
+		}
+	}
+	if !foundUser {
+		t.Fatalf("messages=%+v, want user message despite stale source followup", msgs)
+	}
+	turns, err := svc.threadsDB.ListConversationTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListConversationTurns: %v", err)
+	}
+	if len(turns) != 1 || turns[0].RunID != resp.RunID || turns[0].UserMessageID != "m_stale_source_user" {
+		t.Fatalf("turns=%+v, want canonical turn despite stale source followup", turns)
 	}
 }
 

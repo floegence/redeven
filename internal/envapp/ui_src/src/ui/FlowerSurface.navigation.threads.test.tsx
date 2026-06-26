@@ -537,8 +537,9 @@ describe('FlowerSurface navigation threads', () => {
     const listThreads = vi.fn(async () => [runningThread]);
     const loadThread = vi.fn(async () => liveBootstrap(firstDetail, 1));
     const listThreadLiveEvents = vi.fn(async () => {
-      if (!liveUpdateReady) return { events: [], next_cursor: 1, retained_from_seq: 1 };
+      if (!liveUpdateReady) return { stream_generation: 1, events: [], next_cursor: 1, retained_from_seq: 1 };
       return {
+        stream_generation: 1,
         events: [{
           schema_version: 1,
           seq: 2,
@@ -643,8 +644,197 @@ describe('FlowerSurface navigation threads', () => {
 
     expect(runtime.querySelector('[data-thread-id="thread-live-second"]')?.getAttribute('data-flower-thread-status')).toBe('running');
 
-    firstLive.resolve({ events: [], next_cursor: 1, retained_from_seq: 1 });
-    secondLive.resolve({ events: [], next_cursor: 1, retained_from_seq: 1 });
+    firstLive.resolve({ stream_generation: 1, events: [], next_cursor: 1, retained_from_seq: 1 });
+    secondLive.resolve({ stream_generation: 1, events: [], next_cursor: 1, retained_from_seq: 1 });
+  });
+
+  it('lets a reselected thread fetch live events even while its old request is still pending', async () => {
+    const firstThread = thread({
+      thread_id: 'thread-live-reselect-first',
+      title: 'First live reselect',
+      status: 'running',
+      updated_at_ms: 5_000,
+      messages: [{
+        id: 'm-reselect-first',
+        role: 'assistant',
+        content: 'First',
+        status: 'streaming',
+        created_at_ms: 5_000,
+      }],
+    });
+    const secondThread = thread({
+      thread_id: 'thread-live-reselect-second',
+      title: 'Second live reselect',
+      status: 'running',
+      updated_at_ms: 5_100,
+      messages: [{
+        id: 'm-reselect-second',
+        role: 'assistant',
+        content: 'Second',
+        status: 'streaming',
+        created_at_ms: 5_100,
+      }],
+    });
+    const firstOldLive = deferred<FlowerLiveEventsResponse>();
+    const firstFreshLive = deferred<FlowerLiveEventsResponse>();
+    const secondLive = deferred<FlowerLiveEventsResponse>();
+    let firstPollCount = 0;
+    const listThreadLiveEvents = vi.fn(async (threadID: string) => {
+      if (threadID === 'thread-live-reselect-first') {
+        firstPollCount += 1;
+        return firstPollCount === 1 ? firstOldLive.promise : firstFreshLive.promise;
+      }
+      if (threadID === 'thread-live-reselect-second') return secondLive.promise;
+      throw new Error(`unexpected thread ${threadID}`);
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [firstThread, secondThread]),
+      loadThread: vi.fn(async (threadID: string) => liveBootstrap(threadID === 'thread-live-reselect-first' ? firstThread : secondThread, 1)),
+      listThreadLiveEvents,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-live-reselect-first"] button')));
+    (runtime.querySelector('[data-thread-id="thread-live-reselect-first"] button') as HTMLButtonElement).click();
+    await waitFor(() => listThreadLiveEvents.mock.calls.filter((call) => call[0] === 'thread-live-reselect-first').length === 1);
+
+    (runtime.querySelector('[data-thread-id="thread-live-reselect-second"] button') as HTMLButtonElement).click();
+    await waitFor(() => listThreadLiveEvents.mock.calls.some((call) => call[0] === 'thread-live-reselect-second'));
+
+    (runtime.querySelector('[data-thread-id="thread-live-reselect-first"] button') as HTMLButtonElement).click();
+    await waitFor(() => listThreadLiveEvents.mock.calls.filter((call) => call[0] === 'thread-live-reselect-first').length === 2);
+
+    firstFreshLive.resolve({ stream_generation: 1, events: [], next_cursor: 1, retained_from_seq: 1 });
+    firstOldLive.resolve({
+      stream_generation: 1,
+      events: [liveEvent('thread-live-reselect-first', 2, 'thread.patched', {
+        patch: { title: 'Stale first title', updated_at_ms: 5_200 },
+      })],
+      next_cursor: 2,
+      retained_from_seq: 1,
+    });
+    secondLive.resolve({ stream_generation: 1, events: [], next_cursor: 1, retained_from_seq: 1 });
+    await flush();
+
+    expect(runtime.querySelector('[data-thread-id="thread-live-reselect-first"]')?.textContent).toContain('First live reselect');
+    expect(runtime.querySelector('[data-thread-id="thread-live-reselect-first"]')?.textContent).not.toContain('Stale first title');
+  });
+
+  it('resets the selected live cursor when the stream generation advances', async () => {
+    const selected = thread({
+      thread_id: 'thread-live-generation-reset',
+      title: 'Generation reset',
+      status: 'running',
+      messages: [{
+        id: 'm-generation-reset',
+        role: 'assistant',
+        content: 'Old stream',
+        status: 'streaming',
+        created_at_ms: 1_000,
+        blocks: [{ type: 'markdown', content: 'Old stream' }],
+      }],
+    });
+    let pollCount = 0;
+    const listThreadLiveEvents = vi.fn(async (_threadID: string, afterSeq: number) => {
+      pollCount += 1;
+      if (pollCount === 1 && afterSeq === 0) {
+        return {
+          stream_generation: 1,
+          events: [],
+          next_cursor: 50,
+          retained_from_seq: 1,
+          has_more: true,
+        } satisfies FlowerLiveEventsResponse;
+      }
+      if (pollCount === 2 && afterSeq === 50) {
+        return {
+          stream_generation: 2,
+          events: [],
+          next_cursor: 0,
+          retained_from_seq: 1,
+          has_more: true,
+        } satisfies FlowerLiveEventsResponse;
+      }
+      if (pollCount === 3 && afterSeq === 0) {
+        return {
+          stream_generation: 2,
+          events: [
+            liveEvent('thread-live-generation-reset', 1, 'message.block_delta', {
+              message_id: 'm-generation-reset',
+              block_index: 0,
+              delta: ' after restart',
+            }),
+          ],
+          next_cursor: 1,
+          retained_from_seq: 1,
+          has_more: false,
+        } satisfies FlowerLiveEventsResponse;
+      }
+      throw new Error(`unexpected after_seq ${afterSeq}`);
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [selected]),
+      loadThread: vi.fn(async () => liveBootstrap(selected, 0)),
+      listThreadLiveEvents,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-live-generation-reset"] button')));
+    (runtime.querySelector('[data-thread-id="thread-live-generation-reset"] button') as HTMLButtonElement).click();
+
+    await waitFor(() => runtime.textContent?.includes('Old stream after restart') === true);
+    expect(listThreadLiveEvents.mock.calls.map((call) => call[1])).toEqual([0, 50, 0]);
+  });
+
+  it('continues polling live events while an idle selected thread has running context compaction', async () => {
+    const compactingThread = thread({
+      thread_id: 'thread-idle-compacting-live',
+      title: 'Idle compacting live',
+      status: 'idle',
+      updated_at_ms: 5_200,
+      context_compactions: [{
+        operation_id: 'compact-idle-live',
+        phase: 'start',
+        status: 'compacting',
+        trigger: 'slash_command',
+        updated_at_ms: 5_200,
+      }],
+      timeline_decorations: [{
+        decoration_id: 'decoration-idle-compact',
+        kind: 'context_compaction',
+        ordinal: 2,
+        anchor: {
+          target_kind: 'message',
+          message_id: 'm1',
+          edge: 'after',
+        },
+        compaction: {
+          operation_id: 'compact-idle-live',
+          phase: 'start',
+          status: 'compacting',
+          trigger: 'slash_command',
+          updated_at_ms: 5_200,
+        },
+      }],
+    });
+    const listThreadLiveEvents = vi.fn(async (_threadID: string, _afterSeq: number, _limit?: number) => ({
+      stream_generation: 1,
+      events: [],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    }));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [compactingThread]),
+      loadThread: vi.fn(async () => liveBootstrap(compactingThread, 1)),
+      listThreadLiveEvents,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-idle-compacting-live"] button')));
+    (runtime.querySelector('[data-thread-id="thread-idle-compacting-live"] button') as HTMLButtonElement).click();
+
+    await waitFor(() => listThreadLiveEvents.mock.calls.some((call) => call[0] === 'thread-idle-compacting-live'));
+    expect(runtime.querySelector('[data-flower-compaction-status="compacting"]')).toBeTruthy();
   });
 
   it('persists read state when a selected running thread receives unread detail refreshes', async () => {
@@ -942,6 +1132,7 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
 
     liveEvents.resolve({
+      stream_generation: 1,
       events: [
         liveEvent('thread-live-complete-read', 1, 'message.committed', {
           message_id: 'm-live-complete',
@@ -1331,6 +1522,58 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Provider returned a structured failure.');
   });
 
+  it('ignores stale same-thread load responses that resolve after a newer load', async () => {
+    const staleDetail = thread({
+      thread_id: 'thread-stale-same-load',
+      title: 'Stale same-thread load',
+      messages: [{
+        id: 'm-stale-same-load-old',
+        role: 'assistant',
+        content: 'Old selected detail.',
+        status: 'complete',
+        created_at_ms: 1_000,
+        blocks: [{ type: 'markdown', content: 'Old selected detail.' }],
+      }],
+    });
+    const freshDetail = thread({
+      ...staleDetail,
+      status: 'running',
+      updated_at_ms: 5_000,
+      messages: [{
+        id: 'm-stale-same-load-new',
+        role: 'assistant',
+        content: 'Fresh selected detail.',
+        status: 'streaming',
+        created_at_ms: 5_000,
+        blocks: [{ type: 'markdown', content: 'Fresh selected detail.' }],
+      }],
+      model_io_status: modelIOStatus({ run_id: 'run-stale-same-load' }),
+    });
+    const oldLoad = deferred<FlowerLiveBootstrap>();
+    const loadThread = vi.fn(() => (
+      loadThread.mock.calls.length === 1
+        ? oldLoad.promise
+        : Promise.resolve(liveBootstrap(freshDetail))
+    ));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [staleDetail]),
+      loadThread,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stale-same-load"] button')));
+    (runtime.querySelector('[data-thread-id="thread-stale-same-load"] button') as HTMLButtonElement).click();
+    (runtime.querySelector('[data-thread-id="thread-stale-same-load"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Fresh selected detail.') ?? false);
+
+    oldLoad.resolve(liveBootstrap(staleDetail));
+    await flush();
+
+    expect(runtime.textContent).toContain('Fresh selected detail.');
+    expect(runtime.textContent).not.toContain('Old selected detail.');
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBeTruthy();
+  });
+
   it('keeps selected message rows mounted when a background thread list refresh changes', async () => {
     const selectedDetail = thread({
       thread_id: 'thread-selected-detail',
@@ -1498,6 +1741,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(messageRow?.textContent).not.toContain('Real streamed answer');
 
     liveEvents.resolve({
+      stream_generation: 1,
       events: [
         liveEvent('thread-streaming-row', 1, 'message.block_started', {
           message_id: 'message-streaming-row',
@@ -1556,6 +1800,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(committedSegment?.textContent).toContain('Committed paragraph.');
 
     liveEvents.resolve({
+      stream_generation: 1,
       events: [
         liveEvent('thread-streaming-markdown-stability', 1, 'message.block_delta', {
           message_id: 'message-streaming-markdown-stability',
@@ -1620,6 +1865,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(selection?.toString()).toBe('Selectable running text');
 
     liveEvents.resolve({
+      stream_generation: 1,
       events: [
         liveEvent('thread-running-selection', 1, 'message.block_delta', {
           message_id: 'message-running-selection',
@@ -1685,6 +1931,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(selection?.toString()).toBe('Committed paragraph');
 
     liveEvents.resolve({
+      stream_generation: 1,
       events: [
         liveEvent('thread-commit-selection', 1, 'message.committed', {
           message_id: 'message-commit-selection',
@@ -1795,6 +2042,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(selection?.toString()).toBe('Stable selected activity text');
 
     liveEvents.resolve({
+      stream_generation: 1,
       events: [
         liveEvent('thread-running-activity', 1, 'activity.updated', {
           run_id: 'run-1',

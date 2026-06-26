@@ -99,7 +99,6 @@ export type AICompactThreadContextRequest = {
 export type AICompactThreadContextResponse = {
   operationId?: string;
   kind: string;
-  runId?: string;
   errorCode?: string;
 };
 

@@ -75,6 +75,7 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 	cursor := s.flowerLiveCursorLocked(endpointID, threadID)
 	retainedFromSeq := s.flowerLiveRetainedFromSeqLocked(endpointID, threadID)
 	state := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
+	streamGeneration := s.flowerLiveStreamGenerationValue()
 	s.mu.Unlock()
 
 	persistedState, err := s.flowerLivePersistedContextState(ctx, endpointID, threadID)
@@ -92,6 +93,7 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 		SchemaVersion:    FlowerLiveSchemaVersion,
 		EndpointID:       endpointID,
 		ThreadID:         threadID,
+		StreamGeneration: streamGeneration,
 		Cursor:           cursor,
 		RetainedFromSeq:  retainedFromSeq,
 		Thread:           *thread,
@@ -131,13 +133,14 @@ func (s *Service) ListFlowerThreadLiveEvents(ctx context.Context, meta *session.
 
 	s.mu.Lock()
 	stream := s.flowerLiveByThread[threadKey]
+	streamGeneration := s.flowerLiveStreamGenerationValue()
 	if stream == nil {
 		s.mu.Unlock()
 		if afterSeq > 0 {
 			event := flowerLiveResyncEvent(endpointID, threadID, afterSeq, "cursor_expired")
-			return &FlowerLiveEventsResponse{Events: []FlowerLiveEvent{event}, NextCursor: afterSeq, RetainedFromSeq: 0}, nil
+			return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: []FlowerLiveEvent{event}, NextCursor: afterSeq, RetainedFromSeq: 0}, nil
 		}
-		return &FlowerLiveEventsResponse{Events: []FlowerLiveEvent{}, NextCursor: 0, RetainedFromSeq: 0}, nil
+		return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: []FlowerLiveEvent{}, NextCursor: 0, RetainedFromSeq: 0}, nil
 	}
 
 	nextCursor := stream.NextSeq - 1
@@ -148,7 +151,7 @@ func (s *Service) ListFlowerThreadLiveEvents(ctx context.Context, meta *session.
 	if afterSeq > 0 && retainedFromSeq > 0 && afterSeq < retainedFromSeq {
 		event := flowerLiveResyncEvent(endpointID, threadID, afterSeq, "cursor_expired")
 		s.mu.Unlock()
-		return &FlowerLiveEventsResponse{Events: []FlowerLiveEvent{event}, NextCursor: afterSeq, RetainedFromSeq: retainedFromSeq}, nil
+		return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: []FlowerLiveEvent{event}, NextCursor: afterSeq, RetainedFromSeq: retainedFromSeq}, nil
 	}
 
 	events := make([]FlowerLiveEvent, 0, limit)
@@ -174,7 +177,7 @@ func (s *Service) ListFlowerThreadLiveEvents(ctx context.Context, meta *session.
 	}
 	s.mu.Unlock()
 
-	return &FlowerLiveEventsResponse{Events: events, NextCursor: nextCursor, HasMore: hasMore, RetainedFromSeq: retainedFromSeq}, nil
+	return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: events, NextCursor: nextCursor, HasMore: hasMore, RetainedFromSeq: retainedFromSeq}, nil
 }
 
 func (s *Service) flowerLivePersistedContextState(ctx context.Context, endpointID string, threadID string) (FlowerLiveMaterializedState, error) {
@@ -199,13 +202,20 @@ func (s *Service) flowerLivePersistedContextState(ctx context.Context, endpointI
 		kind := FlowerLiveKind(strings.TrimSpace(rec.EventType))
 		switch kind {
 		case FlowerLiveContextUsageUpdated, FlowerLiveContextCompactionUpdated:
+			payload := json.RawMessage(strings.TrimSpace(rec.PayloadJSON))
+			if kind == FlowerLiveContextCompactionUpdated {
+				var compactionPayload FlowerLiveContextCompactionUpdatedPayload
+				if !decodeFlowerPayload(payload, &compactionPayload) || !flowerContextCompactionTerminal(compactionPayload.Compaction) {
+					continue
+				}
+			}
 			applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
 				SchemaVersion: FlowerLiveSchemaVersion,
 				EndpointID:    strings.TrimSpace(rec.EndpointID),
 				ThreadID:      strings.TrimSpace(rec.ThreadID),
 				RunID:         strings.TrimSpace(rec.RunID),
 				Kind:          kind,
-				Payload:       json.RawMessage(strings.TrimSpace(rec.PayloadJSON)),
+				Payload:       payload,
 				AtUnixMs:      rec.AtUnixMs,
 			})
 		default:
@@ -213,6 +223,18 @@ func (s *Service) flowerLivePersistedContextState(ctx context.Context, endpointI
 		}
 	}
 	return state, nil
+}
+
+func flowerContextCompactionTerminal(compaction FlowerContextCompaction) bool {
+	switch strings.TrimSpace(compaction.Status) {
+	case "compacted", "failed", "cancelled":
+		return true
+	}
+	switch strings.TrimSpace(compaction.Phase) {
+	case "complete", "failed", "cancelled":
+		return true
+	}
+	return false
 }
 
 func mergeFlowerLivePersistedContextState(live FlowerLiveMaterializedState, persisted FlowerLiveMaterializedState) FlowerLiveMaterializedState {
@@ -720,7 +742,7 @@ func (s *Service) appendFlowerLiveTimelineReplacement(endpointID string, threadI
 		return
 	}
 	for attempt := 0; attempt < 4; attempt++ {
-		replacement, ok := s.buildFlowerTimelineReplacedEvent(endpointID, threadID, state, atUnixMs)
+		replacement, ok := s.buildFlowerTimelineReplacedEvent(endpointID, threadID, sourceSeq, state, atUnixMs)
 		if !ok {
 			return
 		}
@@ -761,7 +783,7 @@ func flowerLiveStreamHasTimelineReplacementAfter(stream *flowerLiveThreadStream,
 	return false
 }
 
-func (s *Service) buildFlowerTimelineReplacedEvent(endpointID string, threadID string, state FlowerLiveMaterializedState, atUnixMs int64) (FlowerLiveEvent, bool) {
+func (s *Service) buildFlowerTimelineReplacedEvent(endpointID string, threadID string, sourceSeq int64, state FlowerLiveMaterializedState, atUnixMs int64) (FlowerLiveEvent, bool) {
 	timeline, err := s.buildFlowerTimelineMessages(context.Background(), endpointID, threadID, state)
 	if err != nil {
 		return FlowerLiveEvent{}, false
@@ -774,7 +796,16 @@ func (s *Service) buildFlowerTimelineReplacedEvent(endpointID string, threadID s
 		ThreadID:   strings.TrimSpace(threadID),
 		AtUnixMs:   atUnixMs,
 		Kind:       FlowerLiveTimelineReplaced,
-		Payload:    mustFlowerPayload(FlowerLiveTimelineReplacedPayload{Messages: timeline}),
+		Payload: mustFlowerPayload(FlowerLiveTimelineReplacedPayload{
+			Messages:            timeline,
+			StreamGeneration:    s.flowerLiveStreamGenerationValue(),
+			SnapshotThroughSeq:  sourceSeq,
+			ThreadPatch:         cloneFlowerLiveThreadPatch(state.ThreadPatch),
+			LiveState:           cloneFlowerLiveMaterializedState(state),
+			ContextUsage:        cloneFlowerContextUsage(state.ContextUsage),
+			ContextCompactions:  cloneFlowerContextCompactions(state.ContextCompactions),
+			TimelineDecorations: cloneFlowerTimelineDecorations(state.TimelineDecorations),
+		}),
 	}, true
 }
 

@@ -25,6 +25,43 @@ type ConversationTurn struct {
 	CreatedAtUnixMs    int64  `json:"created_at_unix_ms"`
 }
 
+type ThreadRunStateWrite struct {
+	Status                string
+	ErrorCode             string
+	ErrorMessage          string
+	WaitingUserInputJSON  string
+	UpdatedByUserPublicID string
+	UpdatedByUserEmail    string
+	UpdatedAtUnixMs       int64
+}
+
+type StartUserTurn struct {
+	EndpointID              string
+	ThreadID                string
+	UserMessage             Message
+	UploadIDs               []string
+	Run                     RunRecord
+	Turn                    ConversationTurn
+	RunState                ThreadRunStateWrite
+	SourceQueueID           string
+	RequireSourceQueue      bool
+	StructuredUserInputs    []StructuredUserInputRecord
+	RequestUserInputSecrets []RequestUserInputSecretAnswerRecord
+	UploadClaimedAtUnixMs   int64
+}
+
+type StartUserTurnResult struct {
+	UserMessageID              string
+	UserMessageRowID           int64
+	UserMessageJSON            string
+	UserMessageCreatedAtUnixMs int64
+	ConversationTurnRowID      int64
+	FollowupsRevision          int64
+	UploadsToDelete            []UploadRecord
+}
+
+var ErrDuplicateUserTurnMessage = errors.New("duplicate user turn message")
+
 // ExecutionSpanRecord captures structured execution evidence.
 type ExecutionSpanRecord struct {
 	SpanID          string `json:"span_id"`
@@ -200,7 +237,35 @@ func (s *Store) AppendConversationTurn(ctx context.Context, rec ConversationTurn
 		rec.CreatedAtUnixMs = time.Now().UnixMilli()
 	}
 
-	if _, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	rowID, err := appendConversationTurnTx(ctx, tx, rec)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return rowID, nil
+}
+
+func appendConversationTurnTx(ctx context.Context, tx *sql.Tx, rec ConversationTurn) (int64, error) {
+	rec.TurnID = strings.TrimSpace(rec.TurnID)
+	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
+	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
+	rec.RunID = strings.TrimSpace(rec.RunID)
+	rec.UserMessageID = strings.TrimSpace(rec.UserMessageID)
+	rec.AssistantMessageID = strings.TrimSpace(rec.AssistantMessageID)
+	if rec.TurnID == "" || rec.EndpointID == "" || rec.ThreadID == "" {
+		return 0, errors.New("invalid conversation turn")
+	}
+	if rec.CreatedAtUnixMs <= 0 {
+		rec.CreatedAtUnixMs = time.Now().UnixMilli()
+	}
+	if _, err := tx.ExecContext(ctx, `
 INSERT INTO conversation_turns(turn_id, endpoint_id, thread_id, run_id, user_message_id, assistant_message_id, created_at_unix_ms)
 VALUES(?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(turn_id) DO UPDATE SET
@@ -214,7 +279,7 @@ ON CONFLICT(turn_id) DO UPDATE SET
 		return 0, err
 	}
 	var rowID int64
-	if err := s.db.QueryRowContext(ctx, `
+	if err := tx.QueryRowContext(ctx, `
 SELECT id
 FROM conversation_turns
 WHERE turn_id = ?
@@ -222,6 +287,244 @@ WHERE turn_id = ?
 		return 0, err
 	}
 	return rowID, nil
+}
+
+func (s *Store) StartUserTurn(ctx context.Context, rec StartUserTurn) (StartUserTurnResult, error) {
+	if s == nil || s.db == nil {
+		return StartUserTurnResult{}, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
+	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
+	if rec.EndpointID == "" || rec.ThreadID == "" {
+		return StartUserTurnResult{}, errors.New("invalid request")
+	}
+	rec.UserMessage.ThreadID = strings.TrimSpace(rec.UserMessage.ThreadID)
+	if rec.UserMessage.ThreadID == "" {
+		rec.UserMessage.ThreadID = rec.ThreadID
+	}
+	rec.UserMessage.EndpointID = strings.TrimSpace(rec.UserMessage.EndpointID)
+	if rec.UserMessage.EndpointID == "" {
+		rec.UserMessage.EndpointID = rec.EndpointID
+	}
+	rec.UserMessage.MessageID = strings.TrimSpace(rec.UserMessage.MessageID)
+	rec.UserMessage.Role = strings.TrimSpace(rec.UserMessage.Role)
+	rec.UserMessage.Status = strings.TrimSpace(rec.UserMessage.Status)
+	rec.UserMessage.AuthorUserPublicID = strings.TrimSpace(rec.UserMessage.AuthorUserPublicID)
+	rec.UserMessage.AuthorUserEmail = strings.TrimSpace(rec.UserMessage.AuthorUserEmail)
+	rec.UserMessage.TextContent = strings.TrimSpace(rec.UserMessage.TextContent)
+	rec.UserMessage.MessageJSON = strings.TrimSpace(rec.UserMessage.MessageJSON)
+	if rec.UserMessage.MessageID == "" || rec.UserMessage.Role != "user" || rec.UserMessage.Status == "" || rec.UserMessage.MessageJSON == "" {
+		return StartUserTurnResult{}, errors.New("invalid user message")
+	}
+	now := time.Now().UnixMilli()
+	if rec.UserMessage.CreatedAtUnixMs <= 0 {
+		rec.UserMessage.CreatedAtUnixMs = now
+	}
+	if rec.UserMessage.UpdatedAtUnixMs <= 0 {
+		rec.UserMessage.UpdatedAtUnixMs = rec.UserMessage.CreatedAtUnixMs
+	}
+	if rec.UploadClaimedAtUnixMs <= 0 {
+		rec.UploadClaimedAtUnixMs = rec.UserMessage.CreatedAtUnixMs
+	}
+	rec.Run.EndpointID = strings.TrimSpace(rec.Run.EndpointID)
+	if rec.Run.EndpointID == "" {
+		rec.Run.EndpointID = rec.EndpointID
+	}
+	rec.Run.ThreadID = strings.TrimSpace(rec.Run.ThreadID)
+	if rec.Run.ThreadID == "" {
+		rec.Run.ThreadID = rec.ThreadID
+	}
+	rec.Run.RunID = strings.TrimSpace(rec.Run.RunID)
+	rec.Run.MessageID = strings.TrimSpace(rec.Run.MessageID)
+	if rec.Run.RunID == "" || rec.Run.MessageID == "" {
+		return StartUserTurnResult{}, errors.New("invalid run record")
+	}
+	if strings.TrimSpace(rec.Run.State) == "" {
+		rec.Run.State = "running"
+	}
+	if rec.Run.StartedAtUnixMs <= 0 {
+		rec.Run.StartedAtUnixMs = now
+	}
+	if rec.Run.UpdatedAtUnixMs <= 0 {
+		rec.Run.UpdatedAtUnixMs = rec.Run.StartedAtUnixMs
+	}
+	rec.Turn.EndpointID = strings.TrimSpace(rec.Turn.EndpointID)
+	if rec.Turn.EndpointID == "" {
+		rec.Turn.EndpointID = rec.EndpointID
+	}
+	rec.Turn.ThreadID = strings.TrimSpace(rec.Turn.ThreadID)
+	if rec.Turn.ThreadID == "" {
+		rec.Turn.ThreadID = rec.ThreadID
+	}
+	rec.Turn.RunID = strings.TrimSpace(rec.Turn.RunID)
+	if rec.Turn.RunID == "" {
+		rec.Turn.RunID = rec.Run.RunID
+	}
+	rec.Turn.UserMessageID = strings.TrimSpace(rec.Turn.UserMessageID)
+	if rec.Turn.UserMessageID == "" {
+		rec.Turn.UserMessageID = rec.UserMessage.MessageID
+	}
+	rec.Turn.AssistantMessageID = strings.TrimSpace(rec.Turn.AssistantMessageID)
+	if rec.Turn.AssistantMessageID == "" {
+		rec.Turn.AssistantMessageID = rec.Run.MessageID
+	}
+	rec.Turn.TurnID = strings.TrimSpace(rec.Turn.TurnID)
+	if rec.Turn.TurnID == "" {
+		rec.Turn.TurnID = rec.Turn.AssistantMessageID
+	}
+	if rec.Turn.CreatedAtUnixMs <= 0 {
+		rec.Turn.CreatedAtUnixMs = rec.UserMessage.CreatedAtUnixMs
+	}
+	if strings.TrimSpace(rec.RunState.Status) == "" {
+		rec.RunState.Status = "running"
+	}
+	if rec.RunState.UpdatedAtUnixMs <= 0 {
+		rec.RunState.UpdatedAtUnixMs = rec.Run.UpdatedAtUnixMs
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return StartUserTurnResult{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	preview := buildPreview(rec.UserMessage.Role, rec.UserMessage.TextContent, rec.UserMessage.MessageJSON)
+	rowID, err := appendMessageTx(ctx, tx, rec.EndpointID, rec.ThreadID, rec.UserMessage, rec.RunState.UpdatedByUserPublicID, rec.RunState.UpdatedByUserEmail, preview)
+	if err != nil {
+		if !isUniqueConstraintError(err) {
+			return StartUserTurnResult{}, err
+		}
+		result, replayErr := existingStartedUserTurnTx(ctx, tx, rec)
+		if replayErr != nil {
+			return StartUserTurnResult{}, replayErr
+		}
+		if err := tx.Commit(); err != nil {
+			return StartUserTurnResult{}, err
+		}
+		return result, nil
+	}
+	if err := bindUploadsToRefTx(ctx, tx, rec.EndpointID, rec.ThreadID, UploadRefKindMessage, rec.UserMessage.MessageID, rec.UploadIDs, rec.UploadClaimedAtUnixMs); err != nil {
+		return StartUserTurnResult{}, err
+	}
+	if err := replaceStructuredUserInputsTx(ctx, tx, rec.EndpointID, rec.ThreadID, rec.UserMessage.MessageID, rec.StructuredUserInputs); err != nil {
+		return StartUserTurnResult{}, err
+	}
+	if err := replaceRequestUserInputSecretAnswersTx(ctx, tx, rec.EndpointID, rec.ThreadID, rec.UserMessage.MessageID, rec.RequestUserInputSecrets); err != nil {
+		return StartUserTurnResult{}, err
+	}
+	if err := upsertRunTx(ctx, tx, rec.Run); err != nil {
+		return StartUserTurnResult{}, err
+	}
+	turnRowID, err := appendConversationTurnTx(ctx, tx, rec.Turn)
+	if err != nil {
+		return StartUserTurnResult{}, err
+	}
+	if err := updateThreadRunStateTx(ctx, tx, rec.EndpointID, rec.ThreadID, rec.RunState); err != nil {
+		return StartUserTurnResult{}, err
+	}
+
+	var revision int64
+	var uploadsToDelete []UploadRecord
+	sourceQueueID := strings.TrimSpace(rec.SourceQueueID)
+	if sourceQueueID != "" {
+		res, err := tx.ExecContext(ctx, `
+DELETE FROM ai_queued_turns
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
+`, rec.EndpointID, rec.ThreadID, sourceQueueID)
+		if err != nil {
+			return StartUserTurnResult{}, err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			if rec.RequireSourceQueue {
+				return StartUserTurnResult{}, sql.ErrNoRows
+			}
+		} else {
+			uploadsToDelete, err = prepareUploadCleanupForRefTx(ctx, tx, rec.EndpointID, rec.ThreadID, UploadRefKindQueuedTurn, sourceQueueID, now)
+			if err != nil {
+				return StartUserTurnResult{}, err
+			}
+			revision, err = bumpThreadFollowupsRevisionTx(ctx, tx, rec.EndpointID, rec.ThreadID)
+			if err != nil {
+				return StartUserTurnResult{}, err
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return StartUserTurnResult{}, err
+	}
+	return StartUserTurnResult{
+		UserMessageID:              rec.UserMessage.MessageID,
+		UserMessageRowID:           rowID,
+		UserMessageJSON:            rec.UserMessage.MessageJSON,
+		UserMessageCreatedAtUnixMs: rec.UserMessage.CreatedAtUnixMs,
+		ConversationTurnRowID:      turnRowID,
+		FollowupsRevision:          revision,
+		UploadsToDelete:            uploadsToDelete,
+	}, nil
+}
+
+func existingStartedUserTurnTx(ctx context.Context, tx *sql.Tx, rec StartUserTurn) (StartUserTurnResult, error) {
+	messageID := strings.TrimSpace(rec.UserMessage.MessageID)
+	runID := strings.TrimSpace(rec.Run.RunID)
+	turnID := strings.TrimSpace(rec.Turn.TurnID)
+	if messageID == "" || runID == "" || turnID == "" {
+		return StartUserTurnResult{}, ErrDuplicateUserTurnMessage
+	}
+	var rowID int64
+	var messageJSON string
+	var createdAt int64
+	err := tx.QueryRowContext(ctx, `
+SELECT id, message_json, created_at_unix_ms
+FROM transcript_messages
+WHERE endpoint_id = ? AND thread_id = ? AND message_id = ?
+`, rec.EndpointID, rec.ThreadID, messageID).Scan(&rowID, &messageJSON, &createdAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return StartUserTurnResult{}, ErrDuplicateUserTurnMessage
+		}
+		return StartUserTurnResult{}, err
+	}
+	var turnRowID int64
+	var existingRunID string
+	var existingUserMessageID string
+	var existingAssistantMessageID string
+	err = tx.QueryRowContext(ctx, `
+SELECT id, run_id, user_message_id, assistant_message_id
+FROM conversation_turns
+WHERE turn_id = ? AND endpoint_id = ? AND thread_id = ?
+`, turnID, rec.EndpointID, rec.ThreadID).Scan(&turnRowID, &existingRunID, &existingUserMessageID, &existingAssistantMessageID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return StartUserTurnResult{}, ErrDuplicateUserTurnMessage
+		}
+		return StartUserTurnResult{}, err
+	}
+	var runRowCount int
+	err = tx.QueryRowContext(ctx, `
+SELECT COUNT(1)
+FROM ai_runs
+WHERE endpoint_id = ? AND thread_id = ? AND run_id = ? AND message_id = ?
+`, rec.EndpointID, rec.ThreadID, runID, strings.TrimSpace(rec.Run.MessageID)).Scan(&runRowCount)
+	if err != nil {
+		return StartUserTurnResult{}, err
+	}
+	if strings.TrimSpace(existingRunID) != runID ||
+		strings.TrimSpace(existingUserMessageID) != messageID ||
+		strings.TrimSpace(existingAssistantMessageID) != strings.TrimSpace(rec.Turn.AssistantMessageID) ||
+		runRowCount != 1 {
+		return StartUserTurnResult{}, ErrDuplicateUserTurnMessage
+	}
+	return StartUserTurnResult{
+		UserMessageID:              messageID,
+		UserMessageRowID:           rowID,
+		UserMessageJSON:            messageJSON,
+		UserMessageCreatedAtUnixMs: createdAt,
+		ConversationTurnRowID:      turnRowID,
+	}, nil
 }
 
 func (s *Store) ListConversationTurns(ctx context.Context, endpointID string, threadID string, limit int) ([]ConversationTurn, error) {
@@ -1129,6 +1432,13 @@ func (s *Store) ReplaceStructuredUserInputs(ctx context.Context, endpointID stri
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := replaceStructuredUserInputsTx(ctx, tx, endpointID, threadID, responseMessageID, records); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func replaceStructuredUserInputsTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, responseMessageID string, records []StructuredUserInputRecord) error {
 	if _, err := tx.ExecContext(ctx, `
 DELETE FROM structured_user_inputs
 WHERE endpoint_id = ? AND thread_id = ? AND response_message_id = ?
@@ -1155,7 +1465,7 @@ INSERT INTO structured_user_inputs(
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 func (s *Store) ListRecentStructuredUserInputs(ctx context.Context, endpointID string, threadID string, limit int) ([]StructuredUserInputRecord, error) {
@@ -1228,6 +1538,13 @@ func (s *Store) ReplaceRequestUserInputSecretAnswers(ctx context.Context, endpoi
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := replaceRequestUserInputSecretAnswersTx(ctx, tx, endpointID, threadID, responseMessageID, records); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func replaceRequestUserInputSecretAnswersTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, responseMessageID string, records []RequestUserInputSecretAnswerRecord) error {
 	if _, err := tx.ExecContext(ctx, `
 DELETE FROM request_user_input_secret_answers
 WHERE endpoint_id = ? AND thread_id = ? AND response_message_id = ?
@@ -1257,7 +1574,7 @@ INSERT INTO request_user_input_secret_answers(
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 func (s *Store) ListRequestUserInputSecretAnswers(ctx context.Context, endpointID string, threadID string, responseMessageID string) ([]RequestUserInputSecretAnswerRecord, error) {

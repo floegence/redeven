@@ -70,7 +70,6 @@ type aiCompactThreadContextReq struct {
 type aiCompactThreadContextResp struct {
 	OperationID string `json:"operation_id,omitempty"`
 	Kind        string `json:"kind"`
-	RunID       string `json:"run_id,omitempty"`
 	ErrorCode   string `json:"error_code,omitempty"`
 }
 
@@ -212,7 +211,6 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		return &aiCompactThreadContextResp{
 			OperationID: strings.TrimSpace(resp.OperationID),
 			Kind:        strings.TrimSpace(resp.Kind),
-			RunID:       strings.TrimSpace(resp.RunID),
 			ErrorCode:   strings.TrimSpace(resp.ErrorCode),
 		}, nil
 	})

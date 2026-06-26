@@ -296,12 +296,15 @@ export function liveBootstrap(threadValue: FlowerThreadSnapshot, cursor = 0): Fl
     schema_version: 1,
     endpoint_id: 'test-runtime',
     thread_id: threadValue.thread_id,
+    stream_generation: 1,
     cursor,
     retained_from_seq: 1,
     thread: threadValue,
     timeline_messages: threadValue.messages,
     live_state: {
-      thread_patch: {},
+      thread_patch: {
+        ...(threadValue.queued_turn_count !== undefined ? { queued_turn_count: threadValue.queued_turn_count } : {}),
+      },
       runs: modelIORunID
         ? { [modelIORunID]: { run_id: modelIORunID, status: 'running' } }
         : {},
@@ -585,7 +588,7 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
       thread({ thread_id: 'thread-2', title: 'Review branch', updated_at_ms: 3 }),
     ]),
     loadThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID }))),
-    listThreadLiveEvents: vi.fn(async () => ({ events: [], next_cursor: 0, retained_from_seq: 1 })),
+    listThreadLiveEvents: vi.fn(async () => ({ stream_generation: 1, events: [], next_cursor: 0, retained_from_seq: 1 })),
     loadSubagentDetail: vi.fn(async () => subagentDetail()),
     markThreadRead: vi.fn(async (_threadID: string, snapshot) => ({
       is_unread: false,

@@ -122,6 +122,81 @@ func TestDetachedRunIgnoresPresentationUpdates(t *testing.T) {
 	}
 }
 
+func TestSnapshotAssistantMessagePreservesBlockIndexesForAnchors(t *testing.T) {
+	t.Parallel()
+
+	r := &run{
+		id:                       "run_snapshot_anchor_indexes",
+		threadID:                 "thread_snapshot_anchor_indexes",
+		messageID:                "msg_snapshot_anchor_indexes",
+		assistantCreatedAtUnixMs: 1700000000100,
+		assistantBlocks: []any{
+			&persistedMarkdownBlock{Type: "markdown", Content: "intro"},
+			nil,
+			&persistedMarkdownBlock{Type: "markdown", Content: ""},
+			ActivityTimelineBlock{
+				Type: activityTimelineBlockType,
+				ActivityTimeline: observation.ActivityTimeline{
+					SchemaVersion: observation.ActivityTimelineSchemaVersion,
+					RunID:         "run_snapshot_anchor_indexes",
+					ThreadID:      "thread_snapshot_anchor_indexes",
+					TurnID:        "msg_snapshot_anchor_indexes",
+					TraceID:       "run_snapshot_anchor_indexes",
+					Summary: observation.ActivitySummary{
+						Status:     observation.ActivityStatusSuccess,
+						Severity:   observation.ActivitySeverityNormal,
+						TotalItems: 1,
+						Counts:     observation.ActivityCounts{Success: 1},
+					},
+					Items: []observation.ActivityItem{{
+						ItemID:           "tool:anchor",
+						ToolID:           "anchor",
+						ToolName:         "terminal.exec",
+						Kind:             observation.ActivityKindTool,
+						Status:           observation.ActivityStatusSuccess,
+						Severity:         observation.ActivitySeverityNormal,
+						StartedAtUnixMS:  1700000000101,
+						EndedAtUnixMS:    1700000000102,
+						RequiresApproval: false,
+					}},
+				},
+			},
+		},
+	}
+
+	raw, text, _, err := r.snapshotAssistantMessageJSONWithStatus("canceled")
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSONWithStatus: %v", err)
+	}
+	if text != "intro" {
+		t.Fatalf("assistant text=%q, want intro", text)
+	}
+
+	var msg persistedMessage
+	if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+		t.Fatalf("unmarshal snapshot: %v", err)
+	}
+	if len(msg.Blocks) != 4 {
+		t.Fatalf("snapshot blocks=%d, want original coordinate length 4: %#v", len(msg.Blocks), msg.Blocks)
+	}
+	for _, idx := range []int{1, 2} {
+		block, ok := msg.Blocks[idx].(map[string]any)
+		if !ok {
+			t.Fatalf("block[%d]=%T %#v, want empty markdown placeholder", idx, msg.Blocks[idx], msg.Blocks[idx])
+		}
+		if block["type"] != "markdown" {
+			t.Fatalf("block[%d].type=%v, want markdown", idx, block["type"])
+		}
+		if content, ok := block["content"].(string); !ok || content != "" {
+			t.Fatalf("block[%d].content=%#v, want empty string", idx, block["content"])
+		}
+	}
+	block, ok := msg.Blocks[3].(map[string]any)
+	if !ok || block["type"] != activityTimelineBlockType {
+		t.Fatalf("block[3]=%T %#v, want activity timeline", msg.Blocks[3], msg.Blocks[3])
+	}
+}
+
 func TestHandleToolCallDoesNotEmitActivityTimeline(t *testing.T) {
 	t.Parallel()
 

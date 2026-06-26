@@ -49,7 +49,6 @@ type CompactThreadContextRequest struct {
 type CompactThreadContextResponse struct {
 	OperationID string `json:"operation_id,omitempty"`
 	Kind        string `json:"kind"`
-	RunID       string `json:"run_id,omitempty"`
 	ErrorCode   string `json:"error_code,omitempty"`
 }
 
@@ -58,6 +57,13 @@ type persistedUserMessage struct {
 	RowID           int64
 	MessageJSON     string
 	CreatedAtUnixMs int64
+}
+
+type preparedUserMessage struct {
+	Message          threadstore.Message
+	UploadIDs        []string
+	StructuredInputs []threadstore.StructuredUserInputRecord
+	SecretAnswers    []threadstore.RequestUserInputSecretAnswerRecord
 }
 
 func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (SendUserTurnResponse, error) {
@@ -175,17 +181,66 @@ func isUniqueConstraintError(err error) bool {
 	return strings.Contains(msg, "constraint failed") && strings.Contains(msg, "unique")
 }
 
-func (s *Service) persistUserMessage(ctx context.Context, meta *session.Meta, endpointID string, threadID string, input RunInput) (persistedUserMessage, RunInput, error) {
+func (s *Service) prepareUserMessage(ctx context.Context, meta *session.Meta, endpointID string, threadID string, input RunInput) (preparedUserMessage, RunInput, error) {
 	if s == nil {
-		return persistedUserMessage{}, input, errors.New("nil service")
+		return preparedUserMessage{}, input, errors.New("nil service")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return persistedUserMessage{}, input, errors.New("invalid request")
+	if meta == nil || endpointID == "" || threadID == "" {
+		return preparedUserMessage{}, input, errors.New("invalid request")
+	}
+
+	messageID := strings.TrimSpace(input.MessageID)
+	if messageID != "" && !isSafeClientMessageID(messageID) {
+		messageID = ""
+	}
+	if messageID == "" {
+		id, err := newUserMessageID()
+		if err != nil {
+			return preparedUserMessage{}, input, err
+		}
+		messageID = id
+	}
+	input.MessageID = messageID
+	input, uploadInfoByURL, uploadIDs, err := s.normalizeInputAttachments(ctx, endpointID, input)
+	if err != nil {
+		return preparedUserMessage{}, input, err
+	}
+
+	now := time.Now().UnixMilli()
+	userJSON, userText, err := buildUserMessageJSON(messageID, input, uploadInfoByURL, now)
+	if err != nil {
+		return preparedUserMessage{}, input, err
+	}
+	structured, secretRecords := structuredUserInputRecords(endpointID, threadID, messageID, input, now)
+	return preparedUserMessage{
+		Message: threadstore.Message{
+			ThreadID:           threadID,
+			EndpointID:         endpointID,
+			MessageID:          messageID,
+			Role:               "user",
+			AuthorUserPublicID: strings.TrimSpace(meta.UserPublicID),
+			AuthorUserEmail:    strings.TrimSpace(meta.UserEmail),
+			Status:             "complete",
+			CreatedAtUnixMs:    now,
+			UpdatedAtUnixMs:    now,
+			TextContent:        userText,
+			MessageJSON:        userJSON,
+		},
+		UploadIDs:        uploadIDs,
+		StructuredInputs: structured,
+		SecretAnswers:    secretRecords,
+	}, input, nil
+}
+
+func (s *Service) persistUserMessage(ctx context.Context, meta *session.Meta, endpointID string, threadID string, input RunInput) (persistedUserMessage, RunInput, error) {
+	prepared, input, err := s.prepareUserMessage(ctx, meta, endpointID, threadID, input)
+	if err != nil {
+		return persistedUserMessage{}, input, err
 	}
 
 	s.mu.Lock()
@@ -199,43 +254,8 @@ func (s *Service) persistUserMessage(ctx context.Context, meta *session.Meta, en
 		persistTO = defaultPersistOpTimeout
 	}
 
-	messageID := strings.TrimSpace(input.MessageID)
-	if messageID != "" && !isSafeClientMessageID(messageID) {
-		messageID = ""
-	}
-	if messageID == "" {
-		id, err := newUserMessageID()
-		if err != nil {
-			return persistedUserMessage{}, input, err
-		}
-		messageID = id
-	}
-	input.MessageID = messageID
-	input, uploadInfoByURL, uploadIDs, err := s.normalizeInputAttachments(ctx, endpointID, input)
-	if err != nil {
-		return persistedUserMessage{}, input, err
-	}
-
-	now := time.Now().UnixMilli()
-	userJSON, userText, err := buildUserMessageJSON(messageID, input, uploadInfoByURL, now)
-	if err != nil {
-		return persistedUserMessage{}, input, err
-	}
-
 	pctx, cancel := context.WithTimeout(ctx, persistTO)
-	rowID, err := db.AppendMessageWithUploadRefs(pctx, endpointID, threadID, threadstore.Message{
-		ThreadID:           threadID,
-		EndpointID:         endpointID,
-		MessageID:          messageID,
-		Role:               "user",
-		AuthorUserPublicID: strings.TrimSpace(meta.UserPublicID),
-		AuthorUserEmail:    strings.TrimSpace(meta.UserEmail),
-		Status:             "complete",
-		CreatedAtUnixMs:    now,
-		UpdatedAtUnixMs:    now,
-		TextContent:        userText,
-		MessageJSON:        userJSON,
-	}, meta.UserPublicID, meta.UserEmail, uploadIDs, now)
+	rowID, err := db.AppendMessageWithUploadRefs(pctx, endpointID, threadID, prepared.Message, meta.UserPublicID, meta.UserEmail, prepared.UploadIDs, prepared.Message.CreatedAtUnixMs)
 	cancel()
 	if err != nil {
 		if !isUniqueConstraintError(err) {
@@ -244,59 +264,49 @@ func (s *Service) persistUserMessage(ctx context.Context, meta *session.Meta, en
 		// Idempotency: treat duplicate message_id inserts as success.
 		pctx, cancel := context.WithTimeout(ctx, persistTO)
 		defer cancel()
-		existingRow, existingJSON, getErr := db.GetTranscriptMessageRowIDAndJSONByMessageID(pctx, endpointID, threadID, messageID)
+		existingRow, existingJSON, getErr := db.GetTranscriptMessageRowIDAndJSONByMessageID(pctx, endpointID, threadID, prepared.Message.MessageID)
 		if getErr != nil {
 			return persistedUserMessage{}, input, err
 		}
 		persisted := persistedUserMessage{
-			MessageID:       messageID,
+			MessageID:       prepared.Message.MessageID,
 			RowID:           existingRow,
 			MessageJSON:     existingJSON,
-			CreatedAtUnixMs: now,
+			CreatedAtUnixMs: prepared.Message.CreatedAtUnixMs,
 		}
-		if err := s.persistStructuredUserInputContext(ctx, endpointID, threadID, persisted.MessageID, input, now); err != nil {
+		if err := s.persistStructuredUserInputContext(ctx, endpointID, threadID, persisted.MessageID, input, prepared.Message.CreatedAtUnixMs); err != nil {
 			return persistedUserMessage{}, input, err
 		}
 		return persisted, input, nil
 	}
 
 	persisted := persistedUserMessage{
-		MessageID:       messageID,
+		MessageID:       prepared.Message.MessageID,
 		RowID:           rowID,
-		MessageJSON:     userJSON,
-		CreatedAtUnixMs: now,
+		MessageJSON:     prepared.Message.MessageJSON,
+		CreatedAtUnixMs: prepared.Message.CreatedAtUnixMs,
 	}
-	if err := s.persistStructuredUserInputContext(ctx, endpointID, threadID, persisted.MessageID, input, now); err != nil {
+	if err := s.persistStructuredUserInputContext(ctx, endpointID, threadID, persisted.MessageID, input, prepared.Message.CreatedAtUnixMs); err != nil {
 		return persistedUserMessage{}, input, err
 	}
 	return persisted, input, nil
 }
 
-func (s *Service) persistStructuredUserInputContext(ctx context.Context, endpointID string, threadID string, messageID string, input RunInput, createdAtUnixMs int64) error {
-	if s == nil {
-		return errors.New("nil service")
-	}
+func structuredUserInputRecords(endpointID string, threadID string, messageID string, input RunInput, createdAtUnixMs int64) ([]threadstore.StructuredUserInputRecord, []threadstore.RequestUserInputSecretAnswerRecord) {
 	if input.StructuredResponse == nil {
-		return nil
+		return nil, nil
 	}
-	s.mu.Lock()
-	db := s.threadsDB
-	persistTO := s.persistOpTO
-	s.mu.Unlock()
-	if db == nil {
-		return errors.New("threads store not ready")
-	}
-	if persistTO <= 0 {
-		persistTO = defaultPersistOpTimeout
-	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	messageID = strings.TrimSpace(messageID)
 	record := *input.StructuredResponse
-	record.ResponseMessageID = strings.TrimSpace(messageID)
+	record.ResponseMessageID = messageID
 	structured := make([]threadstore.StructuredUserInputRecord, 0, len(record.Responses))
 	for _, response := range record.Responses {
 		structured = append(structured, threadstore.StructuredUserInputRecord{
 			EndpointID:          endpointID,
 			ThreadID:            threadID,
-			ResponseMessageID:   strings.TrimSpace(messageID),
+			ResponseMessageID:   messageID,
 			PromptID:            strings.TrimSpace(record.PromptID),
 			ToolID:              strings.TrimSpace(record.ToolID),
 			ReasonCode:          strings.TrimSpace(record.ReasonCode),
@@ -316,12 +326,33 @@ func (s *Service) persistStructuredUserInputContext(ctx context.Context, endpoin
 		secretRecords = append(secretRecords, threadstore.RequestUserInputSecretAnswerRecord{
 			EndpointID:        endpointID,
 			ThreadID:          threadID,
-			ResponseMessageID: strings.TrimSpace(messageID),
+			ResponseMessageID: messageID,
 			QuestionID:        strings.TrimSpace(secret.QuestionID),
 			Text:              strings.TrimSpace(secret.Text),
 			CreatedAtUnixMs:   createdAtUnixMs,
 		})
 	}
+	return structured, secretRecords
+}
+
+func (s *Service) persistStructuredUserInputContext(ctx context.Context, endpointID string, threadID string, messageID string, input RunInput, createdAtUnixMs int64) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if input.StructuredResponse == nil {
+		return nil
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	persistTO := s.persistOpTO
+	s.mu.Unlock()
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+	structured, secretRecords := structuredUserInputRecords(endpointID, threadID, strings.TrimSpace(messageID), input, createdAtUnixMs)
 	pctx, cancel := context.WithTimeout(ctx, persistTO)
 	defer cancel()
 	if err := db.ReplaceStructuredUserInputs(pctx, endpointID, threadID, strings.TrimSpace(messageID), structured); err != nil {

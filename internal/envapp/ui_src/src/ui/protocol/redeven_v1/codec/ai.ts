@@ -252,7 +252,6 @@ export function fromWireAICompactThreadContextResponse(resp: wire_ai_compact_thr
   return {
     operationId: String(resp?.operation_id ?? '').trim() || undefined,
     kind: String(resp?.kind ?? '').trim(),
-    runId: String(resp?.run_id ?? '').trim() || undefined,
     errorCode: String(resp?.error_code ?? '').trim() || undefined,
   };
 }

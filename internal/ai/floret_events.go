@@ -16,6 +16,7 @@ const (
 	floretEventProviderFinish        = "provider_finish"
 	floretEventProviderRetry         = "provider_retry"
 	floretEventContextCompact        = "context_compact"
+	floretEventContextCompactDebug   = "context_compact_debug"
 	floretEventContextContinue       = "context_continue"
 	floretEventBudgetExceeded        = "budget_exceeded"
 	floretEventStepEnd               = "step_end"
@@ -50,6 +51,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	r.applyFloretSourceObservation(ev.Sources)
 	r.applyFloretContextStatus(ev.ContextStatus)
 	r.applyFloretCompaction(ev.Compaction)
+	r.persistFloretCompactionDebug(ev.CompactionDebug)
 	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
 	case floretEventProviderRequest:
@@ -121,6 +123,50 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	}
 }
 
+func (r *run) persistFloretCompactionDebug(debug *observation.CompactionDebugEvent) {
+	if r == nil || debug == nil {
+		return
+	}
+	payload := map[string]any{
+		"step_index":                           debug.Step,
+		"operation_id":                         strings.TrimSpace(debug.OperationID),
+		"request_id":                           strings.TrimSpace(debug.RequestID),
+		"stage":                                strings.TrimSpace(debug.Stage),
+		"status":                               strings.TrimSpace(debug.Status),
+		"trigger":                              strings.TrimSpace(debug.Trigger),
+		"reason":                               strings.TrimSpace(debug.Reason),
+		"source":                               strings.TrimSpace(debug.Source),
+		"compaction_convergence_attempt":       debug.CompactionConvergenceAttempt,
+		"history_message_count":                debug.HistoryMessageCount,
+		"active_message_count":                 debug.ActiveMessageCount,
+		"compaction_id":                        strings.TrimSpace(debug.CompactionID),
+		"compaction_generation":                debug.CompactionGeneration,
+		"compaction_window_id":                 strings.TrimSpace(debug.CompactionWindowID),
+		"tokens_before":                        debug.TokensBefore,
+		"tokens_after_estimate":                debug.TokensAfterEstimate,
+		"context_before":                       debug.ContextBefore,
+		"context_after":                        debug.ContextAfter,
+		"before_pressure":                      debug.BeforePressure,
+		"request_estimate":                     debug.RequestEstimate,
+		"validated_context_pressure":           debug.ValidatedContextPressure,
+		"hard_limit_exceeded":                  debug.HardLimitExceeded,
+		"fixed_input_tokens":                   debug.FixedInputTokens,
+		"reducible_input_tokens":               debug.ReducibleInputTokens,
+		"request_safe_limit":                   debug.RequestSafeLimit,
+		"compacted_context_target_tokens":      debug.CompactedContextTargetTokens,
+		"next_compacted_context_target_tokens": debug.NextCompactedContextTargetTokens,
+		"consecutive_failures":                 debug.ConsecutiveFailures,
+		"duration_ms":                          debug.DurationMS,
+		"provider_state_kind":                  strings.TrimSpace(debug.ProviderStateKind),
+		"next_action":                          strings.TrimSpace(debug.NextAction),
+		"error":                                strings.TrimSpace(debug.Error),
+	}
+	if !debug.ObservedAt.IsZero() {
+		payload["observed_at_unix_ms"] = debug.ObservedAt.UnixMilli()
+	}
+	r.persistRunEvent("floret.context.compact.debug", RealtimeStreamKindContext, payload)
+}
+
 func (r *run) applyFloretContextStatus(status *observation.ContextStatus) {
 	if r == nil || status == nil {
 		return
@@ -144,19 +190,21 @@ func (r *run) applyFloretCompaction(compaction *observation.CompactionEvent) {
 		return
 	}
 	projected := flowerContextCompactionFromFloret(compaction, strings.TrimSpace(r.id))
-	r.bindContextCompactionOperationAnchor(projected.OperationID, compaction.RequestID)
-	decoration := r.flowerContextCompactionDecoration(projected)
-	r.persistRunEvent("context.compaction.updated", RealtimeStreamKindContext, flowerContextCompactionPayload(projected, decoration))
-	r.sendStreamEvent(streamEventContextCompaction{
-		Type:               "context-compaction",
-		Compaction:         projected,
-		TimelineDecoration: decoration,
-	})
+	if !r.hostManagedContextCompaction {
+		r.bindContextCompactionOperationAnchor(projected.OperationID, compaction.RequestID)
+		decoration := r.flowerContextCompactionDecoration(projected)
+		r.persistRunEvent("context.compaction.updated", RealtimeStreamKindContext, flowerContextCompactionPayload(projected, decoration))
+		r.sendStreamEvent(streamEventContextCompaction{
+			Type:               "context-compaction",
+			Compaction:         projected,
+			TimelineDecoration: decoration,
+		})
+	}
 	switch strings.TrimSpace(compaction.Phase) {
 	case observation.CompactionPhaseComplete:
 		r.setCompletedContextCompaction(*compaction)
 		r.finishManualCompaction(compaction.RequestID)
-	case observation.CompactionPhaseFailed:
+	case observation.CompactionPhaseFailed, observation.CompactionPhaseCancelled:
 		r.finishManualCompaction(compaction.RequestID)
 	}
 }
@@ -474,6 +522,8 @@ func normalizeFlowerContextCompactionStatus(status string) string {
 		return "compacted"
 	case observation.CompactionStatusFailed:
 		return "failed"
+	case observation.CompactionStatusCancelled:
+		return "cancelled"
 	default:
 		return strings.TrimSpace(status)
 	}

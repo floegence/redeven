@@ -167,6 +167,317 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 	}
 }
 
+func TestStore_StartUserTurnAtomicallyWritesTurnAndConsumesQueue(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_start_turn", EndpointID: "env_start_turn", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	_, _, initialRevision, err := s.CreateFollowup(ctx, QueuedTurn{
+		QueueID:               "fu_start_turn",
+		EndpointID:            "env_start_turn",
+		ThreadID:              "th_start_turn",
+		ChannelID:             "ch_start_turn",
+		Lane:                  FollowupLaneQueued,
+		MessageID:             "m_queued_start_turn",
+		ModelID:               "openai/gpt-5-mini",
+		TextContent:           "queued user turn",
+		CreatedByUserPublicID: "u_start_turn",
+		CreatedByUserEmail:    "u_start_turn@example.com",
+		CreatedAtUnixMs:       900,
+	})
+	if err != nil {
+		t.Fatalf("CreateFollowup: %v", err)
+	}
+
+	start := startUserTurnRecordForTest("env_start_turn", "th_start_turn", "m_user_start_turn", "run_start_turn", "m_assistant_start_turn")
+	start.SourceQueueID = "fu_start_turn"
+	start.StructuredUserInputs = []StructuredUserInputRecord{{
+		QuestionID:        "q1",
+		QuestionText:      "Need detail",
+		Text:              "structured answer",
+		CreatedAtUnixMs:   1001,
+		PublicSummary:     "structured answer",
+		ResponseMessageID: "m_user_start_turn",
+	}}
+	start.RequestUserInputSecrets = []RequestUserInputSecretAnswerRecord{{
+		QuestionID:        "secret_1",
+		Text:              "secret answer",
+		CreatedAtUnixMs:   1001,
+		ResponseMessageID: "m_user_start_turn",
+	}}
+	result, err := s.StartUserTurn(ctx, start)
+	if err != nil {
+		t.Fatalf("StartUserTurn: %v", err)
+	}
+	if result.UserMessageID != "m_user_start_turn" || result.UserMessageRowID <= 0 || result.ConversationTurnRowID <= 0 {
+		t.Fatalf("StartUserTurn result=%+v", result)
+	}
+	if result.FollowupsRevision <= initialRevision {
+		t.Fatalf("FollowupsRevision=%d, want > %d", result.FollowupsRevision, initialRevision)
+	}
+
+	messages, _, _, err := s.ListMessages(ctx, "env_start_turn", "th_start_turn", 10, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(messages) != 1 || messages[0].MessageID != "m_user_start_turn" || messages[0].Role != "user" {
+		t.Fatalf("messages=%+v, want one user message", messages)
+	}
+	turns, err := s.ListConversationTurns(ctx, "env_start_turn", "th_start_turn", 10)
+	if err != nil {
+		t.Fatalf("ListConversationTurns: %v", err)
+	}
+	if len(turns) != 1 || turns[0].RunID != "run_start_turn" || turns[0].UserMessageID != "m_user_start_turn" || turns[0].AssistantMessageID != "m_assistant_start_turn" {
+		t.Fatalf("turns=%+v, want canonical user/assistant turn", turns)
+	}
+	if runs := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_runs WHERE endpoint_id = ? AND thread_id = ? AND run_id = ?`, "env_start_turn", "th_start_turn", "run_start_turn"); runs != 1 {
+		t.Fatalf("runs=%d, want 1", runs)
+	}
+	if queued, err := s.CountFollowupsByLane(ctx, "env_start_turn", "th_start_turn", FollowupLaneQueued); err != nil {
+		t.Fatalf("CountFollowupsByLane: %v", err)
+	} else if queued != 0 {
+		t.Fatalf("queued=%d, want 0 after StartUserTurn", queued)
+	}
+	th, err := s.GetThread(ctx, "env_start_turn", "th_start_turn")
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if th == nil || th.RunStatus != "running" {
+		t.Fatalf("thread=%+v, want running thread state", th)
+	}
+	structured, err := s.ListRecentStructuredUserInputs(ctx, "env_start_turn", "th_start_turn", 10)
+	if err != nil {
+		t.Fatalf("ListRecentStructuredUserInputs: %v", err)
+	}
+	if len(structured) != 1 || structured[0].ResponseMessageID != "m_user_start_turn" {
+		t.Fatalf("structured=%+v, want response message binding", structured)
+	}
+	secrets, err := s.ListRequestUserInputSecretAnswers(ctx, "env_start_turn", "th_start_turn", "m_user_start_turn")
+	if err != nil {
+		t.Fatalf("ListRequestUserInputSecretAnswers: %v", err)
+	}
+	if len(secrets) != 1 || secrets[0].QuestionID != "secret_1" {
+		t.Fatalf("secrets=%+v, want one secret answer", secrets)
+	}
+}
+
+func TestStore_StartUserTurnRollbackWhenSourceQueueIsMissing(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_start_rollback", EndpointID: "env_start_rollback", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	start := startUserTurnRecordForTest("env_start_rollback", "th_start_rollback", "m_user_rollback", "run_rollback", "m_assistant_rollback")
+	start.SourceQueueID = "missing_queue"
+	start.RequireSourceQueue = true
+	if _, err := s.StartUserTurn(ctx, start); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("StartUserTurn err=%v, want %v", err, sql.ErrNoRows)
+	}
+
+	messages, _, _, err := s.ListMessages(ctx, "env_start_rollback", "th_start_rollback", 10, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(messages) != 0 {
+		t.Fatalf("messages=%+v, want rollback to remove transcript message", messages)
+	}
+	turns, err := s.ListConversationTurns(ctx, "env_start_rollback", "th_start_rollback", 10)
+	if err != nil {
+		t.Fatalf("ListConversationTurns: %v", err)
+	}
+	if len(turns) != 0 {
+		t.Fatalf("turns=%+v, want rollback to remove conversation turn", turns)
+	}
+	if runs := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_runs WHERE endpoint_id = ? AND thread_id = ?`, "env_start_rollback", "th_start_rollback"); runs != 0 {
+		t.Fatalf("runs=%d, want rollback to remove run", runs)
+	}
+	th, err := s.GetThread(ctx, "env_start_rollback", "th_start_rollback")
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if th == nil || th.RunStatus != "idle" {
+		t.Fatalf("thread=%+v, want rollback to preserve idle thread state", th)
+	}
+}
+
+func TestStore_StartUserTurnIgnoresMissingOptionalSourceQueue(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_start_optional_source", EndpointID: "env_start_optional_source", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	start := startUserTurnRecordForTest("env_start_optional_source", "th_start_optional_source", "m_user_optional_source", "run_optional_source", "m_assistant_optional_source")
+	start.SourceQueueID = "stale_source_queue"
+	result, err := s.StartUserTurn(ctx, start)
+	if err != nil {
+		t.Fatalf("StartUserTurn: %v", err)
+	}
+	if result.UserMessageID != "m_user_optional_source" || result.ConversationTurnRowID <= 0 {
+		t.Fatalf("StartUserTurn result=%+v, want persisted turn", result)
+	}
+
+	messages, _, _, err := s.ListMessages(ctx, "env_start_optional_source", "th_start_optional_source", 10, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(messages) != 1 || messages[0].MessageID != "m_user_optional_source" {
+		t.Fatalf("messages=%+v, want optional stale source to keep user turn", messages)
+	}
+	turns, err := s.ListConversationTurns(ctx, "env_start_optional_source", "th_start_optional_source", 10)
+	if err != nil {
+		t.Fatalf("ListConversationTurns: %v", err)
+	}
+	if len(turns) != 1 || turns[0].RunID != "run_optional_source" || turns[0].UserMessageID != "m_user_optional_source" {
+		t.Fatalf("turns=%+v, want optional stale source to keep canonical turn", turns)
+	}
+	if runs := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_runs WHERE endpoint_id = ? AND thread_id = ?`, "env_start_optional_source", "th_start_optional_source"); runs != 1 {
+		t.Fatalf("runs=%d, want persisted run", runs)
+	}
+	th, err := s.GetThread(ctx, "env_start_optional_source", "th_start_optional_source")
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if th == nil || th.RunStatus != "running" {
+		t.Fatalf("thread=%+v, want running thread state", th)
+	}
+}
+
+func TestStore_StartUserTurnDuplicateMessageIsIdempotentForSameTurn(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_start_idempotent", EndpointID: "env_start_idempotent", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	start := startUserTurnRecordForTest("env_start_idempotent", "th_start_idempotent", "m_user_start_idempotent", "run_start_idempotent", "m_assistant_start_idempotent")
+	first, err := s.StartUserTurn(ctx, start)
+	if err != nil {
+		t.Fatalf("StartUserTurn first: %v", err)
+	}
+	second, err := s.StartUserTurn(ctx, start)
+	if err != nil {
+		t.Fatalf("StartUserTurn replay: %v", err)
+	}
+	if second.UserMessageRowID != first.UserMessageRowID || second.ConversationTurnRowID != first.ConversationTurnRowID {
+		t.Fatalf("replay result=%+v, want original rows %+v", second, first)
+	}
+	if messages := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ?`, "env_start_idempotent", "th_start_idempotent"); messages != 1 {
+		t.Fatalf("messages=%d, want one idempotent message", messages)
+	}
+	if runs := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_runs WHERE endpoint_id = ? AND thread_id = ?`, "env_start_idempotent", "th_start_idempotent"); runs != 1 {
+		t.Fatalf("runs=%d, want one idempotent run", runs)
+	}
+}
+
+func TestStore_StartUserTurnDuplicateMessageRejectsDifferentRun(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_start_duplicate", EndpointID: "env_start_duplicate", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	start := startUserTurnRecordForTest("env_start_duplicate", "th_start_duplicate", "m_user_start_duplicate", "run_start_duplicate", "m_assistant_start_duplicate")
+	if _, err := s.StartUserTurn(ctx, start); err != nil {
+		t.Fatalf("StartUserTurn first: %v", err)
+	}
+	duplicate := startUserTurnRecordForTest("env_start_duplicate", "th_start_duplicate", "m_user_start_duplicate", "run_start_duplicate_2", "m_assistant_start_duplicate_2")
+	if _, err := s.StartUserTurn(ctx, duplicate); !errors.Is(err, ErrDuplicateUserTurnMessage) {
+		t.Fatalf("StartUserTurn duplicate err=%v, want %v", err, ErrDuplicateUserTurnMessage)
+	}
+	if messages := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ?`, "env_start_duplicate", "th_start_duplicate"); messages != 1 {
+		t.Fatalf("messages=%d, want original message only", messages)
+	}
+	if runs := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_runs WHERE endpoint_id = ? AND thread_id = ?`, "env_start_duplicate", "th_start_duplicate"); runs != 1 {
+		t.Fatalf("runs=%d, want original run only", runs)
+	}
+}
+
+func startUserTurnRecordForTest(endpointID string, threadID string, userMessageID string, runID string, assistantMessageID string) StartUserTurn {
+	return StartUserTurn{
+		EndpointID: endpointID,
+		ThreadID:   threadID,
+		UserMessage: Message{
+			ThreadID:           threadID,
+			EndpointID:         endpointID,
+			MessageID:          userMessageID,
+			Role:               "user",
+			AuthorUserPublicID: "u_start_turn",
+			AuthorUserEmail:    "u_start_turn@example.com",
+			Status:             "complete",
+			CreatedAtUnixMs:    1000,
+			UpdatedAtUnixMs:    1000,
+			TextContent:        "start user turn",
+			MessageJSON:        fmt.Sprintf(`{"id":%q,"role":"user","blocks":[{"type":"text","content":"start user turn"}],"status":"complete"}`, userMessageID),
+		},
+		Run: RunRecord{
+			RunID:           runID,
+			EndpointID:      endpointID,
+			ThreadID:        threadID,
+			MessageID:       assistantMessageID,
+			State:           "running",
+			AttemptCount:    1,
+			StartedAtUnixMs: 1001,
+			UpdatedAtUnixMs: 1001,
+		},
+		Turn: ConversationTurn{
+			TurnID:             assistantMessageID,
+			EndpointID:         endpointID,
+			ThreadID:           threadID,
+			RunID:              runID,
+			UserMessageID:      userMessageID,
+			AssistantMessageID: assistantMessageID,
+			CreatedAtUnixMs:    1000,
+		},
+		RunState: ThreadRunStateWrite{
+			Status:                "running",
+			UpdatedByUserPublicID: "u_start_turn",
+			UpdatedByUserEmail:    "u_start_turn@example.com",
+			UpdatedAtUnixMs:       1001,
+		},
+	}
+}
+
 func TestStore_UpdateThreadRunStateRejectsUnsupportedStatus(t *testing.T) {
 	t.Parallel()
 
@@ -1225,6 +1536,16 @@ func TestStore_ResetStaleActiveThreadRunStates(t *testing.T) {
 		if err := s.UpdateThreadRunState(ctx, "env_1", tc.threadID, tc.status, "", tc.runError, "", "u1", "u1@example.com"); err != nil {
 			t.Fatalf("UpdateThreadRunState(%s): %v", tc.threadID, err)
 		}
+		if err := s.UpsertRun(ctx, RunRecord{
+			RunID:        "run_" + tc.threadID,
+			EndpointID:   "env_1",
+			ThreadID:     tc.threadID,
+			MessageID:    "msg_" + tc.threadID,
+			State:        tc.status,
+			ErrorMessage: tc.runError,
+		}); err != nil {
+			t.Fatalf("UpsertRun(%s): %v", tc.threadID, err)
+		}
 	}
 	activityBeforeReset := map[string]FlowerActivitySnapshot{}
 	for _, tc := range cases {
@@ -1267,9 +1588,28 @@ func TestStore_ResetStaleActiveThreadRunStates(t *testing.T) {
 		if gotErr := strings.TrimSpace(th.RunError); gotErr != tc.wantRunErr {
 			t.Fatalf("thread %s run_error=%q, want %q", tc.threadID, gotErr, tc.wantRunErr)
 		}
+		run, err := s.GetRun(ctx, "env_1", "run_"+tc.threadID)
+		if err != nil {
+			t.Fatalf("GetRun(%s): %v", tc.threadID, err)
+		}
+		if run == nil {
+			t.Fatalf("run for thread %s missing", tc.threadID)
+		}
+		if got := strings.TrimSpace(run.State); got != tc.wantStatus {
+			t.Fatalf("run for thread %s state=%q, want %q", tc.threadID, got, tc.wantStatus)
+		}
+		if gotCode := strings.TrimSpace(run.ErrorCode); gotCode != tc.wantRunErrorCode {
+			t.Fatalf("run for thread %s error_code=%q, want %q", tc.threadID, gotCode, tc.wantRunErrorCode)
+		}
+		if gotErr := strings.TrimSpace(run.ErrorMessage); gotErr != tc.wantRunErr {
+			t.Fatalf("run for thread %s error_message=%q, want %q", tc.threadID, gotErr, tc.wantRunErr)
+		}
 		before := activityBeforeReset[tc.threadID]
 		activeBeforeReset := tc.status == "accepted" || tc.status == "running" || tc.status == "waiting_approval" || tc.status == "recovering" || tc.status == "finalizing"
 		if activeBeforeReset {
+			if run.EndedAtUnixMs <= 0 {
+				t.Fatalf("run for thread %s ended_at_unix_ms=%d, want terminal timestamp", tc.threadID, run.EndedAtUnixMs)
+			}
 			if th.FlowerActivityRevision <= before.ActivityRevision {
 				t.Fatalf("thread %s FlowerActivityRevision=%d, want > %d after stale reset", tc.threadID, th.FlowerActivityRevision, before.ActivityRevision)
 			}
@@ -3076,6 +3416,21 @@ func TestStore_FollowupsCRUDReorderAndRecover(t *testing.T) {
 		t.Fatalf("counts[th_other]=%d, want 0", counts["th_other"])
 	}
 
+	queuedThreads, err := s.ListThreadsWithQueuedTurns(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListThreadsWithQueuedTurns: %v", err)
+	}
+	if len(queuedThreads) != 1 {
+		t.Fatalf("queuedThreads=%+v, want one thread", queuedThreads)
+	}
+	if queuedThreads[0].EndpointID != "env_queue" ||
+		queuedThreads[0].ThreadID != "th_queue" ||
+		queuedThreads[0].QueuedTurnCount != 2 ||
+		queuedThreads[0].FirstQueuedTurnID != "fu_1" ||
+		queuedThreads[0].FirstQueuedSortIndex != 1 {
+		t.Fatalf("queuedThreads[0]=%+v, want queued thread summary for fu_1", queuedThreads[0])
+	}
+
 	queued, err := s.ListFollowupsByLane(ctx, "env_queue", "th_queue", FollowupLaneQueued, 10)
 	if err != nil {
 		t.Fatalf("ListFollowupsByLane queued: %v", err)
@@ -3489,6 +3844,99 @@ func TestStore_SetThreadProviderContinuationAndCompactedContext(t *testing.T) {
 	}
 	if state.CompactedContext.OperationID != "compact-pair-cleared-continuation" {
 		t.Fatalf("compacted context after paired clear=%+v", state.CompactedContext)
+	}
+}
+
+func TestStore_SetThreadProviderContinuationAndCompactedContextRejectsDeletedThread(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_deleted_compact", EndpointID: "env_deleted_compact"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if _, err := s.DeleteThreadResources(ctx, "env_deleted_compact", "th_deleted_compact"); err != nil {
+		t.Fatalf("DeleteThreadResources: %v", err)
+	}
+	compacted := ThreadCompactedContext{
+		OperationID:             "compact-deleted",
+		RequestID:               "manual-deleted",
+		Source:                  "slash_command",
+		CompactionID:            "cmp-deleted",
+		CompactionGeneration:    1,
+		CompactionWindowID:      "window-deleted",
+		CoveredThroughTurnRowID: 1,
+		CoveredThroughMessageID: 1,
+		Transcript: []ThreadCompactedMessage{{
+			Role:    "user",
+			Content: "summary",
+			Kind:    "compaction_summary",
+		}},
+		CreatedAtUnixMs: 100,
+		UpdatedAtUnixMs: 101,
+	}
+	if err := s.SetThreadProviderContinuationAndCompactedContext(ctx, "env_deleted_compact", "th_deleted_compact", ThreadProviderContinuation{}, compacted); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("SetThreadProviderContinuationAndCompactedContext err=%v, want %v", err, sql.ErrNoRows)
+	}
+	if rows := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_state WHERE endpoint_id = ? AND thread_id = ?`, "env_deleted_compact", "th_deleted_compact"); rows != 0 {
+		t.Fatalf("thread state rows=%d, want none after rejected commit", rows)
+	}
+}
+
+func TestStore_SetThreadProviderContinuationAndCompactedContextRejectsChangedBoundary(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_boundary_compact", EndpointID: "env_boundary_compact"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	expected, err := s.CurrentThreadContextBoundary(ctx, "env_boundary_compact", "th_boundary_compact")
+	if err != nil {
+		t.Fatalf("CurrentThreadContextBoundary: %v", err)
+	}
+	start := startUserTurnRecordForTest("env_boundary_compact", "th_boundary_compact", "m_user_boundary", "run_boundary", "m_assistant_boundary")
+	if _, err := s.StartUserTurn(ctx, start); err != nil {
+		t.Fatalf("StartUserTurn: %v", err)
+	}
+	compacted := ThreadCompactedContext{
+		OperationID:             "compact-boundary",
+		RequestID:               "manual-boundary",
+		Source:                  "slash_command",
+		CompactionID:            "cmp-boundary",
+		CompactionGeneration:    1,
+		CompactionWindowID:      "window-boundary",
+		CoveredThroughTurnRowID: expected.TurnRowID,
+		CoveredThroughMessageID: expected.MessageID,
+		Transcript: []ThreadCompactedMessage{{
+			Role:    "user",
+			Content: "summary",
+			Kind:    "compaction_summary",
+		}},
+		CreatedAtUnixMs: 100,
+		UpdatedAtUnixMs: 101,
+	}
+	if err := s.SetThreadProviderContinuationAndCompactedContextIfBoundaryMatches(ctx, "env_boundary_compact", "th_boundary_compact", expected, ThreadProviderContinuation{}, compacted); !errors.Is(err, ErrThreadContextBoundaryChanged) {
+		t.Fatalf("SetThreadProviderContinuationAndCompactedContextIfBoundaryMatches err=%v, want %v", err, ErrThreadContextBoundaryChanged)
+	}
+	state, err := s.GetThreadState(ctx, "env_boundary_compact", "th_boundary_compact")
+	if err != nil {
+		t.Fatalf("GetThreadState: %v", err)
+	}
+	if state != nil {
+		t.Fatalf("thread state=%+v, want no compacted state after rejected boundary", state)
 	}
 }
 

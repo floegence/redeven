@@ -944,11 +944,13 @@ describe('FlowerSurface navigation activity', () => {
     const listThreadLiveEvents = vi.fn(async (_threadID: string, afterSeq: number) => (
       afterSeq === 0
         ? {
+            stream_generation: 1,
             events: shortBatch,
             next_cursor: 5,
             retained_from_seq: 1,
           }
         : {
+            stream_generation: 1,
             events: [],
             next_cursor: afterSeq,
             retained_from_seq: 1,

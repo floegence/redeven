@@ -889,6 +889,10 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 	if runID != "" {
 		return s.CancelRun(meta, runID)
 	}
+	if s.idleThreadCompactionOperation(endpointID, threadID) != "" {
+		_, err := s.StopThread(context.Background(), meta, threadID)
+		return err
+	}
 
 	// Best-effort: if the thread was stuck in a running state without an active in-memory run,
 	// allow the user to unblock the UI by marking it canceled.
@@ -917,9 +921,14 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		return errors.New("invalid request")
 	}
 
+	thKey := runThreadKey(endpointID, threadID)
 	s.mu.Lock()
-	runID := strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)])
+	runID := strings.TrimSpace(s.activeRunByTh[thKey])
 	r := s.runs[runID]
+	idleCompaction := s.idleCompactionByTh[thKey]
+	if idleCompaction != nil && idleCompaction.isCancelled() {
+		idleCompaction = nil
+	}
 	db := s.threadsDB
 	persistTO := s.persistOpTO
 	s.mu.Unlock()
@@ -946,13 +955,28 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 			r.requestCancel("canceled")
 		}
 		s.mu.Lock()
-		if strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)]) == runID {
-			delete(s.activeRunByTh, runThreadKey(endpointID, threadID))
+		if strings.TrimSpace(s.activeRunByTh[thKey]) == runID {
+			delete(s.activeRunByTh, thKey)
 		}
 		s.mu.Unlock()
 	}
+	if idleCompaction != nil {
+		if !force {
+			return ErrThreadBusy
+		}
+		if compaction, ok := s.cancelIdleThreadCompactionWithBroadcast(endpointID, threadID); ok {
+			if compaction.isFinalizing() {
+				waitCtx, waitCancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
+				waitOK := s.waitIdleThreadCompaction(waitCtx, compaction)
+				waitCancel()
+				if !waitOK {
+					return context.DeadlineExceeded
+				}
+			}
+		}
+	}
 
-	if runtime := s.removeThreadSubagentRuntime(runThreadKey(endpointID, threadID)); runtime != nil {
+	if runtime := s.removeThreadSubagentRuntime(thKey); runtime != nil {
 		closeCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
 		runtime.closeAllExisting(closeCtx)
 		cancel()

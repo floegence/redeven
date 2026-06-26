@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
@@ -123,6 +124,7 @@ type Service struct {
 	mu                      sync.Mutex
 	activeRunByTh           map[string]string // <endpoint_id>:<thread_id> -> run_id
 	suppressQueuedDrainByTh map[string]bool
+	idleCompactionByTh      map[string]*idleThreadCompaction
 	runs                    map[string]*run
 	subagentRuntimes        map[string]*floretSubagentRuntime
 
@@ -133,9 +135,10 @@ type Service struct {
 	realtimeSummaryByEndpoint    map[string]map[*rpc.Server]struct{}
 	realtimeSummaryEndpointBySRV map[*rpc.Server]string
 
-	realtimeByThread    map[string]map[*rpc.Server]struct{} // <endpoint_id>:<thread_id> -> set(stream)
-	realtimeThreadBySRV map[*rpc.Server]string
-	flowerLiveByThread  map[string]*flowerLiveThreadStream
+	realtimeByThread     map[string]map[*rpc.Server]struct{} // <endpoint_id>:<thread_id> -> set(stream)
+	realtimeThreadBySRV  map[*rpc.Server]string
+	flowerLiveByThread   map[string]*flowerLiveThreadStream
+	flowerLiveGeneration int64
 
 	uploadsDir string
 	threadsDB  *threadstore.Store
@@ -152,6 +155,29 @@ type Service struct {
 	maintenanceStopCh      chan struct{}
 	maintenanceDoneCh      chan struct{}
 	compactionScheduled    bool
+}
+
+var flowerLiveGenerationSeed atomic.Int64
+
+func newFlowerLiveGeneration() int64 {
+	now := time.Now().UnixMicro()
+	for {
+		current := flowerLiveGenerationSeed.Load()
+		next := now
+		if next <= current {
+			next = current + 1
+		}
+		if flowerLiveGenerationSeed.CompareAndSwap(current, next) {
+			return next
+		}
+	}
+}
+
+func (s *Service) flowerLiveStreamGenerationValue() int64 {
+	if s == nil || s.flowerLiveGeneration <= 0 {
+		return flowerLiveFallbackStreamGeneration
+	}
+	return s.flowerLiveGeneration
 }
 
 type resolvedRunModel struct {
@@ -288,6 +314,7 @@ func NewService(opts Options) (*Service, error) {
 		targetToolExecutor:           opts.TargetToolExecutor,
 		toolTargetPolicyForRun:       opts.ToolTargetPolicyForRun,
 		activeRunByTh:                make(map[string]string),
+		idleCompactionByTh:           make(map[string]*idleThreadCompaction),
 		runs:                         make(map[string]*run),
 		subagentRuntimes:             make(map[string]*floretSubagentRuntime),
 		realtimeWriters:              make(map[*rpc.Server]*aiSinkWriter),
@@ -296,6 +323,7 @@ func NewService(opts Options) (*Service, error) {
 		realtimeByThread:             make(map[string]map[*rpc.Server]struct{}),
 		realtimeThreadBySRV:          make(map[*rpc.Server]string),
 		flowerLiveByThread:           make(map[string]*flowerLiveThreadStream),
+		flowerLiveGeneration:         newFlowerLiveGeneration(),
 		suppressQueuedDrainByTh:      make(map[string]bool),
 		uploadsDir:                   uploadsDir,
 		threadsDB:                    ts,
@@ -317,8 +345,48 @@ func NewService(opts Options) (*Service, error) {
 	if svc.threadTitleCoordinator != nil {
 		svc.threadTitleCoordinator.ScheduleRecovery()
 	}
+	svc.scheduleQueuedTurnRecovery()
 	svc.startBackgroundMaintenance()
 	return svc, nil
+}
+
+func (s *Service) scheduleQueuedTurnRecovery() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	persistTO := s.persistOpTO
+	s.mu.Unlock()
+	if db == nil {
+		return
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), persistTO)
+	queuedThreads, err := db.ListThreadsWithQueuedTurns(ctx, 5000)
+	cancel()
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("ai: queued turn recovery scan failed", "error", err)
+		}
+		return
+	}
+	for _, queued := range queuedThreads {
+		endpointID := strings.TrimSpace(queued.EndpointID)
+		threadID := strings.TrimSpace(queued.ThreadID)
+		if endpointID == "" || threadID == "" {
+			continue
+		}
+		runStatus, _, _ := normalizeThreadRunState(queued.RunStatus, queued.RunErrorCode, queued.RunError)
+		if NormalizeRunState(runStatus) == RunStateWaitingUser || strings.TrimSpace(queued.WaitingUserInputJSON) != "" {
+			continue
+		}
+		if s.threadMgr != nil {
+			s.threadMgr.Wake(endpointID, threadID)
+		}
+	}
 }
 
 func (s *Service) Close() error {
@@ -332,7 +400,6 @@ func (s *Service) Close() error {
 	coordinator := s.threadTitleCoordinator
 	s.threadTitleCoordinator = nil
 	ts := s.threadsDB
-	s.threadsDB = nil
 	writers := make([]*aiSinkWriter, 0, len(s.realtimeWriters))
 	for srv, w := range s.realtimeWriters {
 		if w == nil {
@@ -354,6 +421,12 @@ func (s *Service) Close() error {
 	for _, r := range s.runs {
 		if r != nil {
 			runs = append(runs, r)
+		}
+	}
+	idleCompactions := make([]*idleThreadCompaction, 0, len(s.idleCompactionByTh))
+	for _, compaction := range s.idleCompactionByTh {
+		if compaction != nil {
+			idleCompactions = append(idleCompactions, compaction)
 		}
 	}
 	runtimes := make([]*floretSubagentRuntime, 0, len(s.subagentRuntimes))
@@ -382,6 +455,30 @@ func (s *Service) Close() error {
 	for _, r := range runs {
 		r.requestCancel("canceled")
 	}
+	for _, compaction := range idleCompactions {
+		s.cancelIdleThreadCompactionWithBroadcast(compaction.endpointID, compaction.threadID)
+	}
+	waitTO := s.persistOpTO
+	if waitTO <= 0 {
+		waitTO = defaultPersistOpTimeout
+	}
+	for _, compaction := range idleCompactions {
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), waitTO)
+		waitOK := s.waitIdleThreadCompaction(waitCtx, compaction)
+		waitCancel()
+		if !waitOK && s.log != nil {
+			s.log.Warn("idle context compaction did not finish before service close", "thread_id", compaction.threadID, "operation_id", compaction.operationID)
+		}
+		if waitOK && compaction.isCancelled() {
+			s.publishIdleContextCompactionCancellation(compaction)
+		}
+	}
+	s.mu.Lock()
+	if s.threadsDB == ts {
+		s.threadsDB = nil
+	}
+	s.idleCompactionByTh = make(map[string]*idleThreadCompaction)
+	s.mu.Unlock()
 	for _, runtime := range runtimes {
 		runtime.release()
 	}
@@ -1110,6 +1207,7 @@ type preparedRun struct {
 	req                          RunStartRequest
 	persistedUser                *persistedUserMessage
 	runID                        string
+	startedAtUnixMs              int64
 	channelID                    string
 	endpointID                   string
 	threadID                     string
@@ -1152,19 +1250,136 @@ func (s *Service) StartRunDetached(meta *session.Meta, runID string, req RunStar
 	return nil
 }
 
-func (s *Service) StartRunDetachedWithPersisted(meta *session.Meta, runID string, req RunStartRequest, persisted persistedUserMessage) error {
-	prepared, err := s.prepareRun(meta, runID, req, nil, &persisted)
-	if err != nil {
-		return err
+func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, sourceFollowupID string, requireSourceFollowup bool) (persistedUserMessage, RunInput, error) {
+	if s == nil {
+		return persistedUserMessage{}, req.Input, errors.New("nil service")
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := requireRWX(meta); err != nil {
+		return persistedUserMessage{}, req.Input, err
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	threadID := strings.TrimSpace(req.ThreadID)
+	if endpointID == "" || threadID == "" {
+		return persistedUserMessage{}, req.Input, errors.New("invalid request")
+	}
+
+	preparedUser, normalizedInput, err := s.prepareUserMessage(ctx, meta, endpointID, threadID, req.Input)
+	if err != nil {
+		return persistedUserMessage{}, req.Input, err
+	}
+	req.Input = normalizedInput
+	persistedSeed := persistedUserMessage{
+		MessageID:       preparedUser.Message.MessageID,
+		MessageJSON:     preparedUser.Message.MessageJSON,
+		CreatedAtUnixMs: preparedUser.Message.CreatedAtUnixMs,
+	}
+	prepared, err := s.prepareRun(meta, runID, req, nil, &persistedSeed)
+	if err != nil {
+		return persistedUserMessage{}, normalizedInput, err
+	}
+
+	startedAt := time.Now().UnixMilli()
+	prepared.startedAtUnixMs = startedAt
+	pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
+	result, err := prepared.db.StartUserTurn(pctx, threadstore.StartUserTurn{
+		EndpointID:  endpointID,
+		ThreadID:    threadID,
+		UserMessage: preparedUser.Message,
+		UploadIDs:   preparedUser.UploadIDs,
+		Run: threadstore.RunRecord{
+			RunID:           runID,
+			EndpointID:      endpointID,
+			ThreadID:        threadID,
+			MessageID:       prepared.messageID,
+			State:           string(RunStateRunning),
+			AttemptCount:    1,
+			StartedAtUnixMs: startedAt,
+			UpdatedAtUnixMs: startedAt,
+		},
+		Turn: threadstore.ConversationTurn{
+			TurnID:             prepared.messageID,
+			EndpointID:         endpointID,
+			ThreadID:           threadID,
+			RunID:              runID,
+			UserMessageID:      preparedUser.Message.MessageID,
+			AssistantMessageID: prepared.messageID,
+			CreatedAtUnixMs:    preparedUser.Message.CreatedAtUnixMs,
+		},
+		RunState: threadstore.ThreadRunStateWrite{
+			Status:                string(RunStateRunning),
+			UpdatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),
+			UpdatedByUserEmail:    strings.TrimSpace(meta.UserEmail),
+			UpdatedAtUnixMs:       startedAt,
+		},
+		SourceQueueID:           strings.TrimSpace(sourceFollowupID),
+		RequireSourceQueue:      requireSourceFollowup,
+		StructuredUserInputs:    preparedUser.StructuredInputs,
+		RequestUserInputSecrets: preparedUser.SecretAnswers,
+		UploadClaimedAtUnixMs:   preparedUser.Message.CreatedAtUnixMs,
+	})
+	cancel()
+	if err != nil {
+		s.releasePreparedRun(prepared)
+		return persistedUserMessage{}, normalizedInput, err
+	}
+
+	persisted := persistedUserMessage{
+		MessageID:       result.UserMessageID,
+		RowID:           result.UserMessageRowID,
+		MessageJSON:     result.UserMessageJSON,
+		CreatedAtUnixMs: result.UserMessageCreatedAtUnixMs,
+	}
+	prepared.persistedUser = &persisted
+	prepared.req.Input = normalizedInput
+
+	s.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
+	s.broadcastThreadState(endpointID, threadID, runID, string(RunStateRunning), "", "")
+	s.broadcastThreadSummary(endpointID, threadID)
+	effectiveCurrentInput := deriveEffectiveCurrentUserInput(normalizedInput)
+	effectiveCurrentInput.MessageID = persisted.MessageID
+	effectiveCurrentInput.MessageRowID = persisted.RowID
+	effectiveCurrentInput.MessageCreatedAtUnixMs = persisted.CreatedAtUnixMs
+	s.scheduleAutoThreadTitle(meta, threadID, effectiveCurrentInput)
+	prepared.r.ensureAssistantMessageStarted()
+	prepared.r.updateModelIOStatus(FlowerModelIOPhasePreparing, 0)
+	if _, cleanupErr := s.processUploadCleanupCandidates(context.Background(), result.UploadsToDelete); cleanupErr != nil && s.log != nil {
+		s.log.Warn("ai followup upload cleanup failed after turn start", "thread_id", threadID, "followup_id", strings.TrimSpace(sourceFollowupID), "error", cleanupErr)
+	}
+
 	go func() {
 		if err := s.executePreparedRun(context.Background(), prepared); err != nil {
 			if s.log != nil {
-				s.log.Warn("ai detached run failed", "run_id", runID, "thread_id", strings.TrimSpace(req.ThreadID), "error", err)
+				s.log.Warn("ai detached run failed", "run_id", runID, "thread_id", threadID, "error", err)
 			}
 		}
 	}()
-	return nil
+	return persisted, normalizedInput, nil
+}
+
+func (s *Service) releasePreparedRun(prepared *preparedRun) {
+	if s == nil || prepared == nil {
+		return
+	}
+	runID := strings.TrimSpace(prepared.runID)
+	thKey := strings.TrimSpace(prepared.thKey)
+	s.mu.Lock()
+	if runID != "" {
+		delete(s.runs, runID)
+	}
+	if thKey != "" && strings.TrimSpace(s.activeRunByTh[thKey]) == runID {
+		delete(s.activeRunByTh, thKey)
+	}
+	s.mu.Unlock()
+	if prepared.r != nil {
+		prepared.r.markDone()
+		if prepared.r.stream != nil {
+			prepared.r.stream.close()
+			prepared.r.stream.wait()
+		}
+	}
 }
 
 func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter, persisted *persistedUserMessage) (*preparedRun, error) {
@@ -1251,6 +1466,10 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		s.mu.Unlock()
 		return nil, ErrThreadBusy
 	}
+	if existing := s.idleCompactionByTh[thKey]; existing != nil && existing.busy() {
+		s.mu.Unlock()
+		return nil, ErrThreadBusy
+	}
 	cfg := s.cfg
 	desktopModelSource := s.desktopModelSource
 	modeFallback := "act"
@@ -1305,7 +1524,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 			if !finalizingThreadStatePublished && isFinalizingLifecycleStreamEvent(ev) {
 				finalizingThreadStatePublished = true
 				uctx, cancel := context.WithTimeout(context.Background(), persistTO)
-				_ = db.UpdateThreadRunState(
+				if err := db.UpdateThreadRunState(
 					uctx,
 					endpointID,
 					threadID,
@@ -1315,7 +1534,9 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 					"",
 					metaRef.UserPublicID,
 					metaRef.UserEmail,
-				)
+				); err != nil && s.log != nil {
+					s.log.Warn("update thread finalizing state failed", "thread_id", threadID, "run_id", runID, "error", err)
+				}
 				cancel()
 				s.broadcastThreadState(endpointID, threadID, runID, string(RunStateFinalizing), "", "")
 				s.broadcastThreadSummary(endpointID, threadID)
@@ -1340,7 +1561,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		waitingUserInputJSON := marshalRequestUserInputPrompt(waitingPrompt)
 		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
 		defer cancel()
-		_ = db.UpdateThreadRunState(
+		if err := db.UpdateThreadRunState(
 			uctx,
 			endpointID,
 			threadID,
@@ -1350,19 +1571,18 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 			waitingUserInputJSON,
 			metaRef.UserPublicID,
 			metaRef.UserEmail,
-		)
+		); err != nil && s.log != nil {
+			s.log.Warn("update thread run state failed", "thread_id", threadID, "run_id", runID, "status", status, "error", err)
+		}
 	}
 
-	updateThreadRunState("running", "", "", nil)
-	if persisted != nil && s.contextRepo != nil {
-		turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
-		_, _ = s.contextRepo.AppendTurn(turnCtx, endpointID, threadID, runID, messageID, persisted.MessageID, messageID, persisted.CreatedAtUnixMs)
-		cancelTurn()
+	if persisted == nil {
+		updateThreadRunState("running", "", "", nil)
+		s.broadcastThreadState(endpointID, threadID, runID, "running", "", "")
+		s.broadcastThreadSummary(endpointID, threadID)
+		r.ensureAssistantMessageStarted()
+		r.updateModelIOStatus(FlowerModelIOPhasePreparing, 0)
 	}
-	s.broadcastThreadState(endpointID, threadID, runID, "running", "", "")
-	s.broadcastThreadSummary(endpointID, threadID)
-	r.ensureAssistantMessageStarted()
-	r.updateModelIOStatus(FlowerModelIOPhasePreparing, 0)
 
 	var persistedCopy *persistedUserMessage
 	if persisted != nil {
@@ -1375,6 +1595,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		req:                          req,
 		persistedUser:                persistedCopy,
 		runID:                        runID,
+		startedAtUnixMs:              time.Now().UnixMilli(),
 		channelID:                    channelID,
 		endpointID:                   endpointID,
 		threadID:                     threadID,
@@ -1442,6 +1663,44 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	assistantJSON := ""
 	assistantText := ""
 	var assistantAt int64
+	engineRunStarted := false
+	persistAssistantSnapshot := func(status string) (int64, error) {
+		if db == nil || r.assistantAlreadyPersisted() {
+			return 0, nil
+		}
+		status = normalizeSnapshotMessageStatus(status)
+		if status == "" {
+			status = "complete"
+		}
+		rawJSON, text, at, snapshotErr := r.snapshotAssistantMessageJSONWithStatus(status)
+		if snapshotErr != nil {
+			return 0, snapshotErr
+		}
+		if strings.TrimSpace(rawJSON) == "" {
+			return 0, errors.New("missing assistant message")
+		}
+		pctx, cancel := context.WithTimeout(context.Background(), persistTO)
+		rowID, appendErr := db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
+			ThreadID:        threadID,
+			EndpointID:      endpointID,
+			MessageID:       messageID,
+			Role:            "assistant",
+			Status:          status,
+			CreatedAtUnixMs: at,
+			UpdatedAtUnixMs: at,
+			TextContent:     text,
+			MessageJSON:     rawJSON,
+		}, meta.UserPublicID, meta.UserEmail)
+		cancel()
+		if appendErr != nil {
+			return 0, appendErr
+		}
+		r.markAssistantPersisted()
+		assistantJSON = rawJSON
+		assistantText = text
+		assistantAt = at
+		return rowID, nil
+	}
 
 	defer func() {
 		s.mu.Lock()
@@ -1457,6 +1716,37 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		}
 		runStatus, runStatusErrCode, runStatusErr := deriveThreadRunState(r.getEndReason(), r.getFinalizationReason(), r.getRunErrorCode(), retErr)
 		waitingPrompt := waitingPromptForRunState(runStatus, r.snapshotWaitingPrompt())
+		if !engineRunStarted {
+			startedAt := prepared.startedAtUnixMs
+			if startedAt <= 0 {
+				startedAt = time.Now().UnixMilli()
+			}
+			r.persistRunRecord(NormalizeRunState(runStatus), runStatusErrCode, runStatusErr, startedAt, time.Now().UnixMilli())
+			eventType := "run.error"
+			switch NormalizeRunState(runStatus) {
+			case RunStateSuccess, RunStateWaitingUser, RunStateCanceled:
+				eventType = "run.end"
+			}
+			r.persistRunEvent(eventType, RealtimeStreamKindLifecycle, map[string]any{
+				"state":      runStatus,
+				"error_code": runStatusErrCode,
+				"error":      runStatusErr,
+			})
+			if strings.TrimSpace(messageID) != "" && !r.assistantAlreadyPersisted() {
+				assistantStatus := "error"
+				if NormalizeRunState(runStatus) == RunStateCanceled {
+					assistantStatus = "canceled"
+				}
+				if assistantRowID, persistErr := persistAssistantSnapshot(assistantStatus); persistErr != nil {
+					if r.log != nil {
+						r.log.Warn("persist early assistant message failed", "thread_id", threadID, "run_id", runID, "error", persistErr)
+					}
+				} else if assistantRowID > 0 {
+					s.broadcastTranscriptMessage(endpointID, threadID, runID, assistantRowID, assistantJSON, assistantAt)
+					s.broadcastThreadSummary(endpointID, threadID)
+				}
+			}
+		}
 		if prepared.updateThreadRunState != nil {
 			prepared.updateThreadRunState(runStatus, runStatusErrCode, runStatusErr, waitingPrompt)
 		}
@@ -1555,11 +1845,6 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		autoTitleMessageCreatedAtUnixMs = persisted.CreatedAtUnixMs
 		s.broadcastTranscriptMessage(endpointID, threadID, runID, persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
 		s.broadcastThreadSummary(endpointID, threadID)
-		if s.contextRepo != nil {
-			turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
-			_, _ = s.contextRepo.AppendTurn(turnCtx, endpointID, threadID, runID, messageID, userMsgID, messageID, persisted.CreatedAtUnixMs)
-			cancelTurn()
-		}
 	}
 	effectiveCurrentInput.MessageID = userMsgID
 	effectiveCurrentInput.MessageRowID = autoTitleMessageRowID
@@ -1651,6 +1936,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		ContextPack:     promptPack,
 		ModelCapability: modelCapability,
 	}
+	engineRunStarted = true
 	runErr := r.run(ctx, runReq)
 	finalErr := runErr
 	if runErr != nil {
@@ -1679,45 +1965,32 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		return finalErr
 	}
 
-	assistantJSON, assistantText, assistantAt, err = r.snapshotAssistantMessageJSON()
+	assistantRowID, err := persistAssistantSnapshot("complete")
 	if err != nil {
 		if finalErr != nil {
 			return errors.Join(finalErr, err)
 		}
 		return err
 	}
-	if strings.TrimSpace(assistantJSON) == "" {
-		err = errors.New("missing assistant message")
-		if finalErr != nil {
-			return errors.Join(finalErr, err)
-		}
-		return err
-	}
-	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
-	assistantRowID, err := db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
-		ThreadID:        threadID,
-		EndpointID:      endpointID,
-		MessageID:       messageID,
-		Role:            "assistant",
-		Status:          "complete",
-		CreatedAtUnixMs: assistantAt,
-		UpdatedAtUnixMs: assistantAt,
-		TextContent:     assistantText,
-		MessageJSON:     assistantJSON,
-	}, meta.UserPublicID, meta.UserEmail)
-	cancelPersist()
-	if err != nil {
-		if finalErr != nil {
-			return errors.Join(finalErr, err)
-		}
-		return err
-	}
-	r.markAssistantPersisted()
 	var completedTurnRowID int64
-	if s.contextRepo != nil {
+	if db != nil {
 		turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
-		completedTurnRowID, _ = s.contextRepo.AppendTurn(turnCtx, endpointID, threadID, runID, messageID, userMsgID, messageID, assistantAt)
+		completedTurnRowID, err = db.AppendConversationTurn(turnCtx, threadstore.ConversationTurn{
+			TurnID:             messageID,
+			EndpointID:         endpointID,
+			ThreadID:           threadID,
+			RunID:              runID,
+			UserMessageID:      userMsgID,
+			AssistantMessageID: messageID,
+			CreatedAtUnixMs:    assistantAt,
+		})
 		cancelTurn()
+		if err != nil {
+			if finalErr != nil {
+				return errors.Join(finalErr, err)
+			}
+			return err
+		}
 	}
 	s.broadcastTranscriptMessage(endpointID, threadID, runID, assistantRowID, assistantJSON, assistantAt)
 	s.broadcastThreadSummary(endpointID, threadID)

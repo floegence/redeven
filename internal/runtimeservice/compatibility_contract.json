@@ -12,7 +12,8 @@
       "Desktop Local Environment Flower adapter and main-process runtime request allowlist include /threads/:thread_id/context/compact while preserving startup reports, attach flows, sys.ping, and Local UI health checks",
       "Flower live context compaction events use the single context.compaction.updated event with typed timeline anchors; old anchor_message_id plus placement and started/applied event shapes are rejected by protocol checks",
       "Flower composer /compact command does not create transcript messages, does not stop a running or waiting-approval run, and carries expected_run_id for stale-run protection",
-      "Floret is consumed only from the published github.com/floegence/floret v0.3.27 module with GOWORK=off validation and no replace, go.work, package-manager link, or local sibling path wiring",
+      "Floret is consumed only from the published github.com/floegence/floret v0.3.36 module with GOWORK=off validation and no replace, go.work, package-manager link, or local sibling path wiring",
+      "Flower post-compaction continuation keeps active runs and queued follow-ups on Redeven thread actors while Floret owns compact lifecycle cancellation and diagnostic observation",
       "Compatibility epoch, minimum Desktop version, and minimum Runtime version remain unchanged because Desktop-managed startup, runtime snapshot protocol, SSH bootstrap, gateway lifecycle, and Runtime Service control methods are not expanded"
     ],
     "same_window_rationale": "The compatibility window is unchanged because the feature is implemented inside Flower, Env App UI protocol assets, and Desktop Local UI request routing. The Runtime Service snapshot protocol remains redeven-runtime-v1, Desktop-managed startup still uses structured machine presentation and startup reports, sys.ping and attach semantics are unchanged, and SSH/runtime bootstrap compatibility does not require a newer Desktop or Runtime binary pair."

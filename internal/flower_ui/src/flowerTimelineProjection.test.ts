@@ -273,6 +273,193 @@ describe('buildFlowerTimelineEntries', () => {
     expect(after.blocks[0].block.items.map((item) => item.item_id)).toEqual(['tool-after']);
   });
 
+  it('keeps context compaction anchors stable across empty persisted block placeholders', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: '',
+          status: 'canceled',
+          created_at_ms: 2,
+          blocks: [
+            { type: 'markdown', content: 'Intro.' },
+            { type: 'markdown', content: '' },
+            activityTimeline({
+              items: [
+                activityItem({ item_id: 'tool-before-placeholder', label: 'before' }),
+                activityItem({ item_id: 'tool-after-placeholder', label: 'after' }),
+              ],
+            }),
+          ],
+        },
+      ],
+      timeline_decorations: [{
+        decoration_id: 'context-compaction:compact-placeholder-anchor',
+        kind: 'context_compaction',
+        anchor: {
+          target_kind: 'activity_item',
+          message_id: 'assistant-1',
+          block_index: 2,
+          activity_item_id: 'tool-before-placeholder',
+          edge: 'after',
+        },
+        ordinal: 0,
+        compaction: {
+          operation_id: 'compact-placeholder-anchor',
+          phase: 'complete',
+          status: 'compacted',
+          tokens_before: 26_104,
+          tokens_after_estimate: 6_311,
+          updated_at_ms: 3,
+        },
+      }],
+    }));
+
+    expect(entries.map((entry) => entry.type)).toEqual(['message', 'context_compaction', 'message']);
+    const before = entries[0];
+    const divider = entries[1];
+    const after = entries[2];
+    expect(before?.type).toBe('message');
+    expect(divider?.type).toBe('context_compaction');
+    expect(after?.type).toBe('message');
+    if (before?.type !== 'message' || divider?.type !== 'context_compaction' || after?.type !== 'message') {
+      throw new Error('expected split message around compaction divider');
+    }
+    expect(before.blocks.map((block) => block.type)).toEqual(['content', 'activity']);
+    expect(after.blocks[0]?.type).toBe('activity');
+    if (after.blocks[0]?.type !== 'activity') throw new Error('expected activity block after divider');
+    expect(after.blocks[0].block.items.map((item) => item.item_id)).toEqual(['tool-after-placeholder']);
+    expect(divider.decoration.compaction.status).toBe('compacted');
+  });
+
+  it('keeps context compaction decorations anchored after the final activity item', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        {
+          id: 'assistant-final-tool',
+          role: 'assistant',
+          content: '',
+          status: 'canceled',
+          created_at_ms: 2,
+          blocks: [
+            { type: 'markdown', content: '' },
+            activityTimeline({
+              items: [
+                activityItem({ item_id: 'tool-before-final', label: 'before' }),
+                activityItem({ item_id: 'tool-final', label: 'final' }),
+              ],
+            }),
+          ],
+        },
+      ],
+      timeline_decorations: [{
+        decoration_id: 'context-compaction:compact-final-tool',
+        kind: 'context_compaction',
+        anchor: {
+          target_kind: 'activity_item',
+          message_id: 'assistant-final-tool',
+          block_index: 1,
+          activity_item_id: 'tool-final',
+          edge: 'after',
+        },
+        ordinal: 0,
+        compaction: {
+          operation_id: 'compact-final-tool',
+          phase: 'complete',
+          status: 'compacted',
+          tokens_before: 25_814,
+          tokens_after_estimate: 10_151,
+          updated_at_ms: 3,
+        },
+      }],
+    }));
+
+    expect(entries.map((entry) => entry.type)).toEqual(['message', 'context_compaction']);
+    const messageEntry = entries[0];
+    const divider = entries[1];
+    expect(messageEntry?.type).toBe('message');
+    expect(divider?.type).toBe('context_compaction');
+    if (messageEntry?.type !== 'message' || divider?.type !== 'context_compaction') {
+      throw new Error('expected final activity item divider after message');
+    }
+    expect(messageEntry.blocks[0]?.type).toBe('activity');
+    if (messageEntry.blocks[0]?.type !== 'activity') throw new Error('expected activity block before divider');
+    expect(messageEntry.blocks[0].block.items.map((item) => item.item_id)).toEqual(['tool-before-final', 'tool-final']);
+    expect(divider.decoration.compaction.operation_id).toBe('compact-final-tool');
+  });
+
+  it('keeps context compaction anchors on the original block index after multiple empty placeholders', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        {
+          id: 'assistant-natural-compact',
+          role: 'assistant',
+          content: 'first batch\n\nsecond batch\n\nthird batch',
+          status: 'canceled',
+          created_at_ms: 2,
+          blocks: [
+            { type: 'markdown', content: '' },
+            activityTimeline({
+              items: [activityItem({ item_id: 'tool:preamble', label: 'preamble' })],
+            }),
+            { type: 'markdown', content: 'first batch' },
+            activityTimeline({
+              items: [
+                activityItem({ item_id: 'tool:first-1', label: 'first 1' }),
+                activityItem({ item_id: 'tool:first-2', label: 'first 2' }),
+              ],
+            }),
+            { type: 'markdown', content: 'second batch' },
+            activityTimeline({
+              items: [activityItem({ item_id: 'tool:second-1', label: 'second 1' })],
+            }),
+            { type: 'markdown', content: 'third batch' },
+            activityTimeline({
+              items: [
+                activityItem({ item_id: 'tool:third-1', label: 'third 1' }),
+                activityItem({ item_id: 'tool:third-final', label: 'third final' }),
+              ],
+            }),
+          ],
+        },
+      ],
+      timeline_decorations: [{
+        decoration_id: 'context-compaction:natural-threshold',
+        kind: 'context_compaction',
+        anchor: {
+          target_kind: 'activity_item',
+          message_id: 'assistant-natural-compact',
+          block_index: 7,
+          activity_item_id: 'tool:third-final',
+          edge: 'after',
+        },
+        ordinal: 0,
+        compaction: {
+          operation_id: 'natural-threshold',
+          phase: 'complete',
+          status: 'compacted',
+          tokens_before: 25_814,
+          tokens_after_estimate: 10_151,
+          updated_at_ms: 3,
+        },
+      }],
+    }));
+
+    expect(entries.map((entry) => entry.type)).toEqual(['message', 'context_compaction']);
+    const messageEntry = entries[0];
+    const divider = entries[1];
+    expect(messageEntry?.type).toBe('message');
+    expect(divider?.type).toBe('context_compaction');
+    if (messageEntry?.type !== 'message' || divider?.type !== 'context_compaction') {
+      throw new Error('expected divider after final original-index activity item');
+    }
+    const activityBlocks = messageEntry.blocks.filter((block): block is Extract<typeof block, { type: 'activity' }> => block.type === 'activity');
+    expect(activityBlocks.map((block) => block.block_index)).toEqual([1, 3, 5, 7]);
+    expect(activityBlocks.at(-1)?.block.items.map((item) => item.item_id)).toEqual(['tool:third-1', 'tool:third-final']);
+    expect(divider.decoration.compaction.operation_id).toBe('natural-threshold');
+  });
+
   it('skips context compaction decorations without a valid anchor', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [
@@ -396,7 +583,7 @@ describe('buildFlowerTimelineEntries', () => {
     expect(messages.map((entry) => entry.message.active_cursor === true)).toEqual([false, true]);
   });
 
-  it('preserves canonical stop plus send message order while keeping one running cursor', () => {
+  it('preserves canonical running queued send message order while keeping one running cursor', () => {
     const entries = buildFlowerTimelineEntries(thread({
       status: 'running',
       messages: [
@@ -408,10 +595,10 @@ describe('buildFlowerTimelineEntries', () => {
           created_at_ms: 10,
         },
         {
-          id: 'assistant-canceled',
+          id: 'assistant-first',
           role: 'assistant',
           content: 'partial old answer',
-          status: 'canceled',
+          status: 'streaming',
           active_cursor: true,
           created_at_ms: 20,
           blocks: [{ type: 'markdown', content: 'partial old answer' }],
@@ -437,7 +624,7 @@ describe('buildFlowerTimelineEntries', () => {
     const messages = entries.filter((entry): entry is Extract<typeof entry, { type: 'message' }> => entry.type === 'message');
     expect(messages.map((entry) => entry.message.id)).toEqual([
       'user-first',
-      'assistant-canceled',
+      'assistant-first',
       'user-second',
       'assistant-current',
     ]);

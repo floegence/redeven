@@ -429,6 +429,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         threadId: threadID,
         model: modelID,
         input: {
+          ...(trim(input.message_id) ? { messageId: trim(input.message_id) } : {}),
           text: prompt,
           attachments,
           ...(contextAction ? { contextAction } : {}),

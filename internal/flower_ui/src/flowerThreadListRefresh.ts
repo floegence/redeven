@@ -13,7 +13,7 @@ import { sameFlowerReasoningCapability, sameFlowerReasoningSelection } from './r
 
 export type FlowerThreadListRefreshOptions = Readonly<{
   selectedThreadID?: string;
-  pendingThreadID?: string;
+  pendingThreadIDs?: readonly string[];
   preserveMissingCurrentThreads?: boolean;
   sameThreadSnapshot: (left: FlowerThreadSnapshot, right: FlowerThreadSnapshot) => boolean;
 }>;
@@ -33,8 +33,8 @@ function threadHasLoadedDetail(thread: FlowerThreadSnapshot): boolean {
     || thread.error != null;
 }
 
-function threadHasLocalActiveState(thread: FlowerThreadSnapshot, pendingThreadID = ''): boolean {
-  return trimString(pendingThreadID) === thread.thread_id
+function threadHasLocalActiveState(thread: FlowerThreadSnapshot, pendingThreadIDs: ReadonlySet<string>): boolean {
+  return pendingThreadIDs.has(thread.thread_id)
     || thread.status === 'running'
     || thread.status === 'waiting_user'
     || thread.status === 'waiting_approval';
@@ -42,9 +42,9 @@ function threadHasLocalActiveState(thread: FlowerThreadSnapshot, pendingThreadID
 
 function selectedThreadShouldSurviveMissingListSummary(
   thread: FlowerThreadSnapshot,
-  pendingThreadID = '',
+  pendingThreadIDs: ReadonlySet<string>,
 ): boolean {
-  return threadHasLoadedDetail(thread) || threadHasLocalActiveState(thread, pendingThreadID);
+  return threadHasLoadedDetail(thread) || threadHasLocalActiveState(thread, pendingThreadIDs);
 }
 
 function summaryOwnsExistingInputRequest(summary: FlowerThreadSnapshot, existing: FlowerThreadSnapshot): boolean {
@@ -249,7 +249,7 @@ export function mergeFlowerThreadListRefresh(
   options: FlowerThreadListRefreshOptions,
 ): readonly FlowerThreadSnapshot[] {
   const selectedID = trimString(options.selectedThreadID);
-  const pendingThreadID = trimString(options.pendingThreadID);
+  const pendingThreadIDs = new Set((options.pendingThreadIDs ?? []).map(trimString).filter(Boolean));
   const byID = new Map(current.map((thread) => [thread.thread_id, thread] as const));
   const nextIDs = new Set(next.map((thread) => thread.thread_id));
   const merged = next.map((thread) => {
@@ -271,7 +271,7 @@ export function mergeFlowerThreadListRefresh(
     if (
       selectedThread
       && !nextIDs.has(selectedID)
-      && selectedThreadShouldSurviveMissingListSummary(selectedThread, pendingThreadID)
+      && selectedThreadShouldSurviveMissingListSummary(selectedThread, pendingThreadIDs)
     ) {
       merged.push(selectedThread);
     }

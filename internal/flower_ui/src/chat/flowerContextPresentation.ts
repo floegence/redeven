@@ -139,6 +139,8 @@ export function compactionDividerLabel(compaction: FlowerContextCompaction, copy
       return trimString(labels.compacted) || fallback.compacted;
     case 'failed':
       return trimString(labels.failed) || fallback.failed;
+    case 'cancelled':
+      return trimString(labels.cancelled) || fallback.cancelled;
     default:
       return trimString(labels.fallback) || fallback.fallback;
   }

@@ -367,6 +367,7 @@ export async function launchLocalEnvironmentFlowerTurn(
     thread_id: threadID,
     model: modelID,
     input: {
+      ...(trim(input.message_id) ? { message_id: trim(input.message_id) } : {}),
       text: prompt,
       attachments,
       ...(contextAction ? { context_action: contextAction } : {}),
