@@ -240,15 +240,10 @@ func TestSubagentHostConfigKeyTracksRuntimeInputs(t *testing.T) {
 	}, func() {
 		webSearchKey = "web-key-1"
 	})
-	assertSubagentHostKeyChanges("approval policy", func() {
-		cfg.ExecutionPolicy = &config.AIExecutionPolicy{RequireUserApproval: true}
+	assertSubagentHostKeyChanges("permission type", func() {
+		r.permissionType = FlowerPermissionFullAccess
 	}, func() {
-		cfg.ExecutionPolicy = nil
-	})
-	assertSubagentHostKeyChanges("dangerous command policy", func() {
-		cfg.ExecutionPolicy = &config.AIExecutionPolicy{BlockDangerousCommands: true}
-	}, func() {
-		cfg.ExecutionPolicy = nil
+		r.permissionType = FlowerPermissionApprovalRequired
 	})
 	assertSubagentHostKeyChanges("web search mode", func() {
 		cfg.Providers[0].WebSearch.Mode = config.AIProviderWebSearchModeDisabled
@@ -440,7 +435,9 @@ func TestSubagentProjectionRejectsThreadMutations(t *testing.T) {
 	}{
 		{name: "rename", call: func() error { return svc.RenameThread(ctx, meta, child.ThreadID, "renamed") }},
 		{name: "set_model", call: func() error { return svc.SetThreadModel(ctx, meta, child.ThreadID, "openai/gpt-4o-mini") }},
-		{name: "set_mode", call: func() error { return svc.SetThreadExecutionMode(ctx, meta, child.ThreadID, "plan") }},
+		{name: "set_permission", call: func() error {
+			return svc.SetThreadPermissionType(ctx, meta, child.ThreadID, config.AIPermissionReadonly)
+		}},
 		{name: "pin", call: func() error {
 			_, err := svc.SetThreadPinned(ctx, meta, child.ThreadID, true)
 			return err
@@ -489,7 +486,7 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 		ThreadID:        "child-detail",
 		Title:           "Inspect tool flow",
 		ModelID:         "openai/gpt-5-mini",
-		ExecutionMode:   config.AIModeAct,
+		PermissionType:  config.AIPermissionApprovalRequired,
 		RunStatus:       string(RunStateRunning),
 		CreatedAtUnixMs: now.Add(-time.Minute).UnixMilli(),
 		UpdatedAtUnixMs: now.UnixMilli(),

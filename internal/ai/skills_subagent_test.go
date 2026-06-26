@@ -110,7 +110,7 @@ func TestSkillManager_EmbedsRedevenEnvironmentSystemSkill(t *testing.T) {
 		t.Fatalf("unexpected system skill entry: %#v", entry)
 	}
 
-	activation, alreadyActive, err := mgr.Activate("redeven-environment", "act", false)
+	activation, alreadyActive, err := mgr.Activate("redeven-environment", "approval_required", false)
 	if err != nil {
 		t.Fatalf("Activate(redeven-environment) error = %v", err)
 	}
@@ -139,12 +139,12 @@ func TestSkillManager_EmbedsRedevenEnvironmentSystemSkill(t *testing.T) {
 	}
 }
 
-func TestSkillManager_ModeAwareFallbackAndToggles(t *testing.T) {
+func TestSkillManager_PermissionAwareFallbackAndToggles(t *testing.T) {
 	t.Parallel()
 
 	workspace := t.TempDir()
-	primaryDir := filepath.Join(workspace, ".redeven", "skills", "mode-skill")
-	fallbackDir := filepath.Join(workspace, ".agents", "skills", "mode-skill")
+	primaryDir := filepath.Join(workspace, ".redeven", "skills", "permission-skill")
+	fallbackDir := filepath.Join(workspace, ".agents", "skills", "permission-skill")
 	if err := os.MkdirAll(primaryDir, 0o755); err != nil {
 		t.Fatalf("mkdir primary dir: %v", err)
 	}
@@ -152,23 +152,23 @@ func TestSkillManager_ModeAwareFallbackAndToggles(t *testing.T) {
 		t.Fatalf("mkdir fallback dir: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(primaryDir, "SKILL.md"), []byte(`---
-name: mode-skill
-description: act variant
-mode_hint:
-  - act
+name: permission-skill
+description: approval-required variant
+permission_hint:
+  - approval_required
 ---
 
-# act skill`), 0o600); err != nil {
+# approval-required skill`), 0o600); err != nil {
 		t.Fatalf("write primary skill: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(fallbackDir, "SKILL.md"), []byte(`---
-name: mode-skill
-description: plan variant
-mode_hint:
-  - plan
+name: permission-skill
+description: readonly variant
+permission_hint:
+  - readonly
 ---
 
-# plan skill`), 0o600); err != nil {
+# readonly skill`), 0o600); err != nil {
 		t.Fatalf("write fallback skill: %v", err)
 	}
 
@@ -179,26 +179,26 @@ mode_hint:
 		t.Fatalf("expected at least two catalog skills")
 	}
 
-	actList := filterSkillMetaByName(mgr.List("act"), "mode-skill")
-	if len(actList) != 1 || strings.TrimSpace(actList[0].Description) != "act variant" {
-		t.Fatalf("unexpected act skills: %#v", actList)
+	approvalList := filterSkillMetaByName(mgr.List("approval_required"), "permission-skill")
+	if len(approvalList) != 1 || strings.TrimSpace(approvalList[0].Description) != "approval-required variant" {
+		t.Fatalf("unexpected approval_required skills: %#v", approvalList)
 	}
-	planList := filterSkillMetaByName(mgr.List("plan"), "mode-skill")
-	if len(planList) != 1 || strings.TrimSpace(planList[0].Description) != "plan variant" {
-		t.Fatalf("unexpected plan skills: %#v", planList)
+	readonlyList := filterSkillMetaByName(mgr.List("readonly"), "permission-skill")
+	if len(readonlyList) != 1 || strings.TrimSpace(readonlyList[0].Description) != "readonly variant" {
+		t.Fatalf("unexpected readonly skills: %#v", readonlyList)
 	}
 
 	_, err := mgr.PatchToggles([]SkillTogglePatch{{Path: filepath.Join(primaryDir, "SKILL.md"), Enabled: false}})
 	if err != nil {
 		t.Fatalf("PatchToggles disable primary: %v", err)
 	}
-	actList = filterSkillMetaByName(mgr.List("act"), "mode-skill")
-	if len(actList) != 0 {
-		t.Fatalf("act list should be empty after disabling primary, got %#v", actList)
+	approvalList = filterSkillMetaByName(mgr.List("approval_required"), "permission-skill")
+	if len(approvalList) != 0 {
+		t.Fatalf("approval_required list should be empty after disabling primary, got %#v", approvalList)
 	}
-	planList = filterSkillMetaByName(mgr.List("plan"), "mode-skill")
-	if len(planList) != 1 || strings.TrimSpace(planList[0].Description) != "plan variant" {
-		t.Fatalf("unexpected plan skills after toggle: %#v", planList)
+	readonlyList = filterSkillMetaByName(mgr.List("readonly"), "permission-skill")
+	if len(readonlyList) != 1 || strings.TrimSpace(readonlyList[0].Description) != "readonly variant" {
+		t.Fatalf("unexpected readonly skills after toggle: %#v", readonlyList)
 	}
 }
 
@@ -270,8 +270,9 @@ This content should appear in overlay.`
 	if _, _, err := r.activateSkill(skillName); err != nil {
 		t.Fatalf("activate skill: %v", err)
 	}
-	contract := resolveRunCapabilityContract(r, nil, testSignalDefs("task_complete"), false)
-	prompt := r.buildLayeredSystemPrompt("objective", "build", TaskComplexityStandard, 0, true, nil, newRuntimeState("objective"), "", contract)
+	tools := []ToolDef{{Name: "use_skill", Visibility: ToolVisibilityStandard, Capabilities: []ToolCapabilityClass{ToolCapabilityOpenWorld}}}
+	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete"), false)
+	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
 	if !strings.Contains(prompt, "Available skills:") || !strings.Contains(prompt, "prompt-skill") {
 		t.Fatalf("prompt missing skills catalog: %q", prompt)
 	}
@@ -361,6 +362,41 @@ func (m *subagentOpenAISimpleMock) firstRequest() map[string]any {
 	return cloneAnyMap(m.requests[0])
 }
 
+func prepareSubagentPermissionSnapshot(t *testing.T, r *run) {
+	t.Helper()
+	if r == nil {
+		t.Fatal("nil run")
+	}
+	if r.threadsDB == nil {
+		store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+		if err != nil {
+			t.Fatalf("threadstore.Open: %v", err)
+		}
+		t.Cleanup(func() { _ = store.Close() })
+		r.threadsDB = store
+	}
+	if resolved, err := r.resolveSubagentModelGateway(); err == nil {
+		webSearchCapability := resolveProviderWebSearchCapability(resolved.provider, strings.TrimSpace(resolved.modelName))
+		if enableFlowerWebSearchTool(resolved.provider, webSearchCapability) {
+			webSearchCapability.RegisterTool = true
+		}
+		r.webSearchMode = webSearchCapability.Mode
+		r.webSearchToolEnabled = webSearchCapability.RegisterTool
+	}
+	registry := NewInMemoryToolRegistry()
+	if err := registerBuiltInTools(registry, r); err != nil {
+		t.Fatalf("registerBuiltInTools: %v", err)
+	}
+	permissionFilter := newPermissionToolFilter(!r.noUserInteraction)
+	permissionFilter = r.withToolAllowlistFilter(permissionFilter)
+	activeTools := permissionFilter.FilterTools(r.permissionType, registry.Snapshot())
+	activeSignals := permissionFilter.FilterTools(r.permissionType, builtInControlSignalDefinitions())
+	snapshot := r.freezePermissionSnapshot(buildPermissionSnapshot(r.permissionType, activeTools, activeSignals))
+	if err := validatePermissionSnapshotConsistency(snapshot); err != nil {
+		t.Fatalf("invalid parent permission snapshot: %v", err)
+	}
+}
+
 func TestFloretSubagents_DelegateAndWait(t *testing.T) {
 	t.Parallel()
 
@@ -409,6 +445,7 @@ func TestFloretSubagents_DelegateAndWait(t *testing.T) {
 	})
 	r.currentModelID = "openai/gpt-5-mini"
 	r.currentReasoning = config.AIReasoningSelection{Level: config.AIReasoningLevelMedium}
+	prepareSubagentPermissionSnapshot(t, r)
 
 	created, err := r.manageSubagents(context.Background(), map[string]any{
 		"action":     "spawn",
@@ -606,6 +643,7 @@ func TestFloretSubagents_ProjectChildThreadForFlowerNavigation(t *testing.T) {
 		ThreadsDB:    svc.threadsDB,
 	})
 	r.currentModelID = "openai/gpt-5-mini"
+	prepareSubagentPermissionSnapshot(t, r)
 
 	created, err := r.manageSubagents(context.Background(), map[string]any{
 		"action":     "spawn",
@@ -676,7 +714,7 @@ func TestFloretSubagents_ProjectChildThreadForFlowerNavigation(t *testing.T) {
 		ThreadID: id,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "try to write to child"},
-		Options:  RunOptions{Mode: "act"},
+		Options:  RunOptions{PermissionType: config.AIPermissionApprovalRequired},
 	})
 	if !errors.Is(err, ErrReadOnlyThread) {
 		t.Fatalf("SendUserTurn(child) err=%v, want %v", err, ErrReadOnlyThread)
@@ -700,7 +738,7 @@ func TestFloretSubagents_ProjectChildThreadRejectsProductThreadCollision(t *test
 		EndpointID:        endpointID,
 		NamespacePublicID: "ns_test",
 		ModelID:           "openai/gpt-5-mini",
-		ExecutionMode:     "act",
+		PermissionType:    config.AIPermissionApprovalRequired,
 		Title:             "Parent",
 	}); err != nil {
 		t.Fatalf("CreateThread parent: %v", err)
@@ -710,7 +748,7 @@ func TestFloretSubagents_ProjectChildThreadRejectsProductThreadCollision(t *test
 		EndpointID:        endpointID,
 		NamespacePublicID: "ns_test",
 		ModelID:           "openai/gpt-5-mini",
-		ExecutionMode:     "act",
+		PermissionType:    config.AIPermissionApprovalRequired,
 		Title:             "Existing product thread",
 	}); err != nil {
 		t.Fatalf("CreateThread existing: %v", err)
@@ -954,6 +992,7 @@ func TestFloretSubagents_InheritsWebSearchResolver(t *testing.T) {
 		MessageID:    "m_parent_websearch",
 	})
 	r.currentModelID = "compat/gpt-5-mini"
+	prepareSubagentPermissionSnapshot(t, r)
 
 	created, err := r.manageSubagents(context.Background(), map[string]any{
 		"action":     "spawn",
@@ -1657,8 +1696,11 @@ func TestFloretSubagents_ChildRunInheritsParentToolAllowlist(t *testing.T) {
 		t.Fatalf("registerBuiltInTools: %v", err)
 	}
 	activeTools, contract := child.subagentToolSurface(registry.Snapshot(), flruntime.SubAgentForkNone)
-	if contract.AllowSpawnSubagents || contract.AllowUserApproval || contract.AllowUserInput {
-		t.Fatalf("child contract grants forbidden control surfaces: %#v", contract)
+	if contract.AllowSpawnSubagents || contract.AllowUserInput {
+		t.Fatalf("child contract grants forbidden direct control surfaces: %#v", contract)
+	}
+	if !contract.AllowUserApproval {
+		t.Fatalf("child contract should allow delegated approval to the parent thread: %#v", contract)
 	}
 	names := toolDefNames(activeTools)
 	if !containsString(names, "terminal.exec") || !containsString(names, "apply_patch") {
@@ -1669,7 +1711,7 @@ func TestFloretSubagents_ChildRunInheritsParentToolAllowlist(t *testing.T) {
 	}
 }
 
-func TestFloretSubagents_ChildToolsRespectParentPlanMode(t *testing.T) {
+func TestFloretSubagents_ChildToolsRespectParentReadonlyPermission(t *testing.T) {
 	t.Parallel()
 
 	parent := newRun(runOptions{
@@ -1677,7 +1719,7 @@ func TestFloretSubagents_ChildToolsRespectParentPlanMode(t *testing.T) {
 		AgentHomeDir:  t.TempDir(),
 		ToolAllowlist: []string{"terminal.exec", "apply_patch"},
 	})
-	parent.runMode = "plan"
+	parent.permissionType = FlowerPermissionReadonly
 
 	child := parent.subagentChildRun()
 	registry := NewInMemoryToolRegistry()
@@ -1686,11 +1728,10 @@ func TestFloretSubagents_ChildToolsRespectParentPlanMode(t *testing.T) {
 	}
 	activeTools, _ := child.subagentToolSurface(registry.Snapshot(), flruntime.SubAgentForkNone)
 	names := toolDefNames(activeTools)
-	if !containsString(names, "terminal.exec") {
-		t.Fatalf("active child tools=%v, want terminal.exec", names)
-	}
-	if containsString(names, "apply_patch") {
-		t.Fatalf("active child tools=%v, parent plan mode must hide mutating tools", names)
+	for _, hidden := range []string{"terminal.exec", "apply_patch"} {
+		if containsString(names, hidden) {
+			t.Fatalf("active child tools=%v, readonly parent must hide %s", names, hidden)
+		}
 	}
 }
 

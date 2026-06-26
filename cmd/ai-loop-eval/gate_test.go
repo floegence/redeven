@@ -70,9 +70,9 @@ func TestAssessTaskOutcome_PassesStructuredFlowerAssertions(t *testing.T) {
 				MinLength:        60,
 			},
 			Thread: taskThreadAssertions{
-				RunStatus:     "success",
-				ExecutionMode: "act",
-				WaitingPrompt: "forbidden",
+				RunStatus:      "success",
+				PermissionType: "approval_required",
+				WaitingPrompt:  "forbidden",
 			},
 			Tools: taskToolAssertions{
 				MustCall:    []string{"terminal.exec", "write_todos", "task_complete"},
@@ -98,9 +98,9 @@ func TestAssessTaskOutcome_PassesStructuredFlowerAssertions(t *testing.T) {
 		FinalText:     "Risk: config drift. Evidence: /tmp/workspace/README.md and /tmp/workspace/cmd/app/main.go. Verification: run tests.",
 		EvidencePaths: []string{"/tmp/workspace/README.md", "/tmp/workspace/cmd/app/main.go"},
 		ThreadState: threadStateSummary{
-			RunStatus:     "success",
-			ExecutionMode: "act",
-			WaitingPrompt: false,
+			RunStatus:      "success",
+			PermissionType: "approval_required",
+			WaitingPrompt:  false,
 		},
 		EventCounts: map[string]int{"todos.updated": 1},
 		rawToolCalls: []threadstore.ToolCallRecord{

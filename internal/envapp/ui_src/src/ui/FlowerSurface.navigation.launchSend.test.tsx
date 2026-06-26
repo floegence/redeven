@@ -855,6 +855,7 @@ describe('FlowerSurface navigation launch/send', () => {
       model_io_status: null,
       approval_actions: [{
         action_id: 'approval-1',
+        origin: 'main_tool',
         run_id: 'run-waiting-approval-compact',
         tool_id: 'tool-1',
         tool_name: 'terminal.exec',
@@ -862,6 +863,7 @@ describe('FlowerSurface navigation launch/send', () => {
         state: 'requested',
         can_approve: true,
         revision: 1,
+        version: 1,
         requested_at_ms: 1,
         summary: { label: 'Run command', effects: [], targets: [], flags: [] },
       }],

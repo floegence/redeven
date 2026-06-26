@@ -94,14 +94,17 @@ function positiveInteger(raw: unknown): number | undefined {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
 
+function normalizePermissionType(raw: unknown): FlowerSettingsSnapshot['config']['permission_type'] {
+  const value = trim(raw).toLowerCase();
+  if (value === 'readonly' || value === 'full_access') return value;
+  return 'approval_required';
+}
+
 function defaultConfig(): FlowerSettingsSnapshot['config'] {
   return {
     schema_version: 1,
     current_model_id: '',
-    execution_policy: {
-      require_user_approval: true,
-      block_dangerous_commands: true,
-    },
+    permission_type: 'approval_required',
     terminal_exec_policy: {
       default_timeout_ms: 120000,
       max_timeout_ms: 600000,
@@ -157,6 +160,7 @@ function mapSettings(settings: AgentSettingsResponse, models?: ModelsResponse): 
       config: {
         ...defaultConfig(),
         current_model_id: trim(models?.current_model) || trim(ai?.current_model_id),
+        permission_type: normalizePermissionType(ai?.permission_type),
       },
       provider_secrets: [],
       model_source: externalModelSource,
@@ -166,10 +170,7 @@ function mapSettings(settings: AgentSettingsResponse, models?: ModelsResponse): 
     ? {
         schema_version: 1 as const,
         current_model_id: trim(ai.current_model_id),
-        execution_policy: {
-          require_user_approval: ai.execution_policy?.require_user_approval ?? true,
-          block_dangerous_commands: ai.execution_policy?.block_dangerous_commands ?? true,
-        },
+        permission_type: normalizePermissionType(ai.permission_type),
         terminal_exec_policy: {
           default_timeout_ms: positiveInteger(ai.terminal_exec_policy?.default_timeout_ms) ?? 120000,
           max_timeout_ms: positiveInteger(ai.terminal_exec_policy?.max_timeout_ms) ?? 600000,
@@ -212,10 +213,7 @@ function draftProviderToAI(provider: FlowerProviderDraft): AIConfig['providers']
 function draftToAIConfig(draft: FlowerSettingsDraft): AIConfig {
   return {
     current_model_id: trim(draft.config.current_model_id),
-    execution_policy: {
-      require_user_approval: draft.config.execution_policy.require_user_approval,
-      block_dangerous_commands: draft.config.execution_policy.block_dangerous_commands,
-    },
+    permission_type: draft.config.permission_type,
     terminal_exec_policy: {
       default_timeout_ms: draft.config.terminal_exec_policy.default_timeout_ms,
       max_timeout_ms: draft.config.terminal_exec_policy.max_timeout_ms,
@@ -391,13 +389,14 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const models = await loadModels();
       const modelID = currentModelID(snapshot, models);
       if (!modelID) throw new Error(copy.selectModelBeforeChat);
+      const permissionType = normalizePermissionType(input.permission_type ?? snapshot.config.permission_type);
       const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
       let threadID = trim(input.thread_id);
       if (!threadID) {
         const createBody: Record<string, unknown> = {
           title: '',
           model_id: modelID,
-          execution_mode: input.mode ?? 'act',
+          permission_type: permissionType,
         };
         if (trim(input.working_dir)) {
           createBody.working_dir = trim(input.working_dir);
@@ -435,7 +434,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           ...(contextAction ? { contextAction } : {}),
         },
         options: {
-          mode: input.mode ?? 'act',
+          permissionType,
           ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoningSelection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
         },
       });
@@ -479,7 +478,6 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           attachments: [],
         },
         options: {
-          mode: 'act',
           ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoningSelection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
         },
       });

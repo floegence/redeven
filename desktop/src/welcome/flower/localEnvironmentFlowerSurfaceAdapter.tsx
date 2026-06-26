@@ -117,14 +117,17 @@ function positiveInteger(raw: unknown): number | undefined {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
 
+function normalizePermissionType(raw: unknown): FlowerSettingsSnapshot['config']['permission_type'] {
+  const value = trim(raw).toLowerCase();
+  if (value === 'readonly' || value === 'full_access') return value;
+  return 'approval_required';
+}
+
 function defaultConfig(): FlowerSettingsSnapshot['config'] {
   return {
     schema_version: 1,
     current_model_id: '',
-    execution_policy: {
-      require_user_approval: true,
-      block_dangerous_commands: true,
-    },
+    permission_type: 'approval_required',
     terminal_exec_policy: {
       default_timeout_ms: 120000,
       max_timeout_ms: 600000,
@@ -163,10 +166,7 @@ export function mapRuntimeFlowerSettings(settings: AgentSettingsResponse): Flowe
     ? {
         schema_version: 1 as const,
         current_model_id: trim(ai.current_model_id),
-        execution_policy: {
-          require_user_approval: ai.execution_policy?.require_user_approval ?? true,
-          block_dangerous_commands: ai.execution_policy?.block_dangerous_commands ?? true,
-        },
+        permission_type: normalizePermissionType(ai.permission_type),
         terminal_exec_policy: {
           default_timeout_ms: positiveInteger(ai.terminal_exec_policy?.default_timeout_ms) ?? 120000,
           max_timeout_ms: positiveInteger(ai.terminal_exec_policy?.max_timeout_ms) ?? 600000,
@@ -230,10 +230,7 @@ export function mapFlowerSettingsDraftToRuntimeBundle(draft: FlowerSettingsDraft
   return {
     ai: {
       current_model_id: trim(draft.config.current_model_id),
-      execution_policy: {
-        require_user_approval: draft.config.execution_policy.require_user_approval,
-        block_dangerous_commands: draft.config.execution_policy.block_dangerous_commands,
-      },
+      permission_type: draft.config.permission_type,
       terminal_exec_policy: {
         default_timeout_ms: draft.config.terminal_exec_policy.default_timeout_ms,
         max_timeout_ms: draft.config.terminal_exec_policy.max_timeout_ms,
@@ -340,14 +337,14 @@ export async function launchLocalEnvironmentFlowerTurn(
   const models = await loadModels(bridge);
   const modelID = currentModelID(snapshot, models);
   if (!modelID) throw new Error('Select a Flower model before starting a chat.');
-  const mode = input.mode ?? 'act';
+  const permissionType = normalizePermissionType(input.permission_type ?? snapshot.config.permission_type);
   const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
   let threadID = trim(input.thread_id);
   if (!threadID) {
     const createBody: Record<string, unknown> = {
       title: '',
       model_id: modelID,
-      execution_mode: mode,
+      permission_type: permissionType,
     };
     if (trim(input.working_dir)) {
       createBody.working_dir = trim(input.working_dir);
@@ -373,7 +370,7 @@ export async function launchLocalEnvironmentFlowerTurn(
       ...(contextAction ? { context_action: contextAction } : {}),
     },
     options: {
-      mode,
+      permission_type: permissionType,
       ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
     },
   });
@@ -478,7 +475,6 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
           attachments: [],
         },
         options: {
-          mode: 'act',
           ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
         },
       });

@@ -374,6 +374,10 @@ function flushPage(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function nextMicrotask(): Promise<void> {
+  return new Promise((resolve) => queueMicrotask(resolve));
+}
+
 async function openSettingsSection(host: HTMLElement, section: string): Promise<void> {
   const button = host.querySelector(`[data-settings-nav-item="${section}"]`) as HTMLButtonElement | null;
   expect(button).toBeTruthy();
@@ -675,6 +679,54 @@ describe('EnvSettingsPage', () => {
     expect(flowerCard?.textContent).toContain('Local AI Profile on this Mac');
     expect(flowerCard?.textContent).toContain('Desktop model source ready');
     expect(flowerCard?.textContent).not.toContain('Add Provider');
+  });
+
+  it('moves Flower permission radio focus with arrow keys', async () => {
+    protocolMocks.status.mockReturnValue('connected');
+    settingsResponse = {
+      config_path: '/tmp/config.json',
+      runtime: { agent_home_dir: '/workspace', shell: '/bin/zsh' },
+      logging: { log_format: 'plain', log_level: 'info' },
+      codespaces: { code_server_port_min: 0, code_server_port_max: 0 },
+      permission_policy: null,
+      ai: {
+        current_model_id: 'openai/gpt-5.2-mini',
+        permission_type: 'approval_required',
+        providers: [{
+          id: 'openai',
+          name: 'OpenAI',
+          type: 'openai',
+          base_url: 'https://api.openai.com/v1',
+          models: [{ model_name: 'gpt-5.2-mini', context_window: 400000, input_modalities: ['text'] }],
+        }],
+      },
+      ai_secrets: {
+        provider_api_key_set: { openai: true },
+        web_search_provider_api_key_set: { openai: false },
+      },
+    };
+
+    render(() => <EnvSettingsPage />, host);
+    await openSettingsSection(host, 'ai');
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-settings-card="Flower"]')).toBeTruthy();
+    });
+
+    const radios = () => Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+    expect(radios().map((button) => button.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false']);
+
+    radios()[1]?.focus();
+    expect(document.activeElement).toBe(radios()[1]);
+
+    radios()[1]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await nextMicrotask();
+    expect(document.activeElement).toBe(radios()[2]);
+    expect(radios().map((button) => button.getAttribute('aria-checked'))).toEqual(['false', 'false', 'true']);
+
+    radios()[2]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    await nextMicrotask();
+    expect(document.activeElement).toBe(radios()[1]);
+    expect(radios().map((button) => button.getAttribute('aria-checked'))).toEqual(['false', 'true', 'false']);
   });
 
   it('notifies the app settings revision after saving a Flower provider bundle', async () => {

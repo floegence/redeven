@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
-import { AlertTriangle, Bot, Pencil, Shield, Trash, Zap } from '@floegence/floe-webapp-core/icons';
+import { Bot, Pencil, Shield, Trash, Zap } from '@floegence/floe-webapp-core/icons';
 import { Button, Select } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
@@ -23,14 +23,35 @@ import {
 } from '../aiCatalog';
 import type {
   AIConfig, AIProvider, AIProviderModel, AIProviderRow, AIProviderType, AIProviderModelRow, AIProviderWebSearchMode,
-  AIProviderDialogMode, SettingsUpdateResponse,
+  AIProviderDialogMode, AIPermissionType, SettingsUpdateResponse,
 } from '../types';
 import { useI18n, type I18nHelpers } from '../../../i18n';
 
 const AUTO_SAVE_DELAY_MS = 700;
+const PERMISSION_TYPES: readonly AIPermissionType[] = ['readonly', 'approval_required', 'full_access'];
+const PERMISSION_LABELS: Readonly<Record<AIPermissionType, Readonly<{ title: string; description: string }>>> = {
+  readonly: {
+    title: 'Read only',
+    description: 'Safe read tools, search, todos, ask, and delegated subagents. No shell or file edits.',
+  },
+  approval_required: {
+    title: 'Approval required',
+    description: 'Standard tools stay available, and shell or file changes ask before running.',
+  },
+  full_access: {
+    title: 'Full access',
+    description: 'Standard tools run without per-tool confirmation, while timeouts, limits, and audit still apply.',
+  },
+};
 let envProviderIDSequence = 0;
 
 function isJSONObject(value: unknown): value is Record<string, unknown> { return Boolean(value && typeof value === 'object' && !Array.isArray(value)); }
+
+function normalizePermissionType(raw: unknown): AIPermissionType {
+  const value = String(raw ?? '').trim().toLowerCase();
+  if (value === 'readonly' || value === 'full_access') return value;
+  return 'approval_required';
+}
 
 function newProviderID(): string {
   const uuid = globalThis.crypto?.randomUUID?.();
@@ -144,8 +165,7 @@ function validateAIValue(cfg: AIConfig, i18n: I18nHelpers) {
 export function FlowerSection() {
   const ctx = useEnvSettingsPage(); const i18n = useI18n();
 
-  const [requireUserApproval, setRequireUserApproval] = createSignal(false);
-  const [blockDangerousCommands, setBlockDangerousCommands] = createSignal(false);
+  const [permissionType, setPermissionType] = createSignal<AIPermissionType>('approval_required');
   const [currentModelID, setCurrentModelID] = createSignal('');
   const [providers, setProviders] = createSignal<AIProviderRow[]>([]);
   const providerKeySet = createMemo(() => ctx.settings()?.ai_secrets?.provider_api_key_set ?? {});
@@ -158,10 +178,11 @@ export function FlowerSection() {
   const [savedAt, setSavedAt] = createSignal<number | null>(null); const [error, setError] = createSignal<string | null>(null);
   const [providerDialogOpen, setProviderDialogOpen] = createSignal(false);
   const [providerDialogIndex, setProviderDialogIndex] = createSignal<number | null>(null);
+  const permissionButtonRefs = new Map<AIPermissionType, HTMLButtonElement>();
   const [providerDialogProvider, setProviderDialogProvider] = createSignal<AIProviderRow | null>(null);
   const [providerDialogMode, setProviderDialogMode] = createSignal<AIProviderDialogMode>('create');
 
-  createEffect(() => { const s = ctx.settings(); if (!s) return; if (!dirty()) { const ai = s?.ai; setRequireUserApproval(ai?.execution_policy?.require_user_approval ?? false); setBlockDangerousCommands(ai?.execution_policy?.block_dangerous_commands ?? false); setCurrentModelID(ai?.current_model_id ?? ''); setProviders((Array.isArray(ai?.providers) ? ai!.providers : []).map((p: any) => normalizeAIProviderRowDraft(p))); } });
+  createEffect(() => { const s = ctx.settings(); if (!s) return; if (!dirty()) { const ai = s?.ai; setPermissionType(normalizePermissionType(ai?.permission_type)); setCurrentModelID(ai?.current_model_id ?? ''); setProviders((Array.isArray(ai?.providers) ? ai!.providers : []).map((p: any) => normalizeAIProviderRowDraft(p))); } });
 
   const aiModelOptions = createMemo(() => collectAIModelOptions(providers(), i18n.locale()));
   const aiCurrentModelOption = createMemo(() => aiModelOptions().find((o) => o.id === currentModelID()));
@@ -171,15 +192,45 @@ export function FlowerSection() {
     desktopSession()?.target_route === 'remote_desktop'
     && Boolean(desktopModelSource()?.connected || desktopModelSource()?.available || desktopModelSource()?.binding_state)
   ));
+  const focusPermissionType = (kind: AIPermissionType) => {
+    queueMicrotask(() => permissionButtonRefs.get(kind)?.focus());
+  };
+  const choosePermissionType = (kind: AIPermissionType, focus = false) => {
+    if (!ctx.canInteract()) return;
+    setPermissionType(kind);
+    setDirty(true);
+    if (focus) focusPermissionType(kind);
+  };
+  const movePermissionType = (delta: number) => {
+    const currentIndex = Math.max(0, PERMISSION_TYPES.indexOf(permissionType()));
+    const nextIndex = (currentIndex + delta + PERMISSION_TYPES.length) % PERMISSION_TYPES.length;
+    choosePermissionType(PERMISSION_TYPES[nextIndex], true);
+  };
+  const onPermissionTypeKeyDown = (event: KeyboardEvent) => {
+    switch (event.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+        event.preventDefault();
+        movePermissionType(1);
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        event.preventDefault();
+        movePermissionType(-1);
+        break;
+      default:
+        break;
+    }
+  };
 
   let autoSaveTimer: number | undefined;
   const clearTimer = (t: number | undefined) => { if (t != null) { window.clearTimeout(t); return undefined; } return undefined; };
-  createEffect(() => { if (usesRemoteDesktopModelSource() || !dirty() || saving() || !ctx.canInteract()) { autoSaveTimer = clearTimer(autoSaveTimer); return; } autoSaveTimer = clearTimer(autoSaveTimer); autoSaveTimer = window.setTimeout(async () => { autoSaveTimer = undefined; if (!dirty() || saving() || !ctx.canInteract()) return; setSaving(true); try { const pd = normalizeAIProviders(providers()).map((p) => ({ id: p.id, name: p.name, type: p.type, base_url: p.base_url, models: p.models, web_search: p.web_search })); await ctx.saveSettings({ ai: { current_model_id: String(currentModelID() ?? '').trim() || null, execution_policy: { require_user_approval: requireUserApproval(), block_dangerous_commands: blockDangerousCommands() }, terminal_exec_policy: { default_timeout_ms: 120000, max_timeout_ms: 600000 }, providers: pd } }); setSaving(false); setSavedAt(Date.now()); setDirty(false); setError(null); } catch (e) { setSaving(false); setError(formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage')); } }, AUTO_SAVE_DELAY_MS); });
+  createEffect(() => { if (usesRemoteDesktopModelSource() || !dirty() || saving() || !ctx.canInteract()) { autoSaveTimer = clearTimer(autoSaveTimer); return; } autoSaveTimer = clearTimer(autoSaveTimer); autoSaveTimer = window.setTimeout(async () => { autoSaveTimer = undefined; if (!dirty() || saving() || !ctx.canInteract()) return; setSaving(true); try { const pd = normalizeAIProviders(providers()).map((p) => ({ id: p.id, name: p.name, type: p.type, base_url: p.base_url, models: p.models, web_search: p.web_search })); await ctx.saveSettings({ ai: { current_model_id: String(currentModelID() ?? '').trim() || null, permission_type: permissionType(), terminal_exec_policy: { default_timeout_ms: 120000, max_timeout_ms: 600000 }, providers: pd } }); setSaving(false); setSavedAt(Date.now()); setDirty(false); setError(null); } catch (e) { setSaving(false); setError(formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage')); } }, AUTO_SAVE_DELAY_MS); });
   onCleanup(() => { autoSaveTimer = clearTimer(autoSaveTimer); });
 
-  const saveAICurrentModelDirectly = async (next: string, previous: string) => { try { const pd = normalizeAIProviders(providers()).map((p) => ({ id: p.id, name: p.name, type: p.type, base_url: p.base_url, models: p.models, web_search: p.web_search })); await ctx.saveSettings({ ai: { current_model_id: next, execution_policy: { require_user_approval: requireUserApproval(), block_dangerous_commands: blockDangerousCommands() }, terminal_exec_policy: { default_timeout_ms: 120000, max_timeout_ms: 600000 }, providers: pd } }); setSavedAt(Date.now()); setError(null); } catch (e) { const message = formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage'); setCurrentModelID(previous); setError(message); ctx.notify.error(i18n.t('flowerSettings.saveFailedTitle'), message); } };
+  const saveAICurrentModelDirectly = async (next: string, previous: string) => { try { const pd = normalizeAIProviders(providers()).map((p) => ({ id: p.id, name: p.name, type: p.type, base_url: p.base_url, models: p.models, web_search: p.web_search })); await ctx.saveSettings({ ai: { current_model_id: next, permission_type: permissionType(), terminal_exec_policy: { default_timeout_ms: 120000, max_timeout_ms: 600000 }, providers: pd } }); setSavedAt(Date.now()); setError(null); } catch (e) { const message = formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage'); setCurrentModelID(previous); setError(message); ctx.notify.error(i18n.t('flowerSettings.saveFailedTitle'), message); } };
 
-  const buildAIValueFromRows = (rows: AIProviderRow[], curRaw: string): AIConfig => { const pr = normalizeAIProviders(rows); const cur = String(curRaw ?? '').trim(); const nps = pr.map((p) => { const o: any = { id: String(p.id ?? '').trim(), type: p.type, models: [] as AIProviderModel[] }; const nm = providerUsesCustomConnectionName(p.type) ? String(p.name ?? '').trim() : providerTypeLabel(p.type); if (nm) o.name = nm; const bu = String(p.base_url ?? '').trim(); if (bu) o.base_url = bu; const ws = normalizeAIProviderWebSearchForType(p.type, p.web_search); if (ws) o.web_search = ws; o.models = (p.models ?? []).map((m) => { const mo: any = { model_name: String(m.model_name ?? '').trim() }; const wm = String(m.wire_model_name ?? '').trim(); if (wm) mo.wire_model_name = wm; const cw = normalizePositiveInteger(m.context_window); if (cw != null) mo.context_window = cw; const mt = normalizePositiveInteger(m.max_output_tokens); if (mt != null) mo.max_output_tokens = mt; const ec = normalizeEffectiveContextPercent(m.effective_context_window_percent); if (ec != null) mo.effective_context_window_percent = ec; mo.input_modalities = normalizeInputModalities(m.input_modalities); const rc = normalizeFlowerReasoningCapability(m.reasoning_capability); if (rc) mo.reasoning_capability = rc; const rs = serializeFlowerReasoningSelection(m.default_reasoning_selection); if (rs) mo.default_reasoning_selection = rs; return mo as AIProviderModel; }); return o as AIProvider; }); return { current_model_id: cur, execution_policy: { require_user_approval: requireUserApproval(), block_dangerous_commands: blockDangerousCommands() }, terminal_exec_policy: { default_timeout_ms: 120000, max_timeout_ms: 600000 }, providers: nps }; };
+  const buildAIValueFromRows = (rows: AIProviderRow[], curRaw: string): AIConfig => { const pr = normalizeAIProviders(rows); const cur = String(curRaw ?? '').trim(); const nps = pr.map((p) => { const o: any = { id: String(p.id ?? '').trim(), type: p.type, models: [] as AIProviderModel[] }; const nm = providerUsesCustomConnectionName(p.type) ? String(p.name ?? '').trim() : providerTypeLabel(p.type); if (nm) o.name = nm; const bu = String(p.base_url ?? '').trim(); if (bu) o.base_url = bu; const ws = normalizeAIProviderWebSearchForType(p.type, p.web_search); if (ws) o.web_search = ws; o.models = (p.models ?? []).map((m) => { const mo: any = { model_name: String(m.model_name ?? '').trim() }; const wm = String(m.wire_model_name ?? '').trim(); if (wm) mo.wire_model_name = wm; const cw = normalizePositiveInteger(m.context_window); if (cw != null) mo.context_window = cw; const mt = normalizePositiveInteger(m.max_output_tokens); if (mt != null) mo.max_output_tokens = mt; const ec = normalizeEffectiveContextPercent(m.effective_context_window_percent); if (ec != null) mo.effective_context_window_percent = ec; mo.input_modalities = normalizeInputModalities(m.input_modalities); const rc = normalizeFlowerReasoningCapability(m.reasoning_capability); if (rc) mo.reasoning_capability = rc; const rs = serializeFlowerReasoningSelection(m.default_reasoning_selection); if (rs) mo.default_reasoning_selection = rs; return mo as AIProviderModel; }); return o as AIProvider; }); return { current_model_id: cur, permission_type: permissionType(), terminal_exec_policy: { default_timeout_ms: 120000, max_timeout_ms: 600000 }, providers: nps }; };
 
   const saveAIProviderBundle = async (nps: AIProviderRow[], nid: string, pid: string) => { const id = String(pid ?? '').trim(); if (!id) { ctx.notify.error(i18n.t('flowerSettings.invalidProviderTitle'), i18n.t('flowerSettings.providerIdRequired')); return false; } if (!ctx.canAdmin()) { ctx.notify.error(i18n.t('flowerSettings.permissionDeniedTitle'), i18n.t('flowerSettings.adminRequired')); return false; } let av: AIConfig; try { av = buildAIValueFromRows(nps, nid); validateAIValue(av, i18n); setError(null); } catch (e) { const m = formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage'); setError(m); ctx.notify.error(i18n.t('flowerSettings.saveFailedTitle'), m); return false; } const pk = String(providerKeyDraft()?.[id] ?? '').trim(); const wk = String(webSearchKeyDraft()?.[id] ?? '').trim(); setSaving(true); try { const sv = await fetchLocalApiJSON<SettingsUpdateResponse | unknown>('/_redeven_proxy/api/ai/provider_bundle', { method: 'PUT', body: JSON.stringify({ ai: av, provider_api_key_patches: pk ? [{ provider_id: id, api_key: pk }] : [], web_search_provider_key_patches: wk ? [{ provider_id: id, api_key: wk }] : [] }) }); if (isJSONObject(sv) && isJSONObject((sv as SettingsUpdateResponse).settings)) ctx.mutateSettings((sv as SettingsUpdateResponse).settings); ctx.env.bumpSettingsSeq(); setProviders(nps); setCurrentModelID(nid); setProviderKeyDraft((p) => ({ ...p, [id]: '' })); setWebSearchKeyDraft((p) => ({ ...p, [id]: '' })); setSavedAt(Date.now()); setDirty(false); setError(null); ctx.notify.success(i18n.t('flowerSettings.autosavedTitle'), i18n.t('flowerSettings.providerSaved')); return true; } catch (e) { const m = formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage'); setError(m); setDirty(true); ctx.notify.error(i18n.t('flowerSettings.autosaveFailedTitle'), i18n.t('flowerSettings.providerSaveFailed', { message: m })); return false; } finally { setSaving(false); } };
 
@@ -288,36 +339,34 @@ export function FlowerSection() {
           </div>
         </div>
 
-        {/* Execution policy: dual cards */}
+        {/* Default permission */}
         <div class="mt-5">
-          <SubSectionHeader title={i18n.t('flowerSettings.executionPolicyTitle')} description={i18n.t('flowerSettings.executionPolicyDescription')} />
-          <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <button type="button" class={cn('group flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left transition-all', redevenSurfaceRoleClass('panel'), !ctx.canInteract() && 'cursor-not-allowed opacity-50')}
-              onClick={() => { if (ctx.canInteract()) { setRequireUserApproval(!requireUserApproval()); setDirty(true); } }} disabled={!ctx.canInteract()}>
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2.5">
-                  <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10"><Shield class="h-4 w-4 text-blue-500" /></div>
-                  <span class="text-sm font-semibold text-foreground">{i18n.t('flowerSettings.userApprovalTitle')}</span>
-                </div>
-                <span class={cn('text-[11px] font-medium', requireUserApproval() ? 'text-success' : 'text-muted-foreground')}>{requireUserApproval() ? i18n.t('flowerSettings.activeBadge') : i18n.t('flowerSettings.disabledBadge')}</span>
-              </div>
-              <p class="text-xs leading-relaxed text-muted-foreground">{i18n.t('flowerSettings.userApprovalDescription')}</p>
-            </button>
-            <button type="button" class={cn('group flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left transition-all', redevenSurfaceRoleClass('panel'), !ctx.canInteract() && 'cursor-not-allowed opacity-50')}
-              onClick={() => { if (ctx.canInteract()) { setBlockDangerousCommands(!blockDangerousCommands()); setDirty(true); } }} disabled={!ctx.canInteract()}>
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2.5">
-                  <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10"><AlertTriangle class="h-4 w-4 text-amber-500" /></div>
-                  <span class="text-sm font-semibold text-foreground">{i18n.t('flowerSettings.blockDangerousCommandsTitle')}</span>
-                </div>
-                <span class={cn('text-[11px] font-medium', blockDangerousCommands() ? 'text-success' : 'text-muted-foreground')}>{blockDangerousCommands() ? i18n.t('flowerSettings.activeBadge') : i18n.t('flowerSettings.disabledBadge')}</span>
-              </div>
-              <p class="text-xs leading-relaxed text-muted-foreground">{i18n.t('flowerSettings.blockDangerousCommandsDescription')}</p>
-            </button>
+          <SubSectionHeader title="Default permission" description="Applies to new Flower threads. Existing threads keep their own permission." />
+          <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3" role="radiogroup" aria-label="Default permission">
+            <For each={PERMISSION_TYPES}>
+              {(kind) => {
+                const copy = () => PERMISSION_LABELS[kind];
+                return (
+                  <button ref={(el) => { permissionButtonRefs.set(kind, el); }} type="button" class={cn('group flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left transition-all', redevenSurfaceRoleClass('panel'), permissionType() === kind && 'border-primary/70 bg-primary/5', !ctx.canInteract() && 'cursor-not-allowed opacity-50')}
+                    role="radio" aria-checked={permissionType() === kind}
+                    tabIndex={permissionType() === kind ? 0 : -1}
+                    onKeyDown={onPermissionTypeKeyDown}
+                    onClick={() => choosePermissionType(kind)} disabled={!ctx.canInteract()}>
+                    <div class="flex items-center justify-between gap-3">
+                      <div class="flex items-center gap-2.5">
+                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10"><Shield class="h-4 w-4 text-blue-500" /></div>
+                        <span class="text-sm font-semibold text-foreground">{copy().title}</span>
+                      </div>
+                      <span class={cn('text-[11px] font-medium', permissionType() === kind ? 'text-success' : 'text-muted-foreground')}>
+                        {permissionType() === kind ? 'Default' : ''}
+                      </span>
+                    </div>
+                    <p class="text-xs leading-relaxed text-muted-foreground">{copy().description}</p>
+                  </button>
+                );
+              }}
+            </For>
           </div>
-          <Show when={!blockDangerousCommands()}>
-            <div class="mt-3 flex items-start gap-2.5 rounded-lg border border-warning/50 bg-warning/10 p-3"><AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-warning" /><div class="text-xs font-medium text-foreground">{i18n.t('flowerSettings.dangerousCommandsDisabled')}</div></div>
-          </Show>
         </div>
 
         {/* Providers gallery */}

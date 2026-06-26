@@ -56,7 +56,7 @@ func TestBuildFlowerSubagentPromptDoesNotExposeHiddenControlTools(t *testing.T) 
 		ContextMode: subagentContextModeMissionOnly,
 		Contract:    contract,
 	})
-	for _, forbidden := range []string{"ask_user", "subagents", "write_todos", "exit_plan_mode"} {
+	for _, forbidden := range []string{"ask_user", "subagents", "write_todos"} {
 		if strings.Contains(prompt, forbidden) {
 			t.Fatalf("subagent prompt should not expose hidden control tool %q: %q", forbidden, prompt)
 		}
@@ -69,19 +69,22 @@ func TestBuildFlowerSubagentPromptDoesNotExposeHiddenControlTools(t *testing.T) 
 func TestResolveSubagentCapabilityContractHidesParentOnlyTools(t *testing.T) {
 	t.Parallel()
 
-	r := newRun(runOptions{AgentHomeDir: t.TempDir()})
-	activeTools, contract := r.subagentToolSurface([]ToolDef{
+	parent := newRun(runOptions{AgentHomeDir: t.TempDir()})
+	child := parent.subagentChildRun()
+	if child == nil {
+		t.Fatal("subagentChildRun returned nil")
+	}
+	activeTools, contract := child.subagentToolSurface([]ToolDef{
 		{Name: "terminal.exec"},
 		{Name: "subagents"},
 		{Name: "ask_user"},
 		{Name: "write_todos"},
-		{Name: "exit_plan_mode"},
 	}, flruntime.SubAgentForkFullPath)
 	names := mapToolNames(activeTools)
 	if !containsString(names, "terminal.exec") {
 		t.Fatalf("visible tools missing terminal.exec: %v", names)
 	}
-	for _, hidden := range []string{"subagents", "ask_user", "write_todos", "exit_plan_mode"} {
+	for _, hidden := range []string{"subagents", "ask_user", "write_todos"} {
 		if containsString(names, hidden) {
 			t.Fatalf("hidden tool %q leaked into child surface: %v", hidden, names)
 		}
@@ -89,11 +92,40 @@ func TestResolveSubagentCapabilityContractHidesParentOnlyTools(t *testing.T) {
 			t.Fatalf("hidden tool %q missing from contract: %#v", hidden, contract.HiddenToolSet)
 		}
 	}
-	if contract.AllowSpawnSubagents || contract.AllowUserApproval || contract.AllowUserInput {
-		t.Fatalf("subagent contract should deny nested delegation/user interaction: %#v", contract)
+	if contract.AllowSpawnSubagents || contract.AllowUserInput {
+		t.Fatalf("subagent contract should deny nested delegation/direct user input: %#v", contract)
+	}
+	if !contract.AllowUserApproval {
+		t.Fatalf("subagent contract should allow delegated approval through the parent thread: %#v", contract)
 	}
 	if contract.ForkMode != flruntime.SubAgentForkFullPath {
 		t.Fatalf("contract fork mode=%q, want full path", contract.ForkMode)
+	}
+}
+
+func TestSubagentChildRunUsesFrozenParentPermissionSnapshotAllowlist(t *testing.T) {
+	t.Parallel()
+
+	parent := newRun(runOptions{AgentHomeDir: t.TempDir()})
+	parent.permissionType = FlowerPermissionFullAccess
+	parent.permissionSnapshot = PermissionSnapshot{
+		SnapshotID:       "psnap_parent",
+		PermissionType:   FlowerPermissionFullAccess,
+		VisibleToolNames: []string{"subagents", "task_complete"},
+		FloretToolNames:  []string{"subagents"},
+	}
+	child := parent.subagentChildRun()
+	if child == nil {
+		t.Fatal("subagentChildRun returned nil")
+	}
+	activeTools, _ := child.subagentToolSurface([]ToolDef{
+		{Name: "terminal.exec", Visibility: ToolVisibilityStandard},
+		{Name: "file.write", Visibility: ToolVisibilityStandard, Mutating: true},
+		{Name: "subagents", Visibility: ToolVisibilityDelegationControl},
+	}, flruntime.SubAgentForkNone)
+	names := mapToolNames(activeTools)
+	if containsString(names, "terminal.exec") || containsString(names, "file.write") {
+		t.Fatalf("child expanded beyond frozen parent snapshot allowlist: %v", names)
 	}
 }
 
@@ -106,7 +138,7 @@ func TestRegisterBuiltInTools_ExcludesControlSignals(t *testing.T) {
 	if err := registerBuiltInTools(reg, r); err != nil {
 		t.Fatalf("registerBuiltInTools: %v", err)
 	}
-	for _, name := range []string{"ask_user", "task_complete", "exit_plan_mode"} {
+	for _, name := range []string{"ask_user", "task_complete"} {
 		if _, _, ok := reg.resolve(name); ok {
 			t.Fatalf("%s must not be registered as an ordinary tool", name)
 		}
@@ -159,9 +191,12 @@ func TestResolveRunCapabilityContract_MainAutonomousNoUserInteraction(t *testing
 		{Name: "terminal.exec"},
 	}
 	r := &run{noUserInteraction: true}
-	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete", "ask_user", "exit_plan_mode"), false)
+	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete", "ask_user"), false)
 	if contract.AllowUserInteraction {
 		t.Fatalf("expected no user interaction")
+	}
+	if !contract.AllowToolApprovalWait {
+		t.Fatalf("no-user runs should still allow tool approval waits; direct user input is the restricted capability")
 	}
 	if contract.PromptProfile != runPromptProfileMainAutonomous {
 		t.Fatalf("unexpected prompt profile=%q", contract.PromptProfile)
@@ -179,12 +214,16 @@ func TestResolveRunCapabilityContract_SubagentAutonomousNoUserInteraction(t *tes
 		{Name: "terminal.exec"},
 	}
 	r := &run{
-		noUserInteraction: true,
-		subagentDepth:     1,
+		noUserInteraction:      true,
+		allowDelegatedApproval: true,
+		subagentDepth:          1,
 	}
 	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete"), false)
 	if contract.PromptProfile != runPromptProfileSubagentAutonomous {
 		t.Fatalf("unexpected prompt profile=%q", contract.PromptProfile)
+	}
+	if !contract.AllowToolApprovalWait {
+		t.Fatalf("delegated subagent should allow parent-bridged tool approval waits")
 	}
 }
 
@@ -234,7 +273,7 @@ func TestBuildLayeredSystemPrompt_NoUserInteractionOmitsAskUserGuidance(t *testi
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}}
 	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete"), false)
-	prompt := r.buildLayeredSystemPrompt("objective", "act", TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
 	if strings.Contains(prompt, "call ask_user") || strings.Contains(prompt, "ask_user is unavailable") || strings.Contains(prompt, "Do not attempt ask_user") {
 		t.Fatalf("no-user prompt should not include ask_user guidance: %q", prompt)
 	}
@@ -258,7 +297,7 @@ func TestBuildLayeredSystemPrompt_SubagentAutonomousUsesDelegatedWording(t *test
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}}
 	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete"), false)
-	prompt := r.buildLayeredSystemPrompt("objective", "act", TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
 	if !strings.Contains(prompt, "You are Flower operating as a delegated autonomous subagent") {
 		t.Fatalf("subagent prompt missing delegated identity: %q", prompt)
 	}
@@ -270,27 +309,24 @@ func TestBuildLayeredSystemPrompt_SubagentAutonomousUsesDelegatedWording(t *test
 	}
 }
 
-func TestBuildLayeredSystemPrompt_PlanModeEnforcesReadonlyAndExitPlanModeSwitch(t *testing.T) {
+func TestBuildLayeredSystemPrompt_ApprovalRequiredDescribesPermissionType(t *testing.T) {
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		AgentHomeDir: t.TempDir(),
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "file.edit", Mutating: true}}
-	signals := testSignalDefs("task_complete", "ask_user", "exit_plan_mode")
+	signals := testSignalDefs("task_complete", "ask_user")
 	contract := resolveRunCapabilityContract(r, tools, signals, false)
-	prompt := r.buildLayeredSystemPrompt("objective", "plan", TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
-	if !strings.Contains(prompt, "Plan mode is strict readonly: do NOT run any mutating action.") {
-		t.Fatalf("plan prompt missing strict readonly guidance: %q", prompt)
+	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	if !strings.Contains(prompt, "- Permission type: approval_required") {
+		t.Fatalf("prompt missing approval_required permission type: %q", prompt)
 	}
-	if !strings.Contains(prompt, "Readonly terminal.exec commands include local inspection and readonly HTTP fetches that only stream to stdout") {
-		t.Fatalf("plan prompt missing readonly HTTP guidance: %q", prompt)
-	}
-	if !strings.Contains(prompt, "If execution is required, call exit_plan_mode instead of constructing a manual mode-switch ask_user payload.") {
-		t.Fatalf("plan prompt missing exit_plan_mode guidance: %q", prompt)
+	if !strings.Contains(prompt, "- Tool approval policy: shell and mutation tools require confirmation") {
+		t.Fatalf("prompt missing approval policy guidance: %q", prompt)
 	}
 }
 
-func TestBuildLayeredSystemPrompt_PlanModeNoUserInteractionUsesTaskCompleteBlockers(t *testing.T) {
+func TestBuildLayeredSystemPrompt_NoUserInteractionUsesTaskCompleteBlockers(t *testing.T) {
 	r := newRun(runOptions{
 		Log:               slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		AgentHomeDir:      t.TempDir(),
@@ -298,16 +334,16 @@ func TestBuildLayeredSystemPrompt_PlanModeNoUserInteractionUsesTaskCompleteBlock
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}}
 	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete", "ask_user"), false)
-	prompt := r.buildLayeredSystemPrompt("objective", "plan", TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
-	if !strings.Contains(prompt, "User interaction is disabled in this run, so do NOT call ask_user.") {
-		t.Fatalf("plan no-user prompt missing no-ask_user guidance: %q", prompt)
+	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	if !strings.Contains(prompt, "User interaction is disabled in this run.") {
+		t.Fatalf("no-user prompt missing disabled interaction guidance: %q", prompt)
 	}
-	if !strings.Contains(prompt, "If edits are required, finish with task_complete and report blockers plus concrete next-step guidance for the user-facing thread.") {
-		t.Fatalf("plan no-user prompt missing blocker completion guidance: %q", prompt)
+	if !strings.Contains(prompt, "finish with task_complete including blockers plus concrete next-step guidance for the user-facing thread") {
+		t.Fatalf("no-user prompt missing blocker completion guidance: %q", prompt)
 	}
 }
 
-func TestBuildLayeredSystemPrompt_PlanModeSubagentNoUserInteractionUsesParentActions(t *testing.T) {
+func TestBuildLayeredSystemPrompt_SubagentNoUserInteractionUsesParentActions(t *testing.T) {
 	r := newRun(runOptions{
 		Log:               slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		AgentHomeDir:      t.TempDir(),
@@ -316,8 +352,8 @@ func TestBuildLayeredSystemPrompt_PlanModeSubagentNoUserInteractionUsesParentAct
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}}
 	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete"), false)
-	prompt := r.buildLayeredSystemPrompt("objective", "plan", TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
-	if !strings.Contains(prompt, "If edits are required, finish with task_complete and report blockers plus suggested parent actions.") {
-		t.Fatalf("plan subagent prompt missing parent-action guidance: %q", prompt)
+	prompt := r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	if !strings.Contains(prompt, "finish with task_complete including blockers plus suggested parent actions") {
+		t.Fatalf("subagent prompt missing parent-action guidance: %q", prompt)
 	}
 }

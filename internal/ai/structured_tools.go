@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/floegence/redeven/internal/config"
+	"unicode/utf8"
 )
 
 const (
 	defaultFileReadLimit  = 200
 	maxFileReadLimit      = 400
+	maxFileReadBytes      = 2 << 20
 	maxMutationPatchRunes = 8000
 )
 
@@ -67,20 +68,6 @@ type ApplyPatchResult struct {
 	NormalizedFormat string               `json:"normalized_format"`
 	Files            []patchFileSummary   `json:"files"`
 	Mutations        []FileMutationResult `json:"mutations"`
-}
-
-type ExitPlanPromptRef struct {
-	Tool   string `json:"tool"`
-	Prompt string `json:"prompt"`
-}
-
-type ExitPlanModeArgs struct {
-	Summary        string              `json:"summary,omitempty"`
-	AllowedPrompts []ExitPlanPromptRef `json:"allowed_prompts,omitempty"`
-}
-
-type ExitPlanModeResult struct {
-	Summary string `json:"summary,omitempty"`
 }
 
 func mapToolFilePathError(err error) error {
@@ -405,9 +392,30 @@ func (r *run) toolFileRead(ctx context.Context, args FileReadArgs) (FileReadResu
 	if err != nil {
 		return FileReadResult{}, mapToolFilePathError(err)
 	}
-	content, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return FileReadResult{}, mapToolFilePathError(err)
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil {
+		return FileReadResult{}, mapToolFilePathError(err)
+	}
+	if !info.Mode().IsRegular() {
+		return FileReadResult{}, errors.New("file_path must be a regular file")
+	}
+	if info.Size() > maxFileReadBytes {
+		return FileReadResult{}, fmt.Errorf("file is too large to read safely (%d bytes max)", maxFileReadBytes)
+	}
+	content, err := io.ReadAll(io.LimitReader(file, maxFileReadBytes+1))
+	if err != nil {
+		return FileReadResult{}, mapToolFilePathError(err)
+	}
+	if int64(len(content)) > maxFileReadBytes {
+		return FileReadResult{}, fmt.Errorf("file is too large to read safely (%d bytes max)", maxFileReadBytes)
+	}
+	if !utf8.Valid(content) {
+		return FileReadResult{}, errors.New("file is not valid UTF-8 text")
 	}
 	lines := splitFileReadLines(string(content))
 	totalLines := len(lines)
@@ -529,81 +537,4 @@ func (r *run) toolFileWrite(ctx context.Context, args FileWriteArgs) (FileMutati
 		return FileMutationResult{}, err
 	}
 	return newFileMutationResult(path, changeType, original, args.Content), nil
-}
-
-func normalizeExitPlanPromptRefs(items []ExitPlanPromptRef) []ExitPlanPromptRef {
-	if len(items) == 0 {
-		return nil
-	}
-	out := make([]ExitPlanPromptRef, 0, len(items))
-	seen := map[string]struct{}{}
-	for _, item := range items {
-		tool := strings.TrimSpace(item.Tool)
-		prompt := truncateRunes(strings.TrimSpace(item.Prompt), 240)
-		if tool == "" || prompt == "" {
-			continue
-		}
-		key := strings.ToLower(tool) + "\n" + prompt
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, ExitPlanPromptRef{
-			Tool:   tool,
-			Prompt: prompt,
-		})
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func buildExitPlanModeQuestion(summary string) string {
-	summary = truncateRunes(strings.TrimSpace(summary), 280)
-	if summary == "" {
-		return "I need act mode to execute the proposed changes. Switch this thread to Act mode?"
-	}
-	return fmt.Sprintf("I need act mode to execute the proposed changes. Summary: %s. Switch this thread to Act mode?", summary)
-}
-
-func buildExitPlanModeWaitingPrompt(messageID string, toolID string, args ExitPlanModeArgs) *RequestUserInputPrompt {
-	return normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
-		MessageID:        strings.TrimSpace(messageID),
-		ToolID:           toolID,
-		ToolName:         "exit_plan_mode",
-		ReasonCode:       AskUserReasonUserDecisionRequired,
-		RequiredFromUser: []string{"Choose whether to switch this thread to act mode so execution can continue."},
-		Questions: []RequestUserInputQuestion{
-			{
-				ID:                "switch_to_act_mode",
-				Header:            "Execution Needed",
-				Question:          buildExitPlanModeQuestion(args.Summary),
-				ResponseMode:      requestUserInputResponseModeSelect,
-				ChoicesExhaustive: boolValuePtr(true),
-				Choices: []RequestUserInputChoice{
-					{
-						ChoiceID:    "switch_to_act",
-						Label:       "Switch to Act mode",
-						Description: "Enable file and command changes so Flower can execute the plan.",
-						Kind:        requestUserInputChoiceKindSelect,
-						Actions: []RequestUserInputAction{
-							{Type: requestUserInputActionSetMode, Mode: config.AIModeAct},
-						},
-					},
-					{
-						ChoiceID:    "stay_in_plan",
-						Label:       "Stay in Plan mode",
-						Description: "Keep the thread readonly and continue planning only.",
-						Kind:        requestUserInputChoiceKindSelect,
-					},
-				},
-			},
-		},
-	})
-}
-
-func boolValuePtr(v bool) *bool {
-	out := v
-	return &out
 }

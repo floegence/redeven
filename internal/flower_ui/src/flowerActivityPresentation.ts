@@ -107,7 +107,7 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
   content: 'content',
   activation_id: 'activation',
   already_active: 'already active',
-  mode_hints: 'mode hints',
+  permission_hints: 'permission hints',
   dependencies: 'dependencies',
   dependency_degraded: 'dependency degraded',
   reason: 'reason',
@@ -192,7 +192,7 @@ const RENDERER_DETAIL_KEYS: Readonly<Record<Exclude<FlowerActivityRenderer, 'fil
   web_search: ['query', 'provider', 'count', 'sources', 'results', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
   question: ['reason_code', 'required_from_user', 'questions', 'contains_secret', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
   completion: ['result', 'evidence_refs', 'remaining_risks', 'next_actions', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
-  structured: ['operation', 'name', 'action', 'content', 'content_ref', 'activation_id', 'already_active', 'mode_hints', 'dependencies', 'dependency_degraded', 'reason', 'id', 'status', 'message', 'timed_out', 'targets', 'stats', 'output', 'structured', 'key_files', 'rows', 'cards', 'items', 'query', 'count', 'provider', 'data', 'result', 'limit', 'evidence_refs', 'remaining_risks', 'next_actions', 'truncated', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
+  structured: ['operation', 'name', 'action', 'content', 'content_ref', 'activation_id', 'already_active', 'permission_hints', 'dependencies', 'dependency_degraded', 'reason', 'id', 'status', 'message', 'timed_out', 'targets', 'stats', 'output', 'structured', 'key_files', 'rows', 'cards', 'items', 'query', 'count', 'provider', 'data', 'result', 'limit', 'evidence_refs', 'remaining_risks', 'next_actions', 'truncated', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
 };
 
 const SUBAGENT_DETAIL_KEYS: readonly string[] = [

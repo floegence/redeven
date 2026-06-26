@@ -15,7 +15,28 @@ func buildPromptForToolRoutingTest(t *testing.T) string {
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "file.read"}, {Name: "okf.search"}, {Name: "web.search"}}
 	contract := resolveRunCapabilityContract(r, tools, nil, false)
-	return r.buildLayeredSystemPrompt("objective", "act", TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+	return r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
+}
+
+func buildReadonlyPromptForToolRoutingTest(t *testing.T) string {
+	t.Helper()
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: t.TempDir(),
+	})
+	r.permissionType = FlowerPermissionReadonly
+	tools := []ToolDef{
+		{Name: "read_file", Visibility: ToolVisibilityReadonlyExclusive},
+		{Name: "read_files", Visibility: ToolVisibilityReadonlyExclusive},
+		{Name: "rgrep", Visibility: ToolVisibilityReadonlyExclusive},
+		{Name: "find", Visibility: ToolVisibilityReadonlyExclusive},
+		{Name: "web_fetch", Visibility: ToolVisibilityReadonlyExclusive},
+		{Name: "okf.search", Visibility: ToolVisibilitySharedReadonly},
+		{Name: "web.search", Visibility: ToolVisibilitySharedReadonly},
+		{Name: "subagents", Visibility: ToolVisibilityDelegationControl},
+	}
+	contract := resolveRunCapabilityContract(r, tools, nil, false)
+	return r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionReadonly), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
 }
 
 func assertPromptContains(t *testing.T, prompt string, want string) {
@@ -69,4 +90,16 @@ func TestBuildLayeredSystemPrompt_UsesGenericSkillRoutingInsteadOfRedevenEnvSpec
 	assertPromptNotContains(t, prompt, "Redeven environment lifecycle operations:")
 	assertPromptNotContains(t, prompt, "Use `execution_context.current_target_id` as the primary target")
 	assertPromptNotContains(t, prompt, "Do not infer Docker, SSH, systemd, launchctl, or process-manager commands from a Redeven target string")
+}
+
+func TestBuildLayeredSystemPrompt_ReadonlyRoutesThroughReadonlyExclusiveTools(t *testing.T) {
+	t.Parallel()
+
+	prompt := buildReadonlyPromptForToolRoutingTest(t)
+	assertPromptContains(t, prompt, "Use read_file/read_files, rgrep, and find")
+	assertPromptContains(t, prompt, "authoritative URLs via web_fetch")
+	assertPromptContains(t, prompt, "Default rgrep:")
+	assertPromptNotContains(t, prompt, "terminal.exec")
+	assertPromptNotContains(t, prompt, "curl")
+	assertPromptNotContains(t, prompt, "file.read")
 }

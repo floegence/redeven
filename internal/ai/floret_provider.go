@@ -17,7 +17,6 @@ type floretProviderAdapter struct {
 
 	providerType string
 	modelName    string
-	mode         string
 	webSearch    string
 
 	controls                 ProviderControls
@@ -28,12 +27,11 @@ type floretProviderAdapter struct {
 
 type floretProviderAdapterOption func(*floretProviderAdapter)
 
-func newFloretProviderAdapter(base ModelGateway, providerType string, modelName string, mode string, controls ProviderControls, budgets TurnBudgets, webSearch string, options ...floretProviderAdapterOption) *floretProviderAdapter {
+func newFloretProviderAdapter(base ModelGateway, providerType string, modelName string, controls ProviderControls, budgets TurnBudgets, webSearch string, options ...floretProviderAdapterOption) *floretProviderAdapter {
 	adapter := &floretProviderAdapter{
 		base:                  base,
 		providerType:          strings.ToLower(strings.TrimSpace(providerType)),
 		modelName:             strings.TrimSpace(modelName),
-		mode:                  strings.TrimSpace(mode),
 		webSearch:             strings.TrimSpace(webSearch),
 		controls:              controls,
 		budgets:               budgets,
@@ -214,7 +212,6 @@ func (p *floretProviderAdapter) turnRequest(req flruntime.ModelRequest) (ModelGa
 		Messages:         messages,
 		Tools:            tools,
 		Budgets:          budgets,
-		ModeFlags:        ModeFlags{Mode: p.mode},
 		ProviderControls: controls,
 		WebSearchMode:    p.webSearch,
 	}, nil
@@ -380,8 +377,6 @@ func providerSafeFloretControlMessageText(msg flruntime.ModelMessage) string {
 			return "Agent requested structured user input."
 		}
 		return "Agent emitted a task completion signal."
-	case "exit_plan_mode":
-		return "Agent requested a plan-to-act mode transition."
 	default:
 		return fmt.Sprintf("Agent control signal %q was emitted.", name)
 	}

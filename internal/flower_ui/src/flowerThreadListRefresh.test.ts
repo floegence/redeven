@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type {
   FlowerApprovalAction,
+  FlowerMainToolApprovalAction,
   FlowerInputRequest,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
@@ -40,15 +41,17 @@ function inputRequest(promptID: string): FlowerInputRequest {
   };
 }
 
-function approvalAction(overrides: Partial<FlowerApprovalAction> = {}): FlowerApprovalAction {
+function approvalAction(overrides: Partial<FlowerMainToolApprovalAction> = {}): FlowerApprovalAction {
   return {
     action_id: 'approval-1',
+    origin: 'main_tool',
     run_id: 'run-1',
     tool_id: 'tool-shell',
     tool_name: 'shell',
     state: 'requested',
     status: 'pending',
     revision: 1,
+    version: 1,
     requested_at_ms: 1,
     can_approve: true,
     summary: {

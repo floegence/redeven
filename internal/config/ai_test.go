@@ -348,11 +348,11 @@ func TestAIConfigValidate_OK(t *testing.T) {
 	}
 }
 
-func TestAIConfigValidate_RejectsInvalidMode(t *testing.T) {
+func TestAIConfigValidate_RejectsInvalidPermissionType(t *testing.T) {
 	t.Parallel()
 
 	cfg := &AIConfig{
-		Mode:           "oops",
+		PermissionType: "oops",
 		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []AIProvider{
 			{
@@ -366,25 +366,30 @@ func TestAIConfigValidate_RejectsInvalidMode(t *testing.T) {
 	}
 
 	if err := cfg.Validate(); err == nil {
-		t.Fatalf("expected validation error for invalid mode")
+		t.Fatalf("expected validation error for invalid permission_type")
 	}
 }
 
-func TestAIConfig_EffectiveMode_DefaultsAct(t *testing.T) {
+func TestAIConfig_EffectivePermissionTypeDefaultsApprovalRequired(t *testing.T) {
 	t.Parallel()
 
-	if got := ((*AIConfig)(nil)).EffectiveMode(); got != AIModeAct {
-		t.Fatalf("EffectiveMode nil=%q, want %q", got, AIModeAct)
+	if got := ((*AIConfig)(nil)).EffectivePermissionType(); got != AIPermissionApprovalRequired {
+		t.Fatalf("EffectivePermissionType nil=%q, want %q", got, AIPermissionApprovalRequired)
 	}
 
 	cfg := &AIConfig{}
-	if got := cfg.EffectiveMode(); got != AIModeAct {
-		t.Fatalf("EffectiveMode empty=%q, want %q", got, AIModeAct)
+	if got := cfg.EffectivePermissionType(); got != AIPermissionApprovalRequired {
+		t.Fatalf("EffectivePermissionType empty=%q, want %q", got, AIPermissionApprovalRequired)
 	}
 
-	cfg.Mode = AIModePlan
-	if got := cfg.EffectiveMode(); got != AIModePlan {
-		t.Fatalf("EffectiveMode plan=%q, want %q", got, AIModePlan)
+	cfg.PermissionType = AIPermissionReadonly
+	if got := cfg.EffectivePermissionType(); got != AIPermissionReadonly {
+		t.Fatalf("EffectivePermissionType readonly=%q, want %q", got, AIPermissionReadonly)
+	}
+
+	cfg.PermissionType = AIPermissionFullAccess
+	if got := cfg.EffectivePermissionType(); got != AIPermissionFullAccess {
+		t.Fatalf("EffectivePermissionType full_access=%q, want %q", got, AIPermissionFullAccess)
 	}
 }
 
@@ -480,37 +485,6 @@ func TestAIConfig_EffectiveToolRecoveryDefaults(t *testing.T) {
 	}
 	if got := cfg.EffectiveToolRecoveryFailOnRepeatedSignature(); got {
 		t.Fatalf("EffectiveToolRecoveryFailOnRepeatedSignature explicit=%v, want false", got)
-	}
-}
-
-func TestAIConfig_EffectiveExecutionPolicyDefaults(t *testing.T) {
-	t.Parallel()
-
-	nilCfg := (*AIConfig)(nil)
-	if got := nilCfg.EffectiveRequireUserApproval(); got {
-		t.Fatalf("EffectiveRequireUserApproval nil=%v, want false", got)
-	}
-	if got := nilCfg.EffectiveBlockDangerousCommands(); got {
-		t.Fatalf("EffectiveBlockDangerousCommands nil=%v, want false", got)
-	}
-
-	cfg := &AIConfig{}
-	if got := cfg.EffectiveRequireUserApproval(); got {
-		t.Fatalf("EffectiveRequireUserApproval empty=%v, want false", got)
-	}
-	if got := cfg.EffectiveBlockDangerousCommands(); got {
-		t.Fatalf("EffectiveBlockDangerousCommands empty=%v, want false", got)
-	}
-
-	cfg.ExecutionPolicy = &AIExecutionPolicy{
-		RequireUserApproval:    true,
-		BlockDangerousCommands: true,
-	}
-	if got := cfg.EffectiveRequireUserApproval(); !got {
-		t.Fatalf("EffectiveRequireUserApproval explicit=%v, want true", got)
-	}
-	if got := cfg.EffectiveBlockDangerousCommands(); !got {
-		t.Fatalf("EffectiveBlockDangerousCommands explicit=%v, want true", got)
 	}
 }
 

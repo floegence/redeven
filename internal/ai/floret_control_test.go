@@ -115,42 +115,6 @@ func TestFloretControlProjector_TaskCompleteActivityUsesPresentationSpec(t *test
 	}
 }
 
-func TestFloretControlSignalActivityUsesPresentationSpecFields(t *testing.T) {
-	t.Parallel()
-
-	activity := floretActivityForControlSignal("exit_plan_mode", map[string]any{
-		"source":  "exit_plan_mode",
-		"summary": "Need approval before editing.",
-		"allowed_prompts": []ExitPlanPromptRef{{
-			Tool:   "apply_patch",
-			Prompt: "Allow file edits",
-		}},
-		"waiting_prompt": &RequestUserInputPrompt{PromptID: "prompt_1"},
-	}, "Review the plan before edits.")
-	if activity == nil {
-		t.Fatal("activity is nil")
-	}
-	spec := aitools.MustPresentationSpec("exit_plan_mode")
-	if activity.Renderer != observation.ActivityRenderer(spec.Renderer) {
-		t.Fatalf("activity renderer=%q, want registry renderer %q", activity.Renderer, spec.Renderer)
-	}
-	if activity.Label != spec.ResultLabelFallback {
-		t.Fatalf("activity label=%q, want registry fallback %q", activity.Label, spec.ResultLabelFallback)
-	}
-	if activity.Description != "Review the plan before edits." {
-		t.Fatalf("activity description=%q, want prompt question", activity.Description)
-	}
-	if activity.Payload["summary"] != "Need approval before editing." {
-		t.Fatalf("payload=%#v, want summary", activity.Payload)
-	}
-	if prompts := toAnySlice(activity.Payload["allowed_prompts"]); len(prompts) != 1 {
-		t.Fatalf("allowed_prompts=%#v, want one prompt", activity.Payload["allowed_prompts"])
-	}
-	if _, ok := activity.Payload["waiting_prompt"]; ok {
-		t.Fatalf("activity payload must be projected from registry fields only: %#v", activity.Payload)
-	}
-}
-
 func TestFloretControlProjector_InvalidAskUserFailsWithoutContinueSignal(t *testing.T) {
 	t.Parallel()
 
@@ -183,47 +147,22 @@ func TestFloretControlProjector_InvalidAskUserFailsWithoutContinueSignal(t *test
 	}
 }
 
-func TestFloretControlProjector_ExitPlanModeProjectsFactsWithoutFlowerPrompt(t *testing.T) {
+func TestFloretControlProjector_UnknownControlSignalIsNotHandled(t *testing.T) {
 	t.Parallel()
 
 	projector := floretControlProjector{}
 	signal, handled, err := projector.Project(fltools.ToolCall{
-		ID:   "call_exit_plan",
-		Name: "exit_plan_mode",
-		Args: `{"summary":"Need to edit files.","allowed_prompts":[{"tool":"apply_patch","prompt":"Allow edits"}]}`,
+		ID:   "call_unknown_control",
+		Name: "legacy_unknown_signal",
+		Args: `{"summary":"Need to edit files."}`,
 	})
 	if err != nil {
 		t.Fatalf("Project: %v", err)
 	}
-	if !handled {
-		t.Fatalf("exit_plan_mode should be handled")
+	if handled {
+		t.Fatalf("unknown control signal must not be handled")
 	}
-	if signal.Disposition != flruntime.SignalWaiting {
-		t.Fatalf("disposition=%q, want waiting", signal.Disposition)
-	}
-	if signal.Name != "exit_plan_mode" {
-		t.Fatalf("signal name=%q, want exit_plan_mode", signal.Name)
-	}
-	if strings.Contains(signal.OutputText, "Switch this thread to Act mode") {
-		t.Fatalf("output_text must remain fact-only, got %q", signal.OutputText)
-	}
-	if signal.Activity == nil {
-		t.Fatal("activity is nil")
-	}
-	if strings.Contains(signal.Activity.Description, "Switch this thread to Act mode") {
-		t.Fatalf("activity description must not contain Flower waiting prompt: %q", signal.Activity.Description)
-	}
-	if got := strings.TrimSpace(anyToString(signal.Payload["summary"])); got != "Need to edit files." {
-		t.Fatalf("summary=%q, want projected summary", got)
-	}
-	prompts, ok := signal.Payload["allowed_prompts"].([]ExitPlanPromptRef)
-	if !ok || len(prompts) != 1 || prompts[0].Tool != "apply_patch" {
-		t.Fatalf("allowed_prompts=%#v, want one prompt", signal.Payload["allowed_prompts"])
-	}
-	if _, ok := signal.Payload["waiting_prompt"]; ok {
-		t.Fatalf("signal payload must not contain Flower prompt: %#v", signal.Payload)
-	}
-	if _, ok := signal.Payload["args"]; ok {
-		t.Fatalf("signal payload must contain facts only: %#v", signal.Payload)
+	if signal.Name != "" || signal.Disposition != "" {
+		t.Fatalf("signal=%#v, want zero signal", signal)
 	}
 }

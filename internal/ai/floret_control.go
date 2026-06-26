@@ -15,15 +15,13 @@ type floretControlProjector struct {
 	run        *run
 	state      *floretToolRuntimeState
 	complexity string
-	mode       string
 }
 
-func newFloretControlSpec(r *run, state *floretToolRuntimeState, activeTools []ToolDef, complexity string, mode string) (flruntime.TurnSignalSpec, error) {
+func newFloretControlSpec(r *run, state *floretToolRuntimeState, activeTools []ToolDef, complexity string) (flruntime.TurnSignalSpec, error) {
 	projector := floretControlProjector{
 		run:        r,
 		state:      state,
 		complexity: normalizeTaskComplexity(complexity),
-		mode:       strings.TrimSpace(mode),
 	}
 	definitions, err := floretControlDefinitionsFromTools(activeTools)
 	if err != nil {
@@ -53,9 +51,6 @@ func (p floretControlProjector) Project(call fltools.ToolCall) (flruntime.TurnSi
 			return flruntime.TurnSignal{}, true, err
 		}
 		signal, err := p.projectAskUser(flowerCall, core)
-		return signal, true, err
-	case "exit_plan_mode":
-		signal, err := p.projectExitPlanMode(flowerCall)
 		return signal, true, err
 	default:
 		return flruntime.TurnSignal{}, false, nil
@@ -142,32 +137,6 @@ func (p floretControlProjector) projectAskUser(call ToolCall, core flruntime.Tur
 	}, nil
 }
 
-func (p floretControlProjector) projectExitPlanMode(call ToolCall) (flruntime.TurnSignal, error) {
-	args := ExitPlanModeArgs{
-		Summary:        extractSignalText(call, "summary"),
-		AllowedPrompts: extractExitPlanPromptRefs(call.Args["allowed_prompts"]),
-	}
-	args.Summary = truncateRunes(strings.TrimSpace(args.Summary), 280)
-	args.AllowedPrompts = normalizeExitPlanPromptRefs(args.AllowedPrompts)
-	payload := map[string]any{
-		"source":          "exit_plan_mode",
-		"summary":         args.Summary,
-		"allowed_prompts": args.AllowedPrompts,
-	}
-	description := args.Summary
-	if description == "" {
-		description = "Agent requested a plan-to-act mode transition."
-	}
-	return flruntime.TurnSignal{
-		Disposition: flruntime.SignalWaiting,
-		Name:        "exit_plan_mode",
-		CallID:      strings.TrimSpace(call.ID),
-		Payload:     payload,
-		Activity:    floretActivityForControlSignal("exit_plan_mode", payload, description),
-		OutputText:  args.Summary,
-	}, nil
-}
-
 func floretActivityForControlSignal(toolName string, payload map[string]any, description string) *observation.ActivityPresentation {
 	toolName = strings.TrimSpace(toolName)
 	if toolName == "" {
@@ -231,30 +200,4 @@ func askUserValidationError(reason string, contractError string) string {
 		}
 		return prefix + "validation failed"
 	}
-}
-
-func extractExitPlanPromptRefs(value any) []ExitPlanPromptRef {
-	items, ok := value.([]any)
-	if !ok {
-		if typed, ok := value.([]ExitPlanPromptRef); ok {
-			return append([]ExitPlanPromptRef(nil), typed...)
-		}
-		return nil
-	}
-	out := make([]ExitPlanPromptRef, 0, len(items))
-	for _, item := range items {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		ref := ExitPlanPromptRef{
-			Tool:   strings.TrimSpace(anyToString(m["tool"])),
-			Prompt: strings.TrimSpace(anyToString(m["prompt"])),
-		}
-		if ref.Tool == "" && ref.Prompt == "" {
-			continue
-		}
-		out = append(out, ref)
-	}
-	return out
 }

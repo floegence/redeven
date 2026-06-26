@@ -671,9 +671,9 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	if cfg == nil && (desktopModelSource == nil || !desktopModelSource.hasBinding()) {
 		return ErrNotConfigured
 	}
-	modeFallback := "act"
-	if cfg != nil {
-		modeFallback = cfg.EffectiveMode()
+	permissionType, err := normalizePermissionType(threadPermissionTypeString(th, ""), FlowerPermissionApprovalRequired)
+	if err != nil {
+		permissionType = FlowerPermissionApprovalRequired
 	}
 	runWorkingDir := strings.TrimSpace(th.WorkingDir)
 	if runWorkingDir == "" {
@@ -740,6 +740,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	}
 	r.setContextCompactionAnchor(strings.TrimSpace(manual.RequestID), anchor)
 	r.setContextCompactionAnchor(idleManualCompactionOperationID(runID, manual.RequestID), anchor)
+	r.permissionType = permissionType
 	_, modelCapability, reasoning, providerCfg, apiKey, adapterOverride, err := s.resolveIdleCompactionModel(execCtx, cfg, th, r)
 	if err != nil {
 		return err
@@ -758,7 +759,6 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		adapter,
 		providerType,
 		strings.TrimSpace(modelCapability.WireModelName),
-		normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback),
 		ProviderControls{
 			ReasoningSelection:  reasoning,
 			ReasoningCapability: modelCapability.ReasoningCapability,
@@ -805,7 +805,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		contextWindow = modelCapability.MaxContextTokens
 	}
 	inputContextLimit := resolveInputContextLimit(contextWindow, 0)
-	systemPrompt := r.buildLayeredSystemPrompt(strings.TrimSpace(promptPack.Objective), normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback), TaskComplexityStandard, 0, true, nil, runtimeState{}, "", runCapabilityContract{})
+	systemPrompt := r.buildLayeredSystemPrompt(strings.TrimSpace(promptPack.Objective), permissionTypeString(permissionType), TaskComplexityStandard, 0, true, nil, runtimeState{}, "", runCapabilityContract{})
 	result, err := flruntime.CompactProjectedContext(execCtx, flruntime.ProjectedTurnOptions{
 		Config:       redevenFloretAdapterConfig(systemPrompt, floretContextPolicy(contextWindow, inputContextLimit, 0), reasoning),
 		ModelGateway: flProvider,

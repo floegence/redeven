@@ -18,6 +18,10 @@ func resolveRunCapabilityContract(r *run, tools []ToolDef, signals []ToolDef, su
 	if r != nil && r.noUserInteraction {
 		allowUserInteraction = false
 	}
+	allowToolApprovalWait := true
+	if r != nil && r.subagentDepth > 0 && !r.allowDelegatedApproval {
+		allowToolApprovalWait = false
+	}
 
 	allowedTools := make([]string, 0, len(tools))
 	seenTools := make(map[string]struct{}, len(tools))
@@ -41,7 +45,7 @@ func resolveRunCapabilityContract(r *run, tools []ToolDef, signals []ToolDef, su
 		}
 		seenSignals[name] = struct{}{}
 	}
-	for _, signal := range []string{"task_complete", "ask_user", "exit_plan_mode"} {
+	for _, signal := range []string{"task_complete", "ask_user"} {
 		if _, ok := seenSignals[signal]; !ok {
 			continue
 		}
@@ -53,7 +57,7 @@ func resolveRunCapabilityContract(r *run, tools []ToolDef, signals []ToolDef, su
 
 	contract := runCapabilityContract{
 		AllowUserInteraction:           allowUserInteraction,
-		AllowToolApprovalWait:          allowUserInteraction,
+		AllowToolApprovalWait:          allowToolApprovalWait,
 		AllowedSignals:                 append([]string(nil), allowedSignals...),
 		AllowedTools:                   append([]string(nil), allowedTools...),
 		PromptProfile:                  resolveRunPromptProfile("", r, allowUserInteraction),

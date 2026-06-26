@@ -26,7 +26,7 @@ func (r *run) listSkills() []SkillMeta {
 	if mgr == nil {
 		return nil
 	}
-	return mgr.List(r.runMode)
+	return mgr.List(r.skillPermissionType())
 }
 
 func (r *run) activeSkills() []SkillActivation {
@@ -45,13 +45,20 @@ func (r *run) activateSkill(name string) (SkillActivation, bool, error) {
 	if mgr == nil {
 		return SkillActivation{}, false, errors.New("skill manager unavailable")
 	}
-	activation, alreadyActive, err := mgr.Activate(name, r.runMode, false)
+	activation, alreadyActive, err := mgr.Activate(name, r.skillPermissionType(), false)
 	if err != nil {
 		r.persistRunEvent("skill.activate.error", RealtimeStreamKindLifecycle, map[string]any{"name": strings.TrimSpace(name), "error": err.Error()})
 		return SkillActivation{}, false, err
 	}
 	r.persistRunEvent("skill.activated", RealtimeStreamKindLifecycle, map[string]any{"name": activation.Name, "activation_id": activation.ActivationID, "already_active": alreadyActive})
 	return activation, alreadyActive, nil
+}
+
+func (r *run) skillPermissionType() string {
+	if r == nil || r.permissionType == "" {
+		return permissionTypeString(FlowerPermissionApprovalRequired)
+	}
+	return permissionTypeString(r.permissionType)
 }
 
 func (r *run) ensureSubagentRuntime() subagentRuntime {

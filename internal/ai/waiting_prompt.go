@@ -11,7 +11,6 @@ import (
 )
 
 const (
-	requestUserInputActionSetMode          = "set_mode"
 	requestUserInputChoiceKindSelect       = "select"
 	requestUserInputResponseModeSelect     = "select"
 	requestUserInputResponseModeWrite      = "write"
@@ -36,13 +35,10 @@ func buildRequestUserInputPromptID(messageID string, toolID string) string {
 
 func normalizeRequestUserInputAction(action RequestUserInputAction) (RequestUserInputAction, bool) {
 	action.Type = strings.TrimSpace(strings.ToLower(action.Type))
-	switch action.Type {
-	case requestUserInputActionSetMode:
-		action.Mode = normalizeRunMode(action.Mode, config.AIModeAct)
-		return action, true
-	default:
+	if action.Type == "" || action.Type != "open_subagent" {
 		return RequestUserInputAction{}, false
 	}
+	return action, true
 }
 
 func normalizeRequestUserInputChoiceKind(kind string) string {
@@ -293,7 +289,6 @@ func strictRequestUserInputChoicesFromAny(value any) ([]RequestUserInputChoice, 
 			}
 			action, ok := normalizeRequestUserInputAction(RequestUserInputAction{
 				Type: anyToString(actionRecord["type"]),
-				Mode: anyToString(actionRecord["mode"]),
 			})
 			if !ok {
 				return nil, false
@@ -463,7 +458,7 @@ func normalizeRequestUserInputActions(actions []RequestUserInputAction) []Reques
 		if !ok {
 			continue
 		}
-		key := action.Type + ":" + strings.ToLower(strings.TrimSpace(action.Mode))
+		key := action.Type
 		if _, exists := seen[key]; exists {
 			continue
 		}

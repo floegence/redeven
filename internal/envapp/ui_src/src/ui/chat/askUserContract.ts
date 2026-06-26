@@ -1,9 +1,7 @@
-export type AskUserExecutionMode = 'act' | 'plan';
 export type AskUserResponseMode = 'select' | 'write' | 'select_or_write';
 
 export type AskUserAction = Readonly<{
   type: string;
-  mode?: AskUserExecutionMode;
 }>;
 
 export type AskUserChoice = Readonly<{
@@ -29,10 +27,6 @@ function asTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function normalizeExecutionMode(raw: unknown): AskUserExecutionMode {
-  return String(raw ?? '').trim().toLowerCase() === 'plan' ? 'plan' : 'act';
-}
-
 function normalizeAskUserResponseMode(raw: unknown): AskUserResponseMode | null {
   const mode = String(raw ?? '').trim().toLowerCase();
   if (mode === 'select' || mode === 'write' || mode === 'select_or_write') return mode;
@@ -46,12 +40,11 @@ function normalizeAskUserActions(raw: unknown): AskUserAction[] {
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const type = asTrimmedString((item as any).type).toLowerCase();
-    if (!type) continue;
-    const mode = type === 'set_mode' ? normalizeExecutionMode((item as any).mode) : undefined;
-    const key = `${type}:${mode ?? ''}`;
+    if (type !== 'open_subagent') continue;
+    const key = type;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ type, mode });
+    out.push({ type });
     if (out.length >= 4) break;
   }
   return out;

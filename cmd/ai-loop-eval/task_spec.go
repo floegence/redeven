@@ -31,7 +31,7 @@ type taskWorkspaceSpec struct {
 }
 
 type taskRuntimeSpec struct {
-	ExecutionMode                    string            `yaml:"execution_mode"`
+	PermissionType                   string            `yaml:"permission_type"`
 	TimeoutSeconds                   int               `yaml:"timeout_seconds"`
 	ReasoningOnly                    bool              `yaml:"reasoning_only"`
 	RequireUserConfirmOnTaskComplete bool              `yaml:"require_user_confirm_on_task_complete"`
@@ -57,9 +57,9 @@ type taskOutputAssertions struct {
 }
 
 type taskThreadAssertions struct {
-	RunStatus     string `yaml:"run_status"`
-	ExecutionMode string `yaml:"execution_mode"`
-	WaitingPrompt string `yaml:"waiting_prompt"`
+	RunStatus      string `yaml:"run_status"`
+	PermissionType string `yaml:"permission_type"`
+	WaitingPrompt  string `yaml:"waiting_prompt"`
 }
 
 type taskToolAssertions struct {
@@ -99,7 +99,7 @@ type evalTaskWorkspace struct {
 }
 
 type evalTaskRuntime struct {
-	ExecutionMode                    string            `json:"execution_mode"`
+	PermissionType                   string            `json:"permission_type"`
 	TimeoutPerTurn                   time.Duration     `json:"-"`
 	TimeoutSeconds                   int               `json:"timeout_seconds"`
 	ReasoningOnly                    bool              `json:"reasoning_only,omitempty"`
@@ -165,11 +165,6 @@ func normalizeTaskSpecItem(item taskSpecItem, specDir string) (evalTask, error) 
 		return evalTask{}, fmt.Errorf("task %s has no turns", id)
 	}
 
-	executionMode := normalizeExecutionMode(item.Runtime.ExecutionMode)
-	if executionMode == "" {
-		executionMode = "act"
-	}
-
 	timeoutSeconds := item.Runtime.TimeoutSeconds
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 45
@@ -178,6 +173,20 @@ func normalizeTaskSpecItem(item taskSpecItem, specDir string) (evalTask, error) 
 	workspace, err := normalizeTaskWorkspaceSpec(item.Runtime.Workspace, specDir)
 	if err != nil {
 		return evalTask{}, fmt.Errorf("task %s has invalid workspace config: %w", id, err)
+	}
+
+	permissionType := normalizeEvalPermissionType(item.Runtime.PermissionType)
+	if permissionType == "" && strings.TrimSpace(item.Runtime.PermissionType) != "" {
+		return evalTask{}, fmt.Errorf("task %s has invalid permission_type: %s", id, item.Runtime.PermissionType)
+	}
+	if permissionType == "" {
+		permissionType = "approval_required"
+	}
+	if workspace.Mode == taskWorkspaceModeSourceReadonly {
+		if permissionType != "readonly" && strings.TrimSpace(item.Runtime.PermissionType) != "" {
+			return evalTask{}, fmt.Errorf("task %s uses %s workspace but permission_type is %s", id, taskWorkspaceModeSourceReadonly, item.Runtime.PermissionType)
+		}
+		permissionType = "readonly"
 	}
 
 	assertions := item.Assertions
@@ -205,10 +214,10 @@ func normalizeTaskSpecItem(item taskSpecItem, specDir string) (evalTask, error) 
 		assertions.Thread.RunStatus = status
 	}
 
-	if mode := normalizeExecutionMode(assertions.Thread.ExecutionMode); mode == "" && strings.TrimSpace(assertions.Thread.ExecutionMode) != "" {
-		return evalTask{}, fmt.Errorf("task %s has invalid thread execution_mode: %s", id, assertions.Thread.ExecutionMode)
+	if permission := normalizeEvalPermissionType(assertions.Thread.PermissionType); permission == "" && strings.TrimSpace(assertions.Thread.PermissionType) != "" {
+		return evalTask{}, fmt.Errorf("task %s has invalid thread permission_type: %s", id, assertions.Thread.PermissionType)
 	} else {
-		assertions.Thread.ExecutionMode = mode
+		assertions.Thread.PermissionType = permission
 	}
 
 	if assertions.Output.MinEvidencePaths < 0 || assertions.Output.MinLength < 0 {
@@ -225,7 +234,7 @@ func normalizeTaskSpecItem(item taskSpecItem, specDir string) (evalTask, error) 
 		Category: strings.TrimSpace(strings.ToLower(item.Category)),
 		Turns:    turns,
 		Runtime: evalTaskRuntime{
-			ExecutionMode:                    executionMode,
+			PermissionType:                   permissionType,
 			TimeoutPerTurn:                   time.Duration(timeoutSeconds) * time.Second,
 			TimeoutSeconds:                   timeoutSeconds,
 			ReasoningOnly:                    item.Runtime.ReasoningOnly,
@@ -283,14 +292,12 @@ func normalizeTaskWorkspaceSpec(raw taskWorkspaceSpec, specDir string) (evalTask
 	}
 }
 
-func normalizeExecutionMode(raw string) string {
+func normalizeEvalPermissionType(raw string) string {
 	switch strings.TrimSpace(strings.ToLower(raw)) {
 	case "":
 		return ""
-	case "act":
-		return "act"
-	case "plan":
-		return "plan"
+	case "readonly", "approval_required", "full_access":
+		return strings.TrimSpace(strings.ToLower(raw))
 	default:
 		return ""
 	}

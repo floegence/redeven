@@ -50,6 +50,7 @@ func (r *InMemoryToolRegistry) Register(tool ToolDef, handler ToolHandler) error
 		return fmt.Errorf("tool %s missing handler", name)
 	}
 	tool.Name = name
+	tool = normalizeToolPermissionMetadata(tool)
 	tool.Source = strings.ToLower(strings.TrimSpace(tool.Source))
 	if tool.Source == "" {
 		tool.Source = "builtin"
@@ -145,19 +146,42 @@ func (r *InMemoryToolRegistry) resolve(name string) (ToolDef, ToolHandler, bool)
 	return item.def, item.handler, true
 }
 
-type DefaultModeToolFilter struct{}
+type DefaultPermissionToolFilter struct{}
 
-func (f DefaultModeToolFilter) FilterToolsForMode(mode string, all []ToolDef) []ToolDef {
-	mode = strings.ToLower(strings.TrimSpace(mode))
-	if mode == "" {
-		mode = "act"
-	}
+func (f DefaultPermissionToolFilter) FilterTools(permissionType FlowerPermissionType, all []ToolDef) []ToolDef {
 	out := make([]ToolDef, 0, len(all))
 	for _, tool := range all {
-		if mode == "plan" && tool.Mutating {
+		tool = normalizeToolPermissionMetadata(tool)
+		if !toolVisibleForPermission(permissionType, tool) {
 			continue
 		}
 		out = append(out, tool)
 	}
 	return out
+}
+
+func toolVisibleForPermission(permissionType FlowerPermissionType, tool ToolDef) bool {
+	if strings.TrimSpace(tool.Name) == "file.read" {
+		return false
+	}
+	switch permissionType {
+	case FlowerPermissionReadonly:
+		switch tool.Visibility {
+		case ToolVisibilityReadonlyExclusive, ToolVisibilitySharedReadonly, ToolVisibilityInteraction, ToolVisibilityControl, ToolVisibilityDelegationControl:
+			return true
+		default:
+			return false
+		}
+	case FlowerPermissionApprovalRequired, FlowerPermissionFullAccess:
+		switch tool.Visibility {
+		case ToolVisibilityReadonlyExclusive:
+			return false
+		case ToolVisibilityStandard, ToolVisibilitySharedReadonly, ToolVisibilityInteraction, ToolVisibilityControl, ToolVisibilityDelegationControl:
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
+	}
 }

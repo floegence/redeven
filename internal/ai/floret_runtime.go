@@ -43,9 +43,18 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 		req.Options.ResponseFormat = "json_object"
 	}
 
-	mode := normalizeRunMode(req.Options.Mode, r.cfg.EffectiveMode())
-	req.Options.Mode = mode
-	r.runMode = mode
+	permissionType, err := normalizePermissionType(req.Options.PermissionType, "")
+	if err != nil {
+		return r.failRun("Invalid permission type", err)
+	}
+	if strings.TrimSpace(req.Options.PermissionType) == "" {
+		permissionType, err = normalizePermissionType(r.cfg.EffectivePermissionType(), permissionType)
+		if err != nil {
+			return r.failRun("Invalid configured permission type", err)
+		}
+	}
+	req.Options.PermissionType = permissionTypeString(permissionType)
+	r.permissionType = permissionType
 	taskComplexity := TaskComplexityStandard
 
 	var adapter ModelGateway
@@ -74,21 +83,27 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 		"model":             modelName,
 	})
 	r.persistRunEvent("floret.projected_turn.start", RealtimeStreamKindLifecycle, map[string]any{
-		"engine":         "floret",
-		"provider_type":  providerType,
-		"model":          modelName,
-		"max_tool_calls": modelGatewayHardMaxToolCalls,
-		"mode":           mode,
+		"engine":          "floret",
+		"provider_type":   providerType,
+		"model":           modelName,
+		"max_tool_calls":  modelGatewayHardMaxToolCalls,
+		"permission_type": permissionTypeString(permissionType),
 	})
 
 	registry := NewInMemoryToolRegistry()
 	if err := registerBuiltInTools(registry, r); err != nil {
 		return r.failRun("Failed to initialize tool registry", err)
 	}
-	modeFilter := newModeToolFilter(r.cfg, !r.noUserInteraction)
-	modeFilter = r.withToolAllowlistFilter(modeFilter)
-	activeTools := modeFilter.FilterToolsForMode(mode, registry.Snapshot())
-	activeSignals := modeFilter.FilterToolsForMode(mode, builtInControlSignalDefinitions())
+	permissionFilter := newPermissionToolFilter(!r.noUserInteraction)
+	permissionFilter = r.withToolAllowlistFilter(permissionFilter)
+	activeTools := permissionFilter.FilterTools(permissionType, registry.Snapshot())
+	activeSignals := permissionFilter.FilterTools(permissionType, builtInControlSignalDefinitions())
+	permissionSnapshot := r.freezePermissionSnapshot(buildPermissionSnapshot(permissionType, activeTools, activeSignals))
+	if err := validatePermissionSnapshotConsistency(permissionSnapshot); err != nil {
+		return r.failRun("Invalid permission snapshot", err)
+	}
+	activeTools = filterToolsByNames(activeTools, permissionSnapshot.FloretToolNames)
+	activeSignals = filterToolsByNames(activeSignals, permissionSnapshot.PromptCapabilityNames)
 	capabilityContract := resolveRunCapabilityContract(r, activeTools, activeSignals, req.ModelCapability.SupportsAskUserQuestionBatches)
 	controlTools := floretControlToolsForContract(activeSignals, capabilityContract)
 	r.persistRunEvent("capability.contract.resolved", RealtimeStreamKindLifecycle, capabilityContract.eventPayload())
@@ -123,7 +138,7 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 		contextWindow = req.ModelCapability.MaxContextTokens
 	}
 	inputContextLimit := resolveInputContextLimit(contextWindow, req.Options.MaxInputTokens)
-	systemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, taskComplexity, 0, true, activeTools, state, "", capabilityContract)
+	systemPrompt := r.buildLayeredSystemPrompt(taskObjective, permissionTypeString(permissionType), taskComplexity, 0, true, activeTools, state, "", capabilityContract)
 	flTools, err := buildFloretToolRegistry(r, activeTools, sharedState)
 	if err != nil {
 		return r.failRun("Failed to initialize Floret tool registry", err)
@@ -132,7 +147,6 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 		adapter,
 		providerType,
 		capability.WireModelName,
-		mode,
 		ProviderControls{
 			ReasoningSelection:  req.Options.ReasoningSelection,
 			ReasoningCapability: req.ModelCapability.ReasoningCapability,
@@ -150,7 +164,7 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 	)
 	completionPolicy := flruntime.TurnCompletionNaturalStop
 	hostLabels := floretHostLabelsForRun(r)
-	controlSpec, err := newFloretControlSpec(r, sharedState, controlTools, taskComplexity, mode)
+	controlSpec, err := newFloretControlSpec(r, sharedState, controlTools, taskComplexity)
 	if err != nil {
 		return r.failRun("Failed to initialize Floret control tools", err)
 	}
@@ -211,10 +225,10 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 	if ctx.Err() != nil && result.Status != flruntime.TurnStatusCompleted && result.Status != flruntime.TurnStatusWaiting {
 		return r.failRun("Floret run was canceled", ctx.Err())
 	}
-	return r.projectFloretResult(ctx, result, req, sharedState.snapshot(), taskComplexity, mode)
+	return r.projectFloretResult(ctx, result, req, sharedState.snapshot(), taskComplexity, permissionTypeString(permissionType))
 }
 
-func (r *run) projectFloretResult(ctx context.Context, result flruntime.ProjectedTurnResult, req RunRequest, state runtimeState, complexity string, mode string) error {
+func (r *run) projectFloretResult(ctx context.Context, result flruntime.ProjectedTurnResult, req RunRequest, state runtimeState, complexity string, permissionType string) error {
 	if !r.acceptsEngineResultProjection() {
 		return nil
 	}
@@ -242,15 +256,15 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.Projecte
 					return r.failRun("Task completion rejected by user", errors.New("task completion rejected"))
 				}
 			}
-			gatePassed, gateReason := evaluateTaskCompletionGate(resultText, state, complexity, mode)
+			gatePassed, gateReason := evaluateTaskCompletionGate(resultText, state, complexity, permissionType)
 			r.persistRunEvent("completion.attempt", RealtimeStreamKindLifecycle, map[string]any{
-				"step_index":  step,
-				"attempt":     "task_complete",
-				"gate_passed": gatePassed,
-				"gate_reason": gateReason,
-				"complexity":  complexity,
-				"mode":        strings.TrimSpace(mode),
-				"engine":      "floret",
+				"step_index":      step,
+				"attempt":         "task_complete",
+				"gate_passed":     gatePassed,
+				"gate_reason":     gateReason,
+				"complexity":      complexity,
+				"permission_type": strings.TrimSpace(permissionType),
+				"engine":          "floret",
 			})
 			if !gatePassed {
 				return r.failRun("Task completion rejected by completion gate", fmt.Errorf("task_complete rejected: %s", gateReason))
@@ -277,8 +291,6 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.Projecte
 			switch strings.TrimSpace(signal.Name) {
 			case "ask_user":
 				return r.projectFloretAskUserWaiting(step, signal)
-			case "exit_plan_mode":
-				return r.projectFloretExitPlanModeWaiting(step, signal)
 			}
 		}
 		return r.failRun("Run entered waiting state without a supported control signal", errors.New("unsupported waiting control signal"))
@@ -415,45 +427,6 @@ func (r *run) projectFloretAskUserWaiting(step int, signal *flruntime.TurnSignal
 	r.emitLifecyclePhase("ended", map[string]any{"reason": finalReason, "step_index": step})
 	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 	return nil
-}
-
-func (r *run) projectFloretExitPlanModeWaiting(step int, signal *flruntime.TurnSignal) error {
-	if !r.acceptsEngineResultProjection() {
-		return nil
-	}
-	if signal == nil {
-		return errors.New("nil exit_plan_mode control signal")
-	}
-	args := ExitPlanModeArgs{
-		Summary:        strings.TrimSpace(anyToString(signal.Payload["summary"])),
-		AllowedPrompts: extractExitPlanPromptRefs(signal.Payload["allowed_prompts"]),
-	}
-	exitResult := ExitPlanModeResult{
-		Summary: strings.TrimSpace(anyToString(signal.Payload["summary"])),
-	}
-	_, questionsCount := r.persistExitPlanModeWaitingSignal(strings.TrimSpace(signal.CallID), args, exitResult)
-	prompt := r.snapshotWaitingPrompt()
-	r.reconcileCanonicalWaitingUserMessage()
-	questions := promptQuestions(prompt)
-	r.persistRunEvent("exit_plan_mode.waiting", RealtimeStreamKindLifecycle, map[string]any{
-		"summary":             strings.TrimSpace(exitResult.Summary),
-		"questions_count":     questionsCount,
-		"choices_count":       requestUserInputQuestionChoiceCount(questions),
-		"source":              "exit_plan_mode",
-		"finalization_reason": finalizationReasonExitPlanModeWaiting,
-	})
-	r.setFinalizationReason(finalizationReasonExitPlanModeWaiting)
-	r.setEndReason("complete")
-	r.emitLifecyclePhase("ended", map[string]any{"reason": finalizationReasonExitPlanModeWaiting, "step_index": step})
-	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-	return nil
-}
-
-func promptQuestions(prompt *RequestUserInputPrompt) []RequestUserInputQuestion {
-	if prompt == nil {
-		return nil
-	}
-	return prompt.Questions
 }
 
 func flowerMessagesToFloret(messages []Message) ([]flruntime.TranscriptMessage, error) {

@@ -702,7 +702,6 @@ describe('EnvAppShell desktop floating surfaces', () => {
       expect(flowerLaunchTurnMock).toHaveBeenCalledWith(expect.objectContaining({
         prompt: 'inspect from launcher',
         working_dir: '/workspace/app',
-        mode: 'act',
         context_action: expect.objectContaining({
           action_id: 'assistant.ask.flower',
           provider: 'flower',
@@ -773,7 +772,6 @@ describe('EnvAppShell desktop floating surfaces', () => {
       expect(flowerLaunchTurnMock).toHaveBeenCalledWith(expect.objectContaining({
         prompt: 'inspect from launcher',
         working_dir: '/workspace/app',
-        mode: 'act',
       }));
       expect(host.querySelector('[data-testid="deck-flower-activation"]')?.textContent).toBe('ai|true|true|thread-launched');
       expect(windowOpenMock).not.toHaveBeenCalled();
@@ -804,7 +802,6 @@ describe('EnvAppShell desktop floating surfaces', () => {
       expect(flowerLaunchTurnMock).toHaveBeenCalledWith(expect.objectContaining({
         prompt: 'inspect from launcher',
         working_dir: '/workspace/app',
-        mode: 'act',
       }));
       expect(host.querySelector('[data-testid="workbench-flower-activation"]')?.textContent).toBe('ai|focus_latest_or_create|true|true|true|thread-launched');
       expect(windowOpenMock).not.toHaveBeenCalled();

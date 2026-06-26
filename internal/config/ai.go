@@ -24,12 +24,13 @@ type AIConfig struct {
 	// Format: <provider_id>/<model_name>
 	CurrentModelID string `json:"current_model_id"`
 
-	// Mode controls the AI runtime behavior.
+	// PermissionType controls the Flower tool surface and approval behavior.
 	//
 	// Supported values:
-	// - "act": full tool execution flow (default)
-	// - "plan": planning-first mode with strict readonly execution (mutating actions are blocked)
-	Mode string `json:"mode,omitempty"`
+	// - "readonly": safe readonly tools only
+	// - "approval_required": standard tools with shell/mutation approval
+	// - "full_access": standard tools without per-tool approval
+	PermissionType string `json:"permission_type,omitempty"`
 
 	// ToolRecoveryEnabled controls runtime-level recovery orchestration.
 	//
@@ -47,27 +48,12 @@ type AIConfig struct {
 	// repeats across recovery attempts.
 	ToolRecoveryFailOnRepeatedSignature *bool `json:"tool_recovery_fail_on_repeated_signature,omitempty"`
 
-	// ExecutionPolicy controls runtime execution guardrails.
-	//
-	// Defaults are intentionally permissive:
-	// - no user approval requirement
-	// - no dangerous-command hard block
-	ExecutionPolicy *AIExecutionPolicy `json:"execution_policy,omitempty"`
-
 	// TerminalExecPolicy controls the bounded execution policy for terminal.exec.
 	//
 	// The built-in defaults intentionally mimic Claude-style shell behavior:
 	// - default timeout: 2 minutes
 	// - maximum timeout cap: 10 minutes
 	TerminalExecPolicy *AITerminalExecPolicy `json:"terminal_exec_policy,omitempty"`
-}
-
-type AIExecutionPolicy struct {
-	// RequireUserApproval controls whether mutating tool invocations require user approval.
-	RequireUserApproval bool `json:"require_user_approval"`
-
-	// BlockDangerousCommands controls whether dangerous terminal commands are hard-blocked.
-	BlockDangerousCommands bool `json:"block_dangerous_commands"`
 }
 
 type AITerminalExecPolicy struct {
@@ -155,8 +141,9 @@ type AIProviderModel struct {
 }
 
 const (
-	AIModeAct  = "act"
-	AIModePlan = "plan"
+	AIPermissionReadonly         = "readonly"
+	AIPermissionApprovalRequired = "approval_required"
+	AIPermissionFullAccess       = "full_access"
 )
 
 const (
@@ -164,9 +151,6 @@ const (
 	defaultAIToolRecoveryAllowPathRewrite        = true
 	defaultAIToolRecoveryAllowProbeTools         = true
 	defaultAIToolRecoveryFailOnRepeatedSignature = true
-
-	defaultAIRequireUserApproval   = false
-	defaultAIBlockDangerousCommand = false
 
 	defaultAITerminalExecDefaultTimeoutMS = 120_000
 	defaultAITerminalExecMaxTimeoutMS     = 600_000
@@ -341,14 +325,12 @@ func (c *AIConfig) Validate() error {
 		return errors.New("nil config")
 	}
 
-	mode := strings.TrimSpace(strings.ToLower(c.Mode))
-	if mode == "" {
-		mode = AIModeAct
-	}
-	switch mode {
-	case AIModeAct, AIModePlan:
-	default:
-		return fmt.Errorf("invalid ai mode %q", c.Mode)
+	if strings.TrimSpace(c.PermissionType) != "" {
+		switch strings.ToLower(strings.TrimSpace(c.PermissionType)) {
+		case AIPermissionReadonly, AIPermissionApprovalRequired, AIPermissionFullAccess:
+		default:
+			return fmt.Errorf("invalid ai permission_type %q", c.PermissionType)
+		}
 	}
 
 	if c.TerminalExecPolicy != nil {
@@ -554,17 +536,19 @@ func (c *AIConfig) IsAllowedModelID(modelID string) bool {
 	return false
 }
 
-func (c *AIConfig) EffectiveMode() string {
+func (c *AIConfig) EffectivePermissionType() string {
 	if c == nil {
-		return AIModeAct
+		return AIPermissionApprovalRequired
 	}
-	mode := strings.TrimSpace(strings.ToLower(c.Mode))
-	switch mode {
-	case AIModePlan:
-		return AIModePlan
-	default:
-		return AIModeAct
+	switch strings.ToLower(strings.TrimSpace(c.PermissionType)) {
+	case AIPermissionReadonly:
+		return AIPermissionReadonly
+	case AIPermissionFullAccess:
+		return AIPermissionFullAccess
+	case AIPermissionApprovalRequired:
+		return AIPermissionApprovalRequired
 	}
+	return AIPermissionApprovalRequired
 }
 
 func (c *AIConfig) EffectiveToolRecoveryEnabled() bool {
@@ -593,20 +577,6 @@ func (c *AIConfig) EffectiveToolRecoveryFailOnRepeatedSignature() bool {
 		return defaultAIToolRecoveryFailOnRepeatedSignature
 	}
 	return *c.ToolRecoveryFailOnRepeatedSignature
-}
-
-func (c *AIConfig) EffectiveRequireUserApproval() bool {
-	if c == nil || c.ExecutionPolicy == nil {
-		return defaultAIRequireUserApproval
-	}
-	return c.ExecutionPolicy.RequireUserApproval
-}
-
-func (c *AIConfig) EffectiveBlockDangerousCommands() bool {
-	if c == nil || c.ExecutionPolicy == nil {
-		return defaultAIBlockDangerousCommand
-	}
-	return c.ExecutionPolicy.BlockDangerousCommands
 }
 
 func (c *AIConfig) EffectiveTerminalExecMaxTimeoutMS() int64 {

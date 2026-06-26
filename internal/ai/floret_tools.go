@@ -19,8 +19,12 @@ type floretToolRuntimeState struct {
 	state runtimeState
 }
 
-const subagentToolHostContextAgentTypeKey = "subagent_agent_type"
-const subagentToolHostContextParentModeKey = "subagent_parent_mode"
+const (
+	subagentToolHostContextAgentTypeKey        = "subagent_agent_type"
+	subagentToolHostContextChildThreadIDKey    = "child_thread_id"
+	subagentToolHostContextParentPermissionKey = "subagent_parent_permission"
+	subagentToolHostContextSubagentIDKey       = "subagent_id"
+)
 
 func newFloretToolRuntimeState(state runtimeState) *floretToolRuntimeState {
 	return &floretToolRuntimeState{state: state}
@@ -82,7 +86,7 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 			continue
 		}
 		def := def
-		toolDef, err := floretToolDefinition(def)
+		toolDef, err := floretToolDefinition(r, def)
 		if err != nil {
 			return nil, err
 		}
@@ -100,6 +104,7 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 					call.Name = strings.TrimSpace(def.Name)
 				}
 				execRun := floretInvocationRunContext(r, inv)
+				ctx = contextWithFloretToolExecutionAuthorization(ctx, call.ID, call.Name)
 				handler := &builtInToolHandler{r: execRun, toolName: call.Name}
 				result, err := handler.Execute(ctx, call)
 				if err != nil {
@@ -129,9 +134,30 @@ func floretInvocationRunContext(base *run, inv fltools.Invocation[map[string]any
 	if base == nil {
 		return nil
 	}
-	runID := strings.TrimSpace(inv.RunID)
-	threadID := strings.TrimSpace(inv.ThreadID)
-	turnID := strings.TrimSpace(inv.TurnID)
+	return floretRunContextForIDs(base, inv.RunID, inv.ThreadID, inv.TurnID, inv.HostContext)
+}
+
+func floretApprovalRunContext(base *run, req fltools.ApprovalRequest) *run {
+	if base == nil {
+		return nil
+	}
+	threadID := strings.TrimSpace(req.HostContext[subagentToolHostContextChildThreadIDKey])
+	if threadID == "" {
+		threadID = strings.TrimSpace(req.HostContext[subagentToolHostContextSubagentIDKey])
+	}
+	if threadID == "" {
+		return base
+	}
+	return floretRunContextForIDs(base, threadID, threadID, "", req.HostContext)
+}
+
+func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawTurnID string, hostContext map[string]string) *run {
+	if base == nil {
+		return nil
+	}
+	runID := strings.TrimSpace(rawRunID)
+	threadID := strings.TrimSpace(rawThreadID)
+	turnID := strings.TrimSpace(rawTurnID)
 	if runID == "" && threadID == "" && turnID == "" {
 		return base
 	}
@@ -156,6 +182,7 @@ func floretInvocationRunContext(base *run, inv fltools.Invocation[map[string]any
 		WorkingDir:            base.workingDir,
 		FilesystemScope:       base.scope,
 		Shell:                 base.shell,
+		Service:               base.service,
 		AIConfig:              base.cfg,
 		SessionMeta:           base.sessionMeta,
 		ResolveProviderKey:    base.resolveProviderKey,
@@ -176,7 +203,6 @@ func floretInvocationRunContext(base *run, inv fltools.Invocation[map[string]any
 		SubagentDepth:         base.subagentDepth,
 		AllowSubagentDelegate: base.allowSubagentDelegate,
 		ToolAllowlist:         mapKeys(base.toolAllowlist),
-		ForceReadonlyExec:     base.forceReadonlyExec,
 		NoUserInteraction:     base.noUserInteraction,
 		WebSearchToolEnabled:  base.webSearchToolEnabled,
 		WebSearchMode:         base.webSearchMode,
@@ -185,12 +211,84 @@ func floretInvocationRunContext(base *run, inv fltools.Invocation[map[string]any
 		TargetToolExecutor:    base.targetToolExecutor,
 		terminalExecRunner:    base.terminalExecRunner,
 	})
-	child.runMode = base.runMode
-	if mode := strings.TrimSpace(inv.HostContext[subagentToolHostContextParentModeKey]); mode != "" {
-		child.runMode = normalizeRunMode(mode, child.runMode)
+	child.permissionType = base.permissionType
+	child.allowDelegatedApproval = base.allowDelegatedApproval
+	child.delegatedApprovalParent = base.delegatedApprovalParent
+	if permission := strings.TrimSpace(hostContext[subagentToolHostContextParentPermissionKey]); permission != "" {
+		if normalized, err := normalizePermissionType(permission, child.permissionType); err == nil {
+			child.permissionType = normalized
+		}
 	}
 	child.currentModelID = base.currentModelID
+	child.bindStoredChildPermissionSnapshot(threadID)
 	return child
+}
+
+func (r *run) bindStoredChildPermissionSnapshot(childThreadID string) {
+	if r == nil || r.subagentDepth <= 0 || !r.noUserInteraction {
+		return
+	}
+	childThreadID = strings.TrimSpace(childThreadID)
+	if childThreadID == "" {
+		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
+		r.toolAllowlist = map[string]struct{}{}
+		return
+	}
+	if r.threadsDB == nil {
+		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
+		r.toolAllowlist = map[string]struct{}{}
+		return
+	}
+	ctx, cancel := persistContextForRun(r)
+	rec, ok, err := r.threadsDB.GetFinalizedChildPermissionSnapshotByThread(ctx, strings.TrimSpace(r.endpointID), childThreadID)
+	cancel()
+	if err != nil || !ok {
+		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
+		r.toolAllowlist = map[string]struct{}{}
+		return
+	}
+	var snapshot PermissionSnapshot
+	if err := json.Unmarshal([]byte(rec.SnapshotJSON), &snapshot); err != nil {
+		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
+		r.toolAllowlist = map[string]struct{}{}
+		return
+	}
+	if strings.TrimSpace(snapshot.SnapshotID) == "" {
+		snapshot.SnapshotID = strings.TrimSpace(rec.ChildSnapshotID)
+	}
+	if strings.TrimSpace(snapshot.SnapshotHash) == "" {
+		snapshot.SnapshotHash = strings.TrimSpace(rec.SnapshotHash)
+	}
+	if strings.TrimSpace(snapshot.RegistryHash) == "" {
+		snapshot.RegistryHash = strings.TrimSpace(rec.RegistryHash)
+	}
+	if strings.TrimSpace(snapshot.SchemaHash) == "" {
+		snapshot.SchemaHash = strings.TrimSpace(rec.SchemaHash)
+	}
+	if strings.TrimSpace(snapshot.PresentationHash) == "" {
+		snapshot.PresentationHash = strings.TrimSpace(rec.PresentationHash)
+	}
+	if !permissionSnapshotActive(snapshot) {
+		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
+		r.toolAllowlist = map[string]struct{}{}
+		return
+	}
+	r.permissionSnapshot = snapshot
+	if snapshot.PermissionType != "" {
+		r.permissionType = snapshot.PermissionType
+	}
+	r.toolAllowlist = stringSet(snapshot.VisibleToolNames...)
+}
+
+func denyAllChildPermissionSnapshot(permissionType FlowerPermissionType) PermissionSnapshot {
+	if permissionType == "" {
+		permissionType = FlowerPermissionApprovalRequired
+	}
+	return PermissionSnapshot{
+		SnapshotID:     "missing_child_permission_snapshot",
+		PermissionType: permissionType,
+		ToolPolicies:   map[string]ToolPermissionPolicy{},
+	}
 }
 
 func mapKeys(in map[string]struct{}) []string {
@@ -356,7 +454,8 @@ func contractSafeToolResultPayload(result ToolResult) (map[string]any, error) {
 	return payload, nil
 }
 
-func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
+func floretToolDefinition(r *run, def ToolDef) (fltools.Definition, error) {
+	def = normalizeToolPermissionMetadata(def)
 	inputSchema := map[string]any{"type": "object", "additionalProperties": true}
 	if len(def.InputSchema) > 0 {
 		var parsed map[string]any
@@ -367,7 +466,11 @@ func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
 	}
 	effects := floretToolEffects(def)
 	readOnly := !def.Mutating && !floretToolOpenWorld(def) && def.Name != "terminal.exec"
-	permission := floretToolPermission(def)
+	permissionType := FlowerPermissionApprovalRequired
+	if r != nil && r.permissionType != "" {
+		permissionType = r.permissionType
+	}
+	permission := floretToolPermission(permissionType, def)
 	return fltools.Definition{
 		Name:         strings.TrimSpace(def.Name),
 		Title:        strings.TrimSpace(def.Name),
@@ -381,7 +484,7 @@ func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
 		Permission:   permission,
 		PermissionFor: func(req fltools.PermissionRequest) (fltools.PermissionSpec, error) {
 			args, _ := req.Args.(map[string]any)
-			return floretPermissionForInvocation(def, cloneAnyMap(args)), nil
+			return floretPermissionForInvocation(permissionType, def, cloneAnyMap(args)), nil
 		},
 		Activity: func(inv fltools.Invocation[any]) (*observation.ActivityPresentation, error) {
 			args, _ := inv.Args.(map[string]any)
@@ -394,38 +497,42 @@ func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
 	}, nil
 }
 
-func floretToolPermission(def ToolDef) fltools.PermissionSpec {
+func floretToolPermission(permissionType FlowerPermissionType, def ToolDef) fltools.PermissionSpec {
 	name := strings.TrimSpace(def.Name)
 	resourceKinds := floretToolResourceKinds(name)
-	mode := fltools.PermissionAllow
-	if def.RequiresApproval || aitools.RequiresApproval(name) || name == "terminal.exec" || floretToolOpenWorld(def) {
+	mode := floretPermissionMode(permissionDecisionForTool(permissionType, def))
+	if floretToolOpenWorld(def) && mode == fltools.PermissionAllow {
 		mode = fltools.PermissionAsk
 	}
 	return fltools.PermissionSpec{Mode: mode, ResourceKinds: resourceKinds}
 }
 
-func floretPermissionForInvocation(def ToolDef, args map[string]any) fltools.PermissionSpec {
+func floretPermissionForInvocation(permissionType FlowerPermissionType, def ToolDef, args map[string]any) fltools.PermissionSpec {
 	toolName := strings.TrimSpace(def.Name)
 	resourceKinds := floretToolResourceKinds(toolName)
-	if toolName == "terminal.exec" && !aitools.RequiresApprovalForInvocation(toolName, args) {
-		return fltools.PermissionSpec{Mode: fltools.PermissionAllow, ResourceKinds: resourceKinds}
+	decision := permissionDecisionForTool(permissionType, def)
+	return fltools.PermissionSpec{Mode: floretPermissionMode(decision), ResourceKinds: resourceKinds}
+}
+
+func floretPermissionMode(decision ApprovalDecisionKind) fltools.PermissionMode {
+	switch decision {
+	case ApprovalDecisionAllow:
+		return fltools.PermissionAllow
+	case ApprovalDecisionAsk:
+		return fltools.PermissionAsk
+	default:
+		return fltools.PermissionDeny
 	}
-	permission := floretToolPermission(def)
-	if permission.ResourceKinds == nil {
-		permission.ResourceKinds = resourceKinds
-	}
-	if aitools.RequiresApprovalForInvocation(toolName, args) {
-		permission.Mode = fltools.PermissionAsk
-	}
-	return permission
 }
 
 func floretToolResourceKinds(toolName string) []string {
 	switch strings.TrimSpace(toolName) {
 	case "terminal.exec":
 		return []string{"command"}
-	case "file.read", "file.edit", "file.write", "apply_patch":
+	case "file.read", "read_file", "read_files", "rgrep", "find", "file.edit", "file.write", "apply_patch":
 		return []string{"file"}
+	case "web_fetch":
+		return []string{"web_url"}
 	case "web.search":
 		return []string{"web_query"}
 	case "okf.search":
@@ -441,7 +548,7 @@ func floretToolResourceKinds(toolName string) []string {
 
 func floretToolOpenWorld(def ToolDef) bool {
 	switch strings.TrimSpace(def.Name) {
-	case "terminal.exec", "web.search":
+	case "terminal.exec", "web.search", "web_fetch", "use_skill":
 		return true
 	default:
 		return false
@@ -455,9 +562,47 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 		if command := strings.TrimSpace(anyToString(args["command"])); command != "" {
 			return []fltools.ResourceRef{{Kind: "command", Value: command}}, nil
 		}
-	case "file.read", "file.edit", "file.write":
+	case "file.read", "read_file", "file.edit", "file.write":
 		if path := strings.TrimSpace(anyToString(args["file_path"])); path != "" {
 			return []fltools.ResourceRef{{Kind: "file", Value: path}}, nil
+		}
+		if path := strings.TrimSpace(anyToString(args["path"])); path != "" {
+			return []fltools.ResourceRef{{Kind: "file", Value: path}}, nil
+		}
+	case "read_files":
+		paths := extractStringSlice(args["paths"])
+		out := make([]fltools.ResourceRef, 0, len(paths))
+		for _, path := range paths {
+			if path = strings.TrimSpace(path); path != "" {
+				out = append(out, fltools.ResourceRef{Kind: "file", Value: path})
+			}
+		}
+		if len(out) > 0 {
+			return out, nil
+		}
+	case "rgrep":
+		paths := extractStringSlice(args["paths"])
+		if len(paths) == 0 {
+			if query := strings.TrimSpace(anyToString(args["query"])); query != "" {
+				return []fltools.ResourceRef{{Kind: "file", Value: query}}, nil
+			}
+		}
+		out := make([]fltools.ResourceRef, 0, len(paths))
+		for _, path := range paths {
+			if path = strings.TrimSpace(path); path != "" {
+				out = append(out, fltools.ResourceRef{Kind: "file", Value: path})
+			}
+		}
+		if len(out) > 0 {
+			return out, nil
+		}
+	case "find":
+		if root := strings.TrimSpace(anyToString(args["root"])); root != "" {
+			return []fltools.ResourceRef{{Kind: "file", Value: root}}, nil
+		}
+	case "web_fetch":
+		if rawURL := strings.TrimSpace(anyToString(args["url"])); rawURL != "" {
+			return []fltools.ResourceRef{{Kind: "web_url", Value: rawURL}}, nil
 		}
 	case "apply_patch":
 		if patch := strings.TrimSpace(anyToString(args["patch"])); patch != "" {
@@ -574,7 +719,9 @@ func floretToolEffects(def ToolDef) []fltools.Effect {
 	switch name {
 	case "terminal.exec":
 		return []fltools.Effect{fltools.EffectShell}
-	case "web.search":
+	case "web.search", "web_fetch":
+		return []fltools.Effect{fltools.EffectNetwork}
+	case "use_skill":
 		return []fltools.Effect{fltools.EffectNetwork}
 	case "file.edit", "file.write", "apply_patch":
 		return []fltools.Effect{fltools.EffectWrite}
@@ -1288,7 +1435,7 @@ func activityScalarString(value any) string {
 
 func isFlowerControlTool(name string) bool {
 	switch strings.TrimSpace(name) {
-	case "ask_user", "task_complete", "exit_plan_mode":
+	case "ask_user", "task_complete":
 		return true
 	default:
 		return false

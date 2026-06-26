@@ -54,6 +54,17 @@ func normalizeThreadRunState(status string, runErrorCode string, runError string
 	}
 }
 
+func threadPermissionTypeString(th *threadstore.Thread, modeFallback string) string {
+	if th == nil {
+		return permissionTypeString(FlowerPermissionApprovalRequired)
+	}
+	permissionType, err := normalizePermissionType(strings.TrimSpace(th.PermissionType), "")
+	if err == nil {
+		return permissionTypeString(permissionType)
+	}
+	return permissionTypeString(FlowerPermissionApprovalRequired)
+}
+
 func activeThreadEffectiveRunState(status string, runErrorCode string, runError string) (string, string, string) {
 	runStatus, _, _ := normalizeThreadRunState(status, runErrorCode, runError)
 	if IsActiveRunState(runStatus) {
@@ -94,7 +105,7 @@ func applyFlowerThreadMetadataView(view *ThreadView, meta *threadstore.FlowerThr
 	}
 }
 
-func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thread, flowerMeta *threadstore.FlowerThreadMetadata, modeFallback string, queuedTurnCount int, active bool) ThreadView {
+func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thread, flowerMeta *threadstore.FlowerThreadMetadata, queuedTurnCount int, active bool) ThreadView {
 	if th == nil {
 		return ThreadView{}
 	}
@@ -112,7 +123,7 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 		Title:               strings.TrimSpace(th.Title),
 		ModelID:             strings.TrimSpace(th.ModelID),
 		ModelLocked:         th.ModelLocked,
-		ExecutionMode:       normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback),
+		PermissionType:      threadPermissionTypeString(th, ""),
 		WorkingDir:          workingDir,
 		QueuedTurnCount:     queuedTurnCount,
 		RunStatus:           runStatus,
@@ -270,14 +281,9 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	}
 	s.mu.Lock()
 	db := s.threadsDB
-	cfg := s.cfg
 	s.mu.Unlock()
 	if db == nil {
 		return nil, errors.New("threads store not ready")
-	}
-	modeFallback := "act"
-	if cfg != nil {
-		modeFallback = cfg.EffectiveMode()
 	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
@@ -304,7 +310,7 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 		return nil, err
 	}
 
-	view := s.threadViewFromRecord(ctx, th, flowerMeta, modeFallback, queuedTurnCount, s.HasActiveThreadForEndpoint(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(th.ThreadID)))
+	view := s.threadViewFromRecord(ctx, th, flowerMeta, queuedTurnCount, s.HasActiveThreadForEndpoint(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(th.ThreadID)))
 	return &view, nil
 }
 
@@ -317,14 +323,9 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	}
 	s.mu.Lock()
 	db := s.threadsDB
-	cfg := s.cfg
 	s.mu.Unlock()
 	if db == nil {
 		return nil, errors.New("threads store not ready")
-	}
-	modeFallback := "act"
-	if cfg != nil {
-		modeFallback = cfg.EffectiveMode()
 	}
 
 	c, ok := threadstore.DecodeCursor(cursor)
@@ -359,17 +360,17 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	out := &ListThreadsResponse{Threads: make([]ThreadView, 0, len(list)), NextCursor: strings.TrimSpace(next)}
 	for _, t := range list {
 		_, active := activeThreads[strings.TrimSpace(t.ThreadID)]
-		out.Threads = append(out.Threads, s.threadViewFromRecord(ctx, &t, flowerMetaByThread[strings.TrimSpace(t.ThreadID)], modeFallback, queuedTurnCounts[strings.TrimSpace(t.ThreadID)], active))
+		out.Threads = append(out.Threads, s.threadViewFromRecord(ctx, &t, flowerMetaByThread[strings.TrimSpace(t.ThreadID)], queuedTurnCounts[strings.TrimSpace(t.ThreadID)], active))
 	}
 	return out, nil
 }
 
-func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title string, modelID string, executionMode string, workingDir string) (*ThreadView, error) {
+func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title string, modelID string, permissionType string, workingDir string) (*ThreadView, error) {
 	return s.CreateThreadWithOptions(ctx, meta, CreateThreadRequest{
-		Title:         title,
-		ModelID:       modelID,
-		ExecutionMode: executionMode,
-		WorkingDir:    workingDir,
+		Title:          title,
+		ModelID:        modelID,
+		PermissionType: strings.TrimSpace(permissionType),
+		WorkingDir:     workingDir,
 	})
 }
 
@@ -394,11 +395,19 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 	}
 
 	modelID := strings.TrimSpace(req.ModelID)
-	modeFallback := "act"
+	permissionFallback := FlowerPermissionApprovalRequired
 	if cfg != nil {
-		modeFallback = cfg.EffectiveMode()
+		if p, err := normalizePermissionType(cfg.EffectivePermissionType(), permissionFallback); err == nil {
+			permissionFallback = p
+		}
 	}
-	executionMode := normalizeRunMode(strings.TrimSpace(req.ExecutionMode), modeFallback)
+	permissionType, err := normalizePermissionType(strings.TrimSpace(req.PermissionType), permissionFallback)
+	if err != nil && strings.TrimSpace(req.PermissionType) != "" {
+		return nil, err
+	}
+	if err != nil {
+		permissionType = permissionFallback
+	}
 	if modelID != "" {
 		if _, _, ok := strings.Cut(modelID, "/"); !ok && !isDesktopModelSourceModelID(modelID) {
 			return nil, errors.New("invalid model")
@@ -456,7 +465,7 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		NamespacePublicID:      strings.TrimSpace(meta.NamespacePublicID),
 		ModelID:                modelID,
 		ReasoningSelectionJSON: marshalReasoningSelection(reasoningSelection),
-		ExecutionMode:          executionMode,
+		PermissionType:         permissionTypeString(permissionType),
 		WorkingDir:             workingDirClean,
 		Title:                  strings.TrimSpace(req.Title),
 		RunStatus:              "idle",
@@ -475,7 +484,7 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		return nil, err
 	}
 
-	view := s.threadViewFromRecord(ctx, &t, nil, modeFallback, 0, false)
+	view := s.threadViewFromRecord(ctx, &t, nil, 0, false)
 	return &view, nil
 }
 
@@ -808,7 +817,7 @@ func (s *Service) ClearThreadReasoningSelection(ctx context.Context, meta *sessi
 	return nil
 }
 
-func (s *Service) SetThreadExecutionMode(ctx context.Context, meta *session.Meta, threadID string, executionMode string) error {
+func (s *Service) SetThreadPermissionType(ctx context.Context, meta *session.Meta, threadID string, permissionType string) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
@@ -832,11 +841,16 @@ func (s *Service) SetThreadExecutionMode(ctx context.Context, meta *session.Meta
 		return errors.New("threads store not ready")
 	}
 
-	fallbackMode := "act"
+	permissionFallback := FlowerPermissionApprovalRequired
 	if cfg != nil {
-		fallbackMode = cfg.EffectiveMode()
+		if p, err := normalizePermissionType(cfg.EffectivePermissionType(), permissionFallback); err == nil {
+			permissionFallback = p
+		}
 	}
-	executionMode = normalizeRunMode(strings.TrimSpace(executionMode), fallbackMode)
+	normalizedPermissionType, err := normalizePermissionType(strings.TrimSpace(permissionType), permissionFallback)
+	if err != nil {
+		return err
+	}
 
 	th, err := db.GetThread(ctx, endpointID, threadID)
 	if err != nil {
@@ -848,11 +862,17 @@ func (s *Service) SetThreadExecutionMode(ctx context.Context, meta *session.Meta
 	if err := s.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
 		return err
 	}
-	currentMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), fallbackMode)
-	if currentMode == executionMode {
+	if s.HasActiveThreadForEndpoint(endpointID, threadID) {
+		return ErrThreadBusy
+	}
+	currentPermissionType, err := normalizePermissionType(strings.TrimSpace(th.PermissionType), "")
+	if err != nil {
+		currentPermissionType = permissionFallback
+	}
+	if currentPermissionType == normalizedPermissionType {
 		return nil
 	}
-	if err := db.UpdateThreadExecutionMode(ctx, endpointID, threadID, executionMode); err != nil {
+	if err := db.UpdateThreadPermissionType(ctx, endpointID, threadID, permissionTypeString(normalizedPermissionType)); err != nil {
 		return err
 	}
 	s.broadcastThreadSummary(endpointID, threadID)

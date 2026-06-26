@@ -1,4 +1,4 @@
-import type { FlowerSurfaceCopy } from '../../../../internal/flower_ui/src/copy';
+import { DEFAULT_FLOWER_SURFACE_COPY, type FlowerSurfaceCopy } from '../../../../internal/flower_ui/src/copy';
 import { localizedFlowerProviderModelNote } from '../../../../internal/flower_ui/src/settings/providerModelNotes';
 import { localizedFlowerProviderTypeLabels } from '../../../../internal/flower_ui/src/settings/providerTypeLabels';
 import type { DesktopI18n } from '../../shared/i18n';
@@ -335,14 +335,9 @@ function createDesktopFlowerSettingsCopy(i18n: DesktopI18n): FlowerSurfaceCopy['
     text: t(i18n, k('text')),
     imageInput: t(i18n, k('imageInput')),
     selectModelPlaceholder: t(i18n, k('selectModelPlaceholder')),
-    userApprovalTitle: t(i18n, k('userApprovalTitle')),
-    userApprovalDescription: t(i18n, k('userApprovalDescription')),
-    on: t(i18n, k('on')),
-    off: t(i18n, k('off')),
-    dangerousCommandsTitle: t(i18n, k('dangerousCommandsTitle')),
-    dangerousCommandsDescription: t(i18n, k('dangerousCommandsDescription')),
-    blocked: t(i18n, k('blocked')),
-    allowed: t(i18n, k('allowed')),
+    defaultPermissionTitle: t(i18n, k('defaultPermissionTitle')),
+    defaultPermissionDescription: t(i18n, k('defaultPermissionDescription')),
+    permissionTypes: DEFAULT_FLOWER_SURFACE_COPY.settings.permissionTypes,
     providersTitle: t(i18n, k('providersTitle')),
     providersDescription: t(i18n, k('providersDescription')),
     managedByLocalAIProfileTitle: t(i18n, k('managedByLocalAIProfileTitle')),
@@ -367,7 +362,6 @@ function createDesktopFlowerSettingsCopy(i18n: DesktopI18n): FlowerSurfaceCopy['
     terminalLimitsDescription: t(i18n, k('terminalLimitsDescription')),
     defaultTimeout: t(i18n, k('defaultTimeout')),
     maximumTimeout: t(i18n, k('maximumTimeout')),
-    dangerousBlockingOff: t(i18n, k('dangerousBlockingOff')),
     webSearchNotSupported: t(i18n, k('webSearchNotSupported')),
     webSearchDisabled: t(i18n, k('webSearchDisabled')),
     openAIBuiltIn: t(i18n, k('openAIBuiltIn')),

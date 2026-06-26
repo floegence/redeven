@@ -8,12 +8,22 @@ import (
 
 	fltools "github.com/floegence/floret/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
-	"github.com/floegence/redeven/internal/config"
 )
 
 func (r *run) approveFloretTool(ctx context.Context, req fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
 	if r == nil {
 		return fltools.PermissionDecisionDenied("tool approval unavailable"), nil
+	}
+	if r.noUserInteraction && r.allowDelegatedApproval && r.delegatedApprovalParent != nil {
+		child := floretApprovalRunContext(r, req)
+		if child == nil {
+			child = r
+		}
+		parent := child.delegatedApprovalParent
+		if parent == nil {
+			parent = r.delegatedApprovalParent
+		}
+		return parent.approveDelegatedFloretTool(ctx, child, req)
 	}
 	args := floretApprovalArgs(req)
 	toolID := strings.TrimSpace(req.ID)
@@ -42,6 +52,49 @@ func (r *run) approveFloretTool(ctx context.Context, req fltools.ApprovalRequest
 	}
 }
 
+func (r *run) approveDelegatedFloretTool(ctx context.Context, child *run, req fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
+	if r == nil {
+		return fltools.PermissionDecisionDenied("delegated tool approval unavailable"), nil
+	}
+	if r.service == nil {
+		return fltools.PermissionDecisionDenied("delegated tool approval unavailable"), nil
+	}
+	args := floretApprovalArgs(req)
+	toolID := strings.TrimSpace(req.ID)
+	if toolID == "" {
+		toolID = strings.TrimSpace(req.ApprovalID)
+	}
+	toolName := strings.TrimSpace(req.Name)
+	policyRun := child
+	if policyRun == nil {
+		policyRun = r
+	}
+	decision, reason := policyRun.floretToolPolicyDecision(toolName, args, req.HostContext)
+	policyRun.persistFloretToolPolicyEvent(toolID, toolName, args, decision, reason)
+	switch decision {
+	case "allow":
+		return fltools.PermissionDecisionAllow, nil
+	case "deny":
+		return fltools.PermissionDecisionDenied(floretPolicyDenialMessage(reason)), nil
+	case "ask":
+		handle, _, err := r.service.registerDelegatedApproval(r, child, req)
+		if err != nil {
+			return fltools.PermissionDecisionDeny, err
+		}
+		approved, err := handle.wait(ctx, r.toolApprovalTO)
+		if err != nil {
+			r.service.markDelegatedApprovalUnavailable(handle.action.ActionID, err.Error())
+			return fltools.PermissionDecisionDeny, err
+		}
+		if !approved {
+			return fltools.PermissionDecisionDenied("Rejected by user"), nil
+		}
+		return fltools.PermissionDecisionAllow, nil
+	default:
+		return fltools.PermissionDecisionDenied("tool approval denied by policy"), nil
+	}
+}
+
 func floretApprovalArgs(req fltools.ApprovalRequest) map[string]any {
 	if args, ok := req.ValidatedArgs.(map[string]any); ok {
 		return cloneAnyMap(args)
@@ -54,41 +107,54 @@ func floretApprovalArgs(req fltools.ApprovalRequest) map[string]any {
 }
 
 func (r *run) floretToolPolicyDecision(toolName string, args map[string]any, hostContext ...map[string]string) (string, string) {
-	requireUserApproval := r.cfg.EffectiveRequireUserApproval()
-	blockDangerousCommands := r.cfg.EffectiveBlockDangerousCommands()
-	mode := strings.TrimSpace(r.runMode)
-	if len(hostContext) > 0 {
-		if labelMode := strings.TrimSpace(hostContext[0][subagentToolHostContextParentModeKey]); labelMode != "" {
-			mode = normalizeRunMode(labelMode, mode)
+	decision, ok := r.permissionDecisionForToolFromSnapshot(toolName)
+	if !ok {
+		permissionType := r.permissionType
+		if len(hostContext) > 0 {
+			if raw := strings.TrimSpace(hostContext[0][subagentToolHostContextParentPermissionKey]); raw != "" {
+				if normalized, err := normalizePermissionType(raw, permissionType); err == nil {
+					permissionType = normalized
+				}
+			}
 		}
+		def := ToolDef{
+			Name:             strings.TrimSpace(toolName),
+			Mutating:         aitools.IsMutating(toolName),
+			RequiresApproval: aitools.RequiresApproval(toolName),
+			Visibility:       visibilityForToolName(toolName),
+			Capabilities:     capabilitiesForToolName(toolName),
+		}
+		decision = permissionDecisionForTool(permissionType, def)
 	}
-	isPlanMode := strings.EqualFold(strings.TrimSpace(mode), config.AIModePlan)
-	commandProfile := aitools.InvocationCommandProfile(toolName, args)
-	commandRisk := strings.TrimSpace(string(commandProfile.Risk))
-	readonlyRisk := string(aitools.TerminalCommandRiskReadonly)
-	denyReadonlyExec := r.forceReadonlyExec && toolName == "terminal.exec" && commandRisk != "" && commandRisk != readonlyRisk
-	denyDangerous := blockDangerousCommands && isDangerousInvocation(toolName, args)
-	denyPlanMutating := isPlanMode && isMutatingInvocation(toolName, args)
-	needsApproval := requiresApproval(toolName, args)
-	requireApprovalForInvocation := requireUserApproval && needsApproval && !denyReadonlyExec
-	denyNoUserInteractionApproval := r.noUserInteraction && requireApprovalForInvocation
+	delegatedApprovalUnavailable := r.subagentDepth > 0 && decision == ApprovalDecisionAsk && !r.allowDelegatedApproval
 	switch {
-	case denyNoUserInteractionApproval:
-		if r.subagentDepth > 0 {
-			return "deny", "subagent_no_user_interaction_policy"
-		}
-		return "deny", "no_user_interaction_policy"
-	case denyReadonlyExec:
-		return "deny", "subagent_readonly_guard_blocked"
-	case denyDangerous:
-		return "deny", "dangerous_command_blocked"
-	case denyPlanMutating:
-		return "deny", "plan_mode_readonly_blocked"
-	case requireApprovalForInvocation:
+	case delegatedApprovalUnavailable:
+		return "deny", "delegated_approval_unavailable"
+	case decision == ApprovalDecisionDeny:
+		return "deny", "permission_denied"
+	case decision == ApprovalDecisionAsk:
 		return "ask", "user_approval_required"
 	default:
 		return "allow", "none"
 	}
+}
+
+func (r *run) permissionDecisionForToolFromSnapshot(toolName string) (ApprovalDecisionKind, bool) {
+	if r == nil || !permissionSnapshotActive(r.permissionSnapshot) {
+		return "", false
+	}
+	toolName = strings.TrimSpace(toolName)
+	if toolName == "" {
+		return ApprovalDecisionDeny, true
+	}
+	policy, ok := r.permissionSnapshot.ToolPolicies[toolName]
+	if !ok || !stringSliceContains(r.permissionSnapshot.FloretToolNames, toolName) {
+		return ApprovalDecisionDeny, true
+	}
+	if policy.ApprovalDecision == "" {
+		return ApprovalDecisionDeny, true
+	}
+	return policy.ApprovalDecision, true
 }
 
 func (r *run) persistFloretToolPolicyEvent(toolID string, toolName string, args map[string]any, decision string, reason string) {
@@ -98,41 +164,70 @@ func (r *run) persistFloretToolPolicyEvent(toolID string, toolName string, args 
 	commandProfile := aitools.InvocationCommandProfile(toolName, args)
 	terminalTimeoutDecision := resolveTerminalExecTimeoutDecision(r.cfg, readInt64Field(args, "timeout_ms", "timeoutMs"))
 	r.persistRunEvent("tool.policy", RealtimeStreamKindLifecycle, map[string]any{
-		"tool_id":                         strings.TrimSpace(toolID),
-		"tool_name":                       strings.TrimSpace(toolName),
-		"normalized_command":              strings.TrimSpace(commandProfile.NormalizedCommand),
-		"command_risk":                    strings.TrimSpace(string(commandProfile.Risk)),
-		"command_effects":                 append([]string(nil), commandProfile.Effects...),
-		"classification_reason":           strings.TrimSpace(commandProfile.Reason),
-		"policy_decision":                 strings.TrimSpace(decision),
-		"policy_reason":                   strings.TrimSpace(reason),
-		"policy_force_readonly_exec":      r.forceReadonlyExec,
-		"policy_require_user_approval":    r.cfg.EffectiveRequireUserApproval(),
-		"policy_no_user_interaction":      r.noUserInteraction,
-		"policy_plan_mode_readonly":       strings.EqualFold(strings.TrimSpace(r.runMode), config.AIModePlan),
-		"policy_block_dangerous_commands": r.cfg.EffectiveBlockDangerousCommands(),
-		"timeout_requested_ms":            terminalTimeoutDecision.RequestedMS,
-		"timeout_effective_ms":            terminalTimeoutDecision.EffectiveMS,
-		"timeout_default_ms":              terminalTimeoutDecision.DefaultMS,
-		"timeout_max_ms":                  terminalTimeoutDecision.MaxMS,
-		"timeout_source":                  terminalTimeoutDecision.Source,
+		"tool_id":                    strings.TrimSpace(toolID),
+		"tool_name":                  strings.TrimSpace(toolName),
+		"normalized_command":         strings.TrimSpace(commandProfile.NormalizedCommand),
+		"command_risk":               strings.TrimSpace(string(commandProfile.Risk)),
+		"command_effects":            append([]string(nil), commandProfile.Effects...),
+		"classification_reason":      strings.TrimSpace(commandProfile.Reason),
+		"policy_decision":            strings.TrimSpace(decision),
+		"policy_reason":              strings.TrimSpace(reason),
+		"policy_permission_type":     permissionTypeString(r.permissionType),
+		"policy_no_user_interaction": r.noUserInteraction,
+		"timeout_requested_ms":       terminalTimeoutDecision.RequestedMS,
+		"timeout_effective_ms":       terminalTimeoutDecision.EffectiveMS,
+		"timeout_default_ms":         terminalTimeoutDecision.DefaultMS,
+		"timeout_max_ms":             terminalTimeoutDecision.MaxMS,
+		"timeout_source":             terminalTimeoutDecision.Source,
 	})
 }
 
 func floretPolicyDenialMessage(reason string) string {
 	switch strings.TrimSpace(reason) {
-	case "no_user_interaction_policy":
-		return "Tool invocation requires user approval, but user interaction is disabled in this run"
-	case "subagent_readonly_guard_blocked":
-		return "terminal.exec command is blocked by subagent readonly policy"
-	case "subagent_no_user_interaction_policy":
-		return "Subagent tool invocation requires user approval, but subagents cannot request user authorization; choose an allowed non-approval path or report the blocker"
-	case "dangerous_command_blocked":
-		return "Command blocked by dangerous-command policy"
-	case "plan_mode_readonly_blocked":
-		return "Mutating tool call blocked by plan-mode readonly policy"
+	case "delegated_approval_unavailable":
+		return "Subagent tool invocation requires user approval, but delegated approval is unavailable for this run"
+	case "permission_denied":
+		return "Tool invocation is not available under the current permission type"
 	default:
 		return "tool invocation denied by policy"
+	}
+}
+
+func visibilityForToolName(toolName string) ToolVisibilityClass {
+	switch strings.TrimSpace(toolName) {
+	case "read_file", "read_files", "rgrep", "find", "web_fetch", "file.read":
+		return ToolVisibilityReadonlyExclusive
+	case "web.search", "okf.search":
+		return ToolVisibilitySharedReadonly
+	case "write_todos":
+		return ToolVisibilityInteraction
+	case "ask_user", "task_complete":
+		return ToolVisibilityControl
+	case "subagents":
+		return ToolVisibilityDelegationControl
+	default:
+		return ToolVisibilityStandard
+	}
+}
+
+func capabilitiesForToolName(toolName string) []ToolCapabilityClass {
+	switch strings.TrimSpace(toolName) {
+	case "terminal.exec":
+		return []ToolCapabilityClass{ToolCapabilityShell, ToolCapabilityOpenWorld}
+	case "file.edit", "file.write", "apply_patch":
+		return []ToolCapabilityClass{ToolCapabilityMutation}
+	case "read_file", "read_files", "rgrep", "find", "file.read", "okf.search":
+		return []ToolCapabilityClass{ToolCapabilityReadonlyLocal}
+	case "web_fetch", "web.search":
+		return []ToolCapabilityClass{ToolCapabilityReadonlyNetwork, ToolCapabilityOpenWorld}
+	case "write_todos", "ask_user", "task_complete":
+		return []ToolCapabilityClass{ToolCapabilityInteraction}
+	case "subagents":
+		return []ToolCapabilityClass{ToolCapabilityDelegation}
+	case "use_skill":
+		return []ToolCapabilityClass{ToolCapabilityOpenWorld}
+	default:
+		return nil
 	}
 }
 
@@ -145,6 +240,7 @@ func (r *run) waitForFloretToolApproval(ctx context.Context, req fltools.Approva
 		return false, errors.New("missing tool approval id")
 	}
 	toolName := strings.TrimSpace(req.Name)
+	args := floretApprovalArgs(req)
 	ch := make(chan bool, 1)
 	requestedAt := time.Now().UnixMilli()
 	expiresAt := int64(0)
@@ -156,6 +252,8 @@ func (r *run) waitForFloretToolApproval(ctx context.Context, req fltools.Approva
 		decision:      ch,
 		toolName:      toolName,
 		argsHash:      strings.TrimSpace(req.ArgsHash),
+		command:       approvalCommandForTool(toolName, args),
+		cwd:           approvalCwdForTool(toolName, args),
 		effects:       floretApprovalEffects(req),
 		flags:         floretApprovalFlags(req),
 		targets:       floretApprovalTargets(req),
@@ -185,6 +283,20 @@ func (r *run) waitForFloretToolApproval(ctx context.Context, req fltools.Approva
 	case <-timer.C:
 		return false, errors.New("Approval timed out")
 	}
+}
+
+func approvalCommandForTool(toolName string, args map[string]any) string {
+	if strings.TrimSpace(toolName) != "terminal.exec" {
+		return ""
+	}
+	return strings.TrimSpace(anyToString(args["command"]))
+}
+
+func approvalCwdForTool(toolName string, args map[string]any) string {
+	if strings.TrimSpace(toolName) != "terminal.exec" {
+		return ""
+	}
+	return strings.TrimSpace(firstNonEmptyString(anyToString(args["cwd"]), anyToString(args["workdir"])))
 }
 
 func floretApprovalEffects(req fltools.ApprovalRequest) []string {

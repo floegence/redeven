@@ -77,8 +77,7 @@ type TurnBudgets struct {
 }
 
 type ModeFlags struct {
-	Mode          string `json:"mode,omitempty"`
-	ReasoningOnly bool   `json:"reasoning_only,omitempty"`
+	ReasoningOnly bool `json:"reasoning_only,omitempty"`
 }
 
 type ModelGatewayRequest struct {
@@ -162,6 +161,8 @@ type ToolDef struct {
 	ParallelSafe     bool                         `json:"parallel_safe,omitempty"`
 	Mutating         bool                         `json:"mutating,omitempty"`
 	RequiresApproval bool                         `json:"requires_approval,omitempty"`
+	Visibility       ToolVisibilityClass          `json:"visibility,omitempty"`
+	Capabilities     []ToolCapabilityClass        `json:"capabilities,omitempty"`
 	Presentation     aitools.ToolPresentationSpec `json:"presentation,omitempty"`
 	Source           string                       `json:"source,omitempty"`
 	Namespace        string                       `json:"namespace,omitempty"`
@@ -180,8 +181,8 @@ type ToolRegistry interface {
 	Snapshot() []ToolDef
 }
 
-type ModeToolFilter interface {
-	FilterToolsForMode(mode string, all []ToolDef) []ToolDef
+type PermissionToolFilter interface {
+	FilterTools(permissionType FlowerPermissionType, all []ToolDef) []ToolDef
 }
 
 type ModelSelectInput struct {

@@ -37,14 +37,13 @@ type promptWorkspaceContext struct {
 }
 
 type promptEnvironmentFacts struct {
-	WorkingDir              string
-	AgentHomeDir            string
-	FilesystemRoots         []promptFilesystemRootFact
-	Shell                   string
-	UserInteractionEnabled  bool
-	ToolApprovalEnabled     bool
-	DangerousCommandBlocked bool
-	SubagentDelegation      bool
+	WorkingDir             string
+	AgentHomeDir           string
+	FilesystemRoots        []promptFilesystemRootFact
+	Shell                  string
+	UserInteractionEnabled bool
+	PermissionType         FlowerPermissionType
+	SubagentDelegation     bool
 }
 
 type promptFilesystemRootFact struct {
@@ -131,10 +130,7 @@ func collectPromptEnvironmentFacts(r *run, capability runCapabilityContract) pro
 		}
 	}
 	out.Shell = strings.TrimSpace(r.shell)
-	if r.cfg != nil {
-		out.ToolApprovalEnabled = r.cfg.EffectiveRequireUserApproval()
-		out.DangerousCommandBlocked = r.cfg.EffectiveBlockDangerousCommands()
-	}
+	out.PermissionType = r.permissionType
 	out.SubagentDelegation = r.allowSubagentDelegate
 	return out
 }
@@ -487,10 +483,19 @@ func renderPromptEnvironmentFactsLines(env promptEnvironmentFacts) []string {
 			lines = append(lines, fmt.Sprintf("- Filesystem roots: %s", strings.Join(rootParts, "; ")))
 		}
 	}
-	lines = append(lines,
-		fmt.Sprintf("- Mutating tool approval required: %t", env.ToolApprovalEnabled),
-		fmt.Sprintf("- Dangerous terminal commands hard-blocked: %t", env.DangerousCommandBlocked),
-	)
+	permissionType := env.PermissionType
+	if permissionType == "" {
+		permissionType = FlowerPermissionApprovalRequired
+	}
+	lines = append(lines, fmt.Sprintf("- Permission type: %s", permissionTypeString(permissionType)))
+	switch permissionType {
+	case FlowerPermissionReadonly:
+		lines = append(lines, "- Tool approval policy: shell and mutation tools are unavailable")
+	case FlowerPermissionApprovalRequired:
+		lines = append(lines, "- Tool approval policy: shell and mutation tools require confirmation")
+	case FlowerPermissionFullAccess:
+		lines = append(lines, "- Tool approval policy: no per-tool confirmation")
+	}
 	lines = append(lines, fmt.Sprintf("- Subagent delegation available: %t", env.SubagentDelegation))
 	return lines
 }

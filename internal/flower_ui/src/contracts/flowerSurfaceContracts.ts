@@ -64,10 +64,7 @@ export type FlowerProviderDraft = FlowerProvider & Readonly<{
   web_search_api_key?: string | null;
 }>;
 
-export type FlowerExecutionPolicy = Readonly<{
-  require_user_approval: boolean;
-  block_dangerous_commands: boolean;
-}>;
+export type FlowerPermissionType = 'readonly' | 'approval_required' | 'full_access';
 
 export type FlowerTerminalExecPolicy = Readonly<{
   default_timeout_ms: number;
@@ -77,7 +74,7 @@ export type FlowerTerminalExecPolicy = Readonly<{
 export type FlowerConfig = Readonly<{
   schema_version: 1;
   current_model_id: string;
-  execution_policy: FlowerExecutionPolicy;
+  permission_type: FlowerPermissionType;
   terminal_exec_policy: FlowerTerminalExecPolicy;
   providers: readonly FlowerProvider[];
 }>;
@@ -310,7 +307,6 @@ export type FlowerChatMessageBlock =
 
 export type FlowerInputRequestAction = Readonly<{
   type: string;
-  mode?: string;
 }>;
 
 export type FlowerInputRequestChoice = Readonly<{
@@ -394,6 +390,7 @@ export type FlowerThreadSnapshot = Readonly<{
   status: FlowerThreadStatus;
   active_run_id?: string;
   queued_turn_count?: number;
+  permission_type?: FlowerPermissionType;
   source_label: string;
   target_labels: readonly string[];
   read_only_reason?: string;
@@ -523,29 +520,67 @@ export type FlowerSafeTarget = Readonly<{
   uri?: string;
 }>;
 
-export type FlowerApprovalAction = Readonly<{
+export type FlowerApprovalOrigin = 'main_tool' | 'delegated_subagent';
+
+export type FlowerDelegatedApprovalRef = Readonly<{
+  parent_thread_id: string;
+  parent_run_id: string;
+  parent_turn_id?: string;
+  subagent_id: string;
+  child_thread_id: string;
+  child_run_id: string;
+  child_turn_id?: string;
+  child_tool_call_id: string;
+  approval_id: string;
+}>;
+
+type FlowerApprovalActionBase = Readonly<{
   action_id: string;
-  run_id: string;
   turn_id?: string;
-  tool_id: string;
   tool_name: string;
-  state: 'requested' | 'approved' | 'rejected' | 'timed_out' | 'canceled';
+  state: 'requested' | 'approved' | 'rejected' | 'timed_out' | 'canceled' | 'unavailable';
   status: 'pending' | 'resolved' | 'unavailable';
   revision: number;
+  version: number;
+  surface_epoch?: number;
+  surface_role?: 'primary_action' | 'locator' | 'mirror';
+  scope?: string;
   requested_at_ms: number;
   resolved_at_ms?: number;
   expires_at_ms?: number;
   can_approve: boolean;
   expected_seq?: number;
   read_only_reason?: string;
+  delegated_ref?: FlowerDelegatedApprovalRef;
+  delivery_state?: 'waiting_decision' | 'delivery_pending' | 'delivery_delivered' | 'delivery_failed' | 'delivery_ack_unknown' | 'delivery_unavailable';
+  child_execution_state?: 'unknown' | 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled';
+  primary_wait_anchor?: string;
   summary: Readonly<{
     label: string;
     description?: string;
+    command?: string;
+    cwd?: string;
     effects?: readonly string[];
     flags?: readonly string[];
     targets?: readonly FlowerSafeTarget[];
   }>;
 }>;
+
+export type FlowerMainToolApprovalAction = FlowerApprovalActionBase & Readonly<{
+  origin: 'main_tool';
+  run_id: string;
+  tool_id: string;
+  delegated_ref?: never;
+}>;
+
+export type FlowerDelegatedSubagentApprovalAction = FlowerApprovalActionBase & Readonly<{
+  origin: 'delegated_subagent';
+  delegated_ref: FlowerDelegatedApprovalRef;
+  run_id?: string;
+  tool_id?: string;
+}>;
+
+export type FlowerApprovalAction = FlowerMainToolApprovalAction | FlowerDelegatedSubagentApprovalAction;
 
 export type FlowerLiveKind =
   | 'run.started'
@@ -588,7 +623,7 @@ export type FlowerLiveThreadPatch = Readonly<{
   title?: string;
   model_id?: string;
   model_locked?: boolean;
-  execution_mode?: string;
+  permission_type?: FlowerPermissionType;
   working_dir?: string;
   queued_turn_count?: number;
   run_status?: string;
@@ -783,15 +818,30 @@ export type FlowerLiveEventsResponse = Readonly<{
   retained_from_seq: number;
 }>;
 
-export type FlowerSubmitApprovalRequest = Readonly<{
+type FlowerSubmitApprovalRequestBase = Readonly<{
   thread_id: string;
-  run_id: string;
   action_id: string;
-  tool_id: string;
   approved: boolean;
   expected_seq?: number;
   revision?: number;
+  version?: number;
+  surface_epoch?: number;
+  idempotency_key?: string;
 }>;
+
+export type FlowerSubmitApprovalRequest =
+  | (FlowerSubmitApprovalRequestBase & Readonly<{
+      origin?: 'main_tool';
+      run_id: string;
+      tool_id: string;
+      delegated_ref?: never;
+    }>)
+  | (FlowerSubmitApprovalRequestBase & Readonly<{
+      origin: 'delegated_subagent';
+      delegated_ref: FlowerDelegatedApprovalRef;
+      run_id?: string;
+      tool_id?: string;
+    }>);
 
 export type FlowerThreadListItem = Readonly<{
   thread_id: string;
@@ -889,7 +939,7 @@ export type FlowerTurnLaunchInput = Readonly<{
   attachments?: readonly FlowerTurnAttachment[];
   pending_files?: readonly File[];
   working_dir?: string;
-  mode?: 'act' | 'plan';
+  permission_type?: FlowerPermissionType;
   reasoning_selection?: FlowerReasoningSelection;
 }>;
 

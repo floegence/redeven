@@ -35,10 +35,7 @@ function settingsSnapshot(): FlowerSettingsSnapshot {
     config: {
       schema_version: 1,
       current_model_id: 'default/gpt-5',
-      execution_policy: {
-        require_user_approval: true,
-        block_dangerous_commands: true,
-      },
+      permission_type: 'approval_required',
       terminal_exec_policy: {
         default_timeout_ms: 30_000,
         max_timeout_ms: 120_000,
@@ -262,5 +259,72 @@ describe('runtime Flower surface adapter read state', () => {
     });
     expect(launchTurn).not.toHaveBeenCalled();
     expect(stopThread).not.toHaveBeenCalled();
+  });
+
+  it('submits main tool approvals with run and tool identity', async () => {
+    const submitApproval = vi.fn(async () => undefined);
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ submitApproval }));
+
+    await adapter.submitApproval({
+      thread_id: ' thread_1 ',
+      origin: 'main_tool',
+      run_id: ' run_1 ',
+      action_id: ' action_1 ',
+      tool_id: ' tool_1 ',
+      approved: true,
+      expected_seq: 12.9,
+      revision: 2.1,
+    });
+
+    expect(submitApproval).toHaveBeenCalledWith({
+      thread_id: 'thread_1',
+      origin: 'main_tool',
+      run_id: 'run_1',
+      action_id: 'action_1',
+      tool_id: 'tool_1',
+      approved: true,
+      expected_seq: 12,
+      revision: 2,
+      version: undefined,
+      surface_epoch: undefined,
+    });
+  });
+
+  it('submits delegated approvals without requiring run or tool identity', async () => {
+    const submitApproval = vi.fn(async () => undefined);
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ submitApproval }));
+    const delegatedRef = {
+      parent_thread_id: 'thread_1',
+      parent_run_id: 'run_parent',
+      subagent_id: 'child_1',
+      child_thread_id: 'thread_child',
+      child_run_id: 'run_child',
+      child_tool_call_id: 'tool_child',
+      approval_id: 'approval_child',
+    };
+
+    await adapter.submitApproval({
+      thread_id: ' thread_1 ',
+      origin: 'delegated_subagent',
+      action_id: ' action_delegated ',
+      approved: false,
+      version: 3,
+      surface_epoch: 5,
+      idempotency_key: ' idem-1 ',
+      delegated_ref: delegatedRef,
+    });
+
+    expect(submitApproval).toHaveBeenCalledWith({
+      thread_id: 'thread_1',
+      origin: 'delegated_subagent',
+      action_id: 'action_delegated',
+      approved: false,
+      expected_seq: undefined,
+      revision: undefined,
+      version: 3,
+      surface_epoch: 5,
+      idempotency_key: 'idem-1',
+      delegated_ref: delegatedRef,
+    });
   });
 });
