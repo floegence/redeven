@@ -144,6 +144,11 @@ function integerOrZero(raw: unknown): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 }
 
+function positiveIntegerOrOne(raw: unknown): number {
+  const value = Number(raw ?? 1);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+}
+
 function modelIOPhase(raw: unknown): FlowerModelIOPhase | null {
   switch (trim(raw)) {
     case 'preparing':
@@ -303,6 +308,11 @@ function mapContextCompactions(raw: unknown): readonly FlowerContextCompaction[]
   return compactions.length > 0 ? compactions : undefined;
 }
 
+function mapContextCompactionsSnapshot(raw: unknown): readonly FlowerContextCompaction[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw.map(mapContextCompaction).filter(isPresent);
+}
+
 function mapTimelineDecorations(raw: unknown): readonly FlowerTimelineDecoration[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const decorations = raw.map((value) => {
@@ -313,6 +323,17 @@ function mapTimelineDecorations(raw: unknown): readonly FlowerTimelineDecoration
     return decoration;
   });
   return decorations.length > 0 ? decorations : undefined;
+}
+
+function mapTimelineDecorationsSnapshot(raw: unknown): readonly FlowerTimelineDecoration[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  return raw.map((value) => {
+    const decoration = mapTimelineDecoration(value);
+    if (!decoration) {
+      throw new Error('Flower contract error: timeline_decorations requires valid decoration payloads.');
+    }
+    return decoration;
+  });
 }
 
 function stringRecord(raw: unknown): Readonly<Record<string, string>> | undefined {
@@ -716,8 +737,7 @@ function mapMessageBlock(blockValue: unknown): FlowerMessageBlock | null {
   if (!block) return null;
   const type = trim(block?.type);
   if (type === 'markdown' || type === 'text' || type === 'thinking') {
-    if (typeof block.content !== 'string' || trim(block.content) === '') return null;
-    return { type, content: block.content };
+    return { type, content: typeof block.content === 'string' ? block.content : '' };
   }
   if (type === 'activity-timeline') {
     return mapActivityTimelineBlock(blockValue);
@@ -803,7 +823,9 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
   const record = recordValue(raw);
   if (!record) return null;
   const patch = recordValue(record.patch) ?? record;
-  const queuedTurnCount = positiveInteger(patch.queued_turn_count);
+  const queuedTurnCount = patch.queued_turn_count === undefined
+    ? undefined
+    : nonNegativeInteger(patch.queued_turn_count, 'thread.patch.queued_turn_count');
   const readStatus = patch.read_status === undefined ? null : mapFlowerReadStatus(patch.read_status);
   const reasoningSelection = hasOwn(patch, 'reasoning_selection') ? normalizeFlowerReasoningSelection(patch.reasoning_selection) ?? null : undefined;
   const reasoningCapability = hasOwn(patch, 'reasoning_capability') ? normalizeFlowerReasoningCapability(patch.reasoning_capability) ?? null : undefined;
@@ -865,17 +887,17 @@ function mapLiveState(raw: unknown): FlowerLiveMaterializedState {
     if (input) inputRequests[promptID] = input;
   }
   const modelIO = mapModelIOStatus(record.model_io);
-  const contextUsage = mapContextUsage(record.context_usage);
-  const contextCompactions = mapContextCompactions(record.context_compactions);
-  const timelineDecorations = mapTimelineDecorations(record.timeline_decorations);
+  const contextUsage = record.context_usage === null ? null : mapContextUsage(record.context_usage);
+  const contextCompactions = mapContextCompactionsSnapshot(record.context_compactions);
+  const timelineDecorations = mapTimelineDecorationsSnapshot(record.timeline_decorations);
 
   return {
     thread_patch: mapThreadPatch(record.thread_patch) ?? {},
     runs,
     ...(modelIO ? { model_io: modelIO } : {}),
-    ...(contextUsage ? { context_usage: contextUsage } : {}),
-    ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
-    ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
+    ...(record.context_usage !== undefined ? { context_usage: contextUsage } : {}),
+    ...(contextCompactions !== undefined ? { context_compactions: contextCompactions } : {}),
+    ...(timelineDecorations !== undefined ? { timeline_decorations: timelineDecorations } : {}),
     approval_actions: approvals,
     input_requests: inputRequests,
   };
@@ -908,6 +930,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     updated_at_ms: unixMs(record.updated_at_unix_ms ?? record.last_message_at_unix_ms, 'thread.updated_at_unix_ms'),
     status,
     ...(activeRunID ? { active_run_id: activeRunID } : {}),
+    queued_turn_count: nonNegativeInteger(record.queued_turn_count ?? 0, 'thread.queued_turn_count'),
     source_label: options.sourceLabel,
     target_labels: options.targetLabels,
     ...(trim(record.read_only_reason) ? { read_only_reason: trim(record.read_only_reason) } : {}),
@@ -1035,6 +1058,14 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
     case 'timeline.replaced':
       return {
         messages: Array.isArray(record.messages) ? record.messages.map(mapFlowerMessage).filter(isPresent) : [],
+        stream_generation: positiveIntegerOrOne(record.stream_generation),
+        snapshot_through_seq: integerOrZero(record.snapshot_through_seq),
+        ...(record.thread_patch !== undefined ? { thread_patch: mapThreadPatch(record.thread_patch) ?? {} } : {}),
+        ...(record.live_state !== undefined ? { live_state: mapLiveState(record.live_state) } : {}),
+        ...(record.read_status !== undefined ? { read_status: mapFlowerReadStatus(record.read_status) } : {}),
+        ...(record.context_usage !== undefined ? { context_usage: record.context_usage === null ? null : mapContextUsage(record.context_usage) } : {}),
+        ...(record.context_compactions !== undefined ? { context_compactions: mapContextCompactionsSnapshot(record.context_compactions) ?? [] } : {}),
+        ...(record.timeline_decorations !== undefined ? { timeline_decorations: mapTimelineDecorationsSnapshot(record.timeline_decorations) ?? [] } : {}),
       };
     case 'stream.resync_required':
       return { reason: trim(record.reason) } as FlowerLiveResyncRequiredPayload;
@@ -1090,6 +1121,7 @@ export function mapFlowerLiveBootstrap(raw: unknown, options: FlowerLiveThreadMa
     schema_version: Math.max(0, Math.floor(Number(record.schema_version ?? 0))),
     endpoint_id: trim(record.endpoint_id),
     thread_id: trim(record.thread_id) || thread.thread_id,
+    stream_generation: positiveIntegerOrOne(record.stream_generation),
     cursor: Math.max(0, Math.floor(Number(record.cursor ?? 0))),
     retained_from_seq: Math.max(0, Math.floor(Number(record.retained_from_seq ?? 0))),
     thread,
@@ -1103,6 +1135,7 @@ export function mapFlowerLiveBootstrap(raw: unknown, options: FlowerLiveThreadMa
 export function mapFlowerLiveEvents(raw: unknown): FlowerLiveEventsResponse {
   const record = recordValue(raw) ?? {};
   return {
+    stream_generation: positiveIntegerOrOne(record.stream_generation),
     events: (Array.isArray(record.events) ? record.events : []).map((eventValue): FlowerLiveEvent | null => {
       const event = recordValue(eventValue) ?? {};
       const kind = mapLiveKind(event.kind);

@@ -109,12 +109,10 @@ describe('Redeven v1 AI codec', () => {
     expect(fromWireAICompactThreadContextResponse({
       operation_id: ' op_1 ',
       kind: ' accepted ',
-      run_id: ' run_live ',
       error_code: '',
     })).toEqual({
       operationId: 'op_1',
       kind: 'accepted',
-      runId: 'run_live',
       errorCode: undefined,
     });
   });

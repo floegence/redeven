@@ -196,6 +196,20 @@ type QueuedTurn struct {
 	UpdatedAtUnixMs int64 `json:"updated_at_unix_ms"`
 }
 
+type QueuedThread struct {
+	EndpointID           string `json:"endpoint_id"`
+	ThreadID             string `json:"thread_id"`
+	RunStatus            string `json:"run_status"`
+	RunErrorCode         string `json:"run_error_code"`
+	RunError             string `json:"run_error"`
+	WaitingUserInputJSON string `json:"waiting_user_input_json"`
+	NamespacePublicID    string `json:"namespace_public_id"`
+	QueuedTurnCount      int    `json:"queued_turn_count"`
+	FirstQueuedAtUnixMs  int64  `json:"first_queued_at_unix_ms"`
+	FirstQueuedSortIndex int64  `json:"first_queued_sort_index"`
+	FirstQueuedTurnID    string `json:"first_queued_turn_id"`
+}
+
 type ThreadsCursor struct {
 	PinnedAtUnixMs  int64
 	CreatedAtUnixMs int64
@@ -1492,6 +1506,26 @@ WHERE run_status IN ('accepted', 'running', 'waiting_approval', 'recovering', 'f
 		return 0, err
 	}
 	n, _ := res.RowsAffected()
+	if len(threadIDs) > 0 {
+		for _, id := range threadIDs {
+			if id.endpointID == "" || id.threadID == "" {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `
+UPDATE ai_runs
+SET state = 'canceled',
+    error_code = ?,
+    error_message = ?,
+    ended_at_unix_ms = ?,
+    updated_at_unix_ms = ?
+WHERE endpoint_id = ?
+  AND thread_id = ?
+  AND state IN ('accepted', 'running', 'waiting_approval', 'recovering', 'finalizing')
+`, RuntimeRestartedRunErrorCode, RuntimeRestartedRunErrorMessage, now, now, id.endpointID, id.threadID); err != nil {
+				return 0, err
+			}
+		}
+	}
 	for _, id := range threadIDs {
 		if id.endpointID == "" || id.threadID == "" {
 			continue
@@ -1529,27 +1563,50 @@ func (s *Store) UpdateThreadRunState(
 		return errors.New("invalid request")
 	}
 
-	runStatus, err := canonicalRunStatusForWrite(runStatus)
-	if err != nil {
-		return err
-	}
-	runErrorCode = strings.TrimSpace(runErrorCode)
-	runError = strings.TrimSpace(runError)
-	if runStatus != "failed" && runStatus != "timed_out" {
-		runErrorCode = ""
-		runError = ""
-	}
-	waitingUserInputJSON = normalizeWaitingUserInputJSONForStatus(runStatus, waitingUserInputJSON)
-	if len(runError) > 600 {
-		runError = truncateRunes(runError, 600)
-	}
-
 	now := time.Now().UnixMilli()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := updateThreadRunStateTx(ctx, tx, endpointID, threadID, ThreadRunStateWrite{
+		Status:                runStatus,
+		ErrorCode:             runErrorCode,
+		ErrorMessage:          runError,
+		WaitingUserInputJSON:  waitingUserInputJSON,
+		UpdatedByUserPublicID: updatedByID,
+		UpdatedByUserEmail:    updatedByEmail,
+		UpdatedAtUnixMs:       now,
+	}); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func updateThreadRunStateTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, state ThreadRunStateWrite) error {
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid request")
+	}
+	runStatus, err := canonicalRunStatusForWrite(state.Status)
+	if err != nil {
+		return err
+	}
+	runErrorCode := strings.TrimSpace(state.ErrorCode)
+	runError := strings.TrimSpace(state.ErrorMessage)
+	if runStatus != "failed" && runStatus != "timed_out" {
+		runErrorCode = ""
+		runError = ""
+	}
+	waitingUserInputJSON := normalizeWaitingUserInputJSONForStatus(runStatus, state.WaitingUserInputJSON)
+	if len(runError) > 600 {
+		runError = truncateRunes(runError, 600)
+	}
+	updatedAt := state.UpdatedAtUnixMs
+	if updatedAt <= 0 {
+		updatedAt = time.Now().UnixMilli()
+	}
 	res, err := tx.ExecContext(ctx, `
 	UPDATE ai_threads
 	SET run_status = ?,
@@ -1561,7 +1618,7 @@ func (s *Store) UpdateThreadRunState(
 	    updated_by_user_public_id = ?,
 	    updated_by_user_email = ?
 	WHERE endpoint_id = ? AND thread_id = ?
-	`, runStatus, now, runErrorCode, runError, strings.TrimSpace(waitingUserInputJSON), now, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
+	`, runStatus, updatedAt, runErrorCode, runError, strings.TrimSpace(waitingUserInputJSON), updatedAt, strings.TrimSpace(state.UpdatedByUserPublicID), strings.TrimSpace(state.UpdatedByUserEmail), endpointID, threadID)
 	if err != nil {
 		return err
 	}
@@ -1572,7 +1629,7 @@ func (s *Store) UpdateThreadRunState(
 	if _, err := bumpFlowerActivityTx(ctx, tx, endpointID, threadID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return nil
 }
 
 func (s *Store) DeleteThread(ctx context.Context, endpointID string, threadID string) error {
@@ -2705,6 +2762,8 @@ type ThreadContextBoundary struct {
 	MessageID int64
 }
 
+var ErrThreadContextBoundaryChanged = errors.New("thread context boundary changed")
+
 type ThreadCompactedMessage struct {
 	Role                 string `json:"role"`
 	Content              string `json:"content,omitempty"`
@@ -2786,15 +2845,34 @@ func (s *Store) CurrentThreadContextBoundary(ctx context.Context, endpointID str
 	if endpointID == "" || threadID == "" {
 		return ThreadContextBoundary{}, errors.New("invalid request")
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ThreadContextBoundary{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := ensureThreadExistsTx(ctx, tx, endpointID, threadID); err != nil {
+		return ThreadContextBoundary{}, err
+	}
+	boundary, err := currentThreadContextBoundaryTx(ctx, tx, endpointID, threadID)
+	if err != nil {
+		return ThreadContextBoundary{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return ThreadContextBoundary{}, err
+	}
+	return boundary, nil
+}
+
+func currentThreadContextBoundaryTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (ThreadContextBoundary, error) {
 	var boundary ThreadContextBoundary
-	if err := s.db.QueryRowContext(ctx, `
+	if err := tx.QueryRowContext(ctx, `
 SELECT COALESCE(MAX(id), 0)
 FROM conversation_turns
 WHERE endpoint_id = ? AND thread_id = ?
 `, endpointID, threadID).Scan(&boundary.TurnRowID); err != nil {
 		return ThreadContextBoundary{}, err
 	}
-	if err := s.db.QueryRowContext(ctx, `
+	if err := tx.QueryRowContext(ctx, `
 SELECT COALESCE(MAX(id), 0)
 FROM transcript_messages
 WHERE endpoint_id = ? AND thread_id = ?
@@ -2802,6 +2880,32 @@ WHERE endpoint_id = ? AND thread_id = ?
 		return ThreadContextBoundary{}, err
 	}
 	return boundary, nil
+}
+
+func ensureThreadExistsTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx, `
+SELECT 1
+FROM ai_threads
+WHERE endpoint_id = ? AND thread_id = ?
+`, endpointID, threadID).Scan(&exists); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return sql.ErrNoRows
+		}
+		return err
+	}
+	return nil
+}
+
+func ensureThreadContextBoundaryTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, expected ThreadContextBoundary) error {
+	current, err := currentThreadContextBoundaryTx(ctx, tx, endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	if current.TurnRowID != expected.TurnRowID || current.MessageID != expected.MessageID {
+		return ErrThreadContextBoundaryChanged
+	}
+	return nil
 }
 
 func marshalThreadCompactedContext(ctx ThreadCompactedContext) string {
@@ -3032,6 +3136,14 @@ func (s *Store) SetThreadCompactedContext(ctx context.Context, endpointID string
 }
 
 func (s *Store) SetThreadProviderContinuationAndCompactedContext(ctx context.Context, endpointID string, threadID string, cont ThreadProviderContinuation, compacted ThreadCompactedContext) error {
+	return s.setThreadProviderContinuationAndCompactedContext(ctx, endpointID, threadID, cont, compacted, nil)
+}
+
+func (s *Store) SetThreadProviderContinuationAndCompactedContextIfBoundaryMatches(ctx context.Context, endpointID string, threadID string, expected ThreadContextBoundary, cont ThreadProviderContinuation, compacted ThreadCompactedContext) error {
+	return s.setThreadProviderContinuationAndCompactedContext(ctx, endpointID, threadID, cont, compacted, &expected)
+}
+
+func (s *Store) setThreadProviderContinuationAndCompactedContext(ctx context.Context, endpointID string, threadID string, cont ThreadProviderContinuation, compacted ThreadCompactedContext, expected *ThreadContextBoundary) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
 	}
@@ -3060,6 +3172,14 @@ func (s *Store) SetThreadProviderContinuationAndCompactedContext(ctx context.Con
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := ensureThreadExistsTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	if expected != nil {
+		if err := ensureThreadContextBoundaryTx(ctx, tx, endpointID, threadID, *expected); err != nil {
+			return err
+		}
+	}
 
 	updatedAt := time.Now().UnixMilli()
 	stateJSON := ""
@@ -3185,6 +3305,59 @@ func (s *Store) UpsertRun(ctx context.Context, rec RunRecord) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := upsertRunTx(ctx, tx, rec); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) GetRun(ctx context.Context, endpointID string, runID string) (*RunRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	runID = strings.TrimSpace(runID)
+	if endpointID == "" || runID == "" {
+		return nil, errors.New("invalid request")
+	}
+	var rec RunRecord
+	err := s.db.QueryRowContext(ctx, `
+SELECT run_id, endpoint_id, thread_id, message_id,
+       state, error_code, error_message, attempt_count,
+       started_at_unix_ms, ended_at_unix_ms, updated_at_unix_ms
+FROM ai_runs
+WHERE endpoint_id = ? AND run_id = ?
+`, endpointID, runID).Scan(
+		&rec.RunID,
+		&rec.EndpointID,
+		&rec.ThreadID,
+		&rec.MessageID,
+		&rec.State,
+		&rec.ErrorCode,
+		&rec.ErrorMessage,
+		&rec.AttemptCount,
+		&rec.StartedAtUnixMs,
+		&rec.EndedAtUnixMs,
+		&rec.UpdatedAtUnixMs,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &rec, nil
+}
+
+func upsertRunTx(ctx context.Context, tx *sql.Tx, rec RunRecord) error {
 	rec.RunID = strings.TrimSpace(rec.RunID)
 	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
 	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
@@ -3206,7 +3379,7 @@ func (s *Store) UpsertRun(ctx context.Context, rec RunRecord) error {
 	if rec.StartedAtUnixMs <= 0 {
 		rec.StartedAtUnixMs = now
 	}
-	_, err = s.db.ExecContext(ctx, `
+	_, err = tx.ExecContext(ctx, `
 INSERT INTO ai_runs(
   run_id, endpoint_id, thread_id, message_id,
   state, error_code, error_message, attempt_count,

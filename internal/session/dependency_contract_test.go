@@ -114,18 +114,25 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
 	goSum := readRepoFile(t, root, "go.sum")
+	notices := readRepoFile(t, root, "THIRD_PARTY_NOTICES.md")
 
-	if !strings.Contains(goMod, "github.com/floegence/floret v0.3.27") {
-		t.Fatalf("go.mod must depend on floret v0.3.27")
+	if !strings.Contains(goMod, "github.com/floegence/floret v0.3.36") {
+		t.Fatalf("go.mod must depend on floret v0.3.36")
 	}
 	assertNoLocalGoModuleReference(t, "go.mod", goMod, "github.com/floegence/floret", "floret")
-	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.27 ") {
-		t.Fatalf("go.sum must include floret v0.3.27 module checksum")
+	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.36 ") {
+		t.Fatalf("go.sum must include floret v0.3.36 module checksum")
 	}
-	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.27/go.mod ") {
-		t.Fatalf("go.sum must include floret v0.3.27 go.mod checksum")
+	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.36/go.mod ") {
+		t.Fatalf("go.sum must include floret v0.3.36 go.mod checksum")
 	}
 	assertNoLocalGoModuleReference(t, "go.sum", goSum, "github.com/floegence/floret", "floret")
+	if !strings.Contains(notices, "| github.com/floegence/floret | v0.3.36 |") {
+		t.Fatalf("THIRD_PARTY_NOTICES.md must include floret v0.3.36")
+	}
+	if !strings.Contains(notices, "github.com/floegence/floret@v0.3.36") {
+		t.Fatalf("THIRD_PARTY_NOTICES.md must link floret v0.3.36")
+	}
 }
 
 func TestRepositoryDoesNotUseGoWorkspaceForPublishedDependencies(t *testing.T) {

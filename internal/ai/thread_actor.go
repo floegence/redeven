@@ -355,11 +355,68 @@ func (a *threadActor) loop() {
 				cmd.resp <- stopThreadResult{resp: resp, err: err}
 			case cmdMaybeStartQueuedTurn:
 				if err := a.handleMaybeStartQueuedTurn(context.Background()); err != nil && a.mgr != nil && a.mgr.svc != nil && a.mgr.svc.log != nil {
-					a.mgr.svc.log.Warn("failed to start queued turn", "thread_id", strings.TrimSpace(a.threadID), "error", err)
+					a.mgr.svc.log.Warn("failed to start queued turn", queuedTurnStartLogAttrs(err, strings.TrimSpace(a.endpointID), strings.TrimSpace(a.threadID))...)
 				}
 			}
 		}
 	}
+}
+
+type queuedTurnStartError struct {
+	endpointID         string
+	threadID           string
+	queueID            string
+	messageID          string
+	runID              string
+	requireSourceQueue bool
+	err                error
+}
+
+func (e *queuedTurnStartError) Error() string {
+	if e == nil || e.err == nil {
+		return "queued turn start failed"
+	}
+	return e.err.Error()
+}
+
+func (e *queuedTurnStartError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.err
+}
+
+func queuedTurnStartLogAttrs(err error, endpointID string, threadID string) []any {
+	attrs := []any{
+		"endpoint_id", strings.TrimSpace(endpointID),
+		"thread_id", strings.TrimSpace(threadID),
+	}
+	var queuedErr *queuedTurnStartError
+	if errors.As(err, &queuedErr) && queuedErr != nil {
+		if v := strings.TrimSpace(queuedErr.endpointID); v != "" {
+			attrs[1] = v
+		}
+		if v := strings.TrimSpace(queuedErr.threadID); v != "" {
+			attrs[3] = v
+		}
+		attrs = append(attrs,
+			"queue_id", strings.TrimSpace(queuedErr.queueID),
+			"message_id", strings.TrimSpace(queuedErr.messageID),
+			"run_id", strings.TrimSpace(queuedErr.runID),
+			"require_source_queue", queuedErr.requireSourceQueue,
+		)
+	}
+	return append(attrs, "error", err)
+}
+
+func queuedTurnStartErrorIsPermanent(err error) bool {
+	return errors.Is(err, threadstore.ErrDuplicateUserTurnMessage) ||
+		errors.Is(err, sql.ErrNoRows) ||
+		errors.Is(err, ErrReadOnlyThread) ||
+		errors.Is(err, ErrModelLockViolation) ||
+		errors.Is(err, ErrModelSwitchRequiresExplicitRestart) ||
+		errors.Is(err, ErrWaitingPromptChanged) ||
+		errors.Is(err, ErrWaitingUserQueueConflict)
 }
 
 func (a *threadActor) lookupActiveRun(endpointID string, threadID string) (string, *run) {
@@ -399,6 +456,9 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 		return nil
 	}
 	if activeRunID, _ := a.lookupActiveRun(endpointID, threadID); activeRunID != "" {
+		return nil
+	}
+	if a.mgr.svc.idleThreadCompactionOperation(endpointID, threadID) != "" {
 		return nil
 	}
 
@@ -454,20 +514,36 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 	startReq, err := queuedTurnRecordToRunStartRequest(rec, th.ExecutionMode)
 	if err != nil {
 		if consumeErr := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, rec.QueueID); consumeErr != nil && !errors.Is(consumeErr, sql.ErrNoRows) {
-			return errors.Join(err, consumeErr)
+			err = errors.Join(err, consumeErr)
 		}
-		return err
+		return &queuedTurnStartError{
+			endpointID:         endpointID,
+			threadID:           threadID,
+			queueID:            rec.QueueID,
+			messageID:          rec.MessageID,
+			runID:              runID,
+			requireSourceQueue: true,
+			err:                err,
+		}
 	}
-	persisted, normalizedInput, err := a.mgr.svc.persistUserMessage(ctx, meta, endpointID, threadID, startReq.Input)
-	if err != nil {
-		return err
-	}
-	startReq.Input = normalizedInput
-	if err := a.mgr.svc.StartRunDetachedWithPersisted(meta, runID, startReq, persisted); err != nil {
-		return err
-	}
-	if err := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, rec.QueueID); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
+	if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, rec.QueueID, true); err != nil {
+		if queuedTurnStartErrorIsPermanent(err) {
+			if consumeErr := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, rec.QueueID); consumeErr != nil && !errors.Is(consumeErr, sql.ErrNoRows) {
+				err = errors.Join(err, consumeErr)
+			}
+			if a.mgr != nil {
+				a.mgr.Wake(endpointID, threadID)
+			}
+		}
+		return &queuedTurnStartError{
+			endpointID:         endpointID,
+			threadID:           threadID,
+			queueID:            rec.QueueID,
+			messageID:          rec.MessageID,
+			runID:              runID,
+			requireSourceQueue: true,
+			err:                err,
+		}
 	}
 	return nil
 }
@@ -610,26 +686,43 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 			AppliedExecutionMode: appliedExecutionMode,
 		}, nil
 	}
+	if a.mgr.svc.idleThreadCompactionOperation(endpointID, threadID) != "" {
+		queued, position, err := a.mgr.svc.enqueueQueuedTurn(ctx, meta, req)
+		if err != nil {
+			return SendUserTurnResponse{}, err
+		}
+		consumeSourceFollowup()
+		return SendUserTurnResponse{
+			Kind:                 "queued",
+			QueueID:              strings.TrimSpace(queued.QueueID),
+			QueuePosition:        position,
+			AppliedExecutionMode: appliedExecutionMode,
+		}, nil
+	}
+	tctx, cancel = context.WithTimeout(ctx, persistTO)
+	queuedTurnCount, err := db.CountFollowupsByLane(tctx, endpointID, threadID, threadstore.FollowupLaneQueued)
+	cancel()
+	if err != nil {
+		return SendUserTurnResponse{}, err
+	}
+	if queuedTurnCount > 0 {
+		queued, position, err := a.mgr.svc.enqueueQueuedTurn(ctx, meta, req)
+		if err != nil {
+			return SendUserTurnResponse{}, err
+		}
+		consumeSourceFollowup()
+		return SendUserTurnResponse{
+			Kind:                 "queued",
+			QueueID:              strings.TrimSpace(queued.QueueID),
+			QueuePosition:        position,
+			AppliedExecutionMode: appliedExecutionMode,
+		}, nil
+	}
 
 	runID, err := NewRunID()
 	if err != nil {
 		return SendUserTurnResponse{}, err
 	}
-
-	persisted, normalizedInput, err := a.mgr.svc.persistUserMessage(ctx, meta, endpointID, threadID, req.Input)
-	if err != nil {
-		return SendUserTurnResponse{}, err
-	}
-	req.Input = normalizedInput
-
-	// Transcript events are thread-scoped; they never go to summary subscribers.
-	a.mgr.svc.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
-	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
-	effectiveCurrentInput := deriveEffectiveCurrentUserInput(req.Input)
-	effectiveCurrentInput.MessageID = persisted.MessageID
-	effectiveCurrentInput.MessageRowID = persisted.RowID
-	effectiveCurrentInput.MessageCreatedAtUnixMs = persisted.CreatedAtUnixMs
-	a.mgr.svc.scheduleAutoThreadTitle(meta, threadID, effectiveCurrentInput)
 
 	startReq := RunStartRequest{
 		ThreadID: threadID,
@@ -637,10 +730,9 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		Input:    req.Input,
 		Options:  req.Options,
 	}
-	if err := a.mgr.svc.StartRunDetachedWithPersisted(meta, runID, startReq, persisted); err != nil {
+	if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID, false); err != nil {
 		return SendUserTurnResponse{}, err
 	}
-	consumeSourceFollowup()
 	return SendUserTurnResponse{
 		RunID:                runID,
 		Kind:                 "start",
@@ -722,11 +814,6 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 	}
 	resolvedExecutionMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback)
 	runStatus, _, _ := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
-	consumeSourceFollowup := func() {
-		if err := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, req.SourceFollowupID); err != nil && a.mgr.svc.log != nil {
-			a.mgr.svc.log.Warn("failed to consume source followup", "thread_id", threadID, "followup_id", strings.TrimSpace(req.SourceFollowupID), "error", err)
-		}
-	}
 	openPrompt := a.mgr.svc.threadWaitingPrompt(ctx, th, runStatus)
 	if openPrompt == nil {
 		return SubmitRequestUserInputResponseResponse{}, ErrWaitingPromptChanged
@@ -793,29 +880,15 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
-	persisted, normalizedInput, err := a.mgr.svc.persistUserMessage(ctx, meta, endpointID, threadID, req.Input)
-	if err != nil {
-		return SubmitRequestUserInputResponseResponse{}, err
-	}
-	req.Input = normalizedInput
-	a.mgr.svc.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
-	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
-	effectiveCurrentInput := deriveEffectiveCurrentUserInput(req.Input)
-	effectiveCurrentInput.MessageID = persisted.MessageID
-	effectiveCurrentInput.MessageRowID = persisted.RowID
-	effectiveCurrentInput.MessageCreatedAtUnixMs = persisted.CreatedAtUnixMs
-	a.mgr.svc.scheduleAutoThreadTitle(meta, threadID, effectiveCurrentInput)
-
 	startReq := RunStartRequest{
 		ThreadID: threadID,
 		Model:    strings.TrimSpace(req.Model),
 		Input:    req.Input,
 		Options:  req.Options,
 	}
-	if err := a.mgr.svc.StartRunDetachedWithPersisted(meta, runID, startReq, persisted); err != nil {
+	if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID, false); err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
-	consumeSourceFollowup()
 	return SubmitRequestUserInputResponseResponse{
 		RunID:                   runID,
 		Kind:                    "start",

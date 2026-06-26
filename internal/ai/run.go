@@ -78,6 +78,8 @@ type runOptions struct {
 	TargetToolExecutor    TargetToolExecutor
 
 	terminalExecRunner func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
+
+	HostManagedContextCompaction bool
 }
 
 type run struct {
@@ -168,12 +170,13 @@ type run struct {
 	currentModelID     string
 	currentReasoning   config.AIReasoningSelection
 
-	muManualCompaction          sync.Mutex
-	pendingManualCompaction     *flruntime.ManualCompactionRequest
-	activeManualCompactionID    string
-	completeManualCompactionIDs map[string]struct{}
-	contextCompactionAnchors    map[string]FlowerTimelineAnchor
-	completedContextCompaction  observation.CompactionEvent
+	muManualCompaction           sync.Mutex
+	pendingManualCompaction      *flruntime.ManualCompactionRequest
+	activeManualCompactionID     string
+	completeManualCompactionIDs  map[string]struct{}
+	contextCompactionAnchors     map[string]FlowerTimelineAnchor
+	completedContextCompaction   observation.CompactionEvent
+	hostManagedContextCompaction bool
 
 	webSearchToolEnabled bool
 	webSearchMode        string
@@ -297,7 +300,8 @@ func newRun(opts runOptions) *run {
 			}
 			return opts.SubagentDepth <= 0
 		}(),
-		terminalExecRunner: opts.terminalExecRunner,
+		terminalExecRunner:           opts.terminalExecRunner,
+		hostManagedContextCompaction: opts.HostManagedContextCompaction,
 	}
 	if r.terminalExecRunner == nil {
 		r.terminalExecRunner = defaultTerminalExecRunner
@@ -434,6 +438,14 @@ func (r *run) requestCancel(reason string) {
 	r.muCancel.Lock()
 	if reason != "" && r.cancelReason == "" {
 		r.cancelReason = reason
+	}
+	if reason == "canceled" || reason == "timed_out" {
+		if r.endReason == "" {
+			r.endReason = reason
+		}
+		if r.finalizationReason == "" {
+			r.finalizationReason = reason
+		}
 	}
 	alreadyRequested := r.cancelRequested
 	r.cancelRequested = true
@@ -985,7 +997,9 @@ func (r *run) persistRunRecord(state RunState, errCode string, errMessage string
 		EndedAtUnixMs:   endedAt,
 		UpdatedAtUnixMs: now,
 	}
-	_ = r.threadsDB.UpsertRun(ctx, rec)
+	if err := r.threadsDB.UpsertRun(ctx, rec); err != nil && r.log != nil {
+		r.log.Warn("persist run record failed", "run_id", rec.RunID, "thread_id", rec.ThreadID, "state", rec.State, "error", err)
+	}
 }
 
 func (r *run) persistRunEvent(eventType string, streamKind RealtimeStreamKind, payload map[string]any) {
@@ -1005,7 +1019,7 @@ func (r *run) persistRunEvent(eventType string, streamKind RealtimeStreamKind, p
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
 	defer cancel()
-	_ = r.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
+	if err := r.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
 		EndpointID:  strings.TrimSpace(r.endpointID),
 		ThreadID:    strings.TrimSpace(r.threadID),
 		RunID:       strings.TrimSpace(r.id),
@@ -1013,7 +1027,9 @@ func (r *run) persistRunEvent(eventType string, streamKind RealtimeStreamKind, p
 		EventType:   eventType,
 		PayloadJSON: truncateRunes(string(b), 6000),
 		AtUnixMs:    time.Now().UnixMilli(),
-	})
+	}); err != nil && r.log != nil {
+		r.log.Warn("persist run event failed", "thread_id", strings.TrimSpace(r.threadID), "run_id", strings.TrimSpace(r.id), "event_type", eventType, "stream_kind", streamKind, "error", err)
+	}
 }
 
 func (r *run) persistToolCall(rec threadstore.ToolCallRecord) {
@@ -2600,30 +2616,39 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 		r.assistantCreatedAtUnixMs = time.Now().UnixMilli()
 		r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: ""}}
 	}
-	blocks := make([]any, 0, len(r.assistantBlocks))
-	for _, blk := range r.assistantBlocks {
-		if blk == nil {
-			continue
-		}
-		switch v := blk.(type) {
-		case *persistedMarkdownBlock:
-			if v == nil || strings.TrimSpace(v.Content) == "" {
-				continue
+		blocks := make([]any, 0, len(r.assistantBlocks))
+		lastConcrete := -1
+		for _, blk := range r.assistantBlocks {
+			block := any(&persistedMarkdownBlock{Type: "markdown", Content: ""})
+			switch v := blk.(type) {
+			case nil:
+			case *persistedMarkdownBlock:
+				if v != nil {
+					cp := *v
+					block = &cp
+					if strings.TrimSpace(v.Content) != "" {
+						lastConcrete = len(blocks)
+					}
+				}
+			case *persistedThinkingBlock:
+				if v != nil {
+					cp := *v
+					block = &cp
+					lastConcrete = len(blocks)
+				}
+			default:
+				block = v
+				lastConcrete = len(blocks)
 			}
-			cp := *v
-			blocks = append(blocks, &cp)
-		case *persistedThinkingBlock:
-			if v == nil {
-				continue
-			}
-			cp := *v
-			blocks = append(blocks, &cp)
-		default:
-			blocks = append(blocks, v)
+			blocks = append(blocks, block)
 		}
-	}
-	assistantAt := r.assistantCreatedAtUnixMs
-	r.muAssistant.Unlock()
+		if lastConcrete >= 0 {
+			blocks = blocks[:lastConcrete+1]
+		} else {
+			blocks = nil
+		}
+		assistantAt := r.assistantCreatedAtUnixMs
+		r.muAssistant.Unlock()
 
 	msg := persistedMessage{
 		ID:        r.messageID,

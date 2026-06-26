@@ -125,6 +125,7 @@ describe('flower context presentation', () => {
     expect(compactionDividerLabel(compaction({ status: 'compacting' }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Compacting context');
     expect(compactionDividerLabel(compaction({ status: 'compacted' }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Context compacted');
     expect(compactionDividerLabel(compaction({ status: 'failed' }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Context compaction failed');
+    expect(compactionDividerLabel(compaction({ status: 'cancelled' }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Context compaction cancelled');
     expect(compactionDividerLabel(compaction({ status: 'provider_custom' as 'compacted' }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Context checkpoint');
   });
 

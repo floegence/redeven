@@ -3,11 +3,14 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -111,6 +114,66 @@ func TestService_DeleteThreadForce_DoesNotWaitForRunExit(t *testing.T) {
 	}
 }
 
+func TestService_DeleteThreadHandlesIdleCompactionBusyAndForce(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+
+	meta := &session.Meta{
+		ChannelID:         "ch_test",
+		EndpointID:        "env_test",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		NamespacePublicID: "ns_test",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+	}
+
+	th, err := svc.CreateThread(ctx, meta, "hello", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	var cancelCalled bool
+	begin, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_delete_idle", "run_delete_idle_compaction", FlowerTimelineAnchor{
+		TargetKind: "message",
+		MessageID:  "m_delete_idle_anchor",
+		Edge:       "after",
+	}, threadstore.ThreadContextBoundary{}, func() {
+		cancelCalled = true
+		svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_delete_idle")
+	})
+	if gateErr != nil || !begin.Started || begin.OperationID == "" {
+		t.Fatalf("beginIdleThreadCompaction result=%+v err=%v", begin, gateErr)
+	}
+
+	if err := svc.DeleteThread(ctx, meta, th.ThreadID, false); !errors.Is(err, ErrThreadBusy) {
+		t.Fatalf("DeleteThread(force=false) err=%v, want %v", err, ErrThreadBusy)
+	}
+	if got, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, th.ThreadID); err != nil {
+		t.Fatalf("GetThread after busy delete: %v", err)
+	} else if got == nil {
+		t.Fatalf("thread should remain after busy delete")
+	}
+	if err := svc.DeleteThread(ctx, meta, th.ThreadID, true); err != nil {
+		t.Fatalf("DeleteThread(force=true): %v", err)
+	}
+	if !cancelCalled {
+		t.Fatalf("idle compaction cancel callback was not called")
+	}
+	got, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread after force delete: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("thread should be deleted, got=%+v", got)
+	}
+	if state, err := svc.threadsDB.GetThreadState(ctx, meta.EndpointID, th.ThreadID); err != nil {
+		t.Fatalf("GetThreadState after force delete: %v", err)
+	} else if state != nil {
+		t.Fatalf("thread state should not remain, got=%+v", state)
+	}
+}
+
 func TestService_CancelRun_DetachesStaleActiveMapping(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t, nil)
@@ -160,6 +223,267 @@ func TestService_CancelRun_DetachesStaleActiveMapping(t *testing.T) {
 	if tv.RunStatus != "canceled" {
 		t.Fatalf("unexpected run_status=%q, want %q", tv.RunStatus, "canceled")
 	}
+}
+
+func TestService_CancelThreadCancelsIdleCompaction(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+
+	meta := &session.Meta{
+		ChannelID:         "ch_test",
+		EndpointID:        "env_test",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		NamespacePublicID: "ns_test",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+	}
+
+	th, err := svc.CreateThread(ctx, meta, "hello", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	anchorMessage := threadstore.Message{
+		ThreadID:        th.ThreadID,
+		EndpointID:      meta.EndpointID,
+		MessageID:       "m_cancel_idle_anchor",
+		Role:            "assistant",
+		Status:          "complete",
+		TextContent:     "ready",
+		MessageJSON:     `{"id":"m_cancel_idle_anchor","role":"assistant","status":"complete","blocks":[{"type":"text","text":"ready"}]}`,
+		CreatedAtUnixMs: time.Now().UnixMilli(),
+		UpdatedAtUnixMs: time.Now().UnixMilli(),
+	}
+	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, anchorMessage, meta.UserPublicID, meta.UserEmail); err != nil {
+		t.Fatalf("AppendMessage anchor: %v", err)
+	}
+	boundary, err := svc.threadsDB.CurrentThreadContextBoundary(ctx, meta.EndpointID, th.ThreadID)
+	if err != nil {
+		t.Fatalf("CurrentThreadContextBoundary: %v", err)
+	}
+
+	var cancelCalled bool
+	begin, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_cancel_idle", "run_cancel_idle_compaction", FlowerTimelineAnchor{
+		TargetKind: "message",
+		MessageID:  "m_cancel_idle_anchor",
+		Edge:       "after",
+	}, boundary, func() {
+		cancelCalled = true
+	})
+	if gateErr != nil || !begin.Started || begin.OperationID == "" {
+		t.Fatalf("beginIdleThreadCompaction result=%+v err=%v", begin, gateErr)
+	}
+	defer svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, begin.OperationID)
+
+	if err := svc.CancelThread(meta, th.ThreadID); err != nil {
+		t.Fatalf("CancelThread: %v", err)
+	}
+	if !cancelCalled {
+		t.Fatalf("idle compaction cancel callback was not called")
+	}
+	if got := svc.idleThreadCompactionOperation(meta.EndpointID, th.ThreadID); got != "" {
+		t.Fatalf("idleThreadCompactionOperation=%q, want empty after cancel", got)
+	}
+
+	compacted := threadstore.ThreadCompactedContext{
+		OperationID:             begin.OperationID,
+		CompactionID:            "cmp_cancel_late_rejected",
+		CompactionGeneration:    1,
+		CompactionWindowID:      "window_cancel_late_rejected",
+		CoveredThroughTurnRowID: boundary.TurnRowID,
+		CoveredThroughMessageID: boundary.MessageID,
+		Transcript: []threadstore.ThreadCompactedMessage{{
+			Role:    "assistant",
+			Content: "late summary must not persist",
+		}},
+		CreatedAtUnixMs: time.Now().UnixMilli(),
+		UpdatedAtUnixMs: time.Now().UnixMilli(),
+	}
+	err = svc.commitIdleThreadCompaction(ctx, svc.threadsDB, meta.EndpointID, th.ThreadID, begin.OperationID, threadstore.ThreadProviderContinuation{}, compacted)
+	if !errors.Is(err, errIdleCompactionNotCurrent) {
+		t.Fatalf("commitIdleThreadCompaction err=%v, want %v", err, errIdleCompactionNotCurrent)
+	}
+	state, err := svc.threadsDB.GetThreadState(ctx, meta.EndpointID, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThreadState: %v", err)
+	}
+	if state != nil && !state.CompactedContext.IsZero() {
+		t.Fatalf("CompactedContext=%+v, want empty after rejected late commit", state.CompactedContext)
+	}
+	events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, "run_cancel_idle_compaction", 20)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	if !hasIdleCompactionGatePhase(events, "cancel_requested") || !hasIdleCompactionGatePhase(events, "commit_rejected") {
+		t.Fatalf("gate events=%+v, want cancel_requested and commit_rejected", events)
+	}
+}
+
+func TestService_BeginIdleCompactionReplacesCancelledUnfinishedOperation(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+
+	meta := &session.Meta{
+		ChannelID:         "ch_test",
+		EndpointID:        "env_test",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		NamespacePublicID: "ns_test",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+	}
+	th, err := svc.CreateThread(ctx, meta, "hello", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	anchor := FlowerTimelineAnchor{TargetKind: "message", MessageID: "m_cancelled_replace_anchor", Edge: "after"}
+	var firstCancelCalled bool
+	first, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_replace_first", "run_replace_first", anchor, threadstore.ThreadContextBoundary{}, func() {
+		firstCancelCalled = true
+	})
+	if gateErr != nil || !first.Started {
+		t.Fatalf("begin first result=%+v err=%v", first, gateErr)
+	}
+	if _, ok := svc.cancelIdleThreadCompactionWithBroadcast(meta.EndpointID, th.ThreadID); !ok {
+		t.Fatalf("cancel first returned not found")
+	}
+	if !firstCancelCalled {
+		t.Fatalf("first cancel callback was not called")
+	}
+
+	var secondCancelCalled bool
+	second, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_replace_second", "run_replace_second", anchor, threadstore.ThreadContextBoundary{}, func() {
+		secondCancelCalled = true
+	})
+	if gateErr != nil || !second.Started || second.OperationID != "compact_replace_second" {
+		t.Fatalf("begin second result=%+v err=%v", second, gateErr)
+	}
+	defer svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, second.OperationID)
+	if got := svc.idleThreadCompactionOperation(meta.EndpointID, th.ThreadID); got != second.OperationID {
+		t.Fatalf("idleThreadCompactionOperation=%q, want %q", got, second.OperationID)
+	}
+	if secondCancelCalled {
+		t.Fatalf("second cancel callback was called unexpectedly")
+	}
+
+	compacted := threadstore.ThreadCompactedContext{
+		OperationID:          first.OperationID,
+		CompactionID:         "cmp_replace_first_late",
+		CompactionGeneration: 1,
+		CompactionWindowID:   "window_replace_first_late",
+		Transcript: []threadstore.ThreadCompactedMessage{{
+			Role:    "assistant",
+			Content: "late summary must not persist",
+		}},
+		CreatedAtUnixMs: time.Now().UnixMilli(),
+		UpdatedAtUnixMs: time.Now().UnixMilli(),
+	}
+	err = svc.commitIdleThreadCompaction(ctx, svc.threadsDB, meta.EndpointID, th.ThreadID, first.OperationID, threadstore.ThreadProviderContinuation{}, compacted)
+	if !errors.Is(err, errIdleCompactionNotCurrent) {
+		t.Fatalf("first late commit err=%v, want %v", err, errIdleCompactionNotCurrent)
+	}
+}
+
+func TestService_StopThreadWaitsForFinalizingIdleCompaction(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+
+	meta := &session.Meta{
+		ChannelID:         "ch_test",
+		EndpointID:        "env_test",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		NamespacePublicID: "ns_test",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+	}
+
+	th, err := svc.CreateThread(ctx, meta, "hello", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	var cancelCalled bool
+	begin, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_finalizing_idle", "run_finalizing_idle_compaction", FlowerTimelineAnchor{
+		TargetKind: "message",
+		MessageID:  "m_finalizing_idle_anchor",
+		Edge:       "after",
+	}, threadstore.ThreadContextBoundary{}, func() {
+		cancelCalled = true
+	})
+	if gateErr != nil || !begin.Started || begin.OperationID == "" {
+		t.Fatalf("beginIdleThreadCompaction result=%+v err=%v", begin, gateErr)
+	}
+
+	svc.mu.Lock()
+	compaction := svc.idleCompactionByTh[runThreadKey(meta.EndpointID, th.ThreadID)]
+	svc.mu.Unlock()
+	if compaction == nil {
+		t.Fatalf("idle compaction missing")
+	}
+	compaction.mu.Lock()
+	compaction.finalizing = true
+	compaction.mu.Unlock()
+
+	stopDone := make(chan error, 1)
+	go func() {
+		_, err := svc.StopThread(ctx, meta, th.ThreadID)
+		stopDone <- err
+	}()
+
+	select {
+	case err := <-stopDone:
+		t.Fatalf("StopThread returned before finalizing compaction finished: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	if cancelCalled {
+		t.Fatalf("finalizing idle compaction cancel callback was called")
+	}
+	if got := svc.idleThreadCompactionOperation(meta.EndpointID, th.ThreadID); got != begin.OperationID {
+		t.Fatalf("idleThreadCompactionOperation=%q, want finalizing operation %q", got, begin.OperationID)
+	}
+
+	svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, begin.OperationID)
+
+	select {
+	case err := <-stopDone:
+		if err != nil {
+			t.Fatalf("StopThread after finalizing compaction finished: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("StopThread did not return after finalizing compaction finished")
+	}
+
+	events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, "run_finalizing_idle_compaction", 20)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	if !hasIdleCompactionGatePhase(events, "cancel_skipped_finalizing") {
+		t.Fatalf("gate events=%+v, want cancel_skipped_finalizing", events)
+	}
+	if hasIdleCompactionEventPhase(events, string(FlowerLiveContextCompactionUpdated), "cancelled") {
+		t.Fatalf("gate events=%+v, finalizing compaction must not publish cancelled divider", events)
+	}
+}
+
+func hasIdleCompactionEventPhase(events []threadstore.RunEventRecord, eventType string, phase string) bool {
+	eventType = strings.TrimSpace(eventType)
+	phase = strings.TrimSpace(phase)
+	for _, event := range events {
+		if strings.TrimSpace(event.EventType) != eventType {
+			continue
+		}
+		var payload FlowerLiveContextCompactionUpdatedPayload
+		if !decodeFlowerPayload(json.RawMessage(event.PayloadJSON), &payload) {
+			continue
+		}
+		if strings.TrimSpace(payload.Compaction.Phase) == phase {
+			return true
+		}
+	}
+	return false
 }
 
 func TestService_CancelRun_PersistsCanceledAssistantBeforeNextUserTurn(t *testing.T) {

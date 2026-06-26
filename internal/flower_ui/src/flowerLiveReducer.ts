@@ -195,32 +195,46 @@ function upsertContextCompaction(
   };
 }
 
+function applyLiveMaterializedState(thread: FlowerThreadSnapshot, liveState: FlowerLiveBootstrap['live_state']): FlowerThreadSnapshot {
+  let next: FlowerThreadSnapshot = {
+    ...thread,
+    model_io_status: liveState.model_io ?? null,
+    context_usage: liveState.context_usage ?? null,
+    context_compactions: liveState.context_compactions ?? [],
+    timeline_decorations: liveState.timeline_decorations ?? [],
+    approval_actions: approvalsFromRecord(liveState.approval_actions),
+  };
+  next = applyThreadPatch(next, liveState.thread_patch);
+  const inputRequest = firstInputRequest(liveState.input_requests);
+  if (inputRequest) {
+    next = { ...next, status: 'waiting_user', input_request: inputRequest };
+  } else if (next.status !== 'waiting_user') {
+    next = { ...next, input_request: null };
+  }
+	const activeRunID = activeRunIDFromRuns(liveState.runs);
+	if (threadStatusHidesModelIO(next.status)) {
+		next = withoutModelIO(next);
+	} else if (activeRunID) {
+		next = { ...next, active_run_id: activeRunID, status: 'running' };
+	} else if (threadStatusClearsActiveRunID(next.status)) {
+    const { active_run_id: _activeRunID, model_io_status: _modelIOStatus, ...rest } = next;
+    next = { ...rest, model_io_status: null };
+  }
+  return next;
+}
+
 export function projectFlowerLiveBootstrap(bootstrap: FlowerLiveBootstrap): FlowerThreadSnapshot {
-  let thread: FlowerThreadSnapshot = {
+  const thread: FlowerThreadSnapshot = {
     ...bootstrap.thread,
     read_status: bootstrap.read_status,
     messages: [...bootstrap.timeline_messages],
-    model_io_status: bootstrap.live_state.model_io ?? null,
+  };
+  return applyLiveMaterializedState(thread, {
+    ...bootstrap.live_state,
     context_usage: bootstrap.live_state.context_usage ?? bootstrap.thread.context_usage ?? null,
     context_compactions: bootstrap.live_state.context_compactions ?? bootstrap.thread.context_compactions ?? [],
     timeline_decorations: bootstrap.live_state.timeline_decorations ?? bootstrap.thread.timeline_decorations ?? [],
-    approval_actions: approvalsFromRecord(bootstrap.live_state.approval_actions),
-  };
-  thread = applyThreadPatch(thread, bootstrap.live_state.thread_patch);
-  const inputRequest = firstInputRequest(bootstrap.live_state.input_requests);
-  if (inputRequest) {
-    thread = { ...thread, status: 'waiting_user', input_request: inputRequest };
-  }
-  const activeRunID = activeRunIDFromRuns(bootstrap.live_state.runs);
-  if (activeRunID) {
-    thread = { ...thread, active_run_id: activeRunID };
-  }
-	if (threadStatusHidesModelIO(thread.status)) {
-		thread = withoutModelIO(thread);
-	} else if (thread.model_io_status && trim(thread.model_io_status.run_id) !== trim(thread.active_run_id)) {
-		thread = { ...thread, model_io_status: null };
-  }
-  return thread;
+  });
 }
 
 export type FlowerLiveEventResult = Readonly<{
@@ -257,6 +271,51 @@ function findMessage(thread: FlowerThreadSnapshot, messageID: string): FlowerCha
 
 function replaceMessage(thread: FlowerThreadSnapshot, message: FlowerChatMessage): FlowerThreadSnapshot {
   return { ...thread, messages: mergeMessages(thread.messages, message) };
+}
+
+function withSingleActiveAssistantCursor(messages: readonly FlowerChatMessage[], activeID: string): readonly FlowerChatMessage[] {
+  return messages.map((message) => {
+    if (message.role !== 'assistant') return message;
+    const shouldBeActive = message.id === activeID;
+    if (shouldBeActive && message.active_cursor === true) return message;
+    if (!shouldBeActive && message.active_cursor !== true) return message;
+    if (shouldBeActive) return { ...message, active_cursor: true };
+    const next = { ...message };
+    delete next.active_cursor;
+    return next;
+  });
+}
+
+function upsertStreamingAssistantMessage(
+  thread: FlowerThreadSnapshot,
+  messageID: string,
+  createdAtMs: number,
+): FlowerThreadSnapshot | null {
+  messageID = trim(messageID);
+  if (!messageID) return null;
+  const current = findMessage(thread, messageID);
+  const nextMessage: FlowerChatMessage = current
+    ? {
+        ...current,
+        role: 'assistant',
+        status: current.status === 'complete' ? current.status : 'streaming',
+        created_at_ms: current.created_at_ms || createdAtMs,
+        active_cursor: current.status === 'complete' ? current.active_cursor : true,
+      }
+    : {
+        id: messageID,
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        created_at_ms: createdAtMs,
+        blocks: [],
+        active_cursor: true,
+      };
+  const replaced = replaceMessage(thread, nextMessage);
+  return {
+    ...replaced,
+    messages: withSingleActiveAssistantCursor(replaced.messages, messageID),
+  };
 }
 
 function updateMessageStrict(
@@ -329,6 +388,18 @@ export function applyFlowerLiveEvent(
       }
       break;
     case 'message.started':
+      {
+        const started = upsertStreamingAssistantMessage(
+          next,
+          event.payload.message_id,
+          Number(event.payload.created_at_ms || event.at_unix_ms || 0),
+        );
+        if (!started) {
+          resyncRequired = true;
+          break;
+        }
+        next = started;
+      }
       break;
     case 'message.block_started':
       {
@@ -368,13 +439,13 @@ export function applyFlowerLiveEvent(
       }
       break;
     case 'message.committed':
-      if (findMessage(next, event.payload.message_id || event.payload.message.id)) {
+      if (!event.payload.message || !trim(event.payload.message.id)) {
+        resyncRequired = true;
+      } else {
         next = {
           ...replaceMessage(next, event.payload.message),
           approval_actions: pendingApprovalActions(next.approval_actions),
         };
-      } else {
-        resyncRequired = true;
       }
       break;
     case 'message.failed':
@@ -419,8 +490,32 @@ export function applyFlowerLiveEvent(
         ...next,
         messages: [...event.payload.messages],
       };
+      if (event.payload.read_status) {
+        next = { ...next, read_status: event.payload.read_status };
+      }
+      if (event.payload.context_usage !== undefined) {
+        next = { ...next, context_usage: event.payload.context_usage };
+      }
+      if (event.payload.context_compactions !== undefined) {
+        next = { ...next, context_compactions: [...event.payload.context_compactions] };
+      }
+      if (event.payload.timeline_decorations !== undefined) {
+        next = { ...next, timeline_decorations: [...event.payload.timeline_decorations] };
+      }
+      if (event.payload.thread_patch) {
+        next = applyThreadPatch(next, event.payload.thread_patch);
+      }
+      if (event.payload.live_state) {
+        next = applyLiveMaterializedState(next, event.payload.live_state);
+      }
+      if (threadStatusHidesModelIO(next.status)) {
+        next = withoutModelIO(next);
+      }
       break;
   }
 
-  return { thread: next, cursor: event.seq, resyncRequired, tailKey, tailLength };
+  const nextCursor = event.kind === 'timeline.replaced'
+    ? Math.max(event.seq, Math.floor(Number(event.payload.snapshot_through_seq ?? 0)))
+    : event.seq;
+  return { thread: next, cursor: nextCursor, resyncRequired, tailKey, tailLength };
 }

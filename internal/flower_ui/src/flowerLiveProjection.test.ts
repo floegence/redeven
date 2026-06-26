@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type {
+  FlowerActivityItem,
+  FlowerActivityTimelineBlock,
   FlowerChatMessage,
   FlowerLiveBootstrap,
   FlowerLiveEvent,
@@ -38,6 +40,32 @@ function message(overrides: Partial<FlowerChatMessage> = {}): FlowerChatMessage 
   };
 }
 
+function activityTimelineBlock(itemID: string, label: string): FlowerActivityTimelineBlock {
+  const item: FlowerActivityItem = {
+    item_id: itemID,
+    tool_id: itemID,
+    tool_name: 'terminal.exec',
+    kind: 'tool',
+    status: 'success',
+    severity: 'quiet',
+    needs_attention: false,
+    requires_approval: false,
+    label,
+  };
+  return {
+    type: 'activity-timeline',
+    schema_version: 1,
+    summary: {
+      status: 'success',
+      severity: 'quiet',
+      needs_attention: false,
+      total_items: 1,
+      counts: { success: 1 },
+    },
+    items: [item],
+  };
+}
+
 function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnapshot {
   return {
     thread_id: 'th-live',
@@ -61,6 +89,7 @@ function bootstrap(overrides: Partial<FlowerLiveBootstrap> = {}): FlowerLiveBoot
     schema_version: 1,
     endpoint_id: 'runtime',
     thread_id: baseThread.thread_id,
+    stream_generation: 1,
     cursor: 0,
     retained_from_seq: 1,
     thread: baseThread,
@@ -237,6 +266,33 @@ describe('Flower live projection', () => {
     });
     expect(projected.context_compactions?.[0]?.operation_id).toBe('compact-1');
     expect(projected.timeline_decorations?.[0]?.anchor.message_id).toBe('assistant-live');
+  });
+
+  it('keeps empty structured blocks in timeline messages so original block indexes stay stable', () => {
+    const projected = projectFlowerLiveBootstrap(bootstrap({
+      timeline_messages: [{
+        id: 'assistant-live',
+        role: 'assistant',
+        content: 'alpha\n\nbeta',
+        status: 'canceled',
+        created_at_ms: 2000,
+        blocks: [
+          { type: 'markdown', content: '' },
+          activityTimelineBlock('tool-1', 'first'),
+          { type: 'markdown', content: 'alpha' },
+          activityTimelineBlock('tool-2', 'second'),
+        ],
+      }],
+      live_state: {
+        thread_patch: {},
+        runs: {},
+        approval_actions: {},
+        input_requests: {},
+      },
+    }));
+
+    expect(projected.messages[0]?.blocks).toHaveLength(4);
+    expect(projected.messages[0]?.blocks?.map((block) => block.type)).toEqual(['markdown', 'activity-timeline', 'markdown', 'activity-timeline']);
   });
 
   it('rejects invalid bootstrap compaction decorations instead of dropping them', () => {
@@ -788,6 +844,67 @@ describe('Flower live projection', () => {
     expect(continued.thread.messages.find((item) => item.id === 'assistant-live')?.content).toContain('continuing after compaction');
   });
 
+  it('applies queued turn count patches down to zero', () => {
+    const initial = thread({ queued_turn_count: 1 });
+    const mapped = mapFlowerLiveEvents({
+      schema_version: 1,
+      stream_generation: 1,
+      next_cursor: 10,
+      events: [{
+        schema_version: 1,
+        seq: 10,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        at_unix_ms: 3000,
+        kind: 'thread.patched',
+        payload: {
+          patch: {
+            queued_turn_count: 0,
+          },
+        },
+      }],
+    });
+    const result = applyFlowerLiveEvent(initial, 9, mapped.events[0]);
+
+    expect(result.thread.queued_turn_count).toBe(0);
+  });
+
+  it('keeps queued turn count from thread bootstrap payload', () => {
+    const mapped = mapFlowerLiveBootstrap({
+      schema_version: 1,
+      endpoint_id: 'runtime',
+      thread_id: 'th-live',
+      stream_generation: 1,
+      cursor: 0,
+      retained_from_seq: 1,
+      thread: {
+        thread_id: 'th-live',
+        title: 'Queued thread',
+        model_id: 'openai/gpt-5.2',
+        working_dir: '/workspace',
+        created_at_unix_ms: 1000,
+        updated_at_unix_ms: 1000,
+        run_status: 'idle',
+        queued_turn_count: 1,
+        last_message_preview: 'queued',
+        read_status: readStatus(),
+      },
+      messages: [],
+      live_state: {
+        thread_patch: {},
+        runs: {},
+        approval_actions: {},
+        input_requests: {},
+      },
+      read_status: readStatus(),
+      generated_at_ms: 1000,
+    }, mapperOptions());
+
+    const projected = projectFlowerLiveBootstrap(mapped);
+
+    expect(projected.queued_turn_count).toBe(1);
+  });
+
   it('keeps failed compaction separate from failed run lifecycle', () => {
     const initial = thread({
       status: 'running',
@@ -983,8 +1100,8 @@ describe('Flower live projection', () => {
 		expect(projected.input_request?.reasoning_selection).toEqual({ level: 'high' });
 	});
 
-	it('hides model io status when thread patches enter waiting or terminal status without run identity', () => {
-		const initial = thread({
+  it('hides model io status when thread patches enter waiting or terminal status without run identity', () => {
+    const initial = thread({
       active_run_id: 'run-new',
       model_io_status: {
         phase: 'streaming',
@@ -1048,6 +1165,49 @@ describe('Flower live projection', () => {
     });
 
     expect(waitingApprovalLateModelIO.thread.model_io_status).toBeNull();
+  });
+
+  it('clears stale active run identity when bootstrap live state is terminal', () => {
+    const projected = projectFlowerLiveBootstrap(bootstrap({
+      thread: thread({
+        status: 'success',
+        active_run_id: 'run-old',
+        model_io_status: {
+          phase: 'streaming',
+          run_id: 'run-old',
+          updated_at_ms: 3200,
+        },
+        context_usage: {
+          run_id: 'run-post-compact',
+          phase: 'projected_request',
+          input_tokens: 240,
+          context_window_tokens: 1000,
+          used_ratio: 0.24,
+          pressure_status: 'stable',
+          updated_at_ms: 3300,
+        },
+      }),
+      live_state: {
+        thread_patch: { run_status: 'success' },
+        runs: {},
+        context_usage: {
+          run_id: 'run-post-compact',
+          phase: 'projected_request',
+          input_tokens: 240,
+          context_window_tokens: 1000,
+          used_ratio: 0.24,
+          pressure_status: 'stable',
+          updated_at_ms: 3300,
+        },
+        approval_actions: {},
+        input_requests: {},
+      },
+    }));
+
+    expect(projected.status).toBe('success');
+    expect(projected.active_run_id).toBeUndefined();
+    expect(projected.model_io_status).toBeNull();
+    expect(projected.context_usage?.run_id).toBe('run-post-compact');
   });
 
   it('keeps model io status across non-status thread summary patches', () => {
@@ -1116,6 +1276,102 @@ describe('Flower live projection', () => {
       },
     }));
     expect(input.thread.model_io_status).toBeNull();
+  });
+
+  it('clears stale active run identity from terminal materialized snapshots', () => {
+    const projected = projectFlowerLiveBootstrap(bootstrap({
+      thread: thread({
+        status: 'success',
+        active_run_id: 'run-old',
+        context_usage: {
+          run_id: 'run-latest',
+          phase: 'projected_request',
+          input_tokens: 510,
+          context_window_tokens: 1000,
+          used_ratio: 0.51,
+          pressure_status: 'stable',
+          updated_at_ms: 4300,
+        },
+      }),
+      live_state: {
+        thread_patch: { run_status: 'success' },
+        runs: {},
+        context_usage: {
+          run_id: 'run-latest',
+          phase: 'projected_request',
+          input_tokens: 510,
+          context_window_tokens: 1000,
+          used_ratio: 0.51,
+          pressure_status: 'stable',
+          updated_at_ms: 4300,
+        },
+        approval_actions: {},
+        input_requests: {},
+      },
+    }));
+
+    expect(projected.status).toBe('success');
+    expect(projected.active_run_id).toBeUndefined();
+    expect(projected.context_usage?.run_id).toBe('run-latest');
+  });
+
+  it('clears stale active run identity when timeline replacement reaches terminal state', () => {
+    const initial = thread({
+      status: 'running',
+      active_run_id: 'run-old',
+      model_io_status: {
+        phase: 'streaming',
+        run_id: 'run-old',
+        updated_at_ms: 4200,
+      },
+      context_usage: {
+        run_id: 'run-latest',
+        phase: 'projected_request',
+        input_tokens: 610,
+        context_window_tokens: 1000,
+        used_ratio: 0.61,
+        pressure_status: 'stable',
+        updated_at_ms: 4300,
+      },
+    });
+    const mapped = mapFlowerLiveEvents({
+      schema_version: 1,
+      stream_generation: 1,
+      next_cursor: 30,
+      events: [{
+        schema_version: 1,
+        seq: 30,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        run_id: 'run-old',
+        at_unix_ms: 5000,
+        kind: 'timeline.replaced',
+        payload: {
+          stream_generation: 1,
+          snapshot_through_seq: 30,
+          messages: [message({ id: 'msg-final', content: 'Done', blocks: [{ type: 'markdown', content: 'Done' }] })],
+          thread_patch: {
+            run_status: 'success',
+          },
+        context_usage: {
+          run_id: 'run-latest',
+          phase: 'projected_request',
+          input_tokens: 610,
+          context_window_tokens: 1000,
+          used_ratio: 0.61,
+          pressure_status: 'stable',
+          updated_at_ms: 4300,
+        },
+      },
+      }],
+    });
+
+    const result = applyFlowerLiveEvent(initial, 29, mapped.events[0]);
+
+    expect(result.thread.status).toBe('success');
+    expect(result.thread.active_run_id).toBeUndefined();
+    expect(result.thread.model_io_status).toBeNull();
+    expect(result.thread.context_usage?.run_id).toBe('run-latest');
   });
 
   it('maps top-level read_status from live bootstrap responses', () => {
@@ -1668,6 +1924,54 @@ describe('Flower live projection', () => {
     expect(second.cursor).toBe(5);
   });
 
+  it('creates an assistant streaming row from message.started before block events', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const projected = applyEvents(initial, 0, [
+      event(1, 'message.started', {
+        message_id: 'assistant-started',
+        role: 'assistant',
+        status: 'streaming',
+        created_at_ms: 2100,
+      }),
+      event(2, 'message.block_started', {
+        message_id: 'assistant-started',
+        block_index: 0,
+        block_type: 'markdown',
+      }),
+      event(3, 'message.block_delta', {
+        message_id: 'assistant-started',
+        block_index: 0,
+        delta: 'hello from live',
+      }),
+    ]);
+
+    expect(projected.cursor).toBe(3);
+    expect(projected.thread.messages.map((item) => item.id)).toEqual(['msg-user', 'assistant-started']);
+    expect(projected.thread.messages[1]).toMatchObject({
+      role: 'assistant',
+      status: 'streaming',
+      content: 'hello from live',
+      active_cursor: true,
+    });
+  });
+
+  it('upserts canonical user messages from message.committed without a placeholder', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const committed = applyFlowerLiveEvent(initial, 1, event(2, 'message.committed', {
+      message_id: 'msg-user-2',
+      message: message({
+        id: 'msg-user-2',
+        content: 'Second user turn',
+        created_at_ms: 2200,
+        blocks: [{ type: 'markdown', content: 'Second user turn' }],
+      }),
+    }));
+
+    expect(committed.resyncRequired).toBe(false);
+    expect(committed.thread.messages.map((item) => item.id)).toEqual(['msg-user', 'msg-user-2']);
+    expect(committed.thread.messages[1]).toMatchObject({ role: 'user', content: 'Second user turn' });
+  });
+
   it('commits a streaming draft under the same message id', () => {
     const initial = projectFlowerLiveBootstrap(bootstrapWithLiveAssistant({
       blocks: [{ type: 'markdown', content: '' }],
@@ -1842,6 +2146,8 @@ describe('Flower live projection', () => {
       blocks: [{ type: 'markdown', content: 'old streaming output' }],
     }));
     const result = applyFlowerLiveEvent(initial, 5, event(6, 'timeline.replaced', {
+      stream_generation: 1,
+      snapshot_through_seq: 6,
       messages: [
         message({ id: 'msg-user-1', content: 'First request', created_at_ms: 1000, blocks: [{ type: 'markdown', content: 'First request' }] }),
         {
@@ -1866,10 +2172,94 @@ describe('Flower live projection', () => {
     }));
 
     expect(result.resyncRequired).toBe(false);
+    expect(result.cursor).toBe(6);
     expect(result.thread.messages.map((item) => item.id)).toEqual(['msg-user-1', 'assistant-1', 'msg-user-2', 'assistant-2']);
     expect(result.thread.messages[1]).toMatchObject({ role: 'assistant', status: 'canceled' });
     expect(result.thread.messages[1]?.active_cursor).toBeUndefined();
     expect(result.thread.messages[3]).toMatchObject({ role: 'assistant', status: 'streaming', active_cursor: true });
+  });
+
+  it('replaces stale live state when canonical timeline includes materialized state', () => {
+    const initial = thread({
+      context_compactions: [{
+        operation_id: 'compact-stale',
+        phase: 'start',
+        status: 'compacting',
+        updated_at_ms: 4100,
+      }],
+      timeline_decorations: [{
+        decoration_id: 'context-compaction:compact-stale',
+        kind: 'context_compaction',
+        anchor: {
+          target_kind: 'message',
+          message_id: 'msg-user',
+          edge: 'after',
+        },
+        ordinal: 0,
+        compaction: {
+          operation_id: 'compact-stale',
+          phase: 'start',
+          status: 'compacting',
+          updated_at_ms: 4100,
+        },
+      }],
+      context_usage: {
+        phase: 'provider_usage',
+        pressure_status: 'will_compact',
+        run_id: 'run-old',
+        input_tokens: 900,
+        context_window_tokens: 1000,
+        used_ratio: 0.9,
+        updated_at_ms: 4100,
+      },
+      queued_turn_count: 1,
+    });
+    const mapped = mapFlowerLiveEvents({
+      schema_version: 1,
+      stream_generation: 1,
+      next_cursor: 12,
+      events: [{
+        schema_version: 1,
+        seq: 12,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        at_unix_ms: 5000,
+        kind: 'timeline.replaced',
+        payload: {
+          stream_generation: 1,
+          snapshot_through_seq: 12,
+          messages: [message({ id: 'msg-user', content: 'Canonical', blocks: [{ type: 'markdown', content: 'Canonical' }] })],
+          live_state: {
+            thread_patch: {
+              run_status: 'success',
+              queued_turn_count: 0,
+            },
+            runs: {},
+            approval_actions: {},
+            input_requests: {},
+            context_usage: null,
+            context_compactions: [],
+            timeline_decorations: [],
+          },
+          read_status: readStatus({
+            snapshot: {
+              activity_revision: 2,
+              last_message_at_unix_ms: 5000,
+              activity_signature: 'sig-2',
+            },
+          }),
+        },
+      }],
+    });
+    const result = applyFlowerLiveEvent(initial, 11, mapped.events[0]);
+
+    expect(result.thread.messages.map((item) => item.id)).toEqual(['msg-user']);
+    expect(result.thread.context_compactions).toEqual([]);
+    expect(result.thread.timeline_decorations).toEqual([]);
+    expect(result.thread.context_usage).toBeNull();
+    expect(result.thread.status).toBe('success');
+    expect(result.thread.queued_turn_count).toBe(0);
+    expect(result.thread.read_status.snapshot.activity_signature).toBe('sig-2');
   });
 
   it('drops unsupported persisted message blocks instead of textifying them', () => {

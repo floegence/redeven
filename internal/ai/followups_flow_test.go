@@ -208,3 +208,209 @@ func TestService_StopThread_RecoversQueuedFollowupsToDraftsAndClearsQueue(t *tes
 		t.Fatalf("remaining run should be detached after StopThread")
 	}
 }
+
+func TestService_StopThread_CancelsIdleCompactionAndKeepsQueuedTurnDrafted(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "stop-idle-compaction", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	anchorMessage := threadstore.Message{
+		ThreadID:        th.ThreadID,
+		EndpointID:      meta.EndpointID,
+		MessageID:       "m_stop_idle_compaction_anchor",
+		Role:            "assistant",
+		Status:          "complete",
+		TextContent:     "ready",
+		MessageJSON:     `{"id":"m_stop_idle_compaction_anchor","role":"assistant","status":"complete","blocks":[{"type":"text","text":"ready"}]}`,
+		CreatedAtUnixMs: time.Now().UnixMilli(),
+		UpdatedAtUnixMs: time.Now().UnixMilli(),
+	}
+	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, anchorMessage, meta.UserPublicID, meta.UserEmail); err != nil {
+		t.Fatalf("AppendMessage anchor: %v", err)
+	}
+
+	var cancelCalled bool
+	begin, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_stop_idle", "run_stop_idle_compaction", FlowerTimelineAnchor{
+		TargetKind: "message",
+		MessageID:  "m_stop_idle_compaction_anchor",
+		Edge:       "after",
+	}, threadstore.ThreadContextBoundary{}, func() {
+		cancelCalled = true
+		svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_stop_idle")
+	})
+	if gateErr != nil || !begin.Started {
+		t.Fatalf("beginIdleThreadCompaction result=%+v err=%v", begin, gateErr)
+	}
+
+	followupResp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			MessageID: "m_stop_idle_compaction_followup",
+			Text:      "queued behind compaction",
+		},
+		Options: RunOptions{},
+	})
+	if err != nil {
+		t.Fatalf("SendUserTurn followup: %v", err)
+	}
+	if followupResp.Kind != "queued" {
+		t.Fatalf("followupResp.Kind=%q, want queued", followupResp.Kind)
+	}
+
+	stopCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	stopResp, err := svc.StopThread(stopCtx, meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("StopThread: %v", err)
+	}
+	if !stopResp.OK || len(stopResp.RecoveredFollowups) != 1 {
+		t.Fatalf("StopThread response=%+v, want one recovered followup", stopResp)
+	}
+	if got := strings.TrimSpace(stopResp.RecoveredFollowups[0].FollowupID); got != strings.TrimSpace(followupResp.QueueID) {
+		t.Fatalf("recovered followup=%q, want %q", got, followupResp.QueueID)
+	}
+	if got := svc.idleThreadCompactionOperation(meta.EndpointID, th.ThreadID); got != "" {
+		t.Fatalf("idleThreadCompactionOperation=%q, want empty after stop", got)
+	}
+	if !cancelCalled {
+		t.Fatalf("idle compaction cancel callback was not called")
+	}
+	if begin.OperationID == "" {
+		t.Fatalf("begin.OperationID is empty")
+	}
+
+	queued, err := svc.threadsDB.ListFollowupsByLane(ctx, meta.EndpointID, th.ThreadID, threadstore.FollowupLaneQueued, 10)
+	if err != nil {
+		t.Fatalf("ListFollowupsByLane queued: %v", err)
+	}
+	if len(queued) != 0 {
+		t.Fatalf("queued=%+v, want none after stop", queued)
+	}
+	drafts, err := svc.threadsDB.ListFollowupsByLane(ctx, meta.EndpointID, th.ThreadID, threadstore.FollowupLaneDraft, 10)
+	if err != nil {
+		t.Fatalf("ListFollowupsByLane drafts: %v", err)
+	}
+	if len(drafts) != 1 || drafts[0].MessageID != "m_stop_idle_compaction_followup" {
+		t.Fatalf("drafts=%+v, want stopped followup drafted", drafts)
+	}
+}
+
+func TestService_StopThread_InvalidatesIdleCompactionBeforeLateCommit(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "stop-idle-late-commit", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	anchorMessage := threadstore.Message{
+		ThreadID:        th.ThreadID,
+		EndpointID:      meta.EndpointID,
+		MessageID:       "m_stop_idle_late_anchor",
+		Role:            "assistant",
+		Status:          "complete",
+		TextContent:     "ready",
+		MessageJSON:     `{"id":"m_stop_idle_late_anchor","role":"assistant","status":"complete","blocks":[{"type":"text","text":"ready"}]}`,
+		CreatedAtUnixMs: time.Now().UnixMilli(),
+		UpdatedAtUnixMs: time.Now().UnixMilli(),
+	}
+	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, anchorMessage, meta.UserPublicID, meta.UserEmail); err != nil {
+		t.Fatalf("AppendMessage anchor: %v", err)
+	}
+
+	boundary, err := svc.threadsDB.CurrentThreadContextBoundary(ctx, meta.EndpointID, th.ThreadID)
+	if err != nil {
+		t.Fatalf("CurrentThreadContextBoundary: %v", err)
+	}
+	var cancelCalled bool
+	begin, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_stop_idle_late", "run_stop_idle_late", FlowerTimelineAnchor{
+		TargetKind: "message",
+		MessageID:  "m_stop_idle_late_anchor",
+		Edge:       "after",
+	}, boundary, func() {
+		cancelCalled = true
+	})
+	if gateErr != nil || !begin.Started || begin.OperationID == "" {
+		t.Fatalf("beginIdleThreadCompaction result=%+v err=%v", begin, gateErr)
+	}
+	defer svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, begin.OperationID)
+	svc.mu.Lock()
+	svc.persistOpTO = 20 * time.Millisecond
+	svc.mu.Unlock()
+
+	stopCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	stopResp, err := svc.StopThread(stopCtx, meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("StopThread: %v", err)
+	}
+	if !stopResp.OK {
+		t.Fatalf("StopThread OK=false")
+	}
+	if !cancelCalled {
+		t.Fatalf("idle compaction cancel callback was not called")
+	}
+	if got := svc.idleThreadCompactionOperation(meta.EndpointID, th.ThreadID); got != "" {
+		t.Fatalf("idleThreadCompactionOperation=%q, want empty after cancel", got)
+	}
+	svc.mu.Lock()
+	svc.persistOpTO = 2 * time.Second
+	svc.mu.Unlock()
+
+	compacted := threadstore.ThreadCompactedContext{
+		OperationID:             begin.OperationID,
+		CompactionID:            "cmp_late_rejected",
+		CompactionGeneration:    1,
+		CompactionWindowID:      "window_late_rejected",
+		CoveredThroughTurnRowID: boundary.TurnRowID,
+		CoveredThroughMessageID: boundary.MessageID,
+		Transcript: []threadstore.ThreadCompactedMessage{{
+			Role:    "assistant",
+			Content: "late summary must not persist",
+		}},
+		CreatedAtUnixMs: time.Now().UnixMilli(),
+		UpdatedAtUnixMs: time.Now().UnixMilli(),
+	}
+	err = svc.commitIdleThreadCompaction(ctx, svc.threadsDB, meta.EndpointID, th.ThreadID, begin.OperationID, threadstore.ThreadProviderContinuation{}, compacted)
+	if !errors.Is(err, errIdleCompactionNotCurrent) {
+		t.Fatalf("commitIdleThreadCompaction err=%v, want %v", err, errIdleCompactionNotCurrent)
+	}
+	state, err := svc.threadsDB.GetThreadState(ctx, meta.EndpointID, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThreadState: %v", err)
+	}
+	if state != nil && !state.CompactedContext.IsZero() {
+		t.Fatalf("CompactedContext=%+v, want empty after rejected late commit", state.CompactedContext)
+	}
+
+	events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, "run_stop_idle_late", 20)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	if !hasIdleCompactionGatePhase(events, "cancel_requested") || !hasIdleCompactionGatePhase(events, "commit_rejected") {
+		t.Fatalf("gate events=%+v, want cancel_requested and commit_rejected", events)
+	}
+}
+
+func hasIdleCompactionGatePhase(events []threadstore.RunEventRecord, phase string) bool {
+	phase = strings.TrimSpace(phase)
+	for _, event := range events {
+		if strings.TrimSpace(event.EventType) != idleCompactionGateRunEventType {
+			continue
+		}
+		if strings.Contains(event.PayloadJSON, `"phase":"`+phase+`"`) {
+			return true
+		}
+	}
+	return false
+}

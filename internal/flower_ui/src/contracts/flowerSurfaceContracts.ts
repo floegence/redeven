@@ -177,13 +177,13 @@ export type FlowerContextUsage = Readonly<{
   updated_at_ms: number;
 }>;
 
-export type FlowerContextCompactionStatus = 'compacting' | 'compacted' | 'failed';
+export type FlowerContextCompactionStatus = 'compacting' | 'compacted' | 'failed' | 'cancelled';
 
 export type FlowerContextCompaction = Readonly<{
   operation_id: string;
   run_id?: string;
   step_index?: number;
-  phase: 'start' | 'complete' | 'failed' | string;
+  phase: 'start' | 'complete' | 'failed' | 'cancelled' | string;
   status: FlowerContextCompactionStatus | string;
   trigger?: string;
   reason?: string;
@@ -393,6 +393,7 @@ export type FlowerThreadSnapshot = Readonly<{
   updated_at_ms: number;
   status: FlowerThreadStatus;
   active_run_id?: string;
+  queued_turn_count?: number;
   source_label: string;
   target_labels: readonly string[];
   read_only_reason?: string;
@@ -625,6 +626,7 @@ export type FlowerLiveBootstrap = Readonly<{
   schema_version: number;
   endpoint_id: string;
   thread_id: string;
+  stream_generation: number;
   cursor: number;
   retained_from_seq: number;
   thread: FlowerThreadSnapshot;
@@ -703,6 +705,14 @@ export type FlowerLiveModelIOUpdatedPayload = Readonly<{
 
 export type FlowerLiveTimelineReplacedPayload = Readonly<{
   messages: readonly FlowerChatMessage[];
+  stream_generation: number;
+  snapshot_through_seq: number;
+  thread_patch?: FlowerLiveThreadPatch;
+  live_state?: FlowerLiveMaterializedState;
+  read_status?: FlowerThreadReadStatus;
+  context_usage?: FlowerContextUsage | null;
+  context_compactions?: readonly FlowerContextCompaction[];
+  timeline_decorations?: readonly FlowerTimelineDecoration[];
 }>;
 
 export type FlowerLiveResyncRequiredPayload = Readonly<{
@@ -766,6 +776,7 @@ export type FlowerLiveEvent<K extends FlowerLiveKind = FlowerLiveKind> = K exten
 }> : never;
 
 export type FlowerLiveEventsResponse = Readonly<{
+  stream_generation: number;
   events: readonly FlowerLiveEvent[];
   next_cursor: number;
   has_more?: boolean;
@@ -871,6 +882,7 @@ export type FlowerResolveHandlerInput = Readonly<{
 
 export type FlowerTurnLaunchInput = Readonly<{
   thread_id?: string;
+  message_id?: string;
   prompt: string;
   decision?: FlowerRouterDecision | null;
   context_action?: unknown;

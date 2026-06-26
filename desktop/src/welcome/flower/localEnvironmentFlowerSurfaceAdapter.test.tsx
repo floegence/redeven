@@ -248,7 +248,7 @@ describe('Local Environment Flower surface adapter', () => {
 
     await adapter.loadSettings();
     await adapter.listThreads();
-    const snapshot = await adapter.launchTurn({ prompt: 'hello' });
+    const snapshot = await adapter.launchTurn({ message_id: 'client_desktop-message', prompt: 'hello' });
 
     expect(snapshot.thread.thread_id).toBe('thread-new');
     expect(snapshot.thread.messages[0].content).toBe('hello');
@@ -264,7 +264,7 @@ describe('Local Environment Flower surface adapter', () => {
     expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads/thread-new/turns')?.body).toMatchObject({
       thread_id: 'thread-new',
       model: 'default/gpt-4.1',
-      input: { text: 'hello', attachments: [] },
+      input: { message_id: 'client_desktop-message', text: 'hello', attachments: [] },
       options: { mode: 'act' },
     });
   });
@@ -327,7 +327,7 @@ describe('Local Environment Flower surface adapter', () => {
     const bridge = bridgeFor((request) => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/context/compact') {
-        return { operation_id: 'manual-compact-1', kind: 'accepted', run_id: 'run-1' };
+        return { operation_id: 'manual-compact-1', kind: 'accepted' };
       }
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap') {
         return liveBootstrap({ run_status: 'running' });

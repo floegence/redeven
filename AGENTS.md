@@ -286,6 +286,13 @@ tests, and published Floret release notes.
 - Desktop-managed startup must use `--presentation machine` and `--startup-report-file`; Desktop readiness must never depend on parsing human terminal output.
 - The compact Redeven character mark belongs in the rich renderer only. Do not reintroduce a separate large startup banner or duplicate brand art in command code.
 
+## Desktop UI Verification
+
+- When testing a `dev_desktop.sh` Desktop build, identify the target app through the script's launched process path, user data directory, or remote debugging endpoint before interacting with it.
+- Do not treat the frontmost generic Electron window as the Redeven Desktop target unless its page URL or process arguments prove it belongs to the current worktree.
+- If multiple Electron instances are running, prefer the `dev_desktop.sh` CDP endpoint and page URL for automation. A default Electron welcome page is never valid evidence for Redeven Desktop behavior.
+- Never use a blank or default Electron window as a verification target for Flower or Desktop behavior. If the visible page is an empty welcome shell, re-check the page URL, process arguments, and CDP target before performing any test action.
+
 ## Workbench Wheel Ownership
 
 - Inside Workbench, wheel / trackpad scrolling belongs to the canvas by default. Blank canvas areas and unselected widget bounds may zoom the canvas.

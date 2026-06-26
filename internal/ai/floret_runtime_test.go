@@ -13,6 +13,7 @@ import (
 	flconfig "github.com/floegence/floret/config"
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
+	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -36,6 +37,182 @@ func (p *capturingTurnProvider) firstRequest() ModelGatewayRequest {
 		return ModelGatewayRequest{}
 	}
 	return p.requests[0]
+}
+
+type streamedEmptyTaskCompleteProvider struct{}
+
+func (streamedEmptyTaskCompleteProvider) StreamTurn(_ context.Context, _ ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	onEvent(StreamEvent{Type: StreamEventTextDelta, Text: "OK, continuing works."})
+	return ModelGatewayResult{
+		FinishReason: "tool_calls",
+		ToolCalls: []ToolCall{{
+			ID:   "call_task_complete_empty",
+			Name: "task_complete",
+			Args: map[string]any{},
+		}},
+	}, nil
+}
+
+type naturalCompactionProvider struct {
+	mu       sync.Mutex
+	requests []ModelGatewayRequest
+}
+
+func (p *naturalCompactionProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	p.mu.Lock()
+	p.requests = append(p.requests, req)
+	callIndex := len(p.requests)
+	p.mu.Unlock()
+
+	if callIndex == 1 {
+		return ModelGatewayResult{FinishReason: "stop", Text: "Older context checkpoint summary."}, nil
+	}
+	onEvent(StreamEvent{Type: StreamEventTextDelta, Text: "continued after natural compact"})
+	return ModelGatewayResult{FinishReason: "stop"}, nil
+}
+
+func (p *naturalCompactionProvider) requestCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.requests)
+}
+
+func TestRunFloretProjectedTurnCompletesEmptyTaskCompleteFromStreamedText(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 8)
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "bash",
+		AIConfig:     &config.AIConfig{},
+		SessionMeta: &session.Meta{
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+			CanAdmin:   true,
+		},
+		RunID:     "run_floret_empty_task_complete_streamed",
+		ThreadID:  "thread_floret_empty_task_complete_streamed",
+		MessageID: "msg_floret_empty_task_complete_streamed",
+	})
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+
+	err := r.runFloretProjectedTurn(t.Context(), RunRequest{
+		Model: "compat/gpt-5-mini",
+		Input: RunInput{Text: "finish with streamed text and task_complete"},
+		Options: RunOptions{
+			Mode: config.AIModeAct,
+		},
+	}, config.AIProvider{
+		ID:      "compat",
+		Type:    "openai_compatible",
+		BaseURL: "https://example.test/v1",
+	}, "sk-test", "finish", streamedEmptyTaskCompleteProvider{})
+	if err != nil {
+		t.Fatalf("runFloretProjectedTurn: %v", err)
+	}
+	if got := r.getFinalizationReason(); got != "task_complete" {
+		t.Fatalf("finalizationReason=%q, want task_complete", got)
+	}
+	_, assistantText, _, err := r.snapshotAssistantMessageJSON()
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
+	}
+	if assistantText != "OK, continuing works." {
+		t.Fatalf("assistantText=%q, want streamed final answer", assistantText)
+	}
+	if !hasFloretStreamedMarkdownDelta(events, "OK, continuing works.") {
+		t.Fatalf("events missing streamed markdown delta: %#v", events)
+	}
+}
+
+func TestRunFloretProjectedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 16)
+	provider := &naturalCompactionProvider{}
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "bash",
+		AIConfig:     &config.AIConfig{},
+		SessionMeta: &session.Meta{
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+			CanAdmin:   true,
+		},
+		RunID:     "run_floret_natural_compact_streaming",
+		ThreadID:  "thread_floret_natural_compact_streaming",
+		MessageID: "msg_floret_natural_compact_streaming",
+	})
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+
+	err := r.runFloretProjectedTurn(t.Context(), RunRequest{
+		Model: "compat/gpt-5-mini",
+		History: []RunHistoryMsg{
+			{Role: "user", Text: strings.Repeat("old context ", 2600)},
+			{Role: "assistant", Text: strings.Repeat("old answer ", 1800)},
+		},
+		Input: RunInput{Text: "continue after compacting"},
+		Options: RunOptions{
+			Mode:            config.AIModeAct,
+			MaxInputTokens:  11000,
+			MaxOutputTokens: 500,
+		},
+		ModelCapability: contextmodel.ModelCapability{
+			MaxContextTokens: 20000,
+		},
+	}, config.AIProvider{
+		ID:      "compat",
+		Type:    "openai_compatible",
+		BaseURL: "https://example.test/v1",
+	}, "sk-test", "continue", provider)
+	if err != nil {
+		t.Fatalf("runFloretProjectedTurn: %v", err)
+	}
+	if provider.requestCount() < 2 {
+		t.Fatalf("provider request count=%d, want summary request and post-compaction provider request", provider.requestCount())
+	}
+	if got := r.getFinalizationReason(); got != "natural_stop" {
+		t.Fatalf("finalizationReason=%q, want natural_stop", got)
+	}
+	_, assistantText, _, err := r.snapshotAssistantMessageJSON()
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
+	}
+	if assistantText != "continued after natural compact" {
+		t.Fatalf("assistantText=%q, want post-compaction streamed output", assistantText)
+	}
+	if !hasFloretStreamedMarkdownDelta(events, "continued after natural compact") {
+		t.Fatalf("events missing post-compaction markdown delta: %#v", events)
+	}
+	if got := compactStatusesFromStreamEvents(events); len(got) < 2 || got[0] != "compacting" || got[len(got)-1] != "compacted" {
+		t.Fatalf("compaction statuses=%#v, want compacting -> compacted", got)
+	}
+	if r.getThreadCompactedContextCandidate().IsZero() {
+		t.Fatalf("thread compacted context candidate is zero")
+	}
+}
+
+func hasFloretStreamedMarkdownDelta(events []any, delta string) bool {
+	for _, ev := range events {
+		if blockDelta, ok := ev.(streamEventBlockDelta); ok && blockDelta.Delta == delta {
+			return true
+		}
+	}
+	return false
+}
+
+func compactStatusesFromStreamEvents(events []any) []string {
+	out := make([]string, 0, 2)
+	for _, ev := range events {
+		if compaction, ok := ev.(streamEventContextCompaction); ok {
+			out = append(out, strings.TrimSpace(compaction.Compaction.Status))
+		}
+	}
+	return out
 }
 
 func TestRunFloretProjectedTurnProjectsWebSearchToolThroughFloretGateway(t *testing.T) {
@@ -258,6 +435,161 @@ func TestFloretEventSinkProjectsContextObservations(t *testing.T) {
 		compaction.Compaction.Status != "compacting" ||
 		compaction.Compaction.Phase != observation.CompactionPhaseStart {
 		t.Fatalf("compaction=%#v", compaction.Compaction)
+	}
+}
+
+func TestHostManagedContextCompactionDefersLiveProjection(t *testing.T) {
+	t.Parallel()
+
+	_, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{})
+	r.hostManagedContextCompaction = true
+	r.activeManualCompactionID = "manual-host-managed"
+
+	r.applyFloretCompaction(&observation.CompactionEvent{
+		RunID:                "run_floret_reasoning",
+		ThreadID:             "thread_floret_reasoning",
+		TurnID:               "msg_floret_reasoning",
+		Step:                 1,
+		OperationID:          "run_floret_reasoning:compact:1:manual:manual-host-managed",
+		RequestID:            "manual-host-managed",
+		Phase:                observation.CompactionPhaseComplete,
+		Status:               observation.CompactionStatusCompacted,
+		Trigger:              "manual",
+		Reason:               "manual",
+		CompactionID:         "compact-host-managed",
+		CompactionGeneration: 1,
+		CompactionWindowID:   "window-host-managed",
+		TokensBefore:         1_000,
+		TokensAfterEstimate:  300,
+		ObservedAt:           time.UnixMilli(30_000),
+	})
+
+	if len(*events) != 0 {
+		t.Fatalf("stream events=%#v, want host-managed compaction to defer live projection", *events)
+	}
+	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 10)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	for _, event := range runEvents {
+		if event.EventType == string(FlowerLiveContextCompactionUpdated) {
+			t.Fatalf("unexpected persisted live compaction event: %#v", event)
+		}
+	}
+	completed := r.getCompletedContextCompaction()
+	if completed.CompactionID != "compact-host-managed" {
+		t.Fatalf("completed compaction=%#v, want internal result retained", completed)
+	}
+	if r.activeManualCompactionID != "" {
+		t.Fatalf("activeManualCompactionID=%q, want cleared", r.activeManualCompactionID)
+	}
+	if _, ok := r.completeManualCompactionIDs["manual-host-managed"]; !ok {
+		t.Fatalf("completeManualCompactionIDs=%#v, want manual request recorded complete", r.completeManualCompactionIDs)
+	}
+}
+
+func TestFloretEventSinkPersistsCompactionDebugWithoutProjectingTimeline(t *testing.T) {
+	t.Parallel()
+
+	_, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{})
+	sink := floretEventSink{run: r}
+	sink.EmitEvent(flruntime.Event{
+		Type: floretEventContextCompactDebug,
+		CompactionDebug: &observation.CompactionDebugEvent{
+			RunID:                        "run_floret_reasoning",
+			ThreadID:                     "thread_floret_reasoning",
+			TurnID:                       "msg_floret_reasoning",
+			Step:                         3,
+			OperationID:                  "op_compact_debug",
+			RequestID:                    "req_compact_debug",
+			Stage:                        observation.CompactionDebugStageRequestValidation,
+			Status:                       observation.CompactionDebugStatusRetrying,
+			Trigger:                      "manual",
+			Reason:                       "slash_command",
+			Source:                       "manual",
+			CompactionConvergenceAttempt: 2,
+			TokensBefore:                 101_000,
+			TokensAfterEstimate:          45_000,
+			RequestSafeLimit:             80_000,
+			HardLimitExceeded:            true,
+			DurationMS:                   1234,
+			ProviderStateKind:            "responses",
+			NextAction:                   "provider_request",
+			Error:                        "validation pressure still high",
+			ObservedAt:                   time.UnixMilli(20_000),
+		},
+	})
+	sink.EmitEvent(flruntime.Event{
+		Type: floretEventContextCompactDebug,
+		CompactionDebug: &observation.CompactionDebugEvent{
+			RunID:       "run_floret_reasoning",
+			ThreadID:    "thread_floret_reasoning",
+			TurnID:      "msg_floret_reasoning",
+			Step:        3,
+			OperationID: "op_compact_debug",
+			RequestID:   "req_compact_debug",
+			Stage:       observation.CompactionDebugStagePreflight,
+			Status:      observation.CompactionDebugStatusFailed,
+			Trigger:     "manual",
+			Reason:      "manual",
+			Source:      "slash_command",
+			Error:       "compaction manager is required when context exceeds policy",
+			ObservedAt:  time.UnixMilli(20_100),
+		},
+	})
+
+	if len(*events) != 0 {
+		t.Fatalf("stream events=%#v, want no UI projection for compaction debug", *events)
+	}
+	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 10)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	if len(runEvents) != 2 {
+		t.Fatalf("run events=%#v, want exactly two debug events", runEvents)
+	}
+	if runEvents[0].EventType != "floret.context.compact.debug" || runEvents[0].StreamKind != string(RealtimeStreamKindContext) {
+		t.Fatalf("run event=%#v, want context compaction debug", runEvents[0])
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(runEvents[0].PayloadJSON), &payload); err != nil {
+		t.Fatalf("payload json: %v", err)
+	}
+	for key, want := range map[string]string{
+		"operation_id":        "op_compact_debug",
+		"request_id":          "req_compact_debug",
+		"stage":               observation.CompactionDebugStageRequestValidation,
+		"status":              observation.CompactionDebugStatusRetrying,
+		"provider_state_kind": "responses",
+		"next_action":         "provider_request",
+		"error":               "validation pressure still high",
+	} {
+		if got := strings.TrimSpace(anyToString(payload[key])); got != want {
+			t.Fatalf("payload[%s]=%q, want %q in %#v", key, got, want, payload)
+		}
+	}
+	if payload["tokens_before"] != float64(101_000) ||
+		payload["tokens_after_estimate"] != float64(45_000) ||
+		payload["request_safe_limit"] != float64(80_000) ||
+		payload["duration_ms"] != float64(1234) ||
+		payload["observed_at_unix_ms"] != float64(20_000) ||
+		payload["hard_limit_exceeded"] != true {
+		t.Fatalf("payload numeric fields=%#v", payload)
+	}
+	if err := json.Unmarshal([]byte(runEvents[1].PayloadJSON), &payload); err != nil {
+		t.Fatalf("preflight payload json: %v", err)
+	}
+	for key, want := range map[string]string{
+		"operation_id": "op_compact_debug",
+		"request_id":   "req_compact_debug",
+		"stage":        observation.CompactionDebugStagePreflight,
+		"status":       observation.CompactionDebugStatusFailed,
+		"source":       "slash_command",
+		"error":        "compaction manager is required when context exceeds policy",
+	} {
+		if got := strings.TrimSpace(anyToString(payload[key])); got != want {
+			t.Fatalf("preflight payload[%s]=%q, want %q in %#v", key, got, want, payload)
+		}
 	}
 }
 

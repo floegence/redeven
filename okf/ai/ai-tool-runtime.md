@@ -16,7 +16,9 @@ Floret owns the permission lifecycle. Redeven still decides product policy, incl
 
 Provider adapters are model gateways, not Flower renderers. `floretProviderAdapter` maps provider stream bytes into Floret `ModelEvent` values. Assistant text, reasoning deltas, and model-generated tool-call stream observations are emitted as provider-neutral Floret model events before Redeven projects them into Flower live state. `ToolCallStream` identifies a tool call while the model is still generating it; final executable tool calls remain the separate `ToolCalls` batch. Redeven applies assistant text, reasoning deltas, tool-call stream observations, retry/done/abort markers, and source observations only from Floret runtime events in the event sink. Provider continuation persistence reads the complete opaque provider state from the Floret turn result, stores it as a state JSON envelope including `Attributes`, and only matches provider id, model, base URL, and state kind before passing it back to Floret.
 
-Context pressure and compaction presentation also come from structured Floret runtime observations. Redeven maps Floret context status into `context.usage.updated` and maps Floret compaction lifecycle events into `context.compaction.updated`; those product events are persisted as run events and projected into Flower live materialized state. Redeven supplies a projected compaction summarizer to Floret so the reusable Floret lifecycle still owns the compaction decision, operation id, start/complete/failed phases, active history rewrite, and continuation. Manual `/compact` requests use Floret's manual compaction source and projected context compaction API; Redeven owns the Flower slash-command entrypoint, thread actor serialization, timeline decoration anchor, read-state activity, and durable compacted-context checkpoint. Active manual compaction keeps the current projected turn running, while idle compaction writes a compacted-context checkpoint without creating transcript rows.
+Context pressure and compaction presentation also come from structured Floret runtime observations. Redeven maps Floret context status into `context.usage.updated` and maps Floret compaction lifecycle events into `context.compaction.updated`; those product events are persisted as run events and projected into Flower live materialized state. Floret compaction debug observations are persisted separately as `floret.context.compact.debug` context run events with safe correlation, phase, token-pressure, validation, duration, provider-state-kind, error fields, and `next_action`. The next action distinguishes active projected-turn continuation toward the next provider request from compact-only projected-context return. These debug rows are diagnostic records and never create timeline decorations or chat rows. Redeven supplies a projected compaction summarizer to Floret so the reusable Floret lifecycle still owns the compaction decision, operation id, start/complete/failed/cancelled phases, active history rewrite, and continuation. Manual `/compact` requests use Floret's manual compaction source and projected context compaction API; Redeven owns the Flower slash-command entrypoint, thread actor serialization, timeline decoration anchor, read-state activity, and durable compacted-context checkpoint. Active manual compaction keeps the current projected turn running. Idle manual compaction is a Flower operation rather than an assistant run: the actor publishes the running divider and returns, a background worker performs projected context compaction, and user turns submitted before the operation clears are held as queued follow-ups without transcript rows. Redeven records idle compaction gate events for registered, cancel requested, commit attempted, commit rejected, and commit persisted phases so late commits, thread cancellation, and queued-turn drain can be diagnosed without treating diagnostics as Flower timeline rows.
+
+Redeven accepts a user turn only at one durable boundary. The service prepares the run object and user message payload before storage, then threadstore atomically writes the user transcript message, `ai_runs` row, `conversation_turns` anchor, thread run state, structured user inputs, secret answers, upload references, and optional source follow-up consumption. If storage fails, the reserved active run is released and no orphan transcript message is left for prompt packing. Prompt history reads canonical `conversation_turns`; transcript-only orphan messages are not used as dialogue input.
 
 Flower UI tool activity comes from Floret `ActivityTimeline` projection. Redeven can key detail lookups from timeline item ids, but it must not synthesize chat activity rows from `ai_tool_calls`, `tool.call`, `tool.result`, execution spans, handler outcomes, or provider-adapter side effects.
 
@@ -38,7 +40,7 @@ Tool names are not aliases for deleted knowledge-era tools. Current repository k
 
 Target provenance is part of the tool contract, not a UI hint. Flower must not infer remote execution from thread context alone; it can only claim remote or target execution when a tool result or Redeven product command returns explicit execution provenance.
 
-Redeven must consume published Floret releases. Repository builds, tests, Desktop runs, and release validation must not depend on a sibling checkout, Go workspace, local replace directive, or package-manager local link. The current runtime boundary depends on `github.com/floegence/floret v0.3.27`, including Floret's public reasoning selection API, structured context observations, manual compaction source, projected context compaction API, projected compaction summary lifecycle, provider request budget validation before compacted completion, durable compaction commit after validation, committed compaction append recovery, multi-tool batch boundary preservation during compaction, and parent-scoped subagent detail API.
+Redeven must consume published Floret releases. Repository builds, tests, Desktop runs, and release validation must not depend on a sibling checkout, Go workspace, local replace directive, or package-manager local link. The current runtime boundary depends on `github.com/floegence/floret v0.3.36`, including Floret's public reasoning selection API, structured context observations, manual compaction source, projected context compaction API, projected compaction summary lifecycle, sanitized compaction debug observations with `next_action`, cancellation-aware manual compaction lifecycle events, terminal control output derived from same-step assistant text when `task_complete` has no explicit output, provider-safe replay for empty terminal controls, provider request budget validation before compacted completion, durable compaction commit after validation, committed compaction append recovery, legacy prompt-cache scope migration, multi-tool batch boundary preservation during compaction, and parent-scoped subagent detail API.
 
 # Citations
 
@@ -57,36 +59,37 @@ Redeven must consume published Floret releases. Repository builds, tests, Deskto
 [13] redeven:internal/ai/floret_approval.go:14 - Redeven product policy is returned through the Floret tool approver.
 [14] redeven:internal/ai/floret_provider.go:55 - Provider stream deltas are sent to Floret as model events rather than mutating Flower state directly.
 [15] redeven:internal/ai/floret_events.go:42 - Flower applies streaming and source observations from Floret runtime events.
-[16] redeven:internal/ai/floret_events.go:123 - Structured context status observations are persisted and streamed as `context.usage.updated`.
-[17] redeven:internal/ai/floret_events.go:139 - Structured compaction observations are persisted and streamed as `context.compaction.updated`.
-[18] redeven:internal/ai/floret_compaction.go:19 - Redeven implements the projected Floret compaction summarizer without taking over Floret's compaction lifecycle.
-[19] redeven:internal/ai/floret_runtime.go:171 - Flower execution runs through Floret projected turns with a Floret approver and event sink.
-[20] redeven:internal/ai/compact_thread_context.go:17 - Manual context compaction is exposed as a serialized thread action.
-[21] redeven:internal/ai/run.go:548 - Active runs implement Floret's manual compaction source.
-[22] redeven:internal/ai/compact_thread_context.go:285 - Idle compaction persists a thread compacted-context checkpoint.
-[23] redeven:internal/ai/model_gateway.go:37 - Redeven's remaining hard execution protection is the tool-call count constant.
-[24] redeven:internal/ai/floret_runtime.go:193 - Redeven passes `MaxToolCalls` into the Floret turn limits.
-[25] redeven:internal/ai/floret_runtime.go:204 - Provider continuation candidates are built from the Floret turn result provider state.
-[26] redeven:internal/ai/provider_continuation.go:30 - Previous provider state is loaded as the full Floret model state envelope after provider/profile matching.
-[27] redeven:internal/ai/floret_runtime.go:419 - `exit_plan_mode` waiting prompts are built during Redeven result projection, not signal projection.
-[28] redeven:go.mod:9 - Redeven depends on the published Floret module version.
-[29] redeven:internal/ai/service.go:394 - The service caches a thread-scoped Floret subagent runtime and attaches each new parent run to it.
-[30] redeven:internal/ai/subagents_floret.go:129 - The Redeven subagent runtime dispatches validated actions to the Floret host lifecycle.
-[31] redeven:internal/ai/subagents_floret.go:363 - Subagent hosts reuse the resolved Flower model gateway, Floret tools, approver, event sink, private SQLite store, and twenty-minute run timeout.
-[32] redeven:internal/ai/subagents_floret.go:587 - `spawn` calls Floret `SpawnSubAgent` and returns child `thread_id` as the lifecycle identity.
-[33] redeven:internal/ai/subagents_floret.go:656 - `wait` calls Floret `WaitSubAgents` with bounded timeout semantics.
-[34] redeven:internal/ai/tools/registry.go:424 - Subagent invocation policy asks approval for worker spawn, send_input, close, and close_all.
-[35] redeven:internal/ai/subagents_floret.go:791 - Model-facing subagent results are reduced to bounded summary items.
-[36] redeven:internal/ai/subagents_floret.go:1315 - Flower subagent detail reads through the parent-scoped Floret detail API with raw content disabled.
-[37] redeven:internal/codeapp/appserver/server.go:3737 - Appserver exposes the parent-scoped subagent detail route.
-[38] redeven:internal/flower_ui/src/flowerSubagentProjection.ts:130 - The shared UI projection derives subagent dropdown items only from current activity payload shapes.
-[39] redeven:internal/flower_ui/src/FlowerSurface.tsx:1300 - Opening subagent detail loads the child detail without selecting the child thread.
-[40] redeven:internal/flower_ui/src/FlowerSurface.tsx:3480 - The selected parent thread header renders the Sub Agents dropdown.
-[41] redeven:internal/flower_ui/src/FlowerSurface.tsx:3342 - Subagent execution detail renders inside the parent-thread overlay.
-[42] redeven:internal/ai/threadstore/store.go:357 - Normal thread-list queries exclude `subagent_projection` rows.
-[43] redeven:internal/ai/floret_tools.go:135 - Floret tool invocations derive a child execution run from the invocation run, thread, and turn ids.
-[44] redeven:internal/ai/floret_approval.go:53 - The Floret approver denies approval-required child invocations when subagents cannot ask the user.
-[45] redeven:internal/ai/subagents_floret.go:3132 - Flower child prompts forbid nested subagents and direct user input while requesting a complete final handoff.
-[46] redeven:internal/ai/subagent_lifecycle_test.go:29 - Parent run cancellation is tested to avoid releasing the durable subagent runtime.
-[47] redeven:internal/ai/threads.go:173 - Flower subagent projection threads are rejected by direct thread mutation paths.
-[48] redeven:internal/ai/threads.go:895 - Parent thread deletion closes its cached Floret subagent runtime and deletes child projection threads.
+[16] redeven:internal/ai/floret_events.go:124 - Floret compaction debug observations are persisted as diagnostic context run events.
+[17] redeven:internal/ai/floret_events.go:167 - Structured context status observations are persisted and streamed as `context.usage.updated`.
+[18] redeven:internal/ai/floret_events.go:183 - Structured compaction observations are persisted and streamed as `context.compaction.updated`.
+[19] redeven:internal/ai/floret_compaction.go:19 - Redeven implements the projected Floret compaction summarizer without taking over Floret's compaction lifecycle.
+[20] redeven:internal/ai/floret_runtime.go:171 - Flower execution runs through Floret projected turns with a Floret approver and event sink.
+[21] redeven:internal/ai/compact_thread_context.go:17 - Manual context compaction is exposed as a serialized thread action.
+[22] redeven:internal/ai/run.go:548 - Active runs implement Floret's manual compaction source.
+[23] redeven:internal/ai/compact_thread_context.go:330 - Idle compaction persists compacted-context checkpoints with durable coverage boundaries.
+[24] redeven:internal/ai/model_gateway.go:37 - Redeven's remaining hard execution protection is the tool-call count constant.
+[25] redeven:internal/ai/floret_runtime.go:193 - Redeven passes `MaxToolCalls` into the Floret turn limits.
+[26] redeven:internal/ai/floret_runtime.go:204 - Provider continuation candidates are built from the Floret turn result provider state.
+[27] redeven:internal/ai/provider_continuation.go:30 - Previous provider state is loaded as the full Floret model state envelope after provider/profile matching.
+[28] redeven:internal/ai/floret_runtime.go:419 - `exit_plan_mode` waiting prompts are built during Redeven result projection, not signal projection.
+[29] redeven:go.mod:9 - Redeven depends on the published Floret module version.
+[30] redeven:internal/ai/service.go:394 - The service caches a thread-scoped Floret subagent runtime and attaches each new parent run to it.
+[31] redeven:internal/ai/subagents_floret.go:129 - The Redeven subagent runtime dispatches validated actions to the Floret host lifecycle.
+[32] redeven:internal/ai/subagents_floret.go:363 - Subagent hosts reuse the resolved Flower model gateway, Floret tools, approver, event sink, private SQLite store, and twenty-minute run timeout.
+[33] redeven:internal/ai/subagents_floret.go:587 - `spawn` calls Floret `SpawnSubAgent` and returns child `thread_id` as the lifecycle identity.
+[34] redeven:internal/ai/subagents_floret.go:656 - `wait` calls Floret `WaitSubAgents` with bounded timeout semantics.
+[35] redeven:internal/ai/tools/registry.go:424 - Subagent invocation policy asks approval for worker spawn, send_input, close, and close_all.
+[36] redeven:internal/ai/subagents_floret.go:791 - Model-facing subagent results are reduced to bounded summary items.
+[37] redeven:internal/ai/subagents_floret.go:1315 - Flower subagent detail reads through the parent-scoped Floret detail API with raw content disabled.
+[38] redeven:internal/codeapp/appserver/server.go:3737 - Appserver exposes the parent-scoped subagent detail route.
+[39] redeven:internal/flower_ui/src/flowerSubagentProjection.ts:130 - The shared UI projection derives subagent dropdown items only from current activity payload shapes.
+[40] redeven:internal/flower_ui/src/FlowerSurface.tsx:1300 - Opening subagent detail loads the child detail without selecting the child thread.
+[41] redeven:internal/flower_ui/src/FlowerSurface.tsx:3480 - The selected parent thread header renders the Sub Agents dropdown.
+[42] redeven:internal/flower_ui/src/FlowerSurface.tsx:3342 - Subagent execution detail renders inside the parent-thread overlay.
+[43] redeven:internal/ai/threadstore/store.go:357 - Normal thread-list queries exclude `subagent_projection` rows.
+[44] redeven:internal/ai/floret_tools.go:135 - Floret tool invocations derive a child execution run from the invocation run, thread, and turn ids.
+[45] redeven:internal/ai/floret_approval.go:56 - The Floret approver recognizes the parent-approved worker delegation grant without bypassing other policy gates.
+[46] redeven:internal/ai/subagents_floret.go:2446 - Flower child prompts forbid nested subagents and direct user input.
+[47] redeven:internal/ai/subagent_lifecycle_test.go:29 - Parent run cancellation is tested to avoid releasing the durable subagent runtime.
+[48] redeven:internal/ai/threads.go:173 - Flower subagent projection threads are rejected by direct thread mutation paths.
+[49] redeven:internal/ai/threads.go:895 - Parent thread deletion closes its cached Floret subagent runtime and deletes child projection threads.

@@ -188,7 +188,6 @@ describe('Env local Flower surface adapter', () => {
     const compactThreadContext = vi.fn(async () => ({
       operationId: 'manual-compact-1',
       kind: 'accepted',
-      runId: 'run_compact',
     }));
     const adapter = createEnvLocalFlowerSurfaceAdapter({
       envPublicID: 'env_a',
@@ -329,6 +328,7 @@ describe('Env local Flower surface adapter', () => {
     });
 
     const live = await adapter.launchTurn({
+      message_id: 'client_reasoning-message',
       prompt: 'reason about this',
       reasoning_selection: { level: 'high' },
     });
@@ -337,6 +337,9 @@ describe('Env local Flower surface adapter', () => {
     expect(createdBodies[0]).not.toHaveProperty('reasoning_selection');
     expect(sendUserTurn).toHaveBeenCalledWith(expect.objectContaining({
       threadId: 'thread_reasoning',
+      input: expect.objectContaining({
+        messageId: 'client_reasoning-message',
+      }),
       options: expect.objectContaining({
         reasoningSelection: { level: 'high' },
       }),

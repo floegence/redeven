@@ -157,6 +157,15 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 		if err := a.mgr.svc.CancelRun(meta, activeRunID); err != nil {
 			return StopThreadResponse{}, err
 		}
+	} else if compaction, ok := a.mgr.svc.cancelIdleThreadCompactionWithBroadcast(endpointID, threadID); ok {
+		if compaction.isFinalizing() {
+			waitCtx, waitCancel := context.WithTimeout(ctx, persistTO)
+			waitOK := a.mgr.svc.waitIdleThreadCompaction(waitCtx, compaction)
+			waitCancel()
+			if !waitOK {
+				return StopThreadResponse{}, context.DeadlineExceeded
+			}
+		}
 	} else {
 		uctx, ucancel := context.WithTimeout(ctx, persistTO)
 		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", "", meta.UserPublicID, meta.UserEmail)

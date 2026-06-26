@@ -218,7 +218,7 @@ func (s *Service) persistRealtimeEvent(ev RealtimeEvent) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.persistOpTO)
 	defer cancel()
-	_ = s.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
+	if err := s.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
 		EndpointID:  ev.EndpointID,
 		ThreadID:    ev.ThreadID,
 		RunID:       ev.RunID,
@@ -226,7 +226,9 @@ func (s *Service) persistRealtimeEvent(ev RealtimeEvent) {
 		EventType:   string(ev.EventType),
 		PayloadJSON: truncateRunes(string(b), 6000),
 		AtUnixMs:    ev.AtUnixMs,
-	})
+	}); err != nil && s.log != nil {
+		s.log.Warn("persist realtime run event failed", "thread_id", ev.ThreadID, "run_id", ev.RunID, "event_type", ev.EventType, "stream_kind", ev.StreamKind, "error", err)
+	}
 }
 
 func (s *Service) broadcastRealtimeEvent(ev RealtimeEvent) {

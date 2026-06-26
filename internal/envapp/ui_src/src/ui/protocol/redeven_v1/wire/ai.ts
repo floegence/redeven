@@ -91,7 +91,6 @@ export type wire_ai_compact_thread_context_req = {
 export type wire_ai_compact_thread_context_resp = {
   operation_id?: string;
   kind: string;
-  run_id?: string;
   error_code?: string;
 };
 

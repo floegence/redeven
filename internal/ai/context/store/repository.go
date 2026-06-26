@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/floegence/redeven/internal/ai/context/model"
@@ -62,31 +61,30 @@ func (r *Repository) ListRecentDialogueTurns(ctx context.Context, endpointID str
 	if err != nil {
 		return nil, err
 	}
-	if len(turns) == 0 {
-		fallback, fallbackErr := r.listFallbackDialogue(ctx, endpointID, threadID, limit)
-		if fallbackErr != nil {
-			return nil, fallbackErr
-		}
-		return trimDialogueTurns(fallback, limit), nil
-	}
-
 	out := make([]model.DialogueTurn, 0, len(turns))
 	for _, turn := range turns {
 		userText := ""
 		assistantText := ""
 		userMessageRowID := int64(0)
 		assistantRowID := int64(0)
+		userMessageFound := false
+		assistantMessageFound := false
 		if strings.TrimSpace(turn.UserMessageID) != "" {
 			if msg, err := r.db.GetTranscriptMessage(ctx, endpointID, threadID, turn.UserMessageID); err == nil && msg != nil {
 				userMessageRowID = msg.ID
 				userText = strings.TrimSpace(msg.TextContent)
+				userMessageFound = true
 			}
 		}
 		if strings.TrimSpace(turn.AssistantMessageID) != "" {
 			if msg, err := r.db.GetTranscriptMessage(ctx, endpointID, threadID, turn.AssistantMessageID); err == nil && msg != nil {
 				assistantRowID = msg.ID
 				assistantText = strings.TrimSpace(msg.TextContent)
+				assistantMessageFound = true
 			}
+		}
+		if !userMessageFound || !assistantMessageFound {
+			continue
 		}
 		out = append(out, model.DialogueTurn{
 			TurnRowID:          turn.ID,
@@ -100,10 +98,6 @@ func (r *Repository) ListRecentDialogueTurns(ctx context.Context, endpointID str
 			AssistantText:      assistantText,
 			CreatedAtUnixMs:    turn.CreatedAtUnixMs,
 		})
-	}
-	out, err = r.appendUnlinkedTranscriptDialogue(ctx, endpointID, threadID, limit, out)
-	if err != nil {
-		return nil, err
 	}
 	return trimDialogueTurns(out, limit), nil
 }
@@ -137,151 +131,11 @@ func (r *Repository) ListRecentStructuredUserInputs(ctx context.Context, endpoin
 	return out, nil
 }
 
-func (r *Repository) listFallbackDialogue(ctx context.Context, endpointID string, threadID string, limit int) ([]model.DialogueTurn, error) {
-	messages, err := r.db.ListRecentTranscriptMessages(ctx, endpointID, threadID, limit*2)
-	if err != nil {
-		return nil, err
-	}
-	out := buildDialogueFromTranscriptMessages(messages, nil)
-	if len(out) > limit {
-		out = out[len(out)-limit:]
-	}
-	return out, nil
-}
-
-func (r *Repository) appendUnlinkedTranscriptDialogue(ctx context.Context, endpointID string, threadID string, limit int, existing []model.DialogueTurn) ([]model.DialogueTurn, error) {
-	if !r.Ready() {
-		return nil, errors.New("repository not ready")
-	}
-	if limit <= 0 {
-		limit = 80
-	}
-
-	lookback := limit * 4
-	if lookback < 80 {
-		lookback = 80
-	}
-	messages, err := r.db.ListRecentTranscriptMessages(ctx, endpointID, threadID, lookback)
-	if err != nil {
-		return nil, err
-	}
-	if len(messages) == 0 {
-		return existing, nil
-	}
-
-	referenced := make(map[string]struct{}, len(existing)*2)
-	for _, turn := range existing {
-		if msgID := strings.TrimSpace(turn.UserMessageID); msgID != "" {
-			referenced[msgID] = struct{}{}
-		}
-		if msgID := strings.TrimSpace(turn.AssistantMessageID); msgID != "" {
-			referenced[msgID] = struct{}{}
-		}
-	}
-
-	extras := buildDialogueFromTranscriptMessages(messages, referenced)
-	if len(extras) == 0 {
-		return existing, nil
-	}
-
-	merged := make([]model.DialogueTurn, 0, len(existing)+len(extras))
-	merged = append(merged, existing...)
-	merged = append(merged, extras...)
-	sortDialogueTurnsChronologically(merged)
-	return merged, nil
-}
-
 func trimDialogueTurns(turns []model.DialogueTurn, limit int) []model.DialogueTurn {
 	if limit <= 0 || len(turns) <= limit {
 		return turns
 	}
 	return append([]model.DialogueTurn(nil), turns[len(turns)-limit:]...)
-}
-
-func maxInt64(a int64, b int64) int64 {
-	if a >= b {
-		return a
-	}
-	return b
-}
-
-func buildDialogueFromTranscriptMessages(messages []threadstore.Message, referenced map[string]struct{}) []model.DialogueTurn {
-	if len(messages) == 0 {
-		return nil
-	}
-
-	out := make([]model.DialogueTurn, 0, len(messages)/2+2)
-	pendingUsers := make([]threadstore.Message, 0, 4)
-	for _, msg := range messages {
-		messageID := strings.TrimSpace(msg.MessageID)
-		if messageID == "" {
-			continue
-		}
-		if referenced != nil {
-			if _, exists := referenced[messageID]; exists {
-				continue
-			}
-		}
-
-		role := strings.ToLower(strings.TrimSpace(msg.Role))
-		switch role {
-		case "user":
-			pendingUsers = append(pendingUsers, msg)
-		case "assistant":
-			if len(pendingUsers) == 0 {
-				continue
-			}
-			idx := len(pendingUsers) - 1
-			pendingUser := pendingUsers[idx]
-			pendingUsers = pendingUsers[:idx]
-
-			pendingID := strings.TrimSpace(pendingUser.MessageID)
-			out = append(out, model.DialogueTurn{
-				UserMessageRowID:   pendingUser.ID,
-				AssistantRowID:     msg.ID,
-				TurnID:             "unlinked::" + pendingID,
-				RunID:              "",
-				UserMessageID:      pendingID,
-				AssistantMessageID: messageID,
-				UserText:           strings.TrimSpace(pendingUser.TextContent),
-				AssistantText:      strings.TrimSpace(msg.TextContent),
-				CreatedAtUnixMs:    maxInt64(pendingUser.CreatedAtUnixMs, msg.CreatedAtUnixMs),
-			})
-			if referenced != nil {
-				referenced[pendingID] = struct{}{}
-				referenced[messageID] = struct{}{}
-			}
-		}
-	}
-
-	for _, pendingUser := range pendingUsers {
-		pendingID := strings.TrimSpace(pendingUser.MessageID)
-		if pendingID == "" {
-			continue
-		}
-		out = append(out, model.DialogueTurn{
-			UserMessageRowID:   pendingUser.ID,
-			TurnID:             "pending::" + pendingID,
-			RunID:              "",
-			UserMessageID:      pendingID,
-			AssistantMessageID: "",
-			UserText:           strings.TrimSpace(pendingUser.TextContent),
-			AssistantText:      "",
-			CreatedAtUnixMs:    pendingUser.CreatedAtUnixMs,
-		})
-	}
-
-	sortDialogueTurnsChronologically(out)
-	return out
-}
-
-func sortDialogueTurnsChronologically(turns []model.DialogueTurn) {
-	if len(turns) <= 1 {
-		return
-	}
-	sort.SliceStable(turns, func(i int, j int) bool {
-		return turns[i].CreatedAtUnixMs < turns[j].CreatedAtUnixMs
-	})
 }
 
 func (r *Repository) UpsertExecutionEvidence(ctx context.Context, endpointID string, threadID string, runID string, evidence model.ExecutionEvidence) error {

@@ -256,6 +256,14 @@ export type FlowerSurfaceCopy = Readonly<{
     handlerRetry: string;
     send: string;
     stop: string;
+    compactContext: string;
+    compactChooseThread: string;
+    compactFinishInputRequest: string;
+    compactNeedsConversation: string;
+    commandMenuLabel: string;
+    commandCompactContext: string;
+    pendingSending: string;
+    pendingQueued: string;
     scrollToLatest: string;
     runErrorTitle: string;
     runErrorActions: Readonly<{
@@ -312,6 +320,7 @@ export type FlowerSurfaceCopy = Readonly<{
       compacting: string;
       compacted: string;
       failed: string;
+      cancelled: string;
       fallback: string;
       tokenChange: (before: string, after: string) => string;
     }>;
@@ -369,6 +378,14 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     handlerRetry: 'Retry',
     send: 'Send',
     stop: 'Stop',
+    compactContext: 'Compact context',
+    compactChooseThread: 'Choose a conversation before compacting context.',
+    compactFinishInputRequest: 'Finish the current input request before compacting context.',
+    compactNeedsConversation: 'There is no context to compact yet.',
+    commandMenuLabel: 'Flower commands',
+    commandCompactContext: 'Compact current context',
+    pendingSending: 'Sending',
+    pendingQueued: 'Queued',
     scrollToLatest: 'Scroll to latest',
     runErrorTitle: 'Flower could not finish this reply.',
     runErrorActions: {
@@ -425,6 +442,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       compacting: 'Compacting context',
       compacted: 'Context compacted',
       failed: 'Context compaction failed',
+      cancelled: 'Context compaction cancelled',
       fallback: 'Context checkpoint',
       tokenChange: (before, after) => `${before} to ${after}`,
     },

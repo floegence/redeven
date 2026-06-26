@@ -7,6 +7,7 @@ import (
 )
 
 const FlowerLiveSchemaVersion int64 = 1
+const flowerLiveFallbackStreamGeneration int64 = 1
 
 type FlowerThreadReadSnapshot struct {
 	ActivityRevision    int64  `json:"activity_revision"`
@@ -458,7 +459,14 @@ type FlowerTimelineMessage struct {
 }
 
 type FlowerLiveTimelineReplacedPayload struct {
-	Messages []FlowerTimelineMessage `json:"messages"`
+	Messages            []FlowerTimelineMessage     `json:"messages"`
+	StreamGeneration    int64                       `json:"stream_generation"`
+	SnapshotThroughSeq  int64                       `json:"snapshot_through_seq"`
+	ThreadPatch         FlowerLiveThreadPatch       `json:"thread_patch"`
+	LiveState           FlowerLiveMaterializedState `json:"live_state"`
+	ContextUsage        *FlowerContextUsage         `json:"context_usage"`
+	ContextCompactions  []FlowerContextCompaction   `json:"context_compactions"`
+	TimelineDecorations []FlowerTimelineDecoration  `json:"timeline_decorations"`
 }
 
 type FlowerLiveResyncRequiredPayload struct {
@@ -504,6 +512,7 @@ type FlowerLiveBootstrapResponse struct {
 	SchemaVersion    int64                       `json:"schema_version"`
 	EndpointID       string                      `json:"endpoint_id"`
 	ThreadID         string                      `json:"thread_id"`
+	StreamGeneration int64                       `json:"stream_generation"`
 	Cursor           int64                       `json:"cursor"`
 	RetainedFromSeq  int64                       `json:"retained_from_seq"`
 	Thread           ThreadView                  `json:"thread"`
@@ -514,10 +523,11 @@ type FlowerLiveBootstrapResponse struct {
 }
 
 type FlowerLiveEventsResponse struct {
-	Events          []FlowerLiveEvent `json:"events"`
-	NextCursor      int64             `json:"next_cursor"`
-	HasMore         bool              `json:"has_more,omitempty"`
-	RetainedFromSeq int64             `json:"retained_from_seq"`
+	StreamGeneration int64             `json:"stream_generation"`
+	Events           []FlowerLiveEvent `json:"events"`
+	NextCursor       int64             `json:"next_cursor"`
+	HasMore          bool              `json:"has_more,omitempty"`
+	RetainedFromSeq  int64             `json:"retained_from_seq"`
 }
 
 type SubmitFlowerApprovalRequest struct {
