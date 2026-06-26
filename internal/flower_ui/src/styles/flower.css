@@ -1471,9 +1471,10 @@ html.dark .flower-component-shell {
 }
 
 .flower-compaction-divider-pill {
+  position: relative;
   display: inline-flex;
   min-width: 0;
-  max-width: min(100%, 30rem);
+  max-width: min(100%, 34rem);
   align-items: center;
   gap: 0.4rem;
   border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
@@ -1483,7 +1484,8 @@ html.dark .flower-component-shell {
   box-shadow:
     0 1px 0 color-mix(in srgb, white 46%, transparent) inset,
     0 16px 24px -22px color-mix(in srgb, black 40%, transparent);
-  overflow: hidden;
+  overflow: visible;
+  white-space: nowrap;
 }
 
 .flower-compaction-divider-pill-running {
@@ -1537,13 +1539,11 @@ html.dark .flower-component-shell {
 .flower-compaction-divider-copy {
   display: inline-flex;
   min-width: 0;
-  flex-direction: column;
-  gap: 0.1rem;
+  align-items: center;
   overflow: hidden;
 }
 
-.flower-compaction-divider-label,
-.flower-compaction-divider-detail {
+.flower-compaction-divider-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1582,12 +1582,52 @@ html.dark .flower-component-shell {
   animation: flower-compaction-divider-shimmer 2.2s ease-in-out infinite;
 }
 
-.flower-compaction-divider-detail {
-  color: color-mix(in srgb, var(--muted-foreground) 84%, transparent);
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.6875rem;
-  font-weight: 560;
-  line-height: 1.1;
+.flower-compaction-divider-tooltip {
+  position: absolute;
+  bottom: calc(100% + 0.55rem);
+  left: 50%;
+  z-index: 12;
+  max-width: min(22rem, calc(100vw - 2rem));
+  padding: 0.42rem 0.58rem;
+  transform: translate(-50%, 0.18rem);
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 78%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 94%, var(--background) 6%);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 42%, transparent) inset,
+    0 18px 38px -24px color-mix(in srgb, black 54%, transparent);
+  color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  text-align: center;
+  text-overflow: ellipsis;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+  white-space: nowrap;
+}
+
+.flower-compaction-divider-tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 0.48rem;
+  height: 0.48rem;
+  transform: translate(-50%, -50%) rotate(45deg);
+  border-right: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 78%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 78%, transparent);
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 94%, var(--background) 6%);
+}
+
+.flower-compaction-divider-tooltip[data-open='true'] {
+  transform: translate(-50%, 0);
+  opacity: 1;
 }
 
 .flower-compaction-divider[data-flower-compaction-status='compacting'] .flower-compaction-divider-pill {

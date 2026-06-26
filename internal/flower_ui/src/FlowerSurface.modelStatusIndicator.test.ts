@@ -85,6 +85,9 @@ describe('Flower model status indicator', () => {
     const css = flowerStyles();
     const dividerRule = cssRule(css, '.flower-compaction-divider');
     const pillRule = cssRule(css, '.flower-compaction-divider-pill');
+    const copyRule = cssRule(css, '.flower-compaction-divider-copy');
+    const labelRule = cssRule(css, '.flower-compaction-divider-label');
+    const tooltipRule = cssRule(css, '.flower-compaction-divider-tooltip');
 
     expect(dividerRule).toContain('display: grid');
     expect(dividerRule).toContain('grid-template-columns: minmax(1.5rem, 1fr) auto minmax(1.5rem, 1fr)');
@@ -92,7 +95,23 @@ describe('Flower model status indicator', () => {
     expect(dividerRule).not.toContain('pointer-events: none');
     expect(dividerRule).not.toContain('cursor: pointer');
     expect(pillRule).toContain('display: inline-flex');
-    expect(pillRule).toContain('max-width: min(100%, 30rem)');
+    expect(pillRule).toContain('position: relative');
+    expect(pillRule).toContain('max-width: min(100%, 34rem)');
+    expect(pillRule).toContain('overflow: visible');
+    expect(pillRule).toContain('white-space: nowrap');
+    expect(copyRule).toContain('display: inline-flex');
+    expect(copyRule).toContain('align-items: center');
+    expect(copyRule).not.toContain('flex-direction: column');
+    expect(labelRule).toContain('text-overflow: ellipsis');
+    expect(labelRule).toContain('white-space: nowrap');
+    expect(tooltipRule).toContain('position: absolute');
+    expect(tooltipRule).toContain('bottom: calc(100% + 0.55rem)');
+    expect(tooltipRule).toContain('opacity: 0');
+    expect(tooltipRule).toContain('pointer-events: none');
+    expect(tooltipRule).toContain('white-space: nowrap');
+    expect(css).toContain(".flower-compaction-divider-tooltip[data-open='true']");
+    expect(css).not.toContain('.flower-compaction-divider-detail');
+    expect(pillRule).not.toContain('cursor: pointer');
     expect(css).toContain(".flower-compaction-divider[data-flower-compaction-status='failed'] .flower-compaction-divider-pill");
   });
 

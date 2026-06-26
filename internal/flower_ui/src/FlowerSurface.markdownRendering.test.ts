@@ -110,6 +110,11 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('<FlowerContextCompactionDivider');
     expect(dividerSrc).toContain('flower-compaction-divider');
     expect(dividerSrc).toContain('data-flower-compaction-status={compaction().status}');
+    expect(dividerSrc).toContain('class="flower-compaction-divider-tooltip"');
+    expect(dividerSrc).toContain('role="tooltip"');
+    expect(dividerSrc).toContain("data-open={tooltipOpen() ? 'true' : undefined}");
+    expect(dividerSrc).not.toContain('flower-compaction-divider-detail');
+    expect(dividerSrc).not.toContain('tabIndex=');
     expect(src).not.toContain("case 'decoration':");
   });
 
