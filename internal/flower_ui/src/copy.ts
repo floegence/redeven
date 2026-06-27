@@ -304,6 +304,7 @@ export type FlowerSurfaceCopy = Readonly<{
       hardLimit: string;
       estimated: string;
       unknown: string;
+      lastKnownLabel: string;
       unknownPercent: string;
       unavailable: string;
       usedLabel: string;
@@ -449,6 +450,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       hardLimit: 'At limit',
       estimated: 'Estimated',
       unknown: 'Tracking',
+      lastKnownLabel: 'Last known context',
       unknownPercent: '--%',
       unavailable: 'Not available',
       usedLabel: 'Used',

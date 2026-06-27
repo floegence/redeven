@@ -79,6 +79,20 @@ describe('flower context presentation', () => {
     expect(view.tone).toBe('estimated');
   });
 
+  it('labels last known composer context usage without changing the ratio', () => {
+    const view = buildFlowerComposerContextIndicatorView(usage({
+      input_tokens: 900,
+      context_window_tokens: 1000,
+      used_ratio: 0.9,
+      pressure_status: 'near_threshold',
+    }), DEFAULT_FLOWER_SURFACE_COPY, 'last_known');
+
+    expect(view.ariaLabel).toBe('Last known context');
+    expect(view.tooltipTitle).toBe('Last known context');
+    expect(view.percentLabel).toBe('90%');
+    expect(view.ariaValueText).toBe('Last known context: 90%, 900 of 1,000');
+  });
+
   it('keeps the circular label compact while localizing tooltip ratio text', () => {
     const copy = {
       ...DEFAULT_FLOWER_SURFACE_COPY,

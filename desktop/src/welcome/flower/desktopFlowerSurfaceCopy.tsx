@@ -139,6 +139,7 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
         hardLimit: t(i18n, k('chat.contextIndicatorHardLimit')),
         estimated: t(i18n, k('chat.contextIndicatorEstimated')),
         unknown: t(i18n, k('chat.contextIndicatorUnknown')),
+        lastKnownLabel: t(i18n, k('chat.contextIndicatorLastKnownLabel')),
         unknownPercent: t(i18n, k('chat.contextIndicatorUnknownPercent')),
         unavailable: t(i18n, k('chat.contextIndicatorUnavailable')),
         usedLabel: t(i18n, k('chat.contextIndicatorUsedLabel')),

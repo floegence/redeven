@@ -4,6 +4,7 @@ import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import { trimString } from '../flowerSurfaceModel';
 
 export type FlowerContextTone = 'stable' | 'warning' | 'danger' | 'estimated';
+export type FlowerComposerContextUsageFreshness = 'current' | 'last_known';
 
 export type FlowerComposerContextIndicatorView = Readonly<{
   ariaLabel: string;
@@ -90,10 +91,17 @@ function formatCompactContextPercent(percent: number): string {
   return `${Math.max(0, Math.min(100, Math.round(percent)))}%`;
 }
 
-export function buildFlowerComposerContextIndicatorView(usage: FlowerContextUsage, copy: FlowerSurfaceCopy): FlowerComposerContextIndicatorView {
+export function buildFlowerComposerContextIndicatorView(
+  usage: FlowerContextUsage,
+  copy: FlowerSurfaceCopy,
+  freshness: FlowerComposerContextUsageFreshness = 'current',
+): FlowerComposerContextIndicatorView {
   const labels = copy.chat.contextIndicator ?? DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator;
   const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.contextIndicator;
-  const label = trimString(labels.label) || fallback.label;
+  const currentLabel = trimString(labels.label) || fallback.label;
+  const label = freshness === 'last_known'
+    ? trimString(labels.lastKnownLabel) || fallback.lastKnownLabel
+    : currentLabel;
   const statusValue = contextPressureLabel(usage.pressure_status, copy);
   const ratio = contextUsageRatio(usage);
   const progressValue = ratio === null ? null : Math.max(0, Math.min(100, Math.round(ratio * 100)));

@@ -10,6 +10,7 @@ import { FlowerChatContextPreview } from './chat/FlowerChatContextPreview';
 import { parseChatContextAction } from './chat/flowerChatContextModel';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
+import type { FlowerComposerContextUsageFreshness } from './chat/flowerContextPresentation';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
 import type { FlowerChatContextChip } from './contracts/flowerChatContextTypes';
 import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
@@ -95,6 +96,10 @@ type FlowerComposerSessionDraft = Readonly<{
   inputDrafts: Record<string, FlowerInputDraft>;
   activeInputQuestionID: string;
   reasoningOverride?: FlowerReasoningSelection;
+}>;
+type FlowerComposerContextUsageModel = Readonly<{
+  usage: FlowerContextUsage;
+  freshness: FlowerComposerContextUsageFreshness;
 }>;
 type PendingFlowerTurn = Readonly<{
   thread_id: string;
@@ -2555,13 +2560,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || fallback;
 
   const selectedModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => selectedThread()?.model_io_status ?? null);
-  const selectedContextUsage = createMemo<FlowerContextUsage | null>(() => {
+  const selectedContextUsage = createMemo<FlowerComposerContextUsageModel | null>(() => {
     const thread = selectedThread();
     const usage = thread?.context_usage ?? null;
     if (!thread || !usage) return null;
     const activeRunID = trimString(thread.active_run_id);
-    if (!activeRunID) return usage;
-    return trimString(usage.run_id) === activeRunID ? usage : null;
+    if (!activeRunID || trimString(usage.run_id) === activeRunID) {
+      return { usage, freshness: 'current' };
+    }
+    return { usage, freshness: 'last_known' };
   });
   const selectedThreadHasModelStatus = createMemo(() => selectedModelIOStatus() != null);
   const showScrollToLatestButton = createMemo(() => (
@@ -4449,7 +4456,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </div>
                     <div class="flower-composer-actions">
                       <Show when={selectedContextUsage()}>
-                        {(usage) => <FlowerComposerContextIndicator usage={usage()} copy={copy()} />}
+                        {(contextUsage) => (
+                          <FlowerComposerContextIndicator
+                            usage={contextUsage().usage}
+                            freshness={contextUsage().freshness}
+                            copy={copy()}
+                          />
+                        )}
                       </Show>
                       <Show
                         when={selectedInputRequest()}
