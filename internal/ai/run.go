@@ -3055,6 +3055,9 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolWebFetch(ctx, p)
 
 	case "file.read":
+		if !r.canExecuteReadonlyExclusiveTool() {
+			return nil, errors.New("readonly tool unavailable for current permission type")
+		}
 		if meta == nil || !meta.CanRead {
 			return nil, errors.New("read permission denied")
 		}
@@ -3267,7 +3270,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		if meta == nil || !meta.CanExecute {
 			return nil, errors.New("execute permission denied")
 		}
-		return r.manageSubagents(ctx, cloneAnyMap(args))
+		return r.manageSubagentsForTool(ctx, toolID, cloneAnyMap(args))
 
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)
@@ -3327,12 +3330,109 @@ const (
 	readonlyFindMaxResults          = 1000
 	readonlyFindDefaultMaxDepth     = 8
 	readonlyFindMaxDepth            = 32
+	readonlyFindMaxVisitedEntries   = 10000
+	readonlyFindMaxElapsed          = 5 * time.Second
 	readonlyGrepDefaultMaxMatches   = 200
 	readonlyGrepMaxMatches          = 1000
 	readonlyGrepDefaultContextLines = 0
 	readonlyGrepMaxContextLines     = 5
 	readonlyGrepMaxFileBytes        = 2 << 20
+	readonlyGrepMaxVisitedEntries   = 10000
+	readonlyGrepMaxScannedFiles     = 5000
+	readonlyGrepMaxScannedBytes     = 32 << 20
+	readonlyGrepMaxElapsed          = 5 * time.Second
+	readonlyGrepMaxLineRunes        = 2000
+	readonlyGrepMaxContextRunes     = 1000
 )
+
+var errReadonlyScanLimit = errors.New("readonly scan limit reached")
+
+type readonlyScanBudget struct {
+	startedAt         time.Time
+	maxVisitedEntries int
+	maxScannedFiles   int
+	maxScannedBytes   int64
+	maxElapsed        time.Duration
+	visitedEntries    int
+	scannedFiles      int
+	scannedBytes      int64
+	limitReason       string
+}
+
+func newReadonlyScanBudget(maxVisitedEntries int, maxScannedFiles int, maxScannedBytes int64, maxElapsed time.Duration) *readonlyScanBudget {
+	return &readonlyScanBudget{
+		startedAt:         time.Now(),
+		maxVisitedEntries: maxVisitedEntries,
+		maxScannedFiles:   maxScannedFiles,
+		maxScannedBytes:   maxScannedBytes,
+		maxElapsed:        maxElapsed,
+	}
+}
+
+func (b *readonlyScanBudget) recordVisitedEntry() error {
+	if b == nil {
+		return nil
+	}
+	b.visitedEntries++
+	if b.maxVisitedEntries > 0 && b.visitedEntries > b.maxVisitedEntries {
+		return b.stop("max_visited_entries")
+	}
+	return b.checkElapsed()
+}
+
+func (b *readonlyScanBudget) recordScannedFile(size int64) error {
+	if b == nil {
+		return nil
+	}
+	if size < 0 {
+		size = 0
+	}
+	if b.maxScannedFiles > 0 && b.scannedFiles+1 > b.maxScannedFiles {
+		return b.stop("max_scanned_files")
+	}
+	if b.maxScannedBytes > 0 && b.scannedBytes+size > b.maxScannedBytes {
+		return b.stop("max_scanned_bytes")
+	}
+	b.scannedFiles++
+	b.scannedBytes += size
+	return b.checkElapsed()
+}
+
+func (b *readonlyScanBudget) checkElapsed() error {
+	if b == nil || b.maxElapsed <= 0 {
+		return nil
+	}
+	if time.Since(b.startedAt) <= b.maxElapsed {
+		return nil
+	}
+	return b.stop("max_elapsed")
+}
+
+func (b *readonlyScanBudget) stop(reason string) error {
+	if b != nil && b.limitReason == "" {
+		b.limitReason = strings.TrimSpace(reason)
+	}
+	return errReadonlyScanLimit
+}
+
+func (b *readonlyScanBudget) stats() map[string]interface{} {
+	if b == nil {
+		return nil
+	}
+	stats := map[string]interface{}{
+		"visited_entries": b.visitedEntries,
+	}
+	if b.scannedFiles > 0 {
+		stats["scanned_files"] = b.scannedFiles
+	}
+	if b.scannedBytes > 0 {
+		stats["scanned_bytes"] = b.scannedBytes
+	}
+	if b.limitReason != "" {
+		stats["limit_reason"] = b.limitReason
+	}
+	return stats
+}
 
 type readonlyReadFilesResult struct {
 	Files     []readonlyReadFileResult `json:"files"`
@@ -3382,9 +3482,10 @@ func (r *run) toolReadFiles(ctx context.Context, paths []string, limit int) (rea
 }
 
 type readonlyFindResult struct {
-	Root      string             `json:"root"`
-	Results   []readonlyFindItem `json:"results"`
-	Truncated bool               `json:"truncated,omitempty"`
+	Root      string                 `json:"root"`
+	Results   []readonlyFindItem     `json:"results"`
+	Truncated bool                   `json:"truncated,omitempty"`
+	Stats     map[string]interface{} `json:"stats,omitempty"`
 }
 
 type readonlyFindItem struct {
@@ -3439,6 +3540,7 @@ func (r *run) toolReadonlyFind(ctx context.Context, root string, namePattern str
 	if err != nil {
 		return readonlyFindResult{}, err
 	}
+	budget := newReadonlyScanBudget(readonlyFindMaxVisitedEntries, 0, 0, readonlyFindMaxElapsed)
 	out := readonlyFindResult{Root: resolvedRoot, Results: make([]readonlyFindItem, 0, min(maxResults, 64))}
 	walkErr := filepath.WalkDir(resolvedRoot, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
@@ -3446,6 +3548,10 @@ func (r *run) toolReadonlyFind(ctx context.Context, root string, namePattern str
 		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
+		}
+		if err := budget.recordVisitedEntry(); err != nil {
+			out.Truncated = true
+			return filepath.SkipAll
 		}
 		if path != resolvedRoot {
 			name := entry.Name()
@@ -3494,6 +3600,7 @@ func (r *run) toolReadonlyFind(ctx context.Context, root string, namePattern str
 	if walkErr != nil {
 		return out, walkErr
 	}
+	out.Stats = budget.stats()
 	sort.SliceStable(out.Results, func(i, j int) bool {
 		return out.Results[i].Path < out.Results[j].Path
 	})
@@ -3561,6 +3668,7 @@ func (r *run) toolReadonlyGrep(ctx context.Context, query string, paths []string
 		Matches: make([]readonlyGrepMatch, 0, min(maxMatches, 64)),
 		Stats:   map[string]interface{}{"engine": "go"},
 	}
+	budget := newReadonlyScanBudget(readonlyGrepMaxVisitedEntries, readonlyGrepMaxScannedFiles, readonlyGrepMaxScannedBytes, readonlyGrepMaxElapsed)
 	for _, rawPath := range paths {
 		if err := ctx.Err(); err != nil {
 			return out, err
@@ -3584,6 +3692,10 @@ func (r *run) toolReadonlyGrep(ctx context.Context, query string, paths []string
 				if ctxErr := ctx.Err(); ctxErr != nil {
 					return ctxErr
 				}
+				if err := budget.recordVisitedEntry(); err != nil {
+					out.Truncated = true
+					return filepath.SkipAll
+				}
 				if path != resolvedPath && strings.HasPrefix(entry.Name(), ".") {
 					if entry.IsDir() {
 						return filepath.SkipDir
@@ -3597,7 +3709,11 @@ func (r *run) toolReadonlyGrep(ctx context.Context, query string, paths []string
 					out.Truncated = true
 					return filepath.SkipAll
 				}
-				if err := r.grepReadonlyFile(ctx, scope, path, globMatcher, matcher, contextLines, maxMatches, &out); err != nil {
+				if err := r.grepReadonlyFile(ctx, scope, path, globMatcher, matcher, contextLines, maxMatches, budget, &out); err != nil {
+					if errors.Is(err, errReadonlyScanLimit) {
+						out.Truncated = true
+						return filepath.SkipAll
+					}
 					return err
 				}
 				return nil
@@ -3607,7 +3723,15 @@ func (r *run) toolReadonlyGrep(ctx context.Context, query string, paths []string
 			}
 			continue
 		}
-		if err := r.grepReadonlyFile(ctx, scope, resolvedPath, globMatcher, matcher, contextLines, maxMatches, &out); err != nil {
+		if err := budget.recordVisitedEntry(); err != nil {
+			out.Truncated = true
+			break
+		}
+		if err := r.grepReadonlyFile(ctx, scope, resolvedPath, globMatcher, matcher, contextLines, maxMatches, budget, &out); err != nil {
+			if errors.Is(err, errReadonlyScanLimit) {
+				out.Truncated = true
+				break
+			}
 			return out, err
 		}
 	}
@@ -3618,12 +3742,17 @@ func (r *run) toolReadonlyGrep(ctx context.Context, query string, paths []string
 		return out.Matches[i].Path < out.Matches[j].Path
 	})
 	if out.Truncated {
-		out.Stats["limit_reason"] = "max_matches"
+		if budget.limitReason == "" {
+			out.Stats["limit_reason"] = "max_matches"
+		}
+	}
+	for key, value := range budget.stats() {
+		out.Stats[key] = value
 	}
 	return out, nil
 }
 
-func (r *run) grepReadonlyFile(ctx context.Context, scope runPathScope, path string, globMatcher func(string) bool, matcher readonlyLineMatcher, contextLines int, maxMatches int, out *readonlyGrepResult) error {
+func (r *run) grepReadonlyFile(ctx context.Context, scope runPathScope, path string, globMatcher func(string) bool, matcher readonlyLineMatcher, contextLines int, maxMatches int, budget *readonlyScanBudget, out *readonlyGrepResult) error {
 	if len(out.Matches) >= maxMatches {
 		out.Truncated = true
 		return nil
@@ -3638,6 +3767,10 @@ func (r *run) grepReadonlyFile(ctx context.Context, scope runPathScope, path str
 	}
 	if !globMatcher(path) {
 		return nil
+	}
+	if err := budget.recordScannedFile(info.Size()); err != nil {
+		out.Truncated = true
+		return err
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -3664,7 +3797,7 @@ func (r *run) grepReadonlyFile(ctx context.Context, scope runPathScope, path str
 			DisplayName: displayNameForFilePath(path),
 			Line:        idx + 1,
 			Column:      column,
-			Text:        strings.TrimRight(line, "\n"),
+			Text:        truncateReadonlySnippet(line, readonlyGrepMaxLineRunes),
 		}
 		if contextLines > 0 {
 			match.Context = readonlyContextWindow(lines, idx, contextLines)
@@ -3777,9 +3910,21 @@ func readonlyContextWindow(lines []string, matchIdx int, contextLines int) []rea
 		if idx == matchIdx {
 			continue
 		}
-		out = append(out, readonlyGrepContext{Line: idx + 1, Text: strings.TrimRight(lines[idx], "\n")})
+		out = append(out, readonlyGrepContext{Line: idx + 1, Text: truncateReadonlySnippet(lines[idx], readonlyGrepMaxContextRunes)})
 	}
 	return out
+}
+
+func truncateReadonlySnippet(text string, maxRunes int) string {
+	text = strings.TrimRight(text, "\n")
+	if maxRunes <= 0 {
+		return text
+	}
+	runes := []rune(text)
+	if len(runes) <= maxRunes {
+		return text
+	}
+	return string(runes[:maxRunes]) + "... (truncated)"
 }
 
 func readonlyFindEntryType(entry os.DirEntry) (string, int64) {

@@ -1044,7 +1044,7 @@ type fakeManageSubagentRuntime struct {
 	items []subagentSnapshot
 }
 
-func (f *fakeManageSubagentRuntime) manage(ctx context.Context, args map[string]any) (map[string]any, error) {
+func (f *fakeManageSubagentRuntime) manage(ctx context.Context, _ string, args map[string]any) (map[string]any, error) {
 	action := strings.ToLower(strings.TrimSpace(anyToString(args["action"])))
 	switch action {
 	case subagentActionList:

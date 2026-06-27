@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -125,7 +126,9 @@ func loadTaskSpecs(specPath string) ([]evalTask, error) {
 		return nil, err
 	}
 	var spec taskSpecFile
-	if err := yaml.Unmarshal(data, &spec); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	if err := dec.Decode(&spec); err != nil {
 		return nil, err
 	}
 	if len(spec.Tasks) == 0 {

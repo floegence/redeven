@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,9 +15,11 @@ import (
 	"testing"
 	"time"
 
+	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -65,6 +68,10 @@ func insertPermissionPolicyChildSnapshot(t *testing.T, parent *run, childThreadI
 	t.Helper()
 	registry := NewInMemoryToolRegistry()
 	childRun := parent.subagentChildRun()
+	childRunID := permissionPolicyTestChildRunID(childThreadID)
+	if childRunID == "child_run_" || childRunID == strings.TrimSpace(childThreadID) || (parent != nil && childRunID == strings.TrimSpace(parent.id)) {
+		t.Fatalf("invalid test child run id %q for thread %q", childRunID, childThreadID)
+	}
 	if err := registerBuiltInTools(registry, childRun); err != nil {
 		t.Fatalf("registerBuiltInTools: %v", err)
 	}
@@ -76,11 +83,67 @@ func insertPermissionPolicyChildSnapshot(t *testing.T, parent *run, childThreadI
 		}
 		activeTools = append(activeTools, def)
 	}
-	snapshot := permissionSnapshotWithOwnerIdentity(buildPermissionSnapshot(parent.permissionType, activeTools, nil), parent.endpointID, childThreadID, childThreadID)
-	if err := parent.insertChildPermissionSnapshot(childThreadID, childThreadID, snapshot); err != nil {
+	snapshot := permissionSnapshotWithOwnerIdentity(buildPermissionSnapshot(parent.permissionType, activeTools, nil), parent.endpointID, childThreadID, childRunID)
+	if err := parent.insertChildPermissionSnapshot(childThreadID, childRunID, "spawn_"+childThreadID, snapshot); err != nil {
 		t.Fatalf("insertChildPermissionSnapshot: %v", err)
 	}
 	return snapshot
+}
+
+func insertPermissionPolicyChildSnapshotRecord(t *testing.T, parent *run, childThreadID string, snapshot PermissionSnapshot, mutate func(*threadstore.ChildPermissionSnapshotRecord)) {
+	t.Helper()
+	childRunID := permissionPolicyTestChildRunID(childThreadID)
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("marshal child snapshot: %v", err)
+	}
+	rec := threadstore.ChildPermissionSnapshotRecord{
+		ChildSnapshotID:   snapshot.SnapshotID,
+		EndpointID:        parent.endpointID,
+		ParentSnapshotID:  parent.permissionSnapshot.SnapshotID,
+		SpawnToolCallID:   "spawn_" + childThreadID,
+		ParentThreadID:    parent.threadID,
+		ParentRunID:       parent.id,
+		SubagentID:        childThreadID,
+		ChildThreadID:     childThreadID,
+		ChildRunID:        childRunID,
+		State:             "finalized",
+		SnapshotJSON:      string(payload),
+		SnapshotHash:      snapshot.SnapshotHash,
+		RegistryHash:      snapshot.RegistryHash,
+		SchemaHash:        snapshot.SchemaHash,
+		PresentationHash:  snapshot.PresentationHash,
+		CreatedAtUnixMs:   time.Now().UnixMilli(),
+		FinalizedAtUnixMs: time.Now().UnixMilli(),
+	}
+	if mutate != nil {
+		mutate(&rec)
+	}
+	if err := parent.threadsDB.InsertChildPermissionSnapshot(context.Background(), rec); err != nil {
+		t.Fatalf("InsertChildPermissionSnapshot: %v", err)
+	}
+}
+
+func buildPermissionPolicySnapshotForTools(t *testing.T, r *run, ownerThreadID string, toolNames ...string) PermissionSnapshot {
+	t.Helper()
+	ownerRunID := permissionPolicyTestChildRunID(ownerThreadID)
+	registry := NewInMemoryToolRegistry()
+	if err := registerBuiltInTools(registry, r); err != nil {
+		t.Fatalf("registerBuiltInTools: %v", err)
+	}
+	activeTools := make([]ToolDef, 0, len(toolNames))
+	for _, name := range toolNames {
+		def, _, ok := registry.resolve(name)
+		if !ok {
+			t.Fatalf("resolve tool %q", name)
+		}
+		activeTools = append(activeTools, def)
+	}
+	return permissionSnapshotWithOwnerIdentity(buildPermissionSnapshot(r.permissionType, activeTools, nil), r.endpointID, ownerThreadID, ownerRunID)
+}
+
+func permissionPolicyTestChildRunID(childThreadID string) string {
+	return "child_run_" + strings.TrimSpace(childThreadID)
 }
 
 func newPermissionPolicyBridgeService(t *testing.T) *Service {
@@ -130,6 +193,489 @@ func TestPermissionPolicy_ChildInvocationUsesStoredPermissionSnapshot(t *testing
 	}
 	if decision, ok := execRun.permissionDecisionForToolFromSnapshot("okf.search"); !ok || decision != ApprovalDecisionAllow {
 		t.Fatalf("okf.search decision=%q ok=%v, want snapshot allow", decision, ok)
+	}
+}
+
+func TestPermissionPolicy_ChildSnapshotWithWidenedToolSetFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	svc := newPermissionPolicyBridgeService(t)
+	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "child_snapshot_widened")
+	parent.service = svc
+	parent.threadsDB = svc.threadsDB
+	freezePermissionPolicyTestSnapshot(t, parent)
+	childThreadID := "child_snapshot_widened"
+	childRun := parent.subagentChildRun()
+	widened := buildPermissionPolicySnapshotForTools(t, childRun, childThreadID, "okf.search", "read_file")
+	insertPermissionPolicyChildSnapshotRecord(t, parent, childThreadID, widened, nil)
+
+	execRun := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+		RunID:    childThreadID,
+		ThreadID: childThreadID,
+		HostContext: map[string]string{
+			subagentToolHostContextChildThreadIDKey: childThreadID,
+		},
+	})
+	if execRun == nil {
+		t.Fatalf("floretInvocationRunContext returned nil")
+	}
+	if got := execRun.permissionSnapshot.SnapshotID; got != "missing_child_permission_snapshot" {
+		t.Fatalf("child snapshot id=%q, want fail-closed snapshot", got)
+	}
+	if decision, ok := execRun.permissionDecisionForToolFromSnapshot("okf.search"); !ok || decision != ApprovalDecisionDeny {
+		t.Fatalf("okf.search decision=%q ok=%v, want fail-closed deny", decision, ok)
+	}
+}
+
+func TestPermissionPolicy_ChildSnapshotHashMismatchFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	svc := newPermissionPolicyBridgeService(t)
+	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "child_snapshot_hash")
+	parent.service = svc
+	parent.threadsDB = svc.threadsDB
+	freezePermissionPolicyTestSnapshot(t, parent)
+	childThreadID := "child_snapshot_hash"
+	childRun := parent.subagentChildRun()
+	snapshot := buildPermissionPolicySnapshotForTools(t, childRun, childThreadID, "okf.search")
+	insertPermissionPolicyChildSnapshotRecord(t, parent, childThreadID, snapshot, func(rec *threadstore.ChildPermissionSnapshotRecord) {
+		rec.SnapshotHash = "tampered_hash"
+	})
+
+	execRun := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+		RunID:    childThreadID,
+		ThreadID: childThreadID,
+		HostContext: map[string]string{
+			subagentToolHostContextChildThreadIDKey: childThreadID,
+		},
+	})
+	if execRun == nil {
+		t.Fatalf("floretInvocationRunContext returned nil")
+	}
+	if got := execRun.permissionSnapshot.SnapshotID; got != "missing_child_permission_snapshot" {
+		t.Fatalf("child snapshot id=%q, want fail-closed snapshot", got)
+	}
+	if decision, ok := execRun.permissionDecisionForToolFromSnapshot("okf.search"); !ok || decision != ApprovalDecisionDeny {
+		t.Fatalf("okf.search decision=%q ok=%v, want fail-closed deny", decision, ok)
+	}
+}
+
+func TestPermissionPolicy_ChildSnapshotCompatibilityHashMismatchFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*PermissionSnapshot, *threadstore.ChildPermissionSnapshotRecord)
+	}{
+		{
+			name: "record_registry_hash",
+			mutate: func(_ *PermissionSnapshot, rec *threadstore.ChildPermissionSnapshotRecord) {
+				rec.RegistryHash = "tampered_registry_hash"
+			},
+		},
+		{
+			name: "record_schema_hash",
+			mutate: func(_ *PermissionSnapshot, rec *threadstore.ChildPermissionSnapshotRecord) {
+				rec.SchemaHash = "tampered_schema_hash"
+			},
+		},
+		{
+			name: "record_presentation_hash",
+			mutate: func(_ *PermissionSnapshot, rec *threadstore.ChildPermissionSnapshotRecord) {
+				rec.PresentationHash = "tampered_presentation_hash"
+			},
+		},
+		{
+			name: "current_registry_incompatible",
+			mutate: func(snapshot *PermissionSnapshot, rec *threadstore.ChildPermissionSnapshotRecord) {
+				snapshot.RegistryHash = stableStringListHash(snapshot.FloretToolNames)
+				snapshot.SnapshotHash = permissionSnapshotHash(*snapshot)
+				payload, err := json.Marshal(snapshot)
+				if err != nil {
+					panic(err)
+				}
+				rec.SnapshotJSON = string(payload)
+				rec.SnapshotHash = snapshot.SnapshotHash
+				rec.RegistryHash = snapshot.RegistryHash
+			},
+		},
+		{
+			name: "current_schema_incompatible",
+			mutate: func(snapshot *PermissionSnapshot, rec *threadstore.ChildPermissionSnapshotRecord) {
+				snapshot.SchemaHash = stableStringListHash(snapshot.FloretToolNames)
+				snapshot.SnapshotHash = permissionSnapshotHash(*snapshot)
+				payload, err := json.Marshal(snapshot)
+				if err != nil {
+					panic(err)
+				}
+				rec.SnapshotJSON = string(payload)
+				rec.SnapshotHash = snapshot.SnapshotHash
+				rec.SchemaHash = snapshot.SchemaHash
+			},
+		},
+		{
+			name: "current_presentation_incompatible",
+			mutate: func(snapshot *PermissionSnapshot, rec *threadstore.ChildPermissionSnapshotRecord) {
+				snapshot.PresentationHash = stableStringListHash(snapshot.PromptCapabilityNames)
+				snapshot.SnapshotHash = permissionSnapshotHash(*snapshot)
+				payload, err := json.Marshal(snapshot)
+				if err != nil {
+					panic(err)
+				}
+				rec.SnapshotJSON = string(payload)
+				rec.SnapshotHash = snapshot.SnapshotHash
+				rec.PresentationHash = snapshot.PresentationHash
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			workspace := t.TempDir()
+			svc := newPermissionPolicyBridgeService(t)
+			parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "child_snapshot_"+tc.name)
+			parent.service = svc
+			parent.threadsDB = svc.threadsDB
+			freezePermissionPolicyTestSnapshot(t, parent)
+			childThreadID := "child_snapshot_" + tc.name
+			childRun := parent.subagentChildRun()
+			snapshot := buildPermissionPolicySnapshotForTools(t, childRun, childThreadID, "okf.search")
+			insertPermissionPolicyChildSnapshotRecord(t, parent, childThreadID, snapshot, func(rec *threadstore.ChildPermissionSnapshotRecord) {
+				mutated := snapshot
+				tc.mutate(&mutated, rec)
+			})
+
+			childRunID := permissionPolicyTestChildRunID(childThreadID)
+			execRun := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+				RunID:    childRunID,
+				ThreadID: childThreadID,
+				HostContext: map[string]string{
+					subagentToolHostContextChildThreadIDKey: childThreadID,
+					subagentToolHostContextChildRunIDKey:    childRunID,
+				},
+			})
+			if execRun == nil {
+				t.Fatalf("floretInvocationRunContext returned nil")
+			}
+			if got := execRun.permissionSnapshot.SnapshotID; got != "missing_child_permission_snapshot" {
+				t.Fatalf("child snapshot id=%q, want fail-closed snapshot", got)
+			}
+			if decision, ok := execRun.permissionDecisionForToolFromSnapshot("okf.search"); !ok || decision != ApprovalDecisionDeny {
+				t.Fatalf("okf.search decision=%q ok=%v, want fail-closed deny", decision, ok)
+			}
+		})
+	}
+}
+
+func TestPermissionPolicy_ChildSnapshotParentOwnerMismatchFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*threadstore.ChildPermissionSnapshotRecord)
+	}{
+		{
+			name: "parent_thread",
+			mutate: func(rec *threadstore.ChildPermissionSnapshotRecord) {
+				rec.ParentThreadID = "thread_intruder"
+			},
+		},
+		{
+			name: "parent_run",
+			mutate: func(rec *threadstore.ChildPermissionSnapshotRecord) {
+				rec.ParentRunID = "run_intruder"
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			workspace := t.TempDir()
+			svc := newPermissionPolicyBridgeService(t)
+			parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "child_snapshot_parent_owner_"+tc.name)
+			parent.service = svc
+			parent.threadsDB = svc.threadsDB
+			freezePermissionPolicyTestSnapshot(t, parent)
+			childThreadID := "child_snapshot_parent_owner_" + tc.name
+			childRun := parent.subagentChildRun()
+			snapshot := buildPermissionPolicySnapshotForTools(t, childRun, childThreadID, "okf.search")
+			insertPermissionPolicyChildSnapshotRecord(t, parent, childThreadID, snapshot, tc.mutate)
+
+			childRunID := permissionPolicyTestChildRunID(childThreadID)
+			execRun := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+				RunID:    childRunID,
+				ThreadID: childThreadID,
+				HostContext: map[string]string{
+					subagentToolHostContextChildThreadIDKey: childThreadID,
+					subagentToolHostContextChildRunIDKey:    childRunID,
+				},
+			})
+			if execRun == nil {
+				t.Fatalf("floretInvocationRunContext returned nil")
+			}
+			if got := execRun.permissionSnapshot.SnapshotID; got != "missing_child_permission_snapshot" {
+				t.Fatalf("child snapshot id=%q, want fail-closed snapshot", got)
+			}
+			if decision, ok := execRun.permissionDecisionForToolFromSnapshot("okf.search"); !ok || decision != ApprovalDecisionDeny {
+				t.Fatalf("okf.search decision=%q ok=%v, want fail-closed deny", decision, ok)
+			}
+		})
+	}
+}
+
+func TestPermissionPolicy_ChildSnapshotInvalidRunIdentityFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name       string
+		childRunID func(parent *run, childThreadID string) string
+	}{
+		{
+			name: "missing",
+			childRunID: func(_ *run, _ string) string {
+				return ""
+			},
+		},
+		{
+			name: "thread_alias",
+			childRunID: func(_ *run, childThreadID string) string {
+				return childThreadID
+			},
+		},
+		{
+			name: "parent_alias",
+			childRunID: func(parent *run, _ string) string {
+				return parent.id
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			workspace := t.TempDir()
+			dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+			store, err := threadstore.Open(dbPath)
+			if err != nil {
+				t.Fatalf("threadstore.Open: %v", err)
+			}
+			t.Cleanup(func() { _ = store.Close() })
+			svc := &Service{
+				flowerLiveByThread: map[string]*flowerLiveThreadStream{},
+				delegatedApprovals: map[string]*delegatedApprovalHandle{},
+				threadsDB:          store,
+				persistOpTO:        time.Second,
+			}
+			parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "child_snapshot_identity_"+tc.name)
+			parent.service = svc
+			parent.threadsDB = svc.threadsDB
+			freezePermissionPolicyTestSnapshot(t, parent)
+			childThreadID := "child_snapshot_identity_" + tc.name
+			childRun := parent.subagentChildRun()
+			snapshot := buildPermissionPolicySnapshotForTools(t, childRun, childThreadID, "okf.search")
+			insertPermissionPolicyChildSnapshotRecord(t, parent, childThreadID, snapshot, nil)
+			rawDB, err := sql.Open("sqlite", dbPath)
+			if err != nil {
+				t.Fatalf("sql.Open raw store: %v", err)
+			}
+			t.Cleanup(func() { _ = rawDB.Close() })
+			if _, err := rawDB.ExecContext(context.Background(), `
+UPDATE ai_child_permission_snapshots
+SET child_run_id = ?
+WHERE endpoint_id = ? AND child_thread_id = ?
+`, tc.childRunID(parent, childThreadID), parent.endpointID, childThreadID); err != nil {
+				t.Fatalf("corrupt child_run_id: %v", err)
+			}
+
+			childRunID := permissionPolicyTestChildRunID(childThreadID)
+			execRun := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+				RunID:    childRunID,
+				ThreadID: childThreadID,
+				HostContext: map[string]string{
+					subagentToolHostContextChildThreadIDKey: childThreadID,
+					subagentToolHostContextChildRunIDKey:    childRunID,
+				},
+			})
+			if execRun == nil {
+				t.Fatalf("floretInvocationRunContext returned nil")
+			}
+			if got := execRun.permissionSnapshot.SnapshotID; got != "missing_child_permission_snapshot" {
+				t.Fatalf("child snapshot id=%q, want fail-closed snapshot", got)
+			}
+			if decision, ok := execRun.permissionDecisionForToolFromSnapshot("okf.search"); !ok || decision != ApprovalDecisionDeny {
+				t.Fatalf("okf.search decision=%q ok=%v, want fail-closed deny", decision, ok)
+			}
+		})
+	}
+}
+
+func TestPermissionPolicy_DelegatedApprovalRefUsesExplicitChildRunID(t *testing.T) {
+	t.Parallel()
+
+	parent := &run{threadID: "thread_parent", id: "run_parent", messageID: "turn_parent"}
+	child := &run{threadID: "thread_child", id: "thread_child", messageID: "turn_child"}
+	ref := delegatedApprovalRef(parent, child, fltools.ApprovalRequest{
+		ID:         "tool_call_child",
+		ApprovalID: "approval_child",
+		HostContext: map[string]string{
+			subagentToolHostContextChildThreadIDKey: "thread_child",
+			subagentToolHostContextChildRunIDKey:    "run_child_actual",
+		},
+	})
+	if ref.ChildRunID != "run_child_actual" {
+		t.Fatalf("child_run_id=%q, want explicit child run id", ref.ChildRunID)
+	}
+
+	ref = delegatedApprovalRef(parent, child, fltools.ApprovalRequest{
+		ID:         "tool_call_fallback",
+		ApprovalID: "approval_fallback",
+		HostContext: map[string]string{
+			subagentToolHostContextChildThreadIDKey: "thread_child",
+		},
+	})
+	if ref.ChildRunID != "" || validDelegatedApprovalRef(ref) {
+		t.Fatalf("fallback child_run_id=%q valid=%v, want missing run id to fail closed", ref.ChildRunID, validDelegatedApprovalRef(ref))
+	}
+
+	ref = delegatedApprovalRef(parent, child, fltools.ApprovalRequest{
+		ID:         "tool_call_thread_alias",
+		ApprovalID: "approval_thread_alias",
+		HostContext: map[string]string{
+			subagentToolHostContextChildThreadIDKey: "thread_child",
+			subagentToolHostContextChildRunIDKey:    "thread_child",
+		},
+	})
+	if ref.ChildRunID != "" || validDelegatedApprovalRef(ref) {
+		t.Fatalf("thread alias child_run_id=%q valid=%v, want explicit thread alias to fail closed", ref.ChildRunID, validDelegatedApprovalRef(ref))
+	}
+
+	ref = delegatedApprovalRef(parent, child, fltools.ApprovalRequest{
+		ID:         "tool_call_parent_alias",
+		ApprovalID: "approval_parent_alias",
+		HostContext: map[string]string{
+			subagentToolHostContextChildThreadIDKey: "thread_child",
+			subagentToolHostContextChildRunIDKey:    "run_parent",
+		},
+	})
+	if ref.ChildRunID != "" || validDelegatedApprovalRef(ref) {
+		t.Fatalf("parent alias child_run_id=%q valid=%v, want explicit parent run alias to fail closed", ref.ChildRunID, validDelegatedApprovalRef(ref))
+	}
+}
+
+func TestPermissionPolicy_DelegatedApprovalRejectsParentRunAliasChildRunID(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	svc := newPermissionPolicyBridgeService(t)
+	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_parent_alias")
+	parent.service = svc
+	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_alias")
+	child.service = svc
+	child.noUserInteraction = true
+	child.allowDelegatedApproval = true
+	child.delegatedApprovalParent = parent
+	child.subagentDepth = 1
+	child.threadID = "child_thread_alias"
+
+	_, _, err := svc.registerDelegatedApproval(parent, child, fltools.ApprovalRequest{
+		ID:         "tool_child_alias",
+		ApprovalID: "approval_child_alias",
+		Name:       "terminal.exec",
+		Args:       `{"command":"pwd"}`,
+		ArgsHash:   "args-alias",
+		ValidatedArgs: map[string]any{
+			"command": "pwd",
+		},
+		HostContext: map[string]string{
+			subagentToolHostContextChildThreadIDKey: "child_thread_alias",
+			subagentToolHostContextSubagentIDKey:    "child_thread_alias",
+			subagentToolHostContextChildRunIDKey:    parent.id,
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "missing identity") {
+		t.Fatalf("register delegated approval error=%v, want missing identity", err)
+	}
+}
+
+func TestPermissionPolicy_DelegatedApprovalRejectsChildSnapshotRunIDMismatch(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	svc := newPermissionPolicyBridgeService(t)
+	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_parent_snapshot_mismatch")
+	parent.service = svc
+	parent.threadsDB = svc.threadsDB
+	childThreadID := "child_thread_snapshot_mismatch"
+	insertPermissionPolicyChildSnapshot(t, parent, childThreadID, "terminal.exec")
+	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_snapshot_mismatch")
+	child.service = svc
+	child.noUserInteraction = true
+	child.allowDelegatedApproval = true
+	child.delegatedApprovalParent = parent
+	child.subagentDepth = 1
+	child.threadID = childThreadID
+	child.id = "child_run_wrong_snapshot_mismatch"
+
+	_, _, err := svc.registerDelegatedApproval(parent, child, fltools.ApprovalRequest{
+		ID:         "tool_child_snapshot_mismatch",
+		ApprovalID: "approval_child_snapshot_mismatch",
+		Name:       "terminal.exec",
+		Args:       `{"command":"pwd"}`,
+		ArgsHash:   "args-snapshot-mismatch",
+		ValidatedArgs: map[string]any{
+			"command": "pwd",
+		},
+		HostContext: map[string]string{
+			subagentToolHostContextChildThreadIDKey: childThreadID,
+			subagentToolHostContextSubagentIDKey:    childThreadID,
+			subagentToolHostContextChildRunIDKey:    child.id,
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "identity mismatch") {
+		t.Fatalf("register delegated approval error=%v, want identity mismatch", err)
+	}
+}
+
+func TestPermissionPolicy_DelegatedApprovalActionOmitsMainApprovalIDs(t *testing.T) {
+	t.Parallel()
+
+	parent := &run{threadID: "thread_parent", id: "run_parent", messageID: "turn_parent"}
+	child := &run{threadID: "thread_child", id: "run_child", messageID: "turn_child"}
+	ref := delegatedApprovalRef(parent, child, fltools.ApprovalRequest{
+		ID:         "tool_call_child",
+		ApprovalID: "approval_child",
+		Name:       "terminal.exec",
+		HostContext: map[string]string{
+			subagentToolHostContextChildThreadIDKey: "thread_child",
+			subagentToolHostContextChildRunIDKey:    "run_child",
+		},
+	})
+	action := delegatedApprovalAction(parent, child, fltools.ApprovalRequest{
+		ID:         "tool_call_child",
+		ApprovalID: "approval_child",
+		Name:       "terminal.exec",
+	}, ref, "dappr_contract", 100, 200)
+	payload := mustFlowerPayload(action)
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("delegated approval action payload invalid: %v", err)
+	}
+	if _, ok := decoded["run_id"]; ok {
+		t.Fatalf("delegated approval payload includes run_id: %s", payload)
+	}
+	if _, ok := decoded["tool_id"]; ok {
+		t.Fatalf("delegated approval payload includes tool_id: %s", payload)
+	}
+	refPayload, ok := decoded["delegated_ref"].(map[string]any)
+	if !ok {
+		t.Fatalf("delegated approval payload missing delegated_ref: %#v", decoded)
+	}
+	if refPayload["parent_run_id"] != "run_parent" || refPayload["child_tool_call_id"] != "tool_call_child" {
+		t.Fatalf("delegated ref payload=%#v, want parent run and child tool call identity", refPayload)
 	}
 }
 
@@ -312,14 +858,34 @@ func (r *run) runBuiltInToolThroughFloret(ctx context.Context, toolID string, to
 		ID:   strings.TrimSpace(toolID),
 		Name: strings.TrimSpace(toolName),
 		Args: string(raw),
-	}, floretToolApproverForRun(r), fltools.RunOptions{
+	}, floretToolApproverForRun(r), permissionPolicyTestRunOptions(r))
+	return toolCallOutcomeFromFloretResult(result), nil
+}
+
+func permissionPolicyTestRunOptions(r *run) fltools.RunOptions {
+	if r == nil {
+		return fltools.RunOptions{Step: 1}
+	}
+	opts := fltools.RunOptions{
 		RunID:         strings.TrimSpace(r.id),
 		ThreadID:      strings.TrimSpace(r.threadID),
 		TurnID:        strings.TrimSpace(r.messageID),
 		PromptScopeID: strings.TrimSpace(r.threadID),
 		Step:          1,
-	})
-	return toolCallOutcomeFromFloretResult(result), nil
+	}
+	if r.subagentDepth > 0 {
+		childThreadID := strings.TrimSpace(r.threadID)
+		childRunID := strings.TrimSpace(r.id)
+		opts.HostContext = map[string]string{
+			subagentToolHostContextChildThreadIDKey:    childThreadID,
+			subagentToolHostContextSubagentIDKey:       childThreadID,
+			subagentToolHostContextParentPermissionKey: permissionTypeString(r.permissionType),
+		}
+		if childRunID != "" && childRunID != childThreadID {
+			opts.HostContext[subagentToolHostContextChildRunIDKey] = childRunID
+		}
+	}
+	return opts
 }
 
 func toolCallOutcomeFromFloretResult(result fltools.Result) *toolCallOutcome {
@@ -563,6 +1129,39 @@ func TestPermissionPolicy_ReadonlyExclusiveToolsFailClosedOutsideReadonly(t *tes
 	}
 }
 
+func TestPermissionPolicy_ReadonlyExclusiveToolsFailClosedWithoutSnapshot(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "note.txt"), []byte("needle\n"), 0o644); err != nil {
+		t.Fatalf("write note: %v", err)
+	}
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: workspace,
+		WorkingDir:   workspace,
+		Shell:        "bash",
+		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+	})
+	r.permissionType = FlowerPermissionApprovalRequired
+
+	for toolName, args := range map[string]map[string]any{
+		"file.read":  {"file_path": "note.txt", "limit": 1},
+		"read_file":  {"path": "note.txt", "limit": 1},
+		"read_files": {"paths": []string{"note.txt"}, "limit": 1},
+		"find":       {"root": ".", "name": "*.txt", "type": "file", "max_results": 1},
+		"rgrep":      {"query": "needle", "paths": []string{"."}, "fixed_strings": true, "max_matches": 1},
+		"web_fetch":  {"url": "https://example.com/", "format": "markdown"},
+	} {
+		toolName, args := toolName, args
+		t.Run(toolName, func(t *testing.T) {
+			if _, err := r.execTool(context.Background(), r.sessionMeta, "tool_empty_snapshot_"+strings.ReplaceAll(toolName, ".", "_"), toolName, args); err == nil || !strings.Contains(err.Error(), "readonly tool unavailable") {
+				t.Fatalf("execTool(%s) error=%v, want readonly tool unavailable", toolName, err)
+			}
+		})
+	}
+}
+
 func TestPermissionPolicy_WebSearchUsesReadPermissionGate(t *testing.T) {
 	t.Parallel()
 
@@ -605,6 +1204,131 @@ func TestPermissionPolicy_SubagentsInvocationDoesNotRequestApproval(t *testing.T
 			assertNoApprovalWait(t, r, toolID)
 			if outcome == nil {
 				t.Fatalf("missing subagents outcome")
+			}
+		})
+	}
+}
+
+func TestPermissionPolicy_SubagentsRuntimeActionsDoNotRequestApproval(t *testing.T) {
+	t.Parallel()
+
+	actions := []struct {
+		name string
+		args map[string]any
+	}{
+		{
+			name: "spawn",
+			args: map[string]any{
+				"action":     "spawn",
+				"agent_type": "worker",
+				"task_name":  "runtime no approval",
+				"message":    "run without approving the orchestration action",
+			},
+		},
+		{
+			name: "wait",
+			args: map[string]any{"action": "wait", "ids": []string{"child_runtime_no_approval"}},
+		},
+		{
+			name: "send_input",
+			args: map[string]any{"action": "send_input", "target": "child_runtime_no_approval", "message": "continue"},
+		},
+		{
+			name: "inspect",
+			args: map[string]any{"action": "inspect", "target": "child_runtime_no_approval"},
+		},
+		{
+			name: "close",
+			args: map[string]any{"action": "close", "target": "child_runtime_no_approval"},
+		},
+		{
+			name: "close_all",
+			args: map[string]any{"action": "close_all", "scope": "current_run"},
+		},
+		{
+			name: "list",
+			args: map[string]any{"action": "list"},
+		},
+	}
+	for _, permissionType := range []FlowerPermissionType{
+		FlowerPermissionReadonly,
+		FlowerPermissionApprovalRequired,
+		FlowerPermissionFullAccess,
+	} {
+		permissionType := permissionType
+		t.Run(permissionTypeString(permissionType), func(t *testing.T) {
+			t.Parallel()
+
+			for _, tc := range actions {
+				tc := tc
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+
+					workspace := t.TempDir()
+					svc := newPermissionPolicyBridgeService(t)
+					r := newPermissionPolicyTestRun(t, workspace, permissionType, "subagents_runtime_"+permissionTypeString(permissionType)+"_"+tc.name)
+					r.service = svc
+					r.threadsDB = svc.threadsDB
+					r.cfg = &config.AIConfig{
+						CurrentModelID: "compat/gpt-5-mini",
+						Providers: []config.AIProvider{{
+							ID:      "compat",
+							Type:    "openai_compatible",
+							BaseURL: "https://example.invalid/v1",
+							Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+						}},
+					}
+					r.currentModelID = "compat/gpt-5-mini"
+					r.resolveProviderKey = func(providerID string) (string, bool, error) {
+						return "provider-key", strings.TrimSpace(providerID) == "compat", nil
+					}
+					freezePermissionPolicyTestSnapshot(t, r)
+					childThreadID := "child_runtime_no_approval"
+					insertPermissionPolicyChildSnapshot(t, r, childThreadID, "okf.search")
+					now := time.Now()
+					host := &recordingFloretHost{snapshots: []flruntime.SubAgentSnapshot{{
+						ThreadID:       flruntime.ThreadID(childThreadID),
+						ParentThreadID: flruntime.ThreadID(r.threadID),
+						TaskName:       "runtime no approval child",
+						HostProfileRef: subagentAgentTypeWorker,
+						Status:         flruntime.SubAgentStatusRunning,
+						CreatedAt:      now.Add(-time.Minute),
+						UpdatedAt:      now,
+						CanSendInput:   true,
+						CanInterrupt:   true,
+						CanClose:       true,
+					}}}
+					r.subagentRuntime = &floretSubagentRuntime{parent: r, host: host}
+
+					toolID := "tool_subagents_runtime_" + permissionTypeString(permissionType) + "_" + tc.name
+					outcome, err := r.runBuiltInToolThroughFloret(context.Background(), toolID, "subagents", tc.args)
+					if err != nil {
+						t.Fatalf("run subagents %s through Floret: %v", tc.name, err)
+					}
+					assertNoApprovalWait(t, r, toolID)
+					if outcome == nil || !outcome.Success {
+						t.Fatalf("subagents %s outcome=%+v, want success without approval", tc.name, outcome)
+					}
+					records, err := svc.threadsDB.ListDelegatedApprovalRequestsForThread(context.Background(), r.endpointID, r.threadID, 10)
+					if err != nil {
+						t.Fatalf("ListDelegatedApprovalRequestsForThread: %v", err)
+					}
+					if len(records) != 0 {
+						t.Fatalf("subagents %s wrote delegated approval records: %#v", tc.name, records)
+					}
+					if tc.name == "spawn" {
+						rec, ok, err := svc.threadsDB.GetChildPermissionSnapshotBySpawnToolCall(context.Background(), r.endpointID, toolID)
+						if err != nil {
+							t.Fatalf("GetChildPermissionSnapshotBySpawnToolCall: %v", err)
+						}
+						if !ok || rec.State != "finalized" || rec.SpawnToolCallID != toolID {
+							t.Fatalf("spawn child snapshot=%#v ok=%v, want finalized record keyed by real tool call id %q", rec, ok, toolID)
+						}
+						if rec.ChildThreadID == toolID || rec.ChildRunID == rec.ChildThreadID || rec.ChildRunID == r.id {
+							t.Fatalf("spawn child identity reused tool/thread/parent ids: %#v", rec)
+						}
+					}
+				})
 			}
 		})
 	}
@@ -829,8 +1553,14 @@ func TestPermissionPolicy_SubagentApprovalDelegatesToParentRun(t *testing.T) {
 	}()
 
 	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
-	if action.ToolID != "tool_child_shell" || action.DelegatedRef == nil || action.DelegatedRef.ChildThreadID != child.threadID {
+	if action.RunID != "" || action.ToolID != "" {
+		t.Fatalf("delegated action carried main approval ids: run_id=%q tool_id=%q", action.RunID, action.ToolID)
+	}
+	if action.DelegatedRef == nil || action.DelegatedRef.ChildThreadID != child.threadID || action.DelegatedRef.ChildToolCallID != "tool_child_shell" {
 		t.Fatalf("delegated action mismatch: %#v", action)
+	}
+	if action.DelegatedRef.ChildRunID != child.id || action.DelegatedRef.ChildRunID == child.threadID {
+		t.Fatalf("delegated child_run_id=%q, want distinct child run %q", action.DelegatedRef.ChildRunID, child.id)
 	}
 	assertNoApprovalWait(t, parent, "tool_child_shell")
 	assertNoApprovalWait(t, child, "tool_child_shell")
@@ -838,8 +1568,6 @@ func TestPermissionPolicy_SubagentApprovalDelegatesToParentRun(t *testing.T) {
 		ThreadID:       parent.threadID,
 		Origin:         FlowerApprovalOriginDelegatedSubagent,
 		ActionID:       action.ActionID,
-		RunID:          action.RunID,
-		ToolID:         action.ToolID,
 		Approved:       true,
 		ExpectedSeq:    action.ExpectedSeq,
 		Revision:       action.Revision,
@@ -881,6 +1609,87 @@ func TestPermissionPolicy_SubagentApprovalDelegatesToParentRun(t *testing.T) {
 	}
 }
 
+func TestPermissionPolicy_SubagentDelegatedSubmitRequiresParentOwner(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	target := filepath.Join(workspace, "delegated-owner.txt")
+	svc := newPermissionPolicyBridgeService(t)
+	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_parent_owner")
+	parent.service = svc
+	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_owner")
+	child.service = svc
+	child.noUserInteraction = true
+	child.allowDelegatedApproval = true
+	child.delegatedApprovalParent = parent
+	child.subagentDepth = 1
+	child.threadID = "child_thread_owner"
+
+	type result struct {
+		outcome *toolCallOutcome
+		err     error
+	}
+	done := make(chan result, 1)
+	go func() {
+		outcome, err := child.runTerminalExecThroughFloret(context.Background(), "tool_child_owner", map[string]any{
+			"command": "printf 'owner-approved' > delegated-owner.txt",
+		})
+		done <- result{outcome: outcome, err: err}
+	}()
+
+	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
+	approveReq := SubmitFlowerApprovalRequest{
+		ThreadID:       parent.threadID,
+		Origin:         FlowerApprovalOriginDelegatedSubagent,
+		ActionID:       action.ActionID,
+		Approved:       true,
+		ExpectedSeq:    action.ExpectedSeq,
+		Revision:       action.Revision,
+		Version:        action.Version,
+		SurfaceEpoch:   action.SurfaceEpoch,
+		IdempotencyKey: "idem-delegated-owner-intruder",
+		DelegatedRef:   action.DelegatedRef,
+	}
+	intruderMeta := *parent.sessionMeta
+	intruderMeta.UserPublicID = "user_intruder"
+	if _, err := svc.SubmitFlowerApproval(&intruderMeta, approveReq); err == nil || !strings.Contains(err.Error(), "run not found") {
+		t.Fatalf("intruder delegated approval error=%v, want run not found", err)
+	}
+	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+		t.Fatalf("target should not exist after intruder submit, statErr=%v", statErr)
+	}
+	rec, ok, err := svc.threadsDB.GetDelegatedApprovalRequest(context.Background(), parent.endpointID, parent.threadID, action.ActionID)
+	if err != nil {
+		t.Fatalf("GetDelegatedApprovalRequest: %v", err)
+	}
+	if !ok || rec.ParentUserPublicID != parent.userPublicID || rec.Status != "pending" || rec.State != "requested" {
+		t.Fatalf("delegated record after intruder submit=%#v, want original owner pending", rec)
+	}
+	select {
+	case res := <-done:
+		t.Fatalf("child completed after intruder submit: outcome=%+v err=%v", res.outcome, res.err)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	cleanup := approveReq
+	cleanup.Approved = false
+	cleanup.IdempotencyKey = "idem-delegated-owner-cleanup"
+	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, cleanup); err != nil {
+		t.Fatalf("owner cleanup reject: %v", err)
+	}
+	select {
+	case res := <-done:
+		if res.err != nil {
+			t.Fatalf("child terminal tool returned error: %v", res.err)
+		}
+		if res.outcome == nil || res.outcome.Success {
+			t.Fatalf("child terminal outcome=%+v, want rejected after owner cleanup", res.outcome)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatalf("timed out waiting for delegated owner cleanup")
+	}
+}
+
 func TestPermissionPolicy_SubagentDelegatedConcurrentSubmitOnlyOneWins(t *testing.T) {
 	t.Parallel()
 
@@ -914,8 +1723,6 @@ func TestPermissionPolicy_SubagentDelegatedConcurrentSubmitOnlyOneWins(t *testin
 		ThreadID:     parent.threadID,
 		Origin:       FlowerApprovalOriginDelegatedSubagent,
 		ActionID:     action.ActionID,
-		RunID:        action.RunID,
-		ToolID:       action.ToolID,
 		ExpectedSeq:  action.ExpectedSeq,
 		Revision:     action.Revision,
 		Version:      action.Version,
@@ -1155,6 +1962,11 @@ func TestPermissionPolicy_SubagentDelegatedRepeatedAskReusesRecordAndLiveAction(
 		ValidatedArgs: map[string]any{
 			"command": "pwd",
 		},
+		HostContext: map[string]string{
+			subagentToolHostContextChildThreadIDKey: "child_thread_repeat",
+			subagentToolHostContextSubagentIDKey:    "child_thread_repeat",
+			subagentToolHostContextChildRunIDKey:    child.id,
+		},
 	}
 
 	handle, created, err := svc.registerDelegatedApproval(parent, child, req)
@@ -1198,7 +2010,7 @@ func TestPermissionPolicy_SubagentDelegatedRepeatedAskReusesRecordAndLiveAction(
 	}
 }
 
-func TestNewService_MarksPendingDelegatedApprovalsUnavailableOnStartup(t *testing.T) {
+func TestNewService_ReconcilesDelegatedApprovalDeliveryStatesOnStartup(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
@@ -1210,34 +2022,67 @@ func TestNewService_MarksPendingDelegatedApprovalsUnavailableOnStartup(t *testin
 	if err != nil {
 		t.Fatalf("threadstore.Open: %v", err)
 	}
-	rec := threadstore.DelegatedApprovalRecord{
-		ActionID:            "dappr_startup",
-		EndpointID:          "env_permission_policy",
-		ParentThreadID:      "thread_startup",
-		ParentRunID:         "run_parent_startup",
-		ParentTurnID:        "turn_parent_startup",
-		SubagentID:          "subagent_startup",
-		ChildThreadID:       "thread_child_startup",
-		ChildRunID:          "run_child_startup",
-		ChildTurnID:         "turn_child_startup",
-		ChildToolCallID:     "tool_child_startup",
-		ApprovalID:          "approval_child_startup",
-		RefHash:             "ref_hash_startup",
-		State:               "requested",
-		Status:              "pending",
-		DeliveryState:       "waiting_decision",
-		ChildExecutionState: "pending",
-		Version:             1,
-		SurfaceEpoch:        1,
-		RequestedAtUnixMs:   100,
-		ExpiresAtUnixMs:     1000,
-		ActionJSON:          `{"action_id":"dappr_startup","state":"requested","status":"pending","can_approve":true}`,
-		CreatedAtUnixMs:     100,
-		UpdatedAtUnixMs:     100,
+	record := func(actionID string) threadstore.DelegatedApprovalRecord {
+		return threadstore.DelegatedApprovalRecord{
+			ActionID:            actionID,
+			EndpointID:          "env_permission_policy",
+			ParentThreadID:      "thread_startup",
+			ParentUserPublicID:  "user_permission_policy",
+			ParentRunID:         "run_parent_startup",
+			ParentTurnID:        "turn_parent_startup",
+			SubagentID:          "subagent_startup",
+			ChildThreadID:       "thread_child_startup",
+			ChildRunID:          "run_child_startup",
+			ChildTurnID:         "turn_child_startup",
+			ChildToolCallID:     "tool_child_" + actionID,
+			ApprovalID:          "approval_child_" + actionID,
+			RefHash:             "ref_hash_" + actionID,
+			State:               "requested",
+			Status:              "pending",
+			DeliveryState:       "waiting_decision",
+			ChildExecutionState: "pending",
+			Version:             1,
+			SurfaceEpoch:        1,
+			RequestedAtUnixMs:   100,
+			ExpiresAtUnixMs:     1000,
+			ActionJSON:          fmt.Sprintf(`{"action_id":%q,"state":"requested","status":"pending","can_approve":true}`, actionID),
+			CreatedAtUnixMs:     100,
+			UpdatedAtUnixMs:     100,
+		}
 	}
-	if err := store.UpsertDelegatedApprovalRequest(context.Background(), rec); err != nil {
+	ctx := context.Background()
+	pending := record("dappr_startup_pending")
+	deliveryPending := record("dappr_startup_delivery_pending")
+	delivered := record("dappr_startup_delivered")
+	for _, rec := range []threadstore.DelegatedApprovalRecord{pending, deliveryPending, delivered} {
+		if err := store.UpsertDelegatedApprovalRequest(ctx, rec); err != nil {
+			_ = store.Close()
+			t.Fatalf("UpsertDelegatedApprovalRequest %s: %v", rec.ActionID, err)
+		}
+	}
+	for _, rec := range []threadstore.DelegatedApprovalRecord{deliveryPending, delivered} {
+		if _, err := store.SubmitDelegatedApprovalDecisionCAS(ctx, threadstore.DelegatedApprovalDecisionRequest{
+			EndpointID:       rec.EndpointID,
+			ParentThreadID:   rec.ParentThreadID,
+			ActionID:         rec.ActionID,
+			RefHash:          rec.RefHash,
+			Version:          1,
+			SurfaceEpoch:     1,
+			Approved:         true,
+			NextVersion:      2,
+			NextActionJSON:   fmt.Sprintf(`{"action_id":%q,"state":"approved","status":"resolved","delivery_state":"delivery_pending","can_approve":false}`, rec.ActionID),
+			ResolvedAtUnixMs: 200,
+			ActorScope:       rec.EndpointID + ":" + rec.ParentUserPublicID + ":" + rec.ParentThreadID,
+			IdempotencyKey:   "idem-" + rec.ActionID,
+			ResponseJSON:     `{"ok":true}`,
+		}); err != nil {
+			_ = store.Close()
+			t.Fatalf("SubmitDelegatedApprovalDecisionCAS %s: %v", rec.ActionID, err)
+		}
+	}
+	if changed, err := store.MarkDelegatedApprovalDelivered(ctx, delivered.EndpointID, delivered.ParentThreadID, delivered.ActionID, 2, fmt.Sprintf(`{"action_id":%q,"state":"approved","status":"resolved","delivery_state":"delivery_delivered","can_approve":false}`, delivered.ActionID), 250); err != nil || !changed {
 		_ = store.Close()
-		t.Fatalf("UpsertDelegatedApprovalRequest: %v", err)
+		t.Fatalf("MarkDelegatedApprovalDelivered changed=%v err=%v", changed, err)
 	}
 	if err := store.Close(); err != nil {
 		t.Fatalf("close seed store: %v", err)
@@ -1252,22 +2097,35 @@ func TestNewService_MarksPendingDelegatedApprovalsUnavailableOnStartup(t *testin
 		t.Fatalf("NewService: %v", err)
 	}
 	t.Cleanup(func() { _ = svc.Close() })
-	got, ok, err := svc.threadsDB.GetDelegatedApprovalRequest(context.Background(), rec.EndpointID, rec.ParentThreadID, rec.ActionID)
-	if err != nil {
-		t.Fatalf("GetDelegatedApprovalRequest: %v", err)
+	cases := []struct {
+		record       threadstore.DelegatedApprovalRecord
+		wantState    string
+		wantStatus   string
+		wantDelivery string
+		wantVersion  int64
+	}{
+		{record: pending, wantState: "unavailable", wantStatus: "unavailable", wantDelivery: "delivery_unavailable", wantVersion: 2},
+		{record: deliveryPending, wantState: "approved", wantStatus: "resolved", wantDelivery: "delivery_ack_unknown", wantVersion: 3},
+		{record: delivered, wantState: "approved", wantStatus: "resolved", wantDelivery: "delivery_delivered", wantVersion: 2},
 	}
-	if !ok {
-		t.Fatalf("delegated approval missing after startup")
-	}
-	if got.State != "unavailable" || got.Status != "unavailable" || got.DeliveryState != "delivery_unavailable" || got.Version != 2 {
-		t.Fatalf("startup delegated record=%#v, want unavailable version 2", got)
-	}
-	var action map[string]any
-	if err := json.Unmarshal([]byte(got.ActionJSON), &action); err != nil {
-		t.Fatalf("startup action_json is invalid: %v", err)
-	}
-	if action["can_approve"] != false || action["state"] != "unavailable" {
-		t.Fatalf("startup action_json=%#v, want non-decidable unavailable action", action)
+	for _, tc := range cases {
+		got, ok, err := svc.threadsDB.GetDelegatedApprovalRequest(context.Background(), tc.record.EndpointID, tc.record.ParentThreadID, tc.record.ActionID)
+		if err != nil {
+			t.Fatalf("GetDelegatedApprovalRequest %s: %v", tc.record.ActionID, err)
+		}
+		if !ok {
+			t.Fatalf("delegated approval %s missing after startup", tc.record.ActionID)
+		}
+		if got.State != tc.wantState || got.Status != tc.wantStatus || got.DeliveryState != tc.wantDelivery || got.Version != tc.wantVersion {
+			t.Fatalf("startup delegated record %s=%#v, want state=%s status=%s delivery=%s version=%d", tc.record.ActionID, got, tc.wantState, tc.wantStatus, tc.wantDelivery, tc.wantVersion)
+		}
+		var action map[string]any
+		if err := json.Unmarshal([]byte(got.ActionJSON), &action); err != nil {
+			t.Fatalf("startup action_json for %s is invalid: %v", tc.record.ActionID, err)
+		}
+		if action["can_approve"] != false || action["state"] != tc.wantState || action["delivery_state"] != tc.wantDelivery {
+			t.Fatalf("startup action_json for %s=%#v, want non-decidable %s/%s", tc.record.ActionID, action, tc.wantState, tc.wantDelivery)
+		}
 	}
 }
 
@@ -1303,8 +2161,6 @@ func TestPermissionPolicy_SubagentDelegatedSubmitRequiresMatchingRef(t *testing.
 		ThreadID:       parent.threadID,
 		Origin:         FlowerApprovalOriginDelegatedSubagent,
 		ActionID:       action.ActionID,
-		RunID:          action.RunID,
-		ToolID:         action.ToolID,
 		Approved:       true,
 		ExpectedSeq:    action.ExpectedSeq,
 		Revision:       action.Revision,
@@ -1370,21 +2226,20 @@ func TestPermissionPolicy_SubagentDelegatedRejectPreventsExecution(t *testing.T)
 	}()
 
 	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
-	if action.ToolID != "tool_child_reject" {
-		t.Fatalf("delegated action tool_id=%q, want tool_child_reject", action.ToolID)
+	if action.DelegatedRef == nil || action.DelegatedRef.ChildToolCallID != "tool_child_reject" {
+		t.Fatalf("delegated action ref=%#v, want child tool call tool_child_reject", action.DelegatedRef)
 	}
 	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, SubmitFlowerApprovalRequest{
-		ThreadID:     parent.threadID,
-		Origin:       FlowerApprovalOriginDelegatedSubagent,
-		ActionID:     action.ActionID,
-		RunID:        action.RunID,
-		ToolID:       action.ToolID,
-		Approved:     false,
-		ExpectedSeq:  action.ExpectedSeq,
-		Revision:     action.Revision,
-		Version:      action.Version,
-		SurfaceEpoch: action.SurfaceEpoch,
-		DelegatedRef: action.DelegatedRef,
+		ThreadID:       parent.threadID,
+		Origin:         FlowerApprovalOriginDelegatedSubagent,
+		ActionID:       action.ActionID,
+		Approved:       false,
+		ExpectedSeq:    action.ExpectedSeq,
+		Revision:       action.Revision,
+		Version:        action.Version,
+		SurfaceEpoch:   action.SurfaceEpoch,
+		IdempotencyKey: "idem-delegated-reject",
+		DelegatedRef:   action.DelegatedRef,
 	}); err != nil {
 		t.Fatalf("SubmitFlowerApproval delegated reject: %v", err)
 	}

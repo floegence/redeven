@@ -15,6 +15,7 @@ type DelegatedApprovalRecord struct {
 	ActionID            string
 	EndpointID          string
 	ParentThreadID      string
+	ParentUserPublicID  string
 	ParentRunID         string
 	ParentTurnID        string
 	SubagentID          string
@@ -43,6 +44,7 @@ type DelegatedApprovalDecisionRequest struct {
 	EndpointID       string
 	ParentThreadID   string
 	ActionID         string
+	RefHash          string
 	Version          int64
 	SurfaceEpoch     int64
 	Approved         bool
@@ -98,14 +100,14 @@ func (s *Store) UpsertDelegatedApprovalRequest(ctx context.Context, rec Delegate
 	defer func() { _ = tx.Rollback() }()
 	res, err := tx.ExecContext(ctx, `
 INSERT OR IGNORE INTO ai_delegated_approval_requests(
-  action_id, endpoint_id, parent_thread_id, parent_run_id, parent_turn_id,
+  action_id, endpoint_id, parent_thread_id, parent_user_public_id, parent_run_id, parent_turn_id,
   subagent_id, child_thread_id, child_run_id, child_turn_id,
   child_tool_call_id, approval_id, ref_hash, request_fingerprint, state, status,
   delivery_state, child_execution_state, version, surface_epoch,
   requested_at_unix_ms, resolved_at_unix_ms, expires_at_unix_ms,
   action_json, created_at_unix_ms, updated_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, rec.ActionID, rec.EndpointID, rec.ParentThreadID, rec.ParentRunID, rec.ParentTurnID,
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, rec.ActionID, rec.EndpointID, rec.ParentThreadID, rec.ParentUserPublicID, rec.ParentRunID, rec.ParentTurnID,
 		rec.SubagentID, rec.ChildThreadID, rec.ChildRunID, rec.ChildTurnID,
 		rec.ChildToolCallID, rec.ApprovalID, rec.RefHash, rec.RequestFingerprint, rec.State, rec.Status,
 		rec.DeliveryState, rec.ChildExecutionState, rec.Version, rec.SurfaceEpoch,
@@ -170,6 +172,7 @@ func (s *Store) SubmitDelegatedApprovalDecisionCAS(ctx context.Context, req Dele
 	req.EndpointID = strings.TrimSpace(req.EndpointID)
 	req.ParentThreadID = strings.TrimSpace(req.ParentThreadID)
 	req.ActionID = strings.TrimSpace(req.ActionID)
+	req.RefHash = strings.TrimSpace(req.RefHash)
 	req.NextActionJSON = strings.TrimSpace(req.NextActionJSON)
 	req.ActorScope = strings.TrimSpace(req.ActorScope)
 	req.IdempotencyKey = strings.TrimSpace(req.IdempotencyKey)
@@ -177,7 +180,7 @@ func (s *Store) SubmitDelegatedApprovalDecisionCAS(ctx context.Context, req Dele
 	if req.ResponseJSON == "" {
 		req.ResponseJSON = "{}"
 	}
-	if req.EndpointID == "" || req.ParentThreadID == "" || req.ActionID == "" || req.Version <= 0 || req.SurfaceEpoch <= 0 || req.NextVersion <= req.Version || req.NextActionJSON == "" {
+	if req.EndpointID == "" || req.ParentThreadID == "" || req.ActionID == "" || req.RefHash == "" || req.ActorScope == "" || req.IdempotencyKey == "" || req.Version <= 0 || req.SurfaceEpoch <= 0 || req.NextVersion <= req.Version || req.NextActionJSON == "" {
 		return DelegatedApprovalDecisionResult{}, errors.New("invalid delegated approval resolution")
 	}
 	if req.ResolvedAtUnixMs <= 0 {
@@ -192,28 +195,29 @@ func (s *Store) SubmitDelegatedApprovalDecisionCAS(ctx context.Context, req Dele
 		return DelegatedApprovalDecisionResult{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if req.ActorScope != "" && req.IdempotencyKey != "" {
-		var existingActionID string
-		var existingApproved int
-		if err := tx.QueryRowContext(ctx, `
-SELECT action_id, approved
-FROM ai_delegated_approval_idempotency
-WHERE actor_scope = ? AND idempotency_key = ?
-`, req.ActorScope, req.IdempotencyKey).Scan(&existingActionID, &existingApproved); err == nil {
-			if strings.TrimSpace(existingActionID) == req.ActionID && (existingApproved != 0) == req.Approved {
-				rec, ok, err := getDelegatedApprovalRequestTx(ctx, tx, req.EndpointID, req.ParentThreadID, req.ActionID)
-				if err != nil {
-					return DelegatedApprovalDecisionResult{}, err
-				}
-				if !ok {
-					return DelegatedApprovalDecisionResult{}, nil
-				}
-				return DelegatedApprovalDecisionResult{Accepted: true, Replayed: true, Record: rec}, tx.Commit()
+	var existingActionID string
+	var existingRefHash string
+	var existingApproved int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT action_id, ref_hash, approved
+		FROM ai_delegated_approval_idempotency
+		WHERE actor_scope = ? AND idempotency_key = ?
+	`, req.ActorScope, req.IdempotencyKey).Scan(&existingActionID, &existingRefHash, &existingApproved); err == nil {
+		if strings.TrimSpace(existingActionID) == req.ActionID &&
+			strings.TrimSpace(existingRefHash) == req.RefHash &&
+			(existingApproved != 0) == req.Approved {
+			rec, ok, err := getDelegatedApprovalRequestTx(ctx, tx, req.EndpointID, req.ParentThreadID, req.ActionID)
+			if err != nil {
+				return DelegatedApprovalDecisionResult{}, err
 			}
-			return DelegatedApprovalDecisionResult{Conflict: true}, tx.Commit()
-		} else if !errors.Is(err, sql.ErrNoRows) {
-			return DelegatedApprovalDecisionResult{}, err
+			if !ok {
+				return DelegatedApprovalDecisionResult{}, nil
+			}
+			return DelegatedApprovalDecisionResult{Accepted: true, Replayed: true, Record: rec}, tx.Commit()
 		}
+		return DelegatedApprovalDecisionResult{Conflict: true}, tx.Commit()
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return DelegatedApprovalDecisionResult{}, err
 	}
 	res, err := tx.ExecContext(ctx, `
 UPDATE ai_delegated_approval_requests
@@ -226,11 +230,12 @@ SET state = ?,
     updated_at_unix_ms = ?
 WHERE endpoint_id = ?
   AND parent_thread_id = ?
-  AND action_id = ?
-  AND status = 'pending'
-  AND version = ?
-  AND surface_epoch = ?
-`, decisionStateForApproval(req.Approved), req.NextVersion, req.NextActionJSON, req.ResolvedAtUnixMs, req.ResolvedAtUnixMs, req.EndpointID, req.ParentThreadID, req.ActionID, req.Version, req.SurfaceEpoch)
+	  AND action_id = ?
+	  AND ref_hash = ?
+	  AND status = 'pending'
+	  AND version = ?
+	  AND surface_epoch = ?
+	`, decisionStateForApproval(req.Approved), req.NextVersion, req.NextActionJSON, req.ResolvedAtUnixMs, req.ResolvedAtUnixMs, req.EndpointID, req.ParentThreadID, req.ActionID, req.RefHash, req.Version, req.SurfaceEpoch)
 	if err != nil {
 		return DelegatedApprovalDecisionResult{}, err
 	}
@@ -250,13 +255,11 @@ VALUES(?, ?, ?, ?, 'delivery_pending', ?, ?, 0)
 `, req.EndpointID, req.ParentThreadID, req.ActionID, decision, req.NextActionJSON, req.ResolvedAtUnixMs); err != nil {
 		return DelegatedApprovalDecisionResult{}, err
 	}
-	if req.ActorScope != "" && req.IdempotencyKey != "" {
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO ai_delegated_approval_idempotency(actor_scope, idempotency_key, endpoint_id, parent_thread_id, action_id, approved, response_json, created_at_unix_ms)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-`, req.ActorScope, req.IdempotencyKey, req.EndpointID, req.ParentThreadID, req.ActionID, boolToInt(req.Approved), req.ResponseJSON, req.ResolvedAtUnixMs); err != nil {
-			return DelegatedApprovalDecisionResult{}, err
-		}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO ai_delegated_approval_idempotency(actor_scope, idempotency_key, endpoint_id, parent_thread_id, action_id, ref_hash, approved, response_json, created_at_unix_ms)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`, req.ActorScope, req.IdempotencyKey, req.EndpointID, req.ParentThreadID, req.ActionID, req.RefHash, boolToInt(req.Approved), req.ResponseJSON, req.ResolvedAtUnixMs); err != nil {
+		return DelegatedApprovalDecisionResult{}, err
 	}
 	rec, ok, err := getDelegatedApprovalRequestTx(ctx, tx, req.EndpointID, req.ParentThreadID, req.ActionID)
 	if err != nil {
@@ -266,24 +269,6 @@ VALUES(?, ?, ?, ?, ?, ?, ?, ?)
 		return DelegatedApprovalDecisionResult{}, nil
 	}
 	return DelegatedApprovalDecisionResult{Accepted: true, Record: rec}, tx.Commit()
-}
-
-func (s *Store) ResolveDelegatedApprovalRequestCAS(ctx context.Context, endpointID string, parentThreadID string, actionID string, version int64, surfaceEpoch int64, approved bool, nextActionJSON string, nextVersion int64, resolvedAtUnixMs int64) (bool, error) {
-	result, err := s.SubmitDelegatedApprovalDecisionCAS(ctx, DelegatedApprovalDecisionRequest{
-		EndpointID:       endpointID,
-		ParentThreadID:   parentThreadID,
-		ActionID:         actionID,
-		Version:          version,
-		SurfaceEpoch:     surfaceEpoch,
-		Approved:         approved,
-		NextActionJSON:   nextActionJSON,
-		NextVersion:      nextVersion,
-		ResolvedAtUnixMs: resolvedAtUnixMs,
-	})
-	if err != nil {
-		return false, err
-	}
-	return result.Accepted, nil
 }
 
 func (s *Store) MarkDelegatedApprovalDelivered(ctx context.Context, endpointID string, parentThreadID string, actionID string, version int64, nextActionJSON string, deliveredAtUnixMs int64) (bool, error) {
@@ -410,6 +395,74 @@ WHERE endpoint_id = ? AND parent_thread_id = ? AND action_id = ?
 	return true, tx.Commit()
 }
 
+func (s *Store) MarkDelegatedApprovalAckUnknown(ctx context.Context, endpointID string, parentThreadID string, actionID string, reason string, nextActionJSON string, nowUnixMs int64) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	parentThreadID = strings.TrimSpace(parentThreadID)
+	actionID = strings.TrimSpace(actionID)
+	nextActionJSON = strings.TrimSpace(nextActionJSON)
+	if endpointID == "" || parentThreadID == "" || actionID == "" || nextActionJSON == "" {
+		return false, errors.New("invalid delegated approval ack-unknown request")
+	}
+	if nowUnixMs <= 0 {
+		nowUnixMs = time.Now().UnixMilli()
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "delegated approval delivery could not be confirmed"
+	}
+	payloadJSON := delegatedApprovalReasonPayload(reason)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, `
+UPDATE ai_delegated_approval_requests
+SET delivery_state = 'delivery_ack_unknown',
+    version = version + 1,
+    action_json = ?,
+    updated_at_unix_ms = ?
+WHERE endpoint_id = ?
+  AND parent_thread_id = ?
+  AND action_id = ?
+  AND status = 'resolved'
+  AND state IN ('approved', 'rejected')
+  AND delivery_state = 'delivery_pending'
+`, nextActionJSON, nowUnixMs, endpointID, parentThreadID, actionID)
+	if err != nil {
+		return false, err
+	}
+	changed, _ := res.RowsAffected()
+	if changed == 0 {
+		return false, tx.Commit()
+	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE ai_delegated_approval_outbox
+SET delivery_state = 'delivery_ack_unknown'
+WHERE endpoint_id = ?
+  AND parent_thread_id = ?
+  AND action_id = ?
+  AND delivery_state = 'delivery_pending'
+`, endpointID, parentThreadID, actionID); err != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO ai_delegated_approval_events(endpoint_id, parent_thread_id, action_id, event_type, version, payload_json, created_at_unix_ms)
+SELECT endpoint_id, parent_thread_id, action_id, 'delivery_ack_unknown', version, ?, ?
+FROM ai_delegated_approval_requests
+WHERE endpoint_id = ? AND parent_thread_id = ? AND action_id = ?
+`, payloadJSON, nowUnixMs, endpointID, parentThreadID, actionID); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
 func (s *Store) ListDelegatedApprovalRequestsForThread(ctx context.Context, endpointID string, parentThreadID string, limit int) ([]DelegatedApprovalRecord, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("store not initialized")
@@ -506,6 +559,47 @@ ORDER BY updated_at_unix_ms ASC
 	count := int64(0)
 	for _, rec := range pending {
 		nextVersion := rec.Version + 1
+		if rec.Status == "resolved" && rec.DeliveryState == "delivery_pending" {
+			nextActionJSON := delegatedApprovalAckUnknownActionJSON(rec, reason, nextVersion)
+			res, err := tx.ExecContext(ctx, `
+UPDATE ai_delegated_approval_requests
+SET delivery_state = 'delivery_ack_unknown',
+    version = ?,
+    action_json = ?,
+    updated_at_unix_ms = ?
+WHERE endpoint_id = ?
+  AND parent_thread_id = ?
+  AND action_id = ?
+  AND status = 'resolved'
+  AND state IN ('approved', 'rejected')
+  AND delivery_state = 'delivery_pending'
+`, nextVersion, nextActionJSON, nowUnixMs, rec.EndpointID, rec.ParentThreadID, rec.ActionID)
+			if err != nil {
+				return count, err
+			}
+			changed, _ := res.RowsAffected()
+			if changed == 0 {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `
+UPDATE ai_delegated_approval_outbox
+SET delivery_state = 'delivery_ack_unknown'
+WHERE endpoint_id = ?
+  AND parent_thread_id = ?
+  AND action_id = ?
+  AND delivery_state = 'delivery_pending'
+`, rec.EndpointID, rec.ParentThreadID, rec.ActionID); err != nil {
+				return count, err
+			}
+			if _, err := tx.ExecContext(ctx, `
+INSERT INTO ai_delegated_approval_events(endpoint_id, parent_thread_id, action_id, event_type, version, payload_json, created_at_unix_ms)
+VALUES(?, ?, ?, 'delivery_ack_unknown', ?, ?, ?)
+`, rec.EndpointID, rec.ParentThreadID, rec.ActionID, nextVersion, delegatedApprovalReasonPayload(reason), nowUnixMs); err != nil {
+				return count, err
+			}
+			count++
+			continue
+		}
 		nextActionJSON := delegatedApprovalUnavailableActionJSON(rec, reason, nextVersion)
 		res, err := tx.ExecContext(ctx, `
 UPDATE ai_delegated_approval_requests
@@ -548,6 +642,29 @@ VALUES(?, ?, ?, 'unavailable', ?, ?, ?)
 	return count, tx.Commit()
 }
 
+func delegatedApprovalAckUnknownActionJSON(rec DelegatedApprovalRecord, reason string, version int64) string {
+	payload := map[string]any{}
+	if raw := strings.TrimSpace(rec.ActionJSON); raw != "" {
+		_ = json.Unmarshal([]byte(raw), &payload)
+	}
+	state := strings.TrimSpace(rec.State)
+	if state == "" {
+		state = "approved"
+	}
+	payload["action_id"] = strings.TrimSpace(rec.ActionID)
+	payload["state"] = state
+	payload["status"] = "resolved"
+	payload["delivery_state"] = "delivery_ack_unknown"
+	payload["can_approve"] = false
+	payload["read_only_reason"] = strings.TrimSpace(reason)
+	payload["version"] = version
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "{}"
+	}
+	return string(data)
+}
+
 func delegatedApprovalUnavailableActionJSON(rec DelegatedApprovalRecord, reason string, version int64) string {
 	payload := map[string]any{}
 	if raw := strings.TrimSpace(rec.ActionJSON); raw != "" {
@@ -568,7 +685,7 @@ func delegatedApprovalUnavailableActionJSON(rec DelegatedApprovalRecord, reason 
 }
 
 const delegatedApprovalSelectSQL = `
-SELECT action_id, endpoint_id, parent_thread_id, parent_run_id, parent_turn_id,
+SELECT action_id, endpoint_id, parent_thread_id, parent_user_public_id, parent_run_id, parent_turn_id,
        subagent_id, child_thread_id, child_run_id, child_turn_id,
        child_tool_call_id, approval_id, ref_hash, request_fingerprint, state, status,
        delivery_state, child_execution_state, version, surface_epoch,
@@ -582,7 +699,7 @@ func scanDelegatedApprovalRows(rows *sql.Rows) ([]DelegatedApprovalRecord, error
 	for rows.Next() {
 		var rec DelegatedApprovalRecord
 		if err := rows.Scan(
-			&rec.ActionID, &rec.EndpointID, &rec.ParentThreadID, &rec.ParentRunID, &rec.ParentTurnID,
+			&rec.ActionID, &rec.EndpointID, &rec.ParentThreadID, &rec.ParentUserPublicID, &rec.ParentRunID, &rec.ParentTurnID,
 			&rec.SubagentID, &rec.ChildThreadID, &rec.ChildRunID, &rec.ChildTurnID,
 			&rec.ChildToolCallID, &rec.ApprovalID, &rec.RefHash, &rec.RequestFingerprint, &rec.State, &rec.Status,
 			&rec.DeliveryState, &rec.ChildExecutionState, &rec.Version, &rec.SurfaceEpoch,
@@ -603,6 +720,7 @@ func normalizeDelegatedApprovalRecord(rec DelegatedApprovalRecord) DelegatedAppr
 	rec.ActionID = strings.TrimSpace(rec.ActionID)
 	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
 	rec.ParentThreadID = strings.TrimSpace(rec.ParentThreadID)
+	rec.ParentUserPublicID = strings.TrimSpace(rec.ParentUserPublicID)
 	rec.ParentRunID = strings.TrimSpace(rec.ParentRunID)
 	rec.ParentTurnID = strings.TrimSpace(rec.ParentTurnID)
 	rec.SubagentID = strings.TrimSpace(rec.SubagentID)
@@ -633,11 +751,13 @@ func normalizeDelegatedApprovalRecord(rec DelegatedApprovalRecord) DelegatedAppr
 func delegatedApprovalRequestFingerprint(rec DelegatedApprovalRecord) string {
 	view := struct {
 		RefHash         string `json:"ref_hash"`
+		ParentUserID    string `json:"parent_user_public_id"`
 		ChildToolCallID string `json:"child_tool_call_id"`
 		ApprovalID      string `json:"approval_id"`
 		ActionJSON      any    `json:"action_json"`
 	}{
 		RefHash:         strings.TrimSpace(rec.RefHash),
+		ParentUserID:    strings.TrimSpace(rec.ParentUserPublicID),
 		ChildToolCallID: strings.TrimSpace(rec.ChildToolCallID),
 		ApprovalID:      strings.TrimSpace(rec.ApprovalID),
 		ActionJSON:      canonicalDelegatedApprovalRequestAction(strings.TrimSpace(rec.ActionJSON)),

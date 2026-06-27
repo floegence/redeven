@@ -59,11 +59,54 @@ function mergeMessages(messages: readonly FlowerChatMessage[], message: FlowerCh
 function visibleApprovalAction(action: FlowerApprovalAction): boolean {
   if (action.status === 'pending' && action.state === 'requested') return true;
   if (action.origin !== 'delegated_subagent') return false;
-  return action.delivery_state === 'delivery_pending' || action.status === 'unavailable';
+  return action.delivery_state === 'delivery_pending'
+    || action.delivery_state === 'delivery_delivered'
+    || action.delivery_state === 'delivery_failed'
+    || action.delivery_state === 'delivery_ack_unknown'
+    || action.delivery_state === 'delivery_unavailable'
+    || action.status === 'unavailable';
+}
+
+function delegatedApprovalPendingDecision(action: FlowerApprovalAction): boolean {
+  return action.origin === 'delegated_subagent'
+    && action.status === 'pending'
+    && action.state === 'requested'
+    && (!action.delivery_state || action.delivery_state === 'waiting_decision');
+}
+
+function delegatedApprovalPrimaryWaitAnchor(action: FlowerApprovalAction): string {
+  return trim(action.primary_wait_anchor)
+    || (trim(action.delegated_ref?.parent_thread_id) ? `thread:${trim(action.delegated_ref?.parent_thread_id)}` : '')
+    || trim(action.scope)
+    || 'thread';
+}
+
+function normalizeDelegatedApprovalSurfaces(actions: readonly FlowerApprovalAction[]): readonly FlowerApprovalAction[] {
+  const pending = actions
+    .filter(delegatedApprovalPendingDecision)
+    .sort((left, right) => {
+      const requestedDelta = Number(left.requested_at_ms ?? 0) - Number(right.requested_at_ms ?? 0);
+      if (requestedDelta !== 0) return requestedDelta;
+      const seqDelta = Number(left.expected_seq ?? 0) - Number(right.expected_seq ?? 0);
+      if (seqDelta !== 0) return seqDelta;
+      return left.action_id.localeCompare(right.action_id);
+    });
+  if (pending.length === 0) return actions;
+  const primaryID = pending[0].action_id;
+  return actions.map((action) => {
+    if (!delegatedApprovalPendingDecision(action)) return action;
+    const surfaceRole = action.action_id === primaryID ? 'primary_action' : 'locator';
+    if (action.surface_role === surfaceRole && trim(action.primary_wait_anchor)) return action;
+    return {
+      ...action,
+      surface_role: surfaceRole,
+      primary_wait_anchor: delegatedApprovalPrimaryWaitAnchor(action),
+    };
+  });
 }
 
 function pendingApprovalActions(actions: readonly FlowerApprovalAction[] | undefined): readonly FlowerApprovalAction[] {
-  return (actions ?? []).filter(visibleApprovalAction);
+  return normalizeDelegatedApprovalSurfaces(actions ?? []).filter(visibleApprovalAction);
 }
 
 function blockFromLiveBlock(block: FlowerLiveBlock): FlowerChatMessageBlock | null {
@@ -118,7 +161,7 @@ function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadP
 }
 
 function approvalsFromRecord(actions: Readonly<Record<string, FlowerApprovalAction>>): readonly FlowerApprovalAction[] {
-  return Object.values(actions)
+  return normalizeDelegatedApprovalSurfaces(Object.values(actions))
     .filter(visibleApprovalAction)
     .sort((left, right) => left.action_id.localeCompare(right.action_id));
 }
@@ -345,9 +388,12 @@ function withApprovalAction(thread: FlowerThreadSnapshot, action: FlowerApproval
   if (visibleApprovalAction(action)) {
     next.push(action);
   }
+  const approvalActions = normalizeDelegatedApprovalSurfaces(next)
+    .filter(visibleApprovalAction)
+    .sort((left, right) => left.action_id.localeCompare(right.action_id));
   const updated = {
     ...thread,
-    approval_actions: next.sort((left, right) => left.action_id.localeCompare(right.action_id)),
+    approval_actions: approvalActions,
     status: action.status === 'pending' ? 'waiting_approval' : thread.status,
   };
   return action.status === 'pending' ? clearModelIOForRun(updated, action.run_id) : updated;

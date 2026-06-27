@@ -62,9 +62,8 @@ type ThreadPatchInput = Readonly<{
   reasoning_selection?: FlowerReasoningSelection | null;
 }>;
 
-type RuntimeApprovalSubmitInput = Readonly<{
+type RuntimeApprovalSubmitBase = Readonly<{
   thread_id: string;
-  origin?: FlowerSubmitApprovalRequest['origin'];
   action_id: string;
   approved: boolean;
   expected_seq?: number;
@@ -72,10 +71,21 @@ type RuntimeApprovalSubmitInput = Readonly<{
   version?: number;
   surface_epoch?: number;
   idempotency_key?: string;
-  delegated_ref?: FlowerSubmitApprovalRequest['delegated_ref'];
-  run_id?: string;
-  tool_id?: string;
 }>;
+
+type RuntimeApprovalSubmitInput =
+  | (RuntimeApprovalSubmitBase & Readonly<{
+      origin?: 'main_tool';
+      run_id: string;
+      tool_id: string;
+      delegated_ref?: never;
+    }>)
+  | (RuntimeApprovalSubmitBase & Readonly<{
+      origin: 'delegated_subagent';
+      delegated_ref: NonNullable<FlowerSubmitApprovalRequest['delegated_ref']>;
+      run_id?: never;
+      tool_id?: never;
+    }>);
 
 export type FlowerRuntimeTransport = Readonly<{
   listThreads(): Promise<ListThreadsResponse>;
@@ -231,7 +241,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     submitApproval: async (input: FlowerSubmitApprovalRequest) => {
       const tid = trim(input.thread_id);
       if (!tid) throw new Error(missingThreadIDMessage(options));
-      await options.transport.submitApproval({
+      const common = {
         thread_id: tid,
         ...(input.origin ? { origin: input.origin } : {}),
         action_id: trim(input.action_id),
@@ -241,9 +251,20 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         version: Math.max(0, Math.floor(Number(input.version ?? 0))) || undefined,
         surface_epoch: Math.max(0, Math.floor(Number(input.surface_epoch ?? 0))) || undefined,
         ...(input.idempotency_key ? { idempotency_key: trim(input.idempotency_key) } : {}),
-        ...(input.delegated_ref ? { delegated_ref: input.delegated_ref } : {}),
-        ...(trim(input.run_id) ? { run_id: trim(input.run_id) } : {}),
-        ...(trim(input.tool_id) ? { tool_id: trim(input.tool_id) } : {}),
+      };
+      if (input.origin === 'delegated_subagent') {
+        await options.transport.submitApproval({
+          ...common,
+          origin: 'delegated_subagent',
+          delegated_ref: input.delegated_ref,
+        });
+        return;
+      }
+      await options.transport.submitApproval({
+        ...common,
+        origin: input.origin,
+        run_id: trim(input.run_id),
+        tool_id: trim(input.tool_id),
       });
     },
     ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),

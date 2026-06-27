@@ -329,6 +329,28 @@ export type FlowerSurfaceCopy = Readonly<{
     toolApprovalReject: string;
     toolApprovalSubmitting: string;
     toolApprovalUnavailable: string;
+    toolApprovalCommand: string;
+    toolApprovalCommandText: string;
+    toolApprovalShowCommand: string;
+    toolApprovalCopy: string;
+    toolApprovalCopyCommand: string;
+    toolApprovalCopyCwd: string;
+    toolApprovalCopied: string;
+    toolApprovalSubtaskSuffix: (subagentID: string) => string;
+    toolApprovalApproveAction: (label: string, subtaskSuffix: string) => string;
+    toolApprovalRejectAction: (label: string, subtaskSuffix: string) => string;
+    threadApprovalPanelLabel: string;
+    threadApprovalPanelTitle: (count: number) => string;
+    delegatedApprovalStatus: Readonly<{
+      unavailable: string;
+      pending: string;
+      delivered: string;
+      failed: string;
+      handledInCurrentThread: string;
+      deliveryInProgress: string;
+      deliveryDelivered: string;
+      deliveryNeedsReview: string;
+    }>;
     readOnlyComposerLabel?: string;
     inputRequestTitle?: string;
     inputRequestDescription?: string;
@@ -464,6 +486,28 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolApprovalReject: 'Reject',
     toolApprovalSubmitting: 'Submitting...',
     toolApprovalUnavailable: 'Approval is no longer available.',
+    toolApprovalCommand: 'Command',
+    toolApprovalCommandText: 'Command text',
+    toolApprovalShowCommand: 'Show command',
+    toolApprovalCopy: 'Copy',
+    toolApprovalCopyCommand: 'Copy command',
+    toolApprovalCopyCwd: 'Copy cwd',
+    toolApprovalCopied: 'Copied',
+    toolApprovalSubtaskSuffix: (subagentID) => ` for subtask ${subagentID}`,
+    toolApprovalApproveAction: (label, subtaskSuffix) => `Approve ${label}${subtaskSuffix}`,
+    toolApprovalRejectAction: (label, subtaskSuffix) => `Reject ${label}${subtaskSuffix}`,
+    threadApprovalPanelLabel: 'Current thread confirmations',
+    threadApprovalPanelTitle: (count) => `Current thread has ${count} subtask confirmation${count === 1 ? '' : 's'}`,
+    delegatedApprovalStatus: {
+      unavailable: 'This subtask confirmation is no longer available. The operation was not released from this approval surface.',
+      pending: 'Your decision is recorded and is being delivered to the subtask. This does not mean the tool has run yet.',
+      delivered: 'Your decision was delivered to the subtask. Tool execution status comes from the subtask activity.',
+      failed: 'Your decision was recorded, but delivery could not be confirmed. This thread will show any child activity it can observe.',
+      handledInCurrentThread: 'Confirmation is handled in the current thread waiting area.',
+      deliveryInProgress: 'Decision delivery in progress.',
+      deliveryDelivered: 'Decision delivered.',
+      deliveryNeedsReview: 'Delivery status needs review.',
+    },
     readOnlyComposerLabel: 'Read only · Managed by parent thread',
     inputRequestTitle: 'Waiting for your reply',
     inputRequestDescription: 'Reply in the composer to continue this conversation.',
@@ -673,11 +717,11 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       },
       approval_required: {
         label: 'Approval required',
-        description: 'Standard tools stay available, and shell or file changes ask before running.',
+        description: 'Standard tools and subagent orchestration stay available. Child tasks inherit this permission, so shell, file changes, and child tool approvals ask before running; readonly-only helpers are hidden.',
       },
       full_access: {
         label: 'Full access',
-        description: 'Standard tools run without per-tool confirmation, while timeouts, limits, and audit still apply.',
+        description: 'Standard tools and subagent orchestration run without per-tool confirmation. Child tasks inherit this permission, while timeouts, limits, and audit still apply; readonly-only helpers are hidden.',
       },
     },
     providersTitle: 'Providers',

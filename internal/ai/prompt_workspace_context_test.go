@@ -13,7 +13,7 @@ type fakePromptSubagentRuntime struct {
 	items []subagentSnapshot
 }
 
-func (f fakePromptSubagentRuntime) manage(context.Context, map[string]any) (map[string]any, error) {
+func (f fakePromptSubagentRuntime) manage(context.Context, string, map[string]any) (map[string]any, error) {
 	return nil, nil
 }
 

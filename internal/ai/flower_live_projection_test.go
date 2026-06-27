@@ -275,6 +275,183 @@ func TestFlowerLiveCommittedCanceledMessageClearsLiveDraft(t *testing.T) {
 	}
 }
 
+func TestFlowerLiveProjectionKeepsResolvedDelegatedAuditActions(t *testing.T) {
+	delegated := FlowerApprovalAction{
+		ActionID:     "dappr_delivered",
+		Origin:       FlowerApprovalOriginDelegatedSubagent,
+		ToolName:     "terminal.exec",
+		State:        FlowerApprovalStateApproved,
+		Status:       FlowerApprovalStatusResolved,
+		Version:      2,
+		SurfaceEpoch: 1,
+		CanApprove:   false,
+		DelegatedRef: &DelegatedApprovalRef{
+			ParentThreadID:  "thread_parent",
+			ParentRunID:     "run_parent",
+			SubagentID:      "child",
+			ChildThreadID:   "thread_child",
+			ChildRunID:      "run_child",
+			ChildToolCallID: "tool_child",
+			ApprovalID:      "approval_child",
+		},
+		DeliveryState: FlowerApprovalDeliveryDelivered,
+		Summary:       FlowerApprovalSummary{Label: "Shell"},
+	}
+	main := FlowerApprovalAction{
+		ActionID:     "appr_main",
+		Origin:       FlowerApprovalOriginMainTool,
+		RunID:        "run_main",
+		ToolID:       "tool_main",
+		ToolName:     "terminal.exec",
+		State:        FlowerApprovalStateApproved,
+		Status:       FlowerApprovalStatusResolved,
+		Version:      2,
+		SurfaceEpoch: 1,
+		CanApprove:   false,
+		Summary:      FlowerApprovalSummary{Label: "Shell"},
+	}
+	state := FlowerLiveMaterializedState{
+		Runs:            map[string]FlowerLiveRunState{},
+		Messages:        map[string]FlowerLiveMessageDraft{},
+		ApprovalActions: map[string]FlowerApprovalAction{delegated.ActionID: delegated, main.ActionID: main},
+		InputRequests:   map[string]RequestUserInputPrompt{},
+	}
+	approvals := map[string]FlowerApprovalState{}
+	applyFlowerLiveEventToMaterializedState(&state, approvals, FlowerLiveEvent{
+		Kind:    FlowerLiveApprovalResolved,
+		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: delegated}),
+	})
+	applyFlowerLiveEventToMaterializedState(&state, approvals, FlowerLiveEvent{
+		Kind:    FlowerLiveApprovalResolved,
+		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: main}),
+	})
+
+	if got, ok := state.ApprovalActions[delegated.ActionID]; !ok || got.Status != FlowerApprovalStatusResolved || got.DeliveryState != FlowerApprovalDeliveryDelivered || got.CanApprove {
+		t.Fatalf("delegated resolved audit action=%#v, want retained resolved non-actionable", got)
+	}
+	if _, ok := state.ApprovalActions[main.ActionID]; ok {
+		t.Fatalf("main resolved approval should be removed from live pending/audit actions: %#v", state.ApprovalActions[main.ActionID])
+	}
+}
+
+func TestFlowerLiveProjectionKeepsSinglePrimaryDelegatedApprovalSurface(t *testing.T) {
+	first := FlowerApprovalAction{
+		ActionID:      "dappr_first",
+		Origin:        FlowerApprovalOriginDelegatedSubagent,
+		ToolName:      "terminal.exec",
+		State:         FlowerApprovalStateRequested,
+		Status:        FlowerApprovalStatusPending,
+		Version:       1,
+		SurfaceEpoch:  1,
+		RequestedAtMs: 100,
+		CanApprove:    true,
+		DelegatedRef: &DelegatedApprovalRef{
+			ParentThreadID:  "thread_parent",
+			ParentRunID:     "run_parent",
+			SubagentID:      "child_first",
+			ChildThreadID:   "thread_child_first",
+			ChildRunID:      "run_child_first",
+			ChildToolCallID: "tool_child_first",
+			ApprovalID:      "approval_child_first",
+		},
+		DeliveryState:       FlowerApprovalDeliveryWaiting,
+		ChildExecutionState: FlowerApprovalChildExecutionPending,
+		Summary:             FlowerApprovalSummary{Label: "Shell"},
+	}
+	second := first
+	second.ActionID = "dappr_second"
+	second.RequestedAtMs = 200
+	second.DelegatedRef = &DelegatedApprovalRef{
+		ParentThreadID:  "thread_parent",
+		ParentRunID:     "run_parent",
+		SubagentID:      "child_second",
+		ChildThreadID:   "thread_child_second",
+		ChildRunID:      "run_child_second",
+		ChildToolCallID: "tool_child_second",
+		ApprovalID:      "approval_child_second",
+	}
+	state := FlowerLiveMaterializedState{
+		Runs:            map[string]FlowerLiveRunState{},
+		Messages:        map[string]FlowerLiveMessageDraft{},
+		ApprovalActions: map[string]FlowerApprovalAction{},
+		InputRequests:   map[string]RequestUserInputPrompt{},
+	}
+	approvals := map[string]FlowerApprovalState{}
+	applyFlowerLiveEventToMaterializedState(&state, approvals, FlowerLiveEvent{
+		Seq:     10,
+		Kind:    FlowerLiveApprovalRequested,
+		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: second}),
+	})
+	applyFlowerLiveEventToMaterializedState(&state, approvals, FlowerLiveEvent{
+		Seq:     11,
+		Kind:    FlowerLiveApprovalRequested,
+		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: first}),
+	})
+	if got := state.ApprovalActions[first.ActionID]; got.SurfaceRole != FlowerApprovalSurfacePrimaryAction || got.PrimaryWaitAnchor != "thread:thread_parent" {
+		t.Fatalf("first surface=%q anchor=%q, want primary thread anchor", got.SurfaceRole, got.PrimaryWaitAnchor)
+	}
+	if got := state.ApprovalActions[second.ActionID]; got.SurfaceRole != FlowerApprovalSurfaceLocator || got.PrimaryWaitAnchor != "thread:thread_parent" || !got.CanApprove {
+		t.Fatalf("second action=%#v, want locator retaining approval capability for later promotion", got)
+	}
+
+	first.State = FlowerApprovalStateRejected
+	first.Status = FlowerApprovalStatusResolved
+	first.CanApprove = false
+	first.DeliveryState = FlowerApprovalDeliveryDelivered
+	applyFlowerLiveEventToMaterializedState(&state, approvals, FlowerLiveEvent{
+		Seq:     12,
+		Kind:    FlowerLiveApprovalResolved,
+		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: first}),
+	})
+	if got := state.ApprovalActions[second.ActionID]; got.SurfaceRole != FlowerApprovalSurfacePrimaryAction || !got.CanApprove {
+		t.Fatalf("second action after first resolved=%#v, want promoted primary", got)
+	}
+}
+
+func TestMergePersistedDelegatedApprovalStateRestoresResolvedAuditActions(t *testing.T) {
+	ctx := context.Background()
+	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	action := FlowerApprovalAction{
+		ActionID:     "dappr_ack_unknown",
+		Origin:       FlowerApprovalOriginDelegatedSubagent,
+		ToolName:     "terminal.exec",
+		State:        FlowerApprovalStateApproved,
+		Status:       FlowerApprovalStatusResolved,
+		Version:      2,
+		SurfaceEpoch: 1,
+		CanApprove:   false,
+		DelegatedRef: &DelegatedApprovalRef{
+			ParentThreadID:  "thread_parent",
+			ParentRunID:     "run_parent",
+			SubagentID:      "child",
+			ChildThreadID:   "thread_child",
+			ChildRunID:      "run_child",
+			ChildToolCallID: "tool_child",
+			ApprovalID:      "approval_child",
+		},
+		DeliveryState: FlowerApprovalDeliveryAckUnknown,
+		Summary:       FlowerApprovalSummary{Label: "Shell"},
+	}
+	if err := store.UpsertDelegatedApprovalRequest(ctx, delegatedApprovalRecordFromAction("env_parent", "user_parent", action)); err != nil {
+		t.Fatalf("UpsertDelegatedApprovalRequest: %v", err)
+	}
+
+	svc := &Service{threadsDB: store}
+	state := svc.mergePersistedDelegatedApprovalState(ctx, "env_parent", "thread_parent", FlowerLiveMaterializedState{})
+	got, ok := state.ApprovalActions[action.ActionID]
+	if !ok {
+		t.Fatalf("persisted resolved delegated action was not restored: %#v", state.ApprovalActions)
+	}
+	if got.Status != FlowerApprovalStatusResolved || got.DeliveryState != FlowerApprovalDeliveryAckUnknown || got.CanApprove {
+		t.Fatalf("restored delegated action=%#v, want resolved ack_unknown non-actionable", got)
+	}
+}
+
 func TestAppendFlowerLiveTimelineReplacementSkipsStaleSnapshotAfterNewerReplacement(t *testing.T) {
 	ctx := context.Background()
 	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))

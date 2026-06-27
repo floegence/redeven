@@ -576,8 +576,8 @@ export type FlowerMainToolApprovalAction = FlowerApprovalActionBase & Readonly<{
 export type FlowerDelegatedSubagentApprovalAction = FlowerApprovalActionBase & Readonly<{
   origin: 'delegated_subagent';
   delegated_ref: FlowerDelegatedApprovalRef;
-  run_id?: string;
-  tool_id?: string;
+  run_id?: never;
+  tool_id?: never;
 }>;
 
 export type FlowerApprovalAction = FlowerMainToolApprovalAction | FlowerDelegatedSubagentApprovalAction;
@@ -839,8 +839,8 @@ export type FlowerSubmitApprovalRequest =
   | (FlowerSubmitApprovalRequestBase & Readonly<{
       origin: 'delegated_subagent';
       delegated_ref: FlowerDelegatedApprovalRef;
-      run_id?: string;
-      tool_id?: string;
+      run_id?: never;
+      tool_id?: never;
     }>);
 
 export type FlowerThreadListItem = Readonly<{

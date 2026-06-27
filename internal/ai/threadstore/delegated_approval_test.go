@@ -3,6 +3,7 @@ package threadstore
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -24,6 +25,7 @@ func delegatedApprovalTestRecord(actionID string) DelegatedApprovalRecord {
 		ActionID:            actionID,
 		EndpointID:          "env_delegated",
 		ParentThreadID:      "thread_parent",
+		ParentUserPublicID:  "user_parent",
 		ParentRunID:         "run_parent",
 		ParentTurnID:        "turn_parent",
 		SubagentID:          "subagent_1",
@@ -44,6 +46,28 @@ func delegatedApprovalTestRecord(actionID string) DelegatedApprovalRecord {
 		ActionJSON:          `{"action_id":"` + actionID + `","state":"requested","status":"pending"}`,
 		CreatedAtUnixMs:     100,
 		UpdatedAtUnixMs:     100,
+	}
+}
+
+func delegatedApprovalDecisionTestRequest(actionID string, approved bool, idempotencySuffix string) DelegatedApprovalDecisionRequest {
+	state := "rejected"
+	if approved {
+		state = "approved"
+	}
+	return DelegatedApprovalDecisionRequest{
+		EndpointID:       "env_delegated",
+		ParentThreadID:   "thread_parent",
+		ActionID:         actionID,
+		RefHash:          "ref_hash_" + actionID,
+		Version:          1,
+		SurfaceEpoch:     1,
+		Approved:         approved,
+		NextVersion:      2,
+		NextActionJSON:   `{"action_id":"` + actionID + `","state":"` + state + `"}`,
+		ResolvedAtUnixMs: 200,
+		ActorScope:       "env_delegated:user_parent:thread_parent",
+		IdempotencyKey:   "idem_" + actionID + "_" + idempotencySuffix,
+		ResponseJSON:     `{"ok":true}`,
 	}
 }
 
@@ -70,12 +94,40 @@ func TestDelegatedApprovalStore_UpsertIsIdempotentForRepeatedAsk(t *testing.T) {
 	if got.Version != 1 || got.ActionJSON != `{"action_id":"dappr_repeat","state":"requested","status":"pending"}` {
 		t.Fatalf("repeated ask rewrote record: version=%d action=%s", got.Version, got.ActionJSON)
 	}
+	if got.ParentUserPublicID != "user_parent" {
+		t.Fatalf("parent_user_public_id=%q, want user_parent", got.ParentUserPublicID)
+	}
 	var requestedEvents int
 	if err := store.db.QueryRowContext(ctx, `SELECT count(*) FROM ai_delegated_approval_events WHERE action_id = ? AND event_type = 'requested'`, "dappr_repeat").Scan(&requestedEvents); err != nil {
 		t.Fatalf("count requested events: %v", err)
 	}
 	if requestedEvents != 1 {
 		t.Fatalf("requested event count=%d, want 1", requestedEvents)
+	}
+}
+
+func TestDelegatedApprovalStore_ParentOwnerIsPartOfRequestFingerprint(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openDelegatedApprovalTestStore(t)
+	rec := delegatedApprovalTestRecord("dappr_owner_drift")
+	if err := store.UpsertDelegatedApprovalRequest(ctx, rec); err != nil {
+		t.Fatalf("Upsert first: %v", err)
+	}
+
+	drifted := rec
+	drifted.ParentUserPublicID = "user_intruder"
+	if err := store.UpsertDelegatedApprovalRequest(ctx, drifted); err == nil || !strings.Contains(err.Error(), "fingerprint mismatch") {
+		t.Fatalf("Upsert owner drift error=%v, want fingerprint mismatch", err)
+	}
+
+	got, ok, err := store.GetDelegatedApprovalRequest(ctx, "env_delegated", "thread_parent", "dappr_owner_drift")
+	if err != nil {
+		t.Fatalf("GetDelegatedApprovalRequest: %v", err)
+	}
+	if !ok || got.ParentUserPublicID != "user_parent" || got.State != "unavailable" || got.Status != "unavailable" {
+		t.Fatalf("record after owner drift=%#v, want original owner and unavailable", got)
 	}
 }
 
@@ -165,6 +217,7 @@ func TestDelegatedApprovalStore_DecisionCASDeliveryAndIdempotency(t *testing.T) 
 	ctx := context.Background()
 	store := openDelegatedApprovalTestStore(t)
 	rec := delegatedApprovalTestRecord("dappr_cas")
+	rec.RefHash = "ref_hash_1"
 	if err := store.UpsertDelegatedApprovalRequest(ctx, rec); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
@@ -173,6 +226,7 @@ func TestDelegatedApprovalStore_DecisionCASDeliveryAndIdempotency(t *testing.T) 
 		EndpointID:       "env_delegated",
 		ParentThreadID:   "thread_parent",
 		ActionID:         "dappr_cas",
+		RefHash:          "ref_hash_1",
 		Version:          1,
 		SurfaceEpoch:     1,
 		Approved:         true,
@@ -205,6 +259,15 @@ func TestDelegatedApprovalStore_DecisionCASDeliveryAndIdempotency(t *testing.T) 
 	if !replay.Accepted || !replay.Replayed || replay.Conflict {
 		t.Fatalf("unexpected replay result: %#v", replay)
 	}
+	req.RefHash = "ref_hash_2"
+	refConflict, err := store.SubmitDelegatedApprovalDecisionCAS(ctx, req)
+	if err != nil {
+		t.Fatalf("Submit ref hash conflict: %v", err)
+	}
+	if !refConflict.Conflict {
+		t.Fatalf("ref hash conflict result=%#v, want conflict", refConflict)
+	}
+	req.RefHash = "ref_hash_1"
 	req.Approved = false
 	conflict, err := store.SubmitDelegatedApprovalDecisionCAS(ctx, req)
 	if err != nil {
@@ -230,6 +293,86 @@ func TestDelegatedApprovalStore_DecisionCASDeliveryAndIdempotency(t *testing.T) 
 	}
 }
 
+func TestDelegatedApprovalStore_DecisionRequiresRefOwnerAndIdempotency(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name   string
+		mutate func(*DelegatedApprovalDecisionRequest)
+	}{
+		{
+			name: "missing_ref_hash",
+			mutate: func(req *DelegatedApprovalDecisionRequest) {
+				req.RefHash = ""
+			},
+		},
+		{
+			name: "missing_actor_scope",
+			mutate: func(req *DelegatedApprovalDecisionRequest) {
+				req.ActorScope = ""
+			},
+		},
+		{
+			name: "missing_idempotency_key",
+			mutate: func(req *DelegatedApprovalDecisionRequest) {
+				req.IdempotencyKey = ""
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			store := openDelegatedApprovalTestStore(t)
+			if err := store.UpsertDelegatedApprovalRequest(ctx, delegatedApprovalTestRecord("dappr_required_"+tc.name)); err != nil {
+				t.Fatalf("Upsert: %v", err)
+			}
+			req := delegatedApprovalDecisionTestRequest("dappr_required_"+tc.name, true, tc.name)
+			tc.mutate(&req)
+
+			if _, err := store.SubmitDelegatedApprovalDecisionCAS(ctx, req); err == nil {
+				t.Fatalf("SubmitDelegatedApprovalDecisionCAS succeeded without %s", tc.name)
+			}
+
+			got, ok, err := store.GetDelegatedApprovalRequest(ctx, "env_delegated", "thread_parent", "dappr_required_"+tc.name)
+			if err != nil {
+				t.Fatalf("Get after rejected decision: %v", err)
+			}
+			if !ok || got.Status != "pending" || got.State != "requested" || got.Version != 1 {
+				t.Fatalf("record changed after invalid decision: %#v", got)
+			}
+		})
+	}
+}
+
+func TestDelegatedApprovalStore_DecisionRefHashMustMatchRequest(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openDelegatedApprovalTestStore(t)
+	if err := store.UpsertDelegatedApprovalRequest(ctx, delegatedApprovalTestRecord("dappr_wrong_ref")); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+
+	req := delegatedApprovalDecisionTestRequest("dappr_wrong_ref", true, "wrong_ref")
+	req.RefHash = "wrong_ref_hash"
+	result, err := store.SubmitDelegatedApprovalDecisionCAS(ctx, req)
+	if err != nil {
+		t.Fatalf("SubmitDelegatedApprovalDecisionCAS: %v", err)
+	}
+	if result.Accepted || result.Replayed || result.Conflict {
+		t.Fatalf("wrong ref hash produced decision result: %#v", result)
+	}
+	got, ok, err := store.GetDelegatedApprovalRequest(ctx, "env_delegated", "thread_parent", "dappr_wrong_ref")
+	if err != nil {
+		t.Fatalf("Get after wrong ref: %v", err)
+	}
+	if !ok || got.Status != "pending" || got.State != "requested" || got.Version != 1 {
+		t.Fatalf("record changed after wrong ref decision: %#v", got)
+	}
+}
+
 func TestDelegatedApprovalStore_StaleDecisionDoesNotChangeRecord(t *testing.T) {
 	t.Parallel()
 
@@ -239,17 +382,10 @@ func TestDelegatedApprovalStore_StaleDecisionDoesNotChangeRecord(t *testing.T) {
 		t.Fatalf("Upsert: %v", err)
 	}
 
-	result, err := store.SubmitDelegatedApprovalDecisionCAS(ctx, DelegatedApprovalDecisionRequest{
-		EndpointID:       "env_delegated",
-		ParentThreadID:   "thread_parent",
-		ActionID:         "dappr_stale",
-		Version:          2,
-		SurfaceEpoch:     1,
-		Approved:         true,
-		NextVersion:      3,
-		NextActionJSON:   `{"action_id":"dappr_stale","state":"approved"}`,
-		ResolvedAtUnixMs: 200,
-	})
+	req := delegatedApprovalDecisionTestRequest("dappr_stale", true, "stale")
+	req.Version = 2
+	req.NextVersion = 3
+	result, err := store.SubmitDelegatedApprovalDecisionCAS(ctx, req)
 	if err != nil {
 		t.Fatalf("Submit stale decision: %v", err)
 	}
@@ -288,12 +424,16 @@ func TestDelegatedApprovalStore_ConcurrentDecisionsOnlyOneWins(t *testing.T) {
 				EndpointID:       "env_delegated",
 				ParentThreadID:   "thread_parent",
 				ActionID:         "dappr_race",
+				RefHash:          "ref_hash_dappr_race",
 				Version:          1,
 				SurfaceEpoch:     1,
 				Approved:         i%2 == 0,
 				NextVersion:      2,
 				NextActionJSON:   `{"action_id":"dappr_race","state":"decided"}`,
 				ResolvedAtUnixMs: int64(200 + i),
+				ActorScope:       "env_delegated:user_parent:thread_parent",
+				IdempotencyKey:   fmt.Sprintf("idem_dappr_race_%d", i),
+				ResponseJSON:     `{"ok":true}`,
 			})
 			if err != nil {
 				errs <- err
@@ -320,6 +460,73 @@ func TestDelegatedApprovalStore_ConcurrentDecisionsOnlyOneWins(t *testing.T) {
 	}
 }
 
+func TestDelegatedApprovalStore_StaleDeliveryDoesNotMarkDelivered(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openDelegatedApprovalTestStore(t)
+	rec := delegatedApprovalTestRecord("dappr_delivery_stale")
+	if err := store.UpsertDelegatedApprovalRequest(ctx, rec); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	req := delegatedApprovalDecisionTestRequest("dappr_delivery_stale", true, "delivery")
+	req.NextActionJSON = `{"action_id":"dappr_delivery_stale","state":"approved","delivery_state":"delivery_pending"}`
+	if _, err := store.SubmitDelegatedApprovalDecisionCAS(ctx, req); err != nil {
+		t.Fatalf("Submit decision: %v", err)
+	}
+	changed, err := store.MarkDelegatedApprovalUnavailable(ctx, "env_delegated", "thread_parent", "dappr_delivery_stale", "delivery channel lost", `{"action_id":"dappr_delivery_stale","state":"unavailable","status":"unavailable"}`, 250)
+	if err != nil {
+		t.Fatalf("Mark unavailable: %v", err)
+	}
+	if !changed {
+		t.Fatalf("unavailable update did not apply")
+	}
+	delivered, err := store.MarkDelegatedApprovalDelivered(ctx, "env_delegated", "thread_parent", "dappr_delivery_stale", 2, `{"action_id":"dappr_delivery_stale","state":"approved","delivery_state":"delivery_delivered"}`, 300)
+	if err != nil {
+		t.Fatalf("Mark delivered: %v", err)
+	}
+	if delivered {
+		t.Fatalf("stale delivery unexpectedly applied")
+	}
+	got, ok, err := store.GetDelegatedApprovalRequest(ctx, "env_delegated", "thread_parent", "dappr_delivery_stale")
+	if err != nil {
+		t.Fatalf("Get after stale delivery: %v", err)
+	}
+	if !ok || got.DeliveryState == "delivery_delivered" || got.Status != "unavailable" {
+		t.Fatalf("record after stale delivery=%#v, want unavailable and not delivered", got)
+	}
+}
+
+func TestDelegatedApprovalStore_MarkAckUnknownPreservesDecision(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := openDelegatedApprovalTestStore(t)
+	rec := delegatedApprovalTestRecord("dappr_ack_unknown")
+	if err := store.UpsertDelegatedApprovalRequest(ctx, rec); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	req := delegatedApprovalDecisionTestRequest("dappr_ack_unknown", true, "ack")
+	req.NextActionJSON = `{"action_id":"dappr_ack_unknown","state":"approved","status":"resolved","delivery_state":"delivery_pending"}`
+	if _, err := store.SubmitDelegatedApprovalDecisionCAS(ctx, req); err != nil {
+		t.Fatalf("Submit decision: %v", err)
+	}
+	changed, err := store.MarkDelegatedApprovalAckUnknown(ctx, "env_delegated", "thread_parent", "dappr_ack_unknown", "ack lost", `{"action_id":"dappr_ack_unknown","state":"approved","status":"resolved","delivery_state":"delivery_ack_unknown"}`, 250)
+	if err != nil {
+		t.Fatalf("Mark ack unknown: %v", err)
+	}
+	if !changed {
+		t.Fatalf("ack unknown update did not apply")
+	}
+	got, ok, err := store.GetDelegatedApprovalRequest(ctx, "env_delegated", "thread_parent", "dappr_ack_unknown")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !ok || got.State != "approved" || got.Status != "resolved" || got.DeliveryState != "delivery_ack_unknown" || got.Version != 3 {
+		t.Fatalf("record after ack unknown=%#v", got)
+	}
+}
+
 func TestDelegatedApprovalStore_MarkPendingUnavailableUsesJSONPayload(t *testing.T) {
 	t.Parallel()
 
@@ -328,17 +535,7 @@ func TestDelegatedApprovalStore_MarkPendingUnavailableUsesJSONPayload(t *testing
 	if err := store.UpsertDelegatedApprovalRequest(ctx, delegatedApprovalTestRecord("dappr_unavailable")); err != nil {
 		t.Fatalf("Upsert pending: %v", err)
 	}
-	if _, err := store.SubmitDelegatedApprovalDecisionCAS(ctx, DelegatedApprovalDecisionRequest{
-		EndpointID:       "env_delegated",
-		ParentThreadID:   "thread_parent",
-		ActionID:         "dappr_unavailable",
-		Version:          1,
-		SurfaceEpoch:     1,
-		Approved:         true,
-		NextVersion:      2,
-		NextActionJSON:   `{"action_id":"dappr_unavailable","state":"approved"}`,
-		ResolvedAtUnixMs: 200,
-	}); err != nil {
+	if _, err := store.SubmitDelegatedApprovalDecisionCAS(ctx, delegatedApprovalDecisionTestRequest("dappr_unavailable", true, "unavailable")); err != nil {
 		t.Fatalf("Submit decision: %v", err)
 	}
 	if err := store.UpsertDelegatedApprovalRequest(ctx, delegatedApprovalTestRecord("dappr_pending_restart")); err != nil {
@@ -363,8 +560,8 @@ func TestDelegatedApprovalStore_MarkPendingUnavailableUsesJSONPayload(t *testing
 	if err != nil {
 		t.Fatalf("Get decided unavailable: %v", err)
 	}
-	if !ok || decided.State != "unavailable" || decided.Status != "unavailable" || decided.DeliveryState != "delivery_unavailable" || decided.Version != 3 {
-		t.Fatalf("decided unavailable record=%#v", decided)
+	if !ok || decided.State != "approved" || decided.Status != "resolved" || decided.DeliveryState != "delivery_ack_unknown" || decided.Version != 3 {
+		t.Fatalf("decided ack-unknown record=%#v", decided)
 	}
 	var outboxDelivery string
 	if err := store.db.QueryRowContext(ctx, `
@@ -375,15 +572,15 @@ LIMIT 1
 `, "dappr_unavailable").Scan(&outboxDelivery); err != nil {
 		t.Fatalf("query unavailable outbox: %v", err)
 	}
-	if outboxDelivery != "delivery_unavailable" {
-		t.Fatalf("outbox delivery_state=%q, want delivery_unavailable", outboxDelivery)
+	if outboxDelivery != "delivery_ack_unknown" {
+		t.Fatalf("outbox delivery_state=%q, want delivery_ack_unknown", outboxDelivery)
 	}
 	var actionPayload map[string]any
 	if err := json.Unmarshal([]byte(decided.ActionJSON), &actionPayload); err != nil {
 		t.Fatalf("decided action_json is not JSON: %q err=%v", decided.ActionJSON, err)
 	}
-	if actionPayload["state"] != "unavailable" || actionPayload["status"] != "unavailable" || actionPayload["delivery_state"] != "delivery_unavailable" || actionPayload["can_approve"] != false {
-		t.Fatalf("decided action_json=%#v, want unavailable action", actionPayload)
+	if actionPayload["state"] != "approved" || actionPayload["status"] != "resolved" || actionPayload["delivery_state"] != "delivery_ack_unknown" || actionPayload["can_approve"] != false {
+		t.Fatalf("decided action_json=%#v, want ack-unknown action", actionPayload)
 	}
 	var payload string
 	if err := store.db.QueryRowContext(ctx, `

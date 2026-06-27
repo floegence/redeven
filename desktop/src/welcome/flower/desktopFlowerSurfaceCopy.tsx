@@ -1,4 +1,4 @@
-import { DEFAULT_FLOWER_SURFACE_COPY, type FlowerSurfaceCopy } from '../../../../internal/flower_ui/src/copy';
+import type { FlowerSurfaceCopy } from '../../../../internal/flower_ui/src/copy';
 import { localizedFlowerProviderModelNote } from '../../../../internal/flower_ui/src/settings/providerModelNotes';
 import { localizedFlowerProviderTypeLabels } from '../../../../internal/flower_ui/src/settings/providerTypeLabels';
 import type { DesktopI18n } from '../../shared/i18n';
@@ -93,6 +93,28 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
       toolApprovalReject: t(i18n, k('chat.toolApprovalReject')),
       toolApprovalSubmitting: t(i18n, k('chat.toolApprovalSubmitting')),
       toolApprovalUnavailable: t(i18n, k('chat.toolApprovalUnavailable')),
+      toolApprovalCommand: t(i18n, k('chat.toolApprovalCommand')),
+      toolApprovalCommandText: t(i18n, k('chat.toolApprovalCommandText')),
+      toolApprovalShowCommand: t(i18n, k('chat.toolApprovalShowCommand')),
+      toolApprovalCopy: t(i18n, k('chat.toolApprovalCopy')),
+      toolApprovalCopyCommand: t(i18n, k('chat.toolApprovalCopyCommand')),
+      toolApprovalCopyCwd: t(i18n, k('chat.toolApprovalCopyCwd')),
+      toolApprovalCopied: t(i18n, k('chat.toolApprovalCopied')),
+      toolApprovalSubtaskSuffix: (subagentID) => t(i18n, k('chat.toolApprovalSubtaskSuffix'), { subagent: subagentID }),
+      toolApprovalApproveAction: (label, subtask) => t(i18n, k('chat.toolApprovalApproveAction'), { label, subtask }),
+      toolApprovalRejectAction: (label, subtask) => t(i18n, k('chat.toolApprovalRejectAction'), { label, subtask }),
+      threadApprovalPanelLabel: t(i18n, k('chat.threadApprovalPanelLabel')),
+      threadApprovalPanelTitle: (count) => t(i18n, k('chat.threadApprovalPanelTitle'), { count }),
+      delegatedApprovalStatus: {
+        unavailable: t(i18n, k('chat.delegatedApprovalStatusUnavailable')),
+        pending: t(i18n, k('chat.delegatedApprovalStatusPending')),
+        delivered: t(i18n, k('chat.delegatedApprovalStatusDelivered')),
+        failed: t(i18n, k('chat.delegatedApprovalStatusFailed')),
+        handledInCurrentThread: t(i18n, k('chat.delegatedApprovalStatusHandledInCurrentThread')),
+        deliveryInProgress: t(i18n, k('chat.delegatedApprovalStatusDeliveryInProgress')),
+        deliveryDelivered: t(i18n, k('chat.delegatedApprovalStatusDeliveryDelivered')),
+        deliveryNeedsReview: t(i18n, k('chat.delegatedApprovalStatusDeliveryNeedsReview')),
+      },
       readOnlyComposerLabel: t(i18n, k('chat.readOnlyComposerLabel')),
       inputRequestTitle: t(i18n, k('chat.inputRequestTitle')),
       inputRequestDescription: t(i18n, k('chat.inputRequestDescription')),
@@ -337,7 +359,20 @@ function createDesktopFlowerSettingsCopy(i18n: DesktopI18n): FlowerSurfaceCopy['
     selectModelPlaceholder: t(i18n, k('selectModelPlaceholder')),
     defaultPermissionTitle: t(i18n, k('defaultPermissionTitle')),
     defaultPermissionDescription: t(i18n, k('defaultPermissionDescription')),
-    permissionTypes: DEFAULT_FLOWER_SURFACE_COPY.settings.permissionTypes,
+    permissionTypes: {
+      readonly: {
+        label: t(i18n, k('permissionReadonlyLabel')),
+        description: t(i18n, k('permissionReadonlyDescription')),
+      },
+      approval_required: {
+        label: t(i18n, k('permissionApprovalRequiredLabel')),
+        description: t(i18n, k('permissionApprovalRequiredDescription')),
+      },
+      full_access: {
+        label: t(i18n, k('permissionFullAccessLabel')),
+        description: t(i18n, k('permissionFullAccessDescription')),
+      },
+    },
     providersTitle: t(i18n, k('providersTitle')),
     providersDescription: t(i18n, k('providersDescription')),
     managedByLocalAIProfileTitle: t(i18n, k('managedByLocalAIProfileTitle')),

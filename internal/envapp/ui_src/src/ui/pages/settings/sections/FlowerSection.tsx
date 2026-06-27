@@ -29,20 +29,6 @@ import { useI18n, type I18nHelpers } from '../../../i18n';
 
 const AUTO_SAVE_DELAY_MS = 700;
 const PERMISSION_TYPES: readonly AIPermissionType[] = ['readonly', 'approval_required', 'full_access'];
-const PERMISSION_LABELS: Readonly<Record<AIPermissionType, Readonly<{ title: string; description: string }>>> = {
-  readonly: {
-    title: 'Read only',
-    description: 'Safe read tools, search, todos, ask, and delegated subagents. No shell or file edits.',
-  },
-  approval_required: {
-    title: 'Approval required',
-    description: 'Standard tools stay available, and shell or file changes ask before running.',
-  },
-  full_access: {
-    title: 'Full access',
-    description: 'Standard tools run without per-tool confirmation, while timeouts, limits, and audit still apply.',
-  },
-};
 let envProviderIDSequence = 0;
 
 function isJSONObject(value: unknown): value is Record<string, unknown> { return Boolean(value && typeof value === 'object' && !Array.isArray(value)); }
@@ -51,6 +37,27 @@ function normalizePermissionType(raw: unknown): AIPermissionType {
   const value = String(raw ?? '').trim().toLowerCase();
   if (value === 'readonly' || value === 'full_access') return value;
   return 'approval_required';
+}
+
+function permissionTypeCopy(i18n: I18nHelpers, kind: AIPermissionType): Readonly<{ title: string; description: string }> {
+  switch (kind) {
+    case 'readonly':
+      return {
+        title: i18n.t('flowerSettings.permissionReadonlyTitle'),
+        description: i18n.t('flowerSettings.permissionReadonlyDescription'),
+      };
+    case 'full_access':
+      return {
+        title: i18n.t('flowerSettings.permissionFullAccessTitle'),
+        description: i18n.t('flowerSettings.permissionFullAccessDescription'),
+      };
+    case 'approval_required':
+    default:
+      return {
+        title: i18n.t('flowerSettings.permissionApprovalRequiredTitle'),
+        description: i18n.t('flowerSettings.permissionApprovalRequiredDescription'),
+      };
+  }
 }
 
 function newProviderID(): string {
@@ -341,11 +348,11 @@ export function FlowerSection() {
 
         {/* Default permission */}
         <div class="mt-5">
-          <SubSectionHeader title="Default permission" description="Applies to new Flower threads. Existing threads keep their own permission." />
-          <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3" role="radiogroup" aria-label="Default permission">
+          <SubSectionHeader title={i18n.t('flowerSettings.defaultPermissionTitle')} description={i18n.t('flowerSettings.defaultPermissionDescription')} />
+          <div class="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3" role="radiogroup" aria-label={i18n.t('flowerSettings.defaultPermissionTitle')}>
             <For each={PERMISSION_TYPES}>
               {(kind) => {
-                const copy = () => PERMISSION_LABELS[kind];
+                const copy = () => permissionTypeCopy(i18n, kind);
                 return (
                   <button ref={(el) => { permissionButtonRefs.set(kind, el); }} type="button" class={cn('group flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left transition-all', redevenSurfaceRoleClass('panel'), permissionType() === kind && 'border-primary/70 bg-primary/5', !ctx.canInteract() && 'cursor-not-allowed opacity-50')}
                     role="radio" aria-checked={permissionType() === kind}
@@ -358,7 +365,7 @@ export function FlowerSection() {
                         <span class="text-sm font-semibold text-foreground">{copy().title}</span>
                       </div>
                       <span class={cn('text-[11px] font-medium', permissionType() === kind ? 'text-success' : 'text-muted-foreground')}>
-                        {permissionType() === kind ? 'Default' : ''}
+                        {permissionType() === kind ? i18n.t('flowerSettings.defaultPermissionBadge') : ''}
                       </span>
                     </div>
                     <p class="text-xs leading-relaxed text-muted-foreground">{copy().description}</p>

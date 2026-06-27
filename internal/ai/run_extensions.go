@@ -76,6 +76,10 @@ func (r *run) ensureSubagentRuntime() subagentRuntime {
 }
 
 func (r *run) manageSubagents(ctx context.Context, args map[string]any) (map[string]any, error) {
+	return r.manageSubagentsForTool(ctx, "", args)
+}
+
+func (r *run) manageSubagentsForTool(ctx context.Context, toolCallID string, args map[string]any) (map[string]any, error) {
 	if r == nil {
 		return nil, errors.New("nil run")
 	}
@@ -115,7 +119,7 @@ func (r *run) manageSubagents(ctx context.Context, args map[string]any) (map[str
 	if runtime == nil {
 		return nil, errors.New("subagent runtime unavailable")
 	}
-	return runtime.manage(ctx, args)
+	return runtime.manage(ctx, strings.TrimSpace(toolCallID), args)
 }
 
 type subagentArgumentsError struct {

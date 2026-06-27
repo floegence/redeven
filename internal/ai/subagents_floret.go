@@ -61,7 +61,7 @@ const (
 )
 
 type subagentRuntime interface {
-	manage(context.Context, map[string]any) (map[string]any, error)
+	manage(context.Context, string, map[string]any) (map[string]any, error)
 	release()
 	snapshots(context.Context) ([]subagentSnapshot, error)
 }
@@ -177,18 +177,28 @@ func (s *floretSubagentRuntime) parentRun() *run {
 	return parent
 }
 
-func (s *floretSubagentRuntime) manage(ctx context.Context, args map[string]any) (map[string]any, error) {
+func (s *floretSubagentRuntime) manage(ctx context.Context, toolCallID string, args map[string]any) (map[string]any, error) {
 	parent := s.parentRun()
 	if parent == nil {
 		return nil, errors.New("subagent runtime unavailable")
+	}
+	toolCallID = strings.TrimSpace(toolCallID)
+	if toolCallID == "" {
+		generated, err := newToolID()
+		if err != nil {
+			return nil, err
+		}
+		toolCallID = generated
 	}
 	action := strings.ToLower(strings.TrimSpace(anyToString(args["action"])))
 	if action == "" {
 		return nil, fmt.Errorf("missing action")
 	}
 	parent.persistRunEvent("delegation.manage.begin", RealtimeStreamKindLifecycle, map[string]any{
-		"action":        action,
-		"provided_keys": subagentValidationProvidedKeys(args),
+		"action":             action,
+		"tool_call_id":       toolCallID,
+		"provided_keys":      subagentValidationProvidedKeys(args),
+		"contract_call_type": "subagents",
 	})
 	var (
 		out map[string]any
@@ -196,7 +206,7 @@ func (s *floretSubagentRuntime) manage(ctx context.Context, args map[string]any)
 	)
 	switch action {
 	case subagentActionSpawn:
-		out, err = s.spawn(ctx, args)
+		out, err = s.spawn(ctx, toolCallID, args)
 	case subagentActionWait:
 		out, err = s.wait(ctx, args)
 	case subagentActionList:
@@ -216,8 +226,9 @@ func (s *floretSubagentRuntime) manage(ctx context.Context, args map[string]any)
 		return nil, err
 	}
 	parent.persistRunEvent("delegation.manage.end", RealtimeStreamKindLifecycle, map[string]any{
-		"action": action,
-		"status": strings.TrimSpace(anyToString(out["status"])),
+		"action":       action,
+		"tool_call_id": toolCallID,
+		"status":       strings.TrimSpace(anyToString(out["status"])),
 	})
 	return out, nil
 }
@@ -705,10 +716,14 @@ func ensureFloretThread(ctx context.Context, host flruntime.Host, threadID flrun
 	return nil
 }
 
-func (s *floretSubagentRuntime) spawn(ctx context.Context, args map[string]any) (map[string]any, error) {
+func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, args map[string]any) (map[string]any, error) {
 	parent := s.parentRun()
 	if parent == nil {
 		return nil, errors.New("subagent runtime unavailable")
+	}
+	toolCallID = strings.TrimSpace(toolCallID)
+	if toolCallID == "" {
+		return nil, errors.New("missing subagents spawn tool call id")
 	}
 	host, err := s.ensureHost(ctx)
 	if err != nil {
@@ -737,15 +752,24 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, args map[string]any) 
 		return nil, err
 	}
 	childRun := parent.subagentChildRun()
+	childRunID, err := NewRunID()
+	if err != nil {
+		return nil, err
+	}
+	childRunID = strings.TrimSpace(childRunID)
+	if childRunID == "" || childRunID == childThreadID {
+		return nil, errors.New("invalid child run identity")
+	}
+	childRun.id = childRunID
 	registry := NewInMemoryToolRegistry()
 	if err := registerBuiltInTools(registry, childRun); err != nil {
 		return nil, err
 	}
 	activeChildTools, childContract := childRun.subagentToolSurface(registry.Snapshot(), forkMode)
-	childSnapshot := permissionSnapshotWithOwnerIdentity(buildPermissionSnapshot(childRun.permissionType, activeChildTools, nil), parent.endpointID, childThreadID, childThreadID)
+	childSnapshot := permissionSnapshotWithOwnerIdentity(buildPermissionSnapshot(childRun.permissionType, activeChildTools, nil), parent.endpointID, childThreadID, childRunID)
 	childRun.permissionSnapshot = childSnapshot
-	if err := parent.insertChildPermissionSnapshot(childThreadID, childThreadID, childSnapshot); err != nil {
-		return nil, fmt.Errorf("persist child permission snapshot: %w", err)
+	if err := parent.insertChildPermissionSnapshotProvisional(childThreadID, childRunID, toolCallID, childSnapshot); err != nil {
+		return nil, fmt.Errorf("persist provisional child permission snapshot: %w", err)
 	}
 	prompt := buildFlowerSubagentPrompt(flowerSubagentPromptSpec{
 		AgentType:   agentType,
@@ -763,10 +787,13 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, args map[string]any) 
 		Message:        prompt,
 		HostProfileRef: agentType,
 		ForkMode:       forkMode,
-		Labels:         s.runLabels(agentType, childThreadID),
+		Labels:         s.runLabels(agentType, childThreadID, childRunID),
 	})
 	if err != nil {
 		return nil, err
+	}
+	if err := parent.finalizeChildPermissionSnapshot(childThreadID, childRunID, childSnapshot.SnapshotID); err != nil {
+		return nil, fmt.Errorf("finalize child permission snapshot: %w", err)
 	}
 	localSnapshot := subagentSnapshotFromFloret(snapshot)
 	localSnapshot.ContextMode = contextMode
@@ -1583,12 +1610,13 @@ func (s *floretSubagentRuntime) sendInput(ctx context.Context, args map[string]a
 	if err != nil {
 		return nil, err
 	}
+	childRunID := s.childRunIDForThread(target)
 	snapshot, err := host.SendSubAgentInput(ctx, flruntime.SendSubAgentInputRequest{
 		ParentThreadID: flruntime.ThreadID(strings.TrimSpace(parent.threadID)),
 		ChildThreadID:  flruntime.ThreadID(target),
 		Message:        strings.TrimSpace(anyToString(args["message"])),
 		Interrupt:      parseBoolArg(args, "interrupt", false),
-		Labels:         s.runLabels(agentType, target),
+		Labels:         s.runLabels(agentType, target, childRunID),
 	})
 	if err != nil {
 		return nil, err
@@ -2688,7 +2716,29 @@ func aggregateSubagentContextMode(snapshots []subagentSnapshot) string {
 	return subagentContextModeMissionOnly
 }
 
-func (s *floretSubagentRuntime) runLabels(agentType string, childThreadID string) flruntime.RunLabels {
+func (s *floretSubagentRuntime) childRunIDForThread(childThreadID string) string {
+	parent := s.parentRun()
+	if parent == nil || parent.threadsDB == nil {
+		return ""
+	}
+	childThreadID = strings.TrimSpace(childThreadID)
+	if childThreadID == "" {
+		return ""
+	}
+	lookupCtx, cancel := persistContextForRun(parent)
+	defer cancel()
+	rec, ok, err := parent.threadsDB.GetFinalizedChildPermissionSnapshotByThread(lookupCtx, strings.TrimSpace(parent.endpointID), childThreadID)
+	if err != nil || !ok {
+		return ""
+	}
+	childRunID := strings.TrimSpace(rec.ChildRunID)
+	if childRunID == "" || childRunID == childThreadID {
+		return ""
+	}
+	return childRunID
+}
+
+func (s *floretSubagentRuntime) runLabels(agentType string, childThreadID string, childRunID string) flruntime.RunLabels {
 	parent := s.parentRun()
 	if parent == nil {
 		return flruntime.RunLabels{}
@@ -2698,6 +2748,10 @@ func (s *floretSubagentRuntime) runLabels(agentType string, childThreadID string
 	if childThreadID != "" {
 		host[subagentToolHostContextChildThreadIDKey] = childThreadID
 		host[subagentToolHostContextSubagentIDKey] = childThreadID
+	}
+	childRunID = strings.TrimSpace(childRunID)
+	if childRunID != "" && childRunID != childThreadID {
+		host[subagentToolHostContextChildRunIDKey] = childRunID
 	}
 	if rawAgentType := strings.TrimSpace(agentType); rawAgentType != "" {
 		normalized := normalizeSubagentAgentType(rawAgentType)
@@ -2709,6 +2763,7 @@ func (s *floretSubagentRuntime) runLabels(agentType string, childThreadID string
 			"parent_run_id":    strings.TrimSpace(parent.id),
 			"parent_thread_id": strings.TrimSpace(parent.threadID),
 			"parent_turn_id":   strings.TrimSpace(parent.messageID),
+			"child_run_id":     childRunID,
 		},
 		Host: host,
 	}
