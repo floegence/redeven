@@ -80,6 +80,31 @@ func TestSearchBundleFiltersTypeTagsAndCapsResults(t *testing.T) {
 	}
 }
 
+func TestSearchBundleShortListIsNotTruncation(t *testing.T) {
+	t.Parallel()
+
+	bundle := testBundle(t)
+	result := SearchBundle(bundle, SearchRequest{Query: "Redeven"})
+	if result.MaxResults != defaultSearchResults {
+		t.Fatalf("max_results=%d, want %d", result.MaxResults, defaultSearchResults)
+	}
+	if result.MatchCount != len(result.Matches) {
+		t.Fatalf("match_count=%d, len(matches)=%d", result.MatchCount, len(result.Matches))
+	}
+	if result.TotalMatches < result.MatchCount {
+		t.Fatalf("total_matches=%d, match_count=%d", result.TotalMatches, result.MatchCount)
+	}
+	if result.OmittedCount != result.TotalMatches-result.MatchCount {
+		t.Fatalf("omitted_count=%d, want total_matches-match_count=%d", result.OmittedCount, result.TotalMatches-result.MatchCount)
+	}
+	if result.HasMore != (result.OmittedCount > 0) {
+		t.Fatalf("has_more=%v, omitted_count=%d", result.HasMore, result.OmittedCount)
+	}
+	if result.HasMore && result.Truncated {
+		t.Fatalf("bounded search result should not report truncation: %#v", result)
+	}
+}
+
 func TestOpenBundleReturnsBodyWindowAndGraph(t *testing.T) {
 	t.Parallel()
 

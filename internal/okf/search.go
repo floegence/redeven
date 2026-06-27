@@ -120,9 +120,14 @@ func SearchBundle(bundle Bundle, req SearchRequest) SearchResult {
 		}
 		return matches[i].Score > matches[j].Score
 	})
-	truncated := len(matches) > maxResults
-	if truncated {
+	totalMatches := len(matches)
+	hasMore := totalMatches > maxResults
+	if hasMore {
 		matches = matches[:maxResults]
+	}
+	omittedCount := totalMatches - len(matches)
+	if omittedCount < 0 {
+		omittedCount = 0
 	}
 
 	return SearchResult{
@@ -132,9 +137,13 @@ func SearchBundle(bundle Bundle, req SearchRequest) SearchResult {
 			Tags: normalizedTags,
 		},
 		TotalConcepts: len(bundle.Concepts),
+		TotalMatches:  totalMatches,
 		MatchCount:    len(matches),
+		MaxResults:    maxResults,
+		HasMore:       hasMore,
+		OmittedCount:  omittedCount,
 		Matches:       matches,
-		Truncated:     truncated,
+		Truncated:     false,
 	}
 }
 

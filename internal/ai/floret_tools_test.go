@@ -526,7 +526,11 @@ func TestFloretToolResultActivityForOKFUsesKnowledgeLookupFallback(t *testing.T)
 		Summary:  toolSuccessSummary("okf.search"),
 		Data: map[string]any{
 			"total_concepts": 12,
+			"total_matches":  7,
 			"match_count":    3,
+			"max_results":    3,
+			"has_more":       true,
+			"omitted_count":  4,
 			"matches":        []map[string]any{{"concept_id": "ai.okf-search-tool"}},
 		},
 	})
@@ -544,6 +548,18 @@ func TestFloretToolResultActivityForOKFUsesKnowledgeLookupFallback(t *testing.T)
 	}
 	if _, ok := activity.Payload["matches"]; !ok {
 		t.Fatalf("okf.search payload missing matches: %#v", activity.Payload)
+	}
+	if activity.Payload["truncated"] == true {
+		t.Fatalf("okf.search short list should not report truncation: %#v", activity.Payload)
+	}
+	if !readBoolField(activity.Payload, "has_more") || readIntField(activity.Payload, "omitted_count") != 4 {
+		t.Fatalf("okf.search payload missing bounded-list metadata: %#v", activity.Payload)
+	}
+	if !activityHasChip(activity.Chips, "has_more", "") {
+		t.Fatalf("okf.search activity should show a neutral more chip: %#v", activity.Chips)
+	}
+	if activityHasChip(activity.Chips, "truncated", "") {
+		t.Fatalf("okf.search short list should not show truncated chip: %#v", activity.Chips)
 	}
 	if activity.Payload["summary"] != "okf.knowledge.lookup" {
 		t.Fatalf("summary payload=%v, want okf.knowledge.lookup", activity.Payload["summary"])

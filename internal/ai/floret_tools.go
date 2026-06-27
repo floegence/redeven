@@ -1124,6 +1124,10 @@ func activityPayloadFieldValue(r *run, field string, source map[string]any) (any
 		if count := len(toAnySlice(source["matches"])); count > 0 {
 			return count, true
 		}
+	case "total_matches":
+		if value, ok := source["total_matches"]; ok {
+			return value, true
+		}
 	case "link_count":
 		if value, ok := source["link_count"]; ok {
 			return value, true
@@ -1543,6 +1547,12 @@ func activityChipForField(field string, payload map[string]any) (observation.Act
 		}
 		return observation.ActivityChip{Kind: "truncated", Label: "truncated", Tone: "warning"}, true
 	}
+	if field == "has_more" {
+		if !readBoolField(payload, "has_more") {
+			return observation.ActivityChip{}, false
+		}
+		return observation.ActivityChip{Kind: "has_more", Label: "more", Tone: "neutral"}, true
+	}
 	value := strings.TrimSpace(activityScalarString(payload[field]))
 	if value == "" {
 		return observation.ActivityChip{}, false
@@ -1587,7 +1597,7 @@ func activityChipLabel(field string) string {
 		return "duration"
 	case "files_changed":
 		return "files"
-	case "results_count", "result_count", "match_count":
+	case "results_count", "result_count", "match_count", "total_matches":
 		return "results"
 	case "section_count":
 		return "sections"
