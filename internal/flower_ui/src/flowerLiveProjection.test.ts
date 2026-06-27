@@ -450,6 +450,54 @@ describe('Flower live projection', () => {
     });
   });
 
+  it('maps unknown context lifecycle strings to stable UI enums', () => {
+    const mapped = mapFlowerLiveEvents({
+      events: [{
+        schema_version: 1,
+        seq: 1,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        run_id: 'run-1',
+        at_unix_ms: 4100,
+        kind: 'context.compaction.updated',
+        payload: {
+          compaction: {
+            operation_id: 'compact-unknown',
+            phase: 'provider_private_phase',
+            status: 'provider_private_status',
+            updated_at_ms: 4100,
+          },
+          timeline_decoration: {
+            decoration_id: 'context-compaction:compact-unknown',
+            kind: 'context_compaction',
+            anchor: {
+              target_kind: 'message',
+              message_id: 'assistant-live',
+              edge: 'after',
+            },
+            ordinal: 0,
+            compaction: {
+              operation_id: 'compact-unknown',
+              phase: 'provider_private_phase',
+              status: 'provider_private_status',
+              updated_at_ms: 4100,
+            },
+          },
+        },
+      }],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+    const event = mapped.events[0] as Extract<FlowerLiveEvent, { kind: 'context.compaction.updated' }>;
+
+    expect(event.kind).toBe('context.compaction.updated');
+    expect(event.payload.compaction.status).toBe('checkpoint');
+    expect(event.payload.compaction.phase).toBe('checkpoint');
+    expect(event.payload.compaction.status).not.toBe('provider_private_status');
+    expect(event.payload.timeline_decoration.compaction.status).toBe('checkpoint');
+    expect(event.payload.timeline_decoration.compaction.phase).toBe('checkpoint');
+  });
+
   it('keeps compaction dividers anchored to the event timeline decoration', () => {
     const initial = thread({
       messages: [
@@ -951,6 +999,55 @@ describe('Flower live projection', () => {
     expect(failedCompaction.thread.timeline_decorations?.[0]?.compaction).toMatchObject({
       status: 'failed',
       error: 'summary failed',
+    });
+  });
+
+  it('keeps no-op compaction as a context divider without ending the run', () => {
+    const initial = thread({
+      status: 'running',
+      active_run_id: 'run-1',
+      model_io_status: {
+        phase: 'streaming',
+        run_id: 'run-1',
+        updated_at_ms: 4000,
+      },
+    });
+
+    const noOpCompaction = applyFlowerLiveEvent(initial, 0, event(1, 'context.compaction.updated', {
+      compaction: {
+        operation_id: 'compact-noop',
+        run_id: 'run-1',
+        phase: 'noop',
+        status: 'noop',
+        reason: 'context_too_small',
+        updated_at_ms: 4100,
+      },
+      timeline_decoration: {
+        decoration_id: 'context-compaction:compact-noop',
+        kind: 'context_compaction',
+        anchor: {
+          target_kind: 'message',
+          message_id: 'msg-user',
+          edge: 'after',
+        },
+        ordinal: 0,
+        compaction: {
+          operation_id: 'compact-noop',
+          run_id: 'run-1',
+          phase: 'noop',
+          status: 'noop',
+          reason: 'context_too_small',
+          updated_at_ms: 4100,
+        },
+      },
+    }));
+
+    expect(noOpCompaction.thread.status).toBe('running');
+    expect(noOpCompaction.thread.active_run_id).toBe('run-1');
+    expect(noOpCompaction.thread.model_io_status?.run_id).toBe('run-1');
+    expect(noOpCompaction.thread.timeline_decorations?.[0]?.compaction).toMatchObject({
+      status: 'noop',
+      reason: 'context_too_small',
     });
   });
 

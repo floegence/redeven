@@ -128,35 +128,35 @@ func (r *run) persistFloretCompactionDebug(debug *observation.CompactionDebugEve
 		return
 	}
 	payload := map[string]any{
-		"step_index":                           debug.Step,
-		"operation_id":                         strings.TrimSpace(debug.OperationID),
-		"request_id":                           strings.TrimSpace(debug.RequestID),
-		"stage":                                strings.TrimSpace(debug.Stage),
-		"status":                               strings.TrimSpace(debug.Status),
-		"trigger":                              strings.TrimSpace(debug.Trigger),
-		"reason":                               strings.TrimSpace(debug.Reason),
-		"source":                               strings.TrimSpace(debug.Source),
-		"compaction_convergence_attempt":       debug.CompactionConvergenceAttempt,
-		"history_message_count":                debug.HistoryMessageCount,
-		"active_message_count":                 debug.ActiveMessageCount,
-		"tokens_before":                        debug.TokensBefore,
-		"tokens_after_estimate":                debug.TokensAfterEstimate,
-		"context_before":                       debug.ContextBefore,
-		"context_after":                        debug.ContextAfter,
-		"before_pressure":                      debug.BeforePressure,
-		"request_estimate":                     debug.RequestEstimate,
-		"validated_context_pressure":           debug.ValidatedContextPressure,
-		"hard_limit_exceeded":                  debug.HardLimitExceeded,
-		"fixed_input_tokens":                   debug.FixedInputTokens,
-		"reducible_input_tokens":               debug.ReducibleInputTokens,
-		"request_safe_limit":                   debug.RequestSafeLimit,
-		"compact_target_tokens":               debug.CompactedContextTargetTokens,
-		"next_compact_target_tokens":          debug.NextCompactedContextTargetTokens,
-		"consecutive_failures":                 debug.ConsecutiveFailures,
-		"duration_ms":                          debug.DurationMS,
-		"provider_state_kind":                  strings.TrimSpace(debug.ProviderStateKind),
-		"next_action":                          strings.TrimSpace(debug.NextAction),
-		"error":                                strings.TrimSpace(debug.Error),
+		"step_index":                     debug.Step,
+		"operation_id":                   strings.TrimSpace(debug.OperationID),
+		"request_id":                     strings.TrimSpace(debug.RequestID),
+		"stage":                          strings.TrimSpace(debug.Stage),
+		"status":                         strings.TrimSpace(debug.Status),
+		"trigger":                        strings.TrimSpace(debug.Trigger),
+		"reason":                         strings.TrimSpace(debug.Reason),
+		"source":                         strings.TrimSpace(debug.Source),
+		"compaction_convergence_attempt": debug.CompactionConvergenceAttempt,
+		"history_message_count":          debug.HistoryMessageCount,
+		"active_message_count":           debug.ActiveMessageCount,
+		"tokens_before":                  debug.TokensBefore,
+		"tokens_after_estimate":          debug.TokensAfterEstimate,
+		"context_before":                 debug.ContextBefore,
+		"context_after":                  debug.ContextAfter,
+		"before_pressure":                debug.BeforePressure,
+		"request_estimate":               debug.RequestEstimate,
+		"validated_context_pressure":     debug.ValidatedContextPressure,
+		"hard_limit_exceeded":            debug.HardLimitExceeded,
+		"fixed_input_tokens":             debug.FixedInputTokens,
+		"reducible_input_tokens":         debug.ReducibleInputTokens,
+		"request_safe_limit":             debug.RequestSafeLimit,
+		"compact_target_tokens":          debug.CompactedContextTargetTokens,
+		"next_compact_target_tokens":     debug.NextCompactedContextTargetTokens,
+		"consecutive_failures":           debug.ConsecutiveFailures,
+		"duration_ms":                    debug.DurationMS,
+		"provider_state_kind":            strings.TrimSpace(debug.ProviderStateKind),
+		"next_action":                    strings.TrimSpace(debug.NextAction),
+		"error":                          strings.TrimSpace(debug.Error),
 	}
 	if !debug.ObservedAt.IsZero() {
 		payload["observed_at_unix_ms"] = debug.ObservedAt.UnixMilli()
@@ -189,6 +189,7 @@ func (r *run) applyFloretCompaction(compaction *observation.CompactionEvent) {
 	projected := flowerContextCompactionFromFloret(compaction, strings.TrimSpace(r.id))
 	if !r.hostManagedContextCompaction {
 		r.bindContextCompactionOperationAnchor(projected.OperationID, compaction.RequestID)
+		r.noteManualCompactionOperation(compaction.RequestID, projected.OperationID)
 		decoration := r.flowerContextCompactionDecoration(projected)
 		r.persistRunEvent("context.compaction.updated", RealtimeStreamKindContext, flowerContextCompactionPayload(projected, decoration))
 		r.sendStreamEvent(streamEventContextCompaction{
@@ -201,7 +202,7 @@ func (r *run) applyFloretCompaction(compaction *observation.CompactionEvent) {
 	case observation.CompactionPhaseComplete:
 		r.setCompletedContextCompaction(*compaction)
 		r.finishManualCompaction(compaction.RequestID)
-	case observation.CompactionPhaseFailed, observation.CompactionPhaseCancelled:
+	case observation.CompactionPhaseFailed, observation.CompactionPhaseCancelled, observation.CompactionPhaseNoop:
 		r.finishManualCompaction(compaction.RequestID)
 	}
 }
@@ -467,7 +468,7 @@ func flowerContextUsageFromFloret(status *observation.ContextStatus, fallbackRun
 	return FlowerContextUsage{
 		RunID:                  runID,
 		StepIndex:              status.Step,
-		Phase:                  strings.TrimSpace(status.Phase),
+		Phase:                  normalizeFlowerContextUsagePhase(status.Phase),
 		InputTokens:            inputTokens,
 		ContextWindowTokens:    pressure.ContextWindowTokens,
 		ThresholdTokens:        pressure.ThresholdTokens,
@@ -475,7 +476,7 @@ func flowerContextUsageFromFloret(status *observation.ContextStatus, fallbackRun
 		OutputHeadroomTokens:   pressure.OutputHeadroomTokens,
 		UsedRatio:              status.UsedRatio,
 		ThresholdRatio:         status.ThresholdRatio,
-		PressureStatus:         strings.TrimSpace(status.Status),
+		PressureStatus:         normalizeFlowerContextPressureStatus(status.Status),
 		Source:                 source,
 		UpdatedAtMs:            updatedAt,
 	}
@@ -497,7 +498,7 @@ func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent, 
 		OperationID:         strings.TrimSpace(compaction.OperationID),
 		RunID:               runID,
 		StepIndex:           compaction.Step,
-		Phase:               strings.TrimSpace(compaction.Phase),
+		Phase:               normalizeFlowerContextCompactionPhase(compaction.Phase),
 		Status:              normalizeFlowerContextCompactionStatus(compaction.Status),
 		Trigger:             strings.TrimSpace(compaction.Trigger),
 		Reason:              strings.TrimSpace(compaction.Reason),
@@ -505,6 +506,51 @@ func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent, 
 		TokensAfterEstimate: compaction.TokensAfterEstimate,
 		Error:               strings.TrimSpace(compaction.Error),
 		UpdatedAtMs:         updatedAt,
+	}
+}
+
+func normalizeFlowerContextUsagePhase(phase string) string {
+	switch strings.TrimSpace(phase) {
+	case "projected_request":
+		return "projected_request"
+	case "provider_usage":
+		return "provider_usage"
+	default:
+		return "projected_request"
+	}
+}
+
+func normalizeFlowerContextPressureStatus(status string) string {
+	switch strings.TrimSpace(status) {
+	case observation.ContextStatusStable:
+		return "stable"
+	case observation.ContextStatusNearThreshold:
+		return "near_threshold"
+	case observation.ContextStatusWillCompact:
+		return "will_compact"
+	case observation.ContextStatusHardLimit:
+		return "hard_limit"
+	case observation.ContextStatusEstimated:
+		return "estimated"
+	default:
+		return "stable"
+	}
+}
+
+func normalizeFlowerContextCompactionPhase(phase string) string {
+	switch strings.TrimSpace(phase) {
+	case observation.CompactionPhaseStart:
+		return "start"
+	case observation.CompactionPhaseComplete:
+		return "complete"
+	case observation.CompactionPhaseFailed:
+		return "failed"
+	case observation.CompactionPhaseCancelled:
+		return "cancelled"
+	case observation.CompactionPhaseNoop:
+		return "noop"
+	default:
+		return "checkpoint"
 	}
 }
 
@@ -518,8 +564,10 @@ func normalizeFlowerContextCompactionStatus(status string) string {
 		return "failed"
 	case observation.CompactionStatusCancelled:
 		return "cancelled"
+	case observation.CompactionStatusNoop:
+		return "noop"
 	default:
-		return strings.TrimSpace(status)
+		return "checkpoint"
 	}
 }
 

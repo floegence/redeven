@@ -451,7 +451,7 @@ html.dark .flower-component-shell {
   width: 2.1rem;
   height: 2.1rem;
   flex: 0 0 2.1rem;
-  cursor: help;
+  cursor: pointer;
   place-items: center;
   border-radius: 9999px;
   background:
@@ -1502,6 +1502,15 @@ html.dark .flower-component-shell {
     0 16px 24px -22px color-mix(in srgb, black 40%, transparent);
   overflow: visible;
   white-space: nowrap;
+}
+
+.flower-compaction-divider-pill[role='button'] {
+  cursor: pointer;
+}
+
+.flower-compaction-divider-pill[role='button']:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 72%, transparent);
+  outline-offset: 3px;
 }
 
 .flower-compaction-divider-pill-running {

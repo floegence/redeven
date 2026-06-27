@@ -154,6 +154,7 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
         compacted: t(i18n, k('chat.compactionDividerCompacted')),
         failed: t(i18n, k('chat.compactionDividerFailed')),
         cancelled: t(i18n, k('chat.compactionDividerCancelled')),
+        noop: t(i18n, k('chat.compactionDividerNoop')),
         fallback: t(i18n, k('chat.compactionDividerFallback')),
         tokenChange: (before, after) => t(i18n, k('chat.compactionDividerTokenChange'), { before, after }),
       },

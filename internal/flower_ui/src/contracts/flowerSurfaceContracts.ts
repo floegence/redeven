@@ -158,10 +158,12 @@ export type FlowerContextPressureStatus =
   | 'hard_limit'
   | 'estimated';
 
+export type FlowerContextUsagePhase = 'projected_request' | 'provider_usage';
+
 export type FlowerContextUsage = Readonly<{
   run_id?: string;
   step_index?: number;
-  phase: 'projected_request' | 'provider_usage' | string;
+  phase: FlowerContextUsagePhase;
   input_tokens?: number;
   context_window_tokens?: number;
   threshold_tokens?: number;
@@ -169,19 +171,21 @@ export type FlowerContextUsage = Readonly<{
   output_headroom_tokens?: number;
   used_ratio?: number;
   threshold_ratio?: number;
-  pressure_status: FlowerContextPressureStatus | string;
+  pressure_status: FlowerContextPressureStatus;
   source?: string;
   updated_at_ms: number;
 }>;
 
-export type FlowerContextCompactionStatus = 'compacting' | 'compacted' | 'failed' | 'cancelled';
+export type FlowerContextCompactionPhase = 'start' | 'complete' | 'failed' | 'cancelled' | 'noop' | 'checkpoint';
+
+export type FlowerContextCompactionStatus = 'compacting' | 'compacted' | 'failed' | 'cancelled' | 'noop' | 'checkpoint';
 
 export type FlowerContextCompaction = Readonly<{
   operation_id: string;
   run_id?: string;
   step_index?: number;
-  phase: 'start' | 'complete' | 'failed' | 'cancelled' | string;
-  status: FlowerContextCompactionStatus | string;
+  phase: FlowerContextCompactionPhase;
+  status: FlowerContextCompactionStatus;
   trigger?: string;
   reason?: string;
   tokens_before?: number;

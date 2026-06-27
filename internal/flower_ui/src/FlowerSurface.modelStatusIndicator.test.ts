@@ -73,7 +73,7 @@ describe('Flower model status indicator', () => {
     expect(progressRule).toContain('width: 2.1rem');
     expect(progressRule).toContain('height: 2.1rem');
     expect(progressRule).toContain('conic-gradient');
-    expect(progressRule).toContain('cursor: help');
+    expect(progressRule).toContain('cursor: pointer');
     expect(percentRule).toContain('font-size: 0.625rem');
     expect(tooltipRule).toContain('opacity: 0');
     expect(css).toContain(".flower-composer-context-indicator[data-context-pressure='warning'] .flower-composer-context-progress");
@@ -81,7 +81,7 @@ describe('Flower model status indicator', () => {
     expect(css).toContain(".flower-composer-context-tooltip[data-open='true']");
   });
 
-  it('renders compaction dividers as non-interactive timeline separators', () => {
+  it('renders compaction dividers as accessible timeline separators', () => {
     const css = flowerStyles();
     const dividerRule = cssRule(css, '.flower-compaction-divider');
     const pillRule = cssRule(css, '.flower-compaction-divider-pill');
@@ -111,7 +111,9 @@ describe('Flower model status indicator', () => {
     expect(tooltipRule).toContain('white-space: nowrap');
     expect(css).toContain(".flower-compaction-divider-tooltip[data-open='true']");
     expect(css).not.toContain('.flower-compaction-divider-detail');
-    expect(pillRule).not.toContain('cursor: pointer');
+    expect(css).toContain(".flower-compaction-divider-pill[role='button']");
+    expect(css).toContain('cursor: pointer');
+    expect(css).toContain(".flower-compaction-divider-pill[role='button']:focus-visible");
     expect(css).toContain(".flower-compaction-divider[data-flower-compaction-status='failed'] .flower-compaction-divider-pill");
   });
 

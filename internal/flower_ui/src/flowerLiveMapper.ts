@@ -205,13 +205,72 @@ function optionalZeroBasedInteger(raw: unknown): number | undefined {
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : undefined;
 }
 
+function mapContextUsagePhase(raw: unknown): FlowerContextUsage['phase'] {
+  switch (trim(raw)) {
+    case 'provider_usage':
+      return 'provider_usage';
+    case 'projected_request':
+    default:
+      return 'projected_request';
+  }
+}
+
+function mapContextPressureStatus(raw: unknown): FlowerContextUsage['pressure_status'] {
+  switch (trim(raw)) {
+    case 'near_threshold':
+      return 'near_threshold';
+    case 'will_compact':
+      return 'will_compact';
+    case 'hard_limit':
+      return 'hard_limit';
+    case 'estimated':
+      return 'estimated';
+    case 'stable':
+    default:
+      return 'stable';
+  }
+}
+
+function mapContextCompactionPhase(raw: unknown): FlowerContextCompaction['phase'] {
+  switch (trim(raw)) {
+    case 'start':
+      return 'start';
+    case 'complete':
+      return 'complete';
+    case 'failed':
+      return 'failed';
+    case 'cancelled':
+      return 'cancelled';
+    case 'noop':
+      return 'noop';
+    default:
+      return 'checkpoint';
+  }
+}
+
+function mapContextCompactionStatus(raw: unknown): FlowerContextCompaction['status'] {
+  switch (trim(raw)) {
+    case 'compacting':
+      return 'compacting';
+    case 'compacted':
+      return 'compacted';
+    case 'failed':
+      return 'failed';
+    case 'cancelled':
+      return 'cancelled';
+    case 'noop':
+      return 'noop';
+    default:
+      return 'checkpoint';
+  }
+}
+
 function mapContextUsage(raw: unknown): FlowerContextUsage | null {
   const record = recordValue(raw);
   if (!record) return null;
-  const phase = trim(record.phase);
-  const pressureStatus = trim(record.pressure_status);
+  const phase = mapContextUsagePhase(record.phase);
+  const pressureStatus = mapContextPressureStatus(record.pressure_status);
   const updatedAt = integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms);
-  if (!phase || !pressureStatus) return null;
   const stepIndex = optionalInteger(record.step_index);
   const inputTokens = optionalInteger(record.input_tokens);
   const contextWindowTokens = optionalInteger(record.context_window_tokens);
@@ -241,10 +300,10 @@ function mapContextCompaction(raw: unknown): FlowerContextCompaction | null {
   const record = recordValue(raw);
   if (!record) return null;
   const operationID = trim(record.operation_id);
-  const phase = trim(record.phase);
-  const status = trim(record.status);
+  const phase = mapContextCompactionPhase(record.phase);
+  const status = mapContextCompactionStatus(record.status);
   const updatedAt = integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms);
-  if (!operationID || !phase || !status) return null;
+  if (!operationID) return null;
   const stepIndex = optionalInteger(record.step_index);
   const tokensBefore = optionalInteger(record.tokens_before);
   const tokensAfterEstimate = optionalInteger(record.tokens_after_estimate);
