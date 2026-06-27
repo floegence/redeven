@@ -4791,64 +4791,86 @@ html.dark .flower-component-shell {
 }
 
 .flower-settings-policy-section {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+  min-width: 0;
   margin-top: 0.625rem;
 }
 
-.flower-settings-policy-card {
+.flower-settings-permission-grid {
   display: grid;
-  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.625rem;
+  margin-top: 0.75rem;
+}
+
+.flower-settings-policy-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
   min-width: 0;
   cursor: pointer;
-  align-items: flex-start;
-  column-gap: 0.75rem;
-  border: 0;
+  border: 1px solid var(--flower-settings-border);
+  border-radius: 0.75rem;
   background: color-mix(in srgb, var(--flower-settings-panel-elevated) 28%, transparent);
-  padding: 0.95rem 1rem;
+  padding: 0.75rem 0.875rem;
   text-align: left;
   transition:
     background-color 150ms ease,
+    border-color 150ms ease,
     color 150ms ease;
-}
-
-.flower-settings-policy-card:nth-child(odd) {
-  padding-left: 1rem;
-  padding-right: 1rem;
-}
-
-.flower-settings-policy-card:nth-child(even) {
-  padding-left: 1rem;
-  padding-right: 1rem;
 }
 
 .flower-settings-policy-card:hover {
   background: color-mix(in srgb, var(--primary) 4%, transparent);
 }
 
-.flower-settings-policy-icon {
+.flower-settings-policy-card-active {
+  border-color: color-mix(in srgb, var(--primary) 70%, transparent);
+  background: color-mix(in srgb, var(--primary) 5%, transparent);
+}
+
+.flower-settings-policy-card-row {
   display: flex;
-  width: 1.875rem;
-  height: 1.875rem;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.flower-settings-policy-card-icon {
+  display: flex;
+  width: 1.625rem;
+  height: 1.625rem;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border-radius: 9999px;
-}
-
-.flower-settings-policy-copy {
-  min-width: 0;
-}
-
-.flower-settings-policy-icon-blue {
+  border-radius: 0.5rem;
   background: color-mix(in srgb, var(--info, #2563eb) 12%, transparent);
   color: var(--info, #2563eb);
 }
 
-.flower-settings-policy-icon-amber {
-  background: color-mix(in srgb, var(--warning, #f59e0b) 14%, transparent);
-  color: var(--warning, #f59e0b);
+.flower-settings-policy-card-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.flower-settings-policy-card-badge {
+  flex: 0 0 auto;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--success, #16a34a) 12%, transparent);
+  color: var(--success, #16a34a);
+  padding: 0.125rem 0.5rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.flower-settings-policy-card-desc {
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1.5;
 }
 
 .flower-settings-state-pill {
@@ -5057,11 +5079,6 @@ html.dark .flower-component-shell {
 .flower-settings-terminal-section {
   margin-top: 1.6rem;
   padding-top: 0;
-}
-
-.flower-settings-policy-section {
-  padding-top: 0;
-  border-top: 0;
 }
 
 .flower-settings-warning-strip,
@@ -5342,17 +5359,11 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     justify-content: flex-start;
   }
 
-  .flower-settings-policy-section,
+  .flower-settings-permission-grid,
   .flower-settings-grid,
   .flower-settings-editor-grid,
   .flower-settings-terminal-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .flower-settings-policy-card:nth-child(odd),
-  .flower-settings-policy-card:nth-child(even) {
-    padding-right: 0.5rem;
-    padding-left: 0.5rem;
   }
 
   .flower-settings-provider-card,
@@ -5419,17 +5430,11 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     align-items: start;
   }
 
-  .flower-settings-policy-section,
+  .flower-settings-permission-grid,
   .flower-settings-provider-gallery,
   .flower-settings-editor-grid,
   .flower-settings-terminal-grid {
     grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  .flower-settings-policy-card:nth-child(odd),
-  .flower-settings-policy-card:nth-child(even) {
-    padding-right: 0.5rem;
-    padding-left: 0.5rem;
   }
 
   .flower-settings-provider-card,

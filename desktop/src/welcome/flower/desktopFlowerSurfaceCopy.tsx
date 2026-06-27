@@ -359,6 +359,7 @@ function createDesktopFlowerSettingsCopy(i18n: DesktopI18n): FlowerSurfaceCopy['
     selectModelPlaceholder: t(i18n, k('selectModelPlaceholder')),
     defaultPermissionTitle: t(i18n, k('defaultPermissionTitle')),
     defaultPermissionDescription: t(i18n, k('defaultPermissionDescription')),
+    defaultPermissionBadge: t(i18n, k('defaultPermissionBadge')),
     permissionTypes: {
       readonly: {
         label: t(i18n, k('permissionReadonlyLabel')),
