@@ -17,6 +17,7 @@ import {
   liveBootstrap,
   modelIOStatus,
   renderSurfaceWithAdapter,
+  renderSurfaceWithAdapterProps,
   thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
@@ -36,6 +37,174 @@ function withLaunchUserMessageID<T extends { readonly messages: readonly { reado
 }
 
 describe('FlowerSurface navigation launch/send', () => {
+  it('patches an existing thread permission from the composer footer', async () => {
+    const baseThread = thread({
+      thread_id: 'thread-permission-existing',
+      title: 'Permission existing',
+      permission_type: 'approval_required',
+    });
+    const updatedThread = {
+      ...baseThread,
+      permission_type: 'full_access' as const,
+      updated_at_ms: baseThread.updated_at_ms + 1,
+    };
+    const setThreadPermissionType = vi.fn(async () => liveBootstrap(updatedThread));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [baseThread]),
+      loadThread: vi.fn(async () => liveBootstrap(baseThread)),
+      setThreadPermissionType,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-permission-existing"] button')));
+    (runtime.querySelector('[data-thread-id="thread-permission-existing"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger[data-permission-type="approval_required"]')));
+
+    const trigger = runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement;
+    expect(trigger.disabled).toBe(false);
+    trigger.click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
+    (runtime.querySelector('.flower-permission-menu-item[data-permission-type="full_access"]') as HTMLButtonElement).click();
+    await waitFor(() => setThreadPermissionType.mock.calls.length === 1);
+
+    expect(setThreadPermissionType).toHaveBeenCalledWith('thread-permission-existing', 'full_access');
+    await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'full_access');
+  });
+
+  it('keeps the permission selector available while a thread is running', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-permission-running',
+      title: 'Permission running',
+      status: 'running',
+      active_run_id: 'run-permission-running',
+      permission_type: 'approval_required',
+      model_io_status: modelIOStatus({ run_id: 'run-permission-running' }),
+    });
+    const updatedThread = {
+      ...runningThread,
+      permission_type: 'readonly' as const,
+      updated_at_ms: runningThread.updated_at_ms + 1,
+    };
+    const setThreadPermissionType = vi.fn(async () => liveBootstrap(updatedThread));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(runningThread)),
+      setThreadPermissionType,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-permission-running"] button')));
+    (runtime.querySelector('[data-thread-id="thread-permission-running"] button') as HTMLButtonElement).click();
+    await waitFor(() => {
+      const trigger = runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement | null;
+      return !!trigger && trigger.getAttribute('data-permission-type') === 'approval_required' && !trigger.disabled;
+    });
+
+    (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
+    (runtime.querySelector('.flower-permission-menu-item[data-permission-type="readonly"]') as HTMLButtonElement).click();
+    await waitFor(() => setThreadPermissionType.mock.calls.length === 1);
+
+    expect(setThreadPermissionType).toHaveBeenCalledWith('thread-permission-running', 'readonly');
+  });
+
+  it('rolls back a failed thread permission patch', async () => {
+    const baseThread = thread({
+      thread_id: 'thread-permission-failed',
+      title: 'Permission failed',
+      permission_type: 'approval_required',
+    });
+    const setThreadPermissionType = vi.fn(async () => {
+      throw new Error('permission denied');
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [baseThread]),
+      loadThread: vi.fn(async () => liveBootstrap(baseThread)),
+      setThreadPermissionType,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-permission-failed"] button')));
+    (runtime.querySelector('[data-thread-id="thread-permission-failed"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger[data-permission-type="approval_required"]')));
+
+    (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
+    (runtime.querySelector('.flower-permission-menu-item[data-permission-type="full_access"]') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('permission denied') === true);
+
+    expect(runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type')).toBe('approval_required');
+    expect(runtime.textContent).toContain('Flower could not save permission.');
+  });
+
+  it('sends the local permission draft when launching a new thread', async () => {
+    const launchedThread = thread({
+      thread_id: 'thread-permission-new',
+      title: 'Permission new',
+      permission_type: 'full_access',
+      messages: [
+        {
+          id: 'm-permission-new-user',
+          role: 'user',
+          content: 'start with full access',
+          status: 'complete',
+          created_at_ms: 10,
+        },
+      ],
+    });
+    const launchTurn = vi.fn(async () => liveBootstrap(launchedThread));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      loadThread: vi.fn(async () => liveBootstrap(launchedThread)),
+      launchTurn,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger[data-permission-type="approval_required"]')));
+    (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
+    (runtime.querySelector('.flower-permission-menu-item[data-permission-type="full_access"]') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'full_access');
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'start with full access';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+
+    expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'start with full access',
+      permission_type: 'full_access',
+    }));
+  });
+
+  it('shows inherited subagent permission state without direct editor control', async () => {
+    const childProjection = thread({
+      thread_id: 'thread-permission-child',
+      title: 'Child worker',
+      owner_kind: 'subagent_projection',
+      parent_thread_id: 'thread-parent',
+      permission_type: 'readonly',
+      read_only_reason: 'Open the parent thread to continue this subagent.',
+    });
+    const runtime = renderSurfaceWithAdapterProps({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [childProjection]),
+      loadThread: vi.fn(async () => liveBootstrap(childProjection)),
+    }, {
+      focusThreadRequest: {
+        request_id: 'focus-child-permission',
+        thread_id: 'thread-permission-child',
+      },
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger-static[data-permission-type="readonly"]')));
+
+    expect(runtime.querySelector('.flower-chat-permission-chip')?.textContent).toContain('Read only');
+    expect(runtime.querySelector('button.flower-permission-trigger')).toBeNull();
+    expect(runtime.querySelector('.flower-permission-menu')).toBeNull();
+  });
+
   it('stops a running selected thread from the composer when the draft is empty', async () => {
     const runningThread = thread({
       thread_id: 'thread-running-stop',

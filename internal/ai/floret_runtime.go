@@ -91,25 +91,6 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		"permission_type": permissionTypeString(permissionType),
 	})
 
-	registry := NewInMemoryToolRegistry()
-	if err := registerBuiltInTools(registry, r); err != nil {
-		return r.failRun("Failed to initialize tool registry", err)
-	}
-	permissionFilter := newPermissionToolFilter(!r.noUserInteraction)
-	permissionFilter = r.withToolAllowlistFilter(permissionFilter)
-	activeTools := permissionFilter.FilterTools(permissionType, registry.Snapshot())
-	activeSignals := permissionFilter.FilterTools(permissionType, builtInControlSignalDefinitions())
-	permissionSnapshot := r.freezePermissionSnapshot(buildPermissionSnapshot(permissionType, activeTools, activeSignals))
-	if err := validatePermissionSnapshotConsistency(permissionSnapshot); err != nil {
-		return r.failRun("Invalid permission snapshot", err)
-	}
-	activeTools = filterToolsByNames(activeTools, permissionSnapshot.FloretToolNames)
-	activeSignals = filterToolsByNames(activeSignals, permissionSnapshot.PromptCapabilityNames)
-	capabilityContract := resolveRunCapabilityContract(r, activeTools, activeSignals, req.ModelCapability.SupportsAskUserQuestionBatches)
-	controlTools := floretControlToolsForContract(activeSignals, capabilityContract)
-	r.persistRunEvent("capability.contract.resolved", RealtimeStreamKindLifecycle, capabilityContract.eventPayload())
-	r.ensureSkillManager()
-
 	state := newRuntimeState(taskObjective)
 	if source, hydrated := r.hydrateTodoRuntimeState(ctx, &state); hydrated {
 		r.persistRunEvent("todo.hydrated", RealtimeStreamKindLifecycle, map[string]any{
@@ -121,6 +102,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		})
 	}
 	sharedState := newFloretToolRuntimeState(state)
+	r.ensureSkillManager()
 
 	providerContinuation := newProviderContinuationProjector(r, providerCfg.ID, providerType, modelName, providerCfg.BaseURL)
 	previousState, err := providerContinuation.PreviousState(ctx)
@@ -131,11 +113,15 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if req.ModelCapability.MaxContextTokens > 0 {
 		contextWindow = req.ModelCapability.MaxContextTokens
 	}
-	systemPrompt := r.buildLayeredSystemPrompt(taskObjective, permissionTypeString(permissionType), taskComplexity, 0, true, activeTools, state, "", capabilityContract)
-	flTools, err := buildFloretToolRegistry(r, activeTools, sharedState)
+	hostLabels := floretHostLabelsForRun(r)
+	surfaceConfig := r.buildDynamicToolSurfaceConfig(taskObjective, taskComplexity, req.ModelCapability.SupportsAskUserQuestionBatches, sharedState, hostLabels)
+	r.dynamicSurfaceConfig = surfaceConfig
+	initialSurface, err := r.buildRunToolSurface(ctx, surfaceConfig, permissionType)
 	if err != nil {
-		return r.failRun("Failed to initialize Floret tool registry", err)
+		return r.failRun("Failed to initialize dynamic tool surface", err)
 	}
+	r.persistRunEvent("capability.contract.resolved", RealtimeStreamKindLifecycle, initialSurface.CapabilityContract.eventPayload())
+	toolSurfaceProvider := r.dynamicToolSurfaceProvider(surfaceConfig, initialSurface.PermissionType, true)
 	flProvider := newFloretProviderAdapter(
 		adapter,
 		providerType,
@@ -156,29 +142,29 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		r.webSearchMode,
 	)
 	completionPolicy := flruntime.TurnCompletionNaturalStop
-	hostLabels := floretHostLabelsForRun(r)
-	controlSpec, err := newFloretControlSpec(r, sharedState, controlTools, taskComplexity)
+	controlSpec, err := newFloretControlSpec(r, sharedState, initialSurface.ControlTools, taskComplexity)
 	if err != nil {
 		return r.failRun("Failed to initialize Floret control tools", err)
 	}
-	labels := flruntime.RunLabels{Correlation: map[string]string{"thread_id": strings.TrimSpace(r.threadID), "message_id": strings.TrimSpace(r.messageID)}, Host: hostLabels}
+	labels := flruntime.RunLabels{Correlation: map[string]string{"thread_id": strings.TrimSpace(r.threadID), "message_id": strings.TrimSpace(r.messageID)}, Host: initialSurface.HostContext}
 	maxTotalTokens := int64(req.Options.MaxInputTokens + req.Options.MaxOutputTokens)
 	if maxTotalTokens <= 0 {
 		maxTotalTokens = 0
 	}
-	floretCfg := redevenFloretAdapterConfig(systemPrompt, floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens), req.Options.ReasoningSelection)
+	floretCfg := redevenFloretAdapterConfig(initialSurface.SystemPrompt, floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens), req.Options.ReasoningSelection)
 	store, err := r.openFloretThreadStore()
 	if err != nil {
 		return r.failRun("Failed to initialize Floret context store", err)
 	}
 	defer func() { _ = store.Close() }()
 	host, err := flruntime.NewHost(flruntime.HostOptions{
-		Config:       floretCfg,
-		ModelGateway: flProvider,
-		Store:        store,
-		Tools:        flTools,
-		Approver:     floretToolApproverForRun(r),
-		Sink:         floretEventSink{run: r},
+		Config:              floretCfg,
+		ModelGateway:        flProvider,
+		Store:               store,
+		Tools:               initialSurface.FloretTools,
+		Approver:            floretToolApproverForRun(r),
+		Sink:                floretEventSink{run: r},
+		ToolSurfaceProvider: toolSurfaceProvider,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
@@ -222,7 +208,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if ctx.Err() != nil && result.Status != flruntime.TurnStatusCompleted && result.Status != flruntime.TurnStatusWaiting {
 		return r.failRun("Floret run was canceled", ctx.Err())
 	}
-	return r.projectFloretResult(ctx, result, req, sharedState.snapshot(), taskComplexity, permissionTypeString(permissionType))
+	return r.projectFloretResult(ctx, result, req, sharedState.snapshot(), taskComplexity, permissionTypeString(r.permissionType))
 }
 
 func (r *run) projectFloretResult(ctx context.Context, result flruntime.TurnResult, req RunRequest, state runtimeState, complexity string, permissionType string) error {

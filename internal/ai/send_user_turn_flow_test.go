@@ -995,6 +995,53 @@ func TestStartRunDetachedRejectedWhileIdleCompactionRunning(t *testing.T) {
 	}
 }
 
+func TestSetThreadPermissionTypeAllowsActiveRunAndBroadcastsPatch(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, meta, "live-permission", "", config.AIPermissionApprovalRequired, "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	thKey := runThreadKey(meta.EndpointID, th.ThreadID)
+	svc.mu.Lock()
+	svc.activeRunByTh[thKey] = "run_active_permission_patch"
+	svc.mu.Unlock()
+
+	if err := svc.SetThreadPermissionType(ctx, meta, th.ThreadID, config.AIPermissionFullAccess); err != nil {
+		t.Fatalf("SetThreadPermissionType active run: %v", err)
+	}
+	got, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if got.PermissionType != config.AIPermissionFullAccess {
+		t.Fatalf("permission_type=%q, want full_access", got.PermissionType)
+	}
+	resp, err := svc.ListFlowerThreadLiveEvents(ctx, meta, th.ThreadID, 0, 20)
+	if err != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents: %v", err)
+	}
+	var patch *FlowerLiveThreadPatch
+	for i := range resp.Events {
+		if resp.Events[i].Kind != FlowerLiveThreadPatched {
+			continue
+		}
+		var payload FlowerLiveThreadPatchedPayload
+		if decodeFlowerPayload(resp.Events[i].Payload, &payload) {
+			patch = &payload.Patch
+		}
+	}
+	if patch == nil {
+		t.Fatalf("events=%#v, want thread.patched", resp.Events)
+	}
+	if patch.PermissionType != config.AIPermissionFullAccess {
+		t.Fatalf("patch permission_type=%q, want full_access", patch.PermissionType)
+	}
+}
+
 func TestBeginIdleCompactionRejectedWhileActiveRunRegistered(t *testing.T) {
 	t.Parallel()
 

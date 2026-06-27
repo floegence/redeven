@@ -862,9 +862,6 @@ func (s *Service) SetThreadPermissionType(ctx context.Context, meta *session.Met
 	if err := s.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
 		return err
 	}
-	if s.HasActiveThreadForEndpoint(endpointID, threadID) {
-		return ErrThreadBusy
-	}
 	currentPermissionType, err := normalizePermissionType(strings.TrimSpace(th.PermissionType), "")
 	if err != nil {
 		currentPermissionType = permissionFallback

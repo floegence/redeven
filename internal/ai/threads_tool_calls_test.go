@@ -177,7 +177,7 @@ func TestMarshalQueuedTurnOptions_PreservesNoUserInteraction(t *testing.T) {
 	}
 }
 
-func TestQueuedTurnRecordToRunStartRequest_PreservesStoredReasoningSelection(t *testing.T) {
+func TestQueuedTurnRecordToRunStartRequest_UsesCurrentThreadPermissionAndPreservesReasoning(t *testing.T) {
 	t.Parallel()
 
 	rec := threadstore.QueuedTurn{
@@ -194,8 +194,8 @@ func TestQueuedTurnRecordToRunStartRequest_PreservesStoredReasoningSelection(t *
 	if err != nil {
 		t.Fatalf("queuedTurnRecordToRunStartRequest: %v", err)
 	}
-	if req.Options.PermissionType != permissionTypeString(FlowerPermissionFullAccess) {
-		t.Fatalf("permission_type=%q, want full_access", req.Options.PermissionType)
+	if req.Options.PermissionType != permissionTypeString(FlowerPermissionApprovalRequired) {
+		t.Fatalf("permission_type=%q, want approval_required", req.Options.PermissionType)
 	}
 	if req.Options.ReasoningSelection.Level != config.AIReasoningLevelHigh {
 		t.Fatalf("reasoning_selection=%+v, want stored high selection", req.Options.ReasoningSelection)

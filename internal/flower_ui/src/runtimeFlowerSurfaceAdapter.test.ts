@@ -259,6 +259,46 @@ describe('runtime Flower surface adapter read state', () => {
     expect(stopThread).not.toHaveBeenCalled();
   });
 
+  it('patches thread permission type and reloads the thread', async () => {
+    const patchThread = vi.fn(async () => ({ thread: { thread_id: 'thread_permission', read_status: readStatus() } }));
+    const loadThread = vi.fn(async () => ({
+      schema_version: 1,
+      endpoint_id: 'runtime_1',
+      thread_id: 'thread_permission',
+      cursor: 5,
+      retained_from_seq: 1,
+      thread: {
+        thread_id: 'thread_permission',
+        title: 'Permission thread',
+        run_status: 'running',
+        model_id: 'default/gpt-5',
+        permission_type: 'full_access',
+        created_at_unix_ms: 1,
+        updated_at_unix_ms: 2,
+        read_status: readStatus(),
+      },
+      timeline_messages: [],
+      live_state: {
+        thread_patch: {},
+        runs: {},
+        approval_actions: {},
+        input_requests: {},
+      },
+      read_status: readStatus(),
+      generated_at_ms: 10,
+    }));
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({
+      patchThread,
+      loadThread,
+    }));
+
+    const result = await adapter.setThreadPermissionType?.(' thread_permission ', 'full_access');
+
+    expect(patchThread).toHaveBeenCalledWith('thread_permission', { permission_type: 'full_access' });
+    expect(loadThread).toHaveBeenCalledWith('thread_permission');
+    expect(result?.thread.permission_type).toBe('full_access');
+  });
+
   it('submits main tool approvals with run and tool identity', async () => {
     const submitApproval = vi.fn(async () => undefined);
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ submitApproval }));

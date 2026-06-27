@@ -418,14 +418,16 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, stri
 		return nil, "", err
 	}
 	systemPrompt := parent.buildSubagentHostSystemPrompt(activeTools, childContract)
+	surfaceProvider := s.dynamicSubagentToolSurfaceProvider(state, flruntime.SubAgentForkNone)
 	host, err := flruntime.NewHost(flruntime.HostOptions{
-		Config:             flconfig.Config{Provider: flconfig.ProviderFake, Model: modelName, SystemPrompt: systemPrompt, Reasoning: config.NormalizeAIReasoningSelection(parent.currentReasoning)},
-		ModelGateway:       flProvider,
-		Store:              store,
-		Tools:              flTools,
-		Approver:           floretToolApproverForRun(childRun),
-		Sink:               floretSubagentEventSink{runtime: s},
-		SubAgentRunTimeout: subagentRunTimeout,
+		Config:              flconfig.Config{Provider: flconfig.ProviderFake, Model: modelName, SystemPrompt: systemPrompt, Reasoning: config.NormalizeAIReasoningSelection(parent.currentReasoning)},
+		ModelGateway:        flProvider,
+		Store:               store,
+		Tools:               flTools,
+		Approver:            floretToolApproverForRun(childRun),
+		Sink:                floretSubagentEventSink{runtime: s},
+		ToolSurfaceProvider: surfaceProvider,
+		SubAgentRunTimeout:  subagentRunTimeout,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
@@ -619,6 +621,100 @@ func (r *run) subagentToolSurface(all []ToolDef, forkMode flruntime.SubAgentFork
 	activeTools = filterSubagentChildTools(activeTools, contract)
 	contract.VisibleTools = mapToolNames(activeTools)
 	return activeTools, contract
+}
+
+func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floretToolRuntimeState, fallbackForkMode flruntime.SubAgentForkMode) flruntime.ToolSurfaceProvider {
+	var mu sync.Mutex
+	lastEpochByThread := map[string]string{}
+	return func(ctx context.Context, req flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
+		parent := s.parentRun()
+		if parent == nil {
+			return flruntime.ToolSurface{}, errors.New("subagent runtime unavailable")
+		}
+		childRun := parent.subagentChildRun()
+		if childRun == nil {
+			return flruntime.ToolSurface{}, errors.New("subagent child runtime unavailable")
+		}
+		childThreadID := strings.TrimSpace(string(req.ThreadID))
+		if childThreadID == "" {
+			childThreadID = strings.TrimSpace(req.HostContext[subagentToolHostContextChildThreadIDKey])
+		}
+		childRunID := strings.TrimSpace(string(req.RunID))
+		if childRunID == "" {
+			childRunID = strings.TrimSpace(req.HostContext[subagentToolHostContextChildRunIDKey])
+		}
+		childRun.threadID = childThreadID
+		childRun.id = childRunID
+		childRun.messageID = strings.TrimSpace(string(req.TurnID))
+		childRun.permissionType = parent.currentThreadPermissionType(ctx, subagentPermissionLimit(parent))
+		registry := NewInMemoryToolRegistry()
+		if err := registerBuiltInTools(registry, childRun); err != nil {
+			return flruntime.ToolSurface{}, err
+		}
+		forkMode := s.childForkModeForThread(ctx, childThreadID, fallbackForkMode)
+		activeTools, childContract := childRun.subagentToolSurface(registry.Snapshot(), forkMode)
+		childSnapshot := permissionSnapshotWithOwnerIdentity(buildPermissionSnapshot(childRun.permissionType, activeTools, nil), parent.endpointID, childThreadID, childRunID)
+		childRun.permissionSnapshot = childSnapshot
+		flTools, err := buildFloretToolRegistry(childRun, activeTools, state)
+		if err != nil {
+			return flruntime.ToolSurface{}, err
+		}
+		hostContext := cloneStringMap(req.HostContext)
+		if hostContext == nil {
+			hostContext = floretHostLabelsForRun(parent)
+		}
+		if childThreadID != "" {
+			hostContext[subagentToolHostContextChildThreadIDKey] = childThreadID
+			hostContext[subagentToolHostContextSubagentIDKey] = childThreadID
+		}
+		if childRunID != "" && childRunID != childThreadID {
+			hostContext[subagentToolHostContextChildRunIDKey] = childRunID
+		}
+		hostContext[subagentToolHostContextParentPermissionKey] = permissionTypeString(childRun.permissionType)
+		epoch := permissionSurfaceEpoch(childSnapshot)
+		key := firstNonEmptyString(childThreadID, strings.TrimSpace(string(req.PromptScopeID)), "subagent")
+		mu.Lock()
+		changed := epoch != "" && lastEpochByThread[key] != epoch
+		if changed {
+			lastEpochByThread[key] = epoch
+		}
+		mu.Unlock()
+		if changed {
+			parent.persistRunEvent("subagent.tool_surface.updated", RealtimeStreamKindLifecycle, map[string]any{
+				"phase":             strings.TrimSpace(req.Phase),
+				"step":              req.Step,
+				"subagent_id":       childThreadID,
+				"child_thread_id":   childThreadID,
+				"child_run_id":      childRunID,
+				"permission_type":   permissionTypeString(childRun.permissionType),
+				"snapshot_id":       strings.TrimSpace(childSnapshot.SnapshotID),
+				"snapshot_hash":     strings.TrimSpace(childSnapshot.SnapshotHash),
+				"registry_hash":     strings.TrimSpace(childSnapshot.RegistryHash),
+				"schema_hash":       strings.TrimSpace(childSnapshot.SchemaHash),
+				"presentation_hash": strings.TrimSpace(childSnapshot.PresentationHash),
+			})
+		}
+		return flruntime.ToolSurface{
+			Tools:        flTools,
+			SystemPrompt: childRun.buildSubagentHostSystemPrompt(activeTools, childContract),
+			HostContext:  hostContext,
+			Epoch:        epoch,
+			Reason:       "parent_thread_permission",
+		}, nil
+	}
+}
+
+func (s *floretSubagentRuntime) childForkModeForThread(ctx context.Context, childThreadID string, fallback flruntime.SubAgentForkMode) flruntime.SubAgentForkMode {
+	childThreadID = strings.TrimSpace(childThreadID)
+	if childThreadID == "" {
+		return fallback
+	}
+	local := subagentSnapshot{ThreadID: childThreadID}
+	local = s.withStoredSubagentContextMode(ctx, local)
+	if strings.TrimSpace(local.ContextMode) == "" {
+		return fallback
+	}
+	return subagentForkModeForContextMode(local.ContextMode)
 }
 
 func filterSubagentChildTools(in []ToolDef, contract subagentCapabilityContract) []ToolDef {
