@@ -1799,7 +1799,7 @@ describe('FlowerSurface navigation launch/send', () => {
     }));
     expect(loadThread).toHaveBeenCalledWith('thread-accepted-preparing');
     expect(runtime.querySelector('.flower-model-status-text')?.textContent).toBe('Preparing model request...');
-    expect(runtime.querySelector('.flower-model-status-text')?.getAttribute('data-text')).toBe('Preparing model request...');
+    expect(runtime.querySelector('.flower-model-status-text')?.getAttribute('data-text')).toBe('Preparing model request');
     expect(runtime.querySelector('.flower-model-status-indicator')?.getAttribute('data-model-io-phase')).toBe('preparing');
     expect(runtime.querySelector('[data-flower-message-id] .flower-model-status-indicator')).toBeNull();
     expect(runtime.querySelector('.flower-chat-transcript .flower-model-status-indicator')).toBeNull();

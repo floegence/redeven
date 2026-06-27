@@ -90,7 +90,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('<FlowerComposerContextIndicator usage={usage()} copy={copy()} />');
     expect(src).toContain('copy().chat.modelStatus');
     expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus');
-    expect(src).toContain('data-text={label}');
+    expect(src).toContain('data-text={base}');
     expect(src).toContain('class="flower-composer-anchor"');
     expect(src).toContain('onClick={() => void executeCompactContextCommand()}');
     expect(src).toContain('const executeCompactContextCommand = async () => {');

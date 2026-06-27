@@ -1809,6 +1809,23 @@ html.dark .flower-component-shell {
   }
 }
 
+.flower-model-status-dots {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  width: 3ch;
+  animation: flower-model-status-dots-reveal 1.5s steps(4, end) infinite;
+  white-space: nowrap;
+}
+
+@keyframes flower-model-status-dots-reveal {
+  0%   { width: 0ch; }
+  25%  { width: 1ch; }
+  50%  { width: 2ch; }
+  75%  { width: 3ch; }
+  100% { width: 3ch; }
+}
+
 .flower-error-card {
   display: grid;
   width: 100%;
@@ -5569,6 +5586,12 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     content: none !important;
     opacity: 0 !important;
     background: none !important;
+  }
+
+  .flower-model-status-dots {
+    animation: none !important;
+    width: auto !important;
+    overflow: visible !important;
   }
 
   .flower-activity-inline-row-running .flower-activity-inline-button::before {
