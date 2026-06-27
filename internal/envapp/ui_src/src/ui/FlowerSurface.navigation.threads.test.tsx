@@ -2299,7 +2299,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(1);
     expect(runtime.querySelector('.flower-model-status-lane')?.textContent).toContain('Thinking...');
     expect(runtime.querySelector('.flower-model-status-text')?.textContent).toBe('Thinking...');
-    expect(runtime.querySelector('.flower-model-status-text')?.getAttribute('data-text')).toBe('Thinking...');
+    expect(runtime.querySelector('.flower-model-status-text')?.getAttribute('data-text')).toBe('Thinking');
   });
 
   it('shows a floating scroll control when the transcript is away from latest output', async () => {

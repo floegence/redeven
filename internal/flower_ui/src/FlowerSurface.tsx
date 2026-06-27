@@ -2594,9 +2594,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return status ? modelStatusLabel(status.phase) : '';
   });
   const modelStatusIndicator = (status: FlowerModelIOStatus | null, label: string) => {
+    const base = label.replace(/\.\.\.$/, '');
     return (
       <div class="flower-model-status-indicator" data-model-io-phase={status?.phase}>
-        <span class="flower-model-status-text" data-text={label}>{label}</span>
+        <span class="flower-model-status-text" data-text={base}>{base}<span class="flower-model-status-dots" aria-hidden="true">...</span></span>
       </div>
     );
   };

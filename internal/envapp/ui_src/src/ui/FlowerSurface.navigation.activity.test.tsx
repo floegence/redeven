@@ -36,7 +36,7 @@ afterEach(() => {
 function expectModelStatusIndicator(root: ParentNode, label = 'Thinking...'): void {
   const indicator = root.querySelector('.flower-model-status-text');
   expect(indicator?.textContent).toBe(label);
-  expect(indicator?.getAttribute('data-text')).toBe(label);
+  expect(indicator?.getAttribute('data-text')).toBe(label.replace(/\.\.\.$/, ''));
   expect(root.querySelector('.flower-model-status-lane')?.textContent).toContain(label);
 }
 
