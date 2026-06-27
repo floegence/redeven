@@ -29,8 +29,12 @@ func toolSuccessSummary(toolName string) string {
 		return "todos.updated"
 	case "web.search":
 		return "web.search"
+	case "okf.index":
+		return "okf.index"
 	case "okf.search":
 		return "okf.knowledge.lookup"
+	case "okf.open":
+		return "okf.concept.opened"
 	case "use_skill":
 		return "skill.activated"
 	case "subagents":
@@ -175,6 +179,8 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 		return normalizeTodosPayload(payload)
 	case "subagents":
 		return normalizeSubagentsPayload(payload)
+	case "okf.index", "okf.search", "okf.open":
+		return normalizeJSONCompatibleToolPayload(payload)
 	default:
 		if payload == nil {
 			return nil, false
@@ -659,9 +665,35 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:         100,
 		},
 		{
+			Name:             "okf.index",
+			Description:      "Browse the embedded Redeven OKF index as a structured directory of maintained repository knowledge. Use this before okf.search when the user asks broad Redeven-internal questions and you need to discover the available OKF areas. OKF covers Redeven-maintained architecture, protocols, runtime/Desktop/gateway behavior, Workbench contracts, release automation, AI tool/runtime contracts, and maintained OKF concepts. OKF does not access the internet and must not be used for current, recent, news, market/pricing, third-party documentation, external, or general web facts. Use okf.open after selecting a concept that needs detailed evidence.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"section": map[string]any{"type": "string", "description": "Optional index section title or slug to narrow the returned directory entries."}}, "additionalProperties": false}),
+			ParallelSafe:     true,
+			Mutating:         false,
+			RequiresApproval: false,
+			Visibility:       ToolVisibilitySharedReadonly,
+			Capabilities:     []ToolCapabilityClass{ToolCapabilityReadonlyLocal},
+			Source:           "builtin",
+			Namespace:        "builtin.okf",
+			Priority:         100,
+		},
+		{
 			Name:             "okf.search",
-			Description:      "Look up embedded Redeven repository knowledge from the OKF bundle and return scoped concept summaries. Use only for Redeven-internal architecture, protocol, runtime, Desktop, gateway, Workbench, release, and maintained OKF concepts. OKF does not access the internet and must not be used for current, recent, news, market/prices, third-party documentation, external, or general web facts.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 8}, "tags": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"query"}, "additionalProperties": false}),
+			Description:      "Search the embedded Redeven OKF bundle and return a short structured list of matching concepts. Use this to discover which OKF concepts may answer a Redeven-internal architecture, protocol, runtime, Desktop, gateway, Workbench, release, AI tool, or maintained OKF question. Start with max_results=3 for broad questions; raise it only when more candidates are needed. This tool returns summaries only: call okf.open before relying on a concept for detailed facts, boundaries, contracts, or user-facing conclusions. OKF does not access the internet and must not be used for current, recent, news, market/pricing, third-party documentation, external, or general web facts. Source-level conclusions must still be verified with file or terminal tools.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string", "description": "Search terms for Redeven-maintained OKF concepts."}, "max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 8, "description": "Maximum concept matches to return. Defaults to 3; use 3 for broad questions."}, "type": map[string]any{"type": "string", "description": "Optional exact OKF concept type filter, for example Runtime Contract, Gateway Contract, UI Contract, AI Tool Contract, Release Contract."}, "tags": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Optional tag filters. A concept matches when it has at least one requested tag."}}, "required": []string{"query"}, "additionalProperties": false}),
+			ParallelSafe:     true,
+			Mutating:         false,
+			RequiresApproval: false,
+			Visibility:       ToolVisibilitySharedReadonly,
+			Capabilities:     []ToolCapabilityClass{ToolCapabilityReadonlyLocal},
+			Source:           "builtin",
+			Namespace:        "builtin.okf",
+			Priority:         100,
+		},
+		{
+			Name:             "okf.open",
+			Description:      "Open one embedded Redeven OKF concept by concept_id or path and return detailed concept content plus OKF graph context. Use this after okf.index or okf.search when a concept is relevant and you need exact maintained repository knowledge, boundaries, contracts, or workflow details. Prefer opening the most relevant concept before making final claims based on OKF. OKF content is repository knowledge only; it does not access the internet, is not internet data, and does not replace source-code verification for implementation-level conclusions.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"concept_id": map[string]any{"type": "string", "description": "Concept id returned by okf.index or okf.search. Exactly one of concept_id or path is required."}, "path": map[string]any{"type": "string", "description": "OKF concept path such as ai/okf-search-tool.md. Exactly one of concept_id or path is required."}, "body_offset": map[string]any{"type": "integer", "minimum": 0, "description": "Optional rune offset into the concept body."}, "body_limit": map[string]any{"type": "integer", "minimum": 1000, "maximum": 20000, "description": "Optional maximum body runes to return. Defaults to 12000."}}, "additionalProperties": false}),
 			ParallelSafe:     true,
 			Mutating:         false,
 			RequiresApproval: false,

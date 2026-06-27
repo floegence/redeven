@@ -2,10 +2,19 @@ package okf
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
+)
+
+const (
+	defaultSearchResults = 3
+	maxSearchResults     = 8
+	defaultBodyLimit     = 12000
+	maxBodyLimit         = 20000
+	minBodyLimit         = 1000
 )
 
 var (
@@ -34,31 +43,57 @@ func LoadEmbeddedBundle() (Bundle, error) {
 	return bundleData, nil
 }
 
+func Index(req IndexRequest) (IndexResult, error) {
+	bundle, err := LoadEmbeddedBundle()
+	if err != nil {
+		return IndexResult{}, err
+	}
+	return IndexBundle(bundle, req), nil
+}
+
+func IndexBundle(bundle Bundle, req IndexRequest) IndexResult {
+	sectionFilter := slugify(req.Section)
+	sections := make([]IndexSection, 0, len(bundle.RootIndex.Sections))
+	for _, section := range bundle.RootIndex.Sections {
+		if sectionFilter != "" && slugify(section.Title) != sectionFilter && slugify(section.Slug) != sectionFilter {
+			continue
+		}
+		sections = append(sections, cloneIndexSection(section))
+	}
+	return IndexResult{
+		OKFVersion:    bundle.OKFVersion,
+		TotalSections: len(bundle.RootIndex.Sections),
+		Sections:      sections,
+		Truncated:     false,
+	}
+}
+
 func Search(req SearchRequest) (SearchResult, error) {
 	bundle, err := LoadEmbeddedBundle()
 	if err != nil {
 		return SearchResult{}, err
 	}
+	return SearchBundle(bundle, req), nil
+}
+
+func SearchBundle(bundle Bundle, req SearchRequest) SearchResult {
 	query := strings.TrimSpace(req.Query)
 	maxResults := req.MaxResults
 	if maxResults <= 0 {
-		maxResults = 3
+		maxResults = defaultSearchResults
 	}
-	if maxResults > 8 {
-		maxResults = 8
+	if maxResults > maxSearchResults {
+		maxResults = maxSearchResults
 	}
-	tagSet := make(map[string]struct{}, len(req.Tags))
-	for _, tag := range req.Tags {
-		t := strings.ToLower(strings.TrimSpace(tag))
-		if t == "" {
-			continue
-		}
-		tagSet[t] = struct{}{}
-	}
+	typeFilter := strings.TrimSpace(req.Type)
+	tagSet, normalizedTags := normalizeTagFilter(req.Tags)
 
 	terms := tokenize(query)
 	matches := make([]SearchMatch, 0, len(bundle.Concepts))
 	for _, concept := range bundle.Concepts {
+		if typeFilter != "" && !strings.EqualFold(strings.TrimSpace(concept.Type), typeFilter) {
+			continue
+		}
 		if len(tagSet) > 0 && !hasAnyTag(concept.Tags, tagSet) {
 			continue
 		}
@@ -74,7 +109,7 @@ func Search(req SearchRequest) (SearchResult, error) {
 			Description: concept.Description,
 			Resource:    concept.Resource,
 			Tags:        append([]string(nil), concept.Tags...),
-			Snippet:     concept.Snippet,
+			Snippet:     capText(concept.Snippet, 240),
 			Score:       score,
 		})
 	}
@@ -85,15 +120,123 @@ func Search(req SearchRequest) (SearchResult, error) {
 		}
 		return matches[i].Score > matches[j].Score
 	})
-	if len(matches) > maxResults {
+	truncated := len(matches) > maxResults
+	if truncated {
 		matches = matches[:maxResults]
 	}
 
 	return SearchResult{
-		Query:         query,
+		Query: query,
+		Filters: SearchFilters{
+			Type: typeFilter,
+			Tags: normalizedTags,
+		},
 		TotalConcepts: len(bundle.Concepts),
+		MatchCount:    len(matches),
 		Matches:       matches,
+		Truncated:     truncated,
+	}
+}
+
+func Open(req OpenRequest) (OpenResult, error) {
+	bundle, err := LoadEmbeddedBundle()
+	if err != nil {
+		return OpenResult{}, err
+	}
+	return OpenBundle(bundle, req)
+}
+
+func OpenBundle(bundle Bundle, req OpenRequest) (OpenResult, error) {
+	conceptID := strings.TrimSpace(req.ConceptID)
+	path := normalizeOKFPath(req.Path)
+	if (conceptID == "" && path == "") || (conceptID != "" && path != "") {
+		return OpenResult{}, errors.New("exactly one of concept_id or path is required")
+	}
+	concept, ok := findConcept(bundle, conceptID, path)
+	if !ok {
+		return OpenResult{}, errors.New("OKF concept not found")
+	}
+	body, offset, returned, truncated := bodyWindow(concept.Body, req.BodyOffset, req.BodyLimit)
+	return OpenResult{
+		Concept:            conceptSummary(concept),
+		Body:               body,
+		BodyOffset:         offset,
+		BodyLength:         len([]rune(concept.Body)),
+		ReturnedBodyLength: returned,
+		Truncated:          truncated,
+		Links:              append([]ConceptLink(nil), concept.Links...),
+		Backlinks:          append([]ConceptLink(nil), concept.Backlinks...),
 	}, nil
+}
+
+func findConcept(bundle Bundle, conceptID string, path string) (Concept, bool) {
+	normalizedConceptID := strings.ReplaceAll(strings.TrimSpace(conceptID), "/", ".")
+	for _, concept := range bundle.Concepts {
+		if normalizedConceptID != "" && strings.EqualFold(strings.TrimSpace(concept.ConceptID), normalizedConceptID) {
+			return concept, true
+		}
+		if path != "" && normalizeOKFPath(concept.Path) == path {
+			return concept, true
+		}
+	}
+	return Concept{}, false
+}
+
+func bodyWindow(body string, offset int, limit int) (string, int, int, bool) {
+	runes := []rune(body)
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > len(runes) {
+		offset = len(runes)
+	}
+	if limit <= 0 {
+		limit = defaultBodyLimit
+	}
+	if limit < minBodyLimit {
+		limit = minBodyLimit
+	}
+	if limit > maxBodyLimit {
+		limit = maxBodyLimit
+	}
+	end := offset + limit
+	if end > len(runes) {
+		end = len(runes)
+	}
+	out := string(runes[offset:end])
+	return out, offset, len([]rune(out)), end < len(runes)
+}
+
+func normalizeTagFilter(tags []string) (map[string]struct{}, []string) {
+	tagSet := make(map[string]struct{}, len(tags))
+	out := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		t := strings.ToLower(strings.TrimSpace(tag))
+		if t == "" {
+			continue
+		}
+		if _, exists := tagSet[t]; exists {
+			continue
+		}
+		tagSet[t] = struct{}{}
+		out = append(out, t)
+	}
+	sort.Strings(out)
+	return tagSet, out
+}
+
+func cloneIndexSection(section IndexSection) IndexSection {
+	out := IndexSection{
+		Title:   section.Title,
+		Slug:    section.Slug,
+		Entries: make([]IndexEntry, 0, len(section.Entries)),
+	}
+	for _, entry := range section.Entries {
+		cloned := entry
+		cloned.Tags = append([]string(nil), entry.Tags...)
+		out.Entries = append(out.Entries, cloned)
+	}
+	return out
 }
 
 func tokenize(input string) []string {
@@ -163,4 +306,16 @@ func scoreConcept(concept Concept, terms []string) int {
 		}
 	}
 	return score
+}
+
+func capText(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if limit <= 0 {
+		return value
+	}
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return strings.TrimSpace(string(runes[:limit]))
 }

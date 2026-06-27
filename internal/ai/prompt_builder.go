@@ -316,8 +316,11 @@ func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
 			"",
 			"Information source routing:",
 			"- Current workspace code and files -> read_file/read_files, rgrep, or find.",
-			"- Redeven repository knowledge (architecture, protocols, runtime/Desktop/gateway behavior, Workbench contracts, release automation, and maintained OKF concepts) -> okf.search.",
-			"- Source-level conclusions -> verify OKF background with readonly file/search tools before final conclusions.",
+			"- Redeven maintained repository knowledge -> okf.index, okf.search, and okf.open.",
+			"- Use okf.index to discover OKF areas for broad Redeven-internal questions.",
+			"- Use okf.search to find candidate concepts; keep broad searches short, usually max_results=3.",
+			"- Use okf.open before relying on OKF for detailed facts, boundaries, contracts, or workflows.",
+			"- Source-level conclusions require readonly file/search verification after OKF navigation.",
 			"- External/current/recent/news/third-party/general web facts -> authoritative URLs via web_fetch; use web.search only for discovery when the URL is unknown.",
 			"",
 			"Skill routing:",
@@ -335,8 +338,11 @@ func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
 		"",
 		"Information source routing:",
 		"- Current workspace code, files, builds, tests, and device state -> terminal.exec or file tools.",
-		"- Redeven repository knowledge (architecture, protocols, runtime/Desktop/gateway behavior, Workbench contracts, release automation, and maintained OKF concepts) -> okf.search.",
-		"- Source-level conclusions -> verify any OKF background with terminal.exec or file tools before final conclusions.",
+		"- Redeven maintained repository knowledge -> okf.index, okf.search, and okf.open.",
+		"- Use okf.index to discover OKF areas for broad Redeven-internal questions.",
+		"- Use okf.search to find candidate concepts; keep broad searches short, usually max_results=3.",
+		"- Use okf.open before relying on OKF for detailed facts, boundaries, contracts, or workflows.",
+		"- Source-level conclusions require file or terminal verification after OKF navigation.",
 		"- External/current/recent/news/third-party/general web facts -> authoritative URLs via terminal.exec/curl; use web.search only for discovery when the URL is unknown.",
 		"",
 		"Skill routing:",
@@ -397,7 +403,7 @@ func buildPromptOnlineResearchSection(snapshot promptRuntimeSnapshot) promptSect
 			"- Use web.search only for discovery when you cannot identify the correct authoritative URL.",
 			"- Treat search results as pointers, not evidence: fetch the underlying public text pages with web_fetch, validate key details, and reference the exact URLs you relied on.",
 			"- OKF does not access the internet and must not be used for external/current/recent/news/third-party/general web facts.",
-			"- Do not use okf.search as a fallback when web.search/web_fetch is unavailable.",
+			"- Do not use OKF tools as a fallback when web.search/web_fetch is unavailable.",
 			"- Avoid low-quality SEO content; if you must use it, corroborate with an authoritative source.",
 		)
 	}
@@ -409,7 +415,7 @@ func buildPromptOnlineResearchSection(snapshot promptRuntimeSnapshot) promptSect
 		"- Use web.search (or provider web search) only for discovery when you cannot identify the correct authoritative URL.",
 		"- Treat search results as pointers, not evidence: fetch the underlying pages (via terminal.exec/curl), validate key details, and reference the exact URLs you relied on.",
 		"- OKF does not access the internet and must not be used for external/current/recent/news/third-party/general web facts.",
-		"- Do not use okf.search as a fallback when web.search is unavailable; fetch authoritative URLs with terminal.exec/curl instead.",
+		"- Do not use OKF tools as a fallback when web.search is unavailable; fetch authoritative URLs with terminal.exec/curl instead.",
 		"- Avoid low-quality SEO content; if you must use it, corroborate with an authoritative source.",
 	)
 }
@@ -435,7 +441,9 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 	}
 	if strings.TrimSpace(snapshot.PermissionType) == string(FlowerPermissionReadonly) {
 		lines = append(lines,
-			"- Use okf.search only for Redeven repository knowledge; for source-level conclusions, verify OKF background with readonly file/search tools before final conclusions.",
+			"- Use OKF tools only for Redeven repository knowledge: okf.index for broad directory discovery, okf.search for short candidate lists, and okf.open for detailed concept facts.",
+			"- Do not answer detailed OKF-backed claims from search snippets alone; open the relevant concept first.",
+			"- For source-level conclusions, verify OKF background with readonly file/search tools before final conclusions.",
 			"- Prefer read_file/read_files for direct file inspection, rgrep for content search, find for path discovery, and web_fetch for authoritative public text pages.",
 			"- Shell commands, file edits, patch application, and mutation-oriented verification are unavailable in readonly permission.",
 			"- When the task asks for verification that requires unavailable shell or mutation tools, explain the permission blocker and use ask_user only when user direction is required.",
@@ -450,7 +458,9 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 		return newPromptSection("mandatory_rules", lines...)
 	}
 	lines = append(lines,
-		"- Use okf.search only for Redeven repository knowledge; for source-level conclusions, verify OKF background with terminal.exec or file tools before final conclusions.",
+		"- Use OKF tools only for Redeven repository knowledge: okf.index for broad directory discovery, okf.search for short candidate lists, and okf.open for detailed concept facts.",
+		"- Do not answer detailed OKF-backed claims from search snippets alone; open the relevant concept first.",
+		"- For source-level conclusions, verify OKF background with terminal.exec or file tools before final conclusions.",
 		"- Prefer the explicit file tools for direct file inspection or mutation when they are available.",
 		"- Prefer apply_patch for patch-shaped edits instead of shell redirection or ad-hoc overwrite commands.",
 		"- When the task asks for verification or a verification command, use terminal.exec for that verification; file inspection can supplement but does not replace a real verification command.",

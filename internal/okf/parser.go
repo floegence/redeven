@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -56,6 +57,11 @@ func LoadSourceBundle(sourceRoot string) (Bundle, []byte, error) {
 	if err != nil {
 		return Bundle{}, nil, err
 	}
+	conceptsByPath := conceptsByPath(concepts)
+	rootIndex.Sections = parseIndexSections(rootIndex.Body, conceptsByPath)
+	rootIndex.Links = parseMarkdownLinks(rootIndex.Path, rootIndex.Body, conceptsByPath)
+	attachConceptLinks(concepts, conceptsByPath)
+	attachConceptBacklinks(concepts, rootIndex)
 
 	sourceHash, err := hashTree(root)
 	if err != nil {
@@ -210,10 +216,241 @@ func parseConcept(path string, rel string) (Concept, error) {
 	}, nil
 }
 
+func conceptsByPath(concepts []Concept) map[string]Concept {
+	out := make(map[string]Concept, len(concepts))
+	for _, concept := range concepts {
+		out[normalizeOKFPath(concept.Path)] = concept
+	}
+	return out
+}
+
+func attachConceptLinks(concepts []Concept, byPath map[string]Concept) {
+	for i := range concepts {
+		concepts[i].Links = parseMarkdownLinks(concepts[i].Path, concepts[i].Body, byPath)
+	}
+}
+
+func attachConceptBacklinks(concepts []Concept, root RootIndex) {
+	indexByPath := make(map[string]int, len(concepts))
+	for i, concept := range concepts {
+		indexByPath[normalizeOKFPath(concept.Path)] = i
+	}
+	rootTitle := "Redeven OKF Bundle"
+	if title, ok := root.Frontmatter["title"].(string); ok && strings.TrimSpace(title) != "" {
+		rootTitle = strings.TrimSpace(title)
+	}
+	rootBacklink := ConceptLink{
+		Label: "Redeven OKF Bundle",
+		Path:  root.Path,
+		Title: rootTitle,
+	}
+	for _, link := range root.Links {
+		if idx, ok := indexByPath[normalizeOKFPath(link.Path)]; ok {
+			concepts[idx].Backlinks = appendUniqueConceptLink(concepts[idx].Backlinks, rootBacklink)
+		}
+	}
+	for _, source := range concepts {
+		backlink := ConceptLink{
+			Label:     source.Title,
+			Path:      source.Path,
+			ConceptID: source.ConceptID,
+			Title:     source.Title,
+		}
+		for _, link := range source.Links {
+			if idx, ok := indexByPath[normalizeOKFPath(link.Path)]; ok {
+				concepts[idx].Backlinks = appendUniqueConceptLink(concepts[idx].Backlinks, backlink)
+			}
+		}
+	}
+	for i := range concepts {
+		sort.Slice(concepts[i].Backlinks, func(a, b int) bool {
+			if concepts[i].Backlinks[a].Path == concepts[i].Backlinks[b].Path {
+				return concepts[i].Backlinks[a].Label < concepts[i].Backlinks[b].Label
+			}
+			return concepts[i].Backlinks[a].Path < concepts[i].Backlinks[b].Path
+		})
+	}
+}
+
+func appendUniqueConceptLink(links []ConceptLink, link ConceptLink) []ConceptLink {
+	key := link.Path + "\x00" + link.ConceptID + "\x00" + link.Label
+	for _, existing := range links {
+		existingKey := existing.Path + "\x00" + existing.ConceptID + "\x00" + existing.Label
+		if existingKey == key {
+			return links
+		}
+	}
+	return append(links, link)
+}
+
+var markdownLinkPattern = regexp.MustCompile(`\[[^\]]+\]\([^\)]+\)`)
+
+func parseIndexSections(body string, byPath map[string]Concept) []IndexSection {
+	var sections []IndexSection
+	var current *IndexSection
+	scanner := bufio.NewScanner(strings.NewReader(body))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "## ") {
+			section := IndexSection{
+				Title: strings.TrimSpace(strings.TrimPrefix(line, "## ")),
+			}
+			section.Slug = slugify(section.Title)
+			sections = append(sections, section)
+			current = &sections[len(sections)-1]
+			continue
+		}
+		if current == nil || !strings.HasPrefix(line, "- [") {
+			continue
+		}
+		links := parseMarkdownLinks("index.md", line, byPath)
+		if len(links) == 0 {
+			continue
+		}
+		link := links[0]
+		concept, ok := byPath[normalizeOKFPath(link.Path)]
+		if !ok {
+			continue
+		}
+		entry := IndexEntry{ConceptSummary: conceptSummary(concept)}
+		if entry.Title == "" {
+			entry.Title = link.Label
+		}
+		current.Entries = append(current.Entries, entry)
+	}
+	out := make([]IndexSection, 0, len(sections))
+	for _, section := range sections {
+		if len(section.Entries) == 0 {
+			continue
+		}
+		out = append(out, section)
+	}
+	return out
+}
+
+func parseMarkdownLinks(sourcePath string, body string, byPath map[string]Concept) []ConceptLink {
+	matches := markdownLinkPattern.FindAllString(body, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(matches))
+	links := make([]ConceptLink, 0, len(matches))
+	for _, match := range matches {
+		closeLabel := strings.Index(match, "](")
+		if closeLabel <= 1 || !strings.HasSuffix(match, ")") {
+			continue
+		}
+		label := strings.TrimSpace(match[1:closeLabel])
+		target := strings.TrimSpace(match[closeLabel+2 : len(match)-1])
+		if label == "" || target == "" {
+			continue
+		}
+		if strings.Contains(target, "://") || strings.HasPrefix(target, "mailto:") || strings.HasPrefix(target, "#") {
+			continue
+		}
+		if hash := strings.Index(target, "#"); hash >= 0 {
+			target = target[:hash]
+		}
+		if query := strings.Index(target, "?"); query >= 0 {
+			target = target[:query]
+		}
+		if !strings.EqualFold(filepath.Ext(target), ".md") {
+			continue
+		}
+		path := resolveOKFLinkPath(sourcePath, target)
+		if path == "" || strings.HasPrefix(path, "dist/") {
+			continue
+		}
+		concept, ok := byPath[path]
+		if !ok {
+			continue
+		}
+		key := path + "\x00" + label
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		links = append(links, ConceptLink{
+			Label:     label,
+			Path:      concept.Path,
+			ConceptID: concept.ConceptID,
+			Title:     concept.Title,
+		})
+	}
+	sort.Slice(links, func(i, j int) bool {
+		if links[i].Path == links[j].Path {
+			return links[i].Label < links[j].Label
+		}
+		return links[i].Path < links[j].Path
+	})
+	return links
+}
+
+func resolveOKFLinkPath(sourcePath string, target string) string {
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return ""
+	}
+	if strings.HasPrefix(target, "/") {
+		target = strings.TrimPrefix(target, "/")
+	} else {
+		base := filepath.Dir(normalizeOKFPath(sourcePath))
+		if base == "." {
+			base = ""
+		}
+		target = filepath.ToSlash(filepath.Join(base, target))
+	}
+	return normalizeOKFPath(target)
+}
+
+func normalizeOKFPath(path string) string {
+	path = filepath.ToSlash(filepath.Clean(strings.TrimSpace(path)))
+	path = strings.TrimPrefix(path, "./")
+	if path == "." {
+		return ""
+	}
+	return path
+}
+
+func slugify(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+	var b strings.Builder
+	prevDash := false
+	for _, r := range value {
+		keep := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if keep {
+			b.WriteRune(r)
+			prevDash = false
+			continue
+		}
+		if !prevDash {
+			b.WriteByte('-')
+			prevDash = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+func conceptSummary(concept Concept) ConceptSummary {
+	return ConceptSummary{
+		ConceptID:   concept.ConceptID,
+		Path:        concept.Path,
+		Type:        concept.Type,
+		Title:       concept.Title,
+		Description: concept.Description,
+		Resource:    concept.Resource,
+		Tags:        append([]string(nil), concept.Tags...),
+	}
+}
+
 func conceptIDFromPath(rel string) string {
 	rel = filepath.ToSlash(filepath.Clean(rel))
 	rel = strings.TrimSuffix(rel, ".md")
-	return strings.TrimPrefix(rel, "./")
+	rel = strings.TrimPrefix(rel, "./")
+	return strings.ReplaceAll(rel, "/", ".")
 }
 
 func titleFromFilename(rel string) string {
