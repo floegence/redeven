@@ -13,7 +13,7 @@ func buildPromptForToolRoutingTest(t *testing.T) string {
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		AgentHomeDir: t.TempDir(),
 	})
-	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "file.read"}, {Name: "okf.search"}, {Name: "web.search"}}
+	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "file.read"}, {Name: "okf.index"}, {Name: "okf.search"}, {Name: "okf.open"}, {Name: "web.search"}}
 	contract := resolveRunCapabilityContract(r, tools, nil, false)
 	return r.buildLayeredSystemPrompt("objective", permissionTypeString(FlowerPermissionApprovalRequired), TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
 }
@@ -31,7 +31,9 @@ func buildReadonlyPromptForToolRoutingTest(t *testing.T) string {
 		{Name: "rgrep", Visibility: ToolVisibilityReadonlyExclusive},
 		{Name: "find", Visibility: ToolVisibilityReadonlyExclusive},
 		{Name: "web_fetch", Visibility: ToolVisibilityReadonlyExclusive},
+		{Name: "okf.index", Visibility: ToolVisibilitySharedReadonly},
 		{Name: "okf.search", Visibility: ToolVisibilitySharedReadonly},
+		{Name: "okf.open", Visibility: ToolVisibilitySharedReadonly},
 		{Name: "web.search", Visibility: ToolVisibilitySharedReadonly},
 		{Name: "subagents", Visibility: ToolVisibilityDelegationControl},
 	}
@@ -58,10 +60,11 @@ func TestBuildLayeredSystemPrompt_RoutesOKFToRedevenRepositoryKnowledgeOnly(t *t
 
 	prompt := buildPromptForToolRoutingTest(t)
 	assertPromptContains(t, prompt, "Information source routing:")
-	assertPromptContains(t, prompt, "Redeven repository knowledge")
-	assertPromptContains(t, prompt, "maintained OKF concepts) -> okf.search")
-	assertPromptContains(t, prompt, "Source-level conclusions -> verify any OKF background with terminal.exec or file tools before final conclusions.")
-	assertPromptContains(t, prompt, "Use okf.search only for Redeven repository knowledge")
+	assertPromptContains(t, prompt, "Redeven maintained repository knowledge -> okf.index, okf.search, and okf.open.")
+	assertPromptContains(t, prompt, "Use okf.index to discover OKF areas for broad Redeven-internal questions.")
+	assertPromptContains(t, prompt, "Use okf.search to find candidate concepts; keep broad searches short, usually max_results=3.")
+	assertPromptContains(t, prompt, "Use okf.open before relying on OKF for detailed facts, boundaries, contracts, or workflows.")
+	assertPromptContains(t, prompt, "Source-level conclusions require file or terminal verification after OKF navigation.")
 }
 
 func TestBuildLayeredSystemPrompt_ExcludesOKFFromExternalResearch(t *testing.T) {
@@ -70,7 +73,7 @@ func TestBuildLayeredSystemPrompt_ExcludesOKFFromExternalResearch(t *testing.T) 
 	prompt := buildPromptForToolRoutingTest(t)
 	assertPromptContains(t, prompt, "External/current/recent/news/third-party/general web facts -> authoritative URLs via terminal.exec/curl")
 	assertPromptContains(t, prompt, "OKF does not access the internet and must not be used for external/current/recent/news/third-party/general web facts.")
-	assertPromptContains(t, prompt, "Do not use okf.search as a fallback when web.search is unavailable")
+	assertPromptContains(t, prompt, "Do not use OKF tools as a fallback when web.search is unavailable")
 }
 
 func TestBuildLayeredSystemPrompt_RemovesOKFFirstDomainBackgroundRule(t *testing.T) {

@@ -43,7 +43,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.
 - [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.
 - [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.
-- [OKF search tool](ai/okf-search-tool.md) - Read-only repository knowledge lookup over the embedded OKF bundle.
+- [OKF tool suite](ai/okf-search-tool.md) - Read-only repository knowledge access through index browsing, short search, and concept opening.
 
 ## Protocol
 

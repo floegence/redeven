@@ -65,39 +65,52 @@ func TestBuiltInToolDefinitions_AskUserDescriptionMentionsStructuredInput(t *tes
 	t.Fatalf("ask_user signal definition not found")
 }
 
-func TestBuiltInToolDefinitions_OKFSearchDescriptionDeclaresKnowledgeBoundary(t *testing.T) {
+func TestBuiltInToolDefinitions_OKFDescriptionsDeclareProgressiveDisclosureBoundary(t *testing.T) {
 	t.Parallel()
 
+	defs := map[string]ToolDef{}
 	for _, def := range builtInToolDefinitions() {
-		if strings.TrimSpace(def.Name) != "okf.search" {
-			continue
+		defs[strings.TrimSpace(def.Name)] = def
+	}
+	for _, name := range []string{"okf.index", "okf.search", "okf.open"} {
+		def, ok := defs[name]
+		if !ok {
+			t.Fatalf("%s tool definition not found", name)
 		}
 		for _, want := range []string{
-			"embedded Redeven repository knowledge",
-			"Redeven-internal",
+			"Redeven",
+			"OKF",
 			"does not access the internet",
-			"current",
-			"recent",
-			"news",
-			"market/prices",
-			"third-party documentation",
-			"external",
-			"general web facts",
 		} {
 			if !strings.Contains(def.Description, want) {
-				t.Fatalf("okf.search description missing %q: %q", want, def.Description)
+				t.Fatalf("%s description missing %q: %q", name, want, def.Description)
 			}
 		}
-		if strings.TrimSpace(def.Description) == "Search the embedded Redeven OKF bundle and return scoped concept summaries." {
-			t.Fatalf("okf.search description kept old generic wording: %q", def.Description)
-		}
 		if strings.Contains(def.Description, "domain background") {
-			t.Fatalf("okf.search description should not keep domain background wording: %q", def.Description)
+			t.Fatalf("%s description should not keep domain background wording: %q", name, def.Description)
 		}
-		return
 	}
-
-	t.Fatalf("okf.search tool definition not found")
+	search := defs["okf.search"].Description
+	for _, want := range []string{
+		"short structured list",
+		"Start with max_results=3",
+		"call okf.open before relying on a concept",
+		"Source-level conclusions must still be verified",
+		"third-party documentation",
+		"general web facts",
+	} {
+		if !strings.Contains(search, want) {
+			t.Fatalf("okf.search description missing %q: %q", want, search)
+		}
+	}
+	index := defs["okf.index"].Description
+	if !strings.Contains(index, "Use this before okf.search") || !strings.Contains(index, "Use okf.open after selecting a concept") {
+		t.Fatalf("okf.index description missing progressive disclosure guidance: %q", index)
+	}
+	open := defs["okf.open"].Description
+	if !strings.Contains(open, "after okf.index or okf.search") || !strings.Contains(open, "does not replace source-code verification") {
+		t.Fatalf("okf.open description missing open/source verification guidance: %q", open)
+	}
 }
 
 func TestToolSuccessSummary_OKFSearchUsesKnowledgeLookupWording(t *testing.T) {
@@ -109,6 +122,44 @@ func TestToolSuccessSummary_OKFSearchUsesKnowledgeLookupWording(t *testing.T) {
 	}
 	if got == "okf.search" || got == "Search OKF" {
 		t.Fatalf("OKF success summary kept search-engine wording: %q", got)
+	}
+}
+
+func TestNormalizeTruncatedToolPayload_OKFSearchKeepsStructuredMatches(t *testing.T) {
+	t.Parallel()
+
+	matches := make([]map[string]any, 0, 8)
+	for i := 0; i < 8; i++ {
+		matches = append(matches, map[string]any{
+			"concept_id":  "concept",
+			"path":        "ai/concept.md",
+			"type":        "AI Tool Contract",
+			"title":       "Concept",
+			"description": strings.Repeat("structured OKF match ", 20),
+			"snippet":     strings.Repeat("snippet ", 80),
+			"score":       1,
+		})
+	}
+	payload := map[string]any{
+		"query":          "redeven",
+		"total_concepts": 22,
+		"match_count":    8,
+		"matches":        matches,
+		"truncated":      false,
+	}
+	normalized, truncated := normalizeTruncatedToolPayload("okf.search", payload)
+	if truncated {
+		t.Fatal("okf.search payload should not be raw-truncated")
+	}
+	root, ok := normalized.(map[string]any)
+	if !ok {
+		t.Fatalf("normalized type=%T, want map", normalized)
+	}
+	if _, ok := root["raw"]; ok {
+		t.Fatalf("okf.search payload collapsed to raw: %#v", root)
+	}
+	if got := len(toAnySlice(root["matches"])); got != 8 {
+		t.Fatalf("matches len=%d, want 8", got)
 	}
 }
 

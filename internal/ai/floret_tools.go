@@ -693,7 +693,7 @@ func floretToolResourceKinds(toolName string) []string {
 		return []string{"web_url"}
 	case "web.search":
 		return []string{"web_query"}
-	case "okf.search":
+	case "okf.index", "okf.search", "okf.open":
 		return []string{"knowledge_query"}
 	case "use_skill":
 		return []string{"skill"}
@@ -773,9 +773,20 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 		if query := strings.TrimSpace(anyToString(args["query"])); query != "" {
 			return []fltools.ResourceRef{{Kind: "web_query", Value: query}}, nil
 		}
+	case "okf.index":
+		if section := strings.TrimSpace(anyToString(args["section"])); section != "" {
+			return []fltools.ResourceRef{{Kind: "knowledge_query", Value: section}}, nil
+		}
 	case "okf.search":
 		if query := strings.TrimSpace(anyToString(args["query"])); query != "" {
 			return []fltools.ResourceRef{{Kind: "knowledge_query", Value: query}}, nil
+		}
+	case "okf.open":
+		if conceptID := strings.TrimSpace(anyToString(args["concept_id"])); conceptID != "" {
+			return []fltools.ResourceRef{{Kind: "knowledge_query", Value: conceptID}}, nil
+		}
+		if path := strings.TrimSpace(anyToString(args["path"])); path != "" {
+			return []fltools.ResourceRef{{Kind: "knowledge_query", Value: path}}, nil
 		}
 	case "use_skill":
 		if name := strings.TrimSpace(anyToString(args["name"])); name != "" {
@@ -1101,6 +1112,37 @@ func activityPayloadFieldValue(r *run, field string, source map[string]any) (any
 	case "results_count":
 		if count := len(toAnySlice(source["results"])); count > 0 {
 			return count, true
+		}
+	case "section_count":
+		if count := len(toAnySlice(source["sections"])); count > 0 {
+			return count, true
+		}
+	case "match_count":
+		if value, ok := source["match_count"]; ok {
+			return value, true
+		}
+		if count := len(toAnySlice(source["matches"])); count > 0 {
+			return count, true
+		}
+	case "link_count":
+		if value, ok := source["link_count"]; ok {
+			return value, true
+		}
+		if count := len(toAnySlice(source["links"])); count > 0 {
+			return count, true
+		}
+	case "backlink_count":
+		if value, ok := source["backlink_count"]; ok {
+			return value, true
+		}
+		if count := len(toAnySlice(source["backlinks"])); count > 0 {
+			return count, true
+		}
+	case "concept_title":
+		if concept, ok := source["concept"].(map[string]any); ok {
+			if title := strings.TrimSpace(anyToString(concept["title"])); title != "" {
+				return title, true
+			}
 		}
 	case "source_count":
 		if count := len(toAnySlice(source["sources"])); count > 0 {
@@ -1545,10 +1587,16 @@ func activityChipLabel(field string) string {
 		return "duration"
 	case "files_changed":
 		return "files"
-	case "results_count", "result_count":
+	case "results_count", "result_count", "match_count":
 		return "results"
+	case "section_count":
+		return "sections"
 	case "source_count":
 		return "sources"
+	case "link_count":
+		return "links"
+	case "backlink_count":
+		return "backlinks"
 	case "agent_count":
 		return "agents"
 	default:

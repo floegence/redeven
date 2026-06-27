@@ -3235,6 +3235,19 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 
 		return websearch.Search(ctx, provider, key, websearch.SearchRequest{Query: query, Count: p.Count})
 
+	case "okf.index":
+		if meta == nil || !meta.CanRead {
+			return nil, errors.New("read permission denied")
+		}
+		var p struct {
+			Section string `json:"section"`
+		}
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return okf.Index(okf.IndexRequest{Section: p.Section})
+
 	case "okf.search":
 		if meta == nil || !meta.CanRead {
 			return nil, errors.New("read permission denied")
@@ -3242,6 +3255,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		var p struct {
 			Query      string   `json:"query"`
 			MaxResults int      `json:"max_results"`
+			Type       string   `json:"type"`
 			Tags       []string `json:"tags"`
 		}
 		b, _ := json.Marshal(args)
@@ -3255,7 +3269,29 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return okf.Search(okf.SearchRequest{
 			Query:      query,
 			MaxResults: p.MaxResults,
+			Type:       p.Type,
 			Tags:       p.Tags,
+		})
+
+	case "okf.open":
+		if meta == nil || !meta.CanRead {
+			return nil, errors.New("read permission denied")
+		}
+		var p struct {
+			ConceptID  string `json:"concept_id"`
+			Path       string `json:"path"`
+			BodyOffset int    `json:"body_offset"`
+			BodyLimit  int    `json:"body_limit"`
+		}
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return okf.Open(okf.OpenRequest{
+			ConceptID:  p.ConceptID,
+			Path:       p.Path,
+			BodyOffset: p.BodyOffset,
+			BodyLimit:  p.BodyLimit,
 		})
 
 	case "write_todos":

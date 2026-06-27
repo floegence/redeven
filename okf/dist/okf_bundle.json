@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "okf_version": "0.1",
   "root_index": {
     "path": "index.md",
@@ -7,12 +7,485 @@
     "frontmatter": {
       "okf_version": "0.1"
     },
-    "body": "# Redeven OKF Bundle\n\nThis top-level OKF corpus is the maintained repository knowledge surface for the current Redeven implementation. It is authored from current source code, generated contracts, and release automation rather than from removed product documents.\n\n## Architecture\n\n- [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.\n- [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.\n- [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.\n- [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.\n- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.\n\n## Security\n\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.\n\n## Desktop\n\n- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Desktop-managed Local UI launches, runtime-control, and startup probing.\n\n## Gateway\n\n- [Gateway service](gateway/gateway-service.md) - Standalone Gateway binary, managed service lifecycle, and Desktop bridge.\n\n## Code\n\n- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.\n\n## UI\n\n- [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.\n- [Flower turn launcher](ui/flower-turn-launcher.md) - Contextual first-turn Ask Flower launchers and host handoff responsibilities.\n- [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.\n\n## AI\n\n- [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.\n- [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.\n- [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.\n- [OKF search tool](ai/okf-search-tool.md) - Read-only repository knowledge lookup over the embedded OKF bundle.\n\n## Protocol\n\n- [Gateway v1 protocol](protocol/gateway-v1-protocol.md) - OpenAPI source contract for Gateway HTTP JSON endpoints, auth, envelopes, and Desktop behavior boundaries.\n- [RCPP v2 provider API](protocol/rcpp-v2-provider-api.md) - Provider discovery, auth, environment catalog, health, bootstrap, and launch data.\n\n## Release\n\n- [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.\n- [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle."
+    "body": "# Redeven OKF Bundle\n\nThis top-level OKF corpus is the maintained repository knowledge surface for the current Redeven implementation. It is authored from current source code, generated contracts, and release automation rather than from removed product documents.\n\n## Architecture\n\n- [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.\n- [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.\n- [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.\n- [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.\n- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.\n\n## Security\n\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.\n\n## Desktop\n\n- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Desktop-managed Local UI launches, runtime-control, and startup probing.\n\n## Gateway\n\n- [Gateway service](gateway/gateway-service.md) - Standalone Gateway binary, managed service lifecycle, and Desktop bridge.\n\n## Code\n\n- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.\n\n## UI\n\n- [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.\n- [Flower turn launcher](ui/flower-turn-launcher.md) - Contextual first-turn Ask Flower launchers and host handoff responsibilities.\n- [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.\n\n## AI\n\n- [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.\n- [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.\n- [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.\n- [OKF tool suite](ai/okf-search-tool.md) - Read-only repository knowledge access through index browsing, short search, and concept opening.\n\n## Protocol\n\n- [Gateway v1 protocol](protocol/gateway-v1-protocol.md) - OpenAPI source contract for Gateway HTTP JSON endpoints, auth, envelopes, and Desktop behavior boundaries.\n- [RCPP v2 provider API](protocol/rcpp-v2-provider-api.md) - Provider discovery, auth, environment catalog, health, bootstrap, and launch data.\n\n## Release\n\n- [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.\n- [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle.",
+    "sections": [
+      {
+        "title": "Architecture",
+        "slug": "architecture",
+        "entries": [
+          {
+            "concept_id": "architecture.runtime-startup-presentation",
+            "path": "architecture/runtime-startup-presentation.md",
+            "type": "Runtime Contract",
+            "title": "Runtime startup presentation",
+            "description": "redeven run startup output is structured events rendered by rich, plain, or machine presentation modes.",
+            "tags": [
+              "architecture",
+              "desktop",
+              "runtime",
+              "startup"
+            ]
+          },
+          {
+            "concept_id": "architecture.local-ui-surface",
+            "path": "architecture/local-ui-surface.md",
+            "type": "Runtime Contract",
+            "title": "Local UI surface",
+            "description": "Local UI serves browser entrypoints, access-gated APIs, direct sessions, Env App proxying, codespaces, and port forwards.",
+            "tags": [
+              "architecture",
+              "local-ui",
+              "runtime",
+              "security"
+            ]
+          },
+          {
+            "concept_id": "architecture.runtime-service-snapshot",
+            "path": "architecture/runtime-service-snapshot.md",
+            "type": "Runtime Contract",
+            "title": "Runtime Service snapshot",
+            "description": "Runtime Service snapshots describe compatibility, open readiness, workload, capabilities, and Desktop/runtime bindings.",
+            "tags": [
+              "architecture",
+              "compatibility",
+              "desktop",
+              "runtime-service"
+            ]
+          },
+          {
+            "concept_id": "architecture.runtime-session-permission-gates",
+            "path": "architecture/runtime-session-permission-gates.md",
+            "type": "Runtime Contract",
+            "title": "Runtime session permission gates",
+            "description": "Redeven validates session metadata and clamps granted permissions before opening runtime sessions.",
+            "tags": [
+              "architecture",
+              "security",
+              "session-security"
+            ]
+          },
+          {
+            "concept_id": "architecture.runtime-transport-dependencies",
+            "path": "architecture/runtime-transport-dependencies.md",
+            "type": "Runtime Contract",
+            "title": "Runtime transport dependencies",
+            "description": "Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.",
+            "tags": [
+              "architecture",
+              "dependencies",
+              "terminal"
+            ]
+          },
+          {
+            "concept_id": "architecture.env-app-upstream-web-dependencies",
+            "path": "architecture/env-app-upstream-web-dependencies.md",
+            "type": "Frontend Contract",
+            "title": "Env App upstream web dependencies",
+            "description": "Env App composes published floe-webapp, Floeterm, and Flowersec web packages.",
+            "tags": [
+              "architecture",
+              "dependencies",
+              "protocol",
+              "ui"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Security",
+        "slug": "security",
+        "entries": [
+          {
+            "concept_id": "security.permission-policy-and-filesystem-scope",
+            "path": "security/permission-policy-and-filesystem-scope.md",
+            "type": "Security Contract",
+            "title": "Permission policy and filesystem scope",
+            "description": "Runtime permissions are clamped by local policy and file features are scoped by directory root policy.",
+            "tags": [
+              "filesystem",
+              "permissions",
+              "runtime",
+              "security"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Desktop",
+        "slug": "desktop",
+        "entries": [
+          {
+            "concept_id": "desktop.desktop-runtime-bridge",
+            "path": "desktop/desktop-runtime-bridge.md",
+            "type": "Desktop Contract",
+            "title": "Desktop runtime bridge",
+            "description": "Desktop starts and probes Desktop-managed runtimes through machine startup reports, Local UI health, and runtime-control.",
+            "tags": [
+              "compatibility",
+              "desktop",
+              "local-ui",
+              "runtime-control"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Gateway",
+        "slug": "gateway",
+        "entries": [
+          {
+            "concept_id": "gateway.gateway-service",
+            "path": "gateway/gateway-service.md",
+            "type": "Gateway Contract",
+            "title": "Gateway service",
+            "description": "redeven-gateway is a separate Gateway service binary with managed lifecycle and Desktop bridge support.",
+            "tags": [
+              "desktop",
+              "gateway",
+              "release",
+              "runtime"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Code",
+        "slug": "code",
+        "entries": [
+          {
+            "concept_id": "code.browser-editor-runtime",
+            "path": "code/browser-editor-runtime.md",
+            "type": "Runtime Contract",
+            "title": "Browser Editor runtime",
+            "description": "Code App serves Browser Editor codespaces through the local app server and managed code workspace engine APIs.",
+            "tags": [
+              "browser-editor",
+              "code-app",
+              "desktop",
+              "local-ui"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "UI",
+        "slug": "ui",
+        "entries": [
+          {
+            "concept_id": "ui.workbench-interaction-contracts",
+            "path": "ui/workbench-interaction-contracts.md",
+            "type": "UI Contract",
+            "title": "Workbench interaction contracts",
+            "description": "Workbench wheel, text selection, and action surfaces use explicit marker props to avoid accidental canvas ownership.",
+            "tags": [
+              "accessibility",
+              "interaction",
+              "ui",
+              "workbench"
+            ]
+          },
+          {
+            "concept_id": "ui.flower-turn-launcher",
+            "path": "ui/flower-turn-launcher.md",
+            "type": "UI Contract",
+            "title": "Flower turn launcher",
+            "description": "Flower first-turn launchers collect scoped context and send one turn before handing off to the owning Flower surface.",
+            "tags": [
+              "desktop",
+              "env-app",
+              "flower",
+              "interaction",
+              "ui"
+            ]
+          },
+          {
+            "concept_id": "ui.flower-live-timeline",
+            "path": "ui/flower-live-timeline.md",
+            "type": "UI Contract",
+            "title": "Flower live timeline",
+            "description": "Flower renders Redeven's canonical thread timeline from live bootstrap and timeline replacement events.",
+            "tags": [
+              "ai",
+              "flower",
+              "live",
+              "ui"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "AI",
+        "slug": "ai",
+        "entries": [
+          {
+            "concept_id": "ai.ai-tool-runtime",
+            "path": "ai/ai-tool-runtime.md",
+            "type": "AI Tool Contract",
+            "title": "AI tool runtime",
+            "description": "Redeven AI builtin tools are registered with permission semantics, presentation metadata, provenance, and runtime execution dispatch.",
+            "tags": [
+              "ai",
+              "permissions",
+              "tools",
+              "ui"
+            ]
+          },
+          {
+            "concept_id": "ai.flower-context-action-records",
+            "path": "ai/flower-context-action-records.md",
+            "type": "AI Context Contract",
+            "title": "Flower context action records",
+            "description": "Ask Flower context actions are validated product records and UI context badges, not a Redeven-owned provider history source.",
+            "tags": [
+              "ai",
+              "context",
+              "flower"
+            ]
+          },
+          {
+            "concept_id": "ai.redeven-env-operations",
+            "path": "ai/redeven-env-operations.md",
+            "type": "AI Operation Contract",
+            "title": "Redeven environment operations",
+            "description": "redeven env and redeven targets exec are the product boundaries for Flower and automation environment lifecycle and target diagnostic requests.",
+            "tags": [
+              "ai",
+              "cli",
+              "desktop",
+              "flower",
+              "runtime"
+            ]
+          },
+          {
+            "concept_id": "ai.okf-bundle-lifecycle",
+            "path": "ai/okf-bundle-lifecycle.md",
+            "type": "OKF Lifecycle",
+            "title": "OKF bundle lifecycle",
+            "description": "Redeven builds a deterministic embedded OKF bundle from source Markdown concepts.",
+            "tags": [
+              "okf",
+              "provenance",
+              "release"
+            ]
+          },
+          {
+            "concept_id": "ai.okf-search-tool",
+            "path": "ai/okf-search-tool.md",
+            "type": "AI Tool Contract",
+            "title": "OKF tool suite",
+            "description": "OKF tools expose read-only Redeven repository knowledge through index browsing, short search, and concept opening.",
+            "tags": [
+              "ai",
+              "okf",
+              "ui"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Protocol",
+        "slug": "protocol",
+        "entries": [
+          {
+            "concept_id": "protocol.gateway-v1-protocol",
+            "path": "protocol/gateway-v1-protocol.md",
+            "type": "Protocol Contract",
+            "title": "Gateway v1 protocol",
+            "description": "Gateway v1 uses OpenAPI as the machine-readable HTTP JSON wire contract for /gateway/v1/*.",
+            "tags": [
+              "desktop",
+              "gateway",
+              "openapi",
+              "protocol"
+            ]
+          },
+          {
+            "concept_id": "protocol.rcpp-v2-provider-api",
+            "path": "protocol/rcpp-v2-provider-api.md",
+            "type": "Protocol Contract",
+            "title": "RCPP v2 provider API",
+            "description": "The provider protocol OpenAPI contract covers discovery, OAuth, environment catalog, runtime health, bootstrap, and launch data.",
+            "tags": [
+              "desktop",
+              "openapi",
+              "protocol",
+              "provider"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Release",
+        "slug": "release",
+        "entries": [
+          {
+            "concept_id": "release.ci-and-release-gates",
+            "path": "release/ci-and-release-gates.md",
+            "type": "Release Contract",
+            "title": "CI and release gates",
+            "description": "Redeven release confidence comes from shell checks, OKF validation, UI checks, Runtime Service compatibility, assets, Go tests, and lint.",
+            "tags": [
+              "ci",
+              "okf",
+              "quality",
+              "release"
+            ]
+          },
+          {
+            "concept_id": "release.okf-release-assets",
+            "path": "release/okf-release-assets.md",
+            "type": "Release Contract",
+            "title": "OKF release assets",
+            "description": "Release workflow publishes OKF verification assets alongside CLI and desktop artifacts.",
+            "tags": [
+              "okf",
+              "release",
+              "security",
+              "supply-chain"
+            ]
+          }
+        ]
+      }
+    ],
+    "links": [
+      {
+        "label": "AI tool runtime",
+        "path": "ai/ai-tool-runtime.md",
+        "concept_id": "ai.ai-tool-runtime",
+        "title": "AI tool runtime"
+      },
+      {
+        "label": "Flower context action records",
+        "path": "ai/flower-context-action-records.md",
+        "concept_id": "ai.flower-context-action-records",
+        "title": "Flower context action records"
+      },
+      {
+        "label": "OKF bundle lifecycle",
+        "path": "ai/okf-bundle-lifecycle.md",
+        "concept_id": "ai.okf-bundle-lifecycle",
+        "title": "OKF bundle lifecycle"
+      },
+      {
+        "label": "OKF tool suite",
+        "path": "ai/okf-search-tool.md",
+        "concept_id": "ai.okf-search-tool",
+        "title": "OKF tool suite"
+      },
+      {
+        "label": "Redeven environment operations",
+        "path": "ai/redeven-env-operations.md",
+        "concept_id": "ai.redeven-env-operations",
+        "title": "Redeven environment operations"
+      },
+      {
+        "label": "Env App upstream web dependencies",
+        "path": "architecture/env-app-upstream-web-dependencies.md",
+        "concept_id": "architecture.env-app-upstream-web-dependencies",
+        "title": "Env App upstream web dependencies"
+      },
+      {
+        "label": "Local UI surface",
+        "path": "architecture/local-ui-surface.md",
+        "concept_id": "architecture.local-ui-surface",
+        "title": "Local UI surface"
+      },
+      {
+        "label": "Runtime Service snapshot",
+        "path": "architecture/runtime-service-snapshot.md",
+        "concept_id": "architecture.runtime-service-snapshot",
+        "title": "Runtime Service snapshot"
+      },
+      {
+        "label": "Runtime session permission gates",
+        "path": "architecture/runtime-session-permission-gates.md",
+        "concept_id": "architecture.runtime-session-permission-gates",
+        "title": "Runtime session permission gates"
+      },
+      {
+        "label": "Runtime startup presentation",
+        "path": "architecture/runtime-startup-presentation.md",
+        "concept_id": "architecture.runtime-startup-presentation",
+        "title": "Runtime startup presentation"
+      },
+      {
+        "label": "Runtime transport dependencies",
+        "path": "architecture/runtime-transport-dependencies.md",
+        "concept_id": "architecture.runtime-transport-dependencies",
+        "title": "Runtime transport dependencies"
+      },
+      {
+        "label": "Browser Editor runtime",
+        "path": "code/browser-editor-runtime.md",
+        "concept_id": "code.browser-editor-runtime",
+        "title": "Browser Editor runtime"
+      },
+      {
+        "label": "Desktop runtime bridge",
+        "path": "desktop/desktop-runtime-bridge.md",
+        "concept_id": "desktop.desktop-runtime-bridge",
+        "title": "Desktop runtime bridge"
+      },
+      {
+        "label": "Gateway service",
+        "path": "gateway/gateway-service.md",
+        "concept_id": "gateway.gateway-service",
+        "title": "Gateway service"
+      },
+      {
+        "label": "Gateway v1 protocol",
+        "path": "protocol/gateway-v1-protocol.md",
+        "concept_id": "protocol.gateway-v1-protocol",
+        "title": "Gateway v1 protocol"
+      },
+      {
+        "label": "RCPP v2 provider API",
+        "path": "protocol/rcpp-v2-provider-api.md",
+        "concept_id": "protocol.rcpp-v2-provider-api",
+        "title": "RCPP v2 provider API"
+      },
+      {
+        "label": "CI and release gates",
+        "path": "release/ci-and-release-gates.md",
+        "concept_id": "release.ci-and-release-gates",
+        "title": "CI and release gates"
+      },
+      {
+        "label": "OKF release assets",
+        "path": "release/okf-release-assets.md",
+        "concept_id": "release.okf-release-assets",
+        "title": "OKF release assets"
+      },
+      {
+        "label": "Permission policy and filesystem scope",
+        "path": "security/permission-policy-and-filesystem-scope.md",
+        "concept_id": "security.permission-policy-and-filesystem-scope",
+        "title": "Permission policy and filesystem scope"
+      },
+      {
+        "label": "Flower live timeline",
+        "path": "ui/flower-live-timeline.md",
+        "concept_id": "ui.flower-live-timeline",
+        "title": "Flower live timeline"
+      },
+      {
+        "label": "Flower turn launcher",
+        "path": "ui/flower-turn-launcher.md",
+        "concept_id": "ui.flower-turn-launcher",
+        "title": "Flower turn launcher"
+      },
+      {
+        "label": "Workbench interaction contracts",
+        "path": "ui/workbench-interaction-contracts.md",
+        "concept_id": "ui.workbench-interaction-contracts",
+        "title": "Workbench interaction contracts"
+      }
+    ]
   },
   "concepts": [
     {
       "path": "ai/ai-tool-runtime.md",
-      "concept_id": "ai/ai-tool-runtime",
+      "concept_id": "ai.ai-tool-runtime",
       "type": "AI Tool Contract",
       "title": "AI tool runtime",
       "description": "Redeven AI builtin tools are registered with permission semantics, presentation metadata, provenance, and runtime execution dispatch.",
@@ -35,12 +508,19 @@
         "title": "AI tool runtime",
         "type": "AI Tool Contract"
       },
-      "body": "Redeven's AI runtime treats tools as typed runtime capabilities. Builtins declare mutation and approval requirements, presentation metadata, grouping behavior, and renderer hints before execution dispatch reaches the runtime implementation. Floret owns the provider loop, turn execution, loop progress guards, provider-visible context lifecycle, tool dispatch lifecycle, permission/resource/approval lifecycle, streaming observation, core control-signal projection, opaque provider state lifecycle, activity observation, and engine metrics. Redeven owns product threads, persisted messages, concrete tool implementations, product policy decisions, approval UI, provider credentials, provider/profile selection, opaque provider-state persistence, and Flower timeline projection.\n\n# Mechanism\n\nThe builtin registry includes readonly file/search/fetch helpers, standard file mutation, patch, terminal, web search, OKF search, todo, interaction, skill, and subagent tools. Flower's product permission is `permission_type`, with `readonly`, `approval_required`, and `full_access` as the only current permission values. `read_file`, `read_files`, `rgrep`, `find`, and `web_fetch` are readonly-exclusive tools for the `readonly` surface; standard shell and mutation tools are not visible there. `approval_required` and `full_access` expose the standard host tool surface instead of those readonly-exclusive helpers. `okf.search` is read-only Redeven repository knowledge lookup; web search is non-mutating product behavior but an open-world network effect in Floret's engine contract. `ToolPresentationSpec` is the single product display source for renderer, grouping, operation, label fields, fallback labels, compact call payload fields, result payload fields, and activity chip fields. Redeven projects builtins into Floret tool definitions with effects, read-only/destructive/open-world flags, resource extractors, static permission defaults, dynamic `PermissionFor`, and activity projection. Tool execution normalizes success summaries, errors, truncation, provenance, and builtin dispatch results so the chat activity timeline can render compact tool activity instead of raw low-level payloads.\n\nFloret owns the permission lifecycle. Redeven decides product policy from the frozen run permission type and tool metadata, then returns allow/ask/deny through the Floret `Approver` before tool dispatch. Each run freezes a `PermissionSnapshot` that supplies the prompt capability list, visible tool names, Floret registry names, per-tool approval decision, and registry/schema/presentation hashes. Runtime handler entrypoints also consult that snapshot, so a hidden or approval-required tool cannot be executed through direct local dispatch without the Floret authorization context. In `approval_required`, shell and mutating host actions ask before running; in `full_access`, per-tool approval is skipped while schema validation, resource extraction, target routing, timeouts, output limits, audit records, and Floret activity projection still apply. Command classification remains useful for audit and presentation, but it is not the source of permission decisions. `subagents` is a delegation-control tool visible in all three permission types, and its own `spawn`, `send_input`, `wait`, `list`, `inspect`, `close`, and `close_all` invocations do not require approval. That allow decision covers only the delegation control action itself; child runs receive a derived tool surface from the parent permission snapshot, and child tool invocations still flow through Floret permission/resource/approval lifecycle. A child approval-required action can delegate the ask back through the parent approver path; direct child user input remains disabled. Tool handlers execute already-approved domain actions and write audit/query records such as `ai_tool_calls`, run events, and execution spans; those records support diagnostics and tool-detail lookup, not Flower UI activity generation.\n\nReadonly-exclusive helpers are not general convenience aliases. `read_file`, `read_files`, `rgrep`, `find`, and `web_fetch` are visible only in `readonly`; `approval_required` and `full_access` use the standard host surface instead. `web_fetch` is a host-provided Redeven tool with SSRF protections, manual redirect validation, resolver and dial-time public IP checks, proxy suppression, body and MIME limits, and public-network-only semantics. It is not a Floret builtin and must not appear as a Floret core tool or a capability available to non-readonly permission types.\n\nProvider adapters are model gateways, not Flower renderers. `floretProviderAdapter` maps provider stream bytes into Floret `ModelEvent` values. Assistant text, reasoning deltas, and model-generated tool-call stream observations are emitted as provider-neutral Floret model events before Redeven projects them into Flower live state. `ToolCallStream` identifies a tool call while the model is still generating it; final executable tool calls remain the separate `ToolCalls` batch. Redeven applies assistant text, reasoning deltas, tool-call stream observations, retry/done/abort markers, and source observations only from Floret runtime events in the event sink. Provider continuation persistence reads the complete opaque provider state from the Floret turn result, stores it as a state JSON envelope including `Attributes`, and only matches provider id, model, base URL, and state kind before passing it back to Floret.\n\nContext pressure and compaction presentation come from structured Floret runtime observations. Redeven maps Floret context status into `context.usage.updated` and maps Floret compaction lifecycle events into `context.compaction.updated`; those product events are persisted as run events and projected into Flower live materialized state. Floret compaction debug observations are persisted separately as `floret.context.compact.debug` context run events with safe correlation, phase, token-pressure, validation, duration, provider-state-kind, error fields, and `next_action`. These debug rows are diagnostic records and never create timeline decorations or chat rows. Redeven owns only product control entrypoints, thread serialization, sanitized live projection, read-state activity, and opaque provider-state persistence for context lifecycle. Manual `/compact` requests enter Redeven only as Flower UI/RPC control signals and are forwarded into Floret `Host` compaction lifecycle APIs. Active manual compaction keeps the current Floret turn running, and `CompactionEvent(complete)` never implies a Redeven run or thread terminal state. Idle manual compaction is a Flower operation rather than an assistant run: the actor publishes the running divider and returns, a background worker calls Floret `Host.CompactThread`, and user turns submitted before the operation clears are held as queued follow-ups without transcript rows. Redeven persists only the opaque provider-state envelope returned by Floret after validating that the product thread boundary has not changed. Gate events for registered, cancel requested, commit attempted, commit rejected, and commit persisted phases make late commits, thread cancellation, and queued-turn drain diagnosable without treating diagnostics as Flower timeline rows.\n\nRedeven accepts a user turn only at one durable boundary. The service prepares the run object and user message payload before storage, then threadstore atomically writes the user transcript message, `ai_runs` row, `conversation_turns` anchor, thread run state, structured user inputs, secret answers, upload references, and optional source follow-up consumption. If storage fails, the reserved active run is released and no orphan transcript message is left behind. Conversation turns and structured user inputs remain product timeline and UI/audit records; they are not a Redeven-owned provider history source. Floret owns provider-visible history and context lifecycle through its thread store and opaque provider-state envelope.\n\nFlower UI tool activity comes from Floret `ActivityTimeline` projection. Redeven can key detail lookups from timeline item ids, but it must not synthesize chat activity rows from `ai_tool_calls`, `tool.call`, `tool.result`, execution spans, handler outcomes, or provider-adapter side effects.\n\nFlower subagents use the published Floret `Host` lifecycle rather than a Redeven-owned goroutine task manager. Redeven caches one Floret subagent runtime per parent Flower thread, so child controllers, the Floret host, and the private SQLite store outlive an individual parent turn. Parent run cancellation or natural turn completion cancels only the parent sampling/tool loop; explicit `subagents(close)` or `subagents(close_all)` is the normal lifecycle path that stops children without deleting their thread records, and parent thread deletion closes known children, releases the cached host, and deletes its read-only child projection threads. `Service.Close` releases local host resources during process shutdown. The `subagents` builtin validates `spawn`, `send_input`, `wait`, `list`, `inspect`, `close`, and `close_all`, then forwards to Floret `SpawnSubAgent`, `SendSubAgentInput`, `WaitSubAgents`, `ListSubAgents`, and `CloseSubAgent`. `wait` defaults to five minutes and caps requested waits at twenty minutes, while child runs pass a twenty-minute Floret subagent run timeout. The child `ThreadID` is the canonical subagent identity and is also returned as `subagent_id` for model-facing compatibility, but child execution uses a distinct child `RunID`; delegated approval refs reject missing child run ids, child-thread aliases, and parent-run aliases. `spawn` persists a provisional child permission snapshot keyed by the real Floret `subagents` tool call id, calls `SpawnSubAgent`, and finalizes the snapshot only after host spawn succeeds. Later `send_input`, child tool execution, and child approval restore read the finalized snapshot instead of sampling the current parent permission. Task names and paths are labels, not lifecycle targets, and the model cannot supply a child `thread_id` or raw `fork_mode`. The parent model chooses `context_mode` on `spawn`: `mission_only` maps to `SubAgentForkNone` and `full_history` maps to `SubAgentForkFullPath`. Redeven stores that mode in child projection metadata so later wait/detail reads use the child’s real context contract instead of a wait-call argument. The thread-scoped child host registers the parent thread's delegated tool surface for the current permission snapshot, removes parent-only controls, and disables hidden Floret control surfaces. If the parent run's model/tool/session configuration changes, the runtime rebuilds the child host only when no child is active; active children continue on the existing host generation. Child tools execute with the Floret invocation `RunID`, `ThreadID`, and `TurnID`, so tool-call audit records and execution spans belong to the child thread instead of the parent. Child threads run with a Flower child prompt that forbids direct user input, states the visible tool list and context mode, and requires a complete but focused final handoff report.\n\nDelegated approval is thread-owned product state, not subagent detail state. Redeven stores delegated approval requests with parent thread, parent user, parent run/turn, child thread/run/turn, child tool call, approval id, ref hash, request fingerprint, delivery state, version, and surface epoch. User decisions submit through the parent thread with a delegated ref; the store compares owner, ref hash, action id, version, surface epoch, and idempotency key before resolving. Idempotent replay is accepted only when the key matches the same action, same ref hash, and same decision. Resolved delivery uses compare-and-swap; if delivery acknowledgement cannot be confirmed, Redeven marks the record as acknowledgement-unknown instead of emitting a false delivered state. The parent Flower waiting projection is the only approval surface; subagent detail is a read-only mirror or locator.\n\nSubagent data is intentionally split into model-facing summaries, parent timeline presentation, and human detail. Model-facing `wait` results return bounded status `items` with child identity, status, context mode, timeout facts, and `detail_ref`; they do not include child transcripts, tool calls, raw output, commands, stdout, stderr, `last_message`, `waiting_prompt`, or `result_digest`. Completed waits include `final_handoff_report`, which carries each child’s final handoff text under a token budget without process detail. Timed-out waits include `progress_summary`, which carries current status, waiting blockers when relevant, and suggested parent actions instead of execution logs. List and inspect remain bounded monitoring views with detail refs. Parent Flower timeline state still comes from Floret `ActivityTimeline` payloads for `subagents`, and the shared UI projection accepts only the current `snapshot`, `subagent`, `item`, and `items` envelope shapes. The parent thread header exposes a Sub Agents dropdown with active and settled counts; selecting a child opens a parent-scoped detail overlay and keeps the selected Flower thread unchanged. The overlay reads `GET /api/ai/threads/{parent}/subagents/{child}/detail`, which calls Floret `ReadSubAgentDetail` with `IncludeRaw=false` and renders user/assistant messages, tool calls, tool results, approvals, turn markers, compactions, errors, and custom rows from the child execution timeline. If a child detail response has only summary data, the UI projects that summary into the same read-only message transcript so the overlay is not blank. Child projection threads still carry structured ownership metadata with `owner_kind=subagent_projection` and `parent_thread_id` for read-only internal projection and cleanup, but `threadstore.ListThreads` excludes them from normal thread-list/sidebar results. The old transcript `type:\"subagent\"` block chain and legacy `snapshots`, `snapshots_by_id`, or free-form `subagents` collection payloads are not supported display sources.\n\nControl signal projection is separate from Redeven waiting UI persistence. Floret signal projection emits engine signal facts for `ask_user` and `task_complete`; Flower `RequestUserInputPrompt` objects are created only by Redeven's waiting projection and persistence layer.\n\n`terminal.exec` is the local AI runtime shell. Its schema describes local execution, and successful terminal results include `execution_location=local_runtime` plus the resolved local working directory. Thread target context, Welcome environment context, or a target-shaped id does not change where this builtin runs.\n\nWhen a thread is configured for explicit target routing, the runtime forwards target-scoped builtin calls through `TargetToolExecutor`. The target executor receives a `TargetToolCall` containing `target_id`, `tool_name`, sanitized arguments, and required capabilities. The run layer returns a result payload that preserves or injects `target_id` and `execution_location`, so target-routed tool results cannot lose provenance before they reach the model or activity timeline.\n\nFlower execution uses the published Floret runtime package through `runFloretHostedTurn` and `flruntime.Host`. Redeven passes the current user input, permission-filtered tool registry, control signals, provider adapter, opaque previous provider state, and loop limits to Floret; it does not pass a preassembled provider-visible history. Floret `Metrics.Steps` is consumed as telemetry for result projection and activity accounting, not as a product configuration or request field. `ask_user` and `task_complete` use Floret core control definitions and provider-safe projection.\n\n# Boundaries\n\nTool names are not aliases for deleted knowledge-era tools. Current repository knowledge lookup is `okf.search` only. OKF is an embedded project corpus and does not access the internet; external, current, recent, news, third-party, market, pricing, and general web facts must use direct authoritative URLs or web search discovery instead.\n\nTarget provenance is part of the tool contract, not a UI hint. Flower must not infer remote execution from thread context alone; it can only claim remote or target execution when a tool result or Redeven product command returns explicit execution provenance.\n\nRedeven must consume published Floret releases. Repository builds, tests, Desktop runs, and release validation must not depend on a sibling checkout, Go workspace, local replace directive, or package-manager local link. The current runtime boundary depends on `github.com/floegence/floret v0.3.39`, including Floret's `Host` turn and compaction facade, structured context observations, cancellation-aware manual compaction lifecycle events, manual compaction admission no-op observations for short or low-savings context, opaque provider state, provider request budget validation, multi-tool batch boundary preservation during compaction, and parent-scoped subagent detail API. Redeven must not import Floret `internal/` packages or depend on provider-visible transcript, summary, range-selection, checkpoint payload, or engine policy data.\n\n# Citations\n\n[1] redeven:internal/ai/tools/registry.go:86 - Builtin tool definitions declare mutation, approval, and presentation specs.\n[2] redeven:internal/ai/tools/registry.go:157 - `okf.search` is registered as a read-only structured tool activity.\n[3] redeven:internal/ai/tools/types.go:126 - `ToolPresentationSpec` carries renderer, operation, label, fallback, compact payload, result payload, and activity chip fields.\n[4] redeven:internal/ai/builtin_tool_handlers.go:18 - Tool success summaries are normalized by builtin name or semantic activity category.\n[5] redeven:internal/ai/builtin_tool_handlers.go:632 - `okf.search` is described as embedded Redeven repository knowledge, not internet search.\n[6] redeven:internal/ai/floret_tools.go:275 - Redeven projects builtin tools into Floret definitions with effects, flags, permissions, and activity projection.\n[7] redeven:internal/ai/floret_tools.go:313 - Floret permission defaults and dynamic invocation permissions are derived from Redeven product tool policy.\n[8] redeven:internal/ai/prompt_builder.go:322 - Prompt construction routes information sources between workspace tools, OKF, and external web discovery.\n[9] redeven:internal/ai/tools/registry.go:111 - Unknown tool names do not resolve to builtin definitions.\n[10] redeven:internal/ai/target_tool_policy.go:49 - Target tool calls and results carry target id and execution location fields.\n[11] redeven:internal/ai/run.go:2833 - Explicit target policy forwards eligible tools through the target executor.\n[12] redeven:internal/ai/run.go:3220 - Local `terminal.exec` returns local runtime execution provenance.\n[13] redeven:internal/ai/floret_approval.go:14 - Redeven product policy is returned through the Floret tool approver.\n[14] redeven:internal/ai/floret_provider.go:55 - Provider stream deltas are sent to Floret as model events rather than mutating Flower state directly.\n[15] redeven:internal/ai/floret_events.go:42 - Flower applies streaming and source observations from Floret runtime events.\n[16] redeven:internal/ai/floret_events.go:124 - Floret compaction debug observations are persisted as diagnostic context run events.\n[17] redeven:internal/ai/floret_events.go:167 - Structured context status observations are persisted and streamed as `context.usage.updated`.\n[18] redeven:internal/ai/floret_events.go:183 - Structured compaction observations are persisted and streamed as `context.compaction.updated`.\n[19] redeven:internal/ai/compact_thread_context.go:812 - Idle manual compaction calls Floret `Host.CompactThread` instead of compacting Redeven prompt history.\n[20] redeven:internal/ai/floret_runtime.go:181 - Flower execution runs through Floret hosted turns with a Floret approver and event sink.\n[21] redeven:internal/ai/compact_thread_context.go:17 - Manual context compaction is exposed as a serialized thread action.\n[22] redeven:internal/ai/run.go:548 - Active runs implement Floret's manual compaction source.\n[23] redeven:internal/ai/compact_thread_context.go:833 - Idle compaction persists only the opaque provider continuation after a thread boundary check.\n[24] redeven:internal/ai/model_gateway.go:37 - Redeven's remaining hard execution protection is the tool-call count constant.\n[25] redeven:internal/ai/floret_runtime.go:193 - Redeven passes `MaxToolCalls` into the Floret turn limits.\n[26] redeven:internal/ai/floret_runtime.go:204 - Provider continuation candidates are built from the Floret turn result provider state.\n[27] redeven:internal/ai/provider_continuation.go:30 - Previous provider state is loaded as the full Floret model state envelope after provider/profile matching.\n[28] redeven:internal/ai/floret_control.go:36 - Floret core control signals are projected only for `task_complete` and `ask_user`.\n[29] redeven:go.mod:9 - Redeven depends on the published Floret module version.\n[30] redeven:internal/ai/service.go:394 - The service caches a thread-scoped Floret subagent runtime and attaches each new parent run to it.\n[31] redeven:internal/ai/subagents_floret.go:129 - The Redeven subagent runtime dispatches validated actions to the Floret host lifecycle.\n[32] redeven:internal/ai/subagents_floret.go:363 - Subagent hosts reuse the resolved Flower model gateway, Floret tools, approver, event sink, private SQLite store, and twenty-minute run timeout.\n[33] redeven:internal/ai/subagents_floret.go:587 - `spawn` calls Floret `SpawnSubAgent` and returns child `thread_id` as the lifecycle identity.\n[34] redeven:internal/ai/subagents_floret.go:656 - `wait` calls Floret `WaitSubAgents` with bounded timeout semantics.\n[35] redeven:internal/ai/tools/registry.go:391 - Subagent invocation policy treats delegation-control actions as non-approval host actions.\n[36] redeven:internal/ai/subagents_floret.go:791 - Model-facing subagent results are reduced to bounded summary items.\n[37] redeven:internal/ai/subagents_floret.go:1315 - Flower subagent detail reads through the parent-scoped Floret detail API with raw content disabled.\n[38] redeven:internal/codeapp/appserver/server.go:3737 - Appserver exposes the parent-scoped subagent detail route.\n[39] redeven:internal/flower_ui/src/flowerSubagentProjection.ts:130 - The shared UI projection derives subagent dropdown items only from current activity payload shapes.\n[40] redeven:internal/flower_ui/src/FlowerSurface.tsx:1300 - Opening subagent detail loads the child detail without selecting the child thread.\n[41] redeven:internal/flower_ui/src/FlowerSurface.tsx:3480 - The selected parent thread header renders the Sub Agents dropdown.\n[42] redeven:internal/flower_ui/src/FlowerSurface.tsx:3342 - Subagent execution detail renders inside the parent-thread overlay.\n[43] redeven:internal/ai/threadstore/store.go:357 - Normal thread-list queries exclude `subagent_projection` rows.\n[44] redeven:internal/ai/floret_tools.go:135 - Floret tool invocations derive a child execution run from the invocation run, thread, and turn ids.\n[45] redeven:internal/ai/floret_approval.go:17 - Child approval-required tool asks can be delegated through the parent approver when delegated approval is available.\n[46] redeven:internal/ai/subagents_floret.go:3301 - Flower child prompts forbid nested subagents and direct user input while requesting a complete final handoff.\n[47] redeven:internal/ai/subagent_lifecycle_test.go:29 - Parent run cancellation is tested to avoid releasing the durable subagent runtime.\n[48] redeven:internal/ai/threads.go:173 - Flower subagent projection threads are rejected by direct thread mutation paths.\n[49] redeven:internal/ai/threads.go:895 - Parent thread deletion closes its cached Floret subagent runtime and deletes child projection threads.\n[50] redeven:internal/ai/floret_runtime.go:101 - Hosted turns freeze a permission snapshot before building the Floret tool registry.\n[51] redeven:internal/ai/tool_executor.go:91 - Direct local tool execution freezes the same permission snapshot before dispatch.\n[52] redeven:internal/ai/run.go:3057 - Legacy `file.read` direct dispatch is guarded as unavailable outside readonly permission.\n[53] redeven:internal/ai/run_extensions.go:82 - Subagent tool dispatch passes the invoking Floret tool call id into the subagent runtime.\n[54] redeven:internal/ai/subagents_floret.go:771 - Subagent spawn persists a provisional child permission snapshot before calling the Floret host.\n[55] redeven:internal/ai/subagents_floret.go:795 - Subagent spawn finalizes the child snapshot only after host spawn succeeds.\n[56] redeven:internal/ai/threadstore/permission_snapshot.go:149 - Threadstore finalizes child permission snapshots with identity checks and provisional-state CAS.\n[57] redeven:internal/ai/threadstore/delegated_approval.go:203 - Delegated approval idempotency replay compares action id, ref hash, and decision.\n[58] redeven:internal/ai/readonly_web_fetch.go:208 - `web_fetch` validates scheme, userinfo, port, host, DNS resolution, and blocked addresses before fetching.\n[59] redeven:internal/ai/readonly_web_fetch.go:341 - `web_fetch` rejects loopback, private, link-local, multicast, unspecified, NAT64, ULA, and reserved public-looking IP ranges.",
-      "snippet": "Redeven's AI runtime treats tools as typed runtime capabilities. Builtins declare mutation and approval requirements, presentation metadata, grouping behavior, and renderer hints before execution dispatch reaches the runtime implementation."
+      "body": "Redeven's AI runtime treats tools as typed runtime capabilities. Builtins declare mutation and approval requirements, presentation metadata, grouping behavior, and renderer hints before execution dispatch reaches the runtime implementation. Floret owns the provider loop, turn execution, loop progress guards, provider-visible context lifecycle, tool dispatch lifecycle, permission/resource/approval lifecycle, streaming observation, core control-signal projection, opaque provider state lifecycle, activity observation, and engine metrics. Redeven owns product threads, persisted messages, concrete tool implementations, product policy decisions, approval UI, provider credentials, provider/profile selection, opaque provider-state persistence, and Flower timeline projection.\n\n# Mechanism\n\nThe builtin registry includes readonly file/search/fetch helpers, standard file mutation, patch, terminal, web search, OKF index/search/open, todo, interaction, skill, and subagent tools. Flower's product permission is `permission_type`, with `readonly`, `approval_required`, and `full_access` as the only current permission values. `read_file`, `read_files`, `rgrep`, `find`, and `web_fetch` are readonly-exclusive tools for the `readonly` surface; standard shell and mutation tools are not visible there. `approval_required` and `full_access` expose the standard host tool surface instead of those readonly-exclusive helpers. `okf.index`, `okf.search`, and `okf.open` are read-only Redeven repository knowledge tools for directory discovery, short concept search, and detailed concept opening; web search is non-mutating product behavior but an open-world network effect in Floret's engine contract. `ToolPresentationSpec` is the single product display source for renderer, grouping, operation, label fields, fallback labels, compact call payload fields, result payload fields, and activity chip fields. Redeven projects builtins into Floret tool definitions with effects, read-only/destructive/open-world flags, resource extractors, static permission defaults, dynamic `PermissionFor`, and activity projection. Tool execution normalizes success summaries, errors, truncation, provenance, and builtin dispatch results so the chat activity timeline can render compact tool activity instead of raw low-level payloads.\n\nFloret owns the permission lifecycle. Redeven decides product policy from the frozen run permission type and tool metadata, then returns allow/ask/deny through the Floret `Approver` before tool dispatch. Each run freezes a `PermissionSnapshot` that supplies the prompt capability list, visible tool names, Floret registry names, per-tool approval decision, and registry/schema/presentation hashes. Runtime handler entrypoints also consult that snapshot, so a hidden or approval-required tool cannot be executed through direct local dispatch without the Floret authorization context. In `approval_required`, shell and mutating host actions ask before running; in `full_access`, per-tool approval is skipped while schema validation, resource extraction, target routing, timeouts, output limits, audit records, and Floret activity projection still apply. Command classification remains useful for audit and presentation, but it is not the source of permission decisions. `subagents` is a delegation-control tool visible in all three permission types, and its own `spawn`, `send_input`, `wait`, `list`, `inspect`, `close`, and `close_all` invocations do not require approval. That allow decision covers only the delegation control action itself; child runs receive a derived tool surface from the parent permission snapshot, and child tool invocations still flow through Floret permission/resource/approval lifecycle. A child approval-required action can delegate the ask back through the parent approver path; direct child user input remains disabled. Tool handlers execute already-approved domain actions and write audit/query records such as `ai_tool_calls`, run events, and execution spans; those records support diagnostics and tool-detail lookup, not Flower UI activity generation.\n\nReadonly-exclusive helpers are not general convenience aliases. `read_file`, `read_files`, `rgrep`, `find`, and `web_fetch` are visible only in `readonly`; `approval_required` and `full_access` use the standard host surface instead. `web_fetch` is a host-provided Redeven tool with SSRF protections, manual redirect validation, resolver and dial-time public IP checks, proxy suppression, body and MIME limits, and public-network-only semantics. It is not a Floret builtin and must not appear as a Floret core tool or a capability available to non-readonly permission types.\n\nProvider adapters are model gateways, not Flower renderers. `floretProviderAdapter` maps provider stream bytes into Floret `ModelEvent` values. Assistant text, reasoning deltas, and model-generated tool-call stream observations are emitted as provider-neutral Floret model events before Redeven projects them into Flower live state. `ToolCallStream` identifies a tool call while the model is still generating it; final executable tool calls remain the separate `ToolCalls` batch. Redeven applies assistant text, reasoning deltas, tool-call stream observations, retry/done/abort markers, and source observations only from Floret runtime events in the event sink. Provider continuation persistence reads the complete opaque provider state from the Floret turn result, stores it as a state JSON envelope including `Attributes`, and only matches provider id, model, base URL, and state kind before passing it back to Floret.\n\nContext pressure and compaction presentation come from structured Floret runtime observations. Redeven maps Floret context status into `context.usage.updated` and maps Floret compaction lifecycle events into `context.compaction.updated`; those product events are persisted as run events and projected into Flower live materialized state. Floret compaction debug observations are persisted separately as `floret.context.compact.debug` context run events with safe correlation, phase, token-pressure, validation, duration, provider-state-kind, error fields, and `next_action`. These debug rows are diagnostic records and never create timeline decorations or chat rows. Redeven owns only product control entrypoints, thread serialization, sanitized live projection, read-state activity, and opaque provider-state persistence for context lifecycle. Manual `/compact` requests enter Redeven only as Flower UI/RPC control signals and are forwarded into Floret `Host` compaction lifecycle APIs. Active manual compaction keeps the current Floret turn running, and `CompactionEvent(complete)` never implies a Redeven run or thread terminal state. Idle manual compaction is a Flower operation rather than an assistant run: the actor publishes the running divider and returns, a background worker calls Floret `Host.CompactThread`, and user turns submitted before the operation clears are held as queued follow-ups without transcript rows. Redeven persists only the opaque provider-state envelope returned by Floret after validating that the product thread boundary has not changed. Gate events for registered, cancel requested, commit attempted, commit rejected, and commit persisted phases make late commits, thread cancellation, and queued-turn drain diagnosable without treating diagnostics as Flower timeline rows.\n\nRedeven accepts a user turn only at one durable boundary. The service prepares the run object and user message payload before storage, then threadstore atomically writes the user transcript message, `ai_runs` row, `conversation_turns` anchor, thread run state, structured user inputs, secret answers, upload references, and optional source follow-up consumption. If storage fails, the reserved active run is released and no orphan transcript message is left behind. Conversation turns and structured user inputs remain product timeline and UI/audit records; they are not a Redeven-owned provider history source. Floret owns provider-visible history and context lifecycle through its thread store and opaque provider-state envelope.\n\nFlower UI tool activity comes from Floret `ActivityTimeline` projection. Redeven can key detail lookups from timeline item ids, but it must not synthesize chat activity rows from `ai_tool_calls`, `tool.call`, `tool.result`, execution spans, handler outcomes, or provider-adapter side effects.\n\nFlower subagents use the published Floret `Host` lifecycle rather than a Redeven-owned goroutine task manager. Redeven caches one Floret subagent runtime per parent Flower thread, so child controllers, the Floret host, and the private SQLite store outlive an individual parent turn. Parent run cancellation or natural turn completion cancels only the parent sampling/tool loop; explicit `subagents(close)` or `subagents(close_all)` is the normal lifecycle path that stops children without deleting their thread records, and parent thread deletion closes known children, releases the cached host, and deletes its read-only child projection threads. `Service.Close` releases local host resources during process shutdown. The `subagents` builtin validates `spawn`, `send_input`, `wait`, `list`, `inspect`, `close`, and `close_all`, then forwards to Floret `SpawnSubAgent`, `SendSubAgentInput`, `WaitSubAgents`, `ListSubAgents`, and `CloseSubAgent`. `wait` defaults to five minutes and caps requested waits at twenty minutes, while child runs pass a twenty-minute Floret subagent run timeout. The child `ThreadID` is the canonical subagent identity and is also returned as `subagent_id` for model-facing compatibility, but child execution uses a distinct child `RunID`; delegated approval refs reject missing child run ids, child-thread aliases, and parent-run aliases. `spawn` persists a provisional child permission snapshot keyed by the real Floret `subagents` tool call id, calls `SpawnSubAgent`, and finalizes the snapshot only after host spawn succeeds. Later `send_input`, child tool execution, and child approval restore read the finalized snapshot instead of sampling the current parent permission. Task names and paths are labels, not lifecycle targets, and the model cannot supply a child `thread_id` or raw `fork_mode`. The parent model chooses `context_mode` on `spawn`: `mission_only` maps to `SubAgentForkNone` and `full_history` maps to `SubAgentForkFullPath`. Redeven stores that mode in child projection metadata so later wait/detail reads use the child’s real context contract instead of a wait-call argument. The thread-scoped child host registers the parent thread's delegated tool surface for the current permission snapshot, removes parent-only controls, and disables hidden Floret control surfaces. If the parent run's model/tool/session configuration changes, the runtime rebuilds the child host only when no child is active; active children continue on the existing host generation. Child tools execute with the Floret invocation `RunID`, `ThreadID`, and `TurnID`, so tool-call audit records and execution spans belong to the child thread instead of the parent. Child threads run with a Flower child prompt that forbids direct user input, states the visible tool list and context mode, and requires a complete but focused final handoff report.\n\nDelegated approval is thread-owned product state, not subagent detail state. Redeven stores delegated approval requests with parent thread, parent user, parent run/turn, child thread/run/turn, child tool call, approval id, ref hash, request fingerprint, delivery state, version, and surface epoch. User decisions submit through the parent thread with a delegated ref; the store compares owner, ref hash, action id, version, surface epoch, and idempotency key before resolving. Idempotent replay is accepted only when the key matches the same action, same ref hash, and same decision. Resolved delivery uses compare-and-swap; if delivery acknowledgement cannot be confirmed, Redeven marks the record as acknowledgement-unknown instead of emitting a false delivered state. The parent Flower waiting projection is the only approval surface; subagent detail is a read-only mirror or locator.\n\nSubagent data is intentionally split into model-facing summaries, parent timeline presentation, and human detail. Model-facing `wait` results return bounded status `items` with child identity, status, context mode, timeout facts, and `detail_ref`; they do not include child transcripts, tool calls, raw output, commands, stdout, stderr, `last_message`, `waiting_prompt`, or `result_digest`. Completed waits include `final_handoff_report`, which carries each child’s final handoff text under a token budget without process detail. Timed-out waits include `progress_summary`, which carries current status, waiting blockers when relevant, and suggested parent actions instead of execution logs. List and inspect remain bounded monitoring views with detail refs. Parent Flower timeline state still comes from Floret `ActivityTimeline` payloads for `subagents`, and the shared UI projection accepts only the current `snapshot`, `subagent`, `item`, and `items` envelope shapes. The parent thread header exposes a Sub Agents dropdown with active and settled counts; selecting a child opens a parent-scoped detail overlay and keeps the selected Flower thread unchanged. The overlay reads `GET /api/ai/threads/{parent}/subagents/{child}/detail`, which calls Floret `ReadSubAgentDetail` with `IncludeRaw=false` and renders user/assistant messages, tool calls, tool results, approvals, turn markers, compactions, errors, and custom rows from the child execution timeline. If a child detail response has only summary data, the UI projects that summary into the same read-only message transcript so the overlay is not blank. Child projection threads still carry structured ownership metadata with `owner_kind=subagent_projection` and `parent_thread_id` for read-only internal projection and cleanup, but `threadstore.ListThreads` excludes them from normal thread-list/sidebar results. The old transcript `type:\"subagent\"` block chain and legacy `snapshots`, `snapshots_by_id`, or free-form `subagents` collection payloads are not supported display sources.\n\nControl signal projection is separate from Redeven waiting UI persistence. Floret signal projection emits engine signal facts for `ask_user` and `task_complete`; Flower `RequestUserInputPrompt` objects are created only by Redeven's waiting projection and persistence layer.\n\n`terminal.exec` is the local AI runtime shell. Its schema describes local execution, and successful terminal results include `execution_location=local_runtime` plus the resolved local working directory. Thread target context, Welcome environment context, or a target-shaped id does not change where this builtin runs.\n\nWhen a thread is configured for explicit target routing, the runtime forwards target-scoped builtin calls through `TargetToolExecutor`. The target executor receives a `TargetToolCall` containing `target_id`, `tool_name`, sanitized arguments, and required capabilities. The run layer returns a result payload that preserves or injects `target_id` and `execution_location`, so target-routed tool results cannot lose provenance before they reach the model or activity timeline.\n\nFlower execution uses the published Floret runtime package through `runFloretHostedTurn` and `flruntime.Host`. Redeven passes the current user input, permission-filtered tool registry, control signals, provider adapter, opaque previous provider state, and loop limits to Floret; it does not pass a preassembled provider-visible history. Floret `Metrics.Steps` is consumed as telemetry for result projection and activity accounting, not as a product configuration or request field. `ask_user` and `task_complete` use Floret core control definitions and provider-safe projection.\n\n# Boundaries\n\nTool names are not aliases for deleted knowledge-era tools. Current repository knowledge access uses `okf.index`, `okf.search`, and `okf.open`: index for broad directory discovery, search for short candidate lists, and open for detailed concept content. OKF is an embedded project corpus and does not access the internet; external, current, recent, news, third-party, market, pricing, and general web facts must use direct authoritative URLs or web search discovery instead.\n\nTarget provenance is part of the tool contract, not a UI hint. Flower must not infer remote execution from thread context alone; it can only claim remote or target execution when a tool result or Redeven product command returns explicit execution provenance.\n\nRedeven must consume published Floret releases. Repository builds, tests, Desktop runs, and release validation must not depend on a sibling checkout, Go workspace, local replace directive, or package-manager local link. The current runtime boundary depends on `github.com/floegence/floret v0.3.39`, including Floret's `Host` turn and compaction facade, structured context observations, cancellation-aware manual compaction lifecycle events, manual compaction admission no-op observations for short or low-savings context, opaque provider state, provider request budget validation, multi-tool batch boundary preservation during compaction, and parent-scoped subagent detail API. Redeven must not import Floret `internal/` packages or depend on provider-visible transcript, summary, range-selection, checkpoint payload, or engine policy data.\n\n# Citations\n\n[1] redeven:internal/ai/tools/registry.go:86 - Builtin tool definitions declare mutation, approval, and presentation specs.\n[2] redeven:internal/ai/tools/registry.go:249 - OKF tools are registered as read-only structured tool activity.\n[3] redeven:internal/ai/tools/types.go:126 - `ToolPresentationSpec` carries renderer, operation, label, fallback, compact payload, result payload, and activity chip fields.\n[4] redeven:internal/ai/builtin_tool_handlers.go:18 - Tool success summaries are normalized by builtin name or semantic activity category.\n[5] redeven:internal/ai/builtin_tool_handlers.go:662 - OKF tool descriptions identify embedded Redeven repository knowledge, not internet search.\n[6] redeven:internal/ai/floret_tools.go:275 - Redeven projects builtin tools into Floret definitions with effects, flags, permissions, and activity projection.\n[7] redeven:internal/ai/floret_tools.go:313 - Floret permission defaults and dynamic invocation permissions are derived from Redeven product tool policy.\n[8] redeven:internal/ai/prompt_builder.go:322 - Prompt construction routes information sources between workspace tools, OKF, and external web discovery.\n[9] redeven:internal/ai/tools/registry.go:111 - Unknown tool names do not resolve to builtin definitions.\n[10] redeven:internal/ai/target_tool_policy.go:49 - Target tool calls and results carry target id and execution location fields.\n[11] redeven:internal/ai/run.go:2833 - Explicit target policy forwards eligible tools through the target executor.\n[12] redeven:internal/ai/run.go:3220 - Local `terminal.exec` returns local runtime execution provenance.\n[13] redeven:internal/ai/floret_approval.go:14 - Redeven product policy is returned through the Floret tool approver.\n[14] redeven:internal/ai/floret_provider.go:55 - Provider stream deltas are sent to Floret as model events rather than mutating Flower state directly.\n[15] redeven:internal/ai/floret_events.go:42 - Flower applies streaming and source observations from Floret runtime events.\n[16] redeven:internal/ai/floret_events.go:124 - Floret compaction debug observations are persisted as diagnostic context run events.\n[17] redeven:internal/ai/floret_events.go:167 - Structured context status observations are persisted and streamed as `context.usage.updated`.\n[18] redeven:internal/ai/floret_events.go:183 - Structured compaction observations are persisted and streamed as `context.compaction.updated`.\n[19] redeven:internal/ai/compact_thread_context.go:812 - Idle manual compaction calls Floret `Host.CompactThread` instead of compacting Redeven prompt history.\n[20] redeven:internal/ai/floret_runtime.go:181 - Flower execution runs through Floret hosted turns with a Floret approver and event sink.\n[21] redeven:internal/ai/compact_thread_context.go:17 - Manual context compaction is exposed as a serialized thread action.\n[22] redeven:internal/ai/run.go:548 - Active runs implement Floret's manual compaction source.\n[23] redeven:internal/ai/compact_thread_context.go:833 - Idle compaction persists only the opaque provider continuation after a thread boundary check.\n[24] redeven:internal/ai/model_gateway.go:37 - Redeven's remaining hard execution protection is the tool-call count constant.\n[25] redeven:internal/ai/floret_runtime.go:193 - Redeven passes `MaxToolCalls` into the Floret turn limits.\n[26] redeven:internal/ai/floret_runtime.go:204 - Provider continuation candidates are built from the Floret turn result provider state.\n[27] redeven:internal/ai/provider_continuation.go:30 - Previous provider state is loaded as the full Floret model state envelope after provider/profile matching.\n[28] redeven:internal/ai/floret_control.go:36 - Floret core control signals are projected only for `task_complete` and `ask_user`.\n[29] redeven:go.mod:9 - Redeven depends on the published Floret module version.\n[30] redeven:internal/ai/service.go:394 - The service caches a thread-scoped Floret subagent runtime and attaches each new parent run to it.\n[31] redeven:internal/ai/subagents_floret.go:129 - The Redeven subagent runtime dispatches validated actions to the Floret host lifecycle.\n[32] redeven:internal/ai/subagents_floret.go:363 - Subagent hosts reuse the resolved Flower model gateway, Floret tools, approver, event sink, private SQLite store, and twenty-minute run timeout.\n[33] redeven:internal/ai/subagents_floret.go:587 - `spawn` calls Floret `SpawnSubAgent` and returns child `thread_id` as the lifecycle identity.\n[34] redeven:internal/ai/subagents_floret.go:656 - `wait` calls Floret `WaitSubAgents` with bounded timeout semantics.\n[35] redeven:internal/ai/tools/registry.go:391 - Subagent invocation policy treats delegation-control actions as non-approval host actions.\n[36] redeven:internal/ai/subagents_floret.go:791 - Model-facing subagent results are reduced to bounded summary items.\n[37] redeven:internal/ai/subagents_floret.go:1315 - Flower subagent detail reads through the parent-scoped Floret detail API with raw content disabled.\n[38] redeven:internal/codeapp/appserver/server.go:3737 - Appserver exposes the parent-scoped subagent detail route.\n[39] redeven:internal/flower_ui/src/flowerSubagentProjection.ts:130 - The shared UI projection derives subagent dropdown items only from current activity payload shapes.\n[40] redeven:internal/flower_ui/src/FlowerSurface.tsx:1300 - Opening subagent detail loads the child detail without selecting the child thread.\n[41] redeven:internal/flower_ui/src/FlowerSurface.tsx:3480 - The selected parent thread header renders the Sub Agents dropdown.\n[42] redeven:internal/flower_ui/src/FlowerSurface.tsx:3342 - Subagent execution detail renders inside the parent-thread overlay.\n[43] redeven:internal/ai/threadstore/store.go:357 - Normal thread-list queries exclude `subagent_projection` rows.\n[44] redeven:internal/ai/floret_tools.go:135 - Floret tool invocations derive a child execution run from the invocation run, thread, and turn ids.\n[45] redeven:internal/ai/floret_approval.go:17 - Child approval-required tool asks can be delegated through the parent approver when delegated approval is available.\n[46] redeven:internal/ai/subagents_floret.go:3301 - Flower child prompts forbid nested subagents and direct user input while requesting a complete final handoff.\n[47] redeven:internal/ai/subagent_lifecycle_test.go:29 - Parent run cancellation is tested to avoid releasing the durable subagent runtime.\n[48] redeven:internal/ai/threads.go:173 - Flower subagent projection threads are rejected by direct thread mutation paths.\n[49] redeven:internal/ai/threads.go:895 - Parent thread deletion closes its cached Floret subagent runtime and deletes child projection threads.\n[50] redeven:internal/ai/floret_runtime.go:101 - Hosted turns freeze a permission snapshot before building the Floret tool registry.\n[51] redeven:internal/ai/tool_executor.go:91 - Direct local tool execution freezes the same permission snapshot before dispatch.\n[52] redeven:internal/ai/run.go:3057 - Legacy `file.read` direct dispatch is guarded as unavailable outside readonly permission.\n[53] redeven:internal/ai/run_extensions.go:82 - Subagent tool dispatch passes the invoking Floret tool call id into the subagent runtime.\n[54] redeven:internal/ai/subagents_floret.go:771 - Subagent spawn persists a provisional child permission snapshot before calling the Floret host.\n[55] redeven:internal/ai/subagents_floret.go:795 - Subagent spawn finalizes the child snapshot only after host spawn succeeds.\n[56] redeven:internal/ai/threadstore/permission_snapshot.go:149 - Threadstore finalizes child permission snapshots with identity checks and provisional-state CAS.\n[57] redeven:internal/ai/threadstore/delegated_approval.go:203 - Delegated approval idempotency replay compares action id, ref hash, and decision.\n[58] redeven:internal/ai/readonly_web_fetch.go:208 - `web_fetch` validates scheme, userinfo, port, host, DNS resolution, and blocked addresses before fetching.\n[59] redeven:internal/ai/readonly_web_fetch.go:341 - `web_fetch` rejects loopback, private, link-local, multicast, unspecified, NAT64, ULA, and reserved public-looking IP ranges.",
+      "snippet": "Redeven's AI runtime treats tools as typed runtime capabilities. Builtins declare mutation and approval requirements, presentation metadata, grouping behavior, and renderer hints before execution dispatch reaches the runtime implementation.",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "ai/flower-context-action-records.md",
-      "concept_id": "ai/flower-context-action-records",
+      "concept_id": "ai.flower-context-action-records",
       "type": "AI Context Contract",
       "title": "Flower context action records",
       "description": "Ask Flower context actions are validated product records and UI context badges, not a Redeven-owned provider history source.",
@@ -62,11 +542,18 @@
         "type": "AI Context Contract"
       },
       "body": "Redeven treats user-selected Ask Flower context as a first-class product input record. The record is persisted with the user turn, used for Flower UI badges and product routing visibility, and kept out of Redeven-owned provider history construction. Floret owns provider-visible context lifecycle.\n\n# Mechanism\n\nClients send a standard `assistant.ask.flower` context action with the turn input. The AI service validates the action against the Flower context-action contract and normalizes it before accepting the user turn. The accepted context action remains attached to the product transcript message and can be projected by Flower as a compact linked-context badge. Structured response records, secret answers, and upload bindings are persisted in the same turn-start flow so product UI and audit reads have one durable boundary.\n\nFlower execution passes the current user input to Floret through the published `Host` facade. Redeven does not build provider-visible history, choose recent dialogue ranges, inject compacted summaries, or assemble provider-visible context from context actions. Floret combines the current input with its own journal, context lifecycle state, tools, permissions, and opaque provider continuation.\n\n# Boundaries\n\nUser-provided context is not a permission grant, not a working-directory mutation, not long-term memory, and not a Redeven-controlled provider-history segment. `suggested_working_dir_abs` is product context only; runtime authority still comes from session metadata and existing thread/runtime execution policy. Execution context fields guide target selection, but they do not authorize direct Docker, SSH, systemd, launchctl, or process-manager operations. Persisted transcript `contextAction` remains an observable record, but it is not the model-context source of truth. Flower UI may project a compact linked-context badge from that record only when the persisted action still matches the standard Ask Flower schema and its target, source, locality, runtime hint, and session source values remain valid; malformed or non-Flower action records must not appear as legitimate linked context. Direct API callers, queued turns, and persisted user messages must use the same strict Flower context-action validator; malformed or non-Flower actions fail instead of being dropped into a context-free turn.\n\n# Citations\n\n[1] redeven:internal/ai/context_action.go:133 - Runtime validates and normalizes standard Ask Flower context actions.\n[2] redeven:internal/ai/send_user_turn.go:257 - Turn start persists the prepared user transcript message at the durable acceptance boundary.\n[3] redeven:internal/ai/send_user_turn.go:338 - Structured user input context is persisted as product state attached to the response message.\n[4] redeven:internal/ai/floret_runtime.go:181 - Hosted Flower execution calls Floret with the current turn input instead of a preassembled history.\n[5] redeven:internal/ai/floret_runtime.go:204 - Floret activity and usage results are projected back into Flower after the turn.\n[6] redeven:internal/flower_ui/src/FlowerSurface.tsx:1384 - Flower UI renders linked-context transcript badges only for valid Ask Flower context actions.",
-      "snippet": "Redeven treats user-selected Ask Flower context as a first-class product input record. The record is persisted with the user turn, used for Flower UI badges and product routing visibility, and kept out of Redeven-owned provider history cons"
+      "snippet": "Redeven treats user-selected Ask Flower context as a first-class product input record. The record is persisted with the user turn, used for Flower UI badges and product routing visibility, and kept out of Redeven-owned provider history cons",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "ai/okf-bundle-lifecycle.md",
-      "concept_id": "ai/okf-bundle-lifecycle",
+      "concept_id": "ai.okf-bundle-lifecycle",
       "type": "OKF Lifecycle",
       "title": "OKF bundle lifecycle",
       "description": "Redeven builds a deterministic embedded OKF bundle from source Markdown concepts.",
@@ -88,14 +575,21 @@
         "type": "OKF Lifecycle"
       },
       "body": "Redeven builds its embedded OKF bundle from curated source files under the top-level `okf/` authoring root, verifies deterministic dist outputs under `okf/dist/`, and embeds the resulting bundle into the binary used by runtime and AI features.\n\n# Mechanism\n\n`build_assets.sh` invokes `build_okf_bundle.sh`, which runs `cmd/okf-bundle` against explicit source and dist roots. The builder scans OKF Markdown concepts, validates required frontmatter and reserved filenames, skips generated `dist/` while hashing the source tree into `source_sha256`, writes bundle plus manifest plus sha outputs, CI validates source integrity and stale dist, and top-level `go:embed` makes the bundle available to runtime search code.\n\n# Boundaries\n\nThe bundle remains auditable only while OKF Markdown concepts are the sole authoring surface and `okf/dist/*` stays a generated verification artifact set rather than hand-edited truth.\n\n# Citations\n\n[1] redeven:scripts/build_assets.sh:53 - Embedded asset builds include the OKF bundle stage.\n[2] redeven:scripts/build_okf_bundle.sh:19 - Bundle script resolves `okf` as source root and `okf/dist` as dist root.\n[3] redeven:cmd/okf-bundle/main.go:14 - The standalone bundle command defaults to the top-level OKF source root.\n[4] redeven:cmd/redeven/okf.go:39 - The main CLI exposes `redeven okf bundle` with the same default roots.\n[5] redeven:internal/okf/builder.go:22 - BuildFromSource assembles the bundle from OKF concepts.\n[6] redeven:internal/okf/builder.go:99 - VerifyDistFiles rejects stale checked-in dist artifacts.\n[7] redeven:internal/okf/builder.go:116 - Source tree hashing skips generated `dist/` and dot directories.\n[8] redeven:okf/dist/embed.go:7 - Top-level dist files are embedded by the `okf/dist` package.\n[9] redeven:internal/okf/embed.go:6 - Internal runtime OKF loading reads through the top-level embedded dist package.\n[10] redeven:scripts/okf/check_source_integrity.sh:5 - Integrity checks validate the top-level OKF source before generated artifacts are trusted.",
-      "snippet": "Redeven builds its embedded OKF bundle from curated source files under the top-level `okf/` authoring root, verifies deterministic dist outputs under `okf/dist/`, and embeds the resulting bundle into the binary used by runtime and AI featur"
+      "snippet": "Redeven builds its embedded OKF bundle from curated source files under the top-level `okf/` authoring root, verifies deterministic dist outputs under `okf/dist/`, and embeds the resulting bundle into the binary used by runtime and AI featur",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "ai/okf-search-tool.md",
-      "concept_id": "ai/okf-search-tool",
+      "concept_id": "ai.okf-search-tool",
       "type": "AI Tool Contract",
-      "title": "OKF search tool",
-      "description": "okf.search is a read-only Redeven repository knowledge lookup over the embedded OKF bundle.",
+      "title": "OKF tool suite",
+      "description": "OKF tools expose read-only Redeven repository knowledge through index browsing, short search, and concept opening.",
       "tags": [
         "ai",
         "okf",
@@ -103,22 +597,29 @@
       ],
       "timestamp": "2026-06-17T00:00:00Z",
       "frontmatter": {
-        "description": "okf.search is a read-only Redeven repository knowledge lookup over the embedded OKF bundle.",
+        "description": "OKF tools expose read-only Redeven repository knowledge through index browsing, short search, and concept opening.",
         "tags": [
           "ai",
           "okf",
           "ui"
         ],
         "timestamp": "2026-06-17T00:00:00Z",
-        "title": "OKF search tool",
+        "title": "OKF tool suite",
         "type": "AI Tool Contract"
       },
-      "body": "Redeven exposes the embedded OKF bundle through a read-only `okf.search` builtin tool, and Env App renders OKF activity as project knowledge lookup inside Flower's compact activity timeline.\n\n# Mechanism\n\nRuntime OKF code loads the embedded bundle once, scores concepts in memory, builtin tool registration advertises `okf.search` as a non-mutating tool with structured presentation metadata, tool execution dispatches to `okf.Search` behind a read-permission gate, and `ActivityTimelineBlock` renders compact knowledge-lookup activity with detail access for query and concept match payloads. OKF activity labels and operation values come from `ToolPresentationSpec`, so the Floret projection does not own a separate OKF display vocabulary.\n\n# Boundaries\n\nThe tool returns scoped Redeven concept summaries rather than raw file-level citation details and does not mutate OKF source or dist artifacts. It does not access the internet and is not a substitute for web search, direct URL fetching, or external source validation. It must not be used for current news, recent public events, market or pricing facts, third-party documentation, or general web facts.\n\n# Citations\n\n[1] redeven:internal/okf/search.go:17 - LoadEmbeddedBundle reads the embedded bundle lazily once.\n[2] redeven:internal/okf/search.go:37 - Search caps max results and filters optional tag constraints.\n[3] redeven:internal/okf/search.go:123 - Concept scoring weights title, description, body, resource, type, and tags.\n[4] redeven:internal/ai/tools/registry.go:157 - Builtin presentation metadata keeps `okf.search` read-only with structured rendering.\n[5] redeven:internal/ai/builtin_tool_handlers.go:632 - Tool definition text limits `okf.search` to Redeven repository knowledge and excludes internet/current/general web facts.\n[6] redeven:internal/ai/builtin_tool_handlers.go:33 - OKF success summaries use knowledge-lookup wording rather than the raw tool name.\n[7] redeven:internal/ai/run.go:2997 - Tool execution dispatches the `okf.search` builtin to OKF search.\n[8] redeven:internal/ai/run.go:3001 - Tool arguments are normalized into query, max result, and tag filters.\n[9] redeven:internal/ai/floret_tools.go:716 - Floret result activity labels are derived from tool presentation label fields and fallbacks.",
-      "snippet": "Redeven exposes the embedded OKF bundle through a read-only `okf.search` builtin tool, and Env App renders OKF activity as project knowledge lookup inside Flower's compact activity timeline. Runtime OKF code loads the embedded bundle once, "
+      "body": "Redeven exposes the embedded OKF bundle through read-only `okf.index`, `okf.search`, and `okf.open` builtin tools, and Env App renders OKF activity as project knowledge lookup inside Flower's compact activity timeline.\n\n# Mechanism\n\nRuntime OKF code loads the embedded bundle once, indexes root directory sections, scores concepts in memory, and opens concept bodies by id or path. The bundle builder parses internal Markdown links into deterministic `links` and `backlinks` so concept detail can expose graph context without scanning source Markdown at runtime. Builtin tool registration advertises OKF tools as non-mutating local-read tools with structured presentation metadata, tool execution dispatches behind a read-permission gate, and `ActivityTimelineBlock` renders compact knowledge-lookup activity with detail access for directory sections, concept matches, opened concept metadata, and link graph payloads. OKF activity labels and operation values come from `ToolPresentationSpec`, so the Floret projection does not own a separate OKF display vocabulary.\n\n# Tool workflow\n\n`okf.index` browses `okf/index.md` as a structured directory and should be used first for broad Redeven-internal questions when the relevant concept area is unclear. `okf.search` returns a short candidate list with `concept_id`, `path`, title, description, resource, tags, snippet, and score; broad searches should start with the default small result count. `okf.open` opens one concept by `concept_id` or path and returns metadata, a body window, and links/backlinks. Models should open the relevant concept before relying on OKF for detailed facts, boundaries, contracts, or workflows.\n\n# Boundaries\n\nThe tools return scoped Redeven repository knowledge and do not mutate OKF source or dist artifacts. They do not access the internet and are not a substitute for web search, direct URL fetching, or external source validation. They must not be used for current news, recent public events, market or pricing facts, third-party documentation, external facts, or general web facts. Source-level conclusions still require file or terminal verification after OKF navigation.\n\n# Citations\n\n[1] redeven:internal/okf/search.go:17 - LoadEmbeddedBundle reads the embedded bundle lazily once.\n[2] redeven:internal/okf/search.go:37 - `Index`, `Search`, and `Open` load the embedded bundle and return structured OKF payloads.\n[3] redeven:internal/okf/search.go:78 - Search caps max results and filters optional type and tag constraints.\n[4] redeven:internal/ai/tools/registry.go:249 - Builtin presentation metadata keeps OKF tools read-only with structured rendering.\n[5] redeven:internal/ai/builtin_tool_handlers.go:662 - Tool definition text limits OKF tools to Redeven repository knowledge and excludes internet/current/general web facts.\n[6] redeven:internal/ai/builtin_tool_handlers.go:33 - OKF success summaries use knowledge-lookup wording rather than the raw tool name.\n[7] redeven:internal/ai/run.go:3186 - Tool execution dispatches OKF builtins to index, search, and open runtime APIs.\n[8] redeven:internal/okf/parser.go:154 - The bundle builder parses internal Markdown links for OKF graph context.\n[9] redeven:internal/ai/floret_tools.go:716 - Floret result activity labels are derived from tool presentation label fields and fallbacks.",
+      "snippet": "Redeven exposes the embedded OKF bundle through read-only `okf.index`, `okf.search`, and `okf.open` builtin tools, and Env App renders OKF activity as project knowledge lookup inside Flower's compact activity timeline. Runtime OKF code load",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "ai/redeven-env-operations.md",
-      "concept_id": "ai/redeven-env-operations",
+      "concept_id": "ai.redeven-env-operations",
       "type": "AI Operation Contract",
       "title": "Redeven environment operations",
       "description": "redeven env and redeven targets exec are the product boundaries for Flower and automation environment lifecycle and target diagnostic requests.",
@@ -144,11 +645,18 @@
         "type": "AI Operation Contract"
       },
       "body": "Redeven environment lifecycle requests must go through the Redeven product surface, not through inferred container, SSH, systemd, launchctl, or process-manager commands. Flower learns this boundary through the standard `redeven-environment` system skill, not through a bespoke environment workflow embedded in the global prompt.\n\n# Mechanism\n\nThe `redeven env` CLI surface exposes machine-readable environment status, diagnostics, and lifecycle operation plans through the shared agent protocol envelope. `list`, `resolve`, `status`, `diagnose`, and `stop` are executable for the supported default Local Environment path. `start`, `restart`, and `update` are phase-one planning entries: they return structured availability, reason codes, and next actions rather than pretending the CLI can start or update Desktop runtime sessions. When the target catalog contains SSH, container, provider, Gateway, or external Local UI entries, `redeven env` may resolve the target but still returns the lifecycle request as `supported=false` with `reason_code=unsupported_target_kind` unless the target is the default Local Environment.\n\nAsk Flower environment context supplies routing data through the standard context action. The `redeven-environment` skill tells Flower to choose targets in this order: `execution_context.current_target_id`, then `target.target_id`, then `execution_context.source_env_public_id`, then `current`. These execution fields are product context and UI/audit facts; they are not proof that `terminal.exec` runs remotely and must not be treated as a Redeven-owned provider-history segment. The literal target `current` is accepted by Redeven target resolution as the current default environment alias.\n\nFor arbitrary target OS diagnostics, Flower should use `redeven targets exec --target \u003ctarget\u003e --command \u003cagent-selected command\u003e --json`. This command lets the agent choose OS-appropriate probes such as `date`, `uname`, uptime, disk, process, package manager, or service checks while Redeven owns target resolution, execution location, timeout, stdout/stderr, and exit-code provenance. The command supports the default Local Environment shell and saved local/SSH host runtime targets with key or agent SSH auth. Password SSH targets, container placements, provider environments, Gateway environments, and external Local UI targets return structured unsupported or unavailable results instead of falling back to ad hoc low-level commands.\n\n# Boundaries\n\n`redeven env` and `redeven targets exec` output is sanitized for Flower and automation. Target and runtime summaries omit runtime-control tokens and avoid leaking local state, config, socket, and agent home paths where those paths are not needed for the contract. Diagnostic output may include local state, lock, and socket paths when those paths are necessary to explain runtime attach state. Operation commands in the environment JSON contract may name Redeven product commands only. Target execution JSON must include `target_id` and `execution_location` when execution occurs. If an operation or target execution returns a structured unavailable, unsupported, or blocked result, Flower should explain that result and the product next action instead of inventing a lower-level workaround.\n\n`terminal.exec` remains the local AI runtime shell. It can be used to invoke Redeven product commands, but it must not be described as remote execution unless the product command result itself contains target execution provenance such as `execution_location=ssh_target`.\n\n# Citations\n\n[1] redeven:cmd/redeven/env.go:13 - The `env` command dispatches lifecycle subcommands.\n[2] redeven:internal/agentprotocol/env.go:60 - Environment status, runtime summary, diagnostics, and operation plans define the JSON contract.\n[3] redeven:internal/agentprotocol/env.go:120 - Environment target resolution distinguishes supported local targets from recognized unsupported target shapes.\n[4] redeven:internal/agentprotocol/targets.go:37 - Target discovery projects the default local target and saved catalog connections into target descriptors.\n[5] redeven:internal/agentprotocol/target_exec.go:39 - Target command execution returns structured target, command, location, stdout/stderr, exit-code, timeout, and support fields.\n[6] redeven:internal/ai/system_skills/redeven-environment/SKILL.md:1 - The system skill teaches Flower the Redeven environment and target execution command surfaces.\n[7] redeven:internal/ai/context_action.go:243 - Ask Flower context actions are converted into model-facing user-provided context.",
-      "snippet": "Redeven environment lifecycle requests must go through the Redeven product surface, not through inferred container, SSH, systemd, launchctl, or process-manager commands. Flower learns this boundary through the standard `redeven-environment`"
+      "snippet": "Redeven environment lifecycle requests must go through the Redeven product surface, not through inferred container, SSH, systemd, launchctl, or process-manager commands. Flower learns this boundary through the standard `redeven-environment`",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "architecture/env-app-upstream-web-dependencies.md",
-      "concept_id": "architecture/env-app-upstream-web-dependencies",
+      "concept_id": "architecture.env-app-upstream-web-dependencies",
       "type": "Frontend Contract",
       "title": "Env App upstream web dependencies",
       "description": "Env App composes published floe-webapp, Floeterm, and Flowersec web packages.",
@@ -172,11 +680,18 @@
         "type": "Frontend Contract"
       },
       "body": "Env App is built as a Redeven-specific shell on top of published floe-webapp UI/runtime primitives, floe-webapp protocol connectivity, Floeterm terminal-web components, and Flowersec controlplane artifact helpers.\n\n# Mechanism\n\nThe UI package pins released versions of the upstream packages. `EnvAppShell` imports floe-webapp providers, layout primitives, icons, and protocol hooks; terminal surfaces use Floeterm `TerminalCore` and session coordination; controlplane services call Flowersec controlplane helpers to exchange entry tickets for connect artifacts; and local package-lock files are the audited dependency source for the embedded UI build.\n\n# Boundaries\n\nThis concept only holds while Env App continues to consume published upstream packages instead of local sibling checkouts or ad-hoc replacements for protocol, terminal, and controlplane artifact handling.\n\n# Citations\n\n[1] redeven:internal/envapp/ui_src/package.json:18 - Env App pins floe-webapp-core.\n[2] redeven:internal/envapp/ui_src/package.json:19 - Env App pins floe-webapp-protocol.\n[3] redeven:internal/envapp/ui_src/package.json:20 - Env App pins floeterm terminal-web.\n[4] redeven:internal/envapp/ui_src/package.json:21 - Env App pins flowersec-core.\n[5] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2 - Env App shell imports floe-webapp runtime and layout primitives.\n[6] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:24 - Env App shell consumes Flowersec observer typing for runtime connections.\n[7] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:25 - Env App shell consumes the floe-webapp protocol hook.\n[8] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:9 - Terminal panel consumes Floeterm TerminalCore and terminal session abstractions.\n[9] redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:2 - Controlplane services request entry connect artifacts through flowersec-core/controlplane.\n[10] redeven:AGENTS.md:173 - Published Dependency Policy forbids local sibling wiring in package manifests and build aliases.",
-      "snippet": "Env App is built as a Redeven-specific shell on top of published floe-webapp UI/runtime primitives, floe-webapp protocol connectivity, Floeterm terminal-web components, and Flowersec controlplane artifact helpers. The UI package pins releas"
+      "snippet": "Env App is built as a Redeven-specific shell on top of published floe-webapp UI/runtime primitives, floe-webapp protocol connectivity, Floeterm terminal-web components, and Flowersec controlplane artifact helpers. The UI package pins releas",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "architecture/local-ui-surface.md",
-      "concept_id": "architecture/local-ui-surface",
+      "concept_id": "architecture.local-ui-surface",
       "type": "Runtime Contract",
       "title": "Local UI surface",
       "description": "Local UI serves browser entrypoints, access-gated APIs, direct sessions, Env App proxying, codespaces, and port forwards.",
@@ -200,11 +715,18 @@
         "type": "Runtime Contract"
       },
       "body": "Redeven Local UI is the browser-facing endpoint runtime surface. It exposes the Env App proxy, Local UI status APIs, direct Flowersec session handoff, Browser Editor codespace routes, and port-forward routes from the same runtime-managed HTTP server.\n\n# Mechanism\n\n`localui.Server` is built with an agent, Code App app server, bind spec, runtime-control socket path, Local Environment identity, diagnostics store, and optional access gate. The handler mounts `/api/local/*`, `/_redeven_direct/ws`, `/_redeven_proxy/*`, `/cs/*`, and `/pf/*`. Password mode protects non-public routes, direct sessions are minted as short-lived Flowersec connect artifacts, and runtime responses include the normalized Runtime Service snapshot.\n\n# Boundaries\n\nLocal UI route behavior is part of the runtime trust boundary. Public Env App shell GET/HEAD requests may pass before local unlock so the shell can load, but local APIs, direct sessions, codespaces, and port-forward routes stay access-gated when password mode is enabled.\n\n# Citations\n\n[1] redeven:internal/localui/localui.go:50 - Local UI options require bind, agent, app server, state, runtime-control, version, diagnostics, and access gate inputs.\n[2] redeven:internal/localui/localui.go:129 - The handler mounts root, codespace, port-forward, local API, direct WebSocket, and Env App proxy routes.\n[3] redeven:internal/localui/localui.go:187 - Local UI computes a local permission cap from the runtime config path.\n[4] redeven:internal/localui/localui.go:218 - Start opens all configured Local UI listeners and serves the handler.\n[5] redeven:internal/localui/localui.go:656 - Local API calls return locked responses when local access is missing.\n[6] redeven:internal/localui/localui.go:672 - Public Env App shell requests are limited to GET/HEAD under `/_redeven_proxy/env`.\n[7] redeven:internal/localui/localui.go:683 - Env App proxy requests are access-gated except for the public Env App shell path.\n[8] redeven:internal/localui/localui.go:1019 - `/api/local/runtime` returns direct WebSocket, Desktop flags, and Runtime Service data.\n[9] redeven:internal/localui/localui.go:1089 - Direct sessions mint short-lived connect artifacts with channel id and E2EE PSK.\n[10] redeven:internal/localui/localui.go:1151 - Connect artifact creation requires local access and an empty request body.",
-      "snippet": "Redeven Local UI is the browser-facing endpoint runtime surface. It exposes the Env App proxy, Local UI status APIs, direct Flowersec session handoff, Browser Editor codespace routes, and port-forward routes from the same runtime-managed HT"
+      "snippet": "Redeven Local UI is the browser-facing endpoint runtime surface. It exposes the Env App proxy, Local UI status APIs, direct Flowersec session handoff, Browser Editor codespace routes, and port-forward routes from the same runtime-managed HT",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "architecture/runtime-service-snapshot.md",
-      "concept_id": "architecture/runtime-service-snapshot",
+      "concept_id": "architecture.runtime-service-snapshot",
       "type": "Runtime Contract",
       "title": "Runtime Service snapshot",
       "description": "Runtime Service snapshots describe compatibility, open readiness, workload, capabilities, and Desktop/runtime bindings.",
@@ -228,11 +750,18 @@
         "type": "Runtime Contract"
       },
       "body": "The Runtime Service snapshot is Redeven's typed compatibility and readiness surface between the endpoint runtime, Desktop, Local UI, and provider-facing environment catalogs.\n\n# Mechanism\n\nThe Go runtime defines protocol version `redeven-runtime-v1`, owner states, compatibility states, open-readiness states, workload counts, runtime-control capabilities, Desktop model source binding state, and provider-link binding state. Normalization trims and defaults partial snapshots, applies endpoint facts such as Desktop ownership and effective run mode, infers open readiness from compatibility when missing, and blocks otherwise-open snapshots when the Env App shell is unavailable. The release compatibility contract is embedded and applied to snapshots.\n\n# Boundaries\n\nConsumers should use `open_readiness` and capability bindings rather than infer readiness from version strings or Desktop-only conditions. Protocol compatibility remains controlled by the embedded compatibility contract.\n\n# Citations\n\n[1] redeven:internal/runtimeservice/snapshot.go:8 - Runtime Service protocol version is `redeven-runtime-v1`.\n[2] redeven:internal/runtimeservice/snapshot.go:123 - Snapshot fields include version, owner, compatibility, readiness, workload, capabilities, and bindings.\n[3] redeven:internal/runtimeservice/snapshot.go:144 - Endpoint normalization applies Desktop-managed facts and effective run mode.\n[4] redeven:internal/runtimeservice/snapshot.go:180 - Snapshot normalization defaults protocol, owner, compatibility, readiness, counts, capabilities, and bindings.\n[5] redeven:internal/runtimeservice/snapshot.go:323 - Open readiness is normalized and inferred from compatibility when absent.\n[6] redeven:internal/runtimeservice/snapshot.go:346 - Update-required, Desktop-update-required, and managed-elsewhere states block opening.\n[7] redeven:internal/localui/localui.go:1043 - Local UI exposes the agent Runtime Service snapshot after endpoint normalization.\n[8] redeven:internal/localui/localui.go:1051 - Missing Env App shell forces an `env_app_shell_unavailable` open-readiness block.\n[9] redeven:internal/runtimeservice/compatibility.go:11 - The compatibility contract JSON is embedded in the runtime.\n[10] redeven:internal/runtimeservice/compatibility.go:142 - Applying the compatibility contract stamps protocol, epoch, minimum versions, review id, and compatibility.",
-      "snippet": "The Runtime Service snapshot is Redeven's typed compatibility and readiness surface between the endpoint runtime, Desktop, Local UI, and provider-facing environment catalogs. The Go runtime defines protocol version `redeven-runtime-v1`, own"
+      "snippet": "The Runtime Service snapshot is Redeven's typed compatibility and readiness surface between the endpoint runtime, Desktop, Local UI, and provider-facing environment catalogs. The Go runtime defines protocol version `redeven-runtime-v1`, own",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "architecture/runtime-session-permission-gates.md",
-      "concept_id": "architecture/runtime-session-permission-gates",
+      "concept_id": "architecture.runtime-session-permission-gates",
       "type": "Runtime Contract",
       "title": "Runtime session permission gates",
       "description": "Redeven validates session metadata and clamps granted permissions before opening runtime sessions.",
@@ -254,11 +783,18 @@
         "type": "Runtime Contract"
       },
       "body": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code App and Port Forward.\n\n# Mechanism\n\nWhen `grant_server` arrives on the control channel, the runtime checks the channel id, endpoint id, and `floe_app`, resolves the local cap via `PermissionPolicy.ResolveCap`, intersects that cap with the declared read/write/execute grant, writes the clamped flags back into the session snapshot, and refuses Code App or Port Forward sessions that do not satisfy stricter runtime-side requirements.\n\n# Boundaries\n\nBrowser or UI-side permission claims remain non-authoritative. This concept only holds while the runtime continues enforcing local caps plus per-app validation before `runDataSession` starts.\n\n# Citations\n\n[1] redeven:internal/config/permission_policy.go:13 - PermissionPolicy clamps control-plane session metadata to a user-approved local maximum.\n[2] redeven:internal/config/permission_policy.go:74 - ResolveCap intersects global, per-user, and per-app caps.\n[3] redeven:internal/agent/agent.go:473 - Unsupported floe_app values are rejected before runtime session startup.\n[4] redeven:internal/agent/agent.go:485 - Granted permissions are intersected with the resolved local cap.\n[5] redeven:internal/agent/agent.go:502 - Effective permissions overwrite the session metadata snapshot used by the runtime.\n[6] redeven:internal/agent/agent.go:508 - Code App sessions require a valid codespace id and full read/write/execute access.\n[7] redeven:internal/agent/agent.go:531 - Port Forward sessions require a valid forward id and execute capability.",
-      "snippet": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code "
+      "snippet": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code ",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "architecture/runtime-startup-presentation.md",
-      "concept_id": "architecture/runtime-startup-presentation",
+      "concept_id": "architecture.runtime-startup-presentation",
       "type": "Runtime Contract",
       "title": "Runtime startup presentation",
       "description": "redeven run startup output is structured events rendered by rich, plain, or machine presentation modes.",
@@ -282,11 +818,18 @@
         "type": "Runtime Contract"
       },
       "body": "`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and Desktop automation output are renderers over the same state snapshot, so readiness, failures, Local UI URLs, runtime-control details, and shutdown results stay machine-readable.\n\n# Mechanism\n\nThe run command parses `--mode`, `--local-ui-bind`, `--desktop-managed`, `--startup-report-file`, and `--presentation`, rejects Desktop-managed startup unless the presentation contract is machine-compatible, initializes a `runtimepresentation.Reporter`, emits phase events as state, lock, bootstrap, config, control, and Local UI phases progress, and writes a Desktop launch report when a Desktop-managed Local UI becomes ready.\n\n# Boundaries\n\nDesktop readiness must come from the machine presentation and startup-report contract, not from scraping rich terminal output. The compact character mark remains a rich renderer concern rather than command startup logic.\n\n# Citations\n\n[1] redeven:cmd/redeven/main.go:222 - Run mode is parsed as remote, hybrid, local, or desktop.\n[2] redeven:cmd/redeven/main.go:228 - Desktop-managed runs are explicit CLI state.\n[3] redeven:cmd/redeven/main.go:229 - Startup reports are written to a caller-provided file.\n[4] redeven:cmd/redeven/main.go:310 - Desktop-managed startup and startup reports require machine-compatible presentation.\n[5] redeven:cmd/redeven/main.go:322 - Presentation config is resolved from requested mode and runtime context.\n[6] redeven:cmd/redeven/main.go:348 - Startup events are emitted through a runtimepresentation.Reporter.\n[7] redeven:cmd/redeven/main.go:640 - Runtime readiness is emitted as a structured ready event with a snapshot.\n[8] redeven:cmd/redeven/main.go:771 - Desktop-ready launch reports include Local UI, runtime-control, state, and Runtime Service details.\n[9] redeven:cmd/redeven/desktop_startup_coordination.go:20 - Desktop launch reports are enabled only for Desktop-managed desktop-mode startups with a report path.\n[10] redeven:internal/runtimepresentation/events.go:1 - Startup phases and event payloads live in the runtimepresentation package.",
-      "snippet": "`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and Desktop automation output are renderers over the same state snapshot, so readiness, failures, Local UI URLs, runtime-control details, and shutdown resul"
+      "snippet": "`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and Desktop automation output are renderers over the same state snapshot, so readiness, failures, Local UI URLs, runtime-control details, and shutdown resul",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "architecture/runtime-transport-dependencies.md",
-      "concept_id": "architecture/runtime-transport-dependencies",
+      "concept_id": "architecture.runtime-transport-dependencies",
       "type": "Runtime Contract",
       "title": "Runtime transport dependencies",
       "description": "Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.",
@@ -308,11 +851,18 @@
         "type": "Runtime Contract"
       },
       "body": "Redeven runtime builds control and data sessions on Flowersec client and endpoint primitives, while terminal lifecycle inside the runtime is delegated to Floeterm's terminal-go manager.\n\n# Mechanism\n\nRedeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The agent connects the control channel through `fsclient.ConnectDirect`, opens data sessions through `endpoint.ConnectTunnel`, and wraps `termgo.NewManager` so terminal sessions, PTY activation, and lifecycle bookkeeping stay inside Floeterm's manager abstraction.\n\n# Boundaries\n\nCompatibility depends on these transport and terminal interfaces staying aligned across released versions. Replacing or bypassing them can break control and data channel behavior, stream semantics, or terminal session lifecycle.\n\n# Citations\n\n[1] redeven:go.mod:8 - Redeven pins floeterm terminal-go in the runtime module.\n[2] redeven:go.mod:9 - Redeven pins flowersec-go in the runtime module.\n[3] redeven:internal/agent/agent.go:20 - Agent imports Flowersec client, endpoint, proxy, and RPC packages.\n[4] redeven:internal/agent/agent.go:532 - The control channel connects through fsclient.ConnectDirect.\n[5] redeven:internal/agent/agent.go:688 - Runtime data sessions connect through endpoint.ConnectTunnel.\n[6] redeven:internal/terminal/manager.go:14 - Runtime terminal manager wraps floeterm terminal-go plus Flowersec RPC types.\n[7] redeven:internal/terminal/manager.go:98 - Runtime instantiates termgo.NewManager with Redeven shell and logging config.\n[8] redeven:AGENTS.md:173 - Repository rules require published upstream releases instead of local sibling checkouts.",
-      "snippet": "Redeven runtime builds control and data sessions on Flowersec client and endpoint primitives, while terminal lifecycle inside the runtime is delegated to Floeterm's terminal-go manager. Redeven pins released `flowersec-go` and `terminal-go`"
+      "snippet": "Redeven runtime builds control and data sessions on Flowersec client and endpoint primitives, while terminal lifecycle inside the runtime is delegated to Floeterm's terminal-go manager. Redeven pins released `flowersec-go` and `terminal-go`",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "code/browser-editor-runtime.md",
-      "concept_id": "code/browser-editor-runtime",
+      "concept_id": "code.browser-editor-runtime",
       "type": "Runtime Contract",
       "title": "Browser Editor runtime",
       "description": "Code App serves Browser Editor codespaces through the local app server and managed code workspace engine APIs.",
@@ -336,11 +886,18 @@
         "type": "Runtime Contract"
       },
       "body": "Browser Editor support is owned by the Code App app server. Codespaces are opened through Local UI `/cs/\u003cid\u003e/` routes, while Desktop and Env App can prepare or update managed Browser Editor runtime versions through code workspace engine APIs.\n\n# Mechanism\n\nThe Code App app server backend owns codespace lifecycle, port resolution, managed runtime status, import sessions, chunk upload, completion, version selection, version removal, and operation cancellation. Local UI routes `/cs/*` to the app server. Runtime-control mirrors the code workspace engine import flow for Desktop-managed setup. The code-server runner starts the editor bound to loopback with no editor auth, an absolute proxy base path under `/cs/\u003ccode_space_id\u003e`, disabled telemetry/update checks, scoped data directories, and a short stable session socket path.\n\n# Boundaries\n\nOpening or managing Browser Editor is not just a static file route. Version setup and removal require full read/write/execute runtime permissions, while status reads require read permission.\n\n# Citations\n\n[1] redeven:internal/codeapp/appserver/server.go:80 - App server backend owns codespace start, stop, delete, and port resolution.\n[2] redeven:internal/codeapp/appserver/server.go:84 - App server backend owns managed code runtime status and import operations.\n[3] redeven:internal/localui/localui.go:132 - Local UI mounts `/cs/` for codespace routes.\n[4] redeven:internal/localui/runtime_control.go:139 - Runtime-control exposes code workspace engine status and import routes.\n[5] redeven:internal/codeapp/appserver/server.go:2302 - Code runtime status requires read permission.\n[6] redeven:internal/codeapp/appserver/server.go:2314 - Code runtime import sessions require full permission.\n[7] redeven:internal/codeapp/appserver/server.go:2341 - Runtime import chunks are uploaded by upload id and chunk index.\n[8] redeven:internal/codeapp/appserver/server.go:2389 - Runtime version selection requires full permission.\n[9] redeven:internal/codeapp/codeserver/runner.go:274 - code-server uses `/cs/\u003ccode_space_id\u003e` as the absolute proxy base path.\n[10] redeven:internal/codeapp/codeserver/runner.go:276 - code-server binds to loopback with editor auth disabled.",
-      "snippet": "Browser Editor support is owned by the Code App app server. Codespaces are opened through Local UI `/cs/\u003cid\u003e/` routes, while Desktop and Env App can prepare or update managed Browser Editor runtime versions through code workspace engine API"
+      "snippet": "Browser Editor support is owned by the Code App app server. Codespaces are opened through Local UI `/cs/\u003cid\u003e/` routes, while Desktop and Env App can prepare or update managed Browser Editor runtime versions through code workspace engine API",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "desktop/desktop-runtime-bridge.md",
-      "concept_id": "desktop/desktop-runtime-bridge",
+      "concept_id": "desktop.desktop-runtime-bridge",
       "type": "Desktop Contract",
       "title": "Desktop runtime bridge",
       "description": "Desktop starts and probes Desktop-managed runtimes through machine startup reports, Local UI health, and runtime-control.",
@@ -364,11 +921,18 @@
         "type": "Desktop Contract"
       },
       "body": "Redeven Desktop treats the endpoint runtime as a managed service when it launches `redeven run --mode desktop --desktop-managed`. The handoff is machine-readable: Desktop receives Local UI URLs, runtime-control endpoint data, Runtime Service readiness, and startup failures without parsing human terminal output.\n\n# Mechanism\n\nThe CLI requires Desktop-managed Local UI runs to use machine presentation, writes startup reports, records Desktop owner metadata in the runtime lock, and exposes runtime-control only to loopback callers with the Desktop owner header and bearer token. Desktop probes `/api/local/runtime/health`, normalizes Runtime Service snapshots in TypeScript, verifies Env App shell readiness by inspecting the shell HTML and asset references, and builds the Env App entry URL from a normalized Local UI base URL. When Desktop Welcome opens Flower and the Local Environment runtime is cold, the Flower attach path starts that same local runtime lifecycle through launcher operation progress; the Flower surface uses the explicit `flower_warmup` presentation context to show runtime startup as a warmup state instead of treating the surface as stalled.\n\nDesktop Welcome uses the same Flower adapter contract as Env App for thread operations. Sending a turn posts through the runtime Flower IPC proxy, stop posts to the thread cancel route, and `/compact` posts to `/_redeven_proxy/api/ai/threads/{thread}/context/compact` before reloading the canonical live bootstrap. The Desktop bridge treats compaction as a thread action, not as a transcript message or a local UI-only marker, so Desktop and Env App receive the same live timeline decorations and read-state patches from the runtime.\n\n# Boundaries\n\nRuntime-control is not a general network API. It is scoped to the local Desktop/runtime bridge and protected by loopback, Desktop owner id, and bearer token checks. Flower warmup is a Desktop presentation context over the existing runtime lifecycle operation, not a separate readiness source or a parser for runtime terminal output. Desktop must not implement alternate Flower thread semantics locally; thread stop, send, compact, and live reload flow through the runtime proxy contract.\n\n# Citations\n\n[1] redeven:cmd/redeven/main.go:292 - Desktop-managed startup is rejected for remote-only mode.\n[2] redeven:cmd/redeven/main.go:310 - Desktop-managed startup requires machine-compatible presentation.\n[3] redeven:cmd/redeven/main.go:627 - Runtime lock metadata records desktop-managed state and Desktop owner id.\n[4] redeven:cmd/redeven/main.go:771 - Desktop-ready startup reports include Local UI, runtime-control, and Runtime Service data.\n[5] redeven:internal/localui/runtime_control.go:23 - Runtime-control protocol version is `redeven-runtime-control-v1`.\n[6] redeven:internal/localui/runtime_control.go:166 - Runtime-control endpoint data includes base URL, token, and Desktop owner id.\n[7] redeven:internal/localui/runtime_control.go:193 - Runtime-control requests require loopback, matching Desktop owner id, and bearer token.\n[8] redeven:desktop/src/main/runtimeState.ts:119 - Desktop probes Local UI runtime health at `/api/local/runtime/health`.\n[9] redeven:desktop/src/main/runtimeState.ts:135 - Desktop validates the Env App shell HTML before treating it as ready.\n[10] redeven:desktop/src/main/localUIURL.ts:44 - Desktop builds the Env App entry URL under `/_redeven_proxy/env/`.\n[11] redeven:desktop/src/main/main.ts:7524 - Welcome Flower cold-starts Local Environment through structured local runtime lifecycle progress.\n[12] redeven:desktop/src/welcome/App.tsx:3073 - The Flower warmup state only consumes lifecycle progress marked with the `flower_warmup` presentation context.\n[13] redeven:internal/flower_ui/src/FlowerSurface.tsx:315 - Flower renders the explicit warmup state without replacing selected-thread content.\n[14] redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:443 - Desktop Flower compaction posts to the runtime compact endpoint and reloads live bootstrap.",
-      "snippet": "Redeven Desktop treats the endpoint runtime as a managed service when it launches `redeven run --mode desktop --desktop-managed`. The handoff is machine-readable: Desktop receives Local UI URLs, runtime-control endpoint data, Runtime Servic"
+      "snippet": "Redeven Desktop treats the endpoint runtime as a managed service when it launches `redeven run --mode desktop --desktop-managed`. The handoff is machine-readable: Desktop receives Local UI URLs, runtime-control endpoint data, Runtime Servic",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "gateway/gateway-service.md",
-      "concept_id": "gateway/gateway-service",
+      "concept_id": "gateway.gateway-service",
       "type": "Gateway Contract",
       "title": "Gateway service",
       "description": "redeven-gateway is a separate Gateway service binary with managed lifecycle and Desktop bridge support.",
@@ -392,11 +956,18 @@
         "type": "Gateway Contract"
       },
       "body": "Gateway is no longer folded into the Runtime Service snapshot. It is a separate `redeven-gateway` binary and service surface that Desktop can manage, bridge, pair, and use for Gateway-owned environment profiles.\n\n# Mechanism\n\nThe Gateway CLI exposes `serve`, `desktop-bridge`, `service-status`, `service-start`, `service-stop`, and `version`. Managed service start creates a bridge token, launches `serve` in the background, records a PID/listen status file, and waits for readiness. `desktop-bridge` verifies that the service is running and that the managed bridge token exists, then serves the Gateway protocol bridge over stdio. The release workflow builds and packages `redeven-gateway` alongside the main `redeven` binary.\n\nThe Gateway HTTP JSON protocol source contract is `spec/openapi/gateway-v1.yaml`. That OpenAPI file describes the `/gateway/v1/*` wire surface, request/response envelopes, schema variants, auth headers, the managed bridge token boundary, and the `redeven-gateway-v1` protocol version. The contract is checked by `internal/runtimegateway/protocol/openapi_contract_test.go` and by `scripts/check_gateway_protocol_contract.sh`, so Go service routes, Desktop client routes, enums, envelope shape, and protocol literals cannot drift silently.\n\nFor URL environment profiles, each open-session creates an isolated local-direct listener and returns a signed artifact URL rooted at a random profile access path on that listener. The main Gateway protocol host does not proxy profile traffic, and open-session does not install browser cookies. Requests must either use the random artifact path or prove a same-origin navigation chain from it, so probing the listener port without the artifact URL cannot reach the target. The listener lifetime is capped by the signed artifact expiry and it is also closed on profile update/delete or Gateway server shutdown. Target-site cookies are captured in a per-open-session server-side cookie jar, browser-supplied cookies and authorization headers are stripped before proxying, target `Set-Cookie` and service-worker scope headers are removed from browser responses.\n\n# Boundaries\n\nGateway state, pairing, profile write enablement, private-profile-target allowance, and URL profile session listener lifecycle are Gateway service concerns. Runtime Service compatibility stays separate unless the runtime snapshot contract itself changes.\n\nOpenAPI is intentionally limited to the Gateway HTTP JSON wire contract. It does not define the Desktop bridge stdio frame protocol, Env App proxy routes, Runtime Service compatibility windows, or a full state-machine DSL. Gateway semantics such as nonce lifetime, trust profile pinning, stale catalog invalidation after protocol failure, and managed-versus-external recovery actions are enforced by Go/TypeScript tests and documented in OKF rather than encoded as a new custom protocol language.\n\nGateway should not depend on the Flowersec DSL for this API contract. Flowersec remains a transport/session dependency boundary, while Gateway's control API is a small HTTP surface with explicit OpenAPI schemas and focused contract tests.\n\n# Citations\n\n[1] redeven:cmd/redeven-gateway/main.go:83 - `serve` accepts state root, listen address, private target, profile write, and pairing flags.\n[2] redeven:cmd/redeven-gateway/main.go:116 - `desktop-bridge` exposes the Gateway protocol bridge over stdio.\n[3] redeven:cmd/redeven-gateway/main.go:188 - `service-start` starts a managed Gateway service in the background.\n[4] redeven:cmd/redeven-gateway/main.go:217 - Managed service start ensures a managed bridge token exists.\n[5] redeven:cmd/redeven-gateway/main.go:227 - Managed service start launches `serve` with state and listener flags.\n[6] redeven:cmd/redeven-gateway/main.go:254 - `service-stop` terminates a running managed Gateway service and removes managed state markers.\n[7] redeven:cmd/redeven-gateway/main.go:293 - Gateway service construction receives Desktop bridge, profile target, profile write, pairing, and token options.\n[8] redeven:cmd/redeven-gateway/main.go:495 - CLI help lists the Gateway command set.\n[9] redeven:.github/workflows/release.yml:51 - Release validates the Gateway protocol contract before packaging.\n[10] redeven:internal/runtimeservice/compatibility_contract.json:8 - The current compatibility review records Gateway service decoupling as outside the Runtime Service window.\n[11] redeven:spec/openapi/gateway-v1.yaml:1 - The Gateway OpenAPI contract declares OpenAPI 3.1.\n[12] redeven:spec/openapi/gateway-v1.yaml:24 - The Gateway OpenAPI contract declares the `redeven-gateway-v1` version.\n[13] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:73 - The contract test rejects the old runtime-gateway protocol name.\n[14] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:76 - The contract test rejects Runtime Service compatibility fields in Gateway OpenAPI.\n[15] redeven:internal/gatewayservice/server.go:643 - URL profile open-session creates an isolated profile session listener.\n[16] redeven:internal/gatewayservice/server.go:847 - Profile session requests are gated by the artifact access path or same-origin proof.\n[17] redeven:internal/gatewayservice/server.go:1019 - The profile proxy injects only server-side jar cookies into target requests.\n[18] redeven:internal/gatewayservice/server.go:1034 - The profile proxy strips target `Set-Cookie` before responding to the browser.\n[19] redeven:scripts/check_gateway_protocol_contract.sh:9 - The standalone contract check runs the Gateway OpenAPI and naming-boundary tests.",
-      "snippet": "Gateway is no longer folded into the Runtime Service snapshot. It is a separate `redeven-gateway` binary and service surface that Desktop can manage, bridge, pair, and use for Gateway-owned environment profiles. The Gateway CLI exposes `ser"
+      "snippet": "Gateway is no longer folded into the Runtime Service snapshot. It is a separate `redeven-gateway` binary and service surface that Desktop can manage, bridge, pair, and use for Gateway-owned environment profiles. The Gateway CLI exposes `ser",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "protocol/gateway-v1-protocol.md",
-      "concept_id": "protocol/gateway-v1-protocol",
+      "concept_id": "protocol.gateway-v1-protocol",
       "type": "Protocol Contract",
       "title": "Gateway v1 protocol",
       "description": "Gateway v1 uses OpenAPI as the machine-readable HTTP JSON wire contract for /gateway/v1/*.",
@@ -420,11 +991,18 @@
         "type": "Protocol Contract"
       },
       "body": "Gateway v1 is the `redeven-gateway-v1` HTTP JSON protocol used by Desktop and `redeven-gateway` for pairing, catalog reads, open-session artifacts, Gateway-owned profile writes, and lifecycle requests. Its machine-readable source contract is `spec/openapi/gateway-v1.yaml`.\n\n# Mechanism\n\nThe OpenAPI document defines seven `POST /gateway/v1/*` endpoints, one success envelope shape, one error envelope shape, the protocol version const, signed Gateway auth headers, the managed bridge token security boundary for profile writes, `GatewayConnectArtifact` variants, and the conditional profile access route variants. Open-session responses do not declare or depend on browser `Set-Cookie`; local-direct profile sessions are represented by a signed artifact URL whose listener port and random access path are session-specific service state, not a protocol cookie.\n\nThe OpenAPI contract is kept consistent with code by a focused Go contract test. The test parses YAML structurally, compares `info.version` with `internal/runtimegateway/protocol.Version` and the Desktop `GATEWAY_PROTOCOL_VERSION`, compares OpenAPI paths against Go server registrations and Desktop routes, verifies security requirements, checks required fields and enums, confirms closed object schemas, validates profile route variants, and rejects old `redeven-runtime-gateway-v1` residue or Runtime Service compatibility fields.\n\nGateway v1 does not expose `ssh_secret` in OpenAPI and accepts only key-agent SSH profile auth. Incoming `ssh_secret`, SSH password auth, unknown `client_capability`, and access-route fields outside the selected route variant are rejected by executable protocol and service validation instead of being ignored or treated as compatibility fallbacks.\n\nDesktop treats Gateway protocol mismatch as a Gateway protocol failure, not as trust repair, pairing, reachability, or Runtime Service compatibility. Managed Gateway mismatches can recommend updating the managed Gateway package; URL/access-only Gateway mismatches remain facts-only and must not promise that Desktop can update a remote host. Protocol mismatch also invalidates cached Gateway catalog environments and capabilities so stale catalog entries cannot be opened after a failed protocol check.\n\n# Boundaries\n\nOpenAPI is sufficient for the Gateway HTTP wire contract, but it is not used as a complete workflow DSL. Nonce lifetime, proof verification, trust profile persistence, isolated local-direct listener lifecycle, artifact-path request gating, stale catalog invalidation, recovery action selection, and debug redaction remain executable Go/TypeScript behavior with tests.\n\nNo new custom Gateway protocol specification language is introduced. Flowersec DSL is also not used for this API contract because the Gateway API is a compact HTTP control surface, while Flowersec remains in the transport/session dependency boundary.\n\nThe contract excludes Desktop bridge stdio hello/frame schemas, Env App proxy routes, direct proxy surfaces, Runtime Service compatibility windows, release installer metadata, and human Markdown protocol descriptions that are not active source contracts.\n\n# Citations\n\n[1] redeven:spec/openapi/gateway-v1.yaml:1 - The OpenAPI document declares version 3.1.\n[2] redeven:spec/openapi/gateway-v1.yaml:24 - `info.version` is `redeven-gateway-v1`.\n[3] redeven:spec/openapi/gateway-v1.yaml:38 - The path set starts with `/gateway/v1/pairing/challenge`.\n[4] redeven:spec/openapi/gateway-v1.yaml:239 - Gateway auth headers are declared as OpenAPI security schemes.\n[5] redeven:spec/openapi/gateway-v1.yaml:286 - The protocol version schema is a string const.\n[6] redeven:spec/openapi/gateway-v1.yaml:657 - Gateway connect artifacts are closed variants for local direct and Desktop bridge sessions.\n[7] redeven:spec/openapi/gateway-v1.yaml:750 - SSH profile auth mode is limited to key-agent auth.\n[8] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:69 - The focused contract test parses and validates the OpenAPI file.\n[9] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:173 - Desktop protocol literals are checked against the Go protocol version.\n[10] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:197 - OpenAPI paths are compared with Go server routes and Desktop routes.\n[11] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:448 - The contract test keeps `ssh_secret` out of Gateway v1 OpenAPI.\n[12] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:485 - The contract test ensures open-session does not expose browser cookies.\n[13] redeven:desktop/src/main/main.ts:3808 - Gateway sync errors build a source record from the current error and previous catalog state.\n[14] redeven:desktop/src/main/main.ts:3855 - Protocol mismatch invalidates cached Gateway catalog data.",
-      "snippet": "Gateway v1 is the `redeven-gateway-v1` HTTP JSON protocol used by Desktop and `redeven-gateway` for pairing, catalog reads, open-session artifacts, Gateway-owned profile writes, and lifecycle requests. Its machine-readable source contract i"
+      "snippet": "Gateway v1 is the `redeven-gateway-v1` HTTP JSON protocol used by Desktop and `redeven-gateway` for pairing, catalog reads, open-session artifacts, Gateway-owned profile writes, and lifecycle requests. Its machine-readable source contract i",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "protocol/rcpp-v2-provider-api.md",
-      "concept_id": "protocol/rcpp-v2-provider-api",
+      "concept_id": "protocol.rcpp-v2-provider-api",
       "type": "Protocol Contract",
       "title": "RCPP v2 provider API",
       "description": "The provider protocol OpenAPI contract covers discovery, OAuth, environment catalog, runtime health, bootstrap, and launch data.",
@@ -448,11 +1026,18 @@
         "type": "Protocol Contract"
       },
       "body": "Redeven's machine-readable provider integration contract is `spec/openapi/rcpp-v2.yaml`. It is the remaining maintained provider protocol specification after stale human protocol Markdown was removed.\n\n# Mechanism\n\nThe OpenAPI contract defines provider discovery under `/.well-known/redeven-provider.json`, OAuth authorization and token endpoints, provider account status, environment catalog listing, runtime health query, bootstrap ticket exchange, local bootstrap registration, and environment launch data resolution. Desktop and runtime code consume the same concepts through provider origin, provider id, access point origin, environment public id, runtime health snapshots, bootstrap tickets, and launch data.\n\n# Boundaries\n\nHuman protocol Markdown is not the source of truth. Provider-facing changes must update the OpenAPI contract and corresponding runtime/Desktop code together.\n\n# Citations\n\n[1] redeven:spec/openapi/rcpp-v2.yaml:3 - The OpenAPI title names the Redeven Control Plane Provider Protocol.\n[2] redeven:spec/openapi/rcpp-v2.yaml:15 - Provider discovery lives at `/.well-known/redeven-provider.json`.\n[3] redeven:spec/openapi/rcpp-v2.yaml:45 - OAuth authorization starts at `/oauth/authorize`.\n[4] redeven:spec/openapi/rcpp-v2.yaml:59 - OAuth token exchange lives at `/oauth/token`.\n[5] redeven:spec/openapi/rcpp-v2.yaml:85 - Provider account status is exposed under `/api/rcpp/v2/account/status`.\n[6] redeven:spec/openapi/rcpp-v2.yaml:101 - Environment listing is exposed under `/api/rcpp/v2/environments`.\n[7] redeven:spec/openapi/rcpp-v2.yaml:128 - Runtime health snapshots are queried through `/api/rcpp/v2/environments/runtime-health/query`.\n[8] redeven:spec/openapi/rcpp-v2.yaml:170 - Runtime bootstrap exchanges use `/api/rcpp/v2/runtime/bootstrap/exchange`.\n[9] redeven:spec/openapi/rcpp-v2.yaml:191 - Local bootstrap registration uses `/api/rcpp/v2/local/bootstrap/register`.\n[10] redeven:spec/openapi/rcpp-v2.yaml:201 - Launch data is resolved through `/api/rcpp/v2/launch-data`.",
-      "snippet": "Redeven's machine-readable provider integration contract is `spec/openapi/rcpp-v2.yaml`. It is the remaining maintained provider protocol specification after stale human protocol Markdown was removed. The OpenAPI contract defines provider d"
+      "snippet": "Redeven's machine-readable provider integration contract is `spec/openapi/rcpp-v2.yaml`. It is the remaining maintained provider protocol specification after stale human protocol Markdown was removed. The OpenAPI contract defines provider d",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "release/ci-and-release-gates.md",
-      "concept_id": "release/ci-and-release-gates",
+      "concept_id": "release.ci-and-release-gates",
       "type": "Release Contract",
       "title": "CI and release gates",
       "description": "Redeven release confidence comes from shell checks, OKF validation, UI checks, Runtime Service compatibility, assets, Go tests, and lint.",
@@ -476,11 +1061,18 @@
         "type": "Release Contract"
       },
       "body": "Redeven keeps CI and local release checks aligned around source validation and generated asset determinism. OKF is part of that gate, not an optional documentation artifact.\n\n# Mechanism\n\nCI has a dedicated OKF bundle check that validates source integrity and verifies checked-in dist files. The main check installs Go, Node, corepack, golangci-lint, gitleaks, and ripgrep, then runs shell syntax checks, third-party notice validation, open-source hygiene, release note generator tests, Runtime Service compatibility checks, Gateway protocol contract checks, Flower protocol checks, Flower UI behavior contracts, UI lint, Desktop checks, embedded asset builds, Go tests, and golangci-lint. Release tags run the compatibility contract check and Gateway protocol contract check before building assets and packaging binaries.\n\n# Boundaries\n\nChecked-in generated OKF dist files must match source. Release automation should collect `okf/dist` verification files from the current tree, not from removed `internal/okf` or knowledge paths. Gateway protocol drift must fail before Gateway binaries are packaged, because `spec/openapi/gateway-v1.yaml` is the active source contract for the Gateway HTTP API.\n\n# Citations\n\n[1] redeven:.github/workflows/ci-check.yml:14 - CI defines a dedicated OKF bundle check job.\n[2] redeven:.github/workflows/ci-check.yml:26 - OKF source integrity is checked in CI.\n[3] redeven:.github/workflows/ci-check.yml:29 - OKF dist verification is checked in CI.\n[4] redeven:.github/workflows/ci-check.yml:55 - CI runs shell script syntax checks across release and validation scripts.\n[5] redeven:.github/workflows/ci-check.yml:92 - Open-source hygiene runs with `--all`.\n[6] redeven:.github/workflows/ci-check.yml:98 - Runtime compatibility contract source checks run in CI.\n[7] redeven:.github/workflows/ci-check.yml:101 - CI runs the Gateway protocol contract guard.\n[8] redeven:.github/workflows/ci-check.yml:107 - CI runs the Flower UI behavior contract script.\n[9] redeven:scripts/check_flower_ui.sh:16 - The local Flower UI gate runs stop/send interaction, shared timeline projection, and markdown readability tests.\n[10] redeven:.github/workflows/ci-check.yml:116 - Embedded assets are built before Go tests and lint.\n[11] redeven:.github/workflows/release.yml:48 - Release tags validate the runtime compatibility contract for the tag.\n[12] redeven:.github/workflows/release.yml:51 - Release tags validate the Gateway protocol contract before packaging.\n[13] redeven:.github/workflows/release.yml:54 - Release tags build embedded assets before packaging.\n[14] redeven:AGENTS.md:326 - Repository local quality gates include OKF integrity, dist verification, assets, Go tests, and golangci-lint.\n[15] redeven:scripts/check_gateway_protocol_contract.sh:9 - The local script executes the focused Gateway OpenAPI and naming-boundary tests.",
-      "snippet": "Redeven keeps CI and local release checks aligned around source validation and generated asset determinism. OKF is part of that gate, not an optional documentation artifact. CI has a dedicated OKF bundle check that validates source integrit"
+      "snippet": "Redeven keeps CI and local release checks aligned around source validation and generated asset determinism. OKF is part of that gate, not an optional documentation artifact. CI has a dedicated OKF bundle check that validates source integrit",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "release/okf-release-assets.md",
-      "concept_id": "release/okf-release-assets",
+      "concept_id": "release.okf-release-assets",
       "type": "Release Contract",
       "title": "OKF release assets",
       "description": "Release workflow publishes OKF verification assets alongside CLI and desktop artifacts.",
@@ -504,11 +1096,18 @@
         "type": "Release Contract"
       },
       "body": "GitHub releases ship `okf_bundle.manifest.json` and `okf_bundle.sha256` together with CLI tarballs, desktop packages, and signed `SHA256SUMS`.\n\n# Mechanism\n\nBuild jobs copy the OKF verification files into per-platform package artifacts. The release job recollects them, includes them in `SHA256SUMS`, signs the checksum file with Cosign keyless OIDC, and uploads the OKF files as standalone GitHub Release assets.\n\n# Boundaries\n\nDownstream verification relies on releases containing both the standalone OKF verification files and the signed aggregate checksum set.\n\n# Citations\n\n[1] redeven:.github/workflows/release.yml:51 - Release builds embedded assets before packaging binaries.\n[2] redeven:.github/workflows/release.yml:54 - Build jobs collect the OKF manifest and sha files into dist.\n[3] redeven:.github/workflows/release.yml:86 - Package artifacts upload those OKF files alongside CLI tarballs.\n[4] redeven:.github/workflows/release.yml:279 - The release job recopies downloaded OKF verification assets into dist.\n[5] redeven:.github/workflows/release.yml:294 - SHA256SUMS includes OKF bundle manifest and sha files.\n[6] redeven:.github/workflows/release.yml:378 - GitHub release upload includes the OKF verification files.",
-      "snippet": "GitHub releases ship `okf_bundle.manifest.json` and `okf_bundle.sha256` together with CLI tarballs, desktop packages, and signed `SHA256SUMS`. Build jobs copy the OKF verification files into per-platform package artifacts. The release job r"
+      "snippet": "GitHub releases ship `okf_bundle.manifest.json` and `okf_bundle.sha256` together with CLI tarballs, desktop packages, and signed `SHA256SUMS`. Build jobs copy the OKF verification files into per-platform package artifacts. The release job r",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "security/permission-policy-and-filesystem-scope.md",
-      "concept_id": "security/permission-policy-and-filesystem-scope",
+      "concept_id": "security.permission-policy-and-filesystem-scope",
       "type": "Security Contract",
       "title": "Permission policy and filesystem scope",
       "description": "Runtime permissions are clamped by local policy and file features are scoped by directory root policy.",
@@ -532,11 +1131,18 @@
         "type": "Security Contract"
       },
       "body": "Redeven treats endpoint runtime policy as authoritative. Control-plane grants can authorize a session, but the runtime clamps those grants with a local permission policy and file-facing features use explicit filesystem root policy.\n\n# Mechanism\n\nThe local permission policy is a three-bit read/write/execute cap. It starts from `local_max`, optionally intersects by user and by floe app, and supports presets for read-only, execute+read, and full read/write/execute. Session startup intersects the control-plane grant with the local cap before the runtime stores effective permission flags. Filesystem scope validates explicit root ids, labels, paths, kinds, default root references, and the invariant that write implies read.\n\n# Boundaries\n\nBrowser state, provider metadata, and UI affordances cannot widen runtime permissions. Future file, Git, Flower, Code App, and terminal changes should update OKF only after the runtime code or typed policy changes.\n\n# Citations\n\n[1] redeven:internal/config/permission_policy.go:11 - PermissionPolicy is the local endpoint cap for session metadata.\n[2] redeven:internal/config/permission_policy.go:25 - PermissionSet is the read/write/execute model.\n[3] redeven:internal/config/permission_policy.go:32 - Permission sets intersect by logical AND.\n[4] redeven:internal/config/permission_policy.go:68 - ResolveCap starts from local max and further intersects user/app caps.\n[5] redeven:internal/config/permission_policy.go:97 - Permission policy presets map CLI names to concrete caps.\n[6] redeven:internal/agent/agent.go:485 - Runtime session handling intersects granted permissions with the local cap.\n[7] redeven:internal/agent/agent.go:508 - Code App sessions require valid codespace identity and full read/write/execute access.\n[8] redeven:internal/agent/agent.go:531 - Port Forward sessions require valid forward identity and execute access.\n[9] redeven:internal/config/filesystem_scope.go:11 - FilesystemScope stores versioned root policy.\n[10] redeven:internal/config/filesystem_scope.go:71 - Filesystem root validation rejects write access without read access.",
-      "snippet": "Redeven treats endpoint runtime policy as authoritative. Control-plane grants can authorize a session, but the runtime clamps those grants with a local permission policy and file-facing features use explicit filesystem root policy."
+      "snippet": "Redeven treats endpoint runtime policy as authoritative. Control-plane grants can authorize a session, but the runtime clamps those grants with a local permission policy and file-facing features use explicit filesystem root policy.",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "ui/flower-live-timeline.md",
-      "concept_id": "ui/flower-live-timeline",
+      "concept_id": "ui.flower-live-timeline",
       "type": "UI Contract",
       "title": "Flower live timeline",
       "description": "Flower renders Redeven's canonical thread timeline from live bootstrap and timeline replacement events.",
@@ -560,11 +1166,18 @@
         "type": "UI Contract"
       },
       "body": "Flower is a reusable chat surface over a Redeven-owned product timeline. Redeven owns thread persistence, turn anchoring, live drafts, and message ordering; Flower renders the ordered messages that Redeven projects for the selected thread.\n\n# Mechanism\n\nThe Flower live bootstrap includes `timeline_messages` as the only ordered message source for a thread snapshot. Redeven builds those messages from persisted transcript rows, conversation turn anchors, and live assistant drafts. Turn anchors order each user message beside its assistant message, while live drafts can replace the matching assistant message before the final assistant transcript row is committed.\n\nLive streaming uses canonical server events to create only the rows those events define. `message.started` may create or merge one assistant streaming row and marks it as the single active cursor. User messages are not locally invented; a canonical `message.committed` payload upserts the committed message by id, so a newly accepted user turn can appear in the current window without a placeholder. Block, activity, or failure updates still require their target message to exist; if local state is missing, the reducer marks the batch as needing resync. When the canonical ordering changes, Redeven emits `timeline.replaced`; the payload carries `stream_generation` and `snapshot_through_seq`, and the reducer replaces the full message array while advancing the cursor to that snapshot boundary. `stream_generation` is a Service-instance epoch rather than a protocol constant. When the selected thread observes a newer generation after holding an older cursor, Flower resets the live cursor for that thread before fetching low-sequence events from the new stream, so runtime restart or stream rebuild cannot cause a stale high cursor to hide new events.\n\nSubagent presentation is also derived from the canonical timeline. The parent thread records delegation tool activity through Floret `ActivityTimeline` payloads for `subagents`; child lifecycle sync refreshes that parent activity timeline from the latest Floret snapshots, so asynchronous child completion updates the parent Sub Agents dropdown without an extra UI state source. The Flower surface projects the dropdown from those payloads, merges child items by child thread id, and shows active and settled counts in the selected parent thread header. The dropdown is a header-triggered floating surface, not a page or side panel: it uses the shared Floe surface floating layer, named Flower layer tokens, an opaque popover surface, and the same running loader language as inline tool activity rows. Selecting a child never selects or navigates to the child thread; it loads parent-scoped detail through the surface adapter and opens a read-only Floe `FloatingWindow` over the current parent conversation. The detail window reuses the same timeline/message/activity renderers as the main thread, adds a bottom live status lane, tails active child detail incrementally, auto-follows only while the user is at the bottom, and exposes a scroll-to-latest affordance when the user reviews earlier output. Detail tailing continues while the child is queued, running, or waiting for input even when the current page reports `has_more=false`; terminal child status stops the tail, and transient tail errors stay in the detail dock with a longer retry interval. The detail tail and full child execution timeline are human UI state only; they are never injected into the parent model context by default. The overlay can render child user/assistant messages, tool calls, tool results, approvals, turn markers, compactions, errors, and generic custom rows from the child detail timeline. If the detail API currently has only summary data, Flower projects that summary into the same read-only message model rather than showing an empty transcript. Legacy transcript-local `subagent` blocks and legacy `snapshots`, `snapshots_by_id`, or free-form `subagents` collection payloads are not part of the live timeline contract.\n\nActive cursor ownership belongs to Redeven's live projection. The projection marks at most one live assistant draft with `active_cursor` while the selected thread is running, and canceled, completed, idle, background, or merely streaming-shaped messages are not treated as active unless the projection marks them active. The visible model status affordance is a localized bottom dock lane driven by `model_io.updated`, not by `active_cursor` or thread running status. `model_io` is derived from Floret provider lifecycle and stream observations: provider request maps to waiting for model response; assistant, reasoning, and model tool-call stream observations map to thinking; provider retry maps to retrying; provider finish maps to finalizing. The indicator is not a timeline message and does not depend on a visible assistant block. The indicator's readable text is the base rendered text; shimmer is a decorative overlay and must not be the only mechanism that makes the label visible.\n\nContext usage and compaction state share the canonical projection model while using distinct presentation affordances. Redeven stores the latest `context_usage` plus historical `context_compactions` and `timeline_decorations` in Flower live materialized state. `context.usage.updated` drives the compact circular context indicator in the composer footer beside the primary send action. `context.compaction.updated` upserts a `context_compaction` timeline decoration keyed by `operation_id`; the UI renders it as a non-interactive divider such as compression in progress, compressed, or failed. A decoration carries a typed timeline `anchor` targeting a message, block, or activity item plus a before/after edge. Missing or invalid anchors are contract errors or skipped render entries, not permission to guess a fallback position. The divider is not a transcript message and does not affect message ordering, copying, or model-visible history. Because context telemetry is visible thread activity, persisted context usage and compaction events advance the canonical Flower read activity revision together with `last_context_run_id`, and broadcasting those context stream events also publishes a thread summary patch so selected live polling receives the current read status.\n\nFlower `/compact` is a composer command, not a chat message. The surface parses the exact slash command before the stop/send matrix, calls the shared `compactThreadContext` adapter action, scrolls to the tail, and never submits `/compact` through `launchTurn`. Running threads compact in place: Redeven accepts the command, binds the decoration anchor at the time the manual operation is queued, forwards the manual request into the active Floret hosted-turn lifecycle, and keeps the run running after start, complete, or failed compaction events. Idle threads use an operation-only background path: the actor captures the anchor, broadcasts the running divider immediately, releases the actor, and then calls Floret `Host.CompactThread`; after Floret completes, Redeven persists only the returned opaque provider continuation when the product thread boundary still matches. Idle compaction never creates user or assistant transcript rows and never stores Redeven-owned provider-visible context state. The selected thread continues live polling while the in-memory live state has a `compacting` operation, even if the thread status is otherwise idle, so the same open Flower window observes the divider transition to compacted or failed. Cold bootstrap restores only terminal persisted compaction events (`compacted`, `failed`, or `cancelled`); an unfinished start/running event without a live worker is not replayed as a permanent \"compression in progress\" divider after restart. User turns sent while an idle compact operation is running enter the queued follow-up lane instead of blocking the actor or writing a premature transcript row; after the operation clears, queued drain starts the turn through the same canonical turn-start path. The next provider-visible context remains Floret-owned through Floret thread state and opaque provider continuation.\n\nAccepted user turns are durable only when their canonical start state is complete. Redeven starts an idle or dequeued user turn in one threadstore transaction that writes the user transcript message, run record, conversation turn anchor, thread run state, structured input records, secret answers, upload bindings, and optional source follow-up consumption. If that transaction fails, no user transcript row remains. After it commits, live projection can broadcast the user message and assistant draft from the same canonical product timeline boundary.\n\nSelected-thread live polling treats `model_io.updated` as a presentation boundary. Even when one live-events response contains a short provider stream followed by finalizing or clearing events, Flower commits the model status lane and yields a render frame at each model I/O boundary. This keeps brief but real provider streaming phases visible to the user without inventing timeline rows, fallback timers, or thread-status heuristics.\n\nThread read state is a user-scoped appserver projection over a canonical Flower activity snapshot persisted on `ai_threads`. Threadstore owns `flower_activity_revision`, `flower_activity_signature`, and `flower_activity_waiting_prompt_id`, initializes them for new and migrated threads, and advances them in the same transaction as visible message changes, run-state changes, waiting prompts, persisted context usage or compaction events, projected thread or message changes, stale active-run resets, and fork initialization. Appserver builds `read_status.snapshot` from `ThreadView.FlowerActivity` rather than deriving a second clock from run status or timestamps; unread is only `current.activity_revision \u003e record.last_seen_activity_revision`.\n\nMark-read requests echo a snapshot previously delivered by the server. Future snapshots are rejected, current-revision signature, waiting-prompt, or last-message mismatches remain protocol errors, and stale snapshots are accepted without pretending they covered newer activity; the response still returns the current authoritative `read_status`. The shared Flower adapter returns that `read_status` directly instead of reloading the bootstrap. A selected running thread that completes while the user keeps it selected is therefore marked read from the final snapshot by the Flower surface, while background completions remain unread until selected.\n\n# Boundaries\n\nFlower does not sort messages, infer canonical insertion points from timestamps, or pair recent user messages with assistant drafts. It may project an assistant streaming row only from a `message.started` event and may upsert a canonical user row only from a `message.committed` payload. Local pending user rows are presentation-only composer feedback while a launch or queued follow-up request is in flight; they are removed or reclassified when the canonical thread snapshot confirms a committed message or queued turn, and they are never copied into transcript storage or model-visible history. The selected thread may show a bottom model status lane while a matching active run has `model_io`, but every durable rendered chat message must come from the current thread timeline.\n\nFlower does not infer read snapshots from run status, timestamps, message previews, context telemetry, or local activity tables. It applies `read_status` delivered by bootstrap/list/patch payloads and only persists read state for the currently selected thread. Selected-thread read sync updates local `read_status` from the `/read` response; if the response is still unread, Flower only queues another persistence attempt when the returned snapshot key differs and the thread remains selected.\n\nFlower does not parse provider request metadata, database rows, or transcript text to estimate context pressure. It renders context usage and compaction only from typed live/bootstrap fields projected by Redeven from structured Floret observations. Flower slash commands are local composer actions; `/compact` does not enter the transcript and does not cancel or replace a running agent turn.\n\nFlower does not synthesize Sub Agents dropdown state from audit tables, provider-adapter side effects, child assistant text, or a separate transcript block type. The parent ActivityTimeline item payload and child thread id are the summary display contract, while full child execution detail belongs to the parent-scoped subagent detail API and is never injected into the parent model context by default. Subagent detail live tailing is a UI-only read path with request identity guards; it must not become a model-facing wait result, a second chat composer, or an alternate thread navigation target. Read-only child projection threads are identified with structured `owner_kind=subagent_projection` metadata for internal projection and cleanup, but they are excluded from normal thread-list/sidebar results and must not become the main Flower navigation target.\n\nRedeven may publish `timeline.replaced` after run start, assistant commit, stop materialization, and resync recovery. Desktop and Env App adapters both refresh the live bootstrap after thread-level stop operations, so the surface receives the same canonical timeline after a stop-only or stop+send interaction.\n\n# Citations\n\n[1] redeven:internal/ai/flower_live_projection.go:79 - Live bootstrap builds `timeline_messages` before returning the thread snapshot.\n[2] redeven:internal/ai/flower_live_projection.go:173 - The server-side timeline builder combines persisted messages, turn anchors, and live drafts.\n[3] redeven:internal/ai/flower_live_projection.go:276 - Active cursor ownership is derived from active live run state.\n[4] redeven:internal/ai/flower_live_projection.go:882 - `streamEventModelIOStatus` projects into `model_io.updated`.\n[5] redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:385 - The shared Flower live bootstrap contract exposes `timeline_messages`.\n[6] redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:456 - `timeline.replaced` carries a full replacement message array.\n[7] redeven:internal/flower_ui/src/flowerLiveReducer.ts:109 - Bootstrap projection uses `timeline_messages` as the thread message array.\n[8] redeven:internal/flower_ui/src/flowerLiveReducer.ts:166 - Strict live message updates require the target message to already exist.\n[9] redeven:internal/flower_ui/src/flowerLiveReducer.ts:262 - Missing committed messages require resync instead of local row creation.\n[10] redeven:internal/flower_ui/src/flowerLiveReducer.ts:347 - `model_io.updated` is applied as thread presentation state rather than a timeline message.\n[11] redeven:internal/ai/flower_live_projection.go:1036 - Context usage updates live materialized state.\n[12] redeven:internal/ai/flower_live_projection.go:1048 - Context compaction updates carry timeline decorations.\n[13] redeven:internal/flower_ui/src/flowerLiveReducer.ts:407 - `context.usage.updated` is applied as thread presentation state.\n[14] redeven:internal/flower_ui/src/flowerLiveReducer.ts:410 - `context.compaction.updated` upserts context compactions and decorations.\n[15] redeven:internal/flower_ui/src/flowerTimelineProjection.ts:140 - Context compaction decorations become timeline divider entries, not messages.\n[16] redeven:internal/flower_ui/src/FlowerSurface.tsx:1793 - Flower parses slash commands before stop and send handling.\n[17] redeven:internal/ai/run.go:574 - Active manual compaction captures the operation anchor when the request is queued.\n[18] redeven:internal/ai/compact_thread_context.go:404 - Idle compaction persists context compaction decorations as context run events without transcript messages.\n[19] redeven:internal/flower_ui/src/FlowerSurface.tsx:1046 - Local pending state is limited to the turn launch request.\n[20] redeven:internal/flower_ui/src/FlowerSurface.tsx:1225 - Visible timeline entries are built from the selected thread snapshot.\n[21] redeven:internal/flower_ui/src/FlowerSurface.tsx:1388 - The visible model status lane reads `model_io_status` and localized model status copy rather than synthesizing a timeline message.\n[22] redeven:internal/flower_ui/src/FlowerSurface.tsx:128 - Flower recognizes `model_io.updated` as a model-status presentation boundary.\n[23] redeven:internal/flower_ui/src/FlowerSurface.tsx:994 - Selected-thread live polling commits and yields at model I/O presentation boundaries.\n[24] redeven:internal/ai/threadstore/schema.go:364 - The threadstore schema adds persisted Flower activity snapshot columns and backfills legacy rows.\n[25] redeven:internal/ai/threadstore/store.go:1260 - Threadstore generates the next Flower activity snapshot from the canonical next thread state.\n[26] redeven:internal/ai/threadstore/store.go:3114 - Persisted context usage and compaction run events update `last_context_run_id` and bump Flower activity in one transaction.\n[27] redeven:internal/ai/realtime_sink.go:433 - Broadcast context stream events publish a thread summary patch after the context event.\n[28] redeven:internal/codeapp/appserver/thread_read_state.go:384 - Appserver validates mark-read snapshots against the current canonical Flower activity snapshot.\n[29] redeven:internal/codeapp/appserver/thread_read_state.go:590 - Appserver reads Flower read snapshots from `ThreadView.FlowerActivity`.\n[30] redeven:internal/codeapp/appserver/thread_read_state.go:661 - Flower unread status is computed from activity revision only.\n[31] redeven:internal/flower_ui/src/runtimeFlowerSurfaceAdapter.ts:136 - The shared runtime adapter returns `/read` `read_status` without reloading the thread.\n[32] redeven:internal/flower_ui/src/FlowerSurface.tsx:1063 - Selected-thread read persistence applies the returned read status and queues only a different current snapshot.\n[33] redeven:internal/flower_ui/src/flowerLiveReducer.ts:86 - Thread patches update the thread read status delivered by appserver.\n[34] redeven:internal/flower_ui/src/flowerSubagentProjection.ts:228 - Subagent dropdown entries are projected from parent activity timeline items.\n[35] redeven:internal/flower_ui/src/flowerSubagentProjection.ts:143 - The projection accepts only the current subagent envelope shapes.\n[36] redeven:internal/flower_ui/src/FlowerSurface.tsx:1578 - Opening a subagent loads parent-scoped detail without selecting the child thread.\n[37] redeven:internal/flower_ui/src/FlowerSurface.tsx:3600 - The selected parent thread header renders the Sub Agents dropdown.\n[38] redeven:internal/flower_ui/src/FlowerSurface.tsx:3443 - Subagent execution detail renders in a floating overlay on the parent thread.\n[39] redeven:internal/flower_ui/src/FlowerSurface.tsx:1930 - Active subagent detail tailing is limited to queued/running/waiting-input states.\n[40] redeven:internal/flower_ui/src/FlowerSurface.tsx:1946 - Detail tail errors use a longer retry interval and remain scoped to the detail dock.\n[41] redeven:internal/ai/threadstore/store.go:379 - Normal thread-list queries exclude `subagent_projection` rows.\n[42] redeven:internal/codeapp/appserver/server.go:3737 - Appserver exposes the parent-scoped subagent detail route.",
-      "snippet": "Flower is a reusable chat surface over a Redeven-owned product timeline. Redeven owns thread persistence, turn anchoring, live drafts, and message ordering; Flower renders the ordered messages that Redeven projects for the selected thread."
+      "snippet": "Flower is a reusable chat surface over a Redeven-owned product timeline. Redeven owns thread persistence, turn anchoring, live drafts, and message ordering; Flower renders the ordered messages that Redeven projects for the selected thread.",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "ui/flower-turn-launcher.md",
-      "concept_id": "ui/flower-turn-launcher",
+      "concept_id": "ui.flower-turn-launcher",
       "type": "UI Contract",
       "title": "Flower turn launcher",
       "description": "Flower first-turn launchers collect scoped context and send one turn before handing off to the owning Flower surface.",
@@ -590,11 +1203,18 @@
         "type": "UI Contract"
       },
       "body": "Redeven uses a shared Flower turn launcher for contextual Ask Flower entrypoints. The launcher is a focused first-turn composer: it previews the captured context, accepts one prompt, calls the shared turn-launch contract, and then lets the host surface hand off to the correct full Flower chat destination.\n\n# Mechanism\n\nShared Flower contracts define `FlowerTurnLauncherIntent`, context items, attachments, and the shared `FlowerSurfaceAdapter` turn controls: `launchTurn` for sending and `stopThread` for canceling the selected running thread. `FlowerTurnLauncherWindow` renders the floating first-turn UI and exposes `onSubmit` instead of owning Desktop or Env App navigation. `FlowerSurface` uses the same `launchTurn` contract for normal chat sends, so new threads and continued conversations share one adapter path. The full Flower composer uses `stopThread` when the selected thread is running or waiting for approval: with an empty draft, the primary action becomes a stop icon and cancels the current run; with a non-empty draft, the action remains send-shaped and executes stop before launching the typed turn. Desktop Welcome opens the launcher from an environment card, builds the shared `assistant.ask.flower` context action, submits through the local environment adapter, creates a one-shot thread focus request for the returned thread id, and opens the Welcome Flower page. Env App captures its view-mode handoff context when the launcher opens; after a successful submit it creates the same one-shot AI thread focus request and routes to Activity, Deck, or Workbench using the captured target. Gateway sessions preserve `runtime_gateway` as their execution context source instead of falling through to generic remote sources. A linked context preview must correspond to a valid `context_action`, including target, locality, source surface, and execution hint values accepted by the runtime validator; hosts must reject an explicit malformed context action instead of silently sending a context-free turn.\n\nEnv App implements `stopThread` with the existing AI RPC stop endpoint and then reloads the thread bootstrap. Desktop implements the same adapter method through the runtime Flower HTTP bridge, which allows `POST /_redeven_proxy/api/ai/threads/:id/cancel` and reloads `/live/bootstrap`. The app server thread cancel route preserves RWX permission checks and audit events while calling `StopThread`, so queued followups are recovered to drafts before the active run is canceled.\n\nEnvironment cards can expose placement-shaped targets such as local container, SSH, provider, or Gateway targets. These identifiers are routing context for Redeven, not permission to infer Docker, SSH, systemd, or Gateway control commands. Flower must interpret environment lifecycle requests through the `redeven-environment` system skill and the `redeven env ... --json` surface so unsupported target kinds return structured product plans instead of lower-level command guesses. For arbitrary OS diagnostics on a selected target, the same skill routes Flower to `redeven targets exec --target \u003ctarget\u003e --command \u003cagent-selected command\u003e --json`, where Redeven owns target resolution and execution provenance.\n\n# Boundaries\n\nThe launcher is not a persistent chat surface and does not inject drafts into the full Flower composer. Hosts must not navigate to Flower before a successful `launchTurn`, must not require a second send in the full chat, and must not re-read the current Env mode at submit time to decide the handoff target. Composer stop+send is not queueing: the current run is stopped first, and only then is the visible draft submitted through `launchTurn`; if stopping or sending fails, the typed draft remains in the composer. `waiting_user` threads stay on the structured input Continue flow and do not enter the stop/stop+send matrix. Focus handoff is a consumed request, not persistent selected-thread state; after `FlowerSurface` accepts a request or the user selects another thread, the host clears that request so remounts and list refreshes cannot pull the user back to the handoff thread. Context actions are product records rather than UI-only metadata: the runtime validates the standard Ask Flower action before accepting the turn, persists the normalized envelope with the transcript message, and leaves provider-visible context lifecycle to Floret. The target context does not alter builtin tool execution. In particular, `terminal.exec` still runs in the local AI runtime; only Redeven product command results or target-routed tool results with explicit `execution_location` can justify saying a command ran on a selected target. The full Flower transcript may show a compact linked-context badge only for standard Ask Flower actions whose persisted envelope still satisfies the same target, source, and execution-context validity rules.\n\n# Citations\n\n[1] redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:739 - `FlowerSurfaceAdapter` exposes `stopThread` alongside `launchTurn`.\n[2] redeven:internal/flower_ui/src/FlowerTurnLauncherWindow.tsx:38 - The shared launcher submit payload contains the prompt and the captured launcher intent.\n[3] redeven:internal/flower_ui/src/FlowerTurnLauncherWindow.tsx:476 - The launcher send button submits the first turn directly from the floating window.\n[4] redeven:internal/flower_ui/src/FlowerSurface.tsx:1188 - `FlowerSurface` stops the selected thread through the shared adapter before applying the returned bootstrap.\n[5] redeven:internal/flower_ui/src/FlowerSurface.tsx:1203 - `FlowerSurface` chooses the stop/stop+send branch before normal chat send.\n[6] redeven:internal/flower_ui/src/FlowerSurface.tsx:1672 - The composer primary action switches to stop only when the selected thread can stop and the draft is empty.\n[7] redeven:desktop/src/welcome/App.tsx:9689 - Environment card Ask Flower controls open the floating launcher instead of navigating directly.\n[8] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:858 - Env App captures the launcher handoff context when opening the launcher.\n[9] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1044 - Env App handoff uses the captured context to route the completed launch to Activity, Deck, or Workbench.\n[10] redeven:desktop/src/welcome/App.tsx:5912 - Desktop Welcome submits the launcher prompt through the local environment Flower turn launcher path.\n[11] redeven:desktop/src/welcome/App.tsx:5922 - Desktop Welcome creates the one-shot focus request after a successful launch.\n[12] redeven:desktop/src/welcome/App.tsx:6164 - Desktop Welcome clears the focus request after `FlowerSurface` consumes it.\n[13] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:840 - Env App creates and consumes one-shot AI thread focus requests.\n[14] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1111 - Env App submits launcher prompts through the env-local Flower adapter `launchTurn` contract.\n[15] redeven:desktop/src/welcome/environmentFlowerContext.ts:108 - Desktop Welcome builds environment-card context with the shared Ask Flower context action contract.\n[16] redeven:internal/ai/context_action.go:133 - Runtime validates Ask Flower context actions before accepting the product turn.\n[17] redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:428 - Env App `stopThread` calls the AI RPC stop endpoint and reloads the thread.\n[18] redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:421 - Desktop `stopThread` posts to the runtime thread cancel endpoint and reloads live bootstrap.\n[19] redeven:desktop/src/main/main.ts:7457 - Desktop runtime Flower allowlist accepts the thread cancel path.\n[20] redeven:internal/codeapp/appserver/server.go:4013 - The app server thread cancel route calls `StopThread` while preserving permission and audit handling.",
-      "snippet": "Redeven uses a shared Flower turn launcher for contextual Ask Flower entrypoints. The launcher is a focused first-turn composer: it previews the captured context, accepts one prompt, calls the shared turn-launch contract, and then lets the "
+      "snippet": "Redeven uses a shared Flower turn launcher for contextual Ask Flower entrypoints. The launcher is a focused first-turn composer: it previews the captured context, accepts one prompt, calls the shared turn-launch contract, and then lets the ",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     },
     {
       "path": "ui/workbench-interaction-contracts.md",
-      "concept_id": "ui/workbench-interaction-contracts",
+      "concept_id": "ui.workbench-interaction-contracts",
       "type": "UI Contract",
       "title": "Workbench interaction contracts",
       "description": "Workbench wheel, text selection, and action surfaces use explicit marker props to avoid accidental canvas ownership.",
@@ -618,8 +1238,15 @@
         "type": "UI Contract"
       },
       "body": "Workbench input ownership is explicit. Canvas zoom, widget activation, local scrolling, text selection, and action controls must be distinguishable by marker contracts rather than inferred from hover state or incidental DOM layout.\n\n# Mechanism\n\nWheel ownership uses exported local scroll viewport props that set `data-floe-canvas-wheel-interactive=\"true\"` and a local-scroll role. Layout-only regions can declare a non-interactive wheel role. Text selection surfaces use separate marker props and do not receive wheel ownership unless combined with local scroll viewport props. Action surfaces declare their own marker so clickable controls can remain interactive inside widgets without becoming text selection surfaces.\n\n# Boundaries\n\nSelected widget boundaries guard canvas zoom. A surface that supports text selection does not automatically own wheel input, and a surface that owns local scrolling must declare the exported wheel contract props.\n\n# Citations\n\n[1] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:1 - Wheel ownership uses a dedicated data attribute.\n[2] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:8 - Local scroll viewport props mark real local scroll regions.\n[3] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:13 - Layout-only wheel props avoid granting scroll ownership.\n[4] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchTextSelectionSurface.ts:12 - Text selection surfaces use a separate marker attribute.\n[5] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchTextSelectionSurface.ts:22 - Text-selection scroll viewports explicitly combine scroll and selection props.\n[6] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.test.ts:51 - Tests enforce that text-selection props do not grant wheel ownership by themselves.\n[7] redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.interaction.test.tsx:864 - Interaction tests cover selected text-selection surfaces versus widget-body activation.\n[8] redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewContent.tsx:211 - File preview content uses the combined text-selection scroll viewport props.",
-      "snippet": "Workbench input ownership is explicit. Canvas zoom, widget activation, local scrolling, text selection, and action controls must be distinguishable by marker contracts rather than inferred from hover state or incidental DOM layout."
+      "snippet": "Workbench input ownership is explicit. Canvas zoom, widget activation, local scrolling, text selection, and action controls must be distinguishable by marker contracts rather than inferred from hover state or incidental DOM layout.",
+      "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
     }
   ],
-  "source_sha256": "156797df13572017c894e99070b63e3f96df6aa29710f8365d940bfc1cf5354a"
+  "source_sha256": "9fa0480391dae8b1e0e2fe91540f964a119820c1da5f6d925f8240963b2a22f9"
 }

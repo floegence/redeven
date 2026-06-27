@@ -396,6 +396,14 @@ func TestFloretApplyPatchResourceRefsUseCanonicalPatchParser(t *testing.T) {
 func TestFloretActivityForOKFCallUsesKnowledgeLookupPresentation(t *testing.T) {
 	t.Parallel()
 
+	indexActivity := floretActivityForToolCall("okf.index", map[string]any{"section": "AI"})
+	if indexActivity == nil {
+		t.Fatal("index activity is nil")
+	}
+	if indexActivity.Label != "AI" || indexActivity.Payload["operation"] != "okf.index" {
+		t.Fatalf("index activity=%#v", indexActivity)
+	}
+
 	activity := floretActivityForToolCall("okf.search", map[string]any{})
 	if activity == nil {
 		t.Fatal("activity is nil")
@@ -422,6 +430,17 @@ func TestFloretActivityForOKFCallUsesKnowledgeLookupPresentation(t *testing.T) {
 	}
 	if withQuery.Payload["operation"] != "okf.search" || withQuery.Payload["query"] != "Workbench wheel ownership" {
 		t.Fatalf("query payload=%#v", withQuery.Payload)
+	}
+	if _, ok := withQuery.Payload["provider"]; ok {
+		t.Fatalf("okf.search call payload should not carry web provider: %#v", withQuery.Payload)
+	}
+
+	openActivity := floretActivityForToolCall("okf.open", map[string]any{"concept_id": "ui.workbench-interaction-contracts"})
+	if openActivity == nil {
+		t.Fatal("open activity is nil")
+	}
+	if openActivity.Label != "ui.workbench-interaction-contracts" || openActivity.Payload["operation"] != "okf.open" {
+		t.Fatalf("open activity=%#v", openActivity)
 	}
 }
 
@@ -507,6 +526,8 @@ func TestFloretToolResultActivityForOKFUsesKnowledgeLookupFallback(t *testing.T)
 		Summary:  toolSuccessSummary("okf.search"),
 		Data: map[string]any{
 			"total_concepts": 12,
+			"match_count":    3,
+			"matches":        []map[string]any{{"concept_id": "ai.okf-search-tool"}},
 		},
 	})
 	if want := presentationResultFallback(t, "okf.search"); activity.Label != want {
@@ -517,6 +538,12 @@ func TestFloretToolResultActivityForOKFUsesKnowledgeLookupFallback(t *testing.T)
 	}
 	if activity.Payload["operation"] != "okf.search" {
 		t.Fatalf("operation payload=%v, want okf.search", activity.Payload["operation"])
+	}
+	if _, ok := activity.Payload["results"]; ok {
+		t.Fatalf("okf.search payload should use matches, not results: %#v", activity.Payload)
+	}
+	if _, ok := activity.Payload["matches"]; !ok {
+		t.Fatalf("okf.search payload missing matches: %#v", activity.Payload)
 	}
 	if activity.Payload["summary"] != "okf.knowledge.lookup" {
 		t.Fatalf("summary payload=%v, want okf.knowledge.lookup", activity.Payload["summary"])
@@ -542,6 +569,57 @@ func TestFloretToolResultActivityForOKFUsesKnowledgeLookupFallback(t *testing.T)
 	}
 	if withQuery.Payload["operation"] != "okf.search" || withQuery.Payload["query"] != "Workbench wheel ownership" {
 		t.Fatalf("query payload=%#v", withQuery.Payload)
+	}
+}
+
+func TestFloretToolResultActivityForOKFIndexAndOpenUseStructuredFields(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	index := mustFloretToolResultActivity(t, r, ToolResult{
+		ToolID:   "call_okf_index",
+		ToolName: "okf.index",
+		Status:   toolResultStatusSuccess,
+		Summary:  toolSuccessSummary("okf.index"),
+		Data: map[string]any{
+			"okf_version":    "0.1",
+			"total_sections": 1,
+			"sections":       []map[string]any{{"title": "AI"}},
+		},
+	})
+	if index.Payload["operation"] != "okf.index" {
+		t.Fatalf("index payload=%#v", index.Payload)
+	}
+	if _, ok := index.Payload["sections"]; !ok {
+		t.Fatalf("index payload missing sections: %#v", index.Payload)
+	}
+
+	open := mustFloretToolResultActivity(t, r, ToolResult{
+		ToolID:   "call_okf_open",
+		ToolName: "okf.open",
+		Status:   toolResultStatusSuccess,
+		Summary:  toolSuccessSummary("okf.open"),
+		Data: map[string]any{
+			"concept":              map[string]any{"title": "OKF search tool", "concept_id": "ai.okf-search-tool"},
+			"body_offset":          0,
+			"body_length":          2000,
+			"returned_body_length": 1000,
+			"links":                []map[string]any{{"path": "ai/ai-tool-runtime.md"}},
+			"backlinks":            []map[string]any{{"path": "index.md"}},
+			"truncated":            true,
+		},
+	})
+	if open.Payload["operation"] != "okf.open" {
+		t.Fatalf("open payload=%#v", open.Payload)
+	}
+	if open.Label != "OKF search tool" {
+		t.Fatalf("open label=%q, want concept title", open.Label)
+	}
+	if _, ok := open.Payload["concept"]; !ok {
+		t.Fatalf("open payload missing concept: %#v", open.Payload)
+	}
+	if !readBoolField(open.Payload, "truncated") {
+		t.Fatalf("open payload should retain body truncation: %#v", open.Payload)
 	}
 }
 
