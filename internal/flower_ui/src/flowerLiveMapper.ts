@@ -861,8 +861,6 @@ function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
       ...base,
       origin: 'delegated_subagent',
       delegated_ref: delegatedRef,
-      ...(runID ? { run_id: runID } : {}),
-      ...(toolID ? { tool_id: toolID } : {}),
     };
   }
   return {

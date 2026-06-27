@@ -356,6 +356,8 @@ func findWorkspaceScopeViolation(toolName string, args any, workspacePath string
 		return findApplyPatchWorkspaceScopeViolation(args, workspacePath)
 	case "file.read", "file.edit", "file.write":
 		return findStructuredFileToolWorkspaceScopeViolation(args, workspacePath)
+	case "read_file", "read_files", "find", "rgrep":
+		return findReadonlyToolWorkspaceScopeViolation(toolName, args, workspacePath)
 	}
 	return ""
 }
@@ -428,6 +430,62 @@ func findStructuredFileToolWorkspaceScopeViolation(args any, workspacePath strin
 		return ""
 	}
 	return validateScopedPathCandidate(filepath.Clean(candidate), workspacePath)
+}
+
+func findReadonlyToolWorkspaceScopeViolation(toolName string, args any, workspacePath string) string {
+	obj, _ := args.(map[string]any)
+	if len(obj) == 0 {
+		return ""
+	}
+	switch toolName {
+	case "read_file":
+		return validateOptionalToolPath(anyToString(obj["path"]), workspacePath)
+	case "read_files", "rgrep":
+		for _, candidate := range anyToStringSlice(obj["paths"]) {
+			if violation := validateOptionalToolPath(candidate, workspacePath); violation != "" {
+				return violation
+			}
+		}
+	case "find":
+		return validateOptionalToolPath(anyToString(obj["root"]), workspacePath)
+	}
+	return ""
+}
+
+func validateOptionalToolPath(candidate string, workspacePath string) string {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" {
+		return ""
+	}
+	if strings.Contains(candidate, "../") || strings.Contains(candidate, `..\`) {
+		return "parent:" + candidate
+	}
+	if filepath.IsAbs(candidate) {
+		return validateScopedPathCandidate(filepath.Clean(candidate), workspacePath)
+	}
+	return ""
+}
+
+func anyToStringSlice(v any) []string {
+	switch typed := v.(type) {
+	case []string:
+		return append([]string(nil), typed...)
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if s := strings.TrimSpace(anyToString(item)); s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return nil
+		}
+		return []string{typed}
+	default:
+		return nil
+	}
 }
 
 func validatePatchTargetPath(candidate string, workspacePath string) string {

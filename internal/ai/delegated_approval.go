@@ -25,6 +25,7 @@ type delegatedApprovalHandle struct {
 	done       chan struct{}
 	action     FlowerApprovalAction
 	endpointID string
+	parentUser string
 	decided    bool
 	allow      bool
 }
@@ -81,6 +82,9 @@ func (s *Service) registerDelegatedApproval(parent *run, child *run, req fltools
 	if !validDelegatedApprovalRef(ref) {
 		return nil, false, errors.New("delegated approval missing identity")
 	}
+	if err := s.validateDelegatedApprovalSnapshotIdentity(parent, ref); err != nil {
+		return nil, false, err
+	}
 	actionID := delegatedApprovalActionID(ref)
 	now := time.Now().UnixMilli()
 	expiresAt := int64(0)
@@ -90,7 +94,7 @@ func (s *Service) registerDelegatedApproval(parent *run, child *run, req fltools
 	action := delegatedApprovalAction(parent, child, req, ref, actionID, now, expiresAt)
 	if s.threadsDB != nil {
 		ctx, cancel := s.delegatedApprovalPersistContext()
-		err := s.threadsDB.UpsertDelegatedApprovalRequest(ctx, delegatedApprovalRecordFromAction(strings.TrimSpace(parent.endpointID), action))
+		err := s.threadsDB.UpsertDelegatedApprovalRequest(ctx, delegatedApprovalRecordFromAction(strings.TrimSpace(parent.endpointID), runUserPublicID(parent), action))
 		cancel()
 		if err != nil {
 			return nil, false, err
@@ -118,6 +122,7 @@ func (s *Service) registerDelegatedApproval(parent *run, child *run, req fltools
 		done:       make(chan struct{}),
 		action:     action,
 		endpointID: strings.TrimSpace(parent.endpointID),
+		parentUser: runUserPublicID(parent),
 	}
 	s.delegatedApprovals[actionID] = handle
 	s.mu.Unlock()
@@ -131,6 +136,27 @@ func (s *Service) registerDelegatedApproval(parent *run, child *run, req fltools
 		Payload:    mustFlowerPayload(FlowerLiveApprovalPayload{Action: action}),
 	})
 	return handle, true, nil
+}
+
+func (s *Service) validateDelegatedApprovalSnapshotIdentity(parent *run, ref DelegatedApprovalRef) error {
+	if s == nil || s.threadsDB == nil || parent == nil {
+		return nil
+	}
+	endpointID := strings.TrimSpace(parent.endpointID)
+	childThreadID := strings.TrimSpace(ref.ChildThreadID)
+	if endpointID == "" || childThreadID == "" {
+		return nil
+	}
+	ctx, cancel := s.delegatedApprovalPersistContext()
+	rec, ok, err := s.threadsDB.GetFinalizedChildPermissionSnapshotByThread(ctx, endpointID, childThreadID)
+	cancel()
+	if err != nil || !ok {
+		return err
+	}
+	if strings.TrimSpace(rec.ChildRunID) != strings.TrimSpace(ref.ChildRunID) {
+		return errors.New("delegated approval child run identity mismatch")
+	}
+	return nil
 }
 
 func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFlowerApprovalRequest) (*SubmitFlowerApprovalResponse, error) {
@@ -172,6 +198,9 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 			return nil, errors.New("delegated approval is no longer available")
 		}
 		storedRec = rec
+		if !delegatedApprovalOwnerMatches(meta, rec.ParentUserPublicID) {
+			return nil, errors.New("run not found")
+		}
 		storedAction = delegatedApprovalActionFromRecord(rec)
 		if storedAction.ActionID == "" {
 			return nil, ErrRunChanged
@@ -194,6 +223,9 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 			s.markDelegatedApprovalRecordUnavailable(endpointID, threadID, actionID, "delegated approval channel is unavailable")
 		}
 		return nil, errors.New("delegated approval is no longer available")
+	}
+	if s.threadsDB == nil && !delegatedApprovalOwnerMatches(meta, handle.parentUser) {
+		return nil, errors.New("run not found")
 	}
 	if liveAction.ActionID == "" {
 		return nil, ErrRunChanged
@@ -239,6 +271,7 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 			EndpointID:       endpointID,
 			ParentThreadID:   threadID,
 			ActionID:         actionID,
+			RefHash:          delegatedApprovalRefHash(*req.DelegatedRef),
 			Version:          req.Version,
 			SurfaceEpoch:     req.SurfaceEpoch,
 			Approved:         req.Approved,
@@ -280,10 +313,37 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 			version = storedRec.Version
 		}
 		ctx, cancel := s.delegatedApprovalPersistContext()
-		_, err := s.threadsDB.MarkDelegatedApprovalDelivered(ctx, endpointID, threadID, actionID, version, string(mustFlowerPayload(resolved)), time.Now().UnixMilli())
+		changed, err := s.threadsDB.MarkDelegatedApprovalDelivered(ctx, endpointID, threadID, actionID, version, string(mustFlowerPayload(resolved)), time.Now().UnixMilli())
 		cancel()
 		if err != nil {
 			return nil, err
+		}
+		if !changed {
+			s.mu.Lock()
+			delete(s.delegatedApprovals, actionID)
+			s.mu.Unlock()
+			ackUnknown := resolved
+			ackUnknown.DeliveryState = FlowerApprovalDeliveryAckUnknown
+			ackUnknown.ReadOnlyReason = "Delegated approval was released to the subagent, but delivery acknowledgement could not be confirmed."
+			ackUnknown.Version = version + 1
+			ctx, cancel = s.delegatedApprovalPersistContext()
+			ackChanged, ackErr := s.threadsDB.MarkDelegatedApprovalAckUnknown(ctx, endpointID, threadID, actionID, ackUnknown.ReadOnlyReason, string(mustFlowerPayload(ackUnknown)), time.Now().UnixMilli())
+			cancel()
+			if ackErr != nil {
+				return nil, ackErr
+			}
+			if !ackChanged {
+				return nil, ErrRunChanged
+			}
+			event := s.appendFlowerLiveEvent(FlowerLiveEvent{
+				EndpointID: endpointID,
+				ThreadID:   threadID,
+				RunID:      delegatedApprovalParentRunID(ackUnknown),
+				TurnID:     strings.TrimSpace(ackUnknown.TurnID),
+				Kind:       FlowerLiveApprovalResolved,
+				Payload:    mustFlowerPayload(FlowerLiveApprovalPayload{Action: ackUnknown}),
+			})
+			return &SubmitFlowerApprovalResponse{OK: true, CurrentCursor: event.Seq}, nil
 		}
 	}
 
@@ -294,7 +354,7 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 	event := s.appendFlowerLiveEvent(FlowerLiveEvent{
 		EndpointID: endpointID,
 		ThreadID:   threadID,
-		RunID:      strings.TrimSpace(resolved.RunID),
+		RunID:      delegatedApprovalParentRunID(resolved),
 		TurnID:     strings.TrimSpace(resolved.TurnID),
 		Kind:       FlowerLiveApprovalResolved,
 		Payload:    mustFlowerPayload(FlowerLiveApprovalPayload{Action: resolved}),
@@ -317,6 +377,7 @@ func (s *Service) replayDelegatedApprovalDecision(meta *session.Meta, req Submit
 		EndpointID:       endpointID,
 		ParentThreadID:   threadID,
 		ActionID:         actionID,
+		RefHash:          delegatedApprovalRefHash(*req.DelegatedRef),
 		Version:          req.Version,
 		SurfaceEpoch:     req.SurfaceEpoch,
 		Approved:         req.Approved,
@@ -375,7 +436,7 @@ func (s *Service) markDelegatedApprovalUnavailable(actionID string, reason strin
 	s.appendFlowerLiveEvent(FlowerLiveEvent{
 		EndpointID: strings.TrimSpace(handle.endpointID),
 		ThreadID:   strings.TrimSpace(action.DelegatedRef.ParentThreadID),
-		RunID:      strings.TrimSpace(action.RunID),
+		RunID:      delegatedApprovalParentRunID(action),
 		TurnID:     strings.TrimSpace(action.TurnID),
 		Kind:       FlowerLiveApprovalResolved,
 		Payload:    mustFlowerPayload(FlowerLiveApprovalPayload{Action: action}),
@@ -412,7 +473,7 @@ func (s *Service) markDelegatedApprovalRecordUnavailable(endpointID string, thre
 	s.appendFlowerLiveEvent(FlowerLiveEvent{
 		EndpointID: endpointID,
 		ThreadID:   threadID,
-		RunID:      strings.TrimSpace(action.RunID),
+		RunID:      delegatedApprovalParentRunID(action),
 		TurnID:     strings.TrimSpace(action.TurnID),
 		Kind:       FlowerLiveApprovalResolved,
 		Payload:    mustFlowerPayload(FlowerLiveApprovalPayload{Action: action}),
@@ -434,10 +495,11 @@ func delegatedApprovalActorScope(meta *session.Meta, threadID string) string {
 	return strings.TrimSpace(meta.EndpointID) + ":" + strings.TrimSpace(meta.UserPublicID) + ":" + strings.TrimSpace(threadID)
 }
 
-func delegatedApprovalRecordFromAction(endpointID string, action FlowerApprovalAction) threadstore.DelegatedApprovalRecord {
+func delegatedApprovalRecordFromAction(endpointID string, parentUserPublicID string, action FlowerApprovalAction) threadstore.DelegatedApprovalRecord {
 	rec := threadstore.DelegatedApprovalRecord{
 		ActionID:            strings.TrimSpace(action.ActionID),
 		EndpointID:          strings.TrimSpace(endpointID),
+		ParentUserPublicID:  strings.TrimSpace(parentUserPublicID),
 		ParentRunID:         strings.TrimSpace(action.RunID),
 		ParentTurnID:        strings.TrimSpace(action.TurnID),
 		State:               strings.TrimSpace(string(action.State)),
@@ -469,14 +531,36 @@ func delegatedApprovalRecordFromAction(endpointID string, action FlowerApprovalA
 	return rec
 }
 
+func runUserPublicID(r *run) string {
+	if r == nil {
+		return ""
+	}
+	if userPublicID := strings.TrimSpace(r.userPublicID); userPublicID != "" {
+		return userPublicID
+	}
+	if r.sessionMeta != nil {
+		return strings.TrimSpace(r.sessionMeta.UserPublicID)
+	}
+	return ""
+}
+
+func delegatedApprovalOwnerMatches(meta *session.Meta, parentUserPublicID string) bool {
+	if meta == nil {
+		return false
+	}
+	return strings.TrimSpace(parentUserPublicID) != "" &&
+		strings.TrimSpace(meta.UserPublicID) != "" &&
+		strings.TrimSpace(parentUserPublicID) == strings.TrimSpace(meta.UserPublicID)
+}
+
 func delegatedApprovalActionFromRecord(rec threadstore.DelegatedApprovalRecord) FlowerApprovalAction {
 	var action FlowerApprovalAction
 	_ = json.Unmarshal([]byte(strings.TrimSpace(rec.ActionJSON)), &action)
 	action.ActionID = firstNonEmptyString(strings.TrimSpace(action.ActionID), strings.TrimSpace(rec.ActionID))
 	action.Origin = FlowerApprovalOriginDelegatedSubagent
-	action.RunID = firstNonEmptyString(strings.TrimSpace(action.RunID), strings.TrimSpace(rec.ParentRunID))
+	action.RunID = ""
 	action.TurnID = firstNonEmptyString(strings.TrimSpace(action.TurnID), strings.TrimSpace(rec.ParentTurnID))
-	action.ToolID = firstNonEmptyString(strings.TrimSpace(action.ToolID), strings.TrimSpace(rec.ChildToolCallID))
+	action.ToolID = ""
 	action.State = FlowerApprovalState(strings.TrimSpace(firstNonEmptyString(string(action.State), rec.State)))
 	action.Status = FlowerApprovalStatus(strings.TrimSpace(firstNonEmptyString(string(action.Status), rec.Status)))
 	action.DeliveryState = FlowerApprovalDeliveryState(strings.TrimSpace(firstNonEmptyString(string(action.DeliveryState), rec.DeliveryState)))
@@ -521,6 +605,16 @@ func delegatedApprovalActionFromRecord(rec threadstore.DelegatedApprovalRecord) 
 	return action
 }
 
+func delegatedApprovalParentRunID(action FlowerApprovalAction) string {
+	if runID := strings.TrimSpace(action.RunID); runID != "" {
+		return runID
+	}
+	if action.DelegatedRef != nil {
+		return strings.TrimSpace(action.DelegatedRef.ParentRunID)
+	}
+	return ""
+}
+
 func delegatedApprovalRef(parent *run, child *run, req fltools.ApprovalRequest) DelegatedApprovalRef {
 	subagentID := firstNonEmptyString(
 		strings.TrimSpace(child.threadID),
@@ -529,18 +623,30 @@ func delegatedApprovalRef(parent *run, child *run, req fltools.ApprovalRequest) 
 		strings.TrimSpace(req.HostContext[subagentToolHostContextSubagentIDKey]),
 		strings.TrimSpace(req.HostContext[subagentToolHostContextChildThreadIDKey]),
 	)
-	childRunID := firstNonEmptyString(subagentID, strings.TrimSpace(child.threadID), strings.TrimSpace(req.ID), strings.TrimSpace(req.ApprovalID))
+	childThreadID := firstNonEmptyString(strings.TrimSpace(child.threadID), subagentID)
+	childRunID := delegatedApprovalChildRunID(child, req, childThreadID, strings.TrimSpace(parent.id))
 	return DelegatedApprovalRef{
 		ParentThreadID:  strings.TrimSpace(parent.threadID),
 		ParentRunID:     strings.TrimSpace(parent.id),
 		ParentTurnID:    strings.TrimSpace(parent.messageID),
 		SubagentID:      subagentID,
-		ChildThreadID:   firstNonEmptyString(strings.TrimSpace(child.threadID), subagentID),
+		ChildThreadID:   childThreadID,
 		ChildRunID:      childRunID,
 		ChildTurnID:     strings.TrimSpace(child.messageID),
 		ChildToolCallID: firstNonEmptyString(strings.TrimSpace(req.ID), strings.TrimSpace(req.ApprovalID)),
 		ApprovalID:      firstNonEmptyString(strings.TrimSpace(req.ApprovalID), strings.TrimSpace(req.ID)),
 	}
+}
+
+func delegatedApprovalChildRunID(child *run, req fltools.ApprovalRequest, childThreadID string, parentRunID string) string {
+	explicit := firstNonEmptyString(
+		strings.TrimSpace(req.HostContext[subagentToolHostContextChildRunIDKey]),
+		strings.TrimSpace(req.Labels["host."+subagentToolHostContextChildRunIDKey]),
+	)
+	if explicit != "" && explicit != strings.TrimSpace(childThreadID) && explicit != strings.TrimSpace(parentRunID) {
+		return explicit
+	}
+	return ""
 }
 
 func validDelegatedApprovalRef(ref DelegatedApprovalRef) bool {
@@ -577,9 +683,7 @@ func delegatedApprovalAction(parent *run, child *run, req fltools.ApprovalReques
 	return FlowerApprovalAction{
 		ActionID:            actionID,
 		Origin:              FlowerApprovalOriginDelegatedSubagent,
-		RunID:               strings.TrimSpace(parent.id),
 		TurnID:              strings.TrimSpace(parent.messageID),
-		ToolID:              strings.TrimSpace(ref.ChildToolCallID),
 		ToolName:            toolName,
 		State:               FlowerApprovalStateRequested,
 		Status:              FlowerApprovalStatusPending,

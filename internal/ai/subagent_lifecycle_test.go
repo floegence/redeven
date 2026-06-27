@@ -24,7 +24,7 @@ type recordingSubagentRuntime struct {
 	releaseCount atomic.Int32
 }
 
-func (r *recordingSubagentRuntime) manage(context.Context, map[string]any) (map[string]any, error) {
+func (r *recordingSubagentRuntime) manage(context.Context, string, map[string]any) (map[string]any, error) {
 	return map[string]any{"status": "ok"}, nil
 }
 
@@ -59,11 +59,14 @@ type recordingFloretHost struct {
 	closeCount         atomic.Int32
 	closeSubagentCount atomic.Int32
 	listSubagentCount  atomic.Int32
+	spawnErr           error
 	snapshots          []flruntime.SubAgentSnapshot
 	threads            map[flruntime.ThreadID]flruntime.ThreadSnapshot
 	detail             flruntime.SubAgentDetail
 	detailErr          error
 	detailRequests     []flruntime.ReadSubAgentDetailRequest
+	spawnRequests      []flruntime.SpawnSubAgentRequest
+	sendInputRequests  []flruntime.SendSubAgentInputRequest
 }
 
 func (h *recordingFloretHost) StartThread(context.Context, flruntime.StartThreadRequest) (flruntime.ThreadSnapshot, error) {
@@ -93,16 +96,61 @@ func (h *recordingFloretHost) CompletePendingTool(context.Context, flruntime.Pen
 	return flruntime.TurnResult{}, nil
 }
 
-func (h *recordingFloretHost) SpawnSubAgent(context.Context, flruntime.SpawnSubAgentRequest) (flruntime.SubAgentSnapshot, error) {
+func (h *recordingFloretHost) SpawnSubAgent(_ context.Context, req flruntime.SpawnSubAgentRequest) (flruntime.SubAgentSnapshot, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.spawnRequests = append(h.spawnRequests, req)
+	if h.spawnErr != nil {
+		return flruntime.SubAgentSnapshot{}, h.spawnErr
+	}
+	now := time.Now()
+	snapshot := flruntime.SubAgentSnapshot{
+		ThreadID:       req.ThreadID,
+		ParentThreadID: req.ParentThreadID,
+		TaskName:       req.TaskName,
+		HostProfileRef: req.HostProfileRef,
+		Status:         flruntime.SubAgentStatusRunning,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		CanSendInput:   true,
+		CanInterrupt:   true,
+		CanClose:       true,
+	}
+	h.snapshots = append(h.snapshots, snapshot)
+	return snapshot, nil
+}
+
+func (h *recordingFloretHost) SendSubAgentInput(_ context.Context, req flruntime.SendSubAgentInputRequest) (flruntime.SubAgentSnapshot, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.sendInputRequests = append(h.sendInputRequests, req)
+	for _, snapshot := range h.snapshots {
+		if snapshot.ThreadID == req.ChildThreadID {
+			snapshot.UpdatedAt = time.Now()
+			return snapshot, nil
+		}
+	}
 	return flruntime.SubAgentSnapshot{}, nil
 }
 
-func (h *recordingFloretHost) SendSubAgentInput(context.Context, flruntime.SendSubAgentInputRequest) (flruntime.SubAgentSnapshot, error) {
-	return flruntime.SubAgentSnapshot{}, nil
-}
-
-func (h *recordingFloretHost) WaitSubAgents(context.Context, flruntime.WaitSubAgentsRequest) (flruntime.WaitSubAgentsResult, error) {
-	return flruntime.WaitSubAgentsResult{}, nil
+func (h *recordingFloretHost) WaitSubAgents(_ context.Context, req flruntime.WaitSubAgentsRequest) (flruntime.WaitSubAgentsResult, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	targets := map[flruntime.ThreadID]struct{}{}
+	for _, id := range req.ChildThreadIDs {
+		targets[id] = struct{}{}
+	}
+	out := make([]flruntime.SubAgentSnapshot, 0, len(h.snapshots))
+	for _, snapshot := range h.snapshots {
+		if len(targets) == 0 {
+			out = append(out, snapshot)
+			continue
+		}
+		if _, ok := targets[snapshot.ThreadID]; ok {
+			out = append(out, snapshot)
+		}
+	}
+	return flruntime.WaitSubAgentsResult{Snapshots: out}, nil
 }
 
 func (h *recordingFloretHost) ListSubAgents(context.Context, flruntime.ThreadID) ([]flruntime.SubAgentSnapshot, error) {
@@ -112,8 +160,20 @@ func (h *recordingFloretHost) ListSubAgents(context.Context, flruntime.ThreadID)
 	return append([]flruntime.SubAgentSnapshot(nil), h.snapshots...), nil
 }
 
-func (h *recordingFloretHost) CloseSubAgent(context.Context, flruntime.CloseSubAgentRequest) (flruntime.SubAgentSnapshot, error) {
+func (h *recordingFloretHost) CloseSubAgent(_ context.Context, req flruntime.CloseSubAgentRequest) (flruntime.SubAgentSnapshot, error) {
 	h.closeSubagentCount.Add(1)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for index, snapshot := range h.snapshots {
+		if snapshot.ThreadID != req.ChildThreadID {
+			continue
+		}
+		snapshot.Status = flruntime.SubAgentStatusCancelled
+		snapshot.CanClose = false
+		snapshot.UpdatedAt = time.Now()
+		h.snapshots[index] = snapshot
+		return snapshot, nil
+	}
 	return flruntime.SubAgentSnapshot{}, nil
 }
 
@@ -250,6 +310,168 @@ func TestSubagentHostConfigKeyTracksRuntimeInputs(t *testing.T) {
 	}, func() {
 		cfg.Providers[0].WebSearch.Mode = config.AIProviderWebSearchModeBrave
 	})
+}
+
+func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
+	t.Parallel()
+
+	store, err := threadstore.Open(t.TempDir() + "/threads.sqlite")
+	if err != nil {
+		t.Fatalf("threadstore.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	cfg := &config.AIConfig{
+		CurrentModelID: "compat/gpt-5-mini",
+		Providers: []config.AIProvider{{
+			ID:      "compat",
+			Type:    "openai_compatible",
+			BaseURL: "https://example.invalid/v1",
+			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+		}},
+	}
+	svc := &Service{
+		threadsDB:          store,
+		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
+		delegatedApprovals: map[string]*delegatedApprovalHandle{},
+		persistOpTO:        time.Second,
+	}
+	parent := newPermissionPolicyTestRun(t, t.TempDir(), FlowerPermissionApprovalRequired, "subagent_spawn_identity")
+	parent.service = svc
+	parent.threadsDB = store
+	parent.cfg = cfg
+	parent.currentModelID = "compat/gpt-5-mini"
+	parent.resolveProviderKey = func(providerID string) (string, bool, error) {
+		return "provider-key", strings.TrimSpace(providerID) == "compat", nil
+	}
+	freezePermissionPolicyTestSnapshot(t, parent)
+
+	host := &recordingFloretHost{}
+	runtime := &floretSubagentRuntime{parent: parent, host: host}
+	spawnToolCallID := "tool_subagents_spawn_identity"
+	if _, err := runtime.spawn(context.Background(), spawnToolCallID, map[string]any{
+		"agent_type": "worker",
+		"task_name":  "identity check",
+		"message":    "check child approval identity",
+	}); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	host.mu.Lock()
+	if len(host.spawnRequests) != 1 {
+		t.Fatalf("spawn request count=%d, want 1", len(host.spawnRequests))
+	}
+	spawnReq := host.spawnRequests[0]
+	host.mu.Unlock()
+
+	childThreadID := strings.TrimSpace(string(spawnReq.ThreadID))
+	childRunID := strings.TrimSpace(spawnReq.Labels.Host[subagentToolHostContextChildRunIDKey])
+	if childThreadID == "" || childRunID == "" {
+		t.Fatalf("spawn labels missing child identity: thread=%q labels=%#v", childThreadID, spawnReq.Labels)
+	}
+	if childRunID == childThreadID || childRunID == parent.id {
+		t.Fatalf("spawn child_run_id=%q must be distinct from child thread %q and parent run %q", childRunID, childThreadID, parent.id)
+	}
+	if spawnReq.Labels.Host[subagentToolHostContextChildThreadIDKey] != childThreadID ||
+		spawnReq.Labels.Host[subagentToolHostContextSubagentIDKey] != childThreadID {
+		t.Fatalf("spawn labels=%#v, want child thread and subagent id", spawnReq.Labels.Host)
+	}
+
+	rec, ok, err := store.GetFinalizedChildPermissionSnapshotByThread(context.Background(), parent.endpointID, childThreadID)
+	if err != nil {
+		t.Fatalf("GetFinalizedChildPermissionSnapshotByThread: %v", err)
+	}
+	if !ok || rec.ChildRunID != childRunID {
+		t.Fatalf("child snapshot record=%#v ok=%v, want child_run_id %q", rec, ok, childRunID)
+	}
+	if rec.SpawnToolCallID != spawnToolCallID {
+		t.Fatalf("spawn_tool_call_id=%q, want real tool call id %q", rec.SpawnToolCallID, spawnToolCallID)
+	}
+
+	if _, err := runtime.sendInput(context.Background(), map[string]any{
+		"target":  childThreadID,
+		"message": "continue with the same approval identity",
+	}); err != nil {
+		t.Fatalf("sendInput: %v", err)
+	}
+	host.mu.Lock()
+	if len(host.sendInputRequests) != 1 {
+		t.Fatalf("send input request count=%d, want 1", len(host.sendInputRequests))
+	}
+	sendReq := host.sendInputRequests[0]
+	host.mu.Unlock()
+	if got := strings.TrimSpace(sendReq.Labels.Host[subagentToolHostContextChildRunIDKey]); got != childRunID {
+		t.Fatalf("send_input child_run_id=%q, want persisted %q", got, childRunID)
+	}
+}
+
+func TestSubagentSpawnFailureLeavesNoFinalizedChildPermissionSnapshot(t *testing.T) {
+	t.Parallel()
+
+	store, err := threadstore.Open(t.TempDir() + "/threads.sqlite")
+	if err != nil {
+		t.Fatalf("threadstore.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	svc := &Service{
+		threadsDB:          store,
+		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
+		delegatedApprovals: map[string]*delegatedApprovalHandle{},
+		persistOpTO:        time.Second,
+	}
+	parent := newPermissionPolicyTestRun(t, t.TempDir(), FlowerPermissionApprovalRequired, "subagent_spawn_failure")
+	parent.service = svc
+	parent.threadsDB = store
+	parent.cfg = &config.AIConfig{
+		CurrentModelID: "compat/gpt-5-mini",
+		Providers: []config.AIProvider{{
+			ID:      "compat",
+			Type:    "openai_compatible",
+			BaseURL: "https://example.invalid/v1",
+			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+		}},
+	}
+	parent.currentModelID = "compat/gpt-5-mini"
+	parent.resolveProviderKey = func(providerID string) (string, bool, error) {
+		return "provider-key", strings.TrimSpace(providerID) == "compat", nil
+	}
+	freezePermissionPolicyTestSnapshot(t, parent)
+
+	host := &recordingFloretHost{spawnErr: errors.New("host spawn failed")}
+	runtime := &floretSubagentRuntime{parent: parent, host: host}
+	spawnToolCallID := "tool_subagents_spawn_failure"
+	if _, err := runtime.spawn(context.Background(), spawnToolCallID, map[string]any{
+		"agent_type": "worker",
+		"task_name":  "failure check",
+		"message":    "fail before child starts",
+	}); err == nil {
+		t.Fatalf("spawn succeeded, want host error")
+	}
+
+	host.mu.Lock()
+	if len(host.spawnRequests) != 1 {
+		t.Fatalf("spawn request count=%d, want 1", len(host.spawnRequests))
+	}
+	childThreadID := strings.TrimSpace(string(host.spawnRequests[0].ThreadID))
+	host.mu.Unlock()
+	if childThreadID == "" {
+		t.Fatalf("spawn request did not allocate child thread id")
+	}
+	if rec, ok, err := store.GetFinalizedChildPermissionSnapshotByThread(context.Background(), parent.endpointID, childThreadID); err != nil {
+		t.Fatalf("GetFinalizedChildPermissionSnapshotByThread: %v", err)
+	} else if ok {
+		t.Fatalf("unexpected finalized child permission snapshot after host failure: %#v", rec)
+	}
+	provisional, ok, err := store.GetChildPermissionSnapshotBySpawnToolCall(context.Background(), parent.endpointID, spawnToolCallID)
+	if err != nil {
+		t.Fatalf("GetChildPermissionSnapshotBySpawnToolCall: %v", err)
+	}
+	if !ok {
+		t.Fatalf("missing provisional child permission snapshot for %s", spawnToolCallID)
+	}
+	if provisional.State != "provisional" {
+		t.Fatalf("child snapshot state=%q, want provisional", provisional.State)
+	}
 }
 
 func TestReleasedSubagentRuntimeCannotRecreateHost(t *testing.T) {

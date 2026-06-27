@@ -1012,6 +1012,7 @@ CREATE TABLE IF NOT EXISTS ai_delegated_approval_requests (
   action_id TEXT NOT NULL,
   endpoint_id TEXT NOT NULL,
   parent_thread_id TEXT NOT NULL,
+  parent_user_public_id TEXT NOT NULL DEFAULT '',
   parent_run_id TEXT NOT NULL DEFAULT '',
   parent_turn_id TEXT NOT NULL DEFAULT '',
   subagent_id TEXT NOT NULL DEFAULT '',
@@ -1067,11 +1068,12 @@ CREATE INDEX IF NOT EXISTS idx_ai_delegated_approval_outbox_pending ON ai_delega
 CREATE TABLE IF NOT EXISTS ai_delegated_approval_idempotency (
   actor_scope TEXT NOT NULL,
   idempotency_key TEXT NOT NULL,
-  endpoint_id TEXT NOT NULL,
-  parent_thread_id TEXT NOT NULL,
-  action_id TEXT NOT NULL,
-  approved INTEGER NOT NULL DEFAULT 0,
-  response_json TEXT NOT NULL DEFAULT '{}',
+	  endpoint_id TEXT NOT NULL,
+	  parent_thread_id TEXT NOT NULL,
+	  action_id TEXT NOT NULL,
+	  ref_hash TEXT NOT NULL DEFAULT '',
+	  approved INTEGER NOT NULL DEFAULT 0,
+	  response_json TEXT NOT NULL DEFAULT '{}',
   created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(actor_scope, idempotency_key)
 );
@@ -1080,7 +1082,13 @@ CREATE INDEX IF NOT EXISTS idx_ai_delegated_approval_idempotency_action ON ai_de
 	if err != nil {
 		return err
 	}
-	return ensureColumnTx(tx, "ai_delegated_approval_requests", "request_fingerprint", `ALTER TABLE ai_delegated_approval_requests ADD COLUMN request_fingerprint TEXT NOT NULL DEFAULT ''`)
+	if err := ensureColumnTx(tx, "ai_delegated_approval_requests", "request_fingerprint", `ALTER TABLE ai_delegated_approval_requests ADD COLUMN request_fingerprint TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	if err := ensureColumnTx(tx, "ai_delegated_approval_idempotency", "ref_hash", `ALTER TABLE ai_delegated_approval_idempotency ADD COLUMN ref_hash TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	return ensureColumnTx(tx, "ai_delegated_approval_requests", "parent_user_public_id", `ALTER TABLE ai_delegated_approval_requests ADD COLUMN parent_user_public_id TEXT NOT NULL DEFAULT ''`)
 }
 
 func ensureFlowerThreadMetadataOwnershipColumnsTx(tx *sql.Tx) error {
@@ -1294,7 +1302,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			"schema_hash", "presentation_hash", "created_at_unix_ms", "finalized_at_unix_ms",
 		},
 		"ai_delegated_approval_requests": {
-			"action_id", "endpoint_id", "parent_thread_id", "parent_run_id", "parent_turn_id",
+			"action_id", "endpoint_id", "parent_thread_id", "parent_user_public_id", "parent_run_id", "parent_turn_id",
 			"subagent_id", "child_thread_id", "child_run_id", "child_turn_id",
 			"child_tool_call_id", "approval_id", "ref_hash", "request_fingerprint", "state", "status",
 			"delivery_state", "child_execution_state", "version", "surface_epoch",
@@ -1311,7 +1319,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		},
 		"ai_delegated_approval_idempotency": {
 			"actor_scope", "idempotency_key", "endpoint_id", "parent_thread_id",
-			"action_id", "approved", "response_json", "created_at_unix_ms",
+			"action_id", "ref_hash", "approved", "response_json", "created_at_unix_ms",
 		},
 	}
 	for tableName, columns := range requiredColumns {

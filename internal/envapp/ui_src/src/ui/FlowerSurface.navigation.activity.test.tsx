@@ -1250,12 +1250,10 @@ describe('FlowerSurface navigation activity', () => {
   });
 
   it('uses a single thread-level primary surface for delegated approvals', async () => {
-    const delegatedAction = {
-      action_id: 'dappr-terminal',
-      origin: 'delegated_subagent' as const,
-      run_id: 'run-parent-delegated',
-      tool_id: 'tool-child-shell',
-      tool_name: 'terminal.exec',
+	    const delegatedAction = {
+	      action_id: 'dappr-terminal',
+	      origin: 'delegated_subagent' as const,
+	      tool_name: 'terminal.exec',
       state: 'requested' as const,
       status: 'pending' as const,
       revision: 1,

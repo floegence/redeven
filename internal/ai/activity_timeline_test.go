@@ -224,13 +224,14 @@ func TestHandleToolCallDoesNotEmitActivityTimeline(t *testing.T) {
 			}
 		},
 	})
+	r.permissionType = FlowerPermissionReadonly
 
-	outcome, err := r.handleToolCall(context.Background(), "tool_file_read_1", "file.read", map[string]any{"file_path": "note.txt"})
+	outcome, err := r.handleToolCall(context.Background(), "tool_read_file_1", "read_file", map[string]any{"path": "note.txt"})
 	if err != nil {
 		t.Fatalf("handleToolCall: %v", err)
 	}
 	if outcome == nil || !outcome.Success {
-		t.Fatalf("outcome=%#v, want successful file.read", outcome)
+		t.Fatalf("outcome=%#v, want successful read_file", outcome)
 	}
 	if len(frames) != 0 {
 		t.Fatalf("activity frames=%d, want handleToolCall to leave activity emission to Floret observations", len(frames))

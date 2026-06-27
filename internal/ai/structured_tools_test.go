@@ -1,8 +1,10 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -158,6 +160,35 @@ func TestReadonlyFind_FiltersWithoutFollowingSymlinks(t *testing.T) {
 	}
 }
 
+func TestReadonlyFind_StopsAtVisitedEntryBudgetWithoutMatches(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	for i := 0; i < readonlyFindMaxVisitedEntries+5; i++ {
+		if err := os.WriteFile(filepath.Join(workspace, fmt.Sprintf("file-%05d.txt", i)), []byte("no match\n"), 0o644); err != nil {
+			t.Fatalf("write fixture %d: %v", i, err)
+		}
+	}
+	r := &run{agentHomeDir: workspace, workingDir: workspace}
+
+	out, err := r.toolReadonlyFind(context.Background(), ".", "definitely-missing-*.txt", "file", 10, 1, true)
+	if err != nil {
+		t.Fatalf("toolReadonlyFind: %v", err)
+	}
+	if len(out.Results) != 0 {
+		t.Fatalf("results=%+v, want no matches", out.Results)
+	}
+	if !out.Truncated {
+		t.Fatalf("Truncated=false, want true after visited-entry budget")
+	}
+	if out.Stats["limit_reason"] != "max_visited_entries" {
+		t.Fatalf("stats=%+v, want max_visited_entries limit", out.Stats)
+	}
+	if visited, ok := out.Stats["visited_entries"].(int); !ok || visited <= readonlyFindMaxVisitedEntries {
+		t.Fatalf("visited_entries=%#v, want > %d", out.Stats["visited_entries"], readonlyFindMaxVisitedEntries)
+	}
+}
+
 func TestReadonlyGrep_TreatsInjectionLikeQueryAsData(t *testing.T) {
 	t.Parallel()
 
@@ -205,6 +236,65 @@ func TestReadonlyGrep_TreatsPathAndGlobInjectionLikeData(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(workspace, "injected-glob")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("glob appears to have been executed, stat err=%v", statErr)
+	}
+}
+
+func TestReadonlyGrep_StopsAtScannedByteBudgetWithoutMatches(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	chunk := bytes.Repeat([]byte("a"), 1<<20)
+	for i := 0; i < int(readonlyGrepMaxScannedBytes/(1<<20))+2; i++ {
+		if err := os.WriteFile(filepath.Join(workspace, fmt.Sprintf("blob-%02d.txt", i)), chunk, 0o644); err != nil {
+			t.Fatalf("write blob %d: %v", i, err)
+		}
+	}
+	r := &run{agentHomeDir: workspace, workingDir: workspace}
+
+	out, err := r.toolReadonlyGrep(context.Background(), "needle", []string{"."}, []string{"*.txt"}, true, true, 10, 0)
+	if err != nil {
+		t.Fatalf("toolReadonlyGrep: %v", err)
+	}
+	if len(out.Matches) != 0 {
+		t.Fatalf("matches=%+v, want no matches", out.Matches)
+	}
+	if !out.Truncated {
+		t.Fatalf("Truncated=false, want true after scanned-byte budget")
+	}
+	if out.Stats["limit_reason"] != "max_scanned_bytes" {
+		t.Fatalf("stats=%+v, want max_scanned_bytes limit", out.Stats)
+	}
+	if scanned, ok := out.Stats["scanned_bytes"].(int64); !ok || scanned > readonlyGrepMaxScannedBytes {
+		t.Fatalf("scanned_bytes=%#v, want <= %d", out.Stats["scanned_bytes"], readonlyGrepMaxScannedBytes)
+	}
+}
+
+func TestReadonlyGrep_TruncatesLongMatchAndContextLines(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	longContext := strings.Repeat("c", readonlyGrepMaxContextRunes+100)
+	longMatch := strings.Repeat("m", readonlyGrepMaxLineRunes+100) + " needle"
+	if err := os.WriteFile(filepath.Join(workspace, "long.txt"), []byte(longContext+"\n"+longMatch+"\n"), 0o644); err != nil {
+		t.Fatalf("write long fixture: %v", err)
+	}
+	r := &run{agentHomeDir: workspace, workingDir: workspace}
+
+	out, err := r.toolReadonlyGrep(context.Background(), "needle", []string{"long.txt"}, nil, true, true, 10, 1)
+	if err != nil {
+		t.Fatalf("toolReadonlyGrep: %v", err)
+	}
+	if len(out.Matches) != 1 {
+		t.Fatalf("matches=%+v, want one match", out.Matches)
+	}
+	if !strings.Contains(out.Matches[0].Text, "(truncated)") || len([]rune(out.Matches[0].Text)) > readonlyGrepMaxLineRunes+len("... (truncated)") {
+		t.Fatalf("match text was not truncated as expected: len=%d text=%q", len([]rune(out.Matches[0].Text)), out.Matches[0].Text)
+	}
+	if len(out.Matches[0].Context) != 1 {
+		t.Fatalf("context=%+v, want one context line", out.Matches[0].Context)
+	}
+	if !strings.Contains(out.Matches[0].Context[0].Text, "(truncated)") || len([]rune(out.Matches[0].Context[0].Text)) > readonlyGrepMaxContextRunes+len("... (truncated)") {
+		t.Fatalf("context text was not truncated as expected: len=%d text=%q", len([]rune(out.Matches[0].Context[0].Text)), out.Matches[0].Context[0].Text)
 	}
 }
 

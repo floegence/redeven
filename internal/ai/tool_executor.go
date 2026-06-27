@@ -76,6 +76,22 @@ func ExecuteLocalTool(ctx context.Context, opts LocalToolExecutionOptions) (Loca
 			Mode: ToolTargetModeLocalRuntime,
 		},
 	})
+	permissionType, err := normalizePermissionType(opts.AIConfig.EffectivePermissionType(), FlowerPermissionApprovalRequired)
+	if err != nil {
+		return LocalToolExecutionResult{}, err
+	}
+	r.permissionType = permissionType
+	registry := NewInMemoryToolRegistry()
+	if err := registerBuiltInTools(registry, r); err != nil {
+		return LocalToolExecutionResult{}, err
+	}
+	permissionFilter := newPermissionToolFilter(true)
+	permissionFilter = r.withToolAllowlistFilter(permissionFilter)
+	activeTools := permissionFilter.FilterTools(permissionType, registry.Snapshot())
+	snapshot := r.freezePermissionSnapshot(buildPermissionSnapshot(permissionType, activeTools, nil))
+	if err := validatePermissionSnapshotConsistency(snapshot); err != nil {
+		return LocalToolExecutionResult{}, err
+	}
 	result, err := r.execTool(runCtx, meta, strings.TrimSpace(opts.ToolCallID), toolName, args)
 	if err != nil {
 		return LocalToolExecutionResult{}, err

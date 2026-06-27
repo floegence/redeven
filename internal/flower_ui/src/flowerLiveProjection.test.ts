@@ -1510,12 +1510,10 @@ describe('Flower live projection', () => {
         at_unix_ms: 4000,
         kind: 'approval.requested',
         payload: {
-          action: {
-            action_id: 'dappr-1',
-            origin: 'delegated_subagent',
-            run_id: 'run-parent',
-            tool_id: 'tool-child-1',
-            tool_name: 'terminal.exec',
+	          action: {
+	            action_id: 'dappr-1',
+	            origin: 'delegated_subagent',
+	            tool_name: 'terminal.exec',
             state: 'approved',
             status: 'resolved',
             revision: 1,
@@ -1523,7 +1521,7 @@ describe('Flower live projection', () => {
             requested_at_unix_ms: 3000,
             resolved_at_unix_ms: 3500,
             can_approve: true,
-            delivery_state: 'delivery_pending',
+            delivery_state: 'delivery_delivered',
             child_execution_state: 'pending',
             delegated_ref: delegatedRef,
             summary: { label: 'Run command' },
@@ -1551,12 +1549,10 @@ describe('Flower live projection', () => {
         at_unix_ms: 4200,
         kind: 'approval.resolved',
         payload: {
-          action: {
-            action_id: 'dappr-2',
-            origin: 'delegated_subagent',
-            run_id: 'run-parent',
-            tool_id: 'tool-child-2',
-            tool_name: 'terminal.exec',
+	          action: {
+	            action_id: 'dappr-2',
+	            origin: 'delegated_subagent',
+	            tool_name: 'terminal.exec',
             state: 'unavailable',
             status: 'unavailable',
             revision: 1,
@@ -1584,7 +1580,7 @@ describe('Flower live projection', () => {
     expect(applied.thread.approval_actions?.[0]).toMatchObject({
       action_id: 'dappr-1',
       surface_role: 'mirror',
-      delivery_state: 'delivery_pending',
+      delivery_state: 'delivery_delivered',
       can_approve: true,
     });
     expect(applied.thread.approval_actions?.[1]).toMatchObject({
@@ -1654,6 +1650,72 @@ describe('Flower live projection', () => {
     });
     expect(applied.thread.approval_actions?.[0].run_id).toBeUndefined();
     expect(applied.thread.approval_actions?.[0].tool_id).toBeUndefined();
+  });
+
+  it('keeps one primary delegated approval surface and promotes the next pending record', () => {
+    const delegatedRef = {
+      parent_thread_id: 'th-live',
+      parent_run_id: 'run-parent',
+      subagent_id: 'child-1',
+      child_thread_id: 'child-thread-1',
+      child_run_id: 'child-run-1',
+      child_tool_call_id: 'tool-child-1',
+      approval_id: 'approval-child-1',
+    };
+    const action = (actionID: string, requestedAtMs: number, subagentID: string) => ({
+      action_id: actionID,
+      origin: 'delegated_subagent' as const,
+      tool_name: 'terminal.exec',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      revision: 1,
+      version: 1,
+      surface_epoch: 1,
+      surface_role: 'primary_action' as const,
+      requested_at_ms: requestedAtMs,
+      can_approve: true,
+      delivery_state: 'waiting_decision' as const,
+      child_execution_state: 'pending' as const,
+      delegated_ref: {
+        ...delegatedRef,
+        subagent_id: subagentID,
+        child_thread_id: `thread-${subagentID}`,
+        child_run_id: `run-${subagentID}`,
+        child_tool_call_id: `tool-${subagentID}`,
+        approval_id: `approval-${subagentID}`,
+      },
+      summary: { label: 'Run command' },
+    });
+    const initial = thread({ status: 'running', permission_type: 'approval_required' });
+    const first = action('dappr-first', 1000, 'first');
+    const second = action('dappr-second', 2000, 'second');
+
+    const applied = applyEvents(initial, 0, [
+      event(1, 'approval.requested', { action: second }),
+      event(2, 'approval.requested', { action: first }),
+    ]);
+
+    expect(applied.thread.approval_actions?.map((item) => [item.action_id, item.surface_role, item.primary_wait_anchor])).toEqual([
+      ['dappr-first', 'primary_action', 'thread:th-live'],
+      ['dappr-second', 'locator', 'thread:th-live'],
+    ]);
+
+    const afterResolve = applyEvents(applied.thread, applied.cursor, [
+      event(3, 'approval.resolved', {
+        action: {
+          ...first,
+          state: 'rejected',
+          status: 'resolved',
+          can_approve: false,
+          delivery_state: 'delivery_delivered',
+        },
+      }),
+    ]);
+
+    expect(afterResolve.thread.approval_actions?.find((item) => item.action_id === 'dappr-second')).toMatchObject({
+      surface_role: 'primary_action',
+      can_approve: true,
+    });
   });
 
   it('applies normalized reasoning fields from thread patches', () => {

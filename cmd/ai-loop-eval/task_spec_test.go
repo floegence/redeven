@@ -116,3 +116,56 @@ tasks:
 		t.Fatalf("expected invalid workspace mode error")
 	}
 }
+
+func TestLoadTaskSpecs_RejectsLegacyPermissionFields(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		runtime string
+	}{
+		{
+			name: "execution_mode",
+			runtime: `      execution_mode: plan
+`,
+		},
+		{
+			name: "mode",
+			runtime: `      mode: act
+`,
+		},
+		{
+			name: "execution_policy",
+			runtime: `      execution_policy:
+        require_user_approval: true
+        block_dangerous_commands: true
+`,
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			path := filepath.Join(dir, "tasks.yaml")
+			content := `version: v2
+
+tasks:
+  - id: legacy_permission
+    title: Legacy Permission
+    stage: screen
+    turns:
+      - "Inspect ${workspace}"
+    runtime:
+` + tc.runtime
+			if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+				t.Fatalf("write task spec: %v", err)
+			}
+
+			if _, err := loadTaskSpecs(path); err == nil {
+				t.Fatalf("expected legacy runtime field %s to be rejected", tc.name)
+			}
+		})
+	}
+}

@@ -122,10 +122,11 @@ func buildPermissionSnapshot(permissionType FlowerPermissionType, activeTools []
 		FloretToolNames:       floretNames,
 		ToolPolicies:          policies,
 	}
+	allVisibleDefs := append(append([]ToolDef{}, activeTools...), activeSignals...)
+	snapshot.RegistryHash = stableToolRegistryHash(activeTools)
+	snapshot.SchemaHash = stableToolSchemaHash(activeTools)
+	snapshot.PresentationHash = stableToolPresentationHash(allVisibleDefs)
 	snapshot.SnapshotHash = permissionSnapshotHash(snapshot)
-	snapshot.RegistryHash = stableStringListHash(snapshot.FloretToolNames)
-	snapshot.SchemaHash = stableStringListHash(snapshot.FloretToolNames)
-	snapshot.PresentationHash = stableStringListHash(snapshot.PromptCapabilityNames)
 	return snapshot
 }
 
@@ -178,6 +179,113 @@ func validatePermissionSnapshotConsistency(snapshot PermissionSnapshot) error {
 		}
 	}
 	return nil
+}
+
+func validateChildPermissionSnapshotSubset(parent PermissionSnapshot, child PermissionSnapshot) error {
+	if parent.PermissionType == "" || child.PermissionType == "" {
+		return fmt.Errorf("permission snapshot subset has missing permission type")
+	}
+	if parent.PermissionType != child.PermissionType {
+		return fmt.Errorf("child permission snapshot permission type %q differs from parent %q", child.PermissionType, parent.PermissionType)
+	}
+	if err := ensureStringListSubset("visible tools", child.VisibleToolNames, parent.VisibleToolNames); err != nil {
+		return err
+	}
+	if err := ensureStringListSubset("prompt capabilities", child.PromptCapabilityNames, parent.PromptCapabilityNames); err != nil {
+		return err
+	}
+	if err := ensureStringListSubset("floret tools", child.FloretToolNames, parent.FloretToolNames); err != nil {
+		return err
+	}
+	for name, childPolicy := range child.ToolPolicies {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return fmt.Errorf("child permission snapshot has empty policy name")
+		}
+		parentPolicy, ok := parent.ToolPolicies[name]
+		if !ok {
+			return fmt.Errorf("child permission snapshot policy %q is not present in parent", name)
+		}
+		if err := validateChildToolPolicySubset(name, parentPolicy, childPolicy); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureStringListSubset(label string, child []string, parent []string) error {
+	parentSet := make(map[string]struct{}, len(parent))
+	for _, item := range parent {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			parentSet[item] = struct{}{}
+		}
+	}
+	for _, item := range child {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			return fmt.Errorf("child permission snapshot has empty %s entry", label)
+		}
+		if _, ok := parentSet[item]; !ok {
+			return fmt.Errorf("child permission snapshot %s entry %q is not present in parent", label, item)
+		}
+	}
+	return nil
+}
+
+func validateChildToolPolicySubset(name string, parent ToolPermissionPolicy, child ToolPermissionPolicy) error {
+	if parent.Visibility != child.Visibility {
+		return fmt.Errorf("child permission snapshot policy %q visibility %q differs from parent %q", name, child.Visibility, parent.Visibility)
+	}
+	if err := ensureCapabilitySubset(name, child.Capabilities, parent.Capabilities); err != nil {
+		return err
+	}
+	if err := ensureStringListSubset("resource kinds for policy "+name, child.ResourceKinds, parent.ResourceKinds); err != nil {
+		return err
+	}
+	parentDecisionRank := approvalDecisionRank(parent.ApprovalDecision)
+	childDecisionRank := approvalDecisionRank(child.ApprovalDecision)
+	if parentDecisionRank < 0 || childDecisionRank < 0 {
+		return fmt.Errorf("child permission snapshot policy %q has invalid approval decision", name)
+	}
+	if childDecisionRank < parentDecisionRank {
+		return fmt.Errorf("child permission snapshot policy %q weakens approval decision from %q to %q", name, parent.ApprovalDecision, child.ApprovalDecision)
+	}
+	if child.ParallelSafe && !parent.ParallelSafe {
+		return fmt.Errorf("child permission snapshot policy %q enables parallel execution not present in parent", name)
+	}
+	return nil
+}
+
+func ensureCapabilitySubset(name string, child []ToolCapabilityClass, parent []ToolCapabilityClass) error {
+	parentSet := make(map[ToolCapabilityClass]struct{}, len(parent))
+	for _, item := range parent {
+		if item != "" {
+			parentSet[item] = struct{}{}
+		}
+	}
+	for _, item := range child {
+		if item == "" {
+			return fmt.Errorf("child permission snapshot policy %q has empty capability", name)
+		}
+		if _, ok := parentSet[item]; !ok {
+			return fmt.Errorf("child permission snapshot policy %q capability %q is not present in parent", name, item)
+		}
+	}
+	return nil
+}
+
+func approvalDecisionRank(decision ApprovalDecisionKind) int {
+	switch decision {
+	case ApprovalDecisionAllow:
+		return 0
+	case ApprovalDecisionAsk:
+		return 1
+	case ApprovalDecisionDeny:
+		return 2
+	default:
+		return -1
+	}
 }
 
 func uniqueStringSet(label string, values []string) (map[string]struct{}, error) {
@@ -309,6 +417,9 @@ func permissionSnapshotHash(snapshot PermissionSnapshot) string {
 		PromptCapabilityNames []string                        `json:"prompt_capability_names"`
 		FloretToolNames       []string                        `json:"floret_tool_names"`
 		ToolPolicies          map[string]ToolPermissionPolicy `json:"tool_policies"`
+		RegistryHash          string                          `json:"registry_hash,omitempty"`
+		SchemaHash            string                          `json:"schema_hash,omitempty"`
+		PresentationHash      string                          `json:"presentation_hash,omitempty"`
 	}
 	view := hashView{
 		PermissionType:        snapshot.PermissionType,
@@ -316,6 +427,9 @@ func permissionSnapshotHash(snapshot PermissionSnapshot) string {
 		PromptCapabilityNames: append([]string(nil), snapshot.PromptCapabilityNames...),
 		FloretToolNames:       append([]string(nil), snapshot.FloretToolNames...),
 		ToolPolicies:          snapshot.ToolPolicies,
+		RegistryHash:          strings.TrimSpace(snapshot.RegistryHash),
+		SchemaHash:            strings.TrimSpace(snapshot.SchemaHash),
+		PresentationHash:      strings.TrimSpace(snapshot.PresentationHash),
 	}
 	sort.Strings(view.VisibleToolNames)
 	sort.Strings(view.PromptCapabilityNames)
@@ -334,6 +448,112 @@ func stableStringListHash(values []string) string {
 	}
 	sort.Strings(cleaned)
 	payload, _ := json.Marshal(cleaned)
+	sum := sha256.Sum256(payload)
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+func stableToolRegistryHash(tools []ToolDef) string {
+	type registryEntry struct {
+		Name             string                `json:"name"`
+		Description      string                `json:"description,omitempty"`
+		ParallelSafe     bool                  `json:"parallel_safe,omitempty"`
+		Mutating         bool                  `json:"mutating,omitempty"`
+		RequiresApproval bool                  `json:"requires_approval,omitempty"`
+		Visibility       ToolVisibilityClass   `json:"visibility,omitempty"`
+		Capabilities     []ToolCapabilityClass `json:"capabilities,omitempty"`
+		Source           string                `json:"source,omitempty"`
+		Namespace        string                `json:"namespace,omitempty"`
+	}
+	entries := make([]registryEntry, 0, len(tools))
+	for _, tool := range tools {
+		tool = normalizeToolPermissionMetadata(tool)
+		name := strings.TrimSpace(tool.Name)
+		if name == "" {
+			continue
+		}
+		capabilities := append([]ToolCapabilityClass(nil), tool.Capabilities...)
+		sort.Slice(capabilities, func(i, j int) bool { return capabilities[i] < capabilities[j] })
+		entries = append(entries, registryEntry{
+			Name:             name,
+			Description:      strings.TrimSpace(tool.Description),
+			ParallelSafe:     tool.ParallelSafe,
+			Mutating:         tool.Mutating,
+			RequiresApproval: tool.RequiresApproval,
+			Visibility:       tool.Visibility,
+			Capabilities:     capabilities,
+			Source:           strings.TrimSpace(tool.Source),
+			Namespace:        strings.TrimSpace(tool.Namespace),
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	return stableJSONHash(entries)
+}
+
+func stableToolSchemaHash(tools []ToolDef) string {
+	type schemaEntry struct {
+		Name        string `json:"name"`
+		InputSchema any    `json:"input_schema,omitempty"`
+	}
+	entries := make([]schemaEntry, 0, len(tools))
+	for _, tool := range tools {
+		name := strings.TrimSpace(tool.Name)
+		if name == "" {
+			continue
+		}
+		entries = append(entries, schemaEntry{
+			Name:        name,
+			InputSchema: canonicalJSONValue(tool.InputSchema),
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	return stableJSONHash(entries)
+}
+
+func stableToolPresentationHash(tools []ToolDef) string {
+	type presentationEntry struct {
+		Name         string `json:"name"`
+		Presentation any    `json:"presentation,omitempty"`
+	}
+	entries := make([]presentationEntry, 0, len(tools))
+	for _, tool := range tools {
+		name := strings.TrimSpace(tool.Name)
+		if name == "" {
+			continue
+		}
+		entries = append(entries, presentationEntry{
+			Name:         name,
+			Presentation: canonicalStructValue(tool.Presentation),
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	return stableJSONHash(entries)
+}
+
+func canonicalJSONValue(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return strings.TrimSpace(string(raw))
+	}
+	return value
+}
+
+func canonicalStructValue(value any) any {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%v", value)
+	}
+	var out any
+	if err := json.Unmarshal(payload, &out); err != nil {
+		return string(payload)
+	}
+	return out
+}
+
+func stableJSONHash(value any) string {
+	payload, _ := json.Marshal(value)
 	sum := sha256.Sum256(payload)
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }

@@ -84,6 +84,7 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 	}
 	state = mergeFlowerLivePersistedContextState(state, persistedState)
 	state = s.mergePersistedDelegatedApprovalState(ctx, endpointID, threadID, state)
+	normalizeFlowerDelegatedApprovalSurfaces(&state)
 
 	timeline, err := s.buildFlowerTimelineMessages(ctx, endpointID, threadID, state)
 	if err != nil {
@@ -125,14 +126,29 @@ func (s *Service) mergePersistedDelegatedApprovalState(ctx context.Context, endp
 		case FlowerApprovalStatusPending, FlowerApprovalStatusUnavailable:
 			state.ApprovalActions[action.ActionID] = action
 		case FlowerApprovalStatusResolved:
-			if action.DeliveryState == FlowerApprovalDeliveryPending {
-				action.Status = FlowerApprovalStatusPending
+			if visibleResolvedDelegatedApprovalAction(action) {
 				action.CanApprove = false
 				state.ApprovalActions[action.ActionID] = action
 			}
 		}
 	}
 	return state
+}
+
+func visibleResolvedDelegatedApprovalAction(action FlowerApprovalAction) bool {
+	if action.Origin != FlowerApprovalOriginDelegatedSubagent {
+		return false
+	}
+	switch action.DeliveryState {
+	case FlowerApprovalDeliveryPending,
+		FlowerApprovalDeliveryDelivered,
+		FlowerApprovalDeliveryFailed,
+		FlowerApprovalDeliveryAckUnknown,
+		FlowerApprovalDeliveryUnavailable:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) ListFlowerThreadLiveEvents(ctx context.Context, meta *session.Meta, threadID string, afterSeq int64, limit int) (*FlowerLiveEventsResponse, error) {
@@ -1332,16 +1348,26 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 			}
 			if action.Status == FlowerApprovalStatusResolved {
 				action.CanApprove = false
+				if visibleResolvedDelegatedApprovalAction(action) {
+					state.ApprovalActions[action.ActionID] = action
+					if approvals != nil {
+						approvals[action.ActionID] = action.State
+					}
+					normalizeFlowerDelegatedApprovalSurfaces(state)
+					return
+				}
 				delete(state.ApprovalActions, action.ActionID)
 				if approvals != nil {
 					approvals[action.ActionID] = action.State
 				}
+				normalizeFlowerDelegatedApprovalSurfaces(state)
 				return
 			}
 			if action.Status == FlowerApprovalStatusUnavailable {
 				action.CanApprove = false
 			}
 			state.ApprovalActions[action.ActionID] = action
+			normalizeFlowerDelegatedApprovalSurfaces(state)
 		}
 	case FlowerLiveInputRequested:
 		var payload FlowerLiveInputRequestedPayload
@@ -1567,6 +1593,78 @@ func (s *Service) flowerLiveApprovalExpectedSeq(endpointID string, threadID stri
 	}
 	action := stream.State.ApprovalActions[actionID]
 	return action.ExpectedSeq
+}
+
+func normalizeFlowerDelegatedApprovalSurfaces(state *FlowerLiveMaterializedState) {
+	if state == nil || len(state.ApprovalActions) == 0 {
+		return
+	}
+	type candidate struct {
+		actionID      string
+		requestedAtMs int64
+		expectedSeq   int64
+	}
+	candidates := make([]candidate, 0)
+	for actionID, action := range state.ApprovalActions {
+		if !flowerDelegatedApprovalPendingDecision(action) {
+			continue
+		}
+		candidates = append(candidates, candidate{
+			actionID:      actionID,
+			requestedAtMs: action.RequestedAtMs,
+			expectedSeq:   action.ExpectedSeq,
+		})
+	}
+	if len(candidates) == 0 {
+		return
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		left := candidates[i]
+		right := candidates[j]
+		if left.requestedAtMs != right.requestedAtMs {
+			return left.requestedAtMs < right.requestedAtMs
+		}
+		if left.expectedSeq != right.expectedSeq {
+			return left.expectedSeq < right.expectedSeq
+		}
+		return left.actionID < right.actionID
+	})
+	primaryID := candidates[0].actionID
+	for _, item := range candidates {
+		action := state.ApprovalActions[item.actionID]
+		if strings.TrimSpace(action.PrimaryWaitAnchor) == "" {
+			action.PrimaryWaitAnchor = flowerDelegatedApprovalPrimaryWaitAnchor(action)
+		}
+		if item.actionID == primaryID {
+			action.SurfaceRole = FlowerApprovalSurfacePrimaryAction
+		} else {
+			action.SurfaceRole = FlowerApprovalSurfaceLocator
+		}
+		state.ApprovalActions[item.actionID] = action
+	}
+}
+
+func flowerDelegatedApprovalPendingDecision(action FlowerApprovalAction) bool {
+	if action.Origin != FlowerApprovalOriginDelegatedSubagent {
+		return false
+	}
+	if action.Status != FlowerApprovalStatusPending || action.State != FlowerApprovalStateRequested {
+		return false
+	}
+	if action.DeliveryState != "" && action.DeliveryState != FlowerApprovalDeliveryWaiting {
+		return false
+	}
+	return true
+}
+
+func flowerDelegatedApprovalPrimaryWaitAnchor(action FlowerApprovalAction) string {
+	if action.DelegatedRef != nil && strings.TrimSpace(action.DelegatedRef.ParentThreadID) != "" {
+		return "thread:" + strings.TrimSpace(action.DelegatedRef.ParentThreadID)
+	}
+	if strings.TrimSpace(action.Scope) != "" {
+		return strings.TrimSpace(action.Scope)
+	}
+	return "thread"
 }
 
 func ensureFlowerLiveStateMaps(state *FlowerLiveMaterializedState) {

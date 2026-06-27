@@ -5,9 +5,9 @@ tasks:
     stage: screen
     category: readonly
     turns:
-      - "Analyze workspace ${workspace} using real files. Report repository purpose, major directories or modules, and one concrete validation path. Cite at least 2 absolute evidence file paths."
+      - "Analyze workspace ${workspace} using readonly tools. Read at least two real files with read_file or read_files, inspect the tree with find or rgrep, then report repository purpose, major directories or modules, and one concrete validation path. Cite at least 2 absolute evidence file paths."
     runtime:
-      execution_mode: act
+      permission_type: readonly
       timeout_seconds: 40
       workspace:
         mode: source_readonly
@@ -27,16 +27,17 @@ tasks:
         must_not_end_with_fallback: true
       thread:
         run_status: success
-        execution_mode: act
+        permission_type: readonly
         waiting_prompt: forbidden
       tools:
         must_call:
-          - "terminal.exec"
+          - "read_file"
           - "task_complete"
         must_succeed:
-          - "terminal.exec"
+          - "read_file"
           - "task_complete"
         must_not_call:
+          - "terminal.exec"
           - "apply_patch"
         max_calls: 12
       events:
@@ -44,13 +45,13 @@ tasks:
           - "signal.recovery.attempt"
 
   - id: readonly_review_question
-    title: Answer versus act review question
+    title: Readonly review question
     stage: screen
     category: readonly
     turns:
-      - "Do not edit any files. Based on real files in ${workspace}, answer this question: is there a likely bug, risk, or inconsistency worth checking first? Give one finding, or explicitly say none found, with concrete evidence paths."
+      - "Do not edit any files. Use readonly tools to inspect real files in ${workspace}, then answer this question: is there a likely bug, risk, or inconsistency worth checking first? Give one finding, or explicitly say none found, with concrete evidence paths."
     runtime:
-      execution_mode: act
+      permission_type: readonly
       timeout_seconds: 35
       workspace:
         mode: source_readonly
@@ -67,33 +68,34 @@ tasks:
         must_not_end_with_fallback: true
       thread:
         run_status: success
-        execution_mode: act
+        permission_type: readonly
         waiting_prompt: forbidden
       tools:
         must_call:
-          - "terminal.exec"
+          - "read_file"
           - "task_complete"
         must_succeed:
-          - "terminal.exec"
+          - "read_file"
           - "task_complete"
         must_not_call:
+          - "terminal.exec"
           - "apply_patch"
         max_calls: 10
       events:
         hard_fail:
           - "signal.recovery.attempt"
 
-  - id: plan_mode_requests_act_switch
-    title: Plan mode asks user to switch to act
+  - id: readonly_edit_request_requires_permission_change
+    title: Readonly edit request asks for permission change
     stage: screen
     category: flower_contract
     turns:
-      - "I need you to edit a file in ${workspace} to add a missing note. In this thread, do whatever is required to proceed safely."
+      - "I need you to edit a file in ${workspace} to add a missing note. This thread is readonly. Do the correct Flower-safe next step."
     runtime:
-      execution_mode: plan
+      permission_type: readonly
       timeout_seconds: 30
       workspace:
-        mode: none
+        mode: source_readonly
     assertions:
       output:
         min_length: 20
@@ -103,7 +105,7 @@ tasks:
         must_not_end_with_fallback: true
       thread:
         run_status: waiting_user
-        execution_mode: plan
+        permission_type: readonly
         waiting_prompt: required
       tools:
         must_call:
@@ -111,6 +113,7 @@ tasks:
         must_succeed:
           - "ask_user"
         must_not_call:
+          - "terminal.exec"
           - "apply_patch"
           - "task_complete"
       events:
@@ -124,9 +127,9 @@ tasks:
     stage: deep
     category: flower_contract
     turns:
-      - "Perform a 3-step readonly repository audit for ${workspace}: identify entrypoints, name one risky area, and describe one verification command. Keep your todo list updated while you work."
+      - "Perform a 3-step readonly repository audit for ${workspace}: identify entrypoints, name one risky area, and describe one verification command. Use read_file, find, or rgrep for evidence, and keep your todo list updated while you work."
     runtime:
-      execution_mode: act
+      permission_type: readonly
       timeout_seconds: 50
       workspace:
         mode: source_readonly
@@ -145,18 +148,19 @@ tasks:
         must_not_end_with_fallback: true
       thread:
         run_status: success
-        execution_mode: act
+        permission_type: readonly
         waiting_prompt: forbidden
       tools:
         must_call:
-          - "terminal.exec"
+          - "read_file"
           - "write_todos"
           - "task_complete"
         must_succeed:
-          - "terminal.exec"
+          - "read_file"
           - "write_todos"
           - "task_complete"
         must_not_call:
+          - "terminal.exec"
           - "apply_patch"
         max_calls: 14
       events:
@@ -175,9 +179,9 @@ tasks:
     stage: deep
     category: flower_contract
     turns:
-      - "Run a compact readonly investigation of ${workspace}: inspect the README, inspect one source directory, run one harmless verification command, and summarize the result with evidence paths. Keep any tool logs out of the final prose."
+      - "Run a compact readonly investigation of ${workspace}: inspect the README with read_file, inspect one source directory with find or rgrep, name one harmless verification command you would run, and summarize the result with evidence paths. Keep any tool logs out of the final prose."
     runtime:
-      execution_mode: act
+      permission_type: readonly
       timeout_seconds: 50
       workspace:
         mode: source_readonly
@@ -198,16 +202,17 @@ tasks:
         must_not_end_with_fallback: true
       thread:
         run_status: success
-        execution_mode: act
+        permission_type: readonly
         waiting_prompt: forbidden
       tools:
         must_call:
-          - "terminal.exec"
+          - "read_file"
           - "task_complete"
         must_succeed:
-          - "terminal.exec"
+          - "read_file"
           - "task_complete"
         must_not_call:
+          - "terminal.exec"
           - "apply_patch"
         max_calls: 14
       events:
@@ -223,10 +228,10 @@ tasks:
     stage: deep
     category: flower_contract
     turns:
-      - "Analyze ${workspace} using real files and provide an initial summary with at least 2 absolute evidence paths. Make it clear that deeper analysis can continue."
+      - "Analyze ${workspace} using readonly tools and real files, then provide an initial summary with at least 2 absolute evidence paths. Make it clear that deeper analysis can continue."
       - "continue"
     runtime:
-      execution_mode: act
+      permission_type: readonly
       timeout_seconds: 45
       workspace:
         mode: source_readonly
@@ -244,47 +249,48 @@ tasks:
         must_not_end_with_fallback: true
       thread:
         run_status: success
-        execution_mode: act
+        permission_type: readonly
         waiting_prompt: forbidden
       tools:
         must_call:
-          - "terminal.exec"
+          - "read_file"
           - "task_complete"
         must_succeed:
-          - "terminal.exec"
+          - "read_file"
           - "task_complete"
         must_not_call:
+          - "terminal.exec"
           - "apply_patch"
         max_calls: 14
       events:
         hard_fail:
           - "signal.recovery.attempt"
 
-  - id: no_user_interaction_closeout
-    title: No-user-interaction run closes with blockers
+  - id: readonly_no_user_interaction_closeout
+    title: Readonly no-user-interaction run closes with blockers
     stage: deep
     category: flower_contract
     turns:
-      - "You need to make a code change in ${workspace}, but this run cannot ask me anything. Finish in the correct Flower way."
+      - "You need to make a code change in ${workspace}, but this thread is readonly and this run cannot ask me anything. Finish in the correct Flower way."
     runtime:
-      execution_mode: plan
+      permission_type: readonly
       timeout_seconds: 30
       no_user_interaction: true
       workspace:
-        mode: none
+        mode: source_readonly
     assertions:
       output:
         min_length: 120
         must_contain:
           - "blocker|blocked|cannot"
-          - "next action|suggested|switch to act"
+          - "permission|readonly|read-only"
         forbidden:
           - "Tool workflow failed"
           - "No response"
         must_not_end_with_fallback: true
       thread:
         run_status: success
-        execution_mode: plan
+        permission_type: readonly
         waiting_prompt: forbidden
       tools:
         must_call:
@@ -293,6 +299,7 @@ tasks:
           - "task_complete"
         must_not_call:
           - "ask_user"
+          - "terminal.exec"
           - "apply_patch"
       events:
         must_not_include:

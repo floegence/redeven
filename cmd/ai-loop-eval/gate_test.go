@@ -304,6 +304,57 @@ func TestFirstWorkspaceScopeViolation_AllowsStructuredFileToolInsideWorkspace(t 
 	}
 }
 
+func TestFirstWorkspaceScopeViolation_ChecksReadonlyToolsInsideWorkspace(t *testing.T) {
+	t.Parallel()
+
+	workspace := "/tmp/workspace"
+	cases := []struct {
+		name     string
+		toolName string
+		argsJSON string
+	}{
+		{name: "read_file", toolName: "read_file", argsJSON: `{"path":"/tmp/workspace/README.md"}`},
+		{name: "read_files", toolName: "read_files", argsJSON: `{"paths":["/tmp/workspace/README.md","docs/note.md"]}`},
+		{name: "find", toolName: "find", argsJSON: `{"root":"/tmp/workspace/internal"}`},
+		{name: "rgrep", toolName: "rgrep", argsJSON: `{"query":"TODO","paths":["/tmp/workspace/internal"]}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			calls := []threadstore.ToolCallRecord{{ToolName: tc.toolName, Status: "success", ArgsJSON: tc.argsJSON}}
+			if violation := firstWorkspaceScopeViolation(tc.toolName, calls, workspace); violation != "" {
+				t.Fatalf("unexpected %s violation: %s", tc.toolName, violation)
+			}
+		})
+	}
+}
+
+func TestFirstWorkspaceScopeViolation_FailsWhenReadonlyToolEscapesWorkspace(t *testing.T) {
+	t.Parallel()
+
+	workspace := "/tmp/workspace"
+	cases := []struct {
+		name     string
+		toolName string
+		argsJSON string
+		want     string
+	}{
+		{name: "read_file_abs", toolName: "read_file", argsJSON: `{"path":"/tmp/outside.txt"}`, want: "/tmp/outside.txt"},
+		{name: "read_files_parent", toolName: "read_files", argsJSON: `{"paths":["../outside.txt"]}`, want: "parent:../outside.txt"},
+		{name: "find_abs", toolName: "find", argsJSON: `{"root":"/var/tmp"}`, want: "/var/tmp"},
+		{name: "rgrep_parent", toolName: "rgrep", argsJSON: `{"query":"x","paths":["../outside"]}`, want: "parent:../outside"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			calls := []threadstore.ToolCallRecord{{ToolName: tc.toolName, Status: "success", ArgsJSON: tc.argsJSON}}
+			if violation := firstWorkspaceScopeViolation(tc.toolName, calls, workspace); violation != tc.want {
+				t.Fatalf("%s violation=%q, want %q", tc.toolName, violation, tc.want)
+			}
+		})
+	}
+}
+
 func TestAssessTaskOutcome_FailsWhenStructuredFileToolEscapesSandbox(t *testing.T) {
 	t.Parallel()
 

@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
@@ -21,6 +23,7 @@ type floretToolRuntimeState struct {
 
 const (
 	subagentToolHostContextAgentTypeKey        = "subagent_agent_type"
+	subagentToolHostContextChildRunIDKey       = "child_run_id"
 	subagentToolHostContextChildThreadIDKey    = "child_thread_id"
 	subagentToolHostContextParentPermissionKey = "subagent_parent_permission"
 	subagentToolHostContextSubagentIDKey       = "subagent_id"
@@ -148,7 +151,11 @@ func floretApprovalRunContext(base *run, req fltools.ApprovalRequest) *run {
 	if threadID == "" {
 		return base
 	}
-	return floretRunContextForIDs(base, threadID, threadID, "", req.HostContext)
+	runID := firstNonEmptyString(
+		strings.TrimSpace(req.HostContext[subagentToolHostContextChildRunIDKey]),
+		strings.TrimSpace(req.Labels["host."+subagentToolHostContextChildRunIDKey]),
+	)
+	return floretRunContextForIDs(base, runID, threadID, "", req.HostContext)
 }
 
 func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawTurnID string, hostContext map[string]string) *run {
@@ -273,11 +280,162 @@ func (r *run) bindStoredChildPermissionSnapshot(childThreadID string) {
 		r.toolAllowlist = map[string]struct{}{}
 		return
 	}
+	ctx, cancel = persistContextForRun(r)
+	if err := r.validateStoredChildPermissionSnapshot(ctx, rec, snapshot); err != nil {
+		cancel()
+		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
+		r.toolAllowlist = map[string]struct{}{}
+		return
+	}
+	cancel()
 	r.permissionSnapshot = snapshot
 	if snapshot.PermissionType != "" {
 		r.permissionType = snapshot.PermissionType
 	}
 	r.toolAllowlist = stringSet(snapshot.VisibleToolNames...)
+}
+
+func (r *run) validateStoredChildPermissionSnapshot(ctx context.Context, rec threadstore.ChildPermissionSnapshotRecord, snapshot PermissionSnapshot) error {
+	if r == nil || r.threadsDB == nil {
+		return errors.New("missing child permission snapshot store")
+	}
+	if strings.TrimSpace(rec.ChildSnapshotID) == "" || strings.TrimSpace(rec.ParentSnapshotID) == "" || strings.TrimSpace(rec.SnapshotHash) == "" {
+		return errors.New("incomplete child permission snapshot identity")
+	}
+	if err := validateStoredChildPermissionSnapshotIdentity(rec); err != nil {
+		return err
+	}
+	if strings.TrimSpace(snapshot.SnapshotID) != strings.TrimSpace(rec.ChildSnapshotID) {
+		return errors.New("child permission snapshot id mismatch")
+	}
+	if got := permissionSnapshotHash(snapshot); got != strings.TrimSpace(rec.SnapshotHash) || strings.TrimSpace(snapshot.SnapshotHash) != got {
+		return errors.New("child permission snapshot hash mismatch")
+	}
+	if err := validateStoredPermissionSnapshotHashes("child", rec.RegistryHash, rec.SchemaHash, rec.PresentationHash, snapshot); err != nil {
+		return err
+	}
+	if err := r.validateCurrentChildPermissionSnapshotCompatibility(snapshot); err != nil {
+		return err
+	}
+	parentRec, ok, err := r.threadsDB.GetPermissionSnapshot(ctx, strings.TrimSpace(r.endpointID), strings.TrimSpace(rec.ParentSnapshotID))
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.New("parent permission snapshot missing")
+	}
+	var parent PermissionSnapshot
+	if err := json.Unmarshal([]byte(parentRec.SnapshotJSON), &parent); err != nil {
+		return err
+	}
+	if strings.TrimSpace(parent.SnapshotID) == "" {
+		parent.SnapshotID = strings.TrimSpace(parentRec.SnapshotID)
+	}
+	if strings.TrimSpace(parent.SnapshotHash) == "" {
+		parent.SnapshotHash = strings.TrimSpace(parentRec.SnapshotHash)
+	}
+	if strings.TrimSpace(parent.SnapshotID) != strings.TrimSpace(parentRec.SnapshotID) {
+		return errors.New("parent permission snapshot id mismatch")
+	}
+	if strings.TrimSpace(parentRec.OwnerThreadID) == "" || strings.TrimSpace(parentRec.OwnerThreadID) != strings.TrimSpace(rec.ParentThreadID) {
+		return errors.New("child permission snapshot parent thread owner mismatch")
+	}
+	if strings.TrimSpace(parentRec.OwnerRunID) == "" || strings.TrimSpace(parentRec.OwnerRunID) != strings.TrimSpace(rec.ParentRunID) {
+		return errors.New("child permission snapshot parent run owner mismatch")
+	}
+	if got := permissionSnapshotHash(parent); got != strings.TrimSpace(parentRec.SnapshotHash) || strings.TrimSpace(parent.SnapshotHash) != got {
+		return errors.New("parent permission snapshot hash mismatch")
+	}
+	if err := validateStoredPermissionSnapshotHashes("parent", parentRec.RegistryHash, parentRec.SchemaHash, parentRec.PresentationHash, parent); err != nil {
+		return err
+	}
+	return validateChildPermissionSnapshotSubset(parent, snapshot)
+}
+
+func validateStoredChildPermissionSnapshotIdentity(rec threadstore.ChildPermissionSnapshotRecord) error {
+	childRunID := strings.TrimSpace(rec.ChildRunID)
+	childThreadID := strings.TrimSpace(rec.ChildThreadID)
+	parentRunID := strings.TrimSpace(rec.ParentRunID)
+	if childRunID == "" {
+		return errors.New("child permission snapshot missing child run identity")
+	}
+	if childRunID == childThreadID {
+		return errors.New("child permission snapshot child run identity aliases child thread")
+	}
+	if parentRunID != "" && childRunID == parentRunID {
+		return errors.New("child permission snapshot child run identity aliases parent run")
+	}
+	return nil
+}
+
+func validateStoredPermissionSnapshotHashes(label string, registryHash string, schemaHash string, presentationHash string, snapshot PermissionSnapshot) error {
+	if strings.TrimSpace(snapshot.RegistryHash) != strings.TrimSpace(registryHash) {
+		return fmt.Errorf("%s permission snapshot registry hash mismatch", label)
+	}
+	if strings.TrimSpace(snapshot.SchemaHash) != strings.TrimSpace(schemaHash) {
+		return fmt.Errorf("%s permission snapshot schema hash mismatch", label)
+	}
+	if strings.TrimSpace(snapshot.PresentationHash) != strings.TrimSpace(presentationHash) {
+		return fmt.Errorf("%s permission snapshot presentation hash mismatch", label)
+	}
+	return nil
+}
+
+func (r *run) validateCurrentChildPermissionSnapshotCompatibility(snapshot PermissionSnapshot) error {
+	if r == nil {
+		return errors.New("missing child permission snapshot runtime")
+	}
+	registry := NewInMemoryToolRegistry()
+	if err := registerBuiltInTools(registry, r); err != nil {
+		return err
+	}
+	allTools := registry.Snapshot()
+	floretTools, err := requireToolDefsByName(allTools, snapshot.FloretToolNames)
+	if err != nil {
+		return err
+	}
+	presentationTools, err := requireToolDefsByName(append(append([]ToolDef{}, allTools...), builtInControlSignalDefinitions()...), snapshot.PromptCapabilityNames)
+	if err != nil {
+		return err
+	}
+	if got := stableToolRegistryHash(floretTools); got != strings.TrimSpace(snapshot.RegistryHash) {
+		return errors.New("child permission snapshot registry is incompatible with current tools")
+	}
+	if got := stableToolSchemaHash(floretTools); got != strings.TrimSpace(snapshot.SchemaHash) {
+		return errors.New("child permission snapshot schema is incompatible with current tools")
+	}
+	if got := stableToolPresentationHash(presentationTools); got != strings.TrimSpace(snapshot.PresentationHash) {
+		return errors.New("child permission snapshot presentation is incompatible with current tools")
+	}
+	return nil
+}
+
+func requireToolDefsByName(all []ToolDef, names []string) ([]ToolDef, error) {
+	byName := make(map[string]ToolDef, len(all))
+	for _, def := range all {
+		name := strings.TrimSpace(def.Name)
+		if name != "" {
+			byName[name] = def
+		}
+	}
+	out := make([]ToolDef, 0, len(names))
+	seen := map[string]struct{}{}
+	for _, rawName := range names {
+		name := strings.TrimSpace(rawName)
+		if name == "" {
+			return nil, errors.New("permission snapshot has empty tool name")
+		}
+		if _, ok := seen[name]; ok {
+			return nil, fmt.Errorf("permission snapshot has duplicate tool %q", name)
+		}
+		def, ok := byName[name]
+		if !ok {
+			return nil, fmt.Errorf("permission snapshot tool %q is not registered", name)
+		}
+		seen[name] = struct{}{}
+		out = append(out, def)
+	}
+	return out, nil
 }
 
 func denyAllChildPermissionSnapshot(permissionType FlowerPermissionType) PermissionSnapshot {
