@@ -75,6 +75,7 @@ export type FlowerSettingsCopy = Readonly<{
   selectModelPlaceholder: string;
   defaultPermissionTitle: string;
   defaultPermissionDescription: string;
+  defaultPermissionBadge: string;
   permissionTypes: Readonly<Record<FlowerPermissionType, Readonly<{
     label: string;
     description: string;
@@ -710,6 +711,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     selectModelPlaceholder: 'Select model',
     defaultPermissionTitle: 'Default permission',
     defaultPermissionDescription: 'Applies to new Flower threads. Existing threads keep their own permission.',
+    defaultPermissionBadge: 'Default',
     permissionTypes: {
       readonly: {
         label: 'Read only',

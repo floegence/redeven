@@ -585,32 +585,34 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
             </section>
 
             <section class="flower-settings-section flower-settings-policy-section">
-              <div class="flower-settings-policy-card flower-settings-policy-card-static">
-                <span class="flower-settings-policy-icon flower-settings-policy-icon-blue"><Shield class="h-4 w-4" /></span>
-                <span class="flower-settings-policy-copy">
-                  <span class="block text-sm font-semibold text-foreground">{copy().defaultPermissionTitle}</span>
-                  <span class="mt-1 block text-xs leading-relaxed text-muted-foreground">{copy().defaultPermissionDescription}</span>
-                </span>
-              </div>
+              <FlowerSubSectionHeader
+                title={copy().defaultPermissionTitle}
+                description={copy().defaultPermissionDescription}
+              />
               <div class="flower-settings-permission-grid" role="radiogroup" aria-label={copy().defaultPermissionTitle}>
                 <For each={PERMISSION_TYPE_ORDER}>
                   {(kind) => {
                     const item = () => copy().permissionTypes[kind];
+                    const active = () => permissionType() === kind;
                     return (
                       <button
                         ref={(el) => { permissionButtonRefs.set(kind, el); }}
                         type="button"
-                        class={cn('flower-settings-policy-card', permissionType() === kind && 'flower-settings-policy-card-active')}
+                        class={cn('flower-settings-policy-card', active() && 'flower-settings-policy-card-active')}
                         role="radio"
-                        aria-checked={permissionType() === kind}
-                        tabIndex={permissionType() === kind ? 0 : -1}
+                        aria-checked={active()}
+                        tabIndex={active() ? 0 : -1}
                         onKeyDown={onPermissionTypeKeyDown}
                         onClick={() => choosePermissionType(kind)}
                       >
-                        <span class="flower-settings-policy-copy">
-                          <span class="block text-sm font-semibold text-foreground">{item().label}</span>
-                          <span class="mt-1 block text-xs leading-relaxed text-muted-foreground">{item().description}</span>
+                        <span class="flower-settings-policy-card-row">
+                          <span class="flower-settings-policy-card-icon"><Shield class="h-3.5 w-3.5" /></span>
+                          <span class="flower-settings-policy-card-label">{item().label}</span>
+                          <Show when={active()}>
+                            <span class="flower-settings-policy-card-badge">{copy().defaultPermissionBadge ?? 'Default'}</span>
+                          </Show>
                         </span>
+                        <span class="flower-settings-policy-card-desc">{item().description}</span>
                       </button>
                     );
                   }}

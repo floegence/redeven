@@ -27,6 +27,7 @@ const FLOWER_SURFACE_ENGLISH_COPY_ALLOWLIST = new Set([
   'chat.entryLabel',
   'chat.contextIndicatorUnknownPercent',
   'settings.apiKey',
+  'settings.defaultPermissionBadge',
   'settings.dialogAPIKey',
   'settings.dialogBaseURL',
   'settings.dialogBraveAPIKey',
