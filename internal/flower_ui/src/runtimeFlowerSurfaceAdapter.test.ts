@@ -247,15 +247,13 @@ describe('runtime Flower surface adapter read state', () => {
 
     const result = await adapter.compactThreadContext({
       thread_id: ' thread_1 ',
-      expected_run_id: ' run_1 ',
-      source: 'slash_command',
+      active_run_id: ' run_1 ',
     });
 
     expect(result.thread.thread_id).toBe('thread_1');
     expect(compactThreadContext).toHaveBeenCalledWith({
       thread_id: 'thread_1',
-      expected_run_id: 'run_1',
-      source: 'slash_command',
+      active_run_id: 'run_1',
     });
     expect(launchTurn).not.toHaveBeenCalled();
     expect(stopThread).not.toHaveBeenCalled();

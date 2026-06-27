@@ -91,8 +91,7 @@ export type AISendUserTurnResponse = {
 
 export type AICompactThreadContextRequest = {
   threadId: string;
-  expectedRunId?: string;
-  source: 'slash_command';
+  activeRunId?: string;
 };
 
 export type AICompactThreadContextResponse = {

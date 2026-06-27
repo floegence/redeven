@@ -476,20 +476,17 @@ type FlowerContextUsage struct {
 }
 
 type FlowerContextCompaction struct {
-	OperationID          string `json:"operation_id"`
-	RunID                string `json:"run_id,omitempty"`
-	StepIndex            int    `json:"step_index,omitempty"`
-	Phase                string `json:"phase"`
-	Status               string `json:"status"`
-	Trigger              string `json:"trigger,omitempty"`
-	Reason               string `json:"reason,omitempty"`
-	CompactionID         string `json:"compaction_id,omitempty"`
-	CompactionGeneration int    `json:"compaction_generation,omitempty"`
-	CompactionWindowID   string `json:"compaction_window_id,omitempty"`
-	TokensBefore         int64  `json:"tokens_before,omitempty"`
-	TokensAfterEstimate  int64  `json:"tokens_after_estimate,omitempty"`
-	Error                string `json:"error,omitempty"`
-	UpdatedAtMs          int64  `json:"updated_at_ms"`
+	OperationID         string `json:"operation_id"`
+	RunID               string `json:"run_id,omitempty"`
+	StepIndex           int    `json:"step_index,omitempty"`
+	Phase               string `json:"phase"`
+	Status              string `json:"status"`
+	Trigger             string `json:"trigger,omitempty"`
+	Reason              string `json:"reason,omitempty"`
+	TokensBefore        int64  `json:"tokens_before,omitempty"`
+	TokensAfterEstimate int64  `json:"tokens_after_estimate,omitempty"`
+	Error               string `json:"error,omitempty"`
+	UpdatedAtMs         int64  `json:"updated_at_ms"`
 }
 
 type FlowerTimelineAnchor struct {

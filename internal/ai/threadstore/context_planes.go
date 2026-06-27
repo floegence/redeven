@@ -93,19 +93,6 @@ type MemoryItemRecord struct {
 	UpdatedAtUnixMs int64   `json:"updated_at_unix_ms"`
 }
 
-// ContextSnapshotRecord stores compression artifacts with quality scores.
-type ContextSnapshotRecord struct {
-	SnapshotID       string  `json:"snapshot_id"`
-	EndpointID       string  `json:"endpoint_id"`
-	ThreadID         string  `json:"thread_id"`
-	Level            string  `json:"level"`
-	SummaryText      string  `json:"summary_text"`
-	CoversTurnFromID int64   `json:"covers_turn_from_id"`
-	CoversTurnToID   int64   `json:"covers_turn_to_id"`
-	QualityScore     float64 `json:"quality_score"`
-	CreatedAtUnixMs  int64   `json:"created_at_unix_ms"`
-}
-
 type StructuredUserInputRecord struct {
 	ID                  int64  `json:"id"`
 	EndpointID          string `json:"endpoint_id"`
@@ -191,16 +178,6 @@ func normalizeSpanStatus(status string) string {
 		return status
 	default:
 		return "running"
-	}
-}
-
-func normalizeSnapshotLevel(level string) string {
-	level = strings.ToLower(strings.TrimSpace(level))
-	switch level {
-	case "turn", "episode", "thread":
-		return level
-	default:
-		return "turn"
 	}
 }
 
@@ -1259,106 +1236,6 @@ WHERE endpoint_id = ? AND thread_id = ? AND version = ?
 		return ThreadTodosSnapshot{}, err
 	}
 	return rec, nil
-}
-
-func (s *Store) InsertContextSnapshot(ctx context.Context, rec ContextSnapshotRecord) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	rec.SnapshotID = strings.TrimSpace(rec.SnapshotID)
-	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
-	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
-	rec.Level = normalizeSnapshotLevel(rec.Level)
-	rec.SummaryText = strings.TrimSpace(rec.SummaryText)
-	if rec.SnapshotID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.SummaryText == "" {
-		return errors.New("invalid context snapshot")
-	}
-	rec.QualityScore = clamp01(rec.QualityScore, 0.5)
-	if rec.CreatedAtUnixMs <= 0 {
-		rec.CreatedAtUnixMs = time.Now().UnixMilli()
-	}
-	_, err := s.db.ExecContext(ctx, `
-INSERT INTO context_snapshots(
-  snapshot_id, endpoint_id, thread_id,
-  level, summary_text,
-  covers_turn_from_id, covers_turn_to_id,
-  quality_score, created_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(snapshot_id) DO UPDATE SET
-  endpoint_id=excluded.endpoint_id,
-  thread_id=excluded.thread_id,
-  level=excluded.level,
-  summary_text=excluded.summary_text,
-  covers_turn_from_id=excluded.covers_turn_from_id,
-  covers_turn_to_id=excluded.covers_turn_to_id,
-  quality_score=excluded.quality_score,
-  created_at_unix_ms=excluded.created_at_unix_ms
-`, rec.SnapshotID, rec.EndpointID, rec.ThreadID, rec.Level, rec.SummaryText, rec.CoversTurnFromID, rec.CoversTurnToID, rec.QualityScore, rec.CreatedAtUnixMs)
-	return err
-}
-
-func (s *Store) ListContextSnapshots(ctx context.Context, endpointID string, threadID string, level string, limit int) ([]ContextSnapshotRecord, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	level = normalizeSnapshotLevel(level)
-	if endpointID == "" || threadID == "" {
-		return nil, errors.New("invalid request")
-	}
-	if limit <= 0 {
-		limit = 20
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	rows, err := s.db.QueryContext(ctx, `
-SELECT snapshot_id, endpoint_id, thread_id,
-       level, summary_text,
-       covers_turn_from_id, covers_turn_to_id,
-       quality_score, created_at_unix_ms
-FROM context_snapshots
-WHERE endpoint_id = ? AND thread_id = ? AND level = ?
-ORDER BY created_at_unix_ms DESC, snapshot_id DESC
-LIMIT ?
-`, endpointID, threadID, level, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	tmp := make([]ContextSnapshotRecord, 0, limit)
-	for rows.Next() {
-		var rec ContextSnapshotRecord
-		if err := rows.Scan(
-			&rec.SnapshotID,
-			&rec.EndpointID,
-			&rec.ThreadID,
-			&rec.Level,
-			&rec.SummaryText,
-			&rec.CoversTurnFromID,
-			&rec.CoversTurnToID,
-			&rec.QualityScore,
-			&rec.CreatedAtUnixMs,
-		); err != nil {
-			return nil, err
-		}
-		tmp = append(tmp, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	out := make([]ContextSnapshotRecord, 0, len(tmp))
-	for i := len(tmp) - 1; i >= 0; i-- {
-		out = append(out, tmp[i])
-	}
-	return out, nil
 }
 
 func (s *Store) UpsertProviderCapability(ctx context.Context, rec ProviderCapabilityRecord) error {

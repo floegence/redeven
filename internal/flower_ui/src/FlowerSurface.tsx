@@ -2109,7 +2109,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     if (compactSubmitting()) return;
-    const expectedRunID = COMPOSER_STOP_THREAD_STATUSES.has(selectedThreadLiveStatus())
+    const activeRunID = COMPOSER_STOP_THREAD_STATUSES.has(selectedThreadLiveStatus())
       ? trimString(thread?.active_run_id)
       : '';
     setCompactSubmitting(true);
@@ -2123,8 +2123,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     try {
       const live = await props.adapter.compactThreadContext({
         thread_id: threadID,
-        expected_run_id: expectedRunID || undefined,
-        source: 'slash_command',
+        active_run_id: activeRunID || undefined,
       });
       const updated = applyLiveBootstrap(live);
       setSelectedThreadID(updated.thread_id);

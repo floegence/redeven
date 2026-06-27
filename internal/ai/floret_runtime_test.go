@@ -65,6 +65,9 @@ func (p *naturalCompactionProvider) StreamTurn(_ context.Context, req ModelGatew
 	p.mu.Unlock()
 
 	if callIndex == 1 {
+		return ModelGatewayResult{FinishReason: "stop", Text: strings.Repeat("older assistant context ", 10000)}, nil
+	}
+	if callIndex == 2 {
 		return ModelGatewayResult{FinishReason: "stop", Text: "Older context checkpoint summary."}, nil
 	}
 	onEvent(StreamEvent{Type: StreamEventTextDelta, Text: "continued after natural compact"})
@@ -77,12 +80,13 @@ func (p *naturalCompactionProvider) requestCount() int {
 	return len(p.requests)
 }
 
-func TestRunFloretProjectedTurnCompletesEmptyTaskCompleteFromStreamedText(t *testing.T) {
+func TestRunFloretHostedTurnCompletesEmptyTaskCompleteFromStreamedText(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 8)
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:     t.TempDir(),
 		AgentHomeDir: t.TempDir(),
 		Shell:        "bash",
 		AIConfig:     &config.AIConfig{},
@@ -98,7 +102,7 @@ func TestRunFloretProjectedTurnCompletesEmptyTaskCompleteFromStreamedText(t *tes
 	})
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 
-	err := r.runFloretProjectedTurn(t.Context(), RunRequest{
+	err := r.runFloretHostedTurn(t.Context(), RunRequest{
 		Model: "compat/gpt-5-mini",
 		Input: RunInput{Text: "finish with streamed text and task_complete"},
 		Options: RunOptions{
@@ -110,7 +114,7 @@ func TestRunFloretProjectedTurnCompletesEmptyTaskCompleteFromStreamedText(t *tes
 		BaseURL: "https://example.test/v1",
 	}, "sk-test", "finish", streamedEmptyTaskCompleteProvider{})
 	if err != nil {
-		t.Fatalf("runFloretProjectedTurn: %v", err)
+		t.Fatalf("runFloretHostedTurn: %v", err)
 	}
 	if got := r.getFinalizationReason(); got != "task_complete" {
 		t.Fatalf("finalizationReason=%q, want task_complete", got)
@@ -122,18 +126,20 @@ func TestRunFloretProjectedTurnCompletesEmptyTaskCompleteFromStreamedText(t *tes
 	if assistantText != "OK, continuing works." {
 		t.Fatalf("assistantText=%q, want streamed final answer", assistantText)
 	}
-	if !hasFloretStreamedMarkdownDelta(events, "OK, continuing works.") {
-		t.Fatalf("events missing streamed markdown delta: %#v", events)
+	if !hasFloretMarkdownContent(events, "OK, continuing works.") {
+		t.Fatalf("events missing streamed markdown content: %#v", events)
 	}
 }
 
-func TestRunFloretProjectedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
+func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 16)
 	provider := &naturalCompactionProvider{}
+	stateDir := t.TempDir()
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
 		Shell:        "bash",
 		AIConfig:     &config.AIConfig{},
@@ -149,20 +155,54 @@ func TestRunFloretProjectedTurnNaturalCompactionContinuesStreaming(t *testing.T)
 	})
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 
-	err := r.runFloretProjectedTurn(t.Context(), RunRequest{
+	err := r.runFloretHostedTurn(t.Context(), RunRequest{
 		Model: "compat/gpt-5-mini",
-		History: []RunHistoryMsg{
-			{Role: "user", Text: strings.Repeat("old context ", 2600)},
-			{Role: "assistant", Text: strings.Repeat("old answer ", 1800)},
-		},
-		Input: RunInput{Text: "continue after compacting"},
+		Input: RunInput{Text: "seed old context"},
 		Options: RunOptions{
 			PermissionType:  config.AIPermissionApprovalRequired,
-			MaxInputTokens:  11000,
 			MaxOutputTokens: 500,
 		},
 		ModelCapability: contextmodel.ModelCapability{
-			MaxContextTokens: 20000,
+			MaxContextTokens: 50000,
+		},
+	}, config.AIProvider{
+		ID:      "compat",
+		Type:    "openai_compatible",
+		BaseURL: "https://example.test/v1",
+	}, "sk-test", "seed", provider)
+	if err != nil {
+		t.Fatalf("seed runFloretHostedTurn: %v", err)
+	}
+
+	events = events[:0]
+	r = newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:     stateDir,
+		AgentHomeDir: t.TempDir(),
+		Shell:        "bash",
+		AIConfig:     &config.AIConfig{},
+		SessionMeta: &session.Meta{
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+			CanAdmin:   true,
+		},
+		RunID:     "run_floret_natural_compact_streaming_next",
+		ThreadID:  "thread_floret_natural_compact_streaming",
+		MessageID: "msg_floret_natural_compact_streaming_next",
+	})
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+
+	err = r.runFloretHostedTurn(t.Context(), RunRequest{
+		Model: "compat/gpt-5-mini",
+		Input: RunInput{Text: "continue after compacting"},
+		Options: RunOptions{
+			PermissionType:  config.AIPermissionApprovalRequired,
+			MaxInputTokens:  48000,
+			MaxOutputTokens: 500,
+		},
+		ModelCapability: contextmodel.ModelCapability{
+			MaxContextTokens: 50000,
 		},
 	}, config.AIProvider{
 		ID:      "compat",
@@ -170,10 +210,10 @@ func TestRunFloretProjectedTurnNaturalCompactionContinuesStreaming(t *testing.T)
 		BaseURL: "https://example.test/v1",
 	}, "sk-test", "continue", provider)
 	if err != nil {
-		t.Fatalf("runFloretProjectedTurn: %v", err)
+		t.Fatalf("runFloretHostedTurn: %v", err)
 	}
-	if provider.requestCount() < 2 {
-		t.Fatalf("provider request count=%d, want summary request and post-compaction provider request", provider.requestCount())
+	if provider.requestCount() < 3 {
+		t.Fatalf("provider request count=%d, want seed, summary, and post-compaction provider requests", provider.requestCount())
 	}
 	if got := r.getFinalizationReason(); got != "natural_stop" {
 		t.Fatalf("finalizationReason=%q, want natural_stop", got)
@@ -185,21 +225,26 @@ func TestRunFloretProjectedTurnNaturalCompactionContinuesStreaming(t *testing.T)
 	if assistantText != "continued after natural compact" {
 		t.Fatalf("assistantText=%q, want post-compaction streamed output", assistantText)
 	}
-	if !hasFloretStreamedMarkdownDelta(events, "continued after natural compact") {
-		t.Fatalf("events missing post-compaction markdown delta: %#v", events)
+	if !hasFloretMarkdownContent(events, "continued after natural compact") {
+		t.Fatalf("events missing post-compaction markdown content: %#v", events)
 	}
 	if got := compactStatusesFromStreamEvents(events); len(got) < 2 || got[0] != "compacting" || got[len(got)-1] != "compacted" {
 		t.Fatalf("compaction statuses=%#v, want compacting -> compacted", got)
 	}
-	if r.getThreadCompactedContextCandidate().IsZero() {
-		t.Fatalf("thread compacted context candidate is zero")
-	}
 }
 
-func hasFloretStreamedMarkdownDelta(events []any, delta string) bool {
+func hasFloretMarkdownContent(events []any, content string) bool {
 	for _, ev := range events {
-		if blockDelta, ok := ev.(streamEventBlockDelta); ok && blockDelta.Delta == delta {
+		if blockDelta, ok := ev.(streamEventBlockDelta); ok && blockDelta.Delta == content {
 			return true
+		}
+		if blockSet, ok := ev.(streamEventBlockSet); ok {
+			if block, ok := blockSet.Block.(persistedMarkdownBlock); ok && block.Content == content {
+				return true
+			}
+			if block, ok := blockSet.Block.(persistedTextBlock); ok && block.Content == content {
+				return true
+			}
 		}
 	}
 	return false
@@ -215,12 +260,13 @@ func compactStatusesFromStreamEvents(events []any) []string {
 	return out
 }
 
-func TestRunFloretProjectedTurnProjectsWebSearchToolThroughFloretGateway(t *testing.T) {
+func TestRunFloretHostedTurnProjectsWebSearchToolThroughFloretGateway(t *testing.T) {
 	t.Parallel()
 
 	provider := &capturingTurnProvider{}
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:     t.TempDir(),
 		AgentHomeDir: t.TempDir(),
 		Shell:        "bash",
 		AIConfig:     &config.AIConfig{},
@@ -234,7 +280,7 @@ func TestRunFloretProjectedTurnProjectsWebSearchToolThroughFloretGateway(t *test
 		ThreadID:  "thread_floret_web_search_tool",
 		MessageID: "msg_floret_web_search_tool",
 	})
-	err := r.runFloretProjectedTurn(t.Context(), RunRequest{
+	err := r.runFloretHostedTurn(t.Context(), RunRequest{
 		Model: "compat/gpt-5-mini",
 		Input: RunInput{Text: "search the web"},
 		Options: RunOptions{
@@ -249,7 +295,7 @@ func TestRunFloretProjectedTurnProjectsWebSearchToolThroughFloretGateway(t *test
 		},
 	}, "sk-test", "search the web", provider)
 	if err != nil {
-		t.Fatalf("runFloretProjectedTurn: %v", err)
+		t.Fatalf("runFloretHostedTurn: %v", err)
 	}
 	req := provider.firstRequest()
 	if !containsString(toolDefNames(req.Tools), "web.search") {
@@ -446,22 +492,19 @@ func TestHostManagedContextCompactionDefersLiveProjection(t *testing.T) {
 	r.activeManualCompactionID = "manual-host-managed"
 
 	r.applyFloretCompaction(&observation.CompactionEvent{
-		RunID:                "run_floret_reasoning",
-		ThreadID:             "thread_floret_reasoning",
-		TurnID:               "msg_floret_reasoning",
-		Step:                 1,
-		OperationID:          "run_floret_reasoning:compact:1:manual:manual-host-managed",
-		RequestID:            "manual-host-managed",
-		Phase:                observation.CompactionPhaseComplete,
-		Status:               observation.CompactionStatusCompacted,
-		Trigger:              "manual",
-		Reason:               "manual",
-		CompactionID:         "compact-host-managed",
-		CompactionGeneration: 1,
-		CompactionWindowID:   "window-host-managed",
-		TokensBefore:         1_000,
-		TokensAfterEstimate:  300,
-		ObservedAt:           time.UnixMilli(30_000),
+		RunID:               "run_floret_reasoning",
+		ThreadID:            "thread_floret_reasoning",
+		TurnID:              "msg_floret_reasoning",
+		Step:                1,
+		OperationID:         "run_floret_reasoning:compact:1:manual:manual-host-managed",
+		RequestID:           "manual-host-managed",
+		Phase:               observation.CompactionPhaseComplete,
+		Status:              observation.CompactionStatusCompacted,
+		Trigger:             "manual",
+		Reason:              "manual",
+		TokensBefore:        1_000,
+		TokensAfterEstimate: 300,
+		ObservedAt:          time.UnixMilli(30_000),
 	})
 
 	if len(*events) != 0 {
@@ -477,8 +520,8 @@ func TestHostManagedContextCompactionDefersLiveProjection(t *testing.T) {
 		}
 	}
 	completed := r.getCompletedContextCompaction()
-	if completed.CompactionID != "compact-host-managed" {
-		t.Fatalf("completed compaction=%#v, want internal result retained", completed)
+	if completed.OperationID != "run_floret_reasoning:compact:1:manual:manual-host-managed" {
+		t.Fatalf("completed compaction=%#v, want operation retained", completed)
 	}
 	if r.activeManualCompactionID != "" {
 		t.Fatalf("activeManualCompactionID=%q, want cleared", r.activeManualCompactionID)
@@ -692,7 +735,7 @@ func TestFloretEventSinkRecordsSourceObservations(t *testing.T) {
 func TestRedevenFloretGatewayConfigDoesNotCarryProviderConfiguration(t *testing.T) {
 	t.Parallel()
 
-	cfg := redevenFloretAdapterConfig("system", floretContextPolicy(1000, 800, 200), config.AIReasoningSelection{Level: config.AIReasoningLevelLow})
+	cfg := redevenFloretAdapterConfig("system", floretModelContextPolicy(1000, 200), config.AIReasoningSelection{Level: config.AIReasoningLevelLow})
 	if cfg.Provider != flconfig.ProviderFake {
 		t.Fatalf("provider=%q, want fake adapter identity", cfg.Provider)
 	}
@@ -730,7 +773,7 @@ func TestProjectFloretTaskCompleteCreatesMarkdownWhenNoVisibleTextExists(t *test
 
 	err := r.projectFloretResult(
 		t.Context(),
-		flruntime.ProjectedTurnResult{
+		flruntime.TurnResult{
 			Status: flruntime.TurnStatusCompleted,
 			Metrics: flruntime.RunMetrics{
 				Steps: 1,
@@ -807,7 +850,7 @@ func TestProjectFloretTaskCompletePreservesStreamedMarkdownAfterActivity(t *test
 
 	err := r.projectFloretResult(
 		t.Context(),
-		flruntime.ProjectedTurnResult{
+		flruntime.TurnResult{
 			Status: flruntime.TurnStatusCompleted,
 			Metrics: flruntime.RunMetrics{
 				Steps: 1,
@@ -874,7 +917,7 @@ func TestProjectFloretNaturalStopCreatesCanonicalMarkdownWithoutTextDelta(t *tes
 
 	err := r.projectFloretResult(
 		t.Context(),
-		flruntime.ProjectedTurnResult{
+		flruntime.TurnResult{
 			Status: flruntime.TurnStatusCompleted,
 			Output: "Canonical answer.",
 			Metrics: flruntime.RunMetrics{
@@ -932,7 +975,7 @@ func TestProjectFloretNaturalStopPreservesStreamedMarkdownAfterActivity(t *testi
 
 	err := r.projectFloretResult(
 		t.Context(),
-		flruntime.ProjectedTurnResult{
+		flruntime.TurnResult{
 			Status: flruntime.TurnStatusCompleted,
 			Output: "Canonical answer.",
 			Metrics: flruntime.RunMetrics{
@@ -974,15 +1017,6 @@ func TestProjectFloretNaturalStopPreservesStreamedMarkdownAfterActivity(t *testi
 	}
 }
 
-func TestFlowerMessagesToFloretRejectsUnsupportedRole(t *testing.T) {
-	t.Parallel()
-
-	_, err := flowerMessagesToFloret([]Message{{Role: "developer"}})
-	if err == nil || !strings.Contains(err.Error(), "unsupported role") {
-		t.Fatalf("error=%v, want unsupported role rejection", err)
-	}
-}
-
 func TestProjectFloretResultIgnoresDetachedRun(t *testing.T) {
 	t.Parallel()
 
@@ -996,7 +1030,7 @@ func TestProjectFloretResultIgnoresDetachedRun(t *testing.T) {
 
 	err := r.projectFloretResult(
 		t.Context(),
-		flruntime.ProjectedTurnResult{
+		flruntime.TurnResult{
 			Status:  flruntime.TurnStatusCompleted,
 			Output:  "Late final answer.",
 			Metrics: flruntime.RunMetrics{Steps: 1},
@@ -1011,7 +1045,7 @@ func TestProjectFloretResultIgnoresDetachedRun(t *testing.T) {
 	}
 	err = r.projectFloretResult(
 		t.Context(),
-		flruntime.ProjectedTurnResult{
+		flruntime.TurnResult{
 			Status:  flruntime.TurnStatusWaiting,
 			Metrics: flruntime.RunMetrics{Steps: 2},
 			Signal: &flruntime.TurnSignal{
@@ -1064,7 +1098,7 @@ func TestProjectFloretUnknownWaitingSignalFailsAsUnsupportedSignal(t *testing.T)
 
 	err := r.projectFloretResult(
 		t.Context(),
-		flruntime.ProjectedTurnResult{
+		flruntime.TurnResult{
 			Status: flruntime.TurnStatusWaiting,
 			Metrics: flruntime.RunMetrics{
 				Steps: 1,

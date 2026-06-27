@@ -1794,7 +1794,7 @@ PRAGMA user_version=1;
 		t.Fatalf("missing migrated queued turn column %q", "context_action_json")
 	}
 
-	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "ai_thread_todos", "ai_thread_checkpoints", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "context_snapshots", "provider_capabilities", "structured_user_inputs", "request_user_input_secret_answers", "ai_flower_thread_metadata", "ai_flower_transfers", "ai_flower_handoffs"} {
+	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "ai_thread_todos", "ai_thread_checkpoints", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "provider_capabilities", "structured_user_inputs", "request_user_input_secret_answers", "ai_flower_thread_metadata", "ai_flower_transfers", "ai_flower_handoffs"} {
 		var exists int
 		if err := s.db.QueryRowContext(ctx, `
 SELECT COUNT(1)
@@ -2298,17 +2298,6 @@ INSERT INTO ai_messages(
 	}); err != nil {
 		t.Fatalf("UpsertMemoryItem: %v", err)
 	}
-	if err := s.InsertContextSnapshot(ctx, ContextSnapshotRecord{
-		SnapshotID:      "snap_1",
-		EndpointID:      endpointID,
-		ThreadID:        threadID,
-		Level:           "thread",
-		SummaryText:     "snapshot",
-		QualityScore:    0.9,
-		CreatedAtUnixMs: 106,
-	}); err != nil {
-		t.Fatalf("InsertContextSnapshot: %v", err)
-	}
 	if err := s.UpsertExecutionSpan(ctx, ExecutionSpanRecord{
 		SpanID:          "span_1",
 		EndpointID:      endpointID,
@@ -2456,7 +2445,6 @@ INSERT INTO ai_messages(
 		"structured_user_inputs":            countRowsForTest(t, s.db, `SELECT COUNT(1) FROM structured_user_inputs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"request_user_input_secret_answers": countRowsForTest(t, s.db, `SELECT COUNT(1) FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"memory_items":                      countRowsForTest(t, s.db, `SELECT COUNT(1) FROM memory_items WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
-		"context_snapshots":                 countRowsForTest(t, s.db, `SELECT COUNT(1) FROM context_snapshots WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"execution_spans":                   countRowsForTest(t, s.db, `SELECT COUNT(1) FROM execution_spans WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_thread_state":                   countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_state WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_thread_todos":                   countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_todos WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
@@ -3020,19 +3008,6 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 	if err := s.SetThreadOpenGoal(ctx, "env_1", "th_src", "finish the forkable task"); err != nil {
 		t.Fatalf("SetThreadOpenGoal: %v", err)
 	}
-	if err := s.InsertContextSnapshot(ctx, ContextSnapshotRecord{
-		SnapshotID:       "snap_src",
-		EndpointID:       "env_1",
-		ThreadID:         "th_src",
-		Level:            "thread",
-		SummaryText:      "compressed source context",
-		CoversTurnFromID: sourceTurns[0].ID,
-		CoversTurnToID:   sourceTurns[0].ID,
-		QualityScore:     0.9,
-		CreatedAtUnixMs:  155,
-	}); err != nil {
-		t.Fatalf("InsertContextSnapshot: %v", err)
-	}
 	if err := s.UpsertExecutionSpan(ctx, ExecutionSpanRecord{
 		SpanID:          "span_src",
 		EndpointID:      "env_1",
@@ -3190,11 +3165,6 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 	if secrets := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`, "env_1", "th_fork"); secrets != 0 {
 		t.Fatalf("fork secret answers=%d, want 0", secrets)
 	}
-	if snaps, err := s.ListContextSnapshots(ctx, "env_1", "th_fork", "thread", 10); err != nil {
-		t.Fatalf("ListContextSnapshots fork: %v", err)
-	} else if len(snaps) != 1 || snaps[0].SnapshotID == "snap_src" || snaps[0].SummaryText != "compressed source context" || snaps[0].CoversTurnFromID != turns[0].ID || snaps[0].CoversTurnToID != turns[0].ID {
-		t.Fatalf("fork context snapshots mismatch: %+v", snaps)
-	}
 	if spans, err := s.ListRecentExecutionSpansByThread(ctx, "env_1", "th_fork", 10); err != nil {
 		t.Fatalf("ListRecentExecutionSpansByThread fork: %v", err)
 	} else if len(spans) != 0 {
@@ -3337,7 +3307,7 @@ func TestStore_ListRunEventsPage_ContextCategory(t *testing.T) {
 	appendEvent("context.integrity.repair_applied")
 	appendEvent("context.usage.updated")
 	appendEvent("context.compaction.updated")
-	appendEvent("floret.projected_turn.result")
+	appendEvent("floret.host_turn.result")
 
 	firstPage, nextCursor, hasMore, err := s.ListRunEventsPage(ctx, "env_1", "run_1", RunEventsQuery{
 		Category: "context",
@@ -3906,7 +3876,7 @@ func TestStore_ThreadProviderContinuationCRUD(t *testing.T) {
 	}
 }
 
-func TestStore_SetThreadProviderContinuationAndCompactedContext(t *testing.T) {
+func TestStore_SetThreadProviderContinuationIfBoundaryMatches(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -3918,48 +3888,34 @@ func TestStore_SetThreadProviderContinuationAndCompactedContext(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 
 	if err := s.CreateThread(ctx, Thread{
-		ThreadID:        "th_compacted_pair",
-		EndpointID:      "env_compacted_pair",
+		ThreadID:        "th_boundary_pair",
+		EndpointID:      "env_boundary_pair",
 		CreatedAtUnixMs: 1,
 		UpdatedAtUnixMs: 1,
 	}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
+	boundary, err := s.CurrentThreadContextBoundary(ctx, "env_boundary_pair", "th_boundary_pair")
+	if err != nil {
+		t.Fatalf("CurrentThreadContextBoundary: %v", err)
+	}
 
 	continuation := ThreadProviderContinuation{
 		State: ProviderContinuationState{
 			Kind:       "openai_responses",
-			ID:         "resp_pair",
-			Attributes: map[string]string{"cursor": "cur_pair"},
+			ID:         "resp_boundary_pair",
+			Attributes: map[string]string{"cursor": "cur_boundary_pair"},
 		},
 		ProviderID:      "openai",
 		Model:           "gpt-5-mini",
 		BaseURL:         "https://api.openai.com/v1",
 		UpdatedAtUnixMs: 10,
 	}
-	compacted := ThreadCompactedContext{
-		OperationID:             "compact-pair",
-		RequestID:               "manual-pair",
-		Source:                  "slash_command",
-		CompactionID:            "cmp-pair",
-		CompactionGeneration:    2,
-		CompactionWindowID:      "window-pair",
-		CompactedThroughEntryID: "entry-pair",
-		CoveredThroughTurnRowID: 42,
-		CoveredThroughMessageID: 99,
-		Transcript: []ThreadCompactedMessage{{
-			Role:    "user",
-			Content: "summary",
-			Kind:    "compaction_summary",
-		}},
-		CreatedAtUnixMs: 100,
-		UpdatedAtUnixMs: 101,
-	}
 
-	if err := s.SetThreadProviderContinuationAndCompactedContext(ctx, "env_compacted_pair", "th_compacted_pair", continuation, compacted); err != nil {
-		t.Fatalf("SetThreadProviderContinuationAndCompactedContext: %v", err)
+	if err := s.SetThreadProviderContinuationIfBoundaryMatches(ctx, "env_boundary_pair", "th_boundary_pair", boundary, continuation); err != nil {
+		t.Fatalf("SetThreadProviderContinuationIfBoundaryMatches: %v", err)
 	}
-	state, err := s.GetThreadState(ctx, "env_compacted_pair", "th_compacted_pair")
+	state, err := s.GetThreadState(ctx, "env_boundary_pair", "th_boundary_pair")
 	if err != nil {
 		t.Fatalf("GetThreadState: %v", err)
 	}
@@ -3969,31 +3925,9 @@ func TestStore_SetThreadProviderContinuationAndCompactedContext(t *testing.T) {
 	if !reflect.DeepEqual(state.ProviderContinuation, continuation) {
 		t.Fatalf("continuation=%+v, want %+v", state.ProviderContinuation, continuation)
 	}
-	if state.CompactedContext.CoveredThroughTurnRowID != 42 || state.CompactedContext.CoveredThroughMessageID != 99 {
-		t.Fatalf("compacted boundary=%+v", state.CompactedContext)
-	}
-
-	compacted.OperationID = "compact-pair-cleared-continuation"
-	compacted.RequestID = "manual-cleared"
-	if err := s.SetThreadProviderContinuationAndCompactedContext(ctx, "env_compacted_pair", "th_compacted_pair", ThreadProviderContinuation{}, compacted); err != nil {
-		t.Fatalf("SetThreadProviderContinuationAndCompactedContext clear continuation: %v", err)
-	}
-	state, err = s.GetThreadState(ctx, "env_compacted_pair", "th_compacted_pair")
-	if err != nil {
-		t.Fatalf("GetThreadState after clear: %v", err)
-	}
-	if state == nil {
-		t.Fatalf("expected thread state after clear")
-	}
-	if !state.ProviderContinuation.IsZero() {
-		t.Fatalf("continuation after paired clear=%+v, want zero", state.ProviderContinuation)
-	}
-	if state.CompactedContext.OperationID != "compact-pair-cleared-continuation" {
-		t.Fatalf("compacted context after paired clear=%+v", state.CompactedContext)
-	}
 }
 
-func TestStore_SetThreadProviderContinuationAndCompactedContextRejectsDeletedThread(t *testing.T) {
+func TestStore_SetThreadProviderContinuationIfBoundaryMatchesRejectsDeletedThread(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -4004,38 +3938,31 @@ func TestStore_SetThreadProviderContinuationAndCompactedContextRejectsDeletedThr
 	}
 	t.Cleanup(func() { _ = s.Close() })
 
-	if err := s.CreateThread(ctx, Thread{ThreadID: "th_deleted_compact", EndpointID: "env_deleted_compact"}); err != nil {
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_deleted_continuation", EndpointID: "env_deleted_continuation"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if _, err := s.DeleteThreadResources(ctx, "env_deleted_compact", "th_deleted_compact"); err != nil {
+	boundary, err := s.CurrentThreadContextBoundary(ctx, "env_deleted_continuation", "th_deleted_continuation")
+	if err != nil {
+		t.Fatalf("CurrentThreadContextBoundary: %v", err)
+	}
+	if _, err := s.DeleteThreadResources(ctx, "env_deleted_continuation", "th_deleted_continuation"); err != nil {
 		t.Fatalf("DeleteThreadResources: %v", err)
 	}
-	compacted := ThreadCompactedContext{
-		OperationID:             "compact-deleted",
-		RequestID:               "manual-deleted",
-		Source:                  "slash_command",
-		CompactionID:            "cmp-deleted",
-		CompactionGeneration:    1,
-		CompactionWindowID:      "window-deleted",
-		CoveredThroughTurnRowID: 1,
-		CoveredThroughMessageID: 1,
-		Transcript: []ThreadCompactedMessage{{
-			Role:    "user",
-			Content: "summary",
-			Kind:    "compaction_summary",
-		}},
-		CreatedAtUnixMs: 100,
-		UpdatedAtUnixMs: 101,
+	continuation := ThreadProviderContinuation{
+		State:           ProviderContinuationState{Kind: "openai_responses", ID: "resp_deleted"},
+		ProviderID:      "openai",
+		Model:           "gpt-5-mini",
+		UpdatedAtUnixMs: 10,
 	}
-	if err := s.SetThreadProviderContinuationAndCompactedContext(ctx, "env_deleted_compact", "th_deleted_compact", ThreadProviderContinuation{}, compacted); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("SetThreadProviderContinuationAndCompactedContext err=%v, want %v", err, sql.ErrNoRows)
+	if err := s.SetThreadProviderContinuationIfBoundaryMatches(ctx, "env_deleted_continuation", "th_deleted_continuation", boundary, continuation); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("SetThreadProviderContinuationIfBoundaryMatches err=%v, want %v", err, sql.ErrNoRows)
 	}
-	if rows := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_state WHERE endpoint_id = ? AND thread_id = ?`, "env_deleted_compact", "th_deleted_compact"); rows != 0 {
+	if rows := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_state WHERE endpoint_id = ? AND thread_id = ?`, "env_deleted_continuation", "th_deleted_continuation"); rows != 0 {
 		t.Fatalf("thread state rows=%d, want none after rejected commit", rows)
 	}
 }
 
-func TestStore_SetThreadProviderContinuationAndCompactedContextRejectsChangedBoundary(t *testing.T) {
+func TestStore_SetThreadProviderContinuationIfBoundaryMatchesRejectsChangedBoundary(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -4046,43 +3973,32 @@ func TestStore_SetThreadProviderContinuationAndCompactedContextRejectsChangedBou
 	}
 	t.Cleanup(func() { _ = s.Close() })
 
-	if err := s.CreateThread(ctx, Thread{ThreadID: "th_boundary_compact", EndpointID: "env_boundary_compact"}); err != nil {
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_boundary_continuation", EndpointID: "env_boundary_continuation"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	expected, err := s.CurrentThreadContextBoundary(ctx, "env_boundary_compact", "th_boundary_compact")
+	expected, err := s.CurrentThreadContextBoundary(ctx, "env_boundary_continuation", "th_boundary_continuation")
 	if err != nil {
 		t.Fatalf("CurrentThreadContextBoundary: %v", err)
 	}
-	start := startUserTurnRecordForTest("env_boundary_compact", "th_boundary_compact", "m_user_boundary", "run_boundary", "m_assistant_boundary")
+	start := startUserTurnRecordForTest("env_boundary_continuation", "th_boundary_continuation", "m_user_boundary", "run_boundary", "m_assistant_boundary")
 	if _, err := s.StartUserTurn(ctx, start); err != nil {
 		t.Fatalf("StartUserTurn: %v", err)
 	}
-	compacted := ThreadCompactedContext{
-		OperationID:             "compact-boundary",
-		RequestID:               "manual-boundary",
-		Source:                  "slash_command",
-		CompactionID:            "cmp-boundary",
-		CompactionGeneration:    1,
-		CompactionWindowID:      "window-boundary",
-		CoveredThroughTurnRowID: expected.TurnRowID,
-		CoveredThroughMessageID: expected.MessageID,
-		Transcript: []ThreadCompactedMessage{{
-			Role:    "user",
-			Content: "summary",
-			Kind:    "compaction_summary",
-		}},
-		CreatedAtUnixMs: 100,
-		UpdatedAtUnixMs: 101,
+	continuation := ThreadProviderContinuation{
+		State:           ProviderContinuationState{Kind: "openai_responses", ID: "resp_changed_boundary"},
+		ProviderID:      "openai",
+		Model:           "gpt-5-mini",
+		UpdatedAtUnixMs: 10,
 	}
-	if err := s.SetThreadProviderContinuationAndCompactedContextIfBoundaryMatches(ctx, "env_boundary_compact", "th_boundary_compact", expected, ThreadProviderContinuation{}, compacted); !errors.Is(err, ErrThreadContextBoundaryChanged) {
-		t.Fatalf("SetThreadProviderContinuationAndCompactedContextIfBoundaryMatches err=%v, want %v", err, ErrThreadContextBoundaryChanged)
+	if err := s.SetThreadProviderContinuationIfBoundaryMatches(ctx, "env_boundary_continuation", "th_boundary_continuation", expected, continuation); !errors.Is(err, ErrThreadContextBoundaryChanged) {
+		t.Fatalf("SetThreadProviderContinuationIfBoundaryMatches err=%v, want %v", err, ErrThreadContextBoundaryChanged)
 	}
-	state, err := s.GetThreadState(ctx, "env_boundary_compact", "th_boundary_compact")
+	state, err := s.GetThreadState(ctx, "env_boundary_continuation", "th_boundary_continuation")
 	if err != nil {
 		t.Fatalf("GetThreadState: %v", err)
 	}
 	if state != nil {
-		t.Fatalf("thread state=%+v, want no compacted state after rejected boundary", state)
+		t.Fatalf("thread state=%+v, want no continuation state after rejected boundary", state)
 	}
 }
 

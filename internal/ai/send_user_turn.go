@@ -41,9 +41,8 @@ type SendUserTurnResponse struct {
 }
 
 type CompactThreadContextRequest struct {
-	ThreadID      string `json:"thread_id"`
-	ExpectedRunID string `json:"expected_run_id,omitempty"`
-	Source        string `json:"source"`
+	ThreadID    string `json:"thread_id"`
+	ActiveRunID string `json:"active_run_id,omitempty"`
 }
 
 type CompactThreadContextResponse struct {

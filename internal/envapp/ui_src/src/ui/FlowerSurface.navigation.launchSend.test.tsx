@@ -230,8 +230,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     expect(compactThreadContext).toHaveBeenCalledWith({
       thread_id: 'thread-running-compact',
-      expected_run_id: 'run-compact',
-      source: 'slash_command',
+      active_run_id: 'run-compact',
     });
     expect(stopThread).not.toHaveBeenCalled();
     expect(launchTurn).not.toHaveBeenCalled();
@@ -341,8 +340,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     expect(compactThreadContext).toHaveBeenCalledWith({
       thread_id: 'thread-running-compact-menu',
-      expected_run_id: 'run-compact-menu',
-      source: 'slash_command',
+      active_run_id: 'run-compact-menu',
     });
     expect(stopThread).not.toHaveBeenCalled();
     expect(launchTurn).not.toHaveBeenCalled();
@@ -910,8 +908,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     expect(compactThreadContext).toHaveBeenCalledWith({
       thread_id: 'thread-waiting-approval-compact',
-      expected_run_id: 'run-waiting-approval-compact',
-      source: 'slash_command',
+      active_run_id: 'run-waiting-approval-compact',
     });
     expect(stopThread).not.toHaveBeenCalled();
     expect(launchTurn).not.toHaveBeenCalled();

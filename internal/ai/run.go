@@ -170,7 +170,6 @@ type run struct {
 	activityFileActionSeq     int64
 	waitingPrompt             *RequestUserInputPrompt
 	providerContinuation      threadstore.ThreadProviderContinuation
-	compactedContext          threadstore.ThreadCompactedContext
 
 	finalizationReason string
 	currentModelID     string
@@ -574,31 +573,6 @@ func (r *run) getProviderContinuationCandidate() threadstore.ThreadProviderConti
 	return r.providerContinuation.Normalized()
 }
 
-func (r *run) setThreadCompactedContextCandidate(compacted threadstore.ThreadCompactedContext) {
-	if r == nil {
-		return
-	}
-	if !r.acceptsEngineResultProjection() {
-		return
-	}
-	compacted = compacted.Normalized()
-	if compacted.IsZero() {
-		return
-	}
-	r.muAssistant.Lock()
-	r.compactedContext = compacted
-	r.muAssistant.Unlock()
-}
-
-func (r *run) getThreadCompactedContextCandidate() threadstore.ThreadCompactedContext {
-	if r == nil {
-		return threadstore.ThreadCompactedContext{}
-	}
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	return r.compactedContext.Normalized()
-}
-
 func (r *run) EnqueueManualCompaction(ctx context.Context, request flruntime.ManualCompactionRequest) (flruntime.ManualCompactionRequest, error) {
 	if r == nil {
 		return flruntime.ManualCompactionRequest{}, errors.New("nil run")
@@ -708,7 +682,7 @@ func (r *run) setCompletedContextCompaction(compaction observation.CompactionEve
 	if r == nil {
 		return
 	}
-	if strings.TrimSpace(compaction.OperationID) == "" || strings.TrimSpace(compaction.CompactionID) == "" {
+	if strings.TrimSpace(compaction.OperationID) == "" {
 		return
 	}
 	r.muManualCompaction.Lock()
@@ -1319,8 +1293,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	startedAt := time.Now()
 	r.persistRunRecord(RunStateRunning, "", "", startedAt.UnixMilli(), 0)
 	runStartPayload := map[string]any{
-		"model":         strings.TrimSpace(req.Model),
-		"history_count": len(req.History),
+		"model": strings.TrimSpace(req.Model),
 	}
 	r.persistRunEvent("run.start", RealtimeStreamKindLifecycle, runStartPayload)
 	defer func() {
@@ -1441,7 +1414,6 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	}
 	r.debug("ai.run.start",
 		"model", modelID,
-		"history_count", len(req.History),
 		"attachment_count", len(req.Input.Attachments),
 		"input_chars", utf8.RuneCountInString(strings.TrimSpace(req.Input.Text)),
 		"objective_chars", utf8.RuneCountInString(strings.TrimSpace(taskObjective)),
@@ -1461,7 +1433,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	if strings.TrimSpace(resolved.userMessage) != "" {
 		return r.failRunWithCode(runErrorCodeProviderMissingKey, resolved.userMessage, resolved.err)
 	}
-	return r.runFloretProjectedTurn(execCtx, req, resolved.provider, resolved.apiKey, strings.TrimSpace(taskObjective), resolved.adapterOverride)
+	return r.runFloretHostedTurn(execCtx, req, resolved.provider, resolved.apiKey, strings.TrimSpace(taskObjective), resolved.adapterOverride)
 }
 
 var errModelGatewayMissingKey = errors.New("missing provider key")

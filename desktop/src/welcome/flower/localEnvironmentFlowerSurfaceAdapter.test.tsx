@@ -336,8 +336,7 @@ describe('Local Environment Flower surface adapter', () => {
 
     const bootstrap = await adapter.compactThreadContext({
       thread_id: ' thread-1 ',
-      expected_run_id: ' run-1 ',
-      source: 'slash_command',
+      active_run_id: ' run-1 ',
     });
 
     expect(bootstrap.thread.status).toBe('running');
@@ -347,8 +346,7 @@ describe('Local Environment Flower surface adapter', () => {
     ]);
     expect(calls[0].body).toEqual({
       thread_id: 'thread-1',
-      expected_run_id: 'run-1',
-      source: 'slash_command',
+      active_run_id: 'run-1',
     });
   });
 

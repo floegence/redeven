@@ -3994,19 +3994,18 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			resp, err := g.ai.CompactThreadContext(r.Context(), meta, body)
 			if err != nil {
 				g.appendAudit(meta, "ai_thread_context_compact", "failure", map[string]any{
-					"thread_id":       threadID,
-					"expected_run_id": strings.TrimSpace(body.ExpectedRunID),
-					"source":          strings.TrimSpace(body.Source),
+					"thread_id":     threadID,
+					"active_run_id": strings.TrimSpace(body.ActiveRunID),
 				}, err)
 				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
 				return
-				}
-				g.appendAudit(meta, "ai_thread_context_compact", "success", map[string]any{
-					"thread_id":    threadID,
-					"operation_id": strings.TrimSpace(resp.OperationID),
-					"kind":         strings.TrimSpace(resp.Kind),
-					"source":       strings.TrimSpace(body.Source),
-				}, nil)
+			}
+			g.appendAudit(meta, "ai_thread_context_compact", "success", map[string]any{
+				"thread_id":     threadID,
+				"active_run_id": strings.TrimSpace(body.ActiveRunID),
+				"operation_id":  strings.TrimSpace(resp.OperationID),
+				"kind":          strings.TrimSpace(resp.Kind),
+			}, nil)
 			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: resp})
 			return
 

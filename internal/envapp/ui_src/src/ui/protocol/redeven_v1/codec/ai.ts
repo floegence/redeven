@@ -241,8 +241,7 @@ export function fromWireAISendUserTurnResponse(resp: wire_ai_send_user_turn_resp
 export function toWireAICompactThreadContextRequest(req: AICompactThreadContextRequest): wire_ai_compact_thread_context_req {
   return {
     thread_id: String(req.threadId ?? '').trim(),
-    expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
-    source: String(req.source ?? '').trim() || 'slash_command',
+    active_run_id: req.activeRunId?.trim() ? String(req.activeRunId).trim() : undefined,
   };
 }
 

@@ -14,7 +14,6 @@ func deleteThreadContextPlanesTx(ctx context.Context, tx *sql.Tx, endpointID str
 		`DELETE FROM structured_user_inputs WHERE endpoint_id = ? AND thread_id = ?`,
 		`DELETE FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`,
 		`DELETE FROM memory_items WHERE endpoint_id = ? AND thread_id = ?`,
-		`DELETE FROM context_snapshots WHERE endpoint_id = ? AND thread_id = ?`,
 		`DELETE FROM execution_spans WHERE endpoint_id = ? AND thread_id = ?`,
 	}
 	for _, q := range queries {

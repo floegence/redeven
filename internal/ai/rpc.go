@@ -62,9 +62,8 @@ type aiSubmitRequestUserInputResponseResp struct {
 }
 
 type aiCompactThreadContextReq struct {
-	ThreadID      string `json:"thread_id"`
-	ExpectedRunID string `json:"expected_run_id,omitempty"`
-	Source        string `json:"source"`
+	ThreadID    string `json:"thread_id"`
+	ActiveRunID string `json:"active_run_id,omitempty"`
 }
 
 type aiCompactThreadContextResp struct {
@@ -201,9 +200,8 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
 		}
 		resp, err := s.CompactThreadContext(ctx, meta, CompactThreadContextRequest{
-			ThreadID:      threadID,
-			ExpectedRunID: strings.TrimSpace(req.ExpectedRunID),
-			Source:        strings.TrimSpace(req.Source),
+			ThreadID:    threadID,
+			ActiveRunID: strings.TrimSpace(req.ActiveRunID),
 		})
 		if err != nil {
 			return nil, toAIRPCError(err)

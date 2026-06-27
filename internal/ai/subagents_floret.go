@@ -2414,15 +2414,12 @@ func flowerSubagentCompactionView(in *flruntime.SubAgentDetailCompaction) *Flowe
 		return nil
 	}
 	return &FlowerSubagentCompactionView{
-		SummarySchemaVersion: strings.TrimSpace(in.SummarySchemaVersion),
-		CompactionGeneration: in.CompactionGeneration,
-		Summary:              strings.TrimSpace(in.Summary),
-		Trigger:              strings.TrimSpace(in.Trigger),
-		Reason:               strings.TrimSpace(in.Reason),
-		Phase:                strings.TrimSpace(in.Phase),
-		TokensBefore:         in.TokensBefore,
-		TokensAfterEstimate:  in.TokensAfterEstimate,
-		Metadata:             cloneStringMap(in.Metadata),
+		Trigger:             strings.TrimSpace(in.Trigger),
+		Reason:              strings.TrimSpace(in.Reason),
+		Phase:               strings.TrimSpace(in.Phase),
+		TokensBefore:        in.TokensBefore,
+		TokensAfterEstimate: in.TokensAfterEstimate,
+		Metadata:            cloneStringMap(in.Metadata),
 	}
 }
 

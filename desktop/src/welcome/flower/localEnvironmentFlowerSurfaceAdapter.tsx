@@ -447,8 +447,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/context/compact`,
         {
           thread_id: tid,
-          expected_run_id: trim(input.expected_run_id) || undefined,
-          source: 'slash_command',
+          active_run_id: trim(input.active_run_id) || undefined,
         },
       );
       return loadRuntimeFlowerThread(bridge, tid);

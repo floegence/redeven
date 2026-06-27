@@ -2741,26 +2741,8 @@ type ThreadState struct {
 	ThreadID             string                     `json:"thread_id"`
 	OpenGoal             string                     `json:"open_goal"`
 	LastAssistantSummary string                     `json:"last_assistant_summary"`
-	CompactedContext     ThreadCompactedContext     `json:"compacted_context,omitempty"`
 	ProviderContinuation ThreadProviderContinuation `json:"provider_continuation,omitempty"`
 	UpdatedAtUnixMs      int64                      `json:"updated_at_unix_ms"`
-}
-
-type ThreadCompactedContext struct {
-	OperationID             string                   `json:"operation_id"`
-	RequestID               string                   `json:"request_id,omitempty"`
-	Source                  string                   `json:"source,omitempty"`
-	CompactionID            string                   `json:"compaction_id,omitempty"`
-	PreviousCompactionID    string                   `json:"previous_compaction_id,omitempty"`
-	CompactionGeneration    int                      `json:"compaction_generation,omitempty"`
-	CompactionWindowID      string                   `json:"compaction_window_id,omitempty"`
-	FirstKeptEntryID        string                   `json:"first_kept_entry_id,omitempty"`
-	CompactedThroughEntryID string                   `json:"compacted_through_entry_id,omitempty"`
-	CoveredThroughTurnRowID int64                    `json:"covered_through_turn_row_id,omitempty"`
-	CoveredThroughMessageID int64                    `json:"covered_through_message_id,omitempty"`
-	Transcript              []ThreadCompactedMessage `json:"transcript,omitempty"`
-	CreatedAtUnixMs         int64                    `json:"created_at_unix_ms,omitempty"`
-	UpdatedAtUnixMs         int64                    `json:"updated_at_unix_ms,omitempty"`
 }
 
 type ThreadContextBoundary struct {
@@ -2769,75 +2751,6 @@ type ThreadContextBoundary struct {
 }
 
 var ErrThreadContextBoundaryChanged = errors.New("thread context boundary changed")
-
-type ThreadCompactedMessage struct {
-	Role                 string `json:"role"`
-	Content              string `json:"content,omitempty"`
-	Reasoning            string `json:"reasoning,omitempty"`
-	ToolCallID           string `json:"tool_call_id,omitempty"`
-	ToolName             string `json:"tool_name,omitempty"`
-	ToolArgs             string `json:"tool_args,omitempty"`
-	Kind                 string `json:"kind,omitempty"`
-	EntryID              string `json:"entry_id,omitempty"`
-	ParentEntryID        string `json:"parent_entry_id,omitempty"`
-	CompactionID         string `json:"compaction_id,omitempty"`
-	CompactionGeneration int    `json:"compaction_generation,omitempty"`
-	CompactionWindowID   string `json:"compaction_window_id,omitempty"`
-}
-
-func (c ThreadCompactedContext) normalized() ThreadCompactedContext {
-	c.OperationID = strings.TrimSpace(c.OperationID)
-	c.RequestID = strings.TrimSpace(c.RequestID)
-	c.Source = strings.TrimSpace(c.Source)
-	c.CompactionID = strings.TrimSpace(c.CompactionID)
-	c.PreviousCompactionID = strings.TrimSpace(c.PreviousCompactionID)
-	c.CompactionWindowID = strings.TrimSpace(c.CompactionWindowID)
-	c.FirstKeptEntryID = strings.TrimSpace(c.FirstKeptEntryID)
-	c.CompactedThroughEntryID = strings.TrimSpace(c.CompactedThroughEntryID)
-	if c.CoveredThroughTurnRowID < 0 {
-		c.CoveredThroughTurnRowID = 0
-	}
-	if c.CoveredThroughMessageID < 0 {
-		c.CoveredThroughMessageID = 0
-	}
-	if c.UpdatedAtUnixMs <= 0 {
-		c.UpdatedAtUnixMs = c.CreatedAtUnixMs
-	}
-	out := make([]ThreadCompactedMessage, 0, len(c.Transcript))
-	for _, msg := range c.Transcript {
-		msg.Role = strings.ToLower(strings.TrimSpace(msg.Role))
-		msg.Content = strings.TrimSpace(msg.Content)
-		msg.Reasoning = strings.TrimSpace(msg.Reasoning)
-		msg.ToolCallID = strings.TrimSpace(msg.ToolCallID)
-		msg.ToolName = strings.TrimSpace(msg.ToolName)
-		msg.ToolArgs = strings.TrimSpace(msg.ToolArgs)
-		msg.Kind = strings.TrimSpace(msg.Kind)
-		msg.EntryID = strings.TrimSpace(msg.EntryID)
-		msg.ParentEntryID = strings.TrimSpace(msg.ParentEntryID)
-		msg.CompactionID = strings.TrimSpace(msg.CompactionID)
-		msg.CompactionWindowID = strings.TrimSpace(msg.CompactionWindowID)
-		if msg.Role != "user" && msg.Role != "assistant" && msg.Role != "tool" {
-			continue
-		}
-		if msg.Content == "" && msg.Reasoning == "" && msg.ToolArgs == "" {
-			continue
-		}
-		out = append(out, msg)
-	}
-	c.Transcript = out
-	if c.OperationID == "" || len(c.Transcript) == 0 {
-		return ThreadCompactedContext{}
-	}
-	return c
-}
-
-func (c ThreadCompactedContext) Normalized() ThreadCompactedContext {
-	return c.normalized()
-}
-
-func (c ThreadCompactedContext) IsZero() bool {
-	return c.normalized().OperationID == ""
-}
 
 func (s *Store) CurrentThreadContextBoundary(ctx context.Context, endpointID string, threadID string) (ThreadContextBoundary, error) {
 	if s == nil || s.db == nil {
@@ -2914,30 +2827,6 @@ func ensureThreadContextBoundaryTx(ctx context.Context, tx *sql.Tx, endpointID s
 	return nil
 }
 
-func marshalThreadCompactedContext(ctx ThreadCompactedContext) string {
-	ctx = ctx.normalized()
-	if ctx.IsZero() {
-		return ""
-	}
-	raw, err := json.Marshal(ctx)
-	if err != nil || len(raw) == 0 {
-		return ""
-	}
-	return string(raw)
-}
-
-func parseThreadCompactedContextJSON(raw string) ThreadCompactedContext {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ThreadCompactedContext{}
-	}
-	var ctx ThreadCompactedContext
-	if err := json.Unmarshal([]byte(raw), &ctx); err != nil {
-		return ThreadCompactedContext{}
-	}
-	return ctx.normalized()
-}
-
 func (s *Store) GetThreadState(ctx context.Context, endpointID string, threadID string) (*ThreadState, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("store not initialized")
@@ -2952,10 +2841,8 @@ func (s *Store) GetThreadState(ctx context.Context, endpointID string, threadID 
 	}
 	var st ThreadState
 	var providerContinuationStateJSON string
-	var compactedContextJSON string
 	err := s.db.QueryRowContext(ctx, `
 	SELECT endpoint_id, thread_id, open_goal, last_assistant_summary,
-	       compacted_context_json,
 	       provider_continuation_state_json, provider_continuation_provider_id,
 	       provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
 	       updated_at_unix_ms
@@ -2966,7 +2853,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 		&st.ThreadID,
 		&st.OpenGoal,
 		&st.LastAssistantSummary,
-		&compactedContextJSON,
 		&providerContinuationStateJSON,
 		&st.ProviderContinuation.ProviderID,
 		&st.ProviderContinuation.Model,
@@ -2982,7 +2868,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 	}
 	st.OpenGoal = strings.TrimSpace(st.OpenGoal)
 	st.LastAssistantSummary = strings.TrimSpace(st.LastAssistantSummary)
-	st.CompactedContext = parseThreadCompactedContextJSON(compactedContextJSON)
 	st.ProviderContinuation.State = parseProviderContinuationStateJSON(providerContinuationStateJSON)
 	st.ProviderContinuation = st.ProviderContinuation.normalized()
 	return &st, nil
@@ -2999,7 +2884,6 @@ func (s *Store) UpsertThreadState(ctx context.Context, st ThreadState) error {
 	st.ThreadID = strings.TrimSpace(st.ThreadID)
 	st.OpenGoal = strings.TrimSpace(st.OpenGoal)
 	st.LastAssistantSummary = strings.TrimSpace(st.LastAssistantSummary)
-	st.CompactedContext = st.CompactedContext.normalized()
 	st.ProviderContinuation = st.ProviderContinuation.normalized()
 	if st.EndpointID == "" || st.ThreadID == "" {
 		return errors.New("invalid thread state")
@@ -3010,23 +2894,21 @@ func (s *Store) UpsertThreadState(ctx context.Context, st ThreadState) error {
 	_, err := s.db.ExecContext(ctx, `
 	INSERT INTO ai_thread_state(
 	  endpoint_id, thread_id, open_goal, last_assistant_summary,
-	  compacted_context_json,
 	  provider_continuation_state_json, provider_continuation_provider_id,
 	  provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
 	  updated_at_unix_ms
 	)
-	VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(endpoint_id, thread_id) DO UPDATE SET
 	  open_goal=excluded.open_goal,
 	  last_assistant_summary=excluded.last_assistant_summary,
-	  compacted_context_json=excluded.compacted_context_json,
 	  provider_continuation_state_json=excluded.provider_continuation_state_json,
 	  provider_continuation_provider_id=excluded.provider_continuation_provider_id,
 	  provider_continuation_model=excluded.provider_continuation_model,
 	  provider_continuation_base_url=excluded.provider_continuation_base_url,
 	  provider_continuation_updated_at_unix_ms=excluded.provider_continuation_updated_at_unix_ms,
 	  updated_at_unix_ms=excluded.updated_at_unix_ms
-	`, st.EndpointID, st.ThreadID, st.OpenGoal, st.LastAssistantSummary, marshalThreadCompactedContext(st.CompactedContext),
+	`, st.EndpointID, st.ThreadID, st.OpenGoal, st.LastAssistantSummary,
 		marshalProviderContinuationState(st.ProviderContinuation.State), st.ProviderContinuation.ProviderID,
 		st.ProviderContinuation.Model, st.ProviderContinuation.BaseURL, st.ProviderContinuation.UpdatedAtUnixMs,
 		st.UpdatedAtUnixMs)
@@ -3074,156 +2956,6 @@ func (s *Store) GetThreadProviderContinuation(ctx context.Context, endpointID st
 	return &cont, nil
 }
 
-func (s *Store) GetThreadCompactedContext(ctx context.Context, endpointID string, threadID string) (*ThreadCompactedContext, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return nil, errors.New("invalid request")
-	}
-	var raw string
-	err := s.db.QueryRowContext(ctx, `
-	SELECT compacted_context_json
-	FROM ai_thread_state
-	WHERE endpoint_id = ? AND thread_id = ?
-	`, endpointID, threadID).Scan(&raw)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	compacted := parseThreadCompactedContextJSON(raw)
-	if compacted.IsZero() {
-		return nil, nil
-	}
-	return &compacted, nil
-}
-
-func (s *Store) SetThreadCompactedContext(ctx context.Context, endpointID string, threadID string, compacted ThreadCompactedContext) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	compacted = compacted.normalized()
-	if endpointID == "" || threadID == "" || compacted.IsZero() {
-		return errors.New("invalid request")
-	}
-	if compacted.UpdatedAtUnixMs <= 0 {
-		compacted.UpdatedAtUnixMs = time.Now().UnixMilli()
-	}
-	if compacted.CreatedAtUnixMs <= 0 {
-		compacted.CreatedAtUnixMs = compacted.UpdatedAtUnixMs
-	}
-	updatedAt := time.Now().UnixMilli()
-	_, err := s.db.ExecContext(ctx, `
-	INSERT INTO ai_thread_state(
-	  endpoint_id, thread_id, open_goal, last_assistant_summary,
-	  compacted_context_json,
-	  provider_continuation_state_json, provider_continuation_provider_id,
-	  provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
-	  updated_at_unix_ms
-	)
-	VALUES(?, ?, '', '', ?, '', '', '', '', 0, ?)
-	ON CONFLICT(endpoint_id, thread_id) DO UPDATE SET
-	  compacted_context_json=excluded.compacted_context_json,
-	  updated_at_unix_ms=excluded.updated_at_unix_ms
-	`, endpointID, threadID, marshalThreadCompactedContext(compacted), updatedAt)
-	return err
-}
-
-func (s *Store) SetThreadProviderContinuationAndCompactedContext(ctx context.Context, endpointID string, threadID string, cont ThreadProviderContinuation, compacted ThreadCompactedContext) error {
-	return s.setThreadProviderContinuationAndCompactedContext(ctx, endpointID, threadID, cont, compacted, nil)
-}
-
-func (s *Store) SetThreadProviderContinuationAndCompactedContextIfBoundaryMatches(ctx context.Context, endpointID string, threadID string, expected ThreadContextBoundary, cont ThreadProviderContinuation, compacted ThreadCompactedContext) error {
-	return s.setThreadProviderContinuationAndCompactedContext(ctx, endpointID, threadID, cont, compacted, &expected)
-}
-
-func (s *Store) setThreadProviderContinuationAndCompactedContext(ctx context.Context, endpointID string, threadID string, cont ThreadProviderContinuation, compacted ThreadCompactedContext, expected *ThreadContextBoundary) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	cont = cont.normalized()
-	compacted = compacted.normalized()
-	if endpointID == "" || threadID == "" || compacted.IsZero() {
-		return errors.New("invalid request")
-	}
-	if !cont.IsZero() && cont.UpdatedAtUnixMs <= 0 {
-		cont.UpdatedAtUnixMs = time.Now().UnixMilli()
-	}
-	if compacted.UpdatedAtUnixMs <= 0 {
-		compacted.UpdatedAtUnixMs = time.Now().UnixMilli()
-	}
-	if compacted.CreatedAtUnixMs <= 0 {
-		compacted.CreatedAtUnixMs = compacted.UpdatedAtUnixMs
-	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := ensureThreadExistsTx(ctx, tx, endpointID, threadID); err != nil {
-		return err
-	}
-	if expected != nil {
-		if err := ensureThreadContextBoundaryTx(ctx, tx, endpointID, threadID, *expected); err != nil {
-			return err
-		}
-	}
-
-	updatedAt := time.Now().UnixMilli()
-	stateJSON := ""
-	providerID := ""
-	model := ""
-	baseURL := ""
-	providerUpdatedAt := int64(0)
-	if !cont.IsZero() {
-		stateJSON = marshalProviderContinuationState(cont.State)
-		providerID = cont.ProviderID
-		model = cont.Model
-		baseURL = cont.BaseURL
-		providerUpdatedAt = cont.UpdatedAtUnixMs
-	}
-	if _, err := tx.ExecContext(ctx, `
-	INSERT INTO ai_thread_state(
-	  endpoint_id, thread_id, open_goal, last_assistant_summary,
-	  compacted_context_json,
-	  provider_continuation_state_json, provider_continuation_provider_id,
-	  provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
-	  updated_at_unix_ms
-	)
-	VALUES(?, ?, '', '', ?, ?, ?, ?, ?, ?, ?)
-	ON CONFLICT(endpoint_id, thread_id) DO UPDATE SET
-	  compacted_context_json=excluded.compacted_context_json,
-	  provider_continuation_state_json=excluded.provider_continuation_state_json,
-	  provider_continuation_provider_id=excluded.provider_continuation_provider_id,
-	  provider_continuation_model=excluded.provider_continuation_model,
-	  provider_continuation_base_url=excluded.provider_continuation_base_url,
-	  provider_continuation_updated_at_unix_ms=excluded.provider_continuation_updated_at_unix_ms,
-	  updated_at_unix_ms=excluded.updated_at_unix_ms
-	`, endpointID, threadID, marshalThreadCompactedContext(compacted),
-		stateJSON, providerID, model, baseURL, providerUpdatedAt, updatedAt); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
 func (s *Store) SetThreadProviderContinuation(ctx context.Context, endpointID string, threadID string, cont ThreadProviderContinuation) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
@@ -3258,6 +2990,55 @@ func (s *Store) SetThreadProviderContinuation(ctx context.Context, endpointID st
 	  updated_at_unix_ms=excluded.updated_at_unix_ms
 	`, endpointID, threadID, marshalProviderContinuationState(cont.State), cont.ProviderID, cont.Model, cont.BaseURL, cont.UpdatedAtUnixMs, updatedAt)
 	return err
+}
+
+func (s *Store) SetThreadProviderContinuationIfBoundaryMatches(ctx context.Context, endpointID string, threadID string, expected ThreadContextBoundary, cont ThreadProviderContinuation) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	cont = cont.normalized()
+	if endpointID == "" || threadID == "" || cont.IsZero() {
+		return errors.New("invalid request")
+	}
+	if cont.UpdatedAtUnixMs <= 0 {
+		cont.UpdatedAtUnixMs = time.Now().UnixMilli()
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := ensureThreadExistsTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	if err := ensureThreadContextBoundaryTx(ctx, tx, endpointID, threadID, expected); err != nil {
+		return err
+	}
+	updatedAt := time.Now().UnixMilli()
+	if _, err := tx.ExecContext(ctx, `
+	INSERT INTO ai_thread_state(
+	  endpoint_id, thread_id, open_goal, last_assistant_summary,
+	  provider_continuation_state_json, provider_continuation_provider_id,
+	  provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
+	  updated_at_unix_ms
+	)
+	VALUES(?, ?, '', '', ?, ?, ?, ?, ?, ?)
+	ON CONFLICT(endpoint_id, thread_id) DO UPDATE SET
+	  provider_continuation_state_json=excluded.provider_continuation_state_json,
+	  provider_continuation_provider_id=excluded.provider_continuation_provider_id,
+	  provider_continuation_model=excluded.provider_continuation_model,
+	  provider_continuation_base_url=excluded.provider_continuation_base_url,
+	  provider_continuation_updated_at_unix_ms=excluded.provider_continuation_updated_at_unix_ms,
+	  updated_at_unix_ms=excluded.updated_at_unix_ms
+	`, endpointID, threadID, marshalProviderContinuationState(cont.State), cont.ProviderID, cont.Model, cont.BaseURL, cont.UpdatedAtUnixMs, updatedAt); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) ClearThreadProviderContinuation(ctx context.Context, endpointID string, threadID string) error {

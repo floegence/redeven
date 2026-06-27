@@ -1481,6 +1481,10 @@ func (h *fakeCloseAllFloretHost) RunTurn(context.Context, flruntime.RunTurnReque
 	return flruntime.TurnResult{}, nil
 }
 
+func (h *fakeCloseAllFloretHost) CompactThread(context.Context, flruntime.CompactThreadRequest) (flruntime.CompactThreadResult, error) {
+	return flruntime.CompactThreadResult{}, nil
+}
+
 func (h *fakeCloseAllFloretHost) RetryTurn(context.Context, flruntime.RetryTurnRequest) (flruntime.TurnResult, error) {
 	return flruntime.TurnResult{}, nil
 }

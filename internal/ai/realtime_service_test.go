@@ -589,9 +589,6 @@ func TestFlowerLiveContextUsageAndCompactionMaterializedState(t *testing.T) {
 	complete := start
 	complete.Phase = "complete"
 	complete.Status = "compacted"
-	complete.CompactionID = "compact-1"
-	complete.CompactionGeneration = 1
-	complete.CompactionWindowID = "window-1"
 	complete.TokensAfterEstimate = 210
 	completeDecoration := startDecoration
 	completeDecoration.Compaction = complete
@@ -601,7 +598,7 @@ func TestFlowerLiveContextUsageAndCompactionMaterializedState(t *testing.T) {
 		Kind:     FlowerLiveContextCompactionUpdated,
 		Payload:  mustFlowerPayload(FlowerLiveContextCompactionUpdatedPayload{Compaction: complete, TimelineDecoration: completeDecoration}),
 	})
-	if len(state.ContextCompactions) != 1 || state.ContextCompactions[0].Status != "compacted" || state.ContextCompactions[0].CompactionID != "compact-1" {
+	if len(state.ContextCompactions) != 1 || state.ContextCompactions[0].Status != "compacted" || state.ContextCompactions[0].OperationID != start.OperationID {
 		t.Fatalf("context compactions after complete=%#v", state.ContextCompactions)
 	}
 	if len(state.TimelineDecorations) != 1 || state.TimelineDecorations[0].Compaction.Status != "compacted" || state.TimelineDecorations[0].Compaction.TokensAfterEstimate != 210 {
@@ -866,19 +863,16 @@ func TestRunContextCompactionAnchorRemainsStableAcrossOperationEvents(t *testing
 	})
 
 	r.applyFloretCompaction(&observation.CompactionEvent{
-		OperationID:          "run-anchor-stable:compact:1:manual:manual-request-1",
-		RequestID:            "manual-request-1",
-		RunID:                "run-anchor-stable",
-		Phase:                observation.CompactionPhaseComplete,
-		Status:               observation.CompactionStatusCompacted,
-		Trigger:              "manual",
-		Reason:               "manual",
-		CompactionID:         "compact-anchor-stable",
-		CompactionGeneration: 1,
-		CompactionWindowID:   "window-anchor-stable",
-		TokensBefore:         900,
-		TokensAfterEstimate:  300,
-		ObservedAt:           time.UnixMilli(10_001),
+		OperationID:         "run-anchor-stable:compact:1:manual:manual-request-1",
+		RequestID:           "manual-request-1",
+		RunID:               "run-anchor-stable",
+		Phase:               observation.CompactionPhaseComplete,
+		Status:              observation.CompactionStatusCompacted,
+		Trigger:             "manual",
+		Reason:              "manual",
+		TokensBefore:        900,
+		TokensAfterEstimate: 300,
+		ObservedAt:          time.UnixMilli(10_001),
 	})
 
 	anchor := r.contextCompactionAnchor("run-anchor-stable:compact:1:manual:manual-request-1")
@@ -1319,21 +1313,18 @@ func TestIdleContextCompactionDoesNotPersistCompleteBeforeCommit(t *testing.T) {
 	})
 	r.activeManualCompactionID = requestID
 	r.applyFloretCompaction(&observation.CompactionEvent{
-		RunID:                runID,
-		ThreadID:             th.ThreadID,
-		TurnID:               r.messageID,
-		OperationID:          operationID,
-		RequestID:            requestID,
-		Phase:                observation.CompactionPhaseComplete,
-		Status:               observation.CompactionStatusCompacted,
-		Trigger:              "manual",
-		Reason:               "manual",
-		CompactionID:         "compact-idle-context-commit-gate",
-		CompactionGeneration: 1,
-		CompactionWindowID:   "window-idle-context-commit-gate",
-		TokensBefore:         1_000,
-		TokensAfterEstimate:  200,
-		ObservedAt:           time.UnixMilli(startedAt + 1),
+		RunID:               runID,
+		ThreadID:            th.ThreadID,
+		TurnID:              r.messageID,
+		OperationID:         operationID,
+		RequestID:           requestID,
+		Phase:               observation.CompactionPhaseComplete,
+		Status:              observation.CompactionStatusCompacted,
+		Trigger:             "manual",
+		Reason:              "manual",
+		TokensBefore:        1_000,
+		TokensAfterEstimate: 200,
+		ObservedAt:          time.UnixMilli(startedAt + 1),
 	})
 
 	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, threadstore.Message{
@@ -1349,21 +1340,13 @@ func TestIdleContextCompactionDoesNotPersistCompleteBeforeCommit(t *testing.T) {
 	}, meta.UserPublicID, meta.UserEmail); err != nil {
 		t.Fatalf("AppendMessage racing user: %v", err)
 	}
-	compacted := threadstore.ThreadCompactedContext{
-		OperationID:             operationID,
-		CompactionID:            "compact-idle-context-commit-gate",
-		CompactionGeneration:    1,
-		CompactionWindowID:      "window-idle-context-commit-gate",
-		CoveredThroughTurnRowID: boundary.TurnRowID,
-		CoveredThroughMessageID: boundary.MessageID,
-		Transcript: []threadstore.ThreadCompactedMessage{{
-			Role:    "assistant",
-			Content: "summary that must not be committed after boundary changes",
-		}},
-		CreatedAtUnixMs: startedAt + 2,
+	continuation := threadstore.ThreadProviderContinuation{
+		State:           threadstore.ProviderContinuationState{Kind: "responses", ID: "resp_idle_context_commit_gate"},
+		ProviderID:      "provider",
+		Model:           "model",
 		UpdatedAtUnixMs: startedAt + 2,
 	}
-	err = svc.commitIdleThreadCompaction(ctx, svc.threadsDB, meta.EndpointID, th.ThreadID, operationID, threadstore.ThreadProviderContinuation{}, compacted)
+	err = svc.commitIdleThreadCompaction(ctx, svc.threadsDB, meta.EndpointID, th.ThreadID, runID, operationID, continuation)
 	if !errors.Is(err, threadstore.ErrThreadContextBoundaryChanged) {
 		t.Fatalf("commitIdleThreadCompaction err=%v, want %v", err, threadstore.ErrThreadContextBoundaryChanged)
 	}

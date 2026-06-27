@@ -139,9 +139,6 @@ func (r *run) persistFloretCompactionDebug(debug *observation.CompactionDebugEve
 		"compaction_convergence_attempt":       debug.CompactionConvergenceAttempt,
 		"history_message_count":                debug.HistoryMessageCount,
 		"active_message_count":                 debug.ActiveMessageCount,
-		"compaction_id":                        strings.TrimSpace(debug.CompactionID),
-		"compaction_generation":                debug.CompactionGeneration,
-		"compaction_window_id":                 strings.TrimSpace(debug.CompactionWindowID),
 		"tokens_before":                        debug.TokensBefore,
 		"tokens_after_estimate":                debug.TokensAfterEstimate,
 		"context_before":                       debug.ContextBefore,
@@ -153,8 +150,8 @@ func (r *run) persistFloretCompactionDebug(debug *observation.CompactionDebugEve
 		"fixed_input_tokens":                   debug.FixedInputTokens,
 		"reducible_input_tokens":               debug.ReducibleInputTokens,
 		"request_safe_limit":                   debug.RequestSafeLimit,
-		"compacted_context_target_tokens":      debug.CompactedContextTargetTokens,
-		"next_compacted_context_target_tokens": debug.NextCompactedContextTargetTokens,
+		"compact_target_tokens":               debug.CompactedContextTargetTokens,
+		"next_compact_target_tokens":          debug.NextCompactedContextTargetTokens,
 		"consecutive_failures":                 debug.ConsecutiveFailures,
 		"duration_ms":                          debug.DurationMS,
 		"provider_state_kind":                  strings.TrimSpace(debug.ProviderStateKind),
@@ -212,7 +209,7 @@ func (r *run) applyFloretCompaction(compaction *observation.CompactionEvent) {
 func (r *run) flowerContextCompactionDecoration(compaction FlowerContextCompaction) FlowerTimelineDecoration {
 	operationID := strings.TrimSpace(compaction.OperationID)
 	if operationID == "" {
-		operationID = firstNonEmptyString(strings.TrimSpace(compaction.CompactionID), fmt.Sprintf("%s:%d:%s", strings.TrimSpace(compaction.RunID), compaction.StepIndex, strings.TrimSpace(compaction.Phase)))
+		operationID = fmt.Sprintf("%s:%d:%s", strings.TrimSpace(compaction.RunID), compaction.StepIndex, strings.TrimSpace(compaction.Phase))
 		compaction.OperationID = operationID
 	}
 	anchor := r.contextCompactionAnchor(operationID)
@@ -497,20 +494,17 @@ func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent, 
 		runID = fallbackRunID
 	}
 	return FlowerContextCompaction{
-		OperationID:          strings.TrimSpace(compaction.OperationID),
-		RunID:                runID,
-		StepIndex:            compaction.Step,
-		Phase:                strings.TrimSpace(compaction.Phase),
-		Status:               normalizeFlowerContextCompactionStatus(compaction.Status),
-		Trigger:              strings.TrimSpace(compaction.Trigger),
-		Reason:               strings.TrimSpace(compaction.Reason),
-		CompactionID:         strings.TrimSpace(compaction.CompactionID),
-		CompactionGeneration: compaction.CompactionGeneration,
-		CompactionWindowID:   strings.TrimSpace(compaction.CompactionWindowID),
-		TokensBefore:         compaction.TokensBefore,
-		TokensAfterEstimate:  compaction.TokensAfterEstimate,
-		Error:                strings.TrimSpace(compaction.Error),
-		UpdatedAtMs:          updatedAt,
+		OperationID:         strings.TrimSpace(compaction.OperationID),
+		RunID:               runID,
+		StepIndex:           compaction.Step,
+		Phase:               strings.TrimSpace(compaction.Phase),
+		Status:              normalizeFlowerContextCompactionStatus(compaction.Status),
+		Trigger:             strings.TrimSpace(compaction.Trigger),
+		Reason:              strings.TrimSpace(compaction.Reason),
+		TokensBefore:        compaction.TokensBefore,
+		TokensAfterEstimate: compaction.TokensAfterEstimate,
+		Error:               strings.TrimSpace(compaction.Error),
+		UpdatedAtMs:         updatedAt,
 	}
 }
 

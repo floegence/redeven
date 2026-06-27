@@ -235,9 +235,6 @@ type FlowerSubagentTurnMarkerView struct {
 }
 
 type FlowerSubagentCompactionView struct {
-	SummarySchemaVersion string            `json:"summary_schema_version,omitempty"`
-	CompactionGeneration int               `json:"compaction_generation,omitempty"`
-	Summary              string            `json:"summary,omitempty"`
 	Trigger              string            `json:"trigger,omitempty"`
 	Reason               string            `json:"reason,omitempty"`
 	Phase                string            `json:"phase,omitempty"`
@@ -357,20 +354,13 @@ type RunStartRequest struct {
 	Options  RunOptions `json:"options"`
 }
 
-// RunRequest is the internal run request for Go runtime execution (includes history).
+// RunRequest is the internal run request for Go runtime execution.
 type RunRequest struct {
 	Model           string                       `json:"model"`
 	Objective       string                       `json:"objective,omitempty"`
-	History         []RunHistoryMsg              `json:"history"`
 	Input           RunInput                     `json:"input"`
 	Options         RunOptions                   `json:"options"`
-	ContextPack     contextmodel.PromptPack      `json:"-"`
 	ModelCapability contextmodel.ModelCapability `json:"-"`
-}
-
-type RunHistoryMsg struct {
-	Role string `json:"role"`
-	Text string `json:"text"`
 }
 
 type RunInput struct {

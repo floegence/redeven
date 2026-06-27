@@ -228,8 +228,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       if (!tid) throw new Error(missingThreadIDMessage(options));
       return options.compactThreadContext({
         thread_id: tid,
-        expected_run_id: trim(input.expected_run_id) || undefined,
-        source: 'slash_command',
+        active_run_id: trim(input.active_run_id) || undefined,
       });
     },
     stopThread: async (threadID) => {

@@ -184,9 +184,6 @@ export type FlowerContextCompaction = Readonly<{
   status: FlowerContextCompactionStatus | string;
   trigger?: string;
   reason?: string;
-  compaction_id?: string;
-  compaction_generation?: number;
-  compaction_window_id?: string;
   tokens_before?: number;
   tokens_after_estimate?: number;
   error?: string;
@@ -478,7 +475,6 @@ export type FlowerSubagentTurnMarkerView = Readonly<{
 
 export type FlowerSubagentCompactionView = Readonly<{
   summary_schema_version?: string;
-  compaction_generation?: number;
   summary?: string;
   trigger?: string;
   reason?: string;
@@ -945,8 +941,7 @@ export type FlowerTurnLaunchInput = Readonly<{
 
 export type FlowerCompactThreadContextInput = Readonly<{
   thread_id: string;
-  expected_run_id?: string;
-  source: 'slash_command';
+  active_run_id?: string;
 }>;
 
 export type FlowerTurnLaunchFailure = Error & Readonly<{

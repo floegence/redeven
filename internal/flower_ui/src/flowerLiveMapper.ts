@@ -246,7 +246,6 @@ function mapContextCompaction(raw: unknown): FlowerContextCompaction | null {
   const updatedAt = integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms);
   if (!operationID || !phase || !status) return null;
   const stepIndex = optionalInteger(record.step_index);
-  const compactionGeneration = optionalInteger(record.compaction_generation);
   const tokensBefore = optionalInteger(record.tokens_before);
   const tokensAfterEstimate = optionalInteger(record.tokens_after_estimate);
   return {
@@ -257,9 +256,6 @@ function mapContextCompaction(raw: unknown): FlowerContextCompaction | null {
     status,
     ...(trim(record.trigger) ? { trigger: trim(record.trigger) } : {}),
     ...(trim(record.reason) ? { reason: trim(record.reason) } : {}),
-    ...(trim(record.compaction_id) ? { compaction_id: trim(record.compaction_id) } : {}),
-    ...(compactionGeneration ? { compaction_generation: compactionGeneration } : {}),
-    ...(trim(record.compaction_window_id) ? { compaction_window_id: trim(record.compaction_window_id) } : {}),
     ...(tokensBefore ? { tokens_before: tokensBefore } : {}),
     ...(tokensAfterEstimate ? { tokens_after_estimate: tokensAfterEstimate } : {}),
     ...(trim(record.error) ? { error: trim(record.error) } : {}),

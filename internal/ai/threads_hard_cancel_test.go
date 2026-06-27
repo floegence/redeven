@@ -286,21 +286,13 @@ func TestService_CancelThreadCancelsIdleCompaction(t *testing.T) {
 		t.Fatalf("idleThreadCompactionOperation=%q, want empty after cancel", got)
 	}
 
-	compacted := threadstore.ThreadCompactedContext{
-		OperationID:             begin.OperationID,
-		CompactionID:            "cmp_cancel_late_rejected",
-		CompactionGeneration:    1,
-		CompactionWindowID:      "window_cancel_late_rejected",
-		CoveredThroughTurnRowID: boundary.TurnRowID,
-		CoveredThroughMessageID: boundary.MessageID,
-		Transcript: []threadstore.ThreadCompactedMessage{{
-			Role:    "assistant",
-			Content: "late summary must not persist",
-		}},
-		CreatedAtUnixMs: time.Now().UnixMilli(),
+	continuation := threadstore.ThreadProviderContinuation{
+		State:           threadstore.ProviderContinuationState{Kind: "responses", ID: "late_cancelled_response"},
+		ProviderID:      "openai",
+		Model:           "gpt-5-mini",
 		UpdatedAtUnixMs: time.Now().UnixMilli(),
 	}
-	err = svc.commitIdleThreadCompaction(ctx, svc.threadsDB, meta.EndpointID, th.ThreadID, begin.OperationID, threadstore.ThreadProviderContinuation{}, compacted)
+	err = svc.commitIdleThreadCompaction(ctx, svc.threadsDB, meta.EndpointID, th.ThreadID, begin.RunID, begin.OperationID, continuation)
 	if !errors.Is(err, errIdleCompactionNotCurrent) {
 		t.Fatalf("commitIdleThreadCompaction err=%v, want %v", err, errIdleCompactionNotCurrent)
 	}
@@ -308,8 +300,8 @@ func TestService_CancelThreadCancelsIdleCompaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetThreadState: %v", err)
 	}
-	if state != nil && !state.CompactedContext.IsZero() {
-		t.Fatalf("CompactedContext=%+v, want empty after rejected late commit", state.CompactedContext)
+	if state != nil && !state.ProviderContinuation.IsZero() {
+		t.Fatalf("ProviderContinuation=%+v, want empty after rejected late commit", state.ProviderContinuation)
 	}
 	events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, "run_cancel_idle_compaction", 20)
 	if err != nil {
@@ -368,21 +360,22 @@ func TestService_BeginIdleCompactionReplacesCancelledUnfinishedOperation(t *test
 		t.Fatalf("second cancel callback was called unexpectedly")
 	}
 
-	compacted := threadstore.ThreadCompactedContext{
-		OperationID:          first.OperationID,
-		CompactionID:         "cmp_replace_first_late",
-		CompactionGeneration: 1,
-		CompactionWindowID:   "window_replace_first_late",
-		Transcript: []threadstore.ThreadCompactedMessage{{
-			Role:    "assistant",
-			Content: "late summary must not persist",
-		}},
-		CreatedAtUnixMs: time.Now().UnixMilli(),
+	continuation := threadstore.ThreadProviderContinuation{
+		State:           threadstore.ProviderContinuationState{Kind: "responses", ID: "late_replaced_response"},
+		ProviderID:      "openai",
+		Model:           "gpt-5-mini",
 		UpdatedAtUnixMs: time.Now().UnixMilli(),
 	}
-	err = svc.commitIdleThreadCompaction(ctx, svc.threadsDB, meta.EndpointID, th.ThreadID, first.OperationID, threadstore.ThreadProviderContinuation{}, compacted)
+	err = svc.commitIdleThreadCompaction(ctx, svc.threadsDB, meta.EndpointID, th.ThreadID, first.RunID, first.OperationID, continuation)
 	if !errors.Is(err, errIdleCompactionNotCurrent) {
 		t.Fatalf("first late commit err=%v, want %v", err, errIdleCompactionNotCurrent)
+	}
+	state, err := svc.threadsDB.GetThreadState(ctx, meta.EndpointID, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThreadState: %v", err)
+	}
+	if state != nil && !state.ProviderContinuation.IsZero() {
+		t.Fatalf("ProviderContinuation=%+v, want empty after replaced late commit", state.ProviderContinuation)
 	}
 }
 

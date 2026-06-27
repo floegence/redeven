@@ -367,21 +367,13 @@ func TestService_StopThread_InvalidatesIdleCompactionBeforeLateCommit(t *testing
 	svc.persistOpTO = 2 * time.Second
 	svc.mu.Unlock()
 
-	compacted := threadstore.ThreadCompactedContext{
-		OperationID:             begin.OperationID,
-		CompactionID:            "cmp_late_rejected",
-		CompactionGeneration:    1,
-		CompactionWindowID:      "window_late_rejected",
-		CoveredThroughTurnRowID: boundary.TurnRowID,
-		CoveredThroughMessageID: boundary.MessageID,
-		Transcript: []threadstore.ThreadCompactedMessage{{
-			Role:    "assistant",
-			Content: "late summary must not persist",
-		}},
-		CreatedAtUnixMs: time.Now().UnixMilli(),
+	continuation := threadstore.ThreadProviderContinuation{
+		State:           threadstore.ProviderContinuationState{Kind: "responses", ID: "resp_late_rejected"},
+		ProviderID:      "provider",
+		Model:           "model",
 		UpdatedAtUnixMs: time.Now().UnixMilli(),
 	}
-	err = svc.commitIdleThreadCompaction(ctx, svc.threadsDB, meta.EndpointID, th.ThreadID, begin.OperationID, threadstore.ThreadProviderContinuation{}, compacted)
+	err = svc.commitIdleThreadCompaction(ctx, svc.threadsDB, meta.EndpointID, th.ThreadID, begin.RunID, begin.OperationID, continuation)
 	if !errors.Is(err, errIdleCompactionNotCurrent) {
 		t.Fatalf("commitIdleThreadCompaction err=%v, want %v", err, errIdleCompactionNotCurrent)
 	}
@@ -389,8 +381,8 @@ func TestService_StopThread_InvalidatesIdleCompactionBeforeLateCommit(t *testing
 	if err != nil {
 		t.Fatalf("GetThreadState: %v", err)
 	}
-	if state != nil && !state.CompactedContext.IsZero() {
-		t.Fatalf("CompactedContext=%+v, want empty after rejected late commit", state.CompactedContext)
+	if state != nil && !state.ProviderContinuation.IsZero() {
+		t.Fatalf("ProviderContinuation=%+v, want empty after rejected late commit", state.ProviderContinuation)
 	}
 
 	events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, "run_stop_idle_late", 20)

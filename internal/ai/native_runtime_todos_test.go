@@ -3,8 +3,6 @@ package ai
 import (
 	"context"
 	"testing"
-
-	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 )
 
 func TestExtractWriteTodosState(t *testing.T) {
@@ -135,35 +133,14 @@ func TestUpdateTodoRuntimeState(t *testing.T) {
 	}
 }
 
-func TestDeriveTodoRuntimeStateFromPromptPack(t *testing.T) {
-	t.Parallel()
-
-	openCount, inProgressCount, ok := deriveTodoRuntimeStateFromPromptPack(contextmodel.PromptPack{
-		PendingTodos: []contextmodel.MemoryItem{
-			{MemoryID: "thread_todo::todo_1", Content: "[in_progress] Inspect workspace"},
-			{MemoryID: "thread_todo::todo_2", Content: "Run tests"},
-		},
-	})
-	if !ok {
-		t.Fatalf("expected prompt-pack todo state to be available")
-	}
-	if openCount != 2 || inProgressCount != 1 {
-		t.Fatalf("unexpected prompt-pack todo state open=%d in_progress=%d", openCount, inProgressCount)
-	}
-}
-
-func TestHydrateTodoRuntimeState_NoPromptPackFallback(t *testing.T) {
+func TestHydrateTodoRuntimeStateRequiresThreadSnapshot(t *testing.T) {
 	t.Parallel()
 
 	r := &run{}
 	state := newRuntimeState("objective")
-	source, hydrated := r.hydrateTodoRuntimeState(context.Background(), &state, contextmodel.PromptPack{
-		PendingTodos: []contextmodel.MemoryItem{
-			{MemoryID: "thread_todo::todo_1", Content: "Inspect workspace"},
-		},
-	})
+	source, hydrated := r.hydrateTodoRuntimeState(context.Background(), &state)
 	if hydrated {
-		t.Fatalf("expected no todo hydration from prompt pack (thread snapshot is authoritative)")
+		t.Fatalf("expected no todo hydration without thread snapshot")
 	}
 	if source != "" {
 		t.Fatalf("source=%q, want empty", source)

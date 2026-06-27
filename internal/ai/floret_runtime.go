@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
-	"unicode/utf8"
 
 	flconfig "github.com/floegence/floret/config"
 	flruntime "github.com/floegence/floret/runtime"
@@ -13,7 +14,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 )
 
-func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, providerCfg config.AIProvider, apiKey string, taskObjective string, adapterOverride ...ModelGateway) error {
+func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerCfg config.AIProvider, apiKey string, taskObjective string, adapterOverride ...ModelGateway) error {
 	if r == nil {
 		return errors.New("nil run")
 	}
@@ -82,7 +83,7 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 		"provider_base_url": strings.TrimSpace(providerCfg.BaseURL),
 		"model":             modelName,
 	})
-	r.persistRunEvent("floret.projected_turn.start", RealtimeStreamKindLifecycle, map[string]any{
+	r.persistRunEvent("floret.host_turn.start", RealtimeStreamKindLifecycle, map[string]any{
 		"engine":          "floret",
 		"provider_type":   providerType,
 		"model":           modelName,
@@ -109,11 +110,8 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 	r.persistRunEvent("capability.contract.resolved", RealtimeStreamKindLifecycle, capabilityContract.eventPayload())
 	r.ensureSkillManager()
 
-	if strings.TrimSpace(req.ContextPack.Objective) != "" {
-		taskObjective = strings.TrimSpace(req.ContextPack.Objective)
-	}
 	state := newRuntimeState(taskObjective)
-	if source, hydrated := r.hydrateTodoRuntimeState(ctx, &state, req.ContextPack); hydrated {
+	if source, hydrated := r.hydrateTodoRuntimeState(ctx, &state); hydrated {
 		r.persistRunEvent("todo.hydrated", RealtimeStreamKindLifecycle, map[string]any{
 			"source":           source,
 			"todo_total_count": state.TodoTotalCount,
@@ -124,10 +122,6 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 	}
 	sharedState := newFloretToolRuntimeState(state)
 
-	history, err := flowerMessagesToFloret(buildMessagesForRun(req))
-	if err != nil {
-		return r.failRun("Failed to project Floret transcript", err)
-	}
 	providerContinuation := newProviderContinuationProjector(r, providerCfg.ID, providerType, modelName, providerCfg.BaseURL)
 	previousState, err := providerContinuation.PreviousState(ctx)
 	if err != nil {
@@ -137,7 +131,6 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 	if req.ModelCapability.MaxContextTokens > 0 {
 		contextWindow = req.ModelCapability.MaxContextTokens
 	}
-	inputContextLimit := resolveInputContextLimit(contextWindow, req.Options.MaxInputTokens)
 	systemPrompt := r.buildLayeredSystemPrompt(taskObjective, permissionTypeString(permissionType), taskComplexity, 0, true, activeTools, state, "", capabilityContract)
 	flTools, err := buildFloretToolRegistry(r, activeTools, sharedState)
 	if err != nil {
@@ -173,33 +166,37 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 	if maxTotalTokens <= 0 {
 		maxTotalTokens = 0
 	}
-	floretCfg := redevenFloretAdapterConfig(systemPrompt, floretContextPolicy(contextWindow, inputContextLimit, req.Options.MaxOutputTokens), req.Options.ReasoningSelection)
-
-	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
-	result, err := flruntime.RunProjectedTurn(ctx, flruntime.ProjectedTurnOptions{
+	floretCfg := redevenFloretAdapterConfig(systemPrompt, floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens), req.Options.ReasoningSelection)
+	store, err := r.openFloretThreadStore()
+	if err != nil {
+		return r.failRun("Failed to initialize Floret context store", err)
+	}
+	defer func() { _ = store.Close() }()
+	host, err := flruntime.NewHost(flruntime.HostOptions{
 		Config:       floretCfg,
 		ModelGateway: flProvider,
+		Store:        store,
 		Tools:        flTools,
 		Approver:     floretToolApproverForRun(r),
 		Sink:         floretEventSink{run: r},
-		CompactionSummarizer: floretProjectedCompactionSummarizer{
-			gateway:  flProvider,
-			provider: providerType,
-			model:    modelName,
-			labels:   labels,
-		},
-		ManualCompactions: r,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
 		},
-	}, flruntime.ProjectedTurnRequest{
-		RunID:                 flruntime.RunID(strings.TrimSpace(r.id)),
-		ThreadID:              flruntime.ThreadID(strings.TrimSpace(r.threadID)),
+	})
+	if err != nil {
+		return r.failRun("Failed to initialize Floret host", err)
+	}
+	threadID := flruntime.ThreadID(strings.TrimSpace(r.threadID))
+	if err := ensureFloretThread(ctx, host, threadID); err != nil {
+		return r.failRun("Failed to initialize Floret thread", err)
+	}
+
+	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
+	result, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
+		ThreadID:              threadID,
 		TurnID:                flruntime.TurnID(strings.TrimSpace(r.messageID)),
-		TraceID:               flruntime.TraceID(strings.TrimSpace(r.id)),
-		PromptScopeID:         flruntime.PromptScopeID(strings.TrimSpace(r.threadID)),
-		History:               history,
+		Input:                 floretCurrentTurnInput(req.Input),
 		Labels:                labels,
 		PreviousProviderState: previousState,
 		Completion:            completionPolicy,
@@ -219,16 +216,15 @@ func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, provid
 		return nil
 	}
 	r.publishFinalActivityTimeline(result.ActivityTimeline)
-	r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), estimateFloretHistoryTokens(systemPrompt, history, activeTools))
+	r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), 0)
 	r.setProviderContinuationCandidate(providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState)))
-	r.setThreadCompactedContextCandidate(floretTurnResultToThreadCompactedContext(result, r.getCompletedContextCompaction()))
 	if ctx.Err() != nil && result.Status != flruntime.TurnStatusCompleted && result.Status != flruntime.TurnStatusWaiting {
 		return r.failRun("Floret run was canceled", ctx.Err())
 	}
 	return r.projectFloretResult(ctx, result, req, sharedState.snapshot(), taskComplexity, permissionTypeString(permissionType))
 }
 
-func (r *run) projectFloretResult(ctx context.Context, result flruntime.ProjectedTurnResult, req RunRequest, state runtimeState, complexity string, permissionType string) error {
+func (r *run) projectFloretResult(ctx context.Context, result flruntime.TurnResult, req RunRequest, state runtimeState, complexity string, permissionType string) error {
 	if !r.acceptsEngineResultProjection() {
 		return nil
 	}
@@ -302,10 +298,10 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.Projecte
 	case flruntime.TurnStatusFailed:
 		resultErr := errors.New(strings.TrimSpace(result.Error))
 		if strings.TrimSpace(result.Error) == "" {
-			resultErr = errors.New("floret projected turn failed")
+			resultErr = errors.New("floret host turn failed")
 		}
 		if finishReason := floretFailureFinishReason(result); finishReason != "" {
-			r.persistFloretProjectedTurnResult(step, result, finishReason)
+			r.persistFloretHostTurnResult(step, result, finishReason)
 			return r.failReplyFinish(step, finishReason, floretFailureFinalizationReason(finishReason), floretFailureMessage(finishReason))
 		}
 		return r.failRunWithCode(classifyRunFailureCode(resultErr, runErrorCodeFloretEngineFailed), "", resultErr)
@@ -334,7 +330,7 @@ func redevenFloretAdapterConfig(systemPrompt string, contextPolicy flconfig.Cont
 	}
 }
 
-func floretFailureFinishReason(result flruntime.ProjectedTurnResult) string {
+func floretFailureFinishReason(result flruntime.TurnResult) string {
 	finishReason := normalizeReplyFinishReason(result.FinishReason)
 	if finishReason == "unknown" {
 		finishReason = normalizeReplyFinishReason(result.RawFinishReason)
@@ -366,12 +362,12 @@ func floretFailureMessage(finishReason string) string {
 	}
 }
 
-func (r *run) persistFloretProjectedTurnResult(step int, result flruntime.ProjectedTurnResult, finishReason string) {
+func (r *run) persistFloretHostTurnResult(step int, result flruntime.TurnResult, finishReason string) {
 	if r == nil {
 		return
 	}
 	usage := flowerUsageFromFloret(result.Metrics.ProviderUsage)
-	r.persistRunEvent("floret.projected_turn.result", RealtimeStreamKindLifecycle, map[string]any{
+	r.persistRunEvent("floret.host_turn.result", RealtimeStreamKindLifecycle, map[string]any{
 		"step_index":    step,
 		"finish_reason": normalizeReplyFinishReason(finishReason),
 		"tool_calls":    result.Metrics.ToolCalls,
@@ -429,141 +425,59 @@ func (r *run) projectFloretAskUserWaiting(step int, signal *flruntime.TurnSignal
 	return nil
 }
 
-func flowerMessagesToFloret(messages []Message) ([]flruntime.TranscriptMessage, error) {
-	out := make([]flruntime.TranscriptMessage, 0, len(messages))
-	for i, msg := range messages {
-		role := strings.ToLower(strings.TrimSpace(msg.Role))
-		switch role {
-		case "user", "assistant", "tool":
-		case "system":
-			continue
-		default:
-			return nil, fmt.Errorf("message %d has unsupported role %q", i, msg.Role)
-		}
-		if role == "tool" {
-			for _, part := range msg.Content {
-				if !strings.EqualFold(strings.TrimSpace(part.Type), "tool_result") {
-					continue
-				}
-				text := strings.TrimSpace(part.Text)
-				if text == "" && len(part.JSON) > 0 {
-					text = string(part.JSON)
-				}
-				out = append(out, flruntime.TranscriptMessage{
-					Role:       "tool",
-					Content:    text,
-					ToolCallID: toolCallIDFromPart(part),
-					ToolName:   strings.TrimSpace(part.ToolName),
-				})
-			}
-			continue
-		}
-		if role == "assistant" {
-			assistantText := messageTextForFloret(msg, false)
-			reasoning := messageReasoningForFloret(msg)
-			if strings.TrimSpace(assistantText) != "" || strings.TrimSpace(reasoning) != "" {
-				out = append(out, flruntime.TranscriptMessage{Role: role, Content: assistantText, Reasoning: reasoning})
-			}
-			for _, part := range msg.Content {
-				if !strings.EqualFold(strings.TrimSpace(part.Type), "tool_call") {
-					continue
-				}
-				args := strings.TrimSpace(part.ArgsJSON)
-				if args == "" && len(part.JSON) > 0 {
-					args = strings.TrimSpace(string(part.JSON))
-				}
-				if args == "" {
-					args = "{}"
-				}
-				out = append(out, flruntime.TranscriptMessage{
-					Role:       "assistant",
-					Content:    "tool_call",
-					Reasoning:  reasoning,
-					ToolCallID: toolCallIDFromPart(part),
-					ToolName:   strings.TrimSpace(part.ToolName),
-					ToolArgs:   args,
-				})
-			}
-			continue
-		}
-		text := messageTextForFloret(msg, true)
-		if strings.TrimSpace(text) == "" {
-			continue
-		}
-		out = append(out, flruntime.TranscriptMessage{Role: role, Content: text})
+func floretCurrentTurnInput(input RunInput) string {
+	parts := make([]string, 0, 1+len(input.Attachments))
+	if text := strings.TrimSpace(input.Text); text != "" {
+		parts = append(parts, text)
 	}
-	return out, nil
-}
-
-func messageTextForFloret(msg Message, includeAttachments bool) string {
-	parts := make([]string, 0, len(msg.Content))
-	for _, part := range msg.Content {
-		switch strings.ToLower(strings.TrimSpace(part.Type)) {
-		case "text":
-			if txt := strings.TrimSpace(part.Text); txt != "" {
-				parts = append(parts, txt)
-			}
-		case "file", "image":
-			if !includeAttachments {
-				continue
-			}
-			label := strings.TrimSpace(part.Text)
-			if label == "" {
-				label = strings.TrimSpace(part.FileURI)
-			}
-			if label != "" {
-				parts = append(parts, "Attachment: "+label)
-			}
+	for _, attachment := range input.Attachments {
+		label := strings.TrimSpace(attachment.Name)
+		if label == "" {
+			label = strings.TrimSpace(attachment.URL)
 		}
+		if label == "" {
+			continue
+		}
+		line := "Attachment: " + label
+		if mimeType := strings.TrimSpace(attachment.MimeType); mimeType != "" {
+			line += " (" + mimeType + ")"
+		}
+		if uri := strings.TrimSpace(attachment.URL); uri != "" && uri != label {
+			line += "\n" + uri
+		}
+		parts = append(parts, line)
 	}
 	return strings.Join(parts, "\n\n")
 }
 
-func messageReasoningForFloret(msg Message) string {
-	parts := make([]string, 0, 1)
-	for _, part := range msg.Content {
-		if strings.EqualFold(strings.TrimSpace(part.Type), "reasoning") && strings.TrimSpace(part.Text) != "" {
-			parts = append(parts, strings.TrimSpace(part.Text))
-		}
-	}
-	return strings.Join(parts, "\n\n")
-}
-
-func floretContextPolicy(contextWindow int, inputLimit int, maxOutput int) flconfig.ContextPolicy {
+func floretModelContextPolicy(contextWindow int, maxOutput int) flconfig.ContextPolicy {
 	if contextWindow <= 0 {
 		contextWindow = modelGatewayDefaultContextLimit
-	}
-	if inputLimit <= 0 {
-		inputLimit = resolveInputContextLimit(contextWindow, 0)
-	}
-	threshold := int64(inputLimit)
-	if threshold <= 0 {
-		threshold = int64(contextWindow)
 	}
 	return flconfig.ContextPolicy{
 		ContextWindowTokens:   int64(contextWindow),
 		MaxOutputTokens:       int64(maxOutput),
 		ReservedOutputTokens:  int64(maxOutput),
-		RecentTailTokens:      threshold,
-		RecentUserTokens:      threshold / 2,
 		MaxCompactionFailures: 2,
 	}
 }
 
-func estimateFloretHistoryTokens(systemPrompt string, history []flruntime.TranscriptMessage, tools []ToolDef) int {
-	total := utf8.RuneCountInString(systemPrompt) / 4
-	for _, msg := range history {
-		total += utf8.RuneCountInString(msg.Content) / 4
-		total += utf8.RuneCountInString(msg.Reasoning) / 4
-		total += utf8.RuneCountInString(msg.ToolArgs) / 4
+func (r *run) openFloretThreadStore() (*flruntime.Store, error) {
+	path, err := floretThreadStorePath(r.stateDir)
+	if err != nil {
+		return nil, err
 	}
-	for _, tool := range tools {
-		total += utf8.RuneCountInString(tool.Name) / 4
-		total += utf8.RuneCountInString(tool.Description) / 4
-		total += len(tool.InputSchema) / 4
+	return flruntime.OpenSQLiteStore(path)
+}
+
+func floretThreadStorePath(stateDir string) (string, error) {
+	stateDir = strings.TrimSpace(stateDir)
+	if stateDir == "" {
+		return "", errors.New("missing state dir for Floret thread store")
 	}
-	if total <= 0 {
-		return 1
+	dir := filepath.Join(stateDir, "ai")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
 	}
-	return total
+	return filepath.Join(dir, "floret_threads.sqlite"), nil
 }

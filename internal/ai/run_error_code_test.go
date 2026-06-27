@@ -49,11 +49,11 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 func TestUserFacingRunErrorHidesFloretWrapperWhenProviderCodeExists(t *testing.T) {
 	t.Parallel()
 
-	msg := userFacingRunError(runErrorCodeProviderAuthFailed, "Floret projected turn failed")
+	msg := userFacingRunError(runErrorCodeProviderAuthFailed, "Floret hosted turn failed")
 	if msg == "" {
 		t.Fatalf("userFacingRunError returned empty message")
 	}
-	if msg == "Floret projected turn failed" {
+	if msg == "Floret hosted turn failed" {
 		t.Fatalf("userFacingRunError exposed internal Floret wrapper")
 	}
 }

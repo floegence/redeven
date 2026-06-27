@@ -100,12 +100,10 @@ describe('Redeven v1 AI codec', () => {
   it('round trips compact thread context payloads', () => {
     expect(toWireAICompactThreadContextRequest({
       threadId: ' th_compact ',
-      expectedRunId: ' run_live ',
-      source: 'slash_command',
+      activeRunId: ' run_live ',
     })).toEqual({
       thread_id: 'th_compact',
-      expected_run_id: 'run_live',
-      source: 'slash_command',
+      active_run_id: 'run_live',
     });
 
     expect(fromWireAICompactThreadContextResponse({
