@@ -131,6 +131,62 @@ func TestRunFloretHostedTurnCompletesEmptyTaskCompleteFromStreamedText(t *testin
 	}
 }
 
+func TestRunFloretHostedTurnEmitsContextUsageFromPublishedHost(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 8)
+	provider := &capturingTurnProvider{}
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "bash",
+		AIConfig:     &config.AIConfig{},
+		SessionMeta: &session.Meta{
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+			CanAdmin:   true,
+		},
+		RunID:     "run_floret_context_usage_projection",
+		ThreadID:  "thread_floret_context_usage_projection",
+		MessageID: "msg_floret_context_usage_projection",
+	})
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+
+	err := r.runFloretHostedTurn(t.Context(), RunRequest{
+		Model: "compat/gpt-5-mini",
+		Input: RunInput{Text: "verify the published Floret host emits context status"},
+		Options: RunOptions{
+			PermissionType:  config.AIPermissionApprovalRequired,
+			MaxOutputTokens: 500,
+		},
+		ModelCapability: contextmodel.ModelCapability{
+			MaxContextTokens: 128000,
+		},
+	}, config.AIProvider{
+		ID:      "compat",
+		Type:    "openai_compatible",
+		BaseURL: "https://example.test/v1",
+	}, "sk-test", "verify context usage", provider)
+	if err != nil {
+		t.Fatalf("runFloretHostedTurn: %v", err)
+	}
+
+	usages := contextUsagesFromStreamEvents(events)
+	if len(usages) == 0 {
+		t.Fatalf("events missing context usage: %#v", events)
+	}
+	first := usages[0]
+	if first.RunID != r.id ||
+		first.Phase != observation.ContextPhaseProjectedRequest ||
+		first.InputTokens <= 0 ||
+		first.ContextWindowTokens <= 0 ||
+		strings.TrimSpace(first.PressureStatus) == "" {
+		t.Fatalf("context usage=%#v", first)
+	}
+}
+
 func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 	t.Parallel()
 
@@ -330,6 +386,16 @@ func compactStatusesFromStreamEvents(events []any) []string {
 	return out
 }
 
+func contextUsagesFromStreamEvents(events []any) []FlowerContextUsage {
+	out := make([]FlowerContextUsage, 0, 2)
+	for _, ev := range events {
+		if usage, ok := ev.(streamEventContextUsage); ok {
+			out = append(out, usage.Usage)
+		}
+	}
+	return out
+}
+
 func TestRunFloretHostedTurnProjectsWebSearchToolThroughFloretGateway(t *testing.T) {
 	t.Parallel()
 
@@ -491,9 +557,9 @@ func TestFloretEventSinkProjectsContextObservations(t *testing.T) {
 	}
 	sink := floretEventSink{run: r}
 	sink.EmitEvent(flruntime.Event{
-		RunID: "run_context_projection",
+		RunID: "msg_context_projection",
 		ContextStatus: &observation.ContextStatus{
-			RunID:    "run_context_projection",
+			RunID:    "msg_context_projection",
 			ThreadID: "thread_context_projection",
 			TurnID:   "msg_context_projection",
 			Step:     1,
@@ -537,7 +603,8 @@ func TestFloretEventSinkProjectsContextObservations(t *testing.T) {
 	if !ok {
 		t.Fatalf("events[0]=%T, want streamEventContextUsage", events[0])
 	}
-	if usage.Usage.Phase != observation.ContextPhaseProjectedRequest ||
+	if usage.Usage.RunID != "run_context_projection" ||
+		usage.Usage.Phase != observation.ContextPhaseProjectedRequest ||
 		usage.Usage.InputTokens != 600 ||
 		usage.Usage.ContextWindowTokens != 1000 ||
 		usage.Usage.PressureStatus != observation.ContextStatusStable {

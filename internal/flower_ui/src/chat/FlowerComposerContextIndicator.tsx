@@ -2,13 +2,18 @@ import { Show, createMemo, createSignal, createUniqueId } from 'solid-js';
 
 import type { FlowerContextUsage } from '../contracts/flowerSurfaceContracts';
 import type { FlowerSurfaceCopy } from '../copy';
-import { buildFlowerComposerContextIndicatorView } from './flowerContextPresentation';
+import {
+  buildFlowerComposerContextIndicatorView,
+  type FlowerComposerContextUsageFreshness,
+} from './flowerContextPresentation';
 
 export function FlowerComposerContextIndicator(props: {
   usage: FlowerContextUsage;
+  freshness?: FlowerComposerContextUsageFreshness;
   copy: FlowerSurfaceCopy;
 }) {
-  const view = createMemo(() => buildFlowerComposerContextIndicatorView(props.usage, props.copy));
+  const freshness = createMemo<FlowerComposerContextUsageFreshness>(() => props.freshness ?? 'current');
+  const view = createMemo(() => buildFlowerComposerContextIndicatorView(props.usage, props.copy, freshness()));
   const [tooltipOpen, setTooltipOpen] = createSignal(false);
   const tooltipID = `flower-composer-context-${createUniqueId()}`;
   const progressStyle = createMemo(() => ({
@@ -23,6 +28,7 @@ export function FlowerComposerContextIndicator(props: {
       class="flower-composer-context-indicator"
       data-context-pressure={view().tone}
       data-context-ratio={dataRatio()}
+      data-context-freshness={freshness()}
       onPointerEnter={() => setTooltipOpen(true)}
       onPointerLeave={() => setTooltipOpen(false)}
     >

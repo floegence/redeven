@@ -87,7 +87,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('const selectedModelStatusIndicator = () => modelStatusIndicator(selectedModelIOStatus(), selectedModelStatusLabel())');
     expect(src).toContain('{selectedModelStatusIndicator()}');
     expect(src).toContain('<Show when={selectedContextUsage()}>');
-    expect(src).toContain('<FlowerComposerContextIndicator usage={usage()} copy={copy()} />');
+    expect(src).toContain('usage={contextUsage().usage}');
+    expect(src).toContain('freshness={contextUsage().freshness}');
     expect(src).toContain('copy().chat.modelStatus');
     expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus');
     expect(src).toContain('data-text={base}');

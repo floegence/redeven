@@ -461,9 +461,9 @@ func flowerContextUsageFromFloret(status *observation.ContextStatus, fallbackRun
 	if updatedAt <= 0 {
 		updatedAt = 0
 	}
-	runID := strings.TrimSpace(status.RunID)
+	runID := strings.TrimSpace(fallbackRunID)
 	if runID == "" {
-		runID = fallbackRunID
+		runID = strings.TrimSpace(status.RunID)
 	}
 	return FlowerContextUsage{
 		RunID:                  runID,
