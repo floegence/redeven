@@ -275,11 +275,11 @@ func (s *Service) flowerLivePersistedContextState(ctx context.Context, endpointI
 
 func flowerContextCompactionTerminal(compaction FlowerContextCompaction) bool {
 	switch strings.TrimSpace(compaction.Status) {
-	case "compacted", "failed", "cancelled":
+	case "compacted", "failed", "cancelled", "noop":
 		return true
 	}
 	switch strings.TrimSpace(compaction.Phase) {
-	case "complete", "failed", "cancelled":
+	case "complete", "failed", "cancelled", "noop":
 		return true
 	}
 	return false
@@ -838,6 +838,14 @@ func flowerLiveStreamHasTimelineReplacementAfter(stream *flowerLiveThreadStream,
 }
 
 func (s *Service) buildFlowerTimelineReplacedEvent(endpointID string, threadID string, sourceSeq int64, state FlowerLiveMaterializedState, atUnixMs int64) (FlowerLiveEvent, bool) {
+	persistedState, err := s.flowerLivePersistedContextState(context.Background(), endpointID, threadID)
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("ai: failed to load persisted Flower context state for timeline replacement", "endpoint_id", endpointID, "thread_id", threadID, "error", err)
+		}
+		return FlowerLiveEvent{}, false
+	}
+	state = mergeFlowerLivePersistedContextState(state, persistedState)
 	timeline, err := s.buildFlowerTimelineMessages(context.Background(), endpointID, threadID, state)
 	if err != nil {
 		return FlowerLiveEvent{}, false

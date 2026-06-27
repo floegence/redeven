@@ -319,6 +319,7 @@ export type FlowerSurfaceCopy = Readonly<{
       compacted: string;
       failed: string;
       cancelled: string;
+      noop: string;
       fallback: string;
       tokenChange: (before: string, after: string) => string;
     }>;
@@ -463,6 +464,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       compacted: 'Context compacted',
       failed: 'Context compaction failed',
       cancelled: 'Context compaction cancelled',
+      noop: 'Context does not need compression',
       fallback: 'Context checkpoint',
       tokenChange: (before, after) => `${before} to ${after}`,
     },

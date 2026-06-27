@@ -233,6 +233,76 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 	}
 }
 
+func TestRunFloretHostedTurnManualCompactionNoopContinuesStreaming(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 16)
+	provider := &capturingTurnProvider{}
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "bash",
+		AIConfig:     &config.AIConfig{},
+		SessionMeta: &session.Meta{
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+			CanAdmin:   true,
+		},
+		RunID:     "run_floret_manual_noop_streaming",
+		ThreadID:  "thread_floret_manual_noop_streaming",
+		MessageID: "msg_floret_manual_noop_streaming",
+	})
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+	r.pendingManualCompaction = &flruntime.ManualCompactionRequest{
+		RequestID:   "manual-noop-request",
+		Source:      "slash_command",
+		RequestedAt: time.UnixMilli(1_000),
+	}
+	r.contextCompactionAnchors = map[string]FlowerTimelineAnchor{
+		"manual-noop-request": {
+			TargetKind: "message",
+			MessageID:  "msg_floret_manual_noop_streaming",
+			Edge:       "after",
+		},
+	}
+
+	err := r.runFloretHostedTurn(t.Context(), RunRequest{
+		Model: "compat/gpt-5-mini",
+		Input: RunInput{Text: "short turn with manual compact"},
+		Options: RunOptions{
+			PermissionType: config.AIPermissionApprovalRequired,
+		},
+		ModelCapability: contextmodel.ModelCapability{
+			MaxContextTokens: 256000,
+		},
+	}, config.AIProvider{
+		ID:      "compat",
+		Type:    "openai_compatible",
+		BaseURL: "https://example.test/v1",
+	}, "sk-test", "manual noop", provider)
+	if err != nil {
+		t.Fatalf("runFloretHostedTurn: %v", err)
+	}
+	if got := compactStatusesFromStreamEvents(events); len(got) == 0 || got[len(got)-1] != "noop" {
+		t.Fatalf("compaction statuses=%#v, want terminal noop", got)
+	}
+	if r.activeManualCompactionID != "" {
+		t.Fatalf("activeManualCompactionID=%q, want cleared after noop", r.activeManualCompactionID)
+	}
+	if _, ok := r.completeManualCompactionIDs["manual-noop-request"]; !ok {
+		t.Fatalf("completeManualCompactionIDs=%#v, want noop request recorded complete", r.completeManualCompactionIDs)
+	}
+	_, assistantText, _, err := r.snapshotAssistantMessageJSON()
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
+	}
+	if assistantText != "done" {
+		t.Fatalf("assistantText=%q, want provider response after noop", assistantText)
+	}
+}
+
 func hasFloretMarkdownContent(events []any, content string) bool {
 	for _, ev := range events {
 		if blockDelta, ok := ev.(streamEventBlockDelta); ok && blockDelta.Delta == content {

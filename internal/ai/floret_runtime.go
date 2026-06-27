@@ -127,7 +127,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if err != nil {
 		return r.failRun("Failed to load provider continuation", err)
 	}
-	contextWindow := modelGatewayDefaultContextLimit
+	contextWindow := modelGatewayDefaultContextWindowTokens
 	if req.ModelCapability.MaxContextTokens > 0 {
 		contextWindow = req.ModelCapability.MaxContextTokens
 	}
@@ -207,7 +207,8 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 			MaxCostUSD:             req.Options.MaxCostUSD,
 			MaxLengthContinuations: 2,
 		},
-		Reasoning: req.Options.ReasoningSelection,
+		Reasoning:         req.Options.ReasoningSelection,
+		ManualCompactions: r,
 	})
 	if err != nil && result.Status == "" {
 		return r.failRunWithCode(classifyRunFailureCode(err, runErrorCodeFloretEngineFailed), "", err)
@@ -452,7 +453,7 @@ func floretCurrentTurnInput(input RunInput) string {
 
 func floretModelContextPolicy(contextWindow int, maxOutput int) flconfig.ContextPolicy {
 	if contextWindow <= 0 {
-		contextWindow = modelGatewayDefaultContextLimit
+		contextWindow = modelGatewayDefaultContextWindowTokens
 	}
 	return flconfig.ContextPolicy{
 		ContextWindowTokens:   int64(contextWindow),

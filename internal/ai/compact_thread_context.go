@@ -21,6 +21,20 @@ func idleManualCompactionOperationID(runID string, requestID string) string {
 	return flruntime.ManualCompactionOperationID(flruntime.RunID(strings.TrimSpace(runID)), 1, strings.TrimSpace(requestID))
 }
 
+func idleCompactThreadResultStatus(result flruntime.CompactThreadResult) string {
+	status := strings.TrimSpace(result.Status)
+	switch {
+	case status == "compacted":
+		return "compacted"
+	case status == "completed" && result.Metrics.Compactions > 0:
+		return "compacted"
+	case status == "noop" || status == "completed" && result.Metrics.Compactions == 0:
+		return "noop"
+	default:
+		return ""
+	}
+}
+
 var errIdleCompactionNotCurrent = errors.New("context compaction operation is no longer current")
 
 const idleCompactionGateRunEventType = "context.compaction.gate"
@@ -777,7 +791,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	if err != nil {
 		return err
 	}
-	contextWindow := modelGatewayDefaultContextLimit
+	contextWindow := modelGatewayDefaultContextWindowTokens
 	if modelCapability.MaxContextTokens > 0 {
 		contextWindow = modelCapability.MaxContextTokens
 	}
@@ -818,10 +832,25 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(result.Status) != "compacted" {
+	operationID := idleManualCompactionOperationID(runID, manual.RequestID)
+	switch idleCompactThreadResultStatus(result) {
+	case "compacted":
+	case "noop":
+		s.publishIdleContextCompaction(endpointID, threadID, runID, FlowerContextCompaction{
+			OperationID:         operationID,
+			RunID:               runID,
+			Phase:               "noop",
+			Status:              "noop",
+			Trigger:             "manual",
+			Reason:              "manual",
+			TokensBefore:        result.Metrics.ProviderUsage.InputTokens,
+			TokensAfterEstimate: result.Metrics.ProviderUsage.WindowInputTokens,
+			UpdatedAtMs:         time.Now().UnixMilli(),
+		}, anchor)
+		return nil
+	default:
 		return ErrNoCompactableContext
 	}
-	operationID := idleManualCompactionOperationID(runID, manual.RequestID)
 	pctx, cancel := context.WithTimeout(context.Background(), persistTO)
 	continuation := providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState))
 	if err := s.commitIdleThreadCompaction(pctx, db, endpointID, threadID, runID, operationID, continuation); err != nil {

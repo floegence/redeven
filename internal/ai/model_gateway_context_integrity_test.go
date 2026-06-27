@@ -3,83 +3,10 @@ package ai
 import (
 	"encoding/json"
 	"errors"
-	"strings"
 	"testing"
 
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
-
-func TestCompactMessages_PrependsDeclarationForRetainedToolResult(t *testing.T) {
-	t.Parallel()
-
-	messages := []Message{
-		{Role: "user", Content: []ContentPart{{Type: "text", Text: "start"}}},
-		{Role: "assistant", Content: []ContentPart{{Type: "text", Text: "ack"}}},
-		{
-			Role: "assistant",
-			Content: []ContentPart{
-				{Type: "reasoning", Text: "need shell"},
-				{Type: "tool_call", ToolCallID: "call_1", ToolName: "terminal.exec", ArgsJSON: `{"command":"pwd"}`},
-			},
-		},
-		{
-			Role: "tool",
-			Content: []ContentPart{
-				{Type: "tool_result", ToolCallID: "call_1", Text: `{"status":"success","summary":"ok"}`},
-			},
-		},
-		{Role: "user", Content: []ContentPart{{Type: "text", Text: "filler-1"}}},
-		{Role: "assistant", Content: []ContentPart{{Type: "text", Text: "filler-2"}}},
-		{Role: "user", Content: []ContentPart{{Type: "text", Text: "filler-3"}}},
-		{Role: "assistant", Content: []ContentPart{{Type: "text", Text: "filler-4"}}},
-		{Role: "user", Content: []ContentPart{{Type: "text", Text: "filler-5"}}},
-		{Role: "assistant", Content: []ContentPart{{Type: "text", Text: "filler-6"}}},
-		{Role: "user", Content: []ContentPart{{Type: "text", Text: "filler-7"}}},
-		{Role: "assistant", Content: []ContentPart{{Type: "text", Text: "filler-8"}}},
-		{Role: "user", Content: []ContentPart{{Type: "text", Text: "filler-9"}}},
-	}
-
-	compacted, stats := compactMessages(messages)
-	if stats.PrependedAssistantMessages < 1 {
-		t.Fatalf("prepended_assistant_messages=%d, want >=1", stats.PrependedAssistantMessages)
-	}
-
-	missing := findMissingToolCallIDs(compacted)
-	if len(missing) != 0 {
-		t.Fatalf("missing_tool_call_ids=%v, want none", missing)
-	}
-
-	callDeclIdx := -1
-	toolResultIdx := -1
-	for idx, msg := range compacted {
-		if callDeclIdx < 0 {
-			for _, id := range toolCallIDsFromAssistantMessage(msg) {
-				if id == "call_1" {
-					callDeclIdx = idx
-					break
-				}
-			}
-		}
-		if toolResultIdx >= 0 {
-			continue
-		}
-		for _, part := range msg.Content {
-			if part.Type == "tool_result" && toolCallIDFromPart(part) == "call_1" {
-				toolResultIdx = idx
-				break
-			}
-		}
-	}
-	if callDeclIdx < 0 {
-		t.Fatalf("missing declaration for call_1")
-	}
-	if toolResultIdx < 0 {
-		t.Fatalf("missing tool_result for call_1")
-	}
-	if callDeclIdx >= toolResultIdx {
-		t.Fatalf("declaration index=%d must be before tool_result index=%d", callDeclIdx, toolResultIdx)
-	}
-}
 
 func TestEnforceToolReferenceIntegrity_DropsOrphanToolResult(t *testing.T) {
 	t.Parallel()
@@ -170,54 +97,6 @@ func TestIsProviderToolCallReferenceError(t *testing.T) {
 	}
 }
 
-func TestPruneToolResultPayloads_KeepsRecentTurnsAndPreservesCallID(t *testing.T) {
-	t.Parallel()
-
-	oldPayload := strings.Repeat("A", 1200)
-	recentPayload := strings.Repeat("B", 1200)
-	latestPayload := strings.Repeat("C", 1200)
-
-	messages := []Message{
-		{Role: "user", Content: []ContentPart{{Type: "text", Text: "u1"}}},
-		{Role: "assistant", Content: []ContentPart{{Type: "tool_call", ToolCallID: "call_1", ToolName: "terminal.exec", ArgsJSON: `{"command":"ls"}`}}},
-		{Role: "tool", Content: []ContentPart{{Type: "tool_result", ToolCallID: "call_1", Text: oldPayload}}},
-		{Role: "user", Content: []ContentPart{{Type: "text", Text: "u2"}}},
-		{Role: "assistant", Content: []ContentPart{{Type: "tool_call", ToolCallID: "call_2", ToolName: "terminal.exec", ArgsJSON: `{"command":"pwd"}`}}},
-		{Role: "tool", Content: []ContentPart{{Type: "tool_result", ToolCallID: "call_2", Text: recentPayload}}},
-		{Role: "user", Content: []ContentPart{{Type: "text", Text: "u3"}}},
-		{Role: "assistant", Content: []ContentPart{{Type: "tool_call", ToolCallID: "call_3", ToolName: "terminal.exec", ArgsJSON: `{"command":"whoami"}`}}},
-		{Role: "tool", Content: []ContentPart{{Type: "tool_result", ToolCallID: "call_3", Text: latestPayload}}},
-		{Role: "user", Content: []ContentPart{{Type: "text", Text: "u4"}}},
-	}
-
-	out, stats := pruneToolResultPayloads(messages, 10, 2, 32)
-	if stats.PrunedParts != 1 {
-		t.Fatalf("pruned_parts=%d, want 1", stats.PrunedParts)
-	}
-	if stats.ProtectedStartIndex != 4 {
-		t.Fatalf("protected_start_index=%d, want 4", stats.ProtectedStartIndex)
-	}
-
-	oldResult, ok := toolResultTextForCallID(out, "call_1")
-	if !ok {
-		t.Fatalf("missing tool_result for call_1")
-	}
-	if !strings.Contains(oldResult, "[tool_result_compacted] call_id=call_1") {
-		t.Fatalf("call_1 placeholder missing call_id, got=%q", oldResult)
-	}
-	if !strings.Contains(oldResult, "preview: ") {
-		t.Fatalf("call_1 placeholder missing preview, got=%q", oldResult)
-	}
-
-	recentResult, ok := toolResultTextForCallID(out, "call_2")
-	if !ok {
-		t.Fatalf("missing tool_result for call_2")
-	}
-	if recentResult != recentPayload {
-		t.Fatalf("call_2 should stay unpruned")
-	}
-}
-
 func TestEnforceToolReferenceIntegrity_DropsOutOfOrderToolResultPart(t *testing.T) {
 	t.Parallel()
 
@@ -256,19 +135,4 @@ func TestEnforceToolReferenceIntegrity_DropsOutOfOrderToolResultPart(t *testing.
 	if len(findMissingToolCallIDs(out)) != 0 {
 		t.Fatalf("output still has missing tool call ids")
 	}
-}
-
-func toolResultTextForCallID(messages []Message, callID string) (string, bool) {
-	for _, msg := range messages {
-		for _, part := range msg.Content {
-			if part.Type != "tool_result" {
-				continue
-			}
-			if toolCallIDFromPart(part) != callID {
-				continue
-			}
-			return part.Text, true
-		}
-	}
-	return "", false
 }

@@ -100,14 +100,52 @@ function messageForSummaryOnlyDetail(threadID: string, detail: FlowerSubagentDet
   };
 }
 
+function subagentCompactionPhase(phase: string): FlowerContextCompaction['phase'] {
+  const normalized = trimString(phase);
+  switch (normalized) {
+    case 'start':
+      return 'start';
+    case 'failed':
+      return 'failed';
+    case 'cancelled':
+      return 'cancelled';
+    case 'noop':
+      return 'noop';
+    case 'complete':
+    case 'compacted':
+      return 'complete';
+    default:
+      return normalized ? 'checkpoint' : 'complete';
+  }
+}
+
+function subagentCompactionStatus(phase: FlowerContextCompaction['phase']): FlowerContextCompaction['status'] {
+  switch (phase) {
+    case 'start':
+      return 'compacting';
+    case 'failed':
+      return 'failed';
+    case 'cancelled':
+      return 'cancelled';
+    case 'noop':
+      return 'noop';
+    case 'checkpoint':
+      return 'checkpoint';
+    case 'complete':
+    default:
+      return 'compacted';
+  }
+}
+
 function compactionDecoration(threadID: string, row: FlowerSubagentTimelineRow, anchorMessageID: string): FlowerTimelineDecoration | null {
   if (row.kind !== 'compaction' || !row.compaction || !trimString(anchorMessageID)) return null;
   const ordinal = Math.max(0, Math.floor(Number(row.ordinal ?? 0)));
   const operationID = `${safeIDPart(threadID)}:compaction:${ordinal}`;
+  const phase = subagentCompactionPhase(row.compaction.phase ?? '');
   const compaction: FlowerContextCompaction = {
     operation_id: operationID,
-    phase: trimString(row.compaction.phase) || 'complete',
-    status: trimString(row.compaction.phase) === 'failed' ? 'failed' : 'compacted',
+    phase,
+    status: subagentCompactionStatus(phase),
     trigger: trimString(row.compaction.trigger),
     reason: trimString(row.compaction.reason) || trimString(row.compaction.summary),
     tokens_before: Number(row.compaction.tokens_before ?? 0) || undefined,

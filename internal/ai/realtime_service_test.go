@@ -896,6 +896,203 @@ func TestRunContextCompactionAnchorRemainsStableAcrossOperationEvents(t *testing
 	}
 }
 
+func TestRunFinalizationCancelsUnfinishedManualCompaction(t *testing.T) {
+	t.Parallel()
+
+	svc := newRealtimeTestService(t, 0)
+	ctx := context.Background()
+	meta := session.Meta{
+		EndpointID:        "env_manual_compact_finalize",
+		NamespacePublicID: "ns_manual_compact_finalize",
+		ChannelID:         "ch_manual_compact_finalize",
+		UserPublicID:      "u_manual_compact_finalize",
+		UserEmail:         "manual-compact-finalize@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+	}
+	th, err := svc.CreateThread(ctx, &meta, "manual compact finalize", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	appendFlowerTimelineTestMessage(t, svc.threadsDB, meta.EndpointID, th.ThreadID, "msg-before-manual-finalize", "assistant", "ready", 1_000)
+
+	r := newRun(runOptions{
+		RunID:            "run-manual-compact-finalize",
+		EndpointID:       meta.EndpointID,
+		ThreadID:         th.ThreadID,
+		MessageID:        "msg-manual-compact-finalize",
+		ThreadsDB:        svc.threadsDB,
+		PersistOpTimeout: time.Second,
+		OnStreamEvent: func(ev any) {
+			svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, "run-manual-compact-finalize", ev)
+		},
+	})
+	if _, err := r.EnqueueManualCompaction(ctx, flruntime.ManualCompactionRequest{
+		RequestID:   "manual-finalize-request",
+		Source:      "slash_command",
+		RequestedAt: time.UnixMilli(2_000),
+	}); err != nil {
+		t.Fatalf("EnqueueManualCompaction: %v", err)
+	}
+
+	r.cancelUnfinishedManualCompactions("run_finished")
+
+	if _, ok, err := r.PollManualCompaction(ctx, flruntime.ManualCompactionPollRequest{}); err != nil || ok {
+		t.Fatalf("PollManualCompaction after finalization returned ok=%v err=%v, want no pending request", ok, err)
+	}
+	events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, "run-manual-compact-finalize", 10)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	var found bool
+	for _, event := range events {
+		if event.EventType != "context.compaction.updated" {
+			continue
+		}
+		var payload FlowerLiveContextCompactionUpdatedPayload
+		if err := json.Unmarshal([]byte(event.PayloadJSON), &payload); err != nil {
+			t.Fatalf("unmarshal compaction payload: %v", err)
+		}
+		got := payload.Compaction
+		if got.OperationID == "manual-finalize-request" && got.Status == "cancelled" && got.Reason == "run_finished" {
+			found = true
+			if payload.TimelineDecoration.Compaction.OperationID != got.OperationID {
+				t.Fatalf("decoration compaction=%#v, want operation %s", payload.TimelineDecoration.Compaction, got.OperationID)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("run events did not contain cancelled manual compaction: %#v", events)
+	}
+
+	svc.mu.Lock()
+	delete(svc.flowerLiveByThread, runThreadKey(meta.EndpointID, th.ThreadID))
+	svc.mu.Unlock()
+	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
+	}
+	if len(bootstrap.LiveState.ContextCompactions) != 1 {
+		t.Fatalf("context compactions=%#v, want one cancelled event", bootstrap.LiveState.ContextCompactions)
+	}
+	got := bootstrap.LiveState.ContextCompactions[0]
+	if got.OperationID != "manual-finalize-request" || got.Status != "cancelled" || got.Phase != "cancelled" {
+		t.Fatalf("context compaction=%#v, want finalized cancelled request", got)
+	}
+}
+
+func TestRunFinalizationCancelsStartedManualCompactionWithFloretOperationID(t *testing.T) {
+	t.Parallel()
+
+	svc := newRealtimeTestService(t, 0)
+	ctx := context.Background()
+	meta := session.Meta{
+		EndpointID:        "env_manual_compact_started_finalize",
+		NamespacePublicID: "ns_manual_compact_started_finalize",
+		ChannelID:         "ch_manual_compact_started_finalize",
+		UserPublicID:      "u_manual_compact_started_finalize",
+		UserEmail:         "manual-compact-started-finalize@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+	}
+	th, err := svc.CreateThread(ctx, &meta, "manual compact started finalize", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	appendFlowerTimelineTestMessage(t, svc.threadsDB, meta.EndpointID, th.ThreadID, "msg-before-started-manual-finalize", "assistant", "ready", 1_000)
+
+	const runID = "run-manual-compact-started-finalize"
+	const requestID = "manual-started-finalize-request"
+	const step = 2
+	operationID := string(flruntime.ManualCompactionOperationID(flruntime.RunID(runID), step, requestID))
+	r := newRun(runOptions{
+		RunID:            runID,
+		EndpointID:       meta.EndpointID,
+		ThreadID:         th.ThreadID,
+		MessageID:        "msg-manual-compact-started-finalize",
+		ThreadsDB:        svc.threadsDB,
+		PersistOpTimeout: time.Second,
+		OnStreamEvent: func(ev any) {
+			svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, ev)
+		},
+	})
+	if _, err := r.EnqueueManualCompaction(ctx, flruntime.ManualCompactionRequest{
+		RequestID:   requestID,
+		Source:      "slash_command",
+		RequestedAt: time.UnixMilli(2_000),
+	}); err != nil {
+		t.Fatalf("EnqueueManualCompaction: %v", err)
+	}
+	if polled, ok, err := r.PollManualCompaction(ctx, flruntime.ManualCompactionPollRequest{
+		RunID:  flruntime.RunID(runID),
+		TurnID: flruntime.TurnID(r.messageID),
+		Step:   step,
+	}); err != nil || !ok || polled.RequestID != requestID {
+		t.Fatalf("PollManualCompaction got=%#v ok=%v err=%v", polled, ok, err)
+	}
+	r.applyFloretCompaction(&observation.CompactionEvent{
+		OperationID: operationID,
+		RequestID:   requestID,
+		RunID:       runID,
+		ThreadID:    th.ThreadID,
+		TurnID:      r.messageID,
+		Step:        step,
+		Phase:       observation.CompactionPhaseStart,
+		Status:      observation.CompactionStatusRunning,
+		Trigger:     "manual",
+		Reason:      "manual",
+		ObservedAt:  time.UnixMilli(2_100),
+	})
+
+	r.cancelUnfinishedManualCompactions("run_finished")
+
+	if _, ok, err := r.PollManualCompaction(ctx, flruntime.ManualCompactionPollRequest{}); err != nil || ok {
+		t.Fatalf("PollManualCompaction after finalization returned ok=%v err=%v, want no pending request", ok, err)
+	}
+	events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, runID, 10)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	var contextEvents []FlowerContextCompaction
+	for _, event := range events {
+		if event.EventType != "context.compaction.updated" {
+			continue
+		}
+		var payload FlowerLiveContextCompactionUpdatedPayload
+		if err := json.Unmarshal([]byte(event.PayloadJSON), &payload); err != nil {
+			t.Fatalf("unmarshal compaction payload: %v", err)
+		}
+		contextEvents = append(contextEvents, payload.Compaction)
+		if payload.Compaction.OperationID != operationID {
+			t.Fatalf("context event operation_id=%q, want %q", payload.Compaction.OperationID, operationID)
+		}
+	}
+	if len(contextEvents) != 2 {
+		t.Fatalf("context events=%#v, want start and cancelled events", contextEvents)
+	}
+	if contextEvents[0].Status != "compacting" || contextEvents[1].Status != "cancelled" || contextEvents[1].Reason != "run_finished" {
+		t.Fatalf("context event lifecycle=%#v, want compacting then cancelled", contextEvents)
+	}
+
+	svc.mu.Lock()
+	delete(svc.flowerLiveByThread, runThreadKey(meta.EndpointID, th.ThreadID))
+	svc.mu.Unlock()
+	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
+	}
+	if len(bootstrap.LiveState.ContextCompactions) != 1 {
+		t.Fatalf("context compactions=%#v, want one terminal event", bootstrap.LiveState.ContextCompactions)
+	}
+	got := bootstrap.LiveState.ContextCompactions[0]
+	if got.OperationID != operationID || got.Status != "cancelled" || got.Phase != "cancelled" {
+		t.Fatalf("context compaction=%#v, want finalized cancelled operation", got)
+	}
+}
+
 func TestFlowerLiveBootstrapRestoresPersistedContextState(t *testing.T) {
 	t.Parallel()
 
@@ -1072,6 +1269,117 @@ func TestIdleContextCompactionEventsRestoreFromLiveBootstrap(t *testing.T) {
 	decoration := bootstrap.LiveState.TimelineDecorations[0]
 	if decoration.Compaction.Status != "cancelled" || decoration.Anchor.MessageID != "msg_idle_context_restore" {
 		t.Fatalf("bootstrap decoration=%#v, want cancelled decoration anchored after assistant", decoration)
+	}
+}
+
+func TestIdleContextCompactionNoopRestoresFromLiveBootstrap(t *testing.T) {
+	t.Parallel()
+
+	svc := newRealtimeTestService(t, 0)
+	ctx := context.Background()
+	meta := session.Meta{
+		ChannelID:         "ch_idle_context_noop_restore",
+		EndpointID:        "env_idle_context_noop_restore",
+		UserPublicID:      "u_idle_context_noop_restore",
+		UserEmail:         "idle-context-noop-restore@example.com",
+		NamespacePublicID: "ns_idle_context_noop_restore",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+	}
+	th, err := svc.CreateThread(ctx, &meta, "idle context noop restore", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, threadstore.Message{
+		ThreadID:        th.ThreadID,
+		EndpointID:      meta.EndpointID,
+		MessageID:       "msg_idle_context_noop_restore",
+		Role:            "assistant",
+		Status:          "complete",
+		TextContent:     "ready",
+		MessageJSON:     `{"id":"msg_idle_context_noop_restore","role":"assistant","content":"ready","status":"complete","created_at_ms":1000}`,
+		CreatedAtUnixMs: 1000,
+		UpdatedAtUnixMs: 1000,
+	}, meta.UserPublicID, meta.UserEmail); err != nil {
+		t.Fatalf("AppendMessage: %v", err)
+	}
+	anchor := FlowerTimelineAnchor{
+		TargetKind: "message",
+		MessageID:  "msg_idle_context_noop_restore",
+		Edge:       "after",
+	}
+	runID := "run_idle_context_noop_restore"
+	now := time.Now().UnixMilli()
+	svc.publishIdleContextCompaction(meta.EndpointID, th.ThreadID, runID, FlowerContextCompaction{
+		OperationID: "compact-idle-noop-restore",
+		RunID:       runID,
+		Phase:       "start",
+		Status:      "compacting",
+		Trigger:     "manual",
+		Reason:      "manual",
+		UpdatedAtMs: now,
+	}, anchor)
+	svc.publishIdleContextCompaction(meta.EndpointID, th.ThreadID, runID, FlowerContextCompaction{
+		OperationID: "compact-idle-noop-restore",
+		RunID:       runID,
+		Phase:       "noop",
+		Status:      "noop",
+		Trigger:     "manual",
+		Reason:      "manual",
+		UpdatedAtMs: now + 1,
+	}, anchor)
+
+	svc.mu.Lock()
+	delete(svc.flowerLiveByThread, runThreadKey(meta.EndpointID, th.ThreadID))
+	svc.mu.Unlock()
+
+	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
+	}
+	if len(bootstrap.LiveState.ContextCompactions) != 1 {
+		t.Fatalf("bootstrap context compactions=%#v, want one noop", bootstrap.LiveState.ContextCompactions)
+	}
+	got := bootstrap.LiveState.ContextCompactions[0]
+	if got.OperationID != "compact-idle-noop-restore" || got.Status != "noop" || got.Phase != "noop" {
+		t.Fatalf("bootstrap compaction=%#v, want noop compact-idle-noop-restore", got)
+	}
+	if len(bootstrap.LiveState.TimelineDecorations) != 1 {
+		t.Fatalf("bootstrap timeline decorations=%#v, want one noop", bootstrap.LiveState.TimelineDecorations)
+	}
+	decoration := bootstrap.LiveState.TimelineDecorations[0]
+	if decoration.Compaction.Status != "noop" || decoration.Anchor.MessageID != "msg_idle_context_noop_restore" {
+		t.Fatalf("bootstrap decoration=%#v, want noop decoration anchored after assistant", decoration)
+	}
+
+	nextRunID := "run_idle_context_noop_after_restore"
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, nextRunID, streamEventMessageStart{Type: "message-start", MessageID: "msg_idle_context_noop_after_restore"})
+	resp, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, 0, 10)
+	if err != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents after noop restore: %v", err)
+	}
+	var replacement FlowerLiveTimelineReplacedPayload
+	foundReplacement := false
+	for _, event := range resp.Events {
+		if event.Kind != FlowerLiveTimelineReplaced {
+			continue
+		}
+		if !decodeFlowerPayload(event.Payload, &replacement) {
+			t.Fatalf("decode timeline replacement payload: %s", string(event.Payload))
+		}
+		if len(replacement.LiveState.ContextCompactions) > 0 {
+			foundReplacement = true
+		}
+	}
+	if !foundReplacement {
+		t.Fatalf("timeline replacement after next run did not retain noop compaction: events=%#v", resp.Events)
+	}
+	if got := replacement.LiveState.ContextCompactions[0]; got.OperationID != "compact-idle-noop-restore" || got.Status != "noop" {
+		t.Fatalf("replacement context compaction=%#v, want retained noop", got)
+	}
+	if len(replacement.LiveState.TimelineDecorations) != 1 || replacement.LiveState.TimelineDecorations[0].Compaction.Status != "noop" {
+		t.Fatalf("replacement timeline decorations=%#v, want retained noop", replacement.LiveState.TimelineDecorations)
 	}
 }
 

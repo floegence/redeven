@@ -194,7 +194,21 @@ describe('FlowerSurface context telemetry', () => {
     const divider = runtime.querySelector('.flower-compaction-divider');
     expect(divider?.getAttribute('data-flower-compaction-status')).toBe('compacted');
     expect(divider?.textContent).toContain('Context compacted');
-    expect(divider?.textContent).toContain('60k to 488');
+    expect(divider?.textContent).not.toContain('60k to 488');
+    const pill = runtime.querySelector('.flower-compaction-divider-pill') as HTMLElement;
+    expect(pill.getAttribute('role')).toBe('button');
+    expect(pill.getAttribute('tabindex')).toBe('0');
+    pill.dispatchEvent(new Event('pointerenter'));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-compaction-divider-tooltip[data-open="true"]')));
+    expect(runtime.querySelector('.flower-compaction-divider-tooltip')?.textContent).toContain('60k to 488');
+    pill.dispatchEvent(new Event('pointerleave'));
+    await waitFor(() => !runtime.querySelector('.flower-compaction-divider-tooltip'));
+    pill.focus();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-compaction-divider-tooltip[data-open="true"]')));
+    pill.blur();
+    await waitFor(() => !runtime.querySelector('.flower-compaction-divider-tooltip'));
+    pill.click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-compaction-divider-tooltip[data-open="true"]')));
     expect(divider?.querySelector('button, a')).toBeNull();
     const messageIDs = Array.from(runtime.querySelectorAll('[data-flower-message-id]'))
       .map((node) => node.getAttribute('data-flower-message-id'));

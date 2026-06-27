@@ -112,9 +112,16 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(dividerSrc).toContain('data-flower-compaction-status={compaction().status}');
     expect(dividerSrc).toContain('class="flower-compaction-divider-tooltip"');
     expect(dividerSrc).toContain('role="tooltip"');
-    expect(dividerSrc).toContain("data-open={tooltipOpen() ? 'true' : undefined}");
+    expect(dividerSrc).toContain('when={tooltipOpen() && hasDetail()}');
+    expect(dividerSrc).toContain("role={hasDetail() ? 'button' : undefined}");
+    expect(dividerSrc).toContain('tabIndex={hasDetail() ? 0 : undefined}');
+    expect(dividerSrc).toContain('onFocus={openTooltip}');
+    expect(dividerSrc).toContain('onBlur={closeTooltip}');
+    expect(dividerSrc).toContain('onClick={openTooltip}');
+    expect(dividerSrc).toContain("event.key === 'Enter' || event.key === ' '");
+    expect(dividerSrc).toContain('data-open="true"');
+    expect(dividerSrc).not.toContain('when={detail()}');
     expect(dividerSrc).not.toContain('flower-compaction-divider-detail');
-    expect(dividerSrc).not.toContain('tabIndex=');
     expect(src).not.toContain("case 'decoration':");
   });
 

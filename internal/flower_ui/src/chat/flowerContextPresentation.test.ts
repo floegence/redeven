@@ -126,7 +126,8 @@ describe('flower context presentation', () => {
     expect(compactionDividerLabel(compaction({ status: 'compacted' }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Context compacted');
     expect(compactionDividerLabel(compaction({ status: 'failed' }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Context compaction failed');
     expect(compactionDividerLabel(compaction({ status: 'cancelled' }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Context compaction cancelled');
-    expect(compactionDividerLabel(compaction({ status: 'provider_custom' as 'compacted' }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Context checkpoint');
+    expect(compactionDividerLabel(compaction({ status: 'noop' }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Context does not need compression');
+    expect(compactionDividerLabel(compaction({ status: 'checkpoint' }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('Context checkpoint');
   });
 
   it('prefers token deltas for compaction details and falls back to errors or reasons', () => {
@@ -145,5 +146,10 @@ describe('flower context presentation', () => {
       reason: 'threshold',
       trigger: 'pre_request',
     }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('threshold');
+    expect(compactionDividerDetail(compaction({
+      status: 'noop',
+      reason: 'context_too_small',
+      trigger: 'manual',
+    }), DEFAULT_FLOWER_SURFACE_COPY)).toBe('context_too_small');
   });
 });

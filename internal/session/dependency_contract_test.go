@@ -117,22 +117,22 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	goSum := readRepoFile(t, root, "go.sum")
 	notices := readRepoFile(t, root, "THIRD_PARTY_NOTICES.md")
 
-	if !strings.Contains(goMod, "github.com/floegence/floret v0.3.37") {
-		t.Fatalf("go.mod must depend on floret v0.3.37")
+	if !strings.Contains(goMod, "github.com/floegence/floret v0.3.39") {
+		t.Fatalf("go.mod must depend on floret v0.3.39")
 	}
 	assertNoLocalGoModuleReference(t, "go.mod", goMod, "github.com/floegence/floret", "floret")
-	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.37 ") {
-		t.Fatalf("go.sum must include floret v0.3.37 module checksum")
+	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.39 ") {
+		t.Fatalf("go.sum must include floret v0.3.39 module checksum")
 	}
-	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.37/go.mod ") {
-		t.Fatalf("go.sum must include floret v0.3.37 go.mod checksum")
+	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.39/go.mod ") {
+		t.Fatalf("go.sum must include floret v0.3.39 go.mod checksum")
 	}
 	assertNoLocalGoModuleReference(t, "go.sum", goSum, "github.com/floegence/floret", "floret")
-	if !strings.Contains(notices, "| github.com/floegence/floret | v0.3.37 |") {
-		t.Fatalf("THIRD_PARTY_NOTICES.md must include floret v0.3.37")
+	if !strings.Contains(notices, "| github.com/floegence/floret | v0.3.39 |") {
+		t.Fatalf("THIRD_PARTY_NOTICES.md must include floret v0.3.39")
 	}
-	if !strings.Contains(notices, "github.com/floegence/floret@v0.3.37") {
-		t.Fatalf("THIRD_PARTY_NOTICES.md must link floret v0.3.37")
+	if !strings.Contains(notices, "github.com/floegence/floret@v0.3.39") {
+		t.Fatalf("THIRD_PARTY_NOTICES.md must link floret v0.3.39")
 	}
 }
 
@@ -152,6 +152,12 @@ func TestFloretContextLifecycleBoundaryDoesNotUseHostHistoryAPIs(t *testing.T) {
 		"Compact" + "PromptPack",
 		"context_" + "snapshots",
 		"compacted_" + "context_json",
+		"compact" + "Messages",
+		"prune" + "ToolResultPayloads",
+		"Compressed " + "context summary",
+		"tool_result_" + "compacted",
+		"modelGatewayDefault" + "CompactThreshold",
+		"modelGatewayToolResult" + "Prune",
 		"User" + "ProvidedContext",
 	}
 	allowedPrefixes := []string{
@@ -196,6 +202,68 @@ func TestFloretContextLifecycleBoundaryDoesNotUseHostHistoryAPIs(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("scan repository: %v", err)
+	}
+}
+
+func TestFloretContextPolicyUsesOnlyHostSelectableModelLimits(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	for _, rel := range []string{
+		filepath.Join("internal", "ai", "floret_runtime.go"),
+		filepath.Join("internal", "ai", "compact_thread_context.go"),
+	} {
+		content := readRepoFile(t, root, rel)
+		for _, marker := range []string{
+			"Recent" + "TailTokens",
+			"Recent" + "UserTokens",
+			"Compacted" + "ContextTargetTokens",
+			"Summary" + "Tokens",
+			"Prompt" + "CacheSegments",
+		} {
+			if strings.Contains(content, marker) {
+				t.Fatalf("%s must not set Floret context policy strategy field %q", rel, marker)
+			}
+		}
+	}
+}
+
+func TestFloretReadThreadIsLimitedToSubagentUIProjection(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	allowed := filepath.Join(root, "internal", "ai", "subagents_floret.go")
+	err := filepath.WalkDir(filepath.Join(root, "internal", "ai"), func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		content := string(data)
+		if strings.Contains(content, "host.Read"+"Thread(") && path != allowed {
+			rel, _ := filepath.Rel(root, path)
+			t.Fatalf("%s must not read Floret thread transcripts", rel)
+		}
+		if strings.Contains(content, ".Messages") && strings.Contains(content, "flruntime.ThreadSnapshot") && path != allowed {
+			rel, _ := filepath.Rel(root, path)
+			t.Fatalf("%s must not inspect Floret thread snapshot messages", rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan ai package: %v", err)
+	}
+	content := readRepoFile(t, root, filepath.Join("internal", "ai", "subagents_floret.go"))
+	if !strings.Contains(content, "syncProjectedSubagentThread") || !strings.Contains(content, "projectedSubagentMessage") {
+		t.Fatalf("subagents_floret.go must keep Floret ReadThread use scoped to projected subagent UI state")
 	}
 }
 

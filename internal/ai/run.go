@@ -175,13 +175,14 @@ type run struct {
 	currentModelID     string
 	currentReasoning   config.AIReasoningSelection
 
-	muManualCompaction           sync.Mutex
-	pendingManualCompaction      *flruntime.ManualCompactionRequest
-	activeManualCompactionID     string
-	completeManualCompactionIDs  map[string]struct{}
-	contextCompactionAnchors     map[string]FlowerTimelineAnchor
-	completedContextCompaction   observation.CompactionEvent
-	hostManagedContextCompaction bool
+	muManualCompaction                sync.Mutex
+	pendingManualCompaction           *flruntime.ManualCompactionRequest
+	activeManualCompactionID          string
+	activeManualCompactionOperationID string
+	completeManualCompactionIDs       map[string]struct{}
+	contextCompactionAnchors          map[string]FlowerTimelineAnchor
+	completedContextCompaction        observation.CompactionEvent
+	hostManagedContextCompaction      bool
 
 	webSearchToolEnabled bool
 	webSearchMode        string
@@ -206,6 +207,11 @@ type run struct {
 	terminalExecRunner func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
 	webFetchHTTPClient *http.Client
 	webFetchResolver   webFetchResolver
+}
+
+type activeManualCompaction struct {
+	RequestID   string
+	OperationID string
 }
 
 type assistantAnswerState struct {
@@ -650,12 +656,11 @@ func (r *run) PollManualCompaction(ctx context.Context, req flruntime.ManualComp
 	if r.pendingManualCompaction == nil || strings.TrimSpace(r.activeManualCompactionID) != "" {
 		return flruntime.ManualCompactionRequest{}, false, nil
 	}
-	if runID := strings.TrimSpace(string(req.RunID)); runID != "" && runID != strings.TrimSpace(r.id) {
-		return flruntime.ManualCompactionRequest{}, false, nil
-	}
 	manual := *r.pendingManualCompaction
 	r.pendingManualCompaction = nil
-	r.activeManualCompactionID = strings.TrimSpace(manual.RequestID)
+	requestID := strings.TrimSpace(manual.RequestID)
+	r.activeManualCompactionID = requestID
+	r.activeManualCompactionOperationID = strings.TrimSpace(flruntime.ManualCompactionOperationID(req.RunID, req.Step, requestID))
 	return manual, true, nil
 }
 
@@ -671,11 +676,85 @@ func (r *run) finishManualCompaction(requestID string) {
 	defer r.muManualCompaction.Unlock()
 	if strings.TrimSpace(r.activeManualCompactionID) == requestID {
 		r.activeManualCompactionID = ""
+		r.activeManualCompactionOperationID = ""
 	}
 	if r.completeManualCompactionIDs == nil {
 		r.completeManualCompactionIDs = map[string]struct{}{}
 	}
 	r.completeManualCompactionIDs[requestID] = struct{}{}
+}
+
+func (r *run) unfinishedManualCompactions() []activeManualCompaction {
+	if r == nil {
+		return nil
+	}
+	r.muManualCompaction.Lock()
+	defer r.muManualCompaction.Unlock()
+	seen := make(map[string]struct{}, 2)
+	out := make([]activeManualCompaction, 0, 2)
+	if r.pendingManualCompaction != nil {
+		if requestID := strings.TrimSpace(r.pendingManualCompaction.RequestID); requestID != "" {
+			if _, ok := r.completeManualCompactionIDs[requestID]; !ok {
+				seen[requestID] = struct{}{}
+				out = append(out, activeManualCompaction{RequestID: requestID, OperationID: requestID})
+			}
+		}
+		r.pendingManualCompaction = nil
+	}
+	if requestID := strings.TrimSpace(r.activeManualCompactionID); requestID != "" {
+		if _, complete := r.completeManualCompactionIDs[requestID]; !complete {
+			if _, duplicate := seen[requestID]; !duplicate {
+				operationID := strings.TrimSpace(r.activeManualCompactionOperationID)
+				if operationID == "" {
+					operationID = requestID
+				}
+				out = append(out, activeManualCompaction{RequestID: requestID, OperationID: operationID})
+			}
+		}
+		r.activeManualCompactionID = ""
+		r.activeManualCompactionOperationID = ""
+	}
+	return out
+}
+
+func (r *run) cancelUnfinishedManualCompactions(reason string) {
+	if r == nil {
+		return
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "run_finished"
+	}
+	for _, compaction := range r.unfinishedManualCompactions() {
+		r.applyFloretCompaction(&observation.CompactionEvent{
+			OperationID: compaction.OperationID,
+			RequestID:   compaction.RequestID,
+			RunID:       strings.TrimSpace(r.id),
+			ThreadID:    strings.TrimSpace(r.threadID),
+			TurnID:      strings.TrimSpace(r.messageID),
+			Phase:       observation.CompactionPhaseCancelled,
+			Status:      observation.CompactionStatusCancelled,
+			Trigger:     "manual",
+			Reason:      reason,
+			ObservedAt:  time.Now(),
+		})
+	}
+}
+
+func (r *run) noteManualCompactionOperation(requestID string, operationID string) {
+	if r == nil {
+		return
+	}
+	requestID = strings.TrimSpace(requestID)
+	operationID = strings.TrimSpace(operationID)
+	if requestID == "" || operationID == "" {
+		return
+	}
+	r.muManualCompaction.Lock()
+	defer r.muManualCompaction.Unlock()
+	if strings.TrimSpace(r.activeManualCompactionID) == requestID {
+		r.activeManualCompactionOperationID = operationID
+	}
 }
 
 func (r *run) setCompletedContextCompaction(compaction observation.CompactionEvent) {
@@ -1355,6 +1434,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		case "error":
 			state = RunStateFailed
 		}
+		r.cancelUnfinishedManualCompactions("run_finished")
 		r.persistRunRecord(state, errCode, errMsg, startedAt.UnixMilli(), time.Now().UnixMilli())
 		r.persistRunEvent(eventType, RealtimeStreamKindLifecycle, map[string]any{
 			"state":               string(state),
