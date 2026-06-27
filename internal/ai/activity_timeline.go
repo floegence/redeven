@@ -213,12 +213,14 @@ func (r *run) recordObservationActivityEvent(ev observation.Event) {
 		return
 	}
 	r.muAssistant.Lock()
+	r.activityTimelineEvents = append(r.activityTimelineEvents, ev)
 	r.activitySegmentEvents = append(r.activitySegmentEvents, ev)
 	events := append([]observation.Event(nil), r.activitySegmentEvents...)
 	r.muAssistant.Unlock()
 
 	timeline := observation.BuildActivityTimeline(r.activityRunMeta(), events, time.Now().UnixMilli())
 	r.publishActivityTimeline(timeline)
+	r.applyCommittedFloretThreadDetailProjection()
 }
 
 func shouldRecordObservationActivityEvent(ev observation.Event) bool {
@@ -257,9 +259,9 @@ func (r *run) publishFinalActivityTimeline(timeline observation.ActivityTimeline
 	if len(timeline.Items) == 0 {
 		return
 	}
-	r.mu.Lock()
+	r.muAssistant.Lock()
 	hasSegment := r.activityTimelineProjected
-	r.mu.Unlock()
+	r.muAssistant.Unlock()
 	if hasSegment {
 		return
 	}
@@ -366,6 +368,7 @@ func (r *run) publishActivityTimeline(timeline observation.ActivityTimeline) {
 	r.muAssistant.Lock()
 	r.persistEnsureIndex(idx)
 	r.assistantBlocks[idx] = block
+	r.activityTimelineProjected = true
 	r.muAssistant.Unlock()
 
 	r.persistRunEvent("activity.timeline.projected", RealtimeStreamKindTool, map[string]any{
@@ -379,9 +382,6 @@ func (r *run) publishActivityTimeline(timeline observation.ActivityTimeline) {
 		"total_items":     timeline.Summary.TotalItems,
 	})
 	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
-	r.mu.Lock()
-	r.activityTimelineProjected = true
-	r.mu.Unlock()
 }
 
 func (r *run) normalizeActivityTimeline(timeline observation.ActivityTimeline) observation.ActivityTimeline {

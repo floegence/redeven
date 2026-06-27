@@ -160,16 +160,19 @@ type run struct {
 	activitySegmentActive     bool
 	activitySegmentBlockIndex int
 
-	muAssistant               sync.Mutex
-	assistantCreatedAtUnixMs  int64
-	assistantBlocks           []any
-	assistantAnswer           assistantAnswerState
-	activitySegmentEvents     []observation.Event
-	activityTimelineProjected bool
-	activityFileActions       map[string]FlowerActivityFileAction
-	activityFileActionSeq     int64
-	waitingPrompt             *RequestUserInputPrompt
-	providerContinuation      threadstore.ThreadProviderContinuation
+	muAssistant                   sync.Mutex
+	assistantCreatedAtUnixMs      int64
+	assistantBlocks               []any
+	assistantAnswer               assistantAnswerState
+	activitySegmentEvents         []observation.Event
+	activityTimelineEvents        []observation.Event
+	activityTimelineProjected     bool
+	activityFileActions           map[string]FlowerActivityFileAction
+	activityFileActionSeq         int64
+	floretThreadProjectionApplied bool
+	floretCommittedThreadEvents   []flruntime.ThreadDetailEvent
+	waitingPrompt                 *RequestUserInputPrompt
+	providerContinuation          threadstore.ThreadProviderContinuation
 
 	finalizationReason string
 	currentModelID     string
@@ -306,6 +309,7 @@ func newRun(opts runOptions) *run {
 		activitySegmentActive:     false,
 		activitySegmentBlockIndex: -1,
 		activitySegmentEvents:     make([]observation.Event, 0, 8),
+		activityTimelineEvents:    make([]observation.Event, 0, 8),
 		activityFileActions:       make(map[string]FlowerActivityFileAction),
 		contextCompactionAnchors:  make(map[string]FlowerTimelineAnchor),
 		subagentDepth:             opts.SubagentDepth,
