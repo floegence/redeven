@@ -166,9 +166,6 @@ function sameContextCompaction(left: FlowerContextCompaction, right: FlowerConte
     && left.status === right.status
     && sameOptionalString(left.trigger, right.trigger)
     && sameOptionalString(left.reason, right.reason)
-    && sameOptionalString(left.compaction_id, right.compaction_id)
-    && sameOptionalNumber(left.compaction_generation, right.compaction_generation)
-    && sameOptionalString(left.compaction_window_id, right.compaction_window_id)
     && sameOptionalNumber(left.tokens_before, right.tokens_before)
     && sameOptionalNumber(left.tokens_after_estimate, right.tokens_after_estimate)
     && sameOptionalString(left.error, right.error)

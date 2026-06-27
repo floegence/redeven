@@ -3,8 +3,6 @@ package ai
 import (
 	"errors"
 	"strings"
-
-	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 )
 
 const ContextActionSchemaVersion = 2
@@ -238,51 +236,4 @@ func contextActionRunEventPayload(action *ContextActionEnvelope) map[string]any 
 		}
 	}
 	return payload
-}
-
-func contextActionToUserProvidedContext(action *ContextActionEnvelope) *contextmodel.UserProvidedContext {
-	var err error
-	action, err = normalizeAskFlowerContextActionEnvelope(action)
-	if err != nil || action == nil {
-		return nil
-	}
-	items := make([]contextmodel.UserProvidedContextItem, 0, len(action.Context))
-	for _, item := range action.Context {
-		items = append(items, contextmodel.UserProvidedContextItem{
-			Kind:           item.Kind,
-			Title:          item.Title,
-			Detail:         item.Detail,
-			Content:        item.Content,
-			Path:           item.Path,
-			IsDirectory:    item.IsDirectory,
-			RootLabel:      item.RootLabel,
-			WorkingDir:     item.WorkingDir,
-			Selection:      item.Selection,
-			SelectionChars: item.SelectionChars,
-			PID:            item.PID,
-			Name:           item.Name,
-			Username:       item.Username,
-			CPUPercent:     item.CPUPercent,
-			MemoryBytes:    item.MemoryBytes,
-			Platform:       item.Platform,
-			CapturedAtMs:   item.CapturedAtMs,
-		})
-	}
-	out := &contextmodel.UserProvidedContext{
-		ActionID:            action.ActionID,
-		Provider:            action.Provider,
-		SourceSurface:       action.Source.Surface,
-		SourceSurfaceID:     action.Source.SurfaceID,
-		TargetID:            action.Target.TargetID,
-		Locality:            action.Target.Locality,
-		SuggestedWorkingDir: action.SuggestedWorkingDir,
-		Items:               items,
-	}
-	if action.ExecutionContext != nil {
-		out.CurrentTargetID = action.ExecutionContext.CurrentTargetID
-		out.SourceEnvPublicID = action.ExecutionContext.SourceEnvPublicID
-		out.RuntimeHint = action.ExecutionContext.RuntimeHint
-		out.SessionSource = action.ExecutionContext.SessionSource
-	}
-	return out
 }

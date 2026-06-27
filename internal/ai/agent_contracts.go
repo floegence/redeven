@@ -145,7 +145,7 @@ type ModelGatewayResult struct {
 	ToolResults     []ToolResult       `json:"tool_results,omitempty"`
 }
 
-// ModelGateway streams one provider request for a Floret projected turn.
+// ModelGateway streams one provider request for a Floret hosted turn.
 type ModelGateway interface {
 	StreamTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error)
 }

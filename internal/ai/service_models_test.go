@@ -191,14 +191,14 @@ func TestDeriveThreadRunState(t *testing.T) {
 func TestDeriveThreadRunStateUsesRunErrorCodePresentation(t *testing.T) {
 	t.Parallel()
 
-	state, code, msg := deriveThreadRunState("error", "", runErrorCodeProviderAuthFailed, errors.New("Floret projected turn failed"))
+	state, code, msg := deriveThreadRunState("error", "", runErrorCodeProviderAuthFailed, errors.New("Floret hosted turn failed"))
 	if state != "failed" {
 		t.Fatalf("state=%q, want failed", state)
 	}
 	if code != runErrorCodeProviderAuthFailed {
 		t.Fatalf("code=%q, want %q", code, runErrorCodeProviderAuthFailed)
 	}
-	if strings.Contains(msg, "Floret projected turn failed") {
+	if strings.Contains(msg, "Floret hosted turn failed") {
 		t.Fatalf("msg=%q should not expose internal Floret wrapper", msg)
 	}
 	if !strings.Contains(msg, "provider") {

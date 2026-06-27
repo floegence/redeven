@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
-	promptpacker "github.com/floegence/redeven/internal/ai/context/packer"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -497,23 +495,6 @@ func TestSubmitRequestUserInputResponse_SecretAnswerDoesNotLeakToTranscriptOrStr
 		t.Fatalf("structured contains_secret=false, want true")
 	}
 
-	pack, err := svc.contextPacker.BuildPromptPack(ctx, promptpacker.BuildInput{
-		EndpointID: meta.EndpointID,
-		ThreadID:   th.ThreadID,
-		RunID:      "run_secret_projection_check",
-		Objective:  "use the provided API key safely",
-		UserInput:  "",
-		Capability: contextmodel.ModelCapability{SupportsAskUserQuestionBatches: true, MaxContextTokens: 2048},
-	})
-	if err != nil {
-		t.Fatalf("BuildPromptPack: %v", err)
-	}
-	if len(pack.RecentStructuredUserInputs) == 0 {
-		t.Fatalf("expected structured projection in prompt pack")
-	}
-	if got := pack.RecentStructuredUserInputs[0]; strings.Contains(got.PublicSummary, secretValue) || got.Text != "" {
-		t.Fatalf("prompt pack leaked secret: %+v", got)
-	}
 }
 
 func TestExecutePreparedRun_WithPersistedUserMessage_ReusesPersistedMessageID(t *testing.T) {
@@ -572,46 +553,6 @@ func TestExecutePreparedRun_WithPersistedUserMessage_ReusesPersistedMessageID(t 
 	}
 	if userMsgIDs[0] != persisted.MessageID {
 		t.Fatalf("user message id=%q, want persisted id=%q", userMsgIDs[0], persisted.MessageID)
-	}
-}
-
-func TestPromptPackExcludesPrecreatedCurrentTurn(t *testing.T) {
-	t.Parallel()
-
-	svc := newSendTurnTestService(t)
-	meta := testSendTurnMeta()
-	ctx := context.Background()
-
-	th, err := svc.CreateThread(ctx, meta, "precreated-current-turn", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-
-	prepared, persisted, _ := prepareAndPersistUserTurnForTest(t, svc, meta, "run_precreated_current_turn", RunStartRequest{
-		ThreadID: th.ThreadID,
-		Model:    "openai/gpt-5-mini",
-		Input: RunInput{
-			MessageID: "m_precreated_current_turn",
-			Text:      "this is the current user input",
-		},
-		Options: RunOptions{},
-	})
-	t.Cleanup(func() { svc.releasePreparedRun(prepared) })
-
-	pack, err := svc.contextPacker.BuildPromptPack(ctx, promptpacker.BuildInput{
-		EndpointID: meta.EndpointID,
-		ThreadID:   th.ThreadID,
-		RunID:      "run_precreated_current_turn",
-		UserInput:  "this is the current user input",
-		Capability: contextmodel.ModelCapability{SupportsAskUserQuestionBatches: true, MaxContextTokens: 2048},
-	})
-	if err != nil {
-		t.Fatalf("BuildPromptPack: %v", err)
-	}
-	for _, turn := range pack.RecentDialogue {
-		if turn.UserMessageID == persisted.MessageID || strings.Contains(turn.UserText, "this is the current user input") {
-			t.Fatalf("current turn leaked into recent dialogue: %+v", pack.RecentDialogue)
-		}
 	}
 }
 
@@ -1710,57 +1651,6 @@ func TestContextRepo_ListRecentDialogueTurns_ExcludesOrphanTranscriptUsersAround
 	}
 	if turns[0].UserMessageID == userOrphanHeadID || turns[0].UserMessageID == userOrphanTailID {
 		t.Fatalf("orphan transcript user projected as dialogue: %+v", turns[0])
-	}
-}
-
-func TestPromptPackToHistory_DeduplicatesPendingTailInput(t *testing.T) {
-	t.Parallel()
-
-	pack := contextmodel.PromptPack{
-		RecentDialogue: []contextmodel.DialogueTurn{
-			{
-				UserMessageID:      "m_user_pending",
-				AssistantMessageID: "",
-				UserText:           "same text",
-				AssistantText:      "",
-			},
-		},
-	}
-
-	history := promptPackToHistory(pack, "same text")
-	if len(history) != 1 {
-		t.Fatalf("history len=%d, want 1", len(history))
-	}
-	if history[0].Role != "user" || history[0].Text != "same text" {
-		t.Fatalf("history[0]=%+v, want single user entry", history[0])
-	}
-}
-
-func TestPromptPackToHistory_DoesNotIncludeUserProvidedContext(t *testing.T) {
-	t.Parallel()
-
-	pack := contextmodel.PromptPack{
-		UserProvidedContext: &contextmodel.UserProvidedContext{
-			ActionID:            "assistant.ask.flower",
-			Provider:            "flower",
-			SourceSurface:       "desktop_welcome_environment_card",
-			TargetID:            "local:local",
-			Locality:            "auto",
-			SuggestedWorkingDir: "/workspace/redeven",
-			Items: []contextmodel.UserProvidedContextItem{{
-				Kind:    "text_snapshot",
-				Title:   "Local Environment",
-				Content: "Environment: Local Environment",
-			}},
-		},
-	}
-
-	history := promptPackToHistory(pack, "inspect env")
-	if len(history) != 1 {
-		t.Fatalf("history len=%d, want 1", len(history))
-	}
-	if history[0].Role != "user" || history[0].Text != "inspect env" {
-		t.Fatalf("history[0]=%+v, want current user input only", history[0])
 	}
 }
 

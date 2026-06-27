@@ -451,8 +451,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       if (!tid) throw new Error(adapterCopy(options).missingThreadID);
       await options.rpc.ai.compactThreadContext({
         threadId: tid,
-        expectedRunId: trim(input.expected_run_id) || undefined,
-        source: 'slash_command',
+        activeRunId: trim(input.active_run_id) || undefined,
       });
       return loadThread(tid);
     },

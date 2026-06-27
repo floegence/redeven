@@ -395,7 +395,7 @@ func TestIntegration_ModelGateway_Anthropic_ContentFilterFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListRunEvents: %v", err)
 	}
-	projectedTurnResult := findRunEventPayload(t, runEvents.Events, "floret.projected_turn.result")
+	projectedTurnResult := findRunEventPayload(t, runEvents.Events, "floret.host_turn.result")
 	if got := strings.TrimSpace(fmt.Sprint(projectedTurnResult["finish_reason"])); got != "content_filter" {
 		t.Fatalf("finish_reason=%q, want content_filter", got)
 	}

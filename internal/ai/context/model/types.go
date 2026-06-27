@@ -6,7 +6,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 )
 
-// ModelCapability defines model/runtime feature support for prompt adaptation.
+// ModelCapability defines provider/model feature support for runtime setup.
 type ModelCapability struct {
 	ProviderID                     string                       `json:"provider_id"`
 	ProviderType                   string                       `json:"provider_type,omitempty"`
@@ -26,41 +26,7 @@ type ModelCapability struct {
 	PreferredToolSchemaMode        string                       `json:"preferred_tool_schema_mode"`
 }
 
-type MemoryScope string
-
-const (
-	MemoryScopeWorking  MemoryScope = "working"
-	MemoryScopeEpisodic MemoryScope = "episodic"
-	MemoryScopeLongTerm MemoryScope = "long_term"
-)
-
-type MemoryKind string
-
-const (
-	MemoryKindFact       MemoryKind = "fact"
-	MemoryKindConstraint MemoryKind = "constraint"
-	MemoryKindDecision   MemoryKind = "decision"
-	MemoryKindTodo       MemoryKind = "todo"
-	MemoryKindBlocker    MemoryKind = "blocker"
-	MemoryKindArtifact   MemoryKind = "artifact"
-)
-
-// MemoryItem is the runtime semantic memory shape.
-type MemoryItem struct {
-	MemoryID       string      `json:"memory_id"`
-	ThreadID       string      `json:"thread_id"`
-	Scope          MemoryScope `json:"scope"`
-	Kind           MemoryKind  `json:"kind"`
-	Content        string      `json:"content"`
-	SourceRefsJSON string      `json:"source_refs_json"`
-	Importance     float64     `json:"importance"`
-	Freshness      float64     `json:"freshness"`
-	Confidence     float64     `json:"confidence"`
-	CreatedAtUnix  int64       `json:"created_at_unix_ms"`
-	UpdatedAtUnix  int64       `json:"updated_at_unix_ms"`
-}
-
-// DialogueTurn stores the text view needed by packer and retriever.
+// DialogueTurn stores the product-level paired message view used by persistence tests and UI-safe reads.
 type DialogueTurn struct {
 	TurnRowID          int64  `json:"turn_row_id,omitempty"`
 	UserMessageRowID   int64  `json:"user_message_row_id,omitempty"`
@@ -74,60 +40,12 @@ type DialogueTurn struct {
 	CreatedAtUnixMs    int64  `json:"created_at_unix_ms"`
 }
 
-// ExecutionEvidence stores normalized spans for context retrieval.
-type ExecutionEvidence struct {
-	SpanID          string `json:"span_id"`
-	RunID           string `json:"run_id"`
-	Kind            string `json:"kind"`
-	Name            string `json:"name"`
-	Status          string `json:"status"`
-	Summary         string `json:"summary"`
-	PayloadJSON     string `json:"payload_json"`
-	StartedAtUnixMs int64  `json:"started_at_unix_ms"`
-	EndedAtUnixMs   int64  `json:"ended_at_unix_ms"`
-}
-
-// AttachmentManifest is the model-facing attachment summary.
+// AttachmentManifest is the attachment capability adaptation input.
 type AttachmentManifest struct {
 	Name     string `json:"name"`
 	MimeType string `json:"mime_type"`
 	URL      string `json:"url"`
 	Mode     string `json:"mode"`
-}
-
-type UserProvidedContextItem struct {
-	Kind           string  `json:"kind"`
-	Title          string  `json:"title,omitempty"`
-	Detail         string  `json:"detail,omitempty"`
-	Content        string  `json:"content,omitempty"`
-	Path           string  `json:"path,omitempty"`
-	IsDirectory    bool    `json:"is_directory,omitempty"`
-	RootLabel      string  `json:"root_label,omitempty"`
-	WorkingDir     string  `json:"working_dir,omitempty"`
-	Selection      string  `json:"selection,omitempty"`
-	SelectionChars int     `json:"selection_chars,omitempty"`
-	PID            int     `json:"pid,omitempty"`
-	Name           string  `json:"name,omitempty"`
-	Username       string  `json:"username,omitempty"`
-	CPUPercent     float64 `json:"cpu_percent,omitempty"`
-	MemoryBytes    int64   `json:"memory_bytes,omitempty"`
-	Platform       string  `json:"platform,omitempty"`
-	CapturedAtMs   int64   `json:"captured_at_ms,omitempty"`
-}
-
-type UserProvidedContext struct {
-	ActionID            string                    `json:"action_id"`
-	Provider            string                    `json:"provider,omitempty"`
-	SourceSurface       string                    `json:"source_surface"`
-	SourceSurfaceID     string                    `json:"source_surface_id,omitempty"`
-	TargetID            string                    `json:"target_id"`
-	Locality            string                    `json:"locality"`
-	CurrentTargetID     string                    `json:"current_target_id,omitempty"`
-	SourceEnvPublicID   string                    `json:"source_env_public_id,omitempty"`
-	RuntimeHint         string                    `json:"runtime_hint,omitempty"`
-	SessionSource       string                    `json:"session_source,omitempty"`
-	SuggestedWorkingDir string                    `json:"suggested_working_dir_abs,omitempty"`
-	Items               []UserProvidedContextItem `json:"items"`
 }
 
 type StructuredUserInput struct {
@@ -144,124 +62,6 @@ type StructuredUserInput struct {
 	PublicSummary       string `json:"public_summary,omitempty"`
 	ContainsSecret      bool   `json:"contains_secret,omitempty"`
 	CreatedAtUnixMs     int64  `json:"created_at_unix_ms"`
-}
-
-// PromptPack is the canonical model context envelope.
-type PromptPack struct {
-	ThreadID                   string                `json:"thread_id"`
-	RunID                      string                `json:"run_id"`
-	SystemContract             string                `json:"system_contract"`
-	Objective                  string                `json:"objective"`
-	ActiveConstraints          []string              `json:"active_constraints"`
-	CompactedHistory           []CompactedMessage    `json:"compacted_history,omitempty"`
-	RecentDialogue             []DialogueTurn        `json:"recent_dialogue"`
-	RecentStructuredUserInputs []StructuredUserInput `json:"recent_structured_user_inputs"`
-	ExecutionEvidence          []ExecutionEvidence   `json:"execution_evidence"`
-	PendingTodos               []MemoryItem          `json:"pending_todos"`
-	Blockers                   []MemoryItem          `json:"blockers"`
-	RetrievedLongTermMemory    []MemoryItem          `json:"retrieved_long_term_memory"`
-	AttachmentsManifest        []AttachmentManifest  `json:"attachments_manifest"`
-	UserProvidedContext        *UserProvidedContext  `json:"user_provided_context,omitempty"`
-	ThreadSnapshot             string                `json:"thread_snapshot"`
-	EstimatedInputTokens       int                   `json:"estimated_input_tokens"`
-	CompressionSavingRatio     float64               `json:"compression_saving_ratio"`
-	CompressionQualityPass     bool                  `json:"compression_quality_pass"`
-	ContextSectionsTokenUsage  map[string]int        `json:"context_sections_token_usage"`
-}
-
-func (p PromptPack) ApproxText() string {
-	parts := []string{strings.TrimSpace(p.SystemContract), strings.TrimSpace(p.Objective), strings.TrimSpace(p.ThreadSnapshot)}
-	parts = append(parts, p.ActiveConstraints...)
-	for _, msg := range p.CompactedHistory {
-		if txt := strings.TrimSpace(msg.Content); txt != "" {
-			parts = append(parts, txt)
-		}
-		if txt := strings.TrimSpace(msg.Reasoning); txt != "" {
-			parts = append(parts, txt)
-		}
-		if txt := strings.TrimSpace(msg.ToolArgs); txt != "" {
-			parts = append(parts, txt)
-		}
-	}
-	for _, turn := range p.RecentDialogue {
-		if txt := strings.TrimSpace(turn.UserText); txt != "" {
-			parts = append(parts, txt)
-		}
-		if txt := strings.TrimSpace(turn.AssistantText); txt != "" {
-			parts = append(parts, txt)
-		}
-	}
-	for _, item := range p.RecentStructuredUserInputs {
-		if txt := strings.TrimSpace(item.PublicSummary); txt != "" {
-			parts = append(parts, txt)
-		}
-	}
-	if p.UserProvidedContext != nil {
-		parts = append(parts,
-			strings.TrimSpace(p.UserProvidedContext.ActionID),
-			strings.TrimSpace(p.UserProvidedContext.Provider),
-			strings.TrimSpace(p.UserProvidedContext.SourceSurface),
-			strings.TrimSpace(p.UserProvidedContext.SourceSurfaceID),
-			strings.TrimSpace(p.UserProvidedContext.TargetID),
-			strings.TrimSpace(p.UserProvidedContext.Locality),
-			strings.TrimSpace(p.UserProvidedContext.CurrentTargetID),
-			strings.TrimSpace(p.UserProvidedContext.SourceEnvPublicID),
-			strings.TrimSpace(p.UserProvidedContext.RuntimeHint),
-			strings.TrimSpace(p.UserProvidedContext.SessionSource),
-			strings.TrimSpace(p.UserProvidedContext.SuggestedWorkingDir),
-		)
-		for _, item := range p.UserProvidedContext.Items {
-			parts = append(parts,
-				strings.TrimSpace(item.Kind),
-				strings.TrimSpace(item.Title),
-				strings.TrimSpace(item.Detail),
-				strings.TrimSpace(item.Content),
-				strings.TrimSpace(item.Path),
-				strings.TrimSpace(item.RootLabel),
-				strings.TrimSpace(item.WorkingDir),
-				strings.TrimSpace(item.Selection),
-				strings.TrimSpace(item.Name),
-				strings.TrimSpace(item.Username),
-				strings.TrimSpace(item.Platform),
-			)
-		}
-	}
-	for _, ev := range p.ExecutionEvidence {
-		if txt := strings.TrimSpace(ev.Summary); txt != "" {
-			parts = append(parts, txt)
-		}
-	}
-	for _, mem := range p.PendingTodos {
-		if txt := strings.TrimSpace(mem.Content); txt != "" {
-			parts = append(parts, txt)
-		}
-	}
-	for _, mem := range p.Blockers {
-		if txt := strings.TrimSpace(mem.Content); txt != "" {
-			parts = append(parts, txt)
-		}
-	}
-	for _, mem := range p.RetrievedLongTermMemory {
-		if txt := strings.TrimSpace(mem.Content); txt != "" {
-			parts = append(parts, txt)
-		}
-	}
-	return strings.TrimSpace(strings.Join(parts, "\n"))
-}
-
-type CompactedMessage struct {
-	Role                 string `json:"role"`
-	Content              string `json:"content,omitempty"`
-	Reasoning            string `json:"reasoning,omitempty"`
-	ToolCallID           string `json:"tool_call_id,omitempty"`
-	ToolName             string `json:"tool_name,omitempty"`
-	ToolArgs             string `json:"tool_args,omitempty"`
-	Kind                 string `json:"kind,omitempty"`
-	EntryID              string `json:"entry_id,omitempty"`
-	ParentEntryID        string `json:"parent_entry_id,omitempty"`
-	CompactionID         string `json:"compaction_id,omitempty"`
-	CompactionGeneration int    `json:"compaction_generation,omitempty"`
-	CompactionWindowID   string `json:"compaction_window_id,omitempty"`
 }
 
 func NormalizeCapability(in ModelCapability) ModelCapability {

@@ -225,18 +225,6 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(memory_id, embedding_model)
 );
-CREATE TABLE IF NOT EXISTS context_snapshots (
-  snapshot_id TEXT PRIMARY KEY,
-  endpoint_id TEXT NOT NULL,
-  thread_id TEXT NOT NULL,
-  level TEXT NOT NULL DEFAULT 'turn',
-  summary_text TEXT NOT NULL DEFAULT '',
-  covers_turn_from_id INTEGER NOT NULL DEFAULT 0,
-  covers_turn_to_id INTEGER NOT NULL DEFAULT 0,
-  quality_score REAL NOT NULL DEFAULT 0.5,
-  created_at_unix_ms INTEGER NOT NULL DEFAULT 0
-);
-CREATE INDEX IF NOT EXISTS idx_context_snapshots_thread_level ON context_snapshots(endpoint_id, thread_id, level, created_at_unix_ms DESC);
 CREATE TABLE IF NOT EXISTS provider_capabilities (
   provider_id TEXT NOT NULL,
   model_name TEXT NOT NULL,

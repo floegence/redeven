@@ -201,14 +201,12 @@ describe('Env local Flower surface adapter', () => {
 
     const bootstrap = await adapter.compactThreadContext({
       thread_id: ' thread_compact ',
-      expected_run_id: ' run_compact ',
-      source: 'slash_command',
+      active_run_id: ' run_compact ',
     });
 
     expect(compactThreadContext).toHaveBeenCalledWith({
       threadId: 'thread_compact',
-      expectedRunId: 'run_compact',
-      source: 'slash_command',
+      activeRunId: 'run_compact',
     });
     expect(fetchMock).toHaveBeenCalledWith(
       '/_redeven_proxy/api/ai/threads/thread_compact/live/bootstrap',

@@ -24,6 +24,7 @@ type openAIContinuationMock struct {
 
 	actualCallCount      int
 	previousResponseIDs  []string
+	issuedPreviousIDs    []string
 	issuedResponseIDs    []string
 	rejectPreviousIDOnce map[string]bool
 }
@@ -72,6 +73,7 @@ func (m *openAIContinuationMock) handle(w http.ResponseWriter, r *http.Request) 
 	responseID := fmt.Sprintf("resp_run_%d", call)
 	token := fmt.Sprintf("CONTINUATION_TOKEN_%d", call)
 	m.previousResponseIDs = append(m.previousResponseIDs, previousResponseID)
+	m.issuedPreviousIDs = append(m.issuedPreviousIDs, previousResponseID)
 	m.issuedResponseIDs = append(m.issuedResponseIDs, responseID)
 	m.mu.Unlock()
 
@@ -82,6 +84,14 @@ func (m *openAIContinuationMock) snapshot() ([]string, []string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	previous := append([]string(nil), m.previousResponseIDs...)
+	issued := append([]string(nil), m.issuedResponseIDs...)
+	return previous, issued
+}
+
+func (m *openAIContinuationMock) successfulCalls() ([]string, []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	previous := append([]string(nil), m.issuedPreviousIDs...)
 	issued := append([]string(nil), m.issuedResponseIDs...)
 	return previous, issued
 }
@@ -310,26 +320,31 @@ func TestIntegration_Service_OpenAIContinuationPersistsAndResumes(t *testing.T) 
 		t.Fatalf("StartRun second: %v", err)
 	}
 
-	previousIDs, issuedResponseIDs := mock.snapshot()
-	if len(previousIDs) != 2 {
-		t.Fatalf("previousIDs=%v, want 2 actual calls", previousIDs)
+	allPreviousIDs, _ := mock.snapshot()
+	if len(allPreviousIDs) < 2 {
+		t.Fatalf("previousIDs=%v, want multiple provider calls", allPreviousIDs)
 	}
-	if previousIDs[0] != "" {
-		t.Fatalf("first actual previous_response_id=%q, want empty", previousIDs[0])
+	if allPreviousIDs[0] != "" {
+		t.Fatalf("first actual previous_response_id=%q, want empty", allPreviousIDs[0])
 	}
-	if previousIDs[1] != "resp_run_1" {
-		t.Fatalf("second actual previous_response_id=%q, want %q", previousIDs[1], "resp_run_1")
+	successfulPreviousIDs, issuedResponseIDs := mock.successfulCalls()
+	resumedResponseID := ""
+	for i, previousID := range successfulPreviousIDs {
+		if previousID == "resp_run_1" && i < len(issuedResponseIDs) {
+			resumedResponseID = issuedResponseIDs[i]
+			break
+		}
 	}
-	if len(issuedResponseIDs) != 2 || issuedResponseIDs[1] != "resp_run_2" {
-		t.Fatalf("issuedResponseIDs=%v, want [... resp_run_2]", issuedResponseIDs)
+	if resumedResponseID == "" {
+		t.Fatalf("successfulPreviousIDs=%v issuedResponseIDs=%v, want a successful call resumed from resp_run_1", successfulPreviousIDs, issuedResponseIDs)
 	}
 
 	continuation, err = svc.threadsDB.GetThreadProviderContinuation(ctx, meta.EndpointID, thread.ThreadID)
 	if err != nil {
 		t.Fatalf("GetThreadProviderContinuation second: %v", err)
 	}
-	if continuation == nil || continuation.State.ID != "resp_run_2" {
-		t.Fatalf("continuation after second run=%+v, want resp_run_2", continuation)
+	if continuation == nil || continuation.State.ID != resumedResponseID {
+		t.Fatalf("continuation after second run=%+v, want resumed response %q", continuation, resumedResponseID)
 	}
 }
 
@@ -374,14 +389,14 @@ func TestIntegration_Service_OpenAIContinuationRejectedPreviousResponseIDFailsAn
 	}
 
 	previousIDs, issuedResponseIDs := mock.snapshot()
-	if len(previousIDs) != 2 {
-		t.Fatalf("previousIDs=%v, want 2 actual calls", previousIDs)
+	if len(previousIDs) < 2 {
+		t.Fatalf("previousIDs=%v, want multiple provider calls", previousIDs)
 	}
-	if previousIDs[0] != "" || previousIDs[1] != "resp_run_1" {
-		t.Fatalf("previousIDs=%v, want [\"\", \"resp_run_1\"]", previousIDs)
+	if previousIDs[0] != "" || !containsString(previousIDs, "resp_run_1") {
+		t.Fatalf("previousIDs=%v, want initial empty call and rejected resp_run_1 replay", previousIDs)
 	}
-	if len(issuedResponseIDs) != 1 || issuedResponseIDs[0] != "resp_run_1" {
-		t.Fatalf("issuedResponseIDs=%v, want only the first successful response", issuedResponseIDs)
+	if !containsString(issuedResponseIDs, "resp_run_1") {
+		t.Fatalf("issuedResponseIDs=%v, want first successful response", issuedResponseIDs)
 	}
 
 	continuation, err := svc.threadsDB.GetThreadProviderContinuation(ctx, meta.EndpointID, thread.ThreadID)

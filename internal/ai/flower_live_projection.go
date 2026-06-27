@@ -908,7 +908,7 @@ func normalizeFlowerContextCompactionForEvent(compaction FlowerContextCompaction
 		compaction.RunID = strings.TrimSpace(event.RunID)
 	}
 	if strings.TrimSpace(compaction.OperationID) == "" {
-		compaction.OperationID = firstNonEmptyString(strings.TrimSpace(compaction.CompactionID), fmt.Sprintf("%s:%d:%s", compaction.RunID, compaction.StepIndex, strings.TrimSpace(compaction.Phase)))
+		compaction.OperationID = fmt.Sprintf("%s:%d:%s", compaction.RunID, compaction.StepIndex, strings.TrimSpace(compaction.Phase))
 	}
 	if compaction.UpdatedAtMs <= 0 {
 		compaction.UpdatedAtMs = event.AtUnixMs
@@ -1438,7 +1438,7 @@ func upsertFlowerContextCompaction(state *FlowerLiveMaterializedState, compactio
 		compaction.RunID = strings.TrimSpace(event.RunID)
 	}
 	if strings.TrimSpace(compaction.OperationID) == "" {
-		compaction.OperationID = firstNonEmptyString(strings.TrimSpace(compaction.CompactionID), fmt.Sprintf("%s:%d:%s", compaction.RunID, compaction.StepIndex, strings.TrimSpace(compaction.Phase)))
+		compaction.OperationID = fmt.Sprintf("%s:%d:%s", compaction.RunID, compaction.StepIndex, strings.TrimSpace(compaction.Phase))
 	}
 	if compaction.UpdatedAtMs <= 0 {
 		compaction.UpdatedAtMs = event.AtUnixMs
@@ -1551,7 +1551,7 @@ func flowerContextCompactionFromStream(stream streamEventContextCompaction, runI
 		compaction.UpdatedAtMs = atUnixMs
 	}
 	if strings.TrimSpace(compaction.OperationID) == "" {
-		compaction.OperationID = firstNonEmptyString(strings.TrimSpace(compaction.CompactionID), fmt.Sprintf("%s:%d:%s", compaction.RunID, compaction.StepIndex, strings.TrimSpace(compaction.Phase)))
+		compaction.OperationID = fmt.Sprintf("%s:%d:%s", compaction.RunID, compaction.StepIndex, strings.TrimSpace(compaction.Phase))
 	}
 	if strings.TrimSpace(compaction.Phase) == "" || strings.TrimSpace(compaction.Status) == "" {
 		return FlowerContextCompaction{}, false

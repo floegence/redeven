@@ -287,9 +287,6 @@ func TestNormalizeAskFlowerContextActionRejectsNonStandardActions(t *testing.T) 
 			if action, err := normalizeAskFlowerContextActionEnvelope(&tt.action); err == nil || action != nil {
 				t.Fatalf("normalizeAskFlowerContextActionEnvelope()=(%#v, %v), want invalid nil", action, err)
 			}
-			if got := contextActionToUserProvidedContext(&tt.action); got != nil {
-				t.Fatalf("contextActionToUserProvidedContext()=%#v, want nil", got)
-			}
 			if got := contextActionRunEventPayload(&tt.action); got != nil {
 				t.Fatalf("contextActionRunEventPayload()=%#v, want nil", got)
 			}
@@ -320,62 +317,5 @@ func TestNormalizeAskFlowerContextActionAcceptsRuntimeGatewaySessionSource(t *te
 	}
 	if action.ExecutionContext == nil || action.ExecutionContext.SessionSource != "runtime_gateway" {
 		t.Fatalf("session source=%#v, want runtime_gateway", action.ExecutionContext)
-	}
-}
-
-func TestContextActionToUserProvidedContext(t *testing.T) {
-	action := contextActionToUserProvidedContext(&ContextActionEnvelope{
-		SchemaVersion: ContextActionSchemaVersion,
-		ActionID:      " assistant.ask.flower ",
-		Provider:      " flower ",
-		Target:        ContextActionTarget{TargetID: " local:local ", Locality: " auto "},
-		Source:        ContextActionSource{Surface: " desktop_welcome_environment_card ", SurfaceID: " local "},
-		ExecutionContext: &ContextActionExecutionHint{
-			CurrentTargetID:   "local:container:docker:redeven-dev:abcd1234",
-			SourceEnvPublicID: "env_123",
-			RuntimeHint:       "auto",
-			SessionSource:     "local_runtime",
-		},
-		Context: []ContextActionContextItem{
-			{
-				Kind:    " text_snapshot ",
-				Title:   " Local Environment ",
-				Detail:  " Local · Ready ",
-				Content: "Environment: Local Environment\nKind: local_environment\nEnvironment ID: local",
-			},
-		},
-		Presentation:        ContextActionPresentation{Label: " Ask Flower ", Priority: 100},
-		SuggestedWorkingDir: " /workspace/redeven ",
-	})
-	if action == nil {
-		t.Fatalf("contextActionToUserProvidedContext returned nil")
-	}
-	if action.ActionID != "assistant.ask.flower" || action.Provider != "flower" {
-		t.Fatalf("unexpected action identity: %#v", action)
-	}
-	if action.SourceSurface != "desktop_welcome_environment_card" || action.SourceSurfaceID != "local" {
-		t.Fatalf("unexpected source: %#v", action)
-	}
-	if action.TargetID != "local:local" || action.Locality != "auto" {
-		t.Fatalf("unexpected target: %#v", action)
-	}
-	if action.CurrentTargetID != "local:container:docker:redeven-dev:abcd1234" ||
-		action.SourceEnvPublicID != "env_123" ||
-		action.RuntimeHint != "auto" ||
-		action.SessionSource != "local_runtime" {
-		t.Fatalf("unexpected execution context: %#v", action)
-	}
-	if action.SuggestedWorkingDir != "/workspace/redeven" {
-		t.Fatalf("SuggestedWorkingDir=%q, want /workspace/redeven", action.SuggestedWorkingDir)
-	}
-	if len(action.Items) != 1 {
-		t.Fatalf("items len=%d, want 1", len(action.Items))
-	}
-	item := action.Items[0]
-	if item.Kind != "text_snapshot" || item.Title != "Local Environment" || item.Detail != "Local · Ready" {
-		t.Fatalf("unexpected item metadata: %#v", item)
-	}
-	if !strings.Contains(item.Content, "Kind: local_environment") {
-		t.Fatalf("item content missing environment kind: %q", item.Content)
 	}
 }

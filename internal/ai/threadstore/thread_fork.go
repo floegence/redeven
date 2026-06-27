@@ -72,8 +72,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 	if err != nil {
 		return nil, err
 	}
-	turnRowIDMap, err := copyForkConversationTurnsTx(ctx, tx, req, messageIDMap)
-	if err != nil {
+	if _, err := copyForkConversationTurnsTx(ctx, tx, req, messageIDMap); err != nil {
 		return nil, err
 	}
 	if err := copyForkStructuredInputsTx(ctx, tx, req, messageIDMap); err != nil {
@@ -83,9 +82,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 		return nil, err
 	}
 	if err := copyForkMemoryItemsTx(ctx, tx, req, messageIDMap); err != nil {
-		return nil, err
-	}
-	if err := copyForkContextSnapshotsTx(ctx, tx, req, turnRowIDMap); err != nil {
 		return nil, err
 	}
 	if err := copyForkUploadRefsTx(ctx, tx, req, messageIDMap); err != nil {
@@ -410,47 +406,6 @@ INSERT INTO memory_items(
 	return rows.Err()
 }
 
-func copyForkContextSnapshotsTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest, turnRowIDMap map[int64]int64) error {
-	rows, err := tx.QueryContext(ctx, `
-SELECT snapshot_id, level, summary_text, covers_turn_from_id, covers_turn_to_id, quality_score, created_at_unix_ms
-FROM context_snapshots
-WHERE endpoint_id = ? AND thread_id = ?
-ORDER BY created_at_unix_ms ASC, snapshot_id ASC
-`, req.EndpointID, req.SourceThreadID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	index := 0
-	for rows.Next() {
-		var snapshotID string
-		var level string
-		var summaryText string
-		var coversFrom int64
-		var coversTo int64
-		var quality float64
-		var createdAt int64
-		if err := rows.Scan(&snapshotID, &level, &summaryText, &coversFrom, &coversTo, &quality, &createdAt); err != nil {
-			return err
-		}
-		index++
-		coversFrom = mappedForkRowID(coversFrom, turnRowIDMap)
-		coversTo = mappedForkRowID(coversTo, turnRowIDMap)
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO context_snapshots(
-  snapshot_id, endpoint_id, thread_id,
-  level, summary_text,
-  covers_turn_from_id, covers_turn_to_id,
-  quality_score, created_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, forkScopedID("snap", req.DestinationThreadID, index), req.EndpointID, req.DestinationThreadID, normalizeSnapshotLevel(level), strings.TrimSpace(summaryText), coversFrom, coversTo, quality, createdAt); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
 func copyForkUploadRefsTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest, messageIDMap map[string]string) error {
 	rows, err := tx.QueryContext(ctx, `
 SELECT upload_id, ref_kind, ref_id, created_at_unix_ms
@@ -554,16 +509,6 @@ func mappedForkID(sourceID string, replacements map[string]string) string {
 		return next
 	}
 	return sourceID
-}
-
-func mappedForkRowID(sourceID int64, replacements map[int64]int64) int64 {
-	if sourceID <= 0 {
-		return 0
-	}
-	if next := replacements[sourceID]; next > 0 {
-		return next
-	}
-	return 0
 }
 
 func rewriteMessageJSONForFork(raw string, replacements map[string]string) (string, error) {

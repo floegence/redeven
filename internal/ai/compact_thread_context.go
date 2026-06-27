@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
+	flconfig "github.com/floegence/floret/config"
 	flruntime "github.com/floegence/floret/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
-	contextpacker "github.com/floegence/redeven/internal/ai/context/packer"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -361,20 +361,21 @@ func (s *Service) waitIdleThreadCompaction(ctx context.Context, compaction *idle
 	}
 }
 
-func (s *Service) commitIdleThreadCompaction(ctx context.Context, db *threadstore.Store, endpointID string, threadID string, operationID string, continuation threadstore.ThreadProviderContinuation, compacted threadstore.ThreadCompactedContext) error {
+func (s *Service) commitIdleThreadCompaction(ctx context.Context, db *threadstore.Store, endpointID string, threadID string, runID string, operationID string, continuation threadstore.ThreadProviderContinuation) error {
 	if s == nil || db == nil {
 		return errors.New("threads store not ready")
 	}
 	thKey := runThreadKey(endpointID, threadID)
+	runID = strings.TrimSpace(runID)
 	operationID = strings.TrimSpace(operationID)
-	if thKey == "" || operationID == "" {
+	if thKey == "" || runID == "" || operationID == "" {
 		return errors.New("invalid request")
 	}
 	s.mu.Lock()
 	existing := s.idleCompactionByTh[thKey]
 	s.mu.Unlock()
 	if existing == nil {
-		s.persistIdleThreadCompactionGateEvent(endpointID, threadID, operationID, operationID, "commit_rejected", map[string]any{
+		s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, operationID, "commit_rejected", map[string]any{
 			"reason":    "not_current",
 			"cancelled": false,
 		})
@@ -395,11 +396,18 @@ func (s *Service) commitIdleThreadCompaction(ctx context.Context, db *threadstor
 		return errIdleCompactionNotCurrent
 	}
 	contextBoundary := existing.contextBoundary
-	runID := existing.runID
+	currentRunID := strings.TrimSpace(existing.runID)
 	existing.finalizing = true
 	existing.mu.Unlock()
+	if currentRunID != runID {
+		s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, operationID, "commit_rejected", map[string]any{
+			"reason":         "run_changed",
+			"current_run_id": currentRunID,
+		})
+		return errIdleCompactionNotCurrent
+	}
 	s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, operationID, "commit_attempt", nil)
-	if err := db.SetThreadProviderContinuationAndCompactedContextIfBoundaryMatches(ctx, endpointID, threadID, contextBoundary, continuation, compacted); err != nil {
+	if err := db.SetThreadProviderContinuationIfBoundaryMatches(ctx, endpointID, threadID, contextBoundary, continuation); err != nil {
 		s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, operationID, "commit_rejected", map[string]any{
 			"reason": strings.TrimSpace(err.Error()),
 		})
@@ -492,13 +500,7 @@ func (a *threadActor) handleCompactThreadContext(ctx context.Context, meta *sess
 	if endpointID == "" || endpointID != strings.TrimSpace(a.endpointID) || threadID == "" || threadID != strings.TrimSpace(a.threadID) {
 		return CompactThreadContextResponse{}, errors.New("invalid request")
 	}
-	source := strings.TrimSpace(req.Source)
-	if source == "" {
-		source = compactThreadContextSourceSlashCommand
-	}
-	if source != compactThreadContextSourceSlashCommand {
-		return CompactThreadContextResponse{}, errors.New("invalid compact source")
-	}
+	source := compactThreadContextSourceSlashCommand
 
 	a.mgr.svc.mu.Lock()
 	db := a.mgr.svc.threadsDB
@@ -528,9 +530,9 @@ func (a *threadActor) handleCompactThreadContext(ctx context.Context, meta *sess
 	}
 
 	activeRunID, activeRun := a.lookupActiveRun(endpointID, threadID)
-	expectedRunID := strings.TrimSpace(req.ExpectedRunID)
+	activeRunRequestID := strings.TrimSpace(req.ActiveRunID)
 	if activeRunID != "" {
-		if expectedRunID != "" && expectedRunID != activeRunID {
+		if activeRunRequestID != "" && activeRunRequestID != activeRunID {
 			return CompactThreadContextResponse{}, ErrRunChanged
 		}
 		requestID, err := newManualCompactionRequestID()
@@ -554,7 +556,7 @@ func (a *threadActor) handleCompactThreadContext(ctx context.Context, meta *sess
 			Kind:        kind,
 		}, nil
 	}
-	if expectedRunID != "" {
+	if activeRunRequestID != "" {
 		return CompactThreadContextResponse{}, ErrRunChanged
 	}
 	runID, err := NewRunID()
@@ -775,89 +777,68 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	if err != nil {
 		return err
 	}
-	promptPack := contextmodel.PromptPack{
-		ThreadID:                  threadID,
-		RunID:                     runID,
-		ContextSectionsTokenUsage: map[string]int{},
-	}
-	if s.contextPacker != nil {
-		pack, packErr := s.contextPacker.BuildPromptPack(execCtx, contextpacker.BuildInput{
-			EndpointID:     endpointID,
-			ThreadID:       threadID,
-			RunID:          runID,
-			Capability:     modelCapability,
-			MaxInputTokens: 0,
-		})
-		if packErr == nil {
-			promptPack = pack
-		}
-	}
-	promptPack = s.applyThreadCompactedContextToPromptPack(execCtx, endpointID, threadID, promptPack)
-	history, err := flowerMessagesToFloret(buildMessagesFromPromptPack(promptPack, ""))
-	if err != nil {
-		return err
-	}
-	if len(history) == 0 {
-		return ErrNoCompactableContext
-	}
 	contextWindow := modelGatewayDefaultContextLimit
 	if modelCapability.MaxContextTokens > 0 {
 		contextWindow = modelCapability.MaxContextTokens
 	}
-	inputContextLimit := resolveInputContextLimit(contextWindow, 0)
-	systemPrompt := r.buildLayeredSystemPrompt(strings.TrimSpace(promptPack.Objective), permissionTypeString(permissionType), TaskComplexityStandard, 0, true, nil, runtimeState{}, "", runCapabilityContract{})
-	result, err := flruntime.CompactProjectedContext(execCtx, flruntime.ProjectedTurnOptions{
-		Config:       redevenFloretAdapterConfig(systemPrompt, floretContextPolicy(contextWindow, inputContextLimit, 0), reasoning),
+	systemPrompt := r.buildLayeredSystemPrompt("", permissionTypeString(permissionType), TaskComplexityStandard, 0, true, nil, runtimeState{}, "", runCapabilityContract{})
+	store, err := r.openFloretThreadStore()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = store.Close() }()
+	host, err := flruntime.NewHost(flruntime.HostOptions{
+		Config:       flconfig.Config{Provider: flconfig.ProviderFake, Model: strings.TrimSpace(modelCapability.WireModelName), SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, 0), Reasoning: reasoning},
 		ModelGateway: flProvider,
+		Store:        store,
 		Sink:         floretEventSink{run: r},
-		CompactionSummarizer: floretProjectedCompactionSummarizer{
-			gateway:  flProvider,
-			provider: providerType,
-			model:    strings.TrimSpace(modelCapability.WireModelName),
-			labels:   labels,
+		LoopLimits: flruntime.LoopLimits{
+			NoProgressLimit:    2,
+			DuplicateToolLimit: 3,
 		},
-	}, flruntime.ProjectedContextCompactionRequest{
-		RunID:                 flruntime.RunID(strings.TrimSpace(runID)),
-		ThreadID:              flruntime.ThreadID(threadID),
-		TurnID:                flruntime.TurnID(messageID),
-		TraceID:               flruntime.TraceID(strings.TrimSpace(runID)),
-		PromptScopeID:         flruntime.PromptScopeID(threadID),
-		History:               history,
-		Labels:                labels,
-		PreviousProviderState: previousState,
-		Reasoning:             reasoning,
-		ManualCompaction:      manual,
 	})
 	if err != nil {
 		return err
 	}
-	compacted := floretProjectedCompactionToThreadCompactedContext(result)
-	if compacted.IsZero() {
+	if err := ensureFloretThread(execCtx, host, flruntime.ThreadID(threadID)); err != nil {
+		return err
+	}
+	result, err := host.CompactThread(execCtx, flruntime.CompactThreadRequest{
+		ThreadID:              flruntime.ThreadID(threadID),
+		RequestID:             strings.TrimSpace(manual.RequestID),
+		Source:                strings.TrimSpace(manual.Source),
+		Labels:                labels,
+		PreviousProviderState: previousState,
+		Limits: flruntime.TurnLimits{
+			MaxToolCalls:           modelGatewayHardMaxToolCalls,
+			MaxLengthContinuations: 2,
+		},
+		Reasoning: reasoning,
+	})
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(result.Status) != "compacted" {
 		return ErrNoCompactableContext
 	}
 	operationID := idleManualCompactionOperationID(runID, manual.RequestID)
-	compacted.CoveredThroughTurnRowID = contextBoundary.TurnRowID
-	compacted.CoveredThroughMessageID = contextBoundary.MessageID
 	pctx, cancel := context.WithTimeout(context.Background(), persistTO)
 	continuation := providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState))
-	if err := s.commitIdleThreadCompaction(pctx, db, endpointID, threadID, operationID, continuation, compacted); err != nil {
+	if err := s.commitIdleThreadCompaction(pctx, db, endpointID, threadID, runID, operationID, continuation); err != nil {
 		cancel()
 		return err
 	}
 	cancel()
 	s.publishIdleContextCompaction(endpointID, threadID, runID, FlowerContextCompaction{
-		OperationID:          firstNonEmptyString(strings.TrimSpace(compacted.OperationID), operationID),
-		RunID:                runID,
-		Phase:                "complete",
-		Status:               "compacted",
-		Trigger:              firstNonEmptyString(strings.TrimSpace(result.Compaction.Trigger), "manual"),
-		Reason:               firstNonEmptyString(strings.TrimSpace(result.Compaction.Reason), "manual"),
-		CompactionID:         strings.TrimSpace(compacted.CompactionID),
-		CompactionGeneration: compacted.CompactionGeneration,
-		CompactionWindowID:   strings.TrimSpace(compacted.CompactionWindowID),
-		TokensBefore:         result.Compaction.TokensBefore,
-		TokensAfterEstimate:  result.Compaction.TokensAfterEstimate,
-		UpdatedAtMs:          time.Now().UnixMilli(),
+		OperationID:         operationID,
+		RunID:               runID,
+		Phase:               "complete",
+		Status:              "compacted",
+		Trigger:             "manual",
+		Reason:              "manual",
+		TokensBefore:        result.Metrics.ProviderUsage.InputTokens,
+		TokensAfterEstimate: result.Metrics.ProviderUsage.WindowInputTokens,
+		UpdatedAtMs:         time.Now().UnixMilli(),
 	}, anchor)
 	s.broadcastThreadSummary(endpointID, threadID)
 	return nil

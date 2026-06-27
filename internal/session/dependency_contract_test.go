@@ -1,6 +1,7 @@
 package session
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -116,22 +117,85 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	goSum := readRepoFile(t, root, "go.sum")
 	notices := readRepoFile(t, root, "THIRD_PARTY_NOTICES.md")
 
-	if !strings.Contains(goMod, "github.com/floegence/floret v0.3.36") {
-		t.Fatalf("go.mod must depend on floret v0.3.36")
+	if !strings.Contains(goMod, "github.com/floegence/floret v0.3.37") {
+		t.Fatalf("go.mod must depend on floret v0.3.37")
 	}
 	assertNoLocalGoModuleReference(t, "go.mod", goMod, "github.com/floegence/floret", "floret")
-	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.36 ") {
-		t.Fatalf("go.sum must include floret v0.3.36 module checksum")
+	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.37 ") {
+		t.Fatalf("go.sum must include floret v0.3.37 module checksum")
 	}
-	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.36/go.mod ") {
-		t.Fatalf("go.sum must include floret v0.3.36 go.mod checksum")
+	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.37/go.mod ") {
+		t.Fatalf("go.sum must include floret v0.3.37 go.mod checksum")
 	}
 	assertNoLocalGoModuleReference(t, "go.sum", goSum, "github.com/floegence/floret", "floret")
-	if !strings.Contains(notices, "| github.com/floegence/floret | v0.3.36 |") {
-		t.Fatalf("THIRD_PARTY_NOTICES.md must include floret v0.3.36")
+	if !strings.Contains(notices, "| github.com/floegence/floret | v0.3.37 |") {
+		t.Fatalf("THIRD_PARTY_NOTICES.md must include floret v0.3.37")
 	}
-	if !strings.Contains(notices, "github.com/floegence/floret@v0.3.36") {
-		t.Fatalf("THIRD_PARTY_NOTICES.md must link floret v0.3.36")
+	if !strings.Contains(notices, "github.com/floegence/floret@v0.3.37") {
+		t.Fatalf("THIRD_PARTY_NOTICES.md must link floret v0.3.37")
+	}
+}
+
+func TestFloretContextLifecycleBoundaryDoesNotUseHostHistoryAPIs(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	forbidden := []string{
+		"github.com/floegence/floret/" + "internal",
+		"Run" + "ProjectedTurn",
+		"ProjectedTurn" + "Request",
+		"ProjectedTurn" + "Result",
+		"Compact" + "ProjectedContext",
+		"Active" + "Transcript",
+		"Prompt" + "Pack",
+		"Snapshot" + "Compactor",
+		"Compact" + "PromptPack",
+		"context_" + "snapshots",
+		"compacted_" + "context_json",
+		"User" + "ProvidedContext",
+	}
+	allowedPrefixes := []string{
+		filepath.Join(root, "internal", "codexbridge") + string(os.PathSeparator),
+		filepath.Join(root, "okf", "dist") + string(os.PathSeparator),
+	}
+	allowedFiles := map[string]bool{
+		filepath.Join(root, "internal", "session", "dependency_contract_test.go"): true,
+	}
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		name := entry.Name()
+		if entry.IsDir() {
+			switch name {
+			case ".git", "node_modules", ".next", "dist", "build", "tmp":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if allowedFiles[path] || !floretBoundaryScanFile(path) {
+			return nil
+		}
+		for _, prefix := range allowedPrefixes {
+			if strings.HasPrefix(path, prefix) {
+				return nil
+			}
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		content := string(data)
+		for _, marker := range forbidden {
+			if strings.Contains(content, marker) {
+				rel, _ := filepath.Rel(root, path)
+				t.Fatalf("%s must not contain Floret context lifecycle boundary marker %q", rel, marker)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan repository: %v", err)
 	}
 }
 
@@ -145,6 +209,15 @@ func TestRepositoryDoesNotUseGoWorkspaceForPublishedDependencies(t *testing.T) {
 		} else if !os.IsNotExist(err) {
 			t.Fatalf("stat %s: %v", name, err)
 		}
+	}
+}
+
+func floretBoundaryScanFile(path string) bool {
+	switch filepath.Ext(path) {
+	case ".go", ".md", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".yaml", ".yml", ".sh":
+		return true
+	default:
+		return false
 	}
 }
 

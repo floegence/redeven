@@ -475,7 +475,6 @@ func ensureAIThreadStateContinuationColumnsTx(tx *sql.Tx) error {
 		column string
 		sql    string
 	}{
-		{column: "compacted_context_json", sql: `ALTER TABLE ai_thread_state ADD COLUMN compacted_context_json TEXT NOT NULL DEFAULT ''`},
 		{column: "provider_continuation_state_json", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_state_json TEXT NOT NULL DEFAULT ''`},
 		{column: "provider_continuation_provider_id", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_provider_id TEXT NOT NULL DEFAULT ''`},
 		{column: "provider_continuation_model", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_model TEXT NOT NULL DEFAULT ''`},
@@ -563,7 +562,6 @@ CREATE TABLE IF NOT EXISTS ai_thread_state (
   thread_id TEXT NOT NULL,
   open_goal TEXT NOT NULL DEFAULT '',
   last_assistant_summary TEXT NOT NULL DEFAULT '',
-  compacted_context_json TEXT NOT NULL DEFAULT '',
   provider_continuation_state_json TEXT NOT NULL DEFAULT '',
   provider_continuation_provider_id TEXT NOT NULL DEFAULT '',
   provider_continuation_model TEXT NOT NULL DEFAULT '',
@@ -697,19 +695,6 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(memory_id, embedding_model)
 );
-
-CREATE TABLE IF NOT EXISTS context_snapshots (
-  snapshot_id TEXT PRIMARY KEY,
-  endpoint_id TEXT NOT NULL,
-  thread_id TEXT NOT NULL,
-  level TEXT NOT NULL DEFAULT 'turn',
-  summary_text TEXT NOT NULL DEFAULT '',
-  covers_turn_from_id INTEGER NOT NULL DEFAULT 0,
-  covers_turn_to_id INTEGER NOT NULL DEFAULT 0,
-  quality_score REAL NOT NULL DEFAULT 0.5,
-  created_at_unix_ms INTEGER NOT NULL DEFAULT 0
-);
-CREATE INDEX IF NOT EXISTS idx_context_snapshots_thread_level ON context_snapshots(endpoint_id, thread_id, level, created_at_unix_ms DESC);
 
 CREATE TABLE IF NOT EXISTS provider_capabilities (
   provider_id TEXT NOT NULL,
@@ -1146,7 +1131,6 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"request_user_input_secret_answers",
 		"execution_spans",
 		"memory_items",
-		"context_snapshots",
 		"provider_capabilities",
 		"ai_uploads",
 		"ai_upload_refs",
@@ -1212,7 +1196,6 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		},
 		"ai_thread_state": {
 			"endpoint_id", "thread_id", "open_goal", "last_assistant_summary",
-			"compacted_context_json",
 			"provider_continuation_state_json", "provider_continuation_provider_id",
 			"provider_continuation_model", "provider_continuation_base_url",
 			"provider_continuation_updated_at_unix_ms", "updated_at_unix_ms",
@@ -1249,10 +1232,6 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			"memory_id", "endpoint_id", "thread_id", "scope", "kind", "content",
 			"source_refs_json", "importance", "freshness", "confidence", "created_at_unix_ms",
 			"updated_at_unix_ms",
-		},
-		"context_snapshots": {
-			"snapshot_id", "endpoint_id", "thread_id", "level", "summary_text",
-			"covers_turn_from_id", "covers_turn_to_id", "quality_score", "created_at_unix_ms",
 		},
 		"provider_capabilities": {
 			"provider_id", "model_name", "capability_json", "updated_at_unix_ms",
@@ -1355,7 +1334,6 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"idx_execution_spans_run_started",
 		"idx_memory_items_thread_updated",
 		"idx_memory_items_scope_kind",
-		"idx_context_snapshots_thread_level",
 		"idx_structured_user_inputs_recent",
 		"idx_request_user_input_secret_answers_message",
 		"idx_ai_uploads_endpoint_created",

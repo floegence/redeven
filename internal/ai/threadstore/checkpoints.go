@@ -38,7 +38,6 @@ type threadCheckpointDerivedSnapshot struct {
 	MemoryItems             []MemoryItemRecord                   `json:"memory_items"`
 	ThreadTodos             *ThreadTodosSnapshot                 `json:"thread_todos,omitempty"`
 	ThreadState             *ThreadState                         `json:"thread_state,omitempty"`
-	ContextSnapshots        []ContextSnapshotRecord              `json:"context_snapshots"`
 	ExecutionSpans          []ExecutionSpanRecord                `json:"execution_spans"`
 	StructuredUserInputs    []StructuredUserInputRecord          `json:"structured_user_inputs"`
 	RequestUserInputSecrets []RequestUserInputSecretAnswerRecord `json:"request_user_input_secret_answers"`
@@ -451,7 +450,6 @@ func (s *Store) snapshotThreadDerivedTx(ctx context.Context, tx *sql.Tx, endpoin
 		MemoryItems:             nil,
 		ThreadTodos:             nil,
 		ThreadState:             nil,
-		ContextSnapshots:        nil,
 		ExecutionSpans:          nil,
 		StructuredUserInputs:    nil,
 		RequestUserInputSecrets: nil,
@@ -519,10 +517,8 @@ WHERE endpoint_id = ? AND thread_id = ?
 	// Thread state.
 	var st ThreadState
 	var providerContinuationStateJSON string
-	var compactedContextJSON string
 	stErr := tx.QueryRowContext(ctx, `
 	SELECT endpoint_id, thread_id, open_goal, last_assistant_summary,
-	       compacted_context_json,
 	       provider_continuation_state_json, provider_continuation_provider_id,
 	       provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
 	       updated_at_unix_ms
@@ -533,7 +529,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 		&st.ThreadID,
 		&st.OpenGoal,
 		&st.LastAssistantSummary,
-		&compactedContextJSON,
 		&providerContinuationStateJSON,
 		&st.ProviderContinuation.ProviderID,
 		&st.ProviderContinuation.Model,
@@ -546,50 +541,12 @@ WHERE endpoint_id = ? AND thread_id = ?
 		st.ThreadID = strings.TrimSpace(st.ThreadID)
 		st.OpenGoal = strings.TrimSpace(st.OpenGoal)
 		st.LastAssistantSummary = strings.TrimSpace(st.LastAssistantSummary)
-		st.CompactedContext = parseThreadCompactedContextJSON(compactedContextJSON)
 		st.ProviderContinuation.State = parseProviderContinuationStateJSON(providerContinuationStateJSON)
 		st.ProviderContinuation = st.ProviderContinuation.normalized()
 		out.ThreadState = &st
 	} else if !errors.Is(stErr, sql.ErrNoRows) {
 		return out, stErr
 	}
-
-	// Context snapshots.
-	srows, err := tx.QueryContext(ctx, `
-SELECT snapshot_id, endpoint_id, thread_id,
-       level, summary_text,
-       covers_turn_from_id, covers_turn_to_id,
-       quality_score, created_at_unix_ms
-FROM context_snapshots
-WHERE endpoint_id = ? AND thread_id = ?
-ORDER BY created_at_unix_ms ASC, snapshot_id ASC
-`, endpointID, threadID)
-	if err != nil {
-		return out, err
-	}
-	for srows.Next() {
-		var rec ContextSnapshotRecord
-		if err := srows.Scan(
-			&rec.SnapshotID,
-			&rec.EndpointID,
-			&rec.ThreadID,
-			&rec.Level,
-			&rec.SummaryText,
-			&rec.CoversTurnFromID,
-			&rec.CoversTurnToID,
-			&rec.QualityScore,
-			&rec.CreatedAtUnixMs,
-		); err != nil {
-			_ = srows.Close()
-			return out, err
-		}
-		out.ContextSnapshots = append(out.ContextSnapshots, rec)
-	}
-	if err := srows.Err(); err != nil {
-		_ = srows.Close()
-		return out, err
-	}
-	_ = srows.Close()
 
 	// Execution spans.
 	erows, err := tx.QueryContext(ctx, `

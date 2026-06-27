@@ -303,7 +303,7 @@ func TestFloretProviderAdapter_UsesProjectedPreviousState(t *testing.T) {
 	if recorder.req.ProviderControls.PreviousResponseID != "resp_prev" {
 		t.Fatalf("PreviousResponseID=%q, want resp_prev", recorder.req.ProviderControls.PreviousResponseID)
 	}
-	if len(recorder.req.Messages) != 1 || messageTextForFloret(recorder.req.Messages[0], true) != "full history" {
+	if len(recorder.req.Messages) != 1 || len(recorder.req.Messages[0].Content) != 1 || strings.TrimSpace(recorder.req.Messages[0].Content[0].Text) != "full history" {
 		t.Fatalf("messages=%#v, want Floret-projected history", recorder.req.Messages)
 	}
 }
@@ -385,7 +385,7 @@ func TestFloretProviderAdapter_EmitsErrorForRejectedPreviousResponseIDWithoutRep
 	if got := recorder.requests[0].ProviderControls.PreviousResponseID; got != "resp_prev" {
 		t.Fatalf("PreviousResponseID=%q, want resp_prev", got)
 	}
-	if len(recorder.requests[0].Messages) != 1 || messageTextForFloret(recorder.requests[0].Messages[0], true) != "full history" {
+	if len(recorder.requests[0].Messages) != 1 || len(recorder.requests[0].Messages[0].Content) != 1 || strings.TrimSpace(recorder.requests[0].Messages[0].Content[0].Text) != "full history" {
 		t.Fatalf("messages=%#v, want Floret-projected history", recorder.requests[0].Messages)
 	}
 	if errorEvent == nil || errorEvent.Err == nil || !strings.Contains(errorEvent.Reason, "previous_response_id") {

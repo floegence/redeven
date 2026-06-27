@@ -277,7 +277,7 @@ export function normalizeContextCompactionEvent(
   const payload = Object.keys(structured).length > 0 ? structured : source;
   const eventType = rawEventType;
   if (!eventType) return null;
-  const compactionId = String(payload.compaction_id ?? payload.operation_id ?? '').trim();
+  const compactionId = String(payload.operation_id ?? '').trim();
   if (!compactionId) return null;
 
   const stepIndex = Math.max(0, Math.floor(readNumber(payload.step_index, 0)));
