@@ -88,6 +88,10 @@ func (h *recordingFloretHost) RunTurn(context.Context, flruntime.RunTurnRequest)
 	return flruntime.TurnResult{}, nil
 }
 
+func (h *recordingFloretHost) ListThreadDetailEvents(context.Context, flruntime.ListThreadDetailEventsRequest) (flruntime.ThreadDetailEvents, error) {
+	return flruntime.ThreadDetailEvents{}, nil
+}
+
 func (h *recordingFloretHost) CompactThread(context.Context, flruntime.CompactThreadRequest) (flruntime.CompactThreadResult, error) {
 	return flruntime.CompactThreadResult{}, nil
 }

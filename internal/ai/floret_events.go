@@ -53,6 +53,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	r.applyFloretCompaction(ev.Compaction)
 	r.persistFloretCompactionDebug(ev.CompactionDebug)
 	r.recordFloretActivityEvent(ev)
+	r.recordFloretCommittedThreadEvent(ev.Committed)
 	switch ev.Type {
 	case floretEventProviderRequest:
 		r.updateModelIOStatus(FlowerModelIOPhaseWaitingResponse, ev.Step)
