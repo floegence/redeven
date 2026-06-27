@@ -599,8 +599,38 @@ func TestFloretToolResultActivityForOKFIndexAndOpenUseStructuredFields(t *testin
 		Summary:  toolSuccessSummary("okf.index"),
 		Data: map[string]any{
 			"okf_version":    "0.1",
-			"total_sections": 1,
-			"sections":       []map[string]any{{"title": "AI"}},
+			"total_sections": 2,
+			"sections": []map[string]any{
+				{
+					"title": "Architecture",
+					"slug":  "architecture",
+					"entries": []map[string]any{
+						{
+							"concept_id":  "architecture.runtime-startup-presentation",
+							"path":        "architecture/runtime-startup-presentation.md",
+							"title":       "Runtime startup presentation",
+							"type":        "Runtime Contract",
+							"description": "redeven run startup output is structured events rendered by rich, plain, or machine presentation modes.",
+							"tags":        []any{"architecture", "desktop", "runtime", "startup"},
+						},
+					},
+				},
+				{
+					"title": "AI",
+					"slug":  "ai",
+					"entries": []map[string]any{
+						{
+							"concept_id":  "ai.okf-search-tool",
+							"path":        "ai/okf-search-tool.md",
+							"title":       "OKF tool suite",
+							"type":        "AI Tool Contract",
+							"description": "OKF tools expose read-only Redeven repository knowledge through progressive disclosure.",
+							"resource":    "internal/ai/builtin_tool_handlers.go",
+							"tags":        []any{"ai", "okf"},
+						},
+					},
+				},
+			},
 		},
 	})
 	if index.Payload["operation"] != "okf.index" {
@@ -608,6 +638,25 @@ func TestFloretToolResultActivityForOKFIndexAndOpenUseStructuredFields(t *testin
 	}
 	if _, ok := index.Payload["sections"]; !ok {
 		t.Fatalf("index payload missing sections: %#v", index.Payload)
+	}
+	if index.Payload["truncated"] == true {
+		t.Fatalf("okf.index structured directory should not report truncation: %#v", index.Payload)
+	}
+	if activityHasChip(index.Chips, "truncated", "") {
+		t.Fatalf("okf.index structured directory should not show truncated chip: %#v", index.Chips)
+	}
+	sections := toAnySlice(index.Payload["sections"])
+	if len(sections) != 2 {
+		t.Fatalf("index sections=%#v, want 2 sections", index.Payload["sections"])
+	}
+	firstSection, _ := sections[0].(map[string]any)
+	entries := toAnySlice(firstSection["entries"])
+	if len(entries) != 1 {
+		t.Fatalf("first section entries=%#v, want one entry", firstSection["entries"])
+	}
+	firstEntry, _ := entries[0].(map[string]any)
+	if got := toAnySlice(firstEntry["tags"]); len(got) != 4 {
+		t.Fatalf("entry tags=%#v, want preserved tags", firstEntry["tags"])
 	}
 
 	open := mustFloretToolResultActivity(t, r, ToolResult{
@@ -636,6 +685,9 @@ func TestFloretToolResultActivityForOKFIndexAndOpenUseStructuredFields(t *testin
 	}
 	if !readBoolField(open.Payload, "truncated") {
 		t.Fatalf("open payload should retain body truncation: %#v", open.Payload)
+	}
+	if !activityHasChip(open.Chips, "truncated", "") {
+		t.Fatalf("open body window truncation should show truncated chip: %#v", open.Chips)
 	}
 }
 

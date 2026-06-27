@@ -494,6 +494,7 @@ const (
 	activityPayloadKeyLimit              = 80
 	activityPayloadStringLimit           = 8000
 	activityPayloadMaxDepth              = 5
+	okfActivityPayloadMaxDepth           = 8
 )
 
 func activityPresentationLabel(value string) string {
@@ -1252,7 +1253,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 	}
 	spec, hasSpec := aitools.PresentationSpec(toolName)
 	renderer := activityRendererFromSpec(spec, hasSpec)
-	rawPayload, dataTruncated := activityPayloadFromResultData(result.Data)
+	rawPayload, dataTruncated := activityPayloadFromResultDataForTool(toolName, result.Data)
 	payload := activityPayloadFromFieldListWithRegistry(r, spec.ResultPayloadFields, rawPayload)
 	payload = activityPayloadWithSpecOperation(payload, spec, hasSpec)
 	if status != "" {
@@ -1264,7 +1265,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 	if details := strings.TrimSpace(result.Details); details != "" {
 		payload["details"] = details
 	}
-	if result.Truncated || dataTruncated || readBoolField(rawPayload, "truncated") || readBoolField(payload, "truncated") {
+	if result.Truncated || readBoolField(rawPayload, "truncated") || readBoolField(payload, "truncated") || (!isOKFToolName(toolName) && dataTruncated) {
 		payload["truncated"] = true
 	}
 	if result.ContentRef != "" {
@@ -1273,8 +1274,8 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 	if result.Error != nil {
 		payload["error"] = activityToolErrorPayload(result.Error)
 	}
-	payload, payloadTruncated := contractSafePayloadMap(payload, 0)
-	if payloadTruncated {
+	payload, payloadTruncated := contractSafePayloadMapForTool(toolName, payload, 0)
+	if payloadTruncated && !isOKFToolName(toolName) {
 		payload["truncated"] = true
 	}
 	activity := &observation.ActivityPresentation{
@@ -1283,35 +1284,57 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 		Chips:    activityChipsFromSpec(spec, payload),
 		Payload:  payload,
 	}
-	return contractSafeActivityPresentation(activity), nil
+	return contractSafeActivityPresentationForTool(toolName, activity), nil
+}
+
+func activityPayloadFromResultDataForTool(toolName string, data any) (map[string]any, bool) {
+	if isOKFToolName(toolName) {
+		return activityPayloadFromResultDataWithDepth(data, okfActivityPayloadMaxDepth)
+	}
+	return activityPayloadFromResultData(data)
 }
 
 func activityPayloadFromResultData(data any) (map[string]any, bool) {
+	return activityPayloadFromResultDataWithDepth(data, activityPayloadMaxDepth)
+}
+
+func activityPayloadFromResultDataWithDepth(data any, maxDepth int) (map[string]any, bool) {
 	if data == nil {
 		return map[string]any{}, false
 	}
 	if record, ok := data.(map[string]any); ok {
-		return contractSafePayloadMap(record, 0)
+		return contractSafePayloadMapWithMaxDepth(record, 0, maxDepth)
 	}
 	raw, err := json.Marshal(data)
 	if err != nil || len(raw) == 0 {
-		value, truncated := contractSafePayloadValue(strings.TrimSpace(fmt.Sprint(data)), 1)
+		value, truncated := contractSafePayloadValueWithMaxDepth(strings.TrimSpace(fmt.Sprint(data)), 1, maxDepth)
 		return map[string]any{"value": value}, truncated
 	}
 	var out map[string]any
 	if err := json.Unmarshal(raw, &out); err == nil && out != nil {
-		return contractSafePayloadMap(out, 0)
+		return contractSafePayloadMapWithMaxDepth(out, 0, maxDepth)
 	}
 	var value any
 	if err := json.Unmarshal(raw, &value); err != nil {
-		safeValue, truncated := contractSafePayloadValue(string(raw), 1)
+		safeValue, truncated := contractSafePayloadValueWithMaxDepth(string(raw), 1, maxDepth)
 		return map[string]any{"value": safeValue}, truncated
 	}
-	safeValue, truncated := contractSafePayloadValue(value, 1)
+	safeValue, truncated := contractSafePayloadValueWithMaxDepth(value, 1, maxDepth)
 	return map[string]any{"value": safeValue}, truncated
 }
 
 func contractSafePayloadMap(in map[string]any, depth int) (map[string]any, bool) {
+	return contractSafePayloadMapWithMaxDepth(in, depth, activityPayloadMaxDepth)
+}
+
+func contractSafePayloadMapForTool(toolName string, in map[string]any, depth int) (map[string]any, bool) {
+	if isOKFToolName(toolName) {
+		return contractSafePayloadMapWithMaxDepth(in, depth, okfActivityPayloadMaxDepth)
+	}
+	return contractSafePayloadMap(in, depth)
+}
+
+func contractSafePayloadMapWithMaxDepth(in map[string]any, depth int, maxDepth int) (map[string]any, bool) {
 	out := make(map[string]any, len(in))
 	truncated := false
 	for key, value := range in {
@@ -1322,13 +1345,13 @@ func contractSafePayloadMap(in map[string]any, depth int) (map[string]any, bool)
 		}
 		if key == "error" {
 			if errorPayload, ok := activityToolErrorRecordFromValue(value); ok {
-				safeError, errorTruncated := contractSafePayloadMap(errorPayload, depth+1)
+				safeError, errorTruncated := contractSafePayloadMapWithMaxDepth(errorPayload, depth+1, maxDepth)
 				out[key] = safeError
 				truncated = truncated || errorTruncated
 				continue
 			}
 		}
-		safeValue, valueTruncated := contractSafePayloadValue(value, depth+1)
+		safeValue, valueTruncated := contractSafePayloadValueWithMaxDepth(value, depth+1, maxDepth)
 		out[key] = safeValue
 		truncated = truncated || valueTruncated
 	}
@@ -1336,12 +1359,16 @@ func contractSafePayloadMap(in map[string]any, depth int) (map[string]any, bool)
 }
 
 func contractSafePayloadValue(value any, depth int) (any, bool) {
-	if depth > activityPayloadMaxDepth {
+	return contractSafePayloadValueWithMaxDepth(value, depth, activityPayloadMaxDepth)
+}
+
+func contractSafePayloadValueWithMaxDepth(value any, depth int, maxDepth int) (any, bool) {
+	if depth > maxDepth {
 		text, truncated := contractSafeString(compactJSONForActivityPayload(value), activityPayloadStringLimit)
 		return text, true || truncated
 	}
 	if errorPayload, ok := activityToolErrorPayloadFromValue(value); ok {
-		safeError, truncated := contractSafePayloadMap(errorPayload, depth)
+		safeError, truncated := contractSafePayloadMapWithMaxDepth(errorPayload, depth, maxDepth)
 		return safeError, truncated
 	}
 	switch typed := value.(type) {
@@ -1364,33 +1391,33 @@ func contractSafePayloadValue(value any, depth int) (any, bool) {
 		}
 		return typed, false
 	case map[string]any:
-		if depth >= activityPayloadMaxDepth {
+		if depth >= maxDepth {
 			text, truncated := contractSafeString(compactJSONForActivityPayload(typed), activityPayloadStringLimit)
 			return text, true || truncated
 		}
-		return contractSafePayloadMap(typed, depth)
+		return contractSafePayloadMapWithMaxDepth(typed, depth, maxDepth)
 	case []any:
-		if depth >= activityPayloadMaxDepth {
+		if depth >= maxDepth {
 			text, truncated := contractSafeString(compactJSONForActivityPayload(typed), activityPayloadStringLimit)
 			return text, true || truncated
 		}
 		out := make([]any, 0, len(typed))
 		truncated := false
 		for _, item := range typed {
-			safeItem, itemTruncated := contractSafePayloadValue(item, depth+1)
+			safeItem, itemTruncated := contractSafePayloadValueWithMaxDepth(item, depth+1, maxDepth)
 			out = append(out, safeItem)
 			truncated = truncated || itemTruncated
 		}
 		return out, truncated
 	case []map[string]any:
-		if depth >= activityPayloadMaxDepth {
+		if depth >= maxDepth {
 			text, truncated := contractSafeString(compactJSONForActivityPayload(typed), activityPayloadStringLimit)
 			return text, true || truncated
 		}
 		out := make([]any, 0, len(typed))
 		truncated := false
 		for _, item := range typed {
-			safeItem, itemTruncated := contractSafePayloadMap(item, depth+1)
+			safeItem, itemTruncated := contractSafePayloadMapWithMaxDepth(item, depth+1, maxDepth)
 			out = append(out, safeItem)
 			truncated = truncated || itemTruncated
 		}
@@ -1398,30 +1425,43 @@ func contractSafePayloadValue(value any, depth int) (any, bool) {
 	default:
 		raw, err := json.Marshal(value)
 		if err != nil || len(raw) == 0 {
-			return contractSafePayloadValue(strings.TrimSpace(fmt.Sprint(value)), depth)
+			return contractSafePayloadValueWithMaxDepth(strings.TrimSpace(fmt.Sprint(value)), depth, maxDepth)
 		}
 		var out any
 		if err := json.Unmarshal(raw, &out); err != nil {
-			return contractSafePayloadValue(string(raw), depth)
+			return contractSafePayloadValueWithMaxDepth(string(raw), depth, maxDepth)
 		}
-		return contractSafePayloadValue(out, depth)
+		return contractSafePayloadValueWithMaxDepth(out, depth, maxDepth)
 	}
 }
 
 func contractSafeActivityPresentation(activity *observation.ActivityPresentation) *observation.ActivityPresentation {
+	return contractSafeActivityPresentationForTool("", activity)
+}
+
+func contractSafeActivityPresentationForTool(toolName string, activity *observation.ActivityPresentation) *observation.ActivityPresentation {
 	if activity == nil {
 		return nil
 	}
 	activity.Label = activityPresentationLabel(activity.Label)
 	activity.Description = activityPresentationDescription(activity.Description)
 	if len(activity.Payload) > 0 {
-		payload, truncated := contractSafePayloadMap(activity.Payload, 0)
-		if truncated {
+		payload, truncated := contractSafePayloadMapForTool(toolName, activity.Payload, 0)
+		if truncated && !isOKFToolName(toolName) {
 			payload["truncated"] = true
 		}
 		activity.Payload = payload
 	}
 	return activity
+}
+
+func isOKFToolName(toolName string) bool {
+	switch strings.TrimSpace(toolName) {
+	case "okf.index", "okf.search", "okf.open":
+		return true
+	default:
+		return false
+	}
 }
 
 func contractSafePayloadKey(key string) string {
