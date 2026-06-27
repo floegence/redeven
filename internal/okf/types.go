@@ -84,7 +84,11 @@ type SearchResult struct {
 	Query         string        `json:"query"`
 	Filters       SearchFilters `json:"filters,omitempty"`
 	TotalConcepts int           `json:"total_concepts"`
+	TotalMatches  int           `json:"total_matches"`
 	MatchCount    int           `json:"match_count"`
+	MaxResults    int           `json:"max_results"`
+	HasMore       bool          `json:"has_more"`
+	OmittedCount  int           `json:"omitted_count"`
 	Matches       []SearchMatch `json:"matches"`
 	Truncated     bool          `json:"truncated"`
 }

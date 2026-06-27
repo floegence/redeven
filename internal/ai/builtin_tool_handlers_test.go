@@ -143,7 +143,11 @@ func TestNormalizeTruncatedToolPayload_OKFSearchKeepsStructuredMatches(t *testin
 	payload := map[string]any{
 		"query":          "redeven",
 		"total_concepts": 22,
+		"total_matches":  8,
 		"match_count":    8,
+		"max_results":    8,
+		"has_more":       false,
+		"omitted_count":  0,
 		"matches":        matches,
 		"truncated":      false,
 	}

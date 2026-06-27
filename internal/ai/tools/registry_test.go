@@ -79,7 +79,7 @@ func TestBuiltInPresentationSpecsCarryProjectionFacts(t *testing.T) {
 			callPayloadFields:   []string{"query", "max_results", "type", "tags"},
 			callLabelFallback:   "OKF knowledge",
 			resultLabelFallback: "OKF knowledge",
-			resultPayloadFields: []string{"query", "filters", "total_concepts", "match_count", "matches", "truncated"},
+			resultPayloadFields: []string{"query", "filters", "total_concepts", "total_matches", "match_count", "max_results", "has_more", "omitted_count", "matches", "truncated"},
 		},
 		{
 			toolName:            "okf.open",

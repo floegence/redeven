@@ -272,8 +272,8 @@ var builtinDefinitions = map[string]Definition{
 			callFallback("OKF knowledge"),
 			resultFallback("OKF knowledge"),
 			callPayloadFields("query", "max_results", "type", "tags"),
-			resultPayloadFields("query", "filters", "total_concepts", "match_count", "matches", "truncated"),
-			chipFields("match_count", "truncated"),
+			resultPayloadFields("query", "filters", "total_concepts", "total_matches", "match_count", "max_results", "has_more", "omitted_count", "matches", "truncated"),
+			chipFields("match_count", "total_matches", "has_more", "truncated"),
 		),
 	},
 	"okf.open": {

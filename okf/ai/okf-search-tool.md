@@ -14,7 +14,7 @@ Runtime OKF code loads the embedded bundle once, indexes root directory sections
 
 # Tool workflow
 
-`okf.index` browses `okf/index.md` as a structured directory and should be used first for broad Redeven-internal questions when the relevant concept area is unclear. `okf.search` returns a short candidate list with `concept_id`, `path`, title, description, resource, tags, snippet, and score; broad searches should start with the default small result count. `okf.open` opens one concept by `concept_id` or path and returns metadata, a body window, and links/backlinks. Models should open the relevant concept before relying on OKF for detailed facts, boundaries, contracts, or workflows.
+`okf.index` browses `okf/index.md` as a structured directory and should be used first for broad Redeven-internal questions when the relevant concept area is unclear. `okf.search` returns a bounded short candidate list with `concept_id`, `path`, title, description, resource, tags, snippet, score, returned count, total match count, and explicit `has_more` metadata; broad searches should start with the default small result count. Limiting search to a short candidate list is progressive disclosure, not content truncation. `okf.open` opens one concept by `concept_id` or path and returns metadata, a body window, and links/backlinks. Models should open the relevant concept before relying on OKF for detailed facts, boundaries, contracts, or workflows.
 
 # Boundaries
 
