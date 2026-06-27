@@ -1,7 +1,7 @@
 import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Clock, Copy, FileText, FolderOpen, GitBranch, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Clock, Copy, FileText, FolderOpen, GitBranch, GripVertical, Plus, Settings, Shield, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, FloatingWindow, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -43,6 +43,7 @@ import type {
   FlowerActivityApprovalState,
   FlowerModelIOPhase,
   FlowerModelIOStatus,
+  FlowerPermissionType,
   FlowerReasoningSelection,
   FlowerSubagentDetail,
   FlowerSubagentTimelineRow,
@@ -95,11 +96,17 @@ type FlowerComposerSessionDraft = Readonly<{
   inputPromptSignature: string;
   inputDrafts: Record<string, FlowerInputDraft>;
   activeInputQuestionID: string;
+  permissionTypeOverride?: FlowerPermissionType;
   reasoningOverride?: FlowerReasoningSelection;
 }>;
 type FlowerComposerContextUsageModel = Readonly<{
   usage: FlowerContextUsage;
   freshness: FlowerComposerContextUsageFreshness;
+}>;
+type PendingPermissionPatch = Readonly<{
+  threadID: string;
+  requested: FlowerPermissionType;
+  previous: FlowerPermissionType;
 }>;
 type PendingFlowerTurn = Readonly<{
   thread_id: string;
@@ -193,6 +200,7 @@ const THREAD_RAIL_WIDTH_MAX = 380;
 const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
 const COMPOSER_STOP_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval']);
 const PENDING_NEW_THREAD_ID = '__new_thread__';
+const FLOWER_PERMISSION_TYPES: readonly FlowerPermissionType[] = ['readonly', 'approval_required', 'full_access'];
 const LIVE_EVENT_RENDER_YIELD_SIZE = 8;
 const MESSAGE_COPY_RESET_MS = 1600;
 const FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID = 'flower-composer-command-compact-context';
@@ -237,6 +245,7 @@ function sameFlowerComposerSessionDraft(left: FlowerComposerSessionDraft, right:
   return left.chatDraft === right.chatDraft
     && left.inputPromptSignature === right.inputPromptSignature
     && left.activeInputQuestionID === right.activeInputQuestionID
+    && left.permissionTypeOverride === right.permissionTypeOverride
     && sameFlowerInputDrafts(left.inputDrafts, right.inputDrafts)
     && sameFlowerReasoningSelection(left.reasoningOverride, right.reasoningOverride);
 }
@@ -559,6 +568,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [composerSessionDrafts, setComposerSessionDrafts] = createSignal<Record<string, FlowerComposerSessionDraft>>({});
   const [chatSubmitError, setChatSubmitError] = createSignal('');
   const [inputSubmitError, setInputSubmitError] = createSignal('');
+  const [permissionSubmitError, setPermissionSubmitError] = createSignal('');
   const [inputSubmitting, setInputSubmitting] = createSignal(false);
   const [chatRunning, setChatRunning] = createSignal(false);
   const [threadStopping, setThreadStopping] = createSignal(false);
@@ -598,6 +608,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [transcriptLayoutRevision, setTranscriptLayoutRevision] = createSignal(0);
   const [subagentDropdownOpen, setSubagentDropdownOpen] = createSignal(false);
   const [subagentDropdownPosition, setSubagentDropdownPosition] = createSignal<FlowerFloatingPoint>({ x: 0, y: 0 });
+  const [permissionMenuOpen, setPermissionMenuOpen] = createSignal(false);
+  const [permissionMenuActiveIndex, setPermissionMenuActiveIndex] = createSignal(0);
+  const [pendingPermissionPatch, setPendingPermissionPatch] = createSignal<PendingPermissionPatch | null>(null);
   const [activeSubagentID, setActiveSubagentID] = createSignal('');
   const [subagentDetail, setSubagentDetail] = createSignal<FlowerSubagentDetail | null>(null);
   const [subagentDetailLoading, setSubagentDetailLoading] = createSignal(false);
@@ -612,6 +625,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadsRefreshSequence = 0;
   let startedFocusThreadRequestID = '';
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
+  let permissionTriggerRef: HTMLButtonElement | undefined;
+  let permissionMenuRef: HTMLDivElement | undefined;
   let subagentTriggerRef: HTMLButtonElement | undefined;
   let subagentDropdownRef: HTMLDivElement | undefined;
   let renameDialogRef: HTMLDivElement | undefined;
@@ -722,10 +737,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadLevelApprovalActions = createMemo(() => (
     selectedApprovalActions().filter((action) => approvalActionIsDelegated(action) && approvalActionIsPrimarySurface(action))
   ));
-  const selectedThreadPermissionCopy = createMemo(() => {
-    const permissionType = selectedThread()?.permission_type ?? 'approval_required';
-    return copy().settings.permissionTypes[permissionType];
-  });
   const selectedApprovalActionsByToolID = createMemo(() => {
     const out = new Map<string, readonly FlowerApprovalAction[]>();
     for (const action of selectedApprovalActions()) {
@@ -811,6 +822,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadLoading = createMemo(() => trimString(loadingThreadID()) !== '' && loadingThreadID() === selectedThreadID());
   const currentComposerSessionKey = createMemo(() => trimString(selectedThreadID()) || PENDING_NEW_THREAD_ID);
   const currentComposerSessionDraft = createMemo(() => composerSessionDrafts()[currentComposerSessionKey()] ?? emptyFlowerComposerSessionDraft());
+  const defaultComposerPermissionType = createMemo<FlowerPermissionType>(() => snapshot()?.config.permission_type ?? 'approval_required');
+  const selectedThreadPermissionType = createMemo<FlowerPermissionType>(() => selectedThread()?.permission_type ?? defaultComposerPermissionType());
+  const composerPermissionType = createMemo<FlowerPermissionType>(() => {
+    const thread = selectedThread();
+    if (thread) return thread.permission_type ?? defaultComposerPermissionType();
+    return currentComposerSessionDraft().permissionTypeOverride ?? defaultComposerPermissionType();
+  });
+  const composerPermissionCopy = createMemo(() => copy().settings.permissionTypes[composerPermissionType()]);
+  const composerPermissionInteractive = createMemo(() => (
+    !selectedThreadIsSubagentProjection()
+    && !selectedThreadReadOnly()
+    && (!selectedThreadID() || typeof props.adapter.setThreadPermissionType === 'function')
+  ));
+  const permissionPatchPending = createMemo(() => {
+    const pending = pendingPermissionPatch();
+    if (!pending) return false;
+    const threadID = selectedThreadID();
+    return threadID ? pending.threadID === threadID : pending.threadID === PENDING_NEW_THREAD_ID;
+  });
+  const permissionSelectorTitle = createMemo(() => (
+    permissionPatchPending()
+      ? copy().chat.permissionSelectorSaving
+      : `${copy().chat.permissionSelectorLabel}: ${composerPermissionCopy().label}`
+  ));
   const updateComposerSessionDraft = (sessionKey: string, updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
     const key = trimString(sessionKey) || PENDING_NEW_THREAD_ID;
     setComposerSessionDrafts((current) => {
@@ -822,6 +857,124 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const updateCurrentComposerSessionDraft = (updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
     updateComposerSessionDraft(currentComposerSessionKey(), updater);
+  };
+  const permissionOptionID = (permissionType: FlowerPermissionType) => `flower-composer-permission-${permissionType}`;
+  const clampPermissionMenuIndex = (index: number): number => {
+    const count = FLOWER_PERMISSION_TYPES.length;
+    return ((index % count) + count) % count;
+  };
+  const setPermissionMenuIndexForType = (permissionType: FlowerPermissionType) => {
+    const index = FLOWER_PERMISSION_TYPES.indexOf(permissionType);
+    setPermissionMenuActiveIndex(index >= 0 ? index : 0);
+  };
+  const permissionMenuItems = () => Array.from(permissionMenuRef?.querySelectorAll<HTMLButtonElement>('.flower-permission-menu-item:not(:disabled)') ?? []);
+  const focusPermissionMenuItem = (index: number) => {
+    const nextIndex = clampPermissionMenuIndex(index);
+    setPermissionMenuActiveIndex(nextIndex);
+    queueMicrotask(() => {
+      const item = permissionMenuItems().find((button) => button.dataset.permissionType === FLOWER_PERMISSION_TYPES[nextIndex]);
+      item?.focus();
+    });
+  };
+  const closePermissionMenu = (restoreFocus = false) => {
+    setPermissionMenuOpen(false);
+    if (restoreFocus) queueMicrotask(() => permissionTriggerRef?.focus());
+  };
+  const openPermissionMenu = () => {
+    if (!composerPermissionInteractive() || permissionPatchPending()) return;
+    setPermissionMenuIndexForType(composerPermissionType());
+    setPermissionMenuOpen(true);
+    queueMicrotask(() => focusPermissionMenuItem(permissionMenuActiveIndex()));
+  };
+  const applyThreadPermissionLocally = (threadID: string, permissionType: FlowerPermissionType) => {
+    const tid = trimString(threadID);
+    if (!tid) return;
+    setThreads((current) => {
+      let changed = false;
+      const next = current.map((thread) => {
+        if (thread.thread_id !== tid || thread.permission_type === permissionType) return thread;
+        changed = true;
+        return {
+          ...thread,
+          permission_type: permissionType,
+          updated_at_ms: Math.max(Number(thread.updated_at_ms ?? 0), Date.now()),
+        };
+      });
+      if (changed) threadLocalMutationRevision += 1;
+      return changed ? next : current;
+    });
+  };
+  const updateComposerPermissionType = async (permissionType: FlowerPermissionType) => {
+    const threadID = trimString(selectedThreadID());
+    closePermissionMenu(true);
+    setPermissionSubmitError('');
+    if (!threadID) {
+      updateCurrentComposerSessionDraft((draft) => (
+        draft.permissionTypeOverride === permissionType
+          ? draft
+          : { ...draft, permissionTypeOverride: permissionType }
+      ));
+      return;
+    }
+    if (!props.adapter.setThreadPermissionType || !composerPermissionInteractive()) return;
+    const previous = selectedThreadPermissionType();
+    if (previous === permissionType) return;
+    setPendingPermissionPatch({ threadID, requested: permissionType, previous });
+    applyThreadPermissionLocally(threadID, permissionType);
+    try {
+      const live = await props.adapter.setThreadPermissionType(threadID, permissionType);
+      const updated = applyLiveBootstrap(live, 'user_action');
+      setSelectedThreadID(updated.thread_id);
+      setPermissionSubmitError('');
+    } catch (error) {
+      applyThreadPermissionLocally(threadID, previous);
+      try {
+        await reloadSelectedThread(threadID, threadLoadSequence, 'user_action');
+      } catch {
+        // Keep the concise permission error; the previous snapshot has already been restored locally.
+      }
+      setPermissionSubmitError(getErrorMessage(error));
+    } finally {
+      setPendingPermissionPatch((pending) => (
+        pending?.threadID === threadID && pending.requested === permissionType ? null : pending
+      ));
+    }
+  };
+  const handlePermissionTriggerKeyDown = (event: KeyboardEvent) => {
+    if (!composerPermissionInteractive() || permissionPatchPending()) return;
+    if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      openPermissionMenu();
+      if (event.key === 'ArrowUp') {
+        queueMicrotask(() => focusPermissionMenuItem(FLOWER_PERMISSION_TYPES.length - 1));
+      }
+    }
+  };
+  const handlePermissionMenuKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closePermissionMenu(true);
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      focusPermissionMenuItem(permissionMenuActiveIndex() + 1);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      focusPermissionMenuItem(permissionMenuActiveIndex() - 1);
+      return;
+    }
+    if (event.key === 'Home') {
+      event.preventDefault();
+      focusPermissionMenuItem(0);
+      return;
+    }
+    if (event.key === 'End') {
+      event.preventDefault();
+      focusPermissionMenuItem(FLOWER_PERMISSION_TYPES.length - 1);
+    }
   };
   const requestComposerFocus = () => {
     setComposerFocusRevision((revision) => revision + 1);
@@ -1026,6 +1179,33 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       window.removeEventListener('resize', onReposition);
       window.removeEventListener('scroll', onReposition, true);
     });
+  });
+
+  createEffect(() => {
+    if (!permissionMenuOpen()) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (permissionTriggerRef?.contains(target) || permissionMenuRef?.contains(target)) return;
+      closePermissionMenu(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      closePermissionMenu(true);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown, true);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+    });
+  });
+
+  createEffect(() => {
+    if (!permissionMenuOpen()) return;
+    if (!composerPermissionInteractive() || permissionPatchPending()) {
+      closePermissionMenu(false);
+    }
   });
 
   const renameOriginalTitle = createMemo(() => threads().find((thread) => thread.thread_id === renameThreadID())?.title ?? '');
@@ -1376,6 +1556,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSelectedThreadID(tid);
     setChatSubmitError('');
     setInputSubmitError('');
+    setPermissionSubmitError('');
     setThreadLoadError('');
     setThreadActionError('');
     returnToChat();
@@ -1911,6 +2092,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         message_id: messageID,
         prompt,
         decision: selectedThreadID() ? null : decision,
+        ...(!selectedThreadID() ? { permission_type: composerPermissionType() } : {}),
         ...(reasoningOverride ? { reasoning_selection: reasoningOverride } : {}),
       });
       const acceptedThread = applyLiveBootstrap(thread);
@@ -2209,6 +2391,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     clearPendingTurns();
     setChatSubmitError('');
     setInputSubmitError('');
+    setPermissionSubmitError('');
     setThreadLoadError('');
     requestComposerFocus();
     void resolveHandlerDecision();
@@ -2526,6 +2709,106 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </div>
     </div>
   );
+
+  const permissionSelector = () => {
+    const canUseMenu = createMemo(() => (
+      !selectedThreadIsSubagentProjection()
+      && !selectedThreadReadOnly()
+      && (!selectedThreadID() || typeof props.adapter.setThreadPermissionType === 'function')
+    ));
+    const interactive = createMemo(() => canUseMenu() && !permissionPatchPending());
+    return (
+      <div
+        class="flower-permission-selector"
+        data-permission-type={composerPermissionType()}
+        data-permission-pending={permissionPatchPending() ? 'true' : 'false'}
+      >
+        <Show
+          when={canUseMenu()}
+          fallback={(
+            <span
+              class="flower-permission-trigger flower-permission-trigger-static"
+              data-permission-type={composerPermissionType()}
+              title={`${copy().chat.permissionSelectorLabel}: ${composerPermissionCopy().label}`}
+              aria-label={`${copy().chat.permissionSelectorLabel}: ${composerPermissionCopy().label}`}
+            >
+              <Shield class="flower-permission-icon" />
+              <span class="flower-permission-label">{composerPermissionCopy().label}</span>
+            </span>
+          )}
+        >
+          <button
+            ref={permissionTriggerRef}
+            type="button"
+            class={cn('flower-permission-trigger', !interactive() && 'flower-permission-trigger-readonly')}
+            data-permission-type={composerPermissionType()}
+            aria-label={`${copy().chat.permissionSelectorLabel}: ${composerPermissionCopy().label}`}
+            aria-haspopup="listbox"
+            aria-expanded={permissionMenuOpen()}
+            aria-controls="flower-composer-permission-menu"
+            title={permissionSelectorTitle()}
+            disabled={!interactive()}
+            onClick={() => {
+              if (permissionMenuOpen()) {
+                closePermissionMenu(false);
+                return;
+              }
+              openPermissionMenu();
+            }}
+            onKeyDown={handlePermissionTriggerKeyDown}
+          >
+            <Shield class="flower-permission-icon" />
+            <span class="flower-permission-label">{composerPermissionCopy().label}</span>
+            <Show when={permissionPatchPending()}>
+              <span class="flower-permission-saving-dot" aria-hidden="true" />
+            </Show>
+            <ChevronDown class="flower-permission-chevron" aria-hidden="true" />
+          </button>
+        </Show>
+        <Show when={permissionMenuOpen()}>
+          <div
+            id="flower-composer-permission-menu"
+            ref={permissionMenuRef}
+            class="flower-permission-menu"
+            role="listbox"
+            aria-label={copy().chat.permissionSelectorLabel}
+            aria-activedescendant={permissionOptionID(FLOWER_PERMISSION_TYPES[permissionMenuActiveIndex()] ?? composerPermissionType())}
+            onKeyDown={handlePermissionMenuKeyDown}
+          >
+            <For each={FLOWER_PERMISSION_TYPES}>
+              {(permissionType, index) => {
+                const itemCopy = createMemo(() => copy().settings.permissionTypes[permissionType]);
+                const selected = createMemo(() => composerPermissionType() === permissionType);
+                return (
+                  <button
+                    id={permissionOptionID(permissionType)}
+                    type="button"
+                    role="option"
+                    tabIndex={permissionMenuActiveIndex() === index() ? 0 : -1}
+                    data-permission-type={permissionType}
+                    aria-selected={selected()}
+                    class={cn('flower-permission-menu-item', selected() && 'flower-permission-menu-item-active')}
+                    onMouseEnter={() => setPermissionMenuActiveIndex(index())}
+                    onFocus={() => setPermissionMenuActiveIndex(index())}
+                    onClick={() => void updateComposerPermissionType(permissionType)}
+                  >
+                    <span class="flower-permission-menu-row">
+                      <Shield class="flower-permission-menu-icon" />
+                      <span class="flower-permission-menu-label">{itemCopy().label}</span>
+                      <Show when={selected()}>
+                        <Check class="flower-permission-menu-check" aria-hidden="true" />
+                      </Show>
+                    </span>
+                    <span class="flower-permission-menu-description">{itemCopy().description}</span>
+                  </button>
+                );
+              }}
+            </For>
+          </div>
+        </Show>
+      </div>
+    );
+  };
 
   const runErrorNotice = (error: FlowerThreadSnapshot['error']) => {
     const code = trimString(error?.code);
@@ -4225,15 +4508,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <FlowerIcon class="h-5 w-5 text-primary" />
             <div class="min-w-0 flex items-center gap-2">
               <div class="flower-chat-header-title truncate">{selectedThread()?.title || copy().chat.titleFallback}</div>
-              <Show when={!isSubagentProjectionThread(selectedThread())}>
-                <span
-                  class="flower-chat-permission-chip"
-                  title={selectedThreadPermissionCopy().description}
-                  aria-label={`Permission: ${selectedThreadPermissionCopy().label}`}
-                >
-                  {selectedThreadPermissionCopy().label}
-                </span>
-              </Show>
+              <span
+                class="flower-chat-permission-chip"
+                title={composerPermissionCopy().description}
+                aria-label={`Permission: ${composerPermissionCopy().label}`}
+              >
+                {composerPermissionCopy().label}
+              </span>
             </div>
           </div>
           <div class="flower-chat-header-actions">
@@ -4412,6 +4693,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           <>
                             <Show when={!selectedInputRequest()}>
                               <div class="flower-model-selection">
+                                {permissionSelector()}
                                 <span class="flower-model-selection-label">{copy().chat.modelLabel}</span>
                                 <span class={cn('flower-model-chip', surfaceWarmupActive() && 'flower-model-chip-warmup')}>
                                   {surfaceWarmupActive() ? warmupModelLabel() : selectedThreadModelLabel()}
@@ -4432,6 +4714,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         )}
                       >
                         <div class="flower-composer-readonly-stack">
+                          {permissionSelector()}
                           <div class="flower-composer-readonly-chip" title={selectedThreadReadOnlyReason()}>
                             {selectedThreadReadOnlyDisplay()}
                           </div>
@@ -4502,6 +4785,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </div>
             <Show when={composerErrorMessage()}>
               {(message) => <div class="flower-composer-error">{errorNotice(copy().chat.composerErrorTitle, message())}</div>}
+            </Show>
+            <Show when={permissionSubmitError()}>
+              {(message) => <div class="flower-composer-error">{errorNotice(copy().chat.permissionSelectorErrorTitle, message())}</div>}
             </Show>
           </div>
         </div>

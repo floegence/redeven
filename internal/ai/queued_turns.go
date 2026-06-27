@@ -180,13 +180,7 @@ func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadPermiss
 	if err != nil {
 		permissionFallback = FlowerPermissionApprovalRequired
 	}
-	if strings.TrimSpace(options.PermissionType) == "" {
-		options.PermissionType = permissionTypeString(permissionFallback)
-	} else if normalized, err := normalizePermissionType(strings.TrimSpace(options.PermissionType), permissionFallback); err == nil {
-		options.PermissionType = permissionTypeString(normalized)
-	} else {
-		options.PermissionType = permissionTypeString(permissionFallback)
-	}
+	options.PermissionType = permissionTypeString(permissionFallback)
 	contextAction, err := unmarshalQueuedTurnContextAction(rec.ContextActionJSON)
 	if err != nil {
 		return RunStartRequest{}, err

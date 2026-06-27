@@ -248,6 +248,9 @@ export type FlowerSurfaceCopy = Readonly<{
     modelLabel: string;
     noModelSelected: string;
     linkedContextLabel: string;
+    permissionSelectorLabel: string;
+    permissionSelectorSaving: string;
+    permissionSelectorErrorTitle: string;
     handlerBlockedTitle: string;
     handlerStartFailedTitle: string;
     handlerStillStarting: string;
@@ -394,6 +397,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     modelLabel: 'Model',
     noModelSelected: 'No model selected',
     linkedContextLabel: 'Linked context',
+    permissionSelectorLabel: 'Thread permission',
+    permissionSelectorSaving: 'Saving permission...',
+    permissionSelectorErrorTitle: 'Flower could not save permission.',
     handlerBlockedTitle: 'Flower needs attention',
     handlerStartFailedTitle: 'Flower could not start',
     handlerStillStarting: 'Flower is still starting.',

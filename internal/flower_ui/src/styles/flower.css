@@ -603,7 +603,202 @@ html.dark .flower-component-shell {
   display: inline-flex;
   min-width: 0;
   align-items: center;
+  gap: 0.45rem;
+}
+
+.flower-permission-selector {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.flower-permission-trigger {
+  display: inline-flex;
+  min-width: 0;
+  max-width: min(13rem, 52vw);
+  height: 1.625rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  color: color-mix(in srgb, var(--foreground) 80%, var(--primary) 20%);
+  padding: 0 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 760;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.flower-permission-trigger:hover,
+.flower-permission-trigger:focus-visible,
+.flower-permission-trigger[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border) 66%);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
+  outline: none;
+}
+
+.flower-permission-trigger:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.flower-permission-trigger:disabled,
+.flower-permission-trigger-readonly {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.flower-permission-trigger-static {
+  cursor: default;
+  opacity: 0.78;
+}
+
+.flower-permission-trigger[data-permission-type='full_access'] {
+  border-color: color-mix(in srgb, #ff8a3d 54%, var(--border) 46%);
+  background: color-mix(in srgb, #ff8a3d 12%, transparent);
+  color: color-mix(in srgb, #ff8a3d 84%, var(--foreground) 16%);
+}
+
+.flower-permission-trigger[data-permission-type='full_access']:hover,
+.flower-permission-trigger[data-permission-type='full_access']:focus-visible,
+.flower-permission-trigger[data-permission-type='full_access'][aria-expanded='true'] {
+  border-color: color-mix(in srgb, #ff8a3d 70%, var(--border) 30%);
+  background: color-mix(in srgb, #ff8a3d 18%, transparent);
+  color: color-mix(in srgb, #ff8a3d 90%, var(--foreground) 10%);
+}
+
+.flower-permission-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: 0 0 auto;
+}
+
+.flower-permission-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-permission-chevron {
+  width: 0.8125rem;
+  height: 0.8125rem;
+  flex: 0 0 auto;
+  opacity: 0.82;
+}
+
+.flower-permission-saving-dot {
+  width: 0.35rem;
+  height: 0.35rem;
+  flex: 0 0 auto;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0.72;
+  animation: flower-permission-saving 0.9s ease-in-out infinite;
+}
+
+@keyframes flower-permission-saving {
+  0%,
+  100% {
+    transform: scale(0.82);
+    opacity: 0.4;
+  }
+
+  50% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+}
+
+.flower-permission-menu {
+  position: absolute;
+  bottom: calc(100% + 0.45rem);
+  left: 0;
+  z-index: 5;
+  display: grid;
+  width: min(21rem, 88vw);
+  gap: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--popover, var(--background)) 96%, transparent);
+  padding: 0.35rem;
+  box-shadow:
+    0 18px 44px -26px color-mix(in srgb, black 54%, transparent),
+    0 8px 20px -16px color-mix(in srgb, var(--foreground) 36%, transparent);
+}
+
+.flower-permission-menu-item {
+  display: grid;
+  width: 100%;
+  cursor: pointer;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.1875rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--foreground);
+  padding: 0.45rem 0.5rem;
+  text-align: left;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.flower-permission-menu-item:hover,
+.flower-permission-menu-item:focus-visible,
+.flower-permission-menu-item-active {
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  outline: none;
+}
+
+.flower-permission-menu-item[data-permission-type='full_access'] {
+  color: color-mix(in srgb, #ff8a3d 84%, var(--foreground) 16%);
+}
+
+.flower-permission-menu-item[data-permission-type='full_access']:hover,
+.flower-permission-menu-item[data-permission-type='full_access']:focus-visible,
+.flower-permission-menu-item[data-permission-type='full_access'].flower-permission-menu-item-active {
+  background: color-mix(in srgb, #ff8a3d 13%, transparent);
+}
+
+.flower-permission-menu-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
   gap: 0.375rem;
+}
+
+.flower-permission-menu-icon,
+.flower-permission-menu-check {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: 0 0 auto;
+}
+
+.flower-permission-menu-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 760;
+}
+
+.flower-permission-menu-description {
+  color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
+  font-size: 0.6875rem;
+  font-weight: 560;
+  line-height: 1.35;
 }
 
 .flower-model-selection-label {
@@ -939,6 +1134,23 @@ html.dark .flower-component-shell {
   .flower-composer-actions > .button,
   .flower-composer-actions > button {
     width: auto;
+  }
+
+  .flower-model-selection {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .flower-permission-selector {
+    max-width: 100%;
+  }
+
+  .flower-permission-trigger {
+    max-width: 100%;
+  }
+
+  .flower-permission-menu {
+    width: min(21rem, calc(100vw - 2rem));
   }
 
   .flower-handler-error-card {

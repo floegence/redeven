@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createEnvLocalFlowerSurfaceAdapter } from './envLocalFlowerSurfaceAdapter';
+import type { FlowerPermissionType } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { projectFlowerLiveBootstrap } from '../../../../../flower_ui/src/flowerLiveReducer';
 
 vi.mock('../services/controlplaneApi', () => ({
@@ -45,6 +46,7 @@ function liveBootstrap(threadID: string, status = 'canceled') {
     title: 'Stopped thread',
     model_id: 'default/gpt-4.1',
     run_status: status,
+    permission_type: 'approval_required' as FlowerPermissionType,
     created_at_unix_ms: 1,
     updated_at_unix_ms: 2,
     last_message_at_unix_ms: 2,
@@ -400,5 +402,34 @@ describe('Env local Flower surface adapter', () => {
 		await adapter.setThreadReasoningSelection?.('thread_reasoning', undefined);
 
 		expect(patchBodies).toEqual([{ reasoning_selection: null }]);
+	});
+
+	it('patches a thread permission type through the local API', async () => {
+		const patchBodies: unknown[] = [];
+		fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+			if (url === '/_redeven_proxy/api/ai/threads/thread_permission' && init?.method === 'PATCH') {
+				patchBodies.push(JSON.parse(String(init.body ?? '{}')));
+				return jsonResponse({ thread: { thread_id: 'thread_permission', read_status: readStatus('running') } });
+			}
+			if (url === '/_redeven_proxy/api/ai/threads/thread_permission/live/bootstrap' && init?.method === 'GET') {
+				const bootstrap = liveBootstrap('thread_permission', 'running');
+				bootstrap.thread = {
+					...bootstrap.thread,
+					permission_type: 'full_access',
+				};
+				return jsonResponse(bootstrap);
+			}
+			throw new Error(`unexpected fetch: ${url}`);
+		});
+		const adapter = createEnvLocalFlowerSurfaceAdapter({
+			envPublicID: 'env_a',
+			envLabel: 'Demo Env',
+			rpc: { ai: {} } as any,
+		});
+
+		const live = await adapter.setThreadPermissionType?.('thread_permission', 'full_access');
+
+		expect(patchBodies).toEqual([{ permission_type: 'full_access' }]);
+		expect(live?.thread.permission_type).toBe('full_access');
 	});
 });

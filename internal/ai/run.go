@@ -198,6 +198,7 @@ type run struct {
 	allowDelegatedApproval  bool
 	delegatedApprovalParent *run
 	permissionSnapshot      PermissionSnapshot
+	dynamicSurfaceConfig    runToolSurfaceConfig
 	toolTargetPolicy        ToolTargetPolicy
 	targetToolExecutor      TargetToolExecutor
 
@@ -3372,6 +3373,27 @@ func (r *run) canExecuteReadonlyExclusiveTool() bool {
 func (r *run) authorizeToolExecutionFromSnapshot(ctx context.Context, toolID string, toolName string) error {
 	if r == nil || !permissionSnapshotActive(r.permissionSnapshot) {
 		return nil
+	}
+	if r.subagentDepth <= 0 && !r.noUserInteraction && r.threadsDB != nil {
+		previousEpoch := permissionSurfaceEpoch(r.permissionSnapshot)
+		surfaceConfig := r.dynamicSurfaceConfig
+		if !surfaceConfig.UseLatestThreadPermission {
+			surfaceConfig.UseLatestThreadPermission = true
+		}
+		surfaceConfig.IncludeControlSignalsInSnapshot = true
+		if surface, err := r.buildRunToolSurface(ctx, surfaceConfig, r.permissionType); err == nil {
+			if surface.Epoch != "" && surface.Epoch != previousEpoch {
+				r.persistRunEvent("tool_surface.updated", RealtimeStreamKindLifecycle, map[string]any{
+					"phase":             "local_tool_dispatch",
+					"permission_type":   permissionTypeString(surface.PermissionType),
+					"snapshot_id":       strings.TrimSpace(surface.PermissionSnapshot.SnapshotID),
+					"snapshot_hash":     strings.TrimSpace(surface.PermissionSnapshot.SnapshotHash),
+					"registry_hash":     strings.TrimSpace(surface.PermissionSnapshot.RegistryHash),
+					"schema_hash":       strings.TrimSpace(surface.PermissionSnapshot.SchemaHash),
+					"presentation_hash": strings.TrimSpace(surface.PermissionSnapshot.PresentationHash),
+				})
+			}
+		}
 	}
 	toolName = strings.TrimSpace(toolName)
 	if toolName == "" {

@@ -643,7 +643,16 @@ func floretToolDefinition(r *run, def ToolDef) (fltools.Definition, error) {
 		Permission:   permission,
 		PermissionFor: func(req fltools.PermissionRequest) (fltools.PermissionSpec, error) {
 			args, _ := req.Args.(map[string]any)
-			return floretPermissionForInvocation(permissionType, def, cloneAnyMap(args)), nil
+			currentPermissionType := permissionType
+			if r != nil && r.permissionType != "" {
+				currentPermissionType = r.permissionType
+			}
+			if raw := strings.TrimSpace(req.HostContext[subagentToolHostContextParentPermissionKey]); raw != "" {
+				if normalized, err := normalizePermissionType(raw, currentPermissionType); err == nil {
+					currentPermissionType = normalized
+				}
+			}
+			return floretPermissionForInvocation(currentPermissionType, def, cloneAnyMap(args)), nil
 		},
 		Activity: func(inv fltools.Invocation[any]) (*observation.ActivityPresentation, error) {
 			args, _ := inv.Args.(map[string]any)
@@ -1356,10 +1365,6 @@ func contractSafePayloadMapWithMaxDepth(in map[string]any, depth int, maxDepth i
 		truncated = truncated || valueTruncated
 	}
 	return out, truncated
-}
-
-func contractSafePayloadValue(value any, depth int) (any, bool) {
-	return contractSafePayloadValueWithMaxDepth(value, depth, activityPayloadMaxDepth)
 }
 
 func contractSafePayloadValueWithMaxDepth(value any, depth int, maxDepth int) (any, bool) {

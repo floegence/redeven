@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -51,6 +53,46 @@ func (streamedEmptyTaskCompleteProvider) StreamTurn(_ context.Context, _ ModelGa
 			Args: map[string]any{},
 		}},
 	}, nil
+}
+
+type permissionDowngradeToolCallProvider struct {
+	store      *threadstore.Store
+	endpointID string
+	threadID   string
+	mu         sync.Mutex
+	calls      int
+	requests   []ModelGatewayRequest
+}
+
+func (p *permissionDowngradeToolCallProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
+	p.mu.Lock()
+	p.calls++
+	callIndex := p.calls
+	p.requests = append(p.requests, req)
+	p.mu.Unlock()
+	if callIndex > 1 {
+		return ModelGatewayResult{FinishReason: "stop", Text: "stale tool was rejected"}, nil
+	}
+	if err := p.store.UpdateThreadPermissionType(ctx, p.endpointID, p.threadID, config.AIPermissionReadonly); err != nil {
+		return ModelGatewayResult{}, err
+	}
+	return ModelGatewayResult{
+		FinishReason: "tool_calls",
+		ToolCalls: []ToolCall{{
+			ID:   "call_terminal_after_downgrade",
+			Name: "terminal.exec",
+			Args: map[string]any{"command": "echo stale", "cwd": "/tmp"},
+		}},
+	}, nil
+}
+
+func (p *permissionDowngradeToolCallProvider) request(index int) ModelGatewayRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if index < 0 || index >= len(p.requests) {
+		return ModelGatewayRequest{}
+	}
+	return p.requests[index]
 }
 
 type naturalCompactionProvider struct {
@@ -184,6 +226,102 @@ func TestRunFloretHostedTurnEmitsContextUsageFromPublishedHost(t *testing.T) {
 		first.ContextWindowTokens <= 0 ||
 		strings.TrimSpace(first.PressureStatus) == "" {
 		t.Fatalf("context usage=%#v", first)
+	}
+}
+
+func TestRunFloretHostedTurnRefreshesPermissionBeforeDispatch(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatalf("threadstore.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	const endpointID = "env_floret_dynamic_permission"
+	const threadID = "thread_floret_dynamic_permission"
+	const runID = "run_floret_dynamic_permission"
+	if err := store.CreateThread(ctx, threadstore.Thread{
+		EndpointID:      endpointID,
+		ThreadID:        threadID,
+		Title:           "dynamic permission",
+		PermissionType:  config.AIPermissionApprovalRequired,
+		CreatedAtUnixMs: 1,
+		UpdatedAtUnixMs: 1,
+	}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "bash",
+		AIConfig:     &config.AIConfig{},
+		SessionMeta: &session.Meta{
+			EndpointID: endpointID,
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+			CanAdmin:   true,
+		},
+		RunID:     runID,
+		ThreadID:  threadID,
+		MessageID: "msg_floret_dynamic_permission",
+	})
+	r.endpointID = endpointID
+	r.threadsDB = store
+
+	provider := &permissionDowngradeToolCallProvider{
+		store:      store,
+		endpointID: endpointID,
+		threadID:   threadID,
+	}
+	err = r.runFloretHostedTurn(ctx, RunRequest{
+		Model: "compat/gpt-5-mini",
+		Input: RunInput{Text: "run stale terminal call"},
+		Options: RunOptions{
+			PermissionType: config.AIPermissionApprovalRequired,
+		},
+	}, config.AIProvider{
+		ID:      "compat",
+		Type:    "openai_compatible",
+		BaseURL: "https://example.test/v1",
+	}, "sk-test", "run stale terminal call", provider)
+	if err != nil {
+		t.Fatalf("runFloretHostedTurn: %v", err)
+	}
+
+	secondRequest := provider.request(1)
+	var sawRejectedToolResult bool
+	for _, message := range secondRequest.Messages {
+		if message.Role != "tool" {
+			continue
+		}
+		for _, part := range message.Content {
+			if part.ToolCallID != "call_terminal_after_downgrade" {
+				continue
+			}
+			if strings.Contains(part.Text, "unknown tool") || strings.Contains(part.Text, "permission") {
+				sawRejectedToolResult = true
+			}
+		}
+	}
+	if !sawRejectedToolResult {
+		t.Fatalf("second provider request missing rejected stale tool result: %#v", secondRequest.Messages)
+	}
+	runEvents, err := store.ListRunEvents(ctx, endpointID, runID, 20)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	var sawReadonlyUpdate bool
+	for _, event := range runEvents {
+		if event.EventType != "tool_surface.updated" || !strings.Contains(event.PayloadJSON, `"permission_type":"readonly"`) {
+			continue
+		}
+		sawReadonlyUpdate = true
+	}
+	if !sawReadonlyUpdate {
+		t.Fatalf("missing readonly tool_surface.updated event: %#v", runEvents)
 	}
 }
 

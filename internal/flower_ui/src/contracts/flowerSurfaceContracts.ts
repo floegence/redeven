@@ -1053,6 +1053,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadReadStatus>;
   renameThread?: (threadID: string, title: string) => Promise<FlowerLiveBootstrap>;
   setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerLiveBootstrap>;
+  setThreadPermissionType?: (threadID: string, permissionType: FlowerPermissionType) => Promise<FlowerLiveBootstrap>;
   setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerLiveBootstrap>;
   forkThread?: (threadID: string) => Promise<FlowerLiveBootstrap>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
