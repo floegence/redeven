@@ -49,7 +49,6 @@ describe('flower context presentation', () => {
       usedValue: '182,000 of 200,000',
       thresholdValue: '180,000',
       safeLimitValue: '190,000',
-      statusValue: 'Near limit',
       tone: 'warning',
       ratio: 0.91,
       progressValue: 91,
@@ -74,8 +73,9 @@ describe('flower context presentation', () => {
     expect(view.progressValue).toBeNull();
     expect(view.percentLabel).toBe('--%');
     expect(view.usedValue).toBe('Not available');
-    expect(view.statusValue).toBe('Estimated');
-    expect(view.ariaValueText).toBe('Context: Estimated');
+    expect(view).not.toHaveProperty('statusValue');
+    expect(view).not.toHaveProperty('statusLabel');
+    expect(view.ariaValueText).toBe('Context: --%');
     expect(view.tone).toBe('estimated');
   });
 

@@ -286,8 +286,8 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.label).toBe('Search docs');
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'Search docs' });
+    expect(presentation.label).toBe('Web search "Search docs"');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Web search "Search docs"' });
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('thread');
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('profile');
   });
