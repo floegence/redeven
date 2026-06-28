@@ -804,22 +804,30 @@ html.dark .flower-component-shell {
   line-height: 1.25;
 }
 
-.flower-model-select {
-  min-width: 8rem;
+.flower-model-select-anchor {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+
+.flower-model-select-trigger {
+  display: inline-flex;
+  min-width: 0;
   max-width: min(22rem, 54vw);
   height: 1.375rem;
   cursor: pointer;
-  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
   border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
   border-radius: 0.45rem;
   background: color-mix(in srgb, var(--muted) 18%, transparent);
   color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
-  padding: 0 1.4rem 0 0.45rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 0 0.35rem 0 0.45rem;
   font-size: 0.6875rem;
   font-weight: 680;
   line-height: 1;
+  white-space: nowrap;
   transition:
     border-color 150ms ease,
     background-color 150ms ease,
@@ -827,20 +835,114 @@ html.dark .flower-component-shell {
     box-shadow 150ms ease;
 }
 
-.flower-model-select:hover,
-.flower-model-select:focus-visible {
+.flower-model-select-trigger:hover,
+.flower-model-select-trigger:focus-visible {
   border-color: color-mix(in srgb, var(--primary) 34%, var(--border) 66%);
   background: color-mix(in srgb, var(--primary) 8%, transparent);
   outline: none;
 }
 
-.flower-model-select:focus-visible {
+.flower-model-select-trigger:focus-visible {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
-.flower-model-select:disabled {
+.flower-model-select-trigger:disabled {
   cursor: not-allowed;
   opacity: 0.72;
+}
+
+.flower-model-select-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-model-select-chevron {
+  width: 0.6875rem;
+  height: 0.6875rem;
+  flex: 0 0 auto;
+  opacity: 0.82;
+}
+
+.flower-model-menu {
+  position: absolute;
+  bottom: calc(100% + 0.45rem);
+  left: 0;
+  z-index: 5;
+  display: grid;
+  width: min(24rem, 88vw);
+  max-height: min(20rem, 56vh);
+  overflow-y: auto;
+  gap: 0.125rem;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--popover, var(--background)) 96%, transparent);
+  padding: 0.25rem;
+  box-shadow:
+    0 18px 44px -26px color-mix(in srgb, black 54%, transparent),
+    0 8px 20px -16px color-mix(in srgb, var(--foreground) 36%, transparent);
+}
+
+.flower-model-menu-item {
+  display: flex;
+  width: 100%;
+  cursor: pointer;
+  align-items: center;
+  gap: 0.5rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--foreground);
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+  transition: background-color 140ms ease;
+}
+
+.flower-model-menu-item:hover,
+.flower-model-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+  outline: none;
+}
+
+.flower-model-menu-item-active {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.flower-model-menu-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: 0 0 auto;
+}
+
+.flower-model-menu-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.flower-model-menu-name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+.flower-model-menu-meta {
+  display: block;
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+}
+
+.flower-model-menu-check {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: 0 0 auto;
+  color: var(--primary);
 }
 
 .flower-reasoning-control {
@@ -1169,7 +1271,7 @@ html.dark .flower-component-shell {
     max-width: 100%;
   }
 
-  .flower-model-select {
+  .flower-model-select-trigger {
     max-width: 100%;
   }
 
