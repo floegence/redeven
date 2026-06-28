@@ -2,7 +2,7 @@ import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Bot, ChevronDown, ChevronLeft, Pencil, Plus, Shield, Trash, Zap } from '@floegence/floe-webapp-core/icons';
-import { Button } from '@floegence/floe-webapp-core/ui';
+import { Button, Select } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerSettingsCopy } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
@@ -25,6 +25,7 @@ import {
   flowerProviderTypeLabel,
   flowerProviderTypeRequiresBaseURL,
   flowerProviderUsesCustomName,
+  formatFlowerTokenCount,
   normalizeFlowerEffectiveContextPercent,
   normalizeFlowerInputModalities,
   normalizeFlowerPositiveInteger,
@@ -40,6 +41,8 @@ type FlowerModelOption = Readonly<{
   id: string;
   label: string;
   supportsImageInput: boolean;
+  contextWindow?: number;
+  maxOutputTokens?: number;
   provider_type: FlowerProviderDraft['type'];
 }>;
 
@@ -105,6 +108,8 @@ function collectModelOptions(providers: readonly FlowerProviderDraft[], labels?:
         id: flowerModelID(providerID, modelName),
         label: `${providerDisplayName(provider, labels)} / ${modelName}`,
         supportsImageInput: flowerModelSupportsImage(model.input_modalities),
+        contextWindow: model.context_window,
+        maxOutputTokens: model.max_output_tokens,
         provider_type: provider.type,
       };
     })
@@ -543,28 +548,24 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                 <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">{copy().currentModel}</div>
                 <Show when={modelOptions().length > 0} fallback={<div class="mt-1 text-base font-semibold text-muted-foreground">{copy().noModelSelected}</div>}>
                   <div>
-                      <label class="flower-settings-model-picker">
-                        <span class="sr-only">{copy().selectModelPlaceholder}</span>
-                        <span class="flower-settings-model-picker-label">{activeModelOption()?.label ?? copy().noModelSelected}</span>
-                        <ChevronDown class="flower-settings-model-picker-icon" />
-                        <select
-                          value={currentModelID()}
-                          onChange={(event) => {
-                            setCurrentModelID(trim(event.currentTarget.value));
-                            markDirty();
-                          }}
-                          disabled={modelOptions().length === 0 || props.saving}
-                          aria-label={copy().selectModelPlaceholder}
-                        >
-                          <For each={modelOptions()}>
-                            {(modelOption) => <option value={modelOption.id}>{modelOption.label}</option>}
-                          </For>
-                        </select>
-                      </label>
-                      <div class="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                      <Select
+                        value={currentModelID()}
+                        options={modelOptions()}
+                        onChange={(value) => { setCurrentModelID(trim(value)); markDirty(); }}
+                        placeholder={copy().selectModelPlaceholder}
+                        disabled={modelOptions().length === 0 || props.saving}
+                        class="mt-0.5 w-full max-w-[24rem]"
+                      />
+                      <div class="mt-2.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
                         <span class="flower-settings-dot-pill flower-settings-dot-pill-active">{copy().text}</span>
                         <Show when={activeModelOption()?.supportsImageInput}>
                           <span class="flower-settings-dot-pill flower-settings-dot-pill-active">{copy().imageInput}</span>
+                        </Show>
+                        <Show when={activeModelOption()?.contextWindow}>
+                          <span class="flower-settings-dot-pill">{formatFlowerTokenCount(activeModelOption()?.contextWindow)} context</span>
+                        </Show>
+                        <Show when={activeModelOption()?.maxOutputTokens}>
+                          <span class="flower-settings-dot-pill">{formatFlowerTokenCount(activeModelOption()?.maxOutputTokens)} output</span>
                         </Show>
                       </div>
                       <Show when={activeProviderModel()?.reasoning_capability && reasoningCapabilitySupportsControl(activeProviderModel()?.reasoning_capability)}>
