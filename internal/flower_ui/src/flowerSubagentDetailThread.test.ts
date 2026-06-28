@@ -36,7 +36,7 @@ describe('projectSubagentDetailThread', () => {
     expect(thread?.messages[0].blocks).toEqual([
       { type: 'text', content: 'Waiting for a permitted non-approval path.' },
     ]);
-    expect(thread?.owner_kind).toBe('subagent_projection');
+    expect(thread?.owner_kind).toBeUndefined();
     expect(thread?.read_only_reason).toContain('parent Flower thread');
   });
 });

@@ -1977,8 +1977,8 @@ describe('Flower live projection', () => {
         ...thread(),
         created_at_unix_ms: 1000,
         updated_at_unix_ms: 1000,
-        owner_kind: 'subagent_projection',
-        owner_id: 'floret',
+        owner_kind: 'product_detail',
+        owner_id: 'redeven',
         parent_thread_id: 'parent-thread',
         read_only_reason: 'Localized read-only copy.',
       } as unknown as FlowerThreadSnapshot,
@@ -1989,20 +1989,20 @@ describe('Flower live projection', () => {
       targetLabels: [],
     });
 
-    expect(mapped.thread.owner_kind).toBe('subagent_projection');
-    expect(mapped.thread.owner_id).toBe('floret');
+    expect(mapped.thread.owner_kind).toBe('product_detail');
+    expect(mapped.thread.owner_id).toBe('redeven');
     expect(mapped.thread.parent_thread_id).toBe('parent-thread');
 
     const patched = applyFlowerLiveEvent(mapped.thread, mapped.cursor, event(2, 'thread.patched', {
       patch: {
-        owner_kind: 'subagent_projection',
-        owner_id: 'floret',
+        owner_kind: 'product_detail',
+        owner_id: 'redeven',
         parent_thread_id: 'parent-thread-2',
         read_only_reason: 'Updated localized copy.',
       },
     }));
 
-    expect(patched.thread.owner_kind).toBe('subagent_projection');
+    expect(patched.thread.owner_kind).toBe('product_detail');
     expect(patched.thread.parent_thread_id).toBe('parent-thread-2');
     expect(patched.thread.read_only_reason).toBe('Updated localized copy.');
   });

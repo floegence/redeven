@@ -108,6 +108,10 @@ func (h *recordingFloretHost) ListThreadDetailEvents(context.Context, flruntime.
 	return flruntime.ThreadDetailEvents{}, nil
 }
 
+func (h *recordingFloretHost) ListPendingApprovals(context.Context, flruntime.ListPendingApprovalsRequest) (flruntime.PendingApprovals, error) {
+	return flruntime.PendingApprovals{}, nil
+}
+
 func (h *recordingFloretHost) CompactThread(context.Context, flruntime.CompactThreadRequest) (flruntime.CompactThreadResult, error) {
 	return flruntime.CompactThreadResult{}, nil
 }
@@ -720,7 +724,7 @@ func TestReleasedSubagentRuntimeDropsQueuedTimelineRefresh(t *testing.T) {
 	}
 }
 
-func TestDeleteThreadClosesRuntimeAndDeletesChildProjections(t *testing.T) {
+func TestDeleteThreadClosesRuntimeWithoutChildThreadstoreProjection(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -731,22 +735,10 @@ func TestDeleteThreadClosesRuntimeAndDeletesChildProjections(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread parent: %v", err)
 	}
-	child, err := svc.CreateThread(ctx, meta, "child", "openai/gpt-5-mini", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread child: %v", err)
-	}
-	if err := svc.UpsertFlowerThreadMetadata(ctx, threadstore.FlowerThreadMetadata{
-		EndpointID:     meta.EndpointID,
-		ThreadID:       child.ThreadID,
-		OwnerKind:      flowerSubagentProjectionOwnerKind,
-		OwnerID:        flowerSubagentProjectionOwnerID,
-		ParentThreadID: parent.ThreadID,
-	}); err != nil {
-		t.Fatalf("UpsertFlowerThreadMetadata child: %v", err)
-	}
+	childID := "child"
 	host := &recordingFloretHost{
 		snapshots: []flruntime.SubAgentSnapshot{{
-			ThreadID:       flruntime.ThreadID(child.ThreadID),
+			ThreadID:       flruntime.ThreadID(childID),
 			TaskName:       "child",
 			ParentThreadID: flruntime.ThreadID(parent.ThreadID),
 			HostProfileRef: subagentAgentTypeWorker,
@@ -790,19 +782,19 @@ func TestDeleteThreadClosesRuntimeAndDeletesChildProjections(t *testing.T) {
 	if got := host.closeCount.Load(); got != 1 {
 		t.Fatalf("runtime host close count=%d, want 1", got)
 	}
-	childAfterDelete, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, child.ThreadID)
+	childAfterDelete, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, childID)
 	if err != nil {
 		t.Fatalf("GetThread child after delete: %v", err)
 	}
 	if childAfterDelete != nil {
-		t.Fatalf("child projection thread still exists")
+		t.Fatalf("child threadstore row exists: %#v", childAfterDelete)
 	}
-	childMetaAfterDelete, err := svc.threadsDB.GetFlowerThreadMetadata(ctx, meta.EndpointID, child.ThreadID)
+	childMetaAfterDelete, err := svc.threadsDB.GetFlowerThreadMetadata(ctx, meta.EndpointID, childID)
 	if err != nil {
 		t.Fatalf("GetFlowerThreadMetadata child after delete: %v", err)
 	}
 	if childMetaAfterDelete != nil {
-		t.Fatalf("child projection metadata still exists: %#v", childMetaAfterDelete)
+		t.Fatalf("child thread metadata exists: %#v", childMetaAfterDelete)
 	}
 	svc.mu.Lock()
 	_, exists := svc.subagentRuntimes[key]
@@ -920,75 +912,6 @@ func TestCancelThreadClosesFloretSubagentsWithoutCachedRuntime(t *testing.T) {
 	}
 }
 
-func TestSubagentProjectionRejectsThreadMutations(t *testing.T) {
-	t.Parallel()
-
-	svc := newSendTurnTestService(t)
-	meta := testSendTurnMeta()
-	ctx := context.Background()
-	parent, err := svc.CreateThread(ctx, meta, "parent", "openai/gpt-5-mini", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread parent: %v", err)
-	}
-	child, err := svc.CreateThread(ctx, meta, "child", "openai/gpt-5-mini", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread child: %v", err)
-	}
-	if err := svc.UpsertFlowerThreadMetadata(ctx, threadstore.FlowerThreadMetadata{
-		EndpointID:     meta.EndpointID,
-		ThreadID:       child.ThreadID,
-		OwnerKind:      flowerSubagentProjectionOwnerKind,
-		OwnerID:        flowerSubagentProjectionOwnerID,
-		ParentThreadID: parent.ThreadID,
-	}); err != nil {
-		t.Fatalf("UpsertFlowerThreadMetadata child: %v", err)
-	}
-
-	cases := []struct {
-		name string
-		call func() error
-	}{
-		{name: "rename", call: func() error { return svc.RenameThread(ctx, meta, child.ThreadID, "renamed") }},
-		{name: "set_model", call: func() error { return svc.SetThreadModel(ctx, meta, child.ThreadID, "openai/gpt-4o-mini") }},
-		{name: "set_permission", call: func() error {
-			return svc.SetThreadPermissionType(ctx, meta, child.ThreadID, config.AIPermissionReadonly)
-		}},
-		{name: "pin", call: func() error {
-			_, err := svc.SetThreadPinned(ctx, meta, child.ThreadID, true)
-			return err
-		}},
-		{name: "cancel", call: func() error { return svc.CancelThread(meta, child.ThreadID) }},
-		{name: "delete", call: func() error { return svc.DeleteThread(ctx, meta, child.ThreadID, true) }},
-	}
-	for _, tc := range cases {
-		if err := tc.call(); !errors.Is(err, ErrReadOnlyThread) {
-			t.Fatalf("%s err=%v, want %v", tc.name, err, ErrReadOnlyThread)
-		}
-	}
-	if _, err := svc.ForkThread(ctx, meta, child.ThreadID, "fork"); !errors.Is(err, ErrReadOnlyThread) {
-		t.Fatalf("ForkThread err=%v, want %v", err, ErrReadOnlyThread)
-	}
-	if _, err := svc.StopThread(ctx, meta, child.ThreadID); !errors.Is(err, ErrReadOnlyThread) {
-		t.Fatalf("StopThread err=%v, want %v", err, ErrReadOnlyThread)
-	}
-
-	view, err := svc.GetThread(ctx, meta, child.ThreadID)
-	if !errors.Is(err, sql.ErrNoRows) || view != nil {
-		t.Fatalf("GetThread child view=%#v err=%v, want hidden projection", view, err)
-	}
-	childMeta, err := svc.threadsDB.GetFlowerThreadMetadata(ctx, meta.EndpointID, child.ThreadID)
-	if err != nil {
-		t.Fatalf("GetFlowerThreadMetadata child: %v", err)
-	}
-	if childMeta == nil ||
-		!isFlowerSubagentProjection(childMeta) ||
-		strings.TrimSpace(childMeta.OwnerID) != flowerSubagentProjectionOwnerID ||
-		strings.TrimSpace(childMeta.ParentThreadID) != parent.ThreadID ||
-		strings.TrimSpace(childMeta.ThreadID) != child.ThreadID {
-		t.Fatalf("child thread metadata not projected: %#v", childMeta)
-	}
-}
-
 func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *testing.T) {
 	t.Parallel()
 
@@ -1046,6 +969,7 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 					ToolResult: &flruntime.SubAgentDetailToolResult{
 						CallID:        "call-1",
 						ToolName:      "terminal.exec",
+						Status:        string(observation.ActivityStatusSuccess),
 						Preview:       "total 4",
 						Truncated:     true,
 						OriginalBytes: 2000,
@@ -1061,6 +985,37 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 							SHA256:    "raw-full-output-sha",
 						},
 					},
+					ActivityTimeline: &observation.ActivityTimeline{
+						SchemaVersion: 1,
+						RunID:         "child-run",
+						ThreadID:      "child-detail",
+						TurnID:        "child-turn",
+						TraceID:       "child-run",
+						Summary: observation.ActivitySummary{
+							Status:         observation.ActivityStatusSuccess,
+							Severity:       observation.ActivitySeverityNormal,
+							TotalItems:     1,
+							Counts:         observation.ActivityCounts{Success: 1},
+							DurationMS:     10,
+							NeedsAttention: false,
+						},
+						Items: []observation.ActivityItem{{
+							ItemID:           "call-1",
+							ToolID:           "call-1",
+							ToolName:         "terminal.exec",
+							Kind:             observation.ActivityKindTool,
+							Status:           observation.ActivityStatusSuccess,
+							Severity:         observation.ActivitySeverityNormal,
+							RequiresApproval: false,
+							Label:            "Run command",
+							Description:      "Command completed",
+							Renderer:         observation.ActivityRendererTerminal,
+							Payload: map[string]any{
+								"stdout":      "total 4",
+								"content_ref": "hash-content",
+							},
+						}},
+					},
 				},
 				{
 					ID:        "event-approval",
@@ -1069,6 +1024,33 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 					Kind:      flruntime.SubAgentDetailEventApproval,
 					CreatedAt: now.Add(-20 * time.Second),
 					Approval:  &flruntime.SubAgentDetailApproval{State: "denied", ToolName: "terminal.exec", ArgsHash: "hash-args", Reason: "readonly policy"},
+					ActivityTimeline: &observation.ActivityTimeline{
+						SchemaVersion: 1,
+						RunID:         "child-run",
+						ThreadID:      "child-detail",
+						TurnID:        "child-turn",
+						TraceID:       "child-run",
+						Summary: observation.ActivitySummary{
+							Status:         observation.ActivityStatusError,
+							Severity:       observation.ActivitySeverityError,
+							TotalItems:     1,
+							Counts:         observation.ActivityCounts{Approval: 1},
+							NeedsAttention: true,
+						},
+						Items: []observation.ActivityItem{{
+							ItemID:           "approval-1",
+							ToolID:           "call-1",
+							ToolName:         "terminal.exec",
+							Kind:             observation.ActivityKindApproval,
+							Status:           observation.ActivityStatusError,
+							Severity:         observation.ActivitySeverityError,
+							NeedsAttention:   true,
+							RequiresApproval: true,
+							ApprovalState:    "denied",
+							Label:            "terminal.exec",
+							Description:      "readonly policy",
+						}},
+					},
 				},
 				{
 					ID:        "event-error",
@@ -1106,14 +1088,14 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 		t.Fatalf("GetThread child detail: %v", err)
 	}
 	if childRecord != nil {
-		t.Fatalf("detail lookup created child projection thread: %#v", childRecord)
+		t.Fatalf("detail lookup created child threadstore row: %#v", childRecord)
 	}
 	childMeta, err := svc.threadsDB.GetFlowerThreadMetadata(ctx, meta.EndpointID, "child-detail")
 	if err != nil {
 		t.Fatalf("GetFlowerThreadMetadata child detail: %v", err)
 	}
 	if childMeta != nil {
-		t.Fatalf("detail lookup created child projection metadata: %#v", childMeta)
+		t.Fatalf("detail lookup created child thread metadata: %#v", childMeta)
 	}
 	host.mu.Lock()
 	requests := append([]flruntime.ReadSubAgentDetailRequest(nil), host.detailRequests...)

@@ -48,7 +48,7 @@ import type {
   FlowerSubagentDetail,
   FlowerSubagentTimelineRow,
 } from './contracts/flowerSurfaceContracts';
-import { isSubagentProjectionThread, projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
+import { projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
 import {
   buildFlowerTimelineEntries,
   type FlowerRenderableMessageBlock,
@@ -698,12 +698,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       ));
   });
   const selectedThreadReadOnlyReason = createMemo(() => trimString(selectedThread()?.read_only_reason));
-  const selectedThreadIsSubagentProjection = createMemo(() => isSubagentProjectionThread(selectedThread()));
-  const selectedThreadReadOnly = createMemo(() => selectedThreadIsSubagentProjection() || selectedThreadLiveStatus() === 'read_only' || Boolean(selectedThreadReadOnlyReason()));
+  const selectedThreadReadOnly = createMemo(() => selectedThreadLiveStatus() === 'read_only' || Boolean(selectedThreadReadOnlyReason()));
   const selectedThreadReadOnlyDisplay = createMemo(() => (
-    selectedThreadIsSubagentProjection()
-      ? subagentsCopy().readOnlyComposerLabel
-      : selectedThreadReadOnlyReason() || subagentsCopy().readOnlyComposerLabel
+    selectedThreadReadOnlyReason() || subagentsCopy().readOnlyComposerLabel
   ));
   const visibleInputRequest = (thread: FlowerThreadSnapshot | null | undefined): FlowerInputRequest | null => (
     thread?.status === 'waiting_user' ? thread.input_request ?? null : null
@@ -846,8 +843,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return status !== 'running' && status !== 'waiting_approval' && status !== 'waiting_user';
   });
   const composerPermissionInteractive = createMemo(() => (
-    !selectedThreadIsSubagentProjection()
-    && !selectedThreadReadOnly()
+    !selectedThreadReadOnly()
     && (!selectedThreadID() || typeof props.adapter.setThreadPermissionType === 'function')
   ));
   const permissionPatchPending = createMemo(() => {
@@ -1237,7 +1233,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ].join('\x1f');
   const threadItems = createMemo(() => {
     localReadVisibilityRevision();
-    return threads().filter((thread) => !isSubagentProjectionThread(thread)).map((t) => {
+    return threads().map((t) => {
       const visibleThread = threadWithLocalReadVisibility(t);
       const sig = threadItemSignature(t);
       const cached = threadItemCache.get(t.thread_id);
@@ -2864,8 +2860,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const permissionSelector = () => {
     const canUseMenu = createMemo(() => (
-      !selectedThreadIsSubagentProjection()
-      && !selectedThreadReadOnly()
+      !selectedThreadReadOnly()
       && (!selectedThreadID() || typeof props.adapter.setThreadPermissionType === 'function')
     ));
     const interactive = createMemo(() => canUseMenu() && !permissionPatchPending());

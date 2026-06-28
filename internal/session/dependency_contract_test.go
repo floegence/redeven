@@ -112,27 +112,34 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
+	const floretVersion = "v0.3.47"
+	oldFloretVersion := "v0.3." + "45"
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
 	goSum := readRepoFile(t, root, "go.sum")
 	notices := readRepoFile(t, root, "THIRD_PARTY_NOTICES.md")
 
-	if !strings.Contains(goMod, "github.com/floegence/floret v0.3.45") {
-		t.Fatalf("go.mod must depend on floret v0.3.45")
+	if !strings.Contains(goMod, "github.com/floegence/floret "+floretVersion) {
+		t.Fatalf("go.mod must depend on floret %s", floretVersion)
 	}
 	assertNoLocalGoModuleReference(t, "go.mod", goMod, "github.com/floegence/floret", "floret")
-	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.45 ") {
-		t.Fatalf("go.sum must include floret v0.3.45 module checksum")
+	if !strings.Contains(goSum, "github.com/floegence/floret "+floretVersion+" ") {
+		t.Fatalf("go.sum must include floret %s module checksum", floretVersion)
 	}
-	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.45/go.mod ") {
-		t.Fatalf("go.sum must include floret v0.3.45 go.mod checksum")
+	if !strings.Contains(goSum, "github.com/floegence/floret "+floretVersion+"/go.mod ") {
+		t.Fatalf("go.sum must include floret %s go.mod checksum", floretVersion)
 	}
 	assertNoLocalGoModuleReference(t, "go.sum", goSum, "github.com/floegence/floret", "floret")
-	if !strings.Contains(notices, "| github.com/floegence/floret | v0.3.45 |") {
-		t.Fatalf("THIRD_PARTY_NOTICES.md must include floret v0.3.45")
+	if !strings.Contains(notices, "| github.com/floegence/floret | "+floretVersion+" |") {
+		t.Fatalf("THIRD_PARTY_NOTICES.md must include floret %s", floretVersion)
 	}
-	if !strings.Contains(notices, "github.com/floegence/floret@v0.3.45") {
-		t.Fatalf("THIRD_PARTY_NOTICES.md must link floret v0.3.45")
+	if !strings.Contains(notices, "github.com/floegence/floret@"+floretVersion) {
+		t.Fatalf("THIRD_PARTY_NOTICES.md must link floret %s", floretVersion)
+	}
+	if strings.Contains(goMod, "github.com/floegence/floret "+oldFloretVersion) ||
+		strings.Contains(goSum, "github.com/floegence/floret "+oldFloretVersion) ||
+		strings.Contains(notices, "github.com/floegence/floret@"+oldFloretVersion) {
+		t.Fatalf("repository must not retain old floret %s dependency markers", oldFloretVersion)
 	}
 }
 
@@ -275,6 +282,81 @@ func TestFloretThreadTranscriptAPIsAreNotUsedInProduction(t *testing.T) {
 		if strings.Contains(content, marker) {
 			t.Fatalf("subagents_floret.go must not retain subagent projection marker %q", marker)
 		}
+	}
+}
+
+func TestFloretDetailBoundaryDoesNotReadRawOrRebuildSubagentActivity(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	err := filepath.WalkDir(filepath.Join(root, "internal", "ai"), func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if strings.Contains(string(data), "IncludeRaw:"+" true") {
+			rel, _ := filepath.Rel(root, path)
+			t.Fatalf("%s must not read Floret detail events with IncludeRaw=true in production", rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan ai package: %v", err)
+	}
+
+	content := readRepoFile(t, root, filepath.Join("internal", "ai", "subagents_floret.go"))
+	for _, marker := range []string{
+		"observation." + "BuildActivityTimeline",
+		"flowerSubagent" + "ObservationEvent",
+		"floretActivity" + "ForToolResult(nil",
+	} {
+		if strings.Contains(content, marker) {
+			t.Fatalf("subagents_floret.go must consume Floret detail activity_timeline instead of retaining marker %q", marker)
+		}
+	}
+}
+
+func TestRepositoryDoesNotRetainLegacySubagentProjectionMarker(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	forbidden := "subagent_" + "projection"
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			switch entry.Name() {
+			case ".git", "node_modules", ".next", "build", "tmp":
+				return filepath.SkipDir
+			default:
+				return nil
+			}
+		}
+		if !floretBoundaryScanFile(path) {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if strings.Contains(string(data), forbidden) {
+			rel, _ := filepath.Rel(root, path)
+			t.Fatalf("%s must not retain legacy subagent projection marker", rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan repository: %v", err)
 	}
 }
 

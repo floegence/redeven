@@ -1581,9 +1581,6 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	if err != nil {
 		return nil, err
 	}
-	if isFlowerSubagentProjection(flowerMeta) {
-		return nil, ErrReadOnlyThread
-	}
 
 	runWorkingDir := strings.TrimSpace(th.WorkingDir)
 	if runWorkingDir == "" {

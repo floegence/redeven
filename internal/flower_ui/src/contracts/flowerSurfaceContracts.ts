@@ -446,6 +446,7 @@ export type FlowerSubagentToolCallView = Readonly<{
 export type FlowerSubagentToolResultView = Readonly<{
   call_id?: string;
   tool_name?: string;
+  status?: string;
   preview?: string;
   truncated?: boolean;
   original_bytes?: number;

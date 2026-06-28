@@ -1130,69 +1130,7 @@ func TestStore_ListThreadsUsesStableCreatedAtOrder(t *testing.T) {
 	}
 }
 
-func TestStore_ListThreadsExcludesSubagentProjectionRows(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-	for _, th := range []Thread{
-		{ThreadID: "parent-new", EndpointID: "env_1", CreatedAtUnixMs: 4000, UpdatedAtUnixMs: 4000},
-		{ThreadID: "child-hidden", EndpointID: "env_1", CreatedAtUnixMs: 3000, UpdatedAtUnixMs: 5000},
-		{ThreadID: "parent-old", EndpointID: "env_1", CreatedAtUnixMs: 2000, UpdatedAtUnixMs: 2000},
-	} {
-		if err := s.CreateThread(ctx, th); err != nil {
-			t.Fatalf("CreateThread(%s): %v", th.ThreadID, err)
-		}
-	}
-	if err := s.UpsertFlowerThreadMetadata(ctx, FlowerThreadMetadata{
-		EndpointID:      "env_1",
-		ThreadID:        "child-hidden",
-		OwnerKind:       "subagent_projection",
-		OwnerID:         "child-hidden",
-		ParentThreadID:  "parent-new",
-		UpdatedAtUnixMs: 5000,
-	}); err != nil {
-		t.Fatalf("UpsertFlowerThreadMetadata child: %v", err)
-	}
-
-	firstPage, cursor, err := s.ListThreads(ctx, "env_1", 1, ThreadsCursor{})
-	if err != nil {
-		t.Fatalf("ListThreads first: %v", err)
-	}
-	if got := storeThreadIDs(firstPage); !slices.Equal(got, []string{"parent-new"}) {
-		t.Fatalf("first page ids=%v, want parent thread only", got)
-	}
-	decoded, ok := DecodeCursor(cursor)
-	if !ok {
-		t.Fatalf("DecodeCursor(%q) failed", cursor)
-	}
-	secondPage, next, err := s.ListThreads(ctx, "env_1", 1, decoded)
-	if err != nil {
-		t.Fatalf("ListThreads second: %v", err)
-	}
-	if got := storeThreadIDs(secondPage); !slices.Equal(got, []string{"parent-old"}) {
-		t.Fatalf("second page ids=%v, want hidden child skipped without cursor pollution", got)
-	}
-	if next != "" {
-		t.Fatalf("next cursor=%q, want empty", next)
-	}
-
-	child, err := s.GetThread(ctx, "env_1", "child-hidden")
-	if err != nil {
-		t.Fatalf("GetThread child: %v", err)
-	}
-	if child == nil {
-		t.Fatalf("legacy projection direct lookup should remain readable")
-	}
-}
-
-func TestStore_UpsertProjectedThreadWithFlowerMetadataHidesProjectionAtomically(t *testing.T) {
+func TestStore_UpsertProjectedThreadWithFlowerMetadataPersistsAtomically(t *testing.T) {
 	t.Parallel()
 
 	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
@@ -1214,7 +1152,7 @@ func TestStore_UpsertProjectedThreadWithFlowerMetadataHidesProjectionAtomically(
 	}, FlowerThreadMetadata{
 		EndpointID:      "env_1",
 		ThreadID:        "child-atomic",
-		OwnerKind:       "subagent_projection",
+		OwnerKind:       "product_detail",
 		OwnerID:         "child-atomic",
 		ParentThreadID:  "parent-atomic",
 		UpdatedAtUnixMs: 2000,
@@ -1225,15 +1163,15 @@ func TestStore_UpsertProjectedThreadWithFlowerMetadataHidesProjectionAtomically(
 	if err != nil {
 		t.Fatalf("ListThreads: %v", err)
 	}
-	if len(threads) != 0 || next != "" {
-		t.Fatalf("subagent projection leaked into list threads=%#v next=%q", threads, next)
+	if got := storeThreadIDs(threads); !slices.Equal(got, []string{"child-atomic"}) || next != "" {
+		t.Fatalf("list threads ids=%v next=%q, want persisted thread", got, next)
 	}
 	child, err := s.GetThread(ctx, "env_1", "child-atomic")
 	if err != nil {
 		t.Fatalf("GetThread child: %v", err)
 	}
 	if child == nil || child.RunStatus != "running" {
-		t.Fatalf("projected child was not stored: %#v", child)
+		t.Fatalf("thread was not stored: %#v", child)
 	}
 	initialChildRevision := child.FlowerActivityRevision
 	initialChildSignature := child.FlowerActivitySignature
@@ -1241,7 +1179,7 @@ func TestStore_UpsertProjectedThreadWithFlowerMetadataHidesProjectionAtomically(
 	if err != nil {
 		t.Fatalf("GetFlowerThreadMetadata: %v", err)
 	}
-	if strings.TrimSpace(meta.OwnerKind) != "subagent_projection" || strings.TrimSpace(meta.ParentThreadID) != "parent-atomic" {
+	if strings.TrimSpace(meta.OwnerKind) != "product_detail" || strings.TrimSpace(meta.ParentThreadID) != "parent-atomic" {
 		t.Fatalf("unexpected metadata: %#v", meta)
 	}
 	if err := s.UpsertProjectedThreadWithFlowerMetadata(ctx, Thread{
@@ -1256,7 +1194,7 @@ func TestStore_UpsertProjectedThreadWithFlowerMetadataHidesProjectionAtomically(
 	}, FlowerThreadMetadata{
 		EndpointID:      "env_1",
 		ThreadID:        "child-atomic",
-		OwnerKind:       "subagent_projection",
+		OwnerKind:       "product_detail",
 		OwnerID:         "child-atomic",
 		ParentThreadID:  "parent-atomic",
 		UpdatedAtUnixMs: 2500,
@@ -1268,13 +1206,13 @@ func TestStore_UpsertProjectedThreadWithFlowerMetadataHidesProjectionAtomically(
 		t.Fatalf("GetThread child after update: %v", err)
 	}
 	if child == nil || child.RunStatus != "success" || child.LastContextRunID != "run_child_2" {
-		t.Fatalf("projected child update was not stored: %#v", child)
+		t.Fatalf("thread update was not stored: %#v", child)
 	}
 	if child.FlowerActivityRevision <= initialChildRevision {
-		t.Fatalf("projected child FlowerActivityRevision=%d, want > %d", child.FlowerActivityRevision, initialChildRevision)
+		t.Fatalf("FlowerActivityRevision=%d, want > %d", child.FlowerActivityRevision, initialChildRevision)
 	}
 	if child.FlowerActivitySignature == initialChildSignature || !strings.Contains(child.FlowerActivitySignature, "status:success") || !strings.Contains(child.FlowerActivitySignature, "turn:run_child_2") {
-		t.Fatalf("projected child FlowerActivitySignature=%q initial=%q, want updated projected state", child.FlowerActivitySignature, initialChildSignature)
+		t.Fatalf("FlowerActivitySignature=%q initial=%q, want updated state", child.FlowerActivitySignature, initialChildSignature)
 	}
 	afterUpdateRevision := child.FlowerActivityRevision
 	if err := s.UpsertProjectedThreadWithFlowerMetadata(ctx, Thread{
@@ -1289,7 +1227,7 @@ func TestStore_UpsertProjectedThreadWithFlowerMetadataHidesProjectionAtomically(
 	}, FlowerThreadMetadata{
 		EndpointID:      "env_1",
 		ThreadID:        "child-atomic",
-		OwnerKind:       "subagent_projection",
+		OwnerKind:       "product_detail",
 		OwnerID:         "child-atomic",
 		ParentThreadID:  "parent-atomic",
 		UpdatedAtUnixMs: 2500,
@@ -2060,108 +1998,6 @@ INSERT INTO ai_threads(
 		if th.PermissionType != tc.want {
 			t.Fatalf("%s PermissionType=%q, want %q", tc.threadID, th.PermissionType, tc.want)
 		}
-	}
-}
-
-func TestStore_MigrateFromV36DeletesLegacyFloretSubagentProjectionsOnly(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	schema := threadstoreSchemaSpec()
-	tx, err := raw.Begin()
-	if err != nil {
-		_ = raw.Close()
-		t.Fatalf("begin v36 migration setup: %v", err)
-	}
-	for _, migration := range schema.Migrations {
-		if migration.ToVersion > 36 {
-			break
-		}
-		if err := migration.Apply(tx); err != nil {
-			_ = tx.Rollback()
-			_ = raw.Close()
-			t.Fatalf("apply migration %d->%d: %v", migration.FromVersion, migration.ToVersion, err)
-		}
-	}
-	if _, err := tx.Exec(`
-INSERT INTO ai_threads(thread_id, endpoint_id, namespace_public_id, title, created_at_unix_ms, updated_at_unix_ms)
-VALUES
-  ('th_parent', 'env_1', 'ns_1', 'Parent', 100, 100),
-  ('th_child_projection', 'env_1', 'ns_1', 'Legacy child projection', 101, 101),
-  ('th_product', 'env_1', 'ns_1', 'Product thread', 102, 102),
-  ('th_other_owner', 'env_1', 'ns_1', 'Other owner thread', 103, 103);
-INSERT INTO transcript_messages(thread_id, endpoint_id, message_id, role, status, created_at_unix_ms, updated_at_unix_ms, text_content, message_json)
-VALUES
-  ('th_parent', 'env_1', 'msg_parent', 'user', 'complete', 100, 100, 'parent', '{"id":"msg_parent"}'),
-  ('th_child_projection', 'env_1', 'msg_child', 'assistant', 'complete', 101, 101, 'child', '{"id":"msg_child"}'),
-  ('th_product', 'env_1', 'msg_product', 'user', 'complete', 102, 102, 'product', '{"id":"msg_product"}');
-INSERT INTO ai_messages(thread_id, endpoint_id, message_id, role, status, created_at_unix_ms, updated_at_unix_ms, text_content, message_json)
-VALUES
-  ('th_parent', 'env_1', 'legacy_parent', 'user', 'complete', 100, 100, 'parent', '{"id":"legacy_parent"}'),
-  ('th_child_projection', 'env_1', 'legacy_child', 'assistant', 'complete', 101, 101, 'child', '{"id":"legacy_child"}');
-INSERT INTO ai_flower_thread_metadata(endpoint_id, thread_id, owner_kind, owner_id, parent_thread_id, updated_at_unix_ms)
-VALUES
-  ('env_1', 'th_parent', 'flower_thread', 'redeven', '', 100),
-  ('env_1', 'th_child_projection', 'subagent_projection', 'floret', 'th_parent', 101),
-  ('env_1', 'th_other_owner', 'subagent_projection', 'other-runtime', 'th_parent', 103);
-`); err != nil {
-		_ = tx.Rollback()
-		_ = raw.Close()
-		t.Fatalf("seed v36 legacy projection rows: %v", err)
-	}
-	if _, err := tx.Exec(`PRAGMA user_version=36;`); err != nil {
-		_ = tx.Rollback()
-		_ = raw.Close()
-		t.Fatalf("set user_version v36: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		_ = raw.Close()
-		t.Fatalf("commit v36 migration setup: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close raw db: %v", err)
-	}
-
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open with v37 migration: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-	ctx := context.Background()
-
-	if th, err := s.GetThread(ctx, "env_1", "th_child_projection"); err != nil || th != nil {
-		t.Fatalf("legacy projection thread after migration thread=%#v err=%v, want deleted", th, err)
-	}
-	if got := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ?`, "env_1", "th_child_projection"); got != 0 {
-		t.Fatalf("legacy projection transcript rows=%d, want 0", got)
-	}
-	if got := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_messages WHERE endpoint_id = ? AND thread_id = ?`, "env_1", "th_child_projection"); got != 0 {
-		t.Fatalf("legacy projection ai_messages rows=%d, want 0", got)
-	}
-	if meta, err := s.GetFlowerThreadMetadata(ctx, "env_1", "th_child_projection"); err != nil || meta != nil {
-		t.Fatalf("legacy projection metadata after migration meta=%#v err=%v, want deleted", meta, err)
-	}
-	for _, threadID := range []string{"th_parent", "th_product", "th_other_owner"} {
-		th, err := s.GetThread(ctx, "env_1", threadID)
-		if err != nil {
-			t.Fatalf("GetThread(%s): %v", threadID, err)
-		}
-		if th == nil {
-			t.Fatalf("thread %s deleted unexpectedly", threadID)
-		}
-	}
-	if got := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ?`, "env_1", "th_parent"); got != 1 {
-		t.Fatalf("parent transcript rows=%d, want 1", got)
-	}
-	if meta, err := s.GetFlowerThreadMetadata(ctx, "env_1", "th_parent"); err != nil || meta == nil {
-		t.Fatalf("parent metadata after migration meta=%#v err=%v, want retained", meta, err)
-	}
-	if meta, err := s.GetFlowerThreadMetadata(ctx, "env_1", "th_other_owner"); err != nil || meta == nil {
-		t.Fatalf("other owner metadata after migration meta=%#v err=%v, want retained", meta, err)
 	}
 }
 

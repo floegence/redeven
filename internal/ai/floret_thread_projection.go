@@ -29,7 +29,7 @@ func listFloretThreadDetailEventsForTurn(ctx context.Context, host flruntime.Hos
 			ThreadID:     threadID,
 			AfterOrdinal: afterOrdinal,
 			Limit:        floretThreadDetailEventPageLimit,
-			IncludeRaw:   true,
+			IncludeRaw:   false,
 		})
 		if err != nil {
 			return nil, err
