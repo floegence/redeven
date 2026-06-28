@@ -103,7 +103,8 @@ describe('FlowerSurface context telemetry', () => {
     expect(indicator?.textContent).toContain('91%');
     expect(indicator?.textContent).toContain('Context');
     expect(indicator?.textContent).toContain('182,000 of 200,000');
-    expect(indicator?.textContent).toContain('Near limit');
+    expect(indicator?.textContent).not.toContain('Status');
+    expect(indicator?.textContent).not.toContain('Near limit');
     expect(indicator?.getAttribute('data-context-pressure')).toBe('warning');
     expect(progress?.getAttribute('aria-valuenow')).toBe('91');
     expect(progress?.hasAttribute('aria-describedby')).toBe(false);
@@ -200,7 +201,7 @@ describe('FlowerSurface context telemetry', () => {
     expect(indicator?.textContent).not.toContain('Last known context');
   });
 
-  it('renders unknown percent context status when no reliable ratio exists', async () => {
+  it('renders unknown percent context usage without exposing pressure status details', async () => {
     const selectedThread = threadWithContext({
       context_usage: {
         run_id: 'run-1',
@@ -222,9 +223,12 @@ describe('FlowerSurface context telemetry', () => {
     const indicator = runtime.querySelector('.flower-composer-context-indicator');
     const progress = indicator?.querySelector('[role="progressbar"]');
     expect(indicator?.textContent).toContain('Context');
-    expect(indicator?.textContent).toContain('Estimated');
+    expect(indicator?.textContent).not.toContain('Status');
+    expect(indicator?.textContent).not.toContain('Estimated');
     expect(indicator?.textContent).toContain('--%');
     expect(indicator?.textContent).not.toContain('0%');
+    expect(indicator?.getAttribute('data-context-pressure')).toBe('estimated');
+    expect(progress?.getAttribute('aria-valuetext')).toBe('Context: --%');
     expect(progress?.hasAttribute('aria-valuenow')).toBe(false);
   });
 

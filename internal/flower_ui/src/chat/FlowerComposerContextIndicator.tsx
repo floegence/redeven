@@ -80,10 +80,6 @@ export function FlowerComposerContextIndicator(props: {
             </div>
           )}
         </Show>
-        <div class="flower-composer-context-tooltip-row">
-          <span>{view().statusLabel}</span>
-          <strong>{view().statusValue}</strong>
-        </div>
       </div>
     </div>
   );
