@@ -53,9 +53,6 @@ const (
 	subagentModelItemTargetBytes = 2 * 1024
 	subagentModelItemHardBytes   = 4 * 1024
 	subagentToolResultHardBytes  = 20 * 1024
-
-	flowerSubagentProjectionOwnerKind = "subagent_projection"
-	flowerSubagentProjectionOwnerID   = "floret"
 )
 
 type subagentRuntime interface {
@@ -2071,39 +2068,19 @@ func flowerSubagentSummary(snapshot flruntime.SubAgentSnapshot) FlowerSubagentSu
 
 func flowerSubagentTimelineRows(events []flruntime.SubAgentDetailEvent) []FlowerSubagentTimelineRow {
 	out := make([]FlowerSubagentTimelineRow, 0, len(events))
-	toolCommandByCallID := make(map[string]string)
-	resultCallIDs := make(map[string]struct{})
 	for _, event := range events {
-		if event.Kind != flruntime.SubAgentDetailEventToolResult || event.ToolResult == nil {
-			continue
-		}
-		if callID := strings.TrimSpace(event.ToolResult.CallID); callID != "" {
-			resultCallIDs[callID] = struct{}{}
-		}
-	}
-	for _, event := range events {
-		if event.Kind != flruntime.SubAgentDetailEventToolCall || event.ToolCall == nil {
-			continue
-		}
-		callID := strings.TrimSpace(event.ToolCall.ID)
-		command := bestDisplayCommand(event.ToolCall.ArgsPreview)
-		if callID != "" && command != "" {
-			toolCommandByCallID[callID] = command
-		}
-	}
-	for _, event := range events {
-		out = append(out, flowerSubagentTimelineRow(event, toolCommandByCallID, resultCallIDs))
+		out = append(out, flowerSubagentTimelineRow(event))
 	}
 	return out
 }
 
-func flowerSubagentTimelineRow(event flruntime.SubAgentDetailEvent, toolCommandByCallID map[string]string, resultCallIDs map[string]struct{}) FlowerSubagentTimelineRow {
+func flowerSubagentTimelineRow(event flruntime.SubAgentDetailEvent) FlowerSubagentTimelineRow {
 	return FlowerSubagentTimelineRow{
 		Ordinal:     event.Ordinal,
 		Kind:        strings.TrimSpace(string(event.Kind)),
 		Type:        strings.TrimSpace(event.Type),
 		CreatedAtMs: timeUnixMS(event.CreatedAt),
-		Activity:    flowerSubagentActivityBlock(event, toolCommandByCallID, resultCallIDs),
+		Activity:    flowerSubagentActivityBlock(event.ActivityTimeline),
 		Message:     flowerSubagentDetailMessage(event.Message),
 		ToolCall:    flowerSubagentToolCallView(event.ToolCall),
 		ToolResult:  flowerSubagentToolResultView(event.ToolResult),
@@ -2116,275 +2093,12 @@ func flowerSubagentTimelineRow(event flruntime.SubAgentDetailEvent, toolCommandB
 	}
 }
 
-func flowerSubagentActivityBlock(event flruntime.SubAgentDetailEvent, toolCommandByCallID map[string]string, resultCallIDs map[string]struct{}) *ActivityTimelineBlock {
-	activityEvent, ok := flowerSubagentObservationEvent(event, toolCommandByCallID, resultCallIDs)
-	if !ok {
+func flowerSubagentActivityBlock(timeline *observation.ActivityTimeline) *ActivityTimelineBlock {
+	if timeline == nil || len(timeline.Items) == 0 {
 		return nil
 	}
-	meta := observation.ActivityRunMeta{
-		RunID:    "subagent:" + strings.TrimSpace(string(event.ThreadID)),
-		ThreadID: strings.TrimSpace(string(event.ThreadID)),
-		TurnID:   firstNonEmptyString(strings.TrimSpace(string(event.TurnID)), fmt.Sprintf("row-%d", event.Ordinal)),
-		TraceID:  "subagent:" + strings.TrimSpace(string(event.ThreadID)),
-	}
-	timeline := observation.BuildActivityTimeline(meta, []observation.Event{activityEvent}, timeUnixMS(event.CreatedAt))
-	if len(timeline.Items) == 0 {
-		return nil
-	}
-	block := newActivityTimelineBlock(timeline, nil)
+	block := newActivityTimelineBlock(*timeline, nil)
 	return &block
-}
-
-func flowerSubagentObservationEvent(event flruntime.SubAgentDetailEvent, toolCommandByCallID map[string]string, resultCallIDs map[string]struct{}) (observation.Event, bool) {
-	observedAt := event.CreatedAt
-	if observedAt.IsZero() {
-		observedAt = time.Now()
-	}
-	base := observation.Event{
-		RunID:      "subagent:" + strings.TrimSpace(string(event.ThreadID)),
-		ThreadID:   strings.TrimSpace(string(event.ThreadID)),
-		TurnID:     firstNonEmptyString(strings.TrimSpace(string(event.TurnID)), fmt.Sprintf("row-%d", event.Ordinal)),
-		TraceID:    "subagent:" + strings.TrimSpace(string(event.ThreadID)),
-		ObservedAt: observedAt,
-		Metadata:   stringMapAsAny(event.Metadata),
-	}
-	switch event.Kind {
-	case flruntime.SubAgentDetailEventToolCall:
-		call := event.ToolCall
-		if call == nil {
-			return observation.Event{}, false
-		}
-		toolName := strings.TrimSpace(call.Name)
-		callID := strings.TrimSpace(call.ID)
-		if _, hasResult := resultCallIDs[callID]; hasResult {
-			return observation.Event{}, false
-		}
-		args := flowerSubagentToolCallArgs(toolName, call.ArgsPreview)
-		base.Type = observation.EventTypeToolCall
-		base.ToolID = firstNonEmptyString(callID, fmt.Sprintf("tool-call-%d", event.Ordinal))
-		base.ToolName = toolName
-		base.ArgsHash = strings.TrimSpace(call.ArgsHash)
-		base.Activity = floretActivityForToolCall(toolName, args)
-		return base, toolName != ""
-	case flruntime.SubAgentDetailEventToolResult:
-		result := event.ToolResult
-		if result == nil {
-			return observation.Event{}, false
-		}
-		toolName := strings.TrimSpace(result.ToolName)
-		callID := strings.TrimSpace(result.CallID)
-		status := toolResultStatusSuccess
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(result.Preview)), "error") || strings.TrimSpace(event.Error) != "" {
-			status = toolResultStatusError
-			base.Error = firstNonEmptyString(strings.TrimSpace(event.Error), strings.TrimSpace(result.Preview))
-		}
-		payload := flowerSubagentToolResultPayload(toolName, result, toolCommandByCallID[callID])
-		activity, err := floretActivityForToolResult(nil, ToolResult{
-			ToolID:     firstNonEmptyString(callID, fmt.Sprintf("tool-result-%d", event.Ordinal)),
-			ToolName:   toolName,
-			Status:     status,
-			Summary:    strings.TrimSpace(result.Preview),
-			Data:       payload,
-			Truncated:  result.Truncated,
-			ContentRef: strings.TrimSpace(result.ContentSHA256),
-		})
-		if err != nil {
-			return observation.Event{}, false
-		}
-		base.Type = observation.EventTypeToolResult
-		base.ToolID = firstNonEmptyString(callID, fmt.Sprintf("tool-result-%d", event.Ordinal))
-		base.ToolName = toolName
-		base.Activity = activity
-		return base, toolName != ""
-	case flruntime.SubAgentDetailEventApproval:
-		approval := event.Approval
-		if approval == nil {
-			return observation.Event{}, false
-		}
-		state := strings.TrimSpace(approval.State)
-		base.Type = flowerSubagentApprovalEventType(state)
-		base.ToolID = firstNonEmptyString(strings.TrimSpace(approval.ToolID), strings.TrimSpace(approval.ArgsHash), fmt.Sprintf("approval-%d", event.Ordinal))
-		base.ToolName = firstNonEmptyString(strings.TrimSpace(approval.ToolName), strings.TrimSpace(approval.ToolKind), "approval")
-		base.ToolKind = strings.TrimSpace(approval.ToolKind)
-		base.ArgsHash = strings.TrimSpace(approval.ArgsHash)
-		base.Message = strings.TrimSpace(approval.Reason)
-		base.Activity = &observation.ActivityPresentation{
-			Label:       firstNonEmptyString(strings.TrimSpace(approval.ToolName), strings.TrimSpace(approval.ToolKind), "Approval"),
-			Description: strings.TrimSpace(approval.Reason),
-			Renderer:    observation.ActivityRendererStructured,
-			Payload: map[string]any{
-				"status":    firstNonEmptyString(state, "requested"),
-				"reason":    strings.TrimSpace(approval.Reason),
-				"args_hash": strings.TrimSpace(approval.ArgsHash),
-			},
-		}
-		return base, true
-	case flruntime.SubAgentDetailEventCustom, flruntime.SubAgentDetailEventInput:
-		title := strings.TrimSpace(event.Type)
-		if title == "" {
-			title = strings.TrimSpace(string(event.Kind))
-		}
-		body := ""
-		if event.Message != nil {
-			body = strings.TrimSpace(event.Message.Preview)
-		}
-		payload := map[string]any{
-			"summary": firstNonEmptyString(body, title),
-		}
-		if details := flowerSubagentMetadataDetails(event.Metadata); details != "" {
-			payload["details"] = details
-		}
-		base.Type = observation.EventTypeControlSignal
-		base.ToolID = fmt.Sprintf("event-%d", event.Ordinal)
-		base.ToolName = "subagent.event"
-		base.Message = title
-		base.Result = firstNonEmptyString(body, title)
-		base.Activity = &observation.ActivityPresentation{
-			Label:       title,
-			Description: body,
-			Renderer:    observation.ActivityRendererStructured,
-			Payload:     payload,
-		}
-		return base, true
-	default:
-		return observation.Event{}, false
-	}
-}
-
-func flowerSubagentMetadataDetails(metadata map[string]string) string {
-	if len(metadata) == 0 {
-		return ""
-	}
-	keys := make([]string, 0, len(metadata))
-	for key, value := range metadata {
-		if strings.TrimSpace(key) != "" && strings.TrimSpace(value) != "" {
-			keys = append(keys, strings.TrimSpace(key))
-		}
-	}
-	sort.Strings(keys)
-	parts := make([]string, 0, len(keys))
-	for _, key := range keys {
-		parts = append(parts, key+": "+strings.TrimSpace(metadata[key]))
-	}
-	return strings.Join(parts, "\n")
-}
-
-func stringMapAsAny(in map[string]string) map[string]any {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(in))
-	for key, value := range in {
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-		if key != "" && value != "" {
-			out[key] = value
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func flowerSubagentToolCallArgs(toolName string, argsPreview string) map[string]any {
-	args := map[string]any{}
-	preview := strings.TrimSpace(argsPreview)
-	if preview == "" {
-		return args
-	}
-	if decoded, ok := tryDecodeJSONArgs(preview); ok {
-		if strings.TrimSpace(toolName) == "terminal.exec" {
-			if cmd, _ := decoded["command"].(string); strings.TrimSpace(cmd) != "" {
-				args["command"] = strings.TrimSpace(cmd)
-			}
-		} else if summary := extractSummaryFromDecoded(decoded); summary != "" {
-			args["summary"] = summary
-		}
-		return args
-	}
-	if strings.TrimSpace(toolName) == "terminal.exec" {
-		args["command"] = preview
-		return args
-	}
-	args["summary"] = preview
-	return args
-}
-
-func tryDecodeJSONArgs(preview string) (map[string]any, bool) {
-	preview = strings.TrimSpace(preview)
-	if !strings.HasPrefix(preview, "{") {
-		return nil, false
-	}
-	var decoded map[string]any
-	if err := json.Unmarshal([]byte(preview), &decoded); err != nil {
-		return nil, false
-	}
-	return decoded, true
-}
-
-func extractSummaryFromDecoded(decoded map[string]any) string {
-	if cmd, _ := decoded["command"].(string); strings.TrimSpace(cmd) != "" {
-		return strings.TrimSpace(cmd)
-	}
-	if desc, _ := decoded["description"].(string); strings.TrimSpace(desc) != "" {
-		return strings.TrimSpace(desc)
-	}
-	return ""
-}
-
-func bestDisplayCommand(argsPreview string) string {
-	preview := strings.TrimSpace(argsPreview)
-	if preview == "" {
-		return ""
-	}
-	if decoded, ok := tryDecodeJSONArgs(preview); ok {
-		if cmd, _ := decoded["command"].(string); strings.TrimSpace(cmd) != "" {
-			return strings.TrimSpace(cmd)
-		}
-	}
-	return preview
-}
-
-func flowerSubagentToolResultPayload(toolName string, result *flruntime.SubAgentDetailToolResult, command string) map[string]any {
-	if result == nil {
-		return nil
-	}
-	payload := map[string]any{}
-	preview := strings.TrimSpace(result.Preview)
-	if strings.TrimSpace(toolName) == "terminal.exec" {
-		if command = strings.TrimSpace(command); command != "" {
-			payload["command"] = command
-		}
-		payload["stdout"] = preview
-	} else if preview != "" {
-		payload["summary"] = preview
-	}
-	if result.Truncated {
-		payload["truncated"] = true
-	}
-	if result.ContentSHA256 != "" {
-		payload["content_ref"] = strings.TrimSpace(result.ContentSHA256)
-	}
-	if result.OriginalBytes > 0 || result.VisibleBytes > 0 {
-		payload["details"] = fmt.Sprintf("bytes %d/%d", result.VisibleBytes, result.OriginalBytes)
-	}
-	return payload
-}
-
-func flowerSubagentApprovalEventType(state string) string {
-	switch strings.TrimSpace(state) {
-	case "approved":
-		return observation.EventTypeToolApprovalApproved
-	case "rejected", "denied", "failed":
-		return observation.EventTypeToolApprovalRejected
-	case "timed_out":
-		return observation.EventTypeToolApprovalTimedOut
-	case "canceled", "cancelled":
-		return observation.EventTypeToolApprovalCanceled
-	default:
-		return observation.EventTypeToolApprovalRequested
-	}
 }
 
 func flowerSubagentDetailMessage(in *flruntime.SubAgentDetailMessage) *FlowerSubagentDetailMessage {
@@ -2417,6 +2131,7 @@ func flowerSubagentToolResultView(in *flruntime.SubAgentDetailToolResult) *Flowe
 	return &FlowerSubagentToolResultView{
 		CallID:        strings.TrimSpace(in.CallID),
 		ToolName:      strings.TrimSpace(in.ToolName),
+		Status:        strings.TrimSpace(in.Status),
 		Preview:       strings.TrimSpace(in.Preview),
 		Truncated:     in.Truncated,
 		OriginalBytes: in.OriginalBytes,

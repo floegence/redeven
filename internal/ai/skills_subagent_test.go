@@ -682,10 +682,10 @@ func TestFloretSubagents_DoNotProjectChildThreadForFlowerNavigation(t *testing.T
 		t.Fatalf("GetThread(child) err=%v, want nil or sql.ErrNoRows", err)
 	}
 	if thread != nil {
-		t.Fatalf("GetThread(child) thread=%#v err=%v, want hidden projection", thread, err)
+		t.Fatalf("GetThread(child) thread=%#v err=%v, want no Redeven child thread", thread, err)
 	}
 	if bootstrap, err := svc.GetFlowerThreadLiveBootstrap(context.Background(), meta, id); (err != nil && !errors.Is(err, sql.ErrNoRows)) || bootstrap != nil {
-		t.Fatalf("GetFlowerThreadLiveBootstrap(child) bootstrap=%#v err=%v, want hidden projection", bootstrap, err)
+		t.Fatalf("GetFlowerThreadLiveBootstrap(child) bootstrap=%#v err=%v, want no Redeven child thread", bootstrap, err)
 	}
 
 	messages, _, _, err := svc.threadsDB.ListMessages(context.Background(), meta.EndpointID, id, 500, 0)
@@ -707,11 +707,11 @@ func TestFloretSubagents_DoNotProjectChildThreadForFlowerNavigation(t *testing.T
 		t.Fatalf("GetFlowerThreadMetadata child: %v", err)
 	}
 	if childMeta != nil {
-		t.Fatalf("child projection metadata should not be created: %#v", childMeta)
+		t.Fatalf("child thread metadata should not be created: %#v", childMeta)
 	}
 	detail, err := svc.GetFlowerSubagentDetail(context.Background(), meta, parent.ThreadID, id, 0, 50)
 	if err != nil {
-		t.Fatalf("GetFlowerSubagentDetail without child projection metadata: %v", err)
+		t.Fatalf("GetFlowerSubagentDetail without child thread metadata: %v", err)
 	}
 	if detail == nil || detail.Summary.ThreadID != id || detail.Summary.ParentThreadID != parent.ThreadID {
 		t.Fatalf("unexpected subagent detail: %#v", detail)
@@ -1496,6 +1496,10 @@ func (h *fakeCloseAllFloretHost) RunTurn(context.Context, flruntime.RunTurnReque
 
 func (h *fakeCloseAllFloretHost) ListThreadDetailEvents(context.Context, flruntime.ListThreadDetailEventsRequest) (flruntime.ThreadDetailEvents, error) {
 	return flruntime.ThreadDetailEvents{}, nil
+}
+
+func (h *fakeCloseAllFloretHost) ListPendingApprovals(context.Context, flruntime.ListPendingApprovalsRequest) (flruntime.PendingApprovals, error) {
+	return flruntime.PendingApprovals{}, nil
 }
 
 func (h *fakeCloseAllFloretHost) CompactThread(context.Context, flruntime.CompactThreadRequest) (flruntime.CompactThreadResult, error) {

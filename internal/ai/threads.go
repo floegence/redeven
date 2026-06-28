@@ -73,24 +73,6 @@ func activeThreadEffectiveRunState(status string, runErrorCode string, runError 
 	return string(RunStateRunning), "", ""
 }
 
-func isFlowerSubagentProjection(meta *threadstore.FlowerThreadMetadata) bool {
-	if meta == nil {
-		return false
-	}
-	return strings.TrimSpace(strings.ToLower(meta.OwnerKind)) == flowerSubagentProjectionOwnerKind
-}
-
-func flowerSubagentProjectionReadOnlyReason(meta *threadstore.FlowerThreadMetadata) string {
-	if !isFlowerSubagentProjection(meta) {
-		return ""
-	}
-	parentID := strings.TrimSpace(meta.ParentThreadID)
-	if parentID == "" {
-		return "Subagent threads are managed by their parent Flower thread."
-	}
-	return "Subagent threads are managed by their parent Flower thread " + parentID + "."
-}
-
 func applyFlowerThreadMetadataView(view *ThreadView, meta *threadstore.FlowerThreadMetadata) {
 	if view == nil {
 		return
@@ -99,9 +81,6 @@ func applyFlowerThreadMetadataView(view *ThreadView, meta *threadstore.FlowerThr
 		view.OwnerKind = strings.TrimSpace(strings.ToLower(meta.OwnerKind))
 		view.OwnerID = strings.TrimSpace(meta.OwnerID)
 		view.ParentThreadID = strings.TrimSpace(meta.ParentThreadID)
-	}
-	if reason := flowerSubagentProjectionReadOnlyReason(meta); reason != "" {
-		view.ReadOnlyReason = reason
 	}
 }
 
@@ -195,53 +174,7 @@ func (s *Service) requireThreadMutable(ctx context.Context, db *threadstore.Stor
 	if endpointID == "" || threadID == "" {
 		return errors.New("invalid request")
 	}
-	flowerMeta, err := db.GetFlowerThreadMetadata(ctxOrBackground(ctx), endpointID, threadID)
-	if err != nil {
-		return err
-	}
-	if isFlowerSubagentProjection(flowerMeta) {
-		return ErrReadOnlyThread
-	}
-	return nil
-}
-
-func (s *Service) deleteSubagentProjectionThreadsForParent(ctx context.Context, db *threadstore.Store, endpointID string, parentThreadID string, persistTO time.Duration) error {
-	if db == nil {
-		return errors.New("threads store not ready")
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	parentThreadID = strings.TrimSpace(parentThreadID)
-	if endpointID == "" || parentThreadID == "" {
-		return errors.New("invalid request")
-	}
-	if persistTO <= 0 {
-		persistTO = defaultPersistOpTimeout
-	}
-	listCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-	children, err := db.ListFlowerThreadMetadataByParent(listCtx, endpointID, parentThreadID)
-	cancel()
-	if err != nil {
-		return err
-	}
-	for _, child := range children {
-		if !isFlowerSubagentProjection(&child) {
-			continue
-		}
-		childThreadID := strings.TrimSpace(child.ThreadID)
-		if childThreadID == "" {
-			continue
-		}
-		deleteCtx, deleteCancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-		result, err := db.DeleteThreadResources(deleteCtx, endpointID, childThreadID)
-		deleteCancel()
-		if err != nil {
-			return err
-		}
-		if _, err := s.processUploadCleanupCandidates(ctx, result.UploadsToDelete); err != nil {
-			return err
-		}
-		s.broadcastThreadSummary(endpointID, childThreadID)
-	}
+	_ = ctx
 	return nil
 }
 
@@ -300,9 +233,6 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	flowerMeta, err := db.GetFlowerThreadMetadata(ctx, endpointID, threadID)
 	if err != nil {
 		return nil, err
-	}
-	if isFlowerSubagentProjection(flowerMeta) {
-		return nil, sql.ErrNoRows
 	}
 	queuedTurnCount, err := db.CountFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued)
 	if err != nil {
@@ -1026,9 +956,6 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	}
 
 	if err := s.deleteFloretThreadTree(ctx, meta, *th, persistTO); err != nil {
-		return err
-	}
-	if err := s.deleteSubagentProjectionThreadsForParent(ctx, db, endpointID, threadID, persistTO); err != nil {
 		return err
 	}
 

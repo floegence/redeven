@@ -1,11 +1,6 @@
 import type { FlowerThreadListItem } from '../contracts/flowerSurfaceContracts';
 
-export function isSubagentProjectionItem(item: Pick<FlowerThreadListItem, 'owner_kind'>): boolean {
-  return String(item.owner_kind ?? '').trim().toLowerCase() === 'subagent_projection';
-}
-
 export function canForkThreadItem(item: FlowerThreadListItem): boolean {
-  if (isSubagentProjectionItem(item)) return false;
   switch (item.status) {
     case 'running':
     case 'waiting_approval':
@@ -18,9 +13,11 @@ export function canForkThreadItem(item: FlowerThreadListItem): boolean {
 }
 
 export function canRenameThreadItem(item: FlowerThreadListItem): boolean {
-  return !isSubagentProjectionItem(item);
+  void item;
+  return true;
 }
 
 export function canPinThreadItem(item: FlowerThreadListItem): boolean {
-  return !isSubagentProjectionItem(item);
+  void item;
+  return true;
 }

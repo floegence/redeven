@@ -383,13 +383,6 @@ SELECT
 %s
 FROM ai_threads
 WHERE endpoint_id = ?
-  AND NOT EXISTS (
-    SELECT 1
-    FROM ai_flower_thread_metadata m
-    WHERE m.endpoint_id = ai_threads.endpoint_id
-      AND m.thread_id = ai_threads.thread_id
-      AND LOWER(TRIM(COALESCE(m.owner_kind, ''))) = 'subagent_projection'
-  )
 `, threadSelectColumnsSQL)
 	if cursor.CreatedAtUnixMs > 0 && strings.TrimSpace(cursor.ThreadID) != "" {
 		cursorPinned := nonNegativeInt64(cursor.PinnedAtUnixMs)

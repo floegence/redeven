@@ -7,10 +7,6 @@ export function trimString(value: string | null | undefined): string {
   return String(value ?? '').trim();
 }
 
-export function isSubagentProjectionThread(thread: Pick<FlowerThreadSnapshot, 'owner_kind'> | null | undefined): boolean {
-  return trimString(thread?.owner_kind).toLowerCase() === 'subagent_projection';
-}
-
 function messagePreviewText(message: FlowerThreadSnapshot['messages'][number]): string {
   const fromBlocks = message.blocks
     ?.map((block) => (block.type === 'markdown' || block.type === 'text' ? trimString(block.content) : ''))

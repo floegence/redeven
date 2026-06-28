@@ -313,7 +313,6 @@ describe('buildFlowerSubagentPanelItems', () => {
       ])]),
       thread_id: 'child-1',
       title: 'Review API',
-      owner_kind: 'subagent_projection',
       parent_thread_id: 'parent-thread',
       read_only_reason: 'Localized copy can change.',
     };

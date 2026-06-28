@@ -64,18 +64,11 @@ describe('groupFlowerThreadItems', () => {
 });
 
 describe('FlowerThreadList item actions', () => {
-  it('keeps direct mutation actions unavailable for subagent projection threads', () => {
-    const child = thread({
-      thread_id: 'child-1',
-      owner_kind: 'subagent_projection',
-      parent_thread_id: 'parent-1',
-      read_only_reason: '',
-      status: 'idle',
-    });
-
-    expect(canForkThreadItem(child)).toBe(false);
-    expect(canRenameThreadItem(child)).toBe(false);
-    expect(canPinThreadItem(child)).toBe(false);
+  it('keeps fork unavailable for active or read-only threads', () => {
+    expect(canForkThreadItem(thread({ thread_id: 'running-1', status: 'running' }))).toBe(false);
+    expect(canForkThreadItem(thread({ thread_id: 'approval-1', status: 'waiting_approval' }))).toBe(false);
+    expect(canForkThreadItem(thread({ thread_id: 'input-1', status: 'waiting_user' }))).toBe(false);
+    expect(canForkThreadItem(thread({ thread_id: 'readonly-1', status: 'read_only' }))).toBe(false);
   });
 
   it('keeps normal idle threads eligible for direct sidebar actions', () => {

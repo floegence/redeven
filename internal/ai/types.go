@@ -202,6 +202,7 @@ type FlowerSubagentToolCallView struct {
 type FlowerSubagentToolResultView struct {
 	CallID        string `json:"call_id,omitempty"`
 	ToolName      string `json:"tool_name,omitempty"`
+	Status        string `json:"status,omitempty"`
 	Preview       string `json:"preview,omitempty"`
 	Truncated     bool   `json:"truncated,omitempty"`
 	OriginalBytes int    `json:"original_bytes,omitempty"`
