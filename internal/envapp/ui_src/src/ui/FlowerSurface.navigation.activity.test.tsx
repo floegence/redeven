@@ -1244,7 +1244,7 @@ describe('FlowerSurface navigation activity', () => {
 
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
     expect(composer.querySelector('textarea')).toBeNull();
-    expect(composer.textContent).toContain('Review before this runs');
+    expect(composer.textContent).toContain('terminal.exec');
     expect(composer.textContent).toContain('Runs shell');
     const row = runtime.querySelector('[data-flower-activity-item-id="approval-item"]') as HTMLElement | null;
     expect(row?.textContent).toContain('pwd; sleep 15; date');
@@ -1451,7 +1451,7 @@ describe('FlowerSurface navigation activity', () => {
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
     expect(composer.textContent).toContain('npm test');
     expect(composer.textContent).not.toContain('npm run lint');
-    expect(composer.textContent).toContain('1 more approval waiting');
+    expect(composer.textContent).toContain('First command');
   });
 
   it('refreshes canonical thread state when an approval decision is stale', async () => {
