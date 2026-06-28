@@ -1771,7 +1771,7 @@ PRAGMA user_version=1;
 		t.Fatalf("rows err: %v", err)
 	}
 
-	for _, col := range []string{"model_id", "model_locked", "execution_mode", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error_code", "run_error", "waiting_user_input_json", "last_context_run_id", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version", "pinned_at_unix_ms", "flower_activity_revision", "flower_activity_signature", "flower_activity_waiting_prompt_id"} {
+	for _, col := range []string{"model_id", "execution_mode", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error_code", "run_error", "waiting_user_input_json", "last_context_run_id", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version", "pinned_at_unix_ms", "flower_activity_revision", "flower_activity_signature", "flower_activity_waiting_prompt_id"} {
 		if !cols[col] {
 			t.Fatalf("missing migrated column %q", col)
 		}
@@ -2009,7 +2009,7 @@ func TestStore_MigrateFromV34BackfillsPermissionType(t *testing.T) {
 	}
 	if _, err := tx.Exec(`
 INSERT INTO ai_threads(
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, reasoning_selection_json,
+  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json,
   execution_mode, working_dir, title, title_source, title_generated_at_unix_ms, title_input_message_id,
   title_model_id, title_prompt_version, followups_revision, pinned_at_unix_ms,
   run_status, run_updated_at_unix_ms, run_error_code, run_error, waiting_user_input_json, last_context_run_id,
@@ -2017,8 +2017,8 @@ INSERT INTO ai_threads(
   created_by_user_public_id, created_by_user_email, updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
 ) VALUES
-  ('th_plan', 'env_1', '', '', 0, '', 'plan', '', 'plan thread', '', 0, '', '', '', 0, 0, 'idle', 0, '', '', '', '', 0, '', '', '', '', '', '', 100, 100, 0, ''),
-  ('th_act', 'env_1', '', '', 0, '', 'act', '', 'act thread', '', 0, '', '', '', 0, 0, 'idle', 0, '', '', '', '', 0, '', '', '', '', '', '', 101, 101, 0, '')
+  ('th_plan', 'env_1', '', '', '', 'plan', '', 'plan thread', '', 0, '', '', '', 0, 0, 'idle', 0, '', '', '', '', 0, '', '', '', '', '', '', 100, 100, 0, ''),
+  ('th_act', 'env_1', '', '', '', 'act', '', 'act thread', '', 0, '', '', '', 0, 0, 'idle', 0, '', '', '', '', 0, '', '', '', '', '', '', 101, 101, 0, '')
 `); err != nil {
 		_ = tx.Rollback()
 		_ = raw.Close()
@@ -2633,58 +2633,10 @@ func TestStore_CreateThread_ModelLockDefaultsToFalse(t *testing.T) {
 	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	th, err := s.GetThread(ctx, "env_1", "th_1")
-	if err != nil {
+	if th, err := s.GetThread(ctx, "env_1", "th_1"); err != nil {
 		t.Fatalf("GetThread: %v", err)
-	}
-	if th == nil {
+	} else if th == nil {
 		t.Fatalf("thread missing")
-	}
-	if th.ModelLocked {
-		t.Fatalf("ModelLocked=%v, want false", th.ModelLocked)
-	}
-}
-
-func TestStore_UpdateThreadModelLock(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	if err := s.UpdateThreadModelLock(ctx, "env_1", "th_1", true); err != nil {
-		t.Fatalf("UpdateThreadModelLock(true): %v", err)
-	}
-	th, err := s.GetThread(ctx, "env_1", "th_1")
-	if err != nil {
-		t.Fatalf("GetThread: %v", err)
-	}
-	if th == nil {
-		t.Fatalf("thread missing")
-	}
-	if !th.ModelLocked {
-		t.Fatalf("ModelLocked=%v, want true", th.ModelLocked)
-	}
-
-	if err := s.UpdateThreadModelLock(ctx, "env_1", "th_1", false); err != nil {
-		t.Fatalf("UpdateThreadModelLock(false): %v", err)
-	}
-	th, err = s.GetThread(ctx, "env_1", "th_1")
-	if err != nil {
-		t.Fatalf("GetThread after unlock: %v", err)
-	}
-	if th == nil {
-		t.Fatalf("thread missing after unlock")
-	}
-	if th.ModelLocked {
-		t.Fatalf("ModelLocked=%v, want false", th.ModelLocked)
 	}
 }
 

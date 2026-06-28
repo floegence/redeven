@@ -166,7 +166,7 @@ func migrateThreadstoreToV10(tx *sql.Tx) error {
 }
 
 func migrateThreadstoreToV11(tx *sql.Tx) error {
-	return ensureAIThreadsModelLockedTx(tx)
+	return nil
 }
 
 func migrateThreadstoreToV12(tx *sql.Tx) error {
@@ -347,10 +347,6 @@ DROP TABLE legacy_floret_subagent_projection_threads;
 
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "model_id", `ALTER TABLE ai_threads ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`)
-}
-
-func ensureAIThreadsModelLockedTx(tx *sql.Tx) error {
-	return ensureColumnTx(tx, "ai_threads", "model_locked", `ALTER TABLE ai_threads ADD COLUMN model_locked INTEGER NOT NULL DEFAULT 0`)
 }
 
 func ensureAIThreadsReasoningSelectionTx(tx *sql.Tx) error {
@@ -1219,7 +1215,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 
 	requiredColumns := map[string][]string{
 		"ai_threads": {
-			"thread_id", "endpoint_id", "namespace_public_id", "model_id", "model_locked",
+			"thread_id", "endpoint_id", "namespace_public_id", "model_id",
 			"execution_mode", "permission_type", "working_dir", "title", "title_source", "title_generated_at_unix_ms",
 			"title_input_message_id", "title_model_id", "title_prompt_version", "followups_revision",
 			"pinned_at_unix_ms",

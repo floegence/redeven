@@ -132,7 +132,6 @@ export type ThreadView = Readonly<{
   thread_id: string;
   title: string;
   model_id?: string;
-  model_locked?: boolean;
   permission_type?: PermissionType;
   working_dir?: string;
   pinned_at_unix_ms?: number;
@@ -461,7 +460,6 @@ export interface AIChatContextValue {
   selectedThreadModel: Accessor<string>;
   selectThreadModel: (modelID: string) => void;
   selectedSendModel: Accessor<string>;
-  activeThreadModelLocked: Accessor<boolean>;
   modelOptions: Accessor<AIModelOption[]>;
   modelSourceGroups: Accessor<AIModelSourceGroup[]>;
 
@@ -1132,7 +1130,6 @@ export function createAIChatContextValue(): AIChatContextValue {
     return t?.title?.trim() || 'New chat';
   });
   const activeThreadWaitingPrompt = createMemo<WaitingPromptView | null>(() => waitingPromptForThread(activeThreadId()));
-  const activeThreadModelLocked = createMemo(() => !!activeThread()?.model_locked);
 
   const resolveThreadModelSelection = (threadId: string | null | undefined): string => {
     if (!modelsReady()) return '';
@@ -1256,12 +1253,8 @@ export function createAIChatContextValue(): AIChatContextValue {
 
     const tid = String(activeThreadId() ?? '').trim();
     if (!tid) return;
-    if (activeThreadModelLocked()) {
-      notify.error('Model locked', 'Restart the thread to switch models.');
-      return;
-    }
     if (isThreadRunning(tid)) {
-      notify.error('Model locked', 'Stop the current run before switching models.');
+      notify.error('Thread busy', 'Stop the current run before switching models.');
       return;
     }
 
@@ -1312,7 +1305,6 @@ export function createAIChatContextValue(): AIChatContextValue {
     const tid = String(activeThreadId() ?? '').trim();
     const th = activeThread();
     if (!tid || !th) return;
-    if (th.model_locked) return;
 
     const overrides = threadModelOverride();
     if (String(overrides?.[tid] ?? '').trim()) return;
@@ -1450,7 +1442,6 @@ export function createAIChatContextValue(): AIChatContextValue {
     selectedThreadModel,
     selectThreadModel,
     selectedSendModel,
-    activeThreadModelLocked,
     modelOptions,
     modelSourceGroups,
     threads,

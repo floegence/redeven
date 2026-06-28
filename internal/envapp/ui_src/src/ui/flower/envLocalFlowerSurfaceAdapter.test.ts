@@ -334,9 +334,13 @@ describe('Env local Flower surface adapter', () => {
     });
 
     expect(live.thread.thread_id).toBe('thread_reasoning');
-    expect(createdBodies[0]).not.toHaveProperty('reasoning_selection');
+    expect(createdBodies[0]).toMatchObject({
+      model_id: 'default/gpt-5.4',
+      reasoning_selection: { level: 'high' },
+    });
     expect(sendUserTurn).toHaveBeenCalledWith(expect.objectContaining({
       threadId: 'thread_reasoning',
+      model: 'default/gpt-5.4',
       input: expect.objectContaining({
         messageId: 'client_reasoning-message',
       }),
@@ -345,6 +349,55 @@ describe('Env local Flower surface adapter', () => {
       }),
     }));
     expect(subscribeThread).toHaveBeenCalledWith({ threadId: 'thread_reasoning' });
+  });
+
+  it('omits the global current model when launching a turn in an existing thread', async () => {
+    const subscribeThread = vi.fn(async () => ({ runId: '' }));
+    const sendUserTurn = vi.fn(async () => ({ runId: 'run_existing', kind: 'start' }));
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings') {
+        return jsonResponse({
+          ai: {
+            current_model_id: 'default/global-model',
+            providers: [{
+              id: 'default',
+              type: 'openai',
+              models: [{ model_name: 'global-model' }],
+            }],
+          },
+          ai_secrets: {
+            provider_api_key_set: { default: true },
+            web_search_provider_api_key_set: {},
+          },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/threads/thread_existing/live/bootstrap' && init?.method === 'GET') {
+        return jsonResponse(liveBootstrap('thread_existing', 'running'));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: {
+        ai: {
+          subscribeThread,
+          sendUserTurn,
+        },
+      } as any,
+    });
+
+    await adapter.launchTurn({
+      thread_id: 'thread_existing',
+      prompt: 'continue existing thread',
+    });
+
+    expect(sendUserTurn).toHaveBeenCalledWith(expect.not.objectContaining({
+      model: expect.anything(),
+    }));
+    expect(sendUserTurn).toHaveBeenCalledWith(expect.objectContaining({
+      threadId: 'thread_existing',
+    }));
   });
 
 	it('passes reasoning selection through input response continuations', async () => {
@@ -432,4 +485,33 @@ describe('Env local Flower surface adapter', () => {
 		expect(patchBodies).toEqual([{ permission_type: 'full_access' }]);
 		expect(live?.thread.permission_type).toBe('full_access');
 	});
+
+  it('patches a thread model through the local API', async () => {
+    const patchBodies: unknown[] = [];
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_model' && init?.method === 'PATCH') {
+        patchBodies.push(JSON.parse(String(init.body ?? '{}')));
+        return jsonResponse({ thread: { thread_id: 'thread_model', read_status: readStatus('idle') } });
+      }
+      if (url === '/_redeven_proxy/api/ai/threads/thread_model/live/bootstrap' && init?.method === 'GET') {
+        const bootstrap = liveBootstrap('thread_model', 'idle');
+        bootstrap.thread = {
+          ...bootstrap.thread,
+          model_id: 'default/gpt-5.4',
+        };
+        return jsonResponse(bootstrap);
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+    });
+
+    const live = await adapter.setThreadModel?.('thread_model', 'default/gpt-5.4');
+
+    expect(patchBodies).toEqual([{ model_id: 'default/gpt-5.4' }]);
+    expect(live?.thread.model_id).toBe('default/gpt-5.4');
+  });
 });

@@ -24,7 +24,6 @@ CREATE TABLE IF NOT EXISTS ai_threads (
   endpoint_id TEXT NOT NULL,
   namespace_public_id TEXT NOT NULL DEFAULT '',
   model_id TEXT NOT NULL DEFAULT '',
-  model_locked INTEGER NOT NULL DEFAULT 0,
   execution_mode TEXT NOT NULL DEFAULT 'act',
   working_dir TEXT NOT NULL DEFAULT '',
   title TEXT NOT NULL DEFAULT '',

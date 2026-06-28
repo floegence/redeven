@@ -139,19 +139,21 @@ describe('shared Flower UI boundary', () => {
     expect(launcherSrc).not.toContain('onSend');
   });
 
-	it('sends only explicit per-turn reasoning overrides from the composer', () => {
+	it('persists thread reasoning while initializing new thread drafts through launch input', () => {
 		const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
+		const contractsSrc = readText(path.join(flowerRoot, 'contracts', 'flowerSurfaceContracts.ts'));
 
 		expect(surfaceSrc).toContain('const selectedWaitingReasoningSelection = createMemo');
 		expect(surfaceSrc).toContain('const composerReasoningOverride = createMemo');
 		expect(surfaceSrc).toContain('const composerReasoningSelection = createMemo(() => composerReasoningOverride() ?? selectedWaitingReasoningSelection() ?? selectedThreadReasoningSelection())');
-		expect(surfaceSrc).toContain('const reasoningOverride = serializeFlowerReasoningSelection(composerReasoningOverride())');
-		expect(surfaceSrc).toContain('...(reasoningOverride ? { reasoning_selection: reasoningOverride } : {})');
+		expect(surfaceSrc).toContain('props.adapter.setThreadReasoningSelection(threadID, normalized)');
+		expect(surfaceSrc).toContain('const draftReasoningSelection = !selectedID ? serializeFlowerReasoningSelection(composerReasoningSelection()) : undefined');
+		expect(surfaceSrc).toContain('...(!selectedID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {})');
 		expect(surfaceSrc).toContain('const reasoningSelection = serializeFlowerReasoningSelection(composerReasoningOverride() ?? selectedWaitingReasoningSelection())');
 		expect(surfaceSrc).toContain('...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {})');
-		expect(surfaceSrc).not.toContain('const reasoningSelection = serializeFlowerReasoningSelection(composerReasoningSelection())');
-		expect(surfaceSrc).not.toContain('serializeFlowerReasoningSelection(composerReasoningSelection()) ? { reasoning_selection');
-  });
+		expect(contractsSrc).toContain('model_id?: string');
+		expect(contractsSrc).toContain('setThreadModel?:');
+	});
 
   it('keeps composer reasoning as a compact badge menu', () => {
     const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));

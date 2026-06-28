@@ -940,7 +940,6 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
     ...(trim(patch.thread_id) ? { thread_id: trim(patch.thread_id) } : {}),
     ...(trim(patch.title) ? { title: trim(patch.title) } : {}),
     ...(trim(patch.model_id) ? { model_id: trim(patch.model_id) } : {}),
-    ...(patch.model_locked !== undefined ? { model_locked: Boolean(patch.model_locked) } : {}),
     ...(normalizePermissionType(patch.permission_type) ? { permission_type: normalizePermissionType(patch.permission_type) } : {}),
     ...(trim(patch.working_dir) ? { working_dir: trim(patch.working_dir) } : {}),
     ...(queuedTurnCount !== undefined ? { queued_turn_count: queuedTurnCount } : {}),

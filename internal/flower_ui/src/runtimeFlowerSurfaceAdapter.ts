@@ -59,6 +59,7 @@ type MarkThreadReadInput = Readonly<{
 
 type ThreadPatchInput = Readonly<{
   title?: string;
+  model_id?: string;
   pinned?: boolean;
   permission_type?: FlowerPermissionType;
   reasoning_selection?: FlowerReasoningSelection | null;
@@ -213,6 +214,14 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       const tid = trim(threadID);
       if (!tid) throw new Error(missingThreadIDMessage(options));
       const threadResp = await options.transport.patchThread(tid, { permission_type: permissionType });
+      return loadThread(trim(threadResp.thread?.thread_id) || tid);
+    },
+    setThreadModel: async (threadID, modelID) => {
+      const tid = trim(threadID);
+      const mid = trim(modelID);
+      if (!tid) throw new Error(missingThreadIDMessage(options));
+      if (!mid) throw new Error('Missing model id.');
+      const threadResp = await options.transport.patchThread(tid, { model_id: mid });
       return loadThread(trim(threadResp.thread?.thread_id) || tid);
     },
     setThreadReasoningSelection: async (threadID, selection) => {

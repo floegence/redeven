@@ -413,8 +413,6 @@ func queuedTurnStartErrorIsPermanent(err error) bool {
 	return errors.Is(err, threadstore.ErrDuplicateUserTurnMessage) ||
 		errors.Is(err, sql.ErrNoRows) ||
 		errors.Is(err, ErrReadOnlyThread) ||
-		errors.Is(err, ErrModelLockViolation) ||
-		errors.Is(err, ErrModelSwitchRequiresExplicitRestart) ||
 		errors.Is(err, ErrWaitingPromptChanged) ||
 		errors.Is(err, ErrWaitingUserQueueConflict)
 }
@@ -579,6 +577,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	appliedPermissionType := ""
 	a.mgr.svc.mu.Lock()
 	db := a.mgr.svc.threadsDB
+	cfg := a.mgr.svc.cfg
 	persistTO := a.mgr.svc.persistOpTO
 	a.mgr.svc.mu.Unlock()
 	if db == nil {
@@ -605,17 +604,11 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	if isFlowerSubagentProjection(flowerMeta) {
 		return SendUserTurnResponse{}, ErrReadOnlyThread
 	}
-	requestedModel := strings.TrimSpace(req.Model)
-	if th.ModelLocked {
-		lockedModelID := strings.TrimSpace(th.ModelID)
-		if lockedModelID == "" {
-			return SendUserTurnResponse{}, ErrModelLockViolation
-		}
-		if requestedModel != "" && requestedModel != lockedModelID {
-			return SendUserTurnResponse{}, ErrModelSwitchRequiresExplicitRestart
-		}
-		req.Model = lockedModelID
+	resolvedModel, err := a.mgr.svc.resolveRunModel(ctx, cfg, req.Model, strings.TrimSpace(th.ModelID), nil)
+	if err != nil {
+		return SendUserTurnResponse{}, err
 	}
+	req.Model = resolvedModel.ID
 	resolvedPermissionType, err := normalizePermissionType(threadPermissionTypeString(th, ""), FlowerPermissionApprovalRequired)
 	if err != nil {
 		resolvedPermissionType = FlowerPermissionApprovalRequired
@@ -768,6 +761,7 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 
 	a.mgr.svc.mu.Lock()
 	db := a.mgr.svc.threadsDB
+	cfg := a.mgr.svc.cfg
 	persistTO := a.mgr.svc.persistOpTO
 	a.mgr.svc.mu.Unlock()
 	if db == nil {
@@ -794,17 +788,11 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 	if isFlowerSubagentProjection(flowerMeta) {
 		return SubmitRequestUserInputResponseResponse{}, ErrReadOnlyThread
 	}
-	requestedModel := strings.TrimSpace(req.Model)
-	if th.ModelLocked {
-		lockedModelID := strings.TrimSpace(th.ModelID)
-		if lockedModelID == "" {
-			return SubmitRequestUserInputResponseResponse{}, ErrModelLockViolation
-		}
-		if requestedModel != "" && requestedModel != lockedModelID {
-			return SubmitRequestUserInputResponseResponse{}, ErrModelSwitchRequiresExplicitRestart
-		}
-		req.Model = lockedModelID
+	resolvedModel, err := a.mgr.svc.resolveRunModel(ctx, cfg, req.Model, strings.TrimSpace(th.ModelID), nil)
+	if err != nil {
+		return SubmitRequestUserInputResponseResponse{}, err
 	}
+	req.Model = resolvedModel.ID
 	resolvedPermissionType, err := normalizePermissionType(threadPermissionTypeString(th, ""), FlowerPermissionApprovalRequired)
 	if err != nil {
 		resolvedPermissionType = FlowerPermissionApprovalRequired
