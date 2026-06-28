@@ -725,15 +725,15 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     permissionTypes: {
       readonly: {
         label: 'Read only',
-        description: 'Safe read tools, search, todos, ask, and delegated subagents. No shell or file edits.',
+        description: 'Read and search only. No shell, file edits, or write tools.',
       },
       approval_required: {
         label: 'Approval required',
-        description: 'Standard tools and subagent orchestration stay available. Child tasks inherit this permission, so shell, file changes, and child tool approvals ask before running; readonly-only helpers are hidden.',
+        description: 'All tools available. Shell, file changes, and child tasks ask before running.',
       },
       full_access: {
         label: 'Full access',
-        description: 'Standard tools and subagent orchestration run without per-tool confirmation. Child tasks inherit this permission, while timeouts, limits, and audit still apply; readonly-only helpers are hidden.',
+        description: 'All tools run without confirmation. Limits and audit still apply.',
       },
     },
     providersTitle: 'Providers',
