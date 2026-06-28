@@ -69,6 +69,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.settings.dialog;
   const [advancedOpen, setAdvancedOpen] = createSignal(false);
   const [customModelName, setCustomModelName] = createSignal('');
+  const [editingModelName, setEditingModelName] = createSignal('');
   const [expandedProviderType, setExpandedProviderType] = createSignal<FlowerProviderType | null>(null);
   const [store, setStore] = createStore<{ draft: FlowerProviderDraft | null }>({ draft: null });
   const providerHasModels = () => (store.draft?.models.length ?? 0) > 0;
@@ -79,6 +80,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       setStore('draft', reconcile(props.provider));
       setAdvancedOpen(false);
       setCustomModelName('');
+      setEditingModelName('');
       setExpandedProviderType(props.mode === 'edit' && props.provider ? props.provider.type : null);
     }
   });
@@ -321,48 +323,96 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                 title={copy().recommendedModelsTitle}
                                 description={copy().recommendedModelsDescription}
                                 actions={(
-                                  <Show when={recommendedModelsForFlowerProviderType(store.draft!.type).length > 0}>
-                                    <Button size="sm" variant="outline" onClick={addAllPresets}>{copy().addAllPresets}</Button>
-                                  </Show>
+                                  <Button size="sm" variant="outline" onClick={addAllPresets}>{copy().addAllPresets}</Button>
                                 )}
                               />
                               <Show
                                 when={recommendedModelsForFlowerProviderType(store.draft!.type).length > 0}
                                 fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{copy().customModelProvider}</div>}
                               >
-                                <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                                <div class="rounded-lg border border-border">
                                   <For each={recommendedModelsForFlowerProviderType(store.draft!.type)}>
-                                    {(model) => {
-                                      const selected = () => modelSelected(store.draft!, model.model_name);
+                                    {(preset) => {
+                                      const modelName = () => cleanModelName(preset.model_name);
+                                      const enabled = () => modelSelected(store.draft!, modelName());
+                                      const activeModel = () => store.draft!.models.find((m) => cleanModelName(m.model_name) === modelName());
+                                      const model = () => activeModel() ?? preset;
+                                      const editOpen = () => editingModelName() === modelName();
+                                      const modelIndex = () => store.draft!.models.findIndex((m) => cleanModelName(m.model_name) === modelName());
                                       return (
-                                        <div class={cn('rounded-lg border p-3 transition', selected() ? 'border-primary/50 bg-primary/5' : 'border-border bg-background')}>
-                                          <div class="flex items-start justify-between gap-3">
-                                          <div class="min-w-0">
-                                            <div class="break-all font-mono text-sm font-semibold text-foreground">{model.model_name}</div>
-                                            <Show when={model.wire_model_name}>
-                                              {(wireModelName) => <div class="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">{wireModelName()}</div>}
+                                        <div class={cn('border-b border-border last:border-b-0', enabled() && 'bg-primary/5')}>
+                                          <div class="flex items-center gap-3 px-3 py-2.5">
+                                            <Checkbox
+                                              checked={enabled()}
+                                              onChange={(on) => { if (on) addPreset(preset); else removePreset(modelName()); }}
+                                              size="sm"
+                                            />
+                                            <div class="min-w-0 flex-1">
+                                              <div class="flex items-center gap-2">
+                                                <span class={cn('font-mono text-sm font-semibold', enabled() ? 'text-foreground' : 'text-muted-foreground')}>{modelName()}</span>
+                                                <Show when={preset.wire_model_name}>
+                                                  <span class="font-mono text-[11px] text-muted-foreground">{preset.wire_model_name!}</span>
+                                                </Show>
+                                              </div>
+                                              <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                                                <Show when={model().context_window}>
+                                                  <span class={cn('rounded-full px-1.5 py-px text-[10px] font-medium', enabled() ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>{formatFlowerTokenCount(model().context_window)} {copy().contextSuffix}</span>
+                                                </Show>
+                                                <Show when={model().max_output_tokens}>
+                                                  <span class={cn('rounded-full px-1.5 py-px text-[10px] font-medium', enabled() ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>{formatFlowerTokenCount(model().max_output_tokens)} {copy().outputSuffix}</span>
+                                                </Show>
+                                                <Show when={flowerModelSupportsImage(model().input_modalities)}>
+                                                  <span class={cn('rounded-full px-1.5 py-px text-[10px] font-medium', enabled() ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>{copy().imageInput}</span>
+                                                </Show>
+                                                <Show when={!flowerModelSupportsImage(model().input_modalities) && enabled()}>
+                                                  <span class="rounded-full bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">{copy().text}</span>
+                                                </Show>
+                                              </div>
+                                              <Show when={copy().modelNote(preset.note_key)}>
+                                                {(note) => <div class="mt-0.5 text-[11px] text-muted-foreground">{note()}</div>}
+                                              </Show>
+                                            </div>
+                                            <Show when={enabled()}>
+                                              <Button size="sm" variant="ghost" class="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" onClick={() => setEditingModelName(editOpen() ? '' : modelName())} aria-label="Edit">
+                                                <Pencil class="h-3 w-3" />
+                                              </Button>
+                                              <Button size="sm" variant="ghost" class="h-6 w-6 p-0 text-muted-foreground hover:text-foreground" onClick={() => {
+                                                if (modelIndex() >= 0) {
+                                                  (setStore as any)('draft', 'models', modelIndex(), produce((m: FlowerProviderModel) => Object.assign(m, { model_name: preset.model_name, wire_model_name: preset.wire_model_name, context_window: preset.context_window, max_output_tokens: preset.max_output_tokens, input_modalities: preset.input_modalities ? [...preset.input_modalities] : undefined })));
+                                                }
+                                              }} aria-label="Reset to defaults">
+                                                <span class="text-[10px]">Reset</span>
+                                              </Button>
                                             </Show>
-                                            <div class="mt-1 text-xs text-muted-foreground">
-                                                {formatFlowerTokenCount(model.context_window)} {copy().contextSuffix}
-                                                <Show when={model.max_output_tokens}> · {formatFlowerTokenCount(model.max_output_tokens)} {copy().outputSuffix}</Show>
+                                          </div>
+                                          <Show when={enabled() && editOpen()}>
+                                            <div class="border-t border-border/60 px-3 py-3">
+                                              <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
+                                                <div class="md:col-span-2">
+                                                  <FlowerFieldLabel>{copy().modelName}</FlowerFieldLabel>
+                                                  <Input value={model().model_name} onInput={(event) => { if (modelIndex() >= 0) (setStore as any)('draft', 'models', modelIndex(), produce((m: FlowerProviderModel) => Object.assign(m, { model_name: event.currentTarget.value }))); }} placeholder="model-name" size="sm" class="w-full font-mono" />
+                                                </div>
+                                                <div class="md:col-span-2">
+                                                  <FlowerFieldLabel>{copy().providerModelID}</FlowerFieldLabel>
+                                                  <Input value={model().wire_model_name ?? ''} onInput={(event) => { if (modelIndex() >= 0) (setStore as any)('draft', 'models', modelIndex(), produce((m: FlowerProviderModel) => Object.assign(m, { wire_model_name: event.currentTarget.value || undefined }))); }} placeholder={modelName()} size="sm" class="w-full font-mono" />
+                                                </div>
+                                                <div>
+                                                  <FlowerFieldLabel>{copy().contextWindow}</FlowerFieldLabel>
+                                                  <Input type="number" value={model().context_window ?? ''} onInput={(event) => { if (modelIndex() >= 0) (setStore as any)('draft', 'models', modelIndex(), produce((m: FlowerProviderModel) => Object.assign(m, { context_window: Number(event.currentTarget.value) || undefined }))); }} placeholder="128000" size="sm" class="w-full font-mono" />
+                                                </div>
+                                                <div>
+                                                  <FlowerFieldLabel>{copy().maxOutput}</FlowerFieldLabel>
+                                                  <Input type="number" value={model().max_output_tokens ?? ''} onInput={(event) => { if (modelIndex() >= 0) (setStore as any)('draft', 'models', modelIndex(), produce((m: FlowerProviderModel) => Object.assign(m, { max_output_tokens: Number(event.currentTarget.value) || undefined }))); }} placeholder="4096" size="sm" class="w-full font-mono" />
+                                                </div>
+                                                <div>
+                                                  <FlowerFieldLabel>{copy().effectiveContextPercent}</FlowerFieldLabel>
+                                                  <Input type="number" value={model().effective_context_window_percent ?? ''} onInput={(event) => { if (modelIndex() >= 0) (setStore as any)('draft', 'models', modelIndex(), produce((m: FlowerProviderModel) => Object.assign(m, { effective_context_window_percent: Number(event.currentTarget.value) || undefined }))); }} placeholder="95" size="sm" class="w-full font-mono" />
+                                                </div>
+                                                <div class="md:col-span-3">
+                                                  <Checkbox checked={flowerModelSupportsImage(model().input_modalities)} onChange={(enabled) => { if (modelIndex() >= 0) (setStore as any)('draft', 'models', modelIndex(), produce((m: FlowerProviderModel) => Object.assign(m, { input_modalities: enabled ? ['text', 'image'] : ['text'] }))); }} label={copy().imageInput} size="sm" />
+                                                </div>
                                               </div>
                                             </div>
-                                            <Button
-                                              size="sm"
-                                              variant={selected() ? 'ghost' : 'outline'}
-                                              class={selected() ? 'text-muted-foreground hover:text-destructive' : ''}
-                                              onClick={() => (selected() ? removePreset(model.model_name) : addPreset(model))}
-                                            >
-                                              {selected() ? copy().remove : copy().add}
-                                            </Button>
-                                          </div>
-                                          <div class="mt-2 flex flex-wrap gap-1.5">
-                                            <FlowerCapabilityTag active>{copy().text}</FlowerCapabilityTag>
-                                            <FlowerCapabilityTag active={flowerModelSupportsImage(model.input_modalities)}>{copy().imageInput}</FlowerCapabilityTag>
-                                            <Show when={selected()}><FlowerCapabilityTag active>{copy().selected}</FlowerCapabilityTag></Show>
-                                          </div>
-                                          <Show when={copy().modelNote(model.note_key)}>
-                                            {(note) => <div class="mt-2 text-[11px] text-muted-foreground">{note()}</div>}
                                           </Show>
                                         </div>
                                       );
@@ -391,140 +441,6 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                               </div>
                             </section>
 
-                            <section class="space-y-3">
-                              <FlowerSubSectionHeader title={copy().selectedModelsTitle} description={copy().selectedModelsDescription} />
-                              <Show
-                                when={store.draft!.models.length > 0}
-                                fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{copy().noSelectedModels}</div>}
-                              >
-                                <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-                                  <For each={store.draft!.models}>
-                                    {(model, index) => (
-                                      <div class="rounded-lg border border-border bg-background p-3">
-                                        <div class="flex items-start justify-between gap-3">
-                                          <div class="min-w-0">
-                                            <div class="break-all font-mono text-sm font-semibold text-foreground">{cleanModelName(model.model_name) || copy().unnamedModel}</div>
-                                            <Show when={model.wire_model_name}>
-                                              {(wireModelName) => <div class="mt-0.5 break-all font-mono text-[11px] text-muted-foreground">{wireModelName()}</div>}
-                                            </Show>
-                                            <div class="mt-1 text-xs text-muted-foreground">
-                                              {flowerModelSupportsImage(model.input_modalities) ? copy().textAndImage : copy().textOnly} · {formatFlowerTokenCount(model.context_window)} {copy().contextSuffix}
-                                            </div>
-                                          </div>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            class="text-muted-foreground hover:text-destructive"
-                                            onClick={() => setModels(store.draft!.models.filter((_, itemIndex) => itemIndex !== index()))}
-                                            disabled={store.draft!.models.length <= 1}
-                                          >
-                                            {copy().remove}
-                                          </Button>
-                                        </div>
-                                        <div class="mt-2 flex flex-wrap gap-1.5">
-                                          <FlowerCapabilityTag active>{copy().text}</FlowerCapabilityTag>
-                                          <FlowerCapabilityTag active={flowerModelSupportsImage(model.input_modalities)}>{copy().imageInput}</FlowerCapabilityTag>
-                                        </div>
-                                        <div class="mt-2 text-[11px] text-muted-foreground">
-                                          {flowerModelID(providerID(), cleanModelName(model.model_name)) || copy().modelIDPending}
-                                        </div>
-                                      </div>
-                                    )}
-                                  </For>
-                                </div>
-                              </Show>
-                            </section>
-
-                            <section class="space-y-3">
-                              <button
-                                type="button"
-                                class="flex w-full cursor-pointer items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3 text-left transition hover:bg-muted/35"
-                                onClick={() => setAdvancedOpen(!advancedOpen())}
-                              >
-                                <span class="min-w-0">
-                                  <span class="block text-sm font-semibold text-foreground">{copy().advancedTitle}</span>
-                                  <span class="mt-1 block text-xs leading-5 text-muted-foreground">{copy().advancedDescription}</span>
-                                </span>
-                                <span class="text-xs text-muted-foreground">{advancedOpen() ? copy().hide : copy().show}</span>
-                              </button>
-                              <Show when={advancedOpen()}>
-                                <div class="space-y-3">
-                                  <For each={store.draft!.models}>
-                                    {(model, index) => (
-                                      <div class="rounded-lg border border-border bg-background p-3">
-                                        <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                          <div class="font-mono text-xs text-muted-foreground">{flowerModelID(providerID(), cleanModelName(model.model_name)) || copy().modelIDPending}</div>
-                                          <FlowerCodeBadge>{providerID() || copy().providerIDPending}</FlowerCodeBadge>
-                                        </div>
-                                        <div class="grid grid-cols-1 gap-3 md:grid-cols-4">
-                                          <div class="md:col-span-2">
-                                            <FlowerFieldLabel>{copy().modelName}</FlowerFieldLabel>
-                                            <Input
-                                              value={model.model_name}
-                                              onInput={(event) => updateModel(index(), { model_name: event.currentTarget.value })}
-                                              placeholder="model-name"
-                                              size="sm"
-                                              class="w-full font-mono"
-                                            />
-                                          </div>
-                                          <div class="md:col-span-2">
-                                            <FlowerFieldLabel>{copy().providerModelID}</FlowerFieldLabel>
-                                            <Input
-                                              value={model.wire_model_name ?? ''}
-                                              onInput={(event) => updateModel(index(), { wire_model_name: event.currentTarget.value || undefined })}
-                                              placeholder={model.model_name}
-                                              size="sm"
-                                              class="w-full font-mono"
-                                            />
-                                          </div>
-                                          <div>
-                                            <FlowerFieldLabel>{copy().contextWindow}</FlowerFieldLabel>
-                                            <Input
-                                              type="number"
-                                              value={model.context_window ?? ''}
-                                              onInput={(event) => updateModel(index(), { context_window: Number(event.currentTarget.value) || undefined })}
-                                              placeholder="128000"
-                                              size="sm"
-                                              class="w-full font-mono"
-                                            />
-                                          </div>
-                                          <div>
-                                            <FlowerFieldLabel>{copy().maxOutput}</FlowerFieldLabel>
-                                            <Input
-                                              type="number"
-                                              value={model.max_output_tokens ?? ''}
-                                              onInput={(event) => updateModel(index(), { max_output_tokens: Number(event.currentTarget.value) || undefined })}
-                                              placeholder="4096"
-                                              size="sm"
-                                              class="w-full font-mono"
-                                            />
-                                          </div>
-                                          <div>
-                                            <FlowerFieldLabel>{copy().effectiveContextPercent}</FlowerFieldLabel>
-                                            <Input
-                                              type="number"
-                                              value={model.effective_context_window_percent ?? ''}
-                                              onInput={(event) => updateModel(index(), { effective_context_window_percent: Number(event.currentTarget.value) || undefined })}
-                                              placeholder="95"
-                                              size="sm"
-                                              class="w-full font-mono"
-                                            />
-                                          </div>
-                                          <div class="md:col-span-3">
-                                            <Checkbox
-                                              checked={flowerModelSupportsImage(model.input_modalities)}
-                                              onChange={(enabled) => updateModel(index(), { input_modalities: enabled ? ['text', 'image'] : ['text'] })}
-                                              label={copy().imageInput}
-                                              size="sm"
-                                            />
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
-                                  </For>
-                                </div>
-                              </Show>
-                            </section>
                             <Show when={props.error}>
                               {(error) => (
                                 <div role="alert" class="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
