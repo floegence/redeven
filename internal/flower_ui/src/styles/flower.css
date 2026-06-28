@@ -1861,42 +1861,27 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, var(--muted-foreground) 76%, var(--foreground) 24%);
 }
 
-.flower-compaction-divider-running-icon {
-  display: inline-grid;
+.flower-compaction-divider-running-clock {
+  position: relative;
+  display: inline-block;
   width: 0.85rem;
   height: 0.85rem;
   flex: 0 0 auto;
-  grid-template-columns: repeat(2, 0.34rem);
-  grid-template-rows: repeat(2, 0.34rem);
-  place-content: center;
-  gap: 0.09rem;
-  color: color-mix(in srgb, var(--primary) 76%, var(--foreground) 24%);
+  border-radius: 9999px;
+  border: 1.5px solid color-mix(in srgb, var(--primary) 52%, var(--foreground) 22%);
 }
 
-.flower-compaction-divider-running-square {
-  width: 0.34rem;
-  height: 0.34rem;
-  border-radius: 0.08rem;
-  background: currentColor;
-  opacity: 0.26;
-  transform: scale(0.74);
-  animation: flower-compaction-divider-loader-square 1.3s ease-in-out infinite;
-}
-
-.flower-compaction-divider-running-square:nth-child(1) {
-  animation-delay: 0ms;
-}
-
-.flower-compaction-divider-running-square:nth-child(2) {
-  animation-delay: 130ms;
-}
-
-.flower-compaction-divider-running-square:nth-child(4) {
-  animation-delay: 260ms;
-}
-
-.flower-compaction-divider-running-square:nth-child(3) {
-  animation-delay: 390ms;
+.flower-compaction-divider-running-clock::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1px;
+  height: 38%;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--primary) 68%, var(--foreground) 18%);
+  transform-origin: top center;
+  animation: flower-compaction-divider-clock-tick 2s linear infinite;
 }
 
 .flower-compaction-divider-copy {
@@ -2013,16 +1998,12 @@ html.dark .flower-component-shell {
   }
 }
 
-@keyframes flower-compaction-divider-loader-square {
-  0%,
-  100% {
-    opacity: 0.26;
-    transform: scale(0.74);
+@keyframes flower-compaction-divider-clock-tick {
+  0% {
+    transform: translate(-50%, -100%) rotate(0deg);
   }
-
-  42% {
-    opacity: 0.9;
-    transform: scale(1);
+  100% {
+    transform: translate(-50%, -100%) rotate(360deg);
   }
 }
 
@@ -5914,7 +5895,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   .flower-activity-inline-row-running .flower-activity-inline-button::before,
   .flower-activity-inline-loader-square,
   .flower-subagent-status-loader .flower-activity-inline-loader-square,
-  .flower-compaction-divider-running-square,
+  .flower-compaction-divider-running-clock::before,
   .flower-compaction-divider-label-shimmer::after,
   .flower-thread-warmup-card::after,
   .flower-model-chip-warmup::after,
