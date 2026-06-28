@@ -4508,13 +4508,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <FlowerIcon class="h-5 w-5 text-primary" />
             <div class="min-w-0 flex items-center gap-2">
               <div class="flower-chat-header-title truncate">{selectedThread()?.title || copy().chat.titleFallback}</div>
-              <span
-                class="flower-chat-permission-chip"
-                title={composerPermissionCopy().description}
-                aria-label={`Permission: ${composerPermissionCopy().label}`}
-              >
-                {composerPermissionCopy().label}
-              </span>
             </div>
           </div>
           <div class="flower-chat-header-actions">
