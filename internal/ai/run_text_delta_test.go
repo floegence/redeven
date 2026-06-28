@@ -2,7 +2,6 @@ package ai
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/floegence/floret/observation"
@@ -276,34 +275,6 @@ func TestReconcileCanonicalMarkdownMessage_DoesNotUpdateVisibleMarkdownAfterActi
 	}
 }
 
-func TestReconcileCanonicalMarkdownMessage_TaskCompleteDoesNotUpdateExistingVisibleMarkdown(t *testing.T) {
-	t.Parallel()
-
-	events := make([]any, 0, 1)
-	r := &run{
-		messageID: "msg_task_complete_preserve",
-		onStreamEvent: func(ev any) {
-			events = append(events, ev)
-		},
-		assistantBlocks: []any{
-			&persistedMarkdownBlock{Type: "markdown", Content: "analysis report"},
-		},
-	}
-	r.setCanonicalMarkdownCandidate("execution summary")
-
-	if r.reconcileCanonicalMarkdownMessage(canonicalMarkdownSourceTaskComplete, "") {
-		t.Fatalf("reconcileCanonicalMarkdownMessage returned true, want false")
-	}
-
-	block, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
-	if !ok || block == nil || block.Content != "analysis report" {
-		t.Fatalf("assistantBlocks[0]=%T %+v, want preserved analysis report", r.assistantBlocks[0], r.assistantBlocks[0])
-	}
-	if len(events) != 0 {
-		t.Fatalf("stream events=%d, want none: %#v", len(events), events)
-	}
-}
-
 func TestReconcileCanonicalMarkdownMessage_CreatesCanonicalMarkdownWhenNoMarkdownBlocksExist(t *testing.T) {
 	t.Parallel()
 
@@ -340,47 +311,6 @@ func TestReconcileCanonicalMarkdownMessage_CreatesCanonicalMarkdownWhenNoMarkdow
 	}
 	if ev, ok := events[1].(streamEventBlockSet); !ok || ev.BlockIndex != 2 {
 		t.Fatalf("event[1]=%+v, want block-set for index 2", events[1])
-	}
-}
-
-func TestReconcileCanonicalMarkdownMessage_TaskCompleteCreatesMarkdownWhenNoVisibleTextExists(t *testing.T) {
-	t.Parallel()
-
-	events := make([]any, 0, 2)
-	r := &run{
-		messageID: "msg_task_complete_append",
-		onStreamEvent: func(ev any) {
-			events = append(events, ev)
-		},
-		assistantBlocks: []any{
-			activityTimelinePlaceholder("run_task_complete_append"),
-		},
-		nextBlockIndex: 1,
-	}
-	r.setCanonicalMarkdownCandidate("execution summary")
-
-	if !r.reconcileCanonicalMarkdownMessage(canonicalMarkdownSourceTaskComplete, "") {
-		t.Fatalf("reconcileCanonicalMarkdownMessage returned false, want true")
-	}
-
-	if len(r.assistantBlocks) != 2 {
-		t.Fatalf("assistantBlocks len=%d, want activity timeline plus markdown: %#v", len(r.assistantBlocks), r.assistantBlocks)
-	}
-	if _, ok := r.assistantBlocks[0].(ActivityTimelineBlock); !ok {
-		t.Fatalf("assistantBlocks[0]=%T, want activity timeline", r.assistantBlocks[0])
-	}
-	block, _ := r.assistantBlocks[1].(*persistedMarkdownBlock)
-	if block == nil || block.Content != "execution summary" {
-		t.Fatalf("assistantBlocks[1]=%+v, want execution summary markdown", block)
-	}
-	if len(events) != 2 {
-		t.Fatalf("stream events=%d, want 2", len(events))
-	}
-	if start, ok := events[0].(streamEventBlockStart); !ok || start.BlockIndex != 1 {
-		t.Fatalf("event[0]=%+v, want block-start for index 1", events[0])
-	}
-	if set, ok := events[1].(streamEventBlockSet); !ok || set.BlockIndex != 1 {
-		t.Fatalf("event[1]=%+v, want block-set for index 1", events[1])
 	}
 }
 
@@ -430,72 +360,6 @@ func TestReconcileCanonicalMarkdownMessage_SnapshotTextUsesVisibleMarkdownBefore
 	if !ok || teaser["type"] != "markdown" || teaser["content"] != "teaser" {
 		t.Fatalf("blocks[2]=%T %+v, want teaser markdown", msg.Blocks[2], msg.Blocks[2])
 	}
-}
-
-func TestRecordTaskCompleteSignalPublishesActivityTimelineWithoutChangingAssistantText(t *testing.T) {
-	t.Parallel()
-
-	events := make([]any, 0, 1)
-	r := &run{
-		id:                       "run_task_complete_projection",
-		messageID:                "msg_task_complete_projection",
-		assistantCreatedAtUnixMs: 1700000000123,
-		onStreamEvent: func(ev any) {
-			events = append(events, ev)
-		},
-		assistantBlocks: []any{
-			&persistedMarkdownBlock{Type: "markdown", Content: "Final user-visible answer."},
-		},
-		nextBlockIndex:        1,
-		currentTextBlockIndex: 0,
-	}
-
-	r.recordTaskCompleteSignal("call_task_complete_1", "Final user-visible answer.", []string{" https://example.test/source ", ""})
-
-	if len(events) != 1 {
-		t.Fatalf("stream events=%d, want one activity update", len(events))
-	}
-	ev, ok := events[0].(streamEventBlockSet)
-	if !ok {
-		t.Fatalf("event type=%T, want streamEventBlockSet", events[0])
-	}
-	timeline, ok := ev.Block.(ActivityTimelineBlock)
-	if !ok {
-		t.Fatalf("event block=%T, want ActivityTimelineBlock", ev.Block)
-	}
-	if timeline.Type != activityTimelineBlockType || timeline.Summary.Status != observation.ActivityStatusSuccess {
-		t.Fatalf("timeline=%#v, want successful activity timeline", timeline)
-	}
-	item, ok := findActivityItemInTimeline(timeline, "task_complete")
-	if !ok {
-		t.Fatalf("timeline missing task_complete item: %#v", timeline.Items)
-	}
-	if item.Status != observation.ActivityStatusSuccess || item.ToolID != "call_task_complete_1" || item.Kind != observation.ActivityKindControl {
-		t.Fatalf("task_complete item=%#v, want successful original call id", item)
-	}
-
-	rawJSON, assistantText, _, err := r.snapshotAssistantMessageJSON()
-	if err != nil {
-		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
-	}
-	if assistantText != "Final user-visible answer." {
-		t.Fatalf("assistantText=%q, want visible markdown only", assistantText)
-	}
-	if !json.Valid([]byte(rawJSON)) {
-		t.Fatalf("assistant JSON invalid: %q", rawJSON)
-	}
-	if !strings.Contains(rawJSON, `"tool_name":"task_complete"`) {
-		t.Fatalf("assistant JSON missing task_complete timeline: %s", rawJSON)
-	}
-}
-
-func findActivityItemInTimeline(timeline ActivityTimelineBlock, toolName string) (observation.ActivityItem, bool) {
-	for _, item := range timeline.Items {
-		if item.ToolName == toolName {
-			return item, true
-		}
-	}
-	return observation.ActivityItem{}, false
 }
 
 func TestReconcileCanonicalWaitingUserMessage_ClearsProvisionalMarkdownBlocks(t *testing.T) {

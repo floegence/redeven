@@ -668,38 +668,32 @@ func TestFloretMessagesToFlower_GroupsConsecutiveAssistantToolCalls(t *testing.T
 	}
 }
 
-func TestFloretMessagesToFlower_ProjectsControlToolHistoryAsProviderSafeText(t *testing.T) {
+func TestFloretMessagesToFlowerKeepsProviderSafeControlTextOpaque(t *testing.T) {
 	t.Parallel()
 
 	got, err := floretMessagesToFlower([]flruntime.ModelMessage{
 		{Role: "user", Content: "ask a structured question"},
-		{Role: "assistant", Content: "tool_call", ToolCallID: "ask-1", ToolName: "ask_user", ToolArgs: `{"questions":[]}`},
-		{Role: "tool", Content: "ask_user was rejected because reason_code is missing or invalid.", ToolCallID: "ask-1", ToolName: "ask_user"},
-		{Role: "assistant", Content: "tool_call", ToolCallID: "ask-2", ToolName: "ask_user", ToolArgs: `{"questions":[{"id":"q1"}]}`},
+		{Role: "assistant", Content: `Host processed control signal "ask_user".`},
 	})
 	if err != nil {
 		t.Fatalf("floretMessagesToFlower: %v", err)
 	}
 
-	if len(got) != 4 {
-		t.Fatalf("messages=%d, want 4: %#v", len(got), got)
+	if len(got) != 2 {
+		t.Fatalf("messages=%d, want 2: %#v", len(got), got)
 	}
 	for _, msg := range got {
 		if msg.Role == "tool" {
-			t.Fatalf("control tool history must not be sent as provider tool role: %#v", got)
+			t.Fatalf("provider-safe control text must stay opaque assistant text: %#v", got)
 		}
 		for _, part := range msg.Content {
 			if part.Type == "tool_call" || part.ToolName == "ask_user" || part.ToolCallID != "" {
-				t.Fatalf("control tool identity leaked into provider history: %#v", got)
+				t.Fatalf("control tool identity leaked into provider request mapping: %#v", got)
 			}
 		}
 	}
-	if got[1].Role != "assistant" || got[1].Content[0].Text != "Agent requested structured user input." {
-		t.Fatalf("control call projection=%#v", got[1])
-	}
-	if !strings.Contains(got[2].Content[0].Text, "Host processed control signal \"ask_user\"") ||
-		!strings.Contains(got[2].Content[0].Text, "reason_code is missing") {
-		t.Fatalf("control result projection=%#v", got[2])
+	if got[1].Role != "assistant" || got[1].Content[0].Text != `Host processed control signal "ask_user".` {
+		t.Fatalf("provider-safe control text mapping=%#v", got[1])
 	}
 }
 

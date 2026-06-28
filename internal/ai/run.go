@@ -165,9 +165,6 @@ type run struct {
 	assistantCreatedAtUnixMs      int64
 	assistantBlocks               []any
 	assistantAnswer               assistantAnswerState
-	activitySegmentEvents         []observation.Event
-	activityTimelineEvents        []observation.Event
-	activityTimelineProjected     bool
 	activityFileActions           map[string]FlowerActivityFileAction
 	activityFileActionSeq         int64
 	floretThreadProjectionApplied bool
@@ -191,9 +188,8 @@ type run struct {
 	webSearchToolEnabled bool
 	webSearchMode        string
 
-	collectedWebSources            map[string]SourceRef // url -> source
-	collectedWebSourceOrder        []string
-	sourcesActivityAlreadyRecorded bool
+	collectedWebSources     map[string]SourceRef // url -> source
+	collectedWebSourceOrder []string
 
 	subagentDepth           int
 	allowSubagentDelegate   bool
@@ -226,8 +222,7 @@ type assistantAnswerState struct {
 type canonicalMarkdownSource string
 
 const (
-	canonicalMarkdownSourceNaturalStop  canonicalMarkdownSource = "natural_stop"
-	canonicalMarkdownSourceTaskComplete canonicalMarkdownSource = "task_complete"
+	canonicalMarkdownSourceNaturalStop canonicalMarkdownSource = "natural_stop"
 )
 
 type assistantMarkdownUpdate struct {
@@ -309,8 +304,6 @@ func newRun(opts runOptions) *run {
 		currentThinkingBlockIndex: -1,
 		activitySegmentActive:     false,
 		activitySegmentBlockIndex: -1,
-		activitySegmentEvents:     make([]observation.Event, 0, 8),
-		activityTimelineEvents:    make([]observation.Event, 0, 8),
 		activityFileActions:       make(map[string]FlowerActivityFileAction),
 		contextCompactionAnchors:  make(map[string]FlowerTimelineAnchor),
 		subagentDepth:             opts.SubagentDepth,
@@ -1863,10 +1856,6 @@ func (r *run) reconcileCanonicalMarkdownMessage(source canonicalMarkdownSource, 
 	var update assistantMarkdownUpdate
 	hasUpdate := false
 	visible := r.nonEmptyMarkdownBlockIndicesLocked()
-	if source == canonicalMarkdownSourceTaskComplete && len(visible) > 0 {
-		r.muAssistant.Unlock()
-		return false
-	}
 	switch len(visible) {
 	case 0:
 		if idx := r.trailingEmptyMarkdownBlockIndexLocked(); idx >= 0 {
@@ -2253,58 +2242,6 @@ func (r *run) recordToolResultActivity(toolID string, toolName string, status st
 		Activity:   activity,
 		ObservedAt: observedAt,
 	})
-}
-
-func (r *run) persistSyntheticToolSuccess(toolID string, toolName string, args map[string]any, result any) string {
-	if r == nil {
-		return strings.TrimSpace(toolID)
-	}
-	toolName = strings.TrimSpace(toolName)
-	if toolName == "" {
-		return strings.TrimSpace(toolID)
-	}
-	toolID = strings.TrimSpace(toolID)
-	if toolID == "" {
-		if id, err := newToolID(); err == nil {
-			toolID = id
-		} else {
-			toolID = "tool_" + strings.ReplaceAll(strings.ToLower(toolName), ".", "_")
-		}
-	}
-	argsCopy := cloneAnyMap(args)
-	startedAt := time.Now()
-	r.recordRuntimeToolCall()
-	r.persistRunEvent("tool.call", RealtimeStreamKindTool, map[string]any{
-		"tool_id":   toolID,
-		"tool_name": toolName,
-		"args":      redactAnyForLog("args", argsCopy, 0),
-	})
-	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusSuccess, argsCopy, result, nil, "", startedAt, startedAt)
-	r.persistRunEvent("tool.result", RealtimeStreamKindTool, map[string]any{
-		"tool_id":   toolID,
-		"tool_name": toolName,
-		"status":    "success",
-	})
-	successPayload := map[string]any{
-		"tool_id":   toolID,
-		"tool_name": toolName,
-		"status":    "success",
-		"result":    redactAnyForLog("result", result, 0),
-	}
-	r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
-		SpanID:          executionSpanID(r.id, toolName, toolID),
-		EndpointID:      strings.TrimSpace(r.endpointID),
-		ThreadID:        strings.TrimSpace(r.threadID),
-		RunID:           strings.TrimSpace(r.id),
-		Kind:            "tool",
-		Name:            toolName,
-		Status:          "success",
-		PayloadJSON:     marshalPersistJSON(successPayload, 6000),
-		StartedAtUnixMs: startedAt.UnixMilli(),
-		EndedAtUnixMs:   startedAt.UnixMilli(),
-		UpdatedAtUnixMs: startedAt.UnixMilli(),
-	})
-	return toolID
 }
 
 func cloneAnyMap(in map[string]any) map[string]any {
@@ -2966,50 +2903,6 @@ func (r *run) recordWebSearchSources(res websearch.SearchResult) {
 	for _, item := range items {
 		r.addWebSource(item.Title, item.URL)
 	}
-}
-
-func (r *run) recordSourcesActivity(_ string) {
-	if r == nil {
-		return
-	}
-
-	var sources []SourceRef
-	r.mu.Lock()
-	if r.sourcesActivityAlreadyRecorded {
-		r.mu.Unlock()
-		return
-	}
-	if len(r.collectedWebSourceOrder) == 0 || len(r.collectedWebSources) == 0 {
-		r.mu.Unlock()
-		return
-	}
-	sources = make([]SourceRef, 0, len(r.collectedWebSourceOrder))
-	for _, url := range r.collectedWebSourceOrder {
-		if src, ok := r.collectedWebSources[url]; ok {
-			sources = append(sources, src)
-		}
-	}
-	if len(sources) == 0 {
-		r.mu.Unlock()
-		return
-	}
-	r.sourcesActivityAlreadyRecorded = true
-	r.mu.Unlock()
-
-	toolID, err := newToolID()
-	if err != nil {
-		toolID = "activity_sources"
-	}
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeHostedToolResult,
-		ToolID:     toolID,
-		ToolName:   "sources",
-		ToolKind:   "hosted",
-		ObservedAt: time.Now(),
-		Metadata: map[string]any{
-			"result_count": len(sources),
-		},
-	})
 }
 
 func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, toolName string, args map[string]any) (any, error) {

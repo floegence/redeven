@@ -279,7 +279,6 @@ func sendFloretProviderEvent(ctx context.Context, out chan<- flruntime.ModelEven
 }
 
 func floretMessagesToFlower(messages []flruntime.ModelMessage) ([]Message, error) {
-	messages = projectFloretControlMessagesForProvider(messages)
 	out := make([]Message, 0, len(messages))
 	for i := 0; i < len(messages); i++ {
 		msg := messages[i]
@@ -330,68 +329,6 @@ func floretMessagesToFlower(messages []flruntime.ModelMessage) ([]Message, error
 		return nil, err
 	}
 	return out, nil
-}
-
-func projectFloretControlMessagesForProvider(messages []flruntime.ModelMessage) []flruntime.ModelMessage {
-	out := make([]flruntime.ModelMessage, 0, len(messages))
-	for _, msg := range messages {
-		if !isFlowerControlTool(msg.ToolName) {
-			out = append(out, msg)
-			continue
-		}
-		switch strings.ToLower(strings.TrimSpace(msg.Role)) {
-		case "assistant":
-			out = append(out, flruntime.ModelMessage{
-				Role:    "assistant",
-				Content: providerSafeFloretControlMessageText(msg),
-			})
-		case "tool":
-			out = append(out, flruntime.ModelMessage{
-				Role:    "assistant",
-				Content: providerSafeFloretControlResultText(msg),
-			})
-		default:
-			out = append(out, msg)
-		}
-	}
-	return out
-}
-
-func providerSafeFloretControlMessageText(msg flruntime.ModelMessage) string {
-	name := strings.TrimSpace(msg.ToolName)
-	if name == "" {
-		name = "control"
-	}
-	switch name {
-	case "ask_user", "task_complete":
-		signal, ok, err := flruntime.ProjectCoreControlSignal(fltools.ToolCall{
-			ID:        strings.TrimSpace(msg.ToolCallID),
-			Name:      name,
-			Args:      strings.TrimSpace(msg.ToolArgs),
-			Reasoning: strings.TrimSpace(msg.Reasoning),
-		})
-		if err == nil && ok {
-			return flruntime.ProviderSafeCoreControlText(signal)
-		}
-		if name == "ask_user" {
-			return "Agent requested structured user input."
-		}
-		return "Agent emitted a task completion signal."
-	default:
-		return fmt.Sprintf("Agent control signal %q was emitted.", name)
-	}
-}
-
-func providerSafeFloretControlResultText(msg flruntime.ModelMessage) string {
-	name := strings.TrimSpace(msg.ToolName)
-	if name == "" {
-		name = "control"
-	}
-	content := strings.TrimSpace(msg.Content)
-	if content == "" {
-		return fmt.Sprintf("Host processed control signal %q.", name)
-	}
-	return fmt.Sprintf("Host processed control signal %q: %s", name, content)
 }
 
 func validateFloretProviderToolResultSequence(messages []Message) error {

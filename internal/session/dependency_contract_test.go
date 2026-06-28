@@ -112,7 +112,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
-	const floretVersion = "v0.3.48"
+	const floretVersion = "v0.3.49"
 	oldFloretVersions := []string{"v0.3." + "45", "v0.3." + "46", "v0.3." + "47"}
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -324,6 +324,84 @@ func TestFloretDetailBoundaryDoesNotReadRawOrRebuildSubagentActivity(t *testing.
 		if strings.Contains(content, marker) {
 			t.Fatalf("subagents_floret.go must consume Floret detail activity_timeline instead of retaining marker %q", marker)
 		}
+	}
+}
+
+func TestFloretMainActivityBoundaryUsesThreadTurnProjection(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	err := filepath.WalkDir(filepath.Join(root, "internal", "ai"), func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		content := string(data)
+		for _, marker := range []string{
+			"observation." + "BuildActivityTimeline",
+			"publish" + "FinalActivityTimeline",
+			"remove" + "SyntheticSuccessfulFinalToolItems",
+		} {
+			if strings.Contains(content, marker) {
+				rel, _ := filepath.Rel(root, path)
+				t.Fatalf("%s must map Floret ThreadTurnProjection instead of retaining marker %q", rel, marker)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan ai package: %v", err)
+	}
+}
+
+func TestFloretControlSignalsAreNotSyntheticToolCallRecords(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	err := filepath.WalkDir(filepath.Join(root, "internal", "ai"), func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		content := string(data)
+		for _, marker := range []string{
+			"persist" + "SyntheticToolSuccess",
+			"persist" + "TaskCompleteSignal",
+			"persist" + "AskUserWaitingSignal",
+			"record" + "TaskCompleteSignal",
+		} {
+			if strings.Contains(content, marker) {
+				rel, _ := filepath.Rel(root, path)
+				t.Fatalf("%s must not persist Floret control signals as synthetic tool-call records: %q", rel, marker)
+			}
+		}
+		if strings.Contains(content, "ai_tool_calls") &&
+			(strings.Contains(content, `"task_complete"`) || strings.Contains(content, `"ask_user"`)) {
+			rel, _ := filepath.Rel(root, path)
+			t.Fatalf("%s must not couple control signals to ai_tool_calls persistence", rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan ai package: %v", err)
 	}
 }
 
