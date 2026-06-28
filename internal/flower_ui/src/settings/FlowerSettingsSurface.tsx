@@ -1,7 +1,7 @@
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Bot, ChevronDown, ChevronLeft, Pencil, Plus, Shield, Trash, Zap } from '@floegence/floe-webapp-core/icons';
+import { Bot, ChevronLeft, Pencil, Plus, Shield, Trash, Zap } from '@floegence/floe-webapp-core/icons';
 import { Button, Select } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerSettingsCopy } from '../copy';
