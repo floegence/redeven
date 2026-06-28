@@ -144,17 +144,27 @@ func (s *Service) validateDelegatedApprovalSnapshotIdentity(parent *run, ref Del
 	}
 	endpointID := strings.TrimSpace(parent.endpointID)
 	childThreadID := strings.TrimSpace(ref.ChildThreadID)
-	if endpointID == "" || childThreadID == "" {
+	childRunID := strings.TrimSpace(ref.ChildRunID)
+	if endpointID == "" || childThreadID == "" || childRunID == "" {
 		return nil
 	}
 	ctx, cancel := s.delegatedApprovalPersistContext()
-	rec, ok, err := s.threadsDB.GetFinalizedChildPermissionSnapshotByThread(ctx, endpointID, childThreadID)
+	_, ok, err := s.threadsDB.GetFinalizedChildPermissionSnapshot(ctx, endpointID, childThreadID, childRunID)
 	cancel()
-	if err != nil || !ok {
+	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(rec.ChildRunID) != strings.TrimSpace(ref.ChildRunID) {
-		return errors.New("delegated approval child run identity mismatch")
+	if !ok {
+		ctx, cancel = s.delegatedApprovalPersistContext()
+		rec, byThreadOK, byThreadErr := s.threadsDB.GetFinalizedChildPermissionSnapshotByThread(ctx, endpointID, childThreadID)
+		cancel()
+		if byThreadErr != nil {
+			return byThreadErr
+		}
+		if byThreadOK && strings.TrimSpace(rec.ChildRunID) != childRunID {
+			return errors.New("delegated approval child run identity mismatch")
+		}
+		return errors.New("delegated approval child permission snapshot missing")
 	}
 	return nil
 }

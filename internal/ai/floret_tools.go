@@ -106,7 +106,10 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 				if call.Name == "" {
 					call.Name = strings.TrimSpace(def.Name)
 				}
-				execRun := floretInvocationRunContext(r, inv)
+				execRun, err := floretInvocationRunContext(r, inv)
+				if err != nil {
+					return fltools.Result{}, err
+				}
 				ctx = contextWithFloretToolExecutionAuthorization(ctx, call.ID, call.Name)
 				handler := &builtInToolHandler{r: execRun, toolName: call.Name}
 				result, err := handler.Execute(ctx, call)
@@ -133,55 +136,63 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 	return registry, nil
 }
 
-func floretInvocationRunContext(base *run, inv fltools.Invocation[map[string]any]) *run {
+func floretInvocationRunContext(base *run, inv fltools.Invocation[map[string]any]) (*run, error) {
 	if base == nil {
-		return nil
+		return nil, errors.New("missing floret invocation run context")
 	}
 	return floretRunContextForIDs(base, inv.RunID, inv.ThreadID, inv.TurnID, inv.HostContext)
 }
 
-func floretApprovalRunContext(base *run, req fltools.ApprovalRequest) *run {
+func floretApprovalRunContext(base *run, req fltools.ApprovalRequest) (*run, error) {
 	if base == nil {
-		return nil
+		return nil, errors.New("missing floret approval run context")
 	}
 	threadID := strings.TrimSpace(req.HostContext[subagentToolHostContextChildThreadIDKey])
 	if threadID == "" {
 		threadID = strings.TrimSpace(req.HostContext[subagentToolHostContextSubagentIDKey])
 	}
 	if threadID == "" {
-		return base
+		return floretRunContextForIDs(base, req.RunID, req.ThreadID, req.TurnID, req.HostContext)
 	}
-	runID := firstNonEmptyString(
-		strings.TrimSpace(req.HostContext[subagentToolHostContextChildRunIDKey]),
-		strings.TrimSpace(req.Labels["host."+subagentToolHostContextChildRunIDKey]),
-	)
-	return floretRunContextForIDs(base, runID, threadID, "", req.HostContext)
+	runID := strings.TrimSpace(req.HostContext[subagentToolHostContextChildRunIDKey])
+	return floretRunContextForIDs(base, runID, req.ThreadID, req.TurnID, req.HostContext)
 }
 
-func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawTurnID string, hostContext map[string]string) *run {
+func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawTurnID string, hostContext map[string]string) (*run, error) {
 	if base == nil {
-		return nil
+		return nil, errors.New("missing floret run context")
 	}
 	runID := strings.TrimSpace(rawRunID)
 	threadID := strings.TrimSpace(rawThreadID)
 	turnID := strings.TrimSpace(rawTurnID)
-	if runID == "" && threadID == "" && turnID == "" {
-		return base
+	childThreadID := strings.TrimSpace(hostContext[subagentToolHostContextChildThreadIDKey])
+	if childThreadID == "" {
+		childThreadID = strings.TrimSpace(hostContext[subagentToolHostContextSubagentIDKey])
 	}
-	if runID == "" {
-		runID = strings.TrimSpace(base.id)
+	childRunID := strings.TrimSpace(hostContext[subagentToolHostContextChildRunIDKey])
+	if childThreadID == "" && childRunID == "" {
+		if err := requireFloretRunIdentity("parent tool invocation", runID, threadID, turnID, strings.TrimSpace(base.id), strings.TrimSpace(base.threadID), strings.TrimSpace(base.messageID)); err != nil {
+			return nil, err
+		}
+		return base, nil
 	}
-	if threadID == "" {
-		threadID = strings.TrimSpace(base.threadID)
+	if childThreadID == "" || childRunID == "" {
+		return nil, errors.New("floret child tool invocation missing explicit child identity")
+	}
+	if childRunID == childThreadID {
+		return nil, errors.New("floret child tool invocation child run aliases child thread")
+	}
+	if parentRunID := strings.TrimSpace(base.id); parentRunID != "" && childRunID == parentRunID && strings.TrimSpace(base.threadID) != childThreadID {
+		return nil, errors.New("floret child tool invocation child run aliases parent run")
+	}
+	if threadID == "" || threadID != childThreadID {
+		return nil, floretIdentityMismatchError("child tool invocation", "thread", threadID, childThreadID)
 	}
 	if turnID == "" {
-		turnID = strings.TrimSpace(base.messageID)
+		return nil, errors.New("floret child tool invocation missing turn id")
 	}
-	if runID == strings.TrimSpace(base.id) &&
-		threadID == strings.TrimSpace(base.threadID) &&
-		turnID == strings.TrimSpace(base.messageID) {
-		return base
-	}
+	runID = childRunID
+	threadID = childThreadID
 	child := newRun(runOptions{
 		Log:                   base.log,
 		StateDir:              base.stateDir,
@@ -227,16 +238,43 @@ func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawT
 		}
 	}
 	child.currentModelID = base.currentModelID
-	child.bindStoredChildPermissionSnapshot(threadID)
-	return child
+	child.bindStoredChildPermissionSnapshot(threadID, runID)
+	return child, nil
 }
 
-func (r *run) bindStoredChildPermissionSnapshot(childThreadID string) {
+func requireFloretRunIdentity(label string, runID string, threadID string, turnID string, wantRunID string, wantThreadID string, wantTurnID string) error {
+	if runID == "" {
+		return fmt.Errorf("floret %s missing run id", label)
+	}
+	if threadID == "" {
+		return fmt.Errorf("floret %s missing thread id", label)
+	}
+	if turnID == "" {
+		return fmt.Errorf("floret %s missing turn id", label)
+	}
+	if runID != wantRunID {
+		return floretIdentityMismatchError(label, "run", runID, wantRunID)
+	}
+	if threadID != wantThreadID {
+		return floretIdentityMismatchError(label, "thread", threadID, wantThreadID)
+	}
+	if turnID != wantTurnID {
+		return floretIdentityMismatchError(label, "turn", turnID, wantTurnID)
+	}
+	return nil
+}
+
+func floretIdentityMismatchError(label string, field string, got string, want string) error {
+	return fmt.Errorf("floret %s %s identity mismatch: got %q, want %q", label, field, got, want)
+}
+
+func (r *run) bindStoredChildPermissionSnapshot(childThreadID string, childRunID string) {
 	if r == nil || r.subagentDepth <= 0 || !r.noUserInteraction {
 		return
 	}
 	childThreadID = strings.TrimSpace(childThreadID)
-	if childThreadID == "" {
+	childRunID = strings.TrimSpace(childRunID)
+	if childThreadID == "" || childRunID == "" {
 		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
 		r.toolAllowlist = map[string]struct{}{}
 		return
@@ -247,7 +285,7 @@ func (r *run) bindStoredChildPermissionSnapshot(childThreadID string) {
 		return
 	}
 	ctx, cancel := persistContextForRun(r)
-	rec, ok, err := r.threadsDB.GetFinalizedChildPermissionSnapshotByThread(ctx, strings.TrimSpace(r.endpointID), childThreadID)
+	rec, ok, err := r.threadsDB.GetFinalizedChildPermissionSnapshot(ctx, strings.TrimSpace(r.endpointID), childThreadID, childRunID)
 	cancel()
 	if err != nil || !ok {
 		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)

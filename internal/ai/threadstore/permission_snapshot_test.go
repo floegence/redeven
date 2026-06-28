@@ -133,6 +133,18 @@ func TestPermissionSnapshotStore_FinalizesProvisionalChildSnapshot(t *testing.T)
 	if !ok || got.State != "finalized" || got.FinalizedAtUnixMs != 250 {
 		t.Fatalf("finalized lookup=%#v ok=%v", got, ok)
 	}
+	exact, ok, err := store.GetFinalizedChildPermissionSnapshot(ctx, "env_snap", "thread_child", "run_child")
+	if err != nil {
+		t.Fatalf("GetFinalizedChildPermissionSnapshot exact: %v", err)
+	}
+	if !ok || exact.ChildSnapshotID != "psnap_child_provisional" || exact.ChildRunID != "run_child" {
+		t.Fatalf("exact finalized lookup=%#v ok=%v", exact, ok)
+	}
+	if mismatched, ok, err := store.GetFinalizedChildPermissionSnapshot(ctx, "env_snap", "thread_child", "run_other"); err != nil {
+		t.Fatalf("GetFinalizedChildPermissionSnapshot mismatched: %v", err)
+	} else if ok {
+		t.Fatalf("mismatched child run lookup returned snapshot: %#v", mismatched)
+	}
 }
 
 func TestPermissionSnapshotStore_RejectsInvalidChildRunIdentity(t *testing.T) {

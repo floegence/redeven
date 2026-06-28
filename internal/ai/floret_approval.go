@@ -15,9 +15,9 @@ func (r *run) approveFloretTool(ctx context.Context, req fltools.ApprovalRequest
 		return fltools.PermissionDecisionDenied("tool approval unavailable"), nil
 	}
 	if r.noUserInteraction && r.allowDelegatedApproval && r.delegatedApprovalParent != nil {
-		child := floretApprovalRunContext(r, req)
-		if child == nil {
-			child = r
+		child, err := floretApprovalRunContext(r, req)
+		if err != nil {
+			return fltools.PermissionDecisionDeny, err
 		}
 		parent := child.delegatedApprovalParent
 		if parent == nil {

@@ -554,9 +554,9 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 		t.Fatalf("spawn labels=%#v, want child thread and subagent id", spawnReq.Labels.Host)
 	}
 
-	rec, ok, err := store.GetFinalizedChildPermissionSnapshotByThread(context.Background(), parent.endpointID, childThreadID)
+	rec, ok, err := store.GetFinalizedChildPermissionSnapshot(context.Background(), parent.endpointID, childThreadID, childRunID)
 	if err != nil {
-		t.Fatalf("GetFinalizedChildPermissionSnapshotByThread: %v", err)
+		t.Fatalf("GetFinalizedChildPermissionSnapshot: %v", err)
 	}
 	if !ok || rec.ChildRunID != childRunID {
 		t.Fatalf("child snapshot record=%#v ok=%v, want child_run_id %q", rec, ok, childRunID)

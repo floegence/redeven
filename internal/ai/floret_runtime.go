@@ -180,6 +180,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
 	result, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
+		RunID:                 flruntime.RunID(strings.TrimSpace(r.id)),
 		ThreadID:              threadID,
 		TurnID:                flruntime.TurnID(strings.TrimSpace(r.messageID)),
 		Input:                 floretCurrentTurnInput(req.Input),
