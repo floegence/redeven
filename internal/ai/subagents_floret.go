@@ -138,12 +138,13 @@ type floretSubagentRuntime struct {
 	muParent sync.Mutex
 	parent   *run
 
-	mu         sync.Mutex
-	host       flruntime.Host
-	hostKey    string
-	storePath  string
-	closed     bool
-	syncQueued map[string]struct{}
+	mu             sync.Mutex
+	host           flruntime.Host
+	hostKey        string
+	storePath      string
+	closed         bool
+	timelineQueued map[string]struct{}
+	contextModes   map[string]string
 }
 
 func newFloretSubagentRuntime(parent *run) *floretSubagentRuntime {
@@ -311,27 +312,27 @@ func (s *floretSubagentRuntime) currentHost() flruntime.Host {
 	return s.host
 }
 
-func (s *floretSubagentRuntime) scheduleProjectedSubagentSync(threadID string) {
+func (s *floretSubagentRuntime) scheduleParentSubagentTimelineRefresh(threadID string) {
 	if s == nil {
 		return
 	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
-		return
+		threadID = "parent"
 	}
 	s.mu.Lock()
 	if s.closed || s.host == nil {
 		s.mu.Unlock()
 		return
 	}
-	if s.syncQueued == nil {
-		s.syncQueued = map[string]struct{}{}
+	if s.timelineQueued == nil {
+		s.timelineQueued = map[string]struct{}{}
 	}
-	if _, exists := s.syncQueued[threadID]; exists {
+	if _, exists := s.timelineQueued[threadID]; exists {
 		s.mu.Unlock()
 		return
 	}
-	s.syncQueued[threadID] = struct{}{}
+	s.timelineQueued[threadID] = struct{}{}
 	s.mu.Unlock()
 
 	go func() {
@@ -340,7 +341,7 @@ func (s *floretSubagentRuntime) scheduleProjectedSubagentSync(threadID string) {
 		<-timer.C
 		defer func() {
 			s.mu.Lock()
-			delete(s.syncQueued, threadID)
+			delete(s.timelineQueued, threadID)
 			s.mu.Unlock()
 		}()
 		s.mu.Lock()
@@ -355,9 +356,7 @@ func (s *floretSubagentRuntime) scheduleProjectedSubagentSync(threadID string) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), parent.persistTimeout())
 		defer cancel()
-		if err := s.syncProjectedSubagentThreadByID(ctx, threadID); err != nil && parent.log != nil {
-			parent.log.Debug("subagent projection sync failed", "thread_id", threadID, "error", err)
-		}
+		s.publishParentSubagentTimeline(ctx)
 	}()
 }
 
@@ -804,12 +803,8 @@ func ensureFloretThread(ctx context.Context, host flruntime.Host, threadID flrun
 	if strings.TrimSpace(string(threadID)) == "" {
 		return errors.New("missing parent thread id")
 	}
-	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: threadID}); err != nil {
-		if _, readErr := host.ReadThread(ctx, threadID); readErr != nil {
-			return err
-		}
-	}
-	return nil
+	_, err := host.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: threadID})
+	return err
 }
 
 func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, args map[string]any) (map[string]any, error) {
@@ -893,9 +888,7 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 	}
 	localSnapshot := subagentSnapshotFromFloret(snapshot)
 	localSnapshot.ContextMode = contextMode
-	if err := s.syncProjectedSubagentThread(ctx, localSnapshot); err != nil {
-		return nil, err
-	}
+	s.refreshSubagentTimeline(ctx, localSnapshot)
 	item := subagentSnapshotPayload(localSnapshot)
 	parent.persistRunEvent("delegation.spawn", RealtimeStreamKindLifecycle, map[string]any{
 		"subagent_id": item["subagent_id"],
@@ -946,15 +939,13 @@ func (s *floretSubagentRuntime) wait(ctx context.Context, args map[string]any) (
 	if err != nil {
 		return nil, err
 	}
-	if err := s.syncProjectedFloretSubagentThreads(ctx, result.Snapshots); err != nil {
-		return nil, err
-	}
 	snapshots := make([]subagentSnapshot, 0, len(result.Snapshots))
 	for _, snapshot := range result.Snapshots {
 		local := subagentSnapshotFromFloret(snapshot)
 		local = s.withStoredSubagentContextMode(ctx, local)
 		snapshots = append(snapshots, local)
 	}
+	s.refreshSubagentTimeline(ctx, snapshots...)
 	contextMode := aggregateSubagentContextMode(snapshots)
 	forkMode := subagentForkModeForContextMode(contextMode)
 	waitContract := resolveSubagentCapabilityContract(parent, nil, forkMode)
@@ -987,9 +978,6 @@ func (s *floretSubagentRuntime) wait(ctx context.Context, args map[string]any) (
 func (s *floretSubagentRuntime) list(ctx context.Context, args map[string]any) (map[string]any, error) {
 	snapshots, err := s.snapshots(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := s.syncProjectedSubagentThreads(ctx, snapshots); err != nil {
 		return nil, err
 	}
 	runningOnly := parseBoolArg(args, "running_only", false)
@@ -1032,9 +1020,6 @@ func (s *floretSubagentRuntime) inspect(ctx context.Context, args map[string]any
 	targets := collectInspectTargets(args)
 	all, err := s.snapshots(ctx)
 	if err != nil {
-		return nil, err
-	}
-	if err := s.syncProjectedSubagentThreads(ctx, all); err != nil {
 		return nil, err
 	}
 	byID := map[string]subagentSnapshot{}
@@ -1718,9 +1703,8 @@ func (s *floretSubagentRuntime) sendInput(ctx context.Context, args map[string]a
 		return nil, err
 	}
 	localSnapshot := subagentSnapshotFromFloret(snapshot)
-	if err := s.syncProjectedSubagentThread(ctx, localSnapshot); err != nil {
-		return nil, err
-	}
+	localSnapshot = s.withStoredSubagentContextMode(ctx, localSnapshot)
+	s.refreshSubagentTimeline(ctx, localSnapshot)
 	item := subagentSnapshotPayload(localSnapshot)
 	bounded := boundedSubagentItem(item)
 	return trimSubagentToolResult(map[string]any{
@@ -1827,9 +1811,8 @@ func (s *floretSubagentRuntime) closeSubagentWithHost(ctx context.Context, host 
 		return subagentSnapshot{}, err
 	}
 	localSnapshot := subagentSnapshotFromFloret(snapshot)
-	if err := s.syncProjectedSubagentThread(ctx, localSnapshot); err != nil {
-		return subagentSnapshot{}, err
-	}
+	localSnapshot = s.withStoredSubagentContextMode(ctx, localSnapshot)
+	s.refreshSubagentTimeline(ctx, localSnapshot)
 	return localSnapshot, nil
 }
 
@@ -1919,7 +1902,7 @@ func (s *floretSubagentRuntime) release() {
 	s.mu.Lock()
 	host := s.host
 	s.host = nil
-	s.syncQueued = nil
+	s.timelineQueued = nil
 	s.closed = true
 	s.mu.Unlock()
 	if host != nil {
@@ -1942,11 +1925,11 @@ func (s *floretSubagentRuntime) snapshots(ctx context.Context) ([]subagentSnapsh
 	}
 	out := make([]subagentSnapshot, 0, len(flSnapshots))
 	for _, snapshot := range flSnapshots {
-		out = append(out, subagentSnapshotFromFloret(snapshot))
+		local := subagentSnapshotFromFloret(snapshot)
+		local = s.withStoredSubagentContextMode(ctx, local)
+		out = append(out, local)
 	}
-	if err := s.syncProjectedSubagentThreads(ctx, out); err != nil {
-		return nil, err
-	}
+	s.refreshSubagentTimeline(ctx, out...)
 	return out, nil
 }
 
@@ -1989,13 +1972,6 @@ func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Met
 	if parent == nil {
 		return nil, sql.ErrNoRows
 	}
-	childMeta, err := db.GetFlowerThreadMetadata(ctxOrBackground(ctx), endpointID, childThreadID)
-	if err != nil {
-		return nil, err
-	}
-	if !isExpectedFlowerSubagentProjection(childMeta, parentThreadID, childThreadID) {
-		return nil, sql.ErrNoRows
-	}
 	if runtime == nil {
 		r := s.detachedSubagentParentRun(meta, *parent)
 		if r == nil {
@@ -2016,24 +1992,24 @@ func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Met
 		IncludeRaw:     false,
 	})
 	if err != nil {
+		if isFloretSubagentNotFoundError(err) {
+			return nil, sql.ErrNoRows
+		}
 		return nil, err
 	}
 	resp := flowerSubagentDetailResponse(detail)
 	if strings.TrimSpace(resp.Summary.ParentThreadID) != parentThreadID || strings.TrimSpace(resp.Summary.ThreadID) != childThreadID {
-		return nil, errors.New("subagent identity mismatch")
+		return nil, sql.ErrNoRows
 	}
-	resp.Summary.ContextMode = contextModeFromSubagentMetadataJSON(childMeta.ContextJSON)
+	resp.Summary.ContextMode = runtime.snapshotContextMode(ctx, childThreadID)
 	return &resp, nil
 }
 
-func isExpectedFlowerSubagentProjection(meta *threadstore.FlowerThreadMetadata, parentThreadID string, childThreadID string) bool {
-	if meta == nil {
+func isFloretSubagentNotFoundError(err error) bool {
+	if err == nil {
 		return false
 	}
-	return strings.TrimSpace(meta.ThreadID) == strings.TrimSpace(childThreadID) &&
-		strings.TrimSpace(meta.ParentThreadID) == strings.TrimSpace(parentThreadID) &&
-		strings.TrimSpace(strings.ToLower(meta.OwnerKind)) == flowerSubagentProjectionOwnerKind &&
-		strings.TrimSpace(meta.OwnerID) == flowerSubagentProjectionOwnerID
+	return strings.Contains(strings.ToLower(err.Error()), "subagent not found")
 }
 
 func (s *Service) detachedSubagentParentRun(meta *session.Meta, th threadstore.Thread) *run {
@@ -2538,166 +2514,9 @@ func flowerSubagentGenericView(event flruntime.SubAgentDetailEvent) *FlowerSubag
 	}
 }
 
-func (s *floretSubagentRuntime) syncProjectedFloretSubagentThreads(ctx context.Context, snapshots []flruntime.SubAgentSnapshot) error {
-	if len(snapshots) == 0 {
-		return nil
-	}
-	items := make([]subagentSnapshot, 0, len(snapshots))
-	for _, snapshot := range snapshots {
-		items = append(items, subagentSnapshotFromFloret(snapshot))
-	}
-	return s.syncProjectedSubagentThreads(ctx, items)
-}
-
-func (s *floretSubagentRuntime) syncProjectedSubagentThreads(ctx context.Context, snapshots []subagentSnapshot) error {
-	for _, snapshot := range snapshots {
-		if err := s.syncProjectedSubagentThreadOnly(ctx, snapshot); err != nil {
-			return err
-		}
-	}
+func (s *floretSubagentRuntime) refreshSubagentTimeline(ctx context.Context, snapshots ...subagentSnapshot) {
+	s.rememberSubagentContextModes(snapshots)
 	s.publishParentSubagentTimeline(ctx)
-	return nil
-}
-
-func (s *floretSubagentRuntime) syncProjectedSubagentThreadByID(ctx context.Context, threadID string) error {
-	threadID = strings.TrimSpace(threadID)
-	if threadID == "" {
-		return nil
-	}
-	parent := s.parentRun()
-	if parent == nil {
-		return nil
-	}
-	host, err := s.ensureHost(ctx)
-	if err != nil {
-		return err
-	}
-	snapshots, err := host.ListSubAgents(ctx, flruntime.ThreadID(strings.TrimSpace(parent.threadID)))
-	if err != nil {
-		return err
-	}
-	for _, snapshot := range snapshots {
-		if strings.TrimSpace(string(snapshot.ThreadID)) == threadID {
-			return s.syncProjectedSubagentThreads(ctx, []subagentSnapshot{subagentSnapshotFromFloret(snapshot)})
-		}
-	}
-	return nil
-}
-
-func (s *floretSubagentRuntime) syncProjectedSubagentThread(ctx context.Context, snapshot subagentSnapshot) error {
-	if err := s.syncProjectedSubagentThreadOnly(ctx, snapshot); err != nil {
-		return err
-	}
-	s.publishParentSubagentTimeline(ctx)
-	return nil
-}
-
-func (s *floretSubagentRuntime) syncProjectedSubagentThreadOnly(ctx context.Context, snapshot subagentSnapshot) error {
-	parent := s.parentRun()
-	if parent == nil || parent.threadsDB == nil {
-		return nil
-	}
-	threadID := strings.TrimSpace(snapshot.ThreadID)
-	if threadID == "" {
-		return nil
-	}
-	endpointID := strings.TrimSpace(parent.endpointID)
-	parentThreadID := strings.TrimSpace(parent.threadID)
-	if endpointID == "" || parentThreadID == "" {
-		return nil
-	}
-	if err := s.ensureProjectedSubagentThreadOwner(ctx, endpointID, threadID); err != nil {
-		return err
-	}
-	snapshot = s.withStoredSubagentContextMode(ctx, snapshot)
-	var thread flruntime.ThreadSnapshot
-	if isSubagentTerminalStatus(snapshot.Status) {
-		host, err := s.ensureHost(ctx)
-		if err != nil {
-			return err
-		}
-		thread, err = host.ReadThread(ctx, flruntime.ThreadID(threadID))
-		if err != nil {
-			if isFloretActiveTurnError(err) {
-				s.scheduleProjectedSubagentSync(threadID)
-			} else {
-				return err
-			}
-		}
-	}
-
-	title := firstNonEmptyString(strings.TrimSpace(snapshot.TaskName), strings.TrimSpace(thread.Title), strings.TrimSpace(snapshot.ThreadID), "Subagent")
-	createdAt := firstPositiveInt64(snapshot.CreatedAtMS, timeUnixMS(thread.CreatedAt), time.Now().UnixMilli())
-	updatedAt := firstPositiveInt64(snapshot.UpdatedAtMS, timeUnixMS(thread.UpdatedAt), createdAt)
-	lastPreview, lastAt := projectedSubagentLastMessage(thread.Messages, snapshot.LastMessage, updatedAt)
-	modelID := strings.TrimSpace(parent.currentModelID)
-	if modelID == "" && parent.cfg != nil {
-		modelID = strings.TrimSpace(parent.cfg.CurrentModelID)
-	}
-	runStatus, runErrCode, runErr := projectedSubagentRunState(snapshot.Status)
-	authorID := strings.TrimSpace(parent.userPublicID)
-	authorEmail := ""
-	if parent.sessionMeta != nil {
-		authorEmail = strings.TrimSpace(parent.sessionMeta.UserEmail)
-	}
-
-	if err := parent.threadsDB.UpsertProjectedThreadWithFlowerMetadata(ctx, threadstore.Thread{
-		ThreadID:              threadID,
-		EndpointID:            endpointID,
-		NamespacePublicID:     parentNamespacePublicID(parent),
-		ModelID:               modelID,
-		ModelLocked:           strings.TrimSpace(modelID) != "",
-		PermissionType:        permissionTypeString(parent.permissionType),
-		WorkingDir:            strings.TrimSpace(parent.workingDir),
-		Title:                 title,
-		TitleSource:           threadstore.ThreadTitleSourceAuto,
-		RunStatus:             runStatus,
-		RunUpdatedAtUnixMs:    updatedAt,
-		RunErrorCode:          runErrCode,
-		RunError:              runErr,
-		LastContextRunID:      strings.TrimSpace(snapshot.LatestTurnID),
-		CreatedByUserPublicID: authorID,
-		CreatedByUserEmail:    authorEmail,
-		UpdatedByUserPublicID: authorID,
-		UpdatedByUserEmail:    authorEmail,
-		CreatedAtUnixMs:       createdAt,
-		UpdatedAtUnixMs:       updatedAt,
-		LastMessageAtUnixMs:   lastAt,
-		LastMessagePreview:    lastPreview,
-	}, threadstore.FlowerThreadMetadata{
-		EndpointID:        endpointID,
-		ThreadID:          threadID,
-		OwnerKind:         flowerSubagentProjectionOwnerKind,
-		OwnerID:           flowerSubagentProjectionOwnerID,
-		ParentThreadID:    parentThreadID,
-		ParentRunID:       strings.TrimSpace(parent.id),
-		ContextJSON:       projectedSubagentMetadataJSON(snapshot),
-		HomeRuntimeKind:   "local_environment",
-		OriginEnvPublicID: endpointID,
-		UpdatedAtUnixMs:   updatedAt,
-	}); err != nil {
-		return err
-	}
-	for index, message := range thread.Messages {
-		projected, ok, err := projectedSubagentMessage(endpointID, threadID, message, index, authorID, authorEmail)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			continue
-		}
-		if _, err := parent.threadsDB.UpsertProjectedMessage(ctx, endpointID, threadID, projected, authorID, authorEmail); err != nil {
-			return err
-		}
-	}
-	if childActivity, ok, err := projectedSubagentActivityMessage(endpointID, threadID, snapshot, thread, authorID, authorEmail); err != nil {
-		return err
-	} else if ok {
-		if _, err := parent.threadsDB.UpsertProjectedMessage(ctx, endpointID, threadID, childActivity, authorID, authorEmail); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (s *floretSubagentRuntime) publishParentSubagentTimeline(ctx context.Context) {
@@ -2713,44 +2532,54 @@ func (s *floretSubagentRuntime) publishParentSubagentTimeline(ctx context.Contex
 	if parentThreadID == "" {
 		return
 	}
-	flSnapshots, err := host.ListSubAgents(ctxOrBackground(ctx), flruntime.ThreadID(parentThreadID))
+	result, err := host.ListSubAgentActivityTimeline(ctxOrBackground(ctx), flruntime.ListSubAgentActivityTimelineRequest{
+		ParentThreadID: flruntime.ThreadID(parentThreadID),
+		Meta:           parent.activityRunMeta(),
+	})
 	if err != nil {
 		parent.persistRunEvent("delegation.timeline.refresh_error", RealtimeStreamKindLifecycle, map[string]any{
 			"error": sanitizeLogText(err.Error(), 240),
 		})
 		return
 	}
-	snapshots := make([]subagentSnapshot, 0, len(flSnapshots))
-	for _, snapshot := range flSnapshots {
-		snapshots = append(snapshots, subagentSnapshotFromFloret(snapshot))
-	}
-	timeline := buildParentSubagentActivityTimeline(parent, snapshots)
+	timeline := s.flowerParentSubagentActivityTimeline(result.Timeline)
 	if len(timeline.Items) == 0 {
 		return
 	}
 	parent.publishActivityTimeline(timeline)
 }
 
-func (s *floretSubagentRuntime) ensureProjectedSubagentThreadOwner(ctx context.Context, endpointID string, threadID string) error {
-	parent := s.parentRun()
-	if parent == nil || parent.threadsDB == nil {
-		return nil
+func (s *floretSubagentRuntime) flowerParentSubagentActivityTimeline(timeline observation.ActivityTimeline) observation.ActivityTimeline {
+	for i := range timeline.Items {
+		payload := cloneAnyMap(timeline.Items[i].Payload)
+		threadID := strings.TrimSpace(anyToString(payload["thread_id"]))
+		if threadID == "" {
+			threadID = strings.TrimSpace(anyToString(payload["subagent_id"]))
+		}
+		if threadID != "" {
+			payload["id"] = threadID
+			payload["subagent_id"] = threadID
+			payload["thread_id"] = threadID
+		}
+		payload["operation"] = "subagents"
+		payload["action"] = "inspect"
+		payload["delegation_runtime"] = "floret"
+		if agentType := strings.TrimSpace(anyToString(payload["agent_type"])); agentType == "" {
+			payload["agent_type"] = normalizeSubagentAgentType(anyToString(payload["host_profile_ref"]))
+		}
+		if status := strings.TrimSpace(anyToString(payload["status"])); status != "" {
+			payload["status"] = flowerSubagentStatus(flruntime.SubAgentStatus(status))
+		}
+		if contextMode := s.snapshotContextMode(context.Background(), threadID); contextMode != "" {
+			payload["context_mode"] = contextMode
+		} else if _, ok := payload["context_mode"]; !ok {
+			payload["context_mode"] = subagentContextModeMissionOnly
+		} else {
+			payload["context_mode"] = normalizeSubagentContextMode(anyToString(payload["context_mode"]))
+		}
+		timeline.Items[i].Payload = payload
 	}
-	existing, err := parent.threadsDB.GetThread(ctx, endpointID, threadID)
-	if err != nil {
-		return err
-	}
-	meta, err := parent.threadsDB.GetFlowerThreadMetadata(ctx, endpointID, threadID)
-	if err != nil {
-		return err
-	}
-	if existing == nil && meta == nil {
-		return nil
-	}
-	if isFlowerSubagentProjection(meta) && strings.TrimSpace(meta.OwnerID) == flowerSubagentProjectionOwnerID {
-		return nil
-	}
-	return fmt.Errorf("projected subagent thread id %q collides with an existing Flower thread", threadID)
+	return timeline
 }
 
 func (s *floretSubagentRuntime) withStoredSubagentContextMode(ctx context.Context, snapshot subagentSnapshot) subagentSnapshot {
@@ -2768,36 +2597,37 @@ func (s *floretSubagentRuntime) withStoredSubagentContextMode(ctx context.Contex
 }
 
 func (s *floretSubagentRuntime) snapshotContextMode(ctx context.Context, threadID string) string {
-	parent := s.parentRun()
-	if parent == nil || parent.threadsDB == nil {
-		return ""
-	}
 	threadID = strings.TrimSpace(threadID)
-	endpointID := strings.TrimSpace(parent.endpointID)
-	if threadID == "" || endpointID == "" {
+	if threadID == "" {
 		return ""
 	}
-	meta, err := parent.threadsDB.GetFlowerThreadMetadata(ctxOrBackground(ctx), endpointID, threadID)
-	if err != nil || meta == nil {
-		return ""
-	}
-	return contextModeFromSubagentMetadataJSON(meta.ContextJSON)
+	_ = ctx
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return normalizeSubagentContextMode(s.contextModes[threadID])
 }
 
-func contextModeFromSubagentMetadataJSON(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
+func (s *floretSubagentRuntime) rememberSubagentContextModes(snapshots []subagentSnapshot) {
+	for _, snapshot := range snapshots {
+		s.rememberSubagentContextMode(snapshot)
 	}
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		return ""
+}
+
+func (s *floretSubagentRuntime) rememberSubagentContextMode(snapshot subagentSnapshot) {
+	if s == nil {
+		return
 	}
-	value := strings.TrimSpace(anyToString(payload["context_mode"]))
-	if value == "" {
-		return ""
+	threadID := strings.TrimSpace(snapshot.ThreadID)
+	if threadID == "" || strings.TrimSpace(snapshot.ContextMode) == "" {
+		return
 	}
-	return normalizeSubagentContextMode(value)
+	contextMode := normalizeSubagentContextMode(snapshot.ContextMode)
+	s.mu.Lock()
+	if s.contextModes == nil {
+		s.contextModes = map[string]string{}
+	}
+	s.contextModes[threadID] = contextMode
+	s.mu.Unlock()
 }
 
 func aggregateSubagentContextMode(snapshots []subagentSnapshot) string {
@@ -2903,162 +2733,6 @@ func (c subagentStatusCounts) payload() map[string]any {
 	}
 }
 
-func buildParentSubagentActivityTimeline(parent *run, snapshots []subagentSnapshot) observation.ActivityTimeline {
-	now := time.Now().UnixMilli()
-	timeline := observation.ActivityTimeline{
-		SchemaVersion: observation.ActivityTimelineSchemaVersion,
-		Summary: observation.ActivitySummary{
-			Status:   observation.ActivityStatusSuccess,
-			Severity: observation.ActivitySeverityQuiet,
-		},
-		Items: []observation.ActivityItem{},
-	}
-	if parent != nil {
-		timeline.RunID = strings.TrimSpace(parent.id)
-		timeline.ThreadID = strings.TrimSpace(parent.threadID)
-		timeline.TurnID = strings.TrimSpace(parent.messageID)
-		timeline.TraceID = strings.TrimSpace(parent.id)
-	}
-	items := make([]subagentSnapshot, 0, len(snapshots))
-	for _, snapshot := range snapshots {
-		if strings.TrimSpace(snapshot.ThreadID) == "" {
-			continue
-		}
-		items = append(items, snapshot)
-	}
-	sort.SliceStable(items, func(i, j int) bool {
-		leftTerminal := isSubagentTerminalStatus(items[i].Status)
-		rightTerminal := isSubagentTerminalStatus(items[j].Status)
-		if leftTerminal != rightTerminal {
-			return !leftTerminal
-		}
-		if items[i].UpdatedAtMS != items[j].UpdatedAtMS {
-			return items[i].UpdatedAtMS > items[j].UpdatedAtMS
-		}
-		return strings.TrimSpace(items[i].ThreadID) < strings.TrimSpace(items[j].ThreadID)
-	})
-	counts := observation.ActivityCounts{}
-	for _, snapshot := range items {
-		status, severity, attention := parentSubagentActivityState(snapshot.Status)
-		switch status {
-		case observation.ActivityStatusPending:
-			counts.Pending++
-		case observation.ActivityStatusRunning:
-			counts.Running++
-		case observation.ActivityStatusWaiting:
-			counts.Waiting++
-		case observation.ActivityStatusSuccess:
-			counts.Success++
-		case observation.ActivityStatusError:
-			counts.Error++
-		case observation.ActivityStatusCanceled:
-			counts.Canceled++
-		}
-		payload := parentSubagentActivityPayload(snapshot)
-		payload["operation"] = "subagents"
-		payload["action"] = "inspect"
-		title := strings.TrimSpace(anyToString(payload["title"]))
-		description := strings.TrimSpace(snapshot.LastMessage)
-		if description == "" {
-			description = strings.TrimSpace(snapshot.Status)
-		}
-		startedAt := firstPositiveInt64(snapshot.CreatedAtMS, snapshot.UpdatedAtMS, now)
-		endedAt := int64(0)
-		if isSubagentTerminalStatus(snapshot.Status) {
-			endedAt = firstPositiveInt64(snapshot.UpdatedAtMS, now)
-		}
-		timeline.Items = append(timeline.Items, observation.ActivityItem{
-			ItemID:           "subagents:" + stableProjectionHash(strings.TrimSpace(snapshot.ThreadID)),
-			ToolID:           "subagents",
-			ToolName:         "subagents",
-			Kind:             observation.ActivityKindControl,
-			Status:           status,
-			Severity:         severity,
-			NeedsAttention:   len(attention) > 0,
-			AttentionReasons: attention,
-			RequiresApproval: false,
-			StartedAtUnixMS:  startedAt,
-			EndedAtUnixMS:    endedAt,
-			Label:            firstNonEmptyString(title, strings.TrimSpace(snapshot.ThreadID), "Subagent"),
-			Description:      description,
-			Payload:          payload,
-		})
-	}
-	timeline.Summary.TotalItems = len(timeline.Items)
-	timeline.Summary.Counts = counts
-	timeline.Summary.Status, timeline.Summary.Severity, timeline.Summary.NeedsAttention, timeline.Summary.AttentionReasons = parentSubagentSummaryState(counts)
-	return timeline
-}
-
-func parentSubagentActivityPayload(snapshot subagentSnapshot) map[string]any {
-	title := strings.TrimSpace(snapshot.TaskName)
-	if title == "" {
-		title = strings.TrimSpace(snapshot.ThreadID)
-	}
-	lastMessage := strings.TrimSpace(snapshot.LastMessage)
-	return map[string]any{
-		"id":                 strings.TrimSpace(snapshot.ThreadID),
-		"subagent_id":        strings.TrimSpace(snapshot.ThreadID),
-		"thread_id":          strings.TrimSpace(snapshot.ThreadID),
-		"agent_type":         strings.TrimSpace(snapshot.AgentType),
-		"title":              title,
-		"task_name":          strings.TrimSpace(snapshot.TaskName),
-		"status":             strings.TrimSpace(snapshot.Status),
-		"last_message":       lastMessage,
-		"waiting_prompt":     strings.TrimSpace(snapshot.WaitingPrompt),
-		"queued_inputs":      snapshot.QueuedInputs,
-		"parent_thread_id":   strings.TrimSpace(snapshot.ParentThreadID),
-		"parent_turn_id":     strings.TrimSpace(snapshot.ParentTurnID),
-		"latest_turn_id":     strings.TrimSpace(snapshot.LatestTurnID),
-		"started_at_ms":      snapshot.CreatedAtMS,
-		"created_at_ms":      snapshot.CreatedAtMS,
-		"updated_at_ms":      snapshot.UpdatedAtMS,
-		"closed":             snapshot.Closed,
-		"can_send_input":     snapshot.CanSendInput,
-		"can_interrupt":      snapshot.CanInterrupt,
-		"can_close":          snapshot.CanClose,
-		"delegation_runtime": "floret",
-	}
-}
-
-func parentSubagentActivityState(status string) (observation.ActivityStatus, observation.ActivitySeverity, []observation.ActivityAttentionReason) {
-	switch strings.TrimSpace(status) {
-	case subagentStatusQueued:
-		return observation.ActivityStatusPending, observation.ActivitySeverityQuiet, nil
-	case subagentStatusRunning:
-		return observation.ActivityStatusRunning, observation.ActivitySeverityNormal, []observation.ActivityAttentionReason{observation.ActivityAttentionRunning}
-	case subagentStatusWaiting:
-		return observation.ActivityStatusWaiting, observation.ActivitySeverityBlocking, []observation.ActivityAttentionReason{observation.ActivityAttentionWaiting}
-	case subagentStatusCompleted:
-		return observation.ActivityStatusSuccess, observation.ActivitySeverityNormal, nil
-	case subagentStatusFailed, subagentStatusTimedOut:
-		return observation.ActivityStatusError, observation.ActivitySeverityError, []observation.ActivityAttentionReason{observation.ActivityAttentionError}
-	case subagentStatusCanceled:
-		return observation.ActivityStatusCanceled, observation.ActivitySeverityWarning, nil
-	default:
-		return observation.ActivityStatusPending, observation.ActivitySeverityQuiet, nil
-	}
-}
-
-func parentSubagentSummaryState(counts observation.ActivityCounts) (observation.ActivityStatus, observation.ActivitySeverity, bool, []observation.ActivityAttentionReason) {
-	if counts.Error > 0 {
-		return observation.ActivityStatusError, observation.ActivitySeverityError, true, []observation.ActivityAttentionReason{observation.ActivityAttentionError}
-	}
-	if counts.Waiting > 0 {
-		return observation.ActivityStatusWaiting, observation.ActivitySeverityBlocking, true, []observation.ActivityAttentionReason{observation.ActivityAttentionWaiting}
-	}
-	if counts.Running > 0 {
-		return observation.ActivityStatusRunning, observation.ActivitySeverityNormal, true, []observation.ActivityAttentionReason{observation.ActivityAttentionRunning}
-	}
-	if counts.Pending > 0 {
-		return observation.ActivityStatusPending, observation.ActivitySeverityQuiet, false, nil
-	}
-	if counts.Canceled > 0 && counts.Success == 0 {
-		return observation.ActivityStatusCanceled, observation.ActivitySeverityWarning, false, nil
-	}
-	return observation.ActivityStatusSuccess, observation.ActivitySeverityNormal, false, nil
-}
-
 func subagentSnapshotFromFloret(in flruntime.SubAgentSnapshot) subagentSnapshot {
 	return subagentSnapshot{
 		ThreadID:       strings.TrimSpace(string(in.ThreadID)),
@@ -3120,229 +2794,6 @@ func parentNamespacePublicID(r *run) string {
 	return strings.TrimSpace(r.sessionMeta.NamespacePublicID)
 }
 
-func projectedSubagentRunState(status string) (string, string, string) {
-	switch strings.TrimSpace(status) {
-	case subagentStatusCompleted:
-		return string(RunStateSuccess), "", ""
-	case subagentStatusFailed:
-		return string(RunStateFailed), "subagent_failed", "The delegated subagent failed."
-	case subagentStatusCanceled:
-		return string(RunStateCanceled), "", ""
-	case subagentStatusTimedOut:
-		return string(RunStateTimedOut), "subagent_timed_out", "The delegated subagent timed out."
-	case subagentStatusRunning, subagentStatusWaiting:
-		return string(RunStateRunning), "", ""
-	default:
-		return string(RunStateIdle), "", ""
-	}
-}
-
-func projectedSubagentMetadataJSON(snapshot subagentSnapshot) string {
-	payload := map[string]any{
-		"kind":               flowerSubagentProjectionOwnerKind,
-		"runtime":            "floret",
-		"thread_id":          strings.TrimSpace(snapshot.ThreadID),
-		"parent_thread_id":   strings.TrimSpace(snapshot.ParentThreadID),
-		"parent_turn_id":     strings.TrimSpace(snapshot.ParentTurnID),
-		"task_name":          strings.TrimSpace(snapshot.TaskName),
-		"agent_type":         strings.TrimSpace(snapshot.AgentType),
-		"context_mode":       normalizeSubagentContextMode(snapshot.ContextMode),
-		"status":             strings.TrimSpace(snapshot.Status),
-		"latest_turn_id":     strings.TrimSpace(snapshot.LatestTurnID),
-		"can_send_input":     snapshot.CanSendInput,
-		"can_interrupt":      snapshot.CanInterrupt,
-		"can_close":          snapshot.CanClose,
-		"updated_at_unix_ms": snapshot.UpdatedAtMS,
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return "{}"
-	}
-	return string(body)
-}
-
-func projectedSubagentLastMessage(messages []flruntime.ThreadMessage, fallback string, fallbackAt int64) (string, int64) {
-	for i := len(messages) - 1; i >= 0; i-- {
-		text := strings.TrimSpace(messages[i].Content)
-		if text == "" {
-			continue
-		}
-		at := timeUnixMS(messages[i].CreatedAt)
-		if at <= 0 {
-			at = fallbackAt
-		}
-		return truncateRunes(text, 160), at
-	}
-	text := strings.TrimSpace(fallback)
-	if text == "" {
-		return "", 0
-	}
-	return truncateRunes(text, 160), fallbackAt
-}
-
-func projectedSubagentMessage(endpointID string, threadID string, msg flruntime.ThreadMessage, index int, authorID string, authorEmail string) (threadstore.Message, bool, error) {
-	role := normalizeProjectedSubagentMessageRole(msg.Role)
-	content := strings.TrimSpace(msg.Content)
-	if role == "" || content == "" {
-		return threadstore.Message{}, false, nil
-	}
-	at := timeUnixMS(msg.CreatedAt)
-	if at <= 0 {
-		at = time.Now().UnixMilli()
-	}
-	messageID := projectedSubagentMessageID(threadID, msg, index)
-	blockType := "markdown"
-	if role == "user" {
-		blockType = "text"
-	}
-	raw, err := json.Marshal(persistedMessage{
-		ID:        messageID,
-		Role:      role,
-		Blocks:    []any{persistedTextBlock{Type: blockType, Content: content}},
-		Status:    "complete",
-		Timestamp: at,
-	})
-	if err != nil {
-		return threadstore.Message{}, false, err
-	}
-	return threadstore.Message{
-		ThreadID:           threadID,
-		EndpointID:         endpointID,
-		MessageID:          messageID,
-		Role:               role,
-		AuthorUserPublicID: authorID,
-		AuthorUserEmail:    authorEmail,
-		Status:             "complete",
-		CreatedAtUnixMs:    at,
-		UpdatedAtUnixMs:    at,
-		TextContent:        content,
-		MessageJSON:        string(raw),
-	}, true, nil
-}
-
-func projectedSubagentActivityMessage(endpointID string, threadID string, snapshot subagentSnapshot, thread flruntime.ThreadSnapshot, authorID string, authorEmail string) (threadstore.Message, bool, error) {
-	if threadID == "" {
-		return threadstore.Message{}, false, nil
-	}
-	at := firstPositiveInt64(snapshot.UpdatedAtMS, timeUnixMS(thread.UpdatedAt), time.Now().UnixMilli())
-	messageID := "floret_subagent_activity_" + stableProjectionHash(threadID+"\x00"+strings.TrimSpace(snapshot.LatestTurnID))
-	title := firstNonEmptyString(strings.TrimSpace(snapshot.TaskName), strings.TrimSpace(snapshot.ThreadID), "Subagent")
-	status := strings.TrimSpace(snapshot.Status)
-	summaryStatus := "running"
-	if isSubagentTerminalStatus(status) {
-		summaryStatus = "success"
-		if status == subagentStatusFailed || status == subagentStatusTimedOut {
-			summaryStatus = "error"
-		}
-	}
-	itemStatus := summaryStatus
-	if status == subagentStatusWaiting {
-		itemStatus = "waiting"
-	}
-	block := map[string]any{
-		"type":           "activity-timeline",
-		"schema_version": 1,
-		"run_id":         strings.TrimSpace(snapshot.LatestTurnID),
-		"thread_id":      threadID,
-		"turn_id":        strings.TrimSpace(snapshot.LatestTurnID),
-		"summary": map[string]any{
-			"status":          summaryStatus,
-			"severity":        "quiet",
-			"needs_attention": status == subagentStatusWaiting || status == subagentStatusFailed,
-			"total_items":     1,
-			"counts":          map[string]any{itemStatus: 1},
-		},
-		"items": []map[string]any{{
-			"item_id":           "subagent.lifecycle",
-			"tool_id":           "subagent.lifecycle",
-			"tool_name":         "subagents",
-			"kind":              "control",
-			"status":            itemStatus,
-			"severity":          "quiet",
-			"needs_attention":   status == subagentStatusWaiting || status == subagentStatusFailed,
-			"requires_approval": false,
-			"label":             "Subagent lifecycle",
-			"description":       title,
-			"payload": map[string]any{
-				"operation":          "subagents",
-				"action":             "inspect",
-				"delegation_runtime": "floret",
-				"thread_id":          threadID,
-				"subagent_id":        threadID,
-				"parent_thread_id":   strings.TrimSpace(snapshot.ParentThreadID),
-				"parent_turn_id":     strings.TrimSpace(snapshot.ParentTurnID),
-				"latest_turn_id":     strings.TrimSpace(snapshot.LatestTurnID),
-				"agent_type":         strings.TrimSpace(snapshot.AgentType),
-				"task_name":          title,
-				"status":             status,
-				"last_message":       strings.TrimSpace(snapshot.LastMessage),
-			},
-		}},
-	}
-	raw, err := json.Marshal(persistedMessage{
-		ID:        messageID,
-		Role:      "assistant",
-		Blocks:    []any{block},
-		Status:    "complete",
-		Timestamp: at,
-	})
-	if err != nil {
-		return threadstore.Message{}, false, err
-	}
-	return threadstore.Message{
-		ThreadID:           threadID,
-		EndpointID:         endpointID,
-		MessageID:          messageID,
-		Role:               "assistant",
-		AuthorUserPublicID: authorID,
-		AuthorUserEmail:    authorEmail,
-		Status:             "complete",
-		CreatedAtUnixMs:    at,
-		UpdatedAtUnixMs:    at,
-		TextContent:        "",
-		MessageJSON:        string(raw),
-	}, true, nil
-}
-
-func projectedSubagentMessageID(threadID string, msg flruntime.ThreadMessage, index int) string {
-	turnID := strings.TrimSpace(string(msg.TurnID))
-	role := strings.TrimSpace(msg.Role)
-	content := strings.TrimSpace(msg.Content)
-	createdAt := timeUnixMS(msg.CreatedAt)
-	hash := stableProjectionHash(strings.Join([]string{
-		strings.TrimSpace(threadID),
-		turnID,
-		role,
-		fmt.Sprintf("%d", createdAt),
-		content,
-		fmt.Sprintf("%d", index),
-	}, "\x00"))
-	parts := []string{"floret", "subagent"}
-	if turnID != "" && isSafeClientMessageID(turnID) {
-		parts = append(parts, turnID)
-	}
-	parts = append(parts, hash)
-	return strings.Join(parts, "_")
-}
-
-func stableProjectionHash(raw string) string {
-	sum := sha256.Sum256([]byte(raw))
-	return hex.EncodeToString(sum[:])[:16]
-}
-
-func normalizeProjectedSubagentMessageRole(raw string) string {
-	switch strings.TrimSpace(strings.ToLower(raw)) {
-	case "user":
-		return "user"
-	case "assistant":
-		return "assistant"
-	case "system":
-		return "system"
-	default:
-		return ""
-	}
-}
-
 func subagentListPayload(snapshot subagentSnapshot) map[string]any {
 	payload := subagentSnapshotPayload(snapshot)
 	return map[string]any{
@@ -3392,10 +2843,6 @@ func isSubagentTerminalStatus(status string) bool {
 	default:
 		return false
 	}
-}
-
-func isFloretActiveTurnError(err error) bool {
-	return err != nil && strings.Contains(err.Error(), "active turn")
 }
 
 func normalizeSubagentAgentType(raw string) string {
@@ -3528,7 +2975,7 @@ func (s floretSubagentEventSink) EmitEvent(ev flruntime.Event) {
 		return
 	}
 	if s.runtime != nil {
-		s.runtime.scheduleProjectedSubagentSync(eventThreadID)
+		s.runtime.scheduleParentSubagentTimelineRefresh(eventThreadID)
 	}
 	parent.persistRunEvent("delegation.child.event", RealtimeStreamKindLifecycle, map[string]any{
 		"event_type": strings.TrimSpace(ev.Type),

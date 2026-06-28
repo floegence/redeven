@@ -574,7 +574,7 @@ func TestFloretSubagents_DelegateAndWait(t *testing.T) {
 	}
 }
 
-func TestFloretSubagents_ProjectChildThreadForFlowerNavigation(t *testing.T) {
+func TestFloretSubagents_DoNotProjectChildThreadForFlowerNavigation(t *testing.T) {
 	t.Parallel()
 
 	workspace := t.TempDir()
@@ -619,6 +619,10 @@ func TestFloretSubagents_ProjectChildThreadForFlowerNavigation(t *testing.T) {
 		t.Fatalf("NewService: %v", err)
 	}
 	t.Cleanup(func() { _ = svc.Close() })
+	parent, err := svc.CreateThread(context.Background(), meta, "Parent", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread parent: %v", err)
+	}
 
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
@@ -637,7 +641,7 @@ func TestFloretSubagents_ProjectChildThreadForFlowerNavigation(t *testing.T) {
 		RunID:        "run_parent_projection",
 		ChannelID:    meta.ChannelID,
 		EndpointID:   meta.EndpointID,
-		ThreadID:     "th_parent_projection",
+		ThreadID:     parent.ThreadID,
 		UserPublicID: meta.UserPublicID,
 		MessageID:    "m_parent_projection",
 		ThreadsDB:    svc.threadsDB,
@@ -665,49 +669,52 @@ func TestFloretSubagents_ProjectChildThreadForFlowerNavigation(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("manageSubagents(wait): %v", err)
 	}
+	runtime, ok := r.subagentRuntime.(*floretSubagentRuntime)
+	if !ok || runtime == nil {
+		t.Fatalf("subagent runtime=%T, want floret runtime", r.subagentRuntime)
+	}
+	svc.mu.Lock()
+	svc.subagentRuntimes[runThreadKey(meta.EndpointID, parent.ThreadID)] = runtime
+	svc.mu.Unlock()
 
 	thread, err := svc.GetThread(context.Background(), meta, id)
-	if !errors.Is(err, sql.ErrNoRows) || thread != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("GetThread(child) err=%v, want nil or sql.ErrNoRows", err)
+	}
+	if thread != nil {
 		t.Fatalf("GetThread(child) thread=%#v err=%v, want hidden projection", thread, err)
 	}
-	if bootstrap, err := svc.GetFlowerThreadLiveBootstrap(context.Background(), meta, id); !errors.Is(err, sql.ErrNoRows) || bootstrap != nil {
+	if bootstrap, err := svc.GetFlowerThreadLiveBootstrap(context.Background(), meta, id); (err != nil && !errors.Is(err, sql.ErrNoRows)) || bootstrap != nil {
 		t.Fatalf("GetFlowerThreadLiveBootstrap(child) bootstrap=%#v err=%v, want hidden projection", bootstrap, err)
 	}
 
-	messagesBefore, _, _, err := svc.threadsDB.ListMessages(context.Background(), meta.EndpointID, id, 500, 0)
+	messages, _, _, err := svc.threadsDB.ListMessages(context.Background(), meta.EndpointID, id, 500, 0)
 	if err != nil {
-		t.Fatalf("ListMessages before resync: %v", err)
+		t.Fatalf("ListMessages child: %v", err)
 	}
-	threadBefore, err := svc.threadsDB.GetThread(context.Background(), meta.EndpointID, id)
+	if len(messages) != 0 {
+		t.Fatalf("child transcript projected into Redeven messages: %#v", messages)
+	}
+	threadRecord, err := svc.threadsDB.GetThread(context.Background(), meta.EndpointID, id)
 	if err != nil {
-		t.Fatalf("GetThread before resync: %v", err)
+		t.Fatalf("GetThread child store: %v", err)
 	}
-	if threadBefore == nil || threadBefore.RunStatus != string(RunStateSuccess) {
-		t.Fatalf("projected child store record missing or wrong status: %#v", threadBefore)
+	if threadRecord != nil {
+		t.Fatalf("child thread projected into Redeven threadstore: %#v", threadRecord)
 	}
 	childMeta, err := svc.threadsDB.GetFlowerThreadMetadata(context.Background(), meta.EndpointID, id)
 	if err != nil {
 		t.Fatalf("GetFlowerThreadMetadata child: %v", err)
 	}
-	if !isExpectedFlowerSubagentProjection(childMeta, "th_parent_projection", id) {
-		t.Fatalf("child metadata not projected: %#v", childMeta)
+	if childMeta != nil {
+		t.Fatalf("child projection metadata should not be created: %#v", childMeta)
 	}
-	if err := r.subagentRuntime.(*floretSubagentRuntime).syncProjectedSubagentThreadByID(context.Background(), id); err != nil {
-		t.Fatalf("syncProjectedSubagentThreadByID: %v", err)
-	}
-	messagesAfter, _, _, err := svc.threadsDB.ListMessages(context.Background(), meta.EndpointID, id, 500, 0)
+	detail, err := svc.GetFlowerSubagentDetail(context.Background(), meta, parent.ThreadID, id, 0, 50)
 	if err != nil {
-		t.Fatalf("ListMessages after resync: %v", err)
+		t.Fatalf("GetFlowerSubagentDetail without child projection metadata: %v", err)
 	}
-	threadAfter, err := svc.threadsDB.GetThread(context.Background(), meta.EndpointID, id)
-	if err != nil {
-		t.Fatalf("GetThread after resync: %v", err)
-	}
-	if len(messagesAfter) != len(messagesBefore) {
-		t.Fatalf("projected resync duplicated messages: before=%d after=%d", len(messagesBefore), len(messagesAfter))
-	}
-	if threadBefore != nil && threadAfter != nil && threadAfter.UpdatedAtUnixMs != threadBefore.UpdatedAtUnixMs {
-		t.Fatalf("idempotent projected resync bumped thread updated_at: before=%d after=%d", threadBefore.UpdatedAtUnixMs, threadAfter.UpdatedAtUnixMs)
+	if detail == nil || detail.Summary.ThreadID != id || detail.Summary.ParentThreadID != parent.ThreadID {
+		t.Fatalf("unexpected subagent detail: %#v", detail)
 	}
 
 	_, err = svc.SendUserTurn(context.Background(), meta, SendUserTurnRequest{
@@ -716,12 +723,12 @@ func TestFloretSubagents_ProjectChildThreadForFlowerNavigation(t *testing.T) {
 		Input:    RunInput{Text: "try to write to child"},
 		Options:  RunOptions{PermissionType: config.AIPermissionApprovalRequired},
 	})
-	if !errors.Is(err, ErrReadOnlyThread) {
-		t.Fatalf("SendUserTurn(child) err=%v, want %v", err, ErrReadOnlyThread)
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "thread not found") {
+		t.Fatalf("SendUserTurn(child) err=%v, want thread not found", err)
 	}
 }
 
-func TestFloretSubagents_ProjectChildThreadRejectsProductThreadCollision(t *testing.T) {
+func TestFloretSubagents_ActivityRefreshDoesNotMutateProductThread(t *testing.T) {
 	t.Parallel()
 
 	workspace := t.TempDir()
@@ -770,7 +777,7 @@ func TestFloretSubagents_ProjectChildThreadRejectsProductThreadCollision(t *test
 	r.currentModelID = "openai/gpt-5-mini"
 	runtime := newFloretSubagentRuntime(r)
 
-	err = runtime.syncProjectedSubagentThread(context.Background(), subagentSnapshot{
+	runtime.refreshSubagentTimeline(context.Background(), subagentSnapshot{
 		ThreadID:       "th_existing_product",
 		TaskName:       "collision",
 		ParentThreadID: parentThreadID,
@@ -779,9 +786,6 @@ func TestFloretSubagents_ProjectChildThreadRejectsProductThreadCollision(t *test
 		CreatedAtMS:    time.Now().UnixMilli(),
 		UpdatedAtMS:    time.Now().UnixMilli(),
 	})
-	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "collides") {
-		t.Fatalf("syncProjectedSubagentThread err=%v, want collision", err)
-	}
 
 	existing, err := db.GetThread(context.Background(), endpointID, "th_existing_product")
 	if err != nil {
@@ -1278,12 +1282,13 @@ func TestSubagentsTool_ContextModeHelpers(t *testing.T) {
 	}); got != subagentContextModeFullHistory {
 		t.Fatalf("aggregate context mode=%q, want full_history", got)
 	}
-	raw := projectedSubagentMetadataJSON(subagentSnapshot{
+	runtime := &floretSubagentRuntime{}
+	runtime.rememberSubagentContextMode(subagentSnapshot{
 		ThreadID:    "child-1",
 		ContextMode: subagentContextModeFullHistory,
 	})
-	if got := contextModeFromSubagentMetadataJSON(raw); got != subagentContextModeFullHistory {
-		t.Fatalf("metadata context mode=%q, want full_history raw=%s", got, raw)
+	if got := runtime.snapshotContextMode(context.Background(), "child-1"); got != subagentContextModeFullHistory {
+		t.Fatalf("stored context mode=%q, want full_history", got)
 	}
 }
 
@@ -1473,6 +1478,16 @@ func (h *fakeCloseAllFloretHost) StartThread(context.Context, flruntime.StartThr
 	return flruntime.ThreadSnapshot{}, nil
 }
 
+func (h *fakeCloseAllFloretHost) EnsureThread(_ context.Context, req flruntime.EnsureThreadRequest) (flruntime.ThreadSummary, error) {
+	now := time.Now()
+	return flruntime.ThreadSummary{
+		ID:               req.ThreadID,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+		CanAppendMessage: true,
+	}, nil
+}
+
 func (h *fakeCloseAllFloretHost) ReadThread(context.Context, flruntime.ThreadID) (flruntime.ThreadSnapshot, error) {
 	return flruntime.ThreadSnapshot{}, nil
 }
@@ -1513,6 +1528,10 @@ func (h *fakeCloseAllFloretHost) ListSubAgents(context.Context, flruntime.Thread
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return append([]flruntime.SubAgentSnapshot(nil), h.snapshots...), nil
+}
+
+func (h *fakeCloseAllFloretHost) ListSubAgentActivityTimeline(context.Context, flruntime.ListSubAgentActivityTimelineRequest) (flruntime.SubAgentActivityTimelineResult, error) {
+	return flruntime.SubAgentActivityTimelineResult{}, nil
 }
 
 func (h *fakeCloseAllFloretHost) CloseSubAgent(_ context.Context, req flruntime.CloseSubAgentRequest) (flruntime.SubAgentSnapshot, error) {
