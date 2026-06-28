@@ -79,7 +79,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       setStore('draft', reconcile(props.provider));
       setAdvancedOpen(false);
       setCustomModelName('');
-      setExpandedProviderType(null);
+      setExpandedProviderType(props.mode === 'edit' && props.provider ? props.provider.type : null);
     }
   });
 
@@ -102,6 +102,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   };
 
   const toggleProviderType = (type: FlowerProviderType) => {
+    if (props.mode === 'edit') return;
     setExpandedProviderType((current) => (current === type ? null : type));
     if (store.draft?.type !== type) changeProviderType(type);
   };
@@ -180,10 +181,11 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
               description={copy().providerTypeDescription}
             />
             <div class="space-y-2">
-              <For each={FLOWER_PROVIDER_TYPES}>
+              <For each={props.mode === 'edit' ? FLOWER_PROVIDER_TYPES.filter((t) => t.value === store.draft?.type) : FLOWER_PROVIDER_TYPES}>
                 {(item) => {
+                  const editMode = props.mode === 'edit';
                   const active = () => store.draft!.type === item.value;
-                  const expanded = () => expandedProviderType() === item.value;
+                  const expanded = () => editMode || expandedProviderType() === item.value;
                   const panelID = `flower-provider-type-${item.value}`;
                   const providerID = () => String(store.draft!.id ?? '').trim();
                   const builtInSearch = () => copy().builtInWebSearch[store.draft!.type] ?? '';
