@@ -214,6 +214,43 @@ LIMIT 1
 	return normalizePermissionSnapshotRecord(rec), true, nil
 }
 
+func (s *Store) GetFinalizedChildPermissionSnapshot(ctx context.Context, endpointID string, childThreadID string, childRunID string) (ChildPermissionSnapshotRecord, bool, error) {
+	if s == nil || s.db == nil {
+		return ChildPermissionSnapshotRecord{}, false, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	childThreadID = strings.TrimSpace(childThreadID)
+	childRunID = strings.TrimSpace(childRunID)
+	if endpointID == "" || childThreadID == "" || childRunID == "" {
+		return ChildPermissionSnapshotRecord{}, false, errors.New("invalid child permission snapshot lookup")
+	}
+	row := s.db.QueryRowContext(ctx, `
+SELECT child_snapshot_id, endpoint_id, parent_snapshot_id, spawn_tool_call_id,
+       parent_thread_id, parent_run_id, subagent_id, child_thread_id, child_run_id,
+       state, snapshot_json, snapshot_hash, registry_hash, schema_hash, presentation_hash,
+       created_at_unix_ms, finalized_at_unix_ms
+FROM ai_child_permission_snapshots
+WHERE endpoint_id = ? AND child_thread_id = ? AND child_run_id = ? AND state = 'finalized'
+LIMIT 1
+`, endpointID, childThreadID, childRunID)
+	var rec ChildPermissionSnapshotRecord
+	if err := row.Scan(
+		&rec.ChildSnapshotID, &rec.EndpointID, &rec.ParentSnapshotID, &rec.SpawnToolCallID,
+		&rec.ParentThreadID, &rec.ParentRunID, &rec.SubagentID, &rec.ChildThreadID, &rec.ChildRunID,
+		&rec.State, &rec.SnapshotJSON, &rec.SnapshotHash, &rec.RegistryHash, &rec.SchemaHash, &rec.PresentationHash,
+		&rec.CreatedAtUnixMs, &rec.FinalizedAtUnixMs,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ChildPermissionSnapshotRecord{}, false, nil
+		}
+		return ChildPermissionSnapshotRecord{}, false, err
+	}
+	return normalizeChildPermissionSnapshotRecord(rec), true, nil
+}
+
 func (s *Store) GetFinalizedChildPermissionSnapshotByThread(ctx context.Context, endpointID string, childThreadID string) (ChildPermissionSnapshotRecord, bool, error) {
 	if s == nil || s.db == nil {
 		return ChildPermissionSnapshotRecord{}, false, errors.New("store not initialized")

@@ -146,6 +146,36 @@ func permissionPolicyTestChildRunID(childThreadID string) string {
 	return "child_run_" + strings.TrimSpace(childThreadID)
 }
 
+func configurePermissionPolicyDelegatedChild(t *testing.T, parent *run, child *run, childThreadID string, toolNames ...string) {
+	t.Helper()
+	if len(toolNames) == 0 {
+		toolNames = []string{"terminal.exec"}
+	}
+	if child != nil && child.service == nil && parent != nil {
+		child.service = parent.service
+	}
+	if parent != nil && parent.threadsDB == nil && parent.service != nil {
+		parent.threadsDB = parent.service.threadsDB
+	}
+	if parent != nil {
+		parent.persistPermissionSnapshot(parent.permissionSnapshot)
+	}
+	if child != nil && child.threadsDB == nil {
+		if child.service != nil {
+			child.threadsDB = child.service.threadsDB
+		} else if parent != nil {
+			child.threadsDB = parent.threadsDB
+		}
+	}
+	child.noUserInteraction = true
+	child.allowDelegatedApproval = true
+	child.delegatedApprovalParent = parent
+	child.subagentDepth = 1
+	child.threadID = childThreadID
+	child.id = permissionPolicyTestChildRunID(childThreadID)
+	insertPermissionPolicyChildSnapshot(t, parent, childThreadID, toolNames...)
+}
+
 func newPermissionPolicyBridgeService(t *testing.T) *Service {
 	t.Helper()
 	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
@@ -158,6 +188,33 @@ func newPermissionPolicyBridgeService(t *testing.T) *Service {
 		delegatedApprovals: map[string]*delegatedApprovalHandle{},
 		threadsDB:          store,
 		persistOpTO:        time.Second,
+	}
+}
+
+func TestPermissionPolicy_ParentInvocationRejectsMismatchedFloretRunID(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	svc := newPermissionPolicyBridgeService(t)
+	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "parent_identity_mismatch")
+	parent.service = svc
+	parent.threadsDB = svc.threadsDB
+
+	execRun, err := floretInvocationRunContext(parent, fltools.Invocation[map[string]any]{
+		RunID:    "wrong_floret_run",
+		ThreadID: parent.threadID,
+		TurnID:   parent.messageID,
+	})
+	if err == nil || !strings.Contains(err.Error(), "run identity mismatch") {
+		t.Fatalf("floretInvocationRunContext err=%v, want run identity mismatch", err)
+	}
+	if execRun != nil {
+		t.Fatalf("mismatched parent identity returned run: %#v", execRun)
+	}
+	if rec, ok, err := svc.threadsDB.GetFinalizedChildPermissionSnapshot(context.Background(), parent.endpointID, "child_identity_mismatch", "child_run_identity_mismatch"); err != nil {
+		t.Fatalf("GetFinalizedChildPermissionSnapshot: %v", err)
+	} else if ok {
+		t.Fatalf("mismatched parent identity created child snapshot: %#v", rec)
 	}
 }
 
@@ -174,14 +231,20 @@ func TestPermissionPolicy_ChildInvocationUsesStoredPermissionSnapshot(t *testing
 	snapshot := insertPermissionPolicyChildSnapshot(t, parent, childThreadID, "okf.search")
 	childBase := parent.subagentChildRun()
 	childBase.permissionType = FlowerPermissionFullAccess
+	childRunID := permissionPolicyTestChildRunID(childThreadID)
 
-	execRun := floretInvocationRunContext(childBase, fltools.Invocation[map[string]any]{
-		RunID:    childThreadID,
+	execRun, err := floretInvocationRunContext(childBase, fltools.Invocation[map[string]any]{
+		RunID:    "floret-exec-child-snapshot-invocation",
 		ThreadID: childThreadID,
+		TurnID:   "child-turn",
 		HostContext: map[string]string{
 			subagentToolHostContextChildThreadIDKey: childThreadID,
+			subagentToolHostContextChildRunIDKey:    childRunID,
 		},
 	})
+	if err != nil {
+		t.Fatalf("floretInvocationRunContext: %v", err)
+	}
 	if execRun == nil {
 		t.Fatalf("floretInvocationRunContext returned nil")
 	}
@@ -209,14 +272,20 @@ func TestPermissionPolicy_ChildSnapshotWithWidenedToolSetFailsClosed(t *testing.
 	childRun := parent.subagentChildRun()
 	widened := buildPermissionPolicySnapshotForTools(t, childRun, childThreadID, "okf.search", "read_file")
 	insertPermissionPolicyChildSnapshotRecord(t, parent, childThreadID, widened, nil)
+	childRunID := permissionPolicyTestChildRunID(childThreadID)
 
-	execRun := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
-		RunID:    childThreadID,
+	execRun, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+		RunID:    "floret-exec-child-snapshot-widened",
 		ThreadID: childThreadID,
+		TurnID:   "child-turn",
 		HostContext: map[string]string{
 			subagentToolHostContextChildThreadIDKey: childThreadID,
+			subagentToolHostContextChildRunIDKey:    childRunID,
 		},
 	})
+	if err != nil {
+		t.Fatalf("floretInvocationRunContext: %v", err)
+	}
 	if execRun == nil {
 		t.Fatalf("floretInvocationRunContext returned nil")
 	}
@@ -243,14 +312,20 @@ func TestPermissionPolicy_ChildSnapshotHashMismatchFailsClosed(t *testing.T) {
 	insertPermissionPolicyChildSnapshotRecord(t, parent, childThreadID, snapshot, func(rec *threadstore.ChildPermissionSnapshotRecord) {
 		rec.SnapshotHash = "tampered_hash"
 	})
+	childRunID := permissionPolicyTestChildRunID(childThreadID)
 
-	execRun := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
-		RunID:    childThreadID,
+	execRun, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+		RunID:    "floret-exec-child-snapshot-hash",
 		ThreadID: childThreadID,
+		TurnID:   "child-turn",
 		HostContext: map[string]string{
 			subagentToolHostContextChildThreadIDKey: childThreadID,
+			subagentToolHostContextChildRunIDKey:    childRunID,
 		},
 	})
+	if err != nil {
+		t.Fatalf("floretInvocationRunContext: %v", err)
+	}
 	if execRun == nil {
 		t.Fatalf("floretInvocationRunContext returned nil")
 	}
@@ -349,14 +424,18 @@ func TestPermissionPolicy_ChildSnapshotCompatibilityHashMismatchFailsClosed(t *t
 			})
 
 			childRunID := permissionPolicyTestChildRunID(childThreadID)
-			execRun := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
-				RunID:    childRunID,
+			execRun, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+				RunID:    "floret-exec-" + childThreadID,
 				ThreadID: childThreadID,
+				TurnID:   "child-turn",
 				HostContext: map[string]string{
 					subagentToolHostContextChildThreadIDKey: childThreadID,
 					subagentToolHostContextChildRunIDKey:    childRunID,
 				},
 			})
+			if err != nil {
+				t.Fatalf("floretInvocationRunContext: %v", err)
+			}
 			if execRun == nil {
 				t.Fatalf("floretInvocationRunContext returned nil")
 			}
@@ -406,14 +485,18 @@ func TestPermissionPolicy_ChildSnapshotParentOwnerMismatchFailsClosed(t *testing
 			insertPermissionPolicyChildSnapshotRecord(t, parent, childThreadID, snapshot, tc.mutate)
 
 			childRunID := permissionPolicyTestChildRunID(childThreadID)
-			execRun := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
-				RunID:    childRunID,
+			execRun, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+				RunID:    "floret-exec-" + childThreadID,
 				ThreadID: childThreadID,
+				TurnID:   "child-turn",
 				HostContext: map[string]string{
 					subagentToolHostContextChildThreadIDKey: childThreadID,
 					subagentToolHostContextChildRunIDKey:    childRunID,
 				},
 			})
+			if err != nil {
+				t.Fatalf("floretInvocationRunContext: %v", err)
+			}
 			if execRun == nil {
 				t.Fatalf("floretInvocationRunContext returned nil")
 			}
@@ -492,14 +575,18 @@ WHERE endpoint_id = ? AND child_thread_id = ?
 			}
 
 			childRunID := permissionPolicyTestChildRunID(childThreadID)
-			execRun := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
-				RunID:    childRunID,
+			execRun, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+				RunID:    "floret-exec-" + childThreadID,
 				ThreadID: childThreadID,
+				TurnID:   "child-turn",
 				HostContext: map[string]string{
 					subagentToolHostContextChildThreadIDKey: childThreadID,
 					subagentToolHostContextChildRunIDKey:    childRunID,
 				},
 			})
+			if err != nil {
+				t.Fatalf("floretInvocationRunContext: %v", err)
+			}
 			if execRun == nil {
 				t.Fatalf("floretInvocationRunContext returned nil")
 			}
@@ -690,14 +777,19 @@ func TestPermissionPolicy_ChildApprovalUsesStoredPermissionSnapshot(t *testing.T
 	freezePermissionPolicyTestSnapshot(t, parent)
 	childThreadID := "child_snapshot_approval"
 	insertPermissionPolicyChildSnapshot(t, parent, childThreadID, "okf.search")
+	childRunID := permissionPolicyTestChildRunID(childThreadID)
 	childBase := parent.subagentChildRun()
 	childBase.permissionType = FlowerPermissionFullAccess
 
 	decision, err := childBase.approveFloretTool(context.Background(), fltools.ApprovalRequest{
-		ID:   "tool_call_1",
-		Name: "terminal.exec",
+		ID:       "tool_call_1",
+		Name:     "terminal.exec",
+		RunID:    "floret-exec-child-snapshot-approval",
+		ThreadID: childThreadID,
+		TurnID:   "child-turn",
 		HostContext: map[string]string{
 			subagentToolHostContextChildThreadIDKey: childThreadID,
+			subagentToolHostContextChildRunIDKey:    childRunID,
 		},
 	})
 	if err != nil {
@@ -718,14 +810,20 @@ func TestPermissionPolicy_ChildInvocationMissingStoredSnapshotFailsClosed(t *tes
 	parent.threadsDB = svc.threadsDB
 	freezePermissionPolicyTestSnapshot(t, parent)
 	childBase := parent.subagentChildRun()
+	childRunID := permissionPolicyTestChildRunID("child_missing")
 
-	execRun := floretInvocationRunContext(childBase, fltools.Invocation[map[string]any]{
-		RunID:    "child_missing",
+	execRun, err := floretInvocationRunContext(childBase, fltools.Invocation[map[string]any]{
+		RunID:    "floret-exec-child-missing",
 		ThreadID: "child_missing",
+		TurnID:   "child-turn",
 		HostContext: map[string]string{
 			subagentToolHostContextChildThreadIDKey: "child_missing",
+			subagentToolHostContextChildRunIDKey:    childRunID,
 		},
 	})
+	if err != nil {
+		t.Fatalf("floretInvocationRunContext: %v", err)
+	}
 	if execRun == nil {
 		t.Fatalf("floretInvocationRunContext returned nil")
 	}
@@ -1534,11 +1632,7 @@ func TestPermissionPolicy_SubagentApprovalDelegatesToParentRun(t *testing.T) {
 	parent.service = svc
 	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child")
 	child.service = svc
-	child.noUserInteraction = true
-	child.allowDelegatedApproval = true
-	child.delegatedApprovalParent = parent
-	child.subagentDepth = 1
-	child.threadID = "child_thread_delegated"
+	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_delegated")
 
 	type result struct {
 		outcome *toolCallOutcome
@@ -1619,11 +1713,7 @@ func TestPermissionPolicy_SubagentDelegatedSubmitRequiresParentOwner(t *testing.
 	parent.service = svc
 	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_owner")
 	child.service = svc
-	child.noUserInteraction = true
-	child.allowDelegatedApproval = true
-	child.delegatedApprovalParent = parent
-	child.subagentDepth = 1
-	child.threadID = "child_thread_owner"
+	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_owner")
 
 	type result struct {
 		outcome *toolCallOutcome
@@ -1700,11 +1790,7 @@ func TestPermissionPolicy_SubagentDelegatedConcurrentSubmitOnlyOneWins(t *testin
 	parent.service = svc
 	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_race")
 	child.service = svc
-	child.noUserInteraction = true
-	child.allowDelegatedApproval = true
-	child.delegatedApprovalParent = parent
-	child.subagentDepth = 1
-	child.threadID = "child_thread_race"
+	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_race")
 
 	type result struct {
 		outcome *toolCallOutcome
@@ -1803,11 +1889,7 @@ func TestPermissionPolicy_SubagentDelegatedStaleVersionAndSurfaceEpochDoNotDeliv
 	parent.service = svc
 	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_stale")
 	child.service = svc
-	child.noUserInteraction = true
-	child.allowDelegatedApproval = true
-	child.delegatedApprovalParent = parent
-	child.subagentDepth = 1
-	child.threadID = "child_thread_stale"
+	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_stale")
 
 	type result struct {
 		outcome *toolCallOutcome
@@ -1882,11 +1964,7 @@ func TestPermissionPolicy_SubagentDelegatedIdempotencyConflictDoesNotRedeliver(t
 	parent.service = svc
 	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_idem")
 	child.service = svc
-	child.noUserInteraction = true
-	child.allowDelegatedApproval = true
-	child.delegatedApprovalParent = parent
-	child.subagentDepth = 1
-	child.threadID = "child_thread_idem"
+	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_idem")
 
 	type result struct {
 		outcome *toolCallOutcome
@@ -1948,11 +2026,7 @@ func TestPermissionPolicy_SubagentDelegatedRepeatedAskReusesRecordAndLiveAction(
 	parent.service = svc
 	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_repeat")
 	child.service = svc
-	child.noUserInteraction = true
-	child.allowDelegatedApproval = true
-	child.delegatedApprovalParent = parent
-	child.subagentDepth = 1
-	child.threadID = "child_thread_repeat"
+	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_repeat")
 	req := fltools.ApprovalRequest{
 		ID:         "tool_child_repeat",
 		ApprovalID: "approval_child_repeat",
@@ -2138,11 +2212,7 @@ func TestPermissionPolicy_SubagentDelegatedSubmitRequiresMatchingRef(t *testing.
 	parent.service = svc
 	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_ref")
 	child.service = svc
-	child.noUserInteraction = true
-	child.allowDelegatedApproval = true
-	child.delegatedApprovalParent = parent
-	child.subagentDepth = 1
-	child.threadID = "child_thread_ref"
+	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_ref")
 
 	type result struct {
 		outcome *toolCallOutcome
@@ -2207,11 +2277,7 @@ func TestPermissionPolicy_SubagentDelegatedRejectPreventsExecution(t *testing.T)
 	parent.service = svc
 	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_reject")
 	child.service = svc
-	child.noUserInteraction = true
-	child.allowDelegatedApproval = true
-	child.delegatedApprovalParent = parent
-	child.subagentDepth = 1
-	child.threadID = "child_thread_reject"
+	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_reject")
 
 	type result struct {
 		outcome *toolCallOutcome

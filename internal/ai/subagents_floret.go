@@ -626,9 +626,9 @@ func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floret
 		if childThreadID == "" {
 			childThreadID = strings.TrimSpace(req.HostContext[subagentToolHostContextChildThreadIDKey])
 		}
-		childRunID := strings.TrimSpace(string(req.RunID))
+		childRunID := strings.TrimSpace(req.HostContext[subagentToolHostContextChildRunIDKey])
 		if childRunID == "" {
-			childRunID = strings.TrimSpace(req.HostContext[subagentToolHostContextChildRunIDKey])
+			return flruntime.ToolSurface{}, errors.New("missing subagent child run identity")
 		}
 		childRun.threadID = childThreadID
 		childRun.id = childRunID
