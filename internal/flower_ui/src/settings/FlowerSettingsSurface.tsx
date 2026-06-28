@@ -407,9 +407,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     return saved;
   };
 
-  const confirmProviderDialog = async () => {
-    const draft = providerDialogProvider();
-    if (!draft) return;
+  const confirmProviderDialog = async (draft: FlowerProviderDraft) => {
     setProviderDialogError('');
     const normalized = normalizeProviderForSave(draft);
     const index = providerDialogIndex();
@@ -729,8 +727,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
         error={providerDialogError()}
         saving={props.saving}
         onOpenChange={(open) => setProviderDialogOpen(open)}
-        onConfirm={confirmProviderDialog}
-        onChange={setProviderDialogProvider}
+        onConfirm={(draft) => void confirmProviderDialog(draft)}
       />
     </>
   );
