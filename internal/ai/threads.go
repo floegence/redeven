@@ -919,6 +919,7 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 		cancel()
 		s.broadcastThreadSummary(endpointID, threadID)
 	}
+	s.closeThreadSubagents(context.Background(), endpointID, threadID, persistTO)
 	return nil
 }
 
@@ -958,6 +959,15 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
 	}
+	loadCtx, loadCancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
+	th, err := db.GetThread(loadCtx, endpointID, threadID)
+	loadCancel()
+	if err != nil {
+		return err
+	}
+	if th == nil {
+		return sql.ErrNoRows
+	}
 
 	if runID != "" {
 		if !force {
@@ -993,11 +1003,8 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		}
 	}
 
-	if runtime := s.removeThreadSubagentRuntime(thKey); runtime != nil {
-		closeCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-		runtime.closeAllExisting(closeCtx)
-		cancel()
-		runtime.release()
+	if err := s.deleteFloretThreadTree(ctx, meta, *th, persistTO); err != nil {
+		return err
 	}
 	if err := s.deleteSubagentProjectionThreadsForParent(ctx, db, endpointID, threadID, persistTO); err != nil {
 		return err

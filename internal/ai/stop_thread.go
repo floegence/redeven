@@ -172,6 +172,7 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 		ucancel()
 		a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
 	}
+	a.mgr.svc.closeThreadSubagents(ctx, endpointID, threadID, persistTO)
 	resp := StopThreadResponse{OK: true, RecoveredFollowups: make([]FollowupItemView, 0, len(recovered))}
 	for i, rec := range recovered {
 		resp.RecoveredFollowups = append(resp.RecoveredFollowups, followupRecordToView(rec, i+1))

@@ -6,12 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	flconfig "github.com/floegence/floret/config"
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
@@ -55,18 +58,21 @@ func TestRunCancelDoesNotReleaseSubagentRuntime(t *testing.T) {
 }
 
 type recordingFloretHost struct {
-	mu                 sync.Mutex
-	closeCount         atomic.Int32
-	closeSubagentCount atomic.Int32
-	listSubagentCount  atomic.Int32
-	spawnErr           error
-	snapshots          []flruntime.SubAgentSnapshot
-	threads            map[flruntime.ThreadID]flruntime.ThreadSnapshot
-	detail             flruntime.SubAgentDetail
-	detailErr          error
-	detailRequests     []flruntime.ReadSubAgentDetailRequest
-	spawnRequests      []flruntime.SpawnSubAgentRequest
-	sendInputRequests  []flruntime.SendSubAgentInputRequest
+	mu                  sync.Mutex
+	closeCount          atomic.Int32
+	closeSubagentCount  atomic.Int32
+	closeSubagentsCount atomic.Int32
+	deleteThreadCount   atomic.Int32
+	listSubagentCount   atomic.Int32
+	spawnErr            error
+	snapshots           []flruntime.SubAgentSnapshot
+	threads             map[flruntime.ThreadID]flruntime.ThreadSnapshot
+	detail              flruntime.SubAgentDetail
+	detailErr           error
+	detailRequests      []flruntime.ReadSubAgentDetailRequest
+	spawnRequests       []flruntime.SpawnSubAgentRequest
+	sendInputRequests   []flruntime.SendSubAgentInputRequest
+	deleteThreadIDs     []flruntime.ThreadID
 }
 
 func (h *recordingFloretHost) StartThread(context.Context, flruntime.StartThreadRequest) (flruntime.ThreadSnapshot, error) {
@@ -127,6 +133,7 @@ func (h *recordingFloretHost) SpawnSubAgent(_ context.Context, req flruntime.Spa
 		ParentThreadID: req.ParentThreadID,
 		TaskName:       req.TaskName,
 		HostProfileRef: req.HostProfileRef,
+		ForkMode:       req.ForkMode,
 		Status:         flruntime.SubAgentStatusRunning,
 		CreatedAt:      now,
 		UpdatedAt:      now,
@@ -245,6 +252,34 @@ func (h *recordingFloretHost) CloseSubAgent(_ context.Context, req flruntime.Clo
 	return flruntime.SubAgentSnapshot{}, nil
 }
 
+func (h *recordingFloretHost) CloseSubAgents(context.Context, flruntime.CloseSubAgentsRequest) (flruntime.CloseSubAgentsResult, error) {
+	h.closeSubagentsCount.Add(1)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	result := flruntime.CloseSubAgentsResult{Snapshots: make([]flruntime.SubAgentSnapshot, 0, len(h.snapshots))}
+	for index, snapshot := range h.snapshots {
+		if snapshot.Closed || !snapshot.CanClose {
+			result.Snapshots = append(result.Snapshots, snapshot)
+			continue
+		}
+		switch snapshot.Status {
+		case flruntime.SubAgentStatusCompleted, flruntime.SubAgentStatusFailed, flruntime.SubAgentStatusCancelled, flruntime.SubAgentStatusClosed:
+			result.Snapshots = append(result.Snapshots, snapshot)
+			continue
+		}
+		snapshot.Status = flruntime.SubAgentStatusClosed
+		snapshot.Closed = true
+		snapshot.CanClose = false
+		snapshot.CanSendInput = false
+		snapshot.CanInterrupt = false
+		snapshot.UpdatedAt = time.Now()
+		h.snapshots[index] = snapshot
+		result.Snapshots = append(result.Snapshots, snapshot)
+		result.Closed++
+	}
+	return result, nil
+}
+
 func (h *recordingFloretHost) ReadSubAgentDetail(_ context.Context, req flruntime.ReadSubAgentDetailRequest) (flruntime.SubAgentDetail, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -259,13 +294,83 @@ func (h *recordingFloretHost) ListSubAgentDetailEvents(context.Context, flruntim
 	return flruntime.SubAgentDetailEvents{}, nil
 }
 
-func (h *recordingFloretHost) DeleteThread(context.Context, flruntime.ThreadID) error {
+func (h *recordingFloretHost) DeleteThread(_ context.Context, id flruntime.ThreadID) error {
+	h.deleteThreadCount.Add(1)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.deleteThreadIDs = append(h.deleteThreadIDs, id)
 	return nil
 }
 
 func (h *recordingFloretHost) Close() error {
 	h.closeCount.Add(1)
 	return nil
+}
+
+func openTestFloretHost(t *testing.T, storePath string, fakeResponse string) flruntime.Host {
+	t.Helper()
+	store, err := flruntime.OpenSQLiteStore(storePath)
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	host, err := flruntime.NewHost(flruntime.HostOptions{
+		Config: flconfig.Config{
+			Provider:     flconfig.ProviderFake,
+			Model:        "fake-model",
+			FakeResponse: fakeResponse,
+		},
+		Store: store,
+	})
+	if err != nil {
+		_ = store.Close()
+		t.Fatalf("NewHost: %v", err)
+	}
+	return host
+}
+
+func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service, parentThreadID string, childThreadID string) string {
+	t.Helper()
+	storePath, err := floretThreadStorePath(svc.stateDir)
+	if err != nil {
+		t.Fatalf("floretThreadStorePath: %v", err)
+	}
+	host := openTestFloretHost(t, storePath, "child done")
+	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: flruntime.ThreadID(parentThreadID)}); err != nil {
+		_ = host.Close()
+		t.Fatalf("StartThread: %v", err)
+	}
+	if _, err := host.SpawnSubAgent(ctx, flruntime.SpawnSubAgentRequest{
+		ParentThreadID: flruntime.ThreadID(parentThreadID),
+		ThreadID:       flruntime.ThreadID(childThreadID),
+		TaskName:       "child",
+		Message:        "work",
+		ForkMode:       flruntime.SubAgentForkFullPath,
+	}); err != nil {
+		_ = host.Close()
+		t.Fatalf("SpawnSubAgent: %v", err)
+	}
+	if waited, err := host.WaitSubAgents(ctx, flruntime.WaitSubAgentsRequest{
+		ParentThreadID: flruntime.ThreadID(parentThreadID),
+		ChildThreadIDs: []flruntime.ThreadID{flruntime.ThreadID(childThreadID)},
+		Timeout:        2 * time.Second,
+	}); err != nil || waited.TimedOut {
+		_ = host.Close()
+		t.Fatalf("WaitSubAgents=%#v err=%v", waited, err)
+	}
+	if err := host.Close(); err != nil {
+		t.Fatalf("Close seed host: %v", err)
+	}
+	return storePath
+}
+
+func assertLegacyFloretSubagentStoreNotCreated(t *testing.T, svc *Service) {
+	t.Helper()
+	path := filepath.Join(svc.stateDir, "ai", "floret_subagents.sqlite")
+	if _, err := os.Stat(path); err == nil {
+		t.Fatalf("legacy Floret subagent store was created at %s", path)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stat legacy Floret subagent store: %v", err)
+	}
 }
 
 func TestServiceCloseReleasesThreadSubagentRuntimes(t *testing.T) {
@@ -667,8 +772,20 @@ func TestDeleteThreadClosesRuntimeAndDeletesChildProjections(t *testing.T) {
 	if err := svc.DeleteThread(ctx, meta, parent.ThreadID, false); err != nil {
 		t.Fatalf("DeleteThread(parent): %v", err)
 	}
-	if got := host.closeSubagentCount.Load(); got != 1 {
-		t.Fatalf("CloseSubAgent count=%d, want 1", got)
+	if got := host.closeSubagentsCount.Load(); got != 1 {
+		t.Fatalf("CloseSubAgents count=%d, want 1", got)
+	}
+	if got := host.closeSubagentCount.Load(); got != 0 {
+		t.Fatalf("CloseSubAgent count=%d, want 0", got)
+	}
+	if got := host.deleteThreadCount.Load(); got != 1 {
+		t.Fatalf("DeleteThread count=%d, want 1", got)
+	}
+	host.mu.Lock()
+	deleteThreadIDs := append([]flruntime.ThreadID(nil), host.deleteThreadIDs...)
+	host.mu.Unlock()
+	if len(deleteThreadIDs) != 1 || deleteThreadIDs[0] != flruntime.ThreadID(parent.ThreadID) {
+		t.Fatalf("DeleteThread ids=%v, want [%s]", deleteThreadIDs, parent.ThreadID)
 	}
 	if got := host.closeCount.Load(); got != 1 {
 		t.Fatalf("runtime host close count=%d, want 1", got)
@@ -692,6 +809,114 @@ func TestDeleteThreadClosesRuntimeAndDeletesChildProjections(t *testing.T) {
 	svc.mu.Unlock()
 	if exists {
 		t.Fatalf("parent runtime cache entry still exists")
+	}
+}
+
+func TestCloseThreadSubagentsUsesFloretBatchClose(t *testing.T) {
+	t.Parallel()
+
+	host := &recordingFloretHost{
+		snapshots: []flruntime.SubAgentSnapshot{{
+			ThreadID:       "child",
+			ParentThreadID: "parent",
+			TaskName:       "child",
+			Status:         flruntime.SubAgentStatusRunning,
+			CanClose:       true,
+			CanSendInput:   true,
+			CanInterrupt:   true,
+			CreatedAt:      time.Now(),
+			UpdatedAt:      time.Now(),
+		}},
+	}
+	svc := &Service{
+		subagentRuntimes: map[string]*floretSubagentRuntime{
+			runThreadKey("env", "parent"): {
+				parent: newRun(runOptions{
+					Log:        slog.Default(),
+					ThreadID:   "parent",
+					EndpointID: "env",
+				}),
+				host:    host,
+				hostKey: "test-generation",
+			},
+		},
+	}
+
+	svc.closeThreadSubagents(context.Background(), "env", "parent", time.Second)
+
+	if got := host.closeSubagentsCount.Load(); got != 1 {
+		t.Fatalf("CloseSubAgents count=%d, want 1", got)
+	}
+	if got := host.closeSubagentCount.Load(); got != 0 {
+		t.Fatalf("CloseSubAgent count=%d, want 0", got)
+	}
+}
+
+func TestDeleteThreadDeletesFloretTreeWithoutCachedRuntime(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	parent, err := svc.CreateThread(ctx, meta, "parent", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread parent: %v", err)
+	}
+	childID := "floret_child_without_cached_runtime"
+	storePath := seedTestFloretSubagentTree(t, ctx, svc, parent.ThreadID, childID)
+
+	if err := svc.DeleteThread(ctx, meta, parent.ThreadID, false); err != nil {
+		t.Fatalf("DeleteThread(parent): %v", err)
+	}
+	assertLegacyFloretSubagentStoreNotCreated(t, svc)
+
+	reopenedHost := openTestFloretHost(t, storePath, "unused")
+	defer reopenedHost.Close()
+	if _, err := reopenedHost.ReadThread(ctx, flruntime.ThreadID(parent.ThreadID)); !isFloretThreadNotFoundError(err) {
+		t.Fatalf("ReadThread parent err=%v, want not found", err)
+	}
+	if _, err := reopenedHost.ReadThread(ctx, flruntime.ThreadID(childID)); !isFloretThreadNotFoundError(err) {
+		t.Fatalf("ReadThread child err=%v, want not found", err)
+	}
+}
+
+func TestCancelThreadClosesFloretSubagentsWithoutCachedRuntime(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	parent, err := svc.CreateThread(ctx, meta, "parent", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread parent: %v", err)
+	}
+	childID := "floret_child_cancel_without_cached_runtime"
+	storePath := seedTestFloretSubagentTree(t, ctx, svc, parent.ThreadID, childID)
+
+	if err := svc.CancelThread(meta, parent.ThreadID); err != nil {
+		t.Fatalf("CancelThread(parent): %v", err)
+	}
+	assertLegacyFloretSubagentStoreNotCreated(t, svc)
+
+	reopenedHost := openTestFloretHost(t, storePath, "unused")
+	defer reopenedHost.Close()
+	snapshot, err := reopenedHost.ReadSubAgentDetail(ctx, flruntime.ReadSubAgentDetailRequest{
+		ParentThreadID: flruntime.ThreadID(parent.ThreadID),
+		ChildThreadID:  flruntime.ThreadID(childID),
+	})
+	if err != nil {
+		t.Fatalf("ReadSubAgentDetail child: %v", err)
+	}
+	if snapshot.Snapshot.Status != flruntime.SubAgentStatusCompleted || snapshot.Snapshot.Closed {
+		t.Fatalf("child snapshot after cancel=%#v, want completed history retained", snapshot.Snapshot)
+	}
+	if _, err := reopenedHost.ReadThread(ctx, flruntime.ThreadID(parent.ThreadID)); err != nil {
+		t.Fatalf("ReadThread parent after cancel: %v", err)
+	}
+	if _, err := reopenedHost.ReadThread(ctx, flruntime.ThreadID(childID)); err != nil {
+		t.Fatalf("ReadThread child after cancel: %v", err)
 	}
 }
 

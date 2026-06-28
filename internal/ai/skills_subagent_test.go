@@ -1276,19 +1276,17 @@ func TestSubagentsTool_ContextModeHelpers(t *testing.T) {
 	if got := subagentForkModeForContextMode(subagentContextModeFullHistory); got != flruntime.SubAgentForkFullPath {
 		t.Fatalf("full_history fork mode=%q, want full path", got)
 	}
+	if got := contextModeForSubagentForkMode(flruntime.SubAgentForkFullPath); got != subagentContextModeFullHistory {
+		t.Fatalf("full path context mode=%q, want full_history", got)
+	}
+	if got := contextModeForSubagentForkMode(flruntime.SubAgentForkNone); got != subagentContextModeMissionOnly {
+		t.Fatalf("none context mode=%q, want mission_only", got)
+	}
 	if got := aggregateSubagentContextMode([]subagentSnapshot{
 		{ThreadID: "a", ContextMode: subagentContextModeMissionOnly},
 		{ThreadID: "b", ContextMode: subagentContextModeFullHistory},
 	}); got != subagentContextModeFullHistory {
 		t.Fatalf("aggregate context mode=%q, want full_history", got)
-	}
-	runtime := &floretSubagentRuntime{}
-	runtime.rememberSubagentContextMode(subagentSnapshot{
-		ThreadID:    "child-1",
-		ContextMode: subagentContextModeFullHistory,
-	})
-	if got := runtime.snapshotContextMode(context.Background(), "child-1"); got != subagentContextModeFullHistory {
-		t.Fatalf("stored context mode=%q, want full_history", got)
 	}
 }
 
@@ -1550,6 +1548,34 @@ func (h *fakeCloseAllFloretHost) CloseSubAgent(_ context.Context, req flruntime.
 		return h.snapshots[index], nil
 	}
 	return flruntime.SubAgentSnapshot{}, fmt.Errorf("missing subagent %q", req.ChildThreadID)
+}
+
+func (h *fakeCloseAllFloretHost) CloseSubAgents(context.Context, flruntime.CloseSubAgentsRequest) (flruntime.CloseSubAgentsResult, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	result := flruntime.CloseSubAgentsResult{Snapshots: make([]flruntime.SubAgentSnapshot, 0, len(h.snapshots))}
+	for index := range h.snapshots {
+		snapshot := h.snapshots[index]
+		if snapshot.Closed || !snapshot.CanClose {
+			result.Snapshots = append(result.Snapshots, snapshot)
+			continue
+		}
+		switch snapshot.Status {
+		case flruntime.SubAgentStatusCompleted, flruntime.SubAgentStatusFailed, flruntime.SubAgentStatusCancelled, flruntime.SubAgentStatusClosed:
+			result.Snapshots = append(result.Snapshots, snapshot)
+			continue
+		}
+		snapshot.Status = flruntime.SubAgentStatusClosed
+		snapshot.Closed = true
+		snapshot.CanClose = false
+		snapshot.CanSendInput = false
+		snapshot.CanInterrupt = false
+		snapshot.UpdatedAt = time.Now()
+		h.snapshots[index] = snapshot
+		result.Snapshots = append(result.Snapshots, snapshot)
+		result.Closed++
+	}
+	return result, nil
 }
 
 func (h *fakeCloseAllFloretHost) ReadSubAgentDetail(context.Context, flruntime.ReadSubAgentDetailRequest) (flruntime.SubAgentDetail, error) {
