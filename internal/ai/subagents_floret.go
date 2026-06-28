@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -141,10 +139,8 @@ type floretSubagentRuntime struct {
 	mu             sync.Mutex
 	host           flruntime.Host
 	hostKey        string
-	storePath      string
 	closed         bool
 	timelineQueued map[string]struct{}
-	contextModes   map[string]string
 }
 
 func newFloretSubagentRuntime(parent *run) *floretSubagentRuntime {
@@ -274,13 +270,12 @@ func (s *floretSubagentRuntime) ensureHost(ctx context.Context) (flruntime.Host,
 		s.host = nil
 		s.hostKey = ""
 	}
-	host, storePath, err := s.newHostLocked(parent)
+	host, err := s.newHostLocked(parent)
 	if err != nil {
 		return nil, err
 	}
 	s.host = host
 	s.hostKey = hostKey
-	s.storePath = storePath
 	if err := ensureFloretThread(ctx, host, flruntime.ThreadID(strings.TrimSpace(parent.threadID))); err != nil {
 		return nil, err
 	}
@@ -360,13 +355,13 @@ func (s *floretSubagentRuntime) scheduleParentSubagentTimelineRefresh(threadID s
 	}()
 }
 
-func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, string, error) {
+func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, error) {
 	if parent == nil {
-		return nil, "", errors.New("subagent runtime unavailable")
+		return nil, errors.New("subagent runtime unavailable")
 	}
 	resolved, err := parent.resolveSubagentModelGateway()
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	providerType := strings.ToLower(strings.TrimSpace(resolved.provider.Type))
 	modelName := strings.TrimSpace(resolved.modelName)
@@ -374,7 +369,7 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, stri
 	if adapter == nil {
 		adapter, err = newProviderAdapter(providerType, strings.TrimSpace(resolved.provider.BaseURL), strings.TrimSpace(resolved.apiKey), resolved.provider.StrictToolSchema)
 		if err != nil {
-			return nil, "", err
+			return nil, err
 		}
 	}
 	webSearchCapability := resolveProviderWebSearchCapability(resolved.provider, modelName)
@@ -388,13 +383,13 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, stri
 	childRun := parent.subagentChildRun()
 	registry := NewInMemoryToolRegistry()
 	if err := registerBuiltInTools(registry, childRun); err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	activeTools, childContract := childRun.subagentToolSurface(registry.Snapshot(), flruntime.SubAgentForkNone)
 	state := newFloretToolRuntimeState(newRuntimeState("subagents"))
 	flTools, err := buildFloretToolRegistry(childRun, activeTools, state)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	flProvider := newFloretProviderAdapter(
 		adapter,
@@ -408,13 +403,9 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, stri
 		parent.webSearchMode,
 		withDisabledFloretCoreControlTools(childContract.HiddenControlTools...),
 	)
-	storePath, err := floretSubagentStorePath(parent.stateDir)
+	store, err := parent.openFloretThreadStore()
 	if err != nil {
-		return nil, "", err
-	}
-	store, err := flruntime.OpenSQLiteStore(storePath)
-	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	systemPrompt := parent.buildSubagentHostSystemPrompt(activeTools, childContract)
 	surfaceProvider := s.dynamicSubagentToolSurfaceProvider(state, flruntime.SubAgentForkNone)
@@ -434,9 +425,9 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, stri
 	})
 	if err != nil {
 		_ = store.Close()
-		return nil, "", err
+		return nil, err
 	}
-	return host, storePath, nil
+	return host, nil
 }
 
 func (r *run) subagentHostConfigKey() (string, error) {
@@ -708,12 +699,21 @@ func (s *floretSubagentRuntime) childForkModeForThread(ctx context.Context, chil
 	if childThreadID == "" {
 		return fallback
 	}
-	local := subagentSnapshot{ThreadID: childThreadID}
-	local = s.withStoredSubagentContextMode(ctx, local)
-	if strings.TrimSpace(local.ContextMode) == "" {
+	parent := s.parentRun()
+	host := s.currentHost()
+	if parent == nil || host == nil {
 		return fallback
 	}
-	return subagentForkModeForContextMode(local.ContextMode)
+	snapshots, err := host.ListSubAgents(ctx, flruntime.ThreadID(strings.TrimSpace(parent.threadID)))
+	if err != nil {
+		return fallback
+	}
+	for _, snapshot := range snapshots {
+		if strings.TrimSpace(string(snapshot.ThreadID)) == childThreadID && snapshot.ForkMode != "" {
+			return snapshot.ForkMode
+		}
+	}
+	return fallback
 }
 
 func filterSubagentChildTools(in []ToolDef, contract subagentCapabilityContract) []ToolDef {
@@ -782,18 +782,6 @@ func mapToolNames(tools []ToolDef) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func floretSubagentStorePath(stateDir string) (string, error) {
-	stateDir = strings.TrimSpace(stateDir)
-	if stateDir == "" {
-		return "", errors.New("missing state dir for subagent store")
-	}
-	dir := filepath.Join(stateDir, "ai")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "floret_subagents.sqlite"), nil
 }
 
 func ensureFloretThread(ctx context.Context, host flruntime.Host, threadID flruntime.ThreadID) error {
@@ -887,7 +875,6 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 		return nil, fmt.Errorf("finalize child permission snapshot: %w", err)
 	}
 	localSnapshot := subagentSnapshotFromFloret(snapshot)
-	localSnapshot.ContextMode = contextMode
 	s.refreshSubagentTimeline(ctx, localSnapshot)
 	item := subagentSnapshotPayload(localSnapshot)
 	parent.persistRunEvent("delegation.spawn", RealtimeStreamKindLifecycle, map[string]any{
@@ -942,7 +929,6 @@ func (s *floretSubagentRuntime) wait(ctx context.Context, args map[string]any) (
 	snapshots := make([]subagentSnapshot, 0, len(result.Snapshots))
 	for _, snapshot := range result.Snapshots {
 		local := subagentSnapshotFromFloret(snapshot)
-		local = s.withStoredSubagentContextMode(ctx, local)
 		snapshots = append(snapshots, local)
 	}
 	s.refreshSubagentTimeline(ctx, snapshots...)
@@ -1303,6 +1289,15 @@ func subagentForkModeForContextMode(mode string) flruntime.SubAgentForkMode {
 		return flruntime.SubAgentForkFullPath
 	default:
 		return flruntime.SubAgentForkNone
+	}
+}
+
+func contextModeForSubagentForkMode(mode flruntime.SubAgentForkMode) string {
+	switch mode {
+	case flruntime.SubAgentForkFullPath:
+		return subagentContextModeFullHistory
+	default:
+		return subagentContextModeMissionOnly
 	}
 }
 
@@ -1703,7 +1698,6 @@ func (s *floretSubagentRuntime) sendInput(ctx context.Context, args map[string]a
 		return nil, err
 	}
 	localSnapshot := subagentSnapshotFromFloret(snapshot)
-	localSnapshot = s.withStoredSubagentContextMode(ctx, localSnapshot)
 	s.refreshSubagentTimeline(ctx, localSnapshot)
 	item := subagentSnapshotPayload(localSnapshot)
 	bounded := boundedSubagentItem(item)
@@ -1811,7 +1805,6 @@ func (s *floretSubagentRuntime) closeSubagentWithHost(ctx context.Context, host 
 		return subagentSnapshot{}, err
 	}
 	localSnapshot := subagentSnapshotFromFloret(snapshot)
-	localSnapshot = s.withStoredSubagentContextMode(ctx, localSnapshot)
 	s.refreshSubagentTimeline(ctx, localSnapshot)
 	return localSnapshot, nil
 }
@@ -1827,40 +1820,30 @@ func (s *floretSubagentRuntime) closeAllAction(ctx context.Context, args map[str
 	}
 	closeCtx, cancel, requestedTimeoutMS, effectiveTimeoutMS, timeoutSource := subagentActionTimeoutContext(ctx, args)
 	defer cancel()
-	flSnapshots, err := host.ListSubAgents(closeCtx, flruntime.ThreadID(strings.TrimSpace(parent.threadID)))
+	result, err := host.CloseSubAgents(closeCtx, flruntime.CloseSubAgentsRequest{
+		ParentThreadID: flruntime.ThreadID(strings.TrimSpace(parent.threadID)),
+		Reason:         "parent_close_all",
+	})
 	if err != nil {
 		return nil, err
 	}
-	snapshots := make([]subagentSnapshot, 0, len(flSnapshots))
-	for _, snapshot := range flSnapshots {
+	snapshots := make([]subagentSnapshot, 0, len(result.Snapshots))
+	affected := make([]string, 0, len(result.Snapshots))
+	for _, snapshot := range result.Snapshots {
+		if id := strings.TrimSpace(string(snapshot.ThreadID)); id != "" {
+			affected = append(affected, id)
+		}
 		snapshots = append(snapshots, subagentSnapshotFromFloret(snapshot))
 	}
-	affected := make([]string, 0, len(snapshots))
-	closedCount := 0
+	s.refreshSubagentTimeline(closeCtx, snapshots...)
+	items := make([]map[string]any, 0, len(snapshots))
 	for _, snapshot := range snapshots {
-		if strings.TrimSpace(snapshot.ThreadID) == "" {
-			continue
-		}
-		affected = append(affected, snapshot.ThreadID)
-		if snapshot.CanClose {
-			if _, err := s.closeSubagentWithHost(closeCtx, host, parent, snapshot.ThreadID); err != nil {
-				return nil, err
-			}
-			closedCount++
-		}
-	}
-	latest, err := s.snapshots(closeCtx)
-	if err != nil {
-		return nil, err
-	}
-	items := make([]map[string]any, 0, len(latest))
-	for _, snapshot := range latest {
 		items = append(items, subagentSnapshotPayload(snapshot))
 	}
 	out := subagentBoundedResult(subagentActionCloseAll, items)
 	out["scope"] = "current_run"
-	out["closed_count"] = closedCount
-	out["stopped_count"] = closedCount
+	out["closed_count"] = result.Closed
+	out["stopped_count"] = result.Closed
 	out["affected_ids"] = affected
 	return trimSubagentToolResult(applySubagentTimeoutFields(out, requestedTimeoutMS, effectiveTimeoutMS, timeoutSource)), nil
 }
@@ -1879,20 +1862,10 @@ func (s *floretSubagentRuntime) closeAllExisting(ctx context.Context) {
 	if host == nil {
 		return
 	}
-	flSnapshots, err := host.ListSubAgents(ctx, flruntime.ThreadID(strings.TrimSpace(parent.threadID)))
-	if err != nil {
-		return
-	}
-	for _, flSnapshot := range flSnapshots {
-		snapshot := subagentSnapshotFromFloret(flSnapshot)
-		if strings.TrimSpace(snapshot.ThreadID) == "" || !snapshot.CanClose {
-			continue
-		}
-		_, _ = host.CloseSubAgent(ctx, flruntime.CloseSubAgentRequest{
-			ParentThreadID: flruntime.ThreadID(strings.TrimSpace(parent.threadID)),
-			ChildThreadID:  flruntime.ThreadID(snapshot.ThreadID),
-		})
-	}
+	_, _ = host.CloseSubAgents(ctx, flruntime.CloseSubAgentsRequest{
+		ParentThreadID: flruntime.ThreadID(strings.TrimSpace(parent.threadID)),
+		Reason:         "parent_stop",
+	})
 }
 
 func (s *floretSubagentRuntime) release() {
@@ -1926,7 +1899,6 @@ func (s *floretSubagentRuntime) snapshots(ctx context.Context) ([]subagentSnapsh
 	out := make([]subagentSnapshot, 0, len(flSnapshots))
 	for _, snapshot := range flSnapshots {
 		local := subagentSnapshotFromFloret(snapshot)
-		local = s.withStoredSubagentContextMode(ctx, local)
 		out = append(out, local)
 	}
 	s.refreshSubagentTimeline(ctx, out...)
@@ -2001,7 +1973,7 @@ func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Met
 	if strings.TrimSpace(resp.Summary.ParentThreadID) != parentThreadID || strings.TrimSpace(resp.Summary.ThreadID) != childThreadID {
 		return nil, sql.ErrNoRows
 	}
-	resp.Summary.ContextMode = runtime.snapshotContextMode(ctx, childThreadID)
+	resp.Summary.ContextMode = contextModeForSubagentForkMode(detail.Snapshot.ForkMode)
 	return &resp, nil
 }
 
@@ -2515,7 +2487,7 @@ func flowerSubagentGenericView(event flruntime.SubAgentDetailEvent) *FlowerSubag
 }
 
 func (s *floretSubagentRuntime) refreshSubagentTimeline(ctx context.Context, snapshots ...subagentSnapshot) {
-	s.rememberSubagentContextModes(snapshots)
+	_ = snapshots
 	s.publishParentSubagentTimeline(ctx)
 }
 
@@ -2570,64 +2542,10 @@ func (s *floretSubagentRuntime) flowerParentSubagentActivityTimeline(timeline ob
 		if status := strings.TrimSpace(anyToString(payload["status"])); status != "" {
 			payload["status"] = flowerSubagentStatus(flruntime.SubAgentStatus(status))
 		}
-		if contextMode := s.snapshotContextMode(context.Background(), threadID); contextMode != "" {
-			payload["context_mode"] = contextMode
-		} else if _, ok := payload["context_mode"]; !ok {
-			payload["context_mode"] = subagentContextModeMissionOnly
-		} else {
-			payload["context_mode"] = normalizeSubagentContextMode(anyToString(payload["context_mode"]))
-		}
+		payload["context_mode"] = contextModeForSubagentForkMode(flruntime.SubAgentForkMode(anyToString(payload["fork_mode"])))
 		timeline.Items[i].Payload = payload
 	}
 	return timeline
-}
-
-func (s *floretSubagentRuntime) withStoredSubagentContextMode(ctx context.Context, snapshot subagentSnapshot) subagentSnapshot {
-	contextMode := normalizeSubagentContextMode(snapshot.ContextMode)
-	if contextMode != subagentContextModeMissionOnly || strings.TrimSpace(snapshot.ContextMode) != "" {
-		snapshot.ContextMode = contextMode
-		return snapshot
-	}
-	if stored := s.snapshotContextMode(ctx, snapshot.ThreadID); stored != "" {
-		snapshot.ContextMode = stored
-		return snapshot
-	}
-	snapshot.ContextMode = subagentContextModeMissionOnly
-	return snapshot
-}
-
-func (s *floretSubagentRuntime) snapshotContextMode(ctx context.Context, threadID string) string {
-	threadID = strings.TrimSpace(threadID)
-	if threadID == "" {
-		return ""
-	}
-	_ = ctx
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return normalizeSubagentContextMode(s.contextModes[threadID])
-}
-
-func (s *floretSubagentRuntime) rememberSubagentContextModes(snapshots []subagentSnapshot) {
-	for _, snapshot := range snapshots {
-		s.rememberSubagentContextMode(snapshot)
-	}
-}
-
-func (s *floretSubagentRuntime) rememberSubagentContextMode(snapshot subagentSnapshot) {
-	if s == nil {
-		return
-	}
-	threadID := strings.TrimSpace(snapshot.ThreadID)
-	if threadID == "" || strings.TrimSpace(snapshot.ContextMode) == "" {
-		return
-	}
-	contextMode := normalizeSubagentContextMode(snapshot.ContextMode)
-	s.mu.Lock()
-	if s.contextModes == nil {
-		s.contextModes = map[string]string{}
-	}
-	s.contextModes[threadID] = contextMode
-	s.mu.Unlock()
 }
 
 func aggregateSubagentContextMode(snapshots []subagentSnapshot) string {
@@ -2741,6 +2659,7 @@ func subagentSnapshotFromFloret(in flruntime.SubAgentSnapshot) subagentSnapshot 
 		ParentThreadID: strings.TrimSpace(string(in.ParentThreadID)),
 		ParentTurnID:   strings.TrimSpace(string(in.ParentTurnID)),
 		AgentType:      normalizeSubagentAgentType(in.HostProfileRef),
+		ContextMode:    contextModeForSubagentForkMode(in.ForkMode),
 		Status:         flowerSubagentStatus(in.Status),
 		LatestTurnID:   strings.TrimSpace(string(in.LatestTurnID)),
 		LastMessage:    strings.TrimSpace(in.LastMessage),

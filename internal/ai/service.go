@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	flconfig "github.com/floegence/floret/config"
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
@@ -523,6 +525,147 @@ func (s *Service) removeThreadSubagentRuntime(thKey string) *floretSubagentRunti
 	delete(s.subagentRuntimes, thKey)
 	s.mu.Unlock()
 	return runtime
+}
+
+func (s *Service) closeThreadSubagents(ctx context.Context, endpointID string, threadID string, timeout time.Duration) {
+	if s == nil {
+		return
+	}
+	thKey := runThreadKey(endpointID, threadID)
+	if thKey == "" {
+		return
+	}
+	s.mu.Lock()
+	runtime := s.subagentRuntimes[thKey]
+	s.mu.Unlock()
+	if runtime != nil {
+		if timeout <= 0 {
+			timeout = defaultPersistOpTimeout
+		}
+		closeCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), timeout)
+		defer cancel()
+		if runtime.currentHost() != nil {
+			runtime.closeAllExisting(closeCtx)
+			return
+		}
+		s.closeThreadSubagentsWithLifecycleHost(closeCtx, threadID)
+		return
+	}
+	if timeout <= 0 {
+		timeout = defaultPersistOpTimeout
+	}
+	closeCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), timeout)
+	defer cancel()
+	s.closeThreadSubagentsWithLifecycleHost(closeCtx, threadID)
+}
+
+func (s *Service) closeThreadSubagentsWithLifecycleHost(ctx context.Context, threadID string) {
+	if s == nil {
+		return
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return
+	}
+	host, err := s.openFloretLifecycleHost()
+	if err != nil {
+		return
+	}
+	defer host.Close()
+	_, _ = host.CloseSubAgents(ctx, flruntime.CloseSubAgentsRequest{
+		ParentThreadID: flruntime.ThreadID(threadID),
+		Reason:         "parent_stop",
+	})
+}
+
+func (s *Service) deleteFloretThreadTree(ctx context.Context, meta *session.Meta, th threadstore.Thread, timeout time.Duration) error {
+	if s == nil {
+		return nil
+	}
+	threadID := strings.TrimSpace(th.ThreadID)
+	endpointID := ""
+	if meta != nil {
+		endpointID = strings.TrimSpace(meta.EndpointID)
+	}
+	if endpointID == "" || threadID == "" {
+		return nil
+	}
+	if timeout <= 0 {
+		timeout = defaultPersistOpTimeout
+	}
+	thKey := runThreadKey(endpointID, threadID)
+	runtime := s.removeThreadSubagentRuntime(thKey)
+	opCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), timeout)
+	defer cancel()
+	if runtime != nil {
+		defer runtime.release()
+		host := runtime.currentHost()
+		if host != nil {
+			runtime.closeAllExisting(opCtx)
+			return host.DeleteThread(opCtx, flruntime.ThreadID(threadID))
+		}
+	}
+	return s.deleteFloretThreadTreeWithLifecycleHost(opCtx, threadID)
+}
+
+func (s *Service) deleteFloretThreadTreeWithLifecycleHost(ctx context.Context, threadID string) error {
+	if s == nil {
+		return nil
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil
+	}
+	host, err := s.openFloretLifecycleHost()
+	if err != nil {
+		return err
+	}
+	defer host.Close()
+	_, _ = host.CloseSubAgents(ctx, flruntime.CloseSubAgentsRequest{
+		ParentThreadID: flruntime.ThreadID(threadID),
+		Reason:         "parent_delete",
+	})
+	if err := host.DeleteThread(ctx, flruntime.ThreadID(threadID)); err != nil {
+		if isFloretThreadNotFoundError(err) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
+func isFloretThreadNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "thread not found")
+}
+
+func (s *Service) openFloretLifecycleHost() (flruntime.Host, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	storePath, err := floretThreadStorePath(s.stateDir)
+	if err != nil {
+		return nil, err
+	}
+	store, err := flruntime.OpenSQLiteStore(storePath)
+	if err != nil {
+		return nil, err
+	}
+	host, err := flruntime.NewHost(flruntime.HostOptions{
+		Config: flconfig.Config{
+			Provider:     flconfig.ProviderFake,
+			Model:        "fake-model",
+			FakeResponse: "ok",
+		},
+		Store: store,
+	})
+	if err != nil {
+		_ = store.Close()
+		return nil, err
+	}
+	return host, nil
 }
 
 func (s *Service) Enabled() bool {
@@ -1655,7 +1798,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}
 
 	assistantJSON := ""
-		var assistantAt int64
+	var assistantAt int64
 	engineRunStarted := false
 	persistAssistantSnapshot := func(status string) (int64, error) {
 		if db == nil || r.assistantAlreadyPersisted() {
@@ -1688,10 +1831,10 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		if appendErr != nil {
 			return 0, appendErr
 		}
-			r.markAssistantPersisted()
-			assistantJSON = rawJSON
-			assistantAt = at
-			return rowID, nil
+		r.markAssistantPersisted()
+		assistantJSON = rawJSON
+		assistantAt = at
+		return rowID, nil
 	}
 
 	defer func() {
@@ -1921,9 +2064,9 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		}
 		return err
 	}
-		if db != nil {
-			turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
-			_, err = db.AppendConversationTurn(turnCtx, threadstore.ConversationTurn{
+	if db != nil {
+		turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
+		_, err = db.AppendConversationTurn(turnCtx, threadstore.ConversationTurn{
 			TurnID:             messageID,
 			EndpointID:         endpointID,
 			ThreadID:           threadID,
@@ -2353,6 +2496,9 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 	if r != nil {
 		r.requestCancel("canceled")
 		s.publishCanceledAssistantDraft(meta, r, db, persistTO)
+	}
+	if threadID != "" {
+		s.closeThreadSubagents(context.Background(), endpointID, threadID, persistTO)
 	}
 
 	if db != nil && threadID != "" {
