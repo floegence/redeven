@@ -73,6 +73,7 @@ type recordingFloretHost struct {
 	spawnRequests       []flruntime.SpawnSubAgentRequest
 	sendInputRequests   []flruntime.SendSubAgentInputRequest
 	deleteThreadIDs     []flruntime.ThreadID
+	pendingApprovals    []flruntime.PendingApproval
 }
 
 func (h *recordingFloretHost) StartThread(context.Context, flruntime.StartThreadRequest) (flruntime.ThreadSnapshot, error) {
@@ -108,8 +109,14 @@ func (h *recordingFloretHost) ListThreadDetailEvents(context.Context, flruntime.
 	return flruntime.ThreadDetailEvents{}, nil
 }
 
-func (h *recordingFloretHost) ListPendingApprovals(context.Context, flruntime.ListPendingApprovalsRequest) (flruntime.PendingApprovals, error) {
-	return flruntime.PendingApprovals{}, nil
+func (h *recordingFloretHost) ListPendingApprovals(_ context.Context, req flruntime.ListPendingApprovalsRequest) (flruntime.PendingApprovals, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return flruntime.PendingApprovals{
+		ThreadID:    req.ThreadID,
+		Approvals:   append([]flruntime.PendingApproval(nil), h.pendingApprovals...),
+		GeneratedAt: time.Now(),
+	}, nil
 }
 
 func (h *recordingFloretHost) CompactThread(context.Context, flruntime.CompactThreadRequest) (flruntime.CompactThreadResult, error) {

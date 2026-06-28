@@ -335,6 +335,10 @@ export type FlowerSurfaceCopy = Readonly<{
     toolApprovalReject: string;
     toolApprovalSubmitting: string;
     toolApprovalUnavailable: string;
+    toolApprovalComposerTitle: string;
+    toolApprovalComposerDescription: string;
+    toolApprovalQueueCount: (count: number) => string;
+    toolApprovalWorkingDirectory: string;
     toolApprovalCommand: string;
     toolApprovalCommandText: string;
     toolApprovalShowCommand: string;
@@ -497,6 +501,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolApprovalReject: 'Reject',
     toolApprovalSubmitting: 'Submitting...',
     toolApprovalUnavailable: 'Approval is no longer available.',
+    toolApprovalComposerTitle: 'Review before this runs',
+    toolApprovalComposerDescription: 'The conversation is paused until you approve or reject this action.',
+    toolApprovalQueueCount: (count) => `${count} more approval${count === 1 ? '' : 's'} waiting`,
+    toolApprovalWorkingDirectory: 'Working directory',
     toolApprovalCommand: 'Command',
     toolApprovalCommandText: 'Command text',
     toolApprovalShowCommand: 'Show command',

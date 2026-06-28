@@ -113,7 +113,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
 	const floretVersion = "v0.3.48"
-	oldFloretVersion := "v0.3." + "47"
+	oldFloretVersions := []string{"v0.3." + "45", "v0.3." + "46", "v0.3." + "47"}
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
 	goSum := readRepoFile(t, root, "go.sum")
@@ -136,10 +136,12 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	if !strings.Contains(notices, "github.com/floegence/floret@"+floretVersion) {
 		t.Fatalf("THIRD_PARTY_NOTICES.md must link floret %s", floretVersion)
 	}
-	if strings.Contains(goMod, "github.com/floegence/floret "+oldFloretVersion) ||
-		strings.Contains(goSum, "github.com/floegence/floret "+oldFloretVersion) ||
-		strings.Contains(notices, "github.com/floegence/floret@"+oldFloretVersion) {
-		t.Fatalf("repository must not retain old floret %s dependency markers", oldFloretVersion)
+	for _, oldFloretVersion := range oldFloretVersions {
+		if strings.Contains(goMod, "github.com/floegence/floret "+oldFloretVersion) ||
+			strings.Contains(goSum, "github.com/floegence/floret "+oldFloretVersion) ||
+			strings.Contains(notices, "github.com/floegence/floret@"+oldFloretVersion) {
+			t.Fatalf("repository must not retain old floret %s dependency markers", oldFloretVersion)
+		}
 	}
 }
 

@@ -765,8 +765,15 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 	args := cloneAnyMap(inv.Args)
 	switch strings.TrimSpace(inv.Name) {
 	case "terminal.exec":
+		out := []fltools.ResourceRef{}
 		if command := strings.TrimSpace(anyToString(args["command"])); command != "" {
-			return []fltools.ResourceRef{{Kind: "command", Value: command}}, nil
+			out = append(out, fltools.ResourceRef{Kind: "command", Value: command})
+		}
+		if cwd := strings.TrimSpace(firstNonEmptyString(anyToString(args["cwd"]), anyToString(args["workdir"]))); cwd != "" {
+			out = append(out, fltools.ResourceRef{Kind: "working_directory", Value: cwd})
+		}
+		if len(out) > 0 {
+			return out, nil
 		}
 	case "file.read", "read_file", "file.edit", "file.write":
 		if path := strings.TrimSpace(anyToString(args["file_path"])); path != "" {
