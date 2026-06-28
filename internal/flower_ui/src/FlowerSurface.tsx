@@ -186,11 +186,15 @@ type FlowerFloatingPoint = Readonly<{
 type FlowerScrollTailController = Readonly<{
   bind: (node: HTMLDivElement | undefined) => void;
   nearBottom: Accessor<boolean>;
+  userInterruptionRevision: () => number;
+  startFollowing: () => void;
+  stopFollowing: () => void;
   markNearBottom: () => void;
   captureWasNearBottom: () => boolean;
   onScroll: () => void;
+  onWheel: (event: WheelEvent) => void;
   measureAfterLayout: () => void;
-  scheduleTailScroll: (options?: Readonly<{ smooth?: boolean }>) => void;
+  scheduleTailScroll: (options?: Readonly<{ smooth?: boolean; force?: boolean }>) => void;
   scrollToBottom: (options?: Readonly<{ smooth?: boolean }>) => void;
   dispose: () => void;
 }>;
@@ -290,16 +294,26 @@ function createFlowerScrollTailController(options: Readonly<{
   let scrollFrame = 0;
   let smoothScrollFrame = 0;
   let scrollToBottomInProgress = false;
-  let nearBottomValue = true;
+  let followingLatest = true;
+  let userInterruptionRevision = 0;
 
   const setValue = (value: boolean) => {
-    nearBottomValue = value;
     setNearBottom(value);
     options.setNearBottomValue?.(value);
+  };
+  const startFollowing = () => {
+    followingLatest = true;
+    setValue(true);
   };
   const isNearBottom = (): boolean => {
     if (!node) return true;
     return node.scrollHeight - node.scrollTop - node.clientHeight <= TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX;
+  };
+  const cancelScheduledScroll = () => {
+    if (scrollFrame) {
+      options.cancelAnimationFrame(scrollFrame);
+      scrollFrame = 0;
+    }
   };
   const cancelSmoothScroll = () => {
     if (smoothScrollFrame) {
@@ -308,12 +322,20 @@ function createFlowerScrollTailController(options: Readonly<{
     }
     scrollToBottomInProgress = false;
   };
+  const stopFollowing = () => {
+    followingLatest = false;
+    userInterruptionRevision += 1;
+    cancelScheduledScroll();
+    cancelSmoothScroll();
+    setValue(isNearBottom());
+  };
   const setScrollTop = (target: HTMLDivElement, scrollTop: number) => {
     target.scrollTop = scrollTop;
   };
   const scrollToBottom = (scrollOptions: Readonly<{ smooth?: boolean }> = {}) => {
     const target = node;
     if (!target) return;
+    followingLatest = true;
     const targetScrollTop = Math.max(0, target.scrollHeight - target.clientHeight);
     cancelSmoothScroll();
     if (!scrollOptions.smooth || options.reducedMotionPreferred() || typeof performance === 'undefined') {
@@ -333,6 +355,11 @@ function createFlowerScrollTailController(options: Readonly<{
     const step = (timestamp: number) => {
       const progress = Math.min(1, (timestamp - startedAt) / TRANSCRIPT_SCROLL_TO_LATEST_MS);
       const eased = 1 - ((1 - progress) ** 3);
+      if (!followingLatest) {
+        cancelSmoothScroll();
+        setValue(isNearBottom());
+        return;
+      }
       setScrollTop(target, startScrollTop + (delta * eased));
       if (progress < 1) {
         smoothScrollFrame = options.requestAnimationFrame(step);
@@ -360,10 +387,16 @@ function createFlowerScrollTailController(options: Readonly<{
       setValue(isNearBottom());
     });
   };
-  const scheduleTailScroll = (scrollOptions: Readonly<{ smooth?: boolean }> = {}) => {
-    if (!nearBottomValue || scrollFrame) return;
+  const scheduleTailScroll = (scrollOptions: Readonly<{ smooth?: boolean; force?: boolean }> = {}) => {
+    const force = scrollOptions.force === true;
+    if ((!force && !followingLatest) || scrollFrame) return;
+    if (force) {
+      followingLatest = true;
+      setValue(true);
+    }
     scrollFrame = options.requestAnimationFrame(() => {
       scrollFrame = 0;
+      if (!force && !followingLatest) return;
       scrollToBottom(scrollOptions);
     });
   };
@@ -374,9 +407,13 @@ function createFlowerScrollTailController(options: Readonly<{
       setValue(isNearBottom());
     },
     nearBottom,
-    markNearBottom: () => setValue(true),
+    userInterruptionRevision: () => userInterruptionRevision,
+    startFollowing,
+    stopFollowing,
+    markNearBottom: startFollowing,
     captureWasNearBottom: () => {
       const value = isNearBottom();
+      followingLatest = value;
       setValue(value);
       return value;
     },
@@ -385,7 +422,18 @@ function createFlowerScrollTailController(options: Readonly<{
         setValue(true);
         return;
       }
-      setValue(isNearBottom());
+      const value = isNearBottom();
+      if (!value && followingLatest) {
+        stopFollowing();
+        return;
+      }
+      followingLatest = value;
+      setValue(value);
+    },
+    onWheel: (event) => {
+      if (event.deltaY < 0) {
+        stopFollowing();
+      }
     },
     measureAfterLayout,
     scheduleTailScroll,
@@ -396,8 +444,7 @@ function createFlowerScrollTailController(options: Readonly<{
         measureFrame = 0;
       }
       if (scrollFrame) {
-        options.cancelAnimationFrame(scrollFrame);
-        scrollFrame = 0;
+        cancelScheduledScroll();
       }
       cancelSmoothScroll();
     },
@@ -1572,6 +1619,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return thread;
   };
 
+  const scrollSelectedThreadToLatestAfterLayout = (threadID: string, sequence: number) => {
+    const tid = trimString(threadID);
+    if (!tid) return;
+    const interruptionRevision = transcriptScroll.userInterruptionRevision();
+    requestTranscriptAnimationFrame(() => {
+      requestTranscriptAnimationFrame(() => {
+        if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
+        if (transcriptScroll.userInterruptionRevision() !== interruptionRevision) return;
+        transcriptScroll.scheduleTailScroll({ smooth: false, force: true });
+      });
+    });
+  };
+
   const markThreadReadLocally = (threadID: string, snapshot: FlowerThreadActivitySnapshot) => {
     const tid = trimString(threadID);
     if (!tid) return;
@@ -1742,8 +1802,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     closeSubagentOverlays();
     const sequence = ++threadLoadSequence;
     const existing = threads().find((thread) => thread.thread_id === tid) ?? null;
-    transcriptScroll.markNearBottom();
+    transcriptScroll.startFollowing();
     setSelectedThreadID(tid);
+    scrollSelectedThreadToLatestAfterLayout(tid, sequence);
     setChatSubmitError('');
     setInputSubmitError('');
     setPermissionSubmitError('');
@@ -1764,6 +1825,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setSelectedThreadID(thread.thread_id);
       setLoadingThreadID('');
       setTranscriptLayoutRevision((revision) => revision + 1);
+      scrollSelectedThreadToLatestAfterLayout(thread.thread_id, sequence);
       requestComposerFocus();
     } catch (error) {
       if (sequence !== threadLoadSequence) return;
@@ -1959,6 +2021,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             if (event.kind === 'timeline.replaced') {
               resyncRequired = false;
               cursor = Math.max(cursor, event.payload.snapshot_through_seq);
+              shouldScrollTail = true;
             }
             if (result.tailKey && result.tailLength > 0) {
               shouldScrollTail = true;
@@ -2259,8 +2322,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     let accepted = false;
     setChatRunning(true);
     addPendingTurn(pending);
-    transcriptScroll.markNearBottom();
-    requestTranscriptAnimationFrame(() => transcriptScroll.scheduleTailScroll({ smooth: false }));
+    transcriptScroll.startFollowing();
+    requestTranscriptAnimationFrame(() => transcriptScroll.scheduleTailScroll({ smooth: false, force: true }));
     updateCurrentComposerSessionDraft((draft) => ({
       ...draft,
       chatDraft: '',
@@ -2447,7 +2510,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const revealPendingCompactionDivider = () => {
-    transcriptScroll.markNearBottom();
+    transcriptScroll.startFollowing();
     scrollTranscriptToBottom({ smooth: false });
     requestTranscriptAnimationFrame(() => scrollTranscriptToBottom({ smooth: false }));
   };
@@ -2582,7 +2645,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const requestID = trimString(props.focusThreadRequest?.request_id);
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     threadLoadSequence += 1;
-    transcriptScroll.markNearBottom();
+    transcriptScroll.startFollowing();
     closeSubagentOverlays();
     setSelectedThreadID('');
     clearPendingTurns();
@@ -2623,11 +2686,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectThread = (threadID: string) => {
     const requestID = trimString(props.focusThreadRequest?.request_id);
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
-    transcriptScroll.markNearBottom();
+    transcriptScroll.startFollowing();
     void loadAndSelectThread(threadID);
   };
 
   const updateTranscriptNearBottom = () => transcriptScroll.onScroll();
+  const updateTranscriptFollowFromWheel = (event: WheelEvent) => transcriptScroll.onWheel(event);
   const scrollTranscriptToBottom = (options: Readonly<{ smooth?: boolean }> = {}) => transcriptScroll.scrollToBottom(options);
   const measureTranscriptNearBottomAfterLayout = () => transcriptScroll.measureAfterLayout();
   const scheduleTranscriptTailScroll = () => transcriptScroll.scheduleTailScroll();
@@ -4746,7 +4810,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         onClose={() => setPreviewChip(null)}
       />
       <div class="flower-chat-main flower-chat-main">
-        <div ref={(node) => { transcriptScroll.bind(node); }} class="flower-chat-transcript flower-chat-transcript" onScroll={updateTranscriptNearBottom}>
+        <div ref={(node) => { transcriptScroll.bind(node); }} class="flower-chat-transcript flower-chat-transcript" onScroll={updateTranscriptNearBottom} onWheel={updateTranscriptFollowFromWheel}>
           <div class="flower-transcript-stack">
             <Show when={loadError()}>
               {(message) => errorNotice(copy().chat.loadErrorTitle, message())}
@@ -4786,7 +4850,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 class="flower-scroll-to-latest-button"
                 aria-label={copy().chat.scrollToLatest}
                 title={copy().chat.scrollToLatest}
-                onClick={() => scrollTranscriptToBottom({ smooth: true })}
+                onClick={() => {
+                  transcriptScroll.startFollowing();
+                  scrollTranscriptToBottom({ smooth: true });
+                }}
               >
                 <ChevronDown class="h-4 w-4" />
               </button>

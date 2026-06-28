@@ -148,7 +148,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('const showScrollToLatestButton = createMemo');
     expect(src).toContain('aria-label={copy().chat.scrollToLatest}');
     expect(src).toContain('title={copy().chat.scrollToLatest}');
-    expect(src).toContain('onClick={() => scrollTranscriptToBottom({ smooth: true })}');
+    expect(src).toContain('transcriptScroll.startFollowing();');
+    expect(src).toContain('scrollTranscriptToBottom({ smooth: true });');
     expect(src).toContain('TRANSCRIPT_SCROLL_TO_LATEST_MS');
     expect(src).toContain('captureWasNearBottom');
   });
