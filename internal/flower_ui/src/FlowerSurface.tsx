@@ -804,7 +804,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       })
   ));
   const selectedComposerApprovalAction = createMemo(() => selectedComposerApprovalActions()[0] ?? null);
-  const selectedComposerApprovalQueueCount = createMemo(() => Math.max(0, selectedComposerApprovalActions().length - 1));
   const selectedThreadLevelApprovalActions = createMemo(() => {
     const composerActionID = trimString(selectedComposerApprovalAction()?.action_id);
     return selectedApprovalActions().filter((action) => (
