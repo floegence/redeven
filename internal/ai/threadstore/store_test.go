@@ -2063,6 +2063,108 @@ INSERT INTO ai_threads(
 	}
 }
 
+func TestStore_MigrateFromV36DeletesLegacyFloretSubagentProjectionsOnly(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	schema := threadstoreSchemaSpec()
+	tx, err := raw.Begin()
+	if err != nil {
+		_ = raw.Close()
+		t.Fatalf("begin v36 migration setup: %v", err)
+	}
+	for _, migration := range schema.Migrations {
+		if migration.ToVersion > 36 {
+			break
+		}
+		if err := migration.Apply(tx); err != nil {
+			_ = tx.Rollback()
+			_ = raw.Close()
+			t.Fatalf("apply migration %d->%d: %v", migration.FromVersion, migration.ToVersion, err)
+		}
+	}
+	if _, err := tx.Exec(`
+INSERT INTO ai_threads(thread_id, endpoint_id, namespace_public_id, title, created_at_unix_ms, updated_at_unix_ms)
+VALUES
+  ('th_parent', 'env_1', 'ns_1', 'Parent', 100, 100),
+  ('th_child_projection', 'env_1', 'ns_1', 'Legacy child projection', 101, 101),
+  ('th_product', 'env_1', 'ns_1', 'Product thread', 102, 102),
+  ('th_other_owner', 'env_1', 'ns_1', 'Other owner thread', 103, 103);
+INSERT INTO transcript_messages(thread_id, endpoint_id, message_id, role, status, created_at_unix_ms, updated_at_unix_ms, text_content, message_json)
+VALUES
+  ('th_parent', 'env_1', 'msg_parent', 'user', 'complete', 100, 100, 'parent', '{"id":"msg_parent"}'),
+  ('th_child_projection', 'env_1', 'msg_child', 'assistant', 'complete', 101, 101, 'child', '{"id":"msg_child"}'),
+  ('th_product', 'env_1', 'msg_product', 'user', 'complete', 102, 102, 'product', '{"id":"msg_product"}');
+INSERT INTO ai_messages(thread_id, endpoint_id, message_id, role, status, created_at_unix_ms, updated_at_unix_ms, text_content, message_json)
+VALUES
+  ('th_parent', 'env_1', 'legacy_parent', 'user', 'complete', 100, 100, 'parent', '{"id":"legacy_parent"}'),
+  ('th_child_projection', 'env_1', 'legacy_child', 'assistant', 'complete', 101, 101, 'child', '{"id":"legacy_child"}');
+INSERT INTO ai_flower_thread_metadata(endpoint_id, thread_id, owner_kind, owner_id, parent_thread_id, updated_at_unix_ms)
+VALUES
+  ('env_1', 'th_parent', 'flower_thread', 'redeven', '', 100),
+  ('env_1', 'th_child_projection', 'subagent_projection', 'floret', 'th_parent', 101),
+  ('env_1', 'th_other_owner', 'subagent_projection', 'other-runtime', 'th_parent', 103);
+`); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatalf("seed v36 legacy projection rows: %v", err)
+	}
+	if _, err := tx.Exec(`PRAGMA user_version=36;`); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatalf("set user_version v36: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		_ = raw.Close()
+		t.Fatalf("commit v36 migration setup: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw db: %v", err)
+	}
+
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open with v37 migration: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+	ctx := context.Background()
+
+	if th, err := s.GetThread(ctx, "env_1", "th_child_projection"); err != nil || th != nil {
+		t.Fatalf("legacy projection thread after migration thread=%#v err=%v, want deleted", th, err)
+	}
+	if got := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ?`, "env_1", "th_child_projection"); got != 0 {
+		t.Fatalf("legacy projection transcript rows=%d, want 0", got)
+	}
+	if got := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_messages WHERE endpoint_id = ? AND thread_id = ?`, "env_1", "th_child_projection"); got != 0 {
+		t.Fatalf("legacy projection ai_messages rows=%d, want 0", got)
+	}
+	if meta, err := s.GetFlowerThreadMetadata(ctx, "env_1", "th_child_projection"); err != nil || meta != nil {
+		t.Fatalf("legacy projection metadata after migration meta=%#v err=%v, want deleted", meta, err)
+	}
+	for _, threadID := range []string{"th_parent", "th_product", "th_other_owner"} {
+		th, err := s.GetThread(ctx, "env_1", threadID)
+		if err != nil {
+			t.Fatalf("GetThread(%s): %v", threadID, err)
+		}
+		if th == nil {
+			t.Fatalf("thread %s deleted unexpectedly", threadID)
+		}
+	}
+	if got := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ?`, "env_1", "th_parent"); got != 1 {
+		t.Fatalf("parent transcript rows=%d, want 1", got)
+	}
+	if meta, err := s.GetFlowerThreadMetadata(ctx, "env_1", "th_parent"); err != nil || meta == nil {
+		t.Fatalf("parent metadata after migration meta=%#v err=%v, want retained", meta, err)
+	}
+	if meta, err := s.GetFlowerThreadMetadata(ctx, "env_1", "th_other_owner"); err != nil || meta == nil {
+		t.Fatalf("other owner metadata after migration meta=%#v err=%v, want retained", meta, err)
+	}
+}
+
 func TestStore_MigrateFromV31EnsuresProviderContinuationStateEnvelope(t *testing.T) {
 	t.Parallel()
 

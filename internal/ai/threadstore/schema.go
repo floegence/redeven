@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 36
+	threadstoreCurrentSchemaVersion = 37
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -64,6 +64,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 33, ToVersion: 34, Apply: migrateThreadstoreToV34},
 			{FromVersion: 34, ToVersion: 35, Apply: migrateThreadstoreToV35},
 			{FromVersion: 35, ToVersion: 36, Apply: migrateThreadstoreToV36},
+			{FromVersion: 36, ToVersion: 37, Apply: migrateThreadstoreToV37},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -289,6 +290,59 @@ func migrateThreadstoreToV35(tx *sql.Tx) error {
 
 func migrateThreadstoreToV36(tx *sql.Tx) error {
 	return ensureDelegatedApprovalTablesTx(tx)
+}
+
+func migrateThreadstoreToV37(tx *sql.Tx) error {
+	return cleanupLegacyFloretSubagentProjectionRowsTx(tx)
+}
+
+func cleanupLegacyFloretSubagentProjectionRowsTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TEMP TABLE IF NOT EXISTS legacy_floret_subagent_projection_threads (
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  PRIMARY KEY(endpoint_id, thread_id)
+);
+DELETE FROM legacy_floret_subagent_projection_threads;
+INSERT OR IGNORE INTO legacy_floret_subagent_projection_threads(endpoint_id, thread_id)
+SELECT endpoint_id, thread_id
+FROM ai_flower_thread_metadata
+WHERE LOWER(TRIM(COALESCE(owner_kind, ''))) = 'subagent_projection'
+  AND LOWER(TRIM(COALESCE(owner_id, ''))) = 'floret'
+  AND TRIM(COALESCE(endpoint_id, '')) <> ''
+  AND TRIM(COALESCE(thread_id, '')) <> '';
+
+DELETE FROM ai_messages
+WHERE EXISTS (
+  SELECT 1
+  FROM legacy_floret_subagent_projection_threads legacy
+  WHERE legacy.endpoint_id = ai_messages.endpoint_id
+    AND legacy.thread_id = ai_messages.thread_id
+);
+DELETE FROM transcript_messages
+WHERE EXISTS (
+  SELECT 1
+  FROM legacy_floret_subagent_projection_threads legacy
+  WHERE legacy.endpoint_id = transcript_messages.endpoint_id
+    AND legacy.thread_id = transcript_messages.thread_id
+);
+DELETE FROM ai_flower_thread_metadata
+WHERE EXISTS (
+  SELECT 1
+  FROM legacy_floret_subagent_projection_threads legacy
+  WHERE legacy.endpoint_id = ai_flower_thread_metadata.endpoint_id
+    AND legacy.thread_id = ai_flower_thread_metadata.thread_id
+);
+DELETE FROM ai_threads
+WHERE EXISTS (
+  SELECT 1
+  FROM legacy_floret_subagent_projection_threads legacy
+  WHERE legacy.endpoint_id = ai_threads.endpoint_id
+    AND legacy.thread_id = ai_threads.thread_id
+);
+DROP TABLE legacy_floret_subagent_projection_threads;
+`)
+	return err
 }
 
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {

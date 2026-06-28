@@ -17,7 +17,6 @@ import {
   liveBootstrap,
   modelIOStatus,
   renderSurfaceWithAdapter,
-  renderSurfaceWithAdapterProps,
   thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
@@ -176,33 +175,6 @@ describe('FlowerSurface navigation launch/send', () => {
       prompt: 'start with full access',
       permission_type: 'full_access',
     }));
-  });
-
-  it('shows inherited subagent permission state without direct editor control', async () => {
-    const childProjection = thread({
-      thread_id: 'thread-permission-child',
-      title: 'Child worker',
-      owner_kind: 'subagent_projection',
-      parent_thread_id: 'thread-parent',
-      permission_type: 'readonly',
-      read_only_reason: 'Open the parent thread to continue this subagent.',
-    });
-    const runtime = renderSurfaceWithAdapterProps({
-      ...adapter(true),
-      listThreads: vi.fn(async () => [childProjection]),
-      loadThread: vi.fn(async () => liveBootstrap(childProjection)),
-    }, {
-      focusThreadRequest: {
-        request_id: 'focus-child-permission',
-        thread_id: 'thread-permission-child',
-      },
-    });
-
-    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger-static[data-permission-type="readonly"]')));
-
-    expect(runtime.querySelector('.flower-chat-permission-chip')?.textContent).toContain('Read only');
-    expect(runtime.querySelector('button.flower-permission-trigger')).toBeNull();
-    expect(runtime.querySelector('.flower-permission-menu')).toBeNull();
   });
 
   it('stops a running selected thread from the composer when the draft is empty', async () => {

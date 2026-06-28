@@ -3022,6 +3022,7 @@ export const flowerSurfaceFrFR = createFlowerSurfaceLocale({
     permissionApprovalRequiredDescription: 'Tous les outils disponibles. Shell, modifications de fichiers et tâches enfant demandent confirmation.',
     permissionFullAccessLabel: 'Accès complet',
     permissionFullAccessDescription: 'Tous les outils sans confirmation. Limites et audit restent actifs.',
+    providersTitle: 'Providers disponibles',
     addProvider: 'Ajouter un Provider',
     noProviders: 'Aucun Provider pour l’instant. Ajoute OpenAI, Anthropic, Kimi, ChatGLM, DeepSeek, Qwen ou une OpenAI-compatible endpoint.',
     editProvider: 'Modifier le Provider',
