@@ -3708,6 +3708,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (action.delivery_state === 'delivery_failed' || action.delivery_state === 'delivery_ack_unknown') return delegatedStatusCopy().deliveryNeedsReview;
       return action.read_only_reason || copy().chat.toolApprovalUnavailable;
     })();
+    const approvalIntroText = (() => {
+      const toolName = action.tool_name;
+      if (toolName === 'terminal.exec') return 'Flower wants to execute a shell command:';
+      if (toolName === 'file.edit') return 'Flower wants to edit a file:';
+      if (toolName === 'file.write') return 'Flower wants to write a file:';
+      if (toolName === 'apply_patch') return 'Flower wants to apply a patch:';
+      return 'Flower needs your approval:';
+    })();
+    const riskNote = () => {
+      const notes: string[] = [];
+      if (visibleFlags.includes('May reach outside the workspace')) notes.push('This command accesses the network.');
+      if (visibleEffects.includes('Writes files')) notes.push('This will modify files.');
+      if (visibleEffects.includes('Runs shell')) notes.push('This runs a shell command.');
+      return notes.length > 0 ? notes.join(' ') : '';
+    };
     return (
       <section
         class={cn('flower-approval-card', composerSurface && 'flower-approval-card-composer')}
@@ -3716,54 +3731,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-flower-approval-surface-role={action.surface_role || 'primary_action'}
         data-flower-composer-approval={composerSurface ? 'true' : undefined}
       >
-        <div class="flower-approval-heading">
-          <div class="flower-approval-icon"><Terminal class="h-3.5 w-3.5" /></div>
-          <div class="flower-approval-copy">
-            <div class="flower-approval-title">{action.summary.label || action.summary.description || copy().chat.toolApprovalRequired}</div>
-            <Show when={visibleEffects.length > 0 || visibleFlags.length > 0}>
-              <div class="flower-approval-heading-meta">
-                <For each={visibleEffects}>
-                  {(effect) => <span class="flower-approval-heading-chip">{effect}</span>}
-                </For>
-                <For each={visibleFlags}>
-                  {(flag) => <span class="flower-approval-heading-chip flower-approval-heading-chip-warning">{flag}</span>}
-                </For>
-              </div>
-            </Show>
-            <Show when={statusCopy}>
-              {(message) => <div id={statusID} class="flower-approval-status">{message()}</div>}
-            </Show>
-          </div>
-        </div>
-        <Show when={cwdText || (action.summary.targets?.length ?? 0) > 0}>
-          <div class="flower-approval-meta">
-            <Show when={cwdText}>
-              {(cwd) => (
-                <span class="flower-approval-chip flower-approval-chip-code flower-approval-chip-copyable">
-                  <span>{copy().chat.toolApprovalWorkingDirectory}: {cwd()}</span>
-                  <button
-                    type="button"
-                    class="flower-approval-chip-copy"
-                    data-copied={cwdCopied() ? 'true' : 'false'}
-                    aria-label={`${copy().chat.toolApprovalCopyCwd}${subtaskLabel}`}
-                    title={cwdCopied() ? copy().chat.toolApprovalCopied : copy().chat.toolApprovalCopyCwd}
-                    onClick={() => void copyApprovalCwd(action)}
-                  >
-                    <Copy class="h-3 w-3" aria-hidden="true" />
-                  </button>
-                </span>
-              )}
-            </Show>
-            <For each={action.summary.targets ?? []}>
-              {(target) => <span class="flower-approval-chip">{target.label}</span>}
-            </For>
-          </div>
-        </Show>
-        <Show when={commandText}>
-          {(command) => (
-            <div class="flower-approval-command">
-              <div class="flower-approval-command-head">
-                <span>{copy().chat.toolApprovalCommand}</span>
+        <div class="flower-approval-body">
+          <p class="flower-approval-intro">{approvalIntroText}</p>
+          <Show when={commandText}>
+            {(command) => (
+              <div class="flower-approval-command-block">
+                <pre class="flower-approval-command-text">{command()}</pre>
                 <button
                   type="button"
                   class="flower-approval-copy-command"
@@ -3776,13 +3749,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   <span>{commandCopied() ? copy().chat.toolApprovalCopied : copy().chat.toolApprovalCopy}</span>
                 </button>
               </div>
-              <details class="flower-approval-command-details" open={command().length <= 180}>
-                <summary>{command().length > 180 ? copy().chat.toolApprovalShowCommand : copy().chat.toolApprovalCommandText}</summary>
-                <pre class="flower-approval-command-text">{command()}</pre>
-              </details>
+            )}
+          </Show>
+          <Show when={!commandText && (action.summary.targets?.length ?? 0) > 0}>
+            <div class="flower-approval-targets">
+              <For each={action.summary.targets ?? []}>
+                {(target) => <span class="flower-approval-target">{target.label}</span>}
+              </For>
             </div>
-          )}
-        </Show>
+          </Show>
+          <Show when={!commandText && !((action.summary.targets?.length ?? 0) > 0) && action.summary.label}>
+            <p class="flower-approval-fallback-label">{action.summary.label}</p>
+          </Show>
+          <Show when={riskNote()}>
+            {(note) => <p class="flower-approval-risk">{note()}</p>}
+          </Show>
+          <Show when={statusCopy}>
+            {(message) => <p class="flower-approval-status">{message()}</p>}
+          </Show>
+        </div>
         <Show when={!composerSurface}>
           <div class="flower-approval-actions">
             <Show when={canDecide} fallback={<div class="flower-approval-unavailable">{unavailableCopy}</div>}>

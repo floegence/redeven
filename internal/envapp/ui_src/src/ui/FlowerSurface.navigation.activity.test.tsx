@@ -1245,7 +1245,7 @@ describe('FlowerSurface navigation activity', () => {
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
     expect(composer.querySelector('textarea')).toBeNull();
     expect(composer.textContent).toContain('terminal.exec');
-    expect(composer.textContent).toContain('Runs shell');
+    expect(composer.textContent).toContain('This runs a shell command.');
     const row = runtime.querySelector('[data-flower-activity-item-id="approval-item"]') as HTMLElement | null;
     expect(row?.textContent).toContain('pwd; sleep 15; date');
     expect(runtime.querySelector('.flower-transcript-stack > .flower-approval-stack')).toBeNull();
@@ -1351,8 +1351,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.querySelector('.flower-composer textarea')).toBeNull();
     expect(runtime.querySelector('[data-flower-thread-approval-panel] [data-flower-approval-action-id="dappr-terminal"]')).toBeNull();
     expect(primaryCard.textContent).toContain('npm test -- --runInBand');
-    expect(primaryCard.textContent).toContain('Working directory: /repo');
-    expect(primaryCard.textContent).toContain('Runs shell');
+    expect(primaryCard.textContent).toContain('This runs a shell command.');
     writeTextToClipboardMock.mockResolvedValueOnce(undefined);
     const copyButton = primaryCard.querySelector('.flower-approval-copy-command') as HTMLButtonElement | null;
     expect(copyButton).toBeTruthy();
@@ -1360,14 +1359,6 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => writeTextToClipboardMock.mock.calls.length === 1);
     expect(writeTextToClipboardMock).toHaveBeenCalledWith('npm test -- --runInBand');
     expect(copyButton?.getAttribute('data-copied')).toBe('true');
-
-    writeTextToClipboardMock.mockResolvedValueOnce(undefined);
-    const copyCwdButton = primaryCard.querySelector('.flower-approval-chip-copy') as HTMLButtonElement | null;
-    expect(copyCwdButton).toBeTruthy();
-    copyCwdButton?.click();
-    await waitFor(() => writeTextToClipboardMock.mock.calls.length === 2);
-    expect(writeTextToClipboardMock).toHaveBeenCalledWith('/repo');
-    expect(copyCwdButton?.getAttribute('data-copied')).toBe('true');
 
     const row = runtime.querySelector('[data-flower-activity-item-id="delegated-approval-item"]') as HTMLElement | null;
     expect(row?.querySelector('[data-flower-approval-action-id="dappr-terminal"]')).toBeNull();
@@ -1451,7 +1442,7 @@ describe('FlowerSurface navigation activity', () => {
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
     expect(composer.textContent).toContain('npm test');
     expect(composer.textContent).not.toContain('npm run lint');
-    expect(composer.textContent).toContain('First command');
+    expect(composer.textContent).toContain('Flower wants to execute a shell command:');
   });
 
   it('refreshes canonical thread state when an approval decision is stale', async () => {
