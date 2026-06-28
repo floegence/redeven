@@ -886,7 +886,8 @@ function titleForPatchItem(item: FlowerActivityItem, files: readonly FlowerActiv
   if (files.length > 1) {
     return { kind: 'file', verb: 'Edit', display_name: `${files.length} files` };
   }
-  return { kind: 'file', verb: 'Edit', display_name: trimString(item.label) || 'files' };
+  const fallbackName = trimString(item.label);
+  return { kind: 'file', verb: 'Edit', display_name: (fallbackName && fallbackName !== 'apply_patch' ? fallbackName : 'files') };
 }
 
 function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions): FlowerActivityPresentation {
@@ -894,7 +895,9 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
   const operation = operationFromPayload(payload) || 'edit';
   const verb = fileVerbForOperation(operation);
   const action = actionFromPayload(payload, verb, trimString(item.label), fileActions);
-  const displayName = action.display_name || trimString(item.label) || defaultLabelForItem(item);
+  let displayName = action.display_name || trimString(item.label) || defaultLabelForItem(item);
+  if (displayName === 'read_files') displayName = 'files';
+  if (displayName === 'apply_patch') displayName = 'files';
   const title: FlowerActivityTitle = { kind: 'file', verb, display_name: displayName };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   if (verb === 'Read') {
@@ -979,21 +982,37 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
   };
 }
 
+function titleWithToolContext(toolName: string, explicit: string, fallback: string): string {
+  const label = explicit || fallback;
+  switch (toolName) {
+    case 'okf.search': return explicit ? `OKF search "${explicit}"` : 'OKF search';
+    case 'okf.open': return explicit ? `OKF concept "${explicit}"` : 'OKF concept';
+    case 'okf.index': return explicit ? `OKF index · ${explicit}` : 'OKF index';
+    case 'rgrep': return explicit ? `rgrep "${explicit}"` : 'rgrep';
+    case 'find': return explicit ? `find ${explicit}` : 'find';
+    case 'web.search': return explicit ? `Web search "${explicit}"` : 'Web search';
+    case 'web_fetch': return explicit ? `Web fetch ${explicit}` : 'Web fetch';
+    case 'use_skill': return explicit ? `Skill ${explicit}` : 'Skill';
+    default: return label;
+  }
+}
+
 function titleForGenericItem(item: FlowerActivityItem, renderer: FlowerActivityRenderer): FlowerActivityTitle {
   const explicit = trimString(item.label);
+  const toolName = trimString(item.tool_name);
   switch (renderer) {
     case 'terminal': {
       const command = payloadValue(item.payload, 'command') || explicit || defaultLabelForItem(item);
       return { kind: 'command', command };
     }
     case 'web_search':
-      return { kind: 'plain', text: explicit || payloadValue(item.payload, 'query') || defaultLabelForItem(item) };
+      return { kind: 'plain', text: titleWithToolContext(toolName, explicit, defaultLabelForItem(item)) };
     case 'question':
       return { kind: 'plain', text: explicit || trimString(item.description) || payloadValue(item.payload, 'question', 'summary') || defaultLabelForItem(item) };
     case 'completion':
       return { kind: 'plain', text: explicit || payloadValue(item.payload, 'result') || defaultLabelForItem(item) };
     default:
-      return { kind: 'plain', text: explicit || defaultLabelForItem(item) };
+      return { kind: 'plain', text: titleWithToolContext(toolName, explicit, defaultLabelForItem(item)) };
   }
 }
 
