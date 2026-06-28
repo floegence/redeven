@@ -141,6 +141,7 @@ type run struct {
 	mu              sync.Mutex
 	toolApprovals   map[string]*toolApprovalRequest
 	waitingApproval bool
+	floretHost      flruntime.Host
 
 	muLifecycle         sync.Mutex
 	lastLifecyclePhase  string

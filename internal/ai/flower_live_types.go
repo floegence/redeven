@@ -341,6 +341,7 @@ type FlowerApprovalOrigin string
 const (
 	FlowerApprovalOriginMainTool          FlowerApprovalOrigin = "main_tool"
 	FlowerApprovalOriginDelegatedSubagent FlowerApprovalOrigin = "delegated_subagent"
+	FlowerApprovalOriginControlConfirm    FlowerApprovalOrigin = "control_confirm"
 )
 
 type FlowerApprovalSurfaceRole string

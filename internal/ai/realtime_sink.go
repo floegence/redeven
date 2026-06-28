@@ -349,6 +349,8 @@ func classifyStreamKind(streamEvent any) RealtimeStreamKind {
 		return RealtimeStreamKindContext
 	case streamEventModelIOStatus:
 		return RealtimeStreamKindLifecycle
+	case streamEventApprovalAction:
+		return RealtimeStreamKindTool
 	case streamEventBlockStart:
 		switch strings.TrimSpace(strings.ToLower(ev.BlockType)) {
 		case activityTimelineBlockType:

@@ -1162,7 +1162,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(firstTerminalRow?.textContent).toContain('npm run check:0');
   });
 
-  it('renders approval controls inside the matching tool activity row', async () => {
+  it('renders approval controls in the composer while preserving the activity audit row', async () => {
     const approveThread = thread({
       thread_id: 'thread-inline-approval',
       title: 'Inline approval',
@@ -1240,20 +1240,22 @@ describe('FlowerSurface navigation activity', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-inline-approval"] button')));
     (runtime.querySelector('[data-thread-id="thread-inline-approval"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="approval-item"] .flower-approval-card')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer [data-flower-composer-approval="true"][data-flower-approval-action-id="appr-terminal"]')));
 
+    const composer = runtime.querySelector('.flower-composer') as HTMLElement;
+    expect(composer.querySelector('textarea')).toBeNull();
+    expect(composer.textContent).toContain('Review before this runs');
+    expect(composer.textContent).toContain('Runs shell');
     const row = runtime.querySelector('[data-flower-activity-item-id="approval-item"]') as HTMLElement | null;
     expect(row?.textContent).toContain('pwd; sleep 15; date');
-    expect(row?.querySelector('[data-flower-approval-action-id="appr-terminal"]')).toBeTruthy();
-    expect(row?.textContent).toContain('Approve');
     expect(runtime.querySelector('.flower-transcript-stack > .flower-approval-stack')).toBeNull();
   });
 
-  it('uses a single thread-level primary surface for delegated approvals', async () => {
-	    const delegatedAction = {
-	      action_id: 'dappr-terminal',
-	      origin: 'delegated_subagent' as const,
-	      tool_name: 'terminal.exec',
+  it('uses the composer as the primary surface for delegated approvals', async () => {
+    const delegatedAction = {
+      action_id: 'dappr-terminal',
+      origin: 'delegated_subagent' as const,
+      tool_name: 'terminal.exec',
       state: 'requested' as const,
       status: 'pending' as const,
       revision: 1,
@@ -1343,11 +1345,14 @@ describe('FlowerSurface navigation activity', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-delegated-approval"] button')));
     (runtime.querySelector('[data-thread-id="thread-delegated-approval"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-thread-approval-panel] [data-flower-approval-action-id="dappr-terminal"]')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer [data-flower-composer-approval="true"][data-flower-approval-action-id="dappr-terminal"]')));
 
-    const primaryCard = runtime.querySelector('[data-flower-thread-approval-panel] [data-flower-approval-action-id="dappr-terminal"]') as HTMLElement;
+    const primaryCard = runtime.querySelector('.flower-composer [data-flower-approval-action-id="dappr-terminal"]') as HTMLElement;
+    expect(runtime.querySelector('.flower-composer textarea')).toBeNull();
+    expect(runtime.querySelector('[data-flower-thread-approval-panel] [data-flower-approval-action-id="dappr-terminal"]')).toBeNull();
     expect(primaryCard.textContent).toContain('npm test -- --runInBand');
-    expect(primaryCard.textContent).toContain('cwd: /repo');
+    expect(primaryCard.textContent).toContain('Working directory: /repo');
+    expect(primaryCard.textContent).toContain('Runs shell');
     writeTextToClipboardMock.mockResolvedValueOnce(undefined);
     const copyButton = primaryCard.querySelector('.flower-approval-copy-command') as HTMLButtonElement | null;
     expect(copyButton).toBeTruthy();
@@ -1366,7 +1371,7 @@ describe('FlowerSurface navigation activity', () => {
 
     const row = runtime.querySelector('[data-flower-activity-item-id="delegated-approval-item"]') as HTMLElement | null;
     expect(row?.querySelector('[data-flower-approval-action-id="dappr-terminal"]')).toBeNull();
-    const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('[data-flower-thread-approval-panel] button'))
+    const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-actions button'))
       .find((button) => button.textContent?.trim() === 'Approve');
     expect(approve).toBeTruthy();
     approve?.click();
@@ -1381,6 +1386,72 @@ describe('FlowerSurface navigation activity', () => {
       idempotency_key: 'dappr-terminal:approve:3:7',
       delegated_ref: delegatedAction.delegated_ref,
     }));
+  });
+
+  it('shows the oldest composer approval with a compact queue count', async () => {
+    const firstApproval = {
+      action_id: 'appr-first',
+      origin: 'main_tool' as const,
+      run_id: 'run-queue-approval',
+      tool_id: 'tool-first',
+      tool_name: 'terminal.exec',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      revision: 1,
+      version: 1,
+      requested_at_ms: 7_100,
+      can_approve: true,
+      expected_seq: 21,
+      summary: {
+        label: 'First command',
+        command: 'npm test',
+        effects: ['shell'],
+      },
+    };
+    const secondApproval = {
+      ...firstApproval,
+      action_id: 'appr-second',
+      tool_id: 'tool-second',
+      requested_at_ms: 7_200,
+      expected_seq: 22,
+      summary: {
+        label: 'Second command',
+        command: 'npm run lint',
+        effects: ['shell'],
+      },
+    };
+    const approvalThread = thread({
+      thread_id: 'thread-approval-queue',
+      title: 'Approval queue',
+      status: 'waiting_approval',
+      approval_actions: [secondApproval, firstApproval],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [approvalThread]),
+      loadThread: vi.fn(async () => ({
+        ...liveBootstrap({
+          ...approvalThread,
+          approval_actions: [],
+        }, 22),
+        live_state: {
+          ...liveBootstrap(approvalThread, 22).live_state,
+          approval_actions: {
+            'appr-first': firstApproval,
+            'appr-second': secondApproval,
+          },
+        },
+      })),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-approval-queue"] button')));
+    (runtime.querySelector('[data-thread-id="thread-approval-queue"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer [data-flower-approval-action-id="appr-first"]')));
+
+    const composer = runtime.querySelector('.flower-composer') as HTMLElement;
+    expect(composer.textContent).toContain('npm test');
+    expect(composer.textContent).not.toContain('npm run lint');
+    expect(composer.textContent).toContain('1 more approval waiting');
   });
 
   it('refreshes canonical thread state when an approval decision is stale', async () => {

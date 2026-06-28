@@ -173,11 +173,12 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if err != nil {
 		return r.failRun("Failed to initialize Floret host", err)
 	}
+	r.setActiveFloretHost(host)
+	defer r.setActiveFloretHost(nil)
 	threadID := flruntime.ThreadID(strings.TrimSpace(r.threadID))
 	if err := ensureFloretThread(ctx, host, threadID); err != nil {
 		return r.failRun("Failed to initialize Floret thread", err)
 	}
-
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
 	result, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
 		RunID:                 flruntime.RunID(strings.TrimSpace(r.id)),

@@ -116,6 +116,9 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"metadata":      ev.Metadata,
 		})
 	case floretEventToolApprovalRequested, floretEventToolApprovalApproved, floretEventToolApprovalRejected, floretEventToolApprovalTimedOut, floretEventToolApprovalCanceled:
+		if ev.Type != floretEventToolApprovalRequested {
+			r.syncPendingFloretApprovals(context.Background(), ev.Type)
+		}
 		r.persistRunEvent("floret."+ev.Type, RealtimeStreamKindLifecycle, map[string]any{
 			"tool_id":   strings.TrimSpace(ev.ToolID),
 			"tool_name": strings.TrimSpace(ev.ToolName),

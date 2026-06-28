@@ -1801,52 +1801,50 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 		ThreadID:            th.ThreadID,
 		MessageID:           "msg_live_approval_seq",
 		UserPublicID:        meta.UserPublicID,
+		Service:             svc,
 		SessionMeta:         &meta,
 		ThreadsDB:           svc.threadsDB,
 		PersistOpTimeout:    time.Second,
 		ToolApprovalTimeout: time.Minute,
+		OnStreamEvent: func(ev any) {
+			svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, ev)
+		},
 	})
+	requestedAt := time.Now()
 	r.toolApprovals["tool_live_approval_seq"] = &toolApprovalRequest{
 		decision:      make(chan bool, 1),
 		toolName:      "terminal.exec",
-		requestedAtMs: time.Now().UnixMilli(),
+		requestedAtMs: requestedAt.UnixMilli(),
+	}
+	host := &recordingFloretHost{pendingApprovals: []flruntime.PendingApproval{{
+		ApprovalID:  "tool_live_approval_seq",
+		ToolCallID:  "tool_live_approval_seq",
+		ToolName:    "terminal.exec",
+		RunID:       flruntime.RunID(r.messageID),
+		ThreadID:    flruntime.ThreadID(th.ThreadID),
+		TurnID:      flruntime.TurnID(r.messageID),
+		Step:        2,
+		State:       "requested",
+		Revision:    3,
+		Epoch:       7,
+		RequestedAt: requestedAt,
+		Resources: []flruntime.PendingApprovalResource{
+			{Kind: "command", Value: "pwd; sleep 15; date"},
+			{Kind: "working_directory", Value: "/repo"},
+		},
+		Effects:   []string{"shell"},
+		OpenWorld: true,
+	}}}
+	r.setActiveFloretHost(host)
+	if actions := r.flowerApprovalActionsFromFloretPending(flruntime.PendingApprovals{ThreadID: flruntime.ThreadID(th.ThreadID), Approvals: host.pendingApprovals}); len(actions) != 1 {
+		t.Fatalf("pending approvals mapped to %d Flower actions: %#v", len(actions), actions)
 	}
 	svc.mu.Lock()
 	svc.runs[runID] = r
 	svc.activeRunByTh[runThreadKey(meta.EndpointID, th.ThreadID)] = runID
 	svc.mu.Unlock()
 
-	block := newActivityTimelineBlock(observation.ActivityTimeline{
-		SchemaVersion: observation.ActivityTimelineSchemaVersion,
-		RunID:         runID,
-		ThreadID:      th.ThreadID,
-		TurnID:        r.messageID,
-		TraceID:       runID,
-		Summary: observation.ActivitySummary{
-			Status:         observation.ActivityStatusWaiting,
-			Severity:       observation.ActivitySeverityBlocking,
-			NeedsAttention: true,
-			TotalItems:     1,
-			Counts:         observation.ActivityCounts{Waiting: 1},
-		},
-		Items: []observation.ActivityItem{{
-			ItemID:           "item_live_approval_seq",
-			ToolID:           "tool_live_approval_seq",
-			ToolName:         "terminal.exec",
-			Kind:             observation.ActivityKindApproval,
-			Status:           observation.ActivityStatusWaiting,
-			Severity:         observation.ActivitySeverityBlocking,
-			NeedsAttention:   true,
-			RequiresApproval: true,
-			ApprovalState:    "requested",
-		}},
-	}, nil)
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventBlockSet{
-		Type:       "block-set",
-		MessageID:  r.messageID,
-		BlockIndex: 0,
-		Block:      block,
-	})
+	r.syncPendingFloretApprovals(ctx, "test_requested")
 
 	resp, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, 0, 10)
 	if err != nil {
@@ -1872,35 +1870,60 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 	if payload.Action.Revision <= 0 {
 		t.Fatalf("revision=%d, want positive revision", payload.Action.Revision)
 	}
+	if payload.Action.SurfaceEpoch != 7 {
+		t.Fatalf("surface_epoch=%d, want 7", payload.Action.SurfaceEpoch)
+	}
+	if payload.Action.Summary.Command != "pwd; sleep 15; date" || payload.Action.Summary.Cwd != "/repo" {
+		t.Fatalf("summary=%#v, want command and cwd from Floret resources", payload.Action.Summary)
+	}
+	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadLiveBootstrap with pending approval: %v", err)
+	}
+	if got := bootstrap.LiveState.ThreadPatch.RunStatus; got != string(RunStateWaitingApproval) {
+		t.Fatalf("bootstrap run status=%q, want waiting_approval", got)
+	}
+	if _, ok := bootstrap.LiveState.ApprovalActions[payload.Action.ActionID]; !ok {
+		t.Fatalf("pending approval missing from bootstrap live state")
+	}
 	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventBlockSet{
 		Type:       "block-set",
 		MessageID:  r.messageID,
 		BlockIndex: 0,
-		Block:      block,
+		Block: newActivityTimelineBlock(observation.ActivityTimeline{
+			SchemaVersion: observation.ActivityTimelineSchemaVersion,
+			RunID:         runID,
+			ThreadID:      th.ThreadID,
+			TurnID:        r.messageID,
+			TraceID:       runID,
+			Summary: observation.ActivitySummary{
+				Status:         observation.ActivityStatusWaiting,
+				Severity:       observation.ActivitySeverityBlocking,
+				NeedsAttention: true,
+				TotalItems:     1,
+				Counts:         observation.ActivityCounts{Waiting: 1},
+			},
+			Items: []observation.ActivityItem{{
+				ItemID:           "item_live_approval_seq",
+				ToolID:           "tool_live_approval_seq",
+				ToolName:         "terminal.exec",
+				Kind:             observation.ActivityKindApproval,
+				Status:           observation.ActivityStatusWaiting,
+				Severity:         observation.ActivitySeverityBlocking,
+				NeedsAttention:   true,
+				RequiresApproval: true,
+				ApprovalState:    "requested",
+			}},
+		}, nil),
 	})
 	duplicateResp, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, approvalEvent.Seq, 10)
 	if err != nil {
 		t.Fatalf("ListFlowerThreadLiveEvents after duplicate approval activity: %v", err)
 	}
-	var duplicatePayload FlowerLiveApprovalPayload
-	var duplicateSeq int64
 	for _, event := range duplicateResp.Events {
 		if event.Kind == FlowerLiveApprovalRequested {
-			duplicateSeq = event.Seq
-			if !decodeFlowerPayload(event.Payload, &duplicatePayload) {
-				t.Fatalf("failed to decode duplicate approval payload: %s", string(event.Payload))
-			}
-			break
+			t.Fatalf("activity timeline generated a pending approval request event: %#v", event)
 		}
-	}
-	if duplicateSeq <= approvalEvent.Seq {
-		t.Fatalf("duplicate approval seq=%d, want after original seq %d", duplicateSeq, approvalEvent.Seq)
-	}
-	if duplicatePayload.Action.ExpectedSeq != payload.Action.ExpectedSeq {
-		t.Fatalf("duplicate expected_seq=%d, want original expected_seq %d", duplicatePayload.Action.ExpectedSeq, payload.Action.ExpectedSeq)
-	}
-	if duplicatePayload.Action.CanApprove != payload.Action.CanApprove {
-		t.Fatalf("duplicate can_approve=%v, want original can_approve %v", duplicatePayload.Action.CanApprove, payload.Action.CanApprove)
 	}
 	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventBlockDelta{
 		Type:       "text-delta",
@@ -1926,6 +1949,13 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SubmitFlowerApproval with event payload: %v", err)
 	}
+	if got := <-r.toolApprovals["tool_live_approval_seq"].decision; got {
+		t.Fatalf("approval decision=%v, want rejected", got)
+	}
+	host.mu.Lock()
+	host.pendingApprovals = nil
+	host.mu.Unlock()
+	r.syncPendingFloretApprovals(ctx, floretEventToolApprovalRejected)
 	resolved, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, advanced.NextCursor, 10)
 	if err != nil {
 		t.Fatalf("ListFlowerThreadLiveEvents after approval submit: %v", err)
@@ -1945,7 +1975,7 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 	if resolvedPayload.Action.ExpectedSeq != payload.Action.ExpectedSeq {
 		t.Fatalf("resolved expected_seq=%d, want original requested seq %d", resolvedPayload.Action.ExpectedSeq, payload.Action.ExpectedSeq)
 	}
-	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
+	bootstrap, err = svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
 	if err != nil {
 		t.Fatalf("GetFlowerThreadLiveBootstrap after approval submit: %v", err)
 	}
@@ -1962,20 +1992,27 @@ func TestFlowerLiveApprovalSnapshotCarriesFloretApprovalContext(t *testing.T) {
 		ThreadID:  "thread_floret_approval_context",
 		MessageID: "msg_floret_approval_context",
 	})
-	r.toolApprovals["tool_floret_approval_context"] = &toolApprovalRequest{
-		decision:      make(chan bool, 1),
-		toolName:      "apply_patch",
-		argsHash:      "abc123",
-		effects:       []string{"write"},
-		flags:         []string{"destructive", "args_hash:abc123"},
-		targets:       []FlowerSafeTarget{{Kind: "file", Label: "added.txt", URI: "file:added.txt"}},
-		requestedAtMs: 1700000000000,
-		expiresAtMs:   1700000060000,
-	}
-
-	action, ok := r.snapshotToolApproval("tool_floret_approval_context")
+	action, ok := r.flowerApprovalActionFromFloretPending(flruntime.PendingApproval{
+		ApprovalID:  "tool_floret_approval_context",
+		ToolCallID:  "tool_floret_approval_context",
+		ToolName:    "apply_patch",
+		RunID:       flruntime.RunID("msg_floret_approval_context"),
+		ThreadID:    flruntime.ThreadID("thread_floret_approval_context"),
+		TurnID:      flruntime.TurnID("msg_floret_approval_context"),
+		Step:        4,
+		State:       "requested",
+		Revision:    2,
+		Epoch:       9,
+		RequestedAt: time.UnixMilli(1700000000000),
+		Resources: []flruntime.PendingApprovalResource{
+			{Kind: "file", Value: "added.txt"},
+		},
+		Effects:     []string{"write"},
+		Destructive: true,
+		ArgsHash:    "abc123",
+	})
 	if !ok {
-		t.Fatal("snapshotToolApproval returned false")
+		t.Fatal("flowerApprovalActionFromFloretPending returned false")
 	}
 	if action.ActionID != flowerApprovalActionID("run_floret_approval_context", "tool_floret_approval_context") {
 		t.Fatalf("ActionID=%q", action.ActionID)
@@ -1983,13 +2020,16 @@ func TestFlowerLiveApprovalSnapshotCarriesFloretApprovalContext(t *testing.T) {
 	if action.ToolName != "apply_patch" {
 		t.Fatalf("ToolName=%q, want apply_patch", action.ToolName)
 	}
+	if action.Revision != 2 || action.SurfaceEpoch != 9 || action.StepID != "step:4" {
+		t.Fatalf("revision=%d epoch=%d step_id=%q", action.Revision, action.SurfaceEpoch, action.StepID)
+	}
 	if action.Summary.Description != "Review access to added.txt before this tool runs." {
 		t.Fatalf("Description=%q", action.Summary.Description)
 	}
 	if !reflect.DeepEqual(action.Summary.Effects, []string{"write"}) {
 		t.Fatalf("Effects=%#v", action.Summary.Effects)
 	}
-	if !reflect.DeepEqual(action.Summary.Flags, []string{"destructive", "args_hash:abc123"}) {
+	if !reflect.DeepEqual(action.Summary.Flags, []string{"destructive"}) {
 		t.Fatalf("Flags=%#v", action.Summary.Flags)
 	}
 	if !reflect.DeepEqual(action.Summary.Targets, []FlowerSafeTarget{{Kind: "file", Label: "added.txt", URI: "file:added.txt"}}) {

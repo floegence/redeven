@@ -2999,6 +2999,7 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 	}
 	r.waitingApproval = true
 	r.mu.Unlock()
+	r.publishControlConfirmationRequested(toolID)
 	defer func() {
 		r.mu.Lock()
 		delete(r.toolApprovals, toolID)
@@ -3038,6 +3039,7 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 		})
 		return false, nil
 	case <-ctx.Done():
+		r.publishToolApprovalResolved(toolID, FlowerApprovalStateCanceled, ctx.Err().Error())
 		return false, ctx.Err()
 	case <-timer.C:
 		r.recordObservationActivityEvent(observation.Event{
@@ -3050,6 +3052,7 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 				"approval_id": toolID,
 			},
 		})
+		r.publishToolApprovalResolved(toolID, FlowerApprovalStateTimedOut, "approval timed out")
 		return false, errors.New("approval timed out")
 	}
 }

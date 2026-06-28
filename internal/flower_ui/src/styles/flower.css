@@ -1258,6 +1258,25 @@ html.dark .flower-component-shell {
     width: auto;
   }
 
+  .flower-composer-approval-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .flower-composer-approval-queue {
+    align-self: flex-start;
+    white-space: normal;
+  }
+
+  .flower-composer-approval-actions,
+  .flower-composer-approval-decision {
+    width: 100%;
+  }
+
+  .flower-composer-approval-decision {
+    justify-content: center;
+  }
+
   .flower-model-selection {
     width: 100%;
     flex-wrap: wrap;
@@ -2793,6 +2812,57 @@ html.dark .flower-component-shell {
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--warning, #f59e0b) 6%, var(--flower-chat-surface-elevated));
   padding: 0.75rem;
+}
+
+.flower-approval-card-composer {
+  border-color: color-mix(in srgb, var(--warning, #f59e0b) 34%, var(--flower-chat-surface-border));
+  background: color-mix(in srgb, var(--warning, #f59e0b) 7%, transparent);
+  box-shadow: none;
+}
+
+.flower-composer-approval-body {
+  min-width: 0;
+}
+
+.flower-composer-approval-banner {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.flower-composer-approval-banner-copy {
+  min-width: 0;
+}
+
+.flower-composer-approval-banner-title {
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.flower-composer-approval-banner-description {
+  margin-top: 0.125rem;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.flower-composer-approval-queue {
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 24%, var(--flower-chat-surface-border));
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 9%, var(--flower-chat-surface-elevated));
+  color: color-mix(in srgb, var(--warning, #f59e0b) 76%, var(--foreground) 24%);
+  padding: 0.1875rem 0.5625rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .flower-thread-approval-panel {
@@ -4362,6 +4432,23 @@ html.dark .flower-component-shell {
   min-height: 2.25rem;
   padding-inline: 0.875rem;
   white-space: nowrap;
+}
+
+.flower-composer-approval-actions {
+  display: inline-flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.flower-composer-approval-decision {
+  min-height: 2.25rem;
+  cursor: pointer;
+}
+
+.flower-composer-approval-decision:disabled {
+  cursor: not-allowed;
 }
 
 .flower-composer-readonly-chip {
