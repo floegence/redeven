@@ -7,12 +7,7 @@ import { compactionDividerDetail, compactionDividerLabel } from './flowerContext
 
 function FlowerContextCompactionRunningIcon() {
   return (
-    <span class="flower-compaction-divider-running-icon" aria-hidden="true">
-      <span class="flower-compaction-divider-running-square" />
-      <span class="flower-compaction-divider-running-square" />
-      <span class="flower-compaction-divider-running-square" />
-      <span class="flower-compaction-divider-running-square" />
-    </span>
+    <span class="flower-compaction-divider-running-clock" aria-hidden="true" />
   );
 }
 

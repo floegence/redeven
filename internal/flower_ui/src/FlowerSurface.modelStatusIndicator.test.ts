@@ -125,7 +125,7 @@ describe('Flower model status indicator', () => {
     const descriptionRule = cssRule(css, '.flower-composer-command-description');
     const pillRule = cssRule(css, '.flower-compaction-divider-pill');
     const dividerRunningRule = cssRule(css, '.flower-compaction-divider-pill-running');
-    const dividerIconRule = cssRule(css, '.flower-compaction-divider-running-icon');
+    const dividerIconRule = cssRule(css, '.flower-compaction-divider-running-clock');
     const dividerLabelRule = cssRule(css, '.flower-compaction-divider-label-shimmer');
     const dividerShimmerRule = cssRule(css, ".flower-compaction-divider[data-flower-compaction-status='compacting'] .flower-compaction-divider-label-shimmer::after");
 
@@ -142,14 +142,14 @@ describe('Flower model status indicator', () => {
     expect(descriptionRule).toContain('font-size: 0.74rem');
     expect(descriptionRule).toContain('white-space: nowrap');
     expect(dividerRunningRule).toContain('border-color: color-mix(in srgb, var(--primary) 30%, var(--flower-chat-surface-border) 70%)');
-    expect(dividerIconRule).toContain('display: inline-grid');
-    expect(dividerIconRule).toContain('grid-template-columns: repeat(2, 0.34rem)');
+    expect(dividerIconRule).toContain('display: inline-block');
+    expect(dividerIconRule).toContain('border-radius: 9999px');
     expect(dividerLabelRule).toContain('position: relative');
     expect(dividerLabelRule).toContain('display: inline-block');
     expect(dividerShimmerRule).toContain('content: attr(data-text)');
     expect(dividerShimmerRule).toContain('animation: flower-compaction-divider-shimmer 2.2s ease-in-out infinite');
     expect(css).toContain('@keyframes flower-compaction-divider-shimmer');
-    expect(css).toContain('@keyframes flower-compaction-divider-loader-square');
+    expect(css).toContain('@keyframes flower-compaction-divider-clock-tick');
     expect(pillRule).toContain('box-shadow');
   });
 
