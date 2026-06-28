@@ -146,7 +146,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
 
   const updateModel = (index: number, patch: Partial<FlowerProviderModel>) => {
     if (!store.draft) return;
-    (setStore as any)('draft', 'models', index, produce((m) => Object.assign(m, patch)));
+    (setStore as any)('draft', 'models', index, produce((m: FlowerProviderModel) => Object.assign(m, patch)));
   };
 
   return (
