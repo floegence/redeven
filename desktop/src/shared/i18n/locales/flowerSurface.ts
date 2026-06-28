@@ -3017,7 +3017,7 @@ export const flowerSurfaceFrFR = createFlowerSurfaceLocale({
     defaultPermissionDescription: 'Contrôle la surface d’outils par défaut et les confirmations pour les nouveaux fils Flower.',
     defaultPermissionBadge: 'Default',
     permissionReadonlyLabel: 'Lecture seule',
-    permissionReadonlyDescription: 'Lecture et recherche uniquement. Pas de shell, d'''édition de fichiers ni d'''outils d'''écriture.',
+    permissionReadonlyDescription: 'Lecture et recherche uniquement. Pas de shell, d’édition de fichiers ni d’outils d’écriture.',
     permissionApprovalRequiredLabel: 'Approbation requise',
     permissionApprovalRequiredDescription: 'Tous les outils disponibles. Shell, modifications de fichiers et tâches enfant demandent confirmation.',
     permissionFullAccessLabel: 'Accès complet',

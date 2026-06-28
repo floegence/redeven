@@ -107,7 +107,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   };
 
   const setModels = (models: readonly FlowerProviderModel[]) => {
-    setStore('draft', 'models', reconcile(models));
+    (setStore as any)('draft', 'models', reconcile(models));
   };
 
   const addPreset = (model: FlowerProviderModel) => {
@@ -146,7 +146,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
 
   const updateModel = (index: number, patch: Partial<FlowerProviderModel>) => {
     if (!store.draft) return;
-    setStore('draft', 'models', index, produce((m) => Object.assign(m, patch)));
+    (setStore as any)('draft', 'models', index, produce((m) => Object.assign(m, patch)));
   };
 
   return (
