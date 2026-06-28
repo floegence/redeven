@@ -262,21 +262,6 @@ html.dark .flower-component-shell {
   color: var(--foreground);
 }
 
-.flower-chat-permission-chip {
-  display: inline-flex;
-  min-width: 0;
-  flex: 0 0 auto;
-  align-items: center;
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 78%, transparent);
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 88%, transparent);
-  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
-  padding: 0.125rem 0.5rem;
-  font-size: 0.6875rem;
-  font-weight: 650;
-  line-height: 1.35;
-  white-space: nowrap;
-}
 
 .flower-chat-header-actions {
   display: flex;
