@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createSignal } from 'solid-js';
 import { createStore, produce, reconcile } from 'solid-js/store';
 import { cn } from '@floegence/floe-webapp-core';
-import { ChevronDown } from '@floegence/floe-webapp-core/icons';
+import { ChevronDown, Pencil } from '@floegence/floe-webapp-core/icons';
 import { Button, Checkbox, Dialog, Input, Select } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerProviderDialogCopy } from '../copy';
