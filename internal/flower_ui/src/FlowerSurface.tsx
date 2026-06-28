@@ -44,6 +44,7 @@ import type {
   FlowerModelIOPhase,
   FlowerModelIOStatus,
   FlowerPermissionType,
+  FlowerProviderType,
   FlowerReasoningSelection,
   FlowerSubagentDetail,
   FlowerSubagentTimelineRow,
@@ -1380,7 +1381,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!current) return threadModelID;
     return formatFlowerCurrentModelLabel({ ...current.config, current_model_id: threadModelID }, copy().chat.noModelSelected);
   });
-  type ComposerModelOption = Readonly<{ id: string; label: string; providerLabel: string; providerType: string; supportsImageInput: boolean; contextWindow?: number; maxOutputTokens?: number }>;
+  type ComposerModelOption = Readonly<{ id: string; label: string; providerLabel: string; providerType?: FlowerProviderType; supportsImageInput: boolean; contextWindow?: number; maxOutputTokens?: number }>;
   const modelSelectOptions = createMemo(() => {
     const current = snapshot();
     const options = current?.config.providers.flatMap((provider) => {
@@ -1404,7 +1405,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const selected = selectedComposerModelID();
     if (selected && !options.some((option) => option.id === selected)) {
       const label = selectedThreadModelLabel();
-      return [{ id: selected, label, providerLabel: '', providerType: '', supportsImageInput: false } as ComposerModelOption, ...options];
+      return [{ id: selected, label, providerLabel: '', supportsImageInput: false } as ComposerModelOption, ...options];
     }
     return options;
   });
@@ -4925,9 +4926,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                                                 aria-selected={selected()}
                                                 onClick={() => { void updateComposerModelID(option.id); closeModelMenu(true); }}
                                               >
-                                                <Show when={option.providerType} fallback={<Bot class="flower-model-menu-icon" />}>
-                                                  <FlowerProviderBrandIcon type={option.providerType} class="flower-model-menu-icon" />
-                                                </Show>
+                                                {option.providerType
+                                                  ? <FlowerProviderBrandIcon type={option.providerType} class="flower-model-menu-icon" />
+                                                  : <Bot class="flower-model-menu-icon" />}
                                                 <span class="flower-model-menu-copy">
                                                   <span class="flower-model-menu-name">{option.label}</span>
                                                   <span class="flower-model-menu-meta">
