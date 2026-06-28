@@ -3717,31 +3717,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-flower-approval-surface-role={action.surface_role || 'primary_action'}
         data-flower-composer-approval={composerSurface ? 'true' : undefined}
       >
-        <Show when={composerSurface}>
-          <div class="flower-composer-approval-banner">
-            <div class="flower-composer-approval-banner-copy">
-              <div class="flower-composer-approval-banner-title">{copy().chat.toolApprovalComposerTitle}</div>
-              <div class="flower-composer-approval-banner-description">{copy().chat.toolApprovalComposerDescription}</div>
-            </div>
-            <Show when={selectedComposerApprovalQueueCount()}>
-              {(count) => <div class="flower-composer-approval-queue">{copy().chat.toolApprovalQueueCount(count())}</div>}
-            </Show>
-          </div>
-        </Show>
         <div class="flower-approval-heading">
-          <div class="flower-approval-icon"><Terminal class="h-4 w-4" /></div>
+          <div class="flower-approval-icon"><Terminal class="h-3.5 w-3.5" /></div>
           <div class="flower-approval-copy">
-            <div class="flower-approval-kicker">{copy().chat.toolApprovalRequired}</div>
             <div class="flower-approval-title">{action.summary.label || action.summary.description || copy().chat.toolApprovalRequired}</div>
-            <Show when={descriptionText}>
-              {(description) => <div id={descriptionID} class="flower-approval-description">{description()}</div>}
+            <Show when={visibleEffects.length > 0 || visibleFlags.length > 0}>
+              <div class="flower-approval-heading-meta">
+                <For each={visibleEffects}>
+                  {(effect) => <span class="flower-approval-heading-chip">{effect}</span>}
+                </For>
+                <For each={visibleFlags}>
+                  {(flag) => <span class="flower-approval-heading-chip flower-approval-heading-chip-warning">{flag}</span>}
+                </For>
+              </div>
             </Show>
             <Show when={statusCopy}>
               {(message) => <div id={statusID} class="flower-approval-status">{message()}</div>}
             </Show>
           </div>
         </div>
-        <Show when={cwdText || visibleEffects.length > 0 || (action.summary.targets?.length ?? 0) > 0 || visibleFlags.length > 0}>
+        <Show when={cwdText || (action.summary.targets?.length ?? 0) > 0}>
           <div class="flower-approval-meta">
             <Show when={cwdText}>
               {(cwd) => (
@@ -3760,14 +3755,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </span>
               )}
             </Show>
-            <For each={visibleEffects}>
-              {(effect) => <span class="flower-approval-chip">{effect}</span>}
-            </For>
             <For each={action.summary.targets ?? []}>
               {(target) => <span class="flower-approval-chip">{target.label}</span>}
-            </For>
-            <For each={visibleFlags}>
-              {(flag) => <span class="flower-approval-chip flower-approval-chip-warning">{flag}</span>}
             </For>
           </div>
         </Show>
