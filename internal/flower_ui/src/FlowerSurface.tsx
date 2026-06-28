@@ -3710,17 +3710,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     })();
     const approvalIntroText = (() => {
       const toolName = action.tool_name;
-      if (toolName === 'terminal.exec') return 'Flower wants to execute a shell command:';
-      if (toolName === 'file.edit') return 'Flower wants to edit a file:';
-      if (toolName === 'file.write') return 'Flower wants to write a file:';
-      if (toolName === 'apply_patch') return 'Flower wants to apply a patch:';
-      return 'Flower needs your approval:';
+      if (toolName === 'terminal.exec') return 'Flower wants to execute a shell command';
+      if (toolName === 'file.edit') return 'Flower wants to edit a file';
+      if (toolName === 'file.write') return 'Flower wants to write a file';
+      if (toolName === 'apply_patch') return 'Flower wants to apply a patch';
+      return 'Flower needs your approval';
     })();
     const riskNote = () => {
       const notes: string[] = [];
       if (visibleFlags.includes('May reach outside the workspace')) notes.push('This command accesses the network.');
       if (visibleEffects.includes('Writes files')) notes.push('This will modify files.');
-      if (visibleEffects.includes('Runs shell')) notes.push('This runs a shell command.');
       return notes.length > 0 ? notes.join(' ') : '';
     };
     return (
@@ -3732,23 +3731,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-flower-composer-approval={composerSurface ? 'true' : undefined}
       >
         <div class="flower-approval-body">
-          <p class="flower-approval-intro">{approvalIntroText}</p>
+          <div class="flower-approval-header">
+            <p class="flower-approval-intro">{approvalIntroText}</p>
+            <Show when={commandText}>
+              <button
+                type="button"
+                class="flower-approval-copy-btn"
+                data-copied={commandCopied() ? 'true' : 'false'}
+                aria-label={`${copy().chat.toolApprovalCopyCommand}${subtaskLabel}`}
+                title={commandCopied() ? copy().chat.toolApprovalCopied : copy().chat.toolApprovalCopyCommand}
+                onClick={() => void copyApprovalCommand(action)}
+              >
+                <Copy class="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+            </Show>
+          </div>
           <Show when={commandText}>
             {(command) => (
-              <div class="flower-approval-command-block">
-                <pre class="flower-approval-command-text">{command()}</pre>
-                <button
-                  type="button"
-                  class="flower-approval-copy-command"
-                  data-copied={commandCopied() ? 'true' : 'false'}
-                  aria-label={`${copy().chat.toolApprovalCopyCommand}${subtaskLabel}`}
-                  title={commandCopied() ? copy().chat.toolApprovalCopied : copy().chat.toolApprovalCopyCommand}
-                  onClick={() => void copyApprovalCommand(action)}
-                >
-                  <Copy class="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>{commandCopied() ? copy().chat.toolApprovalCopied : copy().chat.toolApprovalCopy}</span>
-                </button>
-              </div>
+              <pre class="flower-approval-command-text">{command()}</pre>
             )}
           </Show>
           <Show when={!commandText && (action.summary.targets?.length ?? 0) > 0}>
