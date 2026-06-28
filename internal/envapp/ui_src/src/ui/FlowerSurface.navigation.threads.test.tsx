@@ -87,6 +87,42 @@ function markedReadStatus(snapshot: FlowerThreadActivitySnapshot, status = 'succ
   };
 }
 
+function attachTranscriptScrollMetrics(transcript: HTMLElement, metrics: {
+  clientHeight: number;
+  scrollHeight: number;
+  scrollTop: number;
+}): Readonly<{
+  scrollTop: () => number;
+  setScrollTop: (value: number) => void;
+  setScrollHeight: (value: number) => void;
+}> {
+  let scrollTopValue = metrics.scrollTop;
+  let scrollHeightValue = metrics.scrollHeight;
+  Object.defineProperties(transcript, {
+    clientHeight: { configurable: true, value: metrics.clientHeight },
+    scrollHeight: {
+      configurable: true,
+      get: () => scrollHeightValue,
+    },
+    scrollTop: {
+      configurable: true,
+      get: () => scrollTopValue,
+      set: (value: number) => {
+        scrollTopValue = Number(value);
+      },
+    },
+  });
+  return {
+    scrollTop: () => scrollTopValue,
+    setScrollTop: (value: number) => {
+      scrollTopValue = value;
+    },
+    setScrollHeight: (value: number) => {
+      scrollHeightValue = value;
+    },
+  };
+}
+
 describe('FlowerSurface navigation threads', () => {
   it('consumes external focus requests once without stealing later manual thread selection', async () => {
     const focusedThread = thread({
@@ -2334,18 +2370,13 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-scroll-agent"]')));
 
     const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
-    let scrollTopValue = 120;
-    Object.defineProperties(transcript, {
-      clientHeight: { configurable: true, value: 400 },
-      scrollHeight: { configurable: true, value: 1400 },
-      scrollTop: {
-        configurable: true,
-        get: () => scrollTopValue,
-        set: (value: number) => {
-          scrollTopValue = value;
-        },
-      },
+    const scrollMetrics = attachTranscriptScrollMetrics(transcript, {
+      clientHeight: 400,
+      scrollHeight: 1400,
+      scrollTop: 120,
     });
+    await waitFor(() => scrollMetrics.scrollTop() === 1000);
+    scrollMetrics.setScrollTop(120);
     transcript.dispatchEvent(new Event('scroll', { bubbles: true }));
 
     await waitFor(() => Boolean(runtime.querySelector('.flower-scroll-to-latest-button')));
@@ -2356,16 +2387,25 @@ describe('FlowerSurface navigation threads', () => {
 
     button.click();
 
-    await waitFor(() => scrollTopValue === 1000);
+    await waitFor(() => scrollMetrics.scrollTop() === 1000);
     await waitFor(() => !runtime.querySelector('.flower-scroll-to-latest-button'));
   });
 
-  it('measures a newly selected long thread and shows the scroll control after layout', async () => {
+  it('opens a newly selected long thread at the latest output', async () => {
+    let transcriptScrollTop = 0;
     const clientHeightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function clientHeightMock(this: HTMLElement) {
-      return this.classList.contains('flower-chat-transcript') ? 400 : 0;
+      return this.classList.contains('flower-chat-transcript') ? 180 : 0;
     });
     const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function scrollHeightMock(this: HTMLElement) {
-      return this.classList.contains('flower-chat-transcript') ? 1800 : 0;
+      return this.classList.contains('flower-chat-transcript') ? 920 : 0;
+    });
+    const scrollTopSpy = vi.spyOn(HTMLElement.prototype, 'scrollTop', 'get').mockImplementation(function scrollTopMock(this: HTMLElement) {
+      return this.classList.contains('flower-chat-transcript') ? transcriptScrollTop : 0;
+    });
+    const scrollTopSetSpy = vi.spyOn(HTMLElement.prototype, 'scrollTop', 'set').mockImplementation(function scrollTopSetMock(this: HTMLElement, value: number) {
+      if (this.classList.contains('flower-chat-transcript')) {
+        transcriptScrollTop = Number(value);
+      }
     });
     try {
       const selectedThread = thread({
@@ -2398,11 +2438,278 @@ describe('FlowerSurface navigation threads', () => {
       (runtime.querySelector('[data-thread-id="thread-long-on-load"] button') as HTMLButtonElement).click();
       await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-long-agent"]')));
 
-      await waitFor(() => Boolean(runtime.querySelector('.flower-scroll-to-latest-button')));
-      expect(runtime.querySelector('.flower-scroll-to-latest-button')?.getAttribute('title')).toBe('Scroll to latest');
+      await waitFor(() => transcriptScrollTop === 740);
+      expect(runtime.querySelector('.flower-scroll-to-latest-button')).toBeNull();
     } finally {
       clientHeightSpy.mockRestore();
       scrollHeightSpy.mockRestore();
+      scrollTopSpy.mockRestore();
+      scrollTopSetSpy.mockRestore();
     }
+  });
+
+  it('keeps following latest output while the selected running thread streams', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-follow-running',
+      title: 'Follow running',
+      status: 'running',
+      messages: [{
+        id: 'm-follow-running',
+        role: 'assistant',
+        content: 'Working',
+        status: 'streaming',
+        created_at_ms: 1,
+        blocks: [{ type: 'markdown', content: 'Working' }],
+      }],
+    });
+    let liveReady = false;
+    const listThreadLiveEvents = vi.fn(async () => {
+      if (!liveReady) {
+        return { stream_generation: 1, events: [], next_cursor: 1, retained_from_seq: 1 };
+      }
+      return {
+        stream_generation: 1,
+        events: [liveEvent('thread-follow-running', 2, 'message.block_delta', {
+          message_id: 'm-follow-running',
+          block_index: 0,
+          delta: ' with details',
+        })],
+        next_cursor: 2,
+        retained_from_seq: 1,
+      } satisfies FlowerLiveEventsResponse;
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(runningThread, 1)),
+      listThreadLiveEvents,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-follow-running"] button')));
+    (runtime.querySelector('[data-thread-id="thread-follow-running"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-follow-running"]')));
+
+    const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
+    const scrollMetrics = attachTranscriptScrollMetrics(transcript, {
+      clientHeight: 180,
+      scrollHeight: 920,
+      scrollTop: 740,
+    });
+    liveReady = true;
+    scrollMetrics.setScrollHeight(1100);
+
+    await waitFor(() => runtime.textContent?.includes('Working with details') === true, 2500);
+    await waitFor(() => scrollMetrics.scrollTop() === 920);
+    expect(runtime.querySelector('.flower-scroll-to-latest-button')).toBeNull();
+  });
+
+  it('lets user scrolling interrupt running thread follow mode until returning to latest', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-follow-interrupt',
+      title: 'Follow interrupt',
+      status: 'running',
+      messages: [{
+        id: 'm-follow-interrupt',
+        role: 'assistant',
+        content: 'Working',
+        status: 'streaming',
+        created_at_ms: 1,
+        blocks: [{ type: 'markdown', content: 'Working' }],
+      }],
+    });
+    let interruptedDeltaReady = false;
+    let interruptedDeltaDelivered = false;
+    let resumedDeltaReady = false;
+    let resumedDeltaDelivered = false;
+    const listThreadLiveEvents = vi.fn(async (_threadID: string, afterSeq: number) => {
+      if (afterSeq <= 1 && interruptedDeltaReady && !interruptedDeltaDelivered) {
+        interruptedDeltaDelivered = true;
+        return {
+          stream_generation: 1,
+          events: [liveEvent('thread-follow-interrupt', 2, 'message.block_delta', {
+            message_id: 'm-follow-interrupt',
+            block_index: 0,
+            delta: ' after user scroll',
+          })],
+          next_cursor: 2,
+          retained_from_seq: 1,
+        } satisfies FlowerLiveEventsResponse;
+      }
+      if (afterSeq <= 2 && resumedDeltaReady && !resumedDeltaDelivered) {
+        resumedDeltaDelivered = true;
+        return {
+          stream_generation: 1,
+          events: [liveEvent('thread-follow-interrupt', 3, 'message.block_delta', {
+            message_id: 'm-follow-interrupt',
+            block_index: 0,
+            delta: ' after returning',
+          })],
+          next_cursor: 3,
+          retained_from_seq: 1,
+        } satisfies FlowerLiveEventsResponse;
+      }
+      if (afterSeq <= 1) {
+        return { stream_generation: 1, events: [], next_cursor: 1, retained_from_seq: 1 };
+      }
+      return {
+        stream_generation: 1,
+        events: [],
+        next_cursor: afterSeq,
+        retained_from_seq: 1,
+      } satisfies FlowerLiveEventsResponse;
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(runningThread, 1)),
+      listThreadLiveEvents,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-follow-interrupt"] button')));
+    (runtime.querySelector('[data-thread-id="thread-follow-interrupt"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-follow-interrupt"]')));
+
+    const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
+    const scrollMetrics = attachTranscriptScrollMetrics(transcript, {
+      clientHeight: 180,
+      scrollHeight: 920,
+      scrollTop: 740,
+    });
+    transcript.dispatchEvent(new WheelEvent('wheel', { deltaY: -80, bubbles: true }));
+    scrollMetrics.setScrollTop(300);
+    transcript.dispatchEvent(new Event('scroll', { bubbles: true }));
+    interruptedDeltaReady = true;
+    scrollMetrics.setScrollHeight(1100);
+
+    await waitFor(() => runtime.textContent?.includes('Working after user scroll') === true, 2500);
+    expect(scrollMetrics.scrollTop()).toBe(300);
+    await waitFor(() => Boolean(runtime.querySelector('.flower-scroll-to-latest-button')));
+
+    const button = runtime.querySelector('.flower-scroll-to-latest-button') as HTMLButtonElement;
+    button.click();
+    await waitFor(() => scrollMetrics.scrollTop() === 920);
+
+    resumedDeltaReady = true;
+    scrollMetrics.setScrollHeight(1280);
+    await waitFor(() => runtime.textContent?.includes('Working after user scroll after returning') === true, 2500);
+    await waitFor(() => scrollMetrics.scrollTop() === 1100);
+  });
+
+  it('follows timeline replacements while latest output is still selected', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-follow-replaced',
+      title: 'Follow replaced',
+      status: 'running',
+      messages: [{
+        id: 'm-follow-replaced-old',
+        role: 'assistant',
+        content: 'Old output',
+        status: 'streaming',
+        created_at_ms: 1,
+      }],
+    });
+    let liveReady = false;
+    const listThreadLiveEvents = vi.fn(async () => {
+      if (!liveReady) {
+        return { stream_generation: 1, events: [], next_cursor: 1, retained_from_seq: 1 };
+      }
+      return {
+        stream_generation: 1,
+        events: [liveEvent('thread-follow-replaced', 2, 'timeline.replaced', {
+          messages: [{
+            id: 'm-follow-replaced-new',
+            role: 'assistant',
+            content: 'Canonical latest output',
+            status: 'streaming',
+            created_at_ms: 2,
+          }],
+          stream_generation: 1,
+          snapshot_through_seq: 2,
+        })],
+        next_cursor: 2,
+        retained_from_seq: 1,
+      } satisfies FlowerLiveEventsResponse;
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(runningThread, 1)),
+      listThreadLiveEvents,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-follow-replaced"] button')));
+    (runtime.querySelector('[data-thread-id="thread-follow-replaced"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-follow-replaced-old"]')));
+
+    const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
+    const scrollMetrics = attachTranscriptScrollMetrics(transcript, {
+      clientHeight: 180,
+      scrollHeight: 920,
+      scrollTop: 740,
+    });
+    liveReady = true;
+    scrollMetrics.setScrollHeight(1040);
+
+    await waitFor(() => runtime.textContent?.includes('Canonical latest output') === true, 2500);
+    await waitFor(() => scrollMetrics.scrollTop() === 860);
+  });
+
+  it('ignores stale selected-thread load scrolls after a faster thread switch', async () => {
+    const firstThread = thread({
+      thread_id: 'thread-stale-scroll-first',
+      title: 'First stale scroll',
+      messages: [{
+        id: 'm-stale-first',
+        role: 'assistant',
+        content: 'First loaded late',
+        status: 'complete',
+        created_at_ms: 1,
+      }],
+    });
+    const secondThread = thread({
+      thread_id: 'thread-stale-scroll-second',
+      title: 'Second current scroll',
+      messages: [{
+        id: 'm-stale-second',
+        role: 'assistant',
+        content: 'Second current',
+        status: 'complete',
+        created_at_ms: 2,
+      }],
+    });
+    const firstLoad = deferred<FlowerLiveBootstrap>();
+    const loadThread = vi.fn(async (threadID: string) => {
+      if (threadID === 'thread-stale-scroll-first') return firstLoad.promise;
+      if (threadID === 'thread-stale-scroll-second') return liveBootstrap(secondThread);
+      throw new Error(`unexpected thread ${threadID}`);
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [firstThread, secondThread]),
+      loadThread,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stale-scroll-first"] button')));
+    const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
+    const scrollMetrics = attachTranscriptScrollMetrics(transcript, {
+      clientHeight: 180,
+      scrollHeight: 920,
+      scrollTop: 0,
+    });
+
+    (runtime.querySelector('[data-thread-id="thread-stale-scroll-first"] button') as HTMLButtonElement).click();
+    (runtime.querySelector('[data-thread-id="thread-stale-scroll-second"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Second current') === true);
+    await waitFor(() => scrollMetrics.scrollTop() === 740);
+
+    scrollMetrics.setScrollTop(500);
+    scrollMetrics.setScrollHeight(1600);
+    firstLoad.resolve(liveBootstrap(firstThread));
+    await flush();
+    await wait(40);
+
+    expect(runtime.textContent).toContain('Second current');
+    expect(runtime.textContent).not.toContain('First loaded late');
+    expect(scrollMetrics.scrollTop()).toBe(500);
   });
 });
