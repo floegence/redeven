@@ -386,18 +386,23 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const prompt = trim(input.prompt);
       if (!prompt) throw new Error(copy.enterMessageBeforeSending);
       const snapshot = await loadSettingsSnapshot();
-      const models = await loadModels();
-      const modelID = currentModelID(snapshot, models);
-      if (!modelID) throw new Error(copy.selectModelBeforeChat);
       const permissionType = normalizePermissionType(input.permission_type ?? snapshot.config.permission_type);
       const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
       let threadID = trim(input.thread_id);
+      let turnModelID = trim(input.model_id);
       if (!threadID) {
+        const models = await loadModels();
+        turnModelID = turnModelID || currentModelID(snapshot, models);
+        if (!turnModelID) throw new Error(copy.selectModelBeforeChat);
         const createBody: Record<string, unknown> = {
           title: '',
-          model_id: modelID,
+          model_id: turnModelID,
           permission_type: permissionType,
         };
+        const reasoningSelection = serializeFlowerReasoningSelection(input.reasoning_selection);
+        if (reasoningSelection) {
+          createBody.reasoning_selection = reasoningSelection;
+        }
         if (trim(input.working_dir)) {
           createBody.working_dir = trim(input.working_dir);
         }
@@ -426,7 +431,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       await options.rpc.ai.subscribeThread({ threadId: threadID });
       await options.rpc.ai.sendUserTurn({
         threadId: threadID,
-        model: modelID,
+        ...(turnModelID ? { model: turnModelID } : {}),
         input: {
           ...(trim(input.message_id) ? { messageId: trim(input.message_id) } : {}),
           text: prompt,

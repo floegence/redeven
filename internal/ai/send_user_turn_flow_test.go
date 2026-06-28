@@ -567,24 +567,20 @@ func TestExecutePreparedRun_PreEngineFailureTerminalizesRunRecord(t *testing.T) 
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if err := svc.threadsDB.UpdateThreadModelLock(ctx, meta.EndpointID, th.ThreadID, true); err != nil {
-		t.Fatalf("UpdateThreadModelLock: %v", err)
-	}
-
 	runID := "run_pre_engine_failure"
 	prepared, _, _ := prepareAndPersistUserTurnForTest(t, svc, meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
-		Model:    "openai/gpt-4o-mini",
+		Model:    "openai/not-allowed",
 		Input: RunInput{
 			MessageID: "m_pre_engine_failure",
-			Text:      "trigger model lock failure",
+			Text:      "trigger model validation failure",
 		},
 		Options: RunOptions{},
 	})
 
 	err = svc.executePreparedRun(ctx, prepared)
-	if !errors.Is(err, ErrModelSwitchRequiresExplicitRestart) {
-		t.Fatalf("executePreparedRun err=%v, want %v", err, ErrModelSwitchRequiresExplicitRestart)
+	if err == nil || !strings.Contains(err.Error(), "model not allowed") {
+		t.Fatalf("executePreparedRun err=%v, want model validation failure", err)
 	}
 	rec, err := svc.threadsDB.GetRun(ctx, meta.EndpointID, runID)
 	if err != nil {
@@ -603,7 +599,7 @@ func TestExecutePreparedRun_PreEngineFailureTerminalizesRunRecord(t *testing.T) 
 	if err != nil {
 		t.Fatalf("GetTranscriptMessage assistant: %v", err)
 	}
-	if msg == nil || msg.Role != "assistant" || msg.Status != "error" || !strings.Contains(msg.TextContent, ErrModelSwitchRequiresExplicitRestart.Error()) {
+	if msg == nil || msg.Role != "assistant" || msg.Status != "error" || !strings.Contains(msg.TextContent, "model not allowed") {
 		t.Fatalf("assistant message=%+v, want persisted error assistant", msg)
 	}
 	turns, err := svc.contextRepo.ListRecentDialogueTurns(ctx, meta.EndpointID, th.ThreadID, 10)
@@ -1463,39 +1459,52 @@ func TestThreadActor_MaybeStartQueuedTurn_ConsumesPermanentDuplicateAndDrainsNex
 	t.Fatalf("queued=%+v, want duplicate consumed and next queued turn started", queued)
 }
 
-func TestSendUserTurn_ModelLockConflict_DoesNotPersistMessage(t *testing.T) {
+func TestSendUserTurn_QueuedTurnUsesThreadModelWhenRequestOmitsModel(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 
-	th, err := svc.CreateThread(ctx, meta, "model-lock-conflict", "openai/gpt-5-mini", "", "")
+	th, err := svc.CreateThread(ctx, meta, "thread-model-queue", "openai/gpt-4o-mini", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if err := svc.threadsDB.UpdateThreadModelLock(ctx, meta.EndpointID, th.ThreadID, true); err != nil {
-		t.Fatalf("UpdateThreadModelLock: %v", err)
+	runID := "run_active_thread_model_queue"
+	key := runThreadKey(meta.EndpointID, th.ThreadID)
+	svc.mu.Lock()
+	svc.activeRunByTh[key] = runID
+	svc.runs[runID] = &run{
+		id:         runID,
+		channelID:  meta.ChannelID,
+		endpointID: meta.EndpointID,
+		threadID:   th.ThreadID,
+		doneCh:     make(chan struct{}),
 	}
+	svc.mu.Unlock()
 
-	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
 		ThreadID: th.ThreadID,
-		Model:    "openai/gpt-4o-mini",
 		Input: RunInput{
-			Text: "try switching model while locked",
+			Text: "queue with the thread model",
 		},
 		Options: RunOptions{},
 	})
-	if !errors.Is(err, ErrModelSwitchRequiresExplicitRestart) {
-		t.Fatalf("SendUserTurn err=%v, want %v", err, ErrModelSwitchRequiresExplicitRestart)
-	}
-
-	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
 	if err != nil {
-		t.Fatalf("ListMessages: %v", err)
+		t.Fatalf("SendUserTurn: %v", err)
 	}
-	if len(msgs) != 0 {
-		t.Fatalf("expected no persisted messages on model lock conflict, got %d", len(msgs))
+	if resp.Kind != "queued" {
+		t.Fatalf("Kind=%q, want queued", resp.Kind)
+	}
+	queued, err := svc.threadsDB.ListQueuedTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListQueuedTurns: %v", err)
+	}
+	if len(queued) != 1 {
+		t.Fatalf("queued=%d, want 1", len(queued))
+	}
+	if queued[0].ModelID != "openai/gpt-4o-mini" {
+		t.Fatalf("queued model=%q, want thread model", queued[0].ModelID)
 	}
 }
 

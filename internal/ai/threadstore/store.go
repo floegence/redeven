@@ -113,7 +113,6 @@ type Thread struct {
 	EndpointID             string `json:"endpoint_id"`
 	NamespacePublicID      string `json:"namespace_public_id"`
 	ModelID                string `json:"model_id"`
-	ModelLocked            bool   `json:"model_locked"`
 	ReasoningSelectionJSON string `json:"reasoning_selection_json"`
 	PermissionType         string `json:"permission_type"`
 	WorkingDir             string `json:"working_dir"`
@@ -217,7 +216,7 @@ type ThreadsCursor struct {
 }
 
 const threadSelectColumnsSQL = `
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, reasoning_selection_json, execution_mode, permission_type, working_dir, title,
+  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, execution_mode, permission_type, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error_code, run_error,
   waiting_user_input_json, last_context_run_id, pinned_at_unix_ms,
@@ -235,14 +234,12 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 	if t == nil {
 		return errors.New("nil thread")
 	}
-	var modelLockedInt int
 	var legacyExecutionMode string
 	if err := scan.Scan(
 		&t.ThreadID,
 		&t.EndpointID,
 		&t.NamespacePublicID,
 		&t.ModelID,
-		&modelLockedInt,
 		&t.ReasoningSelectionJSON,
 		&legacyExecutionMode,
 		&t.PermissionType,
@@ -274,7 +271,6 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 	); err != nil {
 		return err
 	}
-	t.ModelLocked = modelLockedInt != 0
 	t.ReasoningSelectionJSON = strings.TrimSpace(t.ReasoningSelectionJSON)
 	t.TitleSource = normalizeThreadTitleSource(t.TitleSource)
 	t.TitleInputMessageID = strings.TrimSpace(t.TitleInputMessageID)
@@ -599,7 +595,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO ai_threads(
-		  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, reasoning_selection_json, permission_type, working_dir, title,
+		  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir, title,
 	  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
 	  run_status, run_updated_at_unix_ms, run_error_code, run_error,
 	  waiting_user_input_json, last_context_run_id,
@@ -608,13 +604,12 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	  updated_by_user_public_id, updated_by_user_email,
 	  created_at_unix_ms, updated_at_unix_ms,
 	  last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
-		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		t.ThreadID,
 		t.EndpointID,
 		t.NamespacePublicID,
 		t.ModelID,
-		boolToInt(t.ModelLocked),
 		t.ReasoningSelectionJSON,
 		t.PermissionType,
 		t.WorkingDir,
@@ -771,7 +766,7 @@ WHERE thread_id = ?
 	if errors.Is(err, sql.ErrNoRows) {
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO ai_threads(
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, permission_type, working_dir, title,
+  thread_id, endpoint_id, namespace_public_id, model_id, permission_type, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error_code, run_error,
   waiting_user_input_json, last_context_run_id,
@@ -780,13 +775,12 @@ INSERT INTO ai_threads(
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms,
   last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `,
 			t.ThreadID,
 			t.EndpointID,
 			t.NamespacePublicID,
 			t.ModelID,
-			boolToInt(t.ModelLocked),
 			t.PermissionType,
 			t.WorkingDir,
 			t.Title,
@@ -841,7 +835,6 @@ INSERT INTO ai_threads(
 UPDATE ai_threads
 SET namespace_public_id = ?,
     model_id = ?,
-    model_locked = ?,
     permission_type = ?,
     working_dir = ?,
     title = ?,
@@ -868,7 +861,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 `,
 		t.NamespacePublicID,
 		t.ModelID,
-		boolToInt(t.ModelLocked),
 		t.PermissionType,
 		t.WorkingDir,
 		t.Title,
@@ -903,7 +895,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 func projectedThreadEqual(existing Thread, next Thread) bool {
 	return existing.NamespacePublicID == next.NamespacePublicID &&
 		existing.ModelID == next.ModelID &&
-		existing.ModelLocked == next.ModelLocked &&
 		existing.PermissionType == next.PermissionType &&
 		existing.WorkingDir == next.WorkingDir &&
 		existing.Title == next.Title &&
@@ -1008,34 +999,6 @@ UPDATE ai_threads
 SET reasoning_selection_json = ?
 WHERE endpoint_id = ? AND thread_id = ?
 `, reasoningSelectionJSON, endpointID, threadID)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
-}
-
-func (s *Store) UpdateThreadModelLock(ctx context.Context, endpointID string, threadID string, locked bool) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return errors.New("invalid request")
-	}
-
-	res, err := s.db.ExecContext(ctx, `
-UPDATE ai_threads
-SET model_locked = ?
-WHERE endpoint_id = ? AND thread_id = ?
-`, boolToInt(locked), endpointID, threadID)
 	if err != nil {
 		return err
 	}

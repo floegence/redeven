@@ -877,7 +877,7 @@ func (s *Service) resolveIdleCompactionModel(ctx context.Context, cfg *config.AI
 	if th == nil || r == nil {
 		return "", contextmodel.ModelCapability{}, config.AIReasoningSelection{}, config.AIProvider{}, "", nil, errors.New("invalid request")
 	}
-	modelCfg, err := s.resolveRunModel(ctx, cfg, "", strings.TrimSpace(th.ModelID), th.ModelLocked, r)
+	modelCfg, err := s.resolveRunModel(ctx, cfg, "", strings.TrimSpace(th.ModelID), r)
 	if err != nil {
 		return "", contextmodel.ModelCapability{}, config.AIReasoningSelection{}, config.AIProvider{}, "", nil, err
 	}

@@ -804,6 +804,45 @@ html.dark .flower-component-shell {
   line-height: 1.25;
 }
 
+.flower-model-select {
+  min-width: 8rem;
+  max-width: min(22rem, 54vw);
+  height: 1.375rem;
+  cursor: pointer;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
+  padding: 0 1.4rem 0 0.45rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  font-weight: 680;
+  line-height: 1;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.flower-model-select:hover,
+.flower-model-select:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border) 66%);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  outline: none;
+}
+
+.flower-model-select:focus-visible {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.flower-model-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
 .flower-reasoning-control {
   position: relative;
   display: inline-flex;
@@ -1127,6 +1166,10 @@ html.dark .flower-component-shell {
   }
 
   .flower-permission-trigger {
+    max-width: 100%;
+  }
+
+  .flower-model-select {
     max-width: 100%;
   }
 

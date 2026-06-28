@@ -1760,9 +1760,6 @@ func mergeFlowerLiveThreadPatch(current FlowerLiveThreadPatch, patch FlowerLiveT
 	if strings.TrimSpace(patch.ModelID) != "" {
 		current.ModelID = strings.TrimSpace(patch.ModelID)
 	}
-	if patch.ModelLocked != nil {
-		current.ModelLocked = patch.ModelLocked
-	}
 	if strings.TrimSpace(patch.PermissionType) != "" {
 		current.PermissionType = strings.TrimSpace(patch.PermissionType)
 	}
@@ -2114,10 +2111,6 @@ func cloneFlowerLiveMaterializedState(in FlowerLiveMaterializedState) FlowerLive
 
 func cloneFlowerLiveThreadPatch(in FlowerLiveThreadPatch) FlowerLiveThreadPatch {
 	out := in
-	if in.ModelLocked != nil {
-		value := *in.ModelLocked
-		out.ModelLocked = &value
-	}
 	if in.ReasoningSelection != nil {
 		value := config.NormalizeAIReasoningSelection(*in.ReasoningSelection)
 		out.ReasoningSelection = &value

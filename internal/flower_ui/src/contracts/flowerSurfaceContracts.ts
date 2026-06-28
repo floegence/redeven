@@ -622,7 +622,6 @@ export type FlowerLiveThreadPatch = Readonly<{
   thread_id?: string;
   title?: string;
   model_id?: string;
-  model_locked?: boolean;
   permission_type?: FlowerPermissionType;
   working_dir?: string;
   queued_turn_count?: number;
@@ -939,6 +938,7 @@ export type FlowerTurnLaunchInput = Readonly<{
   attachments?: readonly FlowerTurnAttachment[];
   pending_files?: readonly File[];
   working_dir?: string;
+  model_id?: string;
   permission_type?: FlowerPermissionType;
   reasoning_selection?: FlowerReasoningSelection;
 }>;
@@ -1054,6 +1054,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   renameThread?: (threadID: string, title: string) => Promise<FlowerLiveBootstrap>;
   setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerLiveBootstrap>;
   setThreadPermissionType?: (threadID: string, permissionType: FlowerPermissionType) => Promise<FlowerLiveBootstrap>;
+  setThreadModel?: (threadID: string, modelID: string) => Promise<FlowerLiveBootstrap>;
   setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerLiveBootstrap>;
   forkThread?: (threadID: string) => Promise<FlowerLiveBootstrap>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;

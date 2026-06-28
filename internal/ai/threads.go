@@ -122,7 +122,6 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 		ThreadID:            strings.TrimSpace(th.ThreadID),
 		Title:               strings.TrimSpace(th.Title),
 		ModelID:             strings.TrimSpace(th.ModelID),
-		ModelLocked:         th.ModelLocked,
 		PermissionType:      threadPermissionTypeString(th, ""),
 		WorkingDir:          workingDir,
 		QueuedTurnCount:     queuedTurnCount,
@@ -425,13 +424,13 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 			modelID = id
 		}
 	}
-	if modelID == "" && cfg != nil {
-		if id := strings.TrimSpace(cfg.CurrentModelID); id != "" && cfg.IsAllowedModelID(id) {
+	if modelID == "" {
+		if id, ok := s.resolvedDesktopModelSourceDefaultModel(ctx); ok {
 			modelID = id
 		}
 	}
-	if modelID == "" && cfg == nil {
-		if id, ok := s.resolvedDesktopModelSourceDefaultModel(ctx); ok {
+	if modelID == "" && cfg != nil {
+		if id := strings.TrimSpace(cfg.CurrentModelID); id != "" && cfg.IsAllowedModelID(id) {
 			modelID = id
 		}
 	}
@@ -636,6 +635,10 @@ func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThre
 }
 
 func threadForkBlockedByRunState(th *threadstore.Thread) bool {
+	return threadPreferenceChangeBlockedByRunState(th)
+}
+
+func threadPreferenceChangeBlockedByRunState(th *threadstore.Thread) bool {
 	if th == nil {
 		return false
 	}
@@ -715,11 +718,10 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	if currentModelID == modelID {
 		return nil
 	}
-	if th.ModelLocked {
-		return ErrModelSwitchRequiresExplicitRestart
-	}
-	if s.HasActiveThreadForEndpoint(endpointID, threadID) {
-		return ErrModelSwitchRequiresExplicitRestart
+	if s.HasActiveThreadForEndpoint(endpointID, threadID) ||
+		s.idleThreadCompactionOperation(endpointID, threadID) != "" ||
+		threadPreferenceChangeBlockedByRunState(th) {
+		return ErrThreadBusy
 	}
 
 	reasoningCapability, modelDefaultReasoning, _ := s.threadReasoningDefaults(ctx, modelID)
@@ -731,6 +733,9 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 		return reasoningSelectionError(modelID, err)
 	}
 	if err := db.UpdateThreadModelAndReasoningSelection(ctx, endpointID, threadID, modelID, marshalReasoningSelection(normalizedReasoning)); err != nil {
+		return err
+	}
+	if err := db.ClearThreadProviderContinuation(ctx, endpointID, threadID); err != nil {
 		return err
 	}
 	s.broadcastThreadSummary(strings.TrimSpace(endpointID), strings.TrimSpace(threadID))
@@ -767,6 +772,11 @@ func (s *Service) SetThreadReasoningSelection(ctx context.Context, meta *session
 	}
 	if err := s.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
 		return err
+	}
+	if s.HasActiveThreadForEndpoint(endpointID, threadID) ||
+		s.idleThreadCompactionOperation(endpointID, threadID) != "" ||
+		threadPreferenceChangeBlockedByRunState(th) {
+		return ErrThreadBusy
 	}
 	capability, modelDefault, _ := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
 	normalized, err := normalizeRequestedReasoningOrReject(capability, selection)
@@ -807,8 +817,20 @@ func (s *Service) ClearThreadReasoningSelection(ctx context.Context, meta *sessi
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
+	th, err := db.GetThread(ctx, endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	if th == nil {
+		return sql.ErrNoRows
+	}
 	if err := s.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
 		return err
+	}
+	if s.HasActiveThreadForEndpoint(endpointID, threadID) ||
+		s.idleThreadCompactionOperation(endpointID, threadID) != "" ||
+		threadPreferenceChangeBlockedByRunState(th) {
+		return ErrThreadBusy
 	}
 	if err := db.UpdateThreadReasoningSelection(ctx, endpointID, threadID, ""); err != nil {
 		return err

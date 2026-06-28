@@ -112,7 +112,6 @@ func insertForkedThreadTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest
 		EndpointID:             req.EndpointID,
 		NamespacePublicID:      strings.TrimSpace(source.NamespacePublicID),
 		ModelID:                strings.TrimSpace(source.ModelID),
-		ModelLocked:            source.ModelLocked,
 		ReasoningSelectionJSON: strings.TrimSpace(source.ReasoningSelectionJSON),
 		PermissionType:         normalizePermissionType(source.PermissionType),
 		WorkingDir:             strings.TrimSpace(source.WorkingDir),
@@ -131,7 +130,7 @@ func insertForkedThreadTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest
 	snapshot := initialFlowerActivitySnapshot(forkedThread)
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO ai_threads(
-  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, reasoning_selection_json, permission_type, working_dir, title,
+  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error_code, run_error,
   waiting_user_input_json, last_context_run_id,
@@ -140,13 +139,12 @@ INSERT INTO ai_threads(
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms,
   last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `,
 		forkedThread.ThreadID,
 		forkedThread.EndpointID,
 		forkedThread.NamespacePublicID,
 		forkedThread.ModelID,
-		boolToInt(forkedThread.ModelLocked),
 		forkedThread.ReasoningSelectionJSON,
 		forkedThread.PermissionType,
 		forkedThread.WorkingDir,

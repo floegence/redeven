@@ -38,11 +38,21 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 		CanAdmin:          true,
 	}
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:           logger,
-		StateDir:         stateDir,
-		AgentHomeDir:     stateDir,
-		Shell:            "/bin/sh",
-		Config:           &config.AIConfig{},
+		Logger:       logger,
+		StateDir:     stateDir,
+		AgentHomeDir: stateDir,
+		Shell:        "/bin/sh",
+		Config: &config.AIConfig{
+			CurrentModelID: "openai/gpt-5-mini",
+			Providers: []config.AIProvider{{
+				ID:   "openai",
+				Name: "OpenAI",
+				Type: "openai",
+				Models: []config.AIProviderModel{{
+					ModelName: "gpt-5-mini",
+				}},
+			}},
+		},
 		RunMaxWallTime:   3 * time.Second,
 		RunIdleTimeout:   3 * time.Second,
 		PersistOpTimeout: 2 * time.Second,
@@ -52,7 +62,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = aiSvc.Close() })
 
-	thread, err := aiSvc.CreateThread(context.Background(), &meta, "input response", "", "", "")
+	thread, err := aiSvc.CreateThread(context.Background(), &meta, "input response", "openai/gpt-5-mini", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}

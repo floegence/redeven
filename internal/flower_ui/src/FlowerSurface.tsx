@@ -96,6 +96,7 @@ type FlowerComposerSessionDraft = Readonly<{
   inputPromptSignature: string;
   inputDrafts: Record<string, FlowerInputDraft>;
   activeInputQuestionID: string;
+  modelIDOverride?: string;
   permissionTypeOverride?: FlowerPermissionType;
   reasoningOverride?: FlowerReasoningSelection;
 }>;
@@ -107,6 +108,11 @@ type PendingPermissionPatch = Readonly<{
   threadID: string;
   requested: FlowerPermissionType;
   previous: FlowerPermissionType;
+}>;
+type PendingModelPatch = Readonly<{
+  threadID: string;
+  requested: string;
+  previous: string;
 }>;
 type PendingFlowerTurn = Readonly<{
   thread_id: string;
@@ -245,6 +251,7 @@ function sameFlowerComposerSessionDraft(left: FlowerComposerSessionDraft, right:
   return left.chatDraft === right.chatDraft
     && left.inputPromptSignature === right.inputPromptSignature
     && left.activeInputQuestionID === right.activeInputQuestionID
+    && left.modelIDOverride === right.modelIDOverride
     && left.permissionTypeOverride === right.permissionTypeOverride
     && sameFlowerInputDrafts(left.inputDrafts, right.inputDrafts)
     && sameFlowerReasoningSelection(left.reasoningOverride, right.reasoningOverride);
@@ -611,6 +618,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [permissionMenuOpen, setPermissionMenuOpen] = createSignal(false);
   const [permissionMenuActiveIndex, setPermissionMenuActiveIndex] = createSignal(0);
   const [pendingPermissionPatch, setPendingPermissionPatch] = createSignal<PendingPermissionPatch | null>(null);
+  const [pendingModelPatch, setPendingModelPatch] = createSignal<PendingModelPatch | null>(null);
   const [activeSubagentID, setActiveSubagentID] = createSignal('');
   const [subagentDetail, setSubagentDetail] = createSignal<FlowerSubagentDetail | null>(null);
   const [subagentDetailLoading, setSubagentDetailLoading] = createSignal(false);
@@ -830,6 +838,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return currentComposerSessionDraft().permissionTypeOverride ?? defaultComposerPermissionType();
   });
   const composerPermissionCopy = createMemo(() => copy().settings.permissionTypes[composerPermissionType()]);
+  const selectedThreadPreferenceEditable = createMemo(() => {
+    if (selectedThreadReadOnly()) return false;
+    if (selectedInputRequest()) return false;
+    if (selectedThreadHasRunningContextCompaction()) return false;
+    const status = selectedThreadLiveStatus();
+    return status !== 'running' && status !== 'waiting_approval' && status !== 'waiting_user';
+  });
   const composerPermissionInteractive = createMemo(() => (
     !selectedThreadIsSubagentProjection()
     && !selectedThreadReadOnly()
@@ -903,6 +918,102 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (changed) threadLocalMutationRevision += 1;
       return changed ? next : current;
     });
+  };
+  const applyThreadModelLocally = (threadID: string, modelID: string) => {
+    const tid = trimString(threadID);
+    const mid = trimString(modelID);
+    if (!tid || !mid) return;
+    setThreads((current) => {
+      let changed = false;
+      const next = current.map((thread) => {
+        if (thread.thread_id !== tid || thread.model_id === mid) return thread;
+        changed = true;
+        return {
+          ...thread,
+          model_id: mid,
+          updated_at_ms: Math.max(Number(thread.updated_at_ms ?? 0), Date.now()),
+        };
+      });
+      if (changed) threadLocalMutationRevision += 1;
+      return changed ? next : current;
+    });
+  };
+  const applyThreadReasoningLocally = (threadID: string, selection: FlowerReasoningSelection | undefined) => {
+    const tid = trimString(threadID);
+    if (!tid) return;
+    setThreads((current) => {
+      let changed = false;
+      const next = current.map((thread) => {
+        if (thread.thread_id !== tid) return thread;
+        if (sameFlowerReasoningSelection(thread.reasoning_selection, selection)) return thread;
+        changed = true;
+        return {
+          ...thread,
+          reasoning_selection: selection,
+          updated_at_ms: Math.max(Number(thread.updated_at_ms ?? 0), Date.now()),
+        };
+      });
+      if (changed) threadLocalMutationRevision += 1;
+      return changed ? next : current;
+    });
+  };
+  const updateComposerModelID = async (modelID: string) => {
+    const mid = trimString(modelID);
+    if (!mid) return;
+    if (!modelSelectOptions().some((option) => option.id === mid)) return;
+    const threadID = trimString(selectedThreadID());
+    setChatSubmitError('');
+    if (!threadID) {
+      updateCurrentComposerSessionDraft((draft) => (
+        trimString(draft.modelIDOverride) === mid ? draft : { ...draft, modelIDOverride: mid }
+      ));
+      return;
+    }
+    if (!props.adapter.setThreadModel || !composerModelInteractive()) return;
+    const previous = selectedComposerModelID();
+    if (previous === mid) return;
+    setPendingModelPatch({ threadID, requested: mid, previous });
+    applyThreadModelLocally(threadID, mid);
+    try {
+      const live = await props.adapter.setThreadModel(threadID, mid);
+      const updated = applyLiveBootstrap(live, 'user_action');
+      setSelectedThreadID(updated.thread_id);
+      setChatSubmitError('');
+    } catch (error) {
+      applyThreadModelLocally(threadID, previous);
+      setChatSubmitError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+    } finally {
+      setPendingModelPatch((current) => (current?.threadID === threadID && current.requested === mid ? null : current));
+    }
+  };
+  const updateComposerReasoningSelection = async (selection: FlowerReasoningSelection | undefined) => {
+    const normalized = serializeFlowerReasoningSelection(selection);
+    const threadID = trimString(selectedThreadID());
+    setChatSubmitError('');
+    if (!threadID || selectedInputRequest()) {
+      updateCurrentComposerSessionDraft((draft) => (
+        sameFlowerReasoningSelection(draft.reasoningOverride, normalized)
+          ? draft
+          : { ...draft, reasoningOverride: normalized }
+      ));
+      return;
+    }
+    if (!props.adapter.setThreadReasoningSelection || !composerReasoningInteractive()) return;
+    const previous = normalizeFlowerReasoningSelection(selectedThread()?.reasoning_selection);
+    if (sameFlowerReasoningSelection(previous, normalized)) return;
+    applyThreadReasoningLocally(threadID, normalized);
+    try {
+      const live = await props.adapter.setThreadReasoningSelection(threadID, normalized);
+      const updated = applyLiveBootstrap(live, 'user_action');
+      setSelectedThreadID(updated.thread_id);
+      updateCurrentComposerSessionDraft((draft) => (
+        draft.reasoningOverride ? { ...draft, reasoningOverride: undefined } : draft
+      ));
+      setChatSubmitError('');
+    } catch (error) {
+      applyThreadReasoningLocally(threadID, previous);
+      setChatSubmitError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+    }
   };
   const updateComposerPermissionType = async (permissionType: FlowerPermissionType) => {
     const threadID = trimString(selectedThreadID());
@@ -1211,8 +1322,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const renameOriginalTitle = createMemo(() => threads().find((thread) => thread.thread_id === renameThreadID())?.title ?? '');
   const renameUnchanged = createMemo(() => trimString(renameDraft()) === trimString(renameOriginalTitle()));
   const currentModelID = createMemo(() => trimString(snapshot()?.config.current_model_id));
+  const selectedComposerModelID = createMemo(() => {
+    const threadModelID = trimString(selectedThread()?.model_id);
+    if (threadModelID) return threadModelID;
+    return trimString(currentComposerSessionDraft().modelIDOverride) || currentModelID();
+  });
   const activeProvider = createMemo(() => {
-    const current = currentModelID();
+    const current = selectedComposerModelID();
     const providerID = current.split('/')[0] ?? '';
     return snapshot()?.config.providers.find((provider) => provider.id === providerID) ?? null;
   });
@@ -1221,11 +1337,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return current ? formatFlowerCurrentModelLabel(current.config, copy().chat.noModelSelected) : copy().chat.noModelSelected;
   });
   const selectedThreadModelLabel = createMemo(() => {
-    const threadModelID = trimString(selectedThread()?.model_id);
+    const threadModelID = selectedComposerModelID();
     if (!threadModelID) return currentModelLabel();
     const current = snapshot();
     if (!current) return threadModelID;
     return formatFlowerCurrentModelLabel({ ...current.config, current_model_id: threadModelID }, copy().chat.noModelSelected);
+  });
+  const modelSelectOptions = createMemo(() => {
+    const current = snapshot();
+    const options = current?.config.providers.flatMap((provider) => {
+      const providerID = trimString(provider.id);
+      if (!providerID) return [];
+      const providerLabel = trimString(provider.name) || providerID;
+      return provider.models.map((model) => {
+        const modelName = trimString(model.model_name);
+        if (!modelName) return null;
+        return {
+          id: `${providerID}/${modelName}`,
+          label: `${providerLabel} / ${modelName}`,
+        };
+      }).filter((option): option is { id: string; label: string } => option !== null);
+    }) ?? [];
+    const selected = selectedComposerModelID();
+    if (selected && !options.some((option) => option.id === selected)) {
+      return [{ id: selected, label: selectedThreadModelLabel() }, ...options];
+    }
+    return options;
   });
   const configuredModelForID = (modelID: string) => {
     const current = snapshot();
@@ -1239,26 +1376,34 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedReasoningCapability = createMemo(() => {
     const thread = selectedThread();
     if (thread?.reasoning_capability) return thread.reasoning_capability;
-    const model = configuredModelForID(thread?.model_id || currentModelID());
+    const model = configuredModelForID(selectedComposerModelID());
     return model?.reasoning_capability ?? null;
   });
 	const selectedThreadReasoningSelection = createMemo(() => (
 		normalizeFlowerReasoningSelection(selectedThread()?.reasoning_selection)
-		?? normalizeFlowerReasoningSelection(configuredModelForID(selectedThread()?.model_id || currentModelID())?.default_reasoning_selection)
+		?? normalizeFlowerReasoningSelection(configuredModelForID(selectedComposerModelID())?.default_reasoning_selection)
 		?? defaultReasoningSelectionForCapability(selectedReasoningCapability())
 	));
 	const selectedWaitingReasoningSelection = createMemo(() => normalizeFlowerReasoningSelection(selectedInputRequest()?.reasoning_selection));
 	const composerReasoningOverride = createMemo(() => normalizeFlowerReasoningSelection(currentComposerSessionDraft().reasoningOverride));
 	const composerReasoningSelection = createMemo(() => composerReasoningOverride() ?? selectedWaitingReasoningSelection() ?? selectedThreadReasoningSelection());
   const composerReasoningEnabled = createMemo(() => reasoningCapabilitySupportsControl(selectedReasoningCapability()));
-  const updateComposerReasoningOverride = (selection: FlowerReasoningSelection | undefined) => {
-    const normalized = serializeFlowerReasoningSelection(selection);
-    updateCurrentComposerSessionDraft((draft) => (
-      sameFlowerReasoningSelection(draft.reasoningOverride, normalized)
-        ? draft
-        : { ...draft, reasoningOverride: normalized }
-    ));
-  };
+  const modelPatchPending = createMemo(() => {
+    const pending = pendingModelPatch();
+    if (!pending) return false;
+    const threadID = selectedThreadID();
+    return threadID ? pending.threadID === threadID : pending.threadID === PENDING_NEW_THREAD_ID;
+  });
+  const composerModelInteractive = createMemo(() => (
+    selectedThreadPreferenceEditable()
+    && modelSelectOptions().length > 0
+    && (!selectedThreadID() || typeof props.adapter.setThreadModel === 'function')
+  ));
+  const composerReasoningInteractive = createMemo(() => (
+    composerReasoningEnabled()
+    && (selectedInputRequest() ? !selectedThreadReadOnly() : selectedThreadPreferenceEditable())
+    && (!selectedThreadID() || selectedInputRequest() || typeof props.adapter.setThreadReasoningSelection === 'function')
+  ));
   const activeProviderSecrets = createMemo(() => {
     const provider = activeProvider();
     if (!provider) return null;
@@ -2055,7 +2200,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setChatSubmitError('message' in state ? state.message : copy().chat.handlerStillStarting);
       return;
     }
-    const reasoningOverride = serializeFlowerReasoningSelection(composerReasoningOverride());
+    const selectedID = trimString(selectedThreadID());
+    const draftReasoningSelection = !selectedID ? serializeFlowerReasoningSelection(composerReasoningSelection()) : undefined;
+    const draftModelID = !selectedID ? selectedComposerModelID() : '';
     const messageID = createClientMessageID();
     const pending: PendingFlowerTurn = {
       thread_id: selectedThreadID() || PENDING_NEW_THREAD_ID,
@@ -2088,12 +2235,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return;
       }
       const thread = await props.adapter.launchTurn({
-        thread_id: selectedThreadID() || undefined,
+        thread_id: selectedID || undefined,
         message_id: messageID,
         prompt,
-        decision: selectedThreadID() ? null : decision,
-        ...(!selectedThreadID() ? { permission_type: composerPermissionType() } : {}),
-        ...(reasoningOverride ? { reasoning_selection: reasoningOverride } : {}),
+        decision: selectedID ? null : decision,
+        ...(!selectedID ? { permission_type: composerPermissionType() } : {}),
+        ...(!selectedID && draftModelID ? { model_id: draftModelID } : {}),
+        ...(!selectedID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {}),
       });
       const acceptedThread = applyLiveBootstrap(thread);
       accepted = true;
@@ -2131,7 +2279,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }));
       setChatSubmitError(getErrorMessage(error));
     } finally {
-      if (accepted) updateComposerReasoningOverride(undefined);
+      if (accepted) {
+        updateCurrentComposerSessionDraft((draft) => (
+          draft.reasoningOverride ? { ...draft, reasoningOverride: undefined } : draft
+        ));
+      }
       setChatRunning(false);
     }
   };
@@ -4688,9 +4840,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                               <div class="flower-model-selection">
                                 {permissionSelector()}
                                 <span class="flower-model-selection-label">{copy().chat.modelLabel}</span>
-                                <span class={cn('flower-model-chip', surfaceWarmupActive() && 'flower-model-chip-warmup')}>
-                                  {surfaceWarmupActive() ? warmupModelLabel() : selectedThreadModelLabel()}
-                                </span>
+                                <Show
+                                  when={!surfaceWarmupActive() && modelSelectOptions().length > 0}
+                                  fallback={(
+                                    <span class={cn('flower-model-chip', surfaceWarmupActive() && 'flower-model-chip-warmup')}>
+                                      {surfaceWarmupActive() ? warmupModelLabel() : selectedThreadModelLabel()}
+                                    </span>
+                                  )}
+                                >
+                                  <select
+                                    class="flower-model-select"
+                                    value={selectedComposerModelID()}
+                                    disabled={!composerModelInteractive() || modelPatchPending()}
+                                    title={selectedThreadModelLabel()}
+                                    onChange={(event) => { void updateComposerModelID(event.currentTarget.value); }}
+                                  >
+                                    <For each={modelSelectOptions()}>
+                                      {(option) => <option value={option.id}>{option.label}</option>}
+                                    </For>
+                                  </select>
+                                </Show>
                                 <Show when={composerReasoningEnabled()}>
                                   <FlowerReasoningControl
                                     compact
@@ -4698,7 +4867,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                                     capability={selectedReasoningCapability()}
                                     selection={composerReasoningSelection()}
                                     label="Reasoning"
-                                    onChange={updateComposerReasoningOverride}
+                                    readOnly={!composerReasoningInteractive()}
+                                    onChange={(selection) => { void updateComposerReasoningSelection(selection); }}
                                   />
                                 </Show>
                               </div>

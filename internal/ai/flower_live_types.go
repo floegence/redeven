@@ -104,7 +104,6 @@ type FlowerLiveThreadPatch struct {
 	ThreadID               string                        `json:"thread_id,omitempty"`
 	Title                  string                        `json:"title,omitempty"`
 	ModelID                string                        `json:"model_id,omitempty"`
-	ModelLocked            *bool                         `json:"model_locked,omitempty"`
 	PermissionType         string                        `json:"permission_type,omitempty"`
 	WorkingDir             string                        `json:"working_dir,omitempty"`
 	QueuedTurnCount        *int                          `json:"queued_turn_count,omitempty"`
@@ -131,7 +130,6 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 		ThreadID            string                        `json:"thread_id,omitempty"`
 		Title               string                        `json:"title,omitempty"`
 		ModelID             string                        `json:"model_id,omitempty"`
-		ModelLocked         *bool                         `json:"model_locked,omitempty"`
 		PermissionType      string                        `json:"permission_type,omitempty"`
 		WorkingDir          string                        `json:"working_dir,omitempty"`
 		QueuedTurnCount     *int                          `json:"queued_turn_count,omitempty"`
@@ -154,7 +152,6 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 		ThreadID:            p.ThreadID,
 		Title:               p.Title,
 		ModelID:             p.ModelID,
-		ModelLocked:         p.ModelLocked,
 		PermissionType:      p.PermissionType,
 		WorkingDir:          p.WorkingDir,
 		QueuedTurnCount:     p.QueuedTurnCount,
@@ -208,7 +205,6 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 		ThreadID            string                  `json:"thread_id,omitempty"`
 		Title               string                  `json:"title,omitempty"`
 		ModelID             string                  `json:"model_id,omitempty"`
-		ModelLocked         *bool                   `json:"model_locked,omitempty"`
 		PermissionType      string                  `json:"permission_type,omitempty"`
 		WorkingDir          string                  `json:"working_dir,omitempty"`
 		QueuedTurnCount     *int                    `json:"queued_turn_count,omitempty"`
@@ -234,7 +230,6 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 		ThreadID:            raw.ThreadID,
 		Title:               raw.Title,
 		ModelID:             raw.ModelID,
-		ModelLocked:         raw.ModelLocked,
 		PermissionType:      raw.PermissionType,
 		WorkingDir:          raw.WorkingDir,
 		QueuedTurnCount:     raw.QueuedTurnCount,

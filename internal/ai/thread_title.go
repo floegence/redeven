@@ -758,7 +758,7 @@ func (s *Service) applyAutoThreadTitleOnce(ctx context.Context, req autoThreadTi
 		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "user_title_locked"}
 	}
 
-	resolved, err := s.resolveRunModel(opCtx, cfg, "", strings.TrimSpace(th.ModelID), th.ModelLocked, nil)
+	resolved, err := s.resolveRunModel(opCtx, cfg, "", strings.TrimSpace(th.ModelID), nil)
 	if err != nil {
 		if logger != nil {
 			logger.Warn("thread auto title resolve model failed",

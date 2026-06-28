@@ -870,8 +870,6 @@ func aiThreadActionHTTPStatus(err error) int {
 	case errors.Is(err, ai.ErrThreadBusy),
 		errors.Is(err, ai.ErrRunChanged),
 		errors.Is(err, ai.ErrWaitingPromptChanged),
-		errors.Is(err, ai.ErrModelLockViolation),
-		errors.Is(err, ai.ErrModelSwitchRequiresExplicitRestart),
 		errors.Is(err, ai.ErrFollowupsRevisionChanged),
 		errors.Is(err, ai.ErrCompactAlreadyPending),
 		errors.Is(err, ai.ErrNoCompactableContext):
@@ -3788,7 +3786,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					status := http.StatusBadRequest
 					if errors.Is(err, sql.ErrNoRows) {
 						status = http.StatusNotFound
-					} else if errors.Is(err, ai.ErrModelSwitchRequiresExplicitRestart) || errors.Is(err, ai.ErrModelLockViolation) {
+					} else if errors.Is(err, ai.ErrThreadBusy) {
 						status = http.StatusConflict
 					}
 					writeJSON(w, status, apiResp{OK: false, Error: err.Error()})

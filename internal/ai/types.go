@@ -139,7 +139,6 @@ type ThreadView struct {
 	ThreadID            string                       `json:"thread_id"`
 	Title               string                       `json:"title"`
 	ModelID             string                       `json:"model_id"`
-	ModelLocked         bool                         `json:"model_locked"`
 	PermissionType      string                       `json:"permission_type"`
 	WorkingDir          string                       `json:"working_dir"`
 	QueuedTurnCount     int                          `json:"queued_turn_count"`
@@ -235,12 +234,12 @@ type FlowerSubagentTurnMarkerView struct {
 }
 
 type FlowerSubagentCompactionView struct {
-	Trigger              string            `json:"trigger,omitempty"`
-	Reason               string            `json:"reason,omitempty"`
-	Phase                string            `json:"phase,omitempty"`
-	TokensBefore         int64             `json:"tokens_before,omitempty"`
-	TokensAfterEstimate  int64             `json:"tokens_after_estimate,omitempty"`
-	Metadata             map[string]string `json:"metadata,omitempty"`
+	Trigger             string            `json:"trigger,omitempty"`
+	Reason              string            `json:"reason,omitempty"`
+	Phase               string            `json:"phase,omitempty"`
+	TokensBefore        int64             `json:"tokens_before,omitempty"`
+	TokensAfterEstimate int64             `json:"tokens_after_estimate,omitempty"`
+	Metadata            map[string]string `json:"metadata,omitempty"`
 }
 
 type FlowerSubagentTimelineRow struct {
