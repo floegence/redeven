@@ -108,8 +108,8 @@ function collectModelOptions(providers: readonly FlowerProviderDraft[], labels?:
         id: flowerModelID(providerID, modelName),
         label: `${providerDisplayName(provider, labels)} / ${modelName}`,
         supportsImageInput: flowerModelSupportsImage(model.input_modalities),
-        contextWindow: model.context_window,
-        maxOutputTokens: model.max_output_tokens,
+        ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
+        ...(model.max_output_tokens != null ? { maxOutputTokens: model.max_output_tokens } : {}),
         provider_type: provider.type,
       };
     })
@@ -223,6 +223,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
 
   const modelOptions = createMemo(() => collectModelOptions(providers(), copy().providerTypeLabels));
   const activeModelOption = createMemo(() => modelOptions().find((option) => option.id === currentModelID()) ?? null);
+  const modelSelectOptions = createMemo(() => modelOptions().map((o) => ({ value: o.id, label: o.label })));
   const activeProviderModel = createMemo(() => {
     const current = trim(currentModelID());
     const [providerID, ...modelParts] = current.split('/');
@@ -550,7 +551,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                   <div>
                       <Select
                         value={currentModelID()}
-                        options={modelOptions()}
+                        options={modelSelectOptions()}
                         onChange={(value) => { setCurrentModelID(trim(value)); markDirty(); }}
                         placeholder={copy().selectModelPlaceholder}
                         disabled={modelOptions().length === 0 || props.saving}
