@@ -1,7 +1,7 @@
 import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Clock, Copy, FileText, FolderOpen, GitBranch, GripVertical, Plus, Settings, Shield, Terminal } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, FileText, FolderOpen, GitBranch, GripVertical, Plus, Settings, Shield, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, FloatingWindow, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -77,6 +77,7 @@ import { FlowerSettingsSurface } from './settings/FlowerSettingsSurface';
 import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerThreadList';
 import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
 import { flowerThreadReadSnapshotKey, mergeFlowerThreadListRefresh, sameThreadSnapshot } from './flowerThreadListRefresh';
+import { FlowerProviderBrandIcon, flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
 import { FlowerReasoningControl } from './ReasoningControl';
 import {
   defaultReasoningSelectionForCapability,
@@ -633,6 +634,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadsRefreshSequence = 0;
   let startedFocusThreadRequestID = '';
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
+  const [modelMenuOpen, setModelMenuOpen] = createSignal(false);
+  let modelTriggerRef: HTMLButtonElement | undefined;
+  let modelMenuRef: HTMLDivElement | undefined;
   let permissionTriggerRef: HTMLButtonElement | undefined;
   let permissionMenuRef: HTMLDivElement | undefined;
   let subagentTriggerRef: HTMLButtonElement | undefined;
@@ -890,6 +894,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const closePermissionMenu = (restoreFocus = false) => {
     setPermissionMenuOpen(false);
     if (restoreFocus) queueMicrotask(() => permissionTriggerRef?.focus());
+  };
+  const closeModelMenu = (restoreFocus = false) => {
+    setModelMenuOpen(false);
+    if (restoreFocus) queueMicrotask(() => modelTriggerRef?.focus());
+  };
+  const openModelMenu = () => {
+    if (!composerModelInteractive() || modelPatchPending()) return;
+    setModelMenuOpen(true);
+  };
+  const handleModelTriggerKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ' || event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      openModelMenu();
+    }
+  };
+  const handleModelMenuKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') { event.preventDefault(); closeModelMenu(true); }
   };
   const openPermissionMenu = () => {
     if (!composerPermissionInteractive() || permissionPatchPending()) return;
@@ -1315,6 +1336,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   });
 
+  createEffect(() => {
+    if (!modelMenuOpen()) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (modelTriggerRef?.contains(target) || modelMenuRef?.contains(target)) return;
+      closeModelMenu(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      closeModelMenu(true);
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown, true);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+    });
+  });
+
   const renameOriginalTitle = createMemo(() => threads().find((thread) => thread.thread_id === renameThreadID())?.title ?? '');
   const renameUnchanged = createMemo(() => trimString(renameDraft()) === trimString(renameOriginalTitle()));
   const currentModelID = createMemo(() => trimString(snapshot()?.config.current_model_id));
@@ -1339,6 +1380,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!current) return threadModelID;
     return formatFlowerCurrentModelLabel({ ...current.config, current_model_id: threadModelID }, copy().chat.noModelSelected);
   });
+  type ComposerModelOption = Readonly<{ id: string; label: string; providerLabel: string; providerType: string; supportsImageInput: boolean; contextWindow?: number; maxOutputTokens?: number }>;
   const modelSelectOptions = createMemo(() => {
     const current = snapshot();
     const options = current?.config.providers.flatMap((provider) => {
@@ -1351,12 +1393,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return {
           id: `${providerID}/${modelName}`,
           label: `${providerLabel} / ${modelName}`,
-        };
-      }).filter((option): option is { id: string; label: string } => option !== null);
+          providerLabel,
+          providerType: provider.type,
+          supportsImageInput: flowerModelSupportsImage(model.input_modalities),
+          ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
+          ...(model.max_output_tokens != null ? { maxOutputTokens: model.max_output_tokens } : {}),
+        } as ComposerModelOption;
+      }).filter((option): option is ComposerModelOption => option !== null);
     }) ?? [];
     const selected = selectedComposerModelID();
     if (selected && !options.some((option) => option.id === selected)) {
-      return [{ id: selected, label: selectedThreadModelLabel() }, ...options];
+      const label = selectedThreadModelLabel();
+      return [{ id: selected, label, providerLabel: '', providerType: '', supportsImageInput: false } as ComposerModelOption, ...options];
     }
     return options;
   });
@@ -4843,17 +4891,67 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                                     </span>
                                   )}
                                 >
-                                  <select
-                                    class="flower-model-select"
-                                    value={selectedComposerModelID()}
-                                    disabled={!composerModelInteractive() || modelPatchPending()}
-                                    title={selectedThreadModelLabel()}
-                                    onChange={(event) => { void updateComposerModelID(event.currentTarget.value); }}
-                                  >
-                                    <For each={modelSelectOptions()}>
-                                      {(option) => <option value={option.id}>{option.label}</option>}
-                                    </For>
-                                  </select>
+                                  <div class="flower-model-select-anchor">
+                                    <button
+                                      ref={modelTriggerRef}
+                                      type="button"
+                                      class="flower-model-select-trigger"
+                                      disabled={!composerModelInteractive() || modelPatchPending()}
+                                      aria-haspopup="listbox"
+                                      aria-expanded={modelMenuOpen()}
+                                      aria-label={`Model: ${selectedThreadModelLabel()}`}
+                                      title={selectedThreadModelLabel()}
+                                      onClick={() => { if (modelMenuOpen()) { closeModelMenu(false); return; } openModelMenu(); }}
+                                      onKeyDown={handleModelTriggerKeyDown}
+                                    >
+                                      <span class="flower-model-select-label">{selectedThreadModelLabel()}</span>
+                                      <ChevronDown class="flower-model-select-chevron" aria-hidden="true" />
+                                    </button>
+                                    <Show when={modelMenuOpen()}>
+                                      <div
+                                        ref={modelMenuRef}
+                                        class="flower-model-menu"
+                                        role="listbox"
+                                        onKeyDown={handleModelMenuKeyDown}
+                                      >
+                                        <For each={modelSelectOptions()}>
+                                          {(option) => {
+                                            const selected = () => option.id === selectedComposerModelID();
+                                            return (
+                                              <button
+                                                type="button"
+                                                class={cn('flower-model-menu-item', selected() && 'flower-model-menu-item-active')}
+                                                role="option"
+                                                aria-selected={selected()}
+                                                onClick={() => { void updateComposerModelID(option.id); closeModelMenu(true); }}
+                                              >
+                                                <Show when={option.providerType} fallback={<Bot class="flower-model-menu-icon" />}>
+                                                  <FlowerProviderBrandIcon type={option.providerType} class="flower-model-menu-icon" />
+                                                </Show>
+                                                <span class="flower-model-menu-copy">
+                                                  <span class="flower-model-menu-name">{option.label}</span>
+                                                  <span class="flower-model-menu-meta">
+                                                    <Show when={option.contextWindow}>
+                                                      <span>{formatFlowerTokenCount(option.contextWindow)} context</span>
+                                                    </Show>
+                                                    <Show when={option.maxOutputTokens}>
+                                                      <span> · {formatFlowerTokenCount(option.maxOutputTokens)} output</span>
+                                                    </Show>
+                                                    <Show when={option.supportsImageInput}>
+                                                      <span> · Image</span>
+                                                    </Show>
+                                                  </span>
+                                                </span>
+                                                <Show when={selected()}>
+                                                  <Check class="flower-model-menu-check" aria-hidden="true" />
+                                                </Show>
+                                              </button>
+                                            );
+                                          }}
+                                        </For>
+                                      </div>
+                                    </Show>
+                                  </div>
                                 </Show>
                                 <Show when={composerReasoningEnabled()}>
                                   <FlowerReasoningControl
