@@ -169,6 +169,77 @@ func TestWebFetch_BlocksHostWithMixedPublicAndPrivateDNS(t *testing.T) {
 	}
 }
 
+func TestWebFetch_AllowsDomainResolvedToVPNFakeIP(t *testing.T) {
+	t.Parallel()
+
+	var gotHost string
+	r := newWebFetchTestRun(fakeWebFetchResolver{
+		"example.com": {"198.18.1.15"},
+	}, func(req *http.Request) (*http.Response, error) {
+		gotHost = req.URL.Host
+		return webFetchResponse(http.StatusOK, "text/plain; charset=utf-8", "hello through vpn"), nil
+	})
+
+	out, err := r.toolWebFetch(context.Background(), webFetchArgs{URL: "https://example.com/page", Format: "text"})
+	if err != nil {
+		t.Fatalf("toolWebFetch: %v", err)
+	}
+	if gotHost != "example.com" || out.Output != "hello through vpn" {
+		t.Fatalf("gotHost=%q output=%q", gotHost, out.Output)
+	}
+}
+
+func TestWebFetch_BlocksLiteralVPNFakeIP(t *testing.T) {
+	t.Parallel()
+
+	r := newWebFetchTestRun(fakeWebFetchResolver{}, func(req *http.Request) (*http.Response, error) {
+		t.Fatalf("transport should not be called for literal VPN fake IP")
+		return nil, nil
+	})
+
+	if _, err := r.toolWebFetch(context.Background(), webFetchArgs{URL: "https://198.18.1.15/page", Format: "text"}); err == nil {
+		t.Fatalf("expected literal VPN fake IP to be blocked")
+	}
+}
+
+func TestWebFetchResolvedIPPolicy_AllowsVPNFakeIP(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		ip      string
+		allowed bool
+	}{
+		{ip: "198.18.1.15", allowed: true},
+		{ip: "198.19.255.254", allowed: true},
+		{ip: "10.0.0.1", allowed: false},
+		{ip: "127.0.0.1", allowed: false},
+		{ip: "169.254.169.254", allowed: false},
+	} {
+		addr, ok := parseWebFetchHostIP(tc.ip)
+		if !ok {
+			t.Fatalf("parseWebFetchHostIP(%q) failed", tc.ip)
+		}
+		if got := isAllowedResolvedWebFetchIP(addr); got != tc.allowed {
+			t.Fatalf("isAllowedResolvedWebFetchIP(%q)=%v, want %v", tc.ip, got, tc.allowed)
+		}
+	}
+}
+
+func TestWebFetchDialPolicy_BlocksLiteralVPNFakeIP(t *testing.T) {
+	t.Parallel()
+
+	addr, ok := parseWebFetchHostIP("198.18.1.15")
+	if !ok {
+		t.Fatalf("parseWebFetchHostIP failed")
+	}
+	if isAllowedWebFetchDialIP("198.18.1.15", addr) {
+		t.Fatalf("expected dial policy to block literal VPN fake IP")
+	}
+	if !isAllowedWebFetchDialIP("example.com", addr) {
+		t.Fatalf("expected dial policy to allow named host resolved to VPN fake IP")
+	}
+}
+
 func TestWebFetch_BlocksRedirectToPrivateTarget(t *testing.T) {
 	t.Parallel()
 

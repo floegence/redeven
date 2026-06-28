@@ -176,12 +176,13 @@ func secureWebFetchDialer(resolver webFetchResolver) func(context.Context, strin
 		if err != nil {
 			return nil, err
 		}
-		ips, err := resolveWebFetchHost(ctx, resolver, strings.Trim(host, "[]"))
+		host = strings.Trim(host, "[]")
+		ips, err := resolveWebFetchHost(ctx, resolver, host)
 		if err != nil {
 			return nil, err
 		}
 		for _, ip := range ips {
-			if !isPublicWebFetchIP(ip) {
+			if !isAllowedWebFetchDialIP(host, ip) {
 				continue
 			}
 			conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
@@ -229,12 +230,18 @@ func parseAndValidateWebFetchURL(ctx context.Context, resolver webFetchResolver,
 	if strings.Contains(host, "%") {
 		return nil, errors.New("url host zone id is not allowed")
 	}
+	if ip, ok := parseWebFetchHostIP(host); ok {
+		if !isPublicWebFetchIP(ip) {
+			return nil, errors.New("url host resolves to a blocked address")
+		}
+		return parsed, nil
+	}
 	ips, err := resolveWebFetchHost(ctx, resolver, host)
 	if err != nil {
 		return nil, err
 	}
 	for _, ip := range ips {
-		if !isPublicWebFetchIP(ip) {
+		if !isAllowedResolvedWebFetchIP(ip) {
 			return nil, errors.New("url host resolves to a blocked address")
 		}
 	}
@@ -375,6 +382,22 @@ func isPublicWebFetchIP(ip netip.Addr) bool {
 		}
 	}
 	return true
+}
+
+func isAllowedResolvedWebFetchIP(ip netip.Addr) bool {
+	ip = ip.Unmap()
+	return isPublicWebFetchIP(ip) || isWebFetchVPNFakeIP(ip)
+}
+
+func isAllowedWebFetchDialIP(host string, ip netip.Addr) bool {
+	if _, ok := parseWebFetchHostIP(host); ok {
+		return isPublicWebFetchIP(ip)
+	}
+	return isAllowedResolvedWebFetchIP(ip)
+}
+
+func isWebFetchVPNFakeIP(ip netip.Addr) bool {
+	return addrInPrefix(ip.Unmap(), "198.18.0.0/15")
 }
 
 func addrInPrefix(ip netip.Addr, prefix string) bool {
