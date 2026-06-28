@@ -204,13 +204,8 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if !r.acceptsEngineResultProjection() {
 		return nil
 	}
-	turnID := flruntime.TurnID(strings.TrimSpace(r.messageID))
-	detailEvents, detailErr := listFloretThreadDetailEventsForTurn(ctx, host, threadID, turnID)
-	if detailErr != nil {
-		return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", fmt.Errorf("read floret thread detail events: %w", detailErr))
-	}
-	if result.Status == flruntime.TurnStatusCompleted {
-		r.applyFloretThreadDetailProjection(detailEvents, result.ActivityTimeline)
+	if result.Status == flruntime.TurnStatusCompleted || result.Status == flruntime.TurnStatusWaiting {
+		r.applyFloretThreadProjection(result.Projection)
 	}
 	r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), 0)
 	r.setProviderContinuationCandidate(providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState)))
@@ -261,8 +256,6 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.TurnResu
 			if !gatePassed {
 				return r.failRun("Task completion rejected by completion gate", fmt.Errorf("task_complete rejected: %s", gateReason))
 			}
-			r.persistTaskCompleteSignal(strings.TrimSpace(signal.CallID), resultText, evidenceRefs)
-			r.recordSourcesActivity("task_complete")
 			r.setFinalizationReason("task_complete")
 			r.setEndReason("complete")
 			r.emitLifecyclePhase("ended", map[string]any{"reason": "task_complete", "step_index": step})
@@ -396,7 +389,7 @@ func (r *run) projectFloretAskUserWaiting(step int, signal *flruntime.TurnSignal
 	if ask.Question == "" {
 		ask.Question = "I need clarification to continue safely."
 	}
-	r.persistAskUserWaitingSignal(ask, "model_signal")
+	r.persistAskUserWaitingPrompt(ask, "model_signal", strings.TrimSpace(signal.CallID))
 	r.reconcileCanonicalWaitingUserMessage()
 	finalReason := finalizationReasonForAskUserSource("model_signal")
 	r.persistRunEvent("ask_user.waiting", RealtimeStreamKindLifecycle, map[string]any{

@@ -1,176 +1,21 @@
 package ai
 
 import (
-	"context"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 )
 
-type floretThreadProjectionOptions struct {
-	ActivityTimeline observation.ActivityTimeline
-	FileActions      map[string]FlowerActivityFileAction
-}
-
-const floretThreadDetailEventPageLimit = 500
-
-func listFloretThreadDetailEventsForTurn(ctx context.Context, host flruntime.Host, threadID flruntime.ThreadID, turnID flruntime.TurnID) ([]flruntime.ThreadDetailEvent, error) {
-	if host == nil {
-		return nil, fmt.Errorf("floret host is nil")
-	}
-	var out []flruntime.ThreadDetailEvent
-	var afterOrdinal int64
-	for {
-		detail, err := host.ListThreadDetailEvents(ctx, flruntime.ListThreadDetailEventsRequest{
-			ThreadID:     threadID,
-			AfterOrdinal: afterOrdinal,
-			Limit:        floretThreadDetailEventPageLimit,
-			IncludeRaw:   true,
-		})
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, floretThreadDetailEventsForTurn(detail.Events, turnID)...)
-		if !detail.HasMore {
-			return out, nil
-		}
-		if detail.NextOrdinal <= afterOrdinal {
-			return nil, fmt.Errorf("floret thread detail pagination did not advance after ordinal %d", afterOrdinal)
-		}
-		afterOrdinal = detail.NextOrdinal
-	}
-}
-
-func floretThreadDetailEventsForTurn(events []flruntime.ThreadDetailEvent, turnID flruntime.TurnID) []flruntime.ThreadDetailEvent {
-	if len(events) == 0 {
-		return nil
-	}
-	turnIDText := strings.TrimSpace(string(turnID))
-	if turnIDText == "" {
-		return nil
-	}
-	out := make([]flruntime.ThreadDetailEvent, 0, len(events))
-	for _, ev := range events {
-		if strings.TrimSpace(string(ev.TurnID)) != turnIDText {
-			continue
-		}
-		out = append(out, ev)
-	}
-	return out
-}
-
-func flowerBlocksFromFloretThreadEvents(events []flruntime.ThreadDetailEvent, opts floretThreadProjectionOptions) []any {
-	blocks := make([]any, 0, len(events))
-	var text strings.Builder
-	pendingToolIDs := make([]string, 0)
-	pendingToolSet := map[string]struct{}{}
-	flushText := func() {
-		content := text.String()
-		if strings.TrimSpace(content) == "" {
-			text.Reset()
-			return
-		}
-		blocks = append(blocks, &persistedMarkdownBlock{Type: "markdown", Content: content})
-		text.Reset()
-	}
-	flushActivity := func() {
-		if len(pendingToolIDs) == 0 {
-			return
-		}
-		timeline := floretActivityTimelineForToolIDs(opts.ActivityTimeline, pendingToolSet)
-		if len(timeline.Items) > 0 {
-			blocks = append(blocks, newActivityTimelineBlock(timeline, opts.FileActions))
-		}
-		pendingToolIDs = pendingToolIDs[:0]
-		pendingToolSet = map[string]struct{}{}
-	}
-	addTool := func(toolID string) {
-		toolID = strings.TrimSpace(toolID)
-		if toolID == "" {
-			return
-		}
-		if _, ok := pendingToolSet[toolID]; ok {
-			return
-		}
-		pendingToolSet[toolID] = struct{}{}
-		pendingToolIDs = append(pendingToolIDs, toolID)
-	}
-	for _, ev := range events {
-		switch ev.Kind {
-		case flruntime.ThreadDetailEventAssistantMessage:
-			content := floretThreadAssistantText(ev)
-			if strings.TrimSpace(content) == "" {
-				continue
-			}
-			flushActivity()
-			text.WriteString(content)
-		case flruntime.ThreadDetailEventToolCall:
-			if ev.ToolCall == nil {
-				continue
-			}
-			flushText()
-			addTool(ev.ToolCall.ID)
-		case flruntime.ThreadDetailEventToolResult:
-			if ev.ToolResult == nil {
-				continue
-			}
-			flushText()
-			addTool(ev.ToolResult.CallID)
-		}
-	}
-	flushText()
-	flushActivity()
-	return blocks
-}
-
-func floretThreadAssistantText(ev flruntime.ThreadDetailEvent) string {
-	if ev.Message == nil {
-		return ""
-	}
-	if text := strings.TrimSpace(ev.Message.Content); text != "" {
-		return ev.Message.Content
-	}
-	return ev.Message.Preview
-}
-
-func floretActivityTimelineForToolIDs(timeline observation.ActivityTimeline, toolIDs map[string]struct{}) observation.ActivityTimeline {
-	if len(timeline.Items) == 0 || len(toolIDs) == 0 {
-		return observation.ActivityTimeline{}
-	}
-	items := make([]observation.ActivityItem, 0, len(timeline.Items))
-	for _, item := range timeline.Items {
-		toolID := strings.TrimSpace(item.ToolID)
-		if toolID == "" {
-			toolID = strings.TrimSpace(item.ItemID)
-		}
-		if _, ok := toolIDs[toolID]; ok {
-			items = append(items, item)
-		}
-	}
-	if len(items) == 0 {
-		return observation.ActivityTimeline{}
-	}
-	timeline.Items = items
-	timeline.Summary = activityTimelineSummaryFromItems(timeline.Summary, items)
-	return timeline
-}
-
-func (r *run) applyFloretThreadDetailProjection(events []flruntime.ThreadDetailEvent, timeline observation.ActivityTimeline) bool {
+func (r *run) applyFloretThreadProjection(projection flruntime.ThreadTurnProjection) bool {
 	if r == nil {
 		return false
 	}
 	if !r.acceptsPresentationUpdates() {
 		return false
 	}
-	fileActions := r.activityTimelineFileActions(timeline)
-	blocks := flowerBlocksFromFloretThreadEvents(events, floretThreadProjectionOptions{
-		ActivityTimeline: r.normalizeActivityTimeline(timeline),
-		FileActions:      fileActions,
-	})
+	blocks := r.flowerBlocksFromFloretThreadProjection(projection)
 	if len(blocks) == 0 {
 		blocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: ""}}
 	}
@@ -189,8 +34,6 @@ func (r *run) applyFloretThreadDetailProjection(events []flruntime.ThreadDetailE
 	}
 	oldLen := len(r.assistantBlocks)
 	r.assistantBlocks = blocks
-	r.activitySegmentEvents = nil
-	r.activityTimelineProjected = containsActivityTimelineBlock(blocks)
 	r.floretThreadProjectionApplied = true
 	r.muAssistant.Unlock()
 	for idx, block := range blocks {
@@ -205,6 +48,31 @@ func (r *run) applyFloretThreadDetailProjection(events []flruntime.ThreadDetailE
 		})
 	}
 	return true
+}
+
+func (r *run) flowerBlocksFromFloretThreadProjection(projection flruntime.ThreadTurnProjection) []any {
+	if r == nil || len(projection.Segments) == 0 {
+		return nil
+	}
+	blocks := make([]any, 0, len(projection.Segments))
+	for _, segment := range projection.Segments {
+		switch segment.Kind {
+		case flruntime.ThreadTurnProjectionSegmentAssistantText:
+			if strings.TrimSpace(segment.Text) == "" {
+				continue
+			}
+			blocks = append(blocks, &persistedMarkdownBlock{Type: "markdown", Content: segment.Text})
+		case flruntime.ThreadTurnProjectionSegmentActivityTimeline:
+			if segment.ActivityTimeline == nil || len(segment.ActivityTimeline.Items) == 0 {
+				continue
+			}
+			timeline := r.normalizeActivityTimeline(*segment.ActivityTimeline)
+			blocks = append(blocks, newActivityTimelineBlock(timeline, r.activityTimelineFileActions(timeline)))
+		case flruntime.ThreadTurnProjectionSegmentControlSignal:
+			continue
+		}
+	}
+	return blocks
 }
 
 func (r *run) recordFloretCommittedThreadEvent(ev *flruntime.ThreadDetailEvent) {
@@ -258,22 +126,18 @@ func (r *run) applyCommittedFloretThreadDetailProjection() bool {
 	}
 	r.muAssistant.Lock()
 	events := append([]flruntime.ThreadDetailEvent(nil), r.floretCommittedThreadEvents...)
-	activityEvents := append([]observation.Event(nil), r.activityTimelineEvents...)
 	r.muAssistant.Unlock()
 	if len(events) == 0 {
 		return false
 	}
-	timeline := observation.BuildActivityTimeline(r.activityRunMeta(), activityEvents, time.Now().UnixMilli())
-	return r.applyFloretThreadDetailProjection(events, timeline)
-}
-
-func containsActivityTimelineBlock(blocks []any) bool {
-	for _, block := range blocks {
-		if isActivityTimelineBlockValue(block) {
-			return true
-		}
-	}
-	return false
+	projection := flruntime.ProjectThreadTurn(flruntime.ProjectThreadTurnRequest{
+		ThreadID: flruntime.ThreadID(strings.TrimSpace(r.threadID)),
+		TurnID:   flruntime.TurnID(strings.TrimSpace(r.messageID)),
+		RunID:    flruntime.RunID(strings.TrimSpace(r.id)),
+		TraceID:  flruntime.TraceID(strings.TrimSpace(r.id)),
+		Events:   events,
+	})
+	return r.applyFloretThreadProjection(projection)
 }
 
 func (r *run) hasFloretThreadDetailProjectionApplied() bool {

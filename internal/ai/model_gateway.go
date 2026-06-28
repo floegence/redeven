@@ -3057,69 +3057,11 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 	}
 }
 
-func (r *run) recordTaskCompleteSignal(toolID string, resultText string, evidenceRefs []string) {
-	if r == nil {
-		return
-	}
-	toolID = r.persistTaskCompleteSignal(toolID, resultText, evidenceRefs)
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeControlSignal,
-		ToolID:     toolID,
-		ToolName:   "task_complete",
-		ToolKind:   "control",
-		Result:     truncateRunes(strings.TrimSpace(resultText), 500),
-		ObservedAt: time.Now(),
-		Metadata: map[string]any{
-			"control_disposition": "terminal",
-			"result_count":        len(normalizeEvidenceRefs(evidenceRefs)),
-		},
-	})
-}
-
-func normalizeEvidenceRefs(evidenceRefs []string) []string {
-	cleanEvidenceRefs := make([]string, 0, len(evidenceRefs))
-	for _, ref := range evidenceRefs {
-		if ref = strings.TrimSpace(ref); ref != "" {
-			cleanEvidenceRefs = append(cleanEvidenceRefs, ref)
-		}
-	}
-	return cleanEvidenceRefs
-}
-
-func (r *run) persistTaskCompleteSignal(toolID string, resultText string, evidenceRefs []string) string {
-	if r == nil {
-		return strings.TrimSpace(toolID)
-	}
-	toolID = strings.TrimSpace(toolID)
-	if toolID == "" {
-		if id, err := newToolID(); err == nil {
-			toolID = id
-		} else {
-			toolID = "tool_task_complete"
-		}
-	}
-	resultText = strings.TrimSpace(resultText)
-	cleanEvidenceRefs := normalizeEvidenceRefs(evidenceRefs)
-	args := map[string]any{
-		"result": truncateRunes(resultText, 500),
-	}
-	result := map[string]any{
-		"result": resultText,
-	}
-	if len(cleanEvidenceRefs) > 0 {
-		args["evidence_refs"] = append([]string(nil), cleanEvidenceRefs...)
-		result["evidence_refs"] = append([]string(nil), cleanEvidenceRefs...)
-	}
-	toolID = r.persistSyntheticToolSuccess(toolID, "task_complete", args, result)
-	return toolID
-}
-
-func (r *run) persistAskUserWaitingSignal(signal askUserSignal, source string) (string, int) {
+func (r *run) persistAskUserWaitingPrompt(signal askUserSignal, _ string, toolID string) (string, int) {
 	if r == nil {
 		return "", 0
 	}
 	signal = normalizeAskUserSignal(signal)
-	source = strings.TrimSpace(source)
 	questions := normalizeRequestUserInputQuestions(signal.Questions)
 	if len(questions) == 0 {
 		return "", 0
@@ -3131,9 +3073,13 @@ func (r *run) persistAskUserWaitingSignal(signal askUserSignal, source string) (
 	if question == "" {
 		return "", 0
 	}
-	toolID, err := newToolID()
-	if err != nil {
-		toolID = "tool_ask_user_waiting"
+	toolID = strings.TrimSpace(toolID)
+	if toolID == "" {
+		id, err := newToolID()
+		if err != nil {
+			return "", 0
+		}
+		toolID = id
 	}
 	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
 		MessageID:          strings.TrimSpace(r.messageID),
@@ -3149,22 +3095,6 @@ func (r *run) persistAskUserWaitingSignal(signal askUserSignal, source string) (
 		return "", 0
 	}
 	r.setWaitingPrompt(prompt)
-	args := map[string]any{
-		"questions":          questions,
-		"reason_code":        signal.ReasonCode,
-		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
-		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
-	}
-	result := map[string]any{
-		"questions":          questions,
-		"source":             source,
-		"reason_code":        signal.ReasonCode,
-		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
-		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
-		"waiting_prompt":     prompt,
-		"waiting_user":       true,
-	}
-	toolID = r.persistSyntheticToolSuccess(toolID, "ask_user", args, result)
 	return toolID, len(questions)
 }
 

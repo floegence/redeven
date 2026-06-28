@@ -2760,14 +2760,14 @@ func TestBuildPreview_AssistantReturnsEmptyWithoutVisibleText(t *testing.T) {
 	}
 }
 
-func TestBuildPreview_AssistantUsesTextBlockForFinalConclusion(t *testing.T) {
+func TestBuildPreview_AssistantUsesFinalMarkdownAfterControlActivity(t *testing.T) {
 	t.Parallel()
 
-	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"activity-timeline","schema_version":1,"run_id":"run_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[{"item_id":"tool_1","tool_id":"tool_1","tool_name":"task_complete","kind":"control","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false}]},{"type":"text","content":"Completed the verification and documented the remaining risks."}],"status":"complete","timestamp":1}`
+	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"activity-timeline","schema_version":1,"run_id":"run_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[{"item_id":"tool_1","tool_id":"tool_1","tool_name":"task_complete","kind":"control","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false}]},{"type":"markdown","content":"Completed the verification and documented the remaining risks."}],"status":"complete","timestamp":1}`
 
 	preview := buildPreview("assistant", "", messageJSON)
 	if !strings.Contains(preview, "Completed the verification") {
-		t.Fatalf("preview=%q, want task_complete result fallback", preview)
+		t.Fatalf("preview=%q, want final markdown after control activity", preview)
 	}
 }
 

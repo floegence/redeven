@@ -3,7 +3,6 @@ package ai
 import (
 	"encoding/json"
 	"strings"
-	"time"
 
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
@@ -115,9 +114,6 @@ func (r *run) finishActivitySegment() {
 	r.activitySegmentActive = false
 	r.activitySegmentBlockIndex = -1
 	r.mu.Unlock()
-	r.muAssistant.Lock()
-	r.activitySegmentEvents = nil
-	r.muAssistant.Unlock()
 }
 
 func (r *run) ensureActivitySegmentBlockIndex(preferred int) int {
@@ -145,9 +141,6 @@ func (r *run) ensureActivitySegmentBlockIndex(preferred int) int {
 	r.needNewTextBlock = true
 	r.needNewThinkingBlock = true
 	r.mu.Unlock()
-	r.muAssistant.Lock()
-	r.activitySegmentEvents = nil
-	r.muAssistant.Unlock()
 	return idx
 }
 
@@ -158,11 +151,9 @@ func (r *run) recordFloretActivityEvent(ev flruntime.Event) {
 	if !r.acceptsPresentationUpdates() {
 		return
 	}
-	activityEvent, ok := observationActivityEventFromFloret(ev)
-	if !ok {
-		return
+	if modelIOEndsBeforeActivity(ev.Type) {
+		r.clearModelIOStatus()
 	}
-	r.recordObservationActivityEvent(activityEvent)
 }
 
 func (r *run) recordObservationActivityEvent(ev observation.Event) {
@@ -178,49 +169,6 @@ func (r *run) recordObservationActivityEvent(ev observation.Event) {
 	if modelIOEndsBeforeActivity(ev.Type) {
 		r.clearModelIOStatus()
 	}
-	if ev.RunID == "" {
-		ev.RunID = strings.TrimSpace(r.id)
-	}
-	if ev.ThreadID == "" {
-		ev.ThreadID = strings.TrimSpace(r.threadID)
-	}
-	if ev.TurnID == "" {
-		ev.TurnID = strings.TrimSpace(r.messageID)
-	}
-	if ev.TraceID == "" {
-		ev.TraceID = strings.TrimSpace(r.id)
-	}
-	if ev.ObservedAt.IsZero() {
-		ev.ObservedAt = time.Now()
-	}
-
-	r.mu.Lock()
-	segmentActive := r.activitySegmentActive
-	r.mu.Unlock()
-	r.muAssistant.Lock()
-	previewEvents := make([]observation.Event, 0, len(r.activitySegmentEvents)+1)
-	if segmentActive {
-		previewEvents = append(previewEvents, r.activitySegmentEvents...)
-	}
-	previewEvents = append(previewEvents, ev)
-	r.muAssistant.Unlock()
-	preview := observation.BuildActivityTimeline(r.activityRunMeta(), previewEvents, time.Now().UnixMilli())
-	if len(preview.Items) == 0 {
-		return
-	}
-
-	if r.ensureActivitySegmentBlockIndex(-1) < 0 {
-		return
-	}
-	r.muAssistant.Lock()
-	r.activityTimelineEvents = append(r.activityTimelineEvents, ev)
-	r.activitySegmentEvents = append(r.activitySegmentEvents, ev)
-	events := append([]observation.Event(nil), r.activitySegmentEvents...)
-	r.muAssistant.Unlock()
-
-	timeline := observation.BuildActivityTimeline(r.activityRunMeta(), events, time.Now().UnixMilli())
-	r.publishActivityTimeline(timeline)
-	r.applyCommittedFloretThreadDetailProjection()
 }
 
 func shouldRecordObservationActivityEvent(ev observation.Event) bool {
@@ -246,100 +194,6 @@ func modelIOEndsBeforeActivity(eventType string) bool {
 	default:
 		return false
 	}
-}
-
-func (r *run) publishFinalActivityTimeline(timeline observation.ActivityTimeline) {
-	if r == nil || len(timeline.Items) == 0 {
-		return
-	}
-	if !r.acceptsPresentationUpdates() {
-		return
-	}
-	timeline = removeSyntheticSuccessfulFinalToolItems(timeline)
-	if len(timeline.Items) == 0 {
-		return
-	}
-	r.muAssistant.Lock()
-	hasSegment := r.activityTimelineProjected
-	r.muAssistant.Unlock()
-	if hasSegment {
-		return
-	}
-	r.publishActivityTimeline(timeline)
-}
-
-func removeSyntheticSuccessfulFinalToolItems(timeline observation.ActivityTimeline) observation.ActivityTimeline {
-	items := make([]observation.ActivityItem, 0, len(timeline.Items))
-	for _, item := range timeline.Items {
-		if item.Kind == observation.ActivityKindTool && item.Status == observation.ActivityStatusSuccess && anyToString(item.Payload["status"]) != toolResultStatusSuccess {
-			continue
-		}
-		items = append(items, item)
-	}
-	timeline.Items = items
-	timeline.Summary = activityTimelineSummaryFromItems(timeline.Summary, items)
-	return timeline
-}
-
-func activityTimelineSummaryFromItems(existing observation.ActivitySummary, items []observation.ActivityItem) observation.ActivitySummary {
-	summary := existing
-	summary.TotalItems = len(items)
-	summary.Counts = observation.ActivityCounts{}
-	summary.NeedsAttention = false
-	summary.AttentionReasons = nil
-	summary.Status = observation.ActivityStatusSuccess
-	summary.Severity = observation.ActivitySeverityQuiet
-	if len(items) == 0 {
-		return summary
-	}
-	for _, item := range items {
-		switch item.Status {
-		case observation.ActivityStatusPending:
-			summary.Counts.Pending++
-		case observation.ActivityStatusRunning:
-			summary.Counts.Running++
-		case observation.ActivityStatusWaiting:
-			summary.Counts.Waiting++
-		case observation.ActivityStatusSuccess:
-			summary.Counts.Success++
-		case observation.ActivityStatusError:
-			summary.Counts.Error++
-		case observation.ActivityStatusCanceled:
-			summary.Counts.Canceled++
-		}
-		if item.NeedsAttention {
-			summary.NeedsAttention = true
-			summary.AttentionReasons = append(summary.AttentionReasons, item.AttentionReasons...)
-		}
-	}
-	if summary.Counts.Error > 0 {
-		summary.Status = observation.ActivityStatusError
-		summary.Severity = observation.ActivitySeverityError
-		return summary
-	}
-	if summary.Counts.Waiting > 0 {
-		summary.Status = observation.ActivityStatusWaiting
-		summary.Severity = observation.ActivitySeverityBlocking
-		return summary
-	}
-	if summary.Counts.Running > 0 {
-		summary.Status = observation.ActivityStatusRunning
-		summary.Severity = observation.ActivitySeverityNormal
-		return summary
-	}
-	if summary.Counts.Pending > 0 {
-		summary.Status = observation.ActivityStatusPending
-		summary.Severity = observation.ActivitySeverityQuiet
-		return summary
-	}
-	if summary.Counts.Canceled > 0 {
-		summary.Status = observation.ActivityStatusCanceled
-		summary.Severity = observation.ActivitySeverityWarning
-		return summary
-	}
-	summary.Status = observation.ActivityStatusSuccess
-	summary.Severity = observation.ActivitySeverityNormal
-	return summary
 }
 
 func (r *run) publishActivityTimeline(timeline observation.ActivityTimeline) {
@@ -368,7 +222,6 @@ func (r *run) publishActivityTimeline(timeline observation.ActivityTimeline) {
 	r.muAssistant.Lock()
 	r.persistEnsureIndex(idx)
 	r.assistantBlocks[idx] = block
-	r.activityTimelineProjected = true
 	r.muAssistant.Unlock()
 
 	r.persistRunEvent("activity.timeline.projected", RealtimeStreamKindTool, map[string]any{
@@ -413,49 +266,6 @@ func (r *run) activityRunMeta() observation.ActivityRunMeta {
 		TurnID:   strings.TrimSpace(r.messageID),
 		TraceID:  strings.TrimSpace(r.id),
 	}
-}
-
-func observationActivityEventFromFloret(ev flruntime.Event) (observation.Event, bool) {
-	observedAt := ev.Timestamp
-	if observedAt.IsZero() {
-		observedAt = time.Now()
-	}
-	eventType := strings.TrimSpace(ev.Type)
-	if eventType == observation.EventTypeRunEnd && !floretRunEndShouldProjectActivity(ev) {
-		return observation.Event{}, false
-	}
-	return observation.Event{
-		Type:         eventType,
-		TraceID:      strings.TrimSpace(string(ev.TraceID)),
-		RunID:        strings.TrimSpace(string(ev.RunID)),
-		ThreadID:     strings.TrimSpace(string(ev.ThreadID)),
-		TurnID:       strings.TrimSpace(string(ev.TurnID)),
-		Step:         ev.Step,
-		Provider:     strings.TrimSpace(ev.Provider),
-		Model:        strings.TrimSpace(ev.Model),
-		Message:      strings.TrimSpace(ev.Message),
-		Result:       strings.TrimSpace(ev.Result),
-		Error:        strings.TrimSpace(ev.Error),
-		ToolID:       strings.TrimSpace(ev.ToolID),
-		ToolName:     strings.TrimSpace(ev.ToolName),
-		ToolKind:     strings.TrimSpace(ev.ToolKind),
-		ArgsHash:     strings.TrimSpace(ev.ArgsHash),
-		DurationMS:   ev.DurationMS,
-		FinishReason: strings.TrimSpace(ev.FinishReason),
-		Activity:     ev.Activity,
-		Metadata:     ev.Metadata,
-		ObservedAt:   observedAt,
-	}, true
-}
-
-func floretRunEndShouldProjectActivity(ev flruntime.Event) bool {
-	if strings.TrimSpace(ev.Error) != "" {
-		return true
-	}
-	message := strings.TrimSpace(ev.Message)
-	return message == string(observation.ActivityStatusWaiting) ||
-		message == string(observation.ActivityStatusCanceled) ||
-		message == "cancelled"
 }
 
 func isActivityObservationEvent(eventType string) bool {

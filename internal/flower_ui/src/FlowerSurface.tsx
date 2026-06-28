@@ -3489,27 +3489,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const copyApprovalCwd = async (action: FlowerApprovalAction) => {
-    const cwd = trimString(action.summary.cwd);
-    if (!cwd) return;
-    const key = `approval:${action.action_id}:cwd`;
-    try {
-      await writeTextToClipboard(cwd);
-      setCopiedApprovalAction(key);
-      if (copiedApprovalResetTimer !== undefined) {
-        window.clearTimeout(copiedApprovalResetTimer);
-      }
-      copiedApprovalResetTimer = window.setTimeout(() => {
-        if (copiedApprovalAction() === key) {
-          setCopiedApprovalAction('');
-        }
-        copiedApprovalResetTimer = undefined;
-      }, 1600);
-    } catch (error) {
-      setThreadActionError(getErrorMessage(error));
-    }
-  };
-
   const inputRequestPrompt = (request: FlowerInputRequest | null | undefined) => (
     <Show when={request}>
       {(inputRequest) => (
@@ -3672,15 +3651,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const actionLabel = action.summary.label || action.tool_name || copy().chat.toolApprovalRequired;
     const subtaskLabel = action.delegated_ref?.subagent_id ? copy().chat.toolApprovalSubtaskSuffix(action.delegated_ref.subagent_id) : '';
     const commandText = trimString(action.summary.command);
-    const cwdText = trimString(action.summary.cwd);
     const descriptionText = action.summary.description || action.read_only_reason || '';
     const hasDescription = Boolean(descriptionText);
     const visibleEffects = approvalVisibleEffects(action);
     const visibleFlags = approvalVisibleFlags(action);
     const commandCopyKey = `approval:${action.action_id}:command`;
-    const cwdCopyKey = `approval:${action.action_id}:cwd`;
     const commandCopied = () => copiedApprovalAction() === commandCopyKey;
-    const cwdCopied = () => copiedApprovalAction() === cwdCopyKey;
     const delegatedStatusCopy = () => copy().chat.delegatedApprovalStatus;
     const statusCopy = (() => {
       if (action.status === 'unavailable' || action.state === 'unavailable' || action.delivery_state === 'delivery_unavailable') {

@@ -1,134 +1,38 @@
 package ai
 
 import (
-	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 )
 
-type threadDetailRecordingHost struct {
-	recordingFloretHost
-	pages    []flruntime.ThreadDetailEvents
-	requests []flruntime.ListThreadDetailEventsRequest
-}
-
-func (h *threadDetailRecordingHost) ListThreadDetailEvents(_ context.Context, req flruntime.ListThreadDetailEventsRequest) (flruntime.ThreadDetailEvents, error) {
-	h.requests = append(h.requests, req)
-	if len(h.pages) == 0 {
-		return flruntime.ThreadDetailEvents{}, nil
-	}
-	page := h.pages[0]
-	h.pages = h.pages[1:]
-	return page, nil
-}
-
-func TestListFloretThreadDetailEventsForTurnRequestsRawContent(t *testing.T) {
-	host := &threadDetailRecordingHost{
-		pages: []flruntime.ThreadDetailEvents{
-			{
-				Events: []flruntime.ThreadDetailEvent{
-					{
-						ID:      "other-turn",
-						Ordinal: 1,
-						TurnID:  flruntime.TurnID("other"),
-						Kind:    flruntime.ThreadDetailEventAssistantMessage,
-						Message: &flruntime.ThreadDetailMessage{Preview: "other preview", Content: "other raw"},
-					},
-					{
-						ID:      "target-preview-and-raw",
-						Ordinal: 2,
-						TurnID:  flruntime.TurnID("turn"),
-						Kind:    flruntime.ThreadDetailEventAssistantMessage,
-						Message: &flruntime.ThreadDetailMessage{Preview: "Gateway (`*`#5...", Content: "Gateway complete raw content."},
-					},
-				},
-				HasMore:     true,
-				NextOrdinal: 2,
-			},
-			{
-				Events: []flruntime.ThreadDetailEvent{{
-					ID:      "target-close",
-					Ordinal: 3,
-					TurnID:  flruntime.TurnID("turn"),
-					Kind:    flruntime.ThreadDetailEventAssistantMessage,
-					Message: &flruntime.ThreadDetailMessage{Preview: "Close...", Content: "Close complete raw content."},
-				}},
-			},
-		},
-	}
-
-	events, err := listFloretThreadDetailEventsForTurn(context.Background(), host, flruntime.ThreadID("thread"), flruntime.TurnID("turn"))
-	if err != nil {
-		t.Fatalf("listFloretThreadDetailEventsForTurn: %v", err)
-	}
-	if len(host.requests) != 2 {
-		t.Fatalf("requests=%d, want paged raw requests: %#v", len(host.requests), host.requests)
-	}
-	if !host.requests[0].IncludeRaw || !host.requests[1].IncludeRaw {
-		t.Fatalf("thread detail requests must include raw assistant content: %#v", host.requests)
-	}
-	if host.requests[0].AfterOrdinal != 0 || host.requests[1].AfterOrdinal != 2 {
-		t.Fatalf("request pagination=%#v, want after 0 then 2", host.requests)
-	}
-	if len(events) != 2 {
-		t.Fatalf("events=%d, want only target turn events: %#v", len(events), events)
-	}
-	if got := events[0].Message.Content; got != "Gateway complete raw content." {
-		t.Fatalf("first event content=%q, want raw content", got)
-	}
-}
-
-func TestFloretThreadDetailProjectionPersistsFullAssistantContentAfterActivity(t *testing.T) {
+func TestFloretThreadProjectionPersistsFullAssistantContentAfterActivity(t *testing.T) {
 	const fullAnswer = "Here is the complete Redeven summary.\n\n- **Gateway** - `redeven-gateway` exposes the full gateway contract through OpenAPI.\n\nWhich part of Redeven would you like to explore next?"
-	const previewOnly = "Here is the complete Redeven summary.\n\n- **Gateway** - `redeven-gateway` through OpenAPI (`*`#5..."
-
 	events := make([]any, 0, 4)
 	r := newRun(runOptions{})
 	r.id = "run_full_projection"
 	r.threadID = "thread_full_projection"
 	r.messageID = "msg_full_projection"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
-	threadEvents := []flruntime.ThreadDetailEvent{
-		{
-			Ordinal:  1,
-			TurnID:   flruntime.TurnID("msg_full_projection"),
-			Kind:     flruntime.ThreadDetailEventToolCall,
-			ToolCall: &flruntime.ThreadDetailToolCall{ID: "call-okf", Name: "okf.open"},
-		},
-		{
-			Ordinal:    2,
-			TurnID:     flruntime.TurnID("msg_full_projection"),
-			Kind:       flruntime.ThreadDetailEventToolResult,
-			ToolResult: &flruntime.ThreadDetailToolResult{CallID: "call-okf", ToolName: "okf.open", Preview: "OKF result"},
-		},
-		{
-			Ordinal: 3,
-			TurnID:  flruntime.TurnID("msg_full_projection"),
-			Kind:    flruntime.ThreadDetailEventAssistantMessage,
-			Message: &flruntime.ThreadDetailMessage{Preview: previewOnly, Content: fullAnswer},
-		},
-	}
-	timeline := observation.ActivityTimeline{
-		SchemaVersion: observation.ActivityTimelineSchemaVersion,
-		RunID:         "run_full_projection",
-		ThreadID:      "thread_full_projection",
-		TurnID:        "msg_full_projection",
-		TraceID:       "run_full_projection",
-		Summary:       observation.ActivitySummary{Status: observation.ActivityStatusSuccess, Severity: observation.ActivitySeverityNormal},
-		Items: []observation.ActivityItem{{
-			ItemID:   "tool:call-okf",
-			ToolID:   "call-okf",
-			ToolName: "okf.open",
-			Kind:     observation.ActivityKindTool,
-			Status:   observation.ActivityStatusSuccess,
-		}},
-	}
 
-	if !r.applyFloretThreadDetailProjection(threadEvents, timeline) {
+	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID: "thread_full_projection",
+		TurnID:   "msg_full_projection",
+		RunID:    "run_full_projection",
+		TraceID:  "run_full_projection",
+		Segments: []flruntime.ThreadTurnProjectionSegment{
+			{
+				Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+				ActivityTimeline: floretProjectionTimeline("run_full_projection", "thread_full_projection", "msg_full_projection", "call-okf", "okf.open"),
+			},
+			{
+				Kind: flruntime.ThreadTurnProjectionSegmentAssistantText,
+				Text: fullAnswer,
+			},
+		},
+	}) {
 		t.Fatalf("projection returned false")
 	}
 	if len(r.assistantBlocks) != 2 {
@@ -139,7 +43,7 @@ func TestFloretThreadDetailProjectionPersistsFullAssistantContentAfterActivity(t
 	}
 	block, ok := r.assistantBlocks[1].(*persistedMarkdownBlock)
 	if !ok || block.Content != fullAnswer {
-		t.Fatalf("assistantBlocks[1]=%T %+v, want full raw markdown", r.assistantBlocks[1], r.assistantBlocks[1])
+		t.Fatalf("assistantBlocks[1]=%T %+v, want full markdown", r.assistantBlocks[1], r.assistantBlocks[1])
 	}
 
 	rawJSON, assistantText, _, err := r.snapshotAssistantMessageJSON()
@@ -147,10 +51,7 @@ func TestFloretThreadDetailProjectionPersistsFullAssistantContentAfterActivity(t
 		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
 	}
 	if assistantText != fullAnswer {
-		t.Fatalf("assistantText=%q, want full raw answer", assistantText)
-	}
-	if strings.Contains(rawJSON, "#5...") {
-		t.Fatalf("assistant snapshot persisted preview truncation: %s", rawJSON)
+		t.Fatalf("assistantText=%q, want full answer", assistantText)
 	}
 	var msg struct {
 		Blocks []json.RawMessage `json:"blocks"`
@@ -163,88 +64,27 @@ func TestFloretThreadDetailProjectionPersistsFullAssistantContentAfterActivity(t
 		t.Fatalf("json.Unmarshal markdown block: %v", err)
 	}
 	if markdown.Content != fullAnswer {
-		t.Fatalf("snapshot markdown=%q, want full raw answer", markdown.Content)
+		t.Fatalf("snapshot markdown=%q, want full answer", markdown.Content)
 	}
 }
 
-func TestFlowerBlocksFromFloretThreadEventsInterleavesTextAndActivity(t *testing.T) {
+func TestFlowerBlocksFromFloretThreadProjectionInterleavesTextAndActivity(t *testing.T) {
 	t.Parallel()
 
-	events := []flruntime.ThreadDetailEvent{
-		{
-			Ordinal: 2,
-			Kind:    flruntime.ThreadDetailEventAssistantMessage,
-			Message: &flruntime.ThreadDetailMessage{Content: "Before first tool."},
+	r := newRun(runOptions{})
+	blocks := r.flowerBlocksFromFloretThreadProjection(flruntime.ThreadTurnProjection{
+		RunID:    "run",
+		ThreadID: "thread",
+		TurnID:   "turn",
+		TraceID:  "run",
+		Segments: []flruntime.ThreadTurnProjectionSegment{
+			{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "Before first tool."},
+			{Kind: flruntime.ThreadTurnProjectionSegmentActivityTimeline, ActivityTimeline: floretProjectionTimeline("run", "thread", "turn", "call-1", "inspect_once")},
+			{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "After first tool, before second tool."},
+			{Kind: flruntime.ThreadTurnProjectionSegmentActivityTimeline, ActivityTimeline: floretProjectionTimeline("run", "thread", "turn", "call-2", "inspect_twice")},
+			{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "Final answer."},
 		},
-		{
-			Ordinal: 3,
-			Kind:    flruntime.ThreadDetailEventToolCall,
-			ToolCall: &flruntime.ThreadDetailToolCall{
-				ID:   "call-1",
-				Name: "inspect_once",
-			},
-		},
-		{
-			Ordinal: 4,
-			Kind:    flruntime.ThreadDetailEventToolResult,
-			ToolResult: &flruntime.ThreadDetailToolResult{
-				CallID:   "call-1",
-				ToolName: "inspect_once",
-			},
-		},
-		{
-			Ordinal: 5,
-			Kind:    flruntime.ThreadDetailEventAssistantMessage,
-			Message: &flruntime.ThreadDetailMessage{Content: "After first tool, before second tool."},
-		},
-		{
-			Ordinal: 6,
-			Kind:    flruntime.ThreadDetailEventToolCall,
-			ToolCall: &flruntime.ThreadDetailToolCall{
-				ID:   "call-2",
-				Name: "inspect_twice",
-			},
-		},
-		{
-			Ordinal: 7,
-			Kind:    flruntime.ThreadDetailEventToolResult,
-			ToolResult: &flruntime.ThreadDetailToolResult{
-				CallID:   "call-2",
-				ToolName: "inspect_twice",
-			},
-		},
-		{
-			Ordinal: 8,
-			Kind:    flruntime.ThreadDetailEventAssistantMessage,
-			Message: &flruntime.ThreadDetailMessage{Content: "Final answer."},
-		},
-	}
-	timeline := observation.ActivityTimeline{
-		SchemaVersion: observation.ActivityTimelineSchemaVersion,
-		RunID:         "run",
-		ThreadID:      "thread",
-		TurnID:        "turn",
-		TraceID:       "run",
-		Summary:       observation.ActivitySummary{Status: observation.ActivityStatusSuccess, Severity: observation.ActivitySeverityNormal},
-		Items: []observation.ActivityItem{
-			{
-				ItemID:   "tool:call-1",
-				ToolID:   "call-1",
-				ToolName: "inspect_once",
-				Kind:     observation.ActivityKindTool,
-				Status:   observation.ActivityStatusSuccess,
-			},
-			{
-				ItemID:   "tool:call-2",
-				ToolID:   "call-2",
-				ToolName: "inspect_twice",
-				Kind:     observation.ActivityKindTool,
-				Status:   observation.ActivityStatusSuccess,
-			},
-		},
-	}
-
-	blocks := flowerBlocksFromFloretThreadEvents(events, floretThreadProjectionOptions{ActivityTimeline: timeline})
+	})
 
 	if len(blocks) != 5 {
 		t.Fatalf("blocks len=%d, want markdown/activity/markdown/activity/markdown: %#v", len(blocks), blocks)
@@ -270,7 +110,7 @@ func TestFlowerBlocksFromFloretThreadEventsInterleavesTextAndActivity(t *testing
 	}
 }
 
-func TestApplyFloretThreadDetailProjectionReplacesStreamedBlocks(t *testing.T) {
+func TestApplyFloretThreadProjectionReplacesStreamedBlocks(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 8)
@@ -283,43 +123,18 @@ func TestApplyFloretThreadDetailProjectionReplacesStreamedBlocks(t *testing.T) {
 		&persistedMarkdownBlock{Type: "markdown", Content: "late streamed"},
 	}
 	r.nextBlockIndex = len(r.assistantBlocks)
-	threadEvents := []flruntime.ThreadDetailEvent{
-		{
-			Ordinal: 1,
-			Kind:    flruntime.ThreadDetailEventAssistantMessage,
-			Message: &flruntime.ThreadDetailMessage{Content: "Canonical intro."},
-		},
-		{
-			Ordinal: 2,
-			Kind:    flruntime.ThreadDetailEventToolCall,
-			ToolCall: &flruntime.ThreadDetailToolCall{
-				ID:   "call-1",
-				Name: "terminal.exec",
-			},
-		},
-		{
-			Ordinal: 3,
-			Kind:    flruntime.ThreadDetailEventAssistantMessage,
-			Message: &flruntime.ThreadDetailMessage{Content: "Canonical close."},
-		},
-	}
-	timeline := observation.ActivityTimeline{
-		SchemaVersion: observation.ActivityTimelineSchemaVersion,
-		RunID:         "run_projection",
-		ThreadID:      "thread_projection",
-		TurnID:        "msg_projection",
-		TraceID:       "run_projection",
-		Summary:       observation.ActivitySummary{Status: observation.ActivityStatusSuccess, Severity: observation.ActivitySeverityNormal},
-		Items: []observation.ActivityItem{{
-			ItemID:   "tool:call-1",
-			ToolID:   "call-1",
-			ToolName: "terminal.exec",
-			Kind:     observation.ActivityKindTool,
-			Status:   observation.ActivityStatusSuccess,
-		}},
-	}
 
-	if !r.applyFloretThreadDetailProjection(threadEvents, timeline) {
+	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		RunID:    "run_projection",
+		ThreadID: "thread_projection",
+		TurnID:   "msg_projection",
+		TraceID:  "run_projection",
+		Segments: []flruntime.ThreadTurnProjectionSegment{
+			{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "Canonical intro."},
+			{Kind: flruntime.ThreadTurnProjectionSegmentActivityTimeline, ActivityTimeline: floretProjectionTimeline("run_projection", "thread_projection", "msg_projection", "call-1", "terminal.exec")},
+			{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "Canonical close."},
+		},
+	}) {
 		t.Fatalf("projection returned false")
 	}
 	if !r.hasFloretThreadDetailProjectionApplied() {
@@ -344,7 +159,7 @@ func TestApplyFloretThreadDetailProjectionReplacesStreamedBlocks(t *testing.T) {
 	}
 }
 
-func TestApplyFloretThreadDetailProjectionClearsStreamedBlocksWhenEmpty(t *testing.T) {
+func TestApplyFloretThreadProjectionClearsStreamedBlocksWhenEmpty(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 4)
@@ -357,7 +172,7 @@ func TestApplyFloretThreadDetailProjectionClearsStreamedBlocksWhenEmpty(t *testi
 	}
 	r.nextBlockIndex = len(r.assistantBlocks)
 
-	if !r.applyFloretThreadDetailProjection(nil, observation.ActivityTimeline{}) {
+	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{}) {
 		t.Fatalf("projection returned false")
 	}
 	if !r.hasFloretThreadDetailProjectionApplied() {
@@ -381,4 +196,24 @@ func TestApplyFloretThreadDetailProjectionClearsStreamedBlocksWhenEmpty(t *testi
 	if !ok || cleared.BlockIndex != 1 {
 		t.Fatalf("events[1]=%T %#v, want stale block clear at index 1", events[1], events[1])
 	}
+}
+
+func floretProjectionTimeline(runID string, threadID string, turnID string, toolID string, toolName string) *observation.ActivityTimeline {
+	timeline := observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		RunID:         runID,
+		ThreadID:      threadID,
+		TurnID:        turnID,
+		TraceID:       runID,
+		Summary:       observation.ActivitySummary{Status: observation.ActivityStatusSuccess, Severity: observation.ActivitySeverityNormal, TotalItems: 1},
+		Items: []observation.ActivityItem{{
+			ItemID:   "tool:" + toolID,
+			ToolID:   toolID,
+			ToolName: toolName,
+			Kind:     observation.ActivityKindTool,
+			Status:   observation.ActivityStatusSuccess,
+			Severity: observation.ActivitySeverityNormal,
+		}},
+	}
+	return &timeline
 }

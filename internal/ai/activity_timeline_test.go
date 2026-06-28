@@ -17,64 +17,6 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestRecordObservationActivityEventPublishesFloretTimelineBlock(t *testing.T) {
-	t.Parallel()
-
-	var frames []ActivityTimelineBlock
-	r := &run{
-		id:                        "run_activity",
-		threadID:                  "thread_activity",
-		messageID:                 "msg_activity",
-		activitySegmentBlockIndex: -1,
-		activitySegmentEvents:     make([]observation.Event, 0, 4),
-		nextBlockIndex:            0,
-		onStreamEvent: func(ev any) {
-			bs, ok := ev.(streamEventBlockSet)
-			if !ok {
-				return
-			}
-			block, ok := bs.Block.(ActivityTimelineBlock)
-			if ok {
-				frames = append(frames, block)
-			}
-		},
-	}
-
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolCall,
-		ToolID:     "tool_terminal",
-		ToolName:   "terminal.exec",
-		ObservedAt: time.UnixMilli(1000),
-	})
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolResult,
-		ToolID:     "tool_terminal",
-		ToolName:   "terminal.exec",
-		ObservedAt: time.UnixMilli(1200),
-	})
-
-	if len(frames) != 2 {
-		t.Fatalf("timeline frames=%d, want 2", len(frames))
-	}
-	latest := frames[len(frames)-1]
-	if latest.Type != activityTimelineBlockType {
-		t.Fatalf("block type=%q, want %q", latest.Type, activityTimelineBlockType)
-	}
-	if latest.RunID != "run_activity" || latest.ThreadID != "thread_activity" || latest.TurnID != "msg_activity" || latest.TraceID != "run_activity" {
-		t.Fatalf("timeline identity=%+v", latest.ActivityTimeline)
-	}
-	if latest.Summary.TotalItems != 1 || latest.Summary.Status != observation.ActivityStatusSuccess {
-		t.Fatalf("summary=%+v, want one successful item", latest.Summary)
-	}
-	item := latest.Items[0]
-	if item.ToolID != "tool_terminal" || item.ToolName != "terminal.exec" || item.Kind != observation.ActivityKindTool {
-		t.Fatalf("item=%+v", item)
-	}
-	if item.StartedAtUnixMS != 1000 || item.EndedAtUnixMS != 1200 {
-		t.Fatalf("item timing=%+v", item)
-	}
-}
-
 func TestDetachedRunIgnoresPresentationUpdates(t *testing.T) {
 	t.Parallel()
 
@@ -84,7 +26,6 @@ func TestDetachedRunIgnoresPresentationUpdates(t *testing.T) {
 		threadID:                  "thread_detached_presentation",
 		messageID:                 "msg_detached_presentation",
 		activitySegmentBlockIndex: -1,
-		activitySegmentEvents:     make([]observation.Event, 0, 4),
 		currentThinkingBlockIndex: -1,
 		onStreamEvent: func(ev any) {
 			events = append(events, ev)
@@ -404,255 +345,42 @@ func TestToolStartActivityPresentationTrimsLabelToContract(t *testing.T) {
 	}
 }
 
-func TestRecordObservationActivityEventPublishesRunningToolFirstFrame(t *testing.T) {
+func TestObservationActivityEventsDoNotPublishFlowerTimelineBlocks(t *testing.T) {
 	t.Parallel()
 
-	var frames []ActivityTimelineBlock
+	var blockSets []streamEventBlockSet
 	r := &run{
-		id:                        "run_running",
-		threadID:                  "thread_running",
-		messageID:                 "msg_running",
+		id:                        "run_observation_boundary",
+		threadID:                  "thread_observation_boundary",
+		messageID:                 "msg_observation_boundary",
 		activitySegmentBlockIndex: -1,
-		activitySegmentEvents:     make([]observation.Event, 0, 2),
 		nextBlockIndex:            0,
 		onStreamEvent: func(ev any) {
-			bs, ok := ev.(streamEventBlockSet)
-			if !ok {
-				return
-			}
-			if block, ok := bs.Block.(ActivityTimelineBlock); ok {
-				frames = append(frames, block)
+			if bs, ok := ev.(streamEventBlockSet); ok {
+				blockSets = append(blockSets, bs)
 			}
 		},
 	}
 
-	activity := toolStartActivityPresentation("terminal.exec", map[string]any{
-		"command": "pwd; sleep 5; ls -1",
-	}, terminalExecTimeoutDecision{
-		EffectiveMS: 5000,
-		Source:      "configured",
-	})
 	r.recordObservationActivityEvent(observation.Event{
 		Type:       observation.EventTypeToolCall,
 		ToolID:     "tool_running_terminal",
 		ToolName:   "terminal.exec",
 		ToolKind:   "local",
-		Activity:   activity,
+		Activity:   toolStartActivityPresentation("terminal.exec", map[string]any{"command": "pwd"}, terminalExecTimeoutDecision{}),
 		ObservedAt: time.UnixMilli(1000),
 	})
+	r.recordToolResultActivity("tool_running_terminal", "terminal.exec", toolResultStatusSuccess, map[string]any{
+		"command":   "pwd",
+		"exit_code": 0,
+		"stdout":    "/workspace\n",
+	}, nil, time.UnixMilli(1010))
 
-	if len(frames) != 1 {
-		t.Fatalf("timeline frames=%d, want 1", len(frames))
+	if len(blockSets) != 0 {
+		t.Fatalf("block-set events=%d, want no Flower timeline blocks from raw observation events: %#v", len(blockSets), blockSets)
 	}
-	latest := frames[0]
-	if latest.Summary.TotalItems != 1 || latest.Summary.Status != observation.ActivityStatusRunning {
-		t.Fatalf("summary=%+v, want running one-item timeline", latest.Summary)
-	}
-	item := latest.Items[0]
-	if item.ToolID != "tool_running_terminal" || item.ToolName != "terminal.exec" || item.Status != observation.ActivityStatusRunning {
-		t.Fatalf("item=%+v, want running terminal item", item)
-	}
-	if item.Label != "pwd; sleep 5; ls -1" || item.Renderer != observation.ActivityRendererTerminal {
-		t.Fatalf("item presentation label=%q renderer=%q", item.Label, item.Renderer)
-	}
-	if item.Payload["command"] != "pwd; sleep 5; ls -1" || item.Payload["status"] != toolCallStatusRunning {
-		t.Fatalf("item payload=%+v", item.Payload)
-	}
-	if item.StartedAtUnixMS != 1000 || item.EndedAtUnixMS != 0 {
-		t.Fatalf("item timing=%+v, want open running item", item)
-	}
-}
-
-func TestRecordToolResultActivityClosesRunningTerminalItem(t *testing.T) {
-	t.Parallel()
-
-	var frames []ActivityTimelineBlock
-	r := &run{
-		id:                        "run_terminal_result",
-		threadID:                  "thread_terminal_result",
-		messageID:                 "msg_terminal_result",
-		activitySegmentBlockIndex: -1,
-		activitySegmentEvents:     make([]observation.Event, 0, 2),
-		nextBlockIndex:            0,
-		onStreamEvent: func(ev any) {
-			bs, ok := ev.(streamEventBlockSet)
-			if !ok {
-				return
-			}
-			if block, ok := bs.Block.(ActivityTimelineBlock); ok {
-				frames = append(frames, block)
-			}
-		},
-	}
-
-	activity := toolStartActivityPresentation("terminal.exec", map[string]any{
-		"command": "printf start; sleep 5; printf end",
-	}, terminalExecTimeoutDecision{EffectiveMS: 6000})
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolCall,
-		ToolID:     "tool_terminal_result",
-		ToolName:   "terminal.exec",
-		ToolKind:   "local",
-		Activity:   activity,
-		ObservedAt: time.UnixMilli(1000),
-	})
-	r.recordToolResultActivity("tool_terminal_result", "terminal.exec", toolResultStatusSuccess, map[string]any{
-		"command":     "printf start; sleep 5; printf end",
-		"stdout":      "startend",
-		"exit_code":   0,
-		"duration_ms": int64(5000),
-	}, nil, time.UnixMilli(6000))
-
-	if len(frames) != 2 {
-		t.Fatalf("timeline frames=%d, want 2", len(frames))
-	}
-	latest := frames[len(frames)-1]
-	if latest.Summary.TotalItems != 1 || latest.Summary.Status != observation.ActivityStatusSuccess {
-		t.Fatalf("summary=%+v, want successful one-item timeline", latest.Summary)
-	}
-	item := latest.Items[0]
-	if item.ToolID != "tool_terminal_result" || item.ToolName != "terminal.exec" || item.Status != observation.ActivityStatusSuccess {
-		t.Fatalf("item=%+v, want successful terminal item", item)
-	}
-	if item.Renderer != observation.ActivityRendererTerminal || item.Payload["stdout"] != "startend" || item.Payload["exit_code"] != 0 {
-		t.Fatalf("item renderer=%q payload=%+v", item.Renderer, item.Payload)
-	}
-	if item.StartedAtUnixMS != 1000 || item.EndedAtUnixMS != 6000 {
-		t.Fatalf("item timing=%+v, want closed terminal item", item)
-	}
-}
-
-func TestRecordToolResultActivityClosesRunningTerminalItemOnTimeout(t *testing.T) {
-	t.Parallel()
-
-	var frames []ActivityTimelineBlock
-	r := &run{
-		id:                        "run_terminal_timeout",
-		threadID:                  "thread_terminal_timeout",
-		messageID:                 "msg_terminal_timeout",
-		activitySegmentBlockIndex: -1,
-		activitySegmentEvents:     make([]observation.Event, 0, 2),
-		nextBlockIndex:            0,
-		onStreamEvent: func(ev any) {
-			bs, ok := ev.(streamEventBlockSet)
-			if !ok {
-				return
-			}
-			if block, ok := bs.Block.(ActivityTimelineBlock); ok {
-				frames = append(frames, block)
-			}
-		},
-	}
-
-	activity := toolStartActivityPresentation("terminal.exec", map[string]any{
-		"command": "curl -sL https://example.test/slow",
-	}, terminalExecTimeoutDecision{EffectiveMS: 30000})
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolCall,
-		ToolID:     "tool_terminal_timeout",
-		ToolName:   "terminal.exec",
-		ToolKind:   "local",
-		Activity:   activity,
-		ObservedAt: time.UnixMilli(1000),
-	})
-	r.recordToolResultActivity("tool_terminal_timeout", "terminal.exec", toolResultStatusTimeout, map[string]any{
-		"command":     "curl -sL https://example.test/slow",
-		"exit_code":   124,
-		"duration_ms": int64(30000),
-		"timed_out":   true,
-	}, &aitools.ToolError{
-		Code:      aitools.ErrorCodeTimeout,
-		Message:   "Tool execution timed out after 30000 ms",
-		Retryable: true,
-	}, time.UnixMilli(31000))
-
-	if len(frames) != 2 {
-		t.Fatalf("timeline frames=%d, want 2", len(frames))
-	}
-	latest := frames[len(frames)-1]
-	if err := observation.ValidateActivityTimeline(latest.ActivityTimeline); err != nil {
-		t.Fatalf("ValidateActivityTimeline: %v", err)
-	}
-	if latest.Summary.TotalItems != 1 || latest.Summary.Status != observation.ActivityStatusError {
-		t.Fatalf("summary=%+v, want error one-item timeline", latest.Summary)
-	}
-	item := latest.Items[0]
-	if item.ToolID != "tool_terminal_timeout" || item.ToolName != "terminal.exec" || item.Status != observation.ActivityStatusError {
-		t.Fatalf("item=%+v, want error terminal item", item)
-	}
-	if item.EndedAtUnixMS != 31000 {
-		t.Fatalf("item timing=%+v, want timeout result to close item", item)
-	}
-	errorPayload, ok := item.Payload["error"].(map[string]any)
-	if !ok {
-		t.Fatalf("error payload=%#v, want map", item.Payload["error"])
-	}
-	if errorPayload["code"] != "TIMEOUT" || errorPayload["retryable"] != true {
-		t.Fatalf("error payload=%#v", errorPayload)
-	}
-}
-
-func TestRecordToolResultActivityClosesRunningItemOnGenericError(t *testing.T) {
-	t.Parallel()
-
-	var frames []ActivityTimelineBlock
-	r := &run{
-		id:                        "run_terminal_error",
-		threadID:                  "thread_terminal_error",
-		messageID:                 "msg_terminal_error",
-		activitySegmentBlockIndex: -1,
-		activitySegmentEvents:     make([]observation.Event, 0, 2),
-		nextBlockIndex:            0,
-		onStreamEvent: func(ev any) {
-			bs, ok := ev.(streamEventBlockSet)
-			if !ok {
-				return
-			}
-			if block, ok := bs.Block.(ActivityTimelineBlock); ok {
-				frames = append(frames, block)
-			}
-		},
-	}
-
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolCall,
-		ToolID:     "tool_terminal_error",
-		ToolName:   "terminal.exec",
-		ToolKind:   "local",
-		Activity:   toolStartActivityPresentation("terminal.exec", map[string]any{"command": "cat /root/secret"}, terminalExecTimeoutDecision{}),
-		ObservedAt: time.UnixMilli(1000),
-	})
-	r.recordToolResultActivity("tool_terminal_error", "terminal.exec", toolResultStatusError, map[string]any{
-		"command":     "cat /root/secret",
-		"exit_code":   1,
-		"duration_ms": int64(12),
-		"stderr":      "permission denied",
-	}, &aitools.ToolError{
-		Code:      aitools.ErrorCodePermissionDenied,
-		Message:   "permission denied",
-		Retryable: false,
-	}, time.UnixMilli(1012))
-
-	if len(frames) != 2 {
-		t.Fatalf("timeline frames=%d, want 2", len(frames))
-	}
-	latest := frames[len(frames)-1]
-	if err := observation.ValidateActivityTimeline(latest.ActivityTimeline); err != nil {
-		t.Fatalf("ValidateActivityTimeline: %v", err)
-	}
-	if latest.Summary.TotalItems != 1 || latest.Summary.Status != observation.ActivityStatusError {
-		t.Fatalf("summary=%+v, want error one-item timeline", latest.Summary)
-	}
-	item := latest.Items[0]
-	if item.ToolID != "tool_terminal_error" || item.Status != observation.ActivityStatusError || item.EndedAtUnixMS != 1012 {
-		t.Fatalf("item=%+v, want closed error item", item)
-	}
-	errorPayload, ok := item.Payload["error"].(map[string]any)
-	if !ok {
-		t.Fatalf("error payload=%#v, want map", item.Payload["error"])
-	}
-	if errorPayload["code"] != "PERMISSION_DENIED" || errorPayload["message"] != "permission denied" || errorPayload["retryable"] != false {
-		t.Fatalf("error payload=%#v", errorPayload)
+	if len(r.assistantBlocks) != 0 {
+		t.Fatalf("assistantBlocks=%#v, want Floret projection to be the only Flower activity source", r.assistantBlocks)
 	}
 }
 
@@ -665,7 +393,6 @@ func TestRecordToolResultActivityRejectsMissingStatus(t *testing.T) {
 		threadID:                  "thread_invalid_status",
 		messageID:                 "msg_invalid_status",
 		activitySegmentBlockIndex: -1,
-		activitySegmentEvents:     make([]observation.Event, 0, 2),
 		nextBlockIndex:            0,
 		onStreamEvent: func(ev any) {
 			if bs, ok := ev.(streamEventBlockSet); ok {
@@ -692,7 +419,6 @@ func TestRecordObservationActivityEventSkipsEmptyTimeline(t *testing.T) {
 		threadID:                  "thread_empty",
 		messageID:                 "msg_empty",
 		activitySegmentBlockIndex: -1,
-		activitySegmentEvents:     make([]observation.Event, 0, 2),
 		nextBlockIndex:            0,
 		onStreamEvent: func(ev any) {
 			if _, ok := ev.(streamEventBlockSet); ok {
@@ -718,274 +444,34 @@ func TestRecordObservationActivityEventSkipsEmptyTimeline(t *testing.T) {
 	}
 }
 
-func TestRecordFloretActivityEventDoesNotCloseRunningToolOnRunEnd(t *testing.T) {
+func TestRecordFloretActivityEventDoesNotPublishFlowerTimelineBlocks(t *testing.T) {
 	t.Parallel()
 
-	var frames []ActivityTimelineBlock
+	var blockSets []streamEventBlockSet
 	r := &run{
-		id:                        "run_close",
-		threadID:                  "thread_close",
-		messageID:                 "msg_close",
+		id:                        "run_floret_activity_boundary",
+		threadID:                  "thread_floret_activity_boundary",
+		messageID:                 "msg_floret_activity_boundary",
 		activitySegmentBlockIndex: -1,
-		activitySegmentEvents:     make([]observation.Event, 0, 2),
 		nextBlockIndex:            0,
 		onStreamEvent: func(ev any) {
-			bs, ok := ev.(streamEventBlockSet)
-			if !ok {
-				return
-			}
-			if block, ok := bs.Block.(ActivityTimelineBlock); ok {
-				frames = append(frames, block)
+			if bs, ok := ev.(streamEventBlockSet); ok {
+				blockSets = append(blockSets, bs)
 			}
 		},
 	}
 
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolCall,
-		ToolID:     "tool_running",
-		ToolName:   "terminal.exec",
-		ObservedAt: time.UnixMilli(1000),
-	})
 	r.recordFloretActivityEvent(flruntime.Event{
 		Type:      observation.EventTypeRunEnd,
 		Message:   string(observation.ActivityStatusSuccess),
 		Timestamp: time.UnixMilli(1300),
 	})
 
-	if len(frames) != 1 {
-		t.Fatalf("timeline frames=%d, want only explicit tool call frame", len(frames))
+	if len(blockSets) != 0 {
+		t.Fatalf("block-set events=%d, want Floret projection to be the only Flower activity source: %#v", len(blockSets), blockSets)
 	}
-	latest := frames[len(frames)-1]
-	if latest.Summary.TotalItems != 1 || latest.Summary.Status != observation.ActivityStatusRunning {
-		t.Fatalf("summary=%+v, want running one-item timeline", latest.Summary)
-	}
-	item := latest.Items[0]
-	if item.ToolID != "tool_running" || item.Status != observation.ActivityStatusRunning {
-		t.Fatalf("item=%+v, want item to remain open without tool result", item)
-	}
-	if item.StartedAtUnixMS != 1000 || item.EndedAtUnixMS != 0 {
-		t.Fatalf("item timing=%+v, want no synthetic run_end close", item)
-	}
-	if len(r.assistantBlocks) != 1 {
-		t.Fatalf("assistantBlocks len=%d, want one activity block", len(r.assistantBlocks))
-	}
-}
-
-func TestPublishFinalActivityTimelineDropsSyntheticRunEndSuccessToolItem(t *testing.T) {
-	t.Parallel()
-
-	r := &run{
-		id:                        "run_final_synthetic",
-		threadID:                  "thread_final_synthetic",
-		messageID:                 "msg_final_synthetic",
-		activitySegmentBlockIndex: -1,
-		nextBlockIndex:            0,
-	}
-	r.publishFinalActivityTimeline(observation.ActivityTimeline{
-		SchemaVersion: observation.ActivityTimelineSchemaVersion,
-		RunID:         "run_final_synthetic",
-		ThreadID:      "thread_final_synthetic",
-		TurnID:        "msg_final_synthetic",
-		TraceID:       "run_final_synthetic",
-		Summary: observation.ActivitySummary{
-			Status:     observation.ActivityStatusSuccess,
-			Severity:   observation.ActivitySeverityNormal,
-			TotalItems: 1,
-			Counts:     observation.ActivityCounts{Success: 1},
-		},
-		Items: []observation.ActivityItem{{
-			ItemID:          "tool:tool_running",
-			ToolID:          "tool_running",
-			ToolName:        "terminal.exec",
-			Kind:            observation.ActivityKindTool,
-			Status:          observation.ActivityStatusSuccess,
-			Severity:        observation.ActivitySeverityNormal,
-			NeedsAttention:  false,
-			StartedAtUnixMS: 1000,
-			EndedAtUnixMS:   1300,
-			Payload:         map[string]any{"command": "sleep 30", "status": toolCallStatusRunning},
-		}},
-	})
-
 	if len(r.assistantBlocks) != 0 {
-		t.Fatalf("assistantBlocks=%#v, want no final synthetic tool block", r.assistantBlocks)
-	}
-}
-
-func TestPublishFinalActivityTimelineKeepsExplicitSuccessfulToolResult(t *testing.T) {
-	t.Parallel()
-
-	r := &run{
-		id:                        "run_final_result",
-		threadID:                  "thread_final_result",
-		messageID:                 "msg_final_result",
-		activitySegmentBlockIndex: -1,
-		nextBlockIndex:            0,
-	}
-	r.publishFinalActivityTimeline(observation.ActivityTimeline{
-		SchemaVersion: observation.ActivityTimelineSchemaVersion,
-		RunID:         "run_final_result",
-		ThreadID:      "thread_final_result",
-		TurnID:        "msg_final_result",
-		TraceID:       "run_final_result",
-		Summary: observation.ActivitySummary{
-			Status:     observation.ActivityStatusSuccess,
-			Severity:   observation.ActivitySeverityNormal,
-			TotalItems: 1,
-			Counts:     observation.ActivityCounts{Success: 1},
-		},
-		Items: []observation.ActivityItem{{
-			ItemID:          "tool:tool_success",
-			ToolID:          "tool_success",
-			ToolName:        "terminal.exec",
-			Kind:            observation.ActivityKindTool,
-			Status:          observation.ActivityStatusSuccess,
-			Severity:        observation.ActivitySeverityNormal,
-			NeedsAttention:  false,
-			StartedAtUnixMS: 1000,
-			EndedAtUnixMS:   1300,
-			Payload:         map[string]any{"command": "pwd", "status": toolResultStatusSuccess, "exit_code": 0},
-		}},
-	})
-
-	if len(r.assistantBlocks) != 1 {
-		t.Fatalf("assistantBlocks=%#v, want explicit successful tool result block", r.assistantBlocks)
-	}
-	block, ok := r.assistantBlocks[0].(ActivityTimelineBlock)
-	if !ok || len(block.Items) != 1 || block.Items[0].Payload["status"] != toolResultStatusSuccess {
-		t.Fatalf("activity block=%T %#v", r.assistantBlocks[0], r.assistantBlocks[0])
-	}
-}
-
-func TestRecordObservationActivityEventKeepsActivitySegmentsInBlockOrder(t *testing.T) {
-	t.Parallel()
-
-	r := &run{
-		id:                        "run_order",
-		threadID:                  "thread_order",
-		messageID:                 "msg_order",
-		currentTextBlockIndex:     -1,
-		needNewTextBlock:          true,
-		currentThinkingBlockIndex: -1,
-		needNewThinkingBlock:      true,
-		activitySegmentBlockIndex: -1,
-		activitySegmentEvents:     make([]observation.Event, 0, 4),
-	}
-
-	if err := r.appendTextDelta("I will inspect the workspace."); err != nil {
-		t.Fatalf("append first text: %v", err)
-	}
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolCall,
-		ToolID:     "tool_ls",
-		ToolName:   "terminal.exec",
-		Activity:   &observation.ActivityPresentation{Label: "ls -la", Renderer: observation.ActivityRendererTerminal},
-		ObservedAt: time.UnixMilli(1000),
-	})
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolResult,
-		ToolID:     "tool_ls",
-		ToolName:   "terminal.exec",
-		ObservedAt: time.UnixMilli(1100),
-	})
-	if err := r.appendTextDelta("Now I will read the package file."); err != nil {
-		t.Fatalf("append second text: %v", err)
-	}
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolCall,
-		ToolID:     "tool_read",
-		ToolName:   "file.read",
-		Activity:   &observation.ActivityPresentation{Label: "package.json", Renderer: observation.ActivityRendererFile},
-		ObservedAt: time.UnixMilli(1200),
-	})
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolResult,
-		ToolID:     "tool_read",
-		ToolName:   "file.read",
-		ObservedAt: time.UnixMilli(1300),
-	})
-
-	if len(r.assistantBlocks) != 4 {
-		t.Fatalf("assistantBlocks len=%d, want 4: %#v", len(r.assistantBlocks), r.assistantBlocks)
-	}
-	firstText, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
-	if !ok || firstText.Content != "I will inspect the workspace." {
-		t.Fatalf("block[0]=%T %+v, want first markdown", r.assistantBlocks[0], r.assistantBlocks[0])
-	}
-	firstActivity, ok := r.assistantBlocks[1].(ActivityTimelineBlock)
-	if !ok || len(firstActivity.Items) != 1 || firstActivity.Items[0].ToolID != "tool_ls" || firstActivity.Items[0].Label != "ls -la" {
-		t.Fatalf("block[1]=%T %+v, want ls activity only", r.assistantBlocks[1], r.assistantBlocks[1])
-	}
-	secondText, ok := r.assistantBlocks[2].(*persistedMarkdownBlock)
-	if !ok || secondText.Content != "Now I will read the package file." {
-		t.Fatalf("block[2]=%T %+v, want second markdown", r.assistantBlocks[2], r.assistantBlocks[2])
-	}
-	secondActivity, ok := r.assistantBlocks[3].(ActivityTimelineBlock)
-	if !ok || len(secondActivity.Items) != 1 || secondActivity.Items[0].ToolID != "tool_read" || secondActivity.Items[0].Label != "package.json" {
-		t.Fatalf("block[3]=%T %+v, want file activity only", r.assistantBlocks[3], r.assistantBlocks[3])
-	}
-}
-
-func TestPublishFinalActivityTimelineDoesNotAppendAfterProjectedSegment(t *testing.T) {
-	t.Parallel()
-
-	r := &run{
-		id:                        "run_final_skip",
-		threadID:                  "thread_final_skip",
-		messageID:                 "msg_final_skip",
-		activitySegmentBlockIndex: -1,
-		activitySegmentEvents:     make([]observation.Event, 0, 2),
-	}
-
-	r.recordObservationActivityEvent(observation.Event{
-		Type:     observation.EventTypeControlSignal,
-		ToolID:   "call_task_complete",
-		ToolName: "task_complete",
-		ToolKind: "control",
-		Activity: &observation.ActivityPresentation{
-			Label:    "task_complete",
-			Renderer: observation.ActivityRendererCompletion,
-			Payload:  map[string]any{"result": "Done."},
-		},
-		ObservedAt: time.UnixMilli(1000),
-	})
-	if err := r.appendTextDelta("Done."); err != nil {
-		t.Fatalf("appendTextDelta: %v", err)
-	}
-	r.publishFinalActivityTimeline(observation.ActivityTimeline{
-		SchemaVersion: observation.ActivityTimelineSchemaVersion,
-		RunID:         "run_final_skip",
-		ThreadID:      "thread_final_skip",
-		TurnID:        "msg_final_skip",
-		TraceID:       "run_final_skip",
-		Summary: observation.ActivitySummary{
-			Status:     observation.ActivityStatusSuccess,
-			Severity:   observation.ActivitySeverityQuiet,
-			TotalItems: 1,
-			Counts:     observation.ActivityCounts{Success: 1},
-		},
-		Items: []observation.ActivityItem{{
-			ItemID:         "control:call_task_complete",
-			ToolID:         "call_task_complete",
-			ToolName:       "task_complete",
-			Kind:           observation.ActivityKindControl,
-			Status:         observation.ActivityStatusSuccess,
-			Severity:       observation.ActivitySeverityQuiet,
-			NeedsAttention: false,
-			Renderer:       observation.ActivityRendererCompletion,
-			Payload:        map[string]any{"result": "Done."},
-		}},
-	})
-
-	if len(r.assistantBlocks) != 2 {
-		t.Fatalf("assistantBlocks len=%d, want 2: %#v", len(r.assistantBlocks), r.assistantBlocks)
-	}
-	if _, ok := r.assistantBlocks[0].(ActivityTimelineBlock); !ok {
-		t.Fatalf("block[0]=%T, want activity timeline", r.assistantBlocks[0])
-	}
-	text, ok := r.assistantBlocks[1].(*persistedMarkdownBlock)
-	if !ok || text.Content != "Done." {
-		t.Fatalf("block[1]=%T %+v, want final markdown", r.assistantBlocks[1], r.assistantBlocks[1])
+		t.Fatalf("assistantBlocks=%#v, want no local timeline projection", r.assistantBlocks)
 	}
 }
 

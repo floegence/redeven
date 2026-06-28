@@ -1034,17 +1034,6 @@ func TestProjectFloretTaskCompleteDoesNotCreateTranscriptMarkdown(t *testing.T) 
 	r.threadID = "thread_floret_task_complete"
 	r.messageID = "msg_floret_task_complete"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
-	r.recordObservationActivityEvent(observation.Event{
-		Type:     observation.EventTypeControlSignal,
-		ToolID:   "call_task_complete",
-		ToolName: "task_complete",
-		ToolKind: "control",
-		Activity: &observation.ActivityPresentation{
-			Label:    "task_complete",
-			Renderer: observation.ActivityRendererCompletion,
-			Payload:  map[string]any{"result": "Done."},
-		},
-	})
 
 	err := r.projectFloretResult(
 		t.Context(),
@@ -1075,21 +1064,15 @@ func TestProjectFloretTaskCompleteDoesNotCreateTranscriptMarkdown(t *testing.T) 
 			blockSets = append(blockSets, bs)
 		}
 	}
-	if len(blockSets) != 1 {
-		t.Fatalf("block-set events=%d, want activity update only: %#v", len(blockSets), blockSets)
+	if len(blockSets) != 0 {
+		t.Fatalf("block-set events=%d, want no local activity or markdown projection: %#v", len(blockSets), blockSets)
 	}
-	if blockSets[0].BlockIndex != 0 {
-		t.Fatalf("activity block-set index=%d, want 0", blockSets[0].BlockIndex)
-	}
-	if len(r.assistantBlocks) != 1 {
-		t.Fatalf("assistantBlocks len=%d, want activity timeline only: %#v", len(r.assistantBlocks), r.assistantBlocks)
-	}
-	if _, ok := r.assistantBlocks[0].(ActivityTimelineBlock); !ok {
-		t.Fatalf("block[0]=%T, want activity timeline", r.assistantBlocks[0])
+	if len(r.assistantBlocks) != 0 {
+		t.Fatalf("assistantBlocks len=%d, want no local task_complete transcript projection: %#v", len(r.assistantBlocks), r.assistantBlocks)
 	}
 }
 
-func TestProjectFloretTaskCompletePreservesStreamedMarkdownAfterActivity(t *testing.T) {
+func TestProjectFloretTaskCompletePreservesStreamedMarkdown(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 4)
@@ -1102,14 +1085,6 @@ func TestProjectFloretTaskCompletePreservesStreamedMarkdownAfterActivity(t *test
 	if err := r.appendTextDelta("Detailed analysis report."); err != nil {
 		t.Fatalf("appendTextDelta: %v", err)
 	}
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolResult,
-		ToolID:     "tool_lookup",
-		ToolName:   "terminal.exec",
-		ToolKind:   "tool",
-		Result:     "lookup complete",
-		ObservedAt: time.Now(),
-	})
 	beforeProjectEventCount := len(events)
 
 	err := r.projectFloretResult(
@@ -1142,15 +1117,12 @@ func TestProjectFloretTaskCompletePreservesStreamedMarkdownAfterActivity(t *test
 			}
 		}
 	}
-	if len(r.assistantBlocks) != 2 {
-		t.Fatalf("assistantBlocks len=%d, want streamed markdown plus activity timeline: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistantBlocks len=%d, want only streamed markdown without local activity projection: %#v", len(r.assistantBlocks), r.assistantBlocks)
 	}
 	text, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
 	if !ok || text.Content != "Detailed analysis report." {
 		t.Fatalf("assistantBlocks[0]=%T %+v, want preserved streamed markdown", r.assistantBlocks[0], r.assistantBlocks[0])
-	}
-	if _, ok := r.assistantBlocks[1].(ActivityTimelineBlock); !ok {
-		t.Fatalf("assistantBlocks[1]=%T, want activity timeline", r.assistantBlocks[1])
 	}
 	_, assistantText, _, err := r.snapshotAssistantMessageJSON()
 	if err != nil {
@@ -1170,14 +1142,6 @@ func TestProjectFloretNaturalStopDoesNotCreateTranscriptMarkdown(t *testing.T) {
 	r.threadID = "thread_floret_natural_stop"
 	r.messageID = "msg_floret_natural_stop"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolResult,
-		ToolID:     "tool_lookup",
-		ToolName:   "terminal.exec",
-		ToolKind:   "tool",
-		Result:     "lookup complete",
-		ObservedAt: time.Now(),
-	})
 
 	err := r.projectFloretResult(
 		t.Context(),
@@ -1202,11 +1166,8 @@ func TestProjectFloretNaturalStopDoesNotCreateTranscriptMarkdown(t *testing.T) {
 			t.Fatalf("unexpected text delta event: %#v", ev)
 		}
 	}
-	if len(r.assistantBlocks) != 1 {
-		t.Fatalf("assistantBlocks len=%d, want activity timeline only: %#v", len(r.assistantBlocks), r.assistantBlocks)
-	}
-	if _, ok := r.assistantBlocks[0].(ActivityTimelineBlock); !ok {
-		t.Fatalf("assistantBlocks[0]=%T, want activity timeline", r.assistantBlocks[0])
+	if len(r.assistantBlocks) != 0 {
+		t.Fatalf("assistantBlocks len=%d, want no local transcript or activity projection: %#v", len(r.assistantBlocks), r.assistantBlocks)
 	}
 }
 
@@ -1250,7 +1211,7 @@ func TestProjectFloretNaturalStopDoesNotUseResultOutputAsTranscriptFallback(t *t
 	}
 }
 
-func TestProjectFloretNaturalStopPreservesStreamedMarkdownAfterActivity(t *testing.T) {
+func TestProjectFloretNaturalStopPreservesStreamedMarkdown(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 4)
@@ -1263,14 +1224,6 @@ func TestProjectFloretNaturalStopPreservesStreamedMarkdownAfterActivity(t *testi
 	if err := r.appendTextDelta("Streamed analysis report."); err != nil {
 		t.Fatalf("appendTextDelta: %v", err)
 	}
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolResult,
-		ToolID:     "tool_lookup",
-		ToolName:   "terminal.exec",
-		ToolKind:   "tool",
-		Result:     "lookup complete",
-		ObservedAt: time.Now(),
-	})
 	beforeProjectEventCount := len(events)
 
 	err := r.projectFloretResult(
@@ -1298,15 +1251,12 @@ func TestProjectFloretNaturalStopPreservesStreamedMarkdownAfterActivity(t *testi
 			}
 		}
 	}
-	if len(r.assistantBlocks) != 2 {
-		t.Fatalf("assistantBlocks len=%d, want streamed markdown plus activity timeline: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistantBlocks len=%d, want only streamed markdown without local activity projection: %#v", len(r.assistantBlocks), r.assistantBlocks)
 	}
 	text, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
 	if !ok || text.Content != "Streamed analysis report." {
 		t.Fatalf("assistantBlocks[0]=%T %+v, want preserved streamed markdown", r.assistantBlocks[0], r.assistantBlocks[0])
-	}
-	if _, ok := r.assistantBlocks[1].(ActivityTimelineBlock); !ok {
-		t.Fatalf("assistantBlocks[1]=%T, want activity timeline", r.assistantBlocks[1])
 	}
 	_, assistantText, _, err := r.snapshotAssistantMessageJSON()
 	if err != nil {
