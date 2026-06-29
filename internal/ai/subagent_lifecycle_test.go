@@ -1177,7 +1177,7 @@ func TestServiceGetFlowerSubagentDetailRejectsWrongParentBeforeRuntime(t *testin
 	if err != nil {
 		t.Fatalf("CreateThread child: %v", err)
 	}
-	host := &recordingFloretHost{detailErr: errors.New("subagent not found")}
+	host := &recordingFloretHost{detailErr: flruntime.ErrSubAgentNotFound}
 	key := runThreadKey(meta.EndpointID, otherParent.ThreadID)
 	svc.mu.Lock()
 	svc.subagentRuntimes[key] = &floretSubagentRuntime{
@@ -1284,5 +1284,20 @@ func TestSubagentChildEventRefreshesParentTimeline(t *testing.T) {
 	}
 	if got := strings.TrimSpace(anyToString(payload["last_message"])); got != "review complete" {
 		t.Fatalf("payload last_message=%q, want review complete; payload=%#v", got, payload)
+	}
+	for _, key := range []string{"operation", "action", "delegation_runtime", "context_mode"} {
+		if _, ok := payload[key]; ok {
+			t.Fatalf("payload %q should stay out of Floret activity payload; payload=%#v", key, payload)
+		}
+	}
+	action, ok := block.SubagentActions[strings.TrimSpace(block.Items[0].ItemID)]
+	if !ok {
+		t.Fatalf("missing subagent action sidecar for item %q: %#v", block.Items[0].ItemID, block.SubagentActions)
+	}
+	if action.Action != subagentActionInspect || action.DelegationRuntime != "floret" || action.ContextMode != subagentContextModeMissionOnly {
+		t.Fatalf("subagent action sidecar=%#v, want inspect/floret/mission_only", action)
+	}
+	if action.ThreadID != childID || action.Status != subagentStatusCompleted || action.LastMessage != "review complete" {
+		t.Fatalf("subagent action sidecar did not preserve child presentation metadata: %#v", action)
 	}
 }

@@ -2705,6 +2705,93 @@ describe('Flower live projection', () => {
     })).toThrow(/message\.committed/);
   });
 
+  it('maps activity timeline subagent sidecars and rejects unknown sidecar fields', () => {
+    const baseEvent = {
+      schema_version: 1,
+      seq: 1,
+      endpoint_id: 'runtime',
+      thread_id: 'th-live',
+      run_id: 'run-1',
+      at_unix_ms: 3000,
+      kind: 'message.block_set',
+      payload: {
+        message_id: 'assistant-live',
+        block_index: 0,
+        block: {
+          type: 'activity-timeline',
+          schema_version: 1,
+          summary: { status: 'success', severity: 'quiet', needs_attention: false, total_items: 1, counts: { success: 1 } },
+          items: [{
+            item_id: 'subagent:review-api',
+            tool_id: 'subagents',
+            tool_name: 'subagents',
+            kind: 'control',
+            status: 'success',
+            severity: 'quiet',
+            needs_attention: false,
+            requires_approval: false,
+            payload: {
+              thread_id: 'child-1',
+              task_name: 'Review API',
+              status: 'completed',
+            },
+          }],
+          subagent_actions: {
+            'subagent:review-api': {
+              operation: 'subagents',
+              action: 'inspect',
+              delegation_runtime: 'floret',
+              thread_id: 'child-1',
+              subagent_id: 'child-1',
+              task_name: 'Review API',
+              agent_type: 'reviewer',
+              context_mode: 'mission_only',
+              status: 'completed',
+            },
+          },
+        },
+      },
+    } as const;
+
+    const mapped = mapFlowerLiveEvents({
+      events: [baseEvent],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+    const blockSet = mapped.events[0] as Extract<FlowerLiveEvent, { kind: 'message.block_set' }>;
+    expect(blockSet.payload.block.type).toBe('activity-timeline');
+    const activityBlock = blockSet.payload.block.type === 'activity-timeline' ? blockSet.payload.block.block : null;
+    expect(activityBlock).toMatchObject({
+      type: 'activity-timeline',
+      subagent_actions: {
+        'subagent:review-api': {
+          action: 'inspect',
+          context_mode: 'mission_only',
+        },
+      },
+    });
+
+    expect(() => mapFlowerLiveEvents({
+      events: [{
+        ...baseEvent,
+        payload: {
+          ...baseEvent.payload,
+          block: {
+            ...baseEvent.payload.block,
+            subagent_actions: {
+              'subagent:review-api': {
+                ...baseEvent.payload.block.subagent_actions['subagent:review-api'],
+                raw_payload: true,
+              },
+            },
+          },
+        },
+      }],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    })).toThrow(/activity_timeline\.subagent_actions\.subagent:review-api\.raw_payload/);
+  });
+
   it('rejects unsupported activity item statuses instead of falling back', () => {
     expect(() => mapFlowerLiveEvents({
       events: [{

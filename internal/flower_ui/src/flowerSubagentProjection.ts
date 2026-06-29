@@ -1,5 +1,6 @@
 import type {
   FlowerActivityItem,
+  FlowerActivitySubagentAction,
   FlowerActivityTimelineBlock,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
@@ -40,6 +41,22 @@ type SnapshotSource = Readonly<Record<string, unknown>>;
 
 function asRecord(value: unknown): SnapshotSource {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as SnapshotSource : {};
+}
+
+function activitySubagentAction(timeline: FlowerActivityTimelineBlock, item: FlowerActivityItem): FlowerActivitySubagentAction | undefined {
+  return timeline.subagent_actions?.[trimString(item.item_id)];
+}
+
+function subagentPayloadForItem(item: FlowerActivityItem, sidecar: FlowerActivitySubagentAction | undefined): SnapshotSource {
+  const payload = item.payload ?? {};
+  if (!sidecar) return payload;
+  return {
+    ...payload,
+    ...asRecord(sidecar),
+    operation: payloadString(payload, 'operation') || payloadString(asRecord(sidecar), 'operation') || 'subagents',
+    action: payloadString(payload, 'action') || payloadString(asRecord(sidecar), 'action'),
+    delegation_runtime: payloadString(payload, 'delegation_runtime') || payloadString(asRecord(sidecar), 'delegation_runtime') || 'floret',
+  };
 }
 
 function scalarText(value: unknown): string {
@@ -125,7 +142,8 @@ function statusRank(status: FlowerSubagentPanelStatus): number {
   }
 }
 
-function isSubagentsActivityItem(item: FlowerActivityItem): boolean {
+function isSubagentsActivityItem(item: FlowerActivityItem, sidecar: FlowerActivitySubagentAction | undefined): boolean {
+  if (sidecar) return true;
   if (trimString(item.tool_name) === 'subagents') return true;
   const payload = item.payload ?? {};
   const operation = payloadString(payload, 'operation');
@@ -191,8 +209,7 @@ function itemFromSnapshot(
   };
 }
 
-function directItemFromActivity(item: FlowerActivityItem, fallbackUpdatedAtMs: number, ownerThreadID: string): FlowerSubagentPanelItem | null {
-  const payload = item.payload ?? {};
+function directItemFromActivity(item: FlowerActivityItem, payload: SnapshotSource, fallbackUpdatedAtMs: number, ownerThreadID: string): FlowerSubagentPanelItem | null {
   const nested = nestedSnapshots(payload);
   if (nested.length > 0) {
     return null;
@@ -248,8 +265,9 @@ export function buildFlowerSubagentPanelItems(thread: FlowerThreadSnapshot | nul
 function collectSubagentItemsFromTimeline(timeline: FlowerActivityTimelineBlock, messageCreatedAtMs: number, ownerThreadID: string): readonly FlowerSubagentPanelItem[] {
   const out: FlowerSubagentPanelItem[] = [];
   for (const item of timeline.items) {
-    if (!isSubagentsActivityItem(item)) continue;
-    const payload = item.payload ?? {};
+    const sidecar = activitySubagentAction(timeline, item);
+    if (!isSubagentsActivityItem(item, sidecar)) continue;
+    const payload = subagentPayloadForItem(item, sidecar);
     const fallbackUpdatedAtMs = numberValue(item.ended_at_unix_ms)
       || numberValue(item.started_at_unix_ms)
       || numberValue(timeline.summary.duration_ms ? messageCreatedAtMs + timeline.summary.duration_ms : 0)
@@ -262,7 +280,7 @@ function collectSubagentItemsFromTimeline(timeline: FlowerActivityTimelineBlock,
       });
       continue;
     }
-    const panelItem = directItemFromActivity(item, fallbackUpdatedAtMs, ownerThreadID);
+    const panelItem = directItemFromActivity(item, payload, fallbackUpdatedAtMs, ownerThreadID);
     if (panelItem) out.push(panelItem);
   }
   return out;

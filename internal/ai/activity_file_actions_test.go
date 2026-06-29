@@ -141,6 +141,37 @@ func TestSanitizeActivityTimelineMessageJSONFiltersPublicPayloadContract(t *test
 	}
 }
 
+func TestSanitizeActivityTimelineMessageJSONKeepsSubagentActionSidecar(t *testing.T) {
+	t.Parallel()
+
+	raw := `{
+		"id":"msg_1",
+		"role":"assistant",
+		"status":"complete",
+		"timestamp":1700000000000,
+		"blocks":[
+			{"type":"activity-timeline","schema_version":1,"run_id":"run_1","thread_id":"thread_1","turn_id":"msg_1","trace_id":"trace_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[
+				{"item_id":"subagent:review","tool_id":"subagents","tool_name":"subagents","kind":"control","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Review API","renderer":"structured","payload":{"thread_id":"child_1","task_name":"Review API","status":"completed"}}
+			],"subagent_actions":{"subagent:review":{"operation":"subagents","action":"inspect","delegation_runtime":"floret","thread_id":"child_1","subagent_id":"child_1","task_name":"Review API","agent_type":"reviewer","context_mode":"mission_only","status":"completed","last_message":"Done","private_path":"/Users/alice/work","can_send_input":false,"can_close":true,"updated_at_ms":1700000000100}}}
+		]
+	}`
+	sanitized, err := SanitizeActivityTimelineMessageJSON(raw)
+	if err != nil {
+		t.Fatalf("SanitizeActivityTimelineMessageJSON: %v", err)
+	}
+	body := string(sanitized)
+	for _, required := range []string{`"subagent_actions"`, `"action":"inspect"`, `"context_mode":"mission_only"`, `"can_close":true`, `"updated_at_ms":1700000000100`} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("sanitized message missing %q: %s", required, body)
+		}
+	}
+	for _, forbidden := range []string{"private_path", "/Users/alice/work", `"can_send_input":false`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("sanitized message contains %q: %s", forbidden, body)
+		}
+	}
+}
+
 func TestSanitizeActivityTimelineMessageJSONKeepsSubagentProjectionPayload(t *testing.T) {
 	t.Parallel()
 

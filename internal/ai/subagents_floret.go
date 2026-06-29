@@ -1978,7 +1978,7 @@ func isFloretSubagentNotFoundError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(strings.ToLower(err.Error()), "subagent not found")
+	return errors.Is(err, flruntime.ErrSubAgentNotFound)
 }
 
 func (s *Service) detachedSubagentParentRun(meta *session.Meta, th threadstore.Thread) *run {
@@ -2229,38 +2229,68 @@ func (s *floretSubagentRuntime) publishParentSubagentTimeline(ctx context.Contex
 		})
 		return
 	}
-	timeline := s.flowerParentSubagentActivityTimeline(result.Timeline)
-	if len(timeline.Items) == 0 {
+	if len(result.Timeline.Items) == 0 {
 		return
 	}
-	parent.publishActivityTimeline(timeline)
+	parent.publishActivityTimelineWithSidecars(result.Timeline, s.flowerParentSubagentActivityActions(result.Timeline))
 }
 
-func (s *floretSubagentRuntime) flowerParentSubagentActivityTimeline(timeline observation.ActivityTimeline) observation.ActivityTimeline {
-	for i := range timeline.Items {
-		payload := cloneAnyMap(timeline.Items[i].Payload)
+func (s *floretSubagentRuntime) flowerParentSubagentActivityActions(timeline observation.ActivityTimeline) map[string]FlowerActivitySubagentAction {
+	out := map[string]FlowerActivitySubagentAction{}
+	for _, item := range timeline.Items {
+		itemID := strings.TrimSpace(item.ItemID)
+		if itemID == "" {
+			continue
+		}
+		payload := item.Payload
 		threadID := strings.TrimSpace(anyToString(payload["thread_id"]))
 		if threadID == "" {
 			threadID = strings.TrimSpace(anyToString(payload["subagent_id"]))
 		}
-		if threadID != "" {
-			payload["id"] = threadID
-			payload["subagent_id"] = threadID
-			payload["thread_id"] = threadID
+		if threadID == "" {
+			continue
 		}
-		payload["operation"] = "subagents"
-		payload["action"] = "inspect"
-		payload["delegation_runtime"] = "floret"
-		if agentType := strings.TrimSpace(anyToString(payload["agent_type"])); agentType == "" {
-			payload["agent_type"] = normalizeSubagentAgentType(anyToString(payload["host_profile_ref"]))
+		agentType := strings.TrimSpace(anyToString(payload["agent_type"]))
+		if agentType == "" {
+			agentType = normalizeSubagentAgentType(anyToString(payload["host_profile_ref"]))
 		}
-		if status := strings.TrimSpace(anyToString(payload["status"])); status != "" {
-			payload["status"] = flowerSubagentStatus(flruntime.SubAgentStatus(status))
+		title := strings.TrimSpace(anyToString(payload["title"]))
+		taskName := strings.TrimSpace(anyToString(payload["task_name"]))
+		if title == "" {
+			title = taskName
 		}
-		payload["context_mode"] = contextModeForSubagentForkMode(flruntime.SubAgentForkMode(anyToString(payload["fork_mode"])))
-		timeline.Items[i].Payload = payload
+		if title == "" {
+			title = threadID
+		}
+		status := ""
+		if rawStatus := strings.TrimSpace(anyToString(payload["status"])); rawStatus != "" {
+			status = flowerSubagentStatus(flruntime.SubAgentStatus(rawStatus))
+		}
+		out[itemID] = FlowerActivitySubagentAction{
+			Operation:         "subagents",
+			Action:            subagentActionInspect,
+			DelegationRuntime: "floret",
+			ThreadID:          threadID,
+			SubagentID:        threadID,
+			ParentThreadID:    strings.TrimSpace(anyToString(payload["parent_thread_id"])),
+			TaskName:          taskName,
+			Title:             title,
+			AgentType:         agentType,
+			ContextMode:       contextModeForSubagentForkMode(flruntime.SubAgentForkMode(anyToString(payload["fork_mode"]))),
+			Status:            status,
+			LastMessage:       strings.TrimSpace(anyToString(payload["last_message"])),
+			WaitingPrompt:     strings.TrimSpace(anyToString(payload["waiting_prompt"])),
+			QueuedInputs:      nonNegativeInt(int(parseInt64Raw(payload["queued_inputs"], 0))),
+			CanSendInput:      anyToBool(payload["can_send_input"]),
+			CanInterrupt:      anyToBool(payload["can_interrupt"]),
+			CanClose:          anyToBool(payload["can_close"]),
+			UpdatedAtMS:       nonNegativeInt64Local(parseInt64Raw(payload["updated_at_ms"], 0)),
+		}
 	}
-	return timeline
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func aggregateSubagentContextMode(snapshots []subagentSnapshot) string {

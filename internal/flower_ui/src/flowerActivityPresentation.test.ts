@@ -178,6 +178,40 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailLines.some((line) => line.value.includes('"snapshot"'))).toBe(false);
   });
 
+  it('renders subagent timeline activity from sidecar metadata without Flower fields in payload', () => {
+    const presentation = presentFlowerActivityItem(item({
+      item_id: 'subagent:review-api',
+      tool_name: 'subagents',
+      renderer: 'structured',
+      label: 'Review API boundary',
+      payload: {
+        thread_id: 'child-thread-1',
+        task_name: 'Review API boundary',
+        host_profile_ref: 'reviewer',
+        fork_mode: 'none',
+        status: 'completed',
+      },
+    }), undefined, undefined, {
+      subagentAction: {
+        operation: 'subagents',
+        action: 'inspect',
+        delegation_runtime: 'floret',
+        thread_id: 'child-thread-1',
+        subagent_id: 'child-thread-1',
+        task_name: 'Review API boundary',
+        agent_type: 'reviewer',
+        context_mode: 'mission_only',
+        status: 'completed',
+      },
+    });
+
+    expect(presentation.label).toBe('Inspect Review API boundary');
+    expect(presentation.meta).toContain('Inspect subagent');
+    expect(presentation.meta).toContain('Reviewer');
+    expect(presentation.meta).toContain('Completed');
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('context mode:mission_only');
+  });
+
   it('renders subagent context mode and wait handoff fields as first-class details', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'subagents',
