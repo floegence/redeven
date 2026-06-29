@@ -9,10 +9,21 @@ import (
 )
 
 func (r *run) applyFloretThreadProjection(projection flruntime.ThreadTurnProjection) bool {
+	return r.applyFloretThreadProjectionInternal(projection, true, false, false)
+}
+
+func (r *run) applyFloretTerminalThreadProjection(projection flruntime.ThreadTurnProjection) bool {
+	return r.applyFloretThreadProjectionInternal(projection, false, true, true)
+}
+
+func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTurnProjection, emit bool, allowDetached bool, requireIdentity bool) bool {
 	if r == nil {
 		return false
 	}
-	if !r.acceptsPresentationUpdates() {
+	if !allowDetached && !r.acceptsPresentationUpdates() {
+		return false
+	}
+	if !r.floretThreadProjectionMatchesRun(projection, requireIdentity) {
 		return false
 	}
 	blocks := r.flowerBlocksFromFloretThreadProjection(projection)
@@ -36,6 +47,9 @@ func (r *run) applyFloretThreadProjection(projection flruntime.ThreadTurnProject
 	r.assistantBlocks = blocks
 	r.floretThreadProjectionApplied = true
 	r.muAssistant.Unlock()
+	if !emit {
+		return true
+	}
 	for idx, block := range blocks {
 		r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
 	}
@@ -46,6 +60,28 @@ func (r *run) applyFloretThreadProjection(projection flruntime.ThreadTurnProject
 			BlockIndex: idx,
 			Block:      persistedMarkdownBlock{Type: "markdown", Content: ""},
 		})
+	}
+	return true
+}
+
+func (r *run) floretThreadProjectionMatchesRun(projection flruntime.ThreadTurnProjection, requireIdentity bool) bool {
+	if r == nil {
+		return false
+	}
+	runID := strings.TrimSpace(string(projection.RunID))
+	threadID := strings.TrimSpace(string(projection.ThreadID))
+	turnID := strings.TrimSpace(string(projection.TurnID))
+	if requireIdentity && (runID == "" || threadID == "" || turnID == "") {
+		return false
+	}
+	if runID != "" && runID != strings.TrimSpace(r.id) {
+		return false
+	}
+	if threadID != "" && threadID != strings.TrimSpace(r.threadID) {
+		return false
+	}
+	if turnID != "" && turnID != strings.TrimSpace(r.messageID) {
+		return false
 	}
 	return true
 }

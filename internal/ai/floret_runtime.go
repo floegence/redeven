@@ -201,16 +201,22 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if err != nil && result.Status == "" {
 		return r.failRunWithCode(classifyRunFailureCode(err, runErrorCodeFloretEngineFailed), "", err)
 	}
-	if !r.acceptsEngineResultProjection() {
-		return nil
-	}
 	if result.Status == flruntime.TurnStatusCompleted || result.Status == flruntime.TurnStatusWaiting {
+		if !r.acceptsEngineResultProjection() {
+			return nil
+		}
 		r.applyFloretThreadProjection(result.Projection)
 	}
-	r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), 0)
-	r.setProviderContinuationCandidate(providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState)))
-	if ctx.Err() != nil && result.Status != flruntime.TurnStatusCompleted && result.Status != flruntime.TurnStatusWaiting {
-		return r.failRun("Floret run was canceled", ctx.Err())
+	if result.Status == flruntime.TurnStatusCancelled {
+		if r.isDetached() {
+			r.applyFloretTerminalThreadProjection(result.Projection)
+			return nil
+		}
+		r.applyFloretThreadProjection(result.Projection)
+	}
+	if r.acceptsEngineResultProjection() {
+		r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), 0)
+		r.setProviderContinuationCandidate(providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState)))
 	}
 	return r.projectFloretResult(ctx, result, req, sharedState.snapshot(), taskComplexity, permissionTypeString(r.permissionType))
 }
@@ -276,10 +282,7 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.TurnResu
 		}
 		return r.failRun("Run entered waiting state without a supported control signal", errors.New("unsupported waiting control signal"))
 	case flruntime.TurnStatusCancelled:
-		if r.finalizeIfContextCanceled(ctx) {
-			return nil
-		}
-		return r.failRun("Floret run was canceled", context.Canceled)
+		return r.projectFloretCancelledResult(ctx, step)
 	case flruntime.TurnStatusFailed:
 		resultErr := errors.New(strings.TrimSpace(result.Error))
 		if strings.TrimSpace(result.Error) == "" {
@@ -293,6 +296,20 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.TurnResu
 	default:
 		return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", fmt.Errorf("unknown floret status %q", result.Status))
 	}
+}
+
+func (r *run) projectFloretCancelledResult(ctx context.Context, step int) error {
+	reason := "canceled"
+	if r != nil && r.getCancelReason() == "timed_out" {
+		reason = "timed_out"
+	} else if ctx != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		reason = "timed_out"
+	}
+	r.setFinalizationReason(reason)
+	r.setEndReason(reason)
+	r.emitLifecyclePhase("ended", map[string]any{"reason": reason, "step_index": step})
+	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
+	return nil
 }
 
 func enableFlowerWebSearchTool(providerCfg config.AIProvider, capability providerWebSearchCapability) bool {

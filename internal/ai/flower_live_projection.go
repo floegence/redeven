@@ -1024,13 +1024,58 @@ func (s *Service) publishCanceledAssistantDraft(meta *session.Meta, r *run, db *
 	if s == nil || r == nil {
 		return
 	}
+	if r.assistantAlreadyPersisted() {
+		return
+	}
+	s.publishCanceledAssistantMessage(meta, r, db, persistTO)
+}
+
+func (s *Service) publishCanceledAssistantProjection(meta *session.Meta, r *run, db *threadstore.Store, persistTO time.Duration) {
+	if s == nil || r == nil {
+		return
+	}
+	messageID := strings.TrimSpace(r.messageID)
+	endpointID := strings.TrimSpace(r.endpointID)
+	threadID := strings.TrimSpace(r.threadID)
+	if messageID == "" || endpointID == "" || threadID == "" || db == nil {
+		s.publishCanceledAssistantMessage(meta, r, db, persistTO)
+		return
+	}
+	rawJSON, _, assistantAt, err := r.snapshotAssistantMessageJSONWithStatus("canceled")
+	if err != nil {
+		s.publishCanceledAssistantMessage(meta, r, db, persistTO)
+		return
+	}
+	at := assistantAt
+	if at <= 0 {
+		at = time.Now().UnixMilli()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), persistTO)
+	rowID, _, getErr := db.GetTranscriptMessageRowIDAndJSONByMessageID(ctx, endpointID, threadID, messageID)
+	cancel()
+	if getErr != nil || rowID <= 0 {
+		s.publishCanceledAssistantMessage(meta, r, db, persistTO)
+		return
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), persistTO)
+	updateErr := db.UpdateTranscriptMessageJSONByRowID(ctx, endpointID, rowID, rawJSON, at)
+	cancel()
+	if updateErr != nil {
+		return
+	}
+	r.markAssistantPersisted()
+	s.broadcastTranscriptMessage(endpointID, threadID, strings.TrimSpace(r.id), rowID, rawJSON, at)
+	s.broadcastThreadSummary(endpointID, threadID)
+}
+
+func (s *Service) publishCanceledAssistantMessage(meta *session.Meta, r *run, db *threadstore.Store, persistTO time.Duration) {
+	if s == nil || r == nil {
+		return
+	}
 	messageID := strings.TrimSpace(r.messageID)
 	endpointID := strings.TrimSpace(r.endpointID)
 	threadID := strings.TrimSpace(r.threadID)
 	if messageID == "" || endpointID == "" || threadID == "" {
-		return
-	}
-	if r.assistantAlreadyPersisted() {
 		return
 	}
 	rawJSON, assistantText, assistantAt, err := r.snapshotAssistantMessageJSONWithStatus("canceled")

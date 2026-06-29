@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/floret/observation"
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -570,5 +572,127 @@ func TestService_CancelRun_PersistsCanceledAssistantBeforeNextUserTurn(t *testin
 	}
 	if len(assistantPayload.Blocks) != 0 {
 		t.Fatalf("assistant canceled boundary should not carry stale blocks: %#v", assistantPayload.Blocks)
+	}
+}
+
+func TestService_PublishCanceledAssistantProjectionUpdatesCanceledBoundary(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+
+	meta := &session.Meta{
+		ChannelID:         "ch_test",
+		EndpointID:        "env_test",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		NamespacePublicID: "ns_test",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+	}
+
+	th, err := svc.CreateThread(ctx, meta, "hello", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	firstUser, _, err := svc.persistUserMessage(ctx, meta, meta.EndpointID, th.ThreadID, RunInput{Text: "first request"})
+	if err != nil {
+		t.Fatalf("persist first user: %v", err)
+	}
+
+	runID := "run_cancel_projection_test"
+	assistantID, err := newMessageID()
+	if err != nil {
+		t.Fatalf("newMessageID: %v", err)
+	}
+	r := newRun(runOptions{})
+	r.id = runID
+	r.channelID = meta.ChannelID
+	r.endpointID = meta.EndpointID
+	r.threadID = th.ThreadID
+	r.userPublicID = meta.UserPublicID
+	r.messageID = assistantID
+	r.threadsDB = svc.threadsDB
+	r.persistOpTimeout = svc.persistOpTO
+	r.markDetached()
+
+	svc.publishCanceledAssistantDraft(meta, r, svc.threadsDB, svc.persistOpTO)
+
+	timeline := observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		RunID:         runID,
+		ThreadID:      th.ThreadID,
+		TurnID:        assistantID,
+		TraceID:       runID,
+		Summary:       observation.ActivitySummary{Status: observation.ActivityStatusCanceled, Severity: observation.ActivitySeverityWarning, TotalItems: 1, Counts: observation.ActivityCounts{Canceled: 1}},
+		Items: []observation.ActivityItem{{
+			ItemID:   "tool:exec-1",
+			ToolID:   "exec-1",
+			ToolName: "terminal.exec",
+			Kind:     observation.ActivityKindTool,
+			Status:   observation.ActivityStatusCanceled,
+			Severity: observation.ActivitySeverityWarning,
+		}},
+	}
+	if !r.applyFloretTerminalThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID: flruntime.ThreadID(th.ThreadID),
+		TurnID:   flruntime.TurnID(assistantID),
+		RunID:    flruntime.RunID(runID),
+		TraceID:  flruntime.TraceID(runID),
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: &timeline,
+		}},
+	}) {
+		t.Fatalf("terminal projection returned false")
+	}
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistantBlocks after projection=%#v, want one activity block", r.assistantBlocks)
+	}
+	if block, ok := r.assistantBlocks[0].(ActivityTimelineBlock); !ok || block.Summary.Status != observation.ActivityStatusCanceled {
+		t.Fatalf("assistant block after projection=%T %#v, want canceled activity", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+	projectedRaw, _, _, err := r.snapshotAssistantMessageJSONWithStatus("canceled")
+	if err != nil {
+		t.Fatalf("snapshot projected assistant: %v", err)
+	}
+	if !strings.Contains(projectedRaw, "activity-timeline") {
+		t.Fatalf("projected assistant JSON missing activity timeline: %s", projectedRaw)
+	}
+	svc.publishCanceledAssistantProjection(meta, r, svc.threadsDB, svc.persistOpTO)
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 20, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("messages=%d, want user plus one assistant: %#v", len(msgs), msgs)
+	}
+	if msgs[0].MessageID != firstUser.MessageID || msgs[1].MessageID != assistantID {
+		t.Fatalf("message order/id mismatch: %#v", msgs)
+	}
+	var assistantPayload struct {
+		Status string            `json:"status"`
+		Blocks []json.RawMessage `json:"blocks"`
+	}
+	if err := json.Unmarshal([]byte(msgs[1].MessageJSON), &assistantPayload); err != nil {
+		t.Fatalf("unmarshal assistant json: %v", err)
+	}
+	if assistantPayload.Status != "canceled" || len(assistantPayload.Blocks) != 1 {
+		t.Fatalf("assistant payload=%#v, want one canceled activity block", assistantPayload)
+	}
+	var activity struct {
+		Type    string `json:"type"`
+		Summary struct {
+			Status string `json:"status"`
+		} `json:"summary"`
+		Items []struct {
+			Status string `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(assistantPayload.Blocks[0], &activity); err != nil {
+		t.Fatalf("unmarshal activity block: %v", err)
+	}
+	if activity.Type != "activity-timeline" || activity.Summary.Status != string(observation.ActivityStatusCanceled) || len(activity.Items) != 1 || activity.Items[0].Status != string(observation.ActivityStatusCanceled) {
+		t.Fatalf("activity block=%#v, want canceled activity", activity)
 	}
 }

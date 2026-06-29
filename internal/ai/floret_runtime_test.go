@@ -1338,6 +1338,82 @@ func TestProjectFloretResultIgnoresDetachedRun(t *testing.T) {
 	}
 }
 
+func TestProjectFloretCancelledResultUsesCanceledLifecycle(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 4)
+	r := newRun(runOptions{})
+	r.id = "run_floret_cancelled"
+	r.threadID = "thread_floret_cancelled"
+	r.messageID = "msg_floret_cancelled"
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+
+	err := r.projectFloretResult(
+		t.Context(),
+		flruntime.TurnResult{
+			Status:  flruntime.TurnStatusCancelled,
+			Metrics: flruntime.RunMetrics{Steps: 1},
+		},
+		RunRequest{},
+		newRuntimeState(""),
+		TaskComplexityStandard,
+		permissionTypeString(FlowerPermissionApprovalRequired),
+	)
+	if err != nil {
+		t.Fatalf("projectFloretResult: %v", err)
+	}
+	if got := r.getEndReason(); got != "canceled" {
+		t.Fatalf("endReason=%q, want canceled", got)
+	}
+	if got := r.getFinalizationReason(); got != "canceled" {
+		t.Fatalf("finalizationReason=%q, want canceled", got)
+	}
+	for _, ev := range events {
+		if _, ok := ev.(streamEventError); ok {
+			t.Fatalf("cancelled result emitted error event: %#v", events)
+		}
+	}
+}
+
+func TestProjectFloretCancelledResultWithDeadlineUsesTimedOutLifecycle(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 4)
+	r := newRun(runOptions{})
+	r.id = "run_floret_cancelled_timeout"
+	r.threadID = "thread_floret_cancelled_timeout"
+	r.messageID = "msg_floret_cancelled_timeout"
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	err := r.projectFloretResult(
+		ctx,
+		flruntime.TurnResult{
+			Status:  flruntime.TurnStatusCancelled,
+			Metrics: flruntime.RunMetrics{Steps: 1},
+		},
+		RunRequest{},
+		newRuntimeState(""),
+		TaskComplexityStandard,
+		permissionTypeString(FlowerPermissionApprovalRequired),
+	)
+	if err != nil {
+		t.Fatalf("projectFloretResult: %v", err)
+	}
+	if got := r.getEndReason(); got != "timed_out" {
+		t.Fatalf("endReason=%q, want timed_out", got)
+	}
+	if got := r.getFinalizationReason(); got != "timed_out" {
+		t.Fatalf("finalizationReason=%q, want timed_out", got)
+	}
+	for _, ev := range events {
+		if _, ok := ev.(streamEventError); ok {
+			t.Fatalf("cancelled timeout result emitted error event: %#v", events)
+		}
+	}
+}
+
 func TestProjectFloretUnknownWaitingSignalFailsAsUnsupportedSignal(t *testing.T) {
 	t.Parallel()
 
