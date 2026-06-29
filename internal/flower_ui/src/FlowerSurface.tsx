@@ -3880,6 +3880,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'canceled':
         return <AlertTriangle class="h-3.5 w-3.5" />;
       case 'waiting':
+        return <Clock class="flower-activity-waiting-clock h-3.5 w-3.5" />;
       case 'pending':
         return <Clock class="h-3.5 w-3.5" />;
       case 'running':

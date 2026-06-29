@@ -3135,6 +3135,33 @@ html.dark .flower-component-shell {
   will-change: left;
 }
 
+.flower-activity-inline-row-waiting .flower-activity-inline-button::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  inset-block: 0;
+  inset-inline-end: auto;
+  left: -9.5%;
+  width: 18%;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      100deg,
+      transparent 0%,
+      rgba(145, 155, 168, 0) 16%,
+      rgba(145, 155, 168, 0.12) 38%,
+      rgba(255, 255, 255, 0.72) 50%,
+      rgba(145, 155, 168, 0.12) 62%,
+      rgba(145, 155, 168, 0) 84%,
+      transparent 100%
+    );
+  opacity: 0.64;
+  transform: skewX(-9deg);
+  animation: flower-activity-running-sheen 5.4s cubic-bezier(0.42, 0, 0.2, 1) infinite;
+  will-change: left;
+}
+
 .flower-activity-inline-loader {
   display: inline-grid;
   width: 0.8rem;
@@ -3171,7 +3198,6 @@ html.dark .flower-component-shell {
   animation-delay: 405ms;
 }
 
-.flower-activity-inline-row-waiting .flower-activity-inline-icon,
 .flower-activity-inline-row-pending .flower-activity-inline-icon {
   color: color-mix(in srgb, var(--warning, #f59e0b) 74%, var(--foreground) 26%);
 }
@@ -3274,7 +3300,6 @@ html.dark .flower-component-shell {
   color: currentColor;
 }
 
-.flower-activity-inline-status-waiting,
 .flower-activity-inline-status-pending {
   color: color-mix(in srgb, var(--warning, #f59e0b) 74%, var(--foreground) 26%);
 }
@@ -3304,6 +3329,17 @@ html.dark .flower-component-shell {
     opacity: 0.08;
     left: 100%;
   }
+}
+
+
+.flower-activity-waiting-clock {
+  animation: flower-activity-waiting-clock-spin 2s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes flower-activity-waiting-clock-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 @keyframes flower-activity-loader-square {
@@ -5900,6 +5936,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   .flower-model-status-text,
   .flower-model-status-text::after,
   .flower-activity-inline-row-running .flower-activity-inline-button::before,
+  .flower-activity-waiting-clock,
   .flower-activity-inline-loader-square,
   .flower-subagent-status-loader .flower-activity-inline-loader-square,
   .flower-compaction-divider-running-clock::before,
@@ -5929,7 +5966,8 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     overflow: visible !important;
   }
 
-  .flower-activity-inline-row-running .flower-activity-inline-button::before {
+  .flower-activity-inline-row-running .flower-activity-inline-button::before,
+  .flower-activity-inline-row-waiting .flower-activity-inline-button::before {
     content: none !important;
     opacity: 0 !important;
     background: none !important;
