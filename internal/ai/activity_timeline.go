@@ -257,10 +257,6 @@ func modelIOEndsBeforeActivity(eventType string) bool {
 	}
 }
 
-func (r *run) publishActivityTimeline(timeline observation.ActivityTimeline) {
-	r.publishActivityTimelineWithSidecars(timeline, nil)
-}
-
 func (r *run) publishActivityTimelineWithSidecars(timeline observation.ActivityTimeline, subagentActions map[string]FlowerActivitySubagentAction) {
 	if r == nil {
 		return
