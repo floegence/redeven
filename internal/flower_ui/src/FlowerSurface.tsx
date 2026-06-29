@@ -4126,8 +4126,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <button
             type="button"
             class="flower-activity-inline-button"
-            aria-expanded={open()}
-            onClick={() => toggleActivityItem(timeline(), item(), blockKey(), index())}
+            aria-expanded={item().requires_approval ? undefined : open()}
+            onClick={item().requires_approval ? undefined : () => toggleActivityItem(timeline(), item(), blockKey(), index())}
           >
             <span class="flower-activity-inline-icon">{statusIcon(item().status)}</span>
             <span class="flower-activity-inline-copy">
@@ -4142,26 +4142,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <span class={cn('flower-activity-inline-status', `flower-activity-inline-status-${item().status}`)}>
               {copy().chat.toolStatuses[item().status]}
             </span>
-            <ChevronDown class={cn('flower-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-activity-inline-chevron-open')} />
+            <Show when={!item().requires_approval}>
+              <ChevronDown class={cn('flower-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-activity-inline-chevron-open')} />
+            </Show>
           </button>
           <Show when={rowFileAction()}>
             {(action) => fileActionButtons(messageID(), blockIndex(), item().item_id, action())}
           </Show>
         </div>
-        <Show when={open()}>
+        <Show when={open() && !item().requires_approval}>
           <div class="flower-activity-inline-details">
             <For each={presentation().detailBlocks}>
               {(block) => activityDetailBlock(messageID(), blockIndex(), item().item_id, block)}
-            </For>
-            <For each={matchingApprovals()}>
-              {(action) => approvalActionCard(action)}
-            </For>
-          </div>
-        </Show>
-        <Show when={!open() && matchingApprovals().length > 0}>
-          <div class="flower-activity-inline-approval">
-            <For each={matchingApprovals()}>
-              {(action) => approvalActionCard(action)}
             </For>
           </div>
         </Show>
