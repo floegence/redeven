@@ -2124,11 +2124,10 @@ describe('FlowerSurface navigation threads', () => {
     liveEvents.resolve({
       stream_generation: 1,
       events: [
-        liveEvent('thread-running-activity', 1, 'activity.updated', {
-          run_id: 'run-1',
+        liveEvent('thread-running-activity', 1, 'message.block_set', {
           message_id: 'message-running-activity',
           block_index: 1,
-          activity: completedActivity,
+          block: completedActivity,
         }),
       ],
       next_cursor: 1,

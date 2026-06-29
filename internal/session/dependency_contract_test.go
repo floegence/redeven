@@ -112,7 +112,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
-	const floretVersion = "v0.3.52"
+	const floretVersion = "v0.3.53"
 	oldFloretVersions := []string{"v0.3." + "45", "v0.3." + "46", "v0.3." + "47"}
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")

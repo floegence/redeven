@@ -615,7 +615,6 @@ export type FlowerLiveKind =
   | 'message.block_set'
   | 'message.committed'
   | 'message.failed'
-  | 'activity.updated'
   | 'approval.requested'
   | 'approval.resolved'
   | 'input.requested'
@@ -728,13 +727,6 @@ export type FlowerLiveMessageFailedPayload = Readonly<{
   error: string;
 }>;
 
-export type FlowerLiveActivityUpdatedPayload = Readonly<{
-  run_id: string;
-  message_id: string;
-  block_index: number;
-  activity: FlowerActivityTimelineBlock;
-}>;
-
 export type FlowerLiveApprovalPayload = Readonly<{
   action: FlowerApprovalAction;
 }>;
@@ -806,7 +798,6 @@ export type FlowerLiveEventPayloadByKind = Readonly<{
   'message.block_set': FlowerLiveMessageBlockSetPayload;
   'message.committed': FlowerLiveMessageCommittedPayload;
   'message.failed': FlowerLiveMessageFailedPayload;
-  'activity.updated': FlowerLiveActivityUpdatedPayload;
   'approval.requested': FlowerLiveApprovalPayload;
   'approval.resolved': FlowerLiveApprovalPayload;
   'input.requested': FlowerLiveInputRequestedPayload;

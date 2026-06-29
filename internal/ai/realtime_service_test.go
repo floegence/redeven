@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -322,22 +323,18 @@ func TestFlowerLiveEventsProjectRealtimeEventsProgressively(t *testing.T) {
 	}
 	wantKinds := []FlowerLiveKind{
 		FlowerLiveRunStarted,
-		FlowerLiveTimelineReplaced,
 		FlowerLiveMessageStarted,
-		FlowerLiveTimelineReplaced,
 		FlowerLiveMessageBlockStart,
-		FlowerLiveTimelineReplaced,
 		FlowerLiveMessageBlockDelta,
-		FlowerLiveTimelineReplaced,
 	}
 	if !reflect.DeepEqual(gotKinds, wantKinds) {
 		t.Fatalf("event kinds=%#v, want %#v", gotKinds, wantKinds)
 	}
-	if err := assertNoFullMessageInDelta(resp.Events[6]); err != nil {
+	if err := assertNoFullMessageInDelta(resp.Events[3]); err != nil {
 		t.Fatalf("delta payload shape: %v", err)
 	}
-	if strings.Contains(string(resp.Events[6].Payload), "active_run") {
-		t.Fatalf("delta payload contains old live shape: %s", string(resp.Events[6].Payload))
+	if strings.Contains(string(resp.Events[3].Payload), "active_run") {
+		t.Fatalf("delta payload contains old live shape: %s", string(resp.Events[3].Payload))
 	}
 
 	finalMessage := `{"id":"msg_live_projection_1","role":"assistant","status":"complete","content":"done","created_at_ms":1700000000000,"blocks":[{"type":"markdown","content":"done"}]}`
@@ -347,14 +344,11 @@ func TestFlowerLiveEventsProjectRealtimeEventsProgressively(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListFlowerThreadLiveEvents after transcript: %v", err)
 	}
-	if len(next.Events) != 2 {
-		t.Fatalf("next events=%d, want 2", len(next.Events))
+	if len(next.Events) != 1 {
+		t.Fatalf("next events=%d, want 1", len(next.Events))
 	}
 	if got := next.Events[0].Kind; got != FlowerLiveMessageCommitted {
 		t.Fatalf("kind=%q, want message.committed", got)
-	}
-	if got := next.Events[1].Kind; got != FlowerLiveTimelineReplaced {
-		t.Fatalf("kind=%q, want timeline.replaced", got)
 	}
 	var committed FlowerLiveMessageCommittedPayload
 	if !decodeFlowerPayload(next.Events[0].Payload, &committed) {
@@ -363,21 +357,146 @@ func TestFlowerLiveEventsProjectRealtimeEventsProgressively(t *testing.T) {
 	if len(committed.Message) == 0 {
 		t.Fatalf("message payload is empty")
 	}
-	var replaced FlowerLiveTimelineReplacedPayload
-	if !decodeFlowerPayload(next.Events[1].Payload, &replaced) {
-		t.Fatalf("failed to decode timeline replacement payload: %s", string(next.Events[1].Payload))
+}
+
+func TestFlowerLiveStreamingDeltasDoNotEmitTimelineReplacements(t *testing.T) {
+	t.Parallel()
+
+	meta := session.Meta{
+		EndpointID:        "env_live_many_deltas",
+		NamespacePublicID: "ns_live_many_deltas",
+		ChannelID:         "ch_live_many_deltas",
+		UserPublicID:      "u_live_many_deltas",
+		UserEmail:         "many-deltas@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
 	}
-	if replaced.StreamGeneration != svc.flowerLiveStreamGenerationValue() {
-		t.Fatalf("stream_generation=%d, want service generation %d", replaced.StreamGeneration, svc.flowerLiveStreamGenerationValue())
+	svc := newRealtimeTestService(t, 0)
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "many deltas", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
 	}
-	if replaced.SnapshotThroughSeq != next.Events[0].Seq {
-		t.Fatalf("snapshot_through_seq=%d, want committed seq %d", replaced.SnapshotThroughSeq, next.Events[0].Seq)
+
+	runID := "run_live_many_deltas"
+	messageID := "msg_live_many_deltas"
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventMessageStart{Type: "message-start", MessageID: messageID})
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventBlockStart{Type: "block-start", MessageID: messageID, BlockIndex: 0, BlockType: "markdown"})
+	for i := 0; i < 1000; i++ {
+		svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventBlockDelta{Type: "block-delta", MessageID: messageID, BlockIndex: 0, Delta: "x"})
 	}
-	if replaced.LiveState.Runs == nil || replaced.LiveState.ApprovalActions == nil || replaced.LiveState.InputRequests == nil {
-		t.Fatalf("timeline replacement live state maps are not initialized: %#v", replaced.LiveState)
+
+	svc.mu.Lock()
+	stream := svc.flowerLiveByThread[runThreadKey(meta.EndpointID, th.ThreadID)]
+	events := append([]FlowerLiveEvent(nil), stream.Events...)
+	svc.mu.Unlock()
+	if len(events) != 1003 {
+		t.Fatalf("events len=%d, want 1003", len(events))
 	}
-	if got := strings.TrimSpace(replaced.LiveState.Runs[runID].Status); got != "running" {
-		t.Fatalf("replacement live run status=%q, want running", got)
+	deltas := 0
+	for _, event := range events {
+		switch event.Kind {
+		case FlowerLiveMessageBlockDelta:
+			deltas++
+		case FlowerLiveTimelineReplaced:
+			t.Fatalf("ordinary streaming delta produced timeline.replaced event: %#v", event)
+		}
+	}
+	if deltas != 1000 {
+		t.Fatalf("delta count=%d, want 1000", deltas)
+	}
+}
+
+func TestFlowerLiveActivityTimelineProjectsThroughMessageBlockSet(t *testing.T) {
+	t.Parallel()
+
+	meta := session.Meta{
+		EndpointID:        "env_live_activity_block",
+		NamespacePublicID: "ns_live_activity_block",
+		ChannelID:         "ch_live_activity_block",
+		UserPublicID:      "u_live_activity_block",
+		UserEmail:         "activity-block@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+	svc := newRealtimeTestService(t, 0)
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "activity block", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_live_activity_block"
+	messageID := "msg_live_activity_block"
+	activity := newActivityTimelineBlock(observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		RunID:         runID,
+		ThreadID:      th.ThreadID,
+		TurnID:        messageID,
+		TraceID:       runID,
+		Summary: observation.ActivitySummary{
+			Status:     observation.ActivityStatusSuccess,
+			Severity:   observation.ActivitySeverityNormal,
+			TotalItems: 1,
+			Counts:     observation.ActivityCounts{Success: 1},
+		},
+		Items: []observation.ActivityItem{{
+			ItemID:   "item_live_activity_block",
+			ToolID:   "tool_live_activity_block",
+			ToolName: "terminal.exec",
+			Kind:     observation.ActivityKindTool,
+			Status:   observation.ActivityStatusSuccess,
+			Severity: observation.ActivitySeverityNormal,
+		}},
+	}, nil)
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventMessageStart{Type: "message-start", MessageID: messageID})
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventBlockSet{
+		Type:       "block-set",
+		MessageID:  messageID,
+		BlockIndex: 0,
+		Block:      activity,
+	})
+
+	resp, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, 0, 10)
+	if err != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents: %v", err)
+	}
+	gotKinds := make([]FlowerLiveKind, 0, len(resp.Events))
+	var blockSetPayload FlowerLiveMessageBlockSetPayload
+	for _, event := range resp.Events {
+		gotKinds = append(gotKinds, event.Kind)
+		if event.Kind == FlowerLiveTimelineReplaced {
+			t.Fatalf("activity block generated timeline.replaced event: %#v", event)
+		}
+		if event.Kind == FlowerLiveMessageBlockSet && !decodeFlowerPayload(event.Payload, &blockSetPayload) {
+			t.Fatalf("decode block_set payload: %s", string(event.Payload))
+		}
+	}
+	wantKinds := []FlowerLiveKind{
+		FlowerLiveRunStarted,
+		FlowerLiveMessageStarted,
+		FlowerLiveMessageBlockSet,
+	}
+	if !reflect.DeepEqual(gotKinds, wantKinds) {
+		t.Fatalf("event kinds=%#v, want %#v", gotKinds, wantKinds)
+	}
+	blockPayload, ok := blockSetPayload.Block.(map[string]any)
+	if !ok {
+		t.Fatalf("block_set payload type=%T, want object", blockSetPayload.Block)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(blockPayload["type"])); got != activityTimelineBlockType {
+		t.Fatalf("block_set type=%q, want activity timeline", got)
+	}
+	rawBlock, err := json.Marshal(blockPayload)
+	if err != nil {
+		t.Fatalf("marshal activity block payload: %v", err)
+	}
+	if !strings.Contains(string(rawBlock), `"status":"success"`) {
+		t.Fatalf("activity block payload did not carry success status: %s", string(rawBlock))
 	}
 }
 
@@ -429,9 +548,7 @@ func TestFlowerLiveModelIOStatusProjectsProviderLifecycle(t *testing.T) {
 	}
 	wantKinds := []FlowerLiveKind{
 		FlowerLiveRunStarted,
-		FlowerLiveTimelineReplaced,
 		FlowerLiveMessageStarted,
-		FlowerLiveTimelineReplaced,
 		FlowerLiveModelIOUpdated,
 		FlowerLiveModelIOUpdated,
 	}
@@ -439,8 +556,8 @@ func TestFlowerLiveModelIOStatusProjectsProviderLifecycle(t *testing.T) {
 		t.Fatalf("event kinds=%#v, want %#v", gotKinds, wantKinds)
 	}
 	var payload FlowerLiveModelIOUpdatedPayload
-	if !decodeFlowerPayload(resp.Events[5].Payload, &payload) || payload.Status == nil {
-		t.Fatalf("failed to decode model io payload: %s", string(resp.Events[5].Payload))
+	if !decodeFlowerPayload(resp.Events[3].Payload, &payload) || payload.Status == nil {
+		t.Fatalf("failed to decode model io payload: %s", string(resp.Events[3].Payload))
 	}
 	if payload.Status.Phase != FlowerModelIOPhaseStreaming || payload.Status.RunID != runID || payload.Status.StepIndex != 1 {
 		t.Fatalf("model io status=%#v", payload.Status)
@@ -512,6 +629,9 @@ func TestFlowerLiveModelIOStatusIgnoresStaleRunClear(t *testing.T) {
 	})
 	if state.ModelIO == nil || state.ModelIO.RunID != "run-new" {
 		t.Fatalf("stale terminal removed model_io: %#v", state.ModelIO)
+	}
+	if got := state.ThreadPatch.RunStatus; got != string(RunStateRunning) {
+		t.Fatalf("stale terminal changed thread run status=%q, want running", got)
 	}
 	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
 		RunID: "run-new",
@@ -1359,27 +1479,28 @@ func TestIdleContextCompactionNoopRestoresFromLiveBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListFlowerThreadLiveEvents after noop restore: %v", err)
 	}
-	var replacement FlowerLiveTimelineReplacedPayload
-	foundReplacement := false
+	var gotKinds []FlowerLiveKind
 	for _, event := range resp.Events {
-		if event.Kind != FlowerLiveTimelineReplaced {
-			continue
-		}
-		if !decodeFlowerPayload(event.Payload, &replacement) {
-			t.Fatalf("decode timeline replacement payload: %s", string(event.Payload))
-		}
-		if len(replacement.LiveState.ContextCompactions) > 0 {
-			foundReplacement = true
+		gotKinds = append(gotKinds, event.Kind)
+		if event.Kind == FlowerLiveTimelineReplaced {
+			t.Fatalf("ordinary next run start produced timeline.replaced event: %#v", event)
 		}
 	}
-	if !foundReplacement {
-		t.Fatalf("timeline replacement after next run did not retain noop compaction: events=%#v", resp.Events)
+	if !reflect.DeepEqual(gotKinds, []FlowerLiveKind{FlowerLiveRunStarted, FlowerLiveMessageStarted}) {
+		t.Fatalf("event kinds=%#v, want next run start only", gotKinds)
 	}
-	if got := replacement.LiveState.ContextCompactions[0]; got.OperationID != "compact-idle-noop-restore" || got.Status != "noop" {
-		t.Fatalf("replacement context compaction=%#v, want retained noop", got)
+	bootstrap, err = svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadLiveBootstrap after next run: %v", err)
 	}
-	if len(replacement.LiveState.TimelineDecorations) != 1 || replacement.LiveState.TimelineDecorations[0].Compaction.Status != "noop" {
-		t.Fatalf("replacement timeline decorations=%#v, want retained noop", replacement.LiveState.TimelineDecorations)
+	if len(bootstrap.LiveState.ContextCompactions) != 1 {
+		t.Fatalf("bootstrap context compactions after next run=%#v, want retained noop", bootstrap.LiveState.ContextCompactions)
+	}
+	if got := bootstrap.LiveState.ContextCompactions[0]; got.OperationID != "compact-idle-noop-restore" || got.Status != "noop" {
+		t.Fatalf("bootstrap context compaction after next run=%#v, want retained noop", got)
+	}
+	if len(bootstrap.LiveState.TimelineDecorations) != 1 || bootstrap.LiveState.TimelineDecorations[0].Compaction.Status != "noop" {
+		t.Fatalf("bootstrap timeline decorations after next run=%#v, want retained noop", bootstrap.LiveState.TimelineDecorations)
 	}
 }
 
@@ -2090,6 +2211,86 @@ func TestFlowerLiveMaterializedStatePrunesTerminalRuns(t *testing.T) {
 	}
 	if _, ok := bootstrap.LiveState.Runs[runID]; ok {
 		t.Fatalf("terminal run still present in live materialized state")
+	}
+	if got := bootstrap.LiveState.ThreadPatch.RunStatus; got != string(RunStateSuccess) {
+		t.Fatalf("terminal thread patch run_status=%q, want success", got)
+	}
+}
+
+func TestFlowerLiveTerminalRunStatusSettlesMaterializedState(t *testing.T) {
+	t.Parallel()
+
+	statuses := []RunState{RunStateSuccess, RunStateCanceled, RunStateFailed, RunStateTimedOut}
+	for _, status := range statuses {
+		status := status
+		t.Run(string(status), func(t *testing.T) {
+			t.Parallel()
+
+			runID := "run_terminal_" + string(status)
+			prompt := &RequestUserInputPrompt{PromptID: "prompt_" + string(status)}
+			state := FlowerLiveMaterializedState{
+				ThreadPatch: FlowerLiveThreadPatch{
+					RunStatus:     string(RunStateWaitingUser),
+					RunErrorCode:  "old_error",
+					RunError:      "old error",
+					WaitingPrompt: prompt,
+				},
+				Runs: map[string]FlowerLiveRunState{
+					runID: {
+						RunID:         runID,
+						Status:        string(RunStateWaitingUser),
+						MessageID:     "msg_" + string(status),
+						WaitingPrompt: prompt,
+						ErrorCode:     "old_error",
+						Error:         "old error",
+					},
+				},
+				ModelIO:         &FlowerModelIOStatus{RunID: runID, Phase: FlowerModelIOPhaseStreaming},
+				ApprovalActions: map[string]FlowerApprovalAction{},
+				InputRequests: map[string]RequestUserInputPrompt{
+					prompt.PromptID: *prompt,
+				},
+			}
+			errorCode := ""
+			errorMessage := ""
+			if status == RunStateFailed {
+				errorCode = "tool_error"
+				errorMessage = "tool failed"
+			}
+			applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+				RunID:    runID,
+				AtUnixMs: 22_000,
+				Kind:     FlowerLiveRunStatusChanged,
+				Payload: mustFlowerPayload(FlowerLiveRunStatusChangedPayload{
+					RunID:     runID,
+					Status:    string(status),
+					ErrorCode: errorCode,
+					Error:     errorMessage,
+				}),
+			})
+
+			if _, ok := state.Runs[runID]; ok {
+				t.Fatalf("terminal run still present: %#v", state.Runs[runID])
+			}
+			if state.ModelIO != nil {
+				t.Fatalf("terminal run left model_io: %#v", state.ModelIO)
+			}
+			if len(state.InputRequests) != 0 {
+				t.Fatalf("terminal run left input requests: %#v", state.InputRequests)
+			}
+			if state.ThreadPatch.RunStatus != string(status) {
+				t.Fatalf("thread patch run_status=%q, want %q", state.ThreadPatch.RunStatus, status)
+			}
+			if state.ThreadPatch.RunUpdatedAtUnixMs != 22_000 {
+				t.Fatalf("run_updated_at_ms=%d, want 22000", state.ThreadPatch.RunUpdatedAtUnixMs)
+			}
+			if state.ThreadPatch.WaitingPrompt != nil {
+				t.Fatalf("thread patch left waiting prompt: %#v", state.ThreadPatch.WaitingPrompt)
+			}
+			if state.ThreadPatch.RunErrorCode != errorCode || state.ThreadPatch.RunError != errorMessage {
+				t.Fatalf("thread patch error=(%q,%q), want (%q,%q)", state.ThreadPatch.RunErrorCode, state.ThreadPatch.RunError, errorCode, errorMessage)
+			}
+		})
 	}
 }
 

@@ -806,11 +806,7 @@ func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) FlowerLiveEvent {
 	}
 	event = appendFlowerLiveEventLocked(stream, event)
 	applyFlowerLiveEventToMaterializedState(&stream.State, stream.ApprovalIndex, event)
-	timelineState := cloneFlowerLiveMaterializedState(stream.State)
 	s.mu.Unlock()
-	if flowerLiveEventNeedsTimelineReplacement(event.Kind) {
-		s.appendFlowerLiveTimelineReplacement(event.EndpointID, event.ThreadID, event.Seq, timelineState, event.AtUnixMs)
-	}
 	return event
 }
 
@@ -825,111 +821,6 @@ func appendFlowerLiveEventLocked(stream *flowerLiveThreadStream, event FlowerLiv
 		stream.Events = stream.Events[:flowerLiveEventBufferLimit]
 	}
 	return event
-}
-
-func flowerLiveEventNeedsTimelineReplacement(kind FlowerLiveKind) bool {
-	switch kind {
-	case FlowerLiveRunStarted,
-		FlowerLiveRunStatusChanged,
-		FlowerLiveMessageStarted,
-		FlowerLiveMessageBlockStart,
-		FlowerLiveMessageBlockDelta,
-		FlowerLiveMessageBlockSet,
-		FlowerLiveMessageCommitted,
-		FlowerLiveMessageFailed,
-		FlowerLiveActivityUpdated,
-		FlowerLiveApprovalRequested,
-		FlowerLiveApprovalResolved,
-		FlowerLiveContextCompactionUpdated,
-		FlowerLiveResyncRequired:
-		return true
-	default:
-		return false
-	}
-}
-
-func (s *Service) appendFlowerLiveTimelineReplacement(endpointID string, threadID string, sourceSeq int64, state FlowerLiveMaterializedState, atUnixMs int64) {
-	if s == nil || sourceSeq <= 0 {
-		return
-	}
-	threadKey := runThreadKey(endpointID, threadID)
-	if threadKey == "" {
-		return
-	}
-	for attempt := 0; attempt < 4; attempt++ {
-		replacement, ok := s.buildFlowerTimelineReplacedEvent(endpointID, threadID, sourceSeq, state, atUnixMs)
-		if !ok {
-			return
-		}
-		s.mu.Lock()
-		stream := s.flowerLiveByThread[threadKey]
-		if stream == nil {
-			s.mu.Unlock()
-			return
-		}
-		if flowerLiveStreamHasTimelineReplacementAfter(stream, sourceSeq) {
-			s.mu.Unlock()
-			return
-		}
-		if stream.NextSeq == sourceSeq+1 {
-			appendFlowerLiveEventLocked(stream, replacement)
-			s.mu.Unlock()
-			return
-		}
-		sourceSeq = stream.NextSeq - 1
-		state = cloneFlowerLiveMaterializedState(stream.State)
-		s.mu.Unlock()
-	}
-}
-
-func flowerLiveStreamHasTimelineReplacementAfter(stream *flowerLiveThreadStream, seq int64) bool {
-	if stream == nil {
-		return false
-	}
-	for i := len(stream.Events) - 1; i >= 0; i-- {
-		event := stream.Events[i]
-		if event.Seq <= seq {
-			return false
-		}
-		if event.Kind == FlowerLiveTimelineReplaced {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *Service) buildFlowerTimelineReplacedEvent(endpointID string, threadID string, sourceSeq int64, state FlowerLiveMaterializedState, atUnixMs int64) (FlowerLiveEvent, bool) {
-	persistedState, err := s.flowerLivePersistedContextState(context.Background(), endpointID, threadID)
-	if err != nil {
-		if s.log != nil {
-			s.log.Warn("ai: failed to load persisted Flower context state for timeline replacement", "endpoint_id", endpointID, "thread_id", threadID, "error", err)
-		}
-		return FlowerLiveEvent{}, false
-	}
-	state = mergeFlowerLivePersistedContextState(state, persistedState)
-	timeline, err := s.buildFlowerTimelineMessages(context.Background(), endpointID, threadID, state)
-	if err != nil {
-		return FlowerLiveEvent{}, false
-	}
-	if atUnixMs <= 0 {
-		atUnixMs = time.Now().UnixMilli()
-	}
-	return FlowerLiveEvent{
-		EndpointID: strings.TrimSpace(endpointID),
-		ThreadID:   strings.TrimSpace(threadID),
-		AtUnixMs:   atUnixMs,
-		Kind:       FlowerLiveTimelineReplaced,
-		Payload: mustFlowerPayload(FlowerLiveTimelineReplacedPayload{
-			Messages:            timeline,
-			StreamGeneration:    s.flowerLiveStreamGenerationValue(),
-			SnapshotThroughSeq:  sourceSeq,
-			ThreadPatch:         cloneFlowerLiveThreadPatch(state.ThreadPatch),
-			LiveState:           cloneFlowerLiveMaterializedState(state),
-			ContextUsage:        cloneFlowerContextUsage(state.ContextUsage),
-			ContextCompactions:  cloneFlowerContextCompactions(state.ContextCompactions),
-			TimelineDecorations: cloneFlowerTimelineDecorations(state.TimelineDecorations),
-		}),
-	}, true
 }
 
 func flowerLiveEventWithAssignedSeqPayload(stream *flowerLiveThreadStream, event FlowerLiveEvent) FlowerLiveEvent {
@@ -1222,12 +1113,6 @@ func (s *Service) flowerLiveEventsFromStreamEvent(ev RealtimeEvent, base func(Fl
 			Block:      block,
 		})}
 		if isActivityTimelineBlockValue(block) {
-			events = append(events, base(FlowerLiveActivityUpdated, FlowerLiveActivityUpdatedPayload{
-				RunID:      strings.TrimSpace(ev.RunID),
-				MessageID:  messageID,
-				BlockIndex: stream.BlockIndex,
-				Activity:   block,
-			}))
 			events = append(events, s.flowerLiveApprovalEventsFromActivity(ev, block, base)...)
 		}
 		return events
@@ -1333,19 +1218,43 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 				Status:    strings.TrimSpace(payload.Status),
 				MessageID: strings.TrimSpace(payload.MessageID),
 			}
+			state.ThreadPatch.RunStatus = strings.TrimSpace(payload.Status)
+			if event.AtUnixMs > 0 {
+				state.ThreadPatch.RunUpdatedAtUnixMs = event.AtUnixMs
+			}
+			state.ThreadPatch.RunErrorCode = ""
+			state.ThreadPatch.RunError = ""
+			state.ThreadPatch.WaitingPrompt = nil
 		}
 	case FlowerLiveRunStatusChanged:
 		var payload FlowerLiveRunStatusChangedPayload
 		if decodeFlowerPayload(event.Payload, &payload) && strings.TrimSpace(payload.RunID) != "" {
-			run := state.Runs[payload.RunID]
+			run, hasRun := state.Runs[payload.RunID]
+			if !hasRun && len(state.Runs) > 0 {
+				if flowerLiveRunStatusIsTerminal(payload.Status) {
+					clearFlowerModelIOForRun(state, payload.RunID)
+				}
+				return
+			}
 			run.RunID = strings.TrimSpace(payload.RunID)
 			run.Status = strings.TrimSpace(payload.Status)
 			run.WaitingPrompt = payload.WaitingPrompt
 			run.ErrorCode = strings.TrimSpace(payload.ErrorCode)
 			run.Error = strings.TrimSpace(payload.Error)
+			state.ThreadPatch.RunStatus = run.Status
+			state.ThreadPatch.RunErrorCode = run.ErrorCode
+			state.ThreadPatch.RunError = run.Error
+			state.ThreadPatch.WaitingPrompt = payload.WaitingPrompt
+			if event.AtUnixMs > 0 {
+				state.ThreadPatch.RunUpdatedAtUnixMs = event.AtUnixMs
+			}
 			if flowerLiveRunStatusIsTerminal(run.Status) {
 				delete(state.Runs, payload.RunID)
 				clearFlowerModelIOForRun(state, payload.RunID)
+				state.ThreadPatch.WaitingPrompt = nil
+				for promptID := range state.InputRequests {
+					delete(state.InputRequests, promptID)
+				}
 			} else {
 				state.Runs[payload.RunID] = run
 				if flowerLiveRunStatusHidesModelIO(run.Status) {
