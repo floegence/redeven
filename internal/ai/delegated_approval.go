@@ -690,6 +690,9 @@ func delegatedApprovalAction(parent *run, child *run, req fltools.ApprovalReques
 	if subagent := strings.TrimSpace(ref.SubagentID); subagent != "" {
 		description = "Subagent " + subagent + " requests approval. " + description
 	}
+	command := strings.TrimSpace(approval.command)
+	cwd := strings.TrimSpace(approval.cwd)
+	targets := append([]FlowerSafeTarget(nil), approval.targets...)
 	return FlowerApprovalAction{
 		ActionID:            actionID,
 		Origin:              FlowerApprovalOriginDelegatedSubagent,
@@ -709,13 +712,13 @@ func delegatedApprovalAction(parent *run, child *run, req fltools.ApprovalReques
 		DeliveryState:       FlowerApprovalDeliveryWaiting,
 		ChildExecutionState: FlowerApprovalChildExecutionPending,
 		Summary: FlowerApprovalSummary{
-			Label:       toolApprovalLabel(toolName),
+			Label:       toolApprovalDisplayLabel(toolName, toolApprovalPresentationArgs(toolName, command, cwd, targets)),
 			Description: description,
-			Command:     strings.TrimSpace(approval.command),
-			Cwd:         strings.TrimSpace(approval.cwd),
+			Command:     command,
+			Cwd:         cwd,
 			Effects:     toolApprovalSummaryEffects(toolName, approval),
 			Flags:       append([]string(nil), approval.flags...),
-			Targets:     append([]FlowerSafeTarget(nil), approval.targets...),
+			Targets:     targets,
 		},
 		StepID: delegatedApprovalArgsHash(args),
 	}

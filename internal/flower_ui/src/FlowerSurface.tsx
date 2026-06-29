@@ -3981,6 +3981,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     timeline.subagent_actions?.[trimString(item.item_id)]
   );
 
+  const activityItemPresentationSource = (item: FlowerActivityItem, approvals: readonly FlowerApprovalAction[]): FlowerActivityItem => {
+    const approval = approvals.find((action) => action.status === 'pending' && action.state === 'requested');
+    if (!approval) return item;
+    const currentLabel = trimString(item.label);
+    const toolName = trimString(item.tool_name);
+    const summaryLabel = trimString(approval.summary.label);
+    const command = trimString(approval.summary.command);
+    const payload = item.payload ?? {};
+    const payloadCommand = typeof payload.command === 'string' ? trimString(payload.command) : '';
+    const labelIsFallback = !currentLabel || currentLabel === toolName || currentLabel === 'Tool approval';
+    const canUseApprovalLabel = labelIsFallback && summaryLabel && summaryLabel !== toolName && summaryLabel !== 'Tool approval';
+    const shouldFillCommand = !payloadCommand && command && (item.renderer === 'terminal' || toolName === 'terminal.exec');
+    if (!canUseApprovalLabel && !shouldFillCommand) return item;
+    return {
+      ...item,
+      ...(canUseApprovalLabel || shouldFillCommand ? { label: shouldFillCommand ? command : summaryLabel } : {}),
+      ...(shouldFillCommand ? { payload: { ...payload, command } } : {}),
+    };
+  };
+
   const activityItemAriaLabel = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock): string => (
     [
       presentFlowerActivityItem(item, timeline.file_actions, { subagents: subagentsCopy() }, { subagentAction: activitySubagentAction(timeline, item) }).label,
@@ -4194,12 +4214,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     index: Accessor<number>,
   ) => {
     const open = createMemo(() => activityItemOpen(timeline(), item(), blockKey(), index()));
-    const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, { subagents: subagentsCopy() }, { subagentAction: activitySubagentAction(timeline(), item()) }));
+    const matchingApprovals = createMemo(() => selectedApprovalActionsByToolID().get(`${trimString(timeline().run_id)}\x1f${trimString(item().tool_id)}`) ?? []);
+    const displayItem = createMemo(() => activityItemPresentationSource(item(), matchingApprovals()));
+    const presentation = createMemo(() => presentFlowerActivityItem(displayItem(), timeline().file_actions, { subagents: subagentsCopy() }, { subagentAction: activitySubagentAction(timeline(), item()) }));
     const rowFileAction = createMemo(() => {
       const value = presentation();
       return value.primaryAction ?? (value.title.kind === 'file' ? disabledFileAction(value.title.display_name) : null);
     });
-    const matchingApprovals = createMemo(() => selectedApprovalActionsByToolID().get(`${trimString(timeline().run_id)}\x1f${trimString(item().tool_id)}`) ?? []);
     const hasPendingApproval = createMemo(() => matchingApprovals().some((a) => a.status === 'pending' && a.state === 'requested'));
     const displayStatus = createMemo(() => hasPendingApproval() ? 'waiting' as const : item().status);
     const isReadOnly = createMemo(() => item().requires_approval || hasPendingApproval());
@@ -4214,7 +4235,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`)}
         data-flower-activity-item-id={item().item_id}
         data-flower-activity-status={displayStatus()}
-        aria-label={activityItemAriaLabel(item(), timeline())}
+        aria-label={activityItemAriaLabel(displayItem(), timeline())}
       >
         <div class="flower-activity-inline-line">
           <button

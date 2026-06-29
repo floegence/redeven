@@ -1183,8 +1183,10 @@ describe('FlowerSurface navigation activity', () => {
         can_approve: true,
         expected_seq: 12,
         summary: {
-          label: 'terminal.exec',
+          label: 'pwd; sleep 15; date',
           description: 'Review this command before it runs.',
+          command: 'pwd; sleep 15; date',
+          cwd: '/repo',
           effects: ['shell'],
         },
       }],
@@ -1212,9 +1214,8 @@ describe('FlowerSurface navigation activity', () => {
                 needs_attention: true,
                 requires_approval: true,
                 approval_state: 'requested',
-                label: 'pwd; sleep 15; date',
+                label: 'terminal.exec',
                 renderer: 'terminal',
-                payload: { command: 'pwd; sleep 15; date' },
               })],
             }),
           ],
@@ -1244,8 +1245,11 @@ describe('FlowerSurface navigation activity', () => {
 
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
     expect(composer.querySelector('textarea')).toBeNull();
-    expect(composer.textContent).toContain('terminal.exec');
+    expect(composer.textContent).toContain('pwd; sleep 15; date');
     expect(composer.textContent).toContain('Flower wants to execute a shell command');
+    const row = runtime.querySelector('[data-flower-activity-item-id="approval-item"]') as HTMLElement;
+    expect(row?.textContent).toContain('pwd; sleep 15; date');
+    expect(row?.textContent).not.toContain('terminal.exec');
     expect(runtime.querySelector('.flower-transcript-stack > .flower-approval-stack')).toBeNull();
   });
 

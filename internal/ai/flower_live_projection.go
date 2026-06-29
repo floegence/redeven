@@ -1978,6 +1978,9 @@ func (r *run) controlConfirmationApprovalActionLocked(toolID string, approval *t
 	if toolName == "" {
 		toolName = "tool"
 	}
+	command := strings.TrimSpace(approval.command)
+	cwd := strings.TrimSpace(approval.cwd)
+	targets := append([]FlowerSafeTarget(nil), approval.targets...)
 	return FlowerApprovalAction{
 		ActionID:      flowerApprovalActionID(r.id, toolID),
 		Origin:        FlowerApprovalOriginControlConfirm,
@@ -1993,13 +1996,13 @@ func (r *run) controlConfirmationApprovalActionLocked(toolID string, approval *t
 		ExpiresAtMs:   approval.expiresAtMs,
 		CanApprove:    true,
 		Summary: FlowerApprovalSummary{
-			Label:       toolApprovalLabel(toolName),
+			Label:       toolApprovalDisplayLabel(toolName, toolApprovalPresentationArgs(toolName, command, cwd, targets)),
 			Description: toolApprovalDescription(approval),
-			Command:     strings.TrimSpace(approval.command),
-			Cwd:         strings.TrimSpace(approval.cwd),
+			Command:     command,
+			Cwd:         cwd,
 			Effects:     toolApprovalSummaryEffects(toolName, approval),
 			Flags:       append([]string(nil), approval.flags...),
-			Targets:     append([]FlowerSafeTarget(nil), approval.targets...),
+			Targets:     targets,
 		},
 	}
 }
@@ -2097,6 +2100,46 @@ func toolApprovalLabel(toolName string) string {
 		return "Tool approval"
 	}
 	return toolName
+}
+
+func toolApprovalDisplayLabel(toolName string, args map[string]any) string {
+	fallback := toolApprovalLabel(toolName)
+	if len(args) == 0 {
+		return fallback
+	}
+	activity := floretActivityForToolCall(toolName, args)
+	if activity == nil {
+		return fallback
+	}
+	if label := strings.TrimSpace(activity.Label); label != "" {
+		return label
+	}
+	return fallback
+}
+
+func toolApprovalPresentationArgs(toolName string, command string, cwd string, targets []FlowerSafeTarget) map[string]any {
+	args := map[string]any{}
+	if strings.TrimSpace(toolName) == "terminal.exec" {
+		if command = strings.TrimSpace(command); command != "" {
+			args["command"] = command
+		}
+		if cwd = strings.TrimSpace(cwd); cwd != "" {
+			args["cwd"] = cwd
+		}
+	}
+	for _, target := range targets {
+		if strings.TrimSpace(target.Kind) != "file" {
+			continue
+		}
+		if label := strings.TrimSpace(target.Label); label != "" {
+			args["file_path"] = label
+			break
+		}
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	return args
 }
 
 func toolApprovalEffects(toolName string) []string {

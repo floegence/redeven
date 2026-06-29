@@ -1876,6 +1876,9 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 	if payload.Action.Summary.Command != "pwd; sleep 15; date" || payload.Action.Summary.Cwd != "/repo" {
 		t.Fatalf("summary=%#v, want command and cwd from Floret resources", payload.Action.Summary)
 	}
+	if payload.Action.Summary.Label != "pwd; sleep 15; date" {
+		t.Fatalf("summary label=%q, want command label", payload.Action.Summary.Label)
+	}
 	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
 	if err != nil {
 		t.Fatalf("GetFlowerThreadLiveBootstrap with pending approval: %v", err)
