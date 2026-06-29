@@ -44,7 +44,7 @@ func TestBuiltInPresentationSpecsCarryProjectionFacts(t *testing.T) {
 		{
 			toolName:          "terminal.exec",
 			labelFields:       []string{"command"},
-			callPayloadFields: []string{"command", "timeout_ms", "description"},
+			callPayloadFields: []string{"command", "yield_ms", "description"},
 		},
 		{
 			toolName:          "file.read",

@@ -8,10 +8,8 @@ import (
 )
 
 func configureTerminalExecProcessGroup(cmd *exec.Cmd) {
-	if cmd == nil {
-		return
-	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// creack/pty starts the command in a new session and process group. Adding
+	// Setpgid here conflicts with that controlling-terminal setup on Unix.
 }
 
 func terminateTerminalExecProcessTree(cmd *exec.Cmd) error {

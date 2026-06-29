@@ -573,7 +573,6 @@ func (r *run) subagentChildRun() *run {
 		SkillManager:          r.skillManager,
 		ToolTargetPolicy:      r.toolTargetPolicy,
 		TargetToolExecutor:    r.targetToolExecutor,
-		terminalExecRunner:    r.terminalExecRunner,
 	})
 	child.permissionType = subagentPermissionLimit(r)
 	child.currentModelID = r.currentModelID

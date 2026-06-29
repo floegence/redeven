@@ -66,16 +66,10 @@ export type FlowerProviderDraft = FlowerProvider & Readonly<{
 
 export type FlowerPermissionType = 'readonly' | 'approval_required' | 'full_access';
 
-export type FlowerTerminalExecPolicy = Readonly<{
-  default_timeout_ms: number;
-  max_timeout_ms: number;
-}>;
-
 export type FlowerConfig = Readonly<{
   schema_version: 1;
   current_model_id: string;
   permission_type: FlowerPermissionType;
-  terminal_exec_policy: FlowerTerminalExecPolicy;
   providers: readonly FlowerProvider[];
 }>;
 

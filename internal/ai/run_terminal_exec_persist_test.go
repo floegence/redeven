@@ -3,15 +3,12 @@ package ai
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
-	"github.com/floegence/redeven/internal/session"
 )
 
 func TestRedactAnyForPersist_TerminalExec_RedactsStdinAndPreservesNewlines(t *testing.T) {
@@ -124,7 +121,6 @@ func TestPersistToolCallSnapshot_TerminalExecResult_NotTruncated(t *testing.T) {
 			"stderr":      "",
 			"exit_code":   0,
 			"duration_ms": 120,
-			"timed_out":   false,
 			"truncated":   false,
 		},
 		nil,
@@ -153,9 +149,7 @@ func TestPersistToolCallSnapshot_TerminalExecResult_NotTruncated(t *testing.T) {
 	}
 }
 
-func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(t *testing.T) {
-	t.Parallel()
-
+func TestHandleToolCall_TerminalExecPending_PersistsProcessHandle(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
 	store, err := threadstore.Open(dbPath)
 	if err != nil {
@@ -165,7 +159,7 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 
 	ctx := context.Background()
 	if err := store.UpsertRun(ctx, threadstore.RunRecord{
-		RunID:      "run_terminal_timeout",
+		RunID:      "run_terminal_pending",
 		EndpointID: "env_1",
 		ThreadID:   "th_1",
 		MessageID:  "msg_1",
@@ -175,28 +169,15 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 	}
 
 	workspace := t.TempDir()
-	toolID := "tool_terminal_timeout"
+	toolID := "tool_terminal_pending"
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
 
-	r := newRun(runOptions{
-		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		RunID:        "run_terminal_timeout",
-		EndpointID:   "env_1",
-		ThreadID:     "th_1",
-		MessageID:    "msg_1",
-		AgentHomeDir: workspace,
-		Shell:        "bash",
-		ThreadsDB:    store,
-		SessionMeta: &session.Meta{
-			CanRead:    true,
-			CanWrite:   true,
-			CanExecute: true,
-		},
-		PersistOpTimeout: 5 * time.Second,
-	})
+	r := newTerminalProcessTestRun(workspace, &Service{terminalProcesses: manager}, store, "env_1", "th_1", "run_terminal_pending", "msg_1")
 
 	outcome, err := r.handleToolCall(context.Background(), toolID, "terminal.exec", map[string]any{
-		"command":    "printf partial-output && sleep 0.1",
-		"timeout_ms": 20,
+		"command":  "sleep 5",
+		"yield_ms": 1,
 	})
 	if err != nil {
 		t.Fatalf("handleToolCall: %v", err)
@@ -204,55 +185,50 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 	if outcome == nil {
 		t.Fatalf("missing tool outcome")
 	}
-	if outcome.Success {
-		t.Fatalf("expected timeout to surface as tool error, got success outcome=%+v", outcome)
-	}
-	if outcome.ToolError == nil {
-		t.Fatalf("missing timeout tool error")
-	}
-	if outcome.ToolError.Code != "TIMEOUT" {
-		t.Fatalf("tool error code=%q, want TIMEOUT", outcome.ToolError.Code)
+	if outcome.Pending == nil {
+		t.Fatalf("missing pending result: %#v", outcome)
 	}
 
 	resultMap, _ := outcome.Result.(map[string]any)
 	if resultMap == nil {
-		t.Fatalf("timeout outcome should preserve terminal result payload")
+		t.Fatalf("pending outcome should preserve terminal result payload")
 	}
-	if !readBoolField(resultMap, "timed_out", "timedOut") {
-		t.Fatalf("timed_out=%v, want true", resultMap["timed_out"])
+	processID := strings.TrimSpace(anyToString(resultMap["process_id"]))
+	if processID == "" {
+		t.Fatalf("missing process_id: %#v", resultMap)
 	}
-	if got := readInt64Field(resultMap, "timeout_ms", "timeoutMs"); got != 20 {
-		t.Fatalf("timeout_ms=%d, want 20", got)
+	if got := strings.TrimSpace(anyToString(resultMap["status"])); got != terminalProcessStatusRunning {
+		t.Fatalf("status=%q, want running", got)
 	}
-	if got := strings.TrimSpace(anyToString(resultMap["timeout_source"])); got != terminalExecTimeoutSourceRequested {
-		t.Fatalf("timeout_source=%q, want %q", got, terminalExecTimeoutSourceRequested)
+	if got := strings.TrimSpace(anyToString(resultMap["pending_handle"])); got != outcome.Pending.Handle {
+		t.Fatalf("pending_handle=%q, want %q", got, outcome.Pending.Handle)
 	}
 
-	rec, err := store.GetToolCall(ctx, "env_1", "run_terminal_timeout", toolID)
+	rec, err := store.GetToolCall(ctx, "env_1", "run_terminal_pending", toolID)
 	if err != nil {
 		t.Fatalf("GetToolCall: %v", err)
 	}
 	if rec == nil {
 		t.Fatalf("GetToolCall returned nil")
 	}
-	if rec.Status != toolCallStatusError {
-		t.Fatalf("tool call status=%q, want %q", rec.Status, toolCallStatusError)
-	}
-	if rec.ErrorCode != "TIMEOUT" {
-		t.Fatalf("tool call error_code=%q, want TIMEOUT", rec.ErrorCode)
+	if rec.Status != toolCallStatusRunning {
+		t.Fatalf("tool call status=%q, want %q", rec.Status, toolCallStatusRunning)
 	}
 
 	var persisted map[string]any
 	if err := json.Unmarshal([]byte(rec.ResultJSON), &persisted); err != nil {
 		t.Fatalf("result json invalid: %v", err)
 	}
-	if !readBoolField(persisted, "timed_out", "timedOut") {
-		t.Fatalf("persisted timed_out=%v, want true", persisted["timed_out"])
+	if got := strings.TrimSpace(anyToString(persisted["process_id"])); got != processID {
+		t.Fatalf("persisted process_id=%q, want %q", got, processID)
 	}
-	if got := readInt64Field(persisted, "timeout_ms", "timeoutMs"); got != 20 {
-		t.Fatalf("persisted timeout_ms=%d, want 20", got)
+	if got := strings.TrimSpace(anyToString(persisted["status"])); got != terminalProcessStatusRunning {
+		t.Fatalf("persisted status=%q, want running", got)
 	}
-	if got := strings.TrimSpace(anyToString(persisted["timeout_source"])); got != terminalExecTimeoutSourceRequested {
-		t.Fatalf("persisted timeout_source=%q, want %q", got, terminalExecTimeoutSourceRequested)
+	if _, ok := persisted["timeout_ms"]; ok {
+		t.Fatalf("persisted timeout_ms should be absent: %#v", persisted)
+	}
+	if _, err := manager.Terminate(processID); err != nil {
+		t.Fatalf("Terminate: %v", err)
 	}
 }

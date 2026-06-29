@@ -128,10 +128,6 @@ function defaultConfig(): FlowerSettingsSnapshot['config'] {
     schema_version: 1,
     current_model_id: '',
     permission_type: 'approval_required',
-    terminal_exec_policy: {
-      default_timeout_ms: 120000,
-      max_timeout_ms: 600000,
-    },
     providers: [],
   };
 }
@@ -167,10 +163,6 @@ export function mapRuntimeFlowerSettings(settings: AgentSettingsResponse): Flowe
         schema_version: 1 as const,
         current_model_id: trim(ai.current_model_id),
         permission_type: normalizePermissionType(ai.permission_type),
-        terminal_exec_policy: {
-          default_timeout_ms: positiveInteger(ai.terminal_exec_policy?.default_timeout_ms) ?? 120000,
-          max_timeout_ms: positiveInteger(ai.terminal_exec_policy?.max_timeout_ms) ?? 600000,
-        },
         providers: (ai.providers ?? []).map(mapProvider).filter((provider) => provider.id && provider.models.length > 0),
       }
     : defaultConfig();
@@ -231,10 +223,6 @@ export function mapFlowerSettingsDraftToRuntimeBundle(draft: FlowerSettingsDraft
     ai: {
       current_model_id: trim(draft.config.current_model_id),
       permission_type: draft.config.permission_type,
-      terminal_exec_policy: {
-        default_timeout_ms: draft.config.terminal_exec_policy.default_timeout_ms,
-        max_timeout_ms: draft.config.terminal_exec_policy.max_timeout_ms,
-      },
       providers: draft.config.providers.map(draftProviderToAI),
     },
     provider_api_key_patches: providerAPIKeyPatches,

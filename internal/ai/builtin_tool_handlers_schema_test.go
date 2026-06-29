@@ -77,11 +77,10 @@ func TestBuiltInToolDefinitions_TargetScopedToolsExposeTargetID(t *testing.T) {
 	t.Parallel()
 
 	targetScoped := map[string]bool{
-		"file.read":     true,
-		"file.edit":     true,
-		"file.write":    true,
-		"apply_patch":   true,
-		"terminal.exec": true,
+		"file.read":   true,
+		"file.edit":   true,
+		"file.write":  true,
+		"apply_patch": true,
 	}
 	seen := map[string]bool{}
 	for _, def := range builtInToolDefinitions() {

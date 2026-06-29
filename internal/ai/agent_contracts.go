@@ -103,9 +103,17 @@ type ToolResult struct {
 	Summary    string             `json:"summary,omitempty"`
 	Details    string             `json:"details,omitempty"`
 	Data       any                `json:"data,omitempty"`
+	Pending    *PendingToolResult `json:"pending,omitempty"`
 	Error      *aitools.ToolError `json:"error,omitempty"`
 	Truncated  bool               `json:"truncated,omitempty"`
 	ContentRef string             `json:"content_ref,omitempty"`
+}
+
+type PendingToolResult struct {
+	Handle      string            `json:"handle"`
+	Summary     string            `json:"summary"`
+	Instruction string            `json:"instruction"`
+	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
 type FlowerActivityFileAction struct {

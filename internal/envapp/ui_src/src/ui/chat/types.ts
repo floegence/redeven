@@ -65,12 +65,10 @@ export interface ShellBlock {
     runId: string;
     toolId: string;
   };
+  processId?: string;
+  latestOutput?: string;
   cwd?: string;
-  timeoutMs?: number;
-  requestedTimeoutMs?: number;
-  timeoutSource?: string;
   durationMs?: number;
-  timedOut?: boolean;
   truncated?: boolean;
   exitCode?: number;
   status: 'running' | 'success' | 'error';

@@ -164,7 +164,6 @@ func (r *run) persistFloretToolPolicyEvent(toolID string, toolName string, args 
 		return
 	}
 	commandProfile := aitools.InvocationCommandProfile(toolName, args)
-	terminalTimeoutDecision := resolveTerminalExecTimeoutDecision(r.cfg, readInt64Field(args, "timeout_ms", "timeoutMs"))
 	r.persistRunEvent("tool.policy", RealtimeStreamKindLifecycle, map[string]any{
 		"tool_id":                    strings.TrimSpace(toolID),
 		"tool_name":                  strings.TrimSpace(toolName),
@@ -176,11 +175,6 @@ func (r *run) persistFloretToolPolicyEvent(toolID string, toolName string, args 
 		"policy_reason":              strings.TrimSpace(reason),
 		"policy_permission_type":     permissionTypeString(r.permissionType),
 		"policy_no_user_interaction": r.noUserInteraction,
-		"timeout_requested_ms":       terminalTimeoutDecision.RequestedMS,
-		"timeout_effective_ms":       terminalTimeoutDecision.EffectiveMS,
-		"timeout_default_ms":         terminalTimeoutDecision.DefaultMS,
-		"timeout_max_ms":             terminalTimeoutDecision.MaxMS,
-		"timeout_source":             terminalTimeoutDecision.Source,
 	})
 }
 

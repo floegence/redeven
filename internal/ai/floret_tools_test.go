@@ -218,10 +218,10 @@ func TestFloretActivityForTerminalCallUsesCommandAsLabel(t *testing.T) {
 	t.Parallel()
 
 	activity := floretActivityForToolCall("terminal.exec", map[string]any{
-		"command":    "npm run build -- --mode production",
-		"cwd":        "/workspace/app",
-		"timeout_ms": 120000,
-		"stdin":      "secret\nvalue",
+		"command":  "npm run build -- --mode production",
+		"cwd":      "/workspace/app",
+		"yield_ms": 120000,
+		"stdin":    "secret\nvalue",
 	})
 	if activity == nil {
 		t.Fatal("activity is nil")
@@ -234,6 +234,9 @@ func TestFloretActivityForTerminalCallUsesCommandAsLabel(t *testing.T) {
 	}
 	if activity.Payload["command"] != "npm run build -- --mode production" {
 		t.Fatalf("payload=%#v, want command", activity.Payload)
+	}
+	if activity.Payload["yield_ms"] != 120000 {
+		t.Fatalf("payload=%#v, want yield_ms", activity.Payload)
 	}
 	if _, ok := activity.Payload["cwd"]; ok {
 		t.Fatalf("terminal activity payload must not include cwd: %#v", activity.Payload)
@@ -477,11 +480,10 @@ func TestFloretToolResultActivityCarriesExpandableTerminalDetailsWithoutCallOnly
 		Status:   toolResultStatusSuccess,
 		Summary:  "command completed",
 		Data: map[string]any{
-			"stdout":      "ok\n",
-			"stderr":      "",
+			"output":      "ok\n",
+			"process_id":  "tp_1",
 			"exit_code":   0,
 			"duration_ms": 42,
-			"timed_out":   false,
 			"truncated":   false,
 		},
 	})
@@ -497,35 +499,35 @@ func TestFloretToolResultActivityCarriesExpandableTerminalDetailsWithoutCallOnly
 	if _, ok := activity.Payload["command"]; ok {
 		t.Fatalf("result-only payload should not invent command: %#v", activity.Payload)
 	}
-	if got := anyToString(activity.Payload["stdout"]); got != "ok\n" {
-		t.Fatalf("stdout=%q", got)
+	if got := strings.TrimSpace(anyToString(activity.Payload["output"])); got != "ok" {
+		t.Fatalf("output=%q", got)
 	}
-	if len(activity.Chips) == 0 || activity.Chips[0].Kind != "exit_code" || activity.Chips[0].Value != "0" {
+	if !activityHasChip(activity.Chips, "exit_code", "0") {
 		t.Fatalf("chips=%#v, want exit code chip", activity.Chips)
 	}
 }
 
-func TestFloretToolResultActivityShowsTerminalExecutionProvenanceChips(t *testing.T) {
+func TestFloretToolResultActivityShowsTerminalProcessChips(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{})
 	activity := mustFloretToolResultActivity(t, r, ToolResult{
-		ToolID:   "call_terminal_target",
+		ToolID:   "call_terminal_process",
 		ToolName: "terminal.exec",
 		Status:   toolResultStatusSuccess,
 		Data: map[string]any{
-			"execution_location": "ssh_target",
-			"target_id":          "ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default",
-			"stdout":             "ok\n",
+			"execution_location": ToolTargetModeLocalRuntime,
+			"process_id":         "tp_123",
+			"output":             "ok\n",
 			"exit_code":          0,
 			"duration_ms":        42,
 		},
 	})
-	if !activityHasChip(activity.Chips, "execution_location", "ssh_target") {
+	if !activityHasChip(activity.Chips, "execution_location", ToolTargetModeLocalRuntime) {
 		t.Fatalf("chips=%#v, want execution location chip", activity.Chips)
 	}
-	if !activityHasChip(activity.Chips, "target", "ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default") {
-		t.Fatalf("chips=%#v, want target chip", activity.Chips)
+	if !activityHasChip(activity.Chips, "process_id", "tp_123") {
+		t.Fatalf("chips=%#v, want process chip", activity.Chips)
 	}
 }
 
@@ -719,21 +721,22 @@ func TestFloretToolResultActivityUsesContractSafeErrorPayload(t *testing.T) {
 
 	r := newRun(runOptions{})
 	activity := mustFloretToolResultActivity(t, r, ToolResult{
-		ToolID:   "call_terminal_timeout",
+		ToolID:   "call_terminal_canceled",
 		ToolName: "terminal.exec",
-		Status:   toolResultStatusTimeout,
-		Summary:  "TIMEOUT",
-		Details:  "Tool execution timed out after 30000 ms",
+		Status:   toolResultStatusAborted,
+		Summary:  "canceled",
+		Details:  "Terminal process was canceled",
 		Data: map[string]any{
+			"status":      terminalProcessStatusCanceled,
+			"process_id":  "tp_canceled",
 			"command":     "curl -sL https://example.test",
 			"exit_code":   124,
 			"duration_ms": 30000,
-			"timed_out":   true,
 		},
 		Error: &aitools.ToolError{
-			Code:      aitools.ErrorCodeTimeout,
-			Message:   "Tool execution timed out after 30000 ms",
-			Retryable: true,
+			Code:      aitools.ErrorCodeCanceled,
+			Message:   "Terminal process was canceled",
+			Retryable: false,
 		},
 	})
 	if activity == nil {
@@ -743,19 +746,19 @@ func TestFloretToolResultActivityUsesContractSafeErrorPayload(t *testing.T) {
 	if !ok {
 		t.Fatalf("error payload=%#v, want map", activity.Payload["error"])
 	}
-	if errorPayload["code"] != "TIMEOUT" || errorPayload["message"] != "Tool execution timed out after 30000 ms" || errorPayload["retryable"] != true {
+	if errorPayload["code"] != "CANCELED" || errorPayload["message"] != "Terminal process was canceled" || errorPayload["retryable"] != false {
 		t.Fatalf("error payload=%#v", errorPayload)
 	}
 	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_1"}, []observation.Event{{
 		Type:     observation.EventTypeToolCall,
-		ToolID:   "tool_timeout",
+		ToolID:   "tool_canceled",
 		ToolName: "terminal.exec",
 		Activity: floretActivityForToolCall("terminal.exec", map[string]any{"command": "curl -sL https://example.test"}),
 	}, {
 		Type:     observation.EventTypeToolResult,
-		ToolID:   "tool_timeout",
+		ToolID:   "tool_canceled",
 		ToolName: "terminal.exec",
-		Error:    "Tool execution timed out after 30000 ms",
+		Error:    "Terminal process was canceled",
 		Activity: activity,
 	}}, 2000)
 	if err := observation.ValidateActivityTimeline(timeline); err != nil {
@@ -843,15 +846,15 @@ func TestFloretToolResultActivityPayloadsAreJSONSafe(t *testing.T) {
 		activity *observation.ActivityPresentation
 	}{
 		{toolName: "terminal.exec", activity: mustFloretToolResultActivity(t, r, ToolResult{
-			ToolID:   "call_terminal_timeout",
+			ToolID:   "call_terminal_error",
 			ToolName: "terminal.exec",
-			Status:   toolResultStatusTimeout,
+			Status:   toolResultStatusError,
 			Data: map[string]any{
 				"command": "curl -sL https://example.test/slow",
 			},
 			Error: &aitools.ToolError{
-				Code:    aitools.ErrorCodeTimeout,
-				Message: "Tool execution timed out after 30000 ms",
+				Code:    aitools.ErrorCodeUnknown,
+				Message: "Terminal process failed",
 			},
 		})},
 		{toolName: "write_todos", activity: mustFloretToolResultActivity(t, r, ToolResult{
@@ -1207,14 +1210,17 @@ func TestFloretControlDefinitionsRejectInvalidSchema(t *testing.T) {
 	}
 }
 
-func TestFloretToolRegistryDoesNotInjectRunTargetContext(t *testing.T) {
+func TestFloretToolRegistryKeepsTerminalExecOnLocalRuntime(t *testing.T) {
 	t.Parallel()
 
 	executor := &recordingTargetToolExecutor{}
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
 	r := newRun(runOptions{
 		AgentHomeDir:       t.TempDir(),
 		SessionMeta:        &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 		EndpointID:         "env_test",
+		Service:            &Service{terminalProcesses: manager},
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 		TargetToolExecutor: executor,
 	})
@@ -1241,18 +1247,15 @@ func TestFloretToolRegistryDoesNotInjectRunTargetContext(t *testing.T) {
 	if result.IsError {
 		t.Fatalf("registry result error text=%q structured=%#v", result.Text, result.Structured)
 	}
-	if executor.call.TargetID != "provider:https%3A%2F%2Fredeven.test:env:target_1" {
-		t.Fatalf("target_id=%q", executor.call.TargetID)
+	if executor.call.ToolName != "" {
+		t.Fatalf("terminal.exec must not be forwarded to target executor: %#v", executor.call)
 	}
-	var forwarded map[string]any
-	if err := json.Unmarshal(executor.call.Arguments, &forwarded); err != nil {
-		t.Fatalf("unmarshal forwarded args: %v", err)
+	data, _ := result.Structured["data"].(map[string]any)
+	if data == nil {
+		t.Fatalf("structured result missing data: %#v", result.Structured)
 	}
-	if forwarded["command"] != "pwd" {
-		t.Fatalf("forwarded command=%#v", forwarded["command"])
-	}
-	if _, ok := forwarded["target_id"]; ok {
-		t.Fatalf("forwarded target tool args must not include target_id: %#v", forwarded)
+	if got := strings.TrimSpace(anyToString(data["execution_location"])); got != ToolTargetModeLocalRuntime {
+		t.Fatalf("execution_location=%q, want %q", got, ToolTargetModeLocalRuntime)
 	}
 }
 
@@ -1427,6 +1430,8 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 		}
 	}
 
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
 	r := newRun(runOptions{
 		Log:              slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		RunID:            "run_parent",
@@ -1435,6 +1440,7 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 		MessageID:        "msg_parent",
 		AgentHomeDir:     t.TempDir(),
 		Shell:            "bash",
+		Service:          &Service{terminalProcesses: manager},
 		ThreadsDB:        store,
 		SessionMeta:      &session.Meta{CanRead: true, CanExecute: true},
 		PersistOpTimeout: 5 * time.Second,

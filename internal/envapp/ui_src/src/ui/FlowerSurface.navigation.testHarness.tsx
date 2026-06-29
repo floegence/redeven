@@ -207,10 +207,6 @@ export function settingsSnapshot(configured = true): FlowerSettingsSnapshot {
       schema_version: 1,
       current_model_id: 'openai/gpt-5.2',
       permission_type: 'approval_required',
-      terminal_exec_policy: {
-        default_timeout_ms: 120000,
-        max_timeout_ms: 600000,
-      },
       providers: [
         {
           id: 'openai',

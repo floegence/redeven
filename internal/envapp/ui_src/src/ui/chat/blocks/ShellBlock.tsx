@@ -13,12 +13,10 @@ export interface ShellBlockProps {
     runId: string;
     toolId: string;
   };
+  processId?: string;
+  latestOutput?: string;
   cwd?: string;
-  timeoutMs?: number;
-  requestedTimeoutMs?: number;
-  timeoutSource?: string;
   durationMs?: number;
-  timedOut?: boolean;
   truncated?: boolean;
   exitCode?: number;
   status: 'running' | 'success' | 'error';
@@ -52,16 +50,20 @@ interface TerminalToolOutputPayload {
   run_id?: string;
   tool_id?: string;
   status?: string;
+  process_id?: string;
+  output?: string;
+  latest_output?: string;
   stdout?: string;
   stderr?: string;
   exit_code?: number;
   duration_ms?: number;
-  timed_out?: boolean;
   truncated?: boolean;
   cwd?: string;
-  timeout_ms?: number;
-  requested_timeout_ms?: number;
-  timeout_source?: string;
+  first_seq?: number;
+  last_seq?: number;
+  total_bytes?: number;
+  started_at_ms?: number;
+  ended_at_ms?: number;
 }
 
 const MULTI_CHAR_OPERATORS = ['&&', '||', '>>', '<<', '>|', '|&', '2>', '1>', '&>'] as const;
@@ -326,51 +328,25 @@ function formatDuration(durationMs: number | undefined): string | null {
   return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
-function formatTimeoutLabel(timeoutMs: number | undefined, timeoutSource: string, i18n: I18nHelpers): string | null {
-  if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) return null;
-  const seconds = Math.max(1, Math.floor(timeoutMs / 1000));
-  if (timeoutSource === 'default') return i18n.t('shellBlock.timeoutAuto', { seconds });
-  if (timeoutSource === 'capped') return i18n.t('shellBlock.timeoutCap', { seconds });
-  return i18n.t('shellBlock.timeoutValue', { seconds });
-}
-
 function composeDeferredOutput(parts: {
-  stdout: string;
-  stderr: string;
+  stdout?: string;
+  stderr?: string;
+  output?: string;
   cwd: string;
-  timeoutMs?: number;
-  requestedTimeoutMs?: number;
-  timeoutSource?: string;
   durationMs?: number;
-  timedOut: boolean;
   truncated: boolean;
 }): string {
   const info: string[] = [];
   if (parts.cwd) info.push(`[cwd] ${parts.cwd}`);
-  if (typeof parts.timeoutMs === 'number' && Number.isFinite(parts.timeoutMs) && parts.timeoutMs > 0) {
-    const roundedTimeout = Math.round(parts.timeoutMs);
-    const roundedRequested =
-      typeof parts.requestedTimeoutMs === 'number' && Number.isFinite(parts.requestedTimeoutMs)
-        ? Math.round(parts.requestedTimeoutMs)
-        : undefined;
-    if (parts.timeoutSource === 'default') {
-      info.push(`[timeout] auto ${roundedTimeout}ms`);
-    } else if (parts.timeoutSource === 'capped' && typeof roundedRequested === 'number' && roundedRequested > roundedTimeout) {
-      info.push(`[timeout] capped ${roundedTimeout}ms (requested ${roundedRequested}ms)`);
-    } else {
-      info.push(`[timeout] ${roundedTimeout}ms`);
-    }
-  }
   if (typeof parts.durationMs === 'number' && Number.isFinite(parts.durationMs) && parts.durationMs >= 0) {
     info.push(`[duration] ${Math.round(parts.durationMs)}ms`);
   }
-  if (parts.timedOut) info.push('[status] timed out');
   if (parts.truncated) info.push('[notice] output truncated');
 
   const sections: string[] = [];
   if (info.length > 0) sections.push(info.join('\n'));
 
-  const stdout = String(parts.stdout ?? '').trimEnd();
+  const stdout = String(parts.stdout ?? parts.output ?? '').trimEnd();
   const stderr = String(parts.stderr ?? '').trimEnd();
   if (stdout) sections.push(stdout);
   if (stderr) sections.push(stdout ? `[stderr]\n${stderr}` : stderr);
@@ -381,7 +357,7 @@ function composeDeferredOutput(parts: {
 function normalizeShellStatus(raw: unknown): ShellBlockProps['status'] | undefined {
   const value = String(raw ?? '').trim().toLowerCase();
   if (value === 'success') return 'success';
-  if (value === 'error' || value === 'failed' || value === 'timeout' || value === 'timed_out') return 'error';
+  if (value === 'error' || value === 'failed' || value === 'timeout' || value === 'timed_out' || value === 'canceled' || value === 'cancelled') return 'error';
   if (value === 'running' || value === 'pending') return 'running';
   return undefined;
 }
@@ -398,6 +374,17 @@ function terminalOutputURL(runID: string, toolID: string, metaOnly: boolean): st
   return `${base}?meta_only=1`;
 }
 
+function terminalProcessURL(runID: string, processID: string, action: 'read' | 'write' | 'terminate', query?: Record<string, string | number | undefined>): string {
+  const base = `/_redeven_proxy/api/ai/runs/${encodeURIComponent(runID)}/terminal/${encodeURIComponent(processID)}/${action}`;
+  const params = new URLSearchParams();
+  Object.entries(query ?? {}).forEach(([key, value]) => {
+    if (value === undefined || value === '') return;
+    params.set(key, String(value));
+  });
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
+}
+
 export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const i18n = useI18n();
   const [expanded, setExpanded] = createSignal(false);
@@ -406,14 +393,17 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const [loadError, setLoadError] = createSignal('');
   const [loadAttempted, setLoadAttempted] = createSignal(false);
   const [runtimeStatus, setRuntimeStatus] = createSignal<'success' | 'error' | undefined>(undefined);
+  const [runtimeProcessId, setRuntimeProcessId] = createSignal<string | undefined>(undefined);
   const [runtimeExitCode, setRuntimeExitCode] = createSignal<number | undefined>(undefined);
   const [runtimeDurationMs, setRuntimeDurationMs] = createSignal<number | undefined>(undefined);
-  const [runtimeTimedOut, setRuntimeTimedOut] = createSignal<boolean | undefined>(undefined);
   const [runtimeTruncated, setRuntimeTruncated] = createSignal<boolean | undefined>(undefined);
   const [runtimeCwd, setRuntimeCwd] = createSignal<string | undefined>(undefined);
-  const [runtimeTimeoutMs, setRuntimeTimeoutMs] = createSignal<number | undefined>(undefined);
-  const [runtimeRequestedTimeoutMs, setRuntimeRequestedTimeoutMs] = createSignal<number | undefined>(undefined);
-  const [runtimeTimeoutSource, setRuntimeTimeoutSource] = createSignal<string | undefined>(undefined);
+  const [runtimeFirstSeq, setRuntimeFirstSeq] = createSignal<number | undefined>(undefined);
+  const [runtimeLastSeq, setRuntimeLastSeq] = createSignal<number | undefined>(undefined);
+  const [runtimeTotalBytes, setRuntimeTotalBytes] = createSignal<number | undefined>(undefined);
+  const [terminalInput, setTerminalInput] = createSignal('');
+  const [terminalActionBusy, setTerminalActionBusy] = createSignal(false);
+  const [terminalActionError, setTerminalActionError] = createSignal('');
   const [commandDetailsOpen, setCommandDetailsOpen] = createSignal(false);
   const [commandCopied, setCommandCopied] = createSignal(false);
   let commandCopiedResetTimer: number | null = null;
@@ -429,22 +419,20 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const hasOutputRef = () =>
     String(props.outputRef?.runId ?? '').trim().length > 0 &&
     String(props.outputRef?.toolId ?? '').trim().length > 0;
+  const displayProcessId = () => String(props.processId ?? runtimeProcessId() ?? '').trim();
   const displayStatus = () => (props.status === 'running' ? runtimeStatus() ?? 'running' : props.status);
   const displayExitCode = () => props.exitCode ?? runtimeExitCode();
   const displayDurationMs = () => props.durationMs ?? runtimeDurationMs();
-  const displayTimedOut = () => (typeof props.timedOut === 'boolean' ? props.timedOut : runtimeTimedOut() ?? false);
   const displayTruncated = () => (typeof props.truncated === 'boolean' ? props.truncated : runtimeTruncated() ?? false);
   const displayCwd = () => props.cwd ?? runtimeCwd() ?? '';
-  const displayTimeoutMs = () => props.timeoutMs ?? runtimeTimeoutMs();
-  const displayRequestedTimeoutMs = () => props.requestedTimeoutMs ?? runtimeRequestedTimeoutMs();
-  const displayTimeoutSource = () => props.timeoutSource ?? runtimeTimeoutSource() ?? '';
-  const resolvedOutput = () => props.output ?? loadedOutput();
+  const displayLastSeq = () => runtimeLastSeq();
+  const resolvedOutput = () => props.output ?? loadedOutput() ?? props.latestOutput;
   const hasOutput = () => String(resolvedOutput() ?? '').trim().length > 0;
-  const canToggle = () => hasOutput() || hasOutputRef() || displayStatus() === 'running';
+  const canUseProcessControls = () => displayProcessId() !== '' && String(props.outputRef?.runId ?? '').trim() !== '';
+  const canToggle = () => hasOutput() || hasOutputRef() || canUseProcessControls() || displayStatus() === 'running';
   const showCommandDetails = createMemo(
     () => normalizedCommand().length > 0 && (commandLineCount() > 1 || commandPreview() !== commandPreviewSource()),
   );
-  const timeoutInlineLabel = createMemo(() => formatTimeoutLabel(displayTimeoutMs(), displayTimeoutSource(), i18n));
 
   createEffect(() => {
     const runID = String(props.outputRef?.runId ?? '').trim();
@@ -454,14 +442,17 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     void toolID;
     void command;
     setRuntimeStatus(undefined);
+    setRuntimeProcessId(undefined);
     setRuntimeExitCode(undefined);
     setRuntimeDurationMs(undefined);
-    setRuntimeTimedOut(undefined);
     setRuntimeTruncated(undefined);
     setRuntimeCwd(undefined);
-    setRuntimeTimeoutMs(undefined);
-    setRuntimeRequestedTimeoutMs(undefined);
-    setRuntimeTimeoutSource(undefined);
+    setRuntimeFirstSeq(undefined);
+    setRuntimeLastSeq(undefined);
+    setRuntimeTotalBytes(undefined);
+    setTerminalInput('');
+    setTerminalActionBusy(false);
+    setTerminalActionError('');
     setLoadedOutput(undefined);
     setLoadError('');
     setLoadAttempted(false);
@@ -508,10 +499,47 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     return (payload?.data ?? {}) as TerminalToolOutputPayload;
   };
 
+  const fetchProcessOutput = async (waitMS = 0): Promise<TerminalToolOutputPayload> => {
+    const runID = String(props.outputRef?.runId ?? '').trim();
+    const processID = displayProcessId();
+    if (!runID || !processID) return {};
+    const resp = await fetch(
+      terminalProcessURL(runID, processID, 'read', {
+        after_seq: waitMS > 0 ? displayLastSeq() : undefined,
+        wait_ms: waitMS,
+        max_bytes: 1_000_000,
+      }),
+      await prepareLocalApiRequestInit({ method: 'GET' }),
+    );
+    const raw = await resp.text();
+    let payload: any = null;
+    try {
+      payload = raw ? JSON.parse(raw) : null;
+    } catch {
+      payload = null;
+    }
+    if (!resp.ok || payload?.ok === false) {
+      throw new Error(String(payload?.error ?? `HTTP ${resp.status}`));
+    }
+    return (payload?.data ?? {}) as TerminalToolOutputPayload;
+  };
+
+  const outputFromPayload = (data: TerminalToolOutputPayload): string => composeDeferredOutput({
+    output: String(data.output ?? data.stdout ?? data.latest_output ?? ''),
+    stdout: String(data.stdout ?? ''),
+    stderr: String(data.stderr ?? ''),
+    cwd: String(data.cwd ?? displayCwd()),
+    durationMs: typeof data.duration_ms === 'number' ? data.duration_ms : displayDurationMs(),
+    truncated: typeof data.truncated === 'boolean' ? data.truncated : displayTruncated(),
+  });
+
   const applyRuntimeMetadata = (data: TerminalToolOutputPayload) => {
     const normalizedStatus = normalizeShellStatus(data.status);
     if (normalizedStatus === 'success' || normalizedStatus === 'error') {
       setRuntimeStatus(normalizedStatus);
+    }
+    if (typeof data.process_id === 'string' && data.process_id.trim()) {
+      setRuntimeProcessId(data.process_id.trim());
     }
     if (typeof data.exit_code === 'number' && Number.isFinite(data.exit_code)) {
       setRuntimeExitCode(Math.round(data.exit_code));
@@ -519,54 +547,36 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     if (typeof data.duration_ms === 'number' && Number.isFinite(data.duration_ms) && data.duration_ms >= 0) {
       setRuntimeDurationMs(Math.round(data.duration_ms));
     }
-    if (typeof data.timed_out === 'boolean') {
-      setRuntimeTimedOut(data.timed_out);
-    }
     if (typeof data.truncated === 'boolean') {
       setRuntimeTruncated(data.truncated);
     }
     if (typeof data.cwd === 'string' && data.cwd.trim()) {
       setRuntimeCwd(data.cwd.trim());
     }
-    if (typeof data.timeout_ms === 'number' && Number.isFinite(data.timeout_ms) && data.timeout_ms > 0) {
-      setRuntimeTimeoutMs(Math.round(data.timeout_ms));
+    if (typeof data.first_seq === 'number' && Number.isFinite(data.first_seq)) {
+      setRuntimeFirstSeq(Math.round(data.first_seq));
     }
-    if (typeof data.requested_timeout_ms === 'number' && Number.isFinite(data.requested_timeout_ms) && data.requested_timeout_ms > 0) {
-      setRuntimeRequestedTimeoutMs(Math.round(data.requested_timeout_ms));
+    if (typeof data.last_seq === 'number' && Number.isFinite(data.last_seq)) {
+      setRuntimeLastSeq(Math.round(data.last_seq));
     }
-    if (typeof data.timeout_source === 'string' && data.timeout_source.trim()) {
-      setRuntimeTimeoutSource(data.timeout_source.trim());
+    if (typeof data.total_bytes === 'number' && Number.isFinite(data.total_bytes)) {
+      setRuntimeTotalBytes(Math.round(data.total_bytes));
     }
   };
 
   const ensureOutputLoaded = async () => {
     if (props.output || loadedOutput() || loadingOutput()) return;
-    if (!hasOutputRef()) return;
-    if (displayStatus() === 'running') return;
+    if (!hasOutputRef() && !canUseProcessControls()) return;
 
     setLoadingOutput(true);
     setLoadError('');
     setLoadAttempted(true);
     try {
-      const data = await fetchToolOutput(false);
+      const data = canUseProcessControls()
+        ? await fetchProcessOutput(0)
+        : await fetchToolOutput(false);
       applyRuntimeMetadata(data);
-      const output = composeDeferredOutput({
-        stdout: String(data.stdout ?? ''),
-        stderr: String(data.stderr ?? ''),
-        cwd: String(data.cwd ?? displayCwd()),
-        timeoutMs:
-          typeof data.timeout_ms === 'number' ? data.timeout_ms : displayTimeoutMs(),
-        requestedTimeoutMs:
-          typeof data.requested_timeout_ms === 'number' ? data.requested_timeout_ms : displayRequestedTimeoutMs(),
-        timeoutSource:
-          typeof data.timeout_source === 'string' ? data.timeout_source : displayTimeoutSource(),
-        durationMs:
-          typeof data.duration_ms === 'number' ? data.duration_ms : displayDurationMs(),
-        timedOut:
-          typeof data.timed_out === 'boolean' ? data.timed_out : displayTimedOut(),
-        truncated:
-          typeof data.truncated === 'boolean' ? data.truncated : displayTruncated(),
-      });
+      const output = outputFromPayload(data);
       setLoadedOutput(output || i18n.t('shellBlock.noOutputCaptured'));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -578,12 +588,11 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
 
   createEffect(() => {
     if (!expanded()) return;
-    if (displayStatus() === 'running') return;
     void ensureOutputLoaded();
   });
 
   createEffect(() => {
-    if (!hasOutputRef()) return;
+    if (!hasOutputRef() && !canUseProcessControls()) return;
     if (displayStatus() !== 'running') return;
     let disposed = false;
     let timer: number | null = null;
@@ -591,13 +600,22 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     const pollStatus = async () => {
       if (disposed) return;
       try {
-        const data = await fetchToolOutput(true);
+        const data = canUseProcessControls()
+          ? await fetchProcessOutput(TERMINAL_STATUS_POLL_INTERVAL_MS)
+          : await fetchToolOutput(true);
         if (disposed) return;
         applyRuntimeMetadata(data);
+        if (expanded()) {
+          const output = outputFromPayload(data);
+          if (output) {
+            setLoadedOutput(output);
+          }
+        }
         const status = normalizeShellStatus(data.status);
         if (status && status !== 'running') {
           if (expanded()) {
-            void ensureOutputLoaded();
+            const output = outputFromPayload(data);
+            setLoadedOutput(output || i18n.t('shellBlock.noOutputCaptured'));
           }
           return;
         }
@@ -648,6 +666,74 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     }
   };
 
+  const handleSendInput = async (): Promise<void> => {
+    const runID = String(props.outputRef?.runId ?? '').trim();
+    const processID = displayProcessId();
+    if (!runID || !processID || terminalActionBusy()) return;
+    setTerminalActionBusy(true);
+    setTerminalActionError('');
+    const input = terminalInput().endsWith('\n') ? terminalInput() : `${terminalInput()}\n`;
+    try {
+      const resp = await fetch(
+        terminalProcessURL(runID, processID, 'write'),
+        await prepareLocalApiRequestInit({ method: 'POST', body: JSON.stringify({ input }) }),
+      );
+      const raw = await resp.text();
+      let payload: any = null;
+      try {
+        payload = raw ? JSON.parse(raw) : null;
+      } catch {
+        payload = null;
+      }
+      if (!resp.ok || payload?.ok === false) {
+        throw new Error(String(payload?.error ?? `HTTP ${resp.status}`));
+      }
+      const data = (payload?.data ?? {}) as TerminalToolOutputPayload;
+      applyRuntimeMetadata(data);
+      const output = outputFromPayload(data);
+      if (output) setLoadedOutput(output);
+      setTerminalInput('');
+    } catch (err) {
+      setTerminalActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTerminalActionBusy(false);
+    }
+  };
+
+  const handleTerminate = async (): Promise<void> => {
+    const runID = String(props.outputRef?.runId ?? '').trim();
+    const processID = displayProcessId();
+    if (!runID || !processID || terminalActionBusy()) return;
+    setTerminalActionBusy(true);
+    setTerminalActionError('');
+    try {
+      const resp = await fetch(
+        terminalProcessURL(runID, processID, 'terminate'),
+        await prepareLocalApiRequestInit({ method: 'POST', body: '{}' }),
+      );
+      const raw = await resp.text();
+      let payload: any = null;
+      try {
+        payload = raw ? JSON.parse(raw) : null;
+      } catch {
+        payload = null;
+      }
+      if (!resp.ok || payload?.ok === false) {
+        throw new Error(String(payload?.error ?? `HTTP ${resp.status}`));
+      }
+      const data = (payload?.data ?? {}) as TerminalToolOutputPayload;
+      applyRuntimeMetadata(data);
+      const status = normalizeShellStatus(data.status);
+      if (status) setRuntimeStatus(status === 'running' ? undefined : status);
+      const output = outputFromPayload(data);
+      if (output) setLoadedOutput(output);
+    } catch (err) {
+      setTerminalActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTerminalActionBusy(false);
+    }
+  };
+
   onCleanup(() => {
     if (commandCopiedResetTimer != null) {
       window.clearTimeout(commandCopiedResetTimer);
@@ -688,16 +774,12 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
             </span>
           </Show>
 
-          <Show when={timeoutInlineLabel()}>
-            <span
-              class={cn(
-                'chat-shell-timeout-inline',
-                displayTimeoutSource() === 'default' && 'chat-shell-timeout-inline-auto',
-                displayTimeoutSource() === 'capped' && 'chat-shell-timeout-inline-capped',
-              )}
-            >
-              {timeoutInlineLabel()}
-            </span>
+          <Show when={displayProcessId()}>
+            {(processId) => (
+              <span class="chat-shell-inline-chip chat-shell-inline-chip-muted" title={processId()}>
+                {processId()}
+              </span>
+            )}
           </Show>
 
           <Show when={showCommandDetails()}>
@@ -755,18 +837,32 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
                 <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">{displayCwd()}</div>
               </div>
             </Show>
+            <Show when={displayProcessId()}>
+              {(processId) => (
+                <div class="chat-shell-detail-meta-card">
+                  <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.process')}</div>
+                  <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">{processId()}</div>
+                </div>
+              )}
+            </Show>
+            <Show when={runtimeTotalBytes() !== undefined}>
+              <div class="chat-shell-detail-meta-card">
+                <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.outputBytes')}</div>
+                <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">{runtimeTotalBytes()}</div>
+              </div>
+            </Show>
+            <Show when={runtimeLastSeq() !== undefined}>
+              <div class="chat-shell-detail-meta-card">
+                <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.sequence')}</div>
+                <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">
+                  {runtimeFirstSeq() ?? 0}-{runtimeLastSeq() ?? 0}
+                </div>
+              </div>
+            </Show>
             <Show when={formatDuration(displayDurationMs())}>
               {(value) => (
                 <div class="chat-shell-detail-meta-card">
                   <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.duration')}</div>
-                  <div class="chat-shell-detail-meta-value">{value()}</div>
-                </div>
-              )}
-            </Show>
-            <Show when={timeoutInlineLabel()}>
-              {(value) => (
-                <div class="chat-shell-detail-meta-card">
-                  <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.timeout')}</div>
                   <div class="chat-shell-detail-meta-value">{value()}</div>
                 </div>
               )}
@@ -822,6 +918,45 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
             >
               <pre>{resolvedOutput()}</pre>
             </div>
+          </Show>
+          <Show when={canUseProcessControls()}>
+            <div class="chat-shell-interaction">
+              <input
+                class="chat-shell-input"
+                value={terminalInput()}
+                placeholder={i18n.t('shellBlock.inputPlaceholder')}
+                disabled={displayStatus() !== 'running' || terminalActionBusy()}
+                onInput={(event) => setTerminalInput(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return;
+                  event.preventDefault();
+                  void handleSendInput();
+                }}
+              />
+              <button
+                type="button"
+                class="chat-shell-action-btn"
+                disabled={displayStatus() !== 'running' || terminalActionBusy()}
+                onClick={() => void handleSendInput()}
+              >
+                {i18n.t('shellBlock.sendInput')}
+              </button>
+              <button
+                type="button"
+                class="chat-shell-action-btn chat-shell-action-btn-danger"
+                disabled={displayStatus() !== 'running' || terminalActionBusy()}
+                onClick={() => void handleTerminate()}
+              >
+                {i18n.t('shellBlock.terminate')}
+              </button>
+            </div>
+            <Show when={terminalActionError()}>
+              {(message) => (
+                <div class="chat-shell-action-error">
+                  {i18n.t('shellBlock.actionError', { message: message() })}
+                </div>
+              )}
+            </Show>
           </Show>
         </div>
       </Show>

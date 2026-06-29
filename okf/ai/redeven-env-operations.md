@@ -3,7 +3,7 @@ type: AI Operation Contract
 title: Redeven environment operations
 description: redeven env and redeven targets exec are the product boundaries for Flower and automation environment lifecycle and target diagnostic requests.
 tags: [ai, flower, cli, desktop, runtime]
-timestamp: 2026-06-18T00:00:00Z
+timestamp: 2026-06-29T00:00:00Z
 ---
 
 Redeven environment lifecycle requests must go through the Redeven product surface, not through inferred container, SSH, systemd, launchctl, or process-manager commands. Flower learns this boundary through the standard `redeven-environment` system skill, not through a bespoke environment workflow embedded in the global prompt.
@@ -20,7 +20,7 @@ For arbitrary target OS diagnostics, Flower should use `redeven targets exec --t
 
 `redeven env` and `redeven targets exec` output is sanitized for Flower and automation. Target and runtime summaries omit runtime-control tokens and avoid leaking local state, config, socket, and agent home paths where those paths are not needed for the contract. Diagnostic output may include local state, lock, and socket paths when those paths are necessary to explain runtime attach state. Operation commands in the environment JSON contract may name Redeven product commands only. Target execution JSON must include `target_id` and `execution_location` when execution occurs. If an operation or target execution returns a structured unavailable, unsupported, or blocked result, Flower should explain that result and the product next action instead of inventing a lower-level workaround.
 
-`terminal.exec` remains the local AI runtime shell. It can be used to invoke Redeven product commands, but it must not be described as remote execution unless the product command result itself contains target execution provenance such as `execution_location=ssh_target`.
+`terminal.exec` remains the local AI runtime shell. It starts an interactive PTY process with a local `process_id`, can be inspected with `terminal.read`, driven with `terminal.write`, and stopped with `terminal.terminate`. It can be used to invoke Redeven product commands, but it must not be described as remote execution unless the product command result itself contains target execution provenance such as `execution_location=ssh_target`.
 
 # Citations
 

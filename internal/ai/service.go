@@ -144,6 +144,7 @@ type Service struct {
 	contextRepo        *contextstore.Repository
 	capabilityResolver *contextadapter.Resolver
 	skillManager       *skillManager
+	terminalProcesses  *terminalProcessManager
 
 	threadTitleCoordinator *autoThreadTitleCoordinator
 	maintenanceStopCh      chan struct{}
@@ -334,6 +335,7 @@ func NewService(opts Options) (*Service, error) {
 		maintenanceStopCh:            make(chan struct{}),
 		maintenanceDoneCh:            make(chan struct{}),
 	}
+	svc.terminalProcesses = newTerminalProcessManager(svc.handleTerminalProcessDone)
 	if svc.skillManager != nil {
 		svc.skillManager.Discover()
 	}
@@ -396,6 +398,8 @@ func (s *Service) Close() error {
 	s.mu.Lock()
 	coordinator := s.threadTitleCoordinator
 	s.threadTitleCoordinator = nil
+	terminalProcesses := s.terminalProcesses
+	s.terminalProcesses = nil
 	ts := s.threadsDB
 	writers := make([]*aiSinkWriter, 0, len(s.realtimeWriters))
 	for srv, w := range s.realtimeWriters {
@@ -440,6 +444,9 @@ func (s *Service) Close() error {
 
 	if coordinator != nil {
 		coordinator.Close()
+	}
+	if terminalProcesses != nil {
+		terminalProcesses.Close()
 	}
 	if maintenanceStopCh != nil {
 		close(maintenanceStopCh)

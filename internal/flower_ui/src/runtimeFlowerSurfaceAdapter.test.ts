@@ -36,10 +36,6 @@ function settingsSnapshot(): FlowerSettingsSnapshot {
       schema_version: 1,
       current_model_id: 'default/gpt-5',
       permission_type: 'approval_required',
-      terminal_exec_policy: {
-        default_timeout_ms: 30_000,
-        max_timeout_ms: 120_000,
-      },
       providers: [],
     },
     provider_secrets: [],
