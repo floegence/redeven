@@ -103,6 +103,9 @@ func (r *run) flowerBlocksFromFloretThreadProjection(projection flruntime.Thread
 				continue
 			}
 			timeline := r.normalizeActivityTimeline(*segment.ActivityTimeline)
+			if !r.validateActivityTimelineForProjection(timeline, "floret_thread_projection") {
+				continue
+			}
 			blocks = append(blocks, newActivityTimelineBlock(timeline, r.activityTimelineFileActions(timeline)))
 		case flruntime.ThreadTurnProjectionSegmentControlSignal:
 			continue
