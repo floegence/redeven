@@ -403,8 +403,9 @@ function rendererForItem(item: FlowerActivityItem): FlowerActivityRenderer {
 
 function defaultLabelForItem(item: FlowerActivityItem): string {
   const label = trimString(item.label);
-  if (label && label !== 'Tool approval') return label;
-  return trimString(item.tool_name) || 'Activity';
+  const toolName = trimString(item.tool_name);
+  if (label && label !== toolName && label !== 'Tool approval') return label;
+  return toolName === 'terminal.exec' ? 'Activity' : toolName || 'Activity';
 }
 
 function operationFromPayload(payload: Readonly<Record<string, unknown>> | undefined): string {
@@ -1011,17 +1012,17 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
 }
 
 function titleWithToolContext(toolName: string, explicit: string, fallback: string): string {
-  const meaningful = explicit && explicit !== 'Tool approval' ? explicit : '';
+  const meaningful = explicit && explicit !== toolName && explicit !== 'Tool approval' ? explicit : '';
   const label = meaningful || fallback;
   switch (toolName) {
-    case 'okf.search': return explicit ? `OKF search "${explicit}"` : 'OKF search';
-    case 'okf.open': return explicit ? `OKF concept "${explicit}"` : 'OKF concept';
-    case 'okf.index': return explicit ? `OKF index · ${explicit}` : 'OKF index';
-    case 'rgrep': return explicit ? `rgrep "${explicit}"` : 'rgrep';
-    case 'find': return explicit ? `find ${explicit}` : 'find';
-    case 'web.search': return explicit ? `Web search "${explicit}"` : 'Web search';
-    case 'web_fetch': return explicit ? `Web fetch ${explicit}` : 'Web fetch';
-    case 'use_skill': return explicit ? `Skill ${explicit}` : 'Skill';
+    case 'okf.search': return meaningful ? `OKF search "${meaningful}"` : 'OKF search';
+    case 'okf.open': return meaningful ? `OKF concept "${meaningful}"` : 'OKF concept';
+    case 'okf.index': return meaningful ? `OKF index · ${meaningful}` : 'OKF index';
+    case 'rgrep': return meaningful ? `rgrep "${meaningful}"` : 'rgrep';
+    case 'find': return meaningful ? `find ${meaningful}` : 'find';
+    case 'web.search': return meaningful ? `Web search "${meaningful}"` : 'Web search';
+    case 'web_fetch': return meaningful ? `Web fetch ${meaningful}` : 'Web fetch';
+    case 'use_skill': return meaningful ? `Skill ${meaningful}` : 'Skill';
     default: return label;
   }
 }
@@ -1030,9 +1031,10 @@ function titleForGenericItem(item: FlowerActivityItem, renderer: FlowerActivityR
   const explicit = trimString(item.label);
   const toolName = trimString(item.tool_name);
   const meaningful = (text: string) => text && text !== 'Tool approval' ? text : '';
+  const meaningfulTerminalTitle = (text: string) => text && text !== toolName && text !== 'Tool approval' ? text : '';
   switch (renderer) {
     case 'terminal': {
-      const command = payloadValue(item.payload, 'command') || meaningful(explicit) || toolName || defaultLabelForItem(item);
+      const command = payloadValue(item.payload, 'command') || meaningfulTerminalTitle(explicit) || defaultLabelForItem(item);
       return { kind: 'command', command };
     }
     case 'web_search':

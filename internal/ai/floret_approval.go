@@ -508,6 +508,9 @@ func (r *run) flowerApprovalActionFromFloretPending(approval flruntime.PendingAp
 	}
 	runID := strings.TrimSpace(r.id)
 	turnID := firstNonEmptyString(strings.TrimSpace(string(approval.TurnID)), strings.TrimSpace(string(approval.RunID)), strings.TrimSpace(r.messageID))
+	command := floretPendingApprovalCommand(approval)
+	cwd := floretPendingApprovalCwd(approval)
+	targets := floretPendingApprovalTargets(approval)
 	return FlowerApprovalAction{
 		ActionID:      flowerApprovalActionID(runID, toolID),
 		Origin:        FlowerApprovalOriginMainTool,
@@ -524,13 +527,13 @@ func (r *run) flowerApprovalActionFromFloretPending(approval flruntime.PendingAp
 		RequestedAtMs: requestedAt,
 		CanApprove:    true,
 		Summary: FlowerApprovalSummary{
-			Label:       toolApprovalLabel(toolName),
+			Label:       toolApprovalDisplayLabel(toolName, toolApprovalPresentationArgs(toolName, command, cwd, targets)),
 			Description: floretPendingApprovalDescription(approval),
-			Command:     floretPendingApprovalCommand(approval),
-			Cwd:         floretPendingApprovalCwd(approval),
+			Command:     command,
+			Cwd:         cwd,
 			Effects:     floretPendingApprovalEffects(approval, toolName),
 			Flags:       floretPendingApprovalFlags(approval),
-			Targets:     floretPendingApprovalTargets(approval),
+			Targets:     targets,
 		},
 	}, true
 }
