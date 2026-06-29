@@ -395,6 +395,24 @@ released runtime artifact reference, compatibility manifest or contract hashes,
 and local verification scripts together. A Redeven change that depends on
 unreleased ReDevPlugin behavior is not ready for integration.
 
+Redeven-side plugin code layout must make the adapter boundary visible:
+
+- packages may be named for host integration, route mounting, capability
+  adapters, or product UI, but must not be named or structured as a second
+  platform core such as `internal/plugins/runtime`,
+  `internal/plugins/registry`, `internal/plugins/bridge`,
+  `internal/plugins/storage`, or `internal/plugins/network`;
+- generated DTOs, schemas, SDK clients, and manifest fixtures must come from
+  released ReDevPlugin artifacts. Redeven may wrap them for product UI, but must
+  not edit generated ReDevPlugin contracts in place;
+- tests in Redeven must prove host adapter behavior, permission mapping, route
+  mounting, lifecycle wiring, and product UX. Reusable manifest, package,
+  bridge, runtime, storage, network, and lifecycle semantics must be validated by
+  released ReDevPlugin tests and fixtures;
+- any new plugin-platform concern discovered during Redeven implementation must
+  be recorded as a ReDevPlugin upstream requirement before Redeven commits code
+  that depends on it.
+
 Use this checklist when reviewing any Redeven plugin integration change:
 
 - Redeven may mount, configure, and observe ReDevPlugin, but must not implement
