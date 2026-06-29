@@ -127,7 +127,6 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
   cards: 'cards',
   items: 'items',
   process_id: 'process',
-  pending_handle: 'pending',
   execution_location: 'location',
   latest_output: 'latest output',
   first_seq: 'first seq',

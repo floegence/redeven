@@ -151,7 +151,7 @@ func TestGetTerminalToolOutput_UsesRunningProcessMetadata(t *testing.T) {
 		ToolName:   "terminal.exec",
 		Status:     "running",
 		ArgsJSON:   `{"command":"go test ./..."}`,
-		ResultJSON: `{"status":"running","process_id":"tp_running","pending_handle":"terminal:process:tp_running","output":"partial","latest_output":"partial","cwd":"/workspace","first_seq":3,"last_seq":4,"total_bytes":7,"started_at_ms":1700000000000,"truncated":false}`,
+		ResultJSON: `{"status":"running","process_id":"tp_running","output":"partial","latest_output":"partial","cwd":"/workspace","first_seq":3,"last_seq":4,"total_bytes":7,"started_at_ms":1700000000000,"truncated":false}`,
 	}); err != nil {
 		t.Fatalf("UpsertToolCall: %v", err)
 	}

@@ -112,8 +112,8 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
-	const floretVersion = "v0.3.58"
-	oldFloretVersions := []string{"v0.3." + "45", "v0.3." + "46", "v0.3." + "47", "v0.3." + "53", "v0.3." + "54", "v0.3." + "55", "v0.3." + "56", "v0.3." + "57"}
+	const floretVersion = "v0.3.61"
+	oldFloretVersions := []string{"v0.3." + "45", "v0.3." + "46", "v0.3." + "47", "v0.3." + "53", "v0.3." + "54", "v0.3." + "55", "v0.3." + "56", "v0.3." + "57", "v0.3." + "58", "v0.3." + "59", "v0.3." + "60"}
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
 	goSum := readRepoFile(t, root, "go.sum")
@@ -360,6 +360,25 @@ func TestFloretMainActivityBoundaryUsesThreadTurnProjection(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("scan ai package: %v", err)
+	}
+}
+
+func TestTerminalProcessUsesFloretSettlementGateway(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	content := readRepoFile(t, root, filepath.Join("internal", "ai", "terminal_process_service.go"))
+	for _, marker := range []string{
+		"floret" + "ThreadStorePath",
+		"Open" + "SQLiteStore",
+		"flruntime." + "NewHost",
+		"open" + "FloretLifecycleHost",
+		"persist" + "TerminalSettlementProjection",
+		"snapshotAssistantMessageJSONWithStatus(\"complete\")",
+	} {
+		if strings.Contains(content, marker) {
+			t.Fatalf("terminal_process_service.go must hand pending settlements to the Floret integration gateway instead of retaining marker %q", marker)
+		}
 	}
 }
 

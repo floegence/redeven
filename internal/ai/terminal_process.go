@@ -84,7 +84,6 @@ type terminalProcessSnapshot struct {
 	EndedAtUnixMs     int64              `json:"ended_at_ms,omitempty"`
 	DurationMS        int64              `json:"duration_ms,omitempty"`
 	ExitCode          int                `json:"exit_code,omitempty"`
-	PendingHandle     string             `json:"pending_handle,omitempty"`
 	ExecutionLocation string             `json:"execution_location"`
 	Error             *aitools.ToolError `json:"error,omitempty"`
 }
@@ -560,25 +559,15 @@ func (p *terminalProcess) snapshotLocked(maxBytes int64) terminalProcessSnapshot
 		EndedAtUnixMs:     endedAtUnixMs,
 		DurationMS:        duration,
 		ExitCode:          p.exitCode,
-		PendingHandle:     terminalProcessPendingHandle(p.id),
 		ExecutionLocation: ToolTargetModeLocalRuntime,
 		Error:             err,
 	}
-}
-
-func terminalProcessPendingHandle(processID string) string {
-	processID = strings.TrimSpace(processID)
-	if processID == "" {
-		return ""
-	}
-	return "terminal:process:" + processID
 }
 
 func terminalProcessResultPayload(snapshot terminalProcessSnapshot) map[string]any {
 	out := map[string]any{
 		"status":             strings.TrimSpace(snapshot.Status),
 		"process_id":         strings.TrimSpace(snapshot.ProcessID),
-		"pending_handle":     strings.TrimSpace(snapshot.PendingHandle),
 		"command":            strings.TrimSpace(snapshot.Command),
 		"cwd":                strings.TrimSpace(snapshot.Cwd),
 		"execution_location": strings.TrimSpace(snapshot.ExecutionLocation),

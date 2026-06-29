@@ -1,6 +1,9 @@
 package ai
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"sort"
 	"strings"
 	"time"
@@ -186,4 +189,129 @@ func (r *run) hasFloretThreadDetailProjectionApplied() bool {
 	r.muAssistant.Lock()
 	defer r.muAssistant.Unlock()
 	return r.floretThreadProjectionApplied
+}
+
+func (s *Service) settlePendingToolWithFloret(ctx context.Context, endpointID string, threadID string, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
+	if s == nil {
+		return flruntime.PendingToolSettlementResult{}, errors.New("nil service")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if active := s.activeRunForFloretSettlement(endpointID, threadID, string(req.RunID)); active != nil && !active.isDetached() {
+		if host := active.activeFloretHost(); host != nil {
+			return host.SettlePendingTool(ctx, req)
+		}
+	}
+	host, err := s.openFloretLifecycleHost()
+	if err != nil {
+		return flruntime.PendingToolSettlementResult{}, err
+	}
+	defer func() { _ = host.Close() }()
+	return host.SettlePendingTool(ctx, req)
+}
+
+func (s *Service) activeRunForFloretSettlement(endpointID string, threadID string, runID string) *run {
+	if s == nil {
+		return nil
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	runID = strings.TrimSpace(runID)
+	if endpointID == "" || threadID == "" || runID == "" {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)]) != runID {
+		return nil
+	}
+	return s.runs[runID]
+}
+
+func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context, endpointID string, threadID string, runID string, messageID string, projection flruntime.ThreadTurnProjection) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if active := s.activeRunForFloretSettlement(endpointID, threadID, runID); active != nil {
+		if active.acceptsPresentationUpdates() {
+			active.applyFloretThreadProjection(projection)
+		} else {
+			active.applyFloretTerminalThreadProjection(projection)
+		}
+	}
+	return s.persistFloretProjectionToAssistantMessage(ctx, endpointID, threadID, runID, messageID, projection)
+}
+
+func (s *Service) persistFloretProjectionToAssistantMessage(ctx context.Context, endpointID string, threadID string, runID string, messageID string, projection flruntime.ThreadTurnProjection) error {
+	if s == nil || s.threadsDB == nil {
+		return errors.New("threads store not ready")
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	runID = strings.TrimSpace(runID)
+	messageID = strings.TrimSpace(messageID)
+	if endpointID == "" || threadID == "" || runID == "" || messageID == "" {
+		return errors.New("invalid floret projection target")
+	}
+	ctx, cancel := context.WithTimeout(ctx, s.persistTimeout())
+	rowID, raw, err := s.threadsDB.GetTranscriptMessageRowIDAndJSONByMessageID(ctx, endpointID, threadID, messageID)
+	cancel()
+	if err != nil {
+		return err
+	}
+	status, createdAt, err := persistedMessageStatusAndTimestamp(raw)
+	if err != nil {
+		return err
+	}
+	if createdAt <= 0 {
+		createdAt = time.Now().UnixMilli()
+	}
+	projectionRun := &run{
+		id:                       runID,
+		endpointID:               endpointID,
+		threadID:                 threadID,
+		messageID:                messageID,
+		service:                  s,
+		assistantCreatedAtUnixMs: createdAt,
+	}
+	blocks := projectionRun.flowerBlocksFromFloretThreadProjection(projection)
+	if len(blocks) == 0 {
+		return errors.New("empty floret projection")
+	}
+	projectionRun.assistantBlocks = blocks
+	rawJSON, _, at, err := projectionRun.snapshotAssistantMessageJSONWithStatus(status)
+	if err != nil {
+		return err
+	}
+	if at <= 0 {
+		at = createdAt
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), s.persistTimeout())
+	err = s.threadsDB.UpdateTranscriptMessageJSONByRowID(ctx, endpointID, rowID, rawJSON, at)
+	cancel()
+	if err != nil {
+		return err
+	}
+	s.broadcastTranscriptMessage(endpointID, threadID, runID, rowID, rawJSON, at)
+	s.broadcastThreadSummary(endpointID, threadID)
+	if s.threadMgr != nil {
+		s.threadMgr.Wake(endpointID, threadID)
+	}
+	return nil
+}
+
+func persistedMessageStatusAndTimestamp(raw string) (string, int64, error) {
+	var msg persistedMessage
+	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &msg); err != nil {
+		return "", 0, err
+	}
+	status := normalizeSnapshotMessageStatus(msg.Status)
+	if status == "" {
+		return "", msg.Timestamp, errors.New("persisted assistant message status is invalid")
+	}
+	return status, msg.Timestamp, nil
 }

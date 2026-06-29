@@ -2,12 +2,10 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"strings"
 	"time"
 
-	flconfig "github.com/floegence/floret/config"
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
@@ -182,14 +180,17 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) {
 		return
 	}
 	s.appendTerminalProcessRunEvent(snapshot, status, resultPayload, toolErr)
-	settled, err := s.settleTerminalProcess(snapshot, resultPayload)
+	settlementReq := terminalProcessSettlementRequest(snapshot, resultPayload)
+	settleCtx, settleCancel := context.WithTimeout(context.Background(), s.persistTimeout())
+	settled, err := s.settlePendingToolWithFloret(settleCtx, snapshot.EndpointID, snapshot.ThreadID, settlementReq)
+	settleCancel()
 	if err != nil {
 		if s.log != nil {
 			s.log.Warn("ai: settle terminal process failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
 		}
 		return
 	}
-	if err := s.persistTerminalSettlementProjection(snapshot, settled.Projection); err != nil && s.log != nil {
+	if err := s.applyFloretPendingToolSettlementProjection(context.Background(), snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, snapshot.TurnID, settled.Projection); err != nil && s.log != nil {
 		s.log.Warn("ai: persist terminal settlement projection failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
 	}
 }
@@ -231,40 +232,19 @@ func (s *Service) appendTerminalProcessRunEvent(snapshot terminalProcessSnapshot
 	cancel()
 }
 
-func (s *Service) settleTerminalProcess(snapshot terminalProcessSnapshot, resultPayload map[string]any) (flruntime.PendingToolSettlementResult, error) {
-	storePath, err := floretThreadStorePath(s.stateDir)
-	if err != nil {
-		return flruntime.PendingToolSettlementResult{}, err
-	}
-	store, err := flruntime.OpenSQLiteStore(storePath)
-	if err != nil {
-		return flruntime.PendingToolSettlementResult{}, err
-	}
-	host, err := flruntime.NewHost(flruntime.HostOptions{
-		Config: flconfig.Config{
-			Provider:     flconfig.ProviderFake,
-			Model:        "redeven-terminal-settlement",
-			SystemPrompt: "Record terminal process settlement.",
-		},
-		Store: store,
-	})
-	if err != nil {
-		_ = store.Close()
-		return flruntime.PendingToolSettlementResult{}, err
-	}
-	defer func() { _ = host.Close() }()
-	return host.SettlePendingTool(context.Background(), flruntime.PendingToolSettlementRequest{
+func terminalProcessSettlementRequest(snapshot terminalProcessSnapshot, resultPayload map[string]any) flruntime.PendingToolSettlementRequest {
+	return flruntime.PendingToolSettlementRequest{
 		ThreadID:   flruntime.ThreadID(snapshot.ThreadID),
 		TurnID:     flruntime.TurnID(snapshot.TurnID),
 		RunID:      flruntime.RunID(snapshot.RunID),
 		ToolCallID: snapshot.ToolID,
 		ToolName:   "terminal.exec",
-		Handle:     snapshot.PendingHandle,
+		Handle:     snapshot.ProcessID,
 		Status:     terminalSettlementStatus(snapshot.Status),
 		Summary:    terminalSettlementSummary(snapshot),
 		Output:     strings.TrimRight(snapshot.Output, "\n"),
 		Activity:   terminalProcessActivity(snapshot, resultPayload),
-	})
+	}
 }
 
 func terminalSettlementStatus(status string) flruntime.PendingToolSettlementStatus {
@@ -303,60 +283,4 @@ func terminalProcessActivity(snapshot terminalProcessSnapshot, payload map[strin
 		},
 		Payload: payload,
 	})
-}
-
-func (s *Service) persistTerminalSettlementProjection(snapshot terminalProcessSnapshot, projection flruntime.ThreadTurnProjection) error {
-	if s == nil || s.threadsDB == nil {
-		return errors.New("threads store not ready")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
-	rowID, raw, err := s.threadsDB.GetTranscriptMessageRowIDAndJSONByMessageID(ctx, snapshot.EndpointID, snapshot.ThreadID, snapshot.TurnID)
-	cancel()
-	if err != nil {
-		return err
-	}
-	createdAt := persistedMessageTimestamp(raw)
-	if createdAt <= 0 {
-		createdAt = time.Now().UnixMilli()
-	}
-	projectionRun := &run{
-		id:                       snapshot.RunID,
-		endpointID:               snapshot.EndpointID,
-		threadID:                 snapshot.ThreadID,
-		messageID:                snapshot.TurnID,
-		service:                  s,
-		assistantCreatedAtUnixMs: createdAt,
-	}
-	blocks := projectionRun.flowerBlocksFromFloretThreadProjection(projection)
-	if len(blocks) == 0 {
-		return errors.New("empty terminal settlement projection")
-	}
-	projectionRun.assistantBlocks = blocks
-	rawJSON, _, at, err := projectionRun.snapshotAssistantMessageJSONWithStatus("complete")
-	if err != nil {
-		return err
-	}
-	if at <= 0 {
-		at = createdAt
-	}
-	ctx, cancel = context.WithTimeout(context.Background(), s.persistTimeout())
-	err = s.threadsDB.UpdateTranscriptMessageJSONByRowID(ctx, snapshot.EndpointID, rowID, rawJSON, at)
-	cancel()
-	if err != nil {
-		return err
-	}
-	s.broadcastTranscriptMessage(snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, rowID, rawJSON, at)
-	s.broadcastThreadSummary(snapshot.EndpointID, snapshot.ThreadID)
-	if s.threadMgr != nil {
-		s.threadMgr.Wake(snapshot.EndpointID, snapshot.ThreadID)
-	}
-	return nil
-}
-
-func persistedMessageTimestamp(raw string) int64 {
-	var msg persistedMessage
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &msg); err != nil {
-		return 0
-	}
-	return msg.Timestamp
 }
