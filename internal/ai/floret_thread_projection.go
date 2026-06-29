@@ -191,7 +191,7 @@ func (r *run) hasFloretThreadDetailProjectionApplied() bool {
 	return r.floretThreadProjectionApplied
 }
 
-func (s *Service) settlePendingToolWithFloret(ctx context.Context, endpointID string, threadID string, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
+func (s *Service) settlePendingToolWithActiveFloretRun(ctx context.Context, endpointID string, threadID string, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
 	if s == nil {
 		return flruntime.PendingToolSettlementResult{}, errors.New("nil service")
 	}
@@ -203,12 +203,7 @@ func (s *Service) settlePendingToolWithFloret(ctx context.Context, endpointID st
 			return host.SettlePendingTool(ctx, req)
 		}
 	}
-	host, err := s.openFloretLifecycleHost()
-	if err != nil {
-		return flruntime.PendingToolSettlementResult{}, err
-	}
-	defer func() { _ = host.Close() }()
-	return host.SettlePendingTool(ctx, req)
+	return flruntime.PendingToolSettlementResult{}, errors.New("active floret settlement host unavailable")
 }
 
 func (s *Service) activeRunForFloretSettlement(endpointID string, threadID string, runID string) *run {
