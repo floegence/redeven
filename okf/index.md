@@ -14,6 +14,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.
 - [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.
 - [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.
+- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Published plugin-platform dependency and Redeven adapter ownership.
 
 ## Security
 
