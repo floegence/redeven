@@ -236,6 +236,9 @@ alters plugin-platform ownership, dependency direction, lifecycle semantics,
 runtime supervision, bridge/security mechanics, or generated-plugin boundaries
 must update the matching boundary language in `redevplugin/AGENTS.md` in the
 same feature and must be reviewed as a cross-repository contract change.
+The inverse is also required: when `redevplugin/AGENTS.md` changes the
+host/platform responsibility split or the shared Git discipline, review this
+section before landing the dependency update in Redeven.
 
 `redeven` is a host product and must consume `redevplugin` through published
 artifacts only:
@@ -301,6 +304,17 @@ Redeven may add product-facing wrappers such as `redeven plugin ...` commands or
 Env App pages, but those wrappers must delegate to released ReDevPlugin APIs.
 If a wrapper needs a new platform capability, add and release that capability in
 `redevplugin` before wiring it into Redeven.
+
+The default conflict-resolution rule is simple: plugin-platform mechanics live
+in ReDevPlugin, Redeven product integration lives in Redeven. If a proposed
+Redeven change needs to define a manifest field, package hash rule, bridge
+message, token or ticket format, WASM ABI, runtime IPC frame, storage/network
+broker behavior, operation/stream envelope, registry state transition, stable
+plugin error code, or generated SDK shape, that change belongs in ReDevPlugin
+first. If a proposed change needs Redeven's AppServer shape, session metadata,
+Workbench placement, Activity Bar UX, Flower orchestration, Desktop packaging,
+installer behavior, local policy, secret vault, or a concrete business adapter,
+that change belongs in Redeven over an already released ReDevPlugin contract.
 
 Redeven must treat ReDevPlugin as an upstream library/runtime dependency, not as
 a co-developed source folder. Integration work may happen in parallel worktrees,
@@ -440,6 +454,14 @@ Use this checklist when reviewing any Redeven plugin integration change:
   platform semantics must be covered by released ReDevPlugin fixtures and
   contracts. Do not create Redeven-only fixture formats that become hidden plugin
   platform standards.
+- Any plugin-platform TODO discovered in Redeven must be recorded as an upstream
+  ReDevPlugin requirement before the Redeven integration can depend on it. Do
+  not hide a missing upstream contract behind a Redeven-local helper, internal
+  package, undocumented endpoint, or fixture-only convention.
+- AGENTS drift is a review blocker. If this section and
+  `redevplugin/AGENTS.md` disagree about ownership, dependency direction, Git
+  workflow, released-artifact consumption, or the Rust runtime boundary, stop and
+  update both files before landing code.
 
 ## Flower / Floret Boundary
 
