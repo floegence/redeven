@@ -1400,6 +1400,11 @@ html.dark .flower-component-shell {
   margin: 0 auto;
 }
 
+.flower-chat-transcript[data-flower-tail-preparing="true"] .flower-transcript-stack {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .flower-chat-bottom-dock {
   position: relative;
   z-index: 1;

@@ -123,6 +123,50 @@ function attachTranscriptScrollMetrics(transcript: HTMLElement, metrics: {
   };
 }
 
+function mockAnimationFrames(): Readonly<{
+  runAll: () => void;
+  pendingCount: () => number;
+  restore: () => void;
+}> {
+  let nextHandle = 1;
+  const callbacks = new Map<number, FrameRequestCallback>();
+  const requestSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    const handle = nextHandle;
+    nextHandle += 1;
+    callbacks.set(handle, callback);
+    return handle;
+  });
+  const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation((handle) => {
+    callbacks.delete(handle);
+  });
+  const runNext = () => {
+    const next = callbacks.entries().next();
+    if (next.done) return false;
+    const [handle, callback] = next.value;
+    callbacks.delete(handle);
+    callback(typeof performance !== 'undefined' ? performance.now() : Date.now());
+    return true;
+  };
+  return {
+    runAll: () => {
+      let guard = 0;
+      while (callbacks.size > 0 && guard < 50) {
+        runNext();
+        guard += 1;
+      }
+      if (guard >= 50) {
+        throw new Error('Timed out flushing animation frames.');
+      }
+    },
+    pendingCount: () => callbacks.size,
+    restore: () => {
+      callbacks.clear();
+      requestSpy.mockRestore();
+      cancelSpy.mockRestore();
+    },
+  };
+}
+
 describe('FlowerSurface navigation threads', () => {
   it('consumes external focus requests once without stealing later manual thread selection', async () => {
     const focusedThread = thread({
@@ -2391,22 +2435,8 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => !runtime.querySelector('.flower-scroll-to-latest-button'));
   });
 
-  it('opens a newly selected long thread at the latest output', async () => {
-    let transcriptScrollTop = 0;
-    const clientHeightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function clientHeightMock(this: HTMLElement) {
-      return this.classList.contains('flower-chat-transcript') ? 180 : 0;
-    });
-    const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function scrollHeightMock(this: HTMLElement) {
-      return this.classList.contains('flower-chat-transcript') ? 920 : 0;
-    });
-    const scrollTopSpy = vi.spyOn(HTMLElement.prototype, 'scrollTop', 'get').mockImplementation(function scrollTopMock(this: HTMLElement) {
-      return this.classList.contains('flower-chat-transcript') ? transcriptScrollTop : 0;
-    });
-    const scrollTopSetSpy = vi.spyOn(HTMLElement.prototype, 'scrollTop', 'set').mockImplementation(function scrollTopSetMock(this: HTMLElement, value: number) {
-      if (this.classList.contains('flower-chat-transcript')) {
-        transcriptScrollTop = Number(value);
-      }
-    });
+  it('hides a newly selected long thread until the first tail reveal opens at latest output', async () => {
+    const frames = mockAnimationFrames();
     try {
       const selectedThread = thread({
         thread_id: 'thread-long-on-load',
@@ -2435,16 +2465,154 @@ describe('FlowerSurface navigation threads', () => {
       });
 
       await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-long-on-load"] button')));
-      (runtime.querySelector('[data-thread-id="thread-long-on-load"] button') as HTMLButtonElement).click();
-      await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-long-agent"]')));
+      const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
+      const scrollMetrics = attachTranscriptScrollMetrics(transcript, {
+        clientHeight: 180,
+        scrollHeight: 920,
+        scrollTop: 0,
+      });
 
-      await waitFor(() => transcriptScrollTop === 740);
+      (runtime.querySelector('[data-thread-id="thread-long-on-load"] button') as HTMLButtonElement).click();
+      await flush();
+
+      expect(runtime.querySelector('[data-flower-message-id="m-long-agent"]')).toBeTruthy();
+      expect(transcript.getAttribute('data-flower-tail-preparing')).toBe('true');
+      expect(transcript.getAttribute('aria-busy')).toBe('true');
+      expect(runtime.querySelector('.flower-scroll-to-latest-button')).toBeNull();
+      expect(scrollMetrics.scrollTop()).toBe(0);
+      expect(frames.pendingCount()).toBeGreaterThan(0);
+
+      frames.runAll();
+      await flush();
+
+      expect(scrollMetrics.scrollTop()).toBe(740);
+      expect(transcript.hasAttribute('data-flower-tail-preparing')).toBe(false);
+      expect(transcript.hasAttribute('aria-busy')).toBe(false);
       expect(runtime.querySelector('.flower-scroll-to-latest-button')).toBeNull();
     } finally {
-      clientHeightSpy.mockRestore();
-      scrollHeightSpy.mockRestore();
-      scrollTopSpy.mockRestore();
-      scrollTopSetSpy.mockRestore();
+      frames.restore();
+    }
+  });
+
+  it('uses refreshed thread detail height when load completes before tail reveal', async () => {
+    const frames = mockAnimationFrames();
+    try {
+      const listedThread = thread({
+        thread_id: 'thread-detail-before-reveal',
+        title: 'Detail before reveal',
+        messages: [{
+          id: 'm-detail-listed',
+          role: 'assistant',
+          content: 'Listed preview output',
+          status: 'complete',
+          created_at_ms: 1,
+        }],
+      });
+      const detailedThread = thread({
+        ...listedThread,
+        messages: [
+          ...(listedThread.messages ?? []),
+          {
+            id: 'm-detail-final',
+            role: 'assistant',
+            content: 'Detailed final output',
+            status: 'complete',
+            created_at_ms: 2,
+          },
+        ],
+      });
+      const detailLoad = deferred<FlowerLiveBootstrap>();
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [listedThread]),
+        loadThread: vi.fn(() => detailLoad.promise),
+      });
+
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-detail-before-reveal"] button')));
+      const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
+      const scrollMetrics = attachTranscriptScrollMetrics(transcript, {
+        clientHeight: 180,
+        scrollHeight: 920,
+        scrollTop: 0,
+      });
+
+      (runtime.querySelector('[data-thread-id="thread-detail-before-reveal"] button') as HTMLButtonElement).click();
+      await flush();
+      expect(transcript.getAttribute('data-flower-tail-preparing')).toBe('true');
+
+      scrollMetrics.setScrollHeight(1400);
+      detailLoad.resolve(liveBootstrap(detailedThread));
+      await flush();
+
+      expect(runtime.querySelector('[data-flower-message-id="m-detail-final"]')).toBeTruthy();
+      expect(transcript.getAttribute('data-flower-tail-preparing')).toBe('true');
+
+      frames.runAll();
+      await flush();
+
+      expect(scrollMetrics.scrollTop()).toBe(1220);
+      expect(transcript.hasAttribute('data-flower-tail-preparing')).toBe(false);
+    } finally {
+      frames.restore();
+    }
+  });
+
+  it('lets upward wheel input cancel pending tail reveal before it can force-scroll', async () => {
+    const frames = mockAnimationFrames();
+    try {
+      const selectedThread = thread({
+        thread_id: 'thread-tail-reveal-interrupt',
+        title: 'Tail reveal interrupt',
+        messages: [
+          {
+            id: 'm-tail-interrupt-user',
+            role: 'user',
+            content: 'Start a long report',
+            status: 'complete',
+            created_at_ms: 1,
+          },
+          {
+            id: 'm-tail-interrupt-agent',
+            role: 'assistant',
+            content: 'Latest Agent output',
+            status: 'complete',
+            created_at_ms: 2,
+          },
+        ],
+      });
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [selectedThread]),
+        loadThread: vi.fn(async () => liveBootstrap(selectedThread)),
+      });
+
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-tail-reveal-interrupt"] button')));
+      const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
+      const scrollMetrics = attachTranscriptScrollMetrics(transcript, {
+        clientHeight: 180,
+        scrollHeight: 920,
+        scrollTop: 0,
+      });
+
+      (runtime.querySelector('[data-thread-id="thread-tail-reveal-interrupt"] button') as HTMLButtonElement).click();
+      await flush();
+      expect(transcript.getAttribute('data-flower-tail-preparing')).toBe('true');
+
+      transcript.dispatchEvent(new WheelEvent('wheel', { deltaY: -80, bubbles: true }));
+      scrollMetrics.setScrollTop(300);
+      transcript.dispatchEvent(new Event('scroll', { bubbles: true }));
+      await flush();
+
+      expect(transcript.hasAttribute('data-flower-tail-preparing')).toBe(false);
+      await waitFor(() => Boolean(runtime.querySelector('.flower-scroll-to-latest-button')));
+
+      frames.runAll();
+      await flush();
+
+      expect(scrollMetrics.scrollTop()).toBe(300);
+      expect(runtime.querySelector('.flower-scroll-to-latest-button')).toBeTruthy();
+    } finally {
+      frames.restore();
     }
   });
 
