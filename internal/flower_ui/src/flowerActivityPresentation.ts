@@ -398,7 +398,8 @@ function rendererForItem(item: FlowerActivityItem): FlowerActivityRenderer {
 
 function defaultLabelForItem(item: FlowerActivityItem): string {
   const label = trimString(item.label);
-  return label || 'Activity';
+  if (label && label !== 'Tool approval') return label;
+  return trimString(item.tool_name) || 'Activity';
 }
 
 function operationFromPayload(payload: Readonly<Record<string, unknown>> | undefined): string {
@@ -459,8 +460,10 @@ function chipText(item: FlowerActivityItem): readonly string[] {
 }
 
 function metaForItem(item: FlowerActivityItem): string {
+  const desc = trimString(item.description);
+  const isApprovalState = /^(requested|approved|rejected|timed_out|canceled)$/.test(desc);
   const parts = [
-    trimString(item.description),
+    ...(isApprovalState ? [] : [desc]),
     ...chipText(item),
   ].filter(Boolean);
   return Array.from(new Set(parts)).join(' · ');
