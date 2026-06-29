@@ -42,11 +42,11 @@ describe('FlowerSurface markdown rendering boundary', () => {
   it('binds activity row status to the timeline item status, not payload status', () => {
     const src = surfaceSource();
 
-    expect(src).toContain("`flower-activity-inline-row-${item().status}`");
-    expect(src).toContain('data-flower-activity-status={item().status}');
-    expect(src).toContain('statusIcon(item().status)');
-    expect(src).toContain("`flower-activity-inline-status-${item().status}`");
-    expect(src).toContain('copy().chat.toolStatuses[item().status]');
+    expect(src).toContain("`flower-activity-inline-row-${displayStatus()}`");
+    expect(src).toContain('data-flower-activity-status={displayStatus()}');
+    expect(src).toContain('statusIcon(displayStatus())');
+    expect(src).toContain("`flower-activity-inline-status-${displayStatus()}`");
+    expect(src).toContain('copy().chat.toolStatuses[displayStatus()]');
     expect(src).not.toContain('payload.status');
     expect(src).not.toContain("payload['status']");
   });

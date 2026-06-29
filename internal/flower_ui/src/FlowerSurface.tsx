@@ -862,6 +862,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       })
   ));
   const selectedComposerApprovalAction = createMemo(() => selectedComposerApprovalActions()[0] ?? null);
+  const selectedApprovalActionsByToolID = createMemo(() => {
+    const out = new Map<string, readonly FlowerApprovalAction[]>();
+    for (const action of selectedApprovalActions()) {
+      if (approvalActionIsDelegated(action)) continue;
+      const toolID = trimString(action.tool_id);
+      const runID = trimString(action.run_id);
+      if (!toolID || !runID) continue;
+      const key = `${runID}\x1f${toolID}`;
+      out.set(key, [...(out.get(key) ?? []), action]);
+    }
+    return out;
+  });
   const selectedThreadLevelApprovalActions = createMemo(() => {
     const composerActionID = trimString(selectedComposerApprovalAction()?.action_id);
     return selectedApprovalActions().filter((action) => (
@@ -3949,6 +3961,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return item.status !== 'success';
   };
   const activityItemVisible = (item: FlowerActivityItem): boolean => {
+    if (item.kind === 'approval') return false;
     if (item.requires_approval && !activityItemHasVisiblePayload(item)) return false;
     return true;
   };
@@ -4187,6 +4200,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const value = presentation();
       return value.primaryAction ?? (value.title.kind === 'file' ? disabledFileAction(value.title.display_name) : null);
     });
+    const matchingApprovals = createMemo(() => selectedApprovalActionsByToolID().get(`${trimString(timeline().run_id)}\x1f${trimString(item().tool_id)}`) ?? []);
+    const hasPendingApproval = createMemo(() => matchingApprovals().some((a) => a.status === 'pending' && a.state === 'requested'));
+    const displayStatus = createMemo(() => hasPendingApproval() ? 'waiting' as const : item().status);
+    const isReadOnly = createMemo(() => item().requires_approval || hasPendingApproval());
     const duration = createMemo(() => {
       const value = item();
       return formatActivityDuration((value.started_at_unix_ms && value.ended_at_unix_ms
@@ -4195,19 +4212,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     return (
       <div
-        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${item().status}`)}
+        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`)}
         data-flower-activity-item-id={item().item_id}
-        data-flower-activity-status={item().status}
+        data-flower-activity-status={displayStatus()}
         aria-label={activityItemAriaLabel(item(), timeline())}
       >
         <div class="flower-activity-inline-line">
           <button
             type="button"
             class="flower-activity-inline-button"
-            aria-expanded={item().requires_approval ? undefined : open()}
-            onClick={item().requires_approval ? undefined : () => toggleActivityItem(timeline(), item(), blockKey(), index())}
+            aria-expanded={isReadOnly() ? undefined : open()}
+            onClick={isReadOnly() ? undefined : () => toggleActivityItem(timeline(), item(), blockKey(), index())}
           >
-            <span class="flower-activity-inline-icon">{statusIcon(item().status)}</span>
+            <span class="flower-activity-inline-icon">{statusIcon(displayStatus())}</span>
             <span class="flower-activity-inline-copy">
               <span class="flower-activity-inline-title">{activityTitle(presentation().title)}</span>
               <Show when={presentation().meta}>
@@ -4217,10 +4234,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <Show when={duration()}>
               {(value) => <span class="flower-activity-inline-duration">{value()}</span>}
             </Show>
-            <span class={cn('flower-activity-inline-status', `flower-activity-inline-status-${item().status}`)}>
-              {copy().chat.toolStatuses[item().status]}
+            <span class={cn('flower-activity-inline-status', `flower-activity-inline-status-${displayStatus()}`)}>
+              {copy().chat.toolStatuses[displayStatus()]}
             </span>
-            <Show when={!item().requires_approval}>
+            <Show when={!isReadOnly()}>
               <ChevronDown class={cn('flower-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-activity-inline-chevron-open')} />
             </Show>
           </button>
@@ -4228,7 +4245,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             {(action) => fileActionButtons(messageID(), blockIndex(), item().item_id, action())}
           </Show>
         </div>
-        <Show when={open() && !item().requires_approval}>
+        <Show when={open() && !isReadOnly()}>
           <div class="flower-activity-inline-details">
             <For each={presentation().detailBlocks}>
               {(block) => activityDetailBlock(messageID(), blockIndex(), item().item_id, block)}

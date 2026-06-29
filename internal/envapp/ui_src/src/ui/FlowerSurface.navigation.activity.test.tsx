@@ -1246,8 +1246,6 @@ describe('FlowerSurface navigation activity', () => {
     expect(composer.querySelector('textarea')).toBeNull();
     expect(composer.textContent).toContain('terminal.exec');
     expect(composer.textContent).toContain('Flower wants to execute a shell command');
-    const row = runtime.querySelector('[data-flower-activity-item-id="approval-item"]') as HTMLElement | null;
-    expect(row?.textContent).toContain('pwd; sleep 15; date');
     expect(runtime.querySelector('.flower-transcript-stack > .flower-approval-stack')).toBeNull();
   });
 
@@ -1360,7 +1358,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(copyButton?.getAttribute('data-copied')).toBe('true');
 
     const row = runtime.querySelector('[data-flower-activity-item-id="delegated-approval-item"]') as HTMLElement | null;
-    expect(row?.querySelector('[data-flower-approval-action-id="dappr-terminal"]')).toBeNull();
+    expect(row).toBeNull();
     const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-actions button'))
       .find((button) => button.textContent?.trim() === 'Approve');
     expect(approve).toBeTruthy();
