@@ -43,6 +43,7 @@ main() {
       internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts \
       internal/flower_ui/src/FlowerSurface.activityRunningSheen.test.ts \
       internal/flower_ui/src/FlowerSurface.modelStatusIndicator.test.ts \
+      internal/flower_ui/src/FlowerSurface.markdownRendering.test.ts \
       internal/flower_ui/src/FlowerSurface.markdownReadability.test.ts
   )
 

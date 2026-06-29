@@ -183,6 +183,10 @@ type FlowerFloatingPoint = Readonly<{
   x: number;
   y: number;
 }>;
+type SelectedThreadTailReveal = Readonly<{
+  threadID: string;
+  sequence: number;
+}>;
 type FlowerScrollTailController = Readonly<{
   bind: (node: HTMLDivElement | undefined) => void;
   nearBottom: Accessor<boolean>;
@@ -218,6 +222,7 @@ const MESSAGE_COPY_RESET_MS = 1600;
 const FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID = 'flower-composer-command-compact-context';
 const TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX = 96;
 const TRANSCRIPT_SCROLL_TO_LATEST_MS = 220;
+const SELECTED_THREAD_TAIL_REVEAL_FALLBACK_MS = 120;
 const SUBAGENT_DETAIL_PAGE_SIZE = 200;
 const SUBAGENT_DROPDOWN_ESTIMATED_SIZE = { width: 368, height: 448 } as const;
 const SUBAGENT_DETAIL_TAIL_RUNNING_INTERVAL_MS = 1500;
@@ -655,6 +660,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [renameError, setRenameError] = createSignal('');
   const [renameSaving, setRenameSaving] = createSignal(false);
   const [loadingThreadID, setLoadingThreadID] = createSignal('');
+  const [selectedThreadTailReveal, setSelectedThreadTailReveal] = createSignal<SelectedThreadTailReveal | null>(null);
   const [threadRailWidth, setThreadRailWidth] = createSignal(THREAD_RAIL_WIDTH_DEFAULT);
   const [threadRailResizing, setThreadRailResizing] = createSignal(false);
   const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
@@ -695,6 +701,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let renameRestoreRef: HTMLElement | undefined;
   let subagentDetailTailTimer: number | undefined;
   let subagentDetailTailInFlight: FlowerSubagentDetailTailRequest | null = null;
+  let selectedThreadTailRevealFrame = 0;
+  let selectedThreadTailRevealTimer: number | undefined;
   let backgroundThreadsRefreshInFlight = false;
   let composerFocusToken = 0;
   const [composerFocusRevision, setComposerFocusRevision] = createSignal(0);
@@ -738,6 +746,56 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     requestAnimationFrame: requestTranscriptAnimationFrame,
     cancelAnimationFrame: cancelTranscriptAnimationFrame,
   });
+  const selectedThreadTailPreparing = createMemo(() => {
+    const pending = selectedThreadTailReveal();
+    return Boolean(pending && pending.threadID === selectedThreadID());
+  });
+  const selectedThreadTailRevealIsCurrent = (threadID: string, sequence: number): boolean => {
+    const pending = selectedThreadTailReveal();
+    return Boolean(
+      pending
+      && pending.threadID === threadID
+      && pending.sequence === sequence
+      && sequence === threadLoadSequence
+      && selectedThreadID() === threadID,
+    );
+  };
+  const clearSelectedThreadTailRevealSchedule = () => {
+    if (selectedThreadTailRevealFrame) {
+      cancelTranscriptAnimationFrame(selectedThreadTailRevealFrame);
+      selectedThreadTailRevealFrame = 0;
+    }
+    if (selectedThreadTailRevealTimer !== undefined) {
+      window.clearTimeout(selectedThreadTailRevealTimer);
+      selectedThreadTailRevealTimer = undefined;
+    }
+  };
+  const settleSelectedThreadTailReveal = (threadID: string, sequence: number) => {
+    if (!selectedThreadTailRevealIsCurrent(threadID, sequence)) return;
+    clearSelectedThreadTailRevealSchedule();
+    transcriptScroll.scrollToBottom({ smooth: false });
+    setSelectedThreadTailReveal(null);
+  };
+  const scheduleSelectedThreadTailReveal = (threadID: string, sequence: number) => {
+    if (!selectedThreadTailRevealIsCurrent(threadID, sequence)) return;
+    clearSelectedThreadTailRevealSchedule();
+    selectedThreadTailRevealFrame = requestTranscriptAnimationFrame(() => {
+      selectedThreadTailRevealFrame = 0;
+      settleSelectedThreadTailReveal(threadID, sequence);
+    });
+    selectedThreadTailRevealTimer = window.setTimeout(() => {
+      selectedThreadTailRevealTimer = undefined;
+      settleSelectedThreadTailReveal(threadID, sequence);
+    }, SELECTED_THREAD_TAIL_REVEAL_FALLBACK_MS);
+  };
+  const beginSelectedThreadTailReveal = (threadID: string, sequence: number) => {
+    clearSelectedThreadTailRevealSchedule();
+    setSelectedThreadTailReveal({ threadID, sequence });
+  };
+  const cancelSelectedThreadTailReveal = () => {
+    clearSelectedThreadTailRevealSchedule();
+    setSelectedThreadTailReveal(null);
+  };
 
   const selectedThread = createMemo(() => threads().find((thread) => thread.thread_id === selectedThreadID()) ?? null);
   const selectedThreadLiveStatus = createMemo(() => selectedThread()?.status ?? 'idle');
@@ -811,18 +869,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && approvalActionIsPrimarySurface(action)
       && trimString(action.action_id) !== composerActionID
     ));
-  });
-  const selectedApprovalActionsByToolID = createMemo(() => {
-    const out = new Map<string, readonly FlowerApprovalAction[]>();
-    for (const action of selectedApprovalActions()) {
-      if (approvalActionIsDelegated(action) && approvalActionIsPrimarySurface(action)) continue;
-      const toolID = trimString(action.tool_id);
-      const runID = trimString(action.run_id);
-      if (!toolID || !runID) continue;
-      const key = `${runID}\x1f${toolID}`;
-      out.set(key, [...(out.get(key) ?? []), action]);
-    }
-    return out;
   });
   const pendingTurnsForThread = (threadID: string): readonly PendingFlowerTurn[] => {
     const tid = trimString(threadID) || PENDING_NEW_THREAD_ID;
@@ -1642,11 +1688,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!tid) return;
     const interruptionRevision = transcriptScroll.userInterruptionRevision();
     requestTranscriptAnimationFrame(() => {
-      requestTranscriptAnimationFrame(() => {
-        if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
-        if (transcriptScroll.userInterruptionRevision() !== interruptionRevision) return;
-        transcriptScroll.scheduleTailScroll({ smooth: false, force: true });
-      });
+      if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
+      if (selectedThreadTailRevealIsCurrent(tid, sequence)) {
+        settleSelectedThreadTailReveal(tid, sequence);
+        return;
+      }
+      if (transcriptScroll.userInterruptionRevision() !== interruptionRevision) return;
+      transcriptScroll.scheduleTailScroll({ smooth: false });
     });
   };
 
@@ -1821,8 +1869,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const sequence = ++threadLoadSequence;
     const existing = threads().find((thread) => thread.thread_id === tid) ?? null;
     transcriptScroll.startFollowing();
+    beginSelectedThreadTailReveal(tid, sequence);
     setSelectedThreadID(tid);
-    scrollSelectedThreadToLatestAfterLayout(tid, sequence);
+    scheduleSelectedThreadTailReveal(tid, sequence);
     setChatSubmitError('');
     setInputSubmitError('');
     setPermissionSubmitError('');
@@ -1843,11 +1892,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setSelectedThreadID(thread.thread_id);
       setLoadingThreadID('');
       setTranscriptLayoutRevision((revision) => revision + 1);
-      scrollSelectedThreadToLatestAfterLayout(thread.thread_id, sequence);
+      if (selectedThreadTailRevealIsCurrent(thread.thread_id, sequence)) {
+        scheduleSelectedThreadTailReveal(thread.thread_id, sequence);
+      } else {
+        scrollSelectedThreadToLatestAfterLayout(thread.thread_id, sequence);
+      }
       requestComposerFocus();
     } catch (error) {
       if (sequence !== threadLoadSequence) return;
       setLoadingThreadID('');
+      if (selectedThreadTailRevealIsCurrent(tid, sequence)) {
+        cancelSelectedThreadTailReveal();
+      }
       setThreadLoadError(getErrorMessage(error));
     }
   };
@@ -2664,6 +2720,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     threadLoadSequence += 1;
     transcriptScroll.startFollowing();
+    cancelSelectedThreadTailReveal();
     closeSubagentOverlays();
     setSelectedThreadID('');
     clearPendingTurns();
@@ -2708,12 +2765,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     void loadAndSelectThread(threadID);
   };
 
-  const updateTranscriptNearBottom = () => transcriptScroll.onScroll();
-  const updateTranscriptFollowFromWheel = (event: WheelEvent) => transcriptScroll.onWheel(event);
+  const updateTranscriptNearBottom = (event?: Event) => {
+    if (selectedThreadTailPreparing() && event?.isTrusted) {
+      cancelSelectedThreadTailReveal();
+    }
+    transcriptScroll.onScroll();
+  };
+  const updateTranscriptFollowFromWheel = (event: WheelEvent) => {
+    if (selectedThreadTailPreparing() && event.deltaY < 0) {
+      cancelSelectedThreadTailReveal();
+    }
+    transcriptScroll.onWheel(event);
+  };
+  const updateTranscriptFollowFromTouch = () => {
+    if (selectedThreadTailPreparing()) {
+      cancelSelectedThreadTailReveal();
+    }
+  };
   const scrollTranscriptToBottom = (options: Readonly<{ smooth?: boolean }> = {}) => transcriptScroll.scrollToBottom(options);
   const measureTranscriptNearBottomAfterLayout = () => transcriptScroll.measureAfterLayout();
   const scheduleTranscriptTailScroll = () => transcriptScroll.scheduleTailScroll();
   onCleanup(() => {
+    clearSelectedThreadTailRevealSchedule();
     transcriptScroll.dispose();
     subagentDetailScroll.dispose();
     if (copiedMessageResetTimer !== undefined) {
@@ -3134,6 +3207,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectedThreadHasModelStatus = createMemo(() => selectedModelIOStatus() != null);
   const showScrollToLatestButton = createMemo(() => (
     (selectedThreadHasContent() || selectedThreadHasModelStatus())
+    && !selectedThreadTailPreparing()
     && !transcriptScroll.nearBottom()
   ));
   createEffect(() => {
@@ -4108,7 +4182,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const value = presentation();
       return value.primaryAction ?? (value.title.kind === 'file' ? disabledFileAction(value.title.display_name) : null);
     });
-    const matchingApprovals = createMemo(() => selectedApprovalActionsByToolID().get(`${trimString(timeline().run_id)}\x1f${trimString(item().tool_id)}`) ?? []);
     const duration = createMemo(() => {
       const value = item();
       return formatActivityDuration((value.started_at_unix_ms && value.ended_at_unix_ms
@@ -4864,7 +4937,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         onClose={() => setPreviewChip(null)}
       />
       <div class="flower-chat-main flower-chat-main">
-        <div ref={(node) => { transcriptScroll.bind(node); }} class="flower-chat-transcript flower-chat-transcript" onScroll={updateTranscriptNearBottom} onWheel={updateTranscriptFollowFromWheel}>
+        <div
+          ref={(node) => { transcriptScroll.bind(node); }}
+          class="flower-chat-transcript flower-chat-transcript"
+          data-flower-tail-preparing={selectedThreadTailPreparing() ? 'true' : undefined}
+          aria-busy={selectedThreadTailPreparing() ? 'true' : undefined}
+          onScroll={updateTranscriptNearBottom}
+          onWheel={updateTranscriptFollowFromWheel}
+          onTouchMove={updateTranscriptFollowFromTouch}
+        >
           <div class="flower-transcript-stack">
             <Show when={loadError()}>
               {(message) => errorNotice(copy().chat.loadErrorTitle, message())}

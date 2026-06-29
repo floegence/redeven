@@ -6,10 +6,15 @@ import { describe, expect, it } from 'vitest';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const surfacePath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'FlowerSurface.tsx');
+const flowerCssPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'styles', 'flower.css');
 const compactionDividerPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'chat', 'FlowerContextCompactionDivider.tsx');
 
 function surfaceSource(): string {
   return fs.readFileSync(surfacePath, 'utf8');
+}
+
+function flowerCssSource(): string {
+  return fs.readFileSync(flowerCssPath, 'utf8');
 }
 
 function compactionDividerSource(): string {
@@ -152,6 +157,22 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('scrollTranscriptToBottom({ smooth: true });');
     expect(src).toContain('TRANSCRIPT_SCROLL_TO_LATEST_MS');
     expect(src).toContain('captureWasNearBottom');
+  });
+
+  it('keeps selected thread tail reveal hidden without collapsing transcript layout', () => {
+    const src = surfaceSource();
+    const css = flowerCssSource();
+    const preparingRuleStart = css.indexOf('.flower-chat-transcript[data-flower-tail-preparing="true"] .flower-transcript-stack');
+    const preparingRuleEnd = css.indexOf('}', preparingRuleStart);
+    const preparingRule = css.slice(preparingRuleStart, preparingRuleEnd);
+
+    expect(src).toContain("data-flower-tail-preparing={selectedThreadTailPreparing() ? 'true' : undefined}");
+    expect(src).toContain("aria-busy={selectedThreadTailPreparing() ? 'true' : undefined}");
+    expect(src).toContain('&& !selectedThreadTailPreparing()');
+    expect(preparingRuleStart).toBeGreaterThanOrEqual(0);
+    expect(preparingRule).toContain('visibility: hidden');
+    expect(preparingRule).toContain('pointer-events: none');
+    expect(preparingRule).not.toContain('display: none');
   });
 
   it('adds copy actions and user message time metadata to chat messages', () => {
