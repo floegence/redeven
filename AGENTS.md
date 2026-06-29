@@ -225,9 +225,11 @@ Rules:
 
 ## ReDevPlugin Boundary
 
-`redevplugin` is the reusable plugin platform. It owns the shared plugin runtime
-implementation and publishes versioned Go, TypeScript, Rust runtime, and
-machine-contract artifacts for host products to consume.
+`redevplugin` is the reusable plugin platform. It is an independently released
+library/runtime repository, not a Redeven source directory, submodule, or
+implementation detail. It owns the shared plugin runtime implementation and
+publishes versioned Go, TypeScript, Rust runtime, and machine-contract artifacts
+for host products to consume.
 
 `redeven` is a host product and must consume `redevplugin` through published
 artifacts only:
@@ -238,6 +240,13 @@ artifacts only:
 - signed `redevplugin-runtime` release artifacts for each supported platform;
 - released OpenAPI, manifest, token/ticket, Rust IPC, WASM ABI, and classifier
   contract hashes.
+
+Redeven integration code should be thin host glue over those released artifacts:
+configuration, route mounting, adapter registration, product UI placement,
+release-artifact selection, and business capability implementations. Public
+plugin-platform mechanics belong upstream in `redevplugin`, including lifecycle
+endpoints, package schemas, bridge protocol, storage/network/runtime brokers,
+operation/stream envelopes, runtime supervision, generated SDKs, and validators.
 
 Do not use `replace`, `go.work`, `go.work.sum`, local sibling paths,
 package-manager links, local npm workspace wiring, Rust path overrides, copied
@@ -281,6 +290,11 @@ Redeven owns only product integration and business adapters:
 - product-level plugin generation UX: collecting user intent, choosing an
   environment, showing approval/review states, and invoking released
   ReDevPlugin templates, validators, package builders, and lifecycle APIs.
+
+Redeven may add product-facing wrappers such as `redeven plugin ...` commands or
+Env App pages, but those wrappers must delegate to released ReDevPlugin APIs.
+If a wrapper needs a new platform capability, add and release that capability in
+`redevplugin` before wiring it into Redeven.
 
 Use this responsibility matrix as the default decision rule:
 
@@ -375,6 +389,10 @@ Use this checklist when reviewing any Redeven plugin integration change:
   token issuer, asset-ticket system, storage broker, network broker, runtime
   IPC layer, runtime supervisor, WASM executor, stream envelope, operation
   manager, or plugin lifecycle state machine.
+- Redeven may expose product routes or CLI commands for plugin management, but
+  platform-management handlers must be released ReDevPlugin handlers or thin
+  wrappers around them. Do not create Redeven-local endpoint semantics that are
+  not present in the ReDevPlugin contract.
 - Redeven may register business capability adapters such as containers, files,
   shell, cloud, or database access. Each adapter must receive a request context
   that has already passed ReDevPlugin identity, permission, confirmation,
