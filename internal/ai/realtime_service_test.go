@@ -2031,7 +2031,7 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 				ItemID:           "item_live_approval_seq",
 				ToolID:           "tool_live_approval_seq",
 				ToolName:         "terminal.exec",
-				Kind:             observation.ActivityKindApproval,
+				Kind:             observation.ActivityKindTool,
 				Status:           observation.ActivityStatusWaiting,
 				Severity:         observation.ActivitySeverityBlocking,
 				NeedsAttention:   true,
