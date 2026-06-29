@@ -1514,6 +1514,10 @@ func (h *fakeCloseAllFloretHost) CompletePendingTool(context.Context, flruntime.
 	return flruntime.TurnResult{}, nil
 }
 
+func (h *fakeCloseAllFloretHost) SettlePendingTool(context.Context, flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
+	return flruntime.PendingToolSettlementResult{}, errors.New("settle pending tool not implemented")
+}
+
 func (h *fakeCloseAllFloretHost) SpawnSubAgent(context.Context, flruntime.SpawnSubAgentRequest) (flruntime.SubAgentSnapshot, error) {
 	return flruntime.SubAgentSnapshot{}, nil
 }

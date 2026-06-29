@@ -3,6 +3,7 @@ package ai
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
@@ -107,6 +108,93 @@ func TestFlowerBlocksFromFloretThreadProjectionInterleavesTextAndActivity(t *tes
 	secondActivity, ok := blocks[3].(ActivityTimelineBlock)
 	if !ok || len(secondActivity.Items) != 1 || secondActivity.Items[0].ToolID != "call-2" {
 		t.Fatalf("blocks[3]=%T %#v, want second activity segment", blocks[3], blocks[3])
+	}
+}
+
+func TestFlowerBlocksFromFloretThreadProjectionKeepsRequestedApprovalWaiting(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(250, 0)
+	projection := flruntime.ProjectThreadTurn(flruntime.ProjectThreadTurnRequest{
+		RunID:    "run_waiting_approval",
+		ThreadID: "thread_waiting_approval",
+		TurnID:   "msg_waiting_approval",
+		TraceID:  "run_waiting_approval",
+		Events: []flruntime.ThreadDetailEvent{
+			{
+				ID:        "approval-requested",
+				Ordinal:   1,
+				ThreadID:  "thread_waiting_approval",
+				TurnID:    "msg_waiting_approval",
+				Kind:      flruntime.ThreadDetailEventApproval,
+				Type:      observation.EventTypeToolApprovalRequested,
+				CreatedAt: now,
+				Approval:  &flruntime.ThreadDetailApproval{State: "requested", ToolID: "exec-1", ToolName: "terminal.exec"},
+				ActivityTimeline: floretProjectionApprovalTimeline(
+					"run_waiting_approval",
+					"thread_waiting_approval",
+					"msg_waiting_approval",
+					"exec-1",
+					"curl -s https://example.test",
+				),
+			},
+			{
+				ID:        "turn-success",
+				Ordinal:   2,
+				ThreadID:  "thread_waiting_approval",
+				TurnID:    "msg_waiting_approval",
+				Kind:      flruntime.ThreadDetailEventTurnMarker,
+				CreatedAt: now.Add(time.Second),
+				TurnMarker: &flruntime.ThreadDetailTurnMarker{
+					Status: string(observation.ActivityStatusSuccess),
+				},
+			},
+		},
+	})
+
+	r := newRun(runOptions{})
+	blocks := r.flowerBlocksFromFloretThreadProjection(projection)
+	if len(blocks) != 1 {
+		t.Fatalf("blocks len=%d, want one activity block: %#v", len(blocks), blocks)
+	}
+	block, ok := blocks[0].(ActivityTimelineBlock)
+	if !ok || len(block.Items) != 1 {
+		t.Fatalf("blocks[0]=%T %#v, want activity timeline", blocks[0], blocks[0])
+	}
+	item := block.Items[0]
+	if block.Summary.Status != observation.ActivityStatusWaiting ||
+		block.Summary.Counts.Success != 0 ||
+		item.Status != observation.ActivityStatusWaiting ||
+		item.ApprovalState != "requested" ||
+		item.EndedAtUnixMS != 0 ||
+		item.Label != "curl -s https://example.test" {
+		t.Fatalf("approval activity should remain waiting: summary=%#v item=%#v", block.Summary, item)
+	}
+}
+
+func TestFlowerBlocksFromFloretThreadProjectionRejectsInvalidActivityTimeline(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	r.id = "run_invalid_projection"
+	r.threadID = "thread_invalid_projection"
+	r.messageID = "msg_invalid_projection"
+	blocks := r.flowerBlocksFromFloretThreadProjection(flruntime.ThreadTurnProjection{
+		RunID:    "run_invalid_projection",
+		ThreadID: "thread_invalid_projection",
+		TurnID:   "msg_invalid_projection",
+		TraceID:  "run_invalid_projection",
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind: flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: floretProjectionInvalidRequestedApprovalTimeline(
+				"run_invalid_projection",
+				"thread_invalid_projection",
+				"msg_invalid_projection",
+			),
+		}},
+	})
+	if len(blocks) != 0 {
+		t.Fatalf("blocks=%#v, want invalid activity timeline rejected", blocks)
 	}
 }
 
@@ -290,4 +378,49 @@ func floretProjectionTimeline(runID string, threadID string, turnID string, tool
 		}},
 	}
 	return &timeline
+}
+
+func floretProjectionApprovalTimeline(runID string, threadID string, turnID string, toolID string, label string) *observation.ActivityTimeline {
+	timeline := observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		RunID:         runID,
+		ThreadID:      threadID,
+		TurnID:        turnID,
+		TraceID:       runID,
+		Summary: observation.ActivitySummary{
+			Status:         observation.ActivityStatusWaiting,
+			Severity:       observation.ActivitySeverityBlocking,
+			NeedsAttention: true,
+			TotalItems:     1,
+			Counts:         observation.ActivityCounts{Waiting: 1, Approval: 1},
+		},
+		Items: []observation.ActivityItem{{
+			ItemID:           "approval:" + toolID,
+			ToolID:           toolID,
+			ToolName:         "terminal.exec",
+			Kind:             observation.ActivityKindApproval,
+			Status:           observation.ActivityStatusWaiting,
+			Severity:         observation.ActivitySeverityBlocking,
+			NeedsAttention:   true,
+			RequiresApproval: true,
+			ApprovalState:    "requested",
+			Label:            label,
+			Renderer:         observation.ActivityRendererTerminal,
+			Payload:          map[string]any{"command": label},
+		}},
+	}
+	return &timeline
+}
+
+func floretProjectionInvalidRequestedApprovalTimeline(runID string, threadID string, turnID string) *observation.ActivityTimeline {
+	timeline := floretProjectionApprovalTimeline(runID, threadID, turnID, "exec-1", "curl -s https://example.test")
+	timeline.Summary.Status = observation.ActivityStatusSuccess
+	timeline.Summary.Severity = observation.ActivitySeverityNormal
+	timeline.Summary.NeedsAttention = false
+	timeline.Summary.Counts = observation.ActivityCounts{Success: 1, Approval: 1}
+	timeline.Items[0].Status = observation.ActivityStatusSuccess
+	timeline.Items[0].Severity = observation.ActivitySeverityNormal
+	timeline.Items[0].NeedsAttention = false
+	timeline.Items[0].EndedAtUnixMS = 20
+	return timeline
 }

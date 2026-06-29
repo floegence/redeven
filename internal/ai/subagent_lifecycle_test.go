@@ -131,6 +131,10 @@ func (h *recordingFloretHost) CompletePendingTool(context.Context, flruntime.Pen
 	return flruntime.TurnResult{}, nil
 }
 
+func (h *recordingFloretHost) SettlePendingTool(context.Context, flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
+	return flruntime.PendingToolSettlementResult{}, errors.New("settle pending tool not implemented")
+}
+
 func (h *recordingFloretHost) SpawnSubAgent(_ context.Context, req flruntime.SpawnSubAgentRequest) (flruntime.SubAgentSnapshot, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

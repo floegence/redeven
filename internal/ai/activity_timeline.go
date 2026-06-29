@@ -268,10 +268,7 @@ func (r *run) publishActivityTimelineWithSidecars(timeline observation.ActivityT
 	if len(timeline.Items) == 0 {
 		return
 	}
-	if err := observation.ValidateActivityTimeline(timeline); err != nil {
-		r.persistRunEvent("activity.timeline.invalid", RealtimeStreamKindTool, map[string]any{
-			"error": sanitizeLogText(err.Error(), 240),
-		})
+	if !r.validateActivityTimelineForProjection(timeline, "live_activity") {
 		return
 	}
 	idx := r.ensureActivitySegmentBlockIndex(-1)
@@ -296,6 +293,20 @@ func (r *run) publishActivityTimelineWithSidecars(timeline observation.ActivityT
 		"total_items":     timeline.Summary.TotalItems,
 	})
 	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+}
+
+func (r *run) validateActivityTimelineForProjection(timeline observation.ActivityTimeline, source string) bool {
+	if r == nil {
+		return false
+	}
+	if err := observation.ValidateActivityTimeline(timeline); err != nil {
+		r.persistRunEvent("activity.timeline.invalid", RealtimeStreamKindTool, map[string]any{
+			"source": strings.TrimSpace(source),
+			"error":  sanitizeLogText(err.Error(), 240),
+		})
+		return false
+	}
+	return true
 }
 
 func (r *run) normalizeActivityTimeline(timeline observation.ActivityTimeline) observation.ActivityTimeline {
