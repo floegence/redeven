@@ -2,6 +2,7 @@ import type {
   FlowerActivityFileAction as FlowerActivityFileActionRecord,
   FlowerActivityItem,
   FlowerActivityRenderer,
+  FlowerActivitySubagentAction as FlowerActivitySubagentActionRecord,
 } from './contracts/flowerSurfaceContracts';
 import type { FlowerSubagentsCopy } from './copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
@@ -97,6 +98,10 @@ export type FlowerActivityPresentation = Readonly<{
 
 type FlowerActivityPresentationCopy = Readonly<{
   subagents?: FlowerSubagentsCopy;
+}>;
+
+type FlowerActivityPresentationSidecars = Readonly<{
+  subagentAction?: FlowerActivitySubagentActionRecord;
 }>;
 
 const DETAIL_LABELS: Readonly<Record<string, string>> = {
@@ -484,7 +489,25 @@ function metaForTerminalItem(item: FlowerActivityItem): string {
   return Array.from(new Set(parts)).join(' · ');
 }
 
-function isSubagentsActivityItem(item: FlowerActivityItem): boolean {
+function sidecarRecord(value: FlowerActivitySubagentActionRecord | undefined): Readonly<Record<string, unknown>> {
+  return value && typeof value === 'object' ? value as Readonly<Record<string, unknown>> : {};
+}
+
+function subagentPayloadForItem(item: FlowerActivityItem, subagentAction?: FlowerActivitySubagentActionRecord): Readonly<Record<string, unknown>> {
+  const payload = item.payload ?? {};
+  if (!subagentAction) return payload;
+  const sidecar = sidecarRecord(subagentAction);
+  return {
+    ...payload,
+    ...sidecar,
+    operation: payloadValue(payload, 'operation') || payloadValue(sidecar, 'operation') || 'subagents',
+    action: payloadValue(payload, 'action') || payloadValue(sidecar, 'action'),
+    delegation_runtime: payloadValue(payload, 'delegation_runtime') || payloadValue(sidecar, 'delegation_runtime') || 'floret',
+  };
+}
+
+function isSubagentsActivityItem(item: FlowerActivityItem, subagentAction?: FlowerActivitySubagentActionRecord): boolean {
+  if (subagentAction) return true;
   const payload = item.payload ?? {};
   return trimString(item.tool_name) === 'subagents'
     || payloadValue(payload, 'operation') === 'subagents'
@@ -756,13 +779,15 @@ function subagentTypeLabel(agentType: string, copy?: FlowerActivityPresentationC
   }
 }
 
-function subagentTitleText(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): string {
-  const payload = item.payload ?? {};
+function subagentTitleText(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy, subagentAction?: FlowerActivitySubagentActionRecord): string {
+  const payload = subagentPayloadForItem(item, subagentAction);
   const action = payloadValue(payload, 'action');
   const directTitle = payloadValue(payload, 'task_name', 'title', 'target', 'subagent_id', 'thread_id');
   const verbs = subagentsCopy(copy).activity.titleVerbs;
-  if (action === 'spawn' && directTitle) return `${verbs.spawn} ${directTitle}`;
-  if ((action === 'send_input' || action === 'close') && directTitle) return `${verbs[action]} ${directTitle}`;
+  if (directTitle) {
+    const verb = action ? verbs[action as keyof typeof verbs] ?? subagentActionLabel(action, copy) : '';
+    return verb ? `${verb} ${directTitle}` : directTitle;
+  }
   const nested = nestedSubagentRecords(payload);
   if (nested.length === 1) {
     const title = payloadValue(nested[0], 'task_name', 'title', 'subagent_id', 'thread_id');
@@ -774,8 +799,8 @@ function subagentTitleText(item: FlowerActivityItem, copy?: FlowerActivityPresen
   return verb || trimString(item.label) || subagentActionLabel(action, copy);
 }
 
-function metaForSubagents(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): string {
-  const payload = item.payload ?? {};
+function metaForSubagents(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy, subagentAction?: FlowerActivitySubagentActionRecord): string {
+  const payload = subagentPayloadForItem(item, subagentAction);
   const nested = nestedSubagentRecords(payload);
   const primary = nested[0] ?? {};
   const action = payloadValue(payload, 'action');
@@ -793,9 +818,9 @@ function metaForSubagents(item: FlowerActivityItem, copy?: FlowerActivityPresent
   return Array.from(new Set(parts)).join(' · ');
 }
 
-function presentationForSubagents(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
-  const payload = item.payload ?? {};
-  const title: FlowerActivityTitle = { kind: 'plain', text: subagentTitleText(item, copy) };
+function presentationForSubagents(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy, subagentAction?: FlowerActivitySubagentActionRecord): FlowerActivityPresentation {
+  const payload = subagentPayloadForItem(item, subagentAction);
+  const title: FlowerActivityTitle = { kind: 'plain', text: subagentTitleText(item, copy, subagentAction) };
   const lines: FlowerActivityDetailLine[] = [];
   if (item.requires_approval) {
     lines.push({ label: subagentsCopy(copy).activity.labels.approval, value: trimString(item.approval_state) || 'requested' });
@@ -812,7 +837,7 @@ function presentationForSubagents(item: FlowerActivityItem, copy?: FlowerActivit
   return {
     label: title.text,
     title,
-    meta: metaForSubagents(item, copy),
+    meta: metaForSubagents(item, copy, subagentAction),
     detailLines,
     detailBlocks: [{ kind: 'structured', lines: detailLines }],
   };
@@ -1021,9 +1046,9 @@ function titleForGenericItem(item: FlowerActivityItem, renderer: FlowerActivityR
   }
 }
 
-export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
+export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions, copy?: FlowerActivityPresentationCopy, sidecars?: FlowerActivityPresentationSidecars): FlowerActivityPresentation {
   const renderer = rendererForItem(item);
-  if (isSubagentsActivityItem(item)) return presentationForSubagents(item, copy);
+  if (isSubagentsActivityItem(item, sidecars?.subagentAction)) return presentationForSubagents(item, copy, sidecars?.subagentAction);
   if (renderer === 'file') return presentationForFile(item, fileActions);
   if (renderer === 'patch') return presentationForPatch(item, fileActions);
   if (renderer === 'todos') return presentationForTodos(item);

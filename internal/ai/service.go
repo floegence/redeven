@@ -636,7 +636,7 @@ func isFloretThreadNotFoundError(err error) bool {
 	if err == nil {
 		return false
 	}
-	return strings.Contains(strings.ToLower(err.Error()), "thread not found")
+	return errors.Is(err, flruntime.ErrThreadNotFound)
 }
 
 func (s *Service) openFloretLifecycleHost() (flruntime.Host, error) {

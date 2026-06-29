@@ -12,18 +12,24 @@ import (
 const activityTimelineBlockType = "activity-timeline"
 
 type ActivityTimelineBlock struct {
-	Type        string                              `json:"type"`
-	FileActions map[string]FlowerActivityFileAction `json:"file_actions,omitempty"`
+	Type            string                                  `json:"type"`
+	FileActions     map[string]FlowerActivityFileAction     `json:"file_actions,omitempty"`
+	SubagentActions map[string]FlowerActivitySubagentAction `json:"subagent_actions,omitempty"`
 	observation.ActivityTimeline
 }
 
 func newActivityTimelineBlock(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction) ActivityTimelineBlock {
+	return newActivityTimelineBlockWithSidecars(timeline, fileActions, nil)
+}
+
+func newActivityTimelineBlockWithSidecars(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction, subagentActions map[string]FlowerActivitySubagentAction) ActivityTimelineBlock {
 	if timeline.SchemaVersion <= 0 {
 		timeline.SchemaVersion = observation.ActivityTimelineSchemaVersion
 	}
 	return ActivityTimelineBlock{
 		Type:             activityTimelineBlockType,
 		FileActions:      cloneFlowerActivityFileActions(fileActions),
+		SubagentActions:  cloneFlowerActivitySubagentActions(subagentActions),
 		ActivityTimeline: timeline,
 	}
 }
@@ -43,6 +49,61 @@ func cloneFlowerActivityFileActions(in map[string]FlowerActivityFileAction) map[
 		value.PreviewPath = strings.TrimSpace(value.PreviewPath)
 		value.DirectoryPath = strings.TrimSpace(value.DirectoryPath)
 		if value.ActionID == "" || value.DisplayName == "" {
+			continue
+		}
+		out[key] = value
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+type FlowerActivitySubagentAction struct {
+	Operation         string `json:"operation,omitempty"`
+	Action            string `json:"action,omitempty"`
+	DelegationRuntime string `json:"delegation_runtime,omitempty"`
+	ThreadID          string `json:"thread_id,omitempty"`
+	SubagentID        string `json:"subagent_id,omitempty"`
+	ParentThreadID    string `json:"parent_thread_id,omitempty"`
+	TaskName          string `json:"task_name,omitempty"`
+	Title             string `json:"title,omitempty"`
+	AgentType         string `json:"agent_type,omitempty"`
+	ContextMode       string `json:"context_mode,omitempty"`
+	Status            string `json:"status,omitempty"`
+	LastMessage       string `json:"last_message,omitempty"`
+	WaitingPrompt     string `json:"waiting_prompt,omitempty"`
+	QueuedInputs      int    `json:"queued_inputs,omitempty"`
+	CanSendInput      bool   `json:"can_send_input,omitempty"`
+	CanInterrupt      bool   `json:"can_interrupt,omitempty"`
+	CanClose          bool   `json:"can_close,omitempty"`
+	UpdatedAtMS       int64  `json:"updated_at_ms,omitempty"`
+}
+
+func cloneFlowerActivitySubagentActions(in map[string]FlowerActivitySubagentAction) map[string]FlowerActivitySubagentAction {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]FlowerActivitySubagentAction, len(in))
+	for key, value := range in {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		value.Operation = strings.TrimSpace(value.Operation)
+		value.Action = strings.TrimSpace(value.Action)
+		value.DelegationRuntime = strings.TrimSpace(value.DelegationRuntime)
+		value.ThreadID = strings.TrimSpace(value.ThreadID)
+		value.SubagentID = strings.TrimSpace(value.SubagentID)
+		value.ParentThreadID = strings.TrimSpace(value.ParentThreadID)
+		value.TaskName = strings.TrimSpace(value.TaskName)
+		value.Title = strings.TrimSpace(value.Title)
+		value.AgentType = strings.TrimSpace(value.AgentType)
+		value.ContextMode = strings.TrimSpace(value.ContextMode)
+		value.Status = strings.TrimSpace(value.Status)
+		value.LastMessage = strings.TrimSpace(value.LastMessage)
+		value.WaitingPrompt = strings.TrimSpace(value.WaitingPrompt)
+		if value.Operation == "" && value.Action == "" && value.ThreadID == "" && value.SubagentID == "" {
 			continue
 		}
 		out[key] = value
@@ -197,6 +258,10 @@ func modelIOEndsBeforeActivity(eventType string) bool {
 }
 
 func (r *run) publishActivityTimeline(timeline observation.ActivityTimeline) {
+	r.publishActivityTimelineWithSidecars(timeline, nil)
+}
+
+func (r *run) publishActivityTimelineWithSidecars(timeline observation.ActivityTimeline, subagentActions map[string]FlowerActivitySubagentAction) {
 	if r == nil {
 		return
 	}
@@ -218,7 +283,7 @@ func (r *run) publishActivityTimeline(timeline observation.ActivityTimeline) {
 		return
 	}
 	fileActions := r.activityTimelineFileActions(timeline)
-	block := newActivityTimelineBlock(timeline, fileActions)
+	block := newActivityTimelineBlockWithSidecars(timeline, fileActions, subagentActions)
 	r.muAssistant.Lock()
 	r.persistEnsureIndex(idx)
 	r.assistantBlocks[idx] = block

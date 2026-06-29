@@ -9,6 +9,7 @@ import type {
   FlowerActivityRenderer,
   FlowerActivitySeverity,
   FlowerActivityStatus,
+  FlowerActivitySubagentAction,
   FlowerActivityTargetRef,
   FlowerActivityTimelineBlock,
   FlowerChatMessage,
@@ -651,6 +652,70 @@ function mapActivityFileActions(raw: unknown): Readonly<Record<string, FlowerAct
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+function mapActivitySubagentAction(raw: unknown, actionKey: string): FlowerActivitySubagentAction | null {
+  const record = plainRecordValue(raw);
+  if (!record) return null;
+  const allowed = new Set([
+    'operation',
+    'action',
+    'delegation_runtime',
+    'thread_id',
+    'subagent_id',
+    'parent_thread_id',
+    'task_name',
+    'title',
+    'agent_type',
+    'context_mode',
+    'status',
+    'last_message',
+    'waiting_prompt',
+    'queued_inputs',
+    'can_send_input',
+    'can_interrupt',
+    'can_close',
+    'updated_at_ms',
+  ]);
+  for (const key of Object.keys(record)) {
+    if (!allowed.has(key)) {
+      throw new Error(`Flower contract error: activity_timeline.subagent_actions.${actionKey}.${key} is not part of the subagent action contract.`);
+    }
+  }
+  const out = {
+    ...(trim(record.operation) ? { operation: trim(record.operation) } : {}),
+    ...(trim(record.action) ? { action: trim(record.action) } : {}),
+    ...(trim(record.delegation_runtime) ? { delegation_runtime: trim(record.delegation_runtime) } : {}),
+    ...(trim(record.thread_id) ? { thread_id: trim(record.thread_id) } : {}),
+    ...(trim(record.subagent_id) ? { subagent_id: trim(record.subagent_id) } : {}),
+    ...(trim(record.parent_thread_id) ? { parent_thread_id: trim(record.parent_thread_id) } : {}),
+    ...(trim(record.task_name) ? { task_name: trim(record.task_name) } : {}),
+    ...(trim(record.title) ? { title: trim(record.title) } : {}),
+    ...(trim(record.agent_type) ? { agent_type: trim(record.agent_type) } : {}),
+    ...(trim(record.context_mode) ? { context_mode: trim(record.context_mode) } : {}),
+    ...(trim(record.status) ? { status: trim(record.status) } : {}),
+    ...(trim(record.last_message) ? { last_message: trim(record.last_message) } : {}),
+    ...(trim(record.waiting_prompt) ? { waiting_prompt: trim(record.waiting_prompt) } : {}),
+    ...(integerOrZero(record.queued_inputs) ? { queued_inputs: integerOrZero(record.queued_inputs) } : {}),
+    ...(record.can_send_input ? { can_send_input: true } : {}),
+    ...(record.can_interrupt ? { can_interrupt: true } : {}),
+    ...(record.can_close ? { can_close: true } : {}),
+    ...(positiveInteger(record.updated_at_ms) ? { updated_at_ms: positiveInteger(record.updated_at_ms) } : {}),
+  };
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+function mapActivitySubagentActions(raw: unknown): FlowerActivityTimelineBlock['subagent_actions'] | undefined {
+  const record = plainRecordValue(raw);
+  if (!record) return undefined;
+  const out: Record<string, FlowerActivitySubagentAction> = {};
+  for (const [key, value] of Object.entries(record)) {
+    const actionKey = trim(key);
+    if (!actionKey) continue;
+    const action = mapActivitySubagentAction(value, actionKey);
+    if (action) out[actionKey] = action;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | null {
   const record = plainRecordValue(raw);
   if (!record || trim(record.type) !== 'activity-timeline') return null;
@@ -658,6 +723,7 @@ function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | n
   const summary = plainRecordValue(record.summary) ?? {};
   const attention = activityAttentionReasonArray(summary.attention_reasons);
   const fileActions = mapActivityFileActions(record.file_actions);
+  const subagentActions = mapActivitySubagentActions(record.subagent_actions);
   return {
     type: 'activity-timeline',
     schema_version: positiveInteger(record.schema_version) ?? 1,
@@ -676,6 +742,7 @@ function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | n
     },
     items,
     ...(fileActions ? { file_actions: fileActions } : {}),
+    ...(subagentActions ? { subagent_actions: subagentActions } : {}),
   };
 }
 

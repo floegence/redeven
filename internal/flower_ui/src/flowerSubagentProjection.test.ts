@@ -96,6 +96,52 @@ describe('buildFlowerSubagentPanelItems', () => {
     });
   });
 
+  it('projects subagents from activity timeline sidecars without Flower fields in payload', () => {
+    const block = timeline([
+      activityItem({
+        item_id: 'subagent:review-api',
+        tool_name: 'subagents',
+        status: 'success',
+        payload: {
+          thread_id: 'child-1',
+          task_name: 'Review API',
+          host_profile_ref: 'reviewer',
+          fork_mode: 'none',
+          status: 'completed',
+        },
+      }),
+    ]);
+    const items = buildFlowerSubagentPanelItems(thread([{
+      ...block,
+      subagent_actions: {
+        'subagent:review-api': {
+          operation: 'subagents',
+          action: 'inspect',
+          delegation_runtime: 'floret',
+          thread_id: 'child-1',
+          subagent_id: 'child-1',
+          task_name: 'Review API',
+          agent_type: 'reviewer',
+          context_mode: 'mission_only',
+          status: 'completed',
+          last_message: 'Done.',
+          updated_at_ms: 120,
+        },
+      },
+    }]));
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      threadID: 'child-1',
+      title: 'Review API',
+      agentType: 'reviewer',
+      status: 'completed',
+      lastMessage: 'Done.',
+      action: 'inspect',
+      canOpen: true,
+    });
+  });
+
   it('merges later updates and keeps active subagents before settled ones', () => {
     const items = buildFlowerSubagentPanelItems(thread([timeline([
       activityItem({

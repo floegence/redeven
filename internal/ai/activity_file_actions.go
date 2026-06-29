@@ -276,6 +276,7 @@ func sanitizeActivityTimelineBlockRecord(block map[string]any) {
 			delete(item, "payload")
 		}
 	}
+	sanitizeActivitySubagentActionsRecord(block)
 	actions, ok := block["file_actions"].(map[string]any)
 	if !ok || len(actions) == 0 {
 		delete(block, "file_actions")
@@ -304,6 +305,60 @@ func sanitizeActivityTimelineBlockRecord(block map[string]any) {
 		return
 	}
 	block["file_actions"] = publicActions
+}
+
+func sanitizeActivitySubagentActionsRecord(block map[string]any) {
+	actions, ok := block["subagent_actions"].(map[string]any)
+	if !ok || len(actions) == 0 {
+		delete(block, "subagent_actions")
+		return
+	}
+	allowed := activitySubagentActionAllowedKeys()
+	publicActions := make(map[string]any, len(actions))
+	for key, value := range actions {
+		actionKey := strings.TrimSpace(key)
+		record, ok := value.(map[string]any)
+		if actionKey == "" || !ok {
+			continue
+		}
+		publicRecord := make(map[string]any, len(record))
+		for field, fieldValue := range record {
+			field = strings.TrimSpace(field)
+			if _, ok := allowed[field]; !ok {
+				continue
+			}
+			switch v := fieldValue.(type) {
+			case string:
+				if trimmed := strings.TrimSpace(v); trimmed != "" {
+					publicRecord[field] = trimmed
+				}
+			case bool:
+				if v {
+					publicRecord[field] = v
+				}
+			case float64:
+				if v > 0 {
+					publicRecord[field] = v
+				}
+			case int:
+				if v > 0 {
+					publicRecord[field] = v
+				}
+			case int64:
+				if v > 0 {
+					publicRecord[field] = v
+				}
+			}
+		}
+		if len(publicRecord) > 0 {
+			publicActions[actionKey] = publicRecord
+		}
+	}
+	if len(publicActions) == 0 {
+		delete(block, "subagent_actions")
+		return
+	}
+	block["subagent_actions"] = publicActions
 }
 
 func sanitizeActivityTargetRefsValue(value any) []any {
@@ -484,6 +539,10 @@ func activityPayloadAllowedKeys(renderer observation.ActivityRenderer) map[strin
 
 func activityFileMutationAllowedKeys() map[string]struct{} {
 	return stringSet("display_name", "file_action_id", "change_type", "additions", "deletions", "unified_diff", "diff_unavailable_reason", "truncated")
+}
+
+func activitySubagentActionAllowedKeys() map[string]struct{} {
+	return stringSet("operation", "action", "delegation_runtime", "thread_id", "subagent_id", "parent_thread_id", "task_name", "title", "agent_type", "context_mode", "status", "last_message", "waiting_prompt", "queued_inputs", "can_send_input", "can_interrupt", "can_close", "updated_at_ms")
 }
 
 func stringSet(values ...string) map[string]struct{} {
