@@ -41,7 +41,6 @@ const (
 	FlowerLiveMessageBlockSet          FlowerLiveKind = "message.block_set"
 	FlowerLiveMessageCommitted         FlowerLiveKind = "message.committed"
 	FlowerLiveMessageFailed            FlowerLiveKind = "message.failed"
-	FlowerLiveActivityUpdated          FlowerLiveKind = "activity.updated"
 	FlowerLiveApprovalRequested        FlowerLiveKind = "approval.requested"
 	FlowerLiveApprovalResolved         FlowerLiveKind = "approval.resolved"
 	FlowerLiveInputRequested           FlowerLiveKind = "input.requested"
@@ -308,13 +307,6 @@ type FlowerLiveMessageCommittedPayload struct {
 type FlowerLiveMessageFailedPayload struct {
 	MessageID string `json:"message_id"`
 	Error     string `json:"error"`
-}
-
-type FlowerLiveActivityUpdatedPayload struct {
-	RunID      string `json:"run_id"`
-	MessageID  string `json:"message_id"`
-	BlockIndex int    `json:"block_index"`
-	Activity   any    `json:"activity"`
 }
 
 type FlowerApprovalState string

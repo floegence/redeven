@@ -1189,19 +1189,6 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
         message_id: trim(record.message_id),
         error: trim(record.error),
       } as FlowerLiveMessageFailedPayload;
-    case 'activity.updated':
-      {
-        const activity = mapActivityTimelineBlock(record.activity);
-        if (!activity) {
-          throw new Error('Flower contract error: activity.updated requires a valid activity timeline block.');
-        }
-        return {
-        run_id: trim(record.run_id),
-        message_id: trim(record.message_id),
-        block_index: Math.max(0, Math.floor(Number(record.block_index ?? 0))),
-          activity,
-        };
-      }
     case 'approval.requested':
     case 'approval.resolved':
       return { action: mapApprovalAction(record.action) ?? undefined } as FlowerLiveApprovalPayload;
@@ -1260,7 +1247,6 @@ const liveKinds = new Set<FlowerLiveKind>([
   'message.block_set',
   'message.committed',
   'message.failed',
-  'activity.updated',
   'approval.requested',
   'approval.resolved',
   'input.requested',

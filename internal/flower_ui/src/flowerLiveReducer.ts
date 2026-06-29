@@ -556,13 +556,6 @@ export function applyFlowerLiveEvent(
     case 'input.resolved':
       next = { ...next, input_request: null };
       break;
-    case 'activity.updated':
-      {
-        const result = updateMessageStrict(next, event.payload.message_id, (message) => upsertBlock(message, event.payload.block_index, event.payload.activity));
-        next = result.thread;
-        resyncRequired = !result.ok;
-      }
-      break;
     case 'model_io.updated':
       next = withModelIOStatus(next, event.payload.status ?? null, event.run_id);
       break;
