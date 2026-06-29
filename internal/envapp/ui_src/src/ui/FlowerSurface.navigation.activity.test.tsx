@@ -1205,10 +1205,10 @@ describe('FlowerSurface navigation activity', () => {
               severity: 'blocking',
               needs_attention: true,
               items: [activityItem({
-                item_id: 'approval-item',
+                item_id: 'tool-needs-approval',
                 tool_id: 'tool-needs-approval',
                 tool_name: 'terminal.exec',
-                kind: 'approval',
+                kind: 'tool',
                 status: 'waiting',
                 severity: 'blocking',
                 needs_attention: true,
@@ -1248,7 +1248,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(composer.querySelector('textarea')).toBeNull();
     expect(composer.textContent).toContain('pwd; sleep 15; date');
     expect(composer.textContent).toContain('Flower wants to execute a shell command');
-    const row = runtime.querySelector('[data-flower-activity-item-id="approval-item"]') as HTMLElement;
+    const row = runtime.querySelector('[data-flower-activity-item-id="tool-needs-approval"]') as HTMLElement;
     expect(row?.textContent).toContain('pwd; sleep 15; date');
     expect(row?.textContent).not.toContain('terminal.exec');
     expect(runtime.querySelector('.flower-transcript-stack > .flower-approval-stack')).toBeNull();
@@ -1309,10 +1309,10 @@ describe('FlowerSurface navigation activity', () => {
               severity: 'blocking',
               needs_attention: true,
               items: [activityItem({
-                item_id: 'delegated-approval-item',
+                item_id: 'tool-child-shell',
                 tool_id: 'tool-child-shell',
                 tool_name: 'terminal.exec',
-                kind: 'approval',
+                kind: 'tool',
                 status: 'waiting',
                 severity: 'blocking',
                 needs_attention: true,
@@ -1362,7 +1362,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(writeTextToClipboardMock).toHaveBeenCalledWith('npm test -- --runInBand');
     expect(copyButton?.getAttribute('data-copied')).toBe('true');
 
-    const row = runtime.querySelector('[data-flower-activity-item-id="delegated-approval-item"]') as HTMLElement | null;
+    const row = runtime.querySelector('[data-flower-activity-item-id="tool-child-shell"]') as HTMLElement | null;
     expect(row?.querySelector('[data-flower-approval-action-id="dappr-terminal"]')).toBeNull();
     const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-actions button'))
       .find((button) => button.textContent?.trim() === 'Approve');
@@ -1486,10 +1486,10 @@ describe('FlowerSurface navigation activity', () => {
               severity: 'blocking',
               needs_attention: true,
               items: [activityItem({
-                item_id: 'stale-approval-item',
+                item_id: 'tool-stale-approval',
                 tool_id: 'tool-stale-approval',
                 tool_name: 'terminal.exec',
-                kind: 'approval',
+                kind: 'tool',
                 status: 'waiting',
                 severity: 'blocking',
                 needs_attention: true,
@@ -1574,7 +1574,7 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => runtime.querySelector('[data-flower-approval-action-id="appr-stale"]') === null);
   });
 
-  it('hides approval-only terminal noise while keeping command and output details visible', async () => {
+  it('renders terminal command and output details from tool activity items', async () => {
     const terminalThread = thread({
       thread_id: 'thread-terminal-output',
       title: 'Terminal output',
@@ -1592,29 +1592,20 @@ describe('FlowerSurface navigation activity', () => {
             activityTimeline({
               run_id: 'run-terminal-output',
               turn_id: 'm-terminal-output',
-              items: [
-                activityItem({
-                  item_id: 'approval-only',
-                  tool_id: 'approval-only',
-                  tool_name: 'terminal.exec',
-                  kind: 'approval',
-                  requires_approval: true,
-                  approval_state: 'approved',
-                }),
-                activityItem({
-                  item_id: 'terminal-real',
-                  tool_id: 'terminal-real',
-                  tool_name: 'terminal.exec',
-                  label: 'terminal.exec',
-                  renderer: 'terminal',
-                  payload: {
-                    command: 'curl -s https://example.com',
-                    exit_code: 0,
-                    stdout: 'example response',
-                    stderr: '',
-                  },
-                }),
-              ],
+              items: [activityItem({
+                item_id: 'terminal-real',
+                tool_id: 'terminal-real',
+                tool_name: 'terminal.exec',
+                kind: 'tool',
+                label: 'terminal.exec',
+                renderer: 'terminal',
+                payload: {
+                  command: 'curl -s https://example.com',
+                  exit_code: 0,
+                  stdout: 'example response',
+                  stderr: '',
+                },
+              })],
             }),
           ],
         },
@@ -1630,13 +1621,11 @@ describe('FlowerSurface navigation activity', () => {
     (runtime.querySelector('[data-thread-id="thread-terminal-output"] button') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelectorAll('.flower-activity-inline-row').length === 1);
 
-    expect(runtime.querySelector('[data-flower-activity-item-id="approval-only"]')).toBeNull();
     expect(runtime.querySelector('[data-flower-activity-item-id="terminal-real"]')).toBeTruthy();
     expect(runtime.textContent).toContain('curl -s https://example.com');
     (runtime.querySelector('[data-flower-activity-item-id="terminal-real"] .flower-activity-inline-button') as HTMLButtonElement).click();
     await waitFor(() => runtime.textContent?.includes('example response') ?? false);
     expect(runtime.textContent).toContain('example response');
-    expect(runtime.textContent).not.toContain('approvalapproved');
   });
 
   it('refreshes inline activity when message block fields change in place', async () => {

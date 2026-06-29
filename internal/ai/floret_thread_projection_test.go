@@ -172,6 +172,85 @@ func TestFlowerBlocksFromFloretThreadProjectionKeepsRequestedApprovalWaiting(t *
 	}
 }
 
+func TestFlowerBlocksFromFloretThreadProjectionKeepsPendingApprovalAsSingleToolRow(t *testing.T) {
+	t.Parallel()
+
+	timeline := observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		RunID:         "run_weather",
+		ThreadID:      "thread_weather",
+		TurnID:        "msg_weather",
+		TraceID:       "run_weather",
+		Summary: observation.ActivitySummary{
+			Status:         observation.ActivityStatusWaiting,
+			Severity:       observation.ActivitySeverityBlocking,
+			NeedsAttention: true,
+			TotalItems:     2,
+			Counts:         observation.ActivityCounts{Success: 1, Waiting: 1, Approval: 1},
+		},
+		Items: []observation.ActivityItem{
+			{
+				ItemID:          "tool:fetch-weather-once",
+				ToolID:          "fetch-weather-once",
+				ToolName:        "terminal.exec",
+				Kind:            observation.ActivityKindTool,
+				Status:          observation.ActivityStatusSuccess,
+				Severity:        observation.ActivitySeverityNormal,
+				Label:           `curl -s "wttr.in/Changsha?format=j1" 2>/dev/null | head -200`,
+				Renderer:        observation.ActivityRendererTerminal,
+				Payload:         map[string]any{"command": `curl -s "wttr.in/Changsha?format=j1" 2>/dev/null | head -200`},
+				StartedAtUnixMS: 10,
+				EndedAtUnixMS:   20,
+			},
+			{
+				ItemID:           "tool:format-weather",
+				ToolID:           "format-weather",
+				ToolName:         "terminal.exec",
+				Kind:             observation.ActivityKindTool,
+				Status:           observation.ActivityStatusWaiting,
+				Severity:         observation.ActivitySeverityBlocking,
+				NeedsAttention:   true,
+				AttentionReasons: []observation.ActivityAttentionReason{observation.ActivityAttentionWaiting, observation.ActivityAttentionApproval},
+				RequiresApproval: true,
+				ApprovalState:    "requested",
+				Label:            `curl -s "wttr.in/Changsha?format=j1" 2>/dev/null | python3 -c "import json, sys"`,
+				Renderer:         observation.ActivityRendererTerminal,
+				Payload:          map[string]any{"command": `curl -s "wttr.in/Changsha?format=j1" 2>/dev/null | python3 -c "import json, sys"`},
+				StartedAtUnixMS:  30,
+			},
+		},
+	}
+	if err := observation.ValidateActivityTimeline(timeline); err != nil {
+		t.Fatalf("timeline should validate: %v", err)
+	}
+
+	r := newRun(runOptions{})
+	blocks := r.flowerBlocksFromFloretThreadProjection(flruntime.ThreadTurnProjection{
+		RunID:    "run_weather",
+		ThreadID: "thread_weather",
+		TurnID:   "msg_weather",
+		TraceID:  "run_weather",
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: &timeline,
+		}},
+	})
+	if len(blocks) != 1 {
+		t.Fatalf("blocks len=%d, want one activity block: %#v", len(blocks), blocks)
+	}
+	block, ok := blocks[0].(ActivityTimelineBlock)
+	if !ok {
+		t.Fatalf("blocks[0]=%T %#v, want activity timeline", blocks[0], blocks[0])
+	}
+	if len(block.Items) != 2 ||
+		block.Items[0].Status != observation.ActivityStatusSuccess ||
+		block.Items[1].Status != observation.ActivityStatusWaiting ||
+		block.Items[1].ApprovalState != "requested" ||
+		block.Items[1].ItemID != "tool:format-weather" {
+		t.Fatalf("activity rows should be historical done plus one waiting tool: %#v", block.Items)
+	}
+}
+
 func TestFlowerBlocksFromFloretThreadProjectionRejectsInvalidActivityTimeline(t *testing.T) {
 	t.Parallel()
 
@@ -395,10 +474,10 @@ func floretProjectionApprovalTimeline(runID string, threadID string, turnID stri
 			Counts:         observation.ActivityCounts{Waiting: 1, Approval: 1},
 		},
 		Items: []observation.ActivityItem{{
-			ItemID:           "approval:" + toolID,
+			ItemID:           "tool:" + toolID,
 			ToolID:           toolID,
 			ToolName:         "terminal.exec",
-			Kind:             observation.ActivityKindApproval,
+			Kind:             observation.ActivityKindTool,
 			Status:           observation.ActivityStatusWaiting,
 			Severity:         observation.ActivitySeverityBlocking,
 			NeedsAttention:   true,

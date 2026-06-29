@@ -1049,15 +1049,15 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 							NeedsAttention: true,
 						},
 						Items: []observation.ActivityItem{{
-							ItemID:           "approval-1",
+							ItemID:           "tool:call-1",
 							ToolID:           "call-1",
 							ToolName:         "terminal.exec",
-							Kind:             observation.ActivityKindApproval,
+							Kind:             observation.ActivityKindTool,
 							Status:           observation.ActivityStatusError,
 							Severity:         observation.ActivitySeverityError,
 							NeedsAttention:   true,
 							RequiresApproval: true,
-							ApprovalState:    "denied",
+							ApprovalState:    "rejected",
 							Label:            "terminal.exec",
 							Description:      "readonly policy",
 						}},
@@ -1156,7 +1156,7 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 	if detail.Timeline[3].Approval == nil || detail.Timeline[3].Approval.State != "denied" {
 		t.Fatalf("approval row not projected: %#v", detail.Timeline[3])
 	}
-	if detail.Timeline[3].Activity == nil || len(detail.Timeline[3].Activity.Items) != 1 || detail.Timeline[3].Activity.Items[0].Kind != observation.ActivityKindApproval {
+	if detail.Timeline[3].Activity == nil || len(detail.Timeline[3].Activity.Items) != 1 || detail.Timeline[3].Activity.Items[0].Kind != observation.ActivityKindTool {
 		t.Fatalf("approval activity not projected through canonical activity block: %#v", detail.Timeline[3])
 	}
 	if detail.Timeline[4].Error != "tool blocked" {

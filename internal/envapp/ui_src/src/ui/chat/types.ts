@@ -103,7 +103,7 @@ export interface ActivityTargetRef {
 }
 
 export type ActivityItemStatus = 'pending' | 'running' | 'waiting' | 'success' | 'error' | 'canceled';
-export type ActivityItemKind = 'tool' | 'hosted_tool' | 'approval' | 'control' | 'budget';
+export type ActivityItemKind = 'tool' | 'hosted_tool' | 'control' | 'budget';
 export type ActivityItemSeverity = 'quiet' | 'normal' | 'warning' | 'error' | 'blocking';
 export type ActivityAttentionReason = 'running' | 'waiting' | 'approval' | 'error';
 export type ActivityApprovalState = 'requested' | 'approved' | 'rejected' | 'timed_out' | 'canceled';

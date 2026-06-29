@@ -216,7 +216,7 @@ export type FlowerActivityStatus =
   | 'error'
   | 'canceled';
 
-export type FlowerActivityKind = 'tool' | 'hosted_tool' | 'approval' | 'control' | 'budget';
+export type FlowerActivityKind = 'tool' | 'hosted_tool' | 'control' | 'budget';
 export type FlowerActivitySeverity = 'quiet' | 'normal' | 'warning' | 'error' | 'blocking';
 export type FlowerActivityAttentionReason = 'running' | 'waiting' | 'approval' | 'error';
 export type FlowerActivityApprovalState = 'requested' | 'approved' | 'rejected' | 'timed_out' | 'canceled';
