@@ -182,7 +182,7 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) {
 	s.appendTerminalProcessRunEvent(snapshot, status, resultPayload, toolErr)
 	settlementReq := terminalProcessSettlementRequest(snapshot, resultPayload)
 	settleCtx, settleCancel := context.WithTimeout(context.Background(), s.persistTimeout())
-	settled, err := s.settlePendingToolWithActiveFloretRun(settleCtx, snapshot.EndpointID, snapshot.ThreadID, settlementReq)
+	settled, err := s.settlePendingToolWithFloret(settleCtx, snapshot.EndpointID, snapshot.ThreadID, settlementReq)
 	settleCancel()
 	if err != nil {
 		if s.log != nil {

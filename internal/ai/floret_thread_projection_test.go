@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -71,7 +72,7 @@ func TestFloretThreadProjectionPersistsFullAssistantContentAfterActivity(t *test
 	}
 }
 
-func TestSettlePendingToolWithActiveFloretRunUsesActiveHost(t *testing.T) {
+func TestSettlePendingToolWithFloretUsesActiveHost(t *testing.T) {
 	host := &recordingFloretHost{
 		settleResult: flruntime.PendingToolSettlementResult{
 			RunID: "run_terminal",
@@ -96,9 +97,9 @@ func TestSettlePendingToolWithActiveFloretRunUsesActiveHost(t *testing.T) {
 		Summary:    "Terminal process completed",
 	}
 
-	result, err := svc.settlePendingToolWithActiveFloretRun(context.Background(), "env_terminal", "thread_terminal", req)
+	result, err := svc.settlePendingToolWithFloret(context.Background(), "env_terminal", "thread_terminal", req)
 	if err != nil {
-		t.Fatalf("settlePendingToolWithActiveFloretRun: %v", err)
+		t.Fatalf("settlePendingToolWithFloret: %v", err)
 	}
 	if result.RunID != "run_terminal" {
 		t.Fatalf("result=%#v, want active host result", result)
@@ -112,14 +113,10 @@ func TestSettlePendingToolWithActiveFloretRunUsesActiveHost(t *testing.T) {
 	}
 }
 
-func TestSettlePendingToolWithActiveFloretRunRequiresActiveHost(t *testing.T) {
-	svc := &Service{
-		activeRunByTh: map[string]string{runThreadKey("env_terminal", "thread_terminal"): "run_terminal"},
-		runs: map[string]*run{
-			"run_terminal": &run{id: "run_terminal", endpointID: "env_terminal", threadID: "thread_terminal"},
-		},
-	}
+func TestSettlePendingToolWithFloretFallsBackToLifecycleHost(t *testing.T) {
+	svc := newTestService(t, nil)
 	req := flruntime.PendingToolSettlementRequest{
+		ThreadID:   "missing_thread",
 		RunID:      "run_terminal",
 		TurnID:     "turn_terminal",
 		ToolCallID: "call_terminal",
@@ -129,12 +126,9 @@ func TestSettlePendingToolWithActiveFloretRunRequiresActiveHost(t *testing.T) {
 		Summary:    "Terminal process completed",
 	}
 
-	_, err := svc.settlePendingToolWithActiveFloretRun(context.Background(), "env_terminal", "thread_terminal", req)
-	if err == nil {
-		t.Fatalf("settlePendingToolWithActiveFloretRun succeeded without an active floret host")
-	}
-	if got, want := err.Error(), "active floret settlement host unavailable"; got != want {
-		t.Fatalf("error=%q, want %q", got, want)
+	_, err := svc.settlePendingToolWithFloret(context.Background(), "env_terminal", "missing_thread", req)
+	if !errors.Is(err, flruntime.ErrThreadNotFound) {
+		t.Fatalf("settlePendingToolWithFloret err=%v, want Floret lifecycle host ErrThreadNotFound", err)
 	}
 }
 
