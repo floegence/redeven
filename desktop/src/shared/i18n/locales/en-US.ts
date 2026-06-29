@@ -134,7 +134,6 @@ export const enUS = {
     toggleThemeDescription: 'Switch between light and dark theme',
     openCommandPaletteTitle: 'Open Command Palette',
     openCommandPaletteDescription: 'Open the command palette',
-    openDeckTitle: 'Open Deck',
   },
   desktop: {
     title: 'Redeven Desktop',

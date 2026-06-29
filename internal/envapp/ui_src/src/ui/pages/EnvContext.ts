@@ -44,14 +44,6 @@ export type SetEnvViewModeOptions = {
   requestWorkbenchOverview?: boolean;
 };
 
-export type EnvDeckSurfaceActivationRequest = {
-  requestId: string;
-  surfaceId: EnvSurfaceId;
-  widgetId?: string;
-  focus?: boolean;
-  ensureVisible?: boolean;
-};
-
 export type EnvWorkbenchSurfaceActivationRequest = {
   requestId: string;
   surfaceId: EnvSurfaceId;
@@ -102,9 +94,6 @@ export type EnvContextValue = {
   lastActivitySurface: () => EnvSurfaceId;
   openSurface: (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => void;
   goActivity: (surfaceId: EnvSurfaceId) => void;
-  deckSurfaceActivationSeq: () => number;
-  deckSurfaceActivation: () => EnvDeckSurfaceActivationRequest | null;
-  consumeDeckSurfaceActivation: (requestId: string) => void;
   workbenchSurfaceActivationSeq: () => number;
   workbenchSurfaceActivation: () => EnvWorkbenchSurfaceActivationRequest | null;
   consumeWorkbenchSurfaceActivation: (requestId: string) => void;

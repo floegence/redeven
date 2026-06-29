@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
-import { deferAfterPaint, type FloeComponent, useCommand, useDeck, useLayout, useNotification, useTheme, useWidgetRegistry } from '@floegence/floe-webapp-core';
+import { deferAfterPaint, type FloeComponent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
 import {
@@ -31,7 +31,6 @@ import { FlowerNavigationIcon } from './icons/FlowerSoftAuraIcon';
 import {
   BottomBarItem,
   DisplayModePageShell,
-  DisplayModeSwitcher,
   Panel,
   PanelContent,
   Shell,
@@ -50,7 +49,6 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import {
   EnvContext,
-  type EnvDeckSurfaceActivationRequest,
   type EnvSettingsOrigin,
   type EnvSettingsSection,
   type EnvWorkbenchOverviewEntryRequest,
@@ -65,7 +63,6 @@ import type {
   FlowerTurnLauncherSubmitInput,
 } from '../../../../flower_ui/src';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
-import { EnvDeckPage } from './pages/EnvDeckPage';
 import { EnvTerminalPage } from './pages/EnvTerminalPage';
 import { EnvMonitorPage } from './pages/EnvMonitorPage';
 import { EnvFileBrowserPage } from './pages/EnvFileBrowserPage';
@@ -79,7 +76,6 @@ import { CodexSidebar } from './codex/CodexSidebar';
 import { AIChatContext, createAIChatContextValue } from './pages/AIChatContext';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
 import { hasRWXPermissions } from './pages/aiPermissions';
-import { localizedRedevenDeckWidgets } from './deck/redevenDeckWidgets';
 import { useRedevenRpc } from './protocol/redeven_v1';
 import { createEnvLocalFlowerSurfaceAdapter } from './flower/envLocalFlowerSurfaceAdapter';
 import { RuntimeUpdateContext } from './maintenance/RuntimeUpdateContext';
@@ -168,7 +164,7 @@ import { readUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
 import {
   ENV_DEFAULT_SURFACE_ID,
-  envWidgetTypeForSurface,
+  ENV_VIEW_MODE_LABELS,
   isEnvSurfaceId,
   normalizePersistedEnvViewMode,
   type EnvOpenSurfaceOptions,
@@ -314,7 +310,11 @@ function isAccessResumeAuthFailure(error: unknown): boolean {
 
 function readPersistedDesktopViewMode(): EnvViewMode | null {
   const explicit = String(readUIStorageItem(DESKTOP_VIEW_MODE_STORAGE_KEY) ?? '').trim();
-  return normalizePersistedEnvViewMode(explicit);
+  const normalized = normalizePersistedEnvViewMode(explicit);
+  if (explicit === 'deck' && normalized === 'workbench') {
+    writeUIStorageItem(DESKTOP_VIEW_MODE_STORAGE_KEY, normalized);
+  }
+  return normalized;
 }
 
 function persistDesktopViewMode(mode: EnvViewMode): void {
@@ -337,6 +337,48 @@ function AIChatProviderBridge(props: { children: any }) {
   return <AIChatContext.Provider value={ctx}>{props.children}</AIChatContext.Provider>;
 }
 
+const ENV_DISPLAY_MODE_SWITCHER_OPTIONS = [
+  { id: 'activity', icon: Terminal },
+  { id: 'workbench', icon: Grid3x3 },
+] as const satisfies ReadonlyArray<{
+  id: EnvViewMode;
+  icon: typeof Terminal;
+}>;
+
+function EnvDisplayModeSwitcher(props: {
+  mode: EnvViewMode;
+  onChange: (mode: EnvViewMode) => void;
+}) {
+  return (
+    <div
+      class="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-md border border-border bg-muted/40 p-0.5"
+      role="tablist"
+      aria-label="Display mode"
+    >
+      {ENV_DISPLAY_MODE_SWITCHER_OPTIONS.map((option) => {
+        const Icon = option.icon;
+        const active = () => props.mode === option.id;
+        return (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={active()}
+            class={`inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-[5px] px-2.5 text-xs font-medium transition-colors ${
+              active()
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-background/60 hover:text-foreground'
+            }`}
+            onClick={() => props.onChange(option.id)}
+          >
+            <Icon class="h-3.5 w-3.5" />
+            <span>{ENV_VIEW_MODE_LABELS[option.id]}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function EnvAppShell() {
   const layout = useLayout();
   const theme = useTheme();
@@ -346,11 +388,9 @@ export function EnvAppShell() {
     requestWorkbenchRenderTransaction('theme');
     toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme());
   };
-  const widgetRegistry = useWidgetRegistry();
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const cmd = useCommand();
-  const deck = useDeck();
   const notify = useNotification();
   const downloadManager = createDownloadManager({
     source: createRuntimeDownloadSource(() => protocol.client()),
@@ -375,8 +415,6 @@ export function EnvAppShell() {
   const headerLogoSrc = createMemo(() =>
     `${import.meta.env.BASE_URL}${theme.resolvedTheme() === 'dark' ? 'logo-dark.svg' : 'logo.svg'}`,
   );
-  widgetRegistry.registerAll(localizedRedevenDeckWidgets(i18n.t));
-
   const [localRuntime, setLocalRuntime] = createSignal<LocalRuntimeInfo | null>(null);
   const isLocalMode = createMemo(() => localRuntime() !== null);
   const initialAccessResumeToken = typeof window !== 'undefined' ? consumeAccessResumeTokenFromWindow(window) : '';
@@ -598,12 +636,10 @@ export function EnvAppShell() {
 
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
   const [pendingAutoOpenCodex, setPendingAutoOpenCodex] = createSignal(false);
-  const [desktopViewMode, setDesktopViewMode] = createSignal<EnvViewMode>('deck');
+  const [desktopViewMode, setDesktopViewMode] = createSignal<EnvViewMode>('workbench');
   const viewMode = createMemo<EnvViewMode>(() => (layout.isMobile() ? 'activity' : desktopViewMode()));
   const [lastActivitySurface, setLastActivitySurface] = createSignal<EnvSurfaceId>(ENV_DEFAULT_SURFACE_ID);
   const [lastRequestedSurface, setLastRequestedSurface] = createSignal<EnvSurfaceId>(ENV_DEFAULT_SURFACE_ID);
-  const [deckSurfaceActivationSeq, setDeckSurfaceActivationSeq] = createSignal(0);
-  const [deckSurfaceActivation, setDeckSurfaceActivation] = createSignal<EnvDeckSurfaceActivationRequest | null>(null);
   const [workbenchSurfaceActivationSeq, setWorkbenchSurfaceActivationSeq] = createSignal(0);
   const [workbenchSurfaceActivation, setWorkbenchSurfaceActivation] = createSignal<EnvWorkbenchSurfaceActivationRequest | null>(null);
   const [workbenchOverviewEntrySeq, setWorkbenchOverviewEntrySeq] = createSignal(0);
@@ -784,16 +820,6 @@ export function EnvAppShell() {
     if (!normalizedRequestId) return;
 
     setOpenTerminalInDirectoryRequest((current) => {
-      if (!current) return current;
-      return current.requestId === normalizedRequestId ? null : current;
-    });
-  };
-
-  const consumeDeckSurfaceActivation = (requestId: string) => {
-    const normalizedRequestId = String(requestId ?? '').trim();
-    if (!normalizedRequestId) return;
-
-    setDeckSurfaceActivation((current) => {
       if (!current) return current;
       return current.requestId === normalizedRequestId ? null : current;
     });
@@ -1051,15 +1077,6 @@ export function EnvAppShell() {
 
     if (target.mode === 'activity' || layout.isMobile()) {
       setViewMode('activity', { surfaceId: 'ai', focusSurface: true });
-      openSurface('ai', { reason: 'handoff_ask_flower', focus: true, ensureVisible: true });
-      return;
-    }
-
-    if (target.mode === 'deck') {
-      if (viewMode() !== 'deck') {
-        setViewMode('deck', { surfaceId: 'ai', focusSurface: true });
-        return;
-      }
       openSurface('ai', { reason: 'handoff_ask_flower', focus: true, ensureVisible: true });
       return;
     }
@@ -1900,7 +1917,7 @@ export function EnvAppShell() {
       }
 
       let preferredSurface = readPersistedActiveSurface();
-      const preferredDesktopViewMode = readPersistedDesktopViewMode() ?? 'deck';
+      const preferredDesktopViewMode = readPersistedDesktopViewMode() ?? 'workbench';
       if (rt && preferredSurface === 'ports') preferredSurface = 'codespaces';
       if (preferredSurface === 'ai') {
         // Defer opening Flower until access state is loaded.
@@ -2083,21 +2100,6 @@ export function EnvAppShell() {
     return surfaceId;
   };
 
-  const activateDeckSurface = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => {
-    const widgetType = envWidgetTypeForSurface(surfaceId);
-    const existingWidget = deck.activeLayout()?.widgets.find((widget) => widget.type === widgetType);
-    const widgetId = existingWidget?.id ?? deck.addWidget(widgetType);
-    setLastRequestedSurface(surfaceId);
-    setDeckSurfaceActivation({
-      requestId: createClientId(),
-      surfaceId,
-      widgetId,
-      focus: options?.focus ?? true,
-      ensureVisible: options?.ensureVisible ?? true,
-    });
-    setDeckSurfaceActivationSeq((n) => n + 1);
-  };
-
   const activateWorkbenchSurface = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => {
     setLastRequestedSurface(surfaceId);
     setWorkbenchSurfaceActivation({
@@ -2153,10 +2155,6 @@ export function EnvAppShell() {
       activateActivitySurface(targetSurface, { persist: false });
       return;
     }
-    if (requestedMode === 'deck' && (options?.focusSurface ?? true)) {
-      activateDeckSurface(targetSurface, { reason: 'mode_restore', focus: true, ensureVisible: true });
-      return;
-    }
     if (
       requestedMode === 'workbench'
       && previousMode !== 'workbench'
@@ -2170,10 +2168,6 @@ export function EnvAppShell() {
     const targetSurface = resolveOpenSurfaceTarget(surfaceId, options);
     setLastRequestedSurface(targetSurface);
 
-    if (viewMode() === 'deck') {
-      activateDeckSurface(targetSurface, options);
-      return;
-    }
     if (viewMode() === 'workbench') {
       activateWorkbenchSurface(targetSurface, options);
       return;
@@ -2394,15 +2388,6 @@ export function EnvAppShell() {
     const generalCategory = i18n.t('shell.commandPalette.categories.general');
 
     const list: any[] = [
-      {
-        id: 'redeven.env.switchToDeck',
-        title: i18n.t('shell.commandPalette.switchToDeckTitle'),
-        description: i18n.t('shell.commandPalette.switchToDeckDescription'),
-        category: commandCategory,
-        keybind: 'mod+shift+d',
-        icon: LayoutDashboard,
-        execute: () => setViewMode('deck', { surfaceId: activeSurface(), focusSurface: true }),
-      },
       {
         id: 'redeven.env.switchToActivity',
         title: i18n.t('shell.commandPalette.switchToActivityTitle'),
@@ -2910,7 +2895,7 @@ export function EnvAppShell() {
   const HeaderActions = () => (
     <div class="flex items-center gap-1">
       <Show when={!layout.isMobile()}>
-        <DisplayModeSwitcher
+        <EnvDisplayModeSwitcher
           mode={viewMode()}
           onChange={(mode) => setViewMode(mode, { surfaceId: activeSurface(), focusSurface: mode !== 'activity' })}
         />
@@ -3065,17 +3050,13 @@ export function EnvAppShell() {
     </Shell>
   );
 
-  const renderDisplayModeContent = (mode: 'deck' | 'workbench') => (
+  const renderWorkbenchContent = () => (
     <div ref={setNotesViewportAnchor} class="relative h-full min-h-0 overflow-hidden">
       <Show
         when={accessGateVisible()}
         fallback={(
           <>
-            {mode === 'deck' ? (
-              <EnvDeckPage />
-            ) : (
-              <EnvWorkbenchPage />
-            )}
+            <EnvWorkbenchPage />
             {renderNotesOverlay()}
           </>
         )}
@@ -3086,18 +3067,10 @@ export function EnvAppShell() {
   );
 
   const renderMainShell = () => {
-    if (viewMode() === 'deck') {
-      return (
-        <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}>
-          {renderDisplayModeContent('deck')}
-        </DisplayModePageShell>
-      );
-    }
-
     if (viewMode() === 'workbench') {
       return (
         <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}>
-          {renderDisplayModeContent('workbench')}
+          {renderWorkbenchContent()}
         </DisplayModePageShell>
       );
     }
@@ -3122,9 +3095,6 @@ export function EnvAppShell() {
         lastActivitySurface,
         openSurface,
         goActivity: (surfaceId) => openSurface(surfaceId, { reason: 'direct_navigation', focus: true, ensureVisible: true }),
-        deckSurfaceActivationSeq,
-        deckSurfaceActivation,
-        consumeDeckSurfaceActivation,
         workbenchSurfaceActivationSeq,
         workbenchSurfaceActivation,
         consumeWorkbenchSurfaceActivation,

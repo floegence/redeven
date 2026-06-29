@@ -7,12 +7,12 @@ describe('envSidebarVisibilityMotion', () => {
     expect(ENV_CONVERSATION_TABS.has('codex')).toBe(true);
     expect(shouldEnvTabOpenSidebar('ai')).toBe(true);
     expect(shouldEnvTabOpenSidebar('codex')).toBe(true);
-    expect(shouldEnvTabOpenSidebar('deck')).toBe(false);
+    expect(shouldEnvTabOpenSidebar('terminal')).toBe(false);
   });
 
   it('returns instant when desktop navigation crosses the conversation sidebar boundary', () => {
     expect(resolveEnvSidebarVisibilityMotion({
-      currentTab: 'deck',
+      currentTab: 'terminal',
       nextTab: 'ai',
       isMobile: false,
     })).toBe('instant');
@@ -32,13 +32,13 @@ describe('envSidebarVisibilityMotion', () => {
     })).toBe('animated');
 
     expect(resolveEnvSidebarVisibilityMotion({
-      currentTab: 'deck',
+      currentTab: 'monitor',
       nextTab: 'monitor',
       isMobile: false,
     })).toBe('animated');
 
     expect(resolveEnvSidebarVisibilityMotion({
-      currentTab: 'deck',
+      currentTab: 'terminal',
       nextTab: 'ai',
       isMobile: true,
     })).toBe('animated');

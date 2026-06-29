@@ -135,7 +135,6 @@ export const jaJP = {
     toggleThemeDescription: "ライトテーマとダークテーマを切り替えます",
     openCommandPaletteTitle: "Command Palette を開く",
     openCommandPaletteDescription: "command palette を開きます",
-    openDeckTitle: "Deck を開く",
   },
   desktop: {
     title: "Redeven Desktop",

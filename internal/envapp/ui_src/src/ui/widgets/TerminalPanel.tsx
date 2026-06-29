@@ -81,7 +81,7 @@ import { useI18n } from '../i18n';
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
 type pending_terminal_session_status = 'creating' | 'failed';
 
-export type TerminalPanelVariant = 'panel' | 'deck' | 'workbench';
+export type TerminalPanelVariant = 'panel' | 'workbench';
 
 const TERMINAL_LIVE_FLUSH_MAX_CHUNKS = 64;
 const TERMINAL_LIVE_FLUSH_MAX_BYTES = 256 * 1024;
@@ -115,7 +115,7 @@ export interface TerminalPanelProps {
     requestId: string;
     workingDir: string;
     preferredName?: string;
-    targetMode?: 'activity' | 'deck' | 'workbench';
+    targetMode?: 'activity' | 'workbench';
   } | null;
   onOpenSessionRequestHandled?: (requestId: string) => void;
   sessionGroupState?: TerminalPanelSessionGroupState;
@@ -1383,10 +1383,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     try {
       return useViewActivation();
     } catch {
-      // Deck layouts can mount terminals outside tab activation providers.
+      // Embedded surfaces can mount terminals outside tab activation providers.
       const fallbackId = String(widgetId ?? '').trim();
       return {
-        id: fallbackId ? `deck:${fallbackId}` : 'terminal_page',
+        id: fallbackId ? `embedded:${fallbackId}` : 'terminal_page',
         active: () => true,
         activationSeq: () => 0,
       };
@@ -1395,7 +1395,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const connId = getOrCreateTerminalConnId();
   const panelId = (() => {
     const wid = String(widgetId ?? '').trim();
-    return wid ? `deck:${wid}` : 'terminal_page';
+    return wid ? `embedded:${wid}` : 'terminal_page';
   })();
   const activeSessionStorageKey = buildActiveSessionStorageKey(panelId);
   const sessionGroupState = createMemo<TerminalPanelSessionGroupState | null>(() => props.sessionGroupState ?? null);
@@ -1436,7 +1436,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const viewActive = () => view.active();
   const workbenchSelected = () => variant !== 'workbench' || props.workbenchSelected !== false;
   const terminalFocusOwner = () => viewActive() && workbenchSelected();
-  const isInDeckWidget = Boolean(String(widgetId ?? '').trim());
+  const isEmbeddedWidget = Boolean(String(widgetId ?? '').trim());
   const permissionReady = () => env.env.state === 'ready';
   const canBrowseFiles = createMemo(() => connected() && permissionReady() && Boolean(env.env()?.permissions?.can_read));
 
@@ -2168,7 +2168,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const shouldAutoFocus = () => {
-    return workbenchSelected() && (!isInDeckWidget || panelHasFocus()) && shouldRestoreTerminalFocus();
+    return workbenchSelected() && (!isEmbeddedWidget || panelHasFocus()) && shouldRestoreTerminalFocus();
   };
 
   const blurActiveElement = () => {
@@ -2607,7 +2607,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const requestId = String(request?.requestId ?? '').trim();
     if (!requestId || requestId === lastHandledOpenSessionRequestId) return;
     if (!connected()) return;
-    const currentMode = variant === 'deck' ? 'deck' : variant === 'workbench' ? 'workbench' : 'activity';
+    const currentMode = variant === 'workbench' ? 'workbench' : 'activity';
     const targetMode = request?.targetMode ?? currentMode;
     if (targetMode !== currentMode) return;
 
@@ -3837,7 +3837,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     </div>
   );
 
-  if (variant === 'deck' || variant === 'workbench') return body;
+  if (variant === 'workbench') return body;
 
   return (
     <div class="h-full overflow-hidden">{body}</div>
@@ -3873,7 +3873,7 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
       when={!noExecute()}
       fallback={
         <PermissionEmptyState
-          variant={props.variant === 'deck' || props.variant === 'workbench' ? 'workbench' : 'panel'}
+          variant={props.variant === 'workbench' ? 'workbench' : 'panel'}
           title={i18n.t('terminal.executePermissionRequired')}
           description={i18n.t('terminal.executePermissionDescription')}
         />

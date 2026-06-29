@@ -135,7 +135,6 @@ export const zhTW = {
     toggleThemeDescription: "在淺色和深色主題之間切換",
     openCommandPaletteTitle: "開啟 Command Palette",
     openCommandPaletteDescription: "開啟 command palette",
-    openDeckTitle: "開啟 Deck",
   },
   desktop: {
     title: "Redeven Desktop",

@@ -33,7 +33,7 @@ const flowerLaunchTurnMock = vi.fn(async () => ({
 let debugConsoleEnabled = false;
 let protocolStatus: 'connected' | 'disconnected' | 'connecting' | 'error' = 'disconnected';
 let protocolClient: unknown = null;
-let desktopViewMode: 'activity' | 'deck' | 'workbench' = 'activity';
+let desktopViewMode: 'activity' | 'workbench' = 'activity';
 let desktopSidebarActiveTab = 'terminal';
 
 function testFlowerTurnIntent(sourceSurface: string) {
@@ -81,12 +81,6 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
   deferAfterPaint: (fn: () => void) => setTimeout(fn, 0),
   useCommand: () => ({ open: vi.fn(), registerAll: () => () => {}, getKeybindDisplay: (keybind: string) => keybind }),
-  useDeck: () => ({
-    activeLayout: () => ({ widgets: [] }),
-    addWidget: vi.fn(() => 'widget-1'),
-    updateWidgetState: vi.fn(),
-    getWidgetState: () => ({}),
-  }),
   useLayout: () => ({
     isMobile: () => false,
     sidebarActiveTab: () => desktopSidebarActiveTab,
@@ -101,7 +95,6 @@ vi.mock('@floegence/floe-webapp-core', () => ({
     themePreset: () => undefined,
     setThemePreset: vi.fn(),
   }),
-  useWidgetRegistry: () => ({ registerAll: vi.fn() }),
 }));
 
 vi.mock('@floegence/floe-webapp-core/app', () => ({
@@ -284,45 +277,6 @@ vi.mock('./TopBarBrandButton', () => ({
   TopBarBrandButton: (props: any) => <button type="button" aria-label={props.label}>{props.children}</button>,
 }));
 
-vi.mock('./pages/EnvDeckPage', () => ({
-  EnvDeckPage: () => {
-    const env = useContext(EnvContextMock);
-    const filePreview = useContext(FilePreviewContextMock);
-    return (
-      <div>
-        <button
-          type="button"
-          data-testid="deck-open-preview"
-          onClick={() => void filePreview.openPreview({
-            id: '/workspace/deck.txt',
-            type: 'file',
-            name: 'deck.txt',
-            path: '/workspace/deck.txt',
-            size: 8,
-          })}
-        >
-          Open Deck Preview
-        </button>
-        <button
-          type="button"
-          data-testid="deck-open-flower-launcher"
-          onClick={() => env.openFlowerTurnLauncher(testFlowerTurnIntent('deck'))}
-        >
-          Ask Flower
-        </button>
-        <div data-testid="deck-flower-activation">
-          {[
-            env.deckSurfaceActivation?.()?.surfaceId ?? '',
-            String(env.deckSurfaceActivation?.()?.focus ?? ''),
-            String(env.deckSurfaceActivation?.()?.ensureVisible ?? ''),
-            env.aiThreadFocusRequest?.()?.thread_id ?? '',
-          ].join('|')}
-        </div>
-      </div>
-    );
-  },
-}));
-
 vi.mock('./workbench/EnvWorkbenchPage', () => ({
   EnvWorkbenchPage: () => {
     const env = useContext(EnvContextMock);
@@ -426,10 +380,6 @@ vi.mock('./codex/CodexProvider', () => ({ CodexProvider: (props: any) => <>{prop
 vi.mock('./codex/CodexSidebar', () => ({ CodexSidebar: () => <div /> }));
 vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
 vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
-vi.mock('./deck/redevenDeckWidgets', () => ({
-  localizedRedevenDeckWidgets: () => [],
-  redevenDeckWidgets: [],
-}));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
 vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div data-testid="file-preview-host" /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div data-testid="file-browser-host" /> }));
@@ -628,35 +578,6 @@ describe('EnvAppShell desktop floating surfaces', () => {
     }
   });
 
-  it('keeps the floating file preview host available in deck mode', async () => {
-    desktopViewMode = 'deck';
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    const { EnvAppShell } = await import('./EnvAppShell');
-    const dispose = render(() => <EnvAppShell />, host);
-
-    try {
-      await flushAsync();
-      await flushAsync();
-
-      expect(host.querySelector('[data-testid="file-preview-host"]')).not.toBeNull();
-      expect(host.querySelector('[data-testid="display-mode-page-shell"]')).not.toBeNull();
-
-      filePreviewOpenPreviewMock.mockClear();
-      (host.querySelector('[data-testid="deck-open-preview"]') as HTMLButtonElement).click();
-      await flushAsync();
-
-      expect(filePreviewOpenPreviewMock).toHaveBeenCalledWith(expect.objectContaining({
-        type: 'file',
-        path: '/workspace/deck.txt',
-      }));
-      expect(windowOpenMock).not.toHaveBeenCalled();
-    } finally {
-      dispose();
-    }
-  });
-
   it('opens debug console through the in-app floating controller without spawning a system window', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -744,36 +665,6 @@ describe('EnvAppShell desktop floating surfaces', () => {
       expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(1);
       expect(host.querySelector('[data-testid="workbench-flower-activation"]')).toBeNull();
       expect(setSidebarActiveTabMock).toHaveBeenLastCalledWith('ai', expect.objectContaining({ openSidebar: false }));
-      expect(windowOpenMock).not.toHaveBeenCalled();
-    } finally {
-      dispose();
-    }
-  });
-
-  it('launches a deck Flower turn once and hands off to the deck AI surface', async () => {
-    desktopViewMode = 'deck';
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    const { EnvAppShell } = await import('./EnvAppShell');
-    const dispose = render(() => <EnvAppShell />, host);
-
-    try {
-      await flushAsync();
-      await flushAsync();
-
-      (host.querySelector('[data-testid="deck-open-flower-launcher"]') as HTMLButtonElement).click();
-      await flushAsync();
-
-      (host.querySelector('[data-testid="flower-turn-launcher-send"]') as HTMLButtonElement).click();
-      await flushAsync();
-
-      expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(1);
-      expect(flowerLaunchTurnMock).toHaveBeenCalledWith(expect.objectContaining({
-        prompt: 'inspect from launcher',
-        working_dir: '/workspace/app',
-      }));
-      expect(host.querySelector('[data-testid="deck-flower-activation"]')?.textContent).toBe('ai|true|true|thread-launched');
       expect(windowOpenMock).not.toHaveBeenCalled();
     } finally {
       dispose();

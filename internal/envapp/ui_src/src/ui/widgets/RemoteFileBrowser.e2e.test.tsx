@@ -28,6 +28,98 @@ const persistStore = vi.hoisted(() => ({
   saveCalls: [] as Array<{ key: string; value: unknown }>,
 }));
 
+function splitScopedEnvKey(prefix: string, key: string): { scope: string; envId: string } | null {
+  if (!key.startsWith(prefix)) return null;
+  const tail = key.slice(prefix.length);
+  const separatorIndex = tail.indexOf(':');
+  if (separatorIndex < 0) return null;
+  const scope = tail.slice(0, separatorIndex).trim();
+  const envId = tail.slice(separatorIndex + 1).trim();
+  return scope && envId ? { scope, envId } : null;
+}
+
+function splitEnvScopedKey(prefix: string, key: string): { envId: string; scope: string } | null {
+  if (!key.startsWith(prefix)) return null;
+  const tail = key.slice(prefix.length);
+  const separatorIndex = tail.lastIndexOf(':');
+  if (separatorIndex < 0) return null;
+  const envId = tail.slice(0, separatorIndex).trim();
+  const scope = tail.slice(separatorIndex + 1).trim();
+  return scope && envId ? { envId, scope } : null;
+}
+
+function readWidgetScopedPersistedValue(key: string): unknown {
+  const sidebarPrefix = 'redeven:remote-file-browser:page-sidebar-width:';
+  if (key.startsWith(sidebarPrefix)) {
+    const widgetId = key.slice(sidebarPrefix.length);
+    return widgetStateStore.values[widgetId]?.browserSidebarWidth;
+  }
+
+  const lastPath = splitScopedEnvKey('files:lastPath:', key);
+  if (lastPath) {
+    return (widgetStateStore.values[lastPath.scope]?.lastPathByEnv as Record<string, unknown> | undefined)?.[lastPath.envId];
+  }
+
+  const showHidden = splitEnvScopedKey('redeven:remote-file-browser:show-hidden:', key);
+  if (showHidden) {
+    return (widgetStateStore.values[showHidden.scope]?.showHiddenByEnv as Record<string, unknown> | undefined)?.[showHidden.envId];
+  }
+
+  const pageMode = splitEnvScopedKey('redeven:remote-file-browser:page-mode:', key);
+  if (pageMode) {
+    return (widgetStateStore.values[pageMode.scope]?.pageModeByEnv as Record<string, unknown> | undefined)?.[pageMode.envId];
+  }
+
+  const gitSubview = splitEnvScopedKey('redeven:remote-file-browser:git-subview:', key);
+  if (gitSubview) {
+    return (widgetStateStore.values[gitSubview.scope]?.gitSubviewByEnv as Record<string, unknown> | undefined)?.[gitSubview.envId];
+  }
+
+  return undefined;
+}
+
+function writeWidgetScopedPersistedValue(key: string, value: unknown): void {
+  const sidebarPrefix = 'redeven:remote-file-browser:page-sidebar-width:';
+  if (key.startsWith(sidebarPrefix)) {
+    const widgetId = key.slice(sidebarPrefix.length);
+    widgetStateStore.updateCalls.push({ widgetId, key: 'browserSidebarWidth', value });
+    widgetStateStore.values[widgetId] = {
+      ...(widgetStateStore.values[widgetId] ?? {}),
+      browserSidebarWidth: value,
+    };
+    return;
+  }
+
+  const writeByEnv = (
+    parsed: { scope: string; envId: string } | null,
+    stateKey: 'lastPathByEnv' | 'showHiddenByEnv' | 'pageModeByEnv' | 'gitSubviewByEnv',
+  ) => {
+    if (!parsed) return false;
+    const previous = widgetStateStore.values[parsed.scope]?.[stateKey];
+    const next = {
+      ...((previous && typeof previous === 'object' && !Array.isArray(previous)) ? previous as Record<string, unknown> : {}),
+      [parsed.envId]: value,
+    };
+    widgetStateStore.updateCalls.push({ widgetId: parsed.scope, key: stateKey, value: next });
+    widgetStateStore.values[parsed.scope] = {
+      ...(widgetStateStore.values[parsed.scope] ?? {}),
+      [stateKey]: next,
+    };
+    return true;
+  };
+
+  if (writeByEnv(splitScopedEnvKey('files:lastPath:', key), 'lastPathByEnv')) return;
+
+  const showHidden = splitEnvScopedKey('redeven:remote-file-browser:show-hidden:', key);
+  if (writeByEnv(showHidden ? { scope: showHidden.scope, envId: showHidden.envId } : null, 'showHiddenByEnv')) return;
+
+  const pageMode = splitEnvScopedKey('redeven:remote-file-browser:page-mode:', key);
+  if (writeByEnv(pageMode ? { scope: pageMode.scope, envId: pageMode.envId } : null, 'pageModeByEnv')) return;
+
+  const gitSubview = splitEnvScopedKey('redeven:remote-file-browser:git-subview:', key);
+  writeByEnv(gitSubview ? { scope: gitSubview.scope, envId: gitSubview.envId } : null, 'gitSubviewByEnv');
+}
+
 const notificationStore = vi.hoisted(() => ({
   success: [] as Array<{ title: string; message?: string }>,
   error: [] as Array<{ title: string; message?: string }>,
@@ -164,25 +256,18 @@ vi.mock('@floegence/floe-webapp-core', async () => {
   const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core')>('@floegence/floe-webapp-core');
   return {
     ...actual,
-    useDeck: () => ({
-      getWidgetState: (widgetId: string) => widgetStateStore.values[widgetId] ?? {},
-      updateWidgetState: (widgetId: string, key: string, value: unknown) => {
-        widgetStateStore.updateCalls.push({ widgetId, key, value });
-        widgetStateStore.values[widgetId] = {
-          ...(widgetStateStore.values[widgetId] ?? {}),
-          [key]: value,
-        };
-      },
-    }),
     useResolvedFloeConfig: () => ({
       persist: {
         load: (key: string, fallback: unknown) => {
           persistStore.loadCalls.push({ key, fallback });
+          const widgetValue = readWidgetScopedPersistedValue(key);
+          if (widgetValue !== undefined) return widgetValue;
           return key in persistStore.values ? persistStore.values[key] : fallback;
         },
         debouncedSave: (key: string, value: unknown) => {
           persistStore.saveCalls.push({ key, value });
           persistStore.values[key] = value;
+          writeWidgetScopedPersistedValue(key, value);
         },
       },
     }),
@@ -974,9 +1059,6 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canExec
     lastActivitySurface: () => 'files',
     openSurface: () => {},
     goActivity: () => {},
-    deckSurfaceActivationSeq: () => 0,
-    deckSurfaceActivation: () => null,
-    consumeDeckSurfaceActivation: () => {},
     workbenchOverviewEntrySeq: () => 0,
     workbenchOverviewEntry: () => null,
     workbenchSurfaceActivationSeq: () => 0,
@@ -2399,7 +2481,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('persists widget sidebar width only to widget state when the integrated browser is resized', async () => {
+  it('persists widget sidebar width to widget-scoped persistence when the integrated browser is resized', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -2428,7 +2510,10 @@ describe('RemoteFileBrowser persistence', () => {
         key: 'browserSidebarWidth',
         value: 336,
       });
-      expect(persistStore.saveCalls).toEqual([]);
+      expect(persistStore.saveCalls).toEqual([{
+        key: 'redeven:remote-file-browser:page-sidebar-width:widget-1',
+        value: 336,
+      }]);
     } finally {
       dispose();
     }

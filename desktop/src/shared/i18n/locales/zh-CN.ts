@@ -135,7 +135,6 @@ export const zhCN = {
     toggleThemeDescription: "在浅色和深色主题之间切换",
     openCommandPaletteTitle: "打开 Command Palette",
     openCommandPaletteDescription: "打开 command palette",
-    openDeckTitle: "打开 Deck",
   },
   desktop: {
     title: "Redeven Desktop",

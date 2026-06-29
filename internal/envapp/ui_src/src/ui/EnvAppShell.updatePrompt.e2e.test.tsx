@@ -50,7 +50,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   useCommand: () => ({ open: vi.fn(), registerAll: () => () => {}, getKeybindDisplay: (keybind: string) => keybind }),
   useLayout: () => ({
     isMobile: () => false,
-    sidebarActiveTab: () => 'deck',
+    sidebarActiveTab: () => 'terminal',
     setSidebarActiveTab: vi.fn(),
     setSidebarCollapsed: vi.fn(),
   }),
@@ -62,13 +62,6 @@ vi.mock('@floegence/floe-webapp-core', () => ({
     themePreset: () => undefined,
     setThemePreset: vi.fn(),
   }),
-  useDeck: () => ({
-    activeLayout: () => ({ widgets: [] }),
-    addWidget: vi.fn(() => 'widget-1'),
-    updateWidgetState: vi.fn(),
-    getWidgetState: () => ({}),
-  }),
-  useWidgetRegistry: () => ({ registerAll: vi.fn() }),
 }));
 
 vi.mock('@floegence/floe-webapp-core/app', () => ({
@@ -88,18 +81,16 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   ),
   DisplayModeSwitcher: (props: any) => (
     <div data-testid="display-mode-switcher">
-      {['activity', 'deck', 'workbench'].map((mode) => (
+      {['activity', 'workbench'].map((mode) => (
         <button type="button" onClick={() => props.onChange?.(mode)}>
-          {mode === 'activity' ? 'Activity' : mode === 'deck' ? 'Deck' : 'Workbench'}
+          {mode === 'activity' ? 'Activity' : 'Workbench'}
         </button>
       ))}
     </div>
   ),
   Panel: (props: any) => <div>{props.children}</div>,
   PanelContent: (props: any) => <div>{props.children}</div>,
-  sanitizeDisplayMode: (value: unknown, fallback = 'activity') => (
-    value === 'activity' || value === 'deck' || value === 'workbench' ? value : fallback
-  ),
+  sanitizeDisplayMode: (value: unknown, fallback = 'activity') => (value === 'activity' || value === 'workbench' ? value : fallback),
   Shell: (props: any) => <div>{props.children}</div>,
   StatusIndicator: (props: any) => <div>{props.label ?? props.status}</div>,
   TopBarIconButton: (props: any) => <button type="button" onClick={props.onClick}>{props.children}</button>,
@@ -207,7 +198,6 @@ vi.mock('./accessResume', () => ({
 
 vi.mock('./icons/FlowerIcon', () => ({ FlowerIcon: () => <span /> }));
 vi.mock('./icons/CodexIcon', () => ({ CodexIcon: () => <span />, CodexNavigationIcon: () => <span /> }));
-vi.mock('./pages/EnvDeckPage', () => ({ EnvDeckPage: () => <div data-testid="deck-page" /> }));
 vi.mock('./workbench/EnvWorkbenchPage', () => ({ EnvWorkbenchPage: () => <div data-testid="workbench-page" /> }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div /> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
@@ -220,10 +210,6 @@ vi.mock('./codex/CodexProvider', () => ({ CodexProvider: (props: any) => <>{prop
 vi.mock('./codex/CodexSidebar', () => ({ CodexSidebar: () => <div /> }));
 vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
 vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
-vi.mock('./deck/redevenDeckWidgets', () => ({
-  localizedRedevenDeckWidgets: () => [],
-  redevenDeckWidgets: [],
-}));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
 vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({ FlowerTurnLauncherWindow: () => <div /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div /> }));
@@ -333,9 +319,9 @@ describe('EnvAppShell update prompt orchestration', () => {
     const dispose = render(() => <EnvAppShell />, host);
 
     try {
-      await flushUntil(() => Boolean(host.querySelector('[data-testid="deck-page"]')));
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="workbench-page"]')));
 
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
       expect(connectMock).toHaveBeenCalled();
 
       latestDeferred.resolve({

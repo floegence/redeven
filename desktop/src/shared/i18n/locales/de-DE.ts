@@ -135,7 +135,6 @@ export const deDE = {
     toggleThemeDescription: "Zwischen hellem und dunklem Theme wechseln",
     openCommandPaletteTitle: "Command Palette öffnen",
     openCommandPaletteDescription: "Command palette öffnen",
-    openDeckTitle: "Deck öffnen",
   },
   desktop: {
     title: "Redeven Desktop",

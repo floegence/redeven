@@ -183,7 +183,6 @@ import {
   ICON_ENDPOINTS,
   buildControlPlaneStatusModel,
   buildProviderBackedEnvironmentActionModel,
-  capabilityUnavailableMessage,
   environmentLibraryCount,
   environmentProviderFilterValue,
   filterGatewayEnvironmentEntries,
@@ -2800,17 +2799,6 @@ function DesktopCommandRegistrar(props: Readonly<{
         execute: () => {
           void props.openEnvironment(environment, 'connect');
         },
-      });
-    }
-
-    if (snapshot.surface === 'connect_environment') {
-      list.push({
-        id: 'redeven.desktop.openDeck',
-        title: props.i18n.t('commandPalette.openDeckTitle'),
-        description: capabilityUnavailableMessage('Deck'),
-        category: props.i18n.t('commandPalette.categories.unavailable'),
-        icon: Search,
-        execute: () => props.showConnectEnvironment(capabilityUnavailableMessage('Deck')),
       });
     }
 

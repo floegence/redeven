@@ -135,7 +135,6 @@ export const ptBR = {
     toggleThemeDescription: "Alternar entre tema claro e escuro",
     openCommandPaletteTitle: "Abrir Command Palette",
     openCommandPaletteDescription: "Abrir a command palette",
-    openDeckTitle: "Abrir Deck",
   },
   desktop: {
     title: "Redeven Desktop",

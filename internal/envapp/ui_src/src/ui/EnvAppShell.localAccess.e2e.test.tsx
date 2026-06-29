@@ -58,7 +58,7 @@ let protocolClient: unknown = null;
 let protocolError: unknown = null;
 let resumeCalls: string[] = [];
 let layoutIsMobile = false;
-let sidebarActiveTabValue = 'deck';
+let sidebarActiveTabValue = 'terminal';
 let sidebarVisibilityMotionValue: 'animated' | 'instant' = 'animated';
 const setSidebarActiveTabMock = vi.fn((tab: string, opts?: {
   openSidebar?: boolean;
@@ -116,13 +116,6 @@ vi.mock('@floegence/floe-webapp-core', () => ({
     themePreset: () => undefined,
     setThemePreset: vi.fn(),
   }),
-  useDeck: () => ({
-    activeLayout: () => ({ widgets: [] }),
-    addWidget: vi.fn(() => 'widget-1'),
-    updateWidgetState: vi.fn(),
-    getWidgetState: () => ({}),
-  }),
-  useWidgetRegistry: () => ({ registerAll: vi.fn() }),
 }));
 
 vi.mock('@floegence/floe-webapp-core/app', () => ({
@@ -142,13 +135,13 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   ),
   DisplayModeSwitcher: (props: any) => (
     <div data-testid="display-mode-switcher">
-      {['activity', 'deck', 'workbench'].map((mode) => (
+      {['activity', 'workbench'].map((mode) => (
         <button
           type="button"
           aria-selected={props.mode === mode}
           onClick={() => props.onChange?.(mode)}
         >
-          {mode === 'activity' ? 'Activity' : mode === 'deck' ? 'Deck' : 'Workbench'}
+          {mode === 'activity' ? 'Activity' : 'Workbench'}
         </button>
       ))}
     </div>
@@ -156,7 +149,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   Panel: (props: any) => <div>{props.children}</div>,
   PanelContent: (props: any) => <div>{props.children}</div>,
   sanitizeDisplayMode: (value: unknown, fallback = 'activity') => (
-    value === 'activity' || value === 'deck' || value === 'workbench' ? value : fallback
+    value === 'activity' || value === 'workbench' ? value : fallback
   ),
   Shell: (props: any) => {
     const env = useContext(EnvContextMock as any) as {
@@ -379,7 +372,6 @@ vi.mock('./accessResume', () => ({
 
 vi.mock('./icons/FlowerIcon', () => ({ FlowerIcon: () => <span /> }));
 vi.mock('./icons/CodexIcon', () => ({ CodexIcon: () => <span />, CodexNavigationIcon: () => <span /> }));
-vi.mock('./pages/EnvDeckPage', () => ({ EnvDeckPage: () => <MockDisplayModeSurface testId="deck-page" /> }));
 vi.mock('./workbench/EnvWorkbenchPage', () => ({ EnvWorkbenchPage: () => <MockDisplayModeSurface testId="workbench-page" /> }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div /> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
@@ -433,10 +425,6 @@ vi.mock('./pages/EnvSettingsPage', async () => {
   };
 });
 vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
-vi.mock('./deck/redevenDeckWidgets', () => ({
-  localizedRedevenDeckWidgets: () => [],
-  redevenDeckWidgets: [],
-}));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
 vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({ FlowerTurnLauncherWindow: () => <div /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div /> }));
@@ -573,7 +561,7 @@ beforeEach(() => {
   protocolError = null;
   resumeCalls = [];
   layoutIsMobile = false;
-  sidebarActiveTabValue = 'deck';
+  sidebarActiveTabValue = 'terminal';
   delete window.redevenDesktopShell;
   delete window.redevenDesktopSessionContext;
   setSidebarActiveTabMock.mockClear();
@@ -1003,7 +991,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   });
 
-  it('binds Notes to the full-page display shell viewport while deck mode is active', async () => {
+  it('binds Notes to the full-page display shell viewport while workbench mode is active', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
 
@@ -1181,7 +1169,7 @@ describe('EnvAppShell local access gate', () => {
       expect(accessResumeMock).not.toHaveBeenCalled();
       expect(resumeCalls).toEqual([]);
       expect(host.textContent).not.toContain('Unlock local runtime');
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
       expect(host.textContent).not.toContain('Preparing secure session');
     } finally {
       dispose();
@@ -1292,7 +1280,7 @@ describe('EnvAppShell local access gate', () => {
       expect(connectMock).toHaveBeenCalledTimes(1);
       expect(unlockLocalAccessMock).not.toHaveBeenCalled();
       expect(accessResumeMock).not.toHaveBeenCalled();
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
     } finally {
       dispose();
     }
@@ -1414,8 +1402,8 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
-      expect(host.querySelector('[data-testid="deck-page-overlay"]')?.textContent).toBe('Connecting to local runtime...');
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="workbench-page-overlay"]')?.textContent).toBe('Connecting to local runtime...');
       expect(reconnectMock).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(12_000);
@@ -1423,7 +1411,7 @@ describe('EnvAppShell local access gate', () => {
 
       expect(getLocalAccessStatusMock.mock.calls.length).toBeGreaterThanOrEqual(3);
       expect(reconnectMock).toHaveBeenCalledTimes(1);
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
       expect(host.textContent).not.toContain('Waiting for runtime...');
     } finally {
       dispose();
@@ -1453,8 +1441,8 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
-      expect(host.querySelector('[data-testid="deck-page-overlay"]')?.textContent).toBe('Connecting to local runtime...');
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="workbench-page-overlay"]')?.textContent).toBe('Connecting to local runtime...');
 
       await vi.advanceTimersByTimeAsync(12_000);
       await flushUntil(() => host.textContent?.includes('Unlock local runtime') ?? false);
@@ -1572,13 +1560,13 @@ describe('EnvAppShell remote access gate', () => {
 
       expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
       expect(host.textContent).toContain('Preparing secure session');
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeNull();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
 
       resumeDeferred.resolve();
       await flushAsync();
       await flushAsync();
 
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
       expect(host.textContent).not.toContain('Preparing secure session');
     } finally {
       dispose();
@@ -1697,7 +1685,7 @@ describe('EnvAppShell remote access gate', () => {
       expect(accessResumeMock).toHaveBeenCalledTimes(2);
       expect(resumeCalls).toEqual(['resume123', 'resume123']);
       expect(statusCalls).toBeGreaterThanOrEqual(2);
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
       expect(host.textContent).not.toContain('Secure session needs attention');
     } finally {
       dispose();
@@ -1784,7 +1772,7 @@ describe('EnvAppShell remote access gate', () => {
         },
       });
       expect(accessResumeMock).toHaveBeenCalledWith({ token: 'resume123' });
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
       expect(host.textContent).not.toContain('Unlock runtime');
     } finally {
       dispose();
@@ -1945,8 +1933,8 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
-      expect(host.querySelector('[data-testid="deck-page-overlay"]')?.textContent).toBe('Connecting to runtime...');
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="workbench-page-overlay"]')?.textContent).toBe('Connecting to runtime...');
       expect(reconnectMock).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(2_000);
@@ -1965,7 +1953,7 @@ describe('EnvAppShell remote access gate', () => {
     }
   });
 
-  it('switches between activity, deck, and workbench mode from the header mode switcher on desktop', async () => {
+  it('migrates persisted deck mode to workbench and switches between activity and workbench on desktop', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     const storage = createStorageMock();
     storage.setItem('redeven_envapp_desktop_view_mode', 'deck');
@@ -1978,26 +1966,20 @@ describe('EnvAppShell remote access gate', () => {
     const dispose = render(() => <EnvAppShell />, host);
 
     try {
-      await flushUntil(() => Boolean(host.querySelector('[data-testid="deck-page"]')), 40);
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="workbench-page"]')), 40);
 
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
+      expect(storage.getItem('redeven_envapp_desktop_view_mode')).toBe('workbench');
 
       findButtonByText(host, 'Activity')?.click();
       await flushUntil(() => host.textContent?.includes('activity main') ?? false);
 
       expect(host.textContent).toContain('activity main');
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeNull();
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
-
-      findButtonByText(host, 'Deck')?.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-testid="deck-page"]')));
-
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeTruthy();
 
       findButtonByText(host, 'Workbench')?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-testid="workbench-page"]')));
 
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeNull();
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
     } finally {
       dispose();
@@ -2019,9 +2001,7 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
 
       expect(host.textContent).toContain('activity main');
-      expect(host.querySelector('[data-testid="deck-page"]')).toBeNull();
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
-      expect(findButtonByText(host, 'Deck')).toBeUndefined();
       expect(findButtonByText(host, 'Activity')).toBeUndefined();
       expect(findButtonByText(host, 'Workbench')).toBeUndefined();
     } finally {

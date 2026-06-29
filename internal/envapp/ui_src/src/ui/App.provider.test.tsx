@@ -22,12 +22,15 @@ vi.mock('@floegence/floe-webapp-core', async () => {
   }
 
   return {
+    CommandProvider: (props: any) => <>{props.children}</>,
+    ComponentRegistryProvider: (props: any) => <>{props.children}</>,
     FileBrowserDragProvider: (props: any) => <>{props.children}</>,
-    FloeProvider: (props: any) => {
-      const renderChildren = () => <NotificationProvider>{props.children}</NotificationProvider>;
-      return props.wrapAfterTheme ? props.wrapAfterTheme(renderChildren) : renderChildren();
-    },
+    FloeConfigProvider: (props: any) => <>{props.children}</>,
+    LayoutProvider: (props: any) => <>{props.children}</>,
     NotificationContainer: () => <div data-testid="notification-container" />,
+    NotificationProvider,
+    ThemeProvider: (props: any) => <>{props.children}</>,
+    WidgetRegistryProvider: (props: any) => <>{props.children}</>,
     useNotification: () => {
       const value = useContext(NotificationContext);
       if (!value) {
@@ -107,13 +110,7 @@ vi.mock('./services/desktopWindowChrome', () => ({
 vi.mock('./services/uiPersistence', () => ({
   resolveEnvAppStorageBinding: () => ({
     namespace: 'test-env',
-    deckStorageKey: 'test-env:deck',
   }),
-}));
-
-vi.mock('./deck/redevenDeckPresets', () => ({
-  REDEVEN_DECK_LAYOUT_IDS: { default: 'default' },
-  localizedRedevenDeckPresets: () => [],
 }));
 
 describe('App provider composition', () => {

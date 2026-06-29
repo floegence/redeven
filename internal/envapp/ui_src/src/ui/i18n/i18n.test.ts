@@ -389,7 +389,6 @@ describe('Env App i18n dictionaries', () => {
     expect(zhCN.t('workbench.widgets.ports.label')).toBe('Web服务');
     expect(zhCN.t('workbench.contextMenu.addWidget', { label: '终端' })).toBe('添加 终端');
     expect(zhCN.t('workbench.contextMenu.goToWidget', { label: 'Web服务' })).toBe('转到 Web服务');
-    expect(zhCN.t('deck.presets.terminalFocus')).toBe('终端聚焦');
     expect(zhCN.t('codespacesSettings.portRange')).toBe('端口范围');
     expect(zhCN.t('codeRuntime.rows.managedEditorSource')).toBe('托管编辑器来源');
     expect(zhCN.t('codeRuntime.currentEditorSection')).toBe('当前编辑器');

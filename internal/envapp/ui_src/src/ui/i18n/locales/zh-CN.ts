@@ -243,8 +243,6 @@ export const zhCN = {
         general: "通用",
         desktop: "Desktop",
       },
-      switchToDeckTitle: "切换到 Deck Mode",
-      switchToDeckDescription: "打开 deck workspace",
       switchToActivityTitle: "切换到 Activity Mode",
       switchToActivityDescription: "显示 activity workspace",
       switchToWorkbenchTitle: "切换到 Workbench Mode",
@@ -372,16 +370,6 @@ export const zhCN = {
     notice: "密码验证会保留在 Runtime 管理的会话内，之后才会继续启用交互功能。",
     missingResumeTokenError: "解锁已成功，但未返回 resume token。",
     errors: localeSettingsSectionMessages['zh-CN'].accessGate.errors,
-  },
-  deck: {
-    presets: {
-      default: "默认",
-      terminalFocus: "终端聚焦",
-      filesFocus: "文件聚焦",
-      monitoring: "监控",
-      flowerPairing: "Flower 配对",
-      codexReview: "Codex 审查",
-    },
   },
   aiChrome: {
     flowerTitle: "Flower",

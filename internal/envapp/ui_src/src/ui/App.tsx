@@ -1,4 +1,15 @@
-import { FileBrowserDragProvider, FloeProvider, NotificationContainer, useTheme } from '@floegence/floe-webapp-core';
+import {
+  CommandProvider,
+  ComponentRegistryProvider,
+  FileBrowserDragProvider,
+  FloeConfigProvider,
+  LayoutProvider,
+  NotificationContainer,
+  NotificationProvider,
+  ThemeProvider,
+  useTheme,
+  WidgetRegistryProvider,
+} from '@floegence/floe-webapp-core';
 import { createMemo, onCleanup, onMount } from 'solid-js';
 import { CommandPalette } from '@floegence/floe-webapp-core/ui';
 import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
@@ -14,7 +25,6 @@ import { installDesktopEmbeddedDragRegionSync } from './services/desktopEmbedded
 import { installDesktopWindowChromeDocumentSync } from './services/desktopWindowChrome';
 import { resolveEnvAppStorageBinding } from './services/uiPersistence';
 import { TerminalSessionsLifecycleSync } from './services/terminalSessionsLifecycleSync';
-import { REDEVEN_DECK_LAYOUT_IDS, localizedRedevenDeckPresets } from './deck/redevenDeckPresets';
 import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
 import { I18nProvider, useI18n, type I18nHelpers } from './i18n';
 
@@ -62,12 +72,6 @@ function buildFloeConfig(t: I18nHelpers['t']) {
       mobileNavigationLabel: t('shell.accessibility.mobileNavigationLabel'),
       sidebarLabel: t('shell.accessibility.sidebarLabel'),
       mainLabel: t('shell.accessibility.mainLabel'),
-    },
-    deck: {
-      storageKey: persistenceBinding.deckStorageKey,
-      defaultActiveLayoutId: REDEVEN_DECK_LAYOUT_IDS.default,
-      presetsMode: 'mutable',
-      presets: localizedRedevenDeckPresets(t),
     },
   } as const;
 }
@@ -171,26 +175,31 @@ function EnvAppProviders() {
   const floeConfig = createMemo(() => buildFloeConfig(i18n.t));
 
   return (
-    <FloeProvider
-      config={floeConfig()}
-      wrapAfterTheme={(renderChildren) => (
+    <FloeConfigProvider config={floeConfig()}>
+      <ThemeProvider>
         <>
           <DesktopThemeSync />
           <ProtocolProvider contract={redevenV1Contract}>
             <FileBrowserDragProvider>
-              {renderChildren()}
+              <NotificationProvider>
+                <ComponentRegistryProvider>
+                  <LayoutProvider>
+                    <WidgetRegistryProvider>
+                      <CommandProvider>
+                        <TerminalSessionsLifecycleSync />
+                        <EnvAppShell />
+                        <CommandPalette />
+                        <NotificationContainer />
+                      </CommandProvider>
+                    </WidgetRegistryProvider>
+                  </LayoutProvider>
+                </ComponentRegistryProvider>
+              </NotificationProvider>
             </FileBrowserDragProvider>
           </ProtocolProvider>
         </>
-      )}
-    >
-      <>
-        <TerminalSessionsLifecycleSync />
-        <EnvAppShell />
-        <CommandPalette />
-        <NotificationContainer />
-      </>
-    </FloeProvider>
+      </ThemeProvider>
+    </FloeConfigProvider>
   );
 }
 
