@@ -254,11 +254,11 @@ ReDevPlugin dependency and contract checks with `GOWORK=off`.
   rollback, data retention, export/import, and diagnostics;
 - permission evaluation, dangerous-confirmation intents, token/ticket minting,
   bridge protocol, rate limits, audit event contracts, and stable error codes;
-- sandboxed iframe UI bootstrap, asset serving contracts, bridge SDK, and
-  host-neutral settings/intent helpers;
-- Rust `redevplugin-runtime` supervision, IPC contracts, WASM actor/job
-  execution, storage/network hot paths, quotas, target classification, and
-  revocation handling;
+- mountable HTTP adapters, sandboxed iframe UI bootstrap, asset serving
+  contracts, bridge SDK, and host-neutral settings/intent helpers;
+- Rust `redevplugin-runtime`, the released runtime manager/supervisor used to
+  launch it, IPC contracts, WASM actor/job execution, storage/network hot paths,
+  quotas, target classification, and revocation handling;
 - host-neutral CLI, templates, validator, replay harness, contract fixtures,
   and platform test suites.
 
@@ -271,6 +271,9 @@ Redeven owns only product integration and business adapters:
   artifact resolution into `redevplugin` adapter interfaces;
 - integrating plugin surfaces into Env App, Activity Bar, Workbench, Settings,
   Desktop packaging, installer packaging, and runtime startup diagnostics;
+- selecting the released `redevplugin-runtime` artifact for the current Redeven
+  release and wiring the ReDevPlugin runtime manager into Redeven process
+  startup/shutdown without replacing its IPC, lease, quota, or revocation logic;
 - registering Redeven-owned business capabilities through
   `redevplugin.CapabilityAdapter` or the released equivalent interface;
 - wiring Flower/Floret tools to the `redevplugin` lifecycle APIs without
@@ -286,7 +289,7 @@ Use this responsibility matrix as the default decision rule:
 | Package and trust | Package layout, canonical hashes, signing rules, manifest validation, trust state contracts, compatibility manifests | Which registries or local sources Redeven allows, local policy caps, review UX, and product audit presentation |
 | Lifecycle | Install, enable, open, disable, uninstall, update, downgrade, export/import, diagnostics, and data-retention APIs | Env App placement, Desktop commands, Activity Bar/Workbench/Settings entry points, and who may invoke the actions |
 | UI runtime | Sandboxed iframe bootstrap, asset ticket/session protocol, bridge SDK, exact-origin messaging, settings and intent contracts | Native shell chrome, Workbench layout, Settings placement, startup diagnostics, route mounting, and Redeven product copy |
-| Backend runtime | Rust `redevplugin-runtime`, WASM actor/job model, IPC, leases, quotas, revocation, hostcall contracts, stream envelopes | Locating and supervising the released runtime binary, packaging it with Redeven, and surfacing diagnostics |
+| Backend runtime | Rust `redevplugin-runtime`, runtime manager/supervisor, WASM actor/job model, IPC, leases, quotas, revocation, hostcall contracts, stream envelopes | Selecting and packaging the released runtime artifact, wiring lifecycle hooks into Redeven startup/shutdown, and surfacing diagnostics |
 | Storage, network, and secrets | Host-neutral broker contracts, request contexts, target classifiers, quotas, secret reference contracts, and stable errors | State-root selection, vault integration, environment/network policy, proxy settings, and user-facing grant UX |
 | Business capabilities | Generic capability adapter interface, permission hooks, operation/stream envelope, and audit DTOs | Docker/Podman, files, shells, cloud services, database access, local product APIs, and other Redeven domain adapters |
 | Plugin generation | Templates, validators, package builder, replay harness, generated SDK clients, and example fixtures | Flower prompt orchestration, user intent collection, environment selection, review/approval UX, and generated-plugin install flow |
@@ -311,10 +314,11 @@ Redeven's integration layer must keep the ReDevPlugin platform state opaque:
   diagnostics sink, and secret-vault adapter, but must not directly edit
   ReDevPlugin registry tables, package staging state, token/ticket rows, storage
   namespaces, runtime leases, or revoke epochs.
-- Redeven may supervise the released `redevplugin-runtime` binary as a child
-  process and surface its diagnostics, but must not fork the Rust IPC protocol,
-  inject custom hostcalls, run plugin WASM modules in a Redeven-owned execution
-  path, or bypass runtime lease/quota/revocation checks.
+- Redeven may configure and launch the released `redevplugin-runtime` through
+  the released ReDevPlugin runtime manager and surface its diagnostics, but must
+  not fork the Rust IPC protocol, implement an alternate supervisor, inject
+  custom hostcalls, run plugin WASM modules in a Redeven-owned execution path, or
+  bypass runtime lease/quota/revocation checks.
 - Redeven UI may frame host chrome around plugin surfaces and decide where a
   surface appears, but the plugin document itself must be loaded through
   ReDevPlugin sandbox bootstrap, asset-ticket/session validation, bridge
@@ -369,8 +373,8 @@ Use this checklist when reviewing any Redeven plugin integration change:
 - Redeven may mount, configure, and observe ReDevPlugin, but must not implement
   an alternate manifest parser, package builder, registry lifecycle, bridge
   token issuer, asset-ticket system, storage broker, network broker, runtime
-  IPC layer, WASM executor, stream envelope, operation manager, or plugin
-  lifecycle state machine.
+  IPC layer, runtime supervisor, WASM executor, stream envelope, operation
+  manager, or plugin lifecycle state machine.
 - Redeven may register business capability adapters such as containers, files,
   shell, cloud, or database access. Each adapter must receive a request context
   that has already passed ReDevPlugin identity, permission, confirmation,
