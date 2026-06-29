@@ -4347,9 +4347,9 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		})
 		outcome.Result = result
 		outcome.Pending = &PendingToolResult{
-			Handle:      snapshot.PendingHandle,
+			Handle:      snapshot.ProcessID,
 			Summary:     "Terminal process is running",
-			Instruction: "Use terminal.read with this process_id to inspect latest output, terminal.write to send input, or terminal.terminate to stop it.",
+			Instruction: "Use this handle value as process_id for terminal.read, terminal.write, or terminal.terminate.",
 			Metadata: map[string]string{
 				"process_id": snapshot.ProcessID,
 			},

@@ -2068,9 +2068,6 @@ func toolApprovalLabel(toolName string) string {
 
 func toolApprovalDisplayLabel(toolName string, args map[string]any) string {
 	fallback := toolApprovalLabel(toolName)
-	if len(args) == 0 {
-		return fallback
-	}
 	activity := floretActivityForToolCall(toolName, args)
 	if activity == nil {
 		return fallback

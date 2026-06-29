@@ -200,8 +200,11 @@ func TestHandleToolCall_TerminalExecPending_PersistsProcessHandle(t *testing.T) 
 	if got := strings.TrimSpace(anyToString(resultMap["status"])); got != terminalProcessStatusRunning {
 		t.Fatalf("status=%q, want running", got)
 	}
-	if got := strings.TrimSpace(anyToString(resultMap["pending_handle"])); got != outcome.Pending.Handle {
-		t.Fatalf("pending_handle=%q, want %q", got, outcome.Pending.Handle)
+	if outcome.Pending.Handle != processID {
+		t.Fatalf("pending handle=%q, want process id %q", outcome.Pending.Handle, processID)
+	}
+	if _, ok := resultMap["pending_handle"]; ok {
+		t.Fatalf("pending result must not expose pending_handle: %#v", resultMap)
 	}
 
 	rec, err := store.GetToolCall(ctx, "env_1", "run_terminal_pending", toolID)
@@ -221,6 +224,9 @@ func TestHandleToolCall_TerminalExecPending_PersistsProcessHandle(t *testing.T) 
 	}
 	if got := strings.TrimSpace(anyToString(persisted["process_id"])); got != processID {
 		t.Fatalf("persisted process_id=%q, want %q", got, processID)
+	}
+	if _, ok := persisted["pending_handle"]; ok {
+		t.Fatalf("persisted result must not expose pending_handle: %#v", persisted)
 	}
 	if got := strings.TrimSpace(anyToString(persisted["status"])); got != terminalProcessStatusRunning {
 		t.Fatalf("persisted status=%q, want running", got)

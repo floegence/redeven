@@ -48,6 +48,34 @@ func TestToolApprovalDisplayLabelFallsBackWithoutCommand(t *testing.T) {
 	}
 }
 
+func TestFlowerApprovalActionFromFloretPendingUsesReadableTerminalReadLabel(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{RunID: "run_pending_read_label", MessageID: "msg_pending_read_label"})
+	action, ok := r.flowerApprovalActionFromFloretPending(flruntime.PendingApproval{
+		ApprovalID: "approval_pending_read_label",
+		ToolCallID: "tool_pending_read_label",
+		ToolName:   "terminal.read",
+		ThreadID:   flruntime.ThreadID("thread_pending_read_label"),
+		TurnID:     flruntime.TurnID("msg_pending_read_label"),
+		State:      "requested",
+		Revision:   1,
+		Resources: []flruntime.PendingApprovalResource{
+			{Kind: "terminal_process", Value: "tp_cb3f475ce437593bb7359824"},
+		},
+		Effects: []string{"shell"},
+	})
+	if !ok {
+		t.Fatal("pending terminal.read approval did not map to Flower action")
+	}
+	if action.Summary.Label != "Read terminal output" {
+		t.Fatalf("summary label=%q, want readable terminal.read label", action.Summary.Label)
+	}
+	if action.Summary.Label == "tp_cb3f475ce437593bb7359824" || action.Summary.Label == "terminal.read" {
+		t.Fatalf("summary label exposed internal process/tool label: %q", action.Summary.Label)
+	}
+}
+
 func TestControlConfirmationApprovalActionUsesCommandPresentationLabel(t *testing.T) {
 	t.Parallel()
 

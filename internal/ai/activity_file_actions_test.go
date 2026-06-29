@@ -356,15 +356,27 @@ func TestSanitizeActivityTimelineMessageJSONFiltersTerminalHostPaths(t *testing.
 				"requires_approval":false,
 				"label":"sleep 10",
 				"renderer":"terminal",
+				"chips":[
+					{"kind":"state","label":"State","value":"running","tone":"running"},
+					{"kind":"handle","label":"Handle","value":"tp_private","tone":"quiet"},
+					{"kind":"process_id","label":"process","value":"tp_public","tone":"quiet"}
+				],
+				"metadata":{
+					"pending_handle":"tp_private",
+					"pending_process_id":"tp_private",
+					"cwd":"/Users/alice/private",
+					"visible":"kept"
+				},
 				"payload":{
 					"command":"sleep 10",
 					"process_id":"tp_public",
+					"pending_handle":"tp_private",
 					"cwd":"/Users/alice/private",
 					"workdir":"/Users/alice/private",
 					"stdin":"secret",
 					"output":"",
 					"status":"success",
-					"result":{"cwd":"/Users/alice/private","visible":"kept"}
+					"result":{"cwd":"/Users/alice/private","pending_state":"running","visible":"kept"}
 				}
 			}]
 		}]
@@ -374,12 +386,12 @@ func TestSanitizeActivityTimelineMessageJSONFiltersTerminalHostPaths(t *testing.
 		t.Fatalf("SanitizeActivityTimelineMessageJSON: %v", err)
 	}
 	body := string(sanitized)
-	for _, forbidden := range []string{`"cwd"`, `"workdir"`, `"stdin"`, "/Users/alice/private", "secret"} {
+	for _, forbidden := range []string{`"cwd"`, `"workdir"`, `"stdin"`, `"pending_handle"`, `"pending_process_id"`, `"pending_state"`, `"kind":"state"`, `"kind":"handle"`, "tp_private", "/Users/alice/private", "secret"} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("terminal public activity contains %q: %s", forbidden, body)
 		}
 	}
-	for _, required := range []string{`"command":"sleep 10"`, `"process_id":"tp_public"`, `"output":""`, `"status":"success"`} {
+	for _, required := range []string{`"command":"sleep 10"`, `"process_id":"tp_public"`, `"output":""`, `"status":"success"`, `"visible":"kept"`, `"kind":"process_id"`} {
 		if !strings.Contains(body, required) {
 			t.Fatalf("terminal public activity missing %q: %s", required, body)
 		}

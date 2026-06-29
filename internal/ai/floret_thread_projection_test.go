@@ -1,12 +1,14 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 func TestFloretThreadProjectionPersistsFullAssistantContentAfterActivity(t *testing.T) {
@@ -66,6 +68,47 @@ func TestFloretThreadProjectionPersistsFullAssistantContentAfterActivity(t *test
 	}
 	if markdown.Content != fullAnswer {
 		t.Fatalf("snapshot markdown=%q, want full answer", markdown.Content)
+	}
+}
+
+func TestSettlePendingToolWithFloretUsesActiveHost(t *testing.T) {
+	host := &recordingFloretHost{
+		settleResult: flruntime.PendingToolSettlementResult{
+			RunID: "run_terminal",
+			Projection: flruntime.ThreadTurnProjection{
+				RunID: "run_terminal",
+			},
+		},
+	}
+	activeRun := &run{id: "run_terminal", endpointID: "env_terminal", threadID: "thread_terminal"}
+	activeRun.setActiveFloretHost(host)
+	svc := &Service{
+		activeRunByTh: map[string]string{runThreadKey("env_terminal", "thread_terminal"): "run_terminal"},
+		runs:          map[string]*run{"run_terminal": activeRun},
+	}
+	req := flruntime.PendingToolSettlementRequest{
+		RunID:      "run_terminal",
+		TurnID:     "turn_terminal",
+		ToolCallID: "call_terminal",
+		ToolName:   "terminal.exec",
+		Handle:     "tp_terminal",
+		Status:     flruntime.PendingToolSettlementCompleted,
+		Summary:    "Terminal process completed",
+	}
+
+	result, err := svc.settlePendingToolWithFloret(context.Background(), "env_terminal", "thread_terminal", req)
+	if err != nil {
+		t.Fatalf("settlePendingToolWithFloret: %v", err)
+	}
+	if result.RunID != "run_terminal" {
+		t.Fatalf("result=%#v, want active host result", result)
+	}
+	if len(host.settleRequests) != 1 {
+		t.Fatalf("settle requests=%#v, want one", host.settleRequests)
+	}
+	got := host.settleRequests[0]
+	if got.ToolCallID != "call_terminal" || got.Handle != "tp_terminal" {
+		t.Fatalf("settle request=%#v", got)
 	}
 }
 
@@ -436,6 +479,102 @@ func TestFloretTerminalThreadProjectionRejectsMismatchedRun(t *testing.T) {
 	}
 	if r.hasFloretThreadDetailProjectionApplied() {
 		t.Fatalf("projection flag set by mismatched terminal projection")
+	}
+}
+
+func TestApplyFloretPendingToolSettlementProjectionPreservesCanceledAssistantMessage(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(ctx, meta, "terminal settlement", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_terminal_settlement"
+	messageID := "msg_terminal_settlement"
+	createdAt := time.UnixMilli(1_700_100_000_000).UnixMilli()
+	initialRaw, err := json.Marshal(persistedMessage{
+		ID:        messageID,
+		Role:      "assistant",
+		Status:    "canceled",
+		Timestamp: createdAt,
+		Blocks:    []any{&persistedMarkdownBlock{Type: "markdown", Content: ""}},
+	})
+	if err != nil {
+		t.Fatalf("marshal initial assistant: %v", err)
+	}
+	rowID, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, thread.ThreadID, threadstore.Message{
+		ThreadID:        thread.ThreadID,
+		EndpointID:      meta.EndpointID,
+		MessageID:       messageID,
+		Role:            "assistant",
+		Status:          "canceled",
+		CreatedAtUnixMs: createdAt,
+		UpdatedAtUnixMs: createdAt,
+		MessageJSON:     string(initialRaw),
+	}, meta.UserPublicID, meta.UserEmail)
+	if err != nil {
+		t.Fatalf("AppendMessage: %v", err)
+	}
+
+	timeline := floretProjectionTimeline(runID, thread.ThreadID, messageID, "exec-1", "terminal.exec")
+	timeline.Summary = observation.ActivitySummary{
+		Status:     observation.ActivityStatusCanceled,
+		Severity:   observation.ActivitySeverityWarning,
+		TotalItems: 1,
+		Counts:     observation.ActivityCounts{Canceled: 1},
+	}
+	timeline.Items[0].Status = observation.ActivityStatusCanceled
+	timeline.Items[0].Severity = observation.ActivitySeverityWarning
+	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, messageID, flruntime.ThreadTurnProjection{
+		ThreadID: flruntime.ThreadID(thread.ThreadID),
+		TurnID:   flruntime.TurnID(messageID),
+		RunID:    flruntime.RunID(runID),
+		TraceID:  flruntime.TraceID(runID),
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: timeline,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("apply settlement projection: %v", err)
+	}
+
+	gotRowID, raw, err := svc.threadsDB.GetTranscriptMessageRowIDAndJSONByMessageID(ctx, meta.EndpointID, thread.ThreadID, messageID)
+	if err != nil {
+		t.Fatalf("GetTranscriptMessageRowIDAndJSONByMessageID: %v", err)
+	}
+	if gotRowID != rowID {
+		t.Fatalf("rowID=%d, want original row %d", gotRowID, rowID)
+	}
+	var msg struct {
+		Status string            `json:"status"`
+		Blocks []json.RawMessage `json:"blocks"`
+	}
+	if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+		t.Fatalf("unmarshal assistant: %v", err)
+	}
+	if msg.Status != "canceled" || len(msg.Blocks) != 1 {
+		t.Fatalf("assistant msg=%#v, want one canceled activity block", msg)
+	}
+	var block struct {
+		Type    string `json:"type"`
+		Summary struct {
+			Status string `json:"status"`
+		} `json:"summary"`
+		Items []struct {
+			Status string `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(msg.Blocks[0], &block); err != nil {
+		t.Fatalf("unmarshal activity block: %v", err)
+	}
+	if block.Type != activityTimelineBlockType ||
+		block.Summary.Status != string(observation.ActivityStatusCanceled) ||
+		len(block.Items) != 1 ||
+		block.Items[0].Status != string(observation.ActivityStatusCanceled) {
+		t.Fatalf("activity block=%#v, want canceled item", block)
 	}
 }
 

@@ -72,6 +72,9 @@ type recordingFloretHost struct {
 	detailRequests      []flruntime.ReadSubAgentDetailRequest
 	spawnRequests       []flruntime.SpawnSubAgentRequest
 	sendInputRequests   []flruntime.SendSubAgentInputRequest
+	settleRequests      []flruntime.PendingToolSettlementRequest
+	settleResult        flruntime.PendingToolSettlementResult
+	settleErr           error
 	deleteThreadIDs     []flruntime.ThreadID
 	pendingApprovals    []flruntime.PendingApproval
 }
@@ -131,8 +134,14 @@ func (h *recordingFloretHost) CompletePendingTool(context.Context, flruntime.Pen
 	return flruntime.TurnResult{}, nil
 }
 
-func (h *recordingFloretHost) SettlePendingTool(context.Context, flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
-	return flruntime.PendingToolSettlementResult{}, errors.New("settle pending tool not implemented")
+func (h *recordingFloretHost) SettlePendingTool(_ context.Context, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.settleRequests = append(h.settleRequests, req)
+	if h.settleErr != nil {
+		return flruntime.PendingToolSettlementResult{}, h.settleErr
+	}
+	return h.settleResult, nil
 }
 
 func (h *recordingFloretHost) SpawnSubAgent(_ context.Context, req flruntime.SpawnSubAgentRequest) (flruntime.SubAgentSnapshot, error) {

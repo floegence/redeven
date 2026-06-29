@@ -40,7 +40,7 @@ func TestTerminalProcessManagerQuickCompletionCapturesPTYOutput(t *testing.T) {
 	if !strings.Contains(snapshot.Output, "quick-output") {
 		t.Fatalf("output=%q, want quick-output", snapshot.Output)
 	}
-	if snapshot.ProcessID == "" || snapshot.PendingHandle == "" {
+	if snapshot.ProcessID == "" {
 		t.Fatalf("missing process identity: %+v", snapshot)
 	}
 	if snapshot.ExecutionLocation != ToolTargetModeLocalRuntime {
@@ -157,8 +157,11 @@ func TestHandleToolCallTerminalExecReturnsPendingProcess(t *testing.T) {
 	if processID == "" {
 		t.Fatalf("missing process_id: %#v", result)
 	}
-	if outcome.Pending.Handle != terminalProcessPendingHandle(processID) {
-		t.Fatalf("pending handle=%q, want process handle for %s", outcome.Pending.Handle, processID)
+	if outcome.Pending.Handle != processID {
+		t.Fatalf("pending handle=%q, want process id %s", outcome.Pending.Handle, processID)
+	}
+	if _, ok := result["pending_handle"]; ok {
+		t.Fatalf("terminal result must not expose pending_handle: %#v", result)
 	}
 	if got := strings.TrimSpace(anyToString(result["status"])); got != terminalProcessStatusRunning {
 		t.Fatalf("status=%q, want running", got)
@@ -166,6 +169,72 @@ func TestHandleToolCallTerminalExecReturnsPendingProcess(t *testing.T) {
 	if _, err := manager.Terminate(processID); err != nil {
 		t.Fatalf("Terminate: %v", err)
 	}
+}
+
+func TestHandleToolCallTerminalPendingHandleIsProcessIDForInteractiveTools(t *testing.T) {
+	workspace := t.TempDir()
+	store := openTerminalProcessTestStore(t)
+	defer func() { _ = store.Close() }()
+	upsertTerminalProcessTestRun(t, store, "env_1", "thread_1", "run_interactive", "turn_1")
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
+
+	r := newTerminalProcessTestRun(workspace, &Service{terminalProcesses: manager}, store, "env_1", "thread_1", "run_interactive", "turn_1")
+
+	outcome, err := r.handleToolCall(context.Background(), "tool_exec", "terminal.exec", map[string]any{
+		"command":  "read line; printf 'reply:%s\\n' \"$line\"; sleep 5",
+		"yield_ms": 1,
+	})
+	if err != nil {
+		t.Fatalf("terminal.exec: %v", err)
+	}
+	if outcome == nil || outcome.Pending == nil {
+		t.Fatalf("outcome=%#v, want pending", outcome)
+	}
+	processID := strings.TrimSpace(outcome.Pending.Handle)
+	if processID == "" {
+		t.Fatalf("pending handle is empty: %#v", outcome.Pending)
+	}
+
+	if _, err := r.handleToolCall(context.Background(), "tool_write", "terminal.write", map[string]any{
+		"process_id": processID,
+		"input":      "hello\n",
+	}); err != nil {
+		t.Fatalf("terminal.write with pending handle: %v", err)
+	}
+	readResult := readTerminalToolUntil(t, r, processID, "reply:hello")
+	if _, err := r.handleToolCall(context.Background(), "tool_terminate", "terminal.terminate", map[string]any{
+		"process_id": processID,
+	}); err != nil {
+		t.Fatalf("terminal.terminate with pending handle after output %#v: %v", readResult, err)
+	}
+}
+
+func readTerminalToolUntil(t *testing.T, r *run, processID string, want string) map[string]any {
+	t.Helper()
+	var afterSeq int64
+	deadline := time.Now().Add(3 * time.Second)
+	var last map[string]any
+	for time.Now().Before(deadline) {
+		outcome, err := r.handleToolCall(context.Background(), "tool_read", "terminal.read", map[string]any{
+			"process_id": processID,
+			"after_seq":  afterSeq,
+			"wait_ms":    500,
+			"max_bytes":  10000,
+		})
+		if err != nil {
+			t.Fatalf("terminal.read with pending handle: %v", err)
+		}
+		last, _ = outcome.Result.(map[string]any)
+		if strings.Contains(anyToString(last["output"]), want) || strings.Contains(anyToString(last["latest_output"]), want) {
+			return last
+		}
+		if seq := readInt64Field(last, "last_seq"); seq > afterSeq {
+			afterSeq = seq
+		}
+	}
+	t.Fatalf("terminal.read output=%#v, want %q", last, want)
+	return nil
 }
 
 func managerReadUntil(t *testing.T, manager *terminalProcessManager, processID string, afterSeq int64, want string) terminalProcessSnapshot {

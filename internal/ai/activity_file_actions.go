@@ -269,6 +269,16 @@ func sanitizeActivityTimelineBlockRecord(block map[string]any) {
 			continue
 		}
 		item["target_refs"] = sanitizeActivityTargetRefsValue(item["target_refs"])
+		if chips := sanitizeActivityChipsValue(item["chips"]); len(chips) > 0 {
+			item["chips"] = chips
+		} else {
+			delete(item, "chips")
+		}
+		if metadata := sanitizeActivityMetadataValue(item["metadata"]); len(metadata) > 0 {
+			item["metadata"] = metadata
+		} else {
+			delete(item, "metadata")
+		}
 		renderer := observation.ActivityRenderer(strings.TrimSpace(fmt.Sprint(item["renderer"])))
 		if payload, ok := sanitizeActivityPayloadValue(item["payload"], renderer); ok {
 			item["payload"] = payload
@@ -395,6 +405,76 @@ func sanitizeActivityTargetRefsValue(value any) []any {
 	return out
 }
 
+func sanitizeActivityChipsValue(value any) []any {
+	chips, _ := value.([]any)
+	if len(chips) == 0 {
+		return nil
+	}
+	out := make([]any, 0, len(chips))
+	for _, chipValue := range chips {
+		chip, ok := chipValue.(map[string]any)
+		if !ok {
+			continue
+		}
+		kind := activityMapString(chip, "kind")
+		label := activityMapString(chip, "label")
+		value := activityMapString(chip, "value")
+		if kind == "" || label == "" || activityChipForbidden(kind, value) {
+			continue
+		}
+		next := map[string]any{
+			"kind":  kind,
+			"label": label,
+		}
+		if value != "" {
+			next["value"] = value
+		}
+		if tone := activityMapString(chip, "tone"); tone != "" {
+			next["tone"] = tone
+		}
+		out = append(out, next)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func activityChipForbidden(kind string, value string) bool {
+	switch activityPayloadKeyPolicyToken(kind) {
+	case "handle":
+		return true
+	case "state":
+		return strings.TrimSpace(value) == string(observation.ActivityStatusRunning)
+	default:
+		return false
+	}
+}
+
+func sanitizeActivityMetadataValue(value any) map[string]any {
+	metadata, _ := value.(map[string]any)
+	if len(metadata) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(metadata))
+	for key, raw := range metadata {
+		key = strings.TrimSpace(key)
+		token := activityPayloadKeyPolicyToken(key)
+		if key == "" || strings.HasPrefix(token, "pending_") || activityPayloadForbiddenKey(key) {
+			continue
+		}
+		text := strings.TrimSpace(fmt.Sprint(raw))
+		if text == "" {
+			continue
+		}
+		out[key] = text
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 func sanitizeActivityPayloadValue(value any, renderer observation.ActivityRenderer) (map[string]any, bool) {
 	payload, ok := value.(map[string]any)
 	if !ok || len(payload) == 0 {
@@ -477,7 +557,11 @@ func sanitizeActivityPublicValue(value any) any {
 }
 
 func activityPayloadForbiddenKey(key string) bool {
-	switch activityPayloadKeyPolicyToken(key) {
+	token := activityPayloadKeyPolicyToken(key)
+	if strings.HasPrefix(token, "pending_") {
+		return true
+	}
+	switch token {
 	case "action_path", "cwd", "directory_path", "display_path", "file_path", "original_file", "path", "preview_path", "private_path", "root_dir", "stdin", "updated_file", "workdir":
 		return true
 	default:
@@ -517,7 +601,7 @@ func activityPayloadKeyPolicyToken(key string) string {
 func activityPayloadAllowedKeys(renderer observation.ActivityRenderer) map[string]struct{} {
 	switch renderer {
 	case observation.ActivityRendererTerminal:
-		return stringSet("command", "description", "process_id", "pending_handle", "execution_location", "output", "latest_output", "first_seq", "last_seq", "total_bytes", "started_at_ms", "ended_at_ms", "exit_code", "duration_ms", "truncated", "stdout", "stderr", "summary", "details", "status", "error", "content_ref")
+		return stringSet("command", "description", "process_id", "execution_location", "output", "latest_output", "first_seq", "last_seq", "total_bytes", "started_at_ms", "ended_at_ms", "exit_code", "duration_ms", "truncated", "stdout", "stderr", "summary", "details", "status", "error", "content_ref")
 	case observation.ActivityRendererFile:
 		return stringSet("operation", "display_name", "file_action_id", "content", "line_offset", "line_count", "total_lines", "change_type", "additions", "deletions", "unified_diff", "diff_unavailable_reason", "truncated", "summary", "details", "status", "error", "content_ref")
 	case observation.ActivityRendererPatch:

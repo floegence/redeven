@@ -2960,6 +2960,46 @@ describe('Flower live projection', () => {
     })).toThrow(/activity item status is unsupported/);
   });
 
+  it('rejects terminal activity pending lifecycle payload fields', () => {
+    expect(() => mapFlowerLiveEvents({
+      events: [{
+        schema_version: 1,
+        seq: 1,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        at_unix_ms: 3000,
+        kind: 'message.block_set',
+        payload: {
+          message_id: 'assistant-live',
+          block_index: 0,
+          block: {
+            type: 'activity-timeline',
+            schema_version: 1,
+            summary: { status: 'running', severity: 'normal', needs_attention: true, total_items: 1, counts: { running: 1 } },
+            items: [{
+              item_id: 'tool-1',
+              tool_id: 'tool-1',
+              tool_name: 'terminal.exec',
+              kind: 'tool',
+              status: 'running',
+              severity: 'normal',
+              needs_attention: true,
+              requires_approval: false,
+              renderer: 'terminal',
+              payload: {
+                command: 'sleep 10',
+                process_id: 'tp_123',
+                pending_handle: 'tp_123',
+              },
+            }],
+          },
+        },
+      }],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    })).toThrow(/activity_item\.payload\.pending_handle/);
+  });
+
   it('rejects missing activity summary status instead of falling back', () => {
     expect(() => mapFlowerLiveEvents({
       events: [{
