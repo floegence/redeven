@@ -135,7 +135,6 @@ export const esES = {
     toggleThemeDescription: "Cambiar entre tema claro y oscuro",
     openCommandPaletteTitle: "Abrir Command Palette",
     openCommandPaletteDescription: "Abrir la command palette",
-    openDeckTitle: "Abrir Deck",
   },
   desktop: {
     title: "Redeven Desktop",

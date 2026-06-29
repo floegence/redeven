@@ -1,6 +1,4 @@
-import type { DisplayMode } from '@floegence/floe-webapp-core/layout';
-
-export type EnvViewMode = DisplayMode;
+export type EnvViewMode = 'activity' | 'workbench';
 
 export type EnvSurfaceId =
   | 'terminal'
@@ -51,11 +49,10 @@ export type EnvOpenSurfaceOptions = {
   fileBrowserPayload?: EnvFileBrowserSurfacePayload;
 };
 
-export const ENV_DESKTOP_VIEW_MODES = ['activity', 'deck', 'workbench'] as const satisfies readonly EnvViewMode[];
+export const ENV_DESKTOP_VIEW_MODES = ['activity', 'workbench'] as const satisfies readonly EnvViewMode[];
 
 export const ENV_VIEW_MODE_LABELS: Record<EnvViewMode, string> = {
   activity: 'Activity',
-  deck: 'Deck',
   workbench: 'Workbench',
 };
 
@@ -91,14 +88,18 @@ export const ENV_SURFACE_WIDGET_TYPES: Record<EnvSurfaceId, string> = {
   codex: 'redeven.codex',
 };
 
-const VALID_ENV_VIEW_MODES = new Set<EnvViewMode>(['activity', 'deck', 'workbench']);
+const VALID_ENV_VIEW_MODES = new Set<EnvViewMode>(['activity', 'workbench']);
 
 export function isEnvViewMode(value: unknown): value is EnvViewMode {
   return typeof value === 'string' && VALID_ENV_VIEW_MODES.has(value as EnvViewMode);
 }
 
 export function normalizePersistedEnvViewMode(value: unknown): EnvViewMode | null {
-  return isEnvViewMode(value) ? value : null;
+  const explicit = String(value ?? '').trim();
+  if (explicit === 'deck') {
+    return 'workbench';
+  }
+  return isEnvViewMode(explicit) ? explicit : null;
 }
 
 export function isEnvSurfaceId(value: unknown): value is EnvSurfaceId {

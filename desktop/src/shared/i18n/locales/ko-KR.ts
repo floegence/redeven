@@ -135,7 +135,6 @@ export const koKR = {
     toggleThemeDescription: "라이트/다크 테마 전환",
     openCommandPaletteTitle: "Command Palette 열기",
     openCommandPaletteDescription: "command palette 열기",
-    openDeckTitle: "Deck 열기",
   },
   desktop: {
     title: "Redeven Desktop",

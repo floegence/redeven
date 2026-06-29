@@ -260,8 +260,6 @@ export const enUS = defineDictionary({
         general: 'General',
         desktop: 'Desktop',
       },
-      switchToDeckTitle: 'Switch to Deck Mode',
-      switchToDeckDescription: 'Open the deck workspace',
       switchToActivityTitle: 'Switch to Activity Mode',
       switchToActivityDescription: 'Show the activity workspace',
       switchToWorkbenchTitle: 'Switch to Workbench Mode',
@@ -392,16 +390,6 @@ export const enUS = defineDictionary({
     retryConnectionAction: 'Retry connection',
     reloadPageAction: 'Reload page',
     notice: 'Password verification stays inside the Runtime-managed session before interactive features continue.',
-  },
-  deck: {
-    presets: {
-      default: 'Default',
-      terminalFocus: 'Terminal Focus',
-      filesFocus: 'Files Focus',
-      monitoring: 'Monitoring',
-      flowerPairing: 'Flower Pairing',
-      codexReview: 'Codex Review',
-    },
   },
   aiChrome: {
     flowerTitle: 'Flower',

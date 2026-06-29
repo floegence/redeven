@@ -135,7 +135,6 @@ export const ruRU = {
     toggleThemeDescription: "Переключить светлую и темную темы",
     openCommandPaletteTitle: "Открыть Command Palette",
     openCommandPaletteDescription: "Открыть command palette",
-    openDeckTitle: "Открыть Deck",
   },
   desktop: {
     title: "Redeven Desktop",

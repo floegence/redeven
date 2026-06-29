@@ -26,7 +26,7 @@ import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { useI18n } from '../i18n';
 
-export type RuntimeMonitorPanelVariant = 'page' | 'deck' | 'workbench';
+export type RuntimeMonitorPanelVariant = 'page' | 'workbench';
 
 export interface RuntimeMonitorPanelProps {
   variant?: RuntimeMonitorPanelVariant;
@@ -520,7 +520,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   const formatPercent = (value: number) => `${Number(value ?? 0).toFixed(2).replace(/\.?0+$/, '')}%`;
 
   const containerClass = () => (
-    props.variant === 'deck' || props.variant === 'workbench'
+    props.variant === 'workbench'
       ? `runtime-monitor-panel h-full min-h-0 overflow-auto p-2 ${redevenSurfaceRoleClass('main')}`
       : `runtime-monitor-panel h-full min-h-0 overflow-auto p-3 ${redevenSurfaceRoleClass('main')}`
   );
@@ -548,7 +548,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
         when={!noExecute()}
         fallback={
           <PermissionEmptyState
-            variant={props.variant === 'deck' || props.variant === 'workbench' ? 'workbench' : 'page'}
+            variant={props.variant === 'workbench' ? 'workbench' : 'page'}
             title={i18n.t('runtimeMonitor.permissionTitle')}
             description={i18n.t('runtimeMonitor.permissionDescription')}
           />

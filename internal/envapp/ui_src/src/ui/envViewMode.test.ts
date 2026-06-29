@@ -7,17 +7,17 @@ import {
 } from './envViewMode';
 
 describe('envViewMode', () => {
-  it('accepts only the final activity/deck/workbench contract', () => {
+  it('accepts only the activity/workbench view-mode contract', () => {
     expect(isEnvViewMode('activity')).toBe(true);
-    expect(isEnvViewMode('deck')).toBe(true);
     expect(isEnvViewMode('workbench')).toBe(true);
+    expect(isEnvViewMode('deck')).toBe(false);
     expect(isEnvViewMode('tab')).toBe(false);
     expect(isEnvViewMode('infinite_map')).toBe(false);
   });
 
-  it('accepts only final persisted modes', () => {
+  it('migrates old Deck persistence to Workbench', () => {
     expect(normalizePersistedEnvViewMode('activity')).toBe('activity');
-    expect(normalizePersistedEnvViewMode('deck')).toBe('deck');
+    expect(normalizePersistedEnvViewMode('deck')).toBe('workbench');
     expect(normalizePersistedEnvViewMode('workbench')).toBe('workbench');
     expect(normalizePersistedEnvViewMode('tab')).toBeNull();
     expect(normalizePersistedEnvViewMode('infinite_map')).toBeNull();

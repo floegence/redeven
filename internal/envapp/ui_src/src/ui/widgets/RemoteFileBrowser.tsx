@@ -1,5 +1,5 @@
 import { Show, batch, createEffect, createMemo, createSignal, untrack } from 'solid-js';
-import { useDeck, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
+import { useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
 import { Copy, Download, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import {
@@ -194,7 +194,6 @@ const PAGE_SIDEBAR_DEFAULT_WIDTH = 240;
 const PAGE_SIDEBAR_MIN_WIDTH = 180;
 const PAGE_SIDEBAR_MAX_WIDTH = 520;
 const PAGE_SIDEBAR_WIDTH_STORAGE_KEY = 'redeven:remote-file-browser:page-sidebar-width';
-const WIDGET_SIDEBAR_WIDTH_STATE_KEY = 'browserSidebarWidth';
 const PAGE_MODE_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:page-mode:';
 const GIT_SUBVIEW_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:git-subview:';
 const SHOW_HIDDEN_STORAGE_KEY_PREFIX = 'redeven:remote-file-browser:show-hidden:';
@@ -364,7 +363,7 @@ const ClipboardIcon = (props: { class?: string }) => (
 export interface RemoteFileBrowserProps {
   widgetId?: string;
   stateScope?: string;
-  persistenceTarget?: 'page' | 'deck' | 'workbench';
+  persistenceTarget?: 'page' | 'workbench';
   initialPathOverride?: string;
   homePathOverride?: string;
   openPathRequest?: {
@@ -511,7 +510,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const rpc = useRedevenRpc();
   const ctx = useEnvContext();
   const i18n = useI18n();
-  const deck = useDeck();
   const floe = useResolvedFloeConfig();
   const layout = useLayout();
   const notification = useNotification();
@@ -519,12 +517,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const downloads = useDownloadManager();
 
   const envId = () => resolveRendererStorageScopeID(ctx.env_id() ?? '');
-  const persistenceTarget = () => props.persistenceTarget ?? (props.widgetId ? 'deck' : 'page');
+  const persistenceTarget = () => props.persistenceTarget ?? (props.widgetId ? 'workbench' : 'page');
   const embeddedWidgetId = () => String(props.widgetId ?? '').trim();
-  const deckWidgetId = () => (persistenceTarget() === 'deck' ? embeddedWidgetId() : '');
   const hasEmbeddedWidget = () => persistenceTarget() !== 'page' && Boolean(embeddedWidgetId());
   const useExternalMobileSidebarToggle = () => !hasEmbeddedWidget();
-  const browserStateScope = () => normalizeBrowserStateScope(props.stateScope);
+  const browserStateScope = () => normalizeBrowserStateScope(props.stateScope ?? (hasEmbeddedWidget() ? embeddedWidgetId() : ''));
   const initialPathOverride = () => normalizeAbsolutePath(props.initialPathOverride ?? '');
   const homePathOverride = () => normalizeAbsolutePath(props.homePathOverride ?? '');
   const scopedStorageKey = (key: string): string => (
@@ -568,12 +565,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   function readPersistedSidebarWidth(): number {
-    const currentDeckWidgetId = deckWidgetId();
-    if (currentDeckWidgetId) {
-      const state = deck.getWidgetState(currentDeckWidgetId);
-      return normalizePageSidebarWidth((state as any)[WIDGET_SIDEBAR_WIDTH_STATE_KEY]);
-    }
-
     return normalizePageSidebarWidth(
       floe.persist.load<number>(scopedStorageKey(PAGE_SIDEBAR_WIDTH_STORAGE_KEY), PAGE_SIDEBAR_DEFAULT_WIDTH)
     );
@@ -581,13 +572,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   function writePersistedSidebarWidth(value: number): void {
     const next = normalizePageSidebarWidth(value);
-
-    const currentDeckWidgetId = deckWidgetId();
-    if (currentDeckWidgetId) {
-      deck.updateWidgetState(currentDeckWidgetId, WIDGET_SIDEBAR_WIDTH_STATE_KEY, next);
-      return;
-    }
-
     floe.persist.debouncedSave(scopedStorageKey(PAGE_SIDEBAR_WIDTH_STORAGE_KEY), next);
   }
 
@@ -876,17 +860,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const override = initialPathOverride();
     if (override) return override;
 
-    const currentDeckWidgetId = deckWidgetId();
-    if (currentDeckWidgetId) {
-      const state = deck.getWidgetState(currentDeckWidgetId);
-      const byEnv = (state as any).lastPathByEnv;
-      if (byEnv && typeof byEnv === 'object' && !Array.isArray(byEnv)) {
-        const saved = (byEnv as any)[eid];
-        if (typeof saved === 'string' && saved.trim()) return normalizePath(saved);
-      }
-      return '';
-    }
-
     const saved = floe.persist.load<string>(scopedStorageKeyByEnv('files:lastPath', eid), '');
     return saved ? normalizePath(saved) : '';
   };
@@ -895,35 +868,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const eid = id.trim();
     if (!eid) return;
     const next = normalizePath(path);
-
-    const currentDeckWidgetId = deckWidgetId();
-    if (currentDeckWidgetId) {
-      const state = deck.getWidgetState(currentDeckWidgetId);
-      const prevRaw = (state as any).lastPathByEnv;
-      const prev =
-        prevRaw && typeof prevRaw === 'object' && !Array.isArray(prevRaw)
-          ? (prevRaw as Record<string, string>)
-          : {};
-      deck.updateWidgetState(currentDeckWidgetId, 'lastPathByEnv', { ...prev, [eid]: next });
-      return;
-    }
-
     floe.persist.debouncedSave(scopedStorageKeyByEnv('files:lastPath', eid), next);
   };
 
   const readPersistedShowHidden = (id: string): boolean => {
     const eid = id.trim();
     if (!eid) return false;
-
-    const currentDeckWidgetId = deckWidgetId();
-    if (currentDeckWidgetId) {
-      const state = deck.getWidgetState(currentDeckWidgetId);
-      const byEnv = (state as any).showHiddenByEnv;
-      if (byEnv && typeof byEnv === 'object' && !Array.isArray(byEnv)) {
-        return normalizeShowHidden((byEnv as any)[eid]);
-      }
-      return false;
-    }
 
     return normalizeShowHidden(floe.persist.load<boolean>(scopedStorageKey(`${SHOW_HIDDEN_STORAGE_KEY_PREFIX}${eid}`), false));
   };
@@ -932,19 +882,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const eid = id.trim();
     if (!eid) return;
     const next = normalizeShowHidden(value);
-
-    const currentDeckWidgetId = deckWidgetId();
-    if (currentDeckWidgetId) {
-      const state = deck.getWidgetState(currentDeckWidgetId);
-      const prevRaw = (state as any).showHiddenByEnv;
-      const prev =
-        prevRaw && typeof prevRaw === 'object' && !Array.isArray(prevRaw)
-          ? (prevRaw as Record<string, boolean>)
-          : {};
-      deck.updateWidgetState(currentDeckWidgetId, 'showHiddenByEnv', { ...prev, [eid]: next });
-      return;
-    }
-
     floe.persist.debouncedSave(scopedStorageKey(`${SHOW_HIDDEN_STORAGE_KEY_PREFIX}${eid}`), next);
   };
 
@@ -953,16 +890,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const eid = id.trim();
     if (!eid) return 'files';
 
-    const currentDeckWidgetId = deckWidgetId();
-    if (currentDeckWidgetId) {
-      const state = deck.getWidgetState(currentDeckWidgetId);
-      const byEnv = (state as any).pageModeByEnv;
-      if (byEnv && typeof byEnv === 'object' && !Array.isArray(byEnv)) {
-        return normalizeBrowserPageMode((byEnv as any)[eid]);
-      }
-      return 'files';
-    }
-
     return normalizeBrowserPageMode(floe.persist.load<string>(scopedStorageKey(`${PAGE_MODE_STORAGE_KEY_PREFIX}${eid}`), 'files'));
   };
 
@@ -970,35 +897,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const eid = id.trim();
     if (!eid) return;
     const next = normalizeBrowserPageMode(mode);
-
-    const currentDeckWidgetId = deckWidgetId();
-    if (currentDeckWidgetId) {
-      const state = deck.getWidgetState(currentDeckWidgetId);
-      const prevRaw = (state as any).pageModeByEnv;
-      const prev =
-        prevRaw && typeof prevRaw === 'object' && !Array.isArray(prevRaw)
-          ? (prevRaw as Record<string, BrowserPageMode>)
-          : {};
-      deck.updateWidgetState(currentDeckWidgetId, 'pageModeByEnv', { ...prev, [eid]: next });
-      return;
-    }
-
     floe.persist.debouncedSave(scopedStorageKey(`${PAGE_MODE_STORAGE_KEY_PREFIX}${eid}`), next);
   };
 
   const readPersistedGitSubview = (id: string): GitWorkbenchSubview => {
     const eid = id.trim();
     if (!eid) return 'changes';
-
-    const currentDeckWidgetId = deckWidgetId();
-    if (currentDeckWidgetId) {
-      const state = deck.getWidgetState(currentDeckWidgetId);
-      const byEnv = (state as any).gitSubviewByEnv;
-      if (byEnv && typeof byEnv === 'object' && !Array.isArray(byEnv)) {
-        return normalizeGitSubview((byEnv as any)[eid]);
-      }
-      return 'changes';
-    }
 
     return normalizeGitSubview(floe.persist.load<string>(scopedStorageKey(`${GIT_SUBVIEW_STORAGE_KEY_PREFIX}${eid}`), 'changes'));
   };
@@ -1007,19 +911,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const eid = id.trim();
     if (!eid) return;
     const next = normalizeGitSubview(view);
-
-    const currentDeckWidgetId = deckWidgetId();
-    if (currentDeckWidgetId) {
-      const state = deck.getWidgetState(currentDeckWidgetId);
-      const prevRaw = (state as any).gitSubviewByEnv;
-      const prev =
-        prevRaw && typeof prevRaw === 'object' && !Array.isArray(prevRaw)
-          ? (prevRaw as Record<string, GitWorkbenchSubview>)
-          : {};
-      deck.updateWidgetState(currentDeckWidgetId, 'gitSubviewByEnv', { ...prev, [eid]: next });
-      return;
-    }
-
     floe.persist.debouncedSave(scopedStorageKey(`${GIT_SUBVIEW_STORAGE_KEY_PREFIX}${eid}`), next);
   };
 

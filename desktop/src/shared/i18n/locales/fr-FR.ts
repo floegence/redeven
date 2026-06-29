@@ -135,7 +135,6 @@ export const frFR = {
     toggleThemeDescription: "Basculer entre thème clair et sombre",
     openCommandPaletteTitle: "Ouvrir Command Palette",
     openCommandPaletteDescription: "Ouvrir la command palette",
-    openDeckTitle: "Ouvrir Deck",
   },
   desktop: {
     title: "Redeven Desktop",

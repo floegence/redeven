@@ -653,7 +653,7 @@ describe('FileBrowserWorkspace interactions', () => {
     }
   });
 
-  it('requires in-component focus before routing typing when used as a deck widget surface', async () => {
+  it('requires in-component focus before routing typing when used as a workbench widget surface', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 

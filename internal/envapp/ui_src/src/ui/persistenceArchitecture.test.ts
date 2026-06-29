@@ -50,7 +50,7 @@ describe('desktop persistence architecture', () => {
     expect(appSrc).toContain('adapter: createDesktopThemeStorageAdapter(');
     expect(appSrc).toContain('createUIStorageAdapter(),');
     expect(appSrc).toContain('namespace: persistenceBinding.namespace,');
-    expect(appSrc).toContain('storageKey: persistenceBinding.deckStorageKey,');
+    expect(appSrc).not.toContain('deckStorageKey');
   });
 
   it('forbids direct localStorage access outside the shared uiStorage service', () => {

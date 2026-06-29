@@ -26,7 +26,6 @@ import {
 import {
   buildDesktopWelcomeShellViewModel,
   buildProviderBackedEnvironmentActionModel,
-  capabilityUnavailableMessage,
   environmentLibraryCount,
   filterEnvironmentLibrary,
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
@@ -678,10 +677,6 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('redeven-provider-shelf rounded-lg border border-border bg-card');
     expect(appSrc).not.toContain('redeven-provider-shelf rounded-[0.625rem]');
-  });
-
-  it('uses Environment guidance copy when a capability is unavailable before connection', () => {
-    expect(capabilityUnavailableMessage('Deck')).toBe('Connect to an Environment first to open Deck.');
   });
 
   it('keeps Local Environment Settings as a dialog layered on top of the launcher surface', () => {

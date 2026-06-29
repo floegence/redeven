@@ -91,7 +91,7 @@ const terminalEnvPermissionsState = vi.hoisted(() => ({
   canExecute: true,
 }));
 const envContextState = vi.hoisted(() => ({
-  viewMode: 'activity' as 'activity' | 'deck' | 'workbench',
+  viewMode: 'activity' as 'activity' | 'workbench',
 }));
 
 const rpcFsMocks = vi.hoisted(() => ({
@@ -1046,7 +1046,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
 
     const loadingCurtain = host.querySelector('.redeven-loading-curtain') as HTMLElement | null;
     expect(loadingCurtain).toBeTruthy();
@@ -1104,7 +1104,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="panel" />, host);
     await settleTerminalPanelAfterPaint();
 
     expect(terminalCoreInstances.length).toBeGreaterThan(0);
@@ -1115,7 +1115,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="panel" />, host);
     await settleTerminalPanelAfterPaint();
 
     expect(terminalConfigState.values.length).toBeGreaterThan(0);
@@ -1149,7 +1149,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="workbench" />, host);
+    render(() => <TerminalPanel variant="panel" />, host);
     await settleTerminalPanel();
 
     const core = terminalCoreInstances[0];
@@ -1190,7 +1190,7 @@ describe('TerminalPanel', () => {
     const lightHost = document.createElement('div');
     document.body.appendChild(lightHost);
 
-    render(() => <TerminalPanel variant="deck" />, lightHost);
+    render(() => <TerminalPanel variant="workbench" />, lightHost);
     await settleTerminalPanel();
 
     expect(findTerminalWorkIndicator(lightHost)?.dataset.terminalWorkTheme).toBe('light');
@@ -1200,7 +1200,7 @@ describe('TerminalPanel', () => {
     const darkHost = document.createElement('div');
     document.body.appendChild(darkHost);
 
-    render(() => <TerminalPanel variant="deck" />, darkHost);
+    render(() => <TerminalPanel variant="workbench" />, darkHost);
     await settleTerminalPanel();
 
     expect(findTerminalWorkIndicator(darkHost)?.dataset.terminalWorkTheme).toBe('dark');
@@ -1249,7 +1249,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     expect(terminalCoreInstances[0]?.setFontFamily).toHaveBeenCalledWith(expect.stringContaining('Iosevka'));
@@ -1285,7 +1285,7 @@ describe('TerminalPanel', () => {
 
     render(() => (
       <TerminalPanel
-        variant="deck"
+        variant="workbench"
         openSessionRequest={{
           requestId: 'request-ignored',
           workingDir: '/workspace/repo',
@@ -1303,24 +1303,24 @@ describe('TerminalPanel', () => {
     widgetState.currentWidgetId = 'widget-1';
     sessionsCoordinatorMocks.createSession.mockClear();
 
-    const deckHost = document.createElement('div');
-    document.body.appendChild(deckHost);
+    const workbenchHost = document.createElement('div');
+    document.body.appendChild(workbenchHost);
     render(() => (
       <TerminalPanel
-        variant="deck"
+        variant="workbench"
         openSessionRequest={{
-          requestId: 'request-deck',
+          requestId: 'request-workbench',
           workingDir: '/workspace/repo',
           preferredName: 'repo',
-          targetMode: 'deck',
+          targetMode: 'workbench',
         }}
         onOpenSessionRequestHandled={handledSpy}
       />
-    ), deckHost);
+    ), workbenchHost);
     await settleTerminalPanelAfterPaint();
 
     expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('repo', '/workspace/repo');
-    expect(handledSpy).toHaveBeenCalledWith('request-deck');
+    expect(handledSpy).toHaveBeenCalledWith('request-workbench');
   });
 
   it('keeps workbench terminal session groups isolated and appends new sessions into the owning widget group', async () => {
@@ -1568,7 +1568,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
@@ -1597,7 +1597,7 @@ describe('TerminalPanel', () => {
       })
     ));
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanelAfterPaint();
 
     const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
@@ -1660,7 +1660,7 @@ describe('TerminalPanel', () => {
       })
     ));
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
@@ -1722,7 +1722,7 @@ describe('TerminalPanel', () => {
         return session;
       });
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
@@ -1747,7 +1747,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     const terminalContent = host.querySelector('[data-testid="terminal-content"]') as HTMLElement | null;
     expect(terminalContent?.style.getPropertyValue('--redeven-terminal-loading-background')).toBe('#111111');
     expect(terminalContent?.style.getPropertyValue('--redeven-terminal-loading-foreground')).toBe('#eeeeee');
@@ -1765,7 +1765,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const provider = terminalCoreInstances[0]?.registeredLinkProviders[0];
@@ -1810,7 +1810,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Terminal 2')?.click();
@@ -1860,7 +1860,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="panel" />, host);
     await settleTerminalPanel();
 
     Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Terminal 2')?.click();
@@ -1908,7 +1908,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     findTerminalTab(host, 'Terminal 2')?.click();
@@ -2005,7 +2005,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="panel" />, host);
     await settleTerminalPanel();
 
     findTerminalTab(host, 'Terminal 2')?.click();
@@ -2033,7 +2033,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const activeCore = terminalCoreInstances[0];
@@ -2051,7 +2051,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const activeCore = terminalCoreInstances[0];
@@ -2090,7 +2090,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     findTerminalTab(host, 'Terminal 2')?.click();
@@ -2185,7 +2185,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await waitForTerminalPanelCondition(() => {
       expect(transportMocks.historyPage.mock.calls).toContainEqual([sessionId, 2, -1]);
     });
@@ -2239,7 +2239,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await vi.waitFor(() => {
       expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
     });
@@ -2284,12 +2284,12 @@ describe('TerminalPanel', () => {
       requestId: 'request-1',
       workingDir: '/workspace/repo',
       preferredName: 'repo',
-      targetMode: 'deck' as const,
+      targetMode: 'workbench' as const,
     });
 
     render(() => (
       <TerminalPanel
-        variant="deck"
+        variant="workbench"
         openSessionRequest={request()}
         onOpenSessionRequestHandled={handledSpy}
       />
@@ -2300,7 +2300,7 @@ describe('TerminalPanel', () => {
       requestId: 'request-1',
       workingDir: '/workspace/repo',
       preferredName: 'repo-again',
-      targetMode: 'deck',
+      targetMode: 'workbench',
     });
     await settleTerminalPanel();
 
@@ -2315,7 +2315,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await Promise.resolve();
     await Promise.resolve();
     focusSpy.mockClear();
@@ -2337,7 +2337,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
     focusSpy.mockClear();
     transportMocks.resize.mockClear();
@@ -2478,7 +2478,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await Promise.resolve();
     await Promise.resolve();
 
@@ -2495,7 +2495,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await Promise.resolve();
     await Promise.resolve();
     focusSpy.mockClear();
@@ -2515,7 +2515,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
     focusSpy.mockClear();
     forceResizeSpy.mockClear();
@@ -2549,7 +2549,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
@@ -2588,7 +2588,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
@@ -2620,7 +2620,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await Promise.resolve();
     await Promise.resolve();
 
@@ -2638,7 +2638,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const terminalInput = host.querySelector('textarea[aria-label="Terminal input"]') as HTMLTextAreaElement | null;
@@ -2663,7 +2663,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await Promise.resolve();
     await Promise.resolve();
     scrollLinesSpy.mockClear();
@@ -2712,7 +2712,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await Promise.resolve();
     await Promise.resolve();
     scrollLinesSpy.mockClear();
@@ -2758,7 +2758,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await Promise.resolve();
     await Promise.resolve();
     transportMocks.sendInput.mockClear();
@@ -2783,7 +2783,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
@@ -2846,7 +2846,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
@@ -2930,7 +2930,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
@@ -2964,7 +2964,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
@@ -2990,7 +2990,7 @@ describe('TerminalPanel', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;

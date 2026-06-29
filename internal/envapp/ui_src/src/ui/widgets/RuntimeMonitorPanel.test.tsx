@@ -168,7 +168,7 @@ describe('RuntimeMonitorPanel', () => {
   it('scopes runtime monitor styles on the panel root', async () => {
     rpcMocks.monitor.getSysMonitor.mockResolvedValue(makeSnapshot(1));
 
-    render(() => <RuntimeMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
     await flushPanel();
 
     expect(host.firstElementChild?.className).toContain('runtime-monitor-panel');
@@ -181,7 +181,7 @@ describe('RuntimeMonitorPanel', () => {
       .mockReturnValueOnce(first.promise)
       .mockResolvedValue(makeSnapshot(2));
 
-    render(() => <RuntimeMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
     await flushPanel();
 
     expect(rpcMocks.monitor.getSysMonitor).toHaveBeenCalledTimes(1);
@@ -219,7 +219,7 @@ describe('RuntimeMonitorPanel', () => {
       }],
     });
 
-    render(() => <RuntimeMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
     await flushPanel();
 
     expect(host.textContent).toContain('Transport');
@@ -289,7 +289,7 @@ describe('RuntimeMonitorPanel', () => {
       ],
     });
 
-    render(() => <RuntimeMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
     await flushPanel();
 
     expect(host.textContent).toContain('Show internal (2)');
@@ -317,7 +317,7 @@ describe('RuntimeMonitorPanel', () => {
       ]),
     );
 
-    render(() => <RuntimeMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
     await flushPanel();
 
     const processRow = host.querySelector('tbody tr') as HTMLTableRowElement | null;
@@ -387,7 +387,7 @@ describe('RuntimeMonitorPanel', () => {
       ]),
     );
 
-    render(() => <RuntimeMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
     await flushPanel();
 
     const processRows = Array.from(
@@ -423,7 +423,7 @@ describe('RuntimeMonitorPanel', () => {
       ]),
     );
 
-    render(() => <RuntimeMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
     await flushPanel();
 
     const processRow = host.querySelector('tbody tr') as HTMLTableRowElement | null;
@@ -457,7 +457,7 @@ describe('RuntimeMonitorPanel', () => {
       ]),
     );
 
-    render(() => <RuntimeMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
     await flushPanel();
 
     const processRow = host.querySelector('tbody tr') as HTMLTableRowElement | null;
@@ -503,7 +503,7 @@ describe('RuntimeMonitorPanel', () => {
       ]),
     );
 
-    render(() => <RuntimeMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
     await flushPanel();
 
     const processRow = host.querySelector('tbody tr') as HTMLTableRowElement | null;
@@ -556,7 +556,7 @@ describe('RuntimeMonitorPanel', () => {
       ]),
     );
 
-    render(() => <RuntimeMonitorPanel variant="deck" />, host);
+    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
     await flushPanel();
 
     const getProcessRow = (name: string) => Array.from(host.querySelectorAll('tbody tr')).find((row) => row.textContent?.includes(name)) as HTMLTableRowElement | undefined;

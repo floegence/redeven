@@ -454,7 +454,7 @@ describe('TerminalPanel browser activity integration', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     findTerminalTab(host, 'Terminal 2')?.click();
@@ -481,7 +481,7 @@ describe('TerminalPanel browser activity integration', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    render(() => <TerminalPanel variant="deck" />, host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
     findTerminalTab(host, 'Terminal 2')?.click();
