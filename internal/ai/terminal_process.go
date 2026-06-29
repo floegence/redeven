@@ -24,6 +24,7 @@ const (
 	terminalProcessDefaultReadBytes = 200_000
 	terminalProcessMaxReadBytes     = 1_000_000
 	terminalProcessTailCapBytes     = 1_000_000
+	terminalProcessOutputDrainWait  = 500 * time.Millisecond
 	terminalProcessMaxRuntime       = 30 * time.Minute
 	terminalProcessMaxActive        = 64
 )
@@ -103,6 +104,7 @@ type terminalProcess struct {
 	cwd        string
 	cmd        *exec.Cmd
 	tty        *os.File
+	readDone   chan struct{}
 	startedAt  time.Time
 	endedAt    time.Time
 	status     string
@@ -180,6 +182,7 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 		cwd:        cwd,
 		cmd:        cmd,
 		tty:        tty,
+		readDone:   make(chan struct{}),
 		startedAt:  time.Now(),
 		status:     terminalProcessStatusRunning,
 		exitCode:   0,
@@ -381,6 +384,7 @@ func (p *terminalProcess) readLoop() {
 	if p == nil || p.tty == nil {
 		return
 	}
+	defer close(p.readDone)
 	buf := make([]byte, 16*1024)
 	for {
 		n, err := p.tty.Read(buf)
@@ -406,6 +410,7 @@ func (p *terminalProcess) waitLoop() {
 	}
 	err := p.cmd.Wait()
 	_ = p.tty.Close()
+	p.waitForOutputDrain()
 	status := terminalProcessStatusSuccess
 	exitCode := 0
 	var toolErr *aitools.ToolError
@@ -431,6 +436,18 @@ func (p *terminalProcess) waitLoop() {
 	p.mu.Unlock()
 	p.managerProcessEnded()
 	p.publishDone()
+}
+
+func (p *terminalProcess) waitForOutputDrain() {
+	if p == nil || p.readDone == nil {
+		return
+	}
+	timer := time.NewTimer(terminalProcessOutputDrainWait)
+	defer timer.Stop()
+	select {
+	case <-p.readDone:
+	case <-timer.C:
+	}
 }
 
 func (p *terminalProcess) maxRuntimeLoop() {
