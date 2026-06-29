@@ -3961,7 +3961,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return item.status !== 'success';
   };
   const activityItemVisible = (item: FlowerActivityItem): boolean => {
-    if (item.kind === 'approval') return false;
     if (item.requires_approval && !activityItemHasVisiblePayload(item)) return false;
     return true;
   };
