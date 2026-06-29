@@ -110,7 +110,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
             <div class="flower-thread-wave-bar" style="animation-delay: 360ms" />
             <div class="flower-thread-wave-bar" style="animation-delay: 540ms" />
           </div>
-          <div class="flower-thread-status-dot h-2 w-2 rounded-full" />
+          <div class="flower-thread-status-dot h-1.5 w-1.5 rounded-full" />
         </div>
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
           <div class="flex min-w-0 items-center gap-1">
