@@ -75,6 +75,7 @@ import { formatGitPatchLineNumber, getGitPatchRenderSnapshot, type GitPatchRende
 import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { FlowerSettingsSurface } from './settings/FlowerSettingsSurface';
+import { FlowerShellCommandHighlight } from './shellCommandHighlight';
 import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerThreadList';
 import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
 import { flowerThreadReadSnapshotKey, mergeFlowerThreadListRefresh, sameThreadSnapshot } from './flowerThreadListRefresh';
@@ -862,18 +863,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       })
   ));
   const selectedComposerApprovalAction = createMemo(() => selectedComposerApprovalActions()[0] ?? null);
-  const selectedApprovalActionsByToolID = createMemo(() => {
-    const out = new Map<string, readonly FlowerApprovalAction[]>();
-    for (const action of selectedApprovalActions()) {
-      if (approvalActionIsDelegated(action)) continue;
-      const toolID = trimString(action.tool_id);
-      const runID = trimString(action.run_id);
-      if (!toolID || !runID) continue;
-      const key = `${runID}\x1f${toolID}`;
-      out.set(key, [...(out.get(key) ?? []), action]);
-    }
-    return out;
-  });
   const selectedThreadLevelApprovalActions = createMemo(() => {
     const composerActionID = trimString(selectedComposerApprovalAction()?.action_id);
     return selectedApprovalActions().filter((action) => (
@@ -3810,7 +3799,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </div>
           <Show when={commandText}>
             {(command) => (
-              <pre class="flower-approval-command-text">{command()}</pre>
+              <pre class="flower-approval-command-text"><FlowerShellCommandHighlight command={command()} /></pre>
             )}
           </Show>
           <Show when={!commandText && (action.summary.targets?.length ?? 0) > 0}>
@@ -3980,26 +3969,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const activitySubagentAction = (timeline: FlowerActivityTimelineBlock, item: FlowerActivityItem) => (
     timeline.subagent_actions?.[trimString(item.item_id)]
   );
-
-  const activityItemPresentationSource = (item: FlowerActivityItem, approvals: readonly FlowerApprovalAction[]): FlowerActivityItem => {
-    const approval = approvals.find((action) => action.status === 'pending' && action.state === 'requested');
-    if (!approval) return item;
-    const currentLabel = trimString(item.label);
-    const toolName = trimString(item.tool_name);
-    const summaryLabel = trimString(approval.summary.label);
-    const command = trimString(approval.summary.command);
-    const payload = item.payload ?? {};
-    const payloadCommand = typeof payload.command === 'string' ? trimString(payload.command) : '';
-    const labelIsFallback = !currentLabel || currentLabel === toolName || currentLabel === 'Tool approval';
-    const canUseApprovalLabel = labelIsFallback && summaryLabel && summaryLabel !== toolName && summaryLabel !== 'Tool approval';
-    const shouldFillCommand = !payloadCommand && command && (item.renderer === 'terminal' || toolName === 'terminal.exec');
-    if (!canUseApprovalLabel && !shouldFillCommand) return item;
-    return {
-      ...item,
-      ...(canUseApprovalLabel || shouldFillCommand ? { label: shouldFillCommand ? command : summaryLabel } : {}),
-      ...(shouldFillCommand ? { payload: { ...payload, command } } : {}),
-    };
-  };
 
   const activityItemAriaLabel = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock): string => (
     [
@@ -4214,16 +4183,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     index: Accessor<number>,
   ) => {
     const open = createMemo(() => activityItemOpen(timeline(), item(), blockKey(), index()));
-    const matchingApprovals = createMemo(() => selectedApprovalActionsByToolID().get(`${trimString(timeline().run_id)}\x1f${trimString(item().tool_id)}`) ?? []);
-    const displayItem = createMemo(() => activityItemPresentationSource(item(), matchingApprovals()));
-    const presentation = createMemo(() => presentFlowerActivityItem(displayItem(), timeline().file_actions, { subagents: subagentsCopy() }, { subagentAction: activitySubagentAction(timeline(), item()) }));
+    const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, { subagents: subagentsCopy() }, { subagentAction: activitySubagentAction(timeline(), item()) }));
     const rowFileAction = createMemo(() => {
       const value = presentation();
       return value.primaryAction ?? (value.title.kind === 'file' ? disabledFileAction(value.title.display_name) : null);
     });
-    const hasPendingApproval = createMemo(() => matchingApprovals().some((a) => a.status === 'pending' && a.state === 'requested'));
-    const displayStatus = createMemo(() => hasPendingApproval() ? 'waiting' as const : item().status);
-    const isReadOnly = createMemo(() => item().requires_approval || hasPendingApproval());
+    const displayStatus = createMemo(() => item().status);
+    const isReadOnly = createMemo(() => item().requires_approval);
     const duration = createMemo(() => {
       const value = item();
       return formatActivityDuration((value.started_at_unix_ms && value.ended_at_unix_ms
@@ -4235,7 +4201,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`)}
         data-flower-activity-item-id={item().item_id}
         data-flower-activity-status={displayStatus()}
-        aria-label={activityItemAriaLabel(displayItem(), timeline())}
+        aria-label={activityItemAriaLabel(item(), timeline())}
       >
         <div class="flower-activity-inline-line">
           <button

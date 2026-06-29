@@ -685,15 +685,15 @@ describe('presentFlowerActivityItem', () => {
     });
   });
 
-  it('keeps every row expandable with a neutral fallback title', () => {
+  it('keeps every row expandable with an explicit tool fallback title', () => {
     const presentation = presentFlowerActivityItem(item({
       payload: undefined,
       renderer: undefined,
       label: undefined,
     }));
 
-    expect(presentation.label).toBe('Activity');
-    expect(presentation.meta).not.toContain('terminal.exec');
+    expect(presentation.label).toBe('terminal.exec');
+    expect(presentation.meta).toBe('');
     expect(presentation.detailLines.length).toBeGreaterThan(0);
     expect(presentation.detailLines.map((line) => line.label)).toContain('status');
     expect(presentation.detailBlocks.length).toBeGreaterThan(0);

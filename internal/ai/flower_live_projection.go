@@ -31,10 +31,11 @@ func newFlowerLiveThreadStream() *flowerLiveThreadStream {
 	return &flowerLiveThreadStream{
 		NextSeq: 1,
 		State: FlowerLiveMaterializedState{
-			Messages:        map[string]FlowerLiveMessageDraft{},
-			Runs:            map[string]FlowerLiveRunState{},
-			ApprovalActions: map[string]FlowerApprovalAction{},
-			InputRequests:   map[string]RequestUserInputPrompt{},
+			Messages:            map[string]FlowerLiveMessageDraft{},
+			Runs:                map[string]FlowerLiveRunState{},
+			ApprovalActions:     map[string]FlowerApprovalAction{},
+			ApprovalActionsSeen: true,
+			InputRequests:       map[string]RequestUserInputPrompt{},
 		},
 		ApprovalIndex: map[string]FlowerApprovalState{},
 	}
@@ -115,6 +116,9 @@ func (s *Service) mergePersistedDelegatedApprovalState(ctx context.Context, endp
 			s.log.Warn("ai: failed to load delegated approvals for flower live bootstrap", "endpoint_id", endpointID, "thread_id", threadID, "error", err)
 		}
 		return state
+	}
+	if len(recs) > 0 {
+		state.ApprovalActionsSeen = true
 	}
 	ensureFlowerLiveStateMaps(&state)
 	for _, rec := range recs {
@@ -771,6 +775,7 @@ func emptyFlowerLiveMaterializedState() FlowerLiveMaterializedState {
 		ContextCompactions:  []FlowerContextCompaction{},
 		TimelineDecorations: []FlowerTimelineDecoration{},
 		ApprovalActions:     map[string]FlowerApprovalAction{},
+		ApprovalActionsSeen: false,
 		InputRequests:       map[string]RequestUserInputPrompt{},
 	}
 }
@@ -1427,6 +1432,7 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 	case FlowerLiveApprovalRequested, FlowerLiveApprovalResolved:
 		var payload FlowerLiveApprovalPayload
 		if decodeFlowerPayload(event.Payload, &payload) && strings.TrimSpace(payload.Action.ActionID) != "" {
+			state.ApprovalActionsSeen = true
 			if event.Kind == FlowerLiveApprovalRequested {
 				clearFlowerModelIOForRun(state, payload.Action.RunID)
 			}
@@ -2293,6 +2299,7 @@ func cloneFlowerLiveMaterializedState(in FlowerLiveMaterializedState) FlowerLive
 		ContextCompactions:  cloneFlowerContextCompactions(in.ContextCompactions),
 		TimelineDecorations: cloneFlowerTimelineDecorations(in.TimelineDecorations),
 		ApprovalActions:     map[string]FlowerApprovalAction{},
+		ApprovalActionsSeen: in.ApprovalActionsSeen,
 		InputRequests:       map[string]RequestUserInputPrompt{},
 	}
 	for key, value := range in.Messages {

@@ -289,6 +289,12 @@ export function modelIOStatus(overrides: Partial<FlowerModelIOStatus> = {}): Flo
 
 export function liveBootstrap(threadValue: FlowerThreadSnapshot, cursor = 0): FlowerLiveBootstrap {
   const modelIORunID = threadValue.model_io_status?.run_id;
+  const activeRunID = modelIORunID || threadValue.active_run_id;
+  const hasApprovalActions = threadValue.approval_actions !== undefined;
+  const approvalActions = Object.fromEntries((threadValue.approval_actions ?? []).map((action) => [action.action_id, action]));
+  const inputRequests = threadValue.status === 'waiting_user' && threadValue.input_request
+    ? { [threadValue.input_request.prompt_id]: threadValue.input_request }
+    : {};
   return {
     schema_version: 1,
     endpoint_id: 'test-runtime',
@@ -302,15 +308,15 @@ export function liveBootstrap(threadValue: FlowerThreadSnapshot, cursor = 0): Fl
       thread_patch: {
         ...(threadValue.queued_turn_count !== undefined ? { queued_turn_count: threadValue.queued_turn_count } : {}),
       },
-      runs: modelIORunID
-        ? { [modelIORunID]: { run_id: modelIORunID, status: 'running' } }
+      runs: activeRunID
+        ? { [activeRunID]: { run_id: activeRunID, status: threadValue.status } }
         : {},
       ...(threadValue.model_io_status ? { model_io: threadValue.model_io_status } : {}),
       ...(threadValue.context_usage ? { context_usage: threadValue.context_usage } : {}),
       ...(threadValue.context_compactions ? { context_compactions: threadValue.context_compactions as readonly FlowerContextCompaction[] } : {}),
       ...(threadValue.timeline_decorations ? { timeline_decorations: threadValue.timeline_decorations as readonly FlowerTimelineDecoration[] } : {}),
-      approval_actions: {},
-      input_requests: {},
+      ...(hasApprovalActions ? { approval_actions: approvalActions } : {}),
+      input_requests: inputRequests,
     },
     read_status: threadValue.read_status,
     generated_at_ms: Math.max(Date.now(), threadValue.updated_at_ms),

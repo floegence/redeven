@@ -560,7 +560,70 @@ type FlowerLiveMaterializedState struct {
 	ContextCompactions  []FlowerContextCompaction         `json:"context_compactions,omitempty"`
 	TimelineDecorations []FlowerTimelineDecoration        `json:"timeline_decorations,omitempty"`
 	ApprovalActions     map[string]FlowerApprovalAction   `json:"approval_actions"`
+	ApprovalActionsSeen bool                              `json:"-"`
 	InputRequests       map[string]RequestUserInputPrompt `json:"input_requests"`
+}
+
+func (s FlowerLiveMaterializedState) MarshalJSON() ([]byte, error) {
+	type flowerLiveMaterializedStateJSON struct {
+		ThreadPatch         FlowerLiveThreadPatch             `json:"thread_patch"`
+		Runs                map[string]FlowerLiveRunState     `json:"runs"`
+		ModelIO             *FlowerModelIOStatus              `json:"model_io,omitempty"`
+		ContextUsage        *FlowerContextUsage               `json:"context_usage,omitempty"`
+		ContextCompactions  []FlowerContextCompaction         `json:"context_compactions,omitempty"`
+		TimelineDecorations []FlowerTimelineDecoration        `json:"timeline_decorations,omitempty"`
+		ApprovalActions     *map[string]FlowerApprovalAction  `json:"approval_actions,omitempty"`
+		InputRequests       map[string]RequestUserInputPrompt `json:"input_requests"`
+	}
+	var approvals *map[string]FlowerApprovalAction
+	if s.ApprovalActionsSeen {
+		actions := s.ApprovalActions
+		if actions == nil {
+			actions = map[string]FlowerApprovalAction{}
+		}
+		approvals = &actions
+	}
+	return json.Marshal(flowerLiveMaterializedStateJSON{
+		ThreadPatch:         s.ThreadPatch,
+		Runs:                s.Runs,
+		ModelIO:             s.ModelIO,
+		ContextUsage:        s.ContextUsage,
+		ContextCompactions:  s.ContextCompactions,
+		TimelineDecorations: s.TimelineDecorations,
+		ApprovalActions:     approvals,
+		InputRequests:       s.InputRequests,
+	})
+}
+
+func (s *FlowerLiveMaterializedState) UnmarshalJSON(data []byte) error {
+	type flowerLiveMaterializedStateJSON struct {
+		ThreadPatch         FlowerLiveThreadPatch             `json:"thread_patch"`
+		Runs                map[string]FlowerLiveRunState     `json:"runs"`
+		ModelIO             *FlowerModelIOStatus              `json:"model_io,omitempty"`
+		ContextUsage        *FlowerContextUsage               `json:"context_usage,omitempty"`
+		ContextCompactions  []FlowerContextCompaction         `json:"context_compactions,omitempty"`
+		TimelineDecorations []FlowerTimelineDecoration        `json:"timeline_decorations,omitempty"`
+		ApprovalActions     *map[string]FlowerApprovalAction  `json:"approval_actions,omitempty"`
+		InputRequests       map[string]RequestUserInputPrompt `json:"input_requests"`
+	}
+	var raw flowerLiveMaterializedStateJSON
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	s.ThreadPatch = raw.ThreadPatch
+	s.Runs = raw.Runs
+	s.ModelIO = raw.ModelIO
+	s.ContextUsage = raw.ContextUsage
+	s.ContextCompactions = raw.ContextCompactions
+	s.TimelineDecorations = raw.TimelineDecorations
+	s.ApprovalActionsSeen = raw.ApprovalActions != nil
+	if raw.ApprovalActions != nil {
+		s.ApprovalActions = *raw.ApprovalActions
+	} else {
+		s.ApprovalActions = nil
+	}
+	s.InputRequests = raw.InputRequests
+	return nil
 }
 
 type FlowerLiveBootstrapResponse struct {
