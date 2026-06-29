@@ -231,6 +231,12 @@ implementation detail. It owns the shared plugin runtime implementation and
 publishes versioned Go, TypeScript, Rust runtime, and machine-contract artifacts
 for host products to consume.
 
+This section is Redeven's side of the cross-repository contract. Any change that
+alters plugin-platform ownership, dependency direction, lifecycle semantics,
+runtime supervision, bridge/security mechanics, or generated-plugin boundaries
+must update the matching boundary language in `redevplugin/AGENTS.md` in the
+same feature and must be reviewed as a cross-repository contract change.
+
 `redeven` is a host product and must consume `redevplugin` through published
 artifacts only:
 
@@ -295,6 +301,13 @@ Redeven may add product-facing wrappers such as `redeven plugin ...` commands or
 Env App pages, but those wrappers must delegate to released ReDevPlugin APIs.
 If a wrapper needs a new platform capability, add and release that capability in
 `redevplugin` before wiring it into Redeven.
+
+Redeven must treat ReDevPlugin as an upstream library/runtime dependency, not as
+a co-developed source folder. Integration work may happen in parallel worktrees,
+but committed Redeven code must only reference released ReDevPlugin module/npm
+versions, released runtime artifacts, and published contract hashes. Do not
+land Redeven code that depends on a local ReDevPlugin checkout, an unreleased
+feature branch, or a copied contract draft.
 
 Use this responsibility matrix as the default decision rule:
 
