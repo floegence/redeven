@@ -115,6 +115,8 @@ func TestApplyFloretThreadProjectionReplacesStreamedBlocks(t *testing.T) {
 
 	events := make([]any, 0, 8)
 	r := newRun(runOptions{})
+	r.id = "run_projection"
+	r.threadID = "thread_projection"
 	r.messageID = "msg_projection"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	r.assistantBlocks = []any{
@@ -195,6 +197,78 @@ func TestApplyFloretThreadProjectionClearsStreamedBlocksWhenEmpty(t *testing.T) 
 	cleared, ok := events[1].(streamEventBlockSet)
 	if !ok || cleared.BlockIndex != 1 {
 		t.Fatalf("events[1]=%T %#v, want stale block clear at index 1", events[1], events[1])
+	}
+}
+
+func TestFloretTerminalThreadProjectionUpdatesDetachedSnapshotWithoutStream(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 1)
+	r := newRun(runOptions{})
+	r.id = "run_terminal_projection"
+	r.threadID = "thread_terminal_projection"
+	r.messageID = "msg_terminal_projection"
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+	r.markDetached()
+
+	timeline := floretProjectionTimeline("run_terminal_projection", "thread_terminal_projection", "msg_terminal_projection", "exec-1", "terminal.exec")
+	timeline.Summary.Status = observation.ActivityStatusCanceled
+	timeline.Summary.Counts = observation.ActivityCounts{Canceled: 1}
+	timeline.Items[0].Status = observation.ActivityStatusCanceled
+	timeline.Items[0].Severity = observation.ActivitySeverityWarning
+
+	if !r.applyFloretTerminalThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID: "thread_terminal_projection",
+		TurnID:   "msg_terminal_projection",
+		RunID:    "run_terminal_projection",
+		TraceID:  "run_terminal_projection",
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: timeline,
+		}},
+	}) {
+		t.Fatalf("terminal projection returned false")
+	}
+	if len(events) != 0 {
+		t.Fatalf("stream events=%d, want none for detached terminal projection: %#v", len(events), events)
+	}
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistantBlocks=%#v, want one activity block", r.assistantBlocks)
+	}
+	block, ok := r.assistantBlocks[0].(ActivityTimelineBlock)
+	if !ok || block.Summary.Status != observation.ActivityStatusCanceled || block.Items[0].Status != observation.ActivityStatusCanceled {
+		t.Fatalf("assistant block=%T %#v, want canceled activity timeline", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+}
+
+func TestFloretTerminalThreadProjectionRejectsMismatchedRun(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	r.id = "run_terminal_projection"
+	r.threadID = "thread_terminal_projection"
+	r.messageID = "msg_terminal_projection"
+	r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: "canceled"}}
+	r.markDetached()
+
+	if r.applyFloretTerminalThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID: "thread_terminal_projection",
+		TurnID:   "msg_terminal_projection",
+		RunID:    "other_run",
+		TraceID:  "other_run",
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: floretProjectionTimeline("other_run", "thread_terminal_projection", "msg_terminal_projection", "exec-1", "terminal.exec"),
+		}},
+	}) {
+		t.Fatalf("terminal projection with mismatched run returned true")
+	}
+	block, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	if !ok || block.Content != "canceled" {
+		t.Fatalf("assistantBlocks mutated by mismatched terminal projection: %#v", r.assistantBlocks)
+	}
+	if r.hasFloretThreadDetailProjectionApplied() {
+		t.Fatalf("projection flag set by mismatched terminal projection")
 	}
 }
 

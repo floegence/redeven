@@ -2014,8 +2014,12 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}
 
 	// Hard-canceled runs are detached from the thread lifecycle to unblock UI actions.
-	// Do not persist assistant messages after detachment, or we may race with subsequent runs on the same thread.
+	// After detachment, only the same run's terminal Floret projection may update
+	// the already-created canceled assistant boundary.
 	if r.isDetached() {
+		if r.hasFloretThreadDetailProjectionApplied() {
+			s.publishCanceledAssistantProjection(meta, r, db, persistTO)
+		}
 		return finalErr
 	}
 

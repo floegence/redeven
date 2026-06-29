@@ -58,12 +58,8 @@ github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/floegence/floeterm/terminal-go v0.4.17 h1:wHbch9wh9VK4S5b2HcgOWXiYAVEP6niXUhDessWIpa8=
 github.com/floegence/floeterm/terminal-go v0.4.17/go.mod h1:SvHskjqLrkbDFJJ6Q/Dlz+bz5Albv+Xm9eDvknt9HLI=
-github.com/floegence/floret v0.3.48 h1:92NbsKqnW6xMUZXron/yNvWYraw1PazkxqP2Vlzbugo=
-github.com/floegence/floret v0.3.48/go.mod h1:u2oNhsSB8OppYPHo/cTmXITL+3pxv7ckjYDiq3SjoCg=
-github.com/floegence/floret v0.3.49 h1:FyW73LRltTUYEztHxHejfZZfn+Yhp2vfL/bfU4gBDYw=
-github.com/floegence/floret v0.3.49/go.mod h1:u2oNhsSB8OppYPHo/cTmXITL+3pxv7ckjYDiq3SjoCg=
-github.com/floegence/floret v0.3.50 h1:w+xciE1zLuBU3kV7mfMBLQEMvaT6Qw38ZwAtxSNatVs=
-github.com/floegence/floret v0.3.50/go.mod h1:u2oNhsSB8OppYPHo/cTmXITL+3pxv7ckjYDiq3SjoCg=
+github.com/floegence/floret v0.3.51 h1:PRHwV7aNP8zK8DJomXMMVgpTWlwdb3EBalGFtgfdiFc=
+github.com/floegence/floret v0.3.51/go.mod h1:u2oNhsSB8OppYPHo/cTmXITL+3pxv7ckjYDiq3SjoCg=
 github.com/floegence/flowersec/flowersec-go v0.19.10 h1:LYiOSEwmOkyI3n1FXC3X16d2nBBG2sbYwGLkWHk1Asc=
 github.com/floegence/flowersec/flowersec-go v0.19.10/go.mod h1:Al9anmDq9j++PUozcCiW6SrL2dh58B+10sd2s1rdZcc=
 github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
