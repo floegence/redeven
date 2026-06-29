@@ -279,6 +279,23 @@ Redeven owns only product integration and business adapters:
   environment, showing approval/review states, and invoking released
   ReDevPlugin templates, validators, package builders, and lifecycle APIs.
 
+Use this responsibility matrix as the default decision rule:
+
+| Area | ReDevPlugin owns | Redeven owns |
+| --- | --- | --- |
+| Package and trust | Package layout, canonical hashes, signing rules, manifest validation, trust state contracts, compatibility manifests | Which registries or local sources Redeven allows, local policy caps, review UX, and product audit presentation |
+| Lifecycle | Install, enable, open, disable, uninstall, update, downgrade, export/import, diagnostics, and data-retention APIs | Env App placement, Desktop commands, Activity Bar/Workbench/Settings entry points, and who may invoke the actions |
+| UI runtime | Sandboxed iframe bootstrap, asset ticket/session protocol, bridge SDK, exact-origin messaging, settings and intent contracts | Native shell chrome, Workbench layout, Settings placement, startup diagnostics, route mounting, and Redeven product copy |
+| Backend runtime | Rust `redevplugin-runtime`, WASM actor/job model, IPC, leases, quotas, revocation, hostcall contracts, stream envelopes | Locating and supervising the released runtime binary, packaging it with Redeven, and surfacing diagnostics |
+| Storage, network, and secrets | Host-neutral broker contracts, request contexts, target classifiers, quotas, secret reference contracts, and stable errors | State-root selection, vault integration, environment/network policy, proxy settings, and user-facing grant UX |
+| Business capabilities | Generic capability adapter interface, permission hooks, operation/stream envelope, and audit DTOs | Docker/Podman, files, shells, cloud services, database access, local product APIs, and other Redeven domain adapters |
+| Plugin generation | Templates, validators, package builder, replay harness, generated SDK clients, and example fixtures | Flower prompt orchestration, user intent collection, environment selection, review/approval UX, and generated-plugin install flow |
+
+If a Redeven feature needs a platform behavior that is not represented in the
+left column as a released ReDevPlugin contract, stop and add the contract
+upstream first. Do not fill the gap by committing a Redeven-local copy of
+platform logic.
+
 The clean dependency direction is one-way: Redeven imports released
 ReDevPlugin artifacts, and ReDevPlugin never imports Redeven. If a feature needs
 Redeven-specific sessions, Env App placement, Flower orchestration, Workbench
