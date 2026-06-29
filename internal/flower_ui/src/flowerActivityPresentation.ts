@@ -998,8 +998,11 @@ function titleWithToolContext(toolName: string, explicit: string, fallback: stri
 }
 
 function titleForGenericItem(item: FlowerActivityItem, renderer: FlowerActivityRenderer): FlowerActivityTitle {
-  const explicit = trimString(item.label);
+  let explicit = trimString(item.label);
   const toolName = trimString(item.tool_name);
+  if (item.requires_approval && (!explicit || explicit === 'Tool approval') && toolName) {
+    explicit = toolName;
+  }
   switch (renderer) {
     case 'terminal': {
       const command = payloadValue(item.payload, 'command') || explicit || defaultLabelForItem(item);
