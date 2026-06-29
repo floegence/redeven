@@ -202,7 +202,6 @@ function TerminalDetailBlock(props: { item: ActivityItem; runID?: string }) {
       latestOutput={latestOutput() || undefined}
       outputRef={props.runID && props.item.tool_id ? { runId: props.runID, toolId: props.item.tool_id } : undefined}
       processId={processId() || undefined}
-      cwd={payloadString(payload(), 'cwd') || undefined}
       durationMs={payloadNumber(payload(), 'duration_ms')}
       truncated={Boolean(payload().truncated)}
       exitCode={payloadNumber(payload(), 'exit_code')}

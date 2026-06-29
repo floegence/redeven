@@ -1031,13 +1031,17 @@ func (s *Service) flowerLiveEventsFromRealtime(ev RealtimeEvent) []FlowerLiveEve
 
 	switch ev.EventType {
 	case RealtimeEventTypeTranscript:
-		messageID, ok := messageIDFromJSON(ev.MessageJSON)
+		safeMessageJSON, err := SanitizeActivityTimelineMessageJSON(string(ev.MessageJSON))
+		if err != nil || len(safeMessageJSON) == 0 {
+			return nil
+		}
+		messageID, ok := messageIDFromJSON(safeMessageJSON)
 		if !ok {
 			return nil
 		}
 		return []FlowerLiveEvent{base(FlowerLiveMessageCommitted, FlowerLiveMessageCommittedPayload{
 			MessageID: messageID,
-			Message:   cloneRawMessage(ev.MessageJSON),
+			Message:   cloneRawMessage(safeMessageJSON),
 		})}
 	case RealtimeEventTypeTranscriptReset:
 		return []FlowerLiveEvent{base(FlowerLiveResyncRequired, FlowerLiveResyncRequiredPayload{Reason: firstNonEmptyString(ev.ResetReason, "transcript_reset")})}

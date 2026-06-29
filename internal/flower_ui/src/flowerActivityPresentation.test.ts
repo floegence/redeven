@@ -48,7 +48,6 @@ describe('presentFlowerActivityItem', () => {
         command: 'npm run build -- --mode production',
         status: 'running',
         process_id: 'tp_123',
-        cwd: '/workspace/app',
         workdir: '/workspace/private',
         exit_code: 0,
         output: 'built\n',
@@ -63,7 +62,6 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.meta).toContain('exit 0');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('command:npm run build -- --mode production');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('process:tp_123');
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('cwd:/workspace/app');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('output:built');
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('workdir');
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('stdin');

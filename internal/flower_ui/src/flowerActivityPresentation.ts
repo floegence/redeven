@@ -128,7 +128,6 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
   items: 'items',
   process_id: 'process',
   pending_handle: 'pending',
-  cwd: 'cwd',
   execution_location: 'location',
   latest_output: 'latest output',
   first_seq: 'first seq',
@@ -219,7 +218,7 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
 };
 
 const RENDERER_DETAIL_KEYS: Readonly<Record<Exclude<FlowerActivityRenderer, 'file' | 'patch' | 'todos'>, readonly string[]>> = {
-  terminal: ['command', 'status', 'process_id', 'cwd', 'execution_location', 'latest_output', 'output', 'first_seq', 'last_seq', 'total_bytes', 'started_at_ms', 'ended_at_ms', 'exit_code', 'duration_ms', 'truncated', 'stdout', 'stderr', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
+  terminal: ['command', 'status', 'process_id', 'execution_location', 'latest_output', 'output', 'first_seq', 'last_seq', 'total_bytes', 'started_at_ms', 'ended_at_ms', 'exit_code', 'duration_ms', 'truncated', 'stdout', 'stderr', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
   web_search: ['query', 'provider', 'count', 'sources', 'results', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
   question: ['reason_code', 'required_from_user', 'questions', 'contains_secret', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
   completion: ['result', 'evidence_refs', 'remaining_risks', 'next_actions', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
