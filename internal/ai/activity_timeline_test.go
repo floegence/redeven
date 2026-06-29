@@ -212,14 +212,14 @@ func TestToolStartActivityPresentationShowsRunningTerminalCommand(t *testing.T) 
 	}
 }
 
-func TestToolStartActivityPresentationUsesNeutralLabelWithoutCommand(t *testing.T) {
+func TestToolStartActivityPresentationUsesToolNameWithoutCommand(t *testing.T) {
 	t.Parallel()
 
 	presentation := toolStartActivityPresentation("terminal.exec", map[string]any{}, terminalExecTimeoutDecision{})
 	if presentation == nil {
 		t.Fatal("presentation is nil")
 	}
-	if presentation.Label != "Activity" || presentation.Description != "" || presentation.Renderer != observation.ActivityRendererTerminal {
+	if presentation.Label != "terminal.exec" || presentation.Description != "" || presentation.Renderer != observation.ActivityRendererTerminal {
 		t.Fatalf("presentation=%+v", presentation)
 	}
 	if _, ok := presentation.Payload["command"]; ok {
@@ -240,6 +240,7 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 		label     string
 		renderer  observation.ActivityRenderer
 		operation string
+		rawLabel  bool
 	}{
 		{
 			name:      "file read",
@@ -288,8 +289,9 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 			name:     "unknown",
 			toolName: "custom.tool",
 			args:     map[string]any{},
-			label:    "Activity",
+			label:    "custom.tool",
 			renderer: observation.ActivityRendererStructured,
+			rawLabel: true,
 		},
 	}
 
@@ -311,7 +313,7 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 			if tc.operation != "" && presentation.Payload["operation"] != tc.operation {
 				t.Fatalf("operation payload=%v, want %q", presentation.Payload["operation"], tc.operation)
 			}
-			if presentation.Label == tc.toolName {
+			if !tc.rawLabel && presentation.Label == tc.toolName {
 				t.Fatalf("label=%q, want friendly label", presentation.Label)
 			}
 		})

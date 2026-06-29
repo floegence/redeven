@@ -405,7 +405,7 @@ function defaultLabelForItem(item: FlowerActivityItem): string {
   const label = trimString(item.label);
   const toolName = trimString(item.tool_name);
   if (label && label !== toolName && label !== 'Tool approval') return label;
-  return toolName === 'terminal.exec' ? 'Activity' : toolName || 'Activity';
+  return toolName || 'tool';
 }
 
 function operationFromPayload(payload: Readonly<Record<string, unknown>> | undefined): string {

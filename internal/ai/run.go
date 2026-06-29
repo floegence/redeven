@@ -2152,21 +2152,19 @@ func toolStartActivityPresentation(toolName string, args map[string]any, timeout
 	toolName = strings.TrimSpace(toolName)
 	activity := floretActivityForToolCall(toolName, args)
 	if activity == nil {
+		label := toolName
+		if label == "" {
+			label = "tool"
+		}
 		activity = &observation.ActivityPresentation{
-			Label:    "Activity",
+			Label:    label,
 			Renderer: observation.ActivityRendererStructured,
 			Payload:  map[string]any{},
 		}
 	}
 	activity = cloneActivityPresentation(activity)
-	if strings.TrimSpace(toolName) == "" {
-		activity.Label = "Activity"
-	}
-	if _, ok := aitools.PresentationSpec(toolName); !ok && !isFlowerControlTool(toolName) {
-		activity.Label = "Activity"
-	}
 	if toolName == "terminal.exec" && strings.TrimSpace(anyToString(args["command"])) == "" {
-		activity.Label = "Activity"
+		activity.Label = toolName
 	}
 	if activity.Payload == nil {
 		activity.Payload = map[string]any{}

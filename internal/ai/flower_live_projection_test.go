@@ -38,6 +38,60 @@ func appendFlowerTimelineTestMessage(t *testing.T, store *threadstore.Store, end
 	}
 }
 
+func TestFlowerLiveMaterializedStateApprovalActionsWireSampling(t *testing.T) {
+	t.Parallel()
+
+	unsampled := FlowerLiveMaterializedState{
+		ThreadPatch:   FlowerLiveThreadPatch{},
+		Runs:          map[string]FlowerLiveRunState{},
+		InputRequests: map[string]RequestUserInputPrompt{},
+	}
+	raw, err := json.Marshal(unsampled)
+	if err != nil {
+		t.Fatalf("marshal unsampled live state: %v", err)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		t.Fatalf("decode unsampled live state object: %v", err)
+	}
+	if _, ok := object["approval_actions"]; ok {
+		t.Fatalf("unsampled live state serialized approval_actions: %s", string(raw))
+	}
+	var decodedUnsampled FlowerLiveMaterializedState
+	if err := json.Unmarshal(raw, &decodedUnsampled); err != nil {
+		t.Fatalf("unmarshal unsampled live state: %v", err)
+	}
+	if decodedUnsampled.ApprovalActionsSeen {
+		t.Fatalf("unsampled live state decoded as sampled")
+	}
+
+	sampledEmpty := FlowerLiveMaterializedState{
+		ThreadPatch:         FlowerLiveThreadPatch{},
+		Runs:                map[string]FlowerLiveRunState{},
+		ApprovalActions:     map[string]FlowerApprovalAction{},
+		ApprovalActionsSeen: true,
+		InputRequests:       map[string]RequestUserInputPrompt{},
+	}
+	raw, err = json.Marshal(sampledEmpty)
+	if err != nil {
+		t.Fatalf("marshal sampled empty live state: %v", err)
+	}
+	object = map[string]json.RawMessage{}
+	if err := json.Unmarshal(raw, &object); err != nil {
+		t.Fatalf("decode sampled empty live state object: %v", err)
+	}
+	if got := string(object["approval_actions"]); got != "{}" {
+		t.Fatalf("sampled empty approval_actions=%s, want {}", got)
+	}
+	var decodedSampled FlowerLiveMaterializedState
+	if err := json.Unmarshal(raw, &decodedSampled); err != nil {
+		t.Fatalf("unmarshal sampled empty live state: %v", err)
+	}
+	if !decodedSampled.ApprovalActionsSeen || decodedSampled.ApprovalActions == nil || len(decodedSampled.ApprovalActions) != 0 {
+		t.Fatalf("sampled empty state decoded incorrectly: %#v", decodedSampled)
+	}
+}
+
 func TestBuildFlowerTimelineMessagesUsesCanonicalTurnOrder(t *testing.T) {
 	ctx := context.Background()
 	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))

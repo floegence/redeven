@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type {
+  FlowerApprovalAction,
   FlowerActivityItem,
   FlowerActivityTimelineBlock,
   FlowerChatMessage,
@@ -10,6 +11,8 @@ import type {
 } from './contracts/flowerSurfaceContracts';
 import { mapFlowerLiveBootstrap, mapFlowerLiveEvents } from './flowerLiveMapper';
 import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
+
+type FlowerMainToolApprovalAction = Extract<FlowerApprovalAction, { origin: 'main_tool' }>;
 
 function readStatus(overrides: Record<string, unknown> = {}) {
   return {
@@ -79,6 +82,25 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     target_labels: [],
     messages: [message()],
     read_status: readStatus(),
+    ...overrides,
+  };
+}
+
+function approvalAction(overrides: Partial<FlowerMainToolApprovalAction> = {}): FlowerMainToolApprovalAction {
+  return {
+    action_id: 'appr-1',
+    origin: 'main_tool',
+    run_id: 'run-1',
+    tool_id: 'tool-1',
+    tool_name: 'terminal.exec',
+    state: 'requested',
+    status: 'pending',
+    revision: 1,
+    version: 1,
+    requested_at_ms: 2000,
+    can_approve: true,
+    expected_seq: 5,
+    summary: { label: 'curl https://example.test', command: 'curl https://example.test', effects: ['shell'] },
     ...overrides,
   };
 }
@@ -1145,9 +1167,9 @@ describe('Flower live projection', () => {
     expect(matchingTerminal.thread.model_io_status).toBeNull();
   });
 
-	it('hides bootstrap model io status for waiting and terminal threads', () => {
-		for (const status of ['waiting_user', 'waiting_approval', 'success', 'failed', 'canceled'] as const) {
-			const projected = projectFlowerLiveBootstrap(bootstrap({
+  it('hides bootstrap model io status for user-waiting and terminal threads', () => {
+    for (const status of ['waiting_user', 'success', 'failed', 'canceled'] as const) {
+      const projected = projectFlowerLiveBootstrap(bootstrap({
         thread: thread({ status }),
         live_state: {
           thread_patch: {},
@@ -1165,37 +1187,61 @@ describe('Flower live projection', () => {
       }));
 
       expect(projected.model_io_status).toBeNull();
-		}
-	});
+    }
+  });
 
-	it('projects waiting prompt reasoning selection', () => {
-		const projected = projectFlowerLiveBootstrap(bootstrap({
-			thread: thread({ status: 'waiting_user' }),
-			live_state: {
-				thread_patch: {},
-				runs: {},
-				approval_actions: {},
-				input_requests: {
-					'prompt-1': {
-						prompt_id: 'prompt-1',
-						message_id: 'msg-wait',
-						tool_id: 'tool-wait',
-						tool_name: 'request_user_input',
-						reasoning_selection: { level: 'high' },
-						questions: [{
-							id: 'next',
-							header: 'Continue',
-							question: 'Continue?',
-							response_mode: 'select',
-							choices: [{ choice_id: 'yes', label: 'Yes', kind: 'select' }],
-						}],
-					},
-				},
-			},
-		}));
+  it('hides bootstrap model io status while a pending approval is visible', () => {
+    const projected = projectFlowerLiveBootstrap(bootstrap({
+      thread: thread({ status: 'waiting_approval' }),
+      live_state: {
+        thread_patch: {},
+        runs: {
+          'run-1': { run_id: 'run-1', status: 'running', message_id: 'assistant-live' },
+        },
+        model_io: {
+          phase: 'streaming',
+          run_id: 'run-1',
+          updated_at_ms: 3200,
+        },
+        approval_actions: {
+          'appr-1': approvalAction(),
+        },
+        input_requests: {},
+      },
+    }));
 
-		expect(projected.input_request?.reasoning_selection).toEqual({ level: 'high' });
-	});
+    expect(projected.status).toBe('waiting_approval');
+    expect(projected.model_io_status).toBeNull();
+  });
+
+  it('projects waiting prompt reasoning selection', () => {
+    const projected = projectFlowerLiveBootstrap(bootstrap({
+      thread: thread({ status: 'waiting_user' }),
+      live_state: {
+        thread_patch: {},
+        runs: {},
+        approval_actions: {},
+        input_requests: {
+          'prompt-1': {
+            prompt_id: 'prompt-1',
+            message_id: 'msg-wait',
+            tool_id: 'tool-wait',
+            tool_name: 'request_user_input',
+            reasoning_selection: { level: 'high' },
+            questions: [{
+              id: 'next',
+              header: 'Continue',
+              question: 'Continue?',
+              response_mode: 'select',
+              choices: [{ choice_id: 'yes', label: 'Yes', kind: 'select' }],
+            }],
+          },
+        },
+      },
+    }));
+
+    expect(projected.input_request?.reasoning_selection).toEqual({ level: 'high' });
+  });
 
   it('hides model io status when thread patches enter waiting or terminal status without run identity', () => {
     const initial = thread({
@@ -2058,6 +2104,96 @@ describe('Flower live projection', () => {
     expect(projected.status).toBe('waiting_approval');
     expect(projected.messages.map((item) => item.id)).toEqual(['msg-user', 'assistant-live']);
     expect(projected.messages[1]?.content).toBe('Inspecting files');
+    expect(projected.approval_actions?.map((action) => action.action_id)).toEqual(['appr-1']);
+  });
+
+  it('keeps existing approval actions when bootstrap live state has not sampled approvals', () => {
+    const approval = approvalAction();
+    const projected = projectFlowerLiveBootstrap(bootstrap({
+      thread: thread({
+        status: 'waiting_approval',
+        approval_actions: [approval],
+      }),
+      live_state: {
+        thread_patch: { run_status: 'running' },
+        runs: {
+          'run-1': { run_id: 'run-1', status: 'running', message_id: 'assistant-live' },
+        },
+        input_requests: {},
+      },
+    }));
+
+    expect(projected.status).toBe('waiting_approval');
+    expect(projected.approval_actions?.map((action) => action.action_id)).toEqual(['appr-1']);
+    expect(projected.active_run_id).toBe('run-1');
+  });
+
+  it('maps missing live approval actions as unsampled rather than an authoritative empty map', () => {
+    const mapped = mapFlowerLiveBootstrap({
+      schema_version: 1,
+      endpoint_id: 'runtime',
+      thread_id: 'th-live',
+      cursor: 5,
+      retained_from_seq: 1,
+      thread: {
+        thread_id: 'th-live',
+        title: 'Live thread',
+        model_id: 'openai/gpt-5.2',
+        working_dir: '/workspace',
+        created_at_unix_ms: 1000,
+        updated_at_unix_ms: 1000,
+        run_status: 'running',
+      },
+      timeline_messages: [],
+      live_state: {
+        thread_patch: { run_status: 'running' },
+        runs: {},
+        input_requests: {},
+      },
+      read_status: readStatus(),
+      generated_at_ms: 3000,
+    }, mapperOptions());
+
+    expect(mapped.live_state.approval_actions).toBeUndefined();
+  });
+
+  it('clears approval actions only when live state explicitly provides an empty approval map', () => {
+    const projected = projectFlowerLiveBootstrap(bootstrap({
+      thread: thread({
+        status: 'waiting_approval',
+        approval_actions: [approvalAction()],
+      }),
+      live_state: {
+        thread_patch: { run_status: 'running' },
+        runs: {
+          'run-1': { run_id: 'run-1', status: 'running', message_id: 'assistant-live' },
+        },
+        approval_actions: {},
+        input_requests: {},
+      },
+    }));
+
+    expect(projected.status).toBe('running');
+    expect(projected.approval_actions).toEqual([]);
+    expect(projected.active_run_id).toBe('run-1');
+  });
+
+  it('keeps pending approval ahead of an active run when deriving bootstrap status', () => {
+    const projected = projectFlowerLiveBootstrap(bootstrap({
+      live_state: {
+        thread_patch: { run_status: 'running' },
+        runs: {
+          'run-1': { run_id: 'run-1', status: 'running', message_id: 'assistant-live' },
+        },
+        approval_actions: {
+          'appr-1': approvalAction(),
+        },
+        input_requests: {},
+      },
+    }));
+
+    expect(projected.status).toBe('waiting_approval');
+    expect(projected.active_run_id).toBe('run-1');
     expect(projected.approval_actions?.map((action) => action.action_id)).toEqual(['appr-1']);
   });
 

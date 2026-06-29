@@ -160,8 +160,8 @@ function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadP
   };
 }
 
-function approvalsFromRecord(actions: Readonly<Record<string, FlowerApprovalAction>>): readonly FlowerApprovalAction[] {
-  return normalizeDelegatedApprovalSurfaces(Object.values(actions))
+function approvalsFromRecord(actions: Readonly<Record<string, FlowerApprovalAction>> | undefined): readonly FlowerApprovalAction[] {
+  return normalizeDelegatedApprovalSurfaces(Object.values(actions ?? {}))
     .filter(visibleApprovalAction)
     .sort((left, right) => left.action_id.localeCompare(right.action_id));
 }
@@ -172,26 +172,38 @@ function firstInputRequest(inputRequests: Readonly<Record<string, FlowerInputReq
 
 function activeRunIDFromRuns(runs: FlowerLiveBootstrap['live_state']['runs']): string {
   const active = Object.values(runs)
-    .filter((run) => !threadStatusHidesModelIO(runStatus(run.status)))
+    .filter((run) => runStatusKeepsActiveRunID(runStatus(run.status)))
     .sort((left, right) => trim(left.run_id).localeCompare(trim(right.run_id)))[0];
   return trim(active?.run_id);
 }
 
+function runStatusKeepsActiveRunID(status: FlowerThreadStatus): boolean {
+  return status === 'running'
+    || status === 'waiting_approval'
+    || status === 'waiting_user';
+}
+
 function threadStatusHidesModelIO(status: FlowerThreadStatus): boolean {
-	return status === 'waiting_approval'
-		|| status === 'waiting_user'
+  return status === 'waiting_approval'
+    || status === 'waiting_user'
     || status === 'failed'
     || status === 'success'
     || status === 'canceled'
-		|| status === 'idle';
+    || status === 'idle';
 }
 
 function threadStatusClearsActiveRunID(status: FlowerThreadStatus): boolean {
-	return status === 'waiting_user'
-		|| status === 'failed'
-		|| status === 'success'
-		|| status === 'canceled'
-		|| status === 'idle';
+  return status === 'waiting_user'
+    || status === 'failed'
+    || status === 'success'
+    || status === 'canceled'
+    || status === 'idle';
+}
+
+function threadStatusIsTerminal(status: FlowerThreadStatus): boolean {
+  return status === 'failed'
+    || status === 'success'
+    || status === 'canceled';
 }
 
 function clearModelIOForRun(thread: FlowerThreadSnapshot, runID: string | undefined): FlowerThreadSnapshot {
@@ -203,10 +215,10 @@ function clearModelIOForRun(thread: FlowerThreadSnapshot, runID: string | undefi
 }
 
 function withoutModelIO(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
-	if (!thread.model_io_status && !thread.active_run_id) return thread;
-	return threadStatusClearsActiveRunID(thread.status)
-		? { ...thread, model_io_status: null, active_run_id: undefined }
-		: { ...thread, model_io_status: null };
+  if (!thread.model_io_status && !thread.active_run_id) return thread;
+  return threadStatusClearsActiveRunID(thread.status)
+    ? { ...thread, model_io_status: null, active_run_id: undefined }
+    : { ...thread, model_io_status: null };
 }
 
 function withModelIOStatus(thread: FlowerThreadSnapshot, status: FlowerModelIOStatus | null | undefined, runID?: string): FlowerThreadSnapshot {
@@ -254,23 +266,43 @@ function applyLiveMaterializedState(thread: FlowerThreadSnapshot, liveState: Flo
     context_usage: liveState.context_usage ?? null,
     context_compactions: liveState.context_compactions ?? [],
     timeline_decorations: liveState.timeline_decorations ?? [],
-    approval_actions: approvalsFromRecord(liveState.approval_actions),
   };
+  if (liveState.approval_actions !== undefined) {
+    next = { ...next, approval_actions: approvalsFromRecord(liveState.approval_actions) };
+  }
   next = applyThreadPatch(next, liveState.thread_patch);
   const inputRequest = firstInputRequest(liveState.input_requests);
+  const approvalActions = pendingApprovalActions(next.approval_actions);
+  const activeRunID = activeRunIDFromRuns(liveState.runs);
   if (inputRequest) {
     next = { ...next, status: 'waiting_user', input_request: inputRequest };
-  } else if (next.status !== 'waiting_user') {
-    next = { ...next, input_request: null };
+  } else if (approvalActions.length > 0) {
+    next = { ...next, approval_actions: approvalActions, status: 'waiting_approval', input_request: null };
+  } else {
+    if (next.status !== 'waiting_user') {
+      next = { ...next, input_request: null };
+    }
+    if (liveState.approval_actions !== undefined && next.status === 'waiting_approval') {
+      next = { ...next, status: 'idle' };
+    }
   }
-	const activeRunID = activeRunIDFromRuns(liveState.runs);
-	if (threadStatusHidesModelIO(next.status)) {
-		next = withoutModelIO(next);
-	} else if (activeRunID) {
-		next = { ...next, active_run_id: activeRunID, status: 'running' };
-	} else if (threadStatusClearsActiveRunID(next.status)) {
+  if (next.status === 'waiting_user' || next.status === 'waiting_approval') {
+    if (activeRunID) {
+      next = { ...next, active_run_id: activeRunID };
+    } else if (thread.active_run_id) {
+      next = { ...next, active_run_id: thread.active_run_id };
+    }
+    next = withoutModelIO(next);
+  } else if (threadStatusIsTerminal(next.status)) {
     const { active_run_id: _activeRunID, model_io_status: _modelIOStatus, ...rest } = next;
     next = { ...rest, model_io_status: null };
+  } else if (activeRunID) {
+    next = { ...next, active_run_id: activeRunID, status: 'running' };
+  } else if (threadStatusClearsActiveRunID(next.status)) {
+    const { active_run_id: _activeRunID, model_io_status: _modelIOStatus, ...rest } = next;
+    next = { ...rest, model_io_status: null };
+  } else if (threadStatusHidesModelIO(next.status)) {
+    next = withoutModelIO(next);
   }
   return next;
 }
@@ -427,12 +459,12 @@ export function applyFlowerLiveEvent(
         ...(event.payload.waiting_prompt !== undefined ? { input_request: event.payload.waiting_prompt ?? null } : {}),
         ...(trim(event.payload.error) ? { error: { message: trim(event.payload.error), ...(trim(event.payload.error_code) ? { code: trim(event.payload.error_code) } : {}) } } : {}),
       };
-		if (threadStatusHidesModelIO(next.status)) {
-			next = clearModelIOForRun(next, event.payload.run_id);
-			if (threadStatusClearsActiveRunID(next.status) && trim(next.active_run_id) === trim(event.payload.run_id)) {
-				next = { ...next, active_run_id: undefined };
-			}
-		} else if (trim(event.payload.run_id)) {
+      if (threadStatusHidesModelIO(next.status)) {
+        next = clearModelIOForRun(next, event.payload.run_id);
+        if (threadStatusClearsActiveRunID(next.status) && trim(next.active_run_id) === trim(event.payload.run_id)) {
+          next = { ...next, active_run_id: undefined };
+        }
+      } else if (trim(event.payload.run_id)) {
         next = { ...next, active_run_id: trim(event.payload.run_id) };
       }
       break;

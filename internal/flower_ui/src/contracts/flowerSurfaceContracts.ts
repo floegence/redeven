@@ -675,7 +675,7 @@ export type FlowerLiveMaterializedState = Readonly<{
   context_usage?: FlowerContextUsage | null;
   context_compactions?: readonly FlowerContextCompaction[];
   timeline_decorations?: readonly FlowerTimelineDecoration[];
-  approval_actions: Readonly<Record<string, FlowerApprovalAction>>;
+  approval_actions?: Readonly<Record<string, FlowerApprovalAction>>;
   input_requests: Readonly<Record<string, FlowerInputRequest>>;
 }>;
 

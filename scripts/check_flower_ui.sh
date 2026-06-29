@@ -34,6 +34,7 @@ main() {
     ui_pkg_log "Flower UI: shared timeline projection contracts..."
     ui_pkg_run_pnpm exec vitest run --root "$ROOT_DIR" --config "$dir/vite.config.ts" --environment=node --maxWorkers=2 --testTimeout=10000 \
       internal/flower_ui/src/flowerLiveProjection.test.ts \
+      internal/flower_ui/src/flowerActivityPresentation.test.ts \
       internal/flower_ui/src/flowerSubagentDetailThread.test.ts \
       internal/flower_ui/src/flowerThreadListRefresh.test.ts \
       internal/flower_ui/src/runtimeFlowerSurfaceAdapter.test.ts \
@@ -42,9 +43,11 @@ main() {
       internal/flower_ui/src/chat/flowerContextPresentation.test.ts \
       internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts \
       internal/flower_ui/src/FlowerSurface.activityRunningSheen.test.ts \
+      internal/flower_ui/src/FlowerSurface.approvalCommand.test.ts \
       internal/flower_ui/src/FlowerSurface.modelStatusIndicator.test.ts \
       internal/flower_ui/src/FlowerSurface.markdownRendering.test.ts \
-      internal/flower_ui/src/FlowerSurface.markdownReadability.test.ts
+      internal/flower_ui/src/FlowerSurface.markdownReadability.test.ts \
+      internal/flower_ui/src/shellCommandHighlight.test.ts
   )
 
   ui_pkg_log "Flower UI behavior checks passed."

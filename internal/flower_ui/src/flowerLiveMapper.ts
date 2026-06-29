@@ -1049,10 +1049,12 @@ function mapLiveState(raw: unknown): FlowerLiveMaterializedState {
       ...(trim(run.error) ? { error: trim(run.error) } : {}),
     };
   }
-  const approvalsRecord = recordValue(record.approval_actions) ?? {};
-  for (const [actionID, value] of Object.entries(approvalsRecord)) {
-    const action = mapApprovalAction({ action_id: actionID, ...(recordValue(value) ?? {}) });
-    if (action) approvals[actionID] = action;
+  const approvalsRecord = record.approval_actions === undefined ? undefined : (recordValue(record.approval_actions) ?? {});
+  if (approvalsRecord !== undefined) {
+    for (const [actionID, value] of Object.entries(approvalsRecord)) {
+      const action = mapApprovalAction({ action_id: actionID, ...(recordValue(value) ?? {}) });
+      if (action) approvals[actionID] = action;
+    }
   }
   const inputsRecord = recordValue(record.input_requests) ?? {};
   for (const [promptID, value] of Object.entries(inputsRecord)) {
@@ -1071,7 +1073,7 @@ function mapLiveState(raw: unknown): FlowerLiveMaterializedState {
     ...(record.context_usage !== undefined ? { context_usage: contextUsage } : {}),
     ...(contextCompactions !== undefined ? { context_compactions: contextCompactions } : {}),
     ...(timelineDecorations !== undefined ? { timeline_decorations: timelineDecorations } : {}),
-    approval_actions: approvals,
+    ...(approvalsRecord !== undefined ? { approval_actions: approvals } : {}),
     input_requests: inputRequests,
   };
 }
