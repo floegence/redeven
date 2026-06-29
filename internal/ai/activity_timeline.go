@@ -215,6 +215,9 @@ func (r *run) recordFloretActivityEvent(ev flruntime.Event) {
 	if modelIOEndsBeforeActivity(ev.Type) {
 		r.clearModelIOStatus()
 	}
+	if ev.ActivityTimeline != nil {
+		r.publishActivityTimelineWithSidecars(*ev.ActivityTimeline, nil)
+	}
 }
 
 func (r *run) recordObservationActivityEvent(ev observation.Event) {

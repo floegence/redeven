@@ -437,7 +437,7 @@ func TestRecordObservationActivityEventSkipsEmptyTimeline(t *testing.T) {
 	}
 }
 
-func TestRecordFloretActivityEventDoesNotPublishFlowerTimelineBlocks(t *testing.T) {
+func TestRecordFloretActivityEventWithoutTimelineDoesNotPublishFlowerTimelineBlocks(t *testing.T) {
 	t.Parallel()
 
 	var blockSets []streamEventBlockSet
@@ -465,6 +465,98 @@ func TestRecordFloretActivityEventDoesNotPublishFlowerTimelineBlocks(t *testing.
 	}
 	if len(r.assistantBlocks) != 0 {
 		t.Fatalf("assistantBlocks=%#v, want no local timeline projection", r.assistantBlocks)
+	}
+}
+
+func TestRecordFloretActivityEventPublishesFloretTimeline(t *testing.T) {
+	t.Parallel()
+
+	var blockSets []streamEventBlockSet
+	r := &run{
+		id:                        "run_floret_activity_projection",
+		threadID:                  "thread_floret_activity_projection",
+		messageID:                 "msg_floret_activity_projection",
+		activitySegmentBlockIndex: -1,
+		nextBlockIndex:            0,
+		onStreamEvent: func(ev any) {
+			if bs, ok := ev.(streamEventBlockSet); ok {
+				blockSets = append(blockSets, bs)
+			}
+		},
+	}
+	running := observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		RunID:         "run_floret_activity_projection",
+		ThreadID:      "thread_floret_activity_projection",
+		TurnID:        "msg_floret_activity_projection",
+		Summary: observation.ActivitySummary{
+			Status:     observation.ActivityStatusRunning,
+			Severity:   observation.ActivitySeverityNormal,
+			TotalItems: 1,
+			Counts:     observation.ActivityCounts{Running: 1},
+		},
+		Items: []observation.ActivityItem{{
+			ItemID:          "tool:exec-1",
+			ToolID:          "exec-1",
+			ToolName:        "terminal.exec",
+			Kind:            observation.ActivityKindTool,
+			Status:          observation.ActivityStatusRunning,
+			Severity:        observation.ActivitySeverityNormal,
+			StartedAtUnixMS: 1_700_000_000_000,
+			Label:           "sleep 10s",
+			Renderer:        observation.ActivityRendererTerminal,
+			Payload:         map[string]any{"command": "sleep 10s"},
+		}},
+	}
+	r.recordFloretActivityEvent(flruntime.Event{
+		Type:             observation.EventTypeToolCall,
+		ActivityTimeline: &running,
+		Timestamp:        time.UnixMilli(1_700_000_000_000),
+	})
+	if len(blockSets) != 1 {
+		t.Fatalf("block-set events=%d, want running timeline: %#v", len(blockSets), blockSets)
+	}
+	block, ok := blockSets[0].Block.(ActivityTimelineBlock)
+	if !ok {
+		t.Fatalf("block = %T %#v, want ActivityTimelineBlock", blockSets[0].Block, blockSets[0].Block)
+	}
+	if len(block.Items) != 1 || block.Items[0].Status != observation.ActivityStatusRunning || block.Items[0].Payload["command"] != "sleep 10s" {
+		t.Fatalf("running block = %#v", block)
+	}
+
+	success := running
+	success.Summary.Status = observation.ActivityStatusSuccess
+	success.Summary.Counts = observation.ActivityCounts{Success: 1}
+	success.Items = []observation.ActivityItem{{
+		ItemID:          "tool:exec-1",
+		ToolID:          "exec-1",
+		ToolName:        "terminal.exec",
+		Kind:            observation.ActivityKindTool,
+		Status:          observation.ActivityStatusSuccess,
+		Severity:        observation.ActivitySeverityNormal,
+		StartedAtUnixMS: 1_700_000_000_000,
+		EndedAtUnixMS:   1_700_000_010_000,
+		Label:           "sleep 10s",
+		Renderer:        observation.ActivityRendererTerminal,
+		Payload:         map[string]any{"command": "sleep 10s", "exit_code": 0, "duration_ms": int64(10_000)},
+	}}
+	r.recordFloretActivityEvent(flruntime.Event{
+		Type:             observation.EventTypeToolResult,
+		ActivityTimeline: &success,
+		Timestamp:        time.UnixMilli(1_700_000_010_000),
+	})
+	if len(blockSets) != 2 {
+		t.Fatalf("block-set events=%d, want running and success timeline: %#v", len(blockSets), blockSets)
+	}
+	finalBlock, ok := blockSets[1].Block.(ActivityTimelineBlock)
+	if !ok {
+		t.Fatalf("final block = %T %#v, want ActivityTimelineBlock", blockSets[1].Block, blockSets[1].Block)
+	}
+	if len(finalBlock.Items) != 1 ||
+		finalBlock.Items[0].Status != observation.ActivityStatusSuccess ||
+		finalBlock.Items[0].Payload["command"] != "sleep 10s" ||
+		finalBlock.Items[0].EndedAtUnixMS-finalBlock.Items[0].StartedAtUnixMS != 10_000 {
+		t.Fatalf("final block = %#v", finalBlock)
 	}
 }
 

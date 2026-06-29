@@ -517,7 +517,7 @@ func activityPayloadKeyPolicyToken(key string) string {
 func activityPayloadAllowedKeys(renderer observation.ActivityRenderer) map[string]struct{} {
 	switch renderer {
 	case observation.ActivityRendererTerminal:
-		return stringSet("command", "description", "process_id", "pending_handle", "cwd", "execution_location", "output", "latest_output", "first_seq", "last_seq", "total_bytes", "started_at_ms", "ended_at_ms", "exit_code", "duration_ms", "truncated", "stdout", "stderr", "summary", "details", "status", "error", "content_ref")
+		return stringSet("command", "description", "process_id", "pending_handle", "execution_location", "output", "latest_output", "first_seq", "last_seq", "total_bytes", "started_at_ms", "ended_at_ms", "exit_code", "duration_ms", "truncated", "stdout", "stderr", "summary", "details", "status", "error", "content_ref")
 	case observation.ActivityRendererFile:
 		return stringSet("operation", "display_name", "file_action_id", "content", "line_offset", "line_count", "total_lines", "change_type", "additions", "deletions", "unified_diff", "diff_unavailable_reason", "truncated", "summary", "details", "status", "error", "content_ref")
 	case observation.ActivityRendererPatch:

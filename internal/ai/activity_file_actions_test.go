@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/floegence/floret/observation"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
@@ -326,6 +327,88 @@ func TestSanitizePublicStreamEventFiltersActivitySidecar(t *testing.T) {
 		if !strings.Contains(string(body), required) {
 			t.Fatalf("public stream event missing %q: %s", required, body)
 		}
+	}
+}
+
+func TestSanitizeActivityTimelineMessageJSONFiltersTerminalHostPaths(t *testing.T) {
+	t.Parallel()
+
+	raw := `{
+		"id":"msg_terminal",
+		"role":"assistant",
+		"status":"complete",
+		"timestamp":1700000000000,
+		"blocks":[{
+			"type":"activity-timeline",
+			"schema_version":1,
+			"run_id":"run_terminal",
+			"thread_id":"thread_terminal",
+			"turn_id":"msg_terminal",
+			"summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},
+			"items":[{
+				"item_id":"tool_terminal",
+				"tool_id":"tool_terminal",
+				"tool_name":"terminal.exec",
+				"kind":"tool",
+				"status":"success",
+				"severity":"quiet",
+				"needs_attention":false,
+				"requires_approval":false,
+				"label":"sleep 10",
+				"renderer":"terminal",
+				"payload":{
+					"command":"sleep 10",
+					"process_id":"tp_public",
+					"cwd":"/Users/alice/private",
+					"workdir":"/Users/alice/private",
+					"stdin":"secret",
+					"output":"",
+					"status":"success",
+					"result":{"cwd":"/Users/alice/private","visible":"kept"}
+				}
+			}]
+		}]
+	}`
+	sanitized, err := SanitizeActivityTimelineMessageJSON(raw)
+	if err != nil {
+		t.Fatalf("SanitizeActivityTimelineMessageJSON: %v", err)
+	}
+	body := string(sanitized)
+	for _, forbidden := range []string{`"cwd"`, `"workdir"`, `"stdin"`, "/Users/alice/private", "secret"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("terminal public activity contains %q: %s", forbidden, body)
+		}
+	}
+	for _, required := range []string{`"command":"sleep 10"`, `"process_id":"tp_public"`, `"output":""`, `"status":"success"`} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("terminal public activity missing %q: %s", required, body)
+		}
+	}
+}
+
+func TestActivityPayloadAllowedKeysExcludeForbiddenKeys(t *testing.T) {
+	t.Parallel()
+
+	renderers := []observation.ActivityRenderer{
+		observation.ActivityRendererStructured,
+		observation.ActivityRendererTerminal,
+		observation.ActivityRendererFile,
+		observation.ActivityRendererPatch,
+		observation.ActivityRendererWebSearch,
+		observation.ActivityRendererTodos,
+		observation.ActivityRendererQuestion,
+		observation.ActivityRendererCompletion,
+	}
+	for _, renderer := range renderers {
+		renderer := renderer
+		t.Run(string(renderer), func(t *testing.T) {
+			t.Parallel()
+			for key := range activityPayloadAllowedKeys(renderer) {
+				if activityPayloadForbiddenKey(key) {
+					t.Fatalf("renderer %q allows forbidden activity payload key %q", renderer, key)
+				}
+			}
+		})
 	}
 }
 

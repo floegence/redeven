@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
@@ -326,6 +327,70 @@ func TestFlowerLiveCommittedCanceledMessageClearsLiveDraft(t *testing.T) {
 	})
 	if _, ok := state.Messages["msg-assistant"]; ok {
 		t.Fatalf("committed canceled message must not remain as a live draft: %#v", state.Messages["msg-assistant"])
+	}
+}
+
+func TestFlowerLiveCommittedMessageSanitizesActivityTimelinePayload(t *testing.T) {
+	svc := &Service{}
+	events := svc.flowerLiveEventsFromRealtime(RealtimeEvent{
+		EventType:  RealtimeEventTypeTranscript,
+		EndpointID: "env_terminal_public",
+		ThreadID:   "thread_terminal_public",
+		RunID:      "run_terminal_public",
+		AtUnixMs:   1_700_000_000_000,
+		MessageJSON: json.RawMessage(`{
+			"id":"msg_terminal_public",
+			"role":"assistant",
+			"status":"complete",
+			"timestamp":1700000000000,
+			"blocks":[{
+				"type":"activity-timeline",
+				"schema_version":1,
+				"run_id":"run_terminal_public",
+				"thread_id":"thread_terminal_public",
+				"turn_id":"msg_terminal_public",
+				"summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},
+				"items":[{
+					"item_id":"tool_terminal_public",
+					"tool_id":"tool_terminal_public",
+					"tool_name":"terminal.exec",
+					"kind":"tool",
+					"status":"success",
+					"severity":"quiet",
+					"needs_attention":false,
+					"requires_approval":false,
+					"label":"sleep 10",
+					"renderer":"terminal",
+					"payload":{
+						"command":"sleep 10",
+						"process_id":"tp_public",
+						"cwd":"/Users/alice/private",
+						"workdir":"/Users/alice/private",
+						"stdin":"secret",
+						"output":"",
+						"status":"success"
+					}
+				}]
+			}]
+		}`),
+	})
+	if len(events) != 1 || events[0].Kind != FlowerLiveMessageCommitted {
+		t.Fatalf("events=%#v, want one message.committed", events)
+	}
+	var payload FlowerLiveMessageCommittedPayload
+	if !decodeFlowerPayload(events[0].Payload, &payload) {
+		t.Fatalf("decode committed payload: %s", string(events[0].Payload))
+	}
+	body := string(payload.Message)
+	for _, forbidden := range []string{`"cwd"`, `"workdir"`, `"stdin"`, "/Users/alice/private", "secret"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("committed public activity contains %q: %s", forbidden, body)
+		}
+	}
+	for _, required := range []string{`"command":"sleep 10"`, `"process_id":"tp_public"`, `"output":""`, `"status":"success"`} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("committed public activity missing %q: %s", required, body)
+		}
 	}
 }
 

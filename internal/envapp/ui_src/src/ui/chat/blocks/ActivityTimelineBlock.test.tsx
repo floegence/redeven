@@ -55,7 +55,6 @@ function baseItem(overrides: Partial<ActivityItem> = {}): ActivityItem {
     description: 'Run tests',
     payload: {
       command: 'go test ./...',
-      cwd: '/workspace/redeven',
       stdout: 'ok\n',
       stderr: '',
       exit_code: 0,

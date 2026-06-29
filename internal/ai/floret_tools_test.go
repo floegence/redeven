@@ -915,6 +915,7 @@ func TestFloretToolResultActivityPayloadsMeetFullContract(t *testing.T) {
 		Status:   toolResultStatusSuccess,
 		Data: map[string]any{
 			"command": "printf ok",
+			"cwd":     "/Users/alice/private",
 			"stdout":  strings.Repeat("o", activityPayloadStringLimit+400),
 			"bad key / with spaces": map[string]any{
 				"level1": map[string]any{
@@ -937,6 +938,9 @@ func TestFloretToolResultActivityPayloadsMeetFullContract(t *testing.T) {
 	}
 	if _, ok := activity.Payload["bad_key_with_spaces"]; ok {
 		t.Fatalf("payload kept non-spec field: %#v", activity.Payload)
+	}
+	if _, ok := activity.Payload["cwd"]; ok {
+		t.Fatalf("terminal activity payload kept host-only cwd: %#v", activity.Payload)
 	}
 	if len([]rune(anyToString(activity.Payload["stdout"]))) > activityPayloadStringLimit {
 		t.Fatalf("stdout length=%d, want <= %d", len([]rune(anyToString(activity.Payload["stdout"]))), activityPayloadStringLimit)
