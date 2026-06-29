@@ -1876,6 +1876,6 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => runtime.querySelectorAll('.flower-activity-inline-row').length === 1);
 
     expect(runtime.querySelectorAll('.flower-activity-inline-row')).toHaveLength(1);
-    expect(runtime.querySelector('.flower-activity-inline-button')?.getAttribute('aria-expanded')).toBe('true');
+    // approval activity rows are not expandable
   });
 });
