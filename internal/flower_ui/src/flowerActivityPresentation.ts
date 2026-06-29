@@ -983,7 +983,8 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
 }
 
 function titleWithToolContext(toolName: string, explicit: string, fallback: string): string {
-  const label = explicit || fallback;
+  const meaningful = explicit && explicit !== 'Tool approval' ? explicit : '';
+  const label = meaningful || fallback;
   switch (toolName) {
     case 'okf.search': return explicit ? `OKF search "${explicit}"` : 'OKF search';
     case 'okf.open': return explicit ? `OKF concept "${explicit}"` : 'OKF concept';
@@ -998,22 +999,20 @@ function titleWithToolContext(toolName: string, explicit: string, fallback: stri
 }
 
 function titleForGenericItem(item: FlowerActivityItem, renderer: FlowerActivityRenderer): FlowerActivityTitle {
-  let explicit = trimString(item.label);
+  const explicit = trimString(item.label);
   const toolName = trimString(item.tool_name);
-  if (item.requires_approval && (!explicit || explicit === 'Tool approval') && toolName) {
-    explicit = toolName;
-  }
+  const meaningful = (text: string) => text && text !== 'Tool approval' ? text : '';
   switch (renderer) {
     case 'terminal': {
-      const command = payloadValue(item.payload, 'command') || explicit || defaultLabelForItem(item);
+      const command = payloadValue(item.payload, 'command') || meaningful(explicit) || toolName || defaultLabelForItem(item);
       return { kind: 'command', command };
     }
     case 'web_search':
       return { kind: 'plain', text: titleWithToolContext(toolName, explicit, defaultLabelForItem(item)) };
     case 'question':
-      return { kind: 'plain', text: explicit || trimString(item.description) || payloadValue(item.payload, 'question', 'summary') || defaultLabelForItem(item) };
+      return { kind: 'plain', text: meaningful(explicit) || trimString(item.description) || payloadValue(item.payload, 'question', 'summary') || defaultLabelForItem(item) };
     case 'completion':
-      return { kind: 'plain', text: explicit || payloadValue(item.payload, 'result') || defaultLabelForItem(item) };
+      return { kind: 'plain', text: meaningful(explicit) || payloadValue(item.payload, 'result') || defaultLabelForItem(item) };
     default:
       return { kind: 'plain', text: titleWithToolContext(toolName, explicit, defaultLabelForItem(item)) };
   }
