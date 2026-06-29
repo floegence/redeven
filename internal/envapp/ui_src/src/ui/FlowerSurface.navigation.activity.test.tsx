@@ -1358,7 +1358,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(copyButton?.getAttribute('data-copied')).toBe('true');
 
     const row = runtime.querySelector('[data-flower-activity-item-id="delegated-approval-item"]') as HTMLElement | null;
-    expect(row).toBeNull();
+    expect(row?.querySelector('[data-flower-approval-action-id="dappr-terminal"]')).toBeNull();
     const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-actions button'))
       .find((button) => button.textContent?.trim() === 'Approve');
     expect(approve).toBeTruthy();
