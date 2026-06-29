@@ -71,7 +71,7 @@ func TestFloretThreadProjectionPersistsFullAssistantContentAfterActivity(t *test
 	}
 }
 
-func TestSettlePendingToolWithFloretUsesActiveHost(t *testing.T) {
+func TestSettlePendingToolWithActiveFloretRunUsesActiveHost(t *testing.T) {
 	host := &recordingFloretHost{
 		settleResult: flruntime.PendingToolSettlementResult{
 			RunID: "run_terminal",
@@ -96,9 +96,9 @@ func TestSettlePendingToolWithFloretUsesActiveHost(t *testing.T) {
 		Summary:    "Terminal process completed",
 	}
 
-	result, err := svc.settlePendingToolWithFloret(context.Background(), "env_terminal", "thread_terminal", req)
+	result, err := svc.settlePendingToolWithActiveFloretRun(context.Background(), "env_terminal", "thread_terminal", req)
 	if err != nil {
-		t.Fatalf("settlePendingToolWithFloret: %v", err)
+		t.Fatalf("settlePendingToolWithActiveFloretRun: %v", err)
 	}
 	if result.RunID != "run_terminal" {
 		t.Fatalf("result=%#v, want active host result", result)
@@ -109,6 +109,32 @@ func TestSettlePendingToolWithFloretUsesActiveHost(t *testing.T) {
 	got := host.settleRequests[0]
 	if got.ToolCallID != "call_terminal" || got.Handle != "tp_terminal" {
 		t.Fatalf("settle request=%#v", got)
+	}
+}
+
+func TestSettlePendingToolWithActiveFloretRunRequiresActiveHost(t *testing.T) {
+	svc := &Service{
+		activeRunByTh: map[string]string{runThreadKey("env_terminal", "thread_terminal"): "run_terminal"},
+		runs: map[string]*run{
+			"run_terminal": &run{id: "run_terminal", endpointID: "env_terminal", threadID: "thread_terminal"},
+		},
+	}
+	req := flruntime.PendingToolSettlementRequest{
+		RunID:      "run_terminal",
+		TurnID:     "turn_terminal",
+		ToolCallID: "call_terminal",
+		ToolName:   "terminal.exec",
+		Handle:     "tp_terminal",
+		Status:     flruntime.PendingToolSettlementCompleted,
+		Summary:    "Terminal process completed",
+	}
+
+	_, err := svc.settlePendingToolWithActiveFloretRun(context.Background(), "env_terminal", "thread_terminal", req)
+	if err == nil {
+		t.Fatalf("settlePendingToolWithActiveFloretRun succeeded without an active floret host")
+	}
+	if got, want := err.Error(), "active floret settlement host unavailable"; got != want {
+		t.Fatalf("error=%q, want %q", got, want)
 	}
 }
 
