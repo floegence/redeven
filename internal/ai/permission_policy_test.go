@@ -25,10 +25,13 @@ import (
 
 func newPermissionPolicyTestRun(t *testing.T, workspace string, permissionType FlowerPermissionType, messageID string) *run {
 	t.Helper()
+	svc := &Service{terminalProcesses: newTerminalProcessManager(nil)}
+	t.Cleanup(svc.terminalProcesses.Close)
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		AgentHomeDir: workspace,
 		Shell:        "bash",
+		Service:      svc,
 		RunID:        "run_" + messageID,
 		EndpointID:   "env_permission_policy",
 		ThreadID:     "thread_" + messageID,
@@ -183,11 +186,14 @@ func newPermissionPolicyBridgeService(t *testing.T) *Service {
 		t.Fatalf("threadstore.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
+	manager := newTerminalProcessManager(nil)
+	t.Cleanup(manager.Close)
 	return &Service{
 		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
 		delegatedApprovals: map[string]*delegatedApprovalHandle{},
 		threadsDB:          store,
 		persistOpTO:        time.Second,
+		terminalProcesses:  manager,
 	}
 }
 

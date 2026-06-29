@@ -153,37 +153,28 @@ func TestResolveToolPath(t *testing.T) {
 }
 
 func TestToolTerminalExec_CwdRules(t *testing.T) {
-	t.Parallel()
-
 	workingDir := t.TempDir()
-	r := &run{agentHomeDir: workingDir, workingDir: workingDir, shell: "bash"}
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
+	r := newTerminalProcessTestRun(workingDir, &Service{terminalProcesses: manager}, nil, "env_paths", "thread_paths", "run_paths", "turn_paths")
 
 	t.Run("passes stdin to the command", func(t *testing.T) {
-		t.Parallel()
 		stdin := "hello\nworld\n"
-		out, err := r.toolTerminalExec(context.Background(), "cat", stdin, "", 5000)
-		if err != nil {
-			t.Fatalf("toolTerminalExec: %v", err)
-		}
-		m, ok := out.(map[string]any)
-		if !ok {
-			t.Fatalf("unexpected result type: %T", out)
-		}
-		if got := anyToString(m["stdout"]); got != stdin {
-			t.Fatalf("stdout=%q, want %q", got, stdin)
+		m := runTerminalExecForPathTest(t, r, "tool_paths_stdin", map[string]any{
+			"command":  "read first; read second; printf 'got:%s/%s\\n' \"$first\" \"$second\"",
+			"stdin":    stdin,
+			"yield_ms": 1000,
+		})
+		if got := anyToString(m["stdout"]); !strings.Contains(got, "got:hello/world") {
+			t.Fatalf("stdout=%q, want processed stdin", got)
 		}
 	})
 
 	t.Run("empty cwd falls back to working_dir_abs", func(t *testing.T) {
-		t.Parallel()
-		out, err := r.toolTerminalExec(context.Background(), "pwd", "", "", 5000)
-		if err != nil {
-			t.Fatalf("toolTerminalExec: %v", err)
-		}
-		m, ok := out.(map[string]any)
-		if !ok {
-			t.Fatalf("unexpected result type: %T", out)
-		}
+		m := runTerminalExecForPathTest(t, r, "tool_paths_default_cwd", map[string]any{
+			"command":  "pwd",
+			"yield_ms": 1000,
+		})
 		stdout := strings.TrimSpace(anyToString(m["stdout"]))
 		if canonicalPath(stdout) != canonicalPath(workingDir) {
 			t.Fatalf("stdout=%q, want cwd=%q", stdout, workingDir)
@@ -191,19 +182,15 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 	})
 
 	t.Run("relative cwd resolves against working_dir_abs", func(t *testing.T) {
-		t.Parallel()
 		subdir := filepath.Join(workingDir, "subdir")
 		if err := os.MkdirAll(subdir, 0o755); err != nil {
 			t.Fatalf("mkdir subdir: %v", err)
 		}
-		out, err := r.toolTerminalExec(context.Background(), "pwd", "", "subdir", 5000)
-		if err != nil {
-			t.Fatalf("toolTerminalExec: %v", err)
-		}
-		m, ok := out.(map[string]any)
-		if !ok {
-			t.Fatalf("unexpected result type: %T", out)
-		}
+		m := runTerminalExecForPathTest(t, r, "tool_paths_relative_cwd", map[string]any{
+			"command":  "pwd",
+			"cwd":      "subdir",
+			"yield_ms": 1000,
+		})
 		stdout := strings.TrimSpace(anyToString(m["stdout"]))
 		if canonicalPath(stdout) != canonicalPath(subdir) {
 			t.Fatalf("stdout=%q, want cwd=%q", stdout, subdir)
@@ -211,7 +198,6 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 	})
 
 	t.Run("absolute cwd outside configured roots is rejected", func(t *testing.T) {
-		t.Parallel()
 		home := t.TempDir()
 		project := filepath.Join(home, "workspace")
 		outside := filepath.Join(home, "other")
@@ -240,8 +226,18 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewRegistry: %v", err)
 		}
-		r := &run{agentHomeDir: home, workingDir: project, scope: scope, shell: "bash"}
-		if _, err := r.toolTerminalExec(context.Background(), "pwd", "", outside, 5000); err == nil {
+		r := newTerminalProcessTestRun(project, &Service{terminalProcesses: manager}, nil, "env_paths", "thread_paths", "run_paths_reject", "turn_paths")
+		r.agentHomeDir = home
+		r.scope = scope
+		outcome, err := r.handleToolCall(context.Background(), "tool_paths_outside_cwd", "terminal.exec", map[string]any{
+			"command":  "pwd",
+			"cwd":      outside,
+			"yield_ms": 1000,
+		})
+		if err != nil {
+			t.Fatalf("handleToolCall: %v", err)
+		}
+		if outcome == nil || outcome.ToolError == nil {
 			t.Fatalf("expected outside-scope cwd to fail")
 		}
 	})
@@ -260,6 +256,22 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 			t.Fatalf("cwd=%q, want %q", cwd, subdir)
 		}
 	})
+}
+
+func runTerminalExecForPathTest(t *testing.T, r *run, toolID string, args map[string]any) map[string]any {
+	t.Helper()
+	outcome, err := r.handleToolCall(context.Background(), toolID, "terminal.exec", args)
+	if err != nil {
+		t.Fatalf("handleToolCall: %v", err)
+	}
+	if outcome == nil || !outcome.Success {
+		t.Fatalf("outcome=%#v, want success", outcome)
+	}
+	m, ok := outcome.Result.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected result type: %T", outcome.Result)
+	}
+	return m
 }
 
 func TestToolApplyPatch_CreatesFile(t *testing.T) {

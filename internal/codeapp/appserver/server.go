@@ -1740,6 +1740,17 @@ func auditURLHost(raw string) (scheme string, host string) {
 	return strings.TrimSpace(u.Scheme), strings.TrimSpace(u.Host)
 }
 
+func parseOptionalInt64Query(r *http.Request, name string) (int64, error) {
+	if r == nil {
+		return 0, nil
+	}
+	raw := strings.TrimSpace(r.URL.Query().Get(name))
+	if raw == "" {
+		return 0, nil
+	}
+	return strconv.ParseInt(raw, 10, 64)
+}
+
 func (g *Server) appendAudit(meta *session.Meta, action string, status string, detail map[string]any, err error) {
 	if g == nil || g.audit == nil || meta == nil {
 		return
@@ -4382,7 +4393,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 		return
 
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/runs/"):
+	case (r.Method == http.MethodGet || r.Method == http.MethodPost) && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/runs/"):
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
@@ -4412,6 +4423,118 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if runID == "" {
 			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 			return
+		}
+
+		if len(parts) == 4 && action == "terminal" {
+			processID := strings.TrimSpace(parts[2])
+			terminalAction := strings.TrimSpace(parts[3])
+			if processID == "" {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing process_id"})
+				return
+			}
+			switch terminalAction {
+			case "read":
+				if r.Method != http.MethodGet {
+					writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
+					return
+				}
+				afterSeq, err := parseOptionalInt64Query(r, "after_seq")
+				if err != nil {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid after_seq"})
+					return
+				}
+				waitMS, err := parseOptionalInt64Query(r, "wait_ms")
+				if err != nil {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid wait_ms"})
+					return
+				}
+				maxBytes, err := parseOptionalInt64Query(r, "max_bytes")
+				if err != nil {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid max_bytes"})
+					return
+				}
+				out, err := g.ai.ReadTerminalProcess(r.Context(), meta, runID, processID, afterSeq, waitMS, maxBytes)
+				if err != nil {
+					g.appendAudit(meta, "ai_terminal_process_read", "failure", map[string]any{
+						"run_id":     runID,
+						"process_id": processID,
+					}, err)
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+					return
+				}
+				g.appendAudit(meta, "ai_terminal_process_read", "success", map[string]any{
+					"run_id":      runID,
+					"process_id":  processID,
+					"status":      strings.TrimSpace(out.Status),
+					"last_seq":    out.LastSeq,
+					"total_bytes": out.TotalBytes,
+				}, nil)
+				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+				return
+
+			case "write":
+				if r.Method != http.MethodPost {
+					writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
+					return
+				}
+				dec := json.NewDecoder(r.Body)
+				dec.DisallowUnknownFields()
+				var body struct {
+					Input string `json:"input"`
+				}
+				if err := dec.Decode(&body); err != nil {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+					return
+				}
+				if err := dec.Decode(&struct{}{}); err != io.EOF {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+					return
+				}
+				out, err := g.ai.WriteTerminalProcess(r.Context(), meta, runID, processID, body.Input)
+				if err != nil {
+					g.appendAudit(meta, "ai_terminal_process_write", "failure", map[string]any{
+						"run_id":      runID,
+						"process_id":  processID,
+						"input_bytes": len(body.Input),
+					}, err)
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+					return
+				}
+				g.appendAudit(meta, "ai_terminal_process_write", "success", map[string]any{
+					"run_id":      runID,
+					"process_id":  processID,
+					"input_bytes": len(body.Input),
+					"status":      strings.TrimSpace(out.Status),
+				}, nil)
+				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+				return
+
+			case "terminate":
+				if r.Method != http.MethodPost {
+					writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
+					return
+				}
+				out, err := g.ai.TerminateTerminalProcess(r.Context(), meta, runID, processID)
+				if err != nil {
+					g.appendAudit(meta, "ai_terminal_process_terminate", "failure", map[string]any{
+						"run_id":     runID,
+						"process_id": processID,
+					}, err)
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+					return
+				}
+				g.appendAudit(meta, "ai_terminal_process_terminate", "success", map[string]any{
+					"run_id":     runID,
+					"process_id": processID,
+					"status":     strings.TrimSpace(out.Status),
+				}, nil)
+				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+				return
+
+			default:
+				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+				return
+			}
 		}
 
 		if r.Method == http.MethodGet && len(parts) == 4 && action == "tools" && strings.TrimSpace(parts[3]) == "output" {

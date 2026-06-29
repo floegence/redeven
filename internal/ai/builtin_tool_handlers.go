@@ -19,6 +19,12 @@ func toolSuccessSummary(toolName string) string {
 	switch strings.TrimSpace(toolName) {
 	case "terminal.exec":
 		return "terminal.exec"
+	case "terminal.read":
+		return "terminal.read"
+	case "terminal.write":
+		return "terminal.write"
+	case "terminal.terminate":
+		return "terminal.terminate"
 	case "file.read":
 		return "file.read"
 	case "file.edit", "file.write":
@@ -68,6 +74,19 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (ToolRe
 	}
 	if outcome == nil {
 		return ToolResult{ToolID: call.ID, ToolName: toolName, Status: toolResultStatusError, Summary: "tool.error", Details: "empty tool outcome"}, nil
+	}
+	if outcome.Pending != nil {
+		data, truncated := normalizeTruncatedToolPayload(toolName, outcome.Result)
+		return ToolResult{
+			ToolID:    strings.TrimSpace(call.ID),
+			ToolName:  toolName,
+			Status:    "pending",
+			Summary:   strings.TrimSpace(outcome.Pending.Summary),
+			Details:   strings.TrimSpace(outcome.Pending.Instruction),
+			Data:      data,
+			Pending:   outcome.Pending,
+			Truncated: truncated,
+		}, nil
 	}
 	if outcome.Success {
 		data, truncated := normalizeTruncatedToolPayload(toolName, outcome.Result)
@@ -163,6 +182,16 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 		if stderr, ok := m["stderr"].(string); ok {
 			trimmed, hit := truncateByRunes(stderr, 2000)
 			m["stderr"] = trimmed
+			truncated = truncated || hit
+		}
+		if output, ok := m["output"].(string); ok {
+			trimmed, hit := truncateByRunes(output, 4000)
+			m["output"] = trimmed
+			truncated = truncated || hit
+		}
+		if latest, ok := m["latest_output"].(string); ok {
+			trimmed, hit := truncateByRunes(latest, 4000)
+			m["latest_output"] = trimmed
 			truncated = truncated || hit
 		}
 		if truncated {
@@ -640,13 +669,52 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.exec",
-			Description:      "Execute a shell command in the local AI runtime. Defaults to the run working directory. Do not treat thread target context as remote execution; remote or target execution must come from explicit target tool/result provenance. When timeout_ms is omitted, the runtime applies a 2-minute default timeout; any requested timeout is capped at 10 minutes.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer", "minimum": 1, "maximum": 600000}, "description": map[string]any{"type": "string", "maxLength": 200}}), "required": []string{"command"}, "additionalProperties": false}),
+			Description:      "Start a PTY-backed shell command in the local AI runtime. Defaults to the run working directory. It waits briefly for yield_ms, returns final output if the process exits, or returns a running process_id for terminal.read, terminal.write, and terminal.terminate. Do not treat thread target context as remote execution.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "yield_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,
 			Capabilities:     []ToolCapabilityClass{ToolCapabilityShell, ToolCapabilityOpenWorld},
+			Source:           "builtin",
+			Namespace:        "builtin.terminal",
+			Priority:         100,
+		},
+		{
+			Name:             "terminal.read",
+			Description:      "Read the latest output from a running or completed terminal process started by terminal.exec. Use after_seq with wait_ms to poll for new output.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "after_seq": map[string]any{"type": "integer", "minimum": 0}, "wait_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000}, "max_bytes": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000000}}, "required": []string{"process_id"}, "additionalProperties": false}),
+			ParallelSafe:     true,
+			Mutating:         false,
+			RequiresApproval: false,
+			Visibility:       ToolVisibilityStandard,
+			Capabilities:     []ToolCapabilityClass{ToolCapabilityShell},
+			Source:           "builtin",
+			Namespace:        "builtin.terminal",
+			Priority:         100,
+		},
+		{
+			Name:             "terminal.write",
+			Description:      "Send input to a running terminal process started by terminal.exec. Include trailing newlines when the shell program expects Enter.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "input": map[string]any{"type": "string", "maxLength": 200000}}, "required": []string{"process_id", "input"}, "additionalProperties": false}),
+			ParallelSafe:     false,
+			Mutating:         false,
+			RequiresApproval: false,
+			Visibility:       ToolVisibilityStandard,
+			Capabilities:     []ToolCapabilityClass{ToolCapabilityShell},
+			Source:           "builtin",
+			Namespace:        "builtin.terminal",
+			Priority:         100,
+		},
+		{
+			Name:             "terminal.terminate",
+			Description:      "Terminate a running terminal process started by terminal.exec.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}}, "required": []string{"process_id"}, "additionalProperties": false}),
+			ParallelSafe:     false,
+			Mutating:         false,
+			RequiresApproval: false,
+			Visibility:       ToolVisibilityStandard,
+			Capabilities:     []ToolCapabilityClass{ToolCapabilityShell},
 			Source:           "builtin",
 			Namespace:        "builtin.terminal",
 			Priority:         100,

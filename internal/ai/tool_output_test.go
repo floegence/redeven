@@ -36,8 +36,8 @@ func TestGetTerminalToolOutput(t *testing.T) {
 		ToolID:     "tool_1",
 		ToolName:   "terminal.exec",
 		Status:     "success",
-		ArgsJSON:   `{"command":"pwd","cwd":"/tmp","timeout_ms":60000}`,
-		ResultJSON: `{"stdout":"/tmp\n","stderr":"","exit_code":0,"duration_ms":8,"timed_out":false,"truncated":false}`,
+		ArgsJSON:   `{"command":"pwd","cwd":"/tmp"}`,
+		ResultJSON: `{"status":"success","process_id":"tp_1","output":"/tmp\n","stdout":"/tmp\n","stderr":"","exit_code":0,"duration_ms":8,"first_seq":1,"last_seq":2,"total_bytes":5,"truncated":false,"execution_location":"local_runtime"}`,
 	}); err != nil {
 		t.Fatalf("UpsertToolCall: %v", err)
 	}
@@ -66,14 +66,11 @@ func TestGetTerminalToolOutput(t *testing.T) {
 	if out.Cwd != "/tmp" {
 		t.Fatalf("cwd=%q, want /tmp", out.Cwd)
 	}
-	if out.TimeoutMS != 60000 {
-		t.Fatalf("timeout_ms=%d, want 60000", out.TimeoutMS)
+	if out.ProcessID != "tp_1" {
+		t.Fatalf("process_id=%q, want tp_1", out.ProcessID)
 	}
-	if out.RequestedTimeoutMS != 60000 {
-		t.Fatalf("requested_timeout_ms=%d, want 60000", out.RequestedTimeoutMS)
-	}
-	if out.TimeoutSource != terminalExecTimeoutSourceRequested {
-		t.Fatalf("timeout_source=%q, want %q", out.TimeoutSource, terminalExecTimeoutSourceRequested)
+	if out.FirstSeq != 1 || out.LastSeq != 2 || out.TotalBytes != 5 {
+		t.Fatalf("seq fields=%d/%d bytes=%d", out.FirstSeq, out.LastSeq, out.TotalBytes)
 	}
 }
 
@@ -128,7 +125,7 @@ func TestGetTerminalToolOutput_RawFallbackForInvalidJSON(t *testing.T) {
 	}
 }
 
-func TestGetTerminalToolOutput_UsesResultTimeoutMetadataWhenArgsOmitTimeout(t *testing.T) {
+func TestGetTerminalToolOutput_UsesRunningProcessMetadata(t *testing.T) {
 	t.Parallel()
 
 	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
@@ -154,7 +151,7 @@ func TestGetTerminalToolOutput_UsesResultTimeoutMetadataWhenArgsOmitTimeout(t *t
 		ToolName:   "terminal.exec",
 		Status:     "running",
 		ArgsJSON:   `{"command":"go test ./..."}`,
-		ResultJSON: `{"timeout_ms":120000,"timeout_source":"default"}`,
+		ResultJSON: `{"status":"running","process_id":"tp_running","pending_handle":"terminal:process:tp_running","output":"partial","latest_output":"partial","cwd":"/workspace","first_seq":3,"last_seq":4,"total_bytes":7,"started_at_ms":1700000000000,"truncated":false}`,
 	}); err != nil {
 		t.Fatalf("UpsertToolCall: %v", err)
 	}
@@ -174,14 +171,20 @@ func TestGetTerminalToolOutput_UsesResultTimeoutMetadataWhenArgsOmitTimeout(t *t
 	if out == nil {
 		t.Fatalf("GetTerminalToolOutput returned nil")
 	}
-	if out.TimeoutMS != 120000 {
-		t.Fatalf("timeout_ms=%d, want 120000", out.TimeoutMS)
+	if out.Status != toolCallStatusRunning {
+		t.Fatalf("status=%q, want running", out.Status)
 	}
-	if out.RequestedTimeoutMS != 0 {
-		t.Fatalf("requested_timeout_ms=%d, want 0", out.RequestedTimeoutMS)
+	if out.ProcessID != "tp_running" {
+		t.Fatalf("process_id=%q, want tp_running", out.ProcessID)
 	}
-	if out.TimeoutSource != terminalExecTimeoutSourceDefault {
-		t.Fatalf("timeout_source=%q, want %q", out.TimeoutSource, terminalExecTimeoutSourceDefault)
+	if out.Output != "partial" || out.LatestOutput != "partial" {
+		t.Fatalf("output=%q latest=%q", out.Output, out.LatestOutput)
+	}
+	if out.Cwd != "/workspace" {
+		t.Fatalf("cwd=%q, want /workspace", out.Cwd)
+	}
+	if out.FirstSeq != 3 || out.LastSeq != 4 || out.TotalBytes != 7 || out.StartedAtUnixMs != 1700000000000 {
+		t.Fatalf("metadata=%+v", out)
 	}
 }
 

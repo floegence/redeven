@@ -81,9 +81,9 @@ func TestHandleToolCall_ExplicitTargetPolicyUsesTargetExecutor(t *testing.T) {
 		TargetToolExecutor: executor,
 	})
 
-	outcome, err := r.handleToolCall(context.Background(), "tool_term_1", "terminal.exec", map[string]any{
+	outcome, err := r.handleToolCall(context.Background(), "tool_file_read_1", "file.read", map[string]any{
 		"target_id": "provider:https%3A%2F%2Fredeven.test:env:env_a",
-		"command":   "pwd",
+		"path":      "/workspace/note.txt",
 	})
 	if err != nil {
 		t.Fatalf("handleToolCall returned error: %v", err)
@@ -94,18 +94,18 @@ func TestHandleToolCall_ExplicitTargetPolicyUsesTargetExecutor(t *testing.T) {
 	if executor.call.TargetID != "provider:https%3A%2F%2Fredeven.test:env:env_a" {
 		t.Fatalf("target_id=%q", executor.call.TargetID)
 	}
-	if executor.call.ToolName != "terminal.exec" {
+	if executor.call.ToolName != "file.read" {
 		t.Fatalf("tool_name=%q", executor.call.ToolName)
 	}
-	if len(executor.call.RequiredCapabilities) != 1 || executor.call.RequiredCapabilities[0] != "execute" {
-		t.Fatalf("required_capabilities=%v, want [execute]", executor.call.RequiredCapabilities)
+	if len(executor.call.RequiredCapabilities) != 1 || executor.call.RequiredCapabilities[0] != "read" {
+		t.Fatalf("required_capabilities=%v, want [read]", executor.call.RequiredCapabilities)
 	}
 	var args map[string]any
 	if err := json.Unmarshal(executor.call.Arguments, &args); err != nil {
 		t.Fatalf("unmarshal args: %v", err)
 	}
-	if args["command"] != "pwd" {
-		t.Fatalf("args.command=%v", args["command"])
+	if args["path"] != "/workspace/note.txt" {
+		t.Fatalf("args.path=%v", args["path"])
 	}
 	if _, ok := args["target_id"]; ok {
 		t.Fatalf("forwarded target tool args must not include target_id: %#v", args)
@@ -124,9 +124,9 @@ func TestHandleToolCall_ExplicitTargetPolicyPreservesTargetProvenance(t *testing
 		TargetToolExecutor: executor,
 	})
 
-	outcome, err := r.handleToolCall(context.Background(), "tool_term_1", "terminal.exec", map[string]any{
+	outcome, err := r.handleToolCall(context.Background(), "tool_file_read_1", "file.read", map[string]any{
 		"target_id": "ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default",
-		"command":   "pwd",
+		"path":      "/workspace/note.txt",
 	})
 	if err != nil {
 		t.Fatalf("handleToolCall returned error: %v", err)
@@ -160,9 +160,9 @@ func TestHandleToolCall_ExplicitTargetPolicyRejectsUnallowedTarget(t *testing.T)
 		TargetToolExecutor: executor,
 	})
 
-	outcome, err := r.handleToolCall(context.Background(), "tool_term_1", "terminal.exec", map[string]any{
+	outcome, err := r.handleToolCall(context.Background(), "tool_file_read_1", "file.read", map[string]any{
 		"target_id": "provider:https%3A%2F%2Fredeven.test:env:env_b",
-		"command":   "pwd",
+		"path":      "/workspace/note.txt",
 	})
 	if err != nil {
 		t.Fatalf("handleToolCall returned error: %v", err)

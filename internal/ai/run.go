@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -78,8 +77,6 @@ type runOptions struct {
 	SubagentRuntime       subagentRuntime
 	ToolTargetPolicy      ToolTargetPolicy
 	TargetToolExecutor    TargetToolExecutor
-
-	terminalExecRunner func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
 
 	HostManagedContextCompaction bool
 
@@ -205,7 +202,6 @@ type run struct {
 	skillManager    *skillManager
 	subagentRuntime subagentRuntime
 
-	terminalExecRunner func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
 	webFetchHTTPClient *http.Client
 	webFetchResolver   webFetchResolver
 }
@@ -317,13 +313,9 @@ func newRun(opts runOptions) *run {
 			}
 			return opts.SubagentDepth <= 0
 		}(),
-		terminalExecRunner:           opts.terminalExecRunner,
 		hostManagedContextCompaction: opts.HostManagedContextCompaction,
 		webFetchHTTPClient:           opts.WebFetchHTTPClient,
 		webFetchResolver:             opts.WebFetchResolver,
-	}
-	if r.terminalExecRunner == nil {
-		r.terminalExecRunner = defaultTerminalExecRunner
 	}
 	if r.idleTimeout > 0 {
 		r.activityCh = make(chan struct{}, 1)
@@ -2088,6 +2080,7 @@ type toolCallOutcome struct {
 	ToolName       string
 	Args           map[string]any
 	Result         any
+	Pending        *PendingToolResult
 	ToolError      *aitools.ToolError
 	RecoveryAction string
 }
@@ -2148,7 +2141,7 @@ func (r *run) persistToolCallSnapshot(toolID string, toolName string, status str
 	r.persistToolCall(rec)
 }
 
-func toolStartActivityPresentation(toolName string, args map[string]any, timeout terminalExecTimeoutDecision) *observation.ActivityPresentation {
+func toolStartActivityPresentation(toolName string, args map[string]any) *observation.ActivityPresentation {
 	toolName = strings.TrimSpace(toolName)
 	activity := floretActivityForToolCall(toolName, args)
 	if activity == nil {
@@ -2170,17 +2163,6 @@ func toolStartActivityPresentation(toolName string, args map[string]any, timeout
 		activity.Payload = map[string]any{}
 	}
 	activity.Payload["status"] = toolCallStatusRunning
-	if toolName == "terminal.exec" {
-		if timeout.EffectiveMS > 0 {
-			activity.Payload["timeout_ms"] = timeout.EffectiveMS
-		}
-		if timeout.RequestedMS > 0 {
-			activity.Payload["requested_timeout_ms"] = timeout.RequestedMS
-		}
-		if source := strings.TrimSpace(timeout.Source); source != "" {
-			activity.Payload["timeout_source"] = source
-		}
-	}
 	return contractSafeActivityPresentation(activity)
 }
 
@@ -2325,12 +2307,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		RecoveryAction: "",
 	}
 	mutating := isMutatingInvocation(toolName, args)
-	var terminalTimeoutDecision terminalExecTimeoutDecision
-	var terminalExecResultMeta map[string]any
-	if toolName == "terminal.exec" {
-		terminalTimeoutDecision = resolveTerminalExecTimeoutDecision(r.cfg, readInt64Field(args, "timeout_ms", "timeoutMs"))
-		terminalExecResultMeta = terminalExecTimeoutDecisionResult(terminalTimeoutDecision)
-	}
 	toolStartedAt := time.Now()
 	toolSpanID := executionSpanID(r.id, toolName, toolID)
 	r.persistRunEvent("tool.call", RealtimeStreamKindTool, map[string]any{
@@ -2364,9 +2340,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	)
 
 	persistResult := any(nil)
-	if toolName == "terminal.exec" {
-		persistResult = terminalExecResultMeta
-	}
 	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusPending, argsForPersist, persistResult, nil, "", toolStartedAt, time.Now())
 
 	setToolError := func(toolErr *aitools.ToolError, recoveryAction string, partialResult any) {
@@ -2398,9 +2371,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			)
 		}
 		errorResult := partialResult
-		if toolName == "terminal.exec" && errorResult == nil {
-			errorResult = terminalExecResultMeta
-		}
 		errorAt := time.Now()
 		r.persistToolCallSnapshot(toolID, toolName, toolCallStatusError, argsForPersist, errorResult, toolErr, recoveryAction, toolStartedAt, errorAt)
 		r.persistRunEvent("tool.error", RealtimeStreamKindTool, map[string]any{
@@ -2447,13 +2417,19 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		return outcome, nil
 	}
 
+	if toolName == "terminal.exec" {
+		terminalOutcome, terminalErr := r.handleTerminalExecProcessTool(ctx, meta, toolID, args, argsForPersist, toolStartedAt, toolSpanID)
+		if terminalErr != nil {
+			setToolError(terminalErr, "", terminalOutcome.Result)
+			return outcome, nil
+		}
+		return terminalOutcome, nil
+	}
+
 	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", toolName)
 	endBusy := r.beginBusy()
 	defer endBusy()
 	persistResult = nil
-	if toolName == "terminal.exec" {
-		persistResult = terminalExecResultMeta
-	}
 	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusRunning, argsForPersist, persistResult, nil, "", toolStartedAt, time.Now())
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	if toolErrRaw != nil {
@@ -2472,13 +2448,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		}
 		setToolError(toolErr, recoveryAction, nil)
 		return outcome, nil
-	}
-
-	if toolName == "terminal.exec" {
-		if toolErr := terminalExecTimeoutToolError(result); toolErr != nil {
-			setToolError(toolErr, "", result)
-			return outcome, nil
-		}
 	}
 
 	if toolName == "web.search" {
@@ -3053,26 +3022,50 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolApplyPatch(ctx, p.Patch)
 
 	case "terminal.exec":
+		return nil, errors.New("terminal.exec must be executed through the hosted terminal process lifecycle")
+
+	case "terminal.read":
 		if meta == nil || !meta.CanExecute {
 			return nil, errors.New("execute permission denied")
 		}
 		var p struct {
-			Command     string `json:"command"`
-			Stdin       string `json:"stdin"`
-			Cwd         string `json:"cwd"`
-			Workdir     string `json:"workdir"`
-			TimeoutMS   int64  `json:"timeout_ms"`
-			Description string `json:"description"`
+			ProcessID string `json:"process_id"`
+			AfterSeq  int64  `json:"after_seq"`
+			WaitMS    int64  `json:"wait_ms"`
+			MaxBytes  int64  `json:"max_bytes"`
 		}
 		b, _ := json.Marshal(args)
 		if err := json.Unmarshal(b, &p); err != nil {
 			return nil, errors.New("invalid args")
 		}
-		cwd, err := r.normalizeTerminalExecCwd(p.Cwd, p.Workdir)
-		if err != nil {
-			return nil, err
+		return r.toolTerminalRead(p.ProcessID, p.AfterSeq, p.WaitMS, p.MaxBytes)
+
+	case "terminal.write":
+		if meta == nil || !meta.CanExecute {
+			return nil, errors.New("execute permission denied")
 		}
-		return r.toolTerminalExec(ctx, p.Command, p.Stdin, cwd, p.TimeoutMS)
+		var p struct {
+			ProcessID string `json:"process_id"`
+			Input     string `json:"input"`
+		}
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return r.toolTerminalWrite(p.ProcessID, p.Input)
+
+	case "terminal.terminate":
+		if meta == nil || !meta.CanExecute {
+			return nil, errors.New("execute permission denied")
+		}
+		var p struct {
+			ProcessID string `json:"process_id"`
+		}
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return r.toolTerminalTerminate(p.ProcessID)
 
 	case "web.search":
 		if meta == nil || !meta.CanRead {
@@ -4255,6 +4248,224 @@ func (r *run) normalizeTerminalExecCwd(cwd string, workdir string) (string, erro
 	return resolvedCwd, nil
 }
 
+type terminalExecProcessArgs struct {
+	Command     string `json:"command"`
+	Stdin       string `json:"stdin"`
+	Cwd         string `json:"cwd"`
+	Workdir     string `json:"workdir"`
+	YieldMS     int64  `json:"yield_ms"`
+	Description string `json:"description"`
+}
+
+func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.Meta, toolID string, args map[string]any, argsForPersist map[string]any, toolStartedAt time.Time, toolSpanID string) (*toolCallOutcome, *aitools.ToolError) {
+	outcome := &toolCallOutcome{
+		Success:  false,
+		ToolName: "terminal.exec",
+		Args:     cloneAnyMap(args),
+	}
+	if err := r.authorizeToolExecutionFromSnapshot(ctx, toolID, "terminal.exec"); err != nil {
+		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
+	}
+	if meta == nil || !meta.CanExecute {
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "execute permission denied", Retryable: false}
+	}
+	var parsed terminalExecProcessArgs
+	b, _ := json.Marshal(args)
+	if err := json.Unmarshal(b, &parsed); err != nil {
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeInvalidArguments, Message: "invalid args", Retryable: false}
+	}
+	if strings.TrimSpace(parsed.Command) == "" {
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeInvalidArguments, Message: "missing command", Retryable: false}
+	}
+	if len(parsed.Stdin) > 200_000 {
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeInvalidArguments, Message: "stdin too large", Retryable: false}
+	}
+	cwd, err := r.normalizeTerminalExecCwd(parsed.Cwd, parsed.Workdir)
+	if err != nil {
+		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
+	}
+	workingDirAbs, err := r.workingDirAbs()
+	if err != nil {
+		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, mapToolCwdError(err))
+	}
+	if strings.TrimSpace(cwd) == "" {
+		cwd = workingDirAbs
+	}
+	cwdAbs, err := r.resolveToolPath(cwd, workingDirAbs)
+	if err != nil {
+		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, mapToolCwdError(err))
+	}
+	manager := (*terminalProcessManager)(nil)
+	if r.service != nil {
+		manager = r.service.terminalProcessManager()
+	}
+	if manager == nil {
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "terminal process manager unavailable", Retryable: true}
+	}
+	shell := strings.TrimSpace(r.shell)
+	if shell == "" {
+		shell = "/bin/bash"
+	}
+
+	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", "terminal.exec")
+	endBusy := r.beginBusy()
+	defer endBusy()
+
+	proc, err := manager.Start(terminalProcessStartRequest{
+		EndpointID: strings.TrimSpace(r.endpointID),
+		ThreadID:   strings.TrimSpace(r.threadID),
+		RunID:      strings.TrimSpace(r.id),
+		TurnID:     strings.TrimSpace(r.messageID),
+		ToolID:     strings.TrimSpace(toolID),
+		ToolName:   "terminal.exec",
+		Command:    parsed.Command,
+		Stdin:      parsed.Stdin,
+		CwdAbs:     cwdAbs,
+		Shell:      shell,
+		Env:        prependRedevenBinToEnv(os.Environ()),
+	})
+	if err != nil {
+		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
+	}
+	snapshot := proc.WaitForYield(parsed.YieldMS)
+	result := terminalProcessResultPayload(snapshot)
+	if snapshot.Status == terminalProcessStatusRunning {
+		snapshot = proc.MarkPending()
+		result = terminalProcessResultPayload(snapshot)
+		r.persistToolCallSnapshot(toolID, "terminal.exec", toolCallStatusRunning, argsForPersist, result, nil, "", toolStartedAt, time.Now())
+		r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
+			SpanID:          toolSpanID,
+			EndpointID:      strings.TrimSpace(r.endpointID),
+			ThreadID:        strings.TrimSpace(r.threadID),
+			RunID:           strings.TrimSpace(r.id),
+			Kind:            "tool",
+			Name:            "terminal.exec",
+			Status:          "running",
+			PayloadJSON:     marshalPersistJSON(map[string]any{"tool_id": toolID, "tool_name": "terminal.exec", "status": "running", "result": redactAnyForLog("result", result, 0)}, 6000),
+			StartedAtUnixMs: toolStartedAt.UnixMilli(),
+			UpdatedAtUnixMs: time.Now().UnixMilli(),
+		})
+		outcome.Result = result
+		outcome.Pending = &PendingToolResult{
+			Handle:      snapshot.PendingHandle,
+			Summary:     "Terminal process is running",
+			Instruction: "Use terminal.read with this process_id to inspect latest output, terminal.write to send input, or terminal.terminate to stop it.",
+			Metadata: map[string]string{
+				"process_id": snapshot.ProcessID,
+			},
+		}
+		return outcome, nil
+	}
+	if snapshot.Status == terminalProcessStatusCanceled {
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Terminal process was canceled", Retryable: false, Meta: map[string]any{"process_id": snapshot.ProcessID}}
+	}
+	if snapshot.Status == terminalProcessStatusError {
+		if snapshot.Error != nil {
+			outcome.Result = result
+			return outcome, snapshot.Error
+		}
+		outcome.Result = result
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "Terminal process failed", Retryable: false, Meta: map[string]any{"process_id": snapshot.ProcessID}}
+	}
+
+	resultAt := time.Now()
+	r.persistToolCallSnapshot(toolID, "terminal.exec", toolCallStatusSuccess, argsForPersist, result, nil, "", toolStartedAt, resultAt)
+	r.persistRunEvent("tool.result", RealtimeStreamKindTool, map[string]any{
+		"tool_id":    toolID,
+		"tool_name":  "terminal.exec",
+		"status":     "success",
+		"process_id": snapshot.ProcessID,
+	})
+	r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
+		SpanID:          toolSpanID,
+		EndpointID:      strings.TrimSpace(r.endpointID),
+		ThreadID:        strings.TrimSpace(r.threadID),
+		RunID:           strings.TrimSpace(r.id),
+		Kind:            "tool",
+		Name:            "terminal.exec",
+		Status:          "success",
+		PayloadJSON:     marshalPersistJSON(map[string]any{"tool_id": toolID, "tool_name": "terminal.exec", "status": "success", "result": redactAnyForLog("result", result, 0)}, 6000),
+		StartedAtUnixMs: toolStartedAt.UnixMilli(),
+		EndedAtUnixMs:   resultAt.UnixMilli(),
+		UpdatedAtUnixMs: resultAt.UnixMilli(),
+	})
+	outcome.Success = true
+	outcome.Result = result
+	return outcome, nil
+}
+
+func (r *run) terminalProcessForTool(processID string) (*terminalProcess, error) {
+	processID = strings.TrimSpace(processID)
+	if processID == "" {
+		return nil, errors.New("missing process_id")
+	}
+	if r == nil || r.service == nil {
+		return nil, errors.New("terminal process manager unavailable")
+	}
+	manager := r.service.terminalProcessManager()
+	if manager == nil {
+		return nil, errors.New("terminal process manager unavailable")
+	}
+	proc, ok := manager.Get(processID)
+	if !ok || proc == nil {
+		return nil, errors.New("terminal process not found")
+	}
+	snapshot := proc.Read(terminalProcessReadRequest{})
+	if strings.TrimSpace(snapshot.EndpointID) != strings.TrimSpace(r.endpointID) ||
+		strings.TrimSpace(snapshot.ThreadID) != strings.TrimSpace(r.threadID) {
+		return nil, errors.New("terminal process not found")
+	}
+	return proc, nil
+}
+
+func (r *run) toolTerminalRead(processID string, afterSeq int64, waitMS int64, maxBytes int64) (any, error) {
+	proc, err := r.terminalProcessForTool(processID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot := proc.Read(terminalProcessReadRequest{
+		ProcessID: strings.TrimSpace(processID),
+		AfterSeq:  afterSeq,
+		WaitMS:    waitMS,
+		MaxBytes:  maxBytes,
+	})
+	return terminalProcessResultPayload(snapshot), nil
+}
+
+func (r *run) toolTerminalWrite(processID string, input string) (any, error) {
+	if strings.TrimSpace(processID) == "" {
+		return nil, errors.New("missing process_id")
+	}
+	if len(input) > 200_000 {
+		return nil, errors.New("input too large")
+	}
+	proc, err := r.terminalProcessForTool(processID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := proc.Write(input)
+	if err != nil {
+		return terminalProcessResultPayload(snapshot), err
+	}
+	payload := terminalProcessResultPayload(snapshot)
+	payload["input_bytes"] = len(input)
+	return payload, nil
+}
+
+func (r *run) toolTerminalTerminate(processID string) (any, error) {
+	proc, err := r.terminalProcessForTool(processID)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := proc.Terminate()
+	if err != nil {
+		return terminalProcessResultPayload(snapshot), err
+	}
+	payload := terminalProcessResultPayload(snapshot)
+	payload["terminated"] = true
+	return payload, nil
+}
+
 func summarizeUnifiedDiff(patchText string) (filesChanged int, hunks int, additions int, deletions int) {
 	parsed, err := parsePatchText(patchText)
 	if err != nil {
@@ -4262,254 +4473,6 @@ func summarizeUnifiedDiff(patchText string) (filesChanged int, hunks int, additi
 	}
 	filesChanged, hunks, additions, deletions, _ = summarizePatchFiles(parsed.files)
 	return filesChanged, hunks, additions, deletions
-}
-
-// --- terminal.exec ---
-
-const (
-	terminalExecFallbackDefaultTimeoutMS = 120_000
-	terminalExecWaitAfterKillTimeout     = 2 * time.Second
-)
-
-const (
-	terminalExecTimeoutSourceDefault   = "default"
-	terminalExecTimeoutSourceRequested = "requested"
-	terminalExecTimeoutSourceCapped    = "capped"
-)
-
-type terminalExecTimeoutDecision struct {
-	RequestedMS int64
-	EffectiveMS int64
-	DefaultMS   int64
-	MaxMS       int64
-	Source      string
-}
-
-type terminalExecInvocation struct {
-	Shell         string
-	Command       string
-	Stdin         string
-	WorkingDirAbs string
-	Env           []string
-}
-
-type terminalExecOutcome struct {
-	Stdout     string
-	Stderr     string
-	ExitCode   int
-	DurationMS int64
-	Truncated  bool
-	TimedOut   bool
-}
-
-func resolveTerminalExecTimeoutDecision(cfg *config.AIConfig, requestedMS int64) terminalExecTimeoutDecision {
-	defaultMS := cfg.EffectiveTerminalExecDefaultTimeoutMS()
-	maxMS := cfg.EffectiveTerminalExecMaxTimeoutMS()
-	if maxMS <= 0 {
-		maxMS = terminalExecFallbackDefaultTimeoutMS
-	}
-	if defaultMS <= 0 {
-		defaultMS = terminalExecFallbackDefaultTimeoutMS
-	}
-	if defaultMS > maxMS {
-		defaultMS = maxMS
-	}
-
-	decision := terminalExecTimeoutDecision{
-		RequestedMS: requestedMS,
-		EffectiveMS: defaultMS,
-		DefaultMS:   defaultMS,
-		MaxMS:       maxMS,
-		Source:      terminalExecTimeoutSourceDefault,
-	}
-	if requestedMS <= 0 {
-		return decision
-	}
-	if requestedMS > maxMS {
-		decision.EffectiveMS = maxMS
-		decision.Source = terminalExecTimeoutSourceCapped
-		return decision
-	}
-	decision.EffectiveMS = requestedMS
-	decision.Source = terminalExecTimeoutSourceRequested
-	return decision
-}
-
-func terminalExecTimeoutDecisionResult(decision terminalExecTimeoutDecision) map[string]any {
-	out := map[string]any{
-		"timeout_ms":     decision.EffectiveMS,
-		"timeout_source": strings.TrimSpace(decision.Source),
-	}
-	if decision.RequestedMS > 0 {
-		out["requested_timeout_ms"] = decision.RequestedMS
-	}
-	return out
-}
-
-func (r *run) toolTerminalExec(ctx context.Context, command string, stdin string, cwd string, timeoutMS int64) (any, error) {
-	command = strings.TrimSpace(command)
-	if command == "" {
-		return nil, errors.New("missing command")
-	}
-	if len(stdin) > 200_000 {
-		return nil, errors.New("stdin too large")
-	}
-	timeoutDecision := resolveTerminalExecTimeoutDecision(r.cfg, timeoutMS)
-	timeoutMS = timeoutDecision.EffectiveMS
-
-	workingDirAbs, err := r.workingDirAbs()
-	if err != nil {
-		return nil, mapToolCwdError(err)
-	}
-	cwd = strings.TrimSpace(cwd)
-	if cwd == "" {
-		cwd = workingDirAbs
-	}
-	cwdAbs, err := r.resolveToolPath(cwd, workingDirAbs)
-	if err != nil {
-		return nil, mapToolCwdError(err)
-	}
-
-	execCtx := ctx
-	var cancel context.CancelFunc
-	execCtx, cancel = context.WithTimeout(execCtx, time.Duration(timeoutMS)*time.Millisecond)
-	defer cancel()
-
-	started := time.Now()
-
-	shell := strings.TrimSpace(r.shell)
-	if shell == "" {
-		shell = "/bin/bash"
-	}
-	runner := r.terminalExecRunner
-	if runner == nil {
-		runner = defaultTerminalExecRunner
-	}
-	outcome, runErr := runner(execCtx, terminalExecInvocation{
-		Shell:         shell,
-		Command:       command,
-		Stdin:         stdin,
-		WorkingDirAbs: cwdAbs,
-		Env:           prependRedevenBinToEnv(os.Environ()),
-	})
-	if runErr != nil {
-		return nil, runErr
-	}
-	if outcome.DurationMS <= 0 {
-		outcome.DurationMS = time.Since(started).Milliseconds()
-	}
-
-	result := map[string]any{
-		"execution_location": "local_runtime",
-		"cwd":                cwdAbs,
-		"stdout":             outcome.Stdout,
-		"stderr":             outcome.Stderr,
-		"exit_code":          outcome.ExitCode,
-		"duration_ms":        outcome.DurationMS,
-		"truncated":          outcome.Truncated,
-		"timed_out":          outcome.TimedOut,
-	}
-	for k, v := range terminalExecTimeoutDecisionResult(timeoutDecision) {
-		result[k] = v
-	}
-	return result, nil
-}
-
-func defaultTerminalExecRunner(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error) {
-	cmd := exec.Command(inv.Shell, "-lc", inv.Command)
-	cmd.Dir = inv.WorkingDirAbs
-	cmd.Env = append([]string(nil), inv.Env...)
-	configureTerminalExecProcessGroup(cmd)
-	if inv.Stdin != "" {
-		cmd.Stdin = strings.NewReader(inv.Stdin)
-	}
-
-	started := time.Now()
-	lim := newCombinedLimitedBuffers(200_000)
-	cmd.Stdout = lim.Stdout()
-	cmd.Stderr = lim.Stderr()
-
-	if err := cmd.Start(); err != nil {
-		return terminalExecOutcome{}, err
-	}
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-
-	runErr := error(nil)
-	select {
-	case runErr = <-done:
-	case <-ctx.Done():
-		_ = terminateTerminalExecProcessTree(cmd)
-		select {
-		case runErr = <-done:
-		case <-time.After(terminalExecWaitAfterKillTimeout):
-			return terminalExecOutcome{}, ctx.Err()
-		}
-	}
-
-	outcome := terminalExecOutcome{
-		Stdout:     lim.StdoutString(),
-		Stderr:     lim.StderrString(),
-		DurationMS: time.Since(started).Milliseconds(),
-		Truncated:  lim.Truncated(),
-		TimedOut:   errors.Is(ctx.Err(), context.DeadlineExceeded),
-	}
-	if runErr == nil {
-		return outcome, nil
-	}
-	if outcome.TimedOut {
-		outcome.ExitCode = 124
-		return outcome, nil
-	}
-	if errors.Is(ctx.Err(), context.Canceled) {
-		return terminalExecOutcome{}, context.Canceled
-	}
-	if ee := (*exec.ExitError)(nil); errors.As(runErr, &ee) {
-		outcome.ExitCode = ee.ExitCode()
-		return outcome, nil
-	}
-	return terminalExecOutcome{}, runErr
-}
-
-func terminalExecTimeoutToolError(result any) *aitools.ToolError {
-	resultMap, _ := result.(map[string]any)
-	if resultMap == nil || !readBoolField(resultMap, "timed_out", "timedOut") {
-		return nil
-	}
-	timeoutMS := readInt64Field(resultMap, "timeout_ms", "timeoutMs")
-	if timeoutMS <= 0 {
-		timeoutMS = terminalExecFallbackDefaultTimeoutMS
-	}
-	timeoutSource := strings.TrimSpace(readStringField(resultMap, "timeout_source", "timeoutSource"))
-	requestedTimeoutMS := readInt64Field(resultMap, "requested_timeout_ms", "requestedTimeoutMs")
-	exitCode := readIntField(resultMap, "exit_code", "exitCode")
-	toolErr := &aitools.ToolError{
-		Code:      aitools.ErrorCodeTimeout,
-		Message:   fmt.Sprintf("Tool execution timed out after %d ms", timeoutMS),
-		Retryable: true,
-		SuggestedFixes: []string{
-			"Retry with a smaller scope.",
-			"Increase timeout_ms when the command is legitimately long-running.",
-			"Do not repeat the same timed-out command unchanged; switch strategy if progress stalls.",
-		},
-		Meta: map[string]any{
-			"timed_out":  true,
-			"timeout_ms": timeoutMS,
-		},
-	}
-	if timeoutSource != "" {
-		toolErr.Meta["timeout_source"] = timeoutSource
-	}
-	if requestedTimeoutMS > 0 {
-		toolErr.Meta["requested_timeout_ms"] = requestedTimeoutMS
-	}
-	if exitCode != 0 {
-		toolErr.Meta["exit_code"] = exitCode
-	}
-	toolErr.Normalize()
-	return toolErr
 }
 
 func prependRedevenBinToEnv(baseEnv []string) []string {

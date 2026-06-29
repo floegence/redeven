@@ -18,11 +18,14 @@ func TestRunIdleWatchdog_DoesNotCancelWhileToolBusy(t *testing.T) {
 
 	root := t.TempDir()
 	meta := &session.Meta{CanRead: true, CanWrite: true, CanExecute: true}
+	svc := &Service{terminalProcesses: newTerminalProcessManager(nil)}
+	t.Cleanup(svc.terminalProcesses.Close)
 
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		AgentHomeDir: root,
 		Shell:        "bash",
+		Service:      svc,
 		SessionMeta:  meta,
 		RunID:        "run_test_idle_watchdog",
 		ChannelID:    "ch_test",
@@ -39,8 +42,8 @@ func TestRunIdleWatchdog_DoesNotCancelWhileToolBusy(t *testing.T) {
 	go r.runIdleWatchdog(ctx)
 
 	outcome, err := r.handleToolCall(ctx, "tool_1", "terminal.exec", map[string]any{
-		"command":    "sleep 0.3; echo ok",
-		"timeout_ms": 5_000,
+		"command":  "sleep 0.3; echo ok",
+		"yield_ms": 1000,
 	})
 	if err != nil {
 		t.Fatalf("handleToolCall error: %v", err)

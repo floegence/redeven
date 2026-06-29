@@ -55,6 +55,9 @@ func (s *floretToolRuntimeState) updateFromToolResult(call ToolCall, result Tool
 		}
 		s.state.ToolCallLedger[id] = "dispatched"
 	}
+	if result.Pending != nil {
+		return
+	}
 	updateTodoRuntimeState(&s.state, []ToolCall{call}, []ToolResult{result}, round)
 	if result.Status == toolResultStatusSuccess {
 		if id != "" {
@@ -116,8 +119,10 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 				if err != nil {
 					return fltools.Result{}, err
 				}
-				if _, err := validateToolResultStatus(result.Status); err != nil {
-					return fltools.Result{}, err
+				if result.Pending == nil {
+					if _, err := validateToolResultStatus(result.Status); err != nil {
+						return fltools.Result{}, err
+					}
 				}
 				if state != nil {
 					state.updateFromToolResult(call, result, inv.Step)
@@ -227,7 +232,6 @@ func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawT
 		SkillManager:          base.skillManager,
 		ToolTargetPolicy:      base.toolTargetPolicy,
 		TargetToolExecutor:    base.targetToolExecutor,
-		terminalExecRunner:    base.terminalExecRunner,
 	})
 	child.permissionType = base.permissionType
 	child.allowDelegatedApproval = base.allowDelegatedApproval
@@ -624,9 +628,17 @@ func validateToolResultStatus(status string) (string, error) {
 }
 
 func contractSafeToolResultPayload(result ToolResult) (map[string]any, error) {
-	status, err := validateToolResultStatus(result.Status)
-	if err != nil {
-		return nil, err
+	status := strings.TrimSpace(result.Status)
+	if result.Pending != nil {
+		if status == "" {
+			status = "pending"
+		}
+	} else {
+		var err error
+		status, err = validateToolResultStatus(result.Status)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if result.Error != nil && status == toolResultStatusSuccess {
 		return nil, fmt.Errorf("tool result status %q cannot carry an error", status)
@@ -754,7 +766,7 @@ func floretToolResourceKinds(toolName string) []string {
 
 func floretToolOpenWorld(def ToolDef) bool {
 	switch strings.TrimSpace(def.Name) {
-	case "terminal.exec", "web.search", "web_fetch", "use_skill":
+	case "terminal.exec", "terminal.read", "terminal.write", "terminal.terminate", "web.search", "web_fetch", "use_skill":
 		return true
 	default:
 		return false
@@ -774,6 +786,10 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 		}
 		if len(out) > 0 {
 			return out, nil
+		}
+	case "terminal.read", "terminal.write", "terminal.terminate":
+		if processID := strings.TrimSpace(anyToString(args["process_id"])); processID != "" {
+			return []fltools.ResourceRef{{Kind: "terminal_process", Value: processID}}, nil
 		}
 	case "file.read", "read_file", "file.edit", "file.write":
 		if path := strings.TrimSpace(anyToString(args["file_path"])); path != "" {
@@ -899,8 +915,8 @@ func resourceRefsFromPatchFiles(files []unifiedDiffFile) []fltools.ResourceRef {
 	return out
 }
 
-func stripRedevenTargetFieldsFromFloretToolSchema(toolName string, inputSchema map[string]any) map[string]any {
-	if !toolRequiresTarget(toolName) || inputSchema == nil {
+func stripRedevenTargetFieldsFromFloretToolSchema(_ string, inputSchema map[string]any) map[string]any {
+	if inputSchema == nil {
 		return inputSchema
 	}
 	if properties, ok := inputSchema["properties"].(map[string]any); ok {
@@ -941,7 +957,7 @@ func floretToolParallelSafe(def ToolDef, effects []fltools.Effect) bool {
 func floretToolEffects(def ToolDef) []fltools.Effect {
 	name := strings.TrimSpace(def.Name)
 	switch name {
-	case "terminal.exec":
+	case "terminal.exec", "terminal.read", "terminal.write", "terminal.terminate":
 		return []fltools.Effect{fltools.EffectShell}
 	case "web.search", "web_fetch":
 		return []fltools.Effect{fltools.EffectNetwork}
@@ -959,6 +975,22 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 	if err != nil {
 		return fltools.Result{}, err
 	}
+	if result.Pending != nil {
+		activity := pendingToolActivityFromFlower(result, structured)
+		return fltools.Result{
+			CallID:     strings.TrimSpace(result.ToolID),
+			Name:       strings.TrimSpace(result.ToolName),
+			Structured: structured,
+			Activity:   activity,
+			Pending: &fltools.PendingToolResult{
+				Handle:      strings.TrimSpace(result.Pending.Handle),
+				State:       fltools.PendingToolResultRunning,
+				Summary:     strings.TrimSpace(result.Pending.Summary),
+				Instruction: strings.TrimSpace(result.Pending.Instruction),
+				Metadata:    cloneStringMap(result.Pending.Metadata),
+			},
+		}, nil
+	}
 	text, _ := json.Marshal(structured)
 	status := strings.TrimSpace(anyToString(structured["status"]))
 	activity, err := floretActivityForToolResult(r, result)
@@ -973,6 +1005,27 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		Activity:   activity,
 		IsError:    status != toolResultStatusSuccess,
 	}, nil
+}
+
+func pendingToolActivityFromFlower(result ToolResult, structured map[string]any) *observation.ActivityPresentation {
+	toolName := strings.TrimSpace(result.ToolName)
+	label := activityPresentationLabel(anyToString(structured["command"]))
+	if label == "" {
+		label = activityPresentationLabel(result.Summary)
+	}
+	if label == "" {
+		label = firstNonEmptyString(toolName, "tool")
+	}
+	payload := cloneAnyMap(structured)
+	payload["status"] = terminalProcessStatusRunning
+	return contractSafeActivityPresentationForTool(toolName, &observation.ActivityPresentation{
+		Label:    label,
+		Renderer: observation.ActivityRendererTerminal,
+		Chips: []observation.ActivityChip{
+			{Kind: "tool", Label: "shell", Tone: "neutral"},
+		},
+		Payload: payload,
+	})
 }
 
 func floretActivityForToolCall(toolName string, args map[string]any) *observation.ActivityPresentation {

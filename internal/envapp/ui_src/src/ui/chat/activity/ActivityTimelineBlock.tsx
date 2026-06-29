@@ -16,6 +16,7 @@ import { formatGitPatchLineNumber, getGitPatchRenderSnapshot, type GitPatchRende
 import { normalizeAskUserQuestions, type AskUserQuestion } from '../askUserContract';
 import { useChatContext } from '../ChatProvider';
 import { ActivityStatusIcon, formatActivityDuration, type ActivityStatus } from '../status/ActivityLine';
+import { ShellBlock } from '../blocks/ShellBlock';
 import type {
   ActivityItem,
   ActivityTimelineBlock as ActivityTimelineBlockType,
@@ -158,6 +159,57 @@ function todoStatusMarker(status: FlowerActivityTodoStatus): string {
 
 function writeLabel(question: AskUserQuestion): string {
   return String(question.writeLabel ?? '').trim();
+}
+
+function payloadString(payload: Readonly<Record<string, unknown>>, key: string): string {
+  return String(payload[key] ?? '').trim();
+}
+
+function payloadNumber(payload: Readonly<Record<string, unknown>>, key: string): number | undefined {
+  const value = Number(payload[key] ?? NaN);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+function shellStatusForItem(item: ActivityItem): 'running' | 'success' | 'error' {
+  switch (String(item.status ?? '').trim().toLowerCase()) {
+    case 'running':
+    case 'pending':
+    case 'waiting':
+      return 'running';
+    case 'success':
+      return 'success';
+    default:
+      return 'error';
+  }
+}
+
+function terminalCommandForItem(item: ActivityItem, payload: Readonly<Record<string, unknown>>): string {
+  return payloadString(payload, 'command')
+    || String(item.label ?? '').trim()
+    || String(item.description ?? '').trim()
+    || String(item.tool_name ?? 'terminal').trim();
+}
+
+function TerminalDetailBlock(props: { item: ActivityItem; runID?: string }) {
+  const payload = createMemo(() => itemPayloadRecord(props.item));
+  const processId = createMemo(() => payloadString(payload(), 'process_id') || String(props.item.metadata?.process_id ?? '').trim());
+  const output = createMemo(() => payloadString(payload(), 'output') || payloadString(payload(), 'stdout'));
+  const latestOutput = createMemo(() => payloadString(payload(), 'latest_output'));
+  return (
+    <ShellBlock
+      command={terminalCommandForItem(props.item, payload())}
+      output={output() || undefined}
+      latestOutput={latestOutput() || undefined}
+      outputRef={props.runID && props.item.tool_id ? { runId: props.runID, toolId: props.item.tool_id } : undefined}
+      processId={processId() || undefined}
+      cwd={payloadString(payload(), 'cwd') || undefined}
+      durationMs={payloadNumber(payload(), 'duration_ms')}
+      truncated={Boolean(payload().truncated)}
+      exitCode={payloadNumber(payload(), 'exit_code')}
+      status={shellStatusForItem(props.item)}
+      class="chat-activity-terminal-shell"
+    />
+  );
 }
 
 function AskUserAudit(props: { item: ActivityItem }) {
@@ -414,9 +466,11 @@ function FileDiffBlock(props: {
 function DetailBlock(props: {
   block: FlowerActivityDetailBlock;
   item: ActivityItem;
+  runID?: string;
   onPreviewFile?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
   onBrowseDirectory?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
 }) {
+  if (props.block.kind === 'terminal') return <TerminalDetailBlock item={props.item} runID={props.runID} />;
   if (props.block.kind === 'todos') return <TodoBlock block={props.block} />;
   if (props.block.kind === 'file_read') {
     return (
@@ -554,6 +608,7 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                               <DetailBlock
                                 block={block}
                                 item={item}
+                                runID={props.block.run_id}
                                 onPreviewFile={props.onPreviewFile}
                                 onBrowseDirectory={props.onBrowseDirectory}
                               />

@@ -47,21 +47,6 @@ type AIConfig struct {
 	// ToolRecoveryFailOnRepeatedSignature controls fail-fast behavior when the same failure signature
 	// repeats across recovery attempts.
 	ToolRecoveryFailOnRepeatedSignature *bool `json:"tool_recovery_fail_on_repeated_signature,omitempty"`
-
-	// TerminalExecPolicy controls the bounded execution policy for terminal.exec.
-	//
-	// The built-in defaults intentionally mimic Claude-style shell behavior:
-	// - default timeout: 2 minutes
-	// - maximum timeout cap: 10 minutes
-	TerminalExecPolicy *AITerminalExecPolicy `json:"terminal_exec_policy,omitempty"`
-}
-
-type AITerminalExecPolicy struct {
-	// DefaultTimeoutMS is the timeout applied when terminal.exec does not specify timeout_ms.
-	DefaultTimeoutMS *int `json:"default_timeout_ms,omitempty"`
-
-	// MaxTimeoutMS is the hard upper cap for any terminal.exec timeout_ms request.
-	MaxTimeoutMS *int `json:"max_timeout_ms,omitempty"`
 }
 
 type AIProvider struct {
@@ -151,9 +136,6 @@ const (
 	defaultAIToolRecoveryAllowPathRewrite        = true
 	defaultAIToolRecoveryAllowProbeTools         = true
 	defaultAIToolRecoveryFailOnRepeatedSignature = true
-
-	defaultAITerminalExecDefaultTimeoutMS = 120_000
-	defaultAITerminalExecMaxTimeoutMS     = 600_000
 
 	defaultAIEffectiveContextWindowPercent int = 95
 )
@@ -333,25 +315,6 @@ func (c *AIConfig) Validate() error {
 		}
 	}
 
-	if c.TerminalExecPolicy != nil {
-		if c.TerminalExecPolicy.DefaultTimeoutMS != nil {
-			v := *c.TerminalExecPolicy.DefaultTimeoutMS
-			if v < 1 || v > defaultAITerminalExecMaxTimeoutMS {
-				return fmt.Errorf("invalid terminal_exec_policy.default_timeout_ms %d (must be in [1,%d])", v, defaultAITerminalExecMaxTimeoutMS)
-			}
-		}
-		if c.TerminalExecPolicy.MaxTimeoutMS != nil {
-			v := *c.TerminalExecPolicy.MaxTimeoutMS
-			if v < 1 || v > defaultAITerminalExecMaxTimeoutMS {
-				return fmt.Errorf("invalid terminal_exec_policy.max_timeout_ms %d (must be in [1,%d])", v, defaultAITerminalExecMaxTimeoutMS)
-			}
-		}
-		if c.TerminalExecPolicy.DefaultTimeoutMS != nil && c.TerminalExecPolicy.MaxTimeoutMS != nil {
-			if *c.TerminalExecPolicy.DefaultTimeoutMS > *c.TerminalExecPolicy.MaxTimeoutMS {
-				return fmt.Errorf("invalid terminal_exec_policy: default_timeout_ms %d exceeds max_timeout_ms %d", *c.TerminalExecPolicy.DefaultTimeoutMS, *c.TerminalExecPolicy.MaxTimeoutMS)
-			}
-		}
-	}
 	// Validate providers.
 	if len(c.Providers) == 0 {
 		return errors.New("missing providers")
@@ -577,39 +540,4 @@ func (c *AIConfig) EffectiveToolRecoveryFailOnRepeatedSignature() bool {
 		return defaultAIToolRecoveryFailOnRepeatedSignature
 	}
 	return *c.ToolRecoveryFailOnRepeatedSignature
-}
-
-func (c *AIConfig) EffectiveTerminalExecMaxTimeoutMS() int64 {
-	if c == nil || c.TerminalExecPolicy == nil || c.TerminalExecPolicy.MaxTimeoutMS == nil {
-		return defaultAITerminalExecMaxTimeoutMS
-	}
-	v := *c.TerminalExecPolicy.MaxTimeoutMS
-	if v < 1 {
-		return defaultAITerminalExecMaxTimeoutMS
-	}
-	if v > defaultAITerminalExecMaxTimeoutMS {
-		return defaultAITerminalExecMaxTimeoutMS
-	}
-	return int64(v)
-}
-
-func (c *AIConfig) EffectiveTerminalExecDefaultTimeoutMS() int64 {
-	maxTimeoutMS := c.EffectiveTerminalExecMaxTimeoutMS()
-	if c == nil || c.TerminalExecPolicy == nil || c.TerminalExecPolicy.DefaultTimeoutMS == nil {
-		if int64(defaultAITerminalExecDefaultTimeoutMS) > maxTimeoutMS {
-			return maxTimeoutMS
-		}
-		return defaultAITerminalExecDefaultTimeoutMS
-	}
-	v := *c.TerminalExecPolicy.DefaultTimeoutMS
-	if v < 1 {
-		if int64(defaultAITerminalExecDefaultTimeoutMS) > maxTimeoutMS {
-			return maxTimeoutMS
-		}
-		return defaultAITerminalExecDefaultTimeoutMS
-	}
-	if int64(v) > maxTimeoutMS {
-		return maxTimeoutMS
-	}
-	return int64(v)
 }

@@ -45,11 +45,6 @@ export type AIProvider = Readonly<{
 
 export type AIPermissionType = 'readonly' | 'approval_required' | 'full_access';
 
-export type AITerminalExecPolicy = Readonly<{
-  default_timeout_ms?: number;
-  max_timeout_ms?: number;
-}>;
-
 export type AIConfig = Readonly<{
   current_model_id: string;
   providers: AIProvider[];
@@ -58,7 +53,6 @@ export type AIConfig = Readonly<{
   tool_recovery_allow_path_rewrite?: boolean;
   tool_recovery_allow_probe_tools?: boolean;
   tool_recovery_fail_on_repeated_signature?: boolean;
-  terminal_exec_policy?: AITerminalExecPolicy;
 }>;
 
 export type AISecretsView = Readonly<{
@@ -308,5 +302,4 @@ export type AIPreservedUIFields = {
   tool_recovery_allow_path_rewrite?: boolean;
   tool_recovery_allow_probe_tools?: boolean;
   tool_recovery_fail_on_repeated_signature?: boolean;
-  terminal_exec_policy?: AITerminalExecPolicy;
 };

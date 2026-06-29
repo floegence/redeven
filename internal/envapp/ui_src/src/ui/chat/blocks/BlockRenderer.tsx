@@ -151,12 +151,10 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
             command: string;
             output?: string;
             outputRef?: { runId: string; toolId: string };
+            processId?: string;
+            latestOutput?: string;
             cwd?: string;
-            timeoutMs?: number;
-            requestedTimeoutMs?: number;
-            timeoutSource?: string;
             durationMs?: number;
-            timedOut?: boolean;
             truncated?: boolean;
             exitCode?: number;
             status: 'running' | 'success' | 'error';
@@ -166,12 +164,10 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               command={b.command}
               output={b.output}
               outputRef={b.outputRef}
+              processId={b.processId}
+              latestOutput={b.latestOutput}
               cwd={b.cwd}
-              timeoutMs={b.timeoutMs}
-              requestedTimeoutMs={b.requestedTimeoutMs}
-              timeoutSource={b.timeoutSource}
               durationMs={b.durationMs}
-              timedOut={b.timedOut}
               truncated={b.truncated}
               exitCode={b.exitCode}
               status={b.status}

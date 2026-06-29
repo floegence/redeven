@@ -100,10 +100,6 @@ export type FlowerSettingsCopy = Readonly<{
   models: string;
   web: string;
   vision: string;
-  terminalLimitsTitle: string;
-  terminalLimitsDescription: string;
-  defaultTimeout: string;
-  maximumTimeout: string;
   webSearchNotSupported: string;
   webSearchDisabled: string;
   openAIBuiltIn: string;
@@ -126,8 +122,6 @@ export type FlowerSettingsCopy = Readonly<{
     modelNeedsContextWindow: (modelName: string) => string;
     selectCurrentModel: string;
     currentModelUnavailable: (modelID: string) => string;
-    terminalTimeoutPositive: string;
-    terminalTimeoutOrder: string;
   }>;
   dialog: FlowerProviderDialogCopy;
 }>;
@@ -764,10 +758,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     models: 'Models',
     web: 'Web',
     vision: 'Vision',
-    terminalLimitsTitle: 'Terminal execution limits',
-    terminalLimitsDescription: 'Timeouts are enforced before a connected runtime executes commands.',
-    defaultTimeout: 'Default timeout (ms)',
-    maximumTimeout: 'Maximum timeout (ms)',
     webSearchNotSupported: 'Not supported',
     webSearchDisabled: 'Disabled',
     openAIBuiltIn: 'OpenAI built-in',
@@ -802,8 +792,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       modelNeedsContextWindow: (modelName) => `${modelName} needs a context window.`,
       selectCurrentModel: 'Select a current model before saving Flower settings.',
       currentModelUnavailable: (modelID) => `Current model is not available: ${modelID}.`,
-      terminalTimeoutPositive: 'Terminal execution timeouts must be positive millisecond values.',
-      terminalTimeoutOrder: 'Default terminal timeout must be less than or equal to the maximum timeout.',
     },
     dialog: {
       addTitle: 'Add provider',

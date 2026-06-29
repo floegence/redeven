@@ -126,9 +126,16 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
   rows: 'rows',
   cards: 'cards',
   items: 'items',
-  timeout_ms: 'timeout',
-  timeout_source: 'timeout source',
-  requested_timeout_ms: 'requested timeout',
+  process_id: 'process',
+  pending_handle: 'pending',
+  cwd: 'cwd',
+  execution_location: 'location',
+  latest_output: 'latest output',
+  first_seq: 'first seq',
+  last_seq: 'last seq',
+  total_bytes: 'bytes',
+  started_at_ms: 'started',
+  ended_at_ms: 'ended',
   exit_code: 'exit',
   duration_ms: 'duration',
   stdout: 'stdout',
@@ -212,7 +219,7 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
 };
 
 const RENDERER_DETAIL_KEYS: Readonly<Record<Exclude<FlowerActivityRenderer, 'file' | 'patch' | 'todos'>, readonly string[]>> = {
-  terminal: ['command', 'status', 'timeout_ms', 'timeout_source', 'requested_timeout_ms', 'exit_code', 'duration_ms', 'timed_out', 'truncated', 'stdout', 'stderr', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
+  terminal: ['command', 'status', 'process_id', 'cwd', 'execution_location', 'latest_output', 'output', 'first_seq', 'last_seq', 'total_bytes', 'started_at_ms', 'ended_at_ms', 'exit_code', 'duration_ms', 'truncated', 'stdout', 'stderr', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
   web_search: ['query', 'provider', 'count', 'sources', 'results', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
   question: ['reason_code', 'required_from_user', 'questions', 'contains_secret', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
   completion: ['result', 'evidence_refs', 'remaining_risks', 'next_actions', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],

@@ -46,11 +46,13 @@ describe('presentFlowerActivityItem', () => {
       label: 'npm run build -- --mode production',
       payload: {
         command: 'npm run build -- --mode production',
+        status: 'running',
+        process_id: 'tp_123',
         cwd: '/workspace/app',
         workdir: '/workspace/private',
         exit_code: 0,
-        stdout: 'built\n',
-        stderr: '',
+        output: 'built\n',
+        latest_output: 'built\n',
         stdin: 'secret',
       },
       chips: [{ kind: 'exit_code', label: 'exit', value: '0', tone: 'neutral' }],
@@ -60,8 +62,9 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.title).toEqual({ kind: 'command', command: 'npm run build -- --mode production' });
     expect(presentation.meta).toContain('exit 0');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('command:npm run build -- --mode production');
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('stdout:built');
-    expect(presentation.detailLines.map((line) => line.label)).not.toContain('cwd');
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('process:tp_123');
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('cwd:/workspace/app');
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('output:built');
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('workdir');
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('stdin');
   });

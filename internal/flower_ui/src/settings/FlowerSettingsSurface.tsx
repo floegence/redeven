@@ -197,8 +197,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const [providers, setProviders] = createSignal<readonly FlowerProviderDraft[]>([]);
   const [currentModelID, setCurrentModelID] = createSignal('');
   const [permissionType, setPermissionType] = createSignal<FlowerPermissionType>('approval_required');
-  const [defaultTimeoutMS, setDefaultTimeoutMS] = createSignal('120000');
-  const [maxTimeoutMS, setMaxTimeoutMS] = createSignal('600000');
   const [localError, setLocalError] = createSignal('');
   const [dirty, setDirty] = createSignal(false);
   const [providerDialogOpen, setProviderDialogOpen] = createSignal(false);
@@ -215,8 +213,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     setProviders(rows);
     setCurrentModelID(trim(snapshot.config.current_model_id));
     setPermissionType(snapshot.config.permission_type ?? 'approval_required');
-    setDefaultTimeoutMS(String(snapshot.config.terminal_exec_policy.default_timeout_ms));
-    setMaxTimeoutMS(String(snapshot.config.terminal_exec_policy.max_timeout_ms));
     setLocalError('');
     setDirty(false);
   });
@@ -374,15 +370,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     if (current && !availableModelIDs.has(current)) {
       return { ok: false, error: copy().validation.currentModelUnavailable(current) };
     }
-    const defaultTimeout = normalizeFlowerPositiveInteger(defaultTimeoutMS());
-    const maxTimeout = normalizeFlowerPositiveInteger(maxTimeoutMS());
-    if (!defaultTimeout || !maxTimeout) {
-      return { ok: false, error: copy().validation.terminalTimeoutPositive };
-    }
-    if (defaultTimeout > maxTimeout) {
-      return { ok: false, error: copy().validation.terminalTimeoutOrder };
-    }
-
     return {
       ok: true,
       current_model_id: current,
@@ -392,10 +379,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
           schema_version: 1,
           current_model_id: current,
           permission_type: permissionType(),
-          terminal_exec_policy: {
-            default_timeout_ms: defaultTimeout,
-            max_timeout_ms: maxTimeout,
-          },
           providers: cleanProviders,
         },
       },
@@ -453,8 +436,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const autosaveFingerprint = createMemo(() => JSON.stringify({
     current_model_id: currentModelID(),
     permission_type: permissionType(),
-    default_timeout_ms: defaultTimeoutMS(),
-    max_timeout_ms: maxTimeoutMS(),
     providers: normalizedProviders(),
   }));
   let autosaveTimer: number | undefined;
@@ -695,20 +676,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                     );
                   }}
                 </For>
-              </div>
-            </section>
-
-            <section class="flower-settings-section flower-settings-terminal-section">
-              <FlowerSubSectionHeader title={copy().terminalLimitsTitle} description={copy().terminalLimitsDescription} />
-              <div class="flower-settings-terminal-grid">
-                <label class="flower-settings-terminal-row">
-                  <span class="flower-settings-terminal-label">{copy().defaultTimeout}</span>
-                  <input class="flower-settings-input" inputMode="numeric" value={defaultTimeoutMS()} onInput={(event) => { setDefaultTimeoutMS(event.currentTarget.value); markDirty(); }} />
-                </label>
-                <label class="flower-settings-terminal-row">
-                  <span class="flower-settings-terminal-label">{copy().maximumTimeout}</span>
-                  <input class="flower-settings-input" inputMode="numeric" value={maxTimeoutMS()} onInput={(event) => { setMaxTimeoutMS(event.currentTarget.value); markDirty(); }} />
-                </label>
               </div>
             </section>
 

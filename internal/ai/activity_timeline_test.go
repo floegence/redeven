@@ -183,11 +183,8 @@ func TestToolStartActivityPresentationShowsRunningTerminalCommand(t *testing.T) 
 	t.Parallel()
 
 	presentation := toolStartActivityPresentation("terminal.exec", map[string]any{
-		"command": "pwd; sleep 5; ls -1",
-	}, terminalExecTimeoutDecision{
-		RequestedMS: 2000,
-		EffectiveMS: 5000,
-		Source:      "max",
+		"command":  "pwd; sleep 5; ls -1",
+		"yield_ms": int64(2000),
 	})
 	if presentation == nil {
 		t.Fatal("presentation is nil")
@@ -201,21 +198,15 @@ func TestToolStartActivityPresentationShowsRunningTerminalCommand(t *testing.T) 
 	if presentation.Payload["status"] != toolCallStatusRunning {
 		t.Fatalf("status payload=%v", presentation.Payload["status"])
 	}
-	if presentation.Payload["timeout_ms"] != int64(5000) {
-		t.Fatalf("timeout_ms payload=%v", presentation.Payload["timeout_ms"])
-	}
-	if presentation.Payload["requested_timeout_ms"] != int64(2000) {
-		t.Fatalf("requested_timeout_ms payload=%v", presentation.Payload["requested_timeout_ms"])
-	}
-	if presentation.Payload["timeout_source"] != "max" {
-		t.Fatalf("timeout_source payload=%v", presentation.Payload["timeout_source"])
+	if presentation.Payload["yield_ms"] != int64(2000) {
+		t.Fatalf("yield_ms payload=%v", presentation.Payload["yield_ms"])
 	}
 }
 
 func TestToolStartActivityPresentationUsesToolNameWithoutCommand(t *testing.T) {
 	t.Parallel()
 
-	presentation := toolStartActivityPresentation("terminal.exec", map[string]any{}, terminalExecTimeoutDecision{})
+	presentation := toolStartActivityPresentation("terminal.exec", map[string]any{})
 	if presentation == nil {
 		t.Fatal("presentation is nil")
 	}
@@ -300,7 +291,7 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			presentation := toolStartActivityPresentation(tc.toolName, tc.args, terminalExecTimeoutDecision{})
+			presentation := toolStartActivityPresentation(tc.toolName, tc.args)
 			if presentation == nil {
 				t.Fatal("presentation is nil")
 			}
@@ -326,7 +317,7 @@ func TestToolStartActivityPresentationTrimsLabelToContract(t *testing.T) {
 	command := "printf " + strings.Repeat("x", 260)
 	presentation := toolStartActivityPresentation("terminal.exec", map[string]any{
 		"command": command,
-	}, terminalExecTimeoutDecision{})
+	})
 	if presentation == nil {
 		t.Fatal("presentation is nil")
 	}
@@ -369,7 +360,7 @@ func TestObservationActivityEventsDoNotPublishFlowerTimelineBlocks(t *testing.T)
 		ToolID:     "tool_running_terminal",
 		ToolName:   "terminal.exec",
 		ToolKind:   "local",
-		Activity:   toolStartActivityPresentation("terminal.exec", map[string]any{"command": "pwd"}, terminalExecTimeoutDecision{}),
+		Activity:   toolStartActivityPresentation("terminal.exec", map[string]any{"command": "pwd"}),
 		ObservedAt: time.UnixMilli(1000),
 	})
 	r.recordToolResultActivity("tool_running_terminal", "terminal.exec", toolResultStatusSuccess, map[string]any{

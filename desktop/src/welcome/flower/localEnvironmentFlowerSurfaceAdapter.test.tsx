@@ -64,10 +64,6 @@ function settingsResponse(): AgentSettingsResponse {
         }],
       }],
       permission_type: 'approval_required',
-      terminal_exec_policy: {
-        default_timeout_ms: 120000,
-        max_timeout_ms: 600000,
-      },
     },
     ai_secrets: {
       provider_api_key_set: { default: true },
