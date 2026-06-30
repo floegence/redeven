@@ -1115,7 +1115,14 @@ describe('FlowerSurface navigation activity', () => {
                   ? {
                       label: `npm run check:${index}`,
                       renderer: 'terminal',
-                      payload: { command: `npm run check:${index}`, exit_code: 0 },
+                      payload: {
+                        command: `npm run check:${index}`,
+                        output: `check ${index} ok\n`,
+                        exit_code: 0,
+                        duration_ms: 1234,
+                        process_id: `tp_check_${index}`,
+                        truncated: index === 0,
+                      },
                     }
                   : tool_name === 'write_todos'
                     ? {
@@ -1157,9 +1164,112 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.textContent).toContain('Update todos');
     expect(runtime.textContent).toContain('completed 1');
     expect(runtime.textContent).toContain('task_complete');
-    const firstTerminalRow = runtime.querySelector('[data-flower-activity-item-id="item-0"]');
+    const firstTerminalRow = runtime.querySelector('[data-flower-activity-item-id="item-0"]') as HTMLElement | null;
     expect(firstTerminalRow).toBeTruthy();
     expect(firstTerminalRow?.textContent).toContain('npm run check:0');
+    (firstTerminalRow?.querySelector('.flower-activity-inline-button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(firstTerminalRow?.querySelector('[data-flower-activity-terminal-panel]')));
+    const terminalPanel = firstTerminalRow?.querySelector('[data-flower-activity-terminal-panel]') as HTMLElement | null;
+    expect(terminalPanel?.textContent).toContain('npm run check:0');
+    expect(terminalPanel?.textContent).toContain('check 0 ok');
+    expect(terminalPanel?.textContent).toContain('exit 0');
+    expect(terminalPanel?.textContent).toContain('1s');
+    expect(terminalPanel?.textContent).toContain('truncated');
+    expect(terminalPanel?.querySelector('.flower-activity-inline-detail-key')).toBeNull();
+    expect(terminalPanel?.textContent).not.toContain('command');
+    expect(terminalPanel?.textContent).not.toContain('process');
+    expect(terminalPanel?.querySelector('input')).toBeNull();
+  });
+
+  it('renders expanded web, question, and completion details as product panels', async () => {
+    const productDetailsThread = thread({
+      thread_id: 'thread-product-activity-details',
+      title: 'Product activity details',
+      created_at_ms: 6_600,
+      updated_at_ms: 6_650,
+      status: 'success',
+      messages: [
+        {
+          id: 'm-product-activity-details',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 6_650,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-product-activity-details',
+              turn_id: 'm-product-activity-details',
+              items: [
+                activityItem({
+                  item_id: 'item-web',
+                  tool_id: 'item-web',
+                  tool_name: 'web.search',
+                  renderer: 'web_search',
+                  label: 'latest release',
+                  status: 'success',
+                  payload: {
+                    query: 'latest release',
+                    count: 1,
+                    results: [{ title: 'Release notes', url: 'https://example.test/release', snippet: 'Release is ready.' }],
+                  },
+                }),
+                activityItem({
+                  item_id: 'item-question',
+                  tool_id: 'item-question',
+                  tool_name: 'ask_user',
+                  renderer: 'question',
+                  label: 'Choose target',
+                  status: 'success',
+                  payload: {
+                    questions: [{
+                      question: 'Which target should I inspect?',
+                      choices: [{ label: 'Local', description: 'This Mac' }],
+                    }],
+                  },
+                }),
+                activityItem({
+                  item_id: 'item-completion',
+                  tool_id: 'item-completion',
+                  tool_name: 'task_complete',
+                  renderer: 'completion',
+                  label: 'task_complete',
+                  status: 'success',
+                  payload: {
+                    result: 'Implemented.',
+                    evidence_refs: ['Flower UI test'],
+                    next_actions: ['Ship'],
+                  },
+                }),
+              ],
+            }),
+          ],
+        },
+      ],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [productDetailsThread]),
+      loadThread: vi.fn(async () => liveBootstrap(productDetailsThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-product-activity-details"] button')));
+    (runtime.querySelector('[data-thread-id="thread-product-activity-details"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="item-web"]')));
+
+    for (const itemID of ['item-web', 'item-question', 'item-completion']) {
+      const row = runtime.querySelector(`[data-flower-activity-item-id="${itemID}"]`) as HTMLElement;
+      (row.querySelector('.flower-activity-inline-button') as HTMLButtonElement).click();
+    }
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-activity-web-panel')));
+    expect(runtime.querySelector('.flower-activity-web-panel')?.textContent).toContain('Release notes');
+    expect(runtime.querySelector('.flower-activity-question-panel')?.textContent).toContain('Which target should I inspect?');
+    expect(runtime.querySelector('.flower-activity-question-panel')?.textContent).toContain('Local');
+    expect(runtime.querySelector('.flower-activity-completion-panel')?.textContent).toContain('Implemented.');
+    expect(runtime.querySelector('.flower-activity-completion-panel')?.textContent).toContain('Flower UI test');
+    expect(runtime.textContent).not.toContain('"results"');
+    expect(runtime.textContent).not.toContain('"questions"');
+    expect(runtime.textContent).not.toContain('evidence_refs');
   });
 
   it('renders approval controls in the composer while preserving the activity audit row', async () => {

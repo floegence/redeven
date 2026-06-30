@@ -4060,7 +4060,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     can_browse_directory: false,
   });
 
-  const detailLinesBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'structured' | 'terminal' }>) => (
+  const detailLinesBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'structured' }>) => (
     <>
       <For each={block.lines}>
         {(line) => (
@@ -4072,6 +4072,176 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </For>
     </>
   );
+
+  const terminalDetailChips = (terminal: Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>['terminal']): readonly string[] => {
+    const chips = [
+      terminal.exit_code !== undefined ? `exit ${terminal.exit_code}` : '',
+      terminal.duration_ms !== undefined ? formatActivityDuration(terminal.duration_ms) : '',
+      terminal.truncated ? 'truncated' : '',
+      terminal.timed_out ? 'timed out' : '',
+      terminal.process_id ? terminal.process_id : '',
+      terminal.total_bytes !== undefined ? `${terminal.total_bytes} bytes` : '',
+      terminal.first_seq !== undefined || terminal.last_seq !== undefined ? `seq ${terminal.first_seq ?? 0}-${terminal.last_seq ?? 0}` : '',
+      terminal.execution_location,
+    ].filter(Boolean);
+    return Array.from(new Set(chips));
+  };
+
+  const terminalDisplayOutput = (terminal: Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>['terminal']): string => {
+    const output = String(terminal.output || terminal.latest_output || '').replace(/\r\n?/g, '\n');
+    if (output.trim()) return output;
+    return terminal.status === 'running' || terminal.status === 'pending' ? 'Waiting for output...' : 'No output captured.';
+  };
+
+  const terminalOutputBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>) => {
+    const terminal = block.terminal;
+    const output = terminalDisplayOutput(terminal);
+    const muted = !String(terminal.output || terminal.latest_output || '').trim();
+    return (
+      <section
+        class={cn('flower-activity-terminal-panel', `flower-activity-terminal-panel-${terminal.status}`)}
+        data-flower-activity-terminal-panel
+      >
+        <div class="flower-activity-terminal-header">
+          <span class="flower-activity-terminal-status">{statusIcon(terminal.status)}</span>
+          <span class="flower-activity-terminal-prompt" aria-hidden="true">$</span>
+          <span class="flower-activity-terminal-command">
+            <FlowerShellCommandHighlight
+              command={terminal.command}
+              class="flower-activity-terminal-command-code"
+              tokenClassPrefix="flower-activity-terminal-command-token"
+            />
+          </span>
+          <div class="flower-activity-terminal-chips" aria-label="Terminal result">
+            <For each={terminalDetailChips(terminal)}>
+              {(chip) => <span class="flower-activity-terminal-chip" title={chip}>{chip}</span>}
+            </For>
+          </div>
+        </div>
+        <div class={cn('flower-activity-terminal-output', muted && 'flower-activity-terminal-output-muted')}>
+          <pre>{output}</pre>
+        </div>
+      </section>
+    );
+  };
+
+  const webEntryList = (label: string, entries: readonly { title: string; url: string; snippet: string; source: string }[]) => (
+    <Show when={entries.length > 0}>
+      <div class="flower-activity-web-section">
+        <div class="flower-activity-detail-heading">{label}</div>
+        <div class="flower-activity-web-list" role="list">
+          <For each={entries}>
+            {(entry) => (
+              <div class="flower-activity-web-entry" role="listitem">
+                <div class="flower-activity-web-entry-title">{entry.title}</div>
+                <Show when={entry.snippet}>
+                  {(snippet) => <div class="flower-activity-web-entry-snippet">{snippet()}</div>}
+                </Show>
+                <Show when={entry.url || entry.source}>
+                  <div class="flower-activity-web-entry-meta">{[entry.source, entry.url].filter(Boolean).join(' · ')}</div>
+                </Show>
+              </div>
+            )}
+          </For>
+        </div>
+      </div>
+    </Show>
+  );
+
+  const webSearchBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'web_search' }>) => {
+    const search = block.search;
+    const resultCount = search.count === 1 ? '1 result' : `${search.count} results`;
+    return (
+      <section class="flower-activity-web-panel">
+        <div class="flower-activity-web-summary">
+          <Show when={search.query}>
+            {(query) => <span class="flower-activity-web-query">{query()}</span>}
+          </Show>
+          <Show when={search.provider}>
+            {(provider) => <span class="flower-activity-web-chip">{provider()}</span>}
+          </Show>
+          <Show when={search.count !== undefined}>
+            <span class="flower-activity-web-chip">{resultCount}</span>
+          </Show>
+        </div>
+        {webEntryList('Results', search.results)}
+        {webEntryList('Matches', search.matches)}
+        {webEntryList('Sections', search.sections)}
+        {webEntryList('Sources', search.sources)}
+      </section>
+    );
+  };
+
+  const questionBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'question' }>) => (
+    <section class="flower-activity-question-panel">
+      <Show when={block.question.reason}>
+        {(reason) => <div class="flower-activity-question-reason">{reason()}</div>}
+      </Show>
+      <Show when={block.question.required.length > 0}>
+        <div class="flower-activity-question-required">
+          <For each={block.question.required}>
+            {(required) => <span class="flower-activity-question-chip">{required}</span>}
+          </For>
+        </div>
+      </Show>
+      <For each={block.question.questions}>
+        {(question) => (
+          <div class="flower-activity-question-item">
+            <div class="flower-activity-question-text">{question.question}</div>
+            <Show when={question.choices.length > 0 || question.write_label}>
+              <div class="flower-activity-question-choices">
+                <For each={question.choices}>
+                  {(choice) => (
+                    <span class="flower-activity-question-choice">
+                      <span>{choice.label}</span>
+                      <Show when={choice.description}>
+                        {(description) => <small>{description()}</small>}
+                      </Show>
+                    </span>
+                  )}
+                </For>
+                <Show when={question.write_label}>
+                  {(label) => <span class="flower-activity-question-choice">{label()}</span>}
+                </Show>
+              </div>
+            </Show>
+          </div>
+        )}
+      </For>
+      <Show when={block.question.questions.length === 0}>
+        <div class="flower-activity-question-empty">Waiting for user input.</div>
+      </Show>
+    </section>
+  );
+
+  const completionList = (label: string, values: readonly string[]) => (
+    <Show when={values.length > 0}>
+      <div class="flower-activity-completion-section">
+        <div class="flower-activity-detail-heading">{label}</div>
+        <ul class="flower-activity-completion-list">
+          <For each={values}>
+            {(value) => <li>{value}</li>}
+          </For>
+        </ul>
+      </div>
+    </Show>
+  );
+
+  const completionBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'completion' }>) => {
+    const value = block.completion;
+    return (
+      <section class="flower-activity-completion-panel">
+        <Show when={value.result || value.summary || value.details}>
+          <div class="flower-activity-completion-result">
+            {value.result || value.summary || value.details}
+          </div>
+        </Show>
+        {completionList('Evidence', value.evidence_refs)}
+        {completionList('Risks', value.remaining_risks)}
+        {completionList('Next', value.next_actions)}
+      </section>
+    );
+  };
 
   const fileReadBlock = (messageID: string, blockIndex: number, itemID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'file_read' }>) => {
     const lineSummary = (() => {
@@ -4175,6 +4345,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       );
     }
+    if (block.kind === 'terminal_output') return terminalOutputBlock(block);
+    if (block.kind === 'web_search') return webSearchBlock(block);
+    if (block.kind === 'question') return questionBlock(block);
+    if (block.kind === 'completion') return completionBlock(block);
     if (block.kind === 'file_read') return fileReadBlock(messageID, blockIndex, itemID, block);
     if (block.kind === 'file_diff') return fileDiffBlock(messageID, blockIndex, itemID, block);
     return detailLinesBlock(block);

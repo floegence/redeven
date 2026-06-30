@@ -276,7 +276,7 @@ function ApprovalActions(props: { messageId: string; item: ActivityItem }) {
   );
 }
 
-function DetailLines(props: { block: Extract<FlowerActivityDetailBlock, { kind: 'structured' | 'terminal' }> }) {
+function DetailLines(props: { block: Extract<FlowerActivityDetailBlock, { kind: 'structured' }> }) {
   return (
     <div class="chat-activity-detail-section">
       <div class="chat-activity-structured-groups">
@@ -462,6 +462,92 @@ function FileDiffBlock(props: {
   );
 }
 
+function WebSearchDetailBlock(props: { block: Extract<FlowerActivityDetailBlock, { kind: 'web_search' }> }) {
+  const entries = createMemo(() => [
+    ...props.block.search.results,
+    ...props.block.search.matches,
+    ...props.block.search.sections,
+    ...props.block.search.sources,
+  ]);
+  return (
+    <section class="chat-activity-detail-section">
+      <div class="chat-activity-detail-section-head">
+        <div class="chat-activity-detail-section-copy">
+          <div class="chat-activity-detail-section-title">{props.block.search.query || 'Search results'}</div>
+          <div class="chat-activity-detail-section-meta">
+            {[props.block.search.provider, props.block.search.count !== undefined ? `${props.block.search.count} result${props.block.search.count === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')}
+          </div>
+        </div>
+      </div>
+      <div class="chat-activity-detail-lines">
+        <For each={entries()}>
+          {(entry) => (
+            <div class="chat-activity-detail-line">
+              <span class="chat-activity-detail-key">{entry.source || entry.url || 'result'}</span>
+              <span class="chat-activity-detail-value">{[entry.title, entry.snippet].filter(Boolean).join(' - ')}</span>
+            </div>
+          )}
+        </For>
+      </div>
+    </section>
+  );
+}
+
+function QuestionDetailBlock(props: { block: Extract<FlowerActivityDetailBlock, { kind: 'question' }> }) {
+  return (
+    <section class="chat-activity-detail-section">
+      <For each={props.block.question.questions}>
+        {(question) => (
+          <div class="chat-activity-user-input-question">
+            <div class="chat-activity-user-input-question-text">{question.question}</div>
+            <Show when={question.choices.length > 0 || question.write_label}>
+              <div class="chat-activity-user-input-choices">
+                <For each={question.choices}>
+                  {(choice) => (
+                    <span class="chat-activity-user-input-choice">
+                      <span class="chat-activity-user-input-choice-label">{choice.label}</span>
+                      <Show when={choice.description}>
+                        {(description) => <span class="chat-activity-user-input-choice-description">{description()}</span>}
+                      </Show>
+                    </span>
+                  )}
+                </For>
+                <Show when={question.write_label}>
+                  {(label) => <span class="chat-activity-user-input-choice">{label()}</span>}
+                </Show>
+              </div>
+            </Show>
+          </div>
+        )}
+      </For>
+    </section>
+  );
+}
+
+function CompletionDetailBlock(props: { block: Extract<FlowerActivityDetailBlock, { kind: 'completion' }> }) {
+  const completion = props.block.completion;
+  const rows = createMemo(() => [
+    { label: 'result', value: completion.result || completion.summary || completion.details },
+    { label: 'evidence', value: completion.evidence_refs.join('\n') },
+    { label: 'risks', value: completion.remaining_risks.join('\n') },
+    { label: 'next', value: completion.next_actions.join('\n') },
+  ].filter((row) => row.value.trim()));
+  return (
+    <section class="chat-activity-detail-section">
+      <div class="chat-activity-detail-lines">
+        <For each={rows()}>
+          {(row) => (
+            <div class="chat-activity-detail-line">
+              <span class="chat-activity-detail-key">{row.label}</span>
+              <span class="chat-activity-detail-value">{row.value}</span>
+            </div>
+          )}
+        </For>
+      </div>
+    </section>
+  );
+}
+
 function DetailBlock(props: {
   block: FlowerActivityDetailBlock;
   item: ActivityItem;
@@ -469,7 +555,10 @@ function DetailBlock(props: {
   onPreviewFile?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
   onBrowseDirectory?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
 }) {
-  if (props.block.kind === 'terminal') return <TerminalDetailBlock item={props.item} runID={props.runID} />;
+  if (props.block.kind === 'terminal_output') return <TerminalDetailBlock item={props.item} runID={props.runID} />;
+  if (props.block.kind === 'web_search') return <WebSearchDetailBlock block={props.block} />;
+  if (props.block.kind === 'question') return <QuestionDetailBlock block={props.block} />;
+  if (props.block.kind === 'completion') return <CompletionDetailBlock block={props.block} />;
   if (props.block.kind === 'todos') return <TodoBlock block={props.block} />;
   if (props.block.kind === 'file_read') {
     return (
