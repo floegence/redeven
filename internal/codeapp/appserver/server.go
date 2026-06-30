@@ -10,7 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
+	stdfs "io/fs"
 	"log/slog"
 	"mime"
 	"net"
@@ -33,6 +33,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	runtimefs "github.com/floegence/redeven/internal/fs"
 	"github.com/floegence/redeven/internal/notes"
 	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/portforward"
@@ -48,7 +49,7 @@ import (
 type Options struct {
 	Logger                  *slog.Logger
 	ListenAddr              string
-	DistFS                  fs.FS
+	DistFS                  stdfs.FS
 	Backend                 Backend
 	PortForward             PortForwardBackend
 	AI                      *ai.Service
@@ -224,7 +225,8 @@ type Server struct {
 	agentHomeDir string
 	scope        *filesystemscope.Registry
 
-	distFS fs.FS
+	distFS stdfs.FS
+	fs     *runtimefs.Service
 
 	ln   net.Listener
 	srv  *http.Server
@@ -332,6 +334,7 @@ func New(opts Options) (*Server, error) {
 		log:                     logger,
 		agentHomeDir:            scope.HomePathAbs(),
 		scope:                   scope,
+		fs:                      runtimefs.NewServiceWithScope(scope),
 		backend:                 opts.Backend,
 		pf:                      opts.PortForward,
 		ai:                      opts.AI,
@@ -597,7 +600,7 @@ func (g *Server) serveEnvAppDist(w http.ResponseWriter, r *http.Request) {
 	}
 
 	distPath := strings.TrimPrefix(p, "/_redeven_proxy/")
-	if info, err := fs.Stat(g.distFS, distPath); err == nil {
+	if info, err := stdfs.Stat(g.distFS, distPath); err == nil {
 		if info.IsDir() {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
@@ -645,12 +648,12 @@ func (g *Server) serveDistFile(w http.ResponseWriter, r *http.Request, distPath 
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	info, err := fs.Stat(g.distFS, cleanPath)
+	info, err := stdfs.Stat(g.distFS, cleanPath)
 	if err != nil || info.IsDir() {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	data, err := fs.ReadFile(g.distFS, cleanPath)
+	data, err := stdfs.ReadFile(g.distFS, cleanPath)
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -660,7 +663,7 @@ func (g *Server) serveDistFile(w http.ResponseWriter, r *http.Request, distPath 
 
 func cleanDistPath(raw string) string {
 	cleanPath := strings.TrimPrefix(path.Clean("/"+strings.TrimSpace(raw)), "/")
-	if cleanPath == "." || cleanPath == "" || !fs.ValidPath(cleanPath) {
+	if cleanPath == "." || cleanPath == "" || !stdfs.ValidPath(cleanPath) {
 		return ""
 	}
 	return cleanPath
@@ -670,18 +673,18 @@ func isDistRequestMethod(method string) bool {
 	return method == http.MethodGet || method == http.MethodHead
 }
 
-func validateEnvAppShellFS(distFS fs.FS) error {
+func validateEnvAppShellFS(distFS stdfs.FS) error {
 	if distFS == nil {
 		return errors.New("missing dist filesystem")
 	}
-	info, err := fs.Stat(distFS, "env/index.html")
+	info, err := stdfs.Stat(distFS, "env/index.html")
 	if err != nil {
 		return fmt.Errorf("missing Env App shell: %w", err)
 	}
 	if info.IsDir() {
 		return errors.New("Env App shell points to a directory")
 	}
-	data, err := fs.ReadFile(distFS, "env/index.html")
+	data, err := stdfs.ReadFile(distFS, "env/index.html")
 	if err != nil {
 		return fmt.Errorf("read Env App shell: %w", err)
 	}
@@ -700,7 +703,7 @@ func validateEnvAppShellFS(distFS fs.FS) error {
 		if assetPath == "" || !strings.HasPrefix(assetPath, "env/assets/") {
 			return fmt.Errorf("Env App shell references an invalid asset path: %q", string(match[1]))
 		}
-		assetInfo, err := fs.Stat(distFS, assetPath)
+		assetInfo, err := stdfs.Stat(distFS, assetPath)
 		if err != nil {
 			return fmt.Errorf("Env App shell references a missing asset %q: %w", assetPath, err)
 		}
@@ -1795,7 +1798,11 @@ func (g *Server) appendAudit(meta *session.Meta, action string, status string, d
 	})
 }
 
-const localAPIFileEndpointPath = "/_redeven_proxy/api/fs/file"
+const (
+	localAPIFileEndpointPath          = "/_redeven_proxy/api/fs/file"
+	localAPIFSPathContextEndpointPath = "/_redeven_proxy/api/fs/path_context"
+	localAPIFSListEndpointPath        = "/_redeven_proxy/api/fs/list"
+)
 
 var fsFileFallbackContentTypes = map[string]string{
 	".aac":  "audio/aac",
@@ -1858,6 +1865,59 @@ func (g *Server) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, filepath.Base(resolvedPath), st.ModTime(), f)
 }
 
+func (g *Server) handleFSPathContext(w http.ResponseWriter, _ *http.Request) {
+	if g == nil || g.fs == nil {
+		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "filesystem service not ready"})
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.fs.PathContext()})
+}
+
+func (g *Server) handleFSList(w http.ResponseWriter, r *http.Request) {
+	if g == nil || g.fs == nil {
+		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "filesystem service not ready"})
+		return
+	}
+
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	var body struct {
+		Path       string `json:"path"`
+		ShowHidden *bool  `json:"show_hidden,omitempty"`
+	}
+	if err := dec.Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+		return
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+		return
+	}
+
+	out, err := g.fs.ListDirectory(body.Path, body.ShowHidden != nil && *body.ShowHidden)
+	if err != nil {
+		status, message := fsListHTTPError(err)
+		writeJSON(w, status, apiResp{OK: false, Error: message})
+		return
+	}
+	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+}
+
+func fsListHTTPError(err error) (int, string) {
+	switch {
+	case errors.Is(err, filesystemscope.ErrPathOutsideScope):
+		return http.StatusForbidden, "path outside filesystem scope"
+	case errors.Is(err, filesystemscope.ErrReadDenied):
+		return http.StatusForbidden, "read permission denied"
+	case os.IsNotExist(err):
+		return http.StatusNotFound, "not found"
+	case errors.Is(err, filesystemscope.ErrPathNotDirectory):
+		return http.StatusBadRequest, "path is not a directory"
+	default:
+		return http.StatusBadRequest, "invalid path"
+	}
+}
+
 func fsFileContentType(path string) string {
 	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(path)))
 	if ext == "" {
@@ -1906,6 +1966,20 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
+	case r.Method == http.MethodGet && r.URL.Path == localAPIFSPathContextEndpointPath:
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		g.handleFSPathContext(w, r)
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == localAPIFSListEndpointPath:
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		g.handleFSList(w, r)
+		return
+
 	case (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == localAPIFileEndpointPath:
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return

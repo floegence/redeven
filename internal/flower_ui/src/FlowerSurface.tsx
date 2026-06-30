@@ -49,6 +49,7 @@ import type {
   FlowerReasoningSelection,
   FlowerSubagentDetail,
   FlowerSubagentTimelineRow,
+  FlowerWorkingDirectoryPathContext,
 } from './contracts/flowerSurfaceContracts';
 import { projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
 import {
@@ -82,6 +83,10 @@ import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveRe
 import { flowerThreadReadSnapshotKey, mergeFlowerThreadListRefresh, sameThreadSnapshot } from './flowerThreadListRefresh';
 import { FlowerProviderBrandIcon, flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
 import { FlowerReasoningControl } from './ReasoningControl';
+import { FlowerWorkingDirPickerDialog } from './filePicker/FlowerWorkingDirPickerDialog';
+import { createDirectoryPickerDataSource } from './filePicker/createDirectoryPickerDataSource';
+import { toPickerTreeAbsolutePath, toPickerTreePath } from './filePicker/directoryPickerTree';
+import { basenameFromAbsolutePath, normalizeAbsolutePath } from './filePicker/path';
 import {
   defaultReasoningSelectionForCapability,
   normalizeFlowerReasoningSelection,
@@ -103,6 +108,7 @@ type FlowerComposerSessionDraft = Readonly<{
   modelIDOverride?: string;
   permissionTypeOverride?: FlowerPermissionType;
   reasoningOverride?: FlowerReasoningSelection;
+  workingDirDraft?: string;
 }>;
 type FlowerComposerContextUsageModel = Readonly<{
   usage: FlowerContextUsage;
@@ -266,6 +272,7 @@ function sameFlowerComposerSessionDraft(left: FlowerComposerSessionDraft, right:
     && left.activeInputQuestionID === right.activeInputQuestionID
     && left.modelIDOverride === right.modelIDOverride
     && left.permissionTypeOverride === right.permissionTypeOverride
+    && left.workingDirDraft === right.workingDirDraft
     && sameFlowerInputDrafts(left.inputDrafts, right.inputDrafts)
     && sameFlowerReasoningSelection(left.reasoningOverride, right.reasoningOverride);
 }
@@ -643,6 +650,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [historyFilter, setHistoryFilter] = createSignal('');
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
   const [previewChip, setPreviewChip] = createSignal<FlowerChatContextChip | null>(null);
+  const [workingDirectoryPathContext, setWorkingDirectoryPathContext] = createSignal<FlowerWorkingDirectoryPathContext | null>(null);
+  const [, setWorkingDirectoryPathContextLoading] = createSignal(false);
+  const [workingDirectoryPickerOpen, setWorkingDirectoryPickerOpen] = createSignal(false);
 
   createEffect(on(
     () => selectedThreadID(),
@@ -987,6 +997,114 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const updateCurrentComposerSessionDraft = (updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
     updateComposerSessionDraft(currentComposerSessionKey(), updater);
   };
+  const warmupState = createMemo(() => props.warmup?.active ? props.warmup : null);
+  const surfaceWarmupActive = createMemo(() => warmupState() !== null);
+  const workingDirectoryPickerAvailable = createMemo(() => (
+    typeof props.adapter.getWorkingDirectoryPathContext === 'function'
+    && typeof props.adapter.listWorkingDirectoryEntries === 'function'
+  ));
+  const workingDirectoryHomePath = createMemo(() => normalizeAbsolutePath(
+    workingDirectoryPathContext()?.homePathAbs
+      || workingDirectoryPathContext()?.agentHomePathAbs
+      || '',
+  ));
+  const selectedThreadWorkingDirectory = createMemo(() => normalizeAbsolutePath(selectedThread()?.working_dir ?? ''));
+  const draftWorkingDirectory = createMemo(() => normalizeAbsolutePath(currentComposerSessionDraft().workingDirDraft ?? ''));
+  const displayedWorkingDirectory = createMemo(() => {
+    const threadPath = selectedThreadWorkingDirectory();
+    if (threadPath) return threadPath;
+    const draftPath = draftWorkingDirectory();
+    if (draftPath) return draftPath;
+    return workingDirectoryHomePath();
+  });
+  const displayedWorkingDirectoryLabel = createMemo(() => (
+    basenameFromAbsolutePath(displayedWorkingDirectory(), copy().threadList.workingDirectoryLabel)
+  ));
+  const workingDirectoryPickerInitialPath = createMemo(() => (
+    toPickerTreePath(displayedWorkingDirectory() || workingDirectoryHomePath(), workingDirectoryHomePath())
+  ));
+  const canPickWorkingDirectory = createMemo(() => (
+    !selectedThreadID()
+    && workingDirectoryPickerAvailable()
+    && !chatRunning()
+    && !surfaceWarmupActive()
+  ));
+  const workingDirectoryChipInteractive = createMemo(() => (
+    selectedThreadWorkingDirectory() !== '' || canPickWorkingDirectory()
+  ));
+  const workingDirectoryChipTitle = createMemo(() => {
+    const path = displayedWorkingDirectory();
+    if (!path) return copy().threadList.workingDirectoryLabel;
+    if (selectedThreadID()) return `${copy().threadList.copyWorkingDirectory}: ${path}`;
+    return `${copy().threadList.workingDirectoryLabel}: ${path}`;
+  });
+  const workingDirectoryPicker = createDirectoryPickerDataSource({
+    homePath: () => workingDirectoryHomePath(),
+    listDirectory: async (absolutePath) => {
+      if (!props.adapter.listWorkingDirectoryEntries) {
+        throw new Error('Working directory picker is unavailable.');
+      }
+      return props.adapter.listWorkingDirectoryEntries({
+        path: absolutePath,
+        showHidden: false,
+      });
+    },
+  });
+  let lastWorkingDirectoryHomePath = '';
+  let workingDirectoryPathContextRequest: Promise<FlowerWorkingDirectoryPathContext> | null = null;
+  createEffect(() => {
+    const homePath = workingDirectoryHomePath();
+    if (homePath === lastWorkingDirectoryHomePath) return;
+    lastWorkingDirectoryHomePath = homePath;
+    workingDirectoryPicker.reset();
+  });
+  const loadWorkingDirectoryPathContext = async (): Promise<FlowerWorkingDirectoryPathContext | null> => {
+    if (!workingDirectoryPickerAvailable() || !props.adapter.getWorkingDirectoryPathContext) return null;
+    const existing = workingDirectoryPathContext();
+    if (existing) return existing;
+    if (workingDirectoryPathContextRequest) return workingDirectoryPathContextRequest;
+    setWorkingDirectoryPathContextLoading(true);
+    workingDirectoryPathContextRequest = props.adapter.getWorkingDirectoryPathContext()
+      .then((context) => {
+        setWorkingDirectoryPathContext(context);
+        return context;
+      })
+      .finally(() => {
+        workingDirectoryPathContextRequest = null;
+        setWorkingDirectoryPathContextLoading(false);
+      });
+    return workingDirectoryPathContextRequest;
+  };
+  const openWorkingDirectoryPicker = async () => {
+    if (!canPickWorkingDirectory()) return;
+    setChatSubmitError('');
+    try {
+      const context = await loadWorkingDirectoryPathContext();
+      if (!context && !workingDirectoryPathContext()) return;
+      workingDirectoryPicker.reset();
+      setWorkingDirectoryPickerOpen(true);
+    } catch (error) {
+      setChatSubmitError(getErrorMessage(error));
+    }
+  };
+  const handleWorkingDirectoryChipClick = async () => {
+    const threadPath = selectedThreadWorkingDirectory();
+    if (threadPath) {
+      await writeClipboardText(threadPath, copy().threadList.workingDirectoryLabel);
+      return;
+    }
+    await openWorkingDirectoryPicker();
+  };
+  createEffect(() => {
+    if (!workingDirectoryPickerAvailable()) return;
+    if (selectedThreadID()) return;
+    void loadWorkingDirectoryPathContext().catch(() => undefined);
+  });
+  createEffect(() => {
+    if (!workingDirectoryPickerOpen()) return;
+    if (workingDirectoryPicker.files().length > 0) return;
+    void workingDirectoryPicker.ensureRootLoaded();
+  });
   const permissionOptionID = (permissionType: FlowerPermissionType) => `flower-composer-permission-${permissionType}`;
   const clampPermissionMenuIndex = (index: number): number => {
     const count = FLOWER_PERMISSION_TYPES.length;
@@ -1232,8 +1350,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   onCleanup(() => {
     composerFocusToken += 1;
   });
-  const warmupState = createMemo(() => props.warmup?.active ? props.warmup : null);
-  const surfaceWarmupActive = createMemo(() => warmupState() !== null);
   const warmupCanReplaceTranscript = createMemo(() => (
     surfaceWarmupActive()
     && !selectedThreadHasContent()
@@ -2387,6 +2503,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const selectedID = trimString(selectedThreadID());
     const draftReasoningSelection = !selectedID ? serializeFlowerReasoningSelection(composerReasoningSelection()) : undefined;
     const draftModelID = !selectedID ? selectedComposerModelID() : '';
+    const draftWorkingDir = !selectedID ? draftWorkingDirectory() : '';
     const messageID = createClientMessageID();
     const pending: PendingFlowerTurn = {
       thread_id: selectedThreadID() || PENDING_NEW_THREAD_ID,
@@ -2426,6 +2543,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ...(!selectedID ? { permission_type: composerPermissionType() } : {}),
         ...(!selectedID && draftModelID ? { model_id: draftModelID } : {}),
         ...(!selectedID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {}),
+        ...(!selectedID && draftWorkingDir ? { working_dir: draftWorkingDir } : {}),
       });
       const acceptedThread = applyLiveBootstrap(thread);
       accepted = true;
@@ -5172,14 +5290,36 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </div>
   );
 
+  const workingDirectoryChip = () => (
+    <button
+      type="button"
+      class={cn(
+        'flower-working-dir-chip',
+        workingDirectoryChipInteractive() && 'flower-working-dir-chip-interactive',
+      )}
+      title={workingDirectoryChipTitle()}
+      aria-label={workingDirectoryChipTitle()}
+      aria-disabled={workingDirectoryChipInteractive() ? undefined : 'true'}
+      tabIndex={workingDirectoryChipInteractive() ? 0 : -1}
+      onClick={() => {
+        if (!workingDirectoryChipInteractive()) return;
+        void handleWorkingDirectoryChipClick();
+      }}
+    >
+      <FolderOpen class="h-3.5 w-3.5" aria-hidden="true" />
+      <span class="flower-working-dir-chip-label">{displayedWorkingDirectoryLabel()}</span>
+    </button>
+  );
+
   const chatPanel = () => (
     <div class="flower-chat-shell flower-chat-shell">
       <div class="flower-chat-header flower-chat-header border-b border-border/80 backdrop-blur-md">
         <div class="flower-chat-header-row">
           <div class="flex min-w-0 items-center gap-3">
             <FlowerIcon class="h-5 w-5 text-primary" />
-            <div class="min-w-0 flex items-center gap-2">
+            <div class="flower-chat-header-identity min-w-0">
               <div class="flower-chat-header-title truncate">{selectedThread()?.title || copy().chat.titleFallback}</div>
+              {workingDirectoryChip()}
             </div>
           </div>
           <div class="flower-chat-header-actions">
@@ -5751,6 +5891,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           />
         </div>
       </section>
+      <FlowerWorkingDirPickerDialog
+        open={workingDirectoryPickerOpen()}
+        onOpenChange={(open) => {
+          if (!open) setWorkingDirectoryPickerOpen(false);
+        }}
+        files={workingDirectoryPicker.files()}
+        initialPath={workingDirectoryPickerInitialPath()}
+        homePath={workingDirectoryHomePath()}
+        homeLabel={copy().chat.workingDirPickerHomeLabel}
+        title={copy().chat.workingDirPickerTitle}
+        confirmText={copy().chat.workingDirPickerConfirm}
+        onExpand={workingDirectoryPicker.expandPath}
+        ensurePath={workingDirectoryPicker.ensurePath}
+        onSelect={(selectedPath) => {
+          if (!canPickWorkingDirectory()) return;
+          const realPath = toPickerTreeAbsolutePath(selectedPath, workingDirectoryHomePath());
+          if (!realPath) return;
+          updateCurrentComposerSessionDraft((draft) => (
+            draft.workingDirDraft === realPath ? draft : { ...draft, workingDirDraft: realPath }
+          ));
+          setWorkingDirectoryPickerOpen(false);
+        }}
+      />
     </main>
   );
 };

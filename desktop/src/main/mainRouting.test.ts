@@ -898,6 +898,8 @@ describe('main routing', () => {
     expect(pathSrc).toContain("new URL(raw, 'http://runtime-flower.local')");
     expect(pathSrc).toContain('const pathname = parsed.pathname;');
     expect(pathSrc).toContain("'/_redeven_proxy/api/settings'");
+    expect(pathSrc).toContain("'/_redeven_proxy/api/fs/path_context'");
+    expect(pathSrc).toContain("'/_redeven_proxy/api/fs/list'");
     expect(pathSrc).toContain("'/_redeven_proxy/api/ai/provider_bundle'");
     expect(pathSrc).toContain("'/_redeven_proxy/api/ai/models'");
     expect(pathSrc).not.toContain("'/_redeven_proxy/api/ai/runs'");
@@ -921,6 +923,9 @@ describe('main routing', () => {
     expect(pathSrc).not.toContain('terminal\\/[^/]+\\/terminate');
     expect(pathSrc).toContain("throw new Error('Flower runtime request path is not allowed.');");
     expect(pathSrc).not.toContain("startsWith('/_redeven_proxy/api/ai/threads')");
+    expect(pathSrc).not.toContain("startsWith('/_redeven_proxy/api/fs')");
+    expect(pathSrc).toContain("pathname === '/_redeven_proxy/api/fs/path_context' && query === ''");
+    expect(pathSrc).toContain("pathname === '/_redeven_proxy/api/fs/list' && query === ''");
 
     const methodStart = mainSrc.indexOf('function runtimeFlowerMethodAllowed(');
     const methodEnd = mainSrc.indexOf('async function requestRuntimeFlower(', methodStart);

@@ -1,7 +1,8 @@
 import { createSignal, untrack, type Accessor } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { PickerEnsurePath } from '@floegence/floe-webapp-core/ui';
-import { normalizeAbsolutePath } from './askFlowerPath';
+
+import { normalizeAbsolutePath } from './path';
 import {
   hasPickerFolderPath,
   listPickerTreePathChain,

@@ -2,6 +2,7 @@ package appserver
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -94,6 +95,36 @@ func performFSFileRequest(srv *Server, method string, target string, origin stri
 	return rr
 }
 
+func performFSAPIRequest(srv *Server, method string, target string, origin string, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(method, target, strings.NewReader(body))
+	if origin != "" {
+		req.Header.Set("Origin", origin)
+	}
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	rr := httptest.NewRecorder()
+	srv.serveHTTP(rr, req)
+	return rr
+}
+
+func decodeFSAPIEnvelope(t *testing.T, rr *httptest.ResponseRecorder) struct {
+	OK    bool            `json:"ok"`
+	Error string          `json:"error"`
+	Data  json.RawMessage `json:"data"`
+} {
+	t.Helper()
+	var out struct {
+		OK    bool            `json:"ok"`
+		Error string          `json:"error"`
+		Data  json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &out); err != nil {
+		t.Fatalf("json.Unmarshal response: %v body=%s", err, rr.Body.String())
+	}
+	return out
+}
+
 func TestServerFSFileResourceServesRangeAndHead(t *testing.T) {
 	t.Parallel()
 
@@ -150,6 +181,159 @@ func TestServerFSFileResourceServesRangeAndHead(t *testing.T) {
 	invalidRangeResp := performFSFileRequest(srv, http.MethodGet, mediaPath, origin, "bytes=99-120")
 	if invalidRangeResp.Code != http.StatusRequestedRangeNotSatisfiable {
 		t.Fatalf("invalid Range status = %d, want %d", invalidRangeResp.Code, http.StatusRequestedRangeNotSatisfiable)
+	}
+}
+
+func TestServerFSAPIServesPathContextAndDirectoryList(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	homeReal, err := filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(home): %v", err)
+	}
+	project := filepath.Join(home, "project")
+	hidden := filepath.Join(home, ".hidden")
+	filePath := filepath.Join(home, "notes.txt")
+	if err := os.Mkdir(project, 0o755); err != nil {
+		t.Fatalf("os.Mkdir(project): %v", err)
+	}
+	if err := os.Mkdir(hidden, 0o755); err != nil {
+		t.Fatalf("os.Mkdir(hidden): %v", err)
+	}
+	if err := os.WriteFile(filePath, []byte("note"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+
+	srv, origin := newFSFileTestServer(t, home, session.Meta{CanRead: true}, nil)
+
+	ctxResp := performFSAPIRequest(srv, http.MethodGet, localAPIFSPathContextEndpointPath, origin, "")
+	if ctxResp.Code != http.StatusOK {
+		t.Fatalf("path context status = %d, want %d body=%s", ctxResp.Code, http.StatusOK, ctxResp.Body.String())
+	}
+	ctxEnvelope := decodeFSAPIEnvelope(t, ctxResp)
+	if !ctxEnvelope.OK {
+		t.Fatalf("path context ok=false error=%q", ctxEnvelope.Error)
+	}
+	var pathContext struct {
+		AgentHomePathAbs string `json:"agent_home_path_abs"`
+		HomePathAbs      string `json:"home_path_abs"`
+		Roots            []struct {
+			Path string `json:"path"`
+		} `json:"roots"`
+	}
+	if err := json.Unmarshal(ctxEnvelope.Data, &pathContext); err != nil {
+		t.Fatalf("json.Unmarshal path context: %v", err)
+	}
+	if pathContext.AgentHomePathAbs != homeReal || pathContext.HomePathAbs != homeReal {
+		t.Fatalf("path context home = (%q, %q), want %q", pathContext.AgentHomePathAbs, pathContext.HomePathAbs, homeReal)
+	}
+	if len(pathContext.Roots) != 1 || pathContext.Roots[0].Path != homeReal {
+		t.Fatalf("path context roots = %#v, want home root", pathContext.Roots)
+	}
+
+	listResp := performFSAPIRequest(srv, http.MethodPost, localAPIFSListEndpointPath, origin, fmt.Sprintf(`{"path":%q}`, home))
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("list status = %d, want %d body=%s", listResp.Code, http.StatusOK, listResp.Body.String())
+	}
+	listEnvelope := decodeFSAPIEnvelope(t, listResp)
+	if !listEnvelope.OK {
+		t.Fatalf("list ok=false error=%q", listEnvelope.Error)
+	}
+	var list struct {
+		Entries []struct {
+			Name        string `json:"name"`
+			Path        string `json:"path"`
+			IsDirectory bool   `json:"is_directory"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(listEnvelope.Data, &list); err != nil {
+		t.Fatalf("json.Unmarshal list: %v", err)
+	}
+	names := map[string]bool{}
+	for _, entry := range list.Entries {
+		names[entry.Name] = true
+		if entry.Name == "project" && (!entry.IsDirectory || entry.Path != project) {
+			t.Fatalf("project entry = %#v, want directory at %q", entry, project)
+		}
+	}
+	if !names["project"] || !names["notes.txt"] {
+		t.Fatalf("list names = %#v, want project and notes.txt", names)
+	}
+	if names[".hidden"] {
+		t.Fatalf("hidden entry returned with show_hidden=false")
+	}
+
+	hiddenResp := performFSAPIRequest(srv, http.MethodPost, localAPIFSListEndpointPath, origin, fmt.Sprintf(`{"path":%q,"show_hidden":true}`, home))
+	if hiddenResp.Code != http.StatusOK {
+		t.Fatalf("hidden list status = %d, want %d body=%s", hiddenResp.Code, http.StatusOK, hiddenResp.Body.String())
+	}
+	hiddenEnvelope := decodeFSAPIEnvelope(t, hiddenResp)
+	var hiddenList struct {
+		Entries []struct {
+			Name string `json:"name"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(hiddenEnvelope.Data, &hiddenList); err != nil {
+		t.Fatalf("json.Unmarshal hidden list: %v", err)
+	}
+	foundHidden := false
+	for _, entry := range hiddenList.Entries {
+		if entry.Name == ".hidden" {
+			foundHidden = true
+			break
+		}
+	}
+	if !foundHidden {
+		t.Fatalf("show_hidden=true list did not include .hidden: %#v", hiddenList.Entries)
+	}
+}
+
+func TestServerFSAPIListRejectsInvalidPathsAndMissingPermission(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	filePath := filepath.Join(home, "notes.txt")
+	if err := os.WriteFile(filePath, []byte("note"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	missingPath := filepath.Join(home, "missing")
+	outsidePath := filepath.Join(t.TempDir(), "outside")
+	if err := os.Mkdir(outsidePath, 0o755); err != nil {
+		t.Fatalf("os.Mkdir(outside): %v", err)
+	}
+
+	srv, origin := newFSFileTestServer(t, home, session.Meta{CanRead: true}, nil)
+	for _, tc := range []struct {
+		name       string
+		path       string
+		wantStatus int
+		wantError  string
+	}{
+		{name: "missing", path: missingPath, wantStatus: http.StatusNotFound, wantError: "not found"},
+		{name: "not directory", path: filePath, wantStatus: http.StatusBadRequest, wantError: "path is not a directory"},
+		{name: "outside scope", path: outsidePath, wantStatus: http.StatusForbidden, wantError: "path outside filesystem scope"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp := performFSAPIRequest(srv, http.MethodPost, localAPIFSListEndpointPath, origin, fmt.Sprintf(`{"path":%q}`, tc.path))
+			if resp.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d body=%s", resp.Code, tc.wantStatus, resp.Body.String())
+			}
+			envelope := decodeFSAPIEnvelope(t, resp)
+			if envelope.OK || envelope.Error != tc.wantError {
+				t.Fatalf("envelope = %#v, want ok=false error=%q", envelope, tc.wantError)
+			}
+		})
+	}
+
+	noReadSrv, noReadOrigin := newFSFileTestServer(t, home, session.Meta{CanRead: false}, nil)
+	resp := performFSAPIRequest(noReadSrv, http.MethodGet, localAPIFSPathContextEndpointPath, noReadOrigin, "")
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("no read path context status = %d, want %d body=%s", resp.Code, http.StatusForbidden, resp.Body.String())
+	}
+	resp = performFSAPIRequest(noReadSrv, http.MethodPost, localAPIFSListEndpointPath, noReadOrigin, fmt.Sprintf(`{"path":%q}`, home))
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("no read list status = %d, want %d body=%s", resp.Code, http.StatusForbidden, resp.Body.String())
 	}
 }
 

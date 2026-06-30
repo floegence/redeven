@@ -170,6 +170,9 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
       resizeConversationsLabel: t(i18n, k('chat.resizeConversationsLabel')),
       entryLabel: t(i18n, k('chat.entryLabel')),
       newChat: t(i18n, k('chat.newChat')),
+      workingDirPickerHomeLabel: t(i18n, k('chat.workingDirPickerHomeLabel')),
+      workingDirPickerTitle: t(i18n, k('chat.workingDirPickerTitle')),
+      workingDirPickerConfirm: t(i18n, k('chat.workingDirPickerConfirm')),
     },
     threadList: {
       title: t(i18n, k('threadList.title')),

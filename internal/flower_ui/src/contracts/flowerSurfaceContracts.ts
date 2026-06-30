@@ -1070,6 +1070,37 @@ export type FlowerTerminalProcessSnapshot = Readonly<{
   execution_location?: string;
 }>;
 
+export type FlowerWorkingDirectoryEntry = Readonly<{
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  size?: number;
+  modifiedAt?: number;
+}>;
+
+export type FlowerWorkingDirectoryPathContext = Readonly<{
+  agentHomePathAbs: string;
+  homePathAbs: string;
+  defaultRootId: string;
+  roots: readonly Readonly<{
+    id: string;
+    label: string;
+    pathAbs: string;
+    kind: string;
+    permissions: Readonly<{
+      read: boolean;
+      write: boolean;
+    }>;
+    hidden?: boolean;
+    system?: boolean;
+  }>[];
+}>;
+
+export type FlowerWorkingDirectoryListInput = Readonly<{
+  path: string;
+  showHidden?: boolean;
+}>;
+
 export type FlowerSurfaceRuntimeDescriptor = Readonly<{
   runtime_id: string;
   runtime_kind: 'local_environment' | 'env_local';
@@ -1100,6 +1131,8 @@ export type FlowerSurfaceAdapter = Readonly<{
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;
   submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<void>;
   readTerminalProcess?: (input: FlowerTerminalProcessReadRequest) => Promise<FlowerTerminalProcessSnapshot>;
+  getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
+  listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
 }>;

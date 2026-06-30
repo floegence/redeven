@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/floegence/redeven/internal/config"
@@ -11,14 +13,10 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestService_CreateThread_RejectsWorkingDirOutsideConfiguredRoots(t *testing.T) {
-	t.Parallel()
-
+func newWorkingDirTestService(t *testing.T, rootDir string) *Service {
+	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	stateDir := t.TempDir()
-
-	rootDir := t.TempDir()
-	outsideDir := t.TempDir()
 	scope, err := filesystemscope.NewRegistry(&config.Config{
 		AgentHomeDir: rootDir,
 		FilesystemScope: &config.FilesystemScope{
@@ -66,8 +64,11 @@ func TestService_CreateThread_RejectsWorkingDirOutsideConfiguredRoots(t *testing
 		t.Fatalf("NewService: %v", err)
 	}
 	t.Cleanup(func() { _ = svc.Close() })
+	return svc
+}
 
-	meta := &session.Meta{
+func workingDirTestMeta() *session.Meta {
+	return &session.Meta{
 		ChannelID:         "ch_test_threads_working_dir",
 		EndpointID:        "env_123",
 		NamespacePublicID: "ns_test",
@@ -78,8 +79,46 @@ func TestService_CreateThread_RejectsWorkingDirOutsideConfiguredRoots(t *testing
 		CanExecute:        true,
 		CanAdmin:          false,
 	}
+}
 
-	if _, err := svc.CreateThread(context.Background(), meta, "test", "", "", outsideDir); err == nil {
+func TestService_CreateThread_StoresWorkingDir(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	projectDir := filepath.Join(rootDir, "project")
+	if err := os.Mkdir(projectDir, 0o755); err != nil {
+		t.Fatalf("os.Mkdir(project): %v", err)
+	}
+	projectReal, err := filepath.EvalSymlinks(projectDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(project): %v", err)
+	}
+	svc := newWorkingDirTestService(t, rootDir)
+
+	view, err := svc.CreateThread(context.Background(), workingDirTestMeta(), "test", "", "", projectDir)
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if view.WorkingDir != projectReal {
+		t.Fatalf("WorkingDir = %q, want %q", view.WorkingDir, projectReal)
+	}
+}
+
+func TestService_CreateThread_RejectsInvalidWorkingDir(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	outsideDir := t.TempDir()
+	filePath := filepath.Join(rootDir, "notes.txt")
+	if err := os.WriteFile(filePath, []byte("note"), 0o600); err != nil {
+		t.Fatalf("os.WriteFile: %v", err)
+	}
+	svc := newWorkingDirTestService(t, rootDir)
+
+	if _, err := svc.CreateThread(context.Background(), workingDirTestMeta(), "test", "", "", outsideDir); err == nil {
 		t.Fatalf("expected CreateThread to reject outside working_dir")
+	}
+	if _, err := svc.CreateThread(context.Background(), workingDirTestMeta(), "test", "", "", filePath); err == nil || err.Error() != "working_dir must be a directory" {
+		t.Fatalf("CreateThread file error = %v, want working_dir must be a directory", err)
 	}
 }

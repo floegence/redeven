@@ -144,6 +144,32 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       <div role="dialog">{props.children}</div>
     </Show>
   ),
+  DirectoryPicker: (props: any) => {
+    const [selectedPath, setSelectedPath] = createSignal(props.initialPath ?? '/');
+    return (
+      <Show when={props.open}>
+        <div role="dialog" aria-label={props.title} data-directory-picker="true">
+          <div>{props.homeLabel}</div>
+          {(props.files ?? []).map((file: any) => (
+            <button
+              type="button"
+              data-directory-picker-entry={file.path}
+              onClick={() => setSelectedPath(file.path)}
+            >
+              {file.name}
+            </button>
+          ))}
+          <button
+            type="button"
+            data-directory-picker-confirm="true"
+            onClick={() => props.onSelect?.(selectedPath())}
+          >
+            {props.confirmText}
+          </button>
+        </div>
+      </Show>
+    );
+  },
   Input: (props: any) => (
     <input
       class={props.class}

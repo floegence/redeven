@@ -9,8 +9,8 @@ import { normalizeAbsolutePath, toHomeDisplayPath } from '../utils/askFlowerPath
 import {
   toPickerTreeAbsolutePath,
   toPickerTreePath,
-} from '../utils/directoryPickerTree';
-import { createDirectoryPickerDataSource } from '../utils/createDirectoryPickerDataSource';
+} from '../../../../../flower_ui/src/filePicker/directoryPickerTree';
+import { createDirectoryPickerDataSource } from '../../../../../flower_ui/src/filePicker/createDirectoryPickerDataSource';
 import { useI18n } from '../i18n';
 import { useCodexContext } from './CodexProvider';
 import { CodexFileBrowserFAB } from './CodexFileBrowserFAB';

@@ -368,6 +368,9 @@ export type FlowerSurfaceCopy = Readonly<{
     resizeConversationsLabel: string;
     entryLabel: string;
     newChat: string;
+    workingDirPickerHomeLabel: string;
+    workingDirPickerTitle: string;
+    workingDirPickerConfirm: string;
   }>;
   threadList: FlowerThreadListCopy;
   emptyState: FlowerEmptyStateCopy;
@@ -534,6 +537,9 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     resizeConversationsLabel: 'Resize conversations',
     entryLabel: 'Flower',
     newChat: 'New chat',
+    workingDirPickerHomeLabel: 'Home',
+    workingDirPickerTitle: 'Select working directory',
+    workingDirPickerConfirm: 'Select',
   },
   threadList: {
     title: 'Conversations',

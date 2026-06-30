@@ -17,6 +17,7 @@ var (
 	ErrPathOutsideScope = errors.New("path outside filesystem scope")
 	ErrReadDenied       = errors.New("read permission denied")
 	ErrWriteDenied      = errors.New("write permission denied")
+	ErrPathNotDirectory = errors.New("path is not a directory")
 )
 
 type PermissionSet struct {
@@ -231,7 +232,7 @@ func (r *Registry) Resolve(path string, opts ResolveOptions) (ResolvedPath, erro
 			return ResolvedPath{}, err
 		}
 		if !info.IsDir() {
-			return ResolvedPath{}, errors.New("path must be a directory")
+			return ResolvedPath{}, ErrPathNotDirectory
 		}
 	}
 	if opts.ForWrite {

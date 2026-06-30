@@ -7457,6 +7457,8 @@ function runtimeFlowerPath(rawPath: unknown): string {
     return true;
   };
   if (pathname === '/_redeven_proxy/api/settings' && query === '') return pathWithQuery;
+  if (pathname === '/_redeven_proxy/api/fs/path_context' && query === '') return pathWithQuery;
+  if (pathname === '/_redeven_proxy/api/fs/list' && query === '') return pathWithQuery;
   if (pathname === '/_redeven_proxy/api/ai/provider_bundle' && query === '') return pathWithQuery;
   if (pathname === '/_redeven_proxy/api/ai/models' && query === '') return pathWithQuery;
   if (pathname === '/_redeven_proxy/api/ai/uploads' && query === '') return pathWithQuery;
@@ -7482,6 +7484,7 @@ function runtimeFlowerMethodAllowed(path: string, method: RuntimeFlowerRequest['
   switch (method) {
     case 'GET':
       return pathname === '/_redeven_proxy/api/settings'
+        || pathname === '/_redeven_proxy/api/fs/path_context'
         || pathname === '/_redeven_proxy/api/ai/models'
         || pathname === '/_redeven_proxy/api/ai/threads'
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname)
@@ -7492,6 +7495,7 @@ function runtimeFlowerMethodAllowed(path: string, method: RuntimeFlowerRequest['
         || /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(pathname);
     case 'POST':
       return pathname === '/_redeven_proxy/api/ai/uploads'
+        || pathname === '/_redeven_proxy/api/fs/list'
         || pathname === '/_redeven_proxy/api/ai/threads'
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u.test(pathname)
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/turns$/u.test(pathname)

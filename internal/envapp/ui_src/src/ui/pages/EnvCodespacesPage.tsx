@@ -50,7 +50,7 @@ import { readDesktopSessionContextSnapshot } from "../services/desktopSessionCon
 import { RedevenLoadingCurtain } from "../primitives/RedevenLoadingCurtain";
 import { buildFilePathFlowerTurnLauncherIntent } from "../utils/filePathAskFlower";
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../utils/openDirectoryInTerminal";
-import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPickerTreeAbsolutePath } from "../utils/directoryPickerTree";
+import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPickerTreeAbsolutePath } from "../../../../../flower_ui/src/filePicker/directoryPickerTree";
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from "../workbench/surface/workbenchWheelInteractive";
 import { FloatingContextMenu, type FloatingContextMenuItem } from "../widgets/FloatingContextMenu";
