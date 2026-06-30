@@ -3915,12 +3915,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const activityItemNeedsAttention = (item: Pick<FlowerActivityItem, 'status' | 'requires_approval' | 'severity' | 'needs_attention'>): boolean => (
+  const activityItemAwaitingApproval = (item: Pick<FlowerActivityItem, 'status' | 'requires_approval' | 'approval_state'>): boolean => (
+    item.requires_approval === true
+    && item.approval_state === 'requested'
+    && item.status === 'waiting'
+  );
+
+  const activityItemNeedsAttention = (item: Pick<FlowerActivityItem, 'status' | 'requires_approval' | 'approval_state' | 'severity' | 'needs_attention'>): boolean => (
     item.needs_attention
     ||
     item.status === 'error'
     || item.status === 'waiting'
-    || item.requires_approval === true
+    || activityItemAwaitingApproval(item)
     || item.severity === 'blocking'
   );
 
@@ -3950,7 +3956,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return item.status !== 'success';
   };
   const activityItemVisible = (item: FlowerActivityItem): boolean => {
-    if (item.requires_approval && !activityItemHasVisiblePayload(item)) return false;
+    if (activityItemAwaitingApproval(item) && !activityItemHasVisiblePayload(item)) return false;
     return true;
   };
 
@@ -4189,7 +4195,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return value.primaryAction ?? (value.title.kind === 'file' ? disabledFileAction(value.title.display_name) : null);
     });
     const displayStatus = createMemo(() => item().status);
-    const isReadOnly = createMemo(() => item().requires_approval);
+    const isReadOnly = createMemo(() => activityItemAwaitingApproval(item()));
     const duration = createMemo(() => {
       const value = item();
       return formatActivityDuration((value.started_at_unix_ms && value.ended_at_unix_ms
