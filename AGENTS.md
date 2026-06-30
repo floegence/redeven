@@ -270,6 +270,19 @@ plugin-platform mechanics belong upstream in `redevplugin`, including lifecycle
 endpoints, package schemas, bridge protocol, storage/network/runtime brokers,
 operation/stream envelopes, runtime supervision, generated SDKs, and validators.
 
+The intended dependency shape is library consumption, not source sharing:
+
+- Redeven imports released ReDevPlugin Go packages for Host integration,
+  registry/lifecycle APIs, DTOs, adapter interfaces, and mountable HTTP handlers.
+- Redeven imports released ReDevPlugin npm packages for plugin surface hosting,
+  bridge SDKs, generated clients, and host-neutral UI helpers.
+- Redeven bundles a released, signed `redevplugin-runtime` binary selected by
+  release metadata for the current platform and channel.
+- Redeven references released ReDevPlugin schemas, generated contracts, and
+  compatibility hashes. It must not edit, fork, or hand-copy those contracts.
+- Redeven contributes product policy and concrete adapters around those
+  imports; it does not become a source tree for ReDevPlugin implementation.
+
 The intended Redeven code shape is a narrow integration layer:
 
 - one or more host packages that configure released ReDevPlugin libraries,
@@ -337,6 +350,24 @@ Redeven may add product-facing wrappers such as `redeven plugin ...` commands or
 Env App pages, but those wrappers must delegate to released ReDevPlugin APIs.
 If a wrapper needs a new platform capability, add and release that capability in
 `redevplugin` before wiring it into Redeven.
+
+Before adding any Redeven plugin-related package, classify it in review:
+
+- Host adapter: allowed in Redeven. It maps Redeven sessions, local policy,
+  filesystem roots, audit/diagnostic sinks, vault access, product UI placement,
+  runtime artifact selection, or a concrete business resource into a released
+  ReDevPlugin interface.
+- Product wrapper: allowed in Redeven. It exposes a Redeven CLI, Env App,
+  Desktop, Activity Bar, Workbench, Settings, or Flower/Floret flow over released
+  ReDevPlugin lifecycle APIs and generated clients.
+- Platform mechanism: not allowed in Redeven. If the package parses manifests,
+  validates packages, mints plugin tokens or asset tickets, serves plugin assets,
+  runs plugin WASM, defines broker semantics, stores plugin registry state,
+  owns operation/stream protocol, or supervises `redevplugin-runtime`, implement
+  and release it in ReDevPlugin first.
+- Business capability: allowed in Redeven only as an adapter that is invoked
+  after ReDevPlugin has resolved identity, permission, confirmation, token,
+  lease/quota, revoke epoch, and audit context.
 
 The default conflict-resolution rule is simple: plugin-platform mechanics live
 in ReDevPlugin, Redeven product integration lives in Redeven. If a proposed
@@ -441,6 +472,22 @@ same feature must update the relevant Go module version, npm package version,
 released runtime artifact reference, compatibility manifest or contract hashes,
 and local verification scripts together. A Redeven change that depends on
 unreleased ReDevPlugin behavior is not ready for integration.
+
+The minimum ReDevPlugin upgrade review in Redeven must answer all of these:
+
+- Which released Go module, npm package, runtime artifact, schema/contract hash,
+  and compatibility manifest versions are being consumed?
+- Which Redeven adapters are newly registered or changed, and which released
+  ReDevPlugin interface do they implement?
+- Which product surfaces are added or changed, and how do they still use the
+  ReDevPlugin sandbox bootstrap, bridge lifecycle, lifecycle API, and generated
+  clients?
+- Which business capabilities are exposed, and where are their permission,
+  confirmation, operation/stream, audit, quota, and revocation checks enforced by
+  ReDevPlugin?
+- Which local checks prove the integration uses released artifacts only and does
+  not depend on `../redevplugin`, `replace`, `go.work`, local npm links, copied
+  contracts, or copied runtime binaries?
 
 Redeven-side plugin code layout must make the adapter boundary visible:
 
