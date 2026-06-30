@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -309,8 +310,15 @@ func (p *terminalProcess) Read(req terminalProcessReadRequest) terminalProcessSn
 }
 
 func (p *terminalProcess) WaitForYield(yieldMS int64) terminalProcessSnapshot {
+	return p.WaitForYieldContext(context.Background(), yieldMS)
+}
+
+func (p *terminalProcess) WaitForYieldContext(ctx context.Context, yieldMS int64) terminalProcessSnapshot {
 	if p == nil {
 		return terminalProcessSnapshot{}
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	if yieldMS <= 0 {
 		yieldMS = terminalProcessDefaultYieldMS
@@ -319,8 +327,19 @@ func (p *terminalProcess) WaitForYield(yieldMS int64) terminalProcessSnapshot {
 		yieldMS = terminalProcessMaxYieldMS
 	}
 	deadline := time.Now().Add(time.Duration(yieldMS) * time.Millisecond)
+	stopWake := context.AfterFunc(ctx, func() {
+		p.mu.Lock()
+		p.cond.Broadcast()
+		p.mu.Unlock()
+	})
+	defer stopWake()
 	p.mu.Lock()
 	for p.status == terminalProcessStatusRunning {
+		if ctx.Err() != nil {
+			p.mu.Unlock()
+			snapshot, _ := p.Terminate()
+			return snapshot
+		}
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			break
@@ -332,6 +351,11 @@ func (p *terminalProcess) WaitForYield(yieldMS int64) terminalProcessSnapshot {
 		})
 		p.cond.Wait()
 		timer.Stop()
+	}
+	if ctx.Err() != nil && p.status == terminalProcessStatusRunning {
+		p.mu.Unlock()
+		snapshot, _ := p.Terminate()
+		return snapshot
 	}
 	snapshot := p.snapshotLocked(0)
 	p.mu.Unlock()

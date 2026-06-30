@@ -93,6 +93,37 @@ func TestTerminalProcessManagerReadWriteAndTerminate(t *testing.T) {
 	}
 }
 
+func TestTerminalProcessWaitForYieldContextTerminatesOnCancel(t *testing.T) {
+	workspace := t.TempDir()
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
+
+	proc, err := manager.Start(terminalProcessStartRequest{
+		EndpointID: "env_test",
+		ThreadID:   "thread_test",
+		RunID:      "run_test",
+		TurnID:     "turn_test",
+		ToolID:     "tool_test",
+		ToolName:   "terminal.exec",
+		Command:    "sleep 5",
+		CwdAbs:     workspace,
+		Shell:      "/bin/bash",
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	snapshot := proc.WaitForYieldContext(ctx, 10_000)
+	if snapshot.Status != terminalProcessStatusCanceled {
+		t.Fatalf("status=%q, want canceled", snapshot.Status)
+	}
+	if snapshot.EndedAtUnixMs <= 0 || snapshot.DurationMS < 0 {
+		t.Fatalf("ended_at_ms=%d duration_ms=%d", snapshot.EndedAtUnixMs, snapshot.DurationMS)
+	}
+}
+
 func TestHandleToolCallTerminalExecQuickCompletionPersistsProcessFields(t *testing.T) {
 	workspace := t.TempDir()
 	store := openTerminalProcessTestStore(t)
@@ -126,6 +157,48 @@ func TestHandleToolCallTerminalExecQuickCompletionPersistsProcessFields(t *testi
 	}
 	if _, ok := result["timeout_ms"]; ok {
 		t.Fatalf("timeout_ms should not be present: %#v", result)
+	}
+}
+
+func TestHandleToolCallTerminalExecCancelTerminatesProcess(t *testing.T) {
+	workspace := t.TempDir()
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
+	store := openTerminalProcessTestStore(t)
+	defer func() { _ = store.Close() }()
+	upsertTerminalProcessTestRun(t, store, "env_1", "thread_1", "run_cancel", "turn_1")
+
+	r := newTerminalProcessTestRun(workspace, &Service{terminalProcesses: manager}, store, "env_1", "thread_1", "run_cancel", "turn_1")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	outcome, err := r.handleToolCall(ctx, "tool_cancel", "terminal.exec", map[string]any{
+		"command":  "sleep 5",
+		"yield_ms": 10_000,
+	})
+	if err != nil {
+		t.Fatalf("handleToolCall: %v", err)
+	}
+	if outcome == nil || outcome.Success || outcome.ToolError == nil || outcome.ToolError.Code != "CANCELED" {
+		t.Fatalf("outcome=%#v, want canceled tool error", outcome)
+	}
+	result, ok := outcome.Result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type=%T, want map", outcome.Result)
+	}
+	if got := strings.TrimSpace(anyToString(result["status"])); got != terminalProcessStatusCanceled {
+		t.Fatalf("status=%q, want canceled in result payload %#v", got, result)
+	}
+	processID := strings.TrimSpace(anyToString(result["process_id"]))
+	if processID == "" {
+		t.Fatalf("missing process_id in canceled result: %#v", result)
+	}
+	snapshot, err := manager.Read(terminalProcessReadRequest{ProcessID: processID})
+	if err != nil {
+		t.Fatalf("Read canceled process: %v", err)
+	}
+	if snapshot.Status != terminalProcessStatusCanceled {
+		t.Fatalf("process status=%q, want canceled", snapshot.Status)
 	}
 }
 

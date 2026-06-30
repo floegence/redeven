@@ -1072,6 +1072,36 @@ func TestFloretToolResultFromFlowerUsesContractSafeStructuredAndText(t *testing.
 	assertContractSafeActivityPayload(t, textPayload, 0)
 }
 
+func TestFloretToolResultFromFlowerMapsAbortedToCanceledActivityStatus(t *testing.T) {
+	t.Parallel()
+
+	result, err := floretToolResultFromFlower(newRun(runOptions{}), ToolResult{
+		ToolID:   "call_terminal_canceled",
+		ToolName: "terminal.exec",
+		Status:   toolResultStatusAborted,
+		Summary:  "tool.aborted",
+		Details:  "Terminal process was canceled",
+		Data: map[string]any{
+			"status":     terminalProcessStatusCanceled,
+			"process_id": "tp_canceled",
+			"command":    "sleep 10",
+		},
+		Error: &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Terminal process was canceled"},
+	})
+	if err != nil {
+		t.Fatalf("floretToolResultFromFlower: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("aborted terminal result must project as canceled activity, not generic error: %#v", result)
+	}
+	if got := result.Metadata["tool_result_status"]; got != string(observation.ActivityStatusCanceled) {
+		t.Fatalf("tool_result_status=%#v, want canceled", got)
+	}
+	if result.Activity == nil || result.Activity.Payload["status"] != toolResultStatusAborted {
+		t.Fatalf("activity=%#v, want aborted product payload", result.Activity)
+	}
+}
+
 func TestFloretToolResultFromFlowerSanitizesNestedLegacyErrorEnvelope(t *testing.T) {
 	t.Parallel()
 
