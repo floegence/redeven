@@ -308,6 +308,40 @@ html.dark .flower-component-shell {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 16%, transparent);
 }
 
+.flower-working-dir-chip[data-copied='true'] {
+  border-color: color-mix(in srgb, #16a34a 38%, var(--border) 62%);
+  background: color-mix(in srgb, #16a34a 8%, transparent);
+  color: color-mix(in srgb, #16a34a 74%, var(--foreground) 26%);
+}
+
+.flower-working-dir-chip-icon {
+  position: relative;
+  display: inline-flex;
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+
+.flower-working-dir-chip-icon > svg {
+  position: absolute;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.flower-working-dir-chip-icon-copied,
+.flower-working-dir-chip[data-copied='true'] .flower-working-dir-chip-icon-idle {
+  opacity: 0;
+  transform: scale(0.82);
+}
+
+.flower-working-dir-chip[data-copied='true'] .flower-working-dir-chip-icon-copied {
+  opacity: 1;
+  transform: scale(1);
+}
+
 .flower-working-dir-chip-label {
   min-width: 0;
   overflow: hidden;

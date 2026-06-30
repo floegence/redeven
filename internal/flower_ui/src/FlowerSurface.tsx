@@ -664,16 +664,42 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [workingDirectoryPathContext, setWorkingDirectoryPathContext] = createSignal<FlowerWorkingDirectoryPathContext | null>(null);
   const [, setWorkingDirectoryPathContextLoading] = createSignal(false);
   const [workingDirectoryPickerOpen, setWorkingDirectoryPickerOpen] = createSignal(false);
+  const [workingDirectoryCopied, setWorkingDirectoryCopied] = createSignal(false);
   const [composerMoreOpen, setComposerMoreOpen] = createSignal(false);
   const [composerControlLayout, setComposerControlLayout] = createSignal<FlowerComposerControlLayout>({
     availableWidth: 0,
     moreWidth: FLOWER_COMPOSER_MORE_WIDTH_FALLBACK_PX,
     itemWidths: {},
   });
+  let workingDirectoryCopyResetTimer: number | undefined;
+
+  const clearWorkingDirectoryCopyTimer = () => {
+    if (workingDirectoryCopyResetTimer !== undefined) {
+      window.clearTimeout(workingDirectoryCopyResetTimer);
+      workingDirectoryCopyResetTimer = undefined;
+    }
+  };
+
+  const clearWorkingDirectoryCopyConfirmation = () => {
+    clearWorkingDirectoryCopyTimer();
+    setWorkingDirectoryCopied(false);
+  };
+
+  const confirmWorkingDirectoryCopied = () => {
+    clearWorkingDirectoryCopyConfirmation();
+    setWorkingDirectoryCopied(true);
+    workingDirectoryCopyResetTimer = window.setTimeout(() => {
+      setWorkingDirectoryCopied(false);
+      workingDirectoryCopyResetTimer = undefined;
+    }, MESSAGE_COPY_RESET_MS);
+  };
 
   createEffect(on(
     () => selectedThreadID(),
-    (next) => { if (next) setPreviewChip(null); },
+    (next) => {
+      if (next) setPreviewChip(null);
+      clearWorkingDirectoryCopyConfirmation();
+    },
     { defer: false },
   ));
 
@@ -1113,10 +1139,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const path = displayedWorkingDirectory();
       if (!path) return;
       setComposerMoreOpen(false);
-      await writeClipboardText(path, copy().threadList.workingDirectoryLabel);
+      setThreadActionError('');
+      try {
+        await writeClipboardText(path, copy().threadList.workingDirectoryLabel);
+        confirmWorkingDirectoryCopied();
+      } catch (error) {
+        setThreadActionError(getErrorMessage(error));
+      }
       return;
     }
     setComposerMoreOpen(false);
+    clearWorkingDirectoryCopyConfirmation();
     await openWorkingDirectoryPicker();
   };
   createEffect(() => {
@@ -3076,6 +3109,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       window.clearTimeout(copiedApprovalResetTimer);
       copiedApprovalResetTimer = undefined;
     }
+    clearWorkingDirectoryCopyTimer();
   });
 
   const yieldAnimationFrame = async () => {
@@ -5458,6 +5492,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         workingDirectoryChipInteractive() && 'flower-working-dir-chip-interactive',
       )}
       data-flower-composer-control="working_dir"
+      data-copied={workingDirectoryCopied() ? 'true' : 'false'}
       title={workingDirectoryChipTitle()}
       aria-label={workingDirectoryChipTitle()}
       aria-disabled={workingDirectoryChipInteractive() ? undefined : 'true'}
@@ -5467,7 +5502,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         void handleWorkingDirectoryChipClick();
       }}
     >
-      <FolderOpen class="h-3.5 w-3.5" aria-hidden="true" />
+      <span class="flower-working-dir-chip-icon" aria-hidden="true">
+        <FolderOpen class="flower-working-dir-chip-icon-idle h-3.5 w-3.5" />
+        <Check class="flower-working-dir-chip-icon-copied h-3.5 w-3.5" />
+      </span>
       <span class="flower-working-dir-chip-label">{displayedWorkingDirectoryLabel()}</span>
     </button>
   );
