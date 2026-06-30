@@ -912,8 +912,24 @@ describe('main routing', () => {
     expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/approvals$/u");
     expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/context\\/compact$/u");
     expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/cancel$/u");
+    expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/runs\\/[^/]+\\/terminal\\/[^/]+\\/read$/u");
+    expect(pathSrc).toContain('allowsTerminalReadQuery(parsed.searchParams)');
+    expect(pathSrc).toContain("'after_seq'");
+    expect(pathSrc).toContain("'wait_ms'");
+    expect(pathSrc).toContain("'max_bytes'");
+    expect(pathSrc).not.toContain('terminal\\/[^/]+\\/write');
+    expect(pathSrc).not.toContain('terminal\\/[^/]+\\/terminate');
     expect(pathSrc).toContain("throw new Error('Flower runtime request path is not allowed.');");
     expect(pathSrc).not.toContain("startsWith('/_redeven_proxy/api/ai/threads')");
+
+    const methodStart = mainSrc.indexOf('function runtimeFlowerMethodAllowed(');
+    const methodEnd = mainSrc.indexOf('async function requestRuntimeFlower(', methodStart);
+    expect(methodStart).toBeGreaterThanOrEqual(0);
+    expect(methodEnd).toBeGreaterThan(methodStart);
+    const methodSrc = mainSrc.slice(methodStart, methodEnd);
+    expect(methodSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/runs\\/[^/]+\\/terminal\\/[^/]+\\/read$/u");
+    expect(methodSrc).not.toContain('terminal\\/[^/]+\\/write');
+    expect(methodSrc).not.toContain('terminal\\/[^/]+\\/terminate');
 
     const requestStart = mainSrc.indexOf('async function requestRuntimeFlower(');
     const requestEnd = mainSrc.indexOf('async function assertLocalEnvironmentRuntimeStopped(', requestStart);
