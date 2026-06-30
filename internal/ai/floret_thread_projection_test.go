@@ -3,9 +3,11 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
+	flconfig "github.com/floegence/floret/config"
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
@@ -68,6 +70,75 @@ func TestFloretThreadProjectionPersistsFullAssistantContentAfterActivity(t *test
 	}
 	if markdown.Content != fullAnswer {
 		t.Fatalf("snapshot markdown=%q, want full answer", markdown.Content)
+	}
+}
+
+func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *testing.T) {
+	fullAnswer := "Here are browser desktop options:\n\n" +
+		"### 1. **HeyPuter/puter**\n" +
+		"### 2. **linuxserver/docker-webtop**\n" +
+		"The Webtop image can be based on Ubuntu/Alpine/Arch/Fedora and still stay readable in Flower.\n\n" +
+		strings.Repeat("This sentence keeps the answer longer than the Floret preview budget. ", 12) +
+		"Final sentence that must survive the completed turn projection."
+	if len([]rune(fullAnswer)) <= 500 {
+		t.Fatalf("test fixture must exceed preview budget, got %d runes", len([]rune(fullAnswer)))
+	}
+
+	ctx := context.Background()
+	host, err := flruntime.NewHost(flruntime.HostOptions{
+		Config: flconfig.Config{
+			Provider:     flconfig.ProviderFake,
+			Model:        "fake-model",
+			FakeResponse: fullAnswer,
+			SystemPrompt: "test",
+		},
+		Store: flruntime.NewMemoryStore(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer host.Close()
+	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: "thread_full_result_projection"}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
+		RunID:    "run_full_result_projection",
+		ThreadID: "thread_full_result_projection",
+		TurnID:   "msg_full_result_projection",
+		Input:    "find options",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	r := newRun(runOptions{})
+	r.id = "run_full_result_projection"
+	r.threadID = "thread_full_result_projection"
+	r.messageID = "msg_full_result_projection"
+	r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID: "thread_full_result_projection",
+		TurnID:   "msg_full_result_projection",
+		RunID:    "run_full_result_projection",
+		TraceID:  "run_full_result_projection",
+		Segments: []flruntime.ThreadTurnProjectionSegment{
+			{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: fullAnswer},
+		},
+	})
+	if !r.applyFloretThreadProjection(result.Projection) {
+		t.Fatalf("completed turn projection was not applied: %#v", result.Projection)
+	}
+	rawJSON, assistantText, _, err := r.snapshotAssistantMessageJSON()
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
+	}
+	if assistantText != fullAnswer {
+		t.Fatalf("assistantText length=%d, want full %d\ntext=%q", len([]rune(assistantText)), len([]rune(fullAnswer)), assistantText)
+	}
+	if strings.Contains(rawJSON, "HeyPuterputer") ||
+		strings.Contains(rawJSON, "linuxserverdocker-webtop") ||
+		strings.Contains(rawJSON, "UbuntuFedora") ||
+		strings.Contains(rawJSON, " L...") {
+		t.Fatalf("snapshot contains downgraded preview text: %s", rawJSON)
 	}
 }
 
