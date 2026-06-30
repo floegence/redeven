@@ -1293,6 +1293,68 @@ func TestFloretToolRegistryKeepsTerminalExecOnLocalRuntime(t *testing.T) {
 	}
 }
 
+func TestFloretToolRegistryPublishesTerminalProcessActivityUpdateBeforeYieldResult(t *testing.T) {
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
+	r := newRun(runOptions{
+		AgentHomeDir: t.TempDir(),
+		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+		EndpointID:   "env_test",
+		Service:      &Service{terminalProcesses: manager},
+	})
+	registry, err := buildFloretToolRegistry(r, []ToolDef{{
+		Name:        "terminal.exec",
+		Description: "Execute a shell command.",
+		InputSchema: json.RawMessage(
+			`{"type":"object","properties":{"command":{"type":"string"},"yield_ms":{"type":"integer"}},"required":["command"],"additionalProperties":false}`,
+		),
+		Source:    "builtin",
+		Namespace: "builtin.terminal",
+	}}, nil)
+	if err != nil {
+		t.Fatalf("buildFloretToolRegistry: %v", err)
+	}
+
+	var updates []fltools.ToolActivityUpdate
+	opts := floretToolRegistryParentRunOptions(r, "terminal_activity_update")
+	opts.ActivityUpdated = func(update fltools.ToolActivityUpdate) {
+		updates = append(updates, update)
+	}
+	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
+		ID:   "call_live_terminal",
+		Name: "terminal.exec",
+		Args: `{"command":"sleep 0.2","yield_ms":1000}`,
+	}, func(context.Context, fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
+		return fltools.PermissionDecisionAllow, nil
+	}, opts)
+	if result.IsError {
+		t.Fatalf("registry result error text=%q structured=%#v", result.Text, result.Structured)
+	}
+	if len(updates) == 0 {
+		t.Fatal("terminal.exec should publish an activity update as soon as the process starts")
+	}
+	update := updates[0]
+	if update.CallID != "call_live_terminal" || update.Name != "terminal.exec" {
+		t.Fatalf("update identity=%q/%q", update.CallID, update.Name)
+	}
+	if update.Activity == nil {
+		t.Fatal("update activity is nil")
+	}
+	payload := update.Activity.Payload
+	if got := strings.TrimSpace(anyToString(payload["status"])); got != terminalProcessStatusRunning {
+		t.Fatalf("activity status=%q, want running; payload=%#v", got, payload)
+	}
+	if got := strings.TrimSpace(anyToString(payload["process_id"])); got == "" || !strings.HasPrefix(got, "tp_") {
+		t.Fatalf("activity process_id=%q, want terminal process id; payload=%#v", got, payload)
+	}
+	if got := strings.TrimSpace(anyToString(payload["command"])); got != "sleep 0.2" {
+		t.Fatalf("activity command=%q, want command payload", got)
+	}
+	if update.Activity.Renderer != observation.ActivityRendererTerminal {
+		t.Fatalf("renderer=%q, want terminal", update.Activity.Renderer)
+	}
+}
+
 func TestFloretToolRegistryDoesNotAddProfileOnlyMutationBlock(t *testing.T) {
 	t.Parallel()
 

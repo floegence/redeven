@@ -11,8 +11,9 @@ import (
 )
 
 type builtInToolHandler struct {
-	r        *run
-	toolName string
+	r               *run
+	toolName        string
+	activityUpdater toolActivityUpdater
 }
 
 func toolSuccessSummary(toolName string) string {
@@ -68,7 +69,7 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (ToolRe
 	if toolName == "" {
 		toolName = strings.TrimSpace(h.toolName)
 	}
-	outcome, err := h.r.handleToolCall(ctx, strings.TrimSpace(call.ID), toolName, cloneAnyMap(call.Args))
+	outcome, err := h.r.handleToolCall(ctx, strings.TrimSpace(call.ID), toolName, cloneAnyMap(call.Args), h.activityUpdater)
 	if err != nil {
 		return ToolResult{}, err
 	}

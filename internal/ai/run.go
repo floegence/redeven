@@ -2085,6 +2085,8 @@ type toolCallOutcome struct {
 	RecoveryAction string
 }
 
+type toolActivityUpdater func(activity *observation.ActivityPresentation, metadata map[string]any)
+
 const (
 	toolCallStatusPending = "pending"
 	toolCallStatusRunning = "running"
@@ -2264,7 +2266,7 @@ func contextHasFloretToolExecutionAuthorization(ctx context.Context, toolID stri
 		strings.TrimSpace(auth.toolName) == strings.TrimSpace(toolName)
 }
 
-func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string, args map[string]any) (*toolCallOutcome, error) {
+func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string, args map[string]any, activityUpdaters ...toolActivityUpdater) (*toolCallOutcome, error) {
 	toolID = strings.TrimSpace(toolID)
 	if toolID == "" {
 		var err error
@@ -2417,8 +2419,13 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		return outcome, nil
 	}
 
+	var activityUpdater toolActivityUpdater
+	if len(activityUpdaters) > 0 {
+		activityUpdater = activityUpdaters[0]
+	}
+
 	if toolName == "terminal.exec" {
-		terminalOutcome, terminalErr := r.handleTerminalExecProcessTool(ctx, meta, toolID, args, argsForPersist, toolStartedAt, toolSpanID)
+		terminalOutcome, terminalErr := r.handleTerminalExecProcessTool(ctx, meta, toolID, args, argsForPersist, toolStartedAt, toolSpanID, activityUpdater)
 		if terminalErr != nil {
 			setToolError(terminalErr, "", terminalOutcome.Result)
 			return outcome, nil
@@ -4257,7 +4264,7 @@ type terminalExecProcessArgs struct {
 	Description string `json:"description"`
 }
 
-func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.Meta, toolID string, args map[string]any, argsForPersist map[string]any, toolStartedAt time.Time, toolSpanID string) (*toolCallOutcome, *aitools.ToolError) {
+func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.Meta, toolID string, args map[string]any, argsForPersist map[string]any, toolStartedAt time.Time, toolSpanID string, activityUpdater toolActivityUpdater) (*toolCallOutcome, *aitools.ToolError) {
 	outcome := &toolCallOutcome{
 		Success:  false,
 		ToolName: "terminal.exec",
@@ -4326,6 +4333,10 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	})
 	if err != nil {
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
+	}
+	if activityUpdater != nil {
+		snapshot := proc.Read(terminalProcessReadRequest{MaxBytes: terminalProcessDefaultReadBytes})
+		activityUpdater(terminalProcessActivity(snapshot, terminalProcessResultPayload(snapshot)), nil)
 	}
 	snapshot := proc.WaitForYieldContext(ctx, parsed.YieldMS)
 	result := terminalProcessResultPayload(snapshot)

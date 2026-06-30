@@ -13,6 +13,7 @@ import type {
   FlowerSubmitInputRequest,
   FlowerSurfaceAdapter,
   FlowerSurfaceRuntimeDescriptor,
+  FlowerTerminalProcessSnapshot,
   FlowerThreadActivitySnapshot,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
@@ -95,6 +96,7 @@ export type FlowerRuntimeTransport = Readonly<{
   loadThread(threadID: string): Promise<unknown>;
   listThreadLiveEvents(threadID: string, afterSeq: number, limit: number): Promise<unknown>;
   loadSubagentDetail(parentThreadID: string, childThreadID: string, afterOrdinal: number, limit: number): Promise<LoadSubagentDetailResponse>;
+  readTerminalProcess?(runID: string, processID: string, input: { after_seq?: number; wait_ms?: number; max_bytes?: number }): Promise<FlowerTerminalProcessSnapshot>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<LoadThreadResponse>;
   forkThread(threadID: string): Promise<LoadThreadResponse>;
@@ -283,6 +285,19 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         tool_id: trim(input.tool_id),
       });
     },
+    ...(options.transport.readTerminalProcess ? {
+      readTerminalProcess: async (input) => {
+        const runID = trim(input.run_id);
+        const processID = trim(input.process_id);
+        if (!runID) throw new Error('Missing run id.');
+        if (!processID) throw new Error('Missing terminal process id.');
+        return options.transport.readTerminalProcess!(runID, processID, {
+          after_seq: Math.max(0, Math.floor(Number(input.after_seq ?? 0))) || undefined,
+          wait_ms: Math.max(0, Math.min(30_000, Math.floor(Number(input.wait_ms ?? 0)))) || undefined,
+          max_bytes: Math.max(1, Math.min(1_000_000, Math.floor(Number(input.max_bytes ?? 200_000)))) || undefined,
+        });
+      },
+    } : {}),
     ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),
     ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
   };
