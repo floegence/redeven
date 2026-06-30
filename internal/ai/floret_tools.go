@@ -993,6 +993,12 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 	}
 	text, _ := json.Marshal(structured)
 	status := strings.TrimSpace(anyToString(structured["status"]))
+	metadata := map[string]any(nil)
+	isError := status != toolResultStatusSuccess
+	if status == toolResultStatusAborted {
+		metadata = map[string]any{"tool_result_status": string(observation.ActivityStatusCanceled)}
+		isError = false
+	}
 	activity, err := floretActivityForToolResult(r, result)
 	if err != nil {
 		return fltools.Result{}, err
@@ -1002,8 +1008,9 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		Name:       strings.TrimSpace(result.ToolName),
 		Text:       string(text),
 		Structured: structured,
+		Metadata:   metadata,
 		Activity:   activity,
-		IsError:    status != toolResultStatusSuccess,
+		IsError:    isError,
 	}, nil
 }
 

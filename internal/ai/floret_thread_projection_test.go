@@ -183,6 +183,46 @@ func TestSettlePendingToolWithActiveFloretRunUsesActiveHost(t *testing.T) {
 	}
 }
 
+func TestSettlePendingToolWithDetachedRunUsesRunHost(t *testing.T) {
+	host := &recordingFloretHost{
+		settleResult: flruntime.PendingToolSettlementResult{
+			RunID: "run_terminal",
+			Projection: flruntime.ThreadTurnProjection{
+				RunID:    "run_terminal",
+				ThreadID: "thread_terminal",
+				TurnID:   "turn_terminal",
+			},
+		},
+	}
+	activeRun := &run{id: "run_terminal", endpointID: "env_terminal", threadID: "thread_terminal"}
+	activeRun.setActiveFloretHost(host)
+	activeRun.markDetached()
+	svc := &Service{
+		activeRunByTh: map[string]string{},
+		runs:          map[string]*run{"run_terminal": activeRun},
+	}
+	req := flruntime.PendingToolSettlementRequest{
+		RunID:      "run_terminal",
+		TurnID:     "turn_terminal",
+		ToolCallID: "call_terminal",
+		ToolName:   "terminal.exec",
+		Handle:     "tp_terminal",
+		Status:     flruntime.PendingToolSettlementCanceled,
+		Summary:    "Terminal process canceled",
+	}
+
+	result, err := svc.settlePendingToolWithActiveFloretRun(context.Background(), "env_terminal", "thread_terminal", req)
+	if err != nil {
+		t.Fatalf("settlePendingToolWithActiveFloretRun: %v", err)
+	}
+	if result.RunID != "run_terminal" {
+		t.Fatalf("result=%#v, want detached run host result", result)
+	}
+	if len(host.settleRequests) != 1 {
+		t.Fatalf("settle requests=%#v, want one", host.settleRequests)
+	}
+}
+
 func TestSettlePendingToolWithActiveFloretRunRequiresActiveHost(t *testing.T) {
 	svc := &Service{
 		activeRunByTh: map[string]string{runThreadKey("env_terminal", "thread_terminal"): "run_terminal"},

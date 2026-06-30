@@ -206,7 +206,7 @@ func (s *Service) settlePendingToolWithActiveFloretRun(ctx context.Context, endp
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if active := s.activeRunForFloretSettlement(endpointID, threadID, string(req.RunID)); active != nil && !active.isDetached() {
+	if active := s.runForFloretSettlement(endpointID, threadID, string(req.RunID)); active != nil {
 		if host := active.activeFloretHost(); host != nil {
 			return host.SettlePendingTool(ctx, req)
 		}
@@ -214,7 +214,7 @@ func (s *Service) settlePendingToolWithActiveFloretRun(ctx context.Context, endp
 	return flruntime.PendingToolSettlementResult{}, errors.New("active floret settlement host unavailable")
 }
 
-func (s *Service) activeRunForFloretSettlement(endpointID string, threadID string, runID string) *run {
+func (s *Service) runForFloretSettlement(endpointID string, threadID string, runID string) *run {
 	if s == nil {
 		return nil
 	}
@@ -226,10 +226,14 @@ func (s *Service) activeRunForFloretSettlement(endpointID string, threadID strin
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)]) != runID {
+	r := s.runs[runID]
+	if r == nil {
 		return nil
 	}
-	return s.runs[runID]
+	if strings.TrimSpace(r.endpointID) != endpointID || strings.TrimSpace(r.threadID) != threadID {
+		return nil
+	}
+	return r
 }
 
 func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context, endpointID string, threadID string, runID string, messageID string, projection flruntime.ThreadTurnProjection) error {
@@ -239,7 +243,7 @@ func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if active := s.activeRunForFloretSettlement(endpointID, threadID, runID); active != nil {
+	if active := s.runForFloretSettlement(endpointID, threadID, runID); active != nil {
 		if active.acceptsPresentationUpdates() {
 			active.applyFloretThreadProjection(projection)
 		} else {

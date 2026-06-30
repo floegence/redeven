@@ -4327,8 +4327,9 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	if err != nil {
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
 	}
-	snapshot := proc.WaitForYield(parsed.YieldMS)
+	snapshot := proc.WaitForYieldContext(ctx, parsed.YieldMS)
 	result := terminalProcessResultPayload(snapshot)
+	outcome.Result = result
 	if snapshot.Status == terminalProcessStatusRunning {
 		snapshot = proc.MarkPending()
 		result = terminalProcessResultPayload(snapshot)
