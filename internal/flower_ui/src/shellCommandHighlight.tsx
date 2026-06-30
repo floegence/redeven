@@ -142,13 +142,15 @@ export function tokenizeFlowerShellCommand(command: string): readonly FlowerShel
   return tokens;
 }
 
-export function FlowerShellCommandHighlight(props: Readonly<{ command: string }>): JSX.Element {
+export function FlowerShellCommandHighlight(props: Readonly<{ command: string; class?: string; tokenClassPrefix?: string }>): JSX.Element {
+  const codeClass = () => props.class ?? 'flower-approval-command-code';
+  const tokenPrefix = () => props.tokenClassPrefix ?? 'flower-approval-command-token';
   return (
-    <code class="flower-approval-command-code">
+    <code class={codeClass()}>
       <For each={tokenizeFlowerShellCommand(props.command)}>
         {(token) => token.kind === 'text'
           ? token.text
-          : <span class={`flower-approval-command-token flower-approval-command-token-${token.kind}`}>{token.text}</span>}
+          : <span class={`${tokenPrefix()} ${tokenPrefix()}-${token.kind}`}>{token.text}</span>}
       </For>
     </code>
   );

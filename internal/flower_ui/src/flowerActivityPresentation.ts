@@ -60,14 +60,87 @@ export type FlowerActivityDiffFile = Readonly<{
   diff_unavailable_reason: string;
 }>;
 
+export type FlowerActivityTerminalDetail = Readonly<{
+  command: string;
+  output: string;
+  latest_output: string;
+  status: FlowerActivityItem['status'];
+  process_id: string;
+  execution_location: string;
+  exit_code?: number;
+  duration_ms?: number;
+  total_bytes?: number;
+  first_seq?: number;
+  last_seq?: number;
+  truncated: boolean;
+  timed_out: boolean;
+}>;
+
+export type FlowerActivityWebSearchEntry = Readonly<{
+  title: string;
+  url: string;
+  snippet: string;
+  source: string;
+}>;
+
+export type FlowerActivityWebSearchDetail = Readonly<{
+  query: string;
+  provider: string;
+  count?: number;
+  results: readonly FlowerActivityWebSearchEntry[];
+  sources: readonly FlowerActivityWebSearchEntry[];
+  matches: readonly FlowerActivityWebSearchEntry[];
+  sections: readonly FlowerActivityWebSearchEntry[];
+}>;
+
+export type FlowerActivityQuestionChoice = Readonly<{
+  label: string;
+  description: string;
+}>;
+
+export type FlowerActivityQuestionItem = Readonly<{
+  id: string;
+  question: string;
+  choices: readonly FlowerActivityQuestionChoice[];
+  write_label: string;
+}>;
+
+export type FlowerActivityQuestionDetail = Readonly<{
+  reason: string;
+  required: readonly string[];
+  questions: readonly FlowerActivityQuestionItem[];
+  contains_secret: boolean;
+}>;
+
+export type FlowerActivityCompletionDetail = Readonly<{
+  result: string;
+  summary: string;
+  details: string;
+  evidence_refs: readonly string[];
+  remaining_risks: readonly string[];
+  next_actions: readonly string[];
+}>;
+
 export type FlowerActivityDetailBlock =
   | Readonly<{
     kind: 'structured';
     lines: readonly FlowerActivityDetailLine[];
   }>
   | Readonly<{
-    kind: 'terminal';
-    lines: readonly FlowerActivityDetailLine[];
+    kind: 'terminal_output';
+    terminal: FlowerActivityTerminalDetail;
+  }>
+  | Readonly<{
+    kind: 'web_search';
+    search: FlowerActivityWebSearchDetail;
+  }>
+  | Readonly<{
+    kind: 'question';
+    question: FlowerActivityQuestionDetail;
+  }>
+  | Readonly<{
+    kind: 'completion';
+    completion: FlowerActivityCompletionDetail;
   }>
   | Readonly<{
     kind: 'todos';
@@ -216,11 +289,7 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
   content_ref: 'content ref',
 };
 
-const RENDERER_DETAIL_KEYS: Readonly<Record<Exclude<FlowerActivityRenderer, 'file' | 'patch' | 'todos'>, readonly string[]>> = {
-  terminal: ['command', 'status', 'process_id', 'execution_location', 'latest_output', 'output', 'first_seq', 'last_seq', 'total_bytes', 'started_at_ms', 'ended_at_ms', 'exit_code', 'duration_ms', 'truncated', 'stdout', 'stderr', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
-  web_search: ['query', 'provider', 'count', 'sources', 'results', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
-  question: ['reason_code', 'required_from_user', 'questions', 'contains_secret', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
-  completion: ['result', 'evidence_refs', 'remaining_risks', 'next_actions', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
+const RENDERER_DETAIL_KEYS: Readonly<Record<'structured', readonly string[]>> = {
   structured: ['operation', 'name', 'action', 'content', 'content_ref', 'activation_id', 'already_active', 'permission_hints', 'dependencies', 'dependency_degraded', 'reason', 'id', 'status', 'message', 'timed_out', 'targets', 'stats', 'output', 'structured', 'key_files', 'rows', 'cards', 'items', 'query', 'count', 'provider', 'okf_version', 'total_sections', 'sections', 'filters', 'total_concepts', 'total_matches', 'match_count', 'max_results', 'has_more', 'omitted_count', 'matches', 'concept_title', 'concept', 'body_offset', 'body_length', 'returned_body_length', 'link_count', 'backlink_count', 'links', 'backlinks', 'data', 'result', 'limit', 'evidence_refs', 'remaining_risks', 'next_actions', 'truncated', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
 };
 
@@ -340,10 +409,37 @@ function numericValue(value: unknown): number {
   return Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
 }
 
+function optionalNumericValue(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const raw = typeof value === 'number' ? value : Number(String(value).trim());
+  return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : undefined;
+}
+
 function boolValue(value: unknown): boolean {
   if (typeof value === 'boolean') return value;
   const normalized = String(value ?? '').trim().toLowerCase();
   return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+function rawTextValue(value: unknown): string {
+  if (typeof value === 'string') return value.replace(/\r\n?/g, '\n');
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'boolean') return value ? 'true' : 'false';
+  return '';
+}
+
+function rawPayloadText(payload: Readonly<Record<string, unknown>> | undefined, ...keys: readonly string[]): string {
+  if (!payload) return '';
+  for (const key of keys) {
+    const value = rawTextValue(payload[key]);
+    if (value.trim()) return value;
+  }
+  return '';
+}
+
+function compactTextArray(value: unknown): readonly string[] {
+  const source = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
+  return source.map((entry) => compactJSON(entry).trim()).filter(Boolean);
 }
 
 function isSubagentBooleanDetailKey(key: string): boolean {
@@ -678,7 +774,7 @@ function uniqueDetailLines(lines: readonly FlowerActivityDetailLine[]): readonly
   return out;
 }
 
-function genericDetailLinesForItem(item: FlowerActivityItem, renderer: Exclude<FlowerActivityRenderer, 'file' | 'patch' | 'todos'>): readonly FlowerActivityDetailLine[] {
+function genericDetailLinesForItem(item: FlowerActivityItem, renderer: 'structured'): readonly FlowerActivityDetailLine[] {
   const payload = item.payload ?? {};
   const orderedKeys = new Set<string>(RENDERER_DETAIL_KEYS[renderer] ?? RENDERER_DETAIL_KEYS.structured);
   const lines = Array.from(orderedKeys)
@@ -1016,6 +1112,204 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
   };
 }
 
+function terminalCommandForItem(item: FlowerActivityItem): string {
+  const payload = item.payload ?? {};
+  const toolName = trimString(item.tool_name);
+  const label = trimString(item.label);
+  const meaningfulLabel = label && label !== toolName && label !== 'Tool approval' ? label : '';
+  return payloadValue(payload, 'command') || meaningfulLabel || defaultLabelForItem(item);
+}
+
+function terminalOutputFromPayload(payload: Readonly<Record<string, unknown>>): string {
+  const output = rawPayloadText(payload, 'output');
+  if (output.trim()) return output;
+  const stdout = rawPayloadText(payload, 'stdout');
+  const stderr = rawPayloadText(payload, 'stderr');
+  if (stdout.trim() && stderr.trim()) return `${stdout.replace(/\s+$/g, '')}\n\n[stderr]\n${stderr}`;
+  return stdout || stderr;
+}
+
+function terminalStatusLines(item: FlowerActivityItem): readonly FlowerActivityDetailLine[] {
+  const payload = item.payload ?? {};
+  const lines: FlowerActivityDetailLine[] = [];
+  if (item.requires_approval) {
+    lines.push({ label: 'approval', value: trimString(item.approval_state) || 'requested' });
+  }
+  for (const key of ['status', 'summary', 'details']) {
+    const line = detailLineFromPayload(payload, key);
+    if (line) lines.push(line);
+  }
+  lines.push(...errorDetailLinesFromPayload(payload));
+  return uniqueDetailLines(lines);
+}
+
+function presentationForTerminal(item: FlowerActivityItem): FlowerActivityPresentation {
+  const payload = item.payload ?? {};
+  const command = terminalCommandForItem(item);
+  const title: FlowerActivityTitle = { kind: 'command', command };
+  const detailLines = terminalStatusLines(item);
+  const terminal: FlowerActivityTerminalDetail = {
+    command,
+    output: terminalOutputFromPayload(payload),
+    latest_output: rawPayloadText(payload, 'latest_output'),
+    status: item.status,
+    process_id: payloadValue(payload, 'process_id'),
+    execution_location: payloadValue(payload, 'execution_location'),
+    exit_code: optionalNumericValue(payload.exit_code),
+    duration_ms: optionalNumericValue(payload.duration_ms),
+    total_bytes: optionalNumericValue(payload.total_bytes),
+    first_seq: optionalNumericValue(payload.first_seq),
+    last_seq: optionalNumericValue(payload.last_seq),
+    truncated: boolValue(payload.truncated),
+    timed_out: boolValue(payload.timed_out),
+  };
+  const detailBlocks: FlowerActivityDetailBlock[] = [{ kind: 'terminal_output', terminal }];
+  if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
+  return {
+    label: command,
+    title,
+    meta: metaForTerminalItem(item),
+    detailLines,
+    detailBlocks,
+  };
+}
+
+function entryFromRecord(value: unknown): FlowerActivityWebSearchEntry | null {
+  const record = asRecord(value);
+  if (Object.keys(record).length === 0) {
+    const title = scalarText(value);
+    return title ? { title, url: '', snippet: '', source: '' } : null;
+  }
+  const title = payloadValue(record, 'title', 'name', 'concept_title', 'label', 'url', 'uri', 'source');
+  const url = payloadValue(record, 'url', 'uri', 'href');
+  const snippet = payloadValue(record, 'snippet', 'summary', 'text', 'content', 'body', 'description');
+  const source = payloadValue(record, 'source', 'provider', 'concept', 'section');
+  if (!title && !url && !snippet && !source) return null;
+  return { title: title || url || source || snippet, url, snippet, source };
+}
+
+function webEntries(payload: Readonly<Record<string, unknown>>, key: string): readonly FlowerActivityWebSearchEntry[] {
+  return asArray(payload[key]).map(entryFromRecord).filter((entry): entry is FlowerActivityWebSearchEntry => entry !== null);
+}
+
+function firstAvailableEntries(payload: Readonly<Record<string, unknown>>, keys: readonly string[]): readonly FlowerActivityWebSearchEntry[] {
+  for (const key of keys) {
+    const entries = webEntries(payload, key);
+    if (entries.length > 0) return entries;
+  }
+  return [];
+}
+
+function countFromPayload(payload: Readonly<Record<string, unknown>>): number | undefined {
+  for (const key of ['count', 'result_count', 'total_results', 'total_matches', 'match_count', 'total_sections']) {
+    const value = optionalNumericValue(payload[key]);
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+function presentationForWebSearch(item: FlowerActivityItem): FlowerActivityPresentation {
+  const payload = item.payload ?? {};
+  const title = titleForGenericItem(item, 'web_search');
+  const detailLines = resultStatusLines(item, payload);
+  const search: FlowerActivityWebSearchDetail = {
+    query: payloadValue(payload, 'query') || trimString(item.label),
+    provider: payloadValue(payload, 'provider', 'okf_version'),
+    count: countFromPayload(payload),
+    results: firstAvailableEntries(payload, ['results', 'items', 'cards', 'rows']),
+    sources: firstAvailableEntries(payload, ['sources', 'links', 'backlinks']),
+    matches: firstAvailableEntries(payload, ['matches']),
+    sections: firstAvailableEntries(payload, ['sections']),
+  };
+  const detailBlocks: FlowerActivityDetailBlock[] = [{ kind: 'web_search', search }];
+  if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
+  return {
+    label: titleText(title),
+    title,
+    meta: metaForItem(item),
+    detailLines,
+    detailBlocks,
+  };
+}
+
+function questionChoices(value: unknown): readonly FlowerActivityQuestionChoice[] {
+  return asArray(value).map((entry) => {
+    const record = asRecord(entry);
+    const label = payloadValue(record, 'label', 'value', 'id', 'text') || scalarText(entry);
+    if (!label) return null;
+    return {
+      label,
+      description: payloadValue(record, 'description', 'help', 'detail'),
+    };
+  }).filter((choice): choice is FlowerActivityQuestionChoice => choice !== null);
+}
+
+function questionItems(payload: Readonly<Record<string, unknown>>): readonly FlowerActivityQuestionItem[] {
+  const questions = asArray(payload.questions).map((entry) => {
+    const record = asRecord(entry);
+    const question = payloadValue(record, 'question', 'prompt', 'label', 'text');
+    if (!question) return null;
+    return {
+      id: payloadValue(record, 'id'),
+      question,
+      choices: questionChoices(record.choices ?? record.options),
+      write_label: payloadValue(record, 'write_label', 'writeLabel', 'input_label'),
+    };
+  }).filter((question): question is FlowerActivityQuestionItem => question !== null);
+  if (questions.length > 0) return questions;
+  const question = payloadValue(payload, 'question', 'prompt', 'summary');
+  return question ? [{
+    id: '',
+    question,
+    choices: questionChoices(payload.choices ?? payload.options),
+    write_label: payloadValue(payload, 'write_label', 'writeLabel', 'input_label'),
+  }] : [];
+}
+
+function presentationForQuestion(item: FlowerActivityItem): FlowerActivityPresentation {
+  const payload = item.payload ?? {};
+  const title = titleForGenericItem(item, 'question');
+  const detailLines = resultStatusLines(item, payload);
+  const question: FlowerActivityQuestionDetail = {
+    reason: payloadValue(payload, 'reason_code', 'reason'),
+    required: compactTextArray(payload.required_from_user),
+    questions: questionItems(payload),
+    contains_secret: boolValue(payload.contains_secret),
+  };
+  const detailBlocks: FlowerActivityDetailBlock[] = [{ kind: 'question', question }];
+  if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
+  return {
+    label: titleText(title),
+    title,
+    meta: metaForItem(item),
+    detailLines,
+    detailBlocks,
+  };
+}
+
+function presentationForCompletion(item: FlowerActivityItem): FlowerActivityPresentation {
+  const payload = item.payload ?? {};
+  const title = titleForGenericItem(item, 'completion');
+  const detailLines = resultStatusLines(item, payload);
+  const completion: FlowerActivityCompletionDetail = {
+    result: payloadValue(payload, 'result'),
+    summary: payloadValue(payload, 'summary'),
+    details: payloadValue(payload, 'details'),
+    evidence_refs: compactTextArray(payload.evidence_refs),
+    remaining_risks: compactTextArray(payload.remaining_risks),
+    next_actions: compactTextArray(payload.next_actions),
+  };
+  const detailBlocks: FlowerActivityDetailBlock[] = [{ kind: 'completion', completion }];
+  if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
+  return {
+    label: titleText(title),
+    title,
+    meta: metaForItem(item),
+    detailLines,
+    detailBlocks,
+  };
+}
+
 function titleWithToolContext(toolName: string, explicit: string, fallback: string): string {
   const meaningful = explicit && explicit !== toolName && explicit !== 'Tool approval' ? explicit : '';
   const label = meaningful || fallback;
@@ -1059,16 +1353,20 @@ export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?
   if (renderer === 'file') return presentationForFile(item, fileActions);
   if (renderer === 'patch') return presentationForPatch(item, fileActions);
   if (renderer === 'todos') return presentationForTodos(item);
+  if (renderer === 'terminal') return presentationForTerminal(item);
+  if (renderer === 'web_search') return presentationForWebSearch(item);
+  if (renderer === 'question') return presentationForQuestion(item);
+  if (renderer === 'completion') return presentationForCompletion(item);
   const title = titleForGenericItem(item, renderer);
-  const detailLines = genericDetailLinesForItem(item, renderer);
+  const detailLines = genericDetailLinesForItem(item, 'structured');
   const detailBlocks: FlowerActivityDetailBlock[] = [{
-    kind: renderer === 'terminal' ? 'terminal' : 'structured',
+    kind: 'structured',
     lines: detailLines,
   }];
   return {
     label: titleText(title),
     title,
-    meta: renderer === 'terminal' ? metaForTerminalItem(item) : metaForItem(item),
+    meta: metaForItem(item),
     detailLines,
     detailBlocks,
   };

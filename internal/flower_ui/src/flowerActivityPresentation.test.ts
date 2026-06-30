@@ -60,11 +60,21 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.label).toBe('npm run build -- --mode production');
     expect(presentation.title).toEqual({ kind: 'command', command: 'npm run build -- --mode production' });
     expect(presentation.meta).toContain('exit 0');
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('command:npm run build -- --mode production');
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('process:tp_123');
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('output:built');
-    expect(presentation.detailLines.map((line) => line.label)).not.toContain('workdir');
-    expect(presentation.detailLines.map((line) => line.label)).not.toContain('stdin');
+    expect(presentation.detailBlocks[0]).toMatchObject({
+      kind: 'terminal_output',
+      terminal: {
+        command: 'npm run build -- --mode production',
+        output: 'built\n',
+        latest_output: 'built\n',
+        process_id: 'tp_123',
+        exit_code: 0,
+      },
+    });
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('command');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('process');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('output');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('workdir');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('stdin');
   });
 
   it('prefers the terminal payload command over a stale generic label', () => {
@@ -102,6 +112,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error message:Tool execution timed out after 30000 ms');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('retryable:true');
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('error');
+    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['terminal_output', 'structured']);
   });
 
   it('keeps payload result status as detail data when it conflicts with the item status', () => {
@@ -348,6 +359,103 @@ describe('presentFlowerActivityItem', () => {
     expect(rows).toContain('error message:Search provider failed');
     expect(rows).toContain('retryable:true');
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('error');
+  });
+
+  it('renders web search payloads as result cards instead of a field table', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'web.search',
+      renderer: 'web_search',
+      status: 'success',
+      label: 'latest release',
+      payload: {
+        query: 'latest release',
+        provider: 'brave',
+        count: 1,
+        results: [{
+          title: 'Release notes',
+          url: 'https://example.test/release',
+          snippet: 'The release is available.',
+        }],
+        sources: [{ title: 'Example', url: 'https://example.test' }],
+      },
+    }));
+
+    expect(presentation.detailBlocks[0]).toEqual({
+      kind: 'web_search',
+      search: {
+        query: 'latest release',
+        provider: 'brave',
+        count: 1,
+        results: [{ title: 'Release notes', url: 'https://example.test/release', snippet: 'The release is available.', source: '' }],
+        sources: [{ title: 'Example', url: 'https://example.test', snippet: '', source: '' }],
+        matches: [],
+        sections: [],
+      },
+    });
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('results');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('sources');
+  });
+
+  it('renders question payloads as prompts and choices', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'ask_user',
+      renderer: 'question',
+      label: 'Choose target',
+      payload: {
+        reason_code: 'needs_user_choice',
+        required_from_user: ['target'],
+        questions: [{
+          id: 'target',
+          question: 'Which target should I inspect?',
+          choices: [{ label: 'Local', description: 'This Mac' }],
+        }],
+      },
+    }));
+
+    expect(presentation.detailBlocks[0]).toEqual({
+      kind: 'question',
+      question: {
+        reason: 'needs_user_choice',
+        required: ['target'],
+        contains_secret: false,
+        questions: [{
+          id: 'target',
+          question: 'Which target should I inspect?',
+          choices: [{ label: 'Local', description: 'This Mac' }],
+          write_label: '',
+        }],
+      },
+    });
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('questions');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('reason');
+  });
+
+  it('renders completion payloads as outcome sections', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'task_complete',
+      renderer: 'completion',
+      label: 'task_complete',
+      payload: {
+        result: 'Implemented.',
+        evidence_refs: ['go test ./...'],
+        remaining_risks: ['visual QA pending'],
+        next_actions: ['ship'],
+      },
+    }));
+
+    expect(presentation.detailBlocks[0]).toEqual({
+      kind: 'completion',
+      completion: {
+        result: 'Implemented.',
+        summary: '',
+        details: '',
+        evidence_refs: ['go test ./...'],
+        remaining_risks: ['visual QA pending'],
+        next_actions: ['ship'],
+      },
+    });
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('result');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('evidence');
   });
 
   it('renders todo details from structured payload', () => {

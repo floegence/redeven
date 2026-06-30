@@ -20,6 +20,28 @@ function cssRule(css: string, selector: string): string {
 }
 
 describe('Flower activity running sheen', () => {
+  it('styles expanded terminal activity as a compact read-only terminal panel', () => {
+    const css = flowerStyles();
+    const panelRule = cssRule(css, '.flower-activity-terminal-panel');
+    const headerRule = cssRule(css, '.flower-activity-terminal-header');
+    const commandRule = cssRule(css, '.flower-activity-terminal-command');
+    const outputRule = cssRule(css, '.flower-activity-terminal-output');
+
+    expect(panelRule).toContain('--flower-activity-terminal-font');
+    expect(panelRule).toContain('background: #0d1117');
+    expect(panelRule).toContain('border-left-width: 3px');
+    expect(headerRule).toContain('background: #151b23');
+    expect(commandRule).toContain('font-family: var(--flower-activity-terminal-font)');
+    expect(commandRule).toContain('text-overflow: ellipsis');
+    expect(outputRule).toContain('font-family: var(--flower-activity-terminal-font)');
+    expect(outputRule).toContain('max-height: 16rem');
+    expect(css).toContain('.flower-activity-terminal-command-code');
+    expect(css).toContain('.flower-activity-terminal-command-token-command');
+    expect(css).toContain('.flower-activity-web-panel,');
+    expect(css).toContain('.flower-activity-question-panel,');
+    expect(css).toContain('.flower-activity-completion-panel');
+  });
+
   it('keeps the subdued running row sheen and square loader on the running row button only', () => {
     const css = flowerStyles();
     const activityInlineRule = cssRule(css, '.flower-activity-inline');
