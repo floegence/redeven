@@ -8,6 +8,8 @@ Goals:
 - never develop directly on `main`;
 - preserve every intentional commit;
 - keep local `main` and `origin/main` aligned whenever `main` is pushed;
+- consume ReDevPlugin as a released plugin-platform dependency while keeping
+  Redeven-specific business adapters in this repository;
 - standardize repository rules on `AGENTS.md` instead of a committed `.develop.md`.
 
 ## Git Workflow (Worktree, Required)
@@ -217,6 +219,11 @@ Rules:
 - `redeven` is a downstream consumer of `floeterm`, `floe-webapp`, `flowersec`, and `redevplugin`.
 - Never reference local sibling checkouts through package manifests, lockfiles, build aliases, source imports, or Go workspace wiring.
 - Forbidden local wiring includes `file:`, `link:`, `workspace:`, `portal:`, relative paths, absolute paths, and equivalent local indirection.
+- For ReDevPlugin specifically, a usable dependency update means the matching
+  Go module, npm packages, signed Rust runtime artifact, generated contracts,
+  compatibility manifest, and contract hashes have all been released together.
+  A local `../redevplugin` worktree, branch, copied schema, or draft package is
+  not a valid Redeven integration source.
 - Required flow:
   - implement upstream first in the source repository;
   - release it;
@@ -256,6 +263,26 @@ release-artifact selection, and business capability implementations. Public
 plugin-platform mechanics belong upstream in `redevplugin`, including lifecycle
 endpoints, package schemas, bridge protocol, storage/network/runtime brokers,
 operation/stream envelopes, runtime supervision, generated SDKs, and validators.
+
+The intended Redeven code shape is a narrow integration layer:
+
+- one or more host packages that configure released ReDevPlugin libraries,
+  mount released HTTP handlers, select released runtime artifacts, and register
+  Redeven business adapters;
+- product UI that places ReDevPlugin surfaces into Env App, Activity Bar,
+  Workbench, Settings, Desktop, or CLI flows without replacing the sandboxed
+  ReDevPlugin surface lifecycle;
+- Flower/Floret orchestration that calls released ReDevPlugin scaffold,
+  validate, package, install, enable, open, disable, uninstall, export/import,
+  and diagnostics APIs;
+- tests that assert Redeven adapter mapping, route mounting, permission
+  projection, business-capability behavior, and product UX.
+
+Redeven integration code must not grow into a second plugin platform. Any
+Redeven package that starts owning a manifest parser, package builder, registry
+state machine, bridge token issuer, asset session manager, WASM executor,
+storage/network broker, operation/stream protocol, or runtime supervisor has
+crossed the boundary and must be moved upstream into ReDevPlugin first.
 
 Do not use `replace`, `go.work`, `go.work.sum`, local sibling paths,
 package-manager links, local npm workspace wiring, Rust path overrides, copied
