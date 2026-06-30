@@ -1042,6 +1042,34 @@ export type FlowerFileOpenRequest = Readonly<{
   action_id: string;
 }>;
 
+export type FlowerTerminalProcessReadRequest = Readonly<{
+  run_id: string;
+  process_id: string;
+  after_seq?: number;
+  wait_ms?: number;
+  max_bytes?: number;
+}>;
+
+export type FlowerTerminalProcessSnapshot = Readonly<{
+  process_id: string;
+  status: string;
+  command?: string;
+  cwd?: string;
+  output?: string;
+  stdout?: string;
+  stderr?: string;
+  latest_output?: string;
+  first_seq?: number;
+  last_seq?: number;
+  total_bytes?: number;
+  truncated?: boolean;
+  started_at_ms?: number;
+  ended_at_ms?: number;
+  duration_ms?: number;
+  exit_code?: number;
+  execution_location?: string;
+}>;
+
 export type FlowerSurfaceRuntimeDescriptor = Readonly<{
   runtime_id: string;
   runtime_kind: 'local_environment' | 'env_local';
@@ -1071,6 +1099,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;
   submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<void>;
+  readTerminalProcess?: (input: FlowerTerminalProcessReadRequest) => Promise<FlowerTerminalProcessSnapshot>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
 }>;

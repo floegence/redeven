@@ -10,6 +10,7 @@ import type {
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
+  FlowerTerminalProcessSnapshot,
   FlowerThreadReadStatus,
   FlowerLiveBootstrap,
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -322,6 +323,17 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(parentThreadID)}/subagents/${encodeURIComponent(childThreadID)}/detail?after_ordinal=${afterOrdinal}&limit=${limit}`,
         { method: 'GET' },
       ),
+      readTerminalProcess: (runID, processID, input) => {
+        const params = new URLSearchParams();
+        if (input.after_seq !== undefined) params.set('after_seq', String(input.after_seq));
+        if (input.wait_ms !== undefined) params.set('wait_ms', String(input.wait_ms));
+        if (input.max_bytes !== undefined) params.set('max_bytes', String(input.max_bytes));
+        const qs = params.toString();
+        return fetchLocalApiJSON<FlowerTerminalProcessSnapshot>(
+          `/_redeven_proxy/api/ai/runs/${encodeURIComponent(runID)}/terminal/${encodeURIComponent(processID)}/read${qs ? `?${qs}` : ''}`,
+          { method: 'GET' },
+        );
+      },
       markThreadRead: (threadID, body) => fetchLocalApiJSON<MarkThreadReadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/read`, {
         method: 'POST',
         body: JSON.stringify(body),

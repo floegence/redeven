@@ -27,6 +27,7 @@ import type {
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
+  FlowerTerminalProcessSnapshot,
   FlowerTurnLaunchFailure,
   FlowerRouterDecision,
   FlowerThreadActivitySnapshot,
@@ -4087,23 +4088,119 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return Array.from(new Set(chips));
   };
 
-  const terminalDisplayOutput = (terminal: Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>['terminal']): string => {
-    const output = String(terminal.output || terminal.latest_output || '').replace(/\r\n?/g, '\n');
-    if (output.trim()) return output;
-    return terminal.status === 'running' || terminal.status === 'pending' ? 'Waiting for output...' : 'No output captured.';
+  const normalizeTerminalSnapshotStatus = (raw: unknown): FlowerActivityStatus | '' => {
+    const value = String(raw ?? '').trim().toLowerCase();
+    if (value === 'success' || value === 'succeeded' || value === 'complete' || value === 'completed') return 'success';
+    if (value === 'error' || value === 'failed' || value === 'timeout' || value === 'timed_out') return 'error';
+    if (value === 'canceled' || value === 'cancelled' || value === 'aborted') return 'canceled';
+    if (value === 'pending') return 'pending';
+    if (value === 'running') return 'running';
+    return '';
   };
 
-  const terminalOutputBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>) => {
+  const terminalSnapshotOutput = (snapshot: FlowerTerminalProcessSnapshot): string => (
+    String(snapshot.output || snapshot.stdout || snapshot.latest_output || '').replace(/\r\n?/g, '\n')
+  );
+
+  const terminalOutputBlock = (runID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>) => {
     const terminal = block.terminal;
-    const output = terminalDisplayOutput(terminal);
-    const muted = !String(terminal.output || terminal.latest_output || '').trim();
+    const [liveOutput, setLiveOutput] = createSignal('');
+    const [liveStatus, setLiveStatus] = createSignal<FlowerActivityStatus | ''>('');
+    const [liveLastSeq, setLiveLastSeq] = createSignal<number | undefined>(terminal.last_seq);
+    const [liveTotalBytes, setLiveTotalBytes] = createSignal<number | undefined>(terminal.total_bytes);
+    const [liveError, setLiveError] = createSignal('');
+    const processID = () => trimString(terminal.process_id);
+    const canReadLiveOutput = () => (
+      !!props.adapter.readTerminalProcess &&
+      trimString(runID) !== '' &&
+      processID() !== '' &&
+      (terminal.status === 'running' || terminal.status === 'pending')
+    );
+    const displayStatus = () => liveStatus() || terminal.status;
+    const displayOutput = () => {
+      const live = liveOutput();
+      const payload = String(terminal.output || terminal.latest_output || '').replace(/\r\n?/g, '\n');
+      const output = live || payload;
+      if (output.trim()) return output;
+      if (liveError()) return `Live output unavailable: ${liveError()}`;
+      if (canReadLiveOutput()) return 'Listening for output...';
+      if ((terminal.status === 'running' || terminal.status === 'pending') && processID() === '') {
+        return 'Live output handle is not available yet.';
+      }
+      return 'No output captured.';
+    };
+    const muted = () => !String(liveOutput() || terminal.output || terminal.latest_output || '').trim();
+    const chips = createMemo(() => {
+      const base = terminalDetailChips({
+        ...terminal,
+        status: displayStatus(),
+        last_seq: liveLastSeq() ?? terminal.last_seq,
+        total_bytes: liveTotalBytes() ?? terminal.total_bytes,
+      });
+      return base;
+    });
+
+    const applyTerminalSnapshot = (snapshot: FlowerTerminalProcessSnapshot) => {
+      const output = terminalSnapshotOutput(snapshot);
+      if (output) {
+        setLiveOutput(output);
+      }
+      const status = normalizeTerminalSnapshotStatus(snapshot.status);
+      if (status) {
+        setLiveStatus(status);
+      }
+      if (typeof snapshot.last_seq === 'number' && Number.isFinite(snapshot.last_seq)) {
+        setLiveLastSeq(Math.max(0, Math.floor(snapshot.last_seq)));
+      }
+      if (typeof snapshot.total_bytes === 'number' && Number.isFinite(snapshot.total_bytes)) {
+        setLiveTotalBytes(Math.max(0, Math.floor(snapshot.total_bytes)));
+      }
+    };
+
+    createEffect(() => {
+      if (!canReadLiveOutput()) return;
+      let disposed = false;
+      let timer: number | undefined;
+      const poll = async () => {
+        if (disposed || !canReadLiveOutput() || !props.adapter.readTerminalProcess) return;
+        try {
+          const snapshot = await props.adapter.readTerminalProcess({
+            run_id: trimString(runID),
+            process_id: processID(),
+            after_seq: untrack(() => liveLastSeq()) ?? terminal.last_seq ?? undefined,
+            wait_ms: 1000,
+            max_bytes: 1_000_000,
+          });
+          if (disposed) return;
+          setLiveError('');
+          applyTerminalSnapshot(snapshot);
+          const status = normalizeTerminalSnapshotStatus(snapshot.status);
+          if (status && status !== 'running' && status !== 'pending') return;
+        } catch (error) {
+          if (!disposed) setLiveError(getErrorMessage(error));
+        }
+        if (!disposed && canReadLiveOutput()) {
+          timer = window.setTimeout(() => {
+            void poll();
+          }, 200);
+        }
+      };
+      void poll();
+      onCleanup(() => {
+        disposed = true;
+        if (timer !== undefined) {
+          window.clearTimeout(timer);
+        }
+      });
+    });
+
     return (
       <section
-        class={cn('flower-activity-terminal-panel', `flower-activity-terminal-panel-${terminal.status}`)}
+        class={cn('flower-activity-terminal-panel', `flower-activity-terminal-panel-${displayStatus()}`)}
         data-flower-activity-terminal-panel
       >
         <div class="flower-activity-terminal-header">
-          <span class="flower-activity-terminal-status">{statusIcon(terminal.status)}</span>
+          <span class="flower-activity-terminal-status">{statusIcon(displayStatus())}</span>
           <span class="flower-activity-terminal-prompt" aria-hidden="true">$</span>
           <span class="flower-activity-terminal-command">
             <FlowerShellCommandHighlight
@@ -4113,13 +4210,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             />
           </span>
           <div class="flower-activity-terminal-chips" aria-label="Terminal result">
-            <For each={terminalDetailChips(terminal)}>
+            <For each={chips()}>
               {(chip) => <span class="flower-activity-terminal-chip" title={chip}>{chip}</span>}
             </For>
           </div>
         </div>
-        <div class={cn('flower-activity-terminal-output', muted && 'flower-activity-terminal-output-muted')}>
-          <pre>{output}</pre>
+        <div class={cn('flower-activity-terminal-output', muted() && 'flower-activity-terminal-output-muted')}>
+          <pre>{displayOutput()}</pre>
         </div>
       </section>
     );
@@ -4316,7 +4413,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </div>
   );
 
-  const activityDetailBlock = (messageID: string, blockIndex: number, itemID: string, block: FlowerActivityDetailBlock) => {
+  const activityDetailBlock = (messageID: string, blockIndex: number, itemID: string, block: FlowerActivityDetailBlock, runID: string) => {
     if (block.kind === 'todos') {
       return (
         <div class="flower-activity-todo-list" role="list" aria-label="Todos">
@@ -4345,7 +4442,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       );
     }
-    if (block.kind === 'terminal_output') return terminalOutputBlock(block);
+    if (block.kind === 'terminal_output') return terminalOutputBlock(runID, block);
     if (block.kind === 'web_search') return webSearchBlock(block);
     if (block.kind === 'question') return questionBlock(block);
     if (block.kind === 'completion') return completionBlock(block);
@@ -4414,7 +4511,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <Show when={open() && !isReadOnly()}>
           <div class="flower-activity-inline-details">
             <For each={presentation().detailBlocks}>
-              {(block) => activityDetailBlock(messageID(), blockIndex(), item().item_id, block)}
+              {(block) => activityDetailBlock(messageID(), blockIndex(), item().item_id, block, trimString(timeline().run_id))}
             </For>
           </div>
         </Show>

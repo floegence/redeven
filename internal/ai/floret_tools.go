@@ -114,7 +114,16 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 					return fltools.Result{}, err
 				}
 				ctx = contextWithFloretToolExecutionAuthorization(ctx, call.ID, call.Name)
-				handler := &builtInToolHandler{r: execRun, toolName: call.Name}
+				handler := &builtInToolHandler{
+					r:        execRun,
+					toolName: call.Name,
+					activityUpdater: func(activity *observation.ActivityPresentation, metadata map[string]any) {
+						inv.UpdateActivity(fltools.ActivityUpdate{
+							Activity: activity,
+							Metadata: metadata,
+						})
+					},
+				}
 				result, err := handler.Execute(ctx, call)
 				if err != nil {
 					return fltools.Result{}, err

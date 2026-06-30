@@ -87,6 +87,11 @@ function adapterOptions(
     }),
     listThreadLiveEvents: vi.fn(async () => ({ events: [] })),
     loadSubagentDetail: vi.fn(async () => ({ detail: undefined })),
+    readTerminalProcess: vi.fn(async () => ({
+      process_id: 'tp_default',
+      status: 'running',
+      output: '',
+    })),
     markThreadRead: vi.fn(async () => ({ read_status: readStatus() })),
     patchThread: vi.fn(async () => ({ thread: undefined })),
     forkThread: vi.fn(async () => ({ thread: undefined })),
@@ -200,6 +205,31 @@ describe('runtime Flower surface adapter read state', () => {
       activity_signature: 'activity:1',
       waiting_prompt_id: '',
     })).rejects.toThrow('thread.read_status.read_state is required');
+  });
+
+  it('reads terminal process output through the runtime transport with bounded query values', async () => {
+    const readTerminalProcess = vi.fn(async () => ({
+      process_id: 'tp_live',
+      status: 'running',
+      output: 'tick 1\n',
+      last_seq: 2,
+    }));
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ readTerminalProcess }));
+
+    const result = await adapter.readTerminalProcess?.({
+      run_id: ' run_live ',
+      process_id: ' tp_live ',
+      after_seq: 2.8,
+      wait_ms: 45_000,
+      max_bytes: 2_000_000,
+    });
+
+    expect(readTerminalProcess).toHaveBeenCalledWith('run_live', 'tp_live', {
+      after_seq: 2,
+      wait_ms: 30000,
+      max_bytes: 1000000,
+    });
+    expect(result?.output).toBe('tick 1\n');
   });
 
   it('passes compact context requests through without creating a user turn', async () => {

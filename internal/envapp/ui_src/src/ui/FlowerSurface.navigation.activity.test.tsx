@@ -1181,6 +1181,76 @@ describe('FlowerSurface navigation activity', () => {
     expect(terminalPanel?.querySelector('input')).toBeNull();
   });
 
+  it('reads live terminal output when an expanded running activity has a process id', async () => {
+    const readTerminalProcess = vi.fn(async () => ({
+      process_id: 'tp_live_terminal',
+      status: 'success',
+      output: 'tick 1\ntick 2\n',
+      last_seq: 2,
+      total_bytes: 14,
+    }));
+    const liveTerminalThread = thread({
+      thread_id: 'thread-live-terminal-output',
+      title: 'Live terminal output',
+      status: 'running',
+      active_run_id: 'run-live-terminal',
+      messages: [
+        {
+          id: 'm-live-terminal-output',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 6_700,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-live-terminal',
+              turn_id: 'm-live-terminal-output',
+              status: 'running',
+              items: [activityItem({
+                item_id: 'terminal-live',
+                tool_id: 'terminal-live',
+                tool_name: 'terminal.exec',
+                kind: 'tool',
+                status: 'running',
+                renderer: 'terminal',
+                label: 'for i in 1 2; do echo tick:$i; done',
+                payload: {
+                  command: 'for i in 1 2; do echo tick:$i; done',
+                  status: 'running',
+                  process_id: 'tp_live_terminal',
+                },
+              })],
+            }),
+          ],
+        },
+      ],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      readTerminalProcess,
+      listThreads: vi.fn(async () => [liveTerminalThread]),
+      loadThread: vi.fn(async () => liveBootstrap(liveTerminalThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-live-terminal-output"] button')));
+    (runtime.querySelector('[data-thread-id="thread-live-terminal-output"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="terminal-live"]')));
+    (runtime.querySelector('[data-flower-activity-item-id="terminal-live"] .flower-activity-inline-button') as HTMLButtonElement).click();
+
+    await waitFor(() => readTerminalProcess.mock.calls.length > 0);
+    expect(readTerminalProcess).toHaveBeenCalledWith({
+      run_id: 'run-live-terminal',
+      process_id: 'tp_live_terminal',
+      after_seq: undefined,
+      wait_ms: 1000,
+      max_bytes: 1000000,
+    });
+    await waitFor(() => runtime.textContent?.includes('tick 2') ?? false);
+    expect(runtime.textContent).toContain('tick 1');
+    expect(runtime.textContent).not.toContain('Waiting for output...');
+    expect(runtime.querySelector('[data-flower-activity-terminal-panel] input')).toBeNull();
+  });
+
   it('renders expanded web, question, and completion details as product panels', async () => {
     const productDetailsThread = thread({
       thread_id: 'thread-product-activity-details',

@@ -589,6 +589,11 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
     loadThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID }))),
     listThreadLiveEvents: vi.fn(async () => ({ stream_generation: 1, events: [], next_cursor: 0, retained_from_seq: 1 })),
     loadSubagentDetail: vi.fn(async () => subagentDetail()),
+    readTerminalProcess: vi.fn(async () => ({
+      process_id: 'tp_default',
+      status: 'running',
+      output: '',
+    })),
     markThreadRead: vi.fn(async (_threadID: string, snapshot) => ({
       is_unread: false,
       snapshot,
