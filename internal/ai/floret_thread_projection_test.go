@@ -241,6 +241,86 @@ func TestFlowerBlocksFromFloretThreadProjectionKeepsRequestedApprovalWaiting(t *
 	}
 }
 
+func TestFlowerBlocksFromFloretThreadProjectionKeepsQueuedSiblingPending(t *testing.T) {
+	t.Parallel()
+
+	now := time.Unix(275, 0)
+	newsCommand := "curl -s https://newsapi.example.test"
+	searchCommand := "curl -sL https://search.example.test"
+	projection := flruntime.ProjectThreadTurn(flruntime.ProjectThreadTurnRequest{
+		RunID:    "run_batch_approval",
+		ThreadID: "thread_batch_approval",
+		TurnID:   "msg_batch_approval",
+		TraceID:  "run_batch_approval",
+		Events: []flruntime.ThreadDetailEvent{
+			{
+				ID:        "call-newsapi",
+				Ordinal:   1,
+				ThreadID:  "thread_batch_approval",
+				TurnID:    "msg_batch_approval",
+				Kind:      flruntime.ThreadDetailEventToolCall,
+				CreatedAt: now,
+				Message: &flruntime.ThreadDetailMessage{Role: "assistant", Activity: &observation.ActivityPresentation{
+					Label:    newsCommand,
+					Renderer: observation.ActivityRendererTerminal,
+					Payload:  map[string]any{"command": newsCommand},
+				}},
+				ToolCall: &flruntime.ThreadDetailToolCall{ID: "call-newsapi", Name: "terminal.exec"},
+			},
+			{
+				ID:        "call-search",
+				Ordinal:   2,
+				ThreadID:  "thread_batch_approval",
+				TurnID:    "msg_batch_approval",
+				Kind:      flruntime.ThreadDetailEventToolCall,
+				CreatedAt: now.Add(5 * time.Millisecond),
+				Message: &flruntime.ThreadDetailMessage{Role: "assistant", Activity: &observation.ActivityPresentation{
+					Label:    searchCommand,
+					Renderer: observation.ActivityRendererTerminal,
+					Payload:  map[string]any{"command": searchCommand},
+				}},
+				ToolCall: &flruntime.ThreadDetailToolCall{ID: "call-search", Name: "terminal.exec"},
+			},
+			{
+				ID:        "approval-newsapi",
+				Ordinal:   3,
+				ThreadID:  "thread_batch_approval",
+				TurnID:    "msg_batch_approval",
+				Kind:      flruntime.ThreadDetailEventApproval,
+				Type:      observation.EventTypeToolApprovalRequested,
+				CreatedAt: now.Add(10 * time.Millisecond),
+				Approval:  &flruntime.ThreadDetailApproval{State: "requested", ToolID: "call-newsapi", ToolName: "terminal.exec"},
+			},
+		},
+	})
+
+	r := newRun(runOptions{})
+	blocks := r.flowerBlocksFromFloretThreadProjection(projection)
+	if len(blocks) != 1 {
+		t.Fatalf("blocks len=%d, want one activity block: %#v", len(blocks), blocks)
+	}
+	block, ok := blocks[0].(ActivityTimelineBlock)
+	if !ok {
+		t.Fatalf("blocks[0]=%T %#v, want activity timeline", blocks[0], blocks[0])
+	}
+	if block.Summary.Counts.Waiting != 1 || block.Summary.Counts.Pending != 1 || block.Summary.Counts.Running != 0 {
+		t.Fatalf("summary should contain one waiting approval and one queued tool: %#v", block.Summary)
+	}
+	waiting := activityBlockItemByToolID(t, block, "call-newsapi")
+	if waiting.Status != observation.ActivityStatusWaiting ||
+		waiting.ApprovalState != "requested" ||
+		!waiting.RequiresApproval ||
+		waiting.Label != newsCommand {
+		t.Fatalf("waiting tool mismatch: %#v", waiting)
+	}
+	queued := activityBlockItemByToolID(t, block, "call-search")
+	if queued.Status != observation.ActivityStatusPending ||
+		queued.RequiresApproval ||
+		queued.Label != searchCommand {
+		t.Fatalf("queued sibling mismatch: %#v", queued)
+	}
+}
+
 func TestFlowerBlocksFromFloretThreadProjectionKeepsPendingApprovalAsSingleToolRow(t *testing.T) {
 	t.Parallel()
 
@@ -712,4 +792,15 @@ func floretProjectionInvalidRequestedApprovalTimeline(runID string, threadID str
 	timeline.Items[0].NeedsAttention = false
 	timeline.Items[0].EndedAtUnixMS = 20
 	return timeline
+}
+
+func activityBlockItemByToolID(t *testing.T, block ActivityTimelineBlock, toolID string) observation.ActivityItem {
+	t.Helper()
+	for _, item := range block.Items {
+		if item.ToolID == toolID {
+			return item
+		}
+	}
+	t.Fatalf("activity item for tool %q not found: %#v", toolID, block.Items)
+	return observation.ActivityItem{}
 }
