@@ -24,6 +24,7 @@ import {
 afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 function withLaunchUserMessageID<T extends { readonly messages: readonly { readonly id: string }[] }>(threadValue: T, currentUserID: string, nextUserID: string): T {
@@ -33,6 +34,72 @@ function withLaunchUserMessageID<T extends { readonly messages: readonly { reado
       message.id === currentUserID ? { ...message, id: nextUserID } : message
     )),
   } as T;
+}
+
+function layoutRect(width: number, height = 22): DOMRect {
+  return {
+    x: 0,
+    y: 0,
+    width,
+    height,
+    top: 0,
+    right: width,
+    bottom: height,
+    left: 0,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
+function installComposerControlLayoutHarness(input: {
+  availableWidth: number;
+  itemWidths?: Partial<Record<string, number>>;
+  moreWidth?: number;
+}) {
+  const records: Array<{ callback: ResizeObserverCallback; elements: Element[] }> = [];
+  vi.stubGlobal('ResizeObserver', class {
+    private readonly record: { callback: ResizeObserverCallback; elements: Element[] };
+
+    constructor(callback: ResizeObserverCallback) {
+      this.record = { callback, elements: [] };
+      records.push(this.record);
+    }
+
+    observe(element: Element) {
+      this.record.elements.push(element);
+    }
+
+    unobserve(element: Element) {
+      this.record.elements = this.record.elements.filter((item) => item !== element);
+    }
+
+    disconnect() {
+      this.record.elements = [];
+    }
+  });
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function composerControlRect(this: HTMLElement) {
+    if (this.classList.contains('flower-composer-controls-viewport')) {
+      return layoutRect(input.availableWidth);
+    }
+    const itemID = this.getAttribute('data-flower-composer-control-measure');
+    if (itemID) {
+      return layoutRect(input.itemWidths?.[itemID] ?? 80);
+    }
+    if (this.getAttribute('data-flower-composer-more-measure') === 'true') {
+      return layoutRect(input.moreWidth ?? 30);
+    }
+    return layoutRect(0);
+  });
+
+  return {
+    trigger() {
+      for (const record of records) {
+        record.callback(
+          record.elements.map((target) => ({ target }) as ResizeObserverEntry),
+          {} as ResizeObserver,
+        );
+      }
+    },
+  };
 }
 
 describe('FlowerSurface navigation launch/send', () => {
@@ -229,15 +296,17 @@ describe('FlowerSurface navigation launch/send', () => {
       launchTurn,
     });
 
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip')?.textContent?.includes('alice') === true);
-    const chip = runtime.querySelector('.flower-working-dir-chip') as HTMLButtonElement;
+    await waitFor(() => runtime.querySelector('.flower-composer-footer .flower-working-dir-chip')?.textContent?.includes('alice') === true);
+    expect(runtime.querySelector('.flower-chat-header .flower-working-dir-chip')).toBeNull();
+    expect(runtime.querySelector('[data-flower-composer-more-panel="true"]')).toBeNull();
+    const chip = runtime.querySelector('.flower-composer-footer .flower-working-dir-chip') as HTMLButtonElement;
     expect(chip.getAttribute('title')).toContain('/Users/alice');
     chip.click();
 
     await waitFor(() => Boolean(runtime.querySelector('[data-directory-picker-entry="/redeven"]')));
     (runtime.querySelector('[data-directory-picker-entry="/redeven"]') as HTMLButtonElement).click();
     (runtime.querySelector('[data-directory-picker-confirm="true"]') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip')?.textContent?.includes('redeven') === true);
+    await waitFor(() => runtime.querySelector('.flower-composer-footer .flower-working-dir-chip')?.textContent?.includes('redeven') === true);
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'start in redeven';
@@ -255,7 +324,160 @@ describe('FlowerSurface navigation launch/send', () => {
     });
   });
 
-  it('copies an existing thread working directory from the header chip', async () => {
+  it('keeps composer controls inline when footer space is sufficient', async () => {
+    const layout = installComposerControlLayoutHarness({
+      availableWidth: 720,
+      itemWidths: {
+        working_dir: 118,
+        permission: 94,
+        model: 172,
+        reasoning: 76,
+      },
+      moreWidth: 30,
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      getWorkingDirectoryPathContext: vi.fn(async () => ({
+        agentHomePathAbs: '/Users/alice',
+        homePathAbs: '/Users/alice',
+        defaultRootId: 'home',
+        roots: [],
+      })),
+      listWorkingDirectoryEntries: vi.fn(async () => []),
+    });
+
+    layout.trigger();
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-composer-controls="true"]')));
+    expect(runtime.querySelector('.flower-chat-header .flower-working-dir-chip')).toBeNull();
+    expect(runtime.querySelector('[data-flower-composer-inline-item="working_dir"] .flower-working-dir-chip')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-composer-inline-item="permission"] .flower-permission-trigger')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-composer-inline-item="model"] .flower-model-select-trigger')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-composer-more-panel="true"]')).toBeNull();
+    expect(runtime.querySelector('button.flower-composer-more-button')).toBeNull();
+  });
+
+  it('moves overflowing composer controls into the More panel without changing working directory launch behavior', async () => {
+    const layout = installComposerControlLayoutHarness({
+      availableWidth: 230,
+      itemWidths: {
+        working_dir: 122,
+        permission: 90,
+        model: 170,
+        reasoning: 78,
+      },
+      moreWidth: 30,
+    });
+    const launchedThread = thread({
+      thread_id: 'thread-working-dir-overflow',
+      title: 'Working dir overflow',
+      working_dir: '/Users/alice/redeven',
+      messages: [
+        {
+          id: 'm-working-dir-overflow-user',
+          role: 'user',
+          content: 'start in overflow redeven',
+          status: 'complete',
+          created_at_ms: 10,
+        },
+      ],
+    });
+    const getWorkingDirectoryPathContext = vi.fn(async () => ({
+      agentHomePathAbs: '/Users/alice',
+      homePathAbs: '/Users/alice',
+      defaultRootId: 'home',
+      roots: [],
+    }));
+    const listWorkingDirectoryEntries = vi.fn(async (input: { path: string; showHidden?: boolean }) => {
+      if (input.path === '/Users/alice') {
+        return [{
+          name: 'redeven',
+          path: '/Users/alice/redeven',
+          isDirectory: true,
+          modifiedAt: 1,
+        }];
+      }
+      return [];
+    });
+    const launchTurn = vi.fn(async () => liveBootstrap(launchedThread));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      loadThread: vi.fn(async () => liveBootstrap(launchedThread)),
+      getWorkingDirectoryPathContext,
+      listWorkingDirectoryEntries,
+      launchTurn,
+    });
+
+    layout.trigger();
+
+    await waitFor(() => Boolean(runtime.querySelector('button.flower-composer-more-button')));
+    expect(runtime.querySelector('[data-flower-composer-inline-item="permission"] .flower-permission-trigger')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-composer-inline-item="working_dir"]')).toBeNull();
+    (runtime.querySelector('button.flower-composer-more-button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-composer-more-panel="true"]')));
+    expect(runtime.querySelector('[data-flower-composer-more-item="working_dir"] .flower-working-dir-chip')).toBeTruthy();
+
+    (runtime.querySelector('[data-flower-composer-more-item="working_dir"] .flower-working-dir-chip') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-directory-picker-entry="/redeven"]')));
+    (runtime.querySelector('[data-directory-picker-entry="/redeven"]') as HTMLButtonElement).click();
+    (runtime.querySelector('[data-directory-picker-confirm="true"]') as HTMLButtonElement).click();
+    await waitFor(() => !runtime.querySelector('[data-flower-composer-more-panel="true"]'));
+    (runtime.querySelector('button.flower-composer-more-button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-flower-composer-more-item="working_dir"] .flower-working-dir-chip')?.textContent?.includes('redeven') === true);
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'start in overflow redeven';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+
+    expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'start in overflow redeven',
+      working_dir: '/Users/alice/redeven',
+    }));
+  });
+
+  it('closes the composer More panel with Escape and outside pointer input', async () => {
+    const layout = installComposerControlLayoutHarness({
+      availableWidth: 180,
+      itemWidths: {
+        working_dir: 122,
+        permission: 90,
+        model: 170,
+        reasoning: 78,
+      },
+      moreWidth: 30,
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      getWorkingDirectoryPathContext: vi.fn(async () => ({
+        agentHomePathAbs: '/Users/alice',
+        homePathAbs: '/Users/alice',
+        defaultRootId: 'home',
+        roots: [],
+      })),
+      listWorkingDirectoryEntries: vi.fn(async () => []),
+    });
+
+    layout.trigger();
+
+    await waitFor(() => Boolean(runtime.querySelector('button.flower-composer-more-button')));
+    const moreButton = runtime.querySelector('button.flower-composer-more-button') as HTMLButtonElement;
+    moreButton.click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-composer-more-panel="true"]')));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await waitFor(() => runtime.querySelector('[data-flower-composer-more-panel="true"]') === null);
+
+    moreButton.click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-composer-more-panel="true"]')));
+    document.dispatchEvent(new Event('pointerdown', { bubbles: true, cancelable: true }));
+    await waitFor(() => runtime.querySelector('[data-flower-composer-more-panel="true"]') === null);
+  });
+
+  it('copies an existing thread working directory from the composer footer chip', async () => {
     const originalClipboard = navigator.clipboard;
     const writeText = vi.fn(async () => undefined);
     Object.defineProperty(navigator, 'clipboard', {
@@ -281,11 +503,66 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-existing-workdir"] button')));
     (runtime.querySelector('[data-thread-id="thread-existing-workdir"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-working-dir-chip')?.textContent?.includes('redeven') === true);
+    await waitFor(() => runtime.querySelector('.flower-composer-footer .flower-working-dir-chip')?.textContent?.includes('redeven') === true);
+    expect(runtime.querySelector('.flower-chat-header .flower-working-dir-chip')).toBeNull();
 
-    const chip = runtime.querySelector('.flower-working-dir-chip') as HTMLButtonElement;
+    const chip = runtime.querySelector('.flower-composer-footer .flower-working-dir-chip') as HTMLButtonElement;
     expect(chip.getAttribute('title')).toContain('/Users/alice/redeven');
     chip.click();
+    await waitFor(() => writeText.mock.calls.length === 1);
+
+    expect(writeText).toHaveBeenCalledWith('/Users/alice/redeven');
+    expect(runtime.querySelector('[data-directory-picker="true"]')).toBeNull();
+    expect(launchTurn).not.toHaveBeenCalled();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: originalClipboard,
+    });
+  });
+
+  it('copies an existing thread working directory from the composer More panel without opening the picker', async () => {
+    const layout = installComposerControlLayoutHarness({
+      availableWidth: 180,
+      itemWidths: {
+        working_dir: 122,
+        permission: 90,
+        model: 170,
+        reasoning: 78,
+      },
+      moreWidth: 30,
+    });
+    const originalClipboard = navigator.clipboard;
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const launchTurn = vi.fn(async () => liveBootstrap(thread()));
+    const existingThread = thread({
+      thread_id: 'thread-existing-workdir-overflow',
+      title: 'Existing working dir overflow',
+      working_dir: '/Users/alice/redeven',
+    });
+    const getWorkingDirectoryPathContext = vi.fn(async () => {
+      throw new Error('picker should not open for existing threads');
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [existingThread]),
+      loadThread: vi.fn(async () => liveBootstrap(existingThread)),
+      getWorkingDirectoryPathContext,
+      listWorkingDirectoryEntries: vi.fn(async () => []),
+      launchTurn,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-existing-workdir-overflow"] button')));
+    (runtime.querySelector('[data-thread-id="thread-existing-workdir-overflow"] button') as HTMLButtonElement).click();
+    layout.trigger();
+    await waitFor(() => Boolean(runtime.querySelector('button.flower-composer-more-button')));
+
+    (runtime.querySelector('button.flower-composer-more-button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-composer-more-item="working_dir"] .flower-working-dir-chip')));
+    (runtime.querySelector('[data-flower-composer-more-item="working_dir"] .flower-working-dir-chip') as HTMLButtonElement).click();
     await waitFor(() => writeText.mock.calls.length === 1);
 
     expect(writeText).toHaveBeenCalledWith('/Users/alice/redeven');
