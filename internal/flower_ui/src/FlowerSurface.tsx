@@ -1,7 +1,7 @@
 import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, FileText, FolderOpen, GitBranch, GripVertical, Plus, Settings, Shield, Terminal } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Plus, Settings, Shield, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, FloatingWindow, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -114,6 +114,13 @@ type FlowerComposerContextUsageModel = Readonly<{
   usage: FlowerContextUsage;
   freshness: FlowerComposerContextUsageFreshness;
 }>;
+type FlowerComposerControlID = 'working_dir' | 'permission' | 'model' | 'reasoning' | 'read_only';
+type FlowerComposerControlLocation = 'inline' | 'overflow';
+type FlowerComposerControlLayout = Readonly<{
+  availableWidth: number;
+  moreWidth: number;
+  itemWidths: Partial<Record<FlowerComposerControlID, number>>;
+}>;
 type PendingPermissionPatch = Readonly<{
   threadID: string;
   requested: FlowerPermissionType;
@@ -225,6 +232,10 @@ const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
 const COMPOSER_STOP_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval']);
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const FLOWER_PERMISSION_TYPES: readonly FlowerPermissionType[] = ['readonly', 'approval_required', 'full_access'];
+const FLOWER_COMPOSER_CONTROL_ORDER: readonly FlowerComposerControlID[] = ['working_dir', 'permission', 'model', 'reasoning', 'read_only'];
+const FLOWER_COMPOSER_CONTROL_OVERFLOW_ORDER: readonly FlowerComposerControlID[] = ['reasoning', 'working_dir', 'model', 'read_only', 'permission'];
+const FLOWER_COMPOSER_CONTROL_GAP_PX = 6;
+const FLOWER_COMPOSER_MORE_WIDTH_FALLBACK_PX = 30;
 const LIVE_EVENT_RENDER_YIELD_SIZE = 8;
 const MESSAGE_COPY_RESET_MS = 1600;
 const FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID = 'flower-composer-command-compact-context';
@@ -653,6 +664,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [workingDirectoryPathContext, setWorkingDirectoryPathContext] = createSignal<FlowerWorkingDirectoryPathContext | null>(null);
   const [, setWorkingDirectoryPathContextLoading] = createSignal(false);
   const [workingDirectoryPickerOpen, setWorkingDirectoryPickerOpen] = createSignal(false);
+  const [composerMoreOpen, setComposerMoreOpen] = createSignal(false);
+  const [composerControlLayout, setComposerControlLayout] = createSignal<FlowerComposerControlLayout>({
+    availableWidth: 0,
+    moreWidth: FLOWER_COMPOSER_MORE_WIDTH_FALLBACK_PX,
+    itemWidths: {},
+  });
 
   createEffect(on(
     () => selectedThreadID(),
@@ -706,6 +723,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let modelMenuRef: HTMLDivElement | undefined;
   let permissionTriggerRef: HTMLButtonElement | undefined;
   let permissionMenuRef: HTMLDivElement | undefined;
+  let composerControlsViewportRef: HTMLDivElement | undefined;
+  let composerControlsMeasureRef: HTMLDivElement | undefined;
+  let composerMoreButtonRef: HTMLButtonElement | undefined;
+  let composerMorePanelRef: HTMLDivElement | undefined;
   let subagentTriggerRef: HTMLButtonElement | undefined;
   let subagentDropdownRef: HTMLDivElement | undefined;
   let renameDialogRef: HTMLDivElement | undefined;
@@ -1030,7 +1051,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && !surfaceWarmupActive()
   ));
   const workingDirectoryChipInteractive = createMemo(() => (
-    selectedThreadWorkingDirectory() !== '' || canPickWorkingDirectory()
+    (selectedThreadID() ? displayedWorkingDirectory() !== '' : canPickWorkingDirectory())
   ));
   const workingDirectoryChipTitle = createMemo(() => {
     const path = displayedWorkingDirectory();
@@ -1088,11 +1109,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
   const handleWorkingDirectoryChipClick = async () => {
-    const threadPath = selectedThreadWorkingDirectory();
-    if (threadPath) {
-      await writeClipboardText(threadPath, copy().threadList.workingDirectoryLabel);
+    if (selectedThreadID()) {
+      const path = displayedWorkingDirectory();
+      if (!path) return;
+      setComposerMoreOpen(false);
+      await writeClipboardText(path, copy().threadList.workingDirectoryLabel);
       return;
     }
+    setComposerMoreOpen(false);
     await openWorkingDirectoryPicker();
   };
   createEffect(() => {
@@ -1717,6 +1741,141 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return null;
   });
   const needsSetup = createMemo(() => !!snapshot() && !readyForChat());
+
+  const composerControlIDs = createMemo<readonly FlowerComposerControlID[]>(() => {
+    if (needsSetup()) return [];
+    if (selectedThreadReadOnly()) return ['working_dir', 'permission', 'read_only'];
+    if (selectedInputRequest()) return [];
+    return [
+      'working_dir',
+      'permission',
+      'model',
+      ...(composerReasoningEnabled() ? ['reasoning' as const] : []),
+    ];
+  });
+  const composerControlWidth = (ids: readonly FlowerComposerControlID[], includeMore: boolean): number => {
+    if (ids.length === 0) return includeMore ? composerControlLayout().moreWidth : 0;
+    const layout = composerControlLayout();
+    const controlsWidth = ids.reduce((total, id) => total + Math.max(0, layout.itemWidths[id] ?? 0), 0);
+    const controlGaps = Math.max(0, ids.length - 1) * FLOWER_COMPOSER_CONTROL_GAP_PX;
+    if (!includeMore) return controlsWidth + controlGaps;
+    return controlsWidth
+      + controlGaps
+      + (ids.length > 0 ? FLOWER_COMPOSER_CONTROL_GAP_PX : 0)
+      + Math.max(FLOWER_COMPOSER_MORE_WIDTH_FALLBACK_PX, layout.moreWidth);
+  };
+  const composerOverflowControlIDs = createMemo<readonly FlowerComposerControlID[]>(() => {
+    const ids = composerControlIDs();
+    const availableWidth = composerControlLayout().availableWidth;
+    if (ids.length === 0 || availableWidth <= 0) return [];
+    if (composerControlWidth(ids, false) <= availableWidth) return [];
+
+    const overflow = new Set<FlowerComposerControlID>();
+    for (const id of FLOWER_COMPOSER_CONTROL_OVERFLOW_ORDER) {
+      if (!ids.includes(id)) continue;
+      overflow.add(id);
+      const inlineIDs = ids.filter((candidate) => !overflow.has(candidate));
+      if (composerControlWidth(inlineIDs, true) <= availableWidth) break;
+    }
+    return FLOWER_COMPOSER_CONTROL_ORDER.filter((id) => overflow.has(id));
+  });
+  const composerInlineControlIDs = createMemo<readonly FlowerComposerControlID[]>(() => {
+    const overflow = new Set(composerOverflowControlIDs());
+    return composerControlIDs().filter((id) => !overflow.has(id));
+  });
+  const setComposerControlLayoutIfChanged = (next: FlowerComposerControlLayout) => {
+    const previous = composerControlLayout();
+    const ids = FLOWER_COMPOSER_CONTROL_ORDER;
+    const same = previous.availableWidth === next.availableWidth
+      && previous.moreWidth === next.moreWidth
+      && ids.every((id) => (previous.itemWidths[id] ?? 0) === (next.itemWidths[id] ?? 0));
+    if (!same) setComposerControlLayout(next);
+  };
+  const measureComposerControls = () => {
+    const viewportWidth = Math.ceil(
+      composerControlsViewportRef?.getBoundingClientRect().width
+        || composerControlsViewportRef?.clientWidth
+        || 0,
+    );
+    const itemWidths: Partial<Record<FlowerComposerControlID, number>> = {};
+    for (const id of FLOWER_COMPOSER_CONTROL_ORDER) {
+      const node = composerControlsMeasureRef?.querySelector<HTMLElement>(`[data-flower-composer-control-measure="${id}"]`);
+      const width = Math.ceil(node?.getBoundingClientRect().width || node?.offsetWidth || 0);
+      if (width > 0) itemWidths[id] = width;
+    }
+    const moreNode = composerControlsMeasureRef?.querySelector<HTMLElement>('[data-flower-composer-more-measure="true"]');
+    const moreWidth = Math.max(
+      FLOWER_COMPOSER_MORE_WIDTH_FALLBACK_PX,
+      Math.ceil(moreNode?.getBoundingClientRect().width || moreNode?.offsetWidth || 0),
+    );
+    setComposerControlLayoutIfChanged({
+      availableWidth: viewportWidth,
+      moreWidth,
+      itemWidths,
+    });
+  };
+  let composerControlMeasureFrame = 0;
+  const scheduleComposerControlMeasure = () => {
+    if (typeof window === 'undefined') return;
+    if (composerControlMeasureFrame) return;
+    composerControlMeasureFrame = window.requestAnimationFrame(() => {
+      composerControlMeasureFrame = 0;
+      measureComposerControls();
+    });
+  };
+  onMount(() => {
+    scheduleComposerControlMeasure();
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => scheduleComposerControlMeasure());
+    if (composerControlsViewportRef) resizeObserver?.observe(composerControlsViewportRef);
+    if (composerControlsMeasureRef) resizeObserver?.observe(composerControlsMeasureRef);
+    const onResize = () => scheduleComposerControlMeasure();
+    window.addEventListener('resize', onResize);
+    onCleanup(() => {
+      if (composerControlMeasureFrame) {
+        window.cancelAnimationFrame(composerControlMeasureFrame);
+        composerControlMeasureFrame = 0;
+      }
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', onResize);
+    });
+  });
+  createEffect(() => {
+    void composerControlIDs().join('|');
+    void displayedWorkingDirectoryLabel();
+    void workingDirectoryChipTitle();
+    void composerPermissionType();
+    void composerPermissionCopy().label;
+    void selectedThreadModelLabel();
+    void composerReasoningEnabled();
+    void composerReasoningSelection();
+    void selectedThreadReadOnlyDisplay();
+    scheduleComposerControlMeasure();
+  });
+  createEffect(() => {
+    if (composerOverflowControlIDs().length === 0) setComposerMoreOpen(false);
+  });
+  createEffect(() => {
+    if (!composerMoreOpen()) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target)) return;
+      setComposerMoreOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setComposerMoreOpen(false);
+      queueMicrotask(() => composerMoreButtonRef?.focus());
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown, true);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+    });
+  });
 
   const handlerStateFromDecision = (decision: FlowerRouterDecision): FlowerHandlerResolutionState => {
     if (decision.selected_handler && !decision.blocker && decision.route !== 'blocked') {
@@ -5290,13 +5449,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </div>
   );
 
-  const workingDirectoryChip = () => (
+  const workingDirectoryChip = (location: FlowerComposerControlLocation = 'inline') => (
     <button
       type="button"
       class={cn(
         'flower-working-dir-chip',
+        `flower-composer-control-${location}`,
         workingDirectoryChipInteractive() && 'flower-working-dir-chip-interactive',
       )}
+      data-flower-composer-control="working_dir"
       title={workingDirectoryChipTitle()}
       aria-label={workingDirectoryChipTitle()}
       aria-disabled={workingDirectoryChipInteractive() ? undefined : 'true'}
@@ -5311,6 +5472,253 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </button>
   );
 
+  const modelSelector = (location: FlowerComposerControlLocation = 'inline') => (
+    <Show
+      when={!surfaceWarmupActive() && modelSelectOptions().length > 0}
+      fallback={(
+        <span class={cn('flower-model-chip', `flower-composer-control-${location}`, surfaceWarmupActive() && 'flower-model-chip-warmup')}>
+          {surfaceWarmupActive() ? warmupModelLabel() : selectedThreadModelLabel()}
+        </span>
+      )}
+    >
+      <div class={cn('flower-model-select-anchor', `flower-composer-control-${location}`)} data-flower-composer-control="model">
+        <button
+          ref={modelTriggerRef}
+          type="button"
+          class="flower-model-select-trigger"
+          disabled={!composerModelInteractive() || modelPatchPending()}
+          aria-haspopup="listbox"
+          aria-expanded={modelMenuOpen()}
+          aria-label={`Model: ${selectedThreadModelLabel()}`}
+          title={selectedThreadModelLabel()}
+          onClick={() => { if (modelMenuOpen()) { closeModelMenu(false); return; } openModelMenu(); }}
+          onKeyDown={handleModelTriggerKeyDown}
+        >
+          <span class="flower-model-select-label">{selectedThreadModelLabel()}</span>
+          <ChevronDown class="flower-model-select-chevron" aria-hidden="true" />
+        </button>
+        <Show when={modelMenuOpen()}>
+          <div
+            ref={modelMenuRef}
+            class="flower-model-menu"
+            role="listbox"
+            onKeyDown={handleModelMenuKeyDown}
+          >
+            <For each={modelSelectOptions()}>
+              {(option) => {
+                const selected = () => option.id === selectedComposerModelID();
+                return (
+                  <button
+                    type="button"
+                    class={cn('flower-model-menu-item', selected() && 'flower-model-menu-item-active')}
+                    role="option"
+                    aria-selected={selected()}
+                    onClick={() => { void updateComposerModelID(option.id); closeModelMenu(true); }}
+                  >
+                    {option.providerType
+                      ? <FlowerProviderBrandIcon type={option.providerType} class="flower-model-menu-icon" />
+                      : <Bot class="flower-model-menu-icon" />}
+                    <span class="flower-model-menu-copy">
+                      <span class="flower-model-menu-name">{option.label}</span>
+                      <span class="flower-model-menu-meta">
+                        <Show when={option.contextWindow}>
+                          <span>{formatFlowerTokenCount(option.contextWindow)} context</span>
+                        </Show>
+                        <Show when={option.maxOutputTokens}>
+                          <span> · {formatFlowerTokenCount(option.maxOutputTokens)} output</span>
+                        </Show>
+                        <Show when={option.supportsImageInput}>
+                          <span> · Image</span>
+                        </Show>
+                      </span>
+                    </span>
+                    <Show when={selected()}>
+                      <Check class="flower-model-menu-check" aria-hidden="true" />
+                    </Show>
+                  </button>
+                );
+              }}
+            </For>
+          </div>
+        </Show>
+      </div>
+    </Show>
+  );
+
+  const reasoningControl = (location: FlowerComposerControlLocation = 'inline') => (
+    <span class={cn('flower-composer-reasoning-control', `flower-composer-control-${location}`)} data-flower-composer-control="reasoning">
+      <FlowerReasoningControl
+        compact
+        variant="badge"
+        capability={selectedReasoningCapability()}
+        selection={composerReasoningSelection()}
+        label="Reasoning"
+        readOnly={!composerReasoningInteractive()}
+        onChange={(selection) => { void updateComposerReasoningSelection(selection); }}
+      />
+    </span>
+  );
+
+  const readOnlyComposerChip = (location: FlowerComposerControlLocation = 'inline') => (
+    <div
+      class={cn('flower-composer-readonly-chip', `flower-composer-control-${location}`)}
+      data-flower-composer-control="read_only"
+      title={selectedThreadReadOnlyReason()}
+    >
+      {selectedThreadReadOnlyDisplay()}
+    </div>
+  );
+
+  const composerControlLabel = (id: FlowerComposerControlID): string => {
+    switch (id) {
+      case 'working_dir':
+        return copy().threadList.workingDirectoryLabel;
+      case 'permission':
+        return copy().chat.permissionSelectorLabel;
+      case 'model':
+        return copy().chat.modelLabel;
+      case 'reasoning':
+        return 'Reasoning';
+      case 'read_only':
+        return selectedThreadReadOnlyDisplay();
+      default:
+        return '';
+    }
+  };
+
+  const composerControlMeasure = (id: FlowerComposerControlID) => {
+    switch (id) {
+      case 'working_dir':
+        return (
+          <span class="flower-working-dir-chip flower-composer-control-measure">
+            <FolderOpen class="h-3.5 w-3.5" aria-hidden="true" />
+            <span class="flower-working-dir-chip-label">{displayedWorkingDirectoryLabel()}</span>
+          </span>
+        );
+      case 'permission':
+        return (
+          <span class="flower-permission-trigger flower-composer-control-measure" data-permission-type={composerPermissionType()}>
+            <Shield class="flower-permission-icon" />
+            <span class="flower-permission-label">{composerPermissionCopy().label}</span>
+            <ChevronDown class="flower-permission-chevron" aria-hidden="true" />
+          </span>
+        );
+      case 'model':
+        return (
+          <span class="flower-model-select-trigger flower-composer-control-measure">
+            <span class="flower-model-select-label">{selectedThreadModelLabel()}</span>
+            <ChevronDown class="flower-model-select-chevron" aria-hidden="true" />
+          </span>
+        );
+      case 'reasoning':
+        return (
+          <span class="flower-reasoning-control flower-reasoning-control-badge flower-composer-control-measure">
+            <span class="flower-reasoning-badge-button">Reasoning</span>
+          </span>
+        );
+      case 'read_only':
+        return (
+          <span class="flower-composer-readonly-chip flower-composer-control-measure">
+            {selectedThreadReadOnlyDisplay()}
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const composerControl = (id: FlowerComposerControlID, location: FlowerComposerControlLocation) => {
+    switch (id) {
+      case 'working_dir':
+        return workingDirectoryChip(location);
+      case 'permission':
+        return permissionSelector();
+      case 'model':
+        return modelSelector(location);
+      case 'reasoning':
+        return reasoningControl(location);
+      case 'read_only':
+        return readOnlyComposerChip(location);
+      default:
+        return null;
+    }
+  };
+
+  const composerMorePanel = () => (
+    <Show when={composerMoreOpen() && composerOverflowControlIDs().length > 0}>
+      <div
+        ref={composerMorePanelRef}
+        class="flower-composer-more-panel"
+        role="dialog"
+        aria-label="More composer controls"
+        data-flower-composer-more-panel="true"
+      >
+        <For each={composerOverflowControlIDs()}>
+          {(id) => (
+            <div class="flower-composer-more-row" data-flower-composer-more-item={id}>
+              <span class="flower-composer-more-label">{composerControlLabel(id)}</span>
+              <span class="flower-composer-more-control">{composerControl(id, 'overflow')}</span>
+            </div>
+          )}
+        </For>
+      </div>
+    </Show>
+  );
+
+  const composerMoreButton = () => (
+    <Show when={composerOverflowControlIDs().length > 0}>
+      <div class="flower-composer-more-anchor">
+        <button
+          ref={composerMoreButtonRef}
+          type="button"
+          class="flower-composer-more-button"
+          aria-label="More composer controls"
+          title="More"
+          aria-haspopup="dialog"
+          aria-expanded={composerMoreOpen()}
+          onClick={() => setComposerMoreOpen((open) => !open)}
+        >
+          <MoreHorizontal class="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+        {composerMorePanel()}
+      </div>
+    </Show>
+  );
+
+  const composerControls = () => (
+    <div
+      ref={composerControlsViewportRef}
+      class="flower-composer-controls-viewport"
+      data-flower-composer-controls="true"
+      aria-live="polite"
+    >
+      <div class="flower-composer-controls-inline">
+        <For each={composerInlineControlIDs()}>
+          {(id) => (
+            <span class="flower-composer-control-slot" data-flower-composer-inline-item={id}>
+              {composerControl(id, 'inline')}
+            </span>
+          )}
+        </For>
+        {composerMoreButton()}
+      </div>
+      <div ref={composerControlsMeasureRef} class="flower-composer-controls-measure" aria-hidden="true">
+        <For each={composerControlIDs()}>
+          {(id) => (
+            <span data-flower-composer-control-measure={id}>
+              {composerControlMeasure(id)}
+            </span>
+          )}
+        </For>
+        <span data-flower-composer-more-measure="true">
+          <span class="flower-composer-more-button flower-composer-control-measure">
+            <MoreHorizontal class="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+
   const chatPanel = () => (
     <div class="flower-chat-shell flower-chat-shell">
       <div class="flower-chat-header flower-chat-header border-b border-border/80 backdrop-blur-md">
@@ -5319,7 +5727,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <FlowerIcon class="h-5 w-5 text-primary" />
             <div class="flower-chat-header-identity min-w-0">
               <div class="flower-chat-header-title truncate">{selectedThread()?.title || copy().chat.titleFallback}</div>
-              {workingDirectoryChip()}
             </div>
           </div>
           <div class="flower-chat-header-actions">
@@ -5515,108 +5922,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </>
                   )}
                 >
-                    <div class="flower-model-stack" aria-live="polite">
-                      <Show
-                        when={selectedThreadReadOnly()}
-                        fallback={(
-                          <>
-                            <Show when={!selectedInputRequest()}>
-                              <div class="flower-model-selection">
-                                {permissionSelector()}
-                                <span class="flower-model-selection-label">{copy().chat.modelLabel}</span>
-                                <Show
-                                  when={!surfaceWarmupActive() && modelSelectOptions().length > 0}
-                                  fallback={(
-                                    <span class={cn('flower-model-chip', surfaceWarmupActive() && 'flower-model-chip-warmup')}>
-                                      {surfaceWarmupActive() ? warmupModelLabel() : selectedThreadModelLabel()}
-                                    </span>
-                                  )}
-                                >
-                                  <div class="flower-model-select-anchor">
-                                    <button
-                                      ref={modelTriggerRef}
-                                      type="button"
-                                      class="flower-model-select-trigger"
-                                      disabled={!composerModelInteractive() || modelPatchPending()}
-                                      aria-haspopup="listbox"
-                                      aria-expanded={modelMenuOpen()}
-                                      aria-label={`Model: ${selectedThreadModelLabel()}`}
-                                      title={selectedThreadModelLabel()}
-                                      onClick={() => { if (modelMenuOpen()) { closeModelMenu(false); return; } openModelMenu(); }}
-                                      onKeyDown={handleModelTriggerKeyDown}
-                                    >
-                                      <span class="flower-model-select-label">{selectedThreadModelLabel()}</span>
-                                      <ChevronDown class="flower-model-select-chevron" aria-hidden="true" />
-                                    </button>
-                                    <Show when={modelMenuOpen()}>
-                                      <div
-                                        ref={modelMenuRef}
-                                        class="flower-model-menu"
-                                        role="listbox"
-                                        onKeyDown={handleModelMenuKeyDown}
-                                      >
-                                        <For each={modelSelectOptions()}>
-                                          {(option) => {
-                                            const selected = () => option.id === selectedComposerModelID();
-                                            return (
-                                              <button
-                                                type="button"
-                                                class={cn('flower-model-menu-item', selected() && 'flower-model-menu-item-active')}
-                                                role="option"
-                                                aria-selected={selected()}
-                                                onClick={() => { void updateComposerModelID(option.id); closeModelMenu(true); }}
-                                              >
-                                                {option.providerType
-                                                  ? <FlowerProviderBrandIcon type={option.providerType} class="flower-model-menu-icon" />
-                                                  : <Bot class="flower-model-menu-icon" />}
-                                                <span class="flower-model-menu-copy">
-                                                  <span class="flower-model-menu-name">{option.label}</span>
-                                                  <span class="flower-model-menu-meta">
-                                                    <Show when={option.contextWindow}>
-                                                      <span>{formatFlowerTokenCount(option.contextWindow)} context</span>
-                                                    </Show>
-                                                    <Show when={option.maxOutputTokens}>
-                                                      <span> · {formatFlowerTokenCount(option.maxOutputTokens)} output</span>
-                                                    </Show>
-                                                    <Show when={option.supportsImageInput}>
-                                                      <span> · Image</span>
-                                                    </Show>
-                                                  </span>
-                                                </span>
-                                                <Show when={selected()}>
-                                                  <Check class="flower-model-menu-check" aria-hidden="true" />
-                                                </Show>
-                                              </button>
-                                            );
-                                          }}
-                                        </For>
-                                      </div>
-                                    </Show>
-                                  </div>
-                                </Show>
-                                <Show when={composerReasoningEnabled()}>
-                                  <FlowerReasoningControl
-                                    compact
-                                    variant="badge"
-                                    capability={selectedReasoningCapability()}
-                                    selection={composerReasoningSelection()}
-                                    label="Reasoning"
-                                    readOnly={!composerReasoningInteractive()}
-                                    onChange={(selection) => { void updateComposerReasoningSelection(selection); }}
-                                  />
-                                </Show>
-                              </div>
-                            </Show>
-                          </>
-                        )}
-                      >
-                        <div class="flower-composer-readonly-stack">
-                          {permissionSelector()}
-                          <div class="flower-composer-readonly-chip" title={selectedThreadReadOnlyReason()}>
-                            {selectedThreadReadOnlyDisplay()}
-                          </div>
-                        </div>
-                      </Show>
+                    <div class="flower-model-stack">
+                      {composerControls()}
                       <Show when={handlerNotice()}>
                         {(notice) => <div role="alert" class="flower-handler-error-card">
                           <div class="flower-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>

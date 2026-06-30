@@ -2409,15 +2409,15 @@ describe('FlowerSurface navigation threads', () => {
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-scroll-latest"] button')));
-    (runtime.querySelector('[data-thread-id="thread-scroll-latest"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-scroll-agent"]')));
-
     const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
     const scrollMetrics = attachTranscriptScrollMetrics(transcript, {
       clientHeight: 400,
       scrollHeight: 1400,
       scrollTop: 120,
     });
+    (runtime.querySelector('[data-thread-id="thread-scroll-latest"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-scroll-agent"]')));
+
     await waitFor(() => scrollMetrics.scrollTop() === 1000);
     scrollMetrics.setScrollTop(120);
     transcript.dispatchEvent(new Event('scroll', { bubbles: true }));
