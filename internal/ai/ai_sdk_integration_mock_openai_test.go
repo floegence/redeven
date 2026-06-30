@@ -383,6 +383,7 @@ func TestIntegration_ModelGateway_OpenAI_IdentityQuestionCompletesWithNaturalSto
 	if !strings.Contains(view.LastMessagePreview, token) {
 		t.Fatalf("last_message_preview=%q, want it to include %q", view.LastMessagePreview, token)
 	}
+	requireAssistantTimelineTextContains(t, ctx, svc, &meta, th.ThreadID, token)
 
 	if !mock.didSeeResponses() {
 		t.Fatalf("expected OpenAI Responses API call (/responses)")
@@ -495,6 +496,7 @@ func TestIntegration_ModelGateway_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testi
 	if !strings.Contains(view.LastMessagePreview, token) {
 		t.Fatalf("last_message_preview=%q, want it to include %q", view.LastMessagePreview, token)
 	}
+	requireAssistantTimelineTextContains(t, ctx, svc, &meta, th.ThreadID, token)
 
 	if !mock.didSeeResponses() {
 		t.Fatalf("expected OpenAI Responses API call (/responses)")

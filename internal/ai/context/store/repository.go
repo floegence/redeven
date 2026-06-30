@@ -67,7 +67,6 @@ func (r *Repository) ListRecentDialogueTurns(ctx context.Context, endpointID str
 		userMessageRowID := int64(0)
 		assistantRowID := int64(0)
 		userMessageFound := false
-		assistantMessageFound := false
 		if strings.TrimSpace(turn.UserMessageID) != "" {
 			if msg, err := r.db.GetTranscriptMessage(ctx, endpointID, threadID, turn.UserMessageID); err == nil && msg != nil {
 				userMessageRowID = msg.ID
@@ -79,10 +78,9 @@ func (r *Repository) ListRecentDialogueTurns(ctx context.Context, endpointID str
 			if msg, err := r.db.GetTranscriptMessage(ctx, endpointID, threadID, turn.AssistantMessageID); err == nil && msg != nil {
 				assistantRowID = msg.ID
 				assistantText = strings.TrimSpace(msg.TextContent)
-				assistantMessageFound = true
 			}
 		}
-		if !userMessageFound || !assistantMessageFound {
+		if !userMessageFound {
 			continue
 		}
 		out = append(out, model.DialogueTurn{

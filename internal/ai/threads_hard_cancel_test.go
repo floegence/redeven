@@ -481,7 +481,7 @@ func hasIdleCompactionEventPhase(events []threadstore.RunEventRecord, eventType 
 	return false
 }
 
-func TestService_CancelRun_PersistsCanceledAssistantBeforeNextUserTurn(t *testing.T) {
+func TestService_CancelRun_DoesNotPersistCanceledAssistantBeforeNextUserTurn(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t, nil)
 
@@ -549,7 +549,6 @@ func TestService_CancelRun_PersistsCanceledAssistantBeforeNextUserTurn(t *testin
 	}
 	want := []string{
 		firstUser.MessageID + ":user:complete",
-		assistantID + ":assistant:canceled",
 		secondUser.MessageID + ":user:complete",
 	}
 	if len(got) != len(want) {
@@ -560,22 +559,9 @@ func TestService_CancelRun_PersistsCanceledAssistantBeforeNextUserTurn(t *testin
 			t.Fatalf("messages=%v, want %v", got, want)
 		}
 	}
-	var assistantPayload struct {
-		Status string `json:"status"`
-		Blocks []any  `json:"blocks"`
-	}
-	if err := json.Unmarshal([]byte(msgs[1].MessageJSON), &assistantPayload); err != nil {
-		t.Fatalf("unmarshal assistant json: %v", err)
-	}
-	if assistantPayload.Status != "canceled" {
-		t.Fatalf("assistant json status=%q, want canceled", assistantPayload.Status)
-	}
-	if len(assistantPayload.Blocks) != 0 {
-		t.Fatalf("assistant canceled boundary should not carry stale blocks: %#v", assistantPayload.Blocks)
-	}
 }
 
-func TestService_PublishCanceledAssistantProjectionUpdatesCanceledBoundary(t *testing.T) {
+func TestFloretTerminalProjectionUpdatesCanceledBoundaryWithoutTranscriptShadow(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t, nil)
 
@@ -614,8 +600,6 @@ func TestService_PublishCanceledAssistantProjectionUpdatesCanceledBoundary(t *te
 	r.threadsDB = svc.threadsDB
 	r.persistOpTimeout = svc.persistOpTO
 	r.markDetached()
-
-	svc.publishCanceledAssistantDraft(meta, r, svc.threadsDB, svc.persistOpTO)
 
 	timeline := observation.ActivityTimeline{
 		SchemaVersion: observation.ActivityTimelineSchemaVersion,
@@ -658,41 +642,14 @@ func TestService_PublishCanceledAssistantProjectionUpdatesCanceledBoundary(t *te
 	if !strings.Contains(projectedRaw, "activity-timeline") {
 		t.Fatalf("projected assistant JSON missing activity timeline: %s", projectedRaw)
 	}
-	svc.publishCanceledAssistantProjection(meta, r, svc.threadsDB, svc.persistOpTO)
-
 	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 20, 0)
 	if err != nil {
 		t.Fatalf("ListMessages: %v", err)
 	}
-	if len(msgs) != 2 {
-		t.Fatalf("messages=%d, want user plus one assistant: %#v", len(msgs), msgs)
+	if len(msgs) != 1 {
+		t.Fatalf("messages=%d, want only the user row after canceled projection: %#v", len(msgs), msgs)
 	}
-	if msgs[0].MessageID != firstUser.MessageID || msgs[1].MessageID != assistantID {
+	if msgs[0].MessageID != firstUser.MessageID {
 		t.Fatalf("message order/id mismatch: %#v", msgs)
-	}
-	var assistantPayload struct {
-		Status string            `json:"status"`
-		Blocks []json.RawMessage `json:"blocks"`
-	}
-	if err := json.Unmarshal([]byte(msgs[1].MessageJSON), &assistantPayload); err != nil {
-		t.Fatalf("unmarshal assistant json: %v", err)
-	}
-	if assistantPayload.Status != "canceled" || len(assistantPayload.Blocks) != 1 {
-		t.Fatalf("assistant payload=%#v, want one canceled activity block", assistantPayload)
-	}
-	var activity struct {
-		Type    string `json:"type"`
-		Summary struct {
-			Status string `json:"status"`
-		} `json:"summary"`
-		Items []struct {
-			Status string `json:"status"`
-		} `json:"items"`
-	}
-	if err := json.Unmarshal(assistantPayload.Blocks[0], &activity); err != nil {
-		t.Fatalf("unmarshal activity block: %v", err)
-	}
-	if activity.Type != "activity-timeline" || activity.Summary.Status != string(observation.ActivityStatusCanceled) || len(activity.Items) != 1 || activity.Items[0].Status != string(observation.ActivityStatusCanceled) {
-		t.Fatalf("activity block=%#v, want canceled activity", activity)
 	}
 }

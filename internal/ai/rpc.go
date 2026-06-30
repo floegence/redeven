@@ -8,7 +8,6 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -301,29 +300,9 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		}
 
 		endpointID := strings.TrimSpace(meta.EndpointID)
-		var msgs []threadstore.Message
-		var nextAfter int64
-		var hasMore bool
-
-		if req.Tail {
-			// Tail mode: return the latest messages window (ASC order) so the client can
-			// anchor its cursor near the end even when realtime frames were dropped.
-			var nextBefore int64
-			var err error
-			msgs, nextBefore, hasMore, err = db.ListMessages(ctx, endpointID, threadID, limit, 0)
-			_ = nextBefore // not used by the RPC client yet
-			if err != nil {
-				return nil, &rpc.Error{Code: 400, Message: err.Error()}
-			}
-			if len(msgs) > 0 {
-				nextAfter = msgs[len(msgs)-1].ID
-			}
-		} else {
-			var err error
-			msgs, nextAfter, hasMore, err = db.ListMessagesAfter(ctx, endpointID, threadID, limit, req.AfterRowID)
-			if err != nil {
-				return nil, &rpc.Error{Code: 400, Message: err.Error()}
-			}
+		msgs, nextAfter, hasMore, err := s.listThreadTimelineMessagesAfter(ctx, endpointID, threadID, limit, req.AfterRowID, req.Tail)
+		if err != nil {
+			return nil, &rpc.Error{Code: 400, Message: err.Error()}
 		}
 
 		out := &aiListMessagesResp{
@@ -332,16 +311,12 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 			HasMore:        hasMore,
 		}
 		for _, m := range msgs {
-			raw, err := SanitizeActivityTimelineMessageJSON(m.MessageJSON)
-			if err != nil {
-				return nil, toAIRPCError(err)
-			}
-			if len(raw) == 0 {
+			if len(m.MessageJSON) == 0 {
 				continue
 			}
 			out.Messages = append(out.Messages, aiTranscriptMessageItem{
-				RowID:       m.ID,
-				MessageJSON: raw,
+				RowID:       m.RowID,
+				MessageJSON: m.MessageJSON,
 			})
 		}
 		return out, nil

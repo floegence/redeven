@@ -599,8 +599,8 @@ func TestExecutePreparedRun_PreEngineFailureTerminalizesRunRecord(t *testing.T) 
 	if err != nil {
 		t.Fatalf("GetTranscriptMessage assistant: %v", err)
 	}
-	if msg == nil || msg.Role != "assistant" || msg.Status != "error" || !strings.Contains(msg.TextContent, "model not allowed") {
-		t.Fatalf("assistant message=%+v, want persisted error assistant", msg)
+	if msg != nil {
+		t.Fatalf("assistant message=%+v, want no Floret-backed transcript shadow row", msg)
 	}
 	turns, err := svc.contextRepo.ListRecentDialogueTurns(ctx, meta.EndpointID, th.ThreadID, 10)
 	if err != nil {

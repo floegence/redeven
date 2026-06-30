@@ -122,6 +122,10 @@ func (h *recordingFloretHost) ListPendingApprovals(_ context.Context, req flrunt
 	}, nil
 }
 
+func (h *recordingFloretHost) ReadTurnProjection(context.Context, flruntime.ReadTurnProjectionRequest) (flruntime.ThreadTurnProjection, error) {
+	return flruntime.ThreadTurnProjection{}, flruntime.ErrTurnNotFound
+}
+
 func (h *recordingFloretHost) CompactThread(context.Context, flruntime.CompactThreadRequest) (flruntime.CompactThreadResult, error) {
 	return flruntime.CompactThreadResult{}, nil
 }

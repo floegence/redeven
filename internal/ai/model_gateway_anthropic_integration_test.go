@@ -256,6 +256,7 @@ func TestIntegration_ModelGateway_Anthropic_Stream_Succeeds(t *testing.T) {
 	if !strings.Contains(view.LastMessagePreview, token) {
 		t.Fatalf("last_message_preview=%q, want it to include %q", view.LastMessagePreview, token)
 	}
+	requireAssistantTimelineTextContains(t, ctx, svc, &meta, th.ThreadID, token)
 	if !mock.didSeeMessages() {
 		t.Fatalf("expected Anthropic Messages API call (/messages)")
 	}
@@ -303,23 +304,7 @@ func TestIntegration_ModelGateway_Anthropic_LengthContinuationSucceeds(t *testin
 		t.Fatalf("run_status=%q, want %q", got, RunStateSuccess)
 	}
 
-	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 50, 0)
-	if err != nil {
-		t.Fatalf("ListMessages: %v", err)
-	}
-	foundAssistant := false
-	for _, msg := range msgs {
-		if strings.TrimSpace(msg.Role) != "assistant" {
-			continue
-		}
-		foundAssistant = true
-		if got := strings.TrimSpace(msg.TextContent); got != "PART_1PART_2" {
-			t.Fatalf("assistant text=%q, want PART_1PART_2", got)
-		}
-	}
-	if !foundAssistant {
-		t.Fatalf("missing assistant message")
-	}
+	requireAssistantTimelineText(t, ctx, svc, &meta, th.ThreadID, "PART_1PART_2")
 
 	runEvents, err := svc.ListRunEvents(ctx, &meta, runID, 2000)
 	if err != nil {
@@ -443,23 +428,7 @@ func TestIntegration_ModelGateway_Anthropic_IdentityLengthContinuationCompletesW
 		t.Fatalf("run_status=%q, want %q", got, RunStateSuccess)
 	}
 
-	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 50, 0)
-	if err != nil {
-		t.Fatalf("ListMessages: %v", err)
-	}
-	assistantCount := 0
-	for _, msg := range msgs {
-		if strings.TrimSpace(msg.Role) != "assistant" {
-			continue
-		}
-		assistantCount++
-		if got := strings.TrimSpace(msg.TextContent); got != "FIRST_PARTSECOND_PART" {
-			t.Fatalf("assistant text=%q, want FIRST_PARTSECOND_PART", got)
-		}
-	}
-	if assistantCount != 1 {
-		t.Fatalf("assistant message count=%d, want 1", assistantCount)
-	}
+	requireAssistantTimelineText(t, ctx, svc, &meta, th.ThreadID, "FIRST_PARTSECOND_PART")
 
 	runEvents, err := svc.ListRunEvents(ctx, &meta, runID, 2000)
 	if err != nil {

@@ -112,8 +112,8 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
-	const floretVersion = "v0.3.68"
-	oldFloretVersions := []string{"v0.3." + "45", "v0.3." + "46", "v0.3." + "47", "v0.3." + "53", "v0.3." + "54", "v0.3." + "55", "v0.3." + "56", "v0.3." + "57", "v0.3." + "58", "v0.3." + "59", "v0.3." + "60", "v0.3." + "61", "v0.3." + "62", "v0.3." + "63", "v0.3." + "64", "v0.3." + "65", "v0.3." + "66", "v0.3." + "67"}
+	const floretVersion = "v0.3.70"
+	oldFloretVersions := []string{"v0.3." + "45", "v0.3." + "46", "v0.3." + "47", "v0.3." + "53", "v0.3." + "54", "v0.3." + "55", "v0.3." + "56", "v0.3." + "57", "v0.3." + "58", "v0.3." + "59", "v0.3." + "60", "v0.3." + "61", "v0.3." + "62", "v0.3." + "63", "v0.3." + "64", "v0.3." + "65", "v0.3." + "66", "v0.3." + "67", "v0.3." + "68", "v0.3." + "69"}
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
 	goSum := readRepoFile(t, root, "go.sum")
@@ -142,6 +142,50 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 			strings.Contains(notices, "github.com/floegence/floret@"+oldFloretVersion) {
 			t.Fatalf("repository must not retain old floret %s dependency markers", oldFloretVersion)
 		}
+	}
+}
+
+func TestFloretAssistantProjectionIsNotStoredAsThreadstoreShadowCopy(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	for _, rel := range []string{
+		filepath.Join("internal", "ai", "service.go"),
+		filepath.Join("internal", "ai", "floret_thread_projection.go"),
+		filepath.Join("internal", "ai", "flower_live_projection.go"),
+		filepath.Join("internal", "ai", "terminal_process_service.go"),
+	} {
+		content := readRepoFile(t, root, rel)
+		for _, marker := range []string{
+			"persist" + "AssistantSnapshot",
+			"persist" + "FloretProjectionToAssistantMessage",
+			"Update" + "TranscriptMessageJSONByRowID",
+			"snapshot" + "AssistantMessageJSONWithStatus(\"complete\")",
+			"Project" + "ThreadTurn",
+		} {
+			if strings.Contains(content, marker) {
+				t.Fatalf("%s must not store Floret assistant projection shadow copy marker %q", rel, marker)
+			}
+		}
+	}
+}
+
+func TestFloretLifecycleBoundaryUsesProviderFreeLifecycleHost(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	content := readRepoFile(t, root, filepath.Join("internal", "ai", "service.go"))
+	for _, marker := range []string{
+		"flconfig." + "ProviderFake",
+		"Fake" + "Response",
+		"flruntime." + "NewHost",
+	} {
+		if strings.Contains(content, marker) {
+			t.Fatalf("service.go lifecycle cleanup must use Floret NewLifecycleHost instead of retaining marker %q", marker)
+		}
+	}
+	if !strings.Contains(content, "flruntime."+"NewLifecycleHost") {
+		t.Fatalf("service.go must use Floret NewLifecycleHost for lifecycle-only cleanup")
 	}
 }
 

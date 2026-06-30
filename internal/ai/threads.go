@@ -990,7 +990,7 @@ func (s *Service) ListThreadMessages(ctx context.Context, meta *session.Meta, th
 		return nil, errors.New("missing thread_id")
 	}
 
-	msgs, nextBeforeID, hasMore, err := db.ListMessages(ctx, meta.EndpointID, threadID, limit, beforeID)
+	msgs, nextBeforeID, hasMore, err := s.listThreadTimelineMessages(ctx, meta.EndpointID, threadID, limit, beforeID)
 	if err != nil {
 		return nil, err
 	}
@@ -1001,14 +1001,10 @@ func (s *Service) ListThreadMessages(ctx context.Context, meta *session.Meta, th
 		TotalReturned: len(msgs),
 	}
 	for _, m := range msgs {
-		raw, err := SanitizeActivityTimelineMessageJSON(m.MessageJSON)
-		if err != nil {
-			return nil, err
-		}
-		if len(raw) == 0 {
+		if len(m.MessageJSON) == 0 {
 			continue
 		}
-		out.Messages = append(out.Messages, raw)
+		out.Messages = append(out.Messages, m.MessageJSON)
 	}
 	return out, nil
 }
