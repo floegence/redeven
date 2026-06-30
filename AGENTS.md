@@ -18,6 +18,12 @@ Goals:
 - Every change must be done in a dedicated worktree plus feature branch.
 - `main` is only for `pull --ff-only` and final integration.
 - Do not leave uncommitted changes in the `main` worktree.
+- Do not create routine `backup/*` branches. If recovery is needed, abort the
+  rebase, inspect the feature worktree, and use explicit user-approved branches
+  only when the branch itself has a real collaboration purpose.
+- `git stash` is allowed only as a short-term safety rope before rebasing or
+  switching context. Every stash must be applied back and continued, or dropped
+  once it is confirmed obsolete. Do not leave stale stashes as hidden work.
 - Never introduce or rely on `go.work` or `go.work.sum` in this repository, sibling repositories, or their shared parent directory as a cross-repo development shortcut.
 - `redeven` consumes published upstream releases only. Do not wire local sibling repositories into builds, tests, or release validation.
 - If local `main` is pushed, push the full current local `main` tip together with all of its latest commits.
