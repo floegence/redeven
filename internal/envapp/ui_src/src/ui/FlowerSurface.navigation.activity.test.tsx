@@ -1644,6 +1644,152 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.textContent).toContain('example response');
   });
 
+  it('allows approved terminal activity rows that required approval to expand', async () => {
+    const terminalThread = thread({
+      thread_id: 'thread-approved-terminal-output',
+      title: 'Approved terminal output',
+      created_at_ms: 6_710,
+      updated_at_ms: 6_820,
+      status: 'success',
+      messages: [
+        {
+          id: 'm-approved-terminal-output',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 6_820,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-approved-terminal-output',
+              turn_id: 'm-approved-terminal-output',
+              items: [activityItem({
+                item_id: 'terminal-approved',
+                tool_id: 'terminal-approved',
+                tool_name: 'terminal.exec',
+                kind: 'tool',
+                label: 'curl -s https://example.com/weather',
+                renderer: 'terminal',
+                requires_approval: true,
+                approval_state: 'approved',
+                payload: {
+                  command: 'curl -s https://example.com/weather',
+                  process_id: 'tp_approved_terminal',
+                  exit_code: 0,
+                  stdout: 'weather response',
+                },
+              })],
+            }),
+          ],
+        },
+      ],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [terminalThread]),
+      loadThread: vi.fn(async () => liveBootstrap(terminalThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-approved-terminal-output"] button')));
+    (runtime.querySelector('[data-thread-id="thread-approved-terminal-output"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="terminal-approved"]')));
+
+    const row = runtime.querySelector('[data-flower-activity-item-id="terminal-approved"]') as HTMLElement;
+    const button = row.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
+    expect(row.textContent).toContain('curl -s https://example.com/weather');
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(row.querySelector('.flower-activity-inline-chevron')).toBeTruthy();
+
+    button.click();
+    await waitFor(() => row.textContent?.includes('weather response') ?? false);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(row.textContent).toContain('approved');
+    expect(row.textContent).toContain('weather response');
+  });
+
+  it('keeps currently waiting approval activity rows read-only', async () => {
+    const approvalAction = {
+      action_id: 'appr-terminal-readonly',
+      origin: 'main_tool' as const,
+      run_id: 'run-terminal-readonly',
+      tool_id: 'terminal-readonly',
+      tool_name: 'terminal.exec',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      revision: 1,
+      version: 1,
+      requested_at_ms: 6_840,
+      can_approve: true,
+      expected_seq: 14,
+      summary: {
+        label: 'curl -s https://example.com/pending',
+        command: 'curl -s https://example.com/pending',
+        effects: ['shell'],
+      },
+    };
+    const terminalThread = thread({
+      thread_id: 'thread-waiting-terminal-readonly',
+      title: 'Waiting terminal output',
+      created_at_ms: 6_830,
+      updated_at_ms: 6_840,
+      status: 'waiting_approval',
+      approval_actions: [approvalAction],
+      messages: [
+        {
+          id: 'm-terminal-readonly',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 6_840,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-terminal-readonly',
+              turn_id: 'm-terminal-readonly',
+              status: 'waiting',
+              severity: 'blocking',
+              needs_attention: true,
+              items: [activityItem({
+                item_id: 'terminal-readonly',
+                tool_id: 'terminal-readonly',
+                tool_name: 'terminal.exec',
+                kind: 'tool',
+                label: 'curl -s https://example.com/pending',
+                renderer: 'terminal',
+                status: 'waiting',
+                severity: 'blocking',
+                needs_attention: true,
+                requires_approval: true,
+                approval_state: 'requested',
+                payload: {
+                  command: 'curl -s https://example.com/pending',
+                  stdout: 'should not open from the activity row',
+                },
+              })],
+            }),
+          ],
+        },
+      ],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [terminalThread]),
+      loadThread: vi.fn(async () => liveBootstrap(terminalThread, 14)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-waiting-terminal-readonly"] button')));
+    (runtime.querySelector('[data-thread-id="thread-waiting-terminal-readonly"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-terminal-readonly"]')));
+
+    const row = runtime.querySelector('[data-flower-activity-item-id="terminal-readonly"]') as HTMLElement;
+    const button = row.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
+    expect(row.textContent).toContain('curl -s https://example.com/pending');
+    expect(button.getAttribute('aria-expanded')).toBeNull();
+    expect(row.querySelector('.flower-activity-inline-chevron')).toBeNull();
+
+    button.click();
+    expect(row.textContent).not.toContain('should not open from the activity row');
+    expect(runtime.querySelector('.flower-composer [data-flower-approval-action-id="appr-terminal-readonly"]')).toBeTruthy();
+  });
+
   it('refreshes inline activity when message block fields change in place', async () => {
     const runningActivity = activityTimeline({
       run_id: 'run-refresh-block',
@@ -1823,7 +1969,7 @@ describe('FlowerSurface navigation activity', () => {
     },
     {
       name: 'approval',
-      status: 'pending' as FlowerActivityStatus,
+      status: 'waiting' as FlowerActivityStatus,
       severity: 'blocking' as const,
       requires_approval: true,
       approval_state: 'requested' as const,
@@ -1884,6 +2030,8 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => runtime.querySelectorAll('.flower-activity-inline-row').length === 1);
 
     expect(runtime.querySelectorAll('.flower-activity-inline-row')).toHaveLength(1);
-    // approval activity rows are not expandable
+    if (scenario.requires_approval) {
+      expect(runtime.querySelector('.flower-activity-inline-button')?.getAttribute('aria-expanded')).toBeNull();
+    }
   });
 });
