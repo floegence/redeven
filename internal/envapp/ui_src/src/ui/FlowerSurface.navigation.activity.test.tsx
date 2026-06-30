@@ -1217,6 +1217,16 @@ describe('FlowerSurface navigation activity', () => {
                 label: 'pwd; sleep 15; date',
                 renderer: 'terminal',
                 payload: { command: 'pwd; sleep 15; date' },
+              }), activityItem({
+                item_id: 'tool-queued-sibling',
+                tool_id: 'tool-queued-sibling',
+                tool_name: 'terminal.exec',
+                kind: 'tool',
+                status: 'pending',
+                severity: 'quiet',
+                label: 'curl -sL https://search.example.test',
+                renderer: 'terminal',
+                payload: { command: 'curl -sL https://search.example.test' },
               })],
             }),
           ],
@@ -1251,6 +1261,12 @@ describe('FlowerSurface navigation activity', () => {
     const row = runtime.querySelector('[data-flower-activity-item-id="tool-needs-approval"]') as HTMLElement;
     expect(row?.textContent).toContain('pwd; sleep 15; date');
     expect(row?.textContent).not.toContain('terminal.exec');
+    expect(row?.getAttribute('data-flower-activity-status')).toBe('waiting');
+    const queuedRow = runtime.querySelector('[data-flower-activity-item-id="tool-queued-sibling"]') as HTMLElement;
+    expect(queuedRow?.textContent).toContain('curl -sL https://search.example.test');
+    expect(queuedRow?.getAttribute('data-flower-activity-status')).toBe('pending');
+    expect(queuedRow?.textContent).toContain('Pending');
+    expect(queuedRow?.textContent).not.toContain('Running');
     expect(runtime.querySelector('.flower-transcript-stack > .flower-approval-stack')).toBeNull();
   });
 
