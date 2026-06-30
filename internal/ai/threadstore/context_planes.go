@@ -13,7 +13,8 @@ const openGoalMemoryPrefix = "open_goal::"
 
 var ErrThreadTodosVersionConflict = errors.New("thread todos version conflict")
 
-// ConversationTurn links transcript messages to one semantic turn.
+// ConversationTurn records product-message and Floret turn correlation for one semantic turn.
+// AssistantMessageID is a presentation/correlation id; Floret-backed turns must not require it to own a transcript row.
 type ConversationTurn struct {
 	ID                 int64  `json:"id"`
 	TurnID             string `json:"turn_id"`
@@ -505,8 +506,13 @@ WHERE endpoint_id = ? AND thread_id = ? AND run_id = ? AND message_id = ?
 }
 
 func (s *Store) ListConversationTurns(ctx context.Context, endpointID string, threadID string, limit int) ([]ConversationTurn, error) {
+	turns, _, _, err := s.ListConversationTurnsBefore(ctx, endpointID, threadID, limit, 0)
+	return turns, err
+}
+
+func (s *Store) ListConversationTurnsBefore(ctx context.Context, endpointID string, threadID string, limit int, beforeID int64) ([]ConversationTurn, int64, bool, error) {
 	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
+		return nil, 0, false, errors.New("store not initialized")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -514,7 +520,7 @@ func (s *Store) ListConversationTurns(ctx context.Context, endpointID string, th
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
 	if endpointID == "" || threadID == "" {
-		return nil, errors.New("invalid request")
+		return nil, 0, false, errors.New("invalid request")
 	}
 	if limit <= 0 {
 		limit = 80
@@ -522,16 +528,19 @@ func (s *Store) ListConversationTurns(ctx context.Context, endpointID string, th
 	if limit > 500 {
 		limit = 500
 	}
+	if beforeID <= 0 {
+		beforeID = 1<<62 - 1
+	}
 
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, turn_id, endpoint_id, thread_id, run_id, user_message_id, assistant_message_id, created_at_unix_ms
 FROM conversation_turns
-WHERE endpoint_id = ? AND thread_id = ?
+WHERE endpoint_id = ? AND thread_id = ? AND id < ?
 ORDER BY id DESC
 LIMIT ?
-`, endpointID, threadID, limit)
+`, endpointID, threadID, beforeID, limit)
 	if err != nil {
-		return nil, err
+		return nil, 0, false, err
 	}
 	defer rows.Close()
 
@@ -548,19 +557,31 @@ LIMIT ?
 			&rec.AssistantMessageID,
 			&rec.CreatedAtUnixMs,
 		); err != nil {
-			return nil, err
+			return nil, 0, false, err
 		}
 		tmp = append(tmp, rec)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, 0, false, err
+	}
+	if len(tmp) == 0 {
+		return nil, 0, false, nil
 	}
 
 	out := make([]ConversationTurn, 0, len(tmp))
 	for i := len(tmp) - 1; i >= 0; i-- {
 		out = append(out, tmp[i])
 	}
-	return out, nil
+	nextBeforeID := out[0].ID
+	var more int
+	if err := s.db.QueryRowContext(ctx, `
+SELECT COUNT(1)
+FROM conversation_turns
+WHERE endpoint_id = ? AND thread_id = ? AND id < ?
+`, endpointID, threadID, nextBeforeID).Scan(&more); err != nil {
+		more = 0
+	}
+	return out, nextBeforeID, more > 0, nil
 }
 
 func (s *Store) ListRecentTranscriptMessages(ctx context.Context, endpointID string, threadID string, limit int) ([]Message, error) {

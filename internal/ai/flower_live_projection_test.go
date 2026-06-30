@@ -39,6 +39,27 @@ func appendFlowerTimelineTestMessage(t *testing.T, store *threadstore.Store, end
 	}
 }
 
+func TestFlowerTimelineMessageFromRawExtractsJSONBlockContent(t *testing.T) {
+	t.Parallel()
+
+	msg, ok, err := flowerTimelineMessageFromRaw("msg_assistant", "assistant", "complete", 123, json.RawMessage(`{
+		"id":"msg_assistant",
+		"role":"assistant",
+		"status":"complete",
+		"timestamp":123,
+		"blocks":[{"type":"markdown","content":"visible answer"}]
+	}`))
+	if err != nil {
+		t.Fatalf("flowerTimelineMessageFromRaw: %v", err)
+	}
+	if !ok {
+		t.Fatalf("flowerTimelineMessageFromRaw ok=false, want true")
+	}
+	if got := strings.TrimSpace(msg.Content); got != "visible answer" {
+		t.Fatalf("Content=%q, want visible answer", got)
+	}
+}
+
 func TestFlowerLiveMaterializedStateApprovalActionsWireSampling(t *testing.T) {
 	t.Parallel()
 
@@ -138,6 +159,15 @@ func TestBuildFlowerTimelineMessagesUsesCanonicalTurnOrder(t *testing.T) {
 			t.Fatalf("AppendConversationTurn(%s): %v", turn.TurnID, err)
 		}
 	}
+	if err := store.UpsertRun(ctx, threadstore.RunRecord{
+		RunID:      "run-2",
+		EndpointID: endpointID,
+		ThreadID:   threadID,
+		MessageID:  "msg-assistant-2",
+		State:      string(RunStateRunning),
+	}); err != nil {
+		t.Fatalf("UpsertRun(run-2): %v", err)
+	}
 
 	svc := &Service{threadsDB: store}
 	timeline, err := svc.buildFlowerTimelineMessages(ctx, endpointID, threadID, FlowerLiveMaterializedState{
@@ -216,6 +246,15 @@ func TestBuildFlowerTimelineMessagesKeepsLateCanceledAssistantWithItsTurn(t *tes
 		CreatedAtUnixMs: 3_000,
 	}); err != nil {
 		t.Fatalf("AppendConversationTurn(run-2): %v", err)
+	}
+	if err := store.UpsertRun(ctx, threadstore.RunRecord{
+		RunID:      "run-2",
+		EndpointID: endpointID,
+		ThreadID:   threadID,
+		MessageID:  "msg-assistant-2",
+		State:      string(RunStateRunning),
+	}); err != nil {
+		t.Fatalf("UpsertRun(run-2): %v", err)
 	}
 
 	svc := &Service{threadsDB: store}

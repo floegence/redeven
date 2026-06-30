@@ -223,8 +223,9 @@ func TestSettlePendingToolWithDetachedRunUsesRunHost(t *testing.T) {
 	}
 }
 
-func TestSettlePendingToolWithActiveFloretRunRequiresActiveHost(t *testing.T) {
+func TestSettlePendingToolWithoutActiveHostUsesLifecycleHost(t *testing.T) {
 	svc := &Service{
+		stateDir:      t.TempDir(),
 		activeRunByTh: map[string]string{runThreadKey("env_terminal", "thread_terminal"): "run_terminal"},
 		runs: map[string]*run{
 			"run_terminal": &run{id: "run_terminal", endpointID: "env_terminal", threadID: "thread_terminal"},
@@ -242,10 +243,10 @@ func TestSettlePendingToolWithActiveFloretRunRequiresActiveHost(t *testing.T) {
 
 	_, err := svc.settlePendingToolWithActiveFloretRun(context.Background(), "env_terminal", "thread_terminal", req)
 	if err == nil {
-		t.Fatalf("settlePendingToolWithActiveFloretRun succeeded without an active host")
+		t.Fatalf("settlePendingToolWithActiveFloretRun succeeded without a seeded Floret pending target")
 	}
-	if got, want := err.Error(), "active floret settlement host unavailable"; got != want {
-		t.Fatalf("error=%q, want %q", got, want)
+	if strings.Contains(err.Error(), "active floret settlement host unavailable") {
+		t.Fatalf("settlement kept old active-host-only failure: %v", err)
 	}
 }
 
@@ -568,9 +569,6 @@ func TestApplyFloretThreadProjectionRejectsInvalidActivityWithoutClearingLiveBlo
 	if applied {
 		t.Fatalf("invalid projection should not apply")
 	}
-	if r.hasFloretThreadDetailProjectionApplied() {
-		t.Fatalf("invalid projection should not mark committed projection applied")
-	}
 	if len(r.assistantBlocks) != 1 {
 		t.Fatalf("assistantBlocks len=%d, want existing live block retained: %#v", len(r.assistantBlocks), r.assistantBlocks)
 	}
@@ -611,9 +609,6 @@ func TestApplyFloretThreadProjectionReplacesStreamedBlocks(t *testing.T) {
 	}) {
 		t.Fatalf("projection returned false")
 	}
-	if !r.hasFloretThreadDetailProjectionApplied() {
-		t.Fatalf("projection flag not set")
-	}
 	if len(r.assistantBlocks) != 3 {
 		t.Fatalf("assistantBlocks len=%d, want 3: %#v", len(r.assistantBlocks), r.assistantBlocks)
 	}
@@ -648,9 +643,6 @@ func TestApplyFloretThreadProjectionClearsStreamedBlocksWhenEmpty(t *testing.T) 
 
 	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{}) {
 		t.Fatalf("projection returned false")
-	}
-	if !r.hasFloretThreadDetailProjectionApplied() {
-		t.Fatalf("projection flag not set")
 	}
 	if len(r.assistantBlocks) != 1 {
 		t.Fatalf("assistantBlocks len=%d, want one empty cache block: %#v", len(r.assistantBlocks), r.assistantBlocks)
@@ -739,12 +731,9 @@ func TestFloretTerminalThreadProjectionRejectsMismatchedRun(t *testing.T) {
 	if !ok || block.Content != "canceled" {
 		t.Fatalf("assistantBlocks mutated by mismatched terminal projection: %#v", r.assistantBlocks)
 	}
-	if r.hasFloretThreadDetailProjectionApplied() {
-		t.Fatalf("projection flag set by mismatched terminal projection")
-	}
 }
 
-func TestApplyFloretPendingToolSettlementProjectionPreservesCanceledAssistantMessage(t *testing.T) {
+func TestApplyFloretPendingToolSettlementProjectionDoesNotPersistAssistantMessage(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t, nil)
 	meta := testSendTurnMeta()
@@ -810,33 +799,8 @@ func TestApplyFloretPendingToolSettlementProjectionPreservesCanceledAssistantMes
 	if gotRowID != rowID {
 		t.Fatalf("rowID=%d, want original row %d", gotRowID, rowID)
 	}
-	var msg struct {
-		Status string            `json:"status"`
-		Blocks []json.RawMessage `json:"blocks"`
-	}
-	if err := json.Unmarshal([]byte(raw), &msg); err != nil {
-		t.Fatalf("unmarshal assistant: %v", err)
-	}
-	if msg.Status != "canceled" || len(msg.Blocks) != 1 {
-		t.Fatalf("assistant msg=%#v, want one canceled activity block", msg)
-	}
-	var block struct {
-		Type    string `json:"type"`
-		Summary struct {
-			Status string `json:"status"`
-		} `json:"summary"`
-		Items []struct {
-			Status string `json:"status"`
-		} `json:"items"`
-	}
-	if err := json.Unmarshal(msg.Blocks[0], &block); err != nil {
-		t.Fatalf("unmarshal activity block: %v", err)
-	}
-	if block.Type != activityTimelineBlockType ||
-		block.Summary.Status != string(observation.ActivityStatusCanceled) ||
-		len(block.Items) != 1 ||
-		block.Items[0].Status != string(observation.ActivityStatusCanceled) {
-		t.Fatalf("activity block=%#v, want canceled item", block)
+	if raw != string(initialRaw) {
+		t.Fatalf("assistant message JSON mutated by Floret settlement projection:\n got %s\nwant %s", raw, string(initialRaw))
 	}
 }
 

@@ -867,6 +867,77 @@ func TestStore_AppendMessage_MonotonicThreadActivityTimestamp(t *testing.T) {
 	}
 }
 
+func TestStore_UpdateThreadLastMessagePreviewDoesNotAppendTranscriptMessage(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_preview", EndpointID: "env_1", CreatedAtUnixMs: 100, UpdatedAtUnixMs: 100}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if _, err := s.AppendMessage(ctx, "env_1", "th_preview", Message{
+		ThreadID:        "th_preview",
+		EndpointID:      "env_1",
+		MessageID:       "msg_user",
+		Role:            "user",
+		Status:          "complete",
+		CreatedAtUnixMs: 1000,
+		UpdatedAtUnixMs: 1000,
+		TextContent:     "initial user request",
+		MessageJSON:     `{"id":"msg_user","role":"user","blocks":[{"type":"markdown","content":"initial user request"}],"status":"complete","timestamp":1000}`,
+	}, "u1", "u1@example.com"); err != nil {
+		t.Fatalf("AppendMessage: %v", err)
+	}
+
+	before, err := s.GetThread(ctx, "env_1", "th_preview")
+	if err != nil {
+		t.Fatalf("GetThread(before): %v", err)
+	}
+	if err := s.UpdateThreadLastMessagePreview(ctx, "env_1", "th_preview", "assistant answer", 2000, "u1", "u1@example.com"); err != nil {
+		t.Fatalf("UpdateThreadLastMessagePreview: %v", err)
+	}
+	after, err := s.GetThread(ctx, "env_1", "th_preview")
+	if err != nil {
+		t.Fatalf("GetThread(after): %v", err)
+	}
+	if got := strings.TrimSpace(after.LastMessagePreview); got != "assistant answer" {
+		t.Fatalf("LastMessagePreview=%q, want assistant answer", got)
+	}
+	if after.LastMessageAtUnixMs != 2000 {
+		t.Fatalf("LastMessageAtUnixMs=%d, want 2000", after.LastMessageAtUnixMs)
+	}
+	if after.FlowerActivityRevision <= before.FlowerActivityRevision {
+		t.Fatalf("FlowerActivityRevision did not advance: before=%d after=%d", before.FlowerActivityRevision, after.FlowerActivityRevision)
+	}
+	msgs, _, _, err := s.ListMessages(ctx, "env_1", "th_preview", 20, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(msgs) != 1 || msgs[0].Role != "user" {
+		t.Fatalf("messages=%+v, want only the original user row", msgs)
+	}
+
+	if err := s.UpdateThreadLastMessagePreview(ctx, "env_1", "th_preview", "older assistant answer", 1500, "u1", "u1@example.com"); err != nil {
+		t.Fatalf("UpdateThreadLastMessagePreview older: %v", err)
+	}
+	unchanged, err := s.GetThread(ctx, "env_1", "th_preview")
+	if err != nil {
+		t.Fatalf("GetThread(unchanged): %v", err)
+	}
+	if got := strings.TrimSpace(unchanged.LastMessagePreview); got != "assistant answer" {
+		t.Fatalf("LastMessagePreview=%q, want assistant answer after older update", got)
+	}
+	if unchanged.LastMessageAtUnixMs != 2000 {
+		t.Fatalf("LastMessageAtUnixMs=%d, want 2000 after older update", unchanged.LastMessageAtUnixMs)
+	}
+}
+
 func TestStore_UpsertProjectedMessageBumpsFlowerActivityOnVisibleChanges(t *testing.T) {
 	t.Parallel()
 
@@ -2149,6 +2220,59 @@ WHERE run_id = 'run_legacy'
 	}
 	if version != CurrentSchemaVersion() {
 		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
+	}
+}
+
+func TestStore_ListConversationTurnsBeforePagesBeyondDefaultWindow(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	endpointID := "env_turn_page"
+	threadID := "th_turn_page"
+	if err := s.CreateThread(ctx, Thread{ThreadID: threadID, EndpointID: endpointID}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	for i := 0; i < 505; i++ {
+		id := fmt.Sprintf("turn_%03d", i)
+		if _, err := s.AppendConversationTurn(ctx, ConversationTurn{
+			TurnID:             id,
+			EndpointID:         endpointID,
+			ThreadID:           threadID,
+			RunID:              "run_" + id,
+			UserMessageID:      "user_" + id,
+			AssistantMessageID: "assistant_" + id,
+			CreatedAtUnixMs:    int64(1000 + i),
+		}); err != nil {
+			t.Fatalf("AppendConversationTurn(%s): %v", id, err)
+		}
+	}
+
+	firstPage, nextBefore, hasMore, err := s.ListConversationTurnsBefore(ctx, endpointID, threadID, 500, 0)
+	if err != nil {
+		t.Fatalf("ListConversationTurnsBefore first: %v", err)
+	}
+	if len(firstPage) != 500 || !hasMore {
+		t.Fatalf("first page len=%d hasMore=%v, want 500 true", len(firstPage), hasMore)
+	}
+	if firstPage[0].TurnID != "turn_005" || firstPage[len(firstPage)-1].TurnID != "turn_504" {
+		t.Fatalf("first page bounds=%q..%q, want turn_005..turn_504", firstPage[0].TurnID, firstPage[len(firstPage)-1].TurnID)
+	}
+	secondPage, _, hasMore, err := s.ListConversationTurnsBefore(ctx, endpointID, threadID, 500, nextBefore)
+	if err != nil {
+		t.Fatalf("ListConversationTurnsBefore second: %v", err)
+	}
+	if len(secondPage) != 5 || hasMore {
+		t.Fatalf("second page len=%d hasMore=%v, want 5 false", len(secondPage), hasMore)
+	}
+	if secondPage[0].TurnID != "turn_000" || secondPage[len(secondPage)-1].TurnID != "turn_004" {
+		t.Fatalf("second page bounds=%q..%q, want turn_000..turn_004", secondPage[0].TurnID, secondPage[len(secondPage)-1].TurnID)
 	}
 }
 

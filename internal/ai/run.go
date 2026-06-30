@@ -158,16 +158,14 @@ type run struct {
 	activitySegmentActive     bool
 	activitySegmentBlockIndex int
 
-	muAssistant                   sync.Mutex
-	assistantCreatedAtUnixMs      int64
-	assistantBlocks               []any
-	assistantAnswer               assistantAnswerState
-	activityFileActions           map[string]FlowerActivityFileAction
-	activityFileActionSeq         int64
-	floretThreadProjectionApplied bool
-	floretCommittedThreadEvents   []flruntime.ThreadDetailEvent
-	waitingPrompt                 *RequestUserInputPrompt
-	providerContinuation          threadstore.ThreadProviderContinuation
+	muAssistant              sync.Mutex
+	assistantCreatedAtUnixMs int64
+	assistantBlocks          []any
+	assistantAnswer          assistantAnswerState
+	activityFileActions      map[string]FlowerActivityFileAction
+	activityFileActionSeq    int64
+	waitingPrompt            *RequestUserInputPrompt
+	providerContinuation     threadstore.ThreadProviderContinuation
 
 	finalizationReason string
 	currentModelID     string
@@ -2696,6 +2694,39 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 	return r.snapshotAssistantMessageJSONWithStatus("complete")
 }
 
+func (r *run) assistantPreviewTextSnapshot() (string, int64) {
+	if r == nil {
+		return "", 0
+	}
+	r.muAssistant.Lock()
+	blocks := make([]any, 0, len(r.assistantBlocks))
+	blocks = append(blocks, r.assistantBlocks...)
+	assistantAt := r.assistantCreatedAtUnixMs
+	r.muAssistant.Unlock()
+
+	var sb strings.Builder
+	for _, blk := range blocks {
+		text := assistantVisibleTextFromBlock(blk)
+		if text == "" {
+			continue
+		}
+		if sb.Len() > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString(text)
+	}
+	if text := strings.TrimSpace(sb.String()); text != "" {
+		return text, assistantAt
+	}
+	if text := r.canonicalMarkdownTextSnapshot(""); text != "" {
+		return text, assistantAt
+	}
+	if text := r.waitingPromptSummarySnapshot(); text != "" {
+		return text, assistantAt
+	}
+	return "", assistantAt
+}
+
 func assistantVisibleTextFromBlock(block any) string {
 	switch v := block.(type) {
 	case *persistedMarkdownBlock:
@@ -2703,6 +2734,12 @@ func assistantVisibleTextFromBlock(block any) string {
 			return ""
 		}
 		return strings.TrimSpace(v.Content)
+	case persistedMarkdownBlock:
+		return strings.TrimSpace(v.Content)
+	case map[string]any:
+		return firstNonEmptyString(anyToString(v["content"]), anyToString(v["text"]))
+	case map[string]string:
+		return firstNonEmptyString(v["content"], v["text"])
 	default:
 		return ""
 	}

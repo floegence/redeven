@@ -2,9 +2,7 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"sort"
 	"strings"
 	"time"
 
@@ -51,7 +49,6 @@ func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTur
 	}
 	oldLen := len(r.assistantBlocks)
 	r.assistantBlocks = blocks
-	r.floretThreadProjectionApplied = true
 	r.muAssistant.Unlock()
 	if !emit {
 		return true
@@ -125,80 +122,6 @@ func (r *run) flowerBlocksFromFloretThreadProjectionChecked(projection flruntime
 	return blocks, true
 }
 
-func (r *run) recordFloretCommittedThreadEvent(ev *flruntime.ThreadDetailEvent) {
-	if r == nil || ev == nil {
-		return
-	}
-	if !r.acceptsPresentationUpdates() {
-		return
-	}
-	if strings.TrimSpace(string(ev.TurnID)) != strings.TrimSpace(r.messageID) {
-		return
-	}
-	r.muAssistant.Lock()
-	for _, existing := range r.floretCommittedThreadEvents {
-		if floretThreadDetailEventsSameEntry(existing, *ev) {
-			r.muAssistant.Unlock()
-			return
-		}
-	}
-	r.floretCommittedThreadEvents = append(r.floretCommittedThreadEvents, *ev)
-	sort.SliceStable(r.floretCommittedThreadEvents, func(i, j int) bool {
-		left := r.floretCommittedThreadEvents[i]
-		right := r.floretCommittedThreadEvents[j]
-		if left.Ordinal != right.Ordinal {
-			return left.Ordinal < right.Ordinal
-		}
-		if !left.CreatedAt.Equal(right.CreatedAt) {
-			return left.CreatedAt.Before(right.CreatedAt)
-		}
-		return left.ID < right.ID
-	})
-	r.muAssistant.Unlock()
-	r.applyCommittedFloretThreadDetailProjection()
-}
-
-func floretThreadDetailEventsSameEntry(left flruntime.ThreadDetailEvent, right flruntime.ThreadDetailEvent) bool {
-	leftID := strings.TrimSpace(left.ID)
-	rightID := strings.TrimSpace(right.ID)
-	if leftID != "" && rightID != "" {
-		return leftID == rightID
-	}
-	return left.Ordinal != 0 && left.Ordinal == right.Ordinal
-}
-
-func (r *run) applyCommittedFloretThreadDetailProjection() bool {
-	if r == nil {
-		return false
-	}
-	if !r.acceptsPresentationUpdates() {
-		return false
-	}
-	r.muAssistant.Lock()
-	events := append([]flruntime.ThreadDetailEvent(nil), r.floretCommittedThreadEvents...)
-	r.muAssistant.Unlock()
-	if len(events) == 0 {
-		return false
-	}
-	projection := flruntime.ProjectThreadTurn(flruntime.ProjectThreadTurnRequest{
-		ThreadID: flruntime.ThreadID(strings.TrimSpace(r.threadID)),
-		TurnID:   flruntime.TurnID(strings.TrimSpace(r.messageID)),
-		RunID:    flruntime.RunID(strings.TrimSpace(r.id)),
-		TraceID:  flruntime.TraceID(strings.TrimSpace(r.id)),
-		Events:   events,
-	})
-	return r.applyFloretThreadProjection(projection)
-}
-
-func (r *run) hasFloretThreadDetailProjectionApplied() bool {
-	if r == nil {
-		return false
-	}
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	return r.floretThreadProjectionApplied
-}
-
 func (s *Service) settlePendingToolWithActiveFloretRun(ctx context.Context, endpointID string, threadID string, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
 	if s == nil {
 		return flruntime.PendingToolSettlementResult{}, errors.New("nil service")
@@ -211,7 +134,12 @@ func (s *Service) settlePendingToolWithActiveFloretRun(ctx context.Context, endp
 			return host.SettlePendingTool(ctx, req)
 		}
 	}
-	return flruntime.PendingToolSettlementResult{}, errors.New("active floret settlement host unavailable")
+	host, err := s.openFloretLifecycleHost()
+	if err != nil {
+		return flruntime.PendingToolSettlementResult{}, err
+	}
+	defer host.Close()
+	return host.SettlePendingTool(ctx, req)
 }
 
 func (s *Service) runForFloretSettlement(endpointID string, threadID string, runID string) *run {
@@ -236,12 +164,9 @@ func (s *Service) runForFloretSettlement(endpointID string, threadID string, run
 	return r
 }
 
-func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context, endpointID string, threadID string, runID string, messageID string, projection flruntime.ThreadTurnProjection) error {
+func (s *Service) applyFloretPendingToolSettlementProjection(_ context.Context, endpointID string, threadID string, runID string, messageID string, projection flruntime.ThreadTurnProjection) error {
 	if s == nil {
 		return errors.New("nil service")
-	}
-	if ctx == nil {
-		ctx = context.Background()
 	}
 	if active := s.runForFloretSettlement(endpointID, threadID, runID); active != nil {
 		if active.acceptsPresentationUpdates() {
@@ -250,75 +175,9 @@ func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context
 			active.applyFloretTerminalThreadProjection(projection)
 		}
 	}
-	return s.persistFloretProjectionToAssistantMessage(ctx, endpointID, threadID, runID, messageID, projection)
-}
-
-func (s *Service) persistFloretProjectionToAssistantMessage(ctx context.Context, endpointID string, threadID string, runID string, messageID string, projection flruntime.ThreadTurnProjection) error {
-	if s == nil || s.threadsDB == nil {
-		return errors.New("threads store not ready")
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	runID = strings.TrimSpace(runID)
-	messageID = strings.TrimSpace(messageID)
-	if endpointID == "" || threadID == "" || runID == "" || messageID == "" {
-		return errors.New("invalid floret projection target")
-	}
-	ctx, cancel := context.WithTimeout(ctx, s.persistTimeout())
-	rowID, raw, err := s.threadsDB.GetTranscriptMessageRowIDAndJSONByMessageID(ctx, endpointID, threadID, messageID)
-	cancel()
-	if err != nil {
-		return err
-	}
-	status, createdAt, err := persistedMessageStatusAndTimestamp(raw)
-	if err != nil {
-		return err
-	}
-	if createdAt <= 0 {
-		createdAt = time.Now().UnixMilli()
-	}
-	projectionRun := &run{
-		id:                       runID,
-		endpointID:               endpointID,
-		threadID:                 threadID,
-		messageID:                messageID,
-		service:                  s,
-		assistantCreatedAtUnixMs: createdAt,
-	}
-	blocks := projectionRun.flowerBlocksFromFloretThreadProjection(projection)
-	if len(blocks) == 0 {
-		return errors.New("empty floret projection")
-	}
-	projectionRun.assistantBlocks = blocks
-	rawJSON, _, at, err := projectionRun.snapshotAssistantMessageJSONWithStatus(status)
-	if err != nil {
-		return err
-	}
-	if at <= 0 {
-		at = createdAt
-	}
-	ctx, cancel = context.WithTimeout(context.Background(), s.persistTimeout())
-	err = s.threadsDB.UpdateTranscriptMessageJSONByRowID(ctx, endpointID, rowID, rawJSON, at)
-	cancel()
-	if err != nil {
-		return err
-	}
-	s.broadcastTranscriptMessage(endpointID, threadID, runID, rowID, rawJSON, at)
 	s.broadcastThreadSummary(endpointID, threadID)
 	if s.threadMgr != nil {
 		s.threadMgr.Wake(endpointID, threadID)
 	}
 	return nil
-}
-
-func persistedMessageStatusAndTimestamp(raw string) (string, int64, error) {
-	var msg persistedMessage
-	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &msg); err != nil {
-		return "", 0, err
-	}
-	status := normalizeSnapshotMessageStatus(msg.Status)
-	if status == "" {
-		return "", msg.Timestamp, errors.New("persisted assistant message status is invalid")
-	}
-	return status, msg.Timestamp, nil
 }

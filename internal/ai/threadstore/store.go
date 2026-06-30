@@ -1545,6 +1545,72 @@ func (s *Store) UpdateThreadRunState(
 	return tx.Commit()
 }
 
+func (s *Store) UpdateThreadLastMessagePreview(ctx context.Context, endpointID string, threadID string, preview string, atUnixMs int64, updatedByID string, updatedByEmail string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	preview = buildPreview("assistant", preview, "")
+	if endpointID == "" || threadID == "" || preview == "" || atUnixMs <= 0 {
+		return errors.New("invalid request")
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var currentUpdatedAt int64
+	var currentLastMessageAt int64
+	if err := tx.QueryRowContext(ctx, `
+SELECT updated_at_unix_ms, last_message_at_unix_ms
+FROM ai_threads
+WHERE endpoint_id = ? AND thread_id = ?
+`, endpointID, threadID).Scan(&currentUpdatedAt, &currentLastMessageAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return sql.ErrNoRows
+		}
+		return err
+	}
+	if atUnixMs < currentLastMessageAt {
+		return tx.Commit()
+	}
+
+	threadUpdatedAt := maxInt64(time.Now().UnixMilli(), currentUpdatedAt+1)
+	updateRes, err := tx.ExecContext(ctx, `
+UPDATE ai_threads
+SET updated_at_unix_ms = ?,
+    updated_by_user_public_id = ?,
+    updated_by_user_email = ?,
+    last_message_at_unix_ms = ?,
+    last_message_preview = ?
+WHERE endpoint_id = ? AND thread_id = ?
+`,
+		threadUpdatedAt,
+		strings.TrimSpace(updatedByID),
+		strings.TrimSpace(updatedByEmail),
+		atUnixMs,
+		preview,
+		endpointID,
+		threadID,
+	)
+	if err != nil {
+		return err
+	}
+	if n, _ := updateRes.RowsAffected(); n == 0 {
+		return sql.ErrNoRows
+	}
+	if _, err := bumpFlowerActivityTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func updateThreadRunStateTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, state ThreadRunStateWrite) error {
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)

@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	flconfig "github.com/floegence/floret/config"
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
@@ -646,7 +645,65 @@ func isFloretThreadNotFoundError(err error) bool {
 	return errors.Is(err, flruntime.ErrThreadNotFound)
 }
 
-func (s *Service) openFloretLifecycleHost() (flruntime.Host, error) {
+func (s *Service) appendFloretConversationTurnCorrelation(ctx context.Context, db *threadstore.Store, timeout time.Duration, endpointID string, threadID string, runID string, turnID string, userMessageID string, createdAtUnixMs int64) error {
+	if db == nil {
+		return nil
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	runID = strings.TrimSpace(runID)
+	turnID = strings.TrimSpace(turnID)
+	userMessageID = strings.TrimSpace(userMessageID)
+	if endpointID == "" || threadID == "" || runID == "" || turnID == "" {
+		return errors.New("invalid floret turn correlation")
+	}
+	if timeout <= 0 {
+		timeout = defaultPersistOpTimeout
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	pctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	_, err := db.AppendConversationTurn(pctx, threadstore.ConversationTurn{
+		TurnID:             turnID,
+		EndpointID:         endpointID,
+		ThreadID:           threadID,
+		RunID:              runID,
+		UserMessageID:      userMessageID,
+		AssistantMessageID: turnID,
+		CreatedAtUnixMs:    createdAtUnixMs,
+	})
+	return err
+}
+
+func (s *Service) updateThreadLastMessagePreviewFromRun(ctx context.Context, db *threadstore.Store, timeout time.Duration, meta *session.Meta, endpointID string, threadID string, r *run) error {
+	if db == nil || r == nil {
+		return nil
+	}
+	preview, _ := r.assistantPreviewTextSnapshot()
+	if strings.TrimSpace(preview) == "" {
+		return nil
+	}
+	atUnixMs := time.Now().UnixMilli()
+	if timeout <= 0 {
+		timeout = defaultPersistOpTimeout
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	updatedByID := ""
+	updatedByEmail := ""
+	if meta != nil {
+		updatedByID = meta.UserPublicID
+		updatedByEmail = meta.UserEmail
+	}
+	pctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return db.UpdateThreadLastMessagePreview(pctx, endpointID, threadID, preview, atUnixMs, updatedByID, updatedByEmail)
+}
+
+func (s *Service) openFloretLifecycleHost() (flruntime.LifecycleHost, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -658,14 +715,7 @@ func (s *Service) openFloretLifecycleHost() (flruntime.Host, error) {
 	if err != nil {
 		return nil, err
 	}
-	host, err := flruntime.NewHost(flruntime.HostOptions{
-		Config: flconfig.Config{
-			Provider:     flconfig.ProviderFake,
-			Model:        "fake-model",
-			FakeResponse: "ok",
-		},
-		Store: store,
-	})
+	host, err := flruntime.NewLifecycleHost(flruntime.LifecycleHostOptions{Store: store})
 	if err != nil {
 		_ = store.Close()
 		return nil, err
@@ -1797,45 +1847,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		return err
 	}
 
-	assistantJSON := ""
-	var assistantAt int64
 	engineRunStarted := false
-	persistAssistantSnapshot := func(status string) (int64, error) {
-		if db == nil || r.assistantAlreadyPersisted() {
-			return 0, nil
-		}
-		status = normalizeSnapshotMessageStatus(status)
-		if status == "" {
-			status = "complete"
-		}
-		rawJSON, text, at, snapshotErr := r.snapshotAssistantMessageJSONWithStatus(status)
-		if snapshotErr != nil {
-			return 0, snapshotErr
-		}
-		if strings.TrimSpace(rawJSON) == "" {
-			return 0, errors.New("missing assistant message")
-		}
-		pctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		rowID, appendErr := db.AppendMessage(pctx, endpointID, threadID, threadstore.Message{
-			ThreadID:        threadID,
-			EndpointID:      endpointID,
-			MessageID:       messageID,
-			Role:            "assistant",
-			Status:          status,
-			CreatedAtUnixMs: at,
-			UpdatedAtUnixMs: at,
-			TextContent:     text,
-			MessageJSON:     rawJSON,
-		}, meta.UserPublicID, meta.UserEmail)
-		cancel()
-		if appendErr != nil {
-			return 0, appendErr
-		}
-		r.markAssistantPersisted()
-		assistantJSON = rawJSON
-		assistantAt = at
-		return rowID, nil
-	}
 
 	defer func() {
 		s.mu.Lock()
@@ -1867,20 +1879,6 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 				"error_code": runStatusErrCode,
 				"error":      runStatusErr,
 			})
-			if strings.TrimSpace(messageID) != "" && !r.assistantAlreadyPersisted() {
-				assistantStatus := "error"
-				if NormalizeRunState(runStatus) == RunStateCanceled {
-					assistantStatus = "canceled"
-				}
-				if assistantRowID, persistErr := persistAssistantSnapshot(assistantStatus); persistErr != nil {
-					if r.log != nil {
-						r.log.Warn("persist early assistant message failed", "thread_id", threadID, "run_id", runID, "error", persistErr)
-					}
-				} else if assistantRowID > 0 {
-					s.broadcastTranscriptMessage(endpointID, threadID, runID, assistantRowID, assistantJSON, assistantAt)
-					s.broadcastThreadSummary(endpointID, threadID)
-				}
-			}
 		}
 		if prepared.updateThreadRunState != nil {
 			prepared.updateThreadRunState(runStatus, runStatusErrCode, runStatusErr, waitingPrompt)
@@ -1962,6 +1960,9 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	effectiveCurrentInput.MessageRowID = autoTitleMessageRowID
 	effectiveCurrentInput.MessageCreatedAtUnixMs = autoTitleMessageCreatedAtUnixMs
 	effectiveInput.MessageID = userMsgID
+	if err := s.appendFloretConversationTurnCorrelation(context.Background(), db, persistTO, endpointID, threadID, runID, messageID, userMsgID, autoTitleMessageCreatedAtUnixMs); err != nil {
+		return streamEarlyError(err)
+	}
 	s.scheduleAutoThreadTitle(meta, threadID, effectiveCurrentInput)
 
 	select {
@@ -2020,43 +2021,13 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		}
 	}
 
-	// Hard-canceled runs are detached from the thread lifecycle to unblock UI actions.
-	// After detachment, only the same run's terminal Floret projection may update
-	// the already-created canceled assistant boundary.
 	if r.isDetached() {
-		if r.hasFloretThreadDetailProjectionApplied() {
-			s.publishCanceledAssistantProjection(meta, r, db, persistTO)
-		}
 		return finalErr
 	}
 
-	assistantRowID, err := persistAssistantSnapshot("complete")
-	if err != nil {
-		if finalErr != nil {
-			return errors.Join(finalErr, err)
-		}
-		return err
+	if err := s.updateThreadLastMessagePreviewFromRun(context.Background(), db, persistTO, meta, endpointID, threadID, r); err != nil && finalErr == nil {
+		finalErr = err
 	}
-	if db != nil {
-		turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
-		_, err = db.AppendConversationTurn(turnCtx, threadstore.ConversationTurn{
-			TurnID:             messageID,
-			EndpointID:         endpointID,
-			ThreadID:           threadID,
-			RunID:              runID,
-			UserMessageID:      userMsgID,
-			AssistantMessageID: messageID,
-			CreatedAtUnixMs:    assistantAt,
-		})
-		cancelTurn()
-		if err != nil {
-			if finalErr != nil {
-				return errors.Join(finalErr, err)
-			}
-			return err
-		}
-	}
-	s.broadcastTranscriptMessage(endpointID, threadID, runID, assistantRowID, assistantJSON, assistantAt)
 	s.broadcastThreadSummary(endpointID, threadID)
 
 	finalReason := strings.TrimSpace(r.getFinalizationReason())
@@ -2458,7 +2429,6 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 
 	if r != nil {
 		r.requestCancel("canceled")
-		s.publishCanceledAssistantDraft(meta, r, db, persistTO)
 	}
 	if threadID != "" {
 		s.closeThreadSubagents(context.Background(), endpointID, threadID, persistTO)

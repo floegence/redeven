@@ -346,26 +346,20 @@ func (s *Service) buildFlowerTimelineMessages(ctx context.Context, endpointID st
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	s.mu.Lock()
-	db := s.threadsDB
-	s.mu.Unlock()
-	if db == nil {
-		return nil, errors.New("threads store not ready")
-	}
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
 	if endpointID == "" || threadID == "" {
 		return nil, errors.New("invalid request")
 	}
 
-	msgs, _, _, err := db.ListMessages(ctx, endpointID, threadID, 500, 0)
+	msgs, err := s.loadThreadTimelineMessages(ctx, endpointID, threadID)
 	if err != nil {
 		return nil, err
 	}
 	persistedByID := make(map[string]FlowerTimelineMessage, len(msgs))
 	persistedOrder := make([]string, 0, len(msgs))
 	for _, msg := range msgs {
-		timelineMsg, ok, err := flowerTimelineMessageFromTranscript(msg)
+		timelineMsg, ok, err := flowerTimelineMessageFromRaw(msg.MessageID, "", "", msg.CreatedAt, msg.MessageJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -376,11 +370,6 @@ func (s *Service) buildFlowerTimelineMessages(ctx context.Context, endpointID st
 		persistedOrder = append(persistedOrder, timelineMsg.MessageID)
 	}
 
-	turns, err := db.ListConversationTurns(ctx, endpointID, threadID, 500)
-	if err != nil {
-		return nil, err
-	}
-	turns = associateTimelineTurnAssistantMessages(turns, persistedByID)
 	activeMessageID := activeFlowerCursorMessageID(state)
 	used := map[string]struct{}{}
 	out := make([]FlowerTimelineMessage, 0, len(persistedByID)+len(state.Messages))
@@ -405,10 +394,6 @@ func (s *Service) buildFlowerTimelineMessages(ctx context.Context, endpointID st
 		}
 	}
 
-	for _, turn := range turns {
-		appendByID(turn.UserMessageID)
-		appendByID(turn.AssistantMessageID)
-	}
 	for _, messageID := range persistedOrder {
 		appendByID(messageID)
 	}
@@ -417,29 +402,6 @@ func (s *Service) buildFlowerTimelineMessages(ctx context.Context, endpointID st
 		appendByID(messageID)
 	}
 	return out, nil
-}
-
-func associateTimelineTurnAssistantMessages(turns []threadstore.ConversationTurn, messages map[string]FlowerTimelineMessage) []threadstore.ConversationTurn {
-	if len(turns) == 0 || len(messages) == 0 {
-		return turns
-	}
-	out := make([]threadstore.ConversationTurn, len(turns))
-	copy(out, turns)
-	for i := range out {
-		if strings.TrimSpace(out[i].AssistantMessageID) != "" {
-			continue
-		}
-		turnID := strings.TrimSpace(out[i].TurnID)
-		if turnID == "" {
-			continue
-		}
-		message, ok := messages[turnID]
-		if !ok || strings.TrimSpace(message.Role) != "assistant" {
-			continue
-		}
-		out[i].AssistantMessageID = turnID
-	}
-	return out
 }
 
 func activeFlowerCursorMessageID(state FlowerLiveMaterializedState) string {
@@ -473,6 +435,10 @@ func flowerTimelineMessageFromTranscript(msg threadstore.Message) (FlowerTimelin
 	if len(raw) == 0 {
 		return FlowerTimelineMessage{}, false, nil
 	}
+	return flowerTimelineMessageFromRaw(msg.MessageID, msg.Role, msg.Status, msg.CreatedAtUnixMs, raw)
+}
+
+func flowerTimelineMessageFromRaw(messageID string, role string, status string, createdAtUnixMs int64, raw json.RawMessage) (FlowerTimelineMessage, bool, error) {
 	var record struct {
 		ID                 string            `json:"id"`
 		Role               string            `json:"role"`
@@ -485,7 +451,7 @@ func flowerTimelineMessageFromTranscript(msg threadstore.Message) (FlowerTimelin
 	if err := json.Unmarshal(raw, &record); err != nil {
 		return FlowerTimelineMessage{}, false, err
 	}
-	id := firstNonEmptyString(strings.TrimSpace(record.ID), strings.TrimSpace(msg.MessageID))
+	id := firstNonEmptyString(strings.TrimSpace(record.ID), strings.TrimSpace(messageID))
 	if id == "" {
 		return FlowerTimelineMessage{}, false, nil
 	}
@@ -502,15 +468,25 @@ func flowerTimelineMessageFromTranscript(msg threadstore.Message) (FlowerTimelin
 	}
 	return FlowerTimelineMessage{
 		MessageID:     id,
-		Role:          firstNonEmptyString(strings.TrimSpace(record.Role), strings.TrimSpace(msg.Role)),
-		Content:       strings.TrimSpace(msg.TextContent),
-		Status:        firstNonEmptyString(strings.TrimSpace(record.Status), strings.TrimSpace(msg.Status)),
-		CreatedAtMs:   firstPositiveInt64(record.Timestamp, msg.CreatedAtUnixMs),
+		Role:          firstNonEmptyString(strings.TrimSpace(record.Role), strings.TrimSpace(role)),
+		Content:       flowerTimelineTextFromBlocks(blocks),
+		Status:        firstNonEmptyString(strings.TrimSpace(record.Status), strings.TrimSpace(status)),
+		CreatedAtMs:   firstPositiveInt64(record.Timestamp, createdAtUnixMs),
 		Blocks:        blocks,
 		ContextAction: contextAction,
 		Live:          false,
 		ActiveCursor:  false,
 	}, true, nil
+}
+
+func flowerTimelineTextFromBlocks(blocks []any) string {
+	parts := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		if text := assistantVisibleTextFromBlock(block); text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func flowerTimelineMessageFromLiveDraft(draft FlowerLiveMessageDraft, activeMessageID string) (FlowerTimelineMessage, bool) {
@@ -913,98 +889,6 @@ func (s *Service) publishFlowerLiveEventFromRealtime(ev RealtimeEvent) {
 	}
 	for _, event := range s.flowerLiveEventsFromRealtime(ev) {
 		s.appendFlowerLiveEvent(event)
-	}
-}
-
-func (s *Service) publishCanceledAssistantDraft(meta *session.Meta, r *run, db *threadstore.Store, persistTO time.Duration) {
-	if s == nil || r == nil {
-		return
-	}
-	if r.assistantAlreadyPersisted() {
-		return
-	}
-	s.publishCanceledAssistantMessage(meta, r, db, persistTO)
-}
-
-func (s *Service) publishCanceledAssistantProjection(meta *session.Meta, r *run, db *threadstore.Store, persistTO time.Duration) {
-	if s == nil || r == nil {
-		return
-	}
-	messageID := strings.TrimSpace(r.messageID)
-	endpointID := strings.TrimSpace(r.endpointID)
-	threadID := strings.TrimSpace(r.threadID)
-	if messageID == "" || endpointID == "" || threadID == "" || db == nil {
-		s.publishCanceledAssistantMessage(meta, r, db, persistTO)
-		return
-	}
-	rawJSON, _, assistantAt, err := r.snapshotAssistantMessageJSONWithStatus("canceled")
-	if err != nil {
-		s.publishCanceledAssistantMessage(meta, r, db, persistTO)
-		return
-	}
-	at := assistantAt
-	if at <= 0 {
-		at = time.Now().UnixMilli()
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), persistTO)
-	rowID, _, getErr := db.GetTranscriptMessageRowIDAndJSONByMessageID(ctx, endpointID, threadID, messageID)
-	cancel()
-	if getErr != nil || rowID <= 0 {
-		s.publishCanceledAssistantMessage(meta, r, db, persistTO)
-		return
-	}
-	ctx, cancel = context.WithTimeout(context.Background(), persistTO)
-	updateErr := db.UpdateTranscriptMessageJSONByRowID(ctx, endpointID, rowID, rawJSON, at)
-	cancel()
-	if updateErr != nil {
-		return
-	}
-	r.markAssistantPersisted()
-	s.broadcastTranscriptMessage(endpointID, threadID, strings.TrimSpace(r.id), rowID, rawJSON, at)
-	s.broadcastThreadSummary(endpointID, threadID)
-}
-
-func (s *Service) publishCanceledAssistantMessage(meta *session.Meta, r *run, db *threadstore.Store, persistTO time.Duration) {
-	if s == nil || r == nil {
-		return
-	}
-	messageID := strings.TrimSpace(r.messageID)
-	endpointID := strings.TrimSpace(r.endpointID)
-	threadID := strings.TrimSpace(r.threadID)
-	if messageID == "" || endpointID == "" || threadID == "" {
-		return
-	}
-	rawJSON, assistantText, assistantAt, err := r.snapshotAssistantMessageJSONWithStatus("canceled")
-	if err != nil {
-		r.ensureAssistantMessageStarted()
-		rawJSON, assistantText, assistantAt, err = r.snapshotAssistantMessageJSONWithStatus("canceled")
-		if err != nil {
-			return
-		}
-	}
-	at := assistantAt
-	if at <= 0 {
-		at = time.Now().UnixMilli()
-	}
-	if db != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		rowID, err := db.AppendMessage(ctx, endpointID, threadID, threadstore.Message{
-			ThreadID:        threadID,
-			EndpointID:      endpointID,
-			MessageID:       messageID,
-			Role:            "assistant",
-			Status:          "canceled",
-			CreatedAtUnixMs: at,
-			UpdatedAtUnixMs: at,
-			TextContent:     assistantText,
-			MessageJSON:     rawJSON,
-		}, strings.TrimSpace(meta.UserPublicID), strings.TrimSpace(meta.UserEmail))
-		cancel()
-		if err == nil {
-			r.markAssistantPersisted()
-			s.broadcastTranscriptMessage(endpointID, threadID, strings.TrimSpace(r.id), rowID, rawJSON, at)
-			s.broadcastThreadSummary(endpointID, threadID)
-		}
 	}
 }
 

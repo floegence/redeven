@@ -1502,6 +1502,10 @@ func (h *fakeCloseAllFloretHost) ListPendingApprovals(context.Context, flruntime
 	return flruntime.PendingApprovals{}, nil
 }
 
+func (h *fakeCloseAllFloretHost) ReadTurnProjection(context.Context, flruntime.ReadTurnProjectionRequest) (flruntime.ThreadTurnProjection, error) {
+	return flruntime.ThreadTurnProjection{}, flruntime.ErrTurnNotFound
+}
+
 func (h *fakeCloseAllFloretHost) CompactThread(context.Context, flruntime.CompactThreadRequest) (flruntime.CompactThreadResult, error) {
 	return flruntime.CompactThreadResult{}, nil
 }
