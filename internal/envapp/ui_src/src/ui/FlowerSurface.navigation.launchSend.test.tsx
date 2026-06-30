@@ -177,6 +177,126 @@ describe('FlowerSurface navigation launch/send', () => {
     }));
   });
 
+  it('selects a working directory before launching a new thread', async () => {
+    const launchedThread = thread({
+      thread_id: 'thread-working-dir-new',
+      title: 'Working dir new',
+      working_dir: '/Users/alice/redeven',
+      messages: [
+        {
+          id: 'm-working-dir-user',
+          role: 'user',
+          content: 'start in redeven',
+          status: 'complete',
+          created_at_ms: 10,
+        },
+      ],
+    });
+    const getWorkingDirectoryPathContext = vi.fn(async () => ({
+      agentHomePathAbs: '/Users/alice',
+      homePathAbs: '/Users/alice',
+      defaultRootId: 'home',
+      roots: [
+        {
+          id: 'home',
+          label: 'Home',
+          pathAbs: '/Users/alice',
+          kind: 'home',
+          permissions: { read: true, write: true },
+        },
+      ],
+    }));
+    const listWorkingDirectoryEntries = vi.fn(async (input: { path: string; showHidden?: boolean }) => {
+      if (input.path === '/Users/alice') {
+        return [
+          {
+            name: 'redeven',
+            path: '/Users/alice/redeven',
+            isDirectory: true,
+            modifiedAt: 1,
+          },
+        ];
+      }
+      return [];
+    });
+    const launchTurn = vi.fn(async () => liveBootstrap(launchedThread));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      loadThread: vi.fn(async () => liveBootstrap(launchedThread)),
+      getWorkingDirectoryPathContext,
+      listWorkingDirectoryEntries,
+      launchTurn,
+    });
+
+    await waitFor(() => runtime.querySelector('.flower-working-dir-chip')?.textContent?.includes('alice') === true);
+    const chip = runtime.querySelector('.flower-working-dir-chip') as HTMLButtonElement;
+    expect(chip.getAttribute('title')).toContain('/Users/alice');
+    chip.click();
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-directory-picker-entry="/redeven"]')));
+    (runtime.querySelector('[data-directory-picker-entry="/redeven"]') as HTMLButtonElement).click();
+    (runtime.querySelector('[data-directory-picker-confirm="true"]') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-working-dir-chip')?.textContent?.includes('redeven') === true);
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'start in redeven';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+
+    expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'start in redeven',
+      working_dir: '/Users/alice/redeven',
+    }));
+    expect(listWorkingDirectoryEntries).toHaveBeenCalledWith({
+      path: '/Users/alice',
+      showHidden: false,
+    });
+  });
+
+  it('copies an existing thread working directory from the header chip', async () => {
+    const originalClipboard = navigator.clipboard;
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    const launchTurn = vi.fn(async () => liveBootstrap(thread()));
+    const existingThread = thread({
+      thread_id: 'thread-existing-workdir',
+      title: 'Existing working dir',
+      working_dir: '/Users/alice/redeven',
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [existingThread]),
+      loadThread: vi.fn(async () => liveBootstrap(existingThread)),
+      getWorkingDirectoryPathContext: vi.fn(async () => {
+        throw new Error('picker should not open for existing threads');
+      }),
+      listWorkingDirectoryEntries: vi.fn(async () => []),
+      launchTurn,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-existing-workdir"] button')));
+    (runtime.querySelector('[data-thread-id="thread-existing-workdir"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-working-dir-chip')?.textContent?.includes('redeven') === true);
+
+    const chip = runtime.querySelector('.flower-working-dir-chip') as HTMLButtonElement;
+    expect(chip.getAttribute('title')).toContain('/Users/alice/redeven');
+    chip.click();
+    await waitFor(() => writeText.mock.calls.length === 1);
+
+    expect(writeText).toHaveBeenCalledWith('/Users/alice/redeven');
+    expect(runtime.querySelector('[data-directory-picker="true"]')).toBeNull();
+    expect(launchTurn).not.toHaveBeenCalled();
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: originalClipboard,
+    });
+  });
+
   it('stops a running selected thread from the composer when the draft is empty', async () => {
     const runningThread = thread({
       thread_id: 'thread-running-stop',

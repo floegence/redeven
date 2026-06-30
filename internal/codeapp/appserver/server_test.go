@@ -1955,6 +1955,17 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	originUser1 := envOriginWithChannel(channelUser1)
 	originUser2 := envOriginWithChannel(channelUser2)
 
+	patchWorkingDir := performServerRequest(
+		srv,
+		http.MethodPatch,
+		"/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID),
+		originUser1,
+		`{"working_dir":"/tmp"}`,
+	)
+	if patchWorkingDir.Code != http.StatusBadRequest {
+		t.Fatalf("PATCH working_dir status=%d body=%s, want %d", patchWorkingDir.Code, patchWorkingDir.Body.String(), http.StatusBadRequest)
+	}
+
 	readList := func(origin string) aiListResponse {
 		t.Helper()
 		rr := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/threads?limit=20", origin, "")

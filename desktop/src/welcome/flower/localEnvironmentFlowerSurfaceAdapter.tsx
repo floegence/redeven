@@ -20,6 +20,9 @@ import type {
   FlowerTerminalProcessSnapshot,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
+  FlowerWorkingDirectoryEntry,
+  FlowerWorkingDirectoryListInput,
+  FlowerWorkingDirectoryPathContext,
 } from '../../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
 import type {
   AgentSettingsResponse,
@@ -80,12 +83,86 @@ type MarkThreadReadResponse = Readonly<{
 
 type FlowerSecretPatch = Readonly<{ provider_id: string; api_key: string | null }>;
 
+type RuntimeFSPathContextResponse = Readonly<{
+  agent_home_path_abs?: string;
+  home_path_abs?: string;
+  default_root_id?: string;
+  roots?: readonly RuntimeFSRoot[];
+}>;
+
+type RuntimeFSRoot = Readonly<{
+  id?: string;
+  label?: string;
+  path?: string;
+  path_abs?: string;
+  kind?: string;
+  permissions?: Readonly<{
+    read?: boolean;
+    write?: boolean;
+  }>;
+  hidden?: boolean;
+  system?: boolean;
+}>;
+
+type RuntimeFSListResponse = Readonly<{
+  entries?: readonly RuntimeFSEntry[];
+}>;
+
+type RuntimeFSEntry = Readonly<{
+  name?: string;
+  path?: string;
+  is_directory?: boolean;
+  isDirectory?: boolean;
+  size?: number;
+  modified_at?: number;
+  modifiedAt?: number;
+}>;
+
 const LOCAL_ENVIRONMENT_RUNTIME_ID = 'env:local-environment';
 const LOCAL_ENVIRONMENT_LABEL = 'Local Environment';
 const LOCAL_ENVIRONMENT_SUBTITLE = 'Uses the Local AI Profile on this Mac';
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function mapRuntimeWorkingDirectoryPathContext(raw: RuntimeFSPathContextResponse): FlowerWorkingDirectoryPathContext {
+  const homePath = trim(raw.home_path_abs) || trim(raw.agent_home_path_abs);
+  return {
+    agentHomePathAbs: trim(raw.agent_home_path_abs) || homePath,
+    homePathAbs: homePath,
+    defaultRootId: trim(raw.default_root_id),
+    roots: (raw.roots ?? []).map((root) => ({
+      id: trim(root.id),
+      label: trim(root.label),
+      pathAbs: trim(root.path_abs) || trim(root.path),
+      kind: trim(root.kind),
+      permissions: {
+        read: root.permissions?.read === true,
+        write: root.permissions?.write === true,
+      },
+      ...(typeof root.hidden === 'boolean' ? { hidden: root.hidden } : {}),
+      ...(typeof root.system === 'boolean' ? { system: root.system } : {}),
+    })),
+  };
+}
+
+function mapRuntimeWorkingDirectoryEntry(raw: RuntimeFSEntry): FlowerWorkingDirectoryEntry {
+  return {
+    name: trim(raw.name),
+    path: trim(raw.path),
+    isDirectory: raw.is_directory === true || raw.isDirectory === true,
+    size: typeof raw.size === 'number' && Number.isFinite(raw.size) ? raw.size : undefined,
+    modifiedAt: typeof raw.modified_at === 'number' && Number.isFinite(raw.modified_at)
+      ? raw.modified_at
+      : typeof raw.modifiedAt === 'number' && Number.isFinite(raw.modifiedAt)
+        ? raw.modifiedAt
+        : undefined,
+  };
+}
+
+function mapRuntimeWorkingDirectoryList(raw: RuntimeFSListResponse): readonly FlowerWorkingDirectoryEntry[] {
+  return (raw.entries ?? []).map(mapRuntimeWorkingDirectoryEntry);
 }
 
 function runtimeFlowerError(error: RuntimeFlowerError): Error & { code?: string; status?: number; retryAfterMs?: number } {
@@ -429,6 +506,15 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));
       return loadSettingsSnapshot(bridge);
     },
+    getWorkingDirectoryPathContext: async () => mapRuntimeWorkingDirectoryPathContext(
+      await runtimeJSON<RuntimeFSPathContextResponse>(bridge, 'GET', '/_redeven_proxy/api/fs/path_context'),
+    ),
+    listWorkingDirectoryEntries: async (input: FlowerWorkingDirectoryListInput) => mapRuntimeWorkingDirectoryList(
+      await runtimeJSON<RuntimeFSListResponse>(bridge, 'POST', '/_redeven_proxy/api/fs/list', {
+        path: trim(input.path),
+        show_hidden: input.showHidden === true,
+      }),
+    ),
     resolveHandler: async () => decision(),
     launchTurn: async (input: FlowerTurnLaunchInput) => {
       return launchLocalEnvironmentFlowerTurn(bridge, input);

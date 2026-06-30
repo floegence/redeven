@@ -443,7 +443,7 @@ func validateThreadWorkingDir(workingDir string, scope *filesystemscope.Registry
 			return "", errors.New("working_dir is outside the configured filesystem roots")
 		case errors.Is(err, os.ErrNotExist):
 			return "", errors.New("working_dir does not exist")
-		case msg == "path must be a directory":
+		case errors.Is(err, filesystemscope.ErrPathNotDirectory):
 			return "", errors.New("working_dir must be a directory")
 		default:
 			return "", errors.New("working_dir is not accessible")

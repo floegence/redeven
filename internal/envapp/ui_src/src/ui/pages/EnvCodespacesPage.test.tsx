@@ -182,7 +182,7 @@ vi.mock('../services/sandboxWindowRegistry', () => ({
   registerSandboxWindow: vi.fn(),
 }));
 
-vi.mock('../utils/directoryPickerTree', () => ({
+vi.mock('../../../../../flower_ui/src/filePicker/directoryPickerTree', () => ({
   replacePickerChildren: vi.fn((prev: any) => prev),
   sortPickerFolderItems: vi.fn((items: any) => items),
   toPickerFolderItem: vi.fn(),

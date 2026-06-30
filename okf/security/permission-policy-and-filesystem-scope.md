@@ -3,7 +3,7 @@ type: Security Contract
 title: Permission policy and filesystem scope
 description: Runtime permissions are clamped by local policy and file features are scoped by directory root policy.
 tags: [security, permissions, filesystem, runtime]
-timestamp: 2026-06-17T00:00:00Z
+timestamp: 2026-06-30T00:00:00Z
 ---
 
 Redeven treats endpoint runtime policy as authoritative. Control-plane grants can authorize a session, but the runtime clamps those grants with a local permission policy and file-facing features use explicit filesystem root policy.
@@ -12,9 +12,11 @@ Redeven treats endpoint runtime policy as authoritative. Control-plane grants ca
 
 The local permission policy is a three-bit read/write/execute cap. It starts from `local_max`, optionally intersects by user and by floe app, and supports presets for read-only, execute+read, and full read/write/execute. Session startup intersects the control-plane grant with the local cap before the runtime stores effective permission flags. Filesystem scope validates explicit root ids, labels, paths, kinds, default root references, and the invariant that write implies read.
 
+The reusable runtime filesystem service owns path context and directory listing over the configured filesystem scope. Code App Local API exposes read-only `GET /_redeven_proxy/api/fs/path_context` and `POST /_redeven_proxy/api/fs/list` for browser-facing directory pickers; both routes require read permission before calling the filesystem service, and list errors preserve scope, read-denied, missing, and not-directory distinctions without bypassing `filesystemscope.Registry`.
+
 # Boundaries
 
-Browser state, provider metadata, and UI affordances cannot widen runtime permissions. Future file, Git, Flower, Code App, and terminal changes should update OKF only after the runtime code or typed policy changes.
+Browser state, provider metadata, and UI affordances cannot widen runtime permissions. Local API filesystem list endpoints are not a write surface and do not grant access outside configured roots. Future file, Git, Flower, Code App, and terminal changes should update OKF only after the runtime code or typed policy changes.
 
 # Citations
 
@@ -28,3 +30,8 @@ Browser state, provider metadata, and UI affordances cannot widen runtime permis
 [8] redeven:internal/agent/agent.go:531 - Port Forward sessions require valid forward identity and execute access.
 [9] redeven:internal/config/filesystem_scope.go:11 - FilesystemScope stores versioned root policy.
 [10] redeven:internal/config/filesystem_scope.go:71 - Filesystem root validation rejects write access without read access.
+[11] redeven:internal/fs/service.go:260 - The filesystem service exposes path context for consumers without duplicating scope logic.
+[12] redeven:internal/fs/service.go:267 - The filesystem service exposes directory listing over the same scoped list implementation.
+[13] redeven:internal/codeapp/appserver/server.go:1969 - The Local API path context route requires read permission.
+[14] redeven:internal/codeapp/appserver/server.go:1976 - The Local API directory list route requires read permission.
+[15] redeven:internal/codeapp/appserver/server.go:1906 - Directory list HTTP errors preserve scope, read, missing, and not-directory distinctions.

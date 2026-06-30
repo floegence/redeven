@@ -146,6 +146,9 @@ export const flowerSurfaceEnUS = {
     resizeConversationsLabel: 'Resize conversations',
     entryLabel: 'Flower',
     newChat: 'New chat',
+    workingDirPickerHomeLabel: 'Home',
+    workingDirPickerTitle: 'Select working directory',
+    workingDirPickerConfirm: 'Select',
   },
   threadList: {
     title: 'Conversations',
@@ -629,6 +632,9 @@ export const flowerSurfaceZhCN = {
     resizeConversationsLabel: '调整对话列表宽度',
     entryLabel: 'Flower',
     newChat: '新对话',
+    workingDirPickerHomeLabel: '主目录',
+    workingDirPickerTitle: '选择工作目录',
+    workingDirPickerConfirm: '选择',
   },
   threadList: {
     ...flowerSurfaceEnUS.threadList,
@@ -1079,6 +1085,9 @@ export const flowerSurfaceZhTW = {
     resizeConversationsLabel: '調整對話列表寬度',
     entryLabel: 'Flower',
     newChat: '新對話',
+    workingDirPickerHomeLabel: '主目錄',
+    workingDirPickerTitle: '選擇工作目錄',
+    workingDirPickerConfirm: '選擇',
   },
   threadList: {
     ...flowerSurfaceEnUS.threadList,
@@ -1524,6 +1533,9 @@ export const flowerSurfaceJaJP = createFlowerSurfaceLocale({
     resizeConversationsLabel: '会話一覧の幅を調整',
     entryLabel: 'Flower',
     newChat: '新しい会話',
+    workingDirPickerHomeLabel: 'ホーム',
+    workingDirPickerTitle: '作業ディレクトリを選択',
+    workingDirPickerConfirm: '選択',
   },
   threadList: {
     title: '会話',
@@ -1961,6 +1973,9 @@ export const flowerSurfaceKoKR = createFlowerSurfaceLocale({
     resizeConversationsLabel: '대화 목록 너비 조정',
     entryLabel: 'Flower',
     newChat: '새 대화',
+    workingDirPickerHomeLabel: '홈',
+    workingDirPickerTitle: '작업 디렉터리 선택',
+    workingDirPickerConfirm: '선택',
   },
   threadList: {
     title: '대화',
@@ -2398,6 +2413,9 @@ export const flowerSurfaceDeDE = createFlowerSurfaceLocale({
     resizeConversationsLabel: 'Breite der Unterhaltungsliste ändern',
     entryLabel: 'Flower',
     newChat: 'Neue Unterhaltung',
+    workingDirPickerHomeLabel: 'Startordner',
+    workingDirPickerTitle: 'Arbeitsverzeichnis auswählen',
+    workingDirPickerConfirm: 'Auswählen',
   },
   threadList: {
     title: 'Unterhaltungen',
@@ -2835,6 +2853,9 @@ export const flowerSurfaceFrFR = createFlowerSurfaceLocale({
     resizeConversationsLabel: 'Redimensionner la liste des conversations',
     entryLabel: 'Flower',
     newChat: 'Nouvelle conversation',
+    workingDirPickerHomeLabel: 'Accueil',
+    workingDirPickerTitle: 'Choisir le répertoire de travail',
+    workingDirPickerConfirm: 'Choisir',
   },
   threadList: {
     title: 'Discussions',
@@ -3272,6 +3293,9 @@ export const flowerSurfaceEsES = createFlowerSurfaceLocale({
     resizeConversationsLabel: 'Cambiar el ancho de la lista de conversaciones',
     entryLabel: 'Flower',
     newChat: 'Nueva conversación',
+    workingDirPickerHomeLabel: 'Inicio',
+    workingDirPickerTitle: 'Seleccionar directorio de trabajo',
+    workingDirPickerConfirm: 'Seleccionar',
   },
   threadList: {
     title: 'Conversaciones',
@@ -3709,6 +3733,9 @@ export const flowerSurfacePtBR = createFlowerSurfaceLocale({
     resizeConversationsLabel: 'Ajustar largura da lista de conversas',
     entryLabel: 'Flower',
     newChat: 'Nova conversa',
+    workingDirPickerHomeLabel: 'Início',
+    workingDirPickerTitle: 'Selecionar diretório de trabalho',
+    workingDirPickerConfirm: 'Selecionar',
   },
   threadList: {
     title: 'Conversas',
@@ -4146,6 +4173,9 @@ export const flowerSurfaceRuRU = createFlowerSurfaceLocale({
     resizeConversationsLabel: 'Изменить ширину списка бесед',
     entryLabel: 'Flower',
     newChat: 'Новая беседа',
+    workingDirPickerHomeLabel: 'Домой',
+    workingDirPickerTitle: 'Выбрать рабочий каталог',
+    workingDirPickerConfirm: 'Выбрать',
   },
   threadList: {
     title: 'Беседы',

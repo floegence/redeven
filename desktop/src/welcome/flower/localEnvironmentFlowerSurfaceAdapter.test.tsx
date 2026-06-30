@@ -263,6 +263,74 @@ describe('Local Environment Flower surface adapter', () => {
     });
   });
 
+  it('loads working directory picker data through read-only runtime FS IPC', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/fs/path_context') {
+        return {
+          agent_home_path_abs: '/Users/alice/.redeven/local-environment',
+          home_path_abs: '/Users/alice',
+          default_root_id: 'home',
+          roots: [{
+            id: 'home',
+            label: 'Home',
+            path_abs: '/Users/alice',
+            kind: 'home',
+            permissions: { read: true, write: true },
+          }],
+        };
+      }
+      if (request.path === '/_redeven_proxy/api/fs/list') {
+        return {
+          entries: [{
+            name: 'redeven',
+            path: '/Users/alice/redeven',
+            is_directory: true,
+            size: 0,
+            modified_at: 1234,
+          }],
+        };
+      }
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+
+    const context = await adapter.getWorkingDirectoryPathContext?.();
+    const entries = await adapter.listWorkingDirectoryEntries?.({
+      path: '/Users/alice',
+      showHidden: true,
+    });
+
+    expect(context).toEqual({
+      agentHomePathAbs: '/Users/alice/.redeven/local-environment',
+      homePathAbs: '/Users/alice',
+      defaultRootId: 'home',
+      roots: [{
+        id: 'home',
+        label: 'Home',
+        pathAbs: '/Users/alice',
+        kind: 'home',
+        permissions: { read: true, write: true },
+      }],
+    });
+    expect(entries).toEqual([{
+      name: 'redeven',
+      path: '/Users/alice/redeven',
+      isDirectory: true,
+      size: 0,
+      modifiedAt: 1234,
+    }]);
+    expect(calls).toEqual([
+      { method: 'GET', path: '/_redeven_proxy/api/fs/path_context' },
+      {
+        method: 'POST',
+        path: '/_redeven_proxy/api/fs/list',
+        body: { path: '/Users/alice', show_hidden: true },
+      },
+    ]);
+  });
+
   it('submits input responses through the runtime thread endpoint', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {

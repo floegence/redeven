@@ -1,5 +1,6 @@
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import { normalizeAbsolutePath } from './askFlowerPath';
+
+import { normalizeAbsolutePath } from './path';
 
 type DirectoryEntryLike = {
   name?: string | null;
@@ -18,7 +19,7 @@ export function normalizePickerTreePath(path: string): string {
   const collapsed = prefixed.replace(/\/+/g, '/');
 
   if (collapsed === '/') return '/';
-  return collapsed.endsWith('/') ? collapsed.replace(/\/+$/, '') || '/' : collapsed;
+  return collapsed.endsWith('/') ? collapsed.replace(/\/+$/g, '') || '/' : collapsed;
 }
 
 export function listPickerTreePathChain(path: string): string[] {
@@ -141,7 +142,7 @@ export function replacePickerChildren(tree: FileItem[], folderPath: string, chil
       changed = true;
       return { ...item, children: nextChildren };
     });
-    return [changed ? next : items, changed];
+    return [next, changed];
   };
 
   const [next] = visit(tree);

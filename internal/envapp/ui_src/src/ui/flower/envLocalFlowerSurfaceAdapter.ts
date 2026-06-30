@@ -380,6 +380,14 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       });
       return loadSettingsSnapshot();
     },
+    getWorkingDirectoryPathContext: () => options.rpc.fs.getPathContext(),
+    listWorkingDirectoryEntries: async (input) => {
+      const response = await options.rpc.fs.list({
+        path: trim(input.path),
+        showHidden: input.showHidden === true,
+      });
+      return response.entries;
+    },
     resolveHandler: async () => decision(options),
     launchTurn: async (input: FlowerTurnLaunchInput) => {
       const copy = adapterCopy(options);

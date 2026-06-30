@@ -391,4 +391,41 @@ describe('runtime Flower surface adapter read state', () => {
       delegated_ref: delegatedRef,
     });
   });
+
+  it('passes working directory picker requests through adapter options', async () => {
+    const getWorkingDirectoryPathContext = vi.fn(async () => ({
+      agentHomePathAbs: '/Users/alice/.redeven/local-environment',
+      homePathAbs: '/Users/alice',
+      defaultRootId: 'home',
+      roots: [],
+    }));
+    const listWorkingDirectoryEntries = vi.fn(async () => [{
+      name: 'redeven',
+      path: '/Users/alice/redeven',
+      isDirectory: true,
+    }]);
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, {
+      getWorkingDirectoryPathContext,
+      listWorkingDirectoryEntries,
+    }));
+
+    await expect(adapter.getWorkingDirectoryPathContext?.()).resolves.toEqual({
+      agentHomePathAbs: '/Users/alice/.redeven/local-environment',
+      homePathAbs: '/Users/alice',
+      defaultRootId: 'home',
+      roots: [],
+    });
+    await expect(adapter.listWorkingDirectoryEntries?.({
+      path: '/Users/alice',
+      showHidden: true,
+    })).resolves.toEqual([{
+      name: 'redeven',
+      path: '/Users/alice/redeven',
+      isDirectory: true,
+    }]);
+    expect(listWorkingDirectoryEntries).toHaveBeenCalledWith({
+      path: '/Users/alice',
+      showHidden: true,
+    });
+  });
 });

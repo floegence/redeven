@@ -38,6 +38,8 @@ main() {
       internal/flower_ui/src/flowerSubagentDetailThread.test.ts \
       internal/flower_ui/src/flowerThreadListRefresh.test.ts \
       internal/flower_ui/src/runtimeFlowerSurfaceAdapter.test.ts \
+      internal/flower_ui/src/filePicker/directoryPickerTree.test.ts \
+      internal/flower_ui/src/filePicker/createDirectoryPickerDataSource.test.ts \
       internal/flower_ui/src/threads/FlowerThreadList.test.ts \
       internal/flower_ui/src/flowerTimelineProjection.test.ts \
       internal/flower_ui/src/chat/flowerContextPresentation.test.ts \

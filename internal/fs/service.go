@@ -31,6 +31,12 @@ type Service struct {
 	scope *filesystemscope.Registry
 }
 
+type PathContextResponse = fsGetPathContextResp
+type RootInfo = fsRootInfo
+type RootPermissionInfo = fsRootPermissionInfo
+type ListResponse = fsListResp
+type FileInfo = fsFileInfo
+
 func NewService(agentHomeAbs string) *Service {
 	scope, err := filesystemscope.NewDefaultRegistry(agentHomeAbs)
 	if err != nil {
@@ -77,6 +83,9 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 			}
 			if os.IsNotExist(err) {
 				return nil, &rpc.Error{Code: 404, Message: "not found"}
+			}
+			if errors.Is(err, filesystemscope.ErrPathNotDirectory) {
+				return nil, &rpc.Error{Code: 400, Message: "path is not a directory"}
 			}
 			return nil, &rpc.Error{Code: 400, Message: "invalid path"}
 		}
@@ -246,6 +255,24 @@ func (s *Service) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, gate
 		}
 		return &fsCopyResp{Success: true, NewPath: newPath}, nil
 	})
+}
+
+func (s *Service) PathContext() *PathContextResponse {
+	if s == nil {
+		return &PathContextResponse{}
+	}
+	return s.getPathContext()
+}
+
+func (s *Service) ListDirectory(path string, showHidden bool) (*ListResponse, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	out, err := s.listDirectoryEntries(path, showHidden)
+	if err != nil {
+		return nil, err
+	}
+	return &ListResponse{Entries: out}, nil
 }
 
 func (s *Service) resolveExistingDir(path string) (string, error) {

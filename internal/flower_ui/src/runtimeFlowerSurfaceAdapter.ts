@@ -6,6 +6,9 @@ import type {
   FlowerResolveHandlerInput,
   FlowerRouterDecision,
   FlowerTurnLaunchInput,
+  FlowerWorkingDirectoryEntry,
+  FlowerWorkingDirectoryListInput,
+  FlowerWorkingDirectoryPathContext,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSubagentDetail,
@@ -114,6 +117,8 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;
+  getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
+  listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
   missingThreadID?: string;
@@ -298,6 +303,8 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         });
       },
     } : {}),
+    ...(options.getWorkingDirectoryPathContext ? { getWorkingDirectoryPathContext: options.getWorkingDirectoryPathContext } : {}),
+    ...(options.listWorkingDirectoryEntries ? { listWorkingDirectoryEntries: options.listWorkingDirectoryEntries } : {}),
     ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),
     ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
   };

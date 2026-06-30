@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
+
 import {
   hasPickerFolderPath,
   listPickerTreePathChain,
@@ -9,6 +10,7 @@ import {
   toPickerTreeAbsolutePath,
   toPickerTreePath,
 } from './directoryPickerTree';
+import { basenameFromAbsolutePath } from './path';
 
 describe('directoryPickerTree', () => {
   it('maps picker root to the configured home directory', () => {
@@ -70,5 +72,11 @@ describe('directoryPickerTree', () => {
     expect(hasPickerFolderPath(next, '/project')).toBe(true);
     expect(hasPickerFolderPath(next, '/project/src')).toBe(true);
     expect(hasPickerFolderPath(next, '/missing')).toBe(false);
+  });
+
+  it('formats basename labels for working directory chips', () => {
+    expect(basenameFromAbsolutePath('/Users/alice/redeven', 'Working dir')).toBe('redeven');
+    expect(basenameFromAbsolutePath('/', 'Working dir')).toBe('/');
+    expect(basenameFromAbsolutePath('', 'Working dir')).toBe('Working dir');
   });
 });
