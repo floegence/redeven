@@ -283,6 +283,31 @@ The intended dependency shape is library consumption, not source sharing:
 - Redeven contributes product policy and concrete adapters around those
   imports; it does not become a source tree for ReDevPlugin implementation.
 
+The front-end and back-end platform implementation must arrive in Redeven as
+released ReDevPlugin library/runtime artifacts, not as Redeven-local platform
+code:
+
+- UI platform code comes from released ReDevPlugin npm packages. Redeven may
+  place the surface in Env App, Activity Bar, Workbench, Settings, Desktop, or
+  CLI workflows, but iframe bootstrap, asset tickets, bridge lifecycle, settings
+  and intent SDKs, generated clients, and sandbox-safe UI utilities stay in
+  ReDevPlugin.
+- Host/back-end platform code comes from released ReDevPlugin Go packages.
+  Redeven may instantiate the Host, mount handlers, choose product policy, and
+  register adapters, but registry state, lifecycle handlers, permission and
+  confirmation enforcement, broker contracts, operation/stream envelopes,
+  token/ticket issuance, and stable platform errors stay in ReDevPlugin.
+- Backend execution code comes from the released Rust `redevplugin-runtime` plus
+  the ReDevPlugin runtime manager/supervisor. Redeven may select and bundle the
+  signed artifact, but it must not create a separate runtime process model,
+  alternate WASM executor, custom IPC protocol, or host-local hot path for plugin
+  storage/network calls.
+- Redeven business code begins at adapter registration. Concrete capabilities
+  such as containers, files, shells, cloud services, database access, vault
+  access, session mapping, and product audit presentation are Redeven logic only
+  after the request has passed ReDevPlugin identity, lifecycle, permission,
+  confirmation, token, lease/quota, revocation, and audit context construction.
+
 The intended Redeven code shape is a narrow integration layer:
 
 - one or more host packages that configure released ReDevPlugin libraries,

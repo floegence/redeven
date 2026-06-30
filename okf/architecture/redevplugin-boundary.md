@@ -28,6 +28,17 @@ mechanics belong upstream in ReDevPlugin, including lifecycle endpoints, package
 schemas, bridge protocol, storage/network/runtime brokers, operation/stream
 envelopes, runtime supervision, generated SDKs, and validators.
 
+ReDevPlugin is the source of both front-end and back-end plugin-platform
+implementation. Redeven consumes released npm packages for sandbox surface
+hosting, bridge lifecycle, settings/intent SDKs, generated clients, and
+sandbox-safe UI helpers. Redeven consumes released Go packages for Host
+construction, lifecycle handlers, registry state, permission and confirmation
+enforcement, broker contracts, operation/stream envelopes, token/ticket issuance,
+and stable platform errors. Redeven bundles the released signed Rust
+`redevplugin-runtime` through the released runtime manager/supervisor instead of
+implementing a second runtime process, WASM executor, IPC protocol, or
+storage/network hot path.
+
 Redeven's integration layer owns only host-product responsibilities: mapping
 Redeven sessions, local permission caps, CSRF and origin checks, state
 directories, audit and diagnostics sinks, secret adapters, Env App surfaces,
@@ -42,6 +53,12 @@ installer behavior, local policy, and concrete business resources belong in
 Redeven adapters over released ReDevPlugin contracts. If a reusable contract is
 missing, it must be implemented and released in ReDevPlugin before Redeven
 depends on it.
+
+Redeven business code starts at adapter registration. Concrete capabilities such
+as containers, files, shells, cloud services, database access, vault access,
+session mapping, and product audit presentation belong in Redeven only after
+ReDevPlugin has constructed the identity, lifecycle, permission, confirmation,
+token, lease/quota, revocation, and audit context for the request.
 
 Redeven may choose the state root, backup/export destination, audit sink,
 diagnostics sink, and secret-vault adapter, but the ReDevPlugin registry,
