@@ -29,7 +29,10 @@ func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTur
 	if !r.floretThreadProjectionMatchesRun(projection, requireIdentity) {
 		return false
 	}
-	blocks := r.flowerBlocksFromFloretThreadProjection(projection)
+	blocks, valid := r.flowerBlocksFromFloretThreadProjectionChecked(projection)
+	if !valid {
+		return false
+	}
 	if len(blocks) == 0 {
 		blocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: ""}}
 	}
@@ -90,8 +93,13 @@ func (r *run) floretThreadProjectionMatchesRun(projection flruntime.ThreadTurnPr
 }
 
 func (r *run) flowerBlocksFromFloretThreadProjection(projection flruntime.ThreadTurnProjection) []any {
+	blocks, _ := r.flowerBlocksFromFloretThreadProjectionChecked(projection)
+	return blocks
+}
+
+func (r *run) flowerBlocksFromFloretThreadProjectionChecked(projection flruntime.ThreadTurnProjection) ([]any, bool) {
 	if r == nil || len(projection.Segments) == 0 {
-		return nil
+		return nil, true
 	}
 	blocks := make([]any, 0, len(projection.Segments))
 	for _, segment := range projection.Segments {
@@ -107,14 +115,14 @@ func (r *run) flowerBlocksFromFloretThreadProjection(projection flruntime.Thread
 			}
 			timeline := r.normalizeActivityTimeline(*segment.ActivityTimeline)
 			if !r.validateActivityTimelineForProjection(timeline, "floret_thread_projection") {
-				continue
+				return nil, false
 			}
 			blocks = append(blocks, newActivityTimelineBlock(timeline, r.activityTimelineFileActions(timeline)))
 		case flruntime.ThreadTurnProjectionSegmentControlSignal:
 			continue
 		}
 	}
-	return blocks
+	return blocks, true
 }
 
 func (r *run) recordFloretCommittedThreadEvent(ev *flruntime.ThreadDetailEvent) {
@@ -191,7 +199,7 @@ func (r *run) hasFloretThreadDetailProjectionApplied() bool {
 	return r.floretThreadProjectionApplied
 }
 
-func (s *Service) settlePendingToolWithFloret(ctx context.Context, endpointID string, threadID string, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
+func (s *Service) settlePendingToolWithActiveFloretRun(ctx context.Context, endpointID string, threadID string, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
 	if s == nil {
 		return flruntime.PendingToolSettlementResult{}, errors.New("nil service")
 	}
@@ -203,12 +211,7 @@ func (s *Service) settlePendingToolWithFloret(ctx context.Context, endpointID st
 			return host.SettlePendingTool(ctx, req)
 		}
 	}
-	host, err := s.openFloretLifecycleHost()
-	if err != nil {
-		return flruntime.PendingToolSettlementResult{}, err
-	}
-	defer func() { _ = host.Close() }()
-	return host.SettlePendingTool(ctx, req)
+	return flruntime.PendingToolSettlementResult{}, errors.New("active floret settlement host unavailable")
 }
 
 func (s *Service) activeRunForFloretSettlement(endpointID string, threadID string, runID string) *run {

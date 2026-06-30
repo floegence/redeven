@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
@@ -72,7 +71,7 @@ func TestFloretThreadProjectionPersistsFullAssistantContentAfterActivity(t *test
 	}
 }
 
-func TestSettlePendingToolWithFloretUsesActiveHost(t *testing.T) {
+func TestSettlePendingToolWithActiveFloretRunUsesActiveHost(t *testing.T) {
 	host := &recordingFloretHost{
 		settleResult: flruntime.PendingToolSettlementResult{
 			RunID: "run_terminal",
@@ -97,9 +96,9 @@ func TestSettlePendingToolWithFloretUsesActiveHost(t *testing.T) {
 		Summary:    "Terminal process completed",
 	}
 
-	result, err := svc.settlePendingToolWithFloret(context.Background(), "env_terminal", "thread_terminal", req)
+	result, err := svc.settlePendingToolWithActiveFloretRun(context.Background(), "env_terminal", "thread_terminal", req)
 	if err != nil {
-		t.Fatalf("settlePendingToolWithFloret: %v", err)
+		t.Fatalf("settlePendingToolWithActiveFloretRun: %v", err)
 	}
 	if result.RunID != "run_terminal" {
 		t.Fatalf("result=%#v, want active host result", result)
@@ -113,10 +112,14 @@ func TestSettlePendingToolWithFloretUsesActiveHost(t *testing.T) {
 	}
 }
 
-func TestSettlePendingToolWithFloretFallsBackToLifecycleHost(t *testing.T) {
-	svc := newTestService(t, nil)
+func TestSettlePendingToolWithActiveFloretRunRequiresActiveHost(t *testing.T) {
+	svc := &Service{
+		activeRunByTh: map[string]string{runThreadKey("env_terminal", "thread_terminal"): "run_terminal"},
+		runs: map[string]*run{
+			"run_terminal": &run{id: "run_terminal", endpointID: "env_terminal", threadID: "thread_terminal"},
+		},
+	}
 	req := flruntime.PendingToolSettlementRequest{
-		ThreadID:   "missing_thread",
 		RunID:      "run_terminal",
 		TurnID:     "turn_terminal",
 		ToolCallID: "call_terminal",
@@ -126,9 +129,12 @@ func TestSettlePendingToolWithFloretFallsBackToLifecycleHost(t *testing.T) {
 		Summary:    "Terminal process completed",
 	}
 
-	_, err := svc.settlePendingToolWithFloret(context.Background(), "env_terminal", "missing_thread", req)
-	if !errors.Is(err, flruntime.ErrThreadNotFound) {
-		t.Fatalf("settlePendingToolWithFloret err=%v, want Floret lifecycle host ErrThreadNotFound", err)
+	_, err := svc.settlePendingToolWithActiveFloretRun(context.Background(), "env_terminal", "thread_terminal", req)
+	if err == nil {
+		t.Fatalf("settlePendingToolWithActiveFloretRun succeeded without an active host")
+	}
+	if got, want := err.Error(), "active floret settlement host unavailable"; got != want {
+		t.Fatalf("error=%q, want %q", got, want)
 	}
 }
 
@@ -337,6 +343,51 @@ func TestFlowerBlocksFromFloretThreadProjectionRejectsInvalidActivityTimeline(t 
 	})
 	if len(blocks) != 0 {
 		t.Fatalf("blocks=%#v, want invalid activity timeline rejected", blocks)
+	}
+}
+
+func TestApplyFloretThreadProjectionRejectsInvalidActivityWithoutClearingLiveBlocks(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 2)
+	r := newRun(runOptions{})
+	r.id = "run_invalid_projection"
+	r.threadID = "thread_invalid_projection"
+	r.messageID = "msg_invalid_projection"
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+	r.assistantBlocks = []any{
+		activityTimelinePlaceholder("run_invalid_projection"),
+	}
+	r.nextBlockIndex = len(r.assistantBlocks)
+
+	applied := r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		RunID:    "run_invalid_projection",
+		ThreadID: "thread_invalid_projection",
+		TurnID:   "msg_invalid_projection",
+		TraceID:  "run_invalid_projection",
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind: flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: floretProjectionInvalidRequestedApprovalTimeline(
+				"run_invalid_projection",
+				"thread_invalid_projection",
+				"msg_invalid_projection",
+			),
+		}},
+	})
+	if applied {
+		t.Fatalf("invalid projection should not apply")
+	}
+	if r.hasFloretThreadDetailProjectionApplied() {
+		t.Fatalf("invalid projection should not mark committed projection applied")
+	}
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistantBlocks len=%d, want existing live block retained: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	}
+	if _, ok := r.assistantBlocks[0].(ActivityTimelineBlock); !ok {
+		t.Fatalf("assistantBlocks[0]=%T, want existing activity block", r.assistantBlocks[0])
+	}
+	if len(events) != 0 {
+		t.Fatalf("invalid projection should not emit block updates: %#v", events)
 	}
 }
 
