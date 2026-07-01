@@ -10,7 +10,7 @@ Browser Editor support is owned by the Code App app server. Codespaces are opene
 
 # Mechanism
 
-The Code App app server backend owns codespace lifecycle, port resolution, managed runtime status, import sessions, chunk upload, completion, version selection, version removal, and operation cancellation. Local UI routes `/cs/*` to the app server. Runtime-control mirrors the code workspace engine import flow for Desktop-managed setup. The code-server runner starts the editor bound to loopback with no editor auth, an absolute proxy base path under `/cs/<code_space_id>`, disabled telemetry/update checks, scoped data directories, and a short stable session socket path.
+The Code App app server backend owns codespace lifecycle, port resolution, managed runtime status, import sessions, chunk upload, completion, version selection, version removal, and operation cancellation. Local UI routes `/cs/*` to the app server. Runtime-control mirrors the code workspace engine import flow for Desktop-managed setup. Managed workspace engine imports validate package checksums, compressed archive size, and extracted regular file totals with a 2 GiB safety cap. The code-server runner starts the editor bound to loopback with no editor auth, an absolute proxy base path under `/cs/<code_space_id>`, disabled telemetry/update checks, scoped data directories, and a short stable session socket path.
 
 # Boundaries
 
@@ -28,3 +28,5 @@ Opening or managing Browser Editor is not just a static file route. Version setu
 [8] redeven:internal/codeapp/appserver/server.go:2389 - Runtime version selection requires full permission.
 [9] redeven:internal/codeapp/codeserver/runner.go:274 - code-server uses `/cs/<code_space_id>` as the absolute proxy base path.
 [10] redeven:internal/codeapp/codeserver/runner.go:276 - code-server binds to loopback with editor auth disabled.
+[11] redeven:internal/codeapp/codeserver/artifact.go:22 - Runtime uses a 2 GiB workspace engine archive safety cap.
+[12] redeven:internal/codeapp/codeserver/artifact.go:293 - Runtime counts extracted regular file sizes before writing archive entries.
