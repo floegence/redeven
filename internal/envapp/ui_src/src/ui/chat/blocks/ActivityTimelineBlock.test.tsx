@@ -540,8 +540,8 @@ describe('ActivityTimelineBlock', () => {
     const block = baseBlock({
       summary: baseSummary('success'),
       items: [baseItem({
-        item_id: 'tool_subagents_wait',
-        tool_id: 'tool_subagents_wait',
+        item_id: 'tool:call_subagents_wait',
+        tool_id: 'call_subagents_wait',
         tool_name: 'subagents',
         renderer: 'structured',
         label: 'subagents',
@@ -552,7 +552,7 @@ describe('ActivityTimelineBlock', () => {
         },
       })],
       subagent_actions: {
-        tool_subagents_wait: {
+        'tool:call_subagents_wait': {
           operation: 'subagents',
           action: 'wait',
           delegation_runtime: 'floret',

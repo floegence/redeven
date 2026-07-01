@@ -1553,7 +1553,7 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => row.textContent?.includes('Review API contract') ?? false);
     expect(row.textContent).toContain('Review API contract');
     expect(row.textContent).toContain('Review the public API boundary.');
-    expect(row.textContent).toContain('Agent: reviewer');
+    expect(row.textContent).not.toContain('Agent:');
     expect(row.textContent).toContain('Open messages');
     expect(row.textContent).not.toContain('Completed');
     expect(row.textContent).not.toContain('API boundary is consistent.');

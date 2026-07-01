@@ -823,7 +823,8 @@ function subagentNameFromRecord(record: Readonly<Record<string, unknown>>): stri
   const task = payloadValue(record, 'task_name');
   const title = payloadValue(record, 'title');
   const safeTitle = title && title !== threadID && title !== subagentID ? title : '';
-  return safeTitle || task || 'Subagent';
+  const safeTask = task && task !== threadID && task !== subagentID ? task : '';
+  return safeTitle || safeTask;
 }
 
 function subagentDescriptionFromRecord(record: Readonly<Record<string, unknown>>, fallback: Readonly<Record<string, unknown>>): string {
@@ -862,9 +863,9 @@ function subagentDetailItemFromRecord(
   const name = subagentNameFromRecord(record);
   const description = subagentDescriptionFromRecord(record, payload);
   const agentType = payloadValue(record, 'agent_type') || payloadValue(payload, 'agent_type');
-  if (!name && !description && !status) return null;
+  if (!name) return null;
   return {
-    name: name || 'Subagent',
+    name,
     description,
     agent_type: agentType,
     raw_status: normalizedStatus,

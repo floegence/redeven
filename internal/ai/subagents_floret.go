@@ -202,22 +202,25 @@ func (s *floretSubagentRuntime) manage(ctx context.Context, toolCallID string, a
 	case subagentActionSpawn:
 		out, err = s.spawn(ctx, toolCallID, args)
 	case subagentActionWait:
-		out, err = s.wait(ctx, args)
+		out, err = s.wait(ctx, toolCallID, args)
 	case subagentActionList:
-		out, err = s.list(ctx, args)
+		out, err = s.list(ctx, toolCallID, args)
 	case subagentActionInspect:
-		out, err = s.inspect(ctx, args)
+		out, err = s.inspect(ctx, toolCallID, args)
 	case subagentActionSendInput:
-		out, err = s.sendInput(ctx, args)
+		out, err = s.sendInput(ctx, toolCallID, args)
 	case subagentActionClose:
-		out, err = s.close(ctx, args)
+		out, err = s.close(ctx, toolCallID, args)
 	case subagentActionCloseAll:
-		out, err = s.closeAllAction(ctx, args)
+		out, err = s.closeAllAction(ctx, toolCallID, args)
 	default:
 		err = fmt.Errorf("unsupported action %q", action)
 	}
 	if err != nil {
 		return nil, err
+	}
+	if actions := flowerToolSubagentActivityActions(toolCallID, action, out); len(actions) > 0 {
+		parent.upsertActivityTimelineSubagentActions(actions)
 	}
 	parent.persistRunEvent("delegation.manage.end", RealtimeStreamKindLifecycle, map[string]any{
 		"action":       action,
@@ -918,7 +921,7 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 	}), nil
 }
 
-func (s *floretSubagentRuntime) wait(ctx context.Context, args map[string]any) (map[string]any, error) {
+func (s *floretSubagentRuntime) wait(ctx context.Context, toolCallID string, args map[string]any) (map[string]any, error) {
 	parent := s.parentRun()
 	if parent == nil {
 		return nil, errors.New("subagent runtime unavailable")
@@ -935,6 +938,7 @@ func (s *floretSubagentRuntime) wait(ctx context.Context, args map[string]any) (
 			childIDs = append(childIDs, flruntime.ThreadID(id))
 		}
 	}
+	s.upsertRunningWaitToolSidecar(ctx, toolCallID, host, parent, childIDs)
 	result, err := host.WaitSubAgents(ctx, flruntime.WaitSubAgentsRequest{
 		ParentThreadID: flruntime.ThreadID(strings.TrimSpace(parent.threadID)),
 		ChildThreadIDs: childIDs,
@@ -978,7 +982,7 @@ func (s *floretSubagentRuntime) wait(ctx context.Context, args map[string]any) (
 	return trimSubagentToolResult(out), nil
 }
 
-func (s *floretSubagentRuntime) list(ctx context.Context, args map[string]any) (map[string]any, error) {
+func (s *floretSubagentRuntime) list(ctx context.Context, _ string, args map[string]any) (map[string]any, error) {
 	snapshots, err := s.snapshots(ctx)
 	if err != nil {
 		return nil, err
@@ -1019,7 +1023,7 @@ func (s *floretSubagentRuntime) list(ctx context.Context, args map[string]any) (
 	return trimSubagentToolResult(out), nil
 }
 
-func (s *floretSubagentRuntime) inspect(ctx context.Context, args map[string]any) (map[string]any, error) {
+func (s *floretSubagentRuntime) inspect(ctx context.Context, _ string, args map[string]any) (map[string]any, error) {
 	targets := collectInspectTargets(args)
 	all, err := s.snapshots(ctx)
 	if err != nil {
@@ -1148,7 +1152,7 @@ func boundedSubagentStatusItem(item map[string]any) map[string]any {
 	}
 	taskName := truncateRunes(strings.TrimSpace(anyToString(item["task_name"])), 180)
 	taskDescription := truncateRunes(strings.TrimSpace(anyToString(item["task_description"])), 500)
-	title := truncateRunes(firstNonEmptyString(taskName, strings.TrimSpace(anyToString(item["title"])), threadID, "Subagent"), 180)
+	title := truncateRunes(firstNonEmptyString(taskName, strings.TrimSpace(anyToString(item["title"])), threadID), 180)
 	return map[string]any{
 		"subagent_id":        threadID,
 		"thread_id":          threadID,
@@ -1159,6 +1163,8 @@ func boundedSubagentStatusItem(item map[string]any) map[string]any {
 		"task_description":   taskDescription,
 		"status":             strings.TrimSpace(anyToString(item["status"])),
 		"parent_thread_id":   strings.TrimSpace(anyToString(item["parent_thread_id"])),
+		"started_at_ms":      nonNegativeInt64Local(parseInt64Raw(item["started_at_ms"], 0)),
+		"created_at_ms":      nonNegativeInt64Local(parseInt64Raw(item["created_at_ms"], 0)),
 		"updated_at_ms":      nonNegativeInt64Local(parseInt64Raw(item["updated_at_ms"], 0)),
 		"detail_available":   threadID != "",
 		"detail_ref":         subagentDetailRef(threadID),
@@ -1174,7 +1180,7 @@ func boundedSubagentItem(item map[string]any) map[string]any {
 	}
 	taskName := truncateRunes(strings.TrimSpace(anyToString(item["task_name"])), 180)
 	taskDescription := truncateRunes(strings.TrimSpace(anyToString(item["task_description"])), 500)
-	title := truncateRunes(firstNonEmptyString(taskName, strings.TrimSpace(anyToString(item["title"])), threadID, "Subagent"), 180)
+	title := truncateRunes(firstNonEmptyString(taskName, strings.TrimSpace(anyToString(item["title"])), threadID), 180)
 	lastMessage := truncateRunes(strings.TrimSpace(anyToString(item["last_message"])), 900)
 	out := map[string]any{
 		"subagent_id":        threadID,
@@ -1679,7 +1685,7 @@ func nonNegativeInt64Local(v int64) int64 {
 	return v
 }
 
-func (s *floretSubagentRuntime) sendInput(ctx context.Context, args map[string]any) (map[string]any, error) {
+func (s *floretSubagentRuntime) sendInput(ctx context.Context, _ string, args map[string]any) (map[string]any, error) {
 	parent := s.parentRun()
 	if parent == nil {
 		return nil, errors.New("subagent runtime unavailable")
@@ -1760,7 +1766,7 @@ func (s *floretSubagentRuntime) subagentAgentTypeForTarget(ctx context.Context, 
 	return "", nil
 }
 
-func (s *floretSubagentRuntime) close(ctx context.Context, args map[string]any) (map[string]any, error) {
+func (s *floretSubagentRuntime) close(ctx context.Context, _ string, args map[string]any) (map[string]any, error) {
 	parent := s.parentRun()
 	if parent == nil {
 		return nil, errors.New("subagent runtime unavailable")
@@ -1811,7 +1817,7 @@ func (s *floretSubagentRuntime) closeSubagentWithHost(ctx context.Context, host 
 	return localSnapshot, nil
 }
 
-func (s *floretSubagentRuntime) closeAllAction(ctx context.Context, args map[string]any) (map[string]any, error) {
+func (s *floretSubagentRuntime) closeAllAction(ctx context.Context, _ string, args map[string]any) (map[string]any, error) {
 	parent := s.parentRun()
 	if parent == nil {
 		return nil, errors.New("subagent runtime unavailable")
@@ -2167,6 +2173,38 @@ func (s *floretSubagentRuntime) refreshSubagentTimeline(ctx context.Context, sna
 	s.publishParentSubagentTimeline(ctx)
 }
 
+func (s *floretSubagentRuntime) upsertRunningWaitToolSidecar(ctx context.Context, toolCallID string, host flruntime.Host, parent *run, childIDs []flruntime.ThreadID) {
+	if s == nil || host == nil || parent == nil {
+		return
+	}
+	toolItemID := flowerToolActivityItemID(toolCallID)
+	if toolItemID == "" || !parent.acceptsPresentationUpdates() {
+		return
+	}
+	parentThreadID := strings.TrimSpace(parent.threadID)
+	if parentThreadID == "" {
+		return
+	}
+	result, err := host.ListSubAgentActivityTimeline(ctxOrBackground(ctx), flruntime.ListSubAgentActivityTimelineRequest{
+		ParentThreadID: flruntime.ThreadID(parentThreadID),
+		Meta:           parent.activityRunMeta(),
+	})
+	if err != nil {
+		parent.persistRunEvent("delegation.timeline.wait_sidecar_error", RealtimeStreamKindLifecycle, map[string]any{
+			"error": sanitizeLogText(err.Error(), 240),
+		})
+		return
+	}
+	parent.refreshActivityTimelineSidecars(result.Timeline, s.flowerParentSubagentActivityActions(result.Timeline))
+	items := flowerSubagentActionItemsFromTimeline(result.Timeline, childIDs)
+	if len(items) == 0 {
+		return
+	}
+	parent.upsertActivityTimelineSubagentActions(map[string]FlowerActivitySubagentAction{
+		toolItemID: flowerSubagentActivityActionFromItems(subagentActionWait, parentThreadID, items),
+	})
+}
+
 func (s *floretSubagentRuntime) publishParentSubagentTimeline(ctx context.Context) {
 	parent := s.parentRun()
 	if parent == nil || !parent.acceptsPresentationUpdates() {
@@ -2203,73 +2241,203 @@ func (s *floretSubagentRuntime) flowerParentSubagentActivityActions(timeline obs
 		if itemID == "" {
 			continue
 		}
-		payload := item.Payload
-		threadID := strings.TrimSpace(anyToString(payload["thread_id"]))
-		if threadID == "" {
-			threadID = strings.TrimSpace(anyToString(payload["subagent_id"]))
+		action, ok := flowerSubagentActivityActionFromPayload(subagentActionInspect, item.Payload)
+		if !ok {
+			continue
 		}
-		agentType := strings.TrimSpace(anyToString(payload["agent_type"]))
-		if agentType == "" {
-			agentType = normalizeSubagentAgentType(anyToString(payload["host_profile_ref"]))
-		}
-		items := flowerSubagentActionItemsFromPayload(payload)
-		title := strings.TrimSpace(anyToString(payload["title"]))
-		taskName := strings.TrimSpace(anyToString(payload["task_name"]))
-		taskDescription := strings.TrimSpace(anyToString(payload["task_description"]))
+		out[itemID] = action
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func flowerToolSubagentActivityActions(toolCallID string, action string, payload map[string]any) map[string]FlowerActivitySubagentAction {
+	itemID := flowerToolActivityItemID(toolCallID)
+	if itemID == "" {
+		return nil
+	}
+	subagentAction, ok := flowerSubagentActivityActionFromPayload(action, payload)
+	if !ok {
+		return nil
+	}
+	return map[string]FlowerActivitySubagentAction{itemID: subagentAction}
+}
+
+func flowerToolActivityItemID(toolCallID string) string {
+	toolCallID = strings.TrimSpace(toolCallID)
+	if toolCallID == "" {
+		return ""
+	}
+	if strings.HasPrefix(toolCallID, "tool:") {
+		return toolCallID
+	}
+	return "tool:" + toolCallID
+}
+
+func flowerSubagentActivityActionFromPayload(defaultAction string, payload map[string]any) (FlowerActivitySubagentAction, bool) {
+	if len(payload) == 0 {
+		return FlowerActivitySubagentAction{}, false
+	}
+	action := strings.TrimSpace(anyToString(payload["action"]))
+	if action == "" {
+		action = strings.TrimSpace(defaultAction)
+	}
+	if action == "" {
+		action = subagentActionInspect
+	}
+	items := flowerSubagentActionItemsFromPayload(payload)
+	threadID := strings.TrimSpace(anyToString(payload["thread_id"]))
+	if threadID == "" {
+		threadID = strings.TrimSpace(anyToString(payload["subagent_id"]))
+	}
+	agentType := strings.TrimSpace(anyToString(payload["agent_type"]))
+	if agentType == "" {
+		agentType = normalizeSubagentAgentType(anyToString(payload["host_profile_ref"]))
+	}
+	title := strings.TrimSpace(anyToString(payload["title"]))
+	taskName := strings.TrimSpace(anyToString(payload["task_name"]))
+	taskDescription := strings.TrimSpace(anyToString(payload["task_description"]))
+	if title == "" {
+		title = taskName
+	}
+	if threadID == "" && len(items) == 1 {
+		threadID = strings.TrimSpace(firstNonEmptyString(items[0].ThreadID, items[0].SubagentID))
 		if title == "" {
-			title = taskName
+			title = firstNonEmptyString(items[0].Title, items[0].TaskName)
 		}
-		if title == "" && threadID != "" {
-			title = threadID
+		if taskName == "" {
+			taskName = items[0].TaskName
 		}
-		if threadID == "" && len(items) == 1 {
-			threadID = strings.TrimSpace(firstNonEmptyString(items[0].ThreadID, items[0].SubagentID))
-			if title == "" {
-				title = firstNonEmptyString(items[0].Title, items[0].TaskName)
+		if taskDescription == "" {
+			taskDescription = items[0].TaskDescription
+		}
+		if agentType == "" {
+			agentType = items[0].AgentType
+		}
+	}
+	status := ""
+	if rawStatus := strings.TrimSpace(anyToString(payload["status"])); rawStatus != "" {
+		status = flowerSubagentStatus(flruntime.SubAgentStatus(rawStatus))
+	}
+	startedAtMS := nonNegativeInt64Local(parseInt64Raw(payload["started_at_ms"], 0))
+	createdAtMS := nonNegativeInt64Local(parseInt64Raw(payload["created_at_ms"], 0))
+	updatedAtMS := nonNegativeInt64Local(parseInt64Raw(payload["updated_at_ms"], 0))
+	if threadID == "" && len(items) == 0 && taskName == "" && title == "" && taskDescription == "" {
+		return FlowerActivitySubagentAction{}, false
+	}
+	return FlowerActivitySubagentAction{
+		Operation:         "subagents",
+		Action:            action,
+		DelegationRuntime: "floret",
+		ThreadID:          threadID,
+		SubagentID:        threadID,
+		ParentThreadID:    strings.TrimSpace(anyToString(payload["parent_thread_id"])),
+		TaskName:          taskName,
+		TaskDescription:   taskDescription,
+		Title:             title,
+		AgentType:         agentType,
+		Status:            status,
+		StartedAtMS:       startedAtMS,
+		CreatedAtMS:       createdAtMS,
+		UpdatedAtMS:       updatedAtMS,
+		Items:             items,
+	}, true
+}
+
+func flowerSubagentActivityActionFromItems(action string, parentThreadID string, items []FlowerActivitySubagentActionItem) FlowerActivitySubagentAction {
+	out := FlowerActivitySubagentAction{
+		Operation:         "subagents",
+		Action:            strings.TrimSpace(action),
+		DelegationRuntime: "floret",
+		ParentThreadID:    strings.TrimSpace(parentThreadID),
+		Items:             cloneFlowerActivitySubagentActionItems(items),
+	}
+	if out.Action == "" {
+		out.Action = subagentActionInspect
+	}
+	if len(out.Items) == 1 {
+		item := out.Items[0]
+		out.ThreadID = strings.TrimSpace(firstNonEmptyString(item.ThreadID, item.SubagentID))
+		out.SubagentID = out.ThreadID
+		out.TaskName = item.TaskName
+		out.TaskDescription = item.TaskDescription
+		out.Title = item.Title
+		out.AgentType = item.AgentType
+		out.Status = item.Status
+		out.StartedAtMS = item.StartedAtMS
+		out.CreatedAtMS = item.CreatedAtMS
+		out.UpdatedAtMS = item.UpdatedAtMS
+	}
+	return out
+}
+
+func flowerSubagentActionItemsFromTimeline(timeline observation.ActivityTimeline, childIDs []flruntime.ThreadID) []FlowerActivitySubagentActionItem {
+	if len(timeline.Items) == 0 {
+		return nil
+	}
+	targets := subagentThreadIDSet(childIDs)
+	out := make([]FlowerActivitySubagentActionItem, 0, len(timeline.Items))
+	for _, item := range timeline.Items {
+		action, ok := flowerSubagentActivityActionFromPayload(subagentActionInspect, item.Payload)
+		if !ok {
+			continue
+		}
+		next, ok := flowerSubagentActionItemFromAction(action)
+		if !ok {
+			continue
+		}
+		if len(targets) > 0 {
+			threadID := strings.TrimSpace(firstNonEmptyString(next.ThreadID, next.SubagentID))
+			if _, ok := targets[threadID]; !ok {
+				continue
 			}
-			if taskName == "" {
-				taskName = items[0].TaskName
-			}
-			if taskDescription == "" {
-				taskDescription = items[0].TaskDescription
-			}
-			if agentType == "" {
-				agentType = items[0].AgentType
-			}
 		}
-		status := ""
-		if rawStatus := strings.TrimSpace(anyToString(payload["status"])); rawStatus != "" {
-			status = flowerSubagentStatus(flruntime.SubAgentStatus(rawStatus))
-		}
-		action := strings.TrimSpace(anyToString(payload["action"]))
-		if action == "" {
-			action = subagentActionInspect
-		}
-		startedAtMS := nonNegativeInt64Local(parseInt64Raw(payload["started_at_ms"], 0))
-		createdAtMS := nonNegativeInt64Local(parseInt64Raw(payload["created_at_ms"], 0))
-		updatedAtMS := nonNegativeInt64Local(parseInt64Raw(payload["updated_at_ms"], 0))
-		out[itemID] = FlowerActivitySubagentAction{
-			Operation:         "subagents",
-			Action:            action,
-			DelegationRuntime: "floret",
-			ThreadID:          threadID,
-			SubagentID:        threadID,
-			ParentThreadID:    strings.TrimSpace(anyToString(payload["parent_thread_id"])),
-			TaskName:          taskName,
-			TaskDescription:   taskDescription,
-			Title:             title,
-			AgentType:         agentType,
-			Status:            status,
-			StartedAtMS:       startedAtMS,
-			CreatedAtMS:       createdAtMS,
-			UpdatedAtMS:       updatedAtMS,
-			Items:             items,
+		out = append(out, next)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func subagentThreadIDSet(childIDs []flruntime.ThreadID) map[string]struct{} {
+	if len(childIDs) == 0 {
+		return nil
+	}
+	out := map[string]struct{}{}
+	for _, id := range childIDs {
+		if value := strings.TrimSpace(string(id)); value != "" {
+			out[value] = struct{}{}
 		}
 	}
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+func flowerSubagentActionItemFromAction(action FlowerActivitySubagentAction) (FlowerActivitySubagentActionItem, bool) {
+	threadID := strings.TrimSpace(firstNonEmptyString(action.ThreadID, action.SubagentID))
+	if threadID == "" && len(action.Items) == 1 {
+		return action.Items[0], true
+	}
+	if threadID == "" {
+		return FlowerActivitySubagentActionItem{}, false
+	}
+	return FlowerActivitySubagentActionItem{
+		ThreadID:        threadID,
+		SubagentID:      threadID,
+		TaskName:        action.TaskName,
+		TaskDescription: action.TaskDescription,
+		Title:           action.Title,
+		AgentType:       action.AgentType,
+		Status:          action.Status,
+		StartedAtMS:     action.StartedAtMS,
+		CreatedAtMS:     action.CreatedAtMS,
+		UpdatedAtMS:     action.UpdatedAtMS,
+	}, true
 }
 
 func flowerSubagentActionItemsFromPayload(payload map[string]any) []FlowerActivitySubagentActionItem {
@@ -2493,6 +2661,7 @@ func subagentListPayload(snapshot subagentSnapshot) map[string]any {
 		"thread_id":          payload["thread_id"],
 		"title":              payload["title"],
 		"task_name":          payload["task_name"],
+		"task_description":   payload["task_description"],
 		"agent_type":         payload["agent_type"],
 		"context_mode":       payload["context_mode"],
 		"status":             payload["status"],

@@ -599,7 +599,7 @@ func TestRefreshActivityTimelineSidecarsUpdatesOnlyExistingActivityBlock(t *test
 	t.Parallel()
 
 	var blockSets []streamEventBlockSet
-	timeline := observation.ActivityTimeline{
+	blockTimeline := observation.ActivityTimeline{
 		SchemaVersion: observation.ActivityTimelineSchemaVersion,
 		RunID:         "run_subagent_sidecar",
 		ThreadID:      "thread_subagent_sidecar",
@@ -608,23 +608,35 @@ func TestRefreshActivityTimelineSidecarsUpdatesOnlyExistingActivityBlock(t *test
 		Summary: observation.ActivitySummary{
 			Status:     observation.ActivityStatusRunning,
 			Severity:   observation.ActivitySeverityNormal,
-			TotalItems: 1,
-			Counts:     observation.ActivityCounts{Running: 1},
+			TotalItems: 2,
+			Counts:     observation.ActivityCounts{Running: 2},
 		},
-		Items: []observation.ActivityItem{{
-			ItemID:   "subagent:child-1",
-			ToolID:   "child-1",
-			ToolName: "subagents",
-			Kind:     observation.ActivityKindTool,
-			Status:   observation.ActivityStatusRunning,
-			Severity: observation.ActivitySeverityNormal,
-		}},
+		Items: []observation.ActivityItem{
+			{
+				ItemID:   "tool:call_wait",
+				ToolID:   "call_wait",
+				ToolName: "subagents",
+				Kind:     observation.ActivityKindTool,
+				Status:   observation.ActivityStatusRunning,
+				Severity: observation.ActivitySeverityNormal,
+			},
+			{
+				ItemID:   "subagent:child-1",
+				ToolID:   "child-1",
+				ToolName: "subagents",
+				Kind:     observation.ActivityKindTool,
+				Status:   observation.ActivityStatusRunning,
+				Severity: observation.ActivitySeverityNormal,
+			},
+		},
 	}
+	parentTimeline := blockTimeline
+	parentTimeline.Items = []observation.ActivityItem{blockTimeline.Items[1]}
 	r := &run{
 		id:              "run_subagent_sidecar",
 		threadID:        "thread_subagent_sidecar",
 		messageID:       "msg_subagent_sidecar",
-		assistantBlocks: []any{newActivityTimelineBlock(timeline, nil)},
+		assistantBlocks: []any{newActivityTimelineBlock(blockTimeline, nil)},
 		onStreamEvent: func(ev any) {
 			if bs, ok := ev.(streamEventBlockSet); ok {
 				blockSets = append(blockSets, bs)
@@ -632,7 +644,14 @@ func TestRefreshActivityTimelineSidecarsUpdatesOnlyExistingActivityBlock(t *test
 		},
 	}
 
-	updated := r.refreshActivityTimelineSidecars(timeline, map[string]FlowerActivitySubagentAction{
+	if !r.upsertActivityTimelineSubagentActions(map[string]FlowerActivitySubagentAction{
+		"tool:call_wait": {Action: subagentActionWait, Items: []FlowerActivitySubagentActionItem{{
+			ThreadID: "child-1", TaskName: "Review UI", TaskDescription: "Review the Flower UI.",
+		}}},
+	}) {
+		t.Fatalf("upsertActivityTimelineSubagentActions returned false for existing tool row")
+	}
+	updated := r.refreshActivityTimelineSidecars(parentTimeline, map[string]FlowerActivitySubagentAction{
 		"subagent:child-1": {Action: subagentActionInspect, ThreadID: "child-1", Status: "running"},
 		"subagent:child-2": {Action: subagentActionInspect, ThreadID: "child-2", Status: "running"},
 	})
@@ -640,34 +659,38 @@ func TestRefreshActivityTimelineSidecarsUpdatesOnlyExistingActivityBlock(t *test
 	if !updated {
 		t.Fatalf("refreshActivityTimelineSidecars returned false")
 	}
-	if len(blockSets) != 1 {
-		t.Fatalf("block-set events=%d, want one existing block refresh: %#v", len(blockSets), blockSets)
+	if len(blockSets) != 2 {
+		t.Fatalf("block-set events=%d, want tool upsert and parent refresh: %#v", len(blockSets), blockSets)
 	}
 	block, ok := r.assistantBlocks[0].(ActivityTimelineBlock)
 	if !ok {
 		t.Fatalf("assistantBlocks[0]=%T, want ActivityTimelineBlock", r.assistantBlocks[0])
 	}
-	if len(block.Items) != 1 || block.Items[0].ItemID != "subagent:child-1" {
+	if len(block.Items) != 2 || block.Items[0].ItemID != "tool:call_wait" || block.Items[1].ItemID != "subagent:child-1" {
 		t.Fatalf("timeline items changed: %#v", block.Items)
 	}
-	if len(block.SubagentActions) != 1 || block.SubagentActions["subagent:child-1"].ThreadID != "child-1" {
-		t.Fatalf("subagent sidecars=%#v, want only matching existing item", block.SubagentActions)
+	if len(block.SubagentActions) != 2 ||
+		block.SubagentActions["tool:call_wait"].Items[0].TaskDescription != "Review the Flower UI." ||
+		block.SubagentActions["subagent:child-1"].ThreadID != "child-1" {
+		t.Fatalf("subagent sidecars=%#v, want preserved tool sidecar plus parent sidecar", block.SubagentActions)
 	}
 	projected := r.flowerBlocksFromFloretThreadProjection(flruntime.ThreadTurnProjection{
-		ThreadID: flruntime.ThreadID(timeline.ThreadID),
-		TurnID:   flruntime.TurnID(timeline.TurnID),
-		RunID:    flruntime.RunID(timeline.RunID),
+		ThreadID: flruntime.ThreadID(blockTimeline.ThreadID),
+		TurnID:   flruntime.TurnID(blockTimeline.TurnID),
+		RunID:    flruntime.RunID(blockTimeline.RunID),
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
 			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
-			ActivityTimeline: &timeline,
+			ActivityTimeline: &blockTimeline,
 		}},
 	})
 	projectedBlock, ok := projected[0].(ActivityTimelineBlock)
 	if !ok {
 		t.Fatalf("projected[0]=%T, want ActivityTimelineBlock", projected[0])
 	}
-	if len(projectedBlock.SubagentActions) != 1 || projectedBlock.SubagentActions["subagent:child-1"].ThreadID != "child-1" {
-		t.Fatalf("projected subagent sidecars=%#v, want replayed sidecar decoration", projectedBlock.SubagentActions)
+	if len(projectedBlock.SubagentActions) != 2 ||
+		projectedBlock.SubagentActions["tool:call_wait"].Items[0].TaskName != "Review UI" ||
+		projectedBlock.SubagentActions["subagent:child-1"].ThreadID != "child-1" {
+		t.Fatalf("projected subagent sidecars=%#v, want replayed tool and parent sidecar decoration", projectedBlock.SubagentActions)
 	}
 
 	emptyRun := &run{
@@ -680,13 +703,90 @@ func TestRefreshActivityTimelineSidecarsUpdatesOnlyExistingActivityBlock(t *test
 			}
 		},
 	}
-	if emptyRun.refreshActivityTimelineSidecars(timeline, map[string]FlowerActivitySubagentAction{
+	if emptyRun.refreshActivityTimelineSidecars(parentTimeline, map[string]FlowerActivitySubagentAction{
 		"subagent:child-1": {Action: subagentActionInspect, ThreadID: "child-1"},
 	}) {
 		t.Fatalf("sidecar refresh created a block without a matching Floret projection block")
 	}
 	if len(emptyRun.assistantBlocks) != 0 {
 		t.Fatalf("emptyRun assistantBlocks=%#v, want no isolated sidecar block", emptyRun.assistantBlocks)
+	}
+}
+
+func TestFlowerToolSubagentActivityActionsUseToolItemID(t *testing.T) {
+	t.Parallel()
+
+	actions := flowerToolSubagentActivityActions("call_spawn_1", subagentActionSpawn, map[string]any{
+		"action":             subagentActionSpawn,
+		"status":             "ok",
+		"thread_id":          "child-1",
+		"task_name":          "Frontend polish review",
+		"task_description":   "Review Flower tool detail UI and propose concise fixes.",
+		"agent_type":         "worker",
+		"started_at_ms":      int64(1700000000100),
+		"created_at_ms":      int64(1700000000100),
+		"updated_at_ms":      int64(1700000000200),
+		"delegation_runtime": "floret",
+	})
+
+	action, ok := actions["tool:call_spawn_1"]
+	if !ok {
+		t.Fatalf("tool sidecar actions=%#v, want key tool:call_spawn_1", actions)
+	}
+	if action.ThreadID != "child-1" || action.TaskName != "Frontend polish review" || action.TaskDescription != "Review Flower tool detail UI and propose concise fixes." {
+		t.Fatalf("unexpected tool sidecar: %#v", action)
+	}
+	if _, ok := actions["call_spawn_1"]; ok {
+		t.Fatalf("tool sidecar must be keyed by real activity item id, got raw call id key: %#v", actions)
+	}
+}
+
+func TestFlowerWaitToolSidecarItemsFromTimelineFilterRequestedChildren(t *testing.T) {
+	t.Parallel()
+
+	timeline := observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		Items: []observation.ActivityItem{
+			{
+				ItemID:   "subagent:child-1",
+				ToolName: "subagents",
+				Payload: map[string]any{
+					"thread_id":        "child-1",
+					"task_name":        "Frontend polish review",
+					"task_description": "Review Flower tool detail UI and propose concise fixes.",
+					"host_profile_ref": "worker",
+					"status":           "running",
+					"started_at_ms":    int64(1700000000100),
+				},
+			},
+			{
+				ItemID:   "subagent:child-2",
+				ToolName: "subagents",
+				Payload: map[string]any{
+					"thread_id":        "child-2",
+					"task_name":        "Activity payload review",
+					"task_description": "Check whether subagent payloads expose only user-facing fields.",
+					"host_profile_ref": "reviewer",
+					"status":           "running",
+					"started_at_ms":    int64(1700000000200),
+				},
+			},
+		},
+	}
+
+	items := flowerSubagentActionItemsFromTimeline(timeline, []flruntime.ThreadID{"child-2"})
+	if len(items) != 1 {
+		t.Fatalf("items=%#v, want only requested child-2", items)
+	}
+	if items[0].ThreadID != "child-2" ||
+		items[0].TaskName != "Activity payload review" ||
+		items[0].TaskDescription != "Check whether subagent payloads expose only user-facing fields." ||
+		items[0].AgentType != "reviewer" {
+		t.Fatalf("unexpected wait sidecar item: %#v", items[0])
+	}
+	action := flowerSubagentActivityActionFromItems(subagentActionWait, "parent-thread", items)
+	if action.Action != subagentActionWait || action.ParentThreadID != "parent-thread" || action.ThreadID != "child-2" {
+		t.Fatalf("unexpected wait sidecar action: %#v", action)
 	}
 }
 

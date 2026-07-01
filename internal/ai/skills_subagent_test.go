@@ -1702,7 +1702,7 @@ func TestFloretSubagents_CloseAllActionReturnsTerminalSnapshots(t *testing.T) {
 		host: host,
 	}
 
-	out, err := runtime.closeAllAction(context.Background(), nil)
+	out, err := runtime.closeAllAction(context.Background(), "call_test_close_all", nil)
 	if err != nil {
 		t.Fatalf("closeAllAction: %v", err)
 	}
@@ -1771,7 +1771,7 @@ func TestFloretSubagents_CloseActionCapsTimeoutAndReturnsBoundedSnapshot(t *test
 		host: host,
 	}
 
-	out, err := runtime.close(context.Background(), map[string]any{
+	out, err := runtime.close(context.Background(), "call_test_close", map[string]any{
 		"target":     "child_running",
 		"timeout_ms": 9_999_999,
 	})

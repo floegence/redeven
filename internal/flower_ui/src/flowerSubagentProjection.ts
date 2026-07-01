@@ -174,9 +174,12 @@ function itemFromSnapshot(
   if (!threadID && !subagentID) return null;
   if (threadID && threadID === ownerThreadID) return null;
   const action = payloadString(activityPayload, 'action') || payloadString(source, 'action');
-  const taskName = payloadString(source, 'task_name', 'title');
+  const rawTaskName = payloadString(source, 'task_name') || payloadString(activityPayload, 'task_name');
+  const taskName = rawTaskName && rawTaskName !== threadID && rawTaskName !== subagentID ? rawTaskName : '';
   const taskDescription = payloadString(source, 'task_description') || payloadString(activityPayload, 'task_description');
-  const title = payloadString(source, 'title', 'task_name') || payloadString(activityPayload, 'task_name', 'title') || 'Subagent';
+  const rawTitle = payloadString(source, 'title') || payloadString(activityPayload, 'title');
+  const title = rawTitle && rawTitle !== threadID && rawTitle !== subagentID ? rawTitle : taskName;
+  if (!title) return null;
   const startedAtMs = numberValue(source.started_at_ms ?? source.created_at_ms);
   const createdAtMs = numberValue(source.created_at_ms ?? source.started_at_ms);
   const updatedAtMs = numberValue(source.updated_at_ms ?? source.updatedAtMs)

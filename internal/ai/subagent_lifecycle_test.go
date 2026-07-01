@@ -592,7 +592,7 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 		t.Fatalf("spawn_tool_call_id=%q, want real tool call id %q", rec.SpawnToolCallID, spawnToolCallID)
 	}
 
-	if _, err := runtime.sendInput(context.Background(), map[string]any{
+	if _, err := runtime.sendInput(context.Background(), "call_test_send_input", map[string]any{
 		"target":  childThreadID,
 		"message": "continue with the same approval identity",
 	}); err != nil {

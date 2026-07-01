@@ -626,9 +626,6 @@ function SubagentsDetailBlock(props: {
                   <Show when={agent.description}>
                     {(description) => <div class="chat-activity-subagents-item-task">{description()}</div>}
                   </Show>
-                  <Show when={agent.agent_type}>
-                    {(agentType) => <div class="chat-activity-subagents-item-agent">Agent: {agentType()}</div>}
-                  </Show>
                 </div>
                 <Show when={agent.open_messages && props.onOpenSubagentMessages}>
                   <button
