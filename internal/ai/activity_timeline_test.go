@@ -25,7 +25,6 @@ func TestDetachedRunIgnoresPresentationUpdates(t *testing.T) {
 		id:                        "run_detached_presentation",
 		threadID:                  "thread_detached_presentation",
 		messageID:                 "msg_detached_presentation",
-		activitySegmentBlockIndex: -1,
 		currentThinkingBlockIndex: -1,
 		onStreamEvent: func(ev any) {
 			events = append(events, ev)
@@ -343,11 +342,10 @@ func TestObservationActivityEventsDoNotPublishFlowerTimelineBlocks(t *testing.T)
 
 	var blockSets []streamEventBlockSet
 	r := &run{
-		id:                        "run_observation_boundary",
-		threadID:                  "thread_observation_boundary",
-		messageID:                 "msg_observation_boundary",
-		activitySegmentBlockIndex: -1,
-		nextBlockIndex:            0,
+		id:             "run_observation_boundary",
+		threadID:       "thread_observation_boundary",
+		messageID:      "msg_observation_boundary",
+		nextBlockIndex: 0,
 		onStreamEvent: func(ev any) {
 			if bs, ok := ev.(streamEventBlockSet); ok {
 				blockSets = append(blockSets, bs)
@@ -382,11 +380,10 @@ func TestRecordToolResultActivityRejectsMissingStatus(t *testing.T) {
 
 	var frames []ActivityTimelineBlock
 	r := &run{
-		id:                        "run_invalid_status",
-		threadID:                  "thread_invalid_status",
-		messageID:                 "msg_invalid_status",
-		activitySegmentBlockIndex: -1,
-		nextBlockIndex:            0,
+		id:             "run_invalid_status",
+		threadID:       "thread_invalid_status",
+		messageID:      "msg_invalid_status",
+		nextBlockIndex: 0,
 		onStreamEvent: func(ev any) {
 			if bs, ok := ev.(streamEventBlockSet); ok {
 				if block, ok := bs.Block.(ActivityTimelineBlock); ok {
@@ -408,11 +405,10 @@ func TestRecordObservationActivityEventSkipsEmptyTimeline(t *testing.T) {
 
 	streamFrames := 0
 	r := &run{
-		id:                        "run_empty",
-		threadID:                  "thread_empty",
-		messageID:                 "msg_empty",
-		activitySegmentBlockIndex: -1,
-		nextBlockIndex:            0,
+		id:             "run_empty",
+		threadID:       "thread_empty",
+		messageID:      "msg_empty",
+		nextBlockIndex: 0,
 		onStreamEvent: func(ev any) {
 			if _, ok := ev.(streamEventBlockSet); ok {
 				streamFrames++
@@ -432,8 +428,8 @@ func TestRecordObservationActivityEventSkipsEmptyTimeline(t *testing.T) {
 	if streamFrames != 0 {
 		t.Fatalf("streamFrames=%d, want 0", streamFrames)
 	}
-	if r.activitySegmentBlockIndex != -1 || r.activitySegmentActive || r.nextBlockIndex != 0 {
-		t.Fatalf("activity segment state index=%d active=%v next=%d, want untouched", r.activitySegmentBlockIndex, r.activitySegmentActive, r.nextBlockIndex)
+	if r.nextBlockIndex != 0 {
+		t.Fatalf("nextBlockIndex=%d, want untouched", r.nextBlockIndex)
 	}
 }
 
@@ -442,11 +438,10 @@ func TestRecordFloretActivityEventWithoutTimelineDoesNotPublishFlowerTimelineBlo
 
 	var blockSets []streamEventBlockSet
 	r := &run{
-		id:                        "run_floret_activity_boundary",
-		threadID:                  "thread_floret_activity_boundary",
-		messageID:                 "msg_floret_activity_boundary",
-		activitySegmentBlockIndex: -1,
-		nextBlockIndex:            0,
+		id:             "run_floret_activity_boundary",
+		threadID:       "thread_floret_activity_boundary",
+		messageID:      "msg_floret_activity_boundary",
+		nextBlockIndex: 0,
 		onStreamEvent: func(ev any) {
 			if bs, ok := ev.(streamEventBlockSet); ok {
 				blockSets = append(blockSets, bs)
@@ -468,16 +463,15 @@ func TestRecordFloretActivityEventWithoutTimelineDoesNotPublishFlowerTimelineBlo
 	}
 }
 
-func TestRecordFloretActivityEventPublishesFloretTimeline(t *testing.T) {
+func TestRecordFloretActivityEventDoesNotPublishAggregateTimelineBlocks(t *testing.T) {
 	t.Parallel()
 
 	var blockSets []streamEventBlockSet
 	r := &run{
-		id:                        "run_floret_activity_projection",
-		threadID:                  "thread_floret_activity_projection",
-		messageID:                 "msg_floret_activity_projection",
-		activitySegmentBlockIndex: -1,
-		nextBlockIndex:            0,
+		id:             "run_floret_activity_projection",
+		threadID:       "thread_floret_activity_projection",
+		messageID:      "msg_floret_activity_projection",
+		nextBlockIndex: 0,
 		onStreamEvent: func(ev any) {
 			if bs, ok := ev.(streamEventBlockSet); ok {
 				blockSets = append(blockSets, bs)
@@ -513,16 +507,6 @@ func TestRecordFloretActivityEventPublishesFloretTimeline(t *testing.T) {
 		ActivityTimeline: &running,
 		Timestamp:        time.UnixMilli(1_700_000_000_000),
 	})
-	if len(blockSets) != 1 {
-		t.Fatalf("block-set events=%d, want running timeline: %#v", len(blockSets), blockSets)
-	}
-	block, ok := blockSets[0].Block.(ActivityTimelineBlock)
-	if !ok {
-		t.Fatalf("block = %T %#v, want ActivityTimelineBlock", blockSets[0].Block, blockSets[0].Block)
-	}
-	if len(block.Items) != 1 || block.Items[0].Status != observation.ActivityStatusRunning || block.Items[0].Payload["command"] != "sleep 10s" {
-		t.Fatalf("running block = %#v", block)
-	}
 
 	success := running
 	success.Summary.Status = observation.ActivityStatusSuccess
@@ -545,18 +529,164 @@ func TestRecordFloretActivityEventPublishesFloretTimeline(t *testing.T) {
 		ActivityTimeline: &success,
 		Timestamp:        time.UnixMilli(1_700_000_010_000),
 	})
-	if len(blockSets) != 2 {
-		t.Fatalf("block-set events=%d, want running and success timeline: %#v", len(blockSets), blockSets)
+	if len(blockSets) != 0 {
+		t.Fatalf("block-set events=%d, want live ThreadTurnProjection to be the only main activity block source: %#v", len(blockSets), blockSets)
 	}
-	finalBlock, ok := blockSets[1].Block.(ActivityTimelineBlock)
+	if len(r.assistantBlocks) != 0 {
+		t.Fatalf("assistantBlocks=%#v, want no aggregate timeline projection", r.assistantBlocks)
+	}
+}
+
+func TestRecordFloretActivityEventDoesNotAppendAggregateTimelineAfterText(t *testing.T) {
+	t.Parallel()
+
+	var blockSets []streamEventBlockSet
+	r := &run{
+		id:             "run_no_duplicate_tail",
+		threadID:       "thread_no_duplicate_tail",
+		messageID:      "msg_no_duplicate_tail",
+		nextBlockIndex: 2,
+		assistantBlocks: []any{
+			newActivityTimelineBlock(observation.ActivityTimeline{
+				SchemaVersion: observation.ActivityTimelineSchemaVersion,
+				RunID:         "run_no_duplicate_tail",
+				ThreadID:      "thread_no_duplicate_tail",
+				TurnID:        "msg_no_duplicate_tail",
+				TraceID:       "run_no_duplicate_tail",
+				Summary: observation.ActivitySummary{
+					Status:     observation.ActivityStatusRunning,
+					Severity:   observation.ActivitySeverityNormal,
+					TotalItems: 1,
+					Counts:     observation.ActivityCounts{Running: 1},
+				},
+				Items: []observation.ActivityItem{{
+					ItemID:   "tool:exec-1",
+					ToolID:   "exec-1",
+					ToolName: "terminal.exec",
+					Kind:     observation.ActivityKindTool,
+					Status:   observation.ActivityStatusRunning,
+					Severity: observation.ActivitySeverityNormal,
+				}},
+			}, nil),
+			&persistedMarkdownBlock{Type: "markdown", Content: "answer after tool"},
+		},
+		onStreamEvent: func(ev any) {
+			if bs, ok := ev.(streamEventBlockSet); ok {
+				blockSets = append(blockSets, bs)
+			}
+		},
+	}
+	success := r.assistantBlocks[0].(ActivityTimelineBlock).ActivityTimeline
+	success.Summary.Status = observation.ActivityStatusSuccess
+	success.Summary.Counts = observation.ActivityCounts{Success: 1}
+	success.Items[0].Status = observation.ActivityStatusSuccess
+
+	r.recordFloretActivityEvent(flruntime.Event{
+		Type:             observation.EventTypeToolResult,
+		ActivityTimeline: &success,
+		Timestamp:        time.UnixMilli(2_000),
+	})
+
+	if len(blockSets) != 0 {
+		t.Fatalf("block-set events=%d, want aggregate timeline not to append duplicate tail: %#v", len(blockSets), blockSets)
+	}
+	if len(r.assistantBlocks) != 2 {
+		t.Fatalf("assistantBlocks len=%d, want unchanged canonical blocks: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	}
+}
+
+func TestRefreshActivityTimelineSidecarsUpdatesOnlyExistingActivityBlock(t *testing.T) {
+	t.Parallel()
+
+	var blockSets []streamEventBlockSet
+	timeline := observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		RunID:         "run_subagent_sidecar",
+		ThreadID:      "thread_subagent_sidecar",
+		TurnID:        "msg_subagent_sidecar",
+		TraceID:       "run_subagent_sidecar",
+		Summary: observation.ActivitySummary{
+			Status:     observation.ActivityStatusRunning,
+			Severity:   observation.ActivitySeverityNormal,
+			TotalItems: 1,
+			Counts:     observation.ActivityCounts{Running: 1},
+		},
+		Items: []observation.ActivityItem{{
+			ItemID:   "subagent:child-1",
+			ToolID:   "child-1",
+			ToolName: "subagents",
+			Kind:     observation.ActivityKindTool,
+			Status:   observation.ActivityStatusRunning,
+			Severity: observation.ActivitySeverityNormal,
+		}},
+	}
+	r := &run{
+		id:              "run_subagent_sidecar",
+		threadID:        "thread_subagent_sidecar",
+		messageID:       "msg_subagent_sidecar",
+		assistantBlocks: []any{newActivityTimelineBlock(timeline, nil)},
+		onStreamEvent: func(ev any) {
+			if bs, ok := ev.(streamEventBlockSet); ok {
+				blockSets = append(blockSets, bs)
+			}
+		},
+	}
+
+	updated := r.refreshActivityTimelineSidecars(timeline, map[string]FlowerActivitySubagentAction{
+		"subagent:child-1": {Action: subagentActionInspect, ThreadID: "child-1", Status: "running"},
+		"subagent:child-2": {Action: subagentActionInspect, ThreadID: "child-2", Status: "running"},
+	})
+
+	if !updated {
+		t.Fatalf("refreshActivityTimelineSidecars returned false")
+	}
+	if len(blockSets) != 1 {
+		t.Fatalf("block-set events=%d, want one existing block refresh: %#v", len(blockSets), blockSets)
+	}
+	block, ok := r.assistantBlocks[0].(ActivityTimelineBlock)
 	if !ok {
-		t.Fatalf("final block = %T %#v, want ActivityTimelineBlock", blockSets[1].Block, blockSets[1].Block)
+		t.Fatalf("assistantBlocks[0]=%T, want ActivityTimelineBlock", r.assistantBlocks[0])
 	}
-	if len(finalBlock.Items) != 1 ||
-		finalBlock.Items[0].Status != observation.ActivityStatusSuccess ||
-		finalBlock.Items[0].Payload["command"] != "sleep 10s" ||
-		finalBlock.Items[0].EndedAtUnixMS-finalBlock.Items[0].StartedAtUnixMS != 10_000 {
-		t.Fatalf("final block = %#v", finalBlock)
+	if len(block.Items) != 1 || block.Items[0].ItemID != "subagent:child-1" {
+		t.Fatalf("timeline items changed: %#v", block.Items)
+	}
+	if len(block.SubagentActions) != 1 || block.SubagentActions["subagent:child-1"].ThreadID != "child-1" {
+		t.Fatalf("subagent sidecars=%#v, want only matching existing item", block.SubagentActions)
+	}
+	projected := r.flowerBlocksFromFloretThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID: flruntime.ThreadID(timeline.ThreadID),
+		TurnID:   flruntime.TurnID(timeline.TurnID),
+		RunID:    flruntime.RunID(timeline.RunID),
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: &timeline,
+		}},
+	})
+	projectedBlock, ok := projected[0].(ActivityTimelineBlock)
+	if !ok {
+		t.Fatalf("projected[0]=%T, want ActivityTimelineBlock", projected[0])
+	}
+	if len(projectedBlock.SubagentActions) != 1 || projectedBlock.SubagentActions["subagent:child-1"].ThreadID != "child-1" {
+		t.Fatalf("projected subagent sidecars=%#v, want replayed sidecar decoration", projectedBlock.SubagentActions)
+	}
+
+	emptyRun := &run{
+		id:        "run_subagent_sidecar",
+		threadID:  "thread_subagent_sidecar",
+		messageID: "msg_subagent_sidecar",
+		onStreamEvent: func(ev any) {
+			if bs, ok := ev.(streamEventBlockSet); ok {
+				blockSets = append(blockSets, bs)
+			}
+		},
+	}
+	if emptyRun.refreshActivityTimelineSidecars(timeline, map[string]FlowerActivitySubagentAction{
+		"subagent:child-1": {Action: subagentActionInspect, ThreadID: "child-1"},
+	}) {
+		t.Fatalf("sidecar refresh created a block without a matching Floret projection block")
+	}
+	if len(emptyRun.assistantBlocks) != 0 {
+		t.Fatalf("emptyRun assistantBlocks=%#v, want no isolated sidecar block", emptyRun.assistantBlocks)
 	}
 }
 

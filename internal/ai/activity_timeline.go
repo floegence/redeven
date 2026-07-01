@@ -167,42 +167,13 @@ func (r *run) activityTimelineFileActions(timeline observation.ActivityTimeline)
 	return cloneFlowerActivityFileActions(out)
 }
 
-func (r *run) finishActivitySegment() {
-	if r == nil {
-		return
+func (r *run) activityTimelineSubagentActions(timeline observation.ActivityTimeline) map[string]FlowerActivitySubagentAction {
+	if r == nil || len(timeline.Items) == 0 {
+		return nil
 	}
-	r.mu.Lock()
-	r.activitySegmentActive = false
-	r.activitySegmentBlockIndex = -1
-	r.mu.Unlock()
-}
-
-func (r *run) ensureActivitySegmentBlockIndex(preferred int) int {
-	if r == nil {
-		return -1
-	}
-	r.mu.Lock()
-	if r.activitySegmentActive && r.activitySegmentBlockIndex >= 0 {
-		idx := r.activitySegmentBlockIndex
-		r.mu.Unlock()
-		return idx
-	}
-	idx := preferred
-	if idx < 0 {
-		idx = r.nextBlockIndex
-	}
-	if idx < 0 {
-		idx = 0
-	}
-	r.activitySegmentActive = true
-	r.activitySegmentBlockIndex = idx
-	if r.nextBlockIndex <= idx {
-		r.nextBlockIndex = idx + 1
-	}
-	r.needNewTextBlock = true
-	r.needNewThinkingBlock = true
-	r.mu.Unlock()
-	return idx
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	return filterSubagentActionsForTimeline(timeline, r.activitySubagentActions)
 }
 
 func (r *run) recordFloretActivityEvent(ev flruntime.Event) {
@@ -214,9 +185,6 @@ func (r *run) recordFloretActivityEvent(ev flruntime.Event) {
 	}
 	if modelIOEndsBeforeActivity(ev.Type) {
 		r.clearModelIOStatus()
-	}
-	if ev.ActivityTimeline != nil {
-		r.publishActivityTimelineWithSidecars(*ev.ActivityTimeline, nil)
 	}
 }
 
@@ -260,42 +228,110 @@ func modelIOEndsBeforeActivity(eventType string) bool {
 	}
 }
 
-func (r *run) publishActivityTimelineWithSidecars(timeline observation.ActivityTimeline, subagentActions map[string]FlowerActivitySubagentAction) {
+func (r *run) refreshActivityTimelineSidecars(timeline observation.ActivityTimeline, subagentActions map[string]FlowerActivitySubagentAction) bool {
 	if r == nil {
-		return
+		return false
 	}
 	if !r.acceptsPresentationUpdates() {
-		return
+		return false
 	}
 	timeline = r.normalizeActivityTimeline(timeline)
 	if len(timeline.Items) == 0 {
-		return
+		return false
 	}
-	if !r.validateActivityTimelineForProjection(timeline, "live_activity") {
-		return
+	if !r.validateActivityTimelineForProjection(timeline, "sidecar_refresh") {
+		return false
 	}
-	idx := r.ensureActivitySegmentBlockIndex(-1)
-	if idx < 0 {
-		return
+	refreshedActions := filterSubagentActionsForTimeline(timeline, subagentActions)
+
+	type update struct {
+		index int
+		block ActivityTimelineBlock
 	}
-	fileActions := r.activityTimelineFileActions(timeline)
-	block := newActivityTimelineBlockWithSidecars(timeline, fileActions, subagentActions)
+	updates := make([]update, 0, 2)
+
 	r.muAssistant.Lock()
-	r.persistEnsureIndex(idx)
-	r.assistantBlocks[idx] = block
+	if r.activitySubagentActions == nil {
+		r.activitySubagentActions = map[string]FlowerActivitySubagentAction{}
+	}
+	for _, item := range timeline.Items {
+		itemID := strings.TrimSpace(item.ItemID)
+		if itemID == "" {
+			continue
+		}
+		if action, ok := refreshedActions[itemID]; ok {
+			r.activitySubagentActions[itemID] = action
+		} else {
+			delete(r.activitySubagentActions, itemID)
+		}
+	}
+	for idx, raw := range r.assistantBlocks {
+		block, ok := activityTimelineBlockFromValue(raw)
+		if !ok {
+			continue
+		}
+		actions := filterSubagentActionsForTimeline(block.ActivityTimeline, r.activitySubagentActions)
+		if subagentActionMapsEqual(block.SubagentActions, actions) {
+			continue
+		}
+		block.SubagentActions = actions
+		r.assistantBlocks[idx] = block
+		updates = append(updates, update{index: idx, block: block})
+	}
 	r.muAssistant.Unlock()
 
-	r.persistRunEvent("activity.timeline.projected", RealtimeStreamKindTool, map[string]any{
-		"block_index":     idx,
-		"run_id":          strings.TrimSpace(timeline.RunID),
-		"thread_id":       strings.TrimSpace(timeline.ThreadID),
-		"turn_id":         strings.TrimSpace(timeline.TurnID),
-		"status":          strings.TrimSpace(string(timeline.Summary.Status)),
-		"severity":        strings.TrimSpace(string(timeline.Summary.Severity)),
-		"needs_attention": timeline.Summary.NeedsAttention,
-		"total_items":     timeline.Summary.TotalItems,
-	})
-	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+	for _, update := range updates {
+		r.sendStreamEvent(streamEventBlockSet{
+			Type:       "block-set",
+			MessageID:  r.messageID,
+			BlockIndex: update.index,
+			Block:      update.block,
+		})
+	}
+	return len(updates) > 0
+}
+
+func subagentActionMapsEqual(a map[string]FlowerActivitySubagentAction, b map[string]FlowerActivitySubagentAction) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for key, value := range a {
+		if b[key] != value {
+			return false
+		}
+	}
+	return true
+}
+
+func activityTimelineBlockFromValue(value any) (ActivityTimelineBlock, bool) {
+	switch block := value.(type) {
+	case ActivityTimelineBlock:
+		return block, true
+	case *ActivityTimelineBlock:
+		if block != nil {
+			return *block, true
+		}
+	}
+	return ActivityTimelineBlock{}, false
+}
+
+func filterSubagentActionsForTimeline(timeline observation.ActivityTimeline, actions map[string]FlowerActivitySubagentAction) map[string]FlowerActivitySubagentAction {
+	if len(timeline.Items) == 0 || len(actions) == 0 {
+		return nil
+	}
+	out := map[string]FlowerActivitySubagentAction{}
+	for _, item := range timeline.Items {
+		itemID := strings.TrimSpace(item.ItemID)
+		if itemID == "" {
+			continue
+		}
+		action, ok := actions[itemID]
+		if !ok {
+			continue
+		}
+		out[itemID] = action
+	}
+	return cloneFlowerActivitySubagentActions(out)
 }
 
 func (r *run) validateActivityTimelineForProjection(timeline observation.ActivityTimeline, source string) bool {

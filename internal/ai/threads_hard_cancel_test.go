@@ -521,7 +521,6 @@ func TestService_CancelRun_DoesNotPersistCanceledAssistantBeforeNextUserTurn(t *
 		threadsDB:                 svc.threadsDB,
 		persistOpTimeout:          svc.persistOpTO,
 		doneCh:                    make(chan struct{}),
-		activitySegmentBlockIndex: -1,
 		currentThinkingBlockIndex: -1,
 	}
 

@@ -2180,7 +2180,7 @@ func (s *floretSubagentRuntime) publishParentSubagentTimeline(ctx context.Contex
 	if len(result.Timeline.Items) == 0 {
 		return
 	}
-	parent.publishActivityTimelineWithSidecars(result.Timeline, s.flowerParentSubagentActivityActions(result.Timeline))
+	parent.refreshActivityTimelineSidecars(result.Timeline, s.flowerParentSubagentActivityActions(result.Timeline))
 }
 
 func (s *floretSubagentRuntime) flowerParentSubagentActivityActions(timeline observation.ActivityTimeline) map[string]FlowerActivitySubagentAction {

@@ -1311,6 +1311,15 @@ func TestSubagentChildEventRefreshesParentTimeline(t *testing.T) {
 		events = append(events, ev)
 		eventsMu.Unlock()
 	}
+	initialTimeline, err := host.ListSubAgentActivityTimeline(context.Background(), flruntime.ListSubAgentActivityTimelineRequest{
+		ParentThreadID: "parent-thread",
+		Meta:           parent.activityRunMeta(),
+	})
+	if err != nil {
+		t.Fatalf("initial subagent timeline: %v", err)
+	}
+	parent.assistantBlocks = []any{newActivityTimelineBlock(initialTimeline.Timeline, nil)}
+	parent.nextBlockIndex = len(parent.assistantBlocks)
 	runtime := &floretSubagentRuntime{
 		parent: parent,
 		host:   host,

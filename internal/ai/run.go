@@ -155,14 +155,13 @@ type run struct {
 	needNewTextBlock          bool
 	currentThinkingBlockIndex int
 	needNewThinkingBlock      bool
-	activitySegmentActive     bool
-	activitySegmentBlockIndex int
 
 	muAssistant              sync.Mutex
 	assistantCreatedAtUnixMs int64
 	assistantBlocks          []any
 	assistantAnswer          assistantAnswerState
 	activityFileActions      map[string]FlowerActivityFileAction
+	activitySubagentActions  map[string]FlowerActivitySubagentAction
 	activityFileActionSeq    int64
 	waitingPrompt            *RequestUserInputPrompt
 	providerContinuation     threadstore.ThreadProviderContinuation
@@ -296,9 +295,8 @@ func newRun(opts runOptions) *run {
 		webSearchMode:             strings.TrimSpace(opts.WebSearchMode),
 		subagentRuntime:           opts.SubagentRuntime,
 		currentThinkingBlockIndex: -1,
-		activitySegmentActive:     false,
-		activitySegmentBlockIndex: -1,
 		activityFileActions:       make(map[string]FlowerActivityFileAction),
+		activitySubagentActions:   make(map[string]FlowerActivitySubagentAction),
 		contextCompactionAnchors:  make(map[string]FlowerTimelineAnchor),
 		subagentDepth:             opts.SubagentDepth,
 		toolTargetPolicy:          normalizeToolTargetPolicy(opts.ToolTargetPolicy),
@@ -1602,7 +1600,6 @@ func (r *run) appendTextDelta(delta string) error {
 		return nil
 	}
 	if r.needNewTextBlock {
-		r.finishActivitySegment()
 		idx := r.nextBlockIndex
 		r.nextBlockIndex++
 		r.currentTextBlockIndex = idx
@@ -1628,7 +1625,6 @@ func (r *run) appendThinkingDelta(delta string) error {
 		return nil
 	}
 	if r.needNewThinkingBlock || r.currentThinkingBlockIndex < 0 {
-		r.finishActivitySegment()
 		idx := r.nextBlockIndex
 		r.nextBlockIndex++
 		r.currentThinkingBlockIndex = idx

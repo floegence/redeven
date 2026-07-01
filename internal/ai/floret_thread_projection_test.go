@@ -142,6 +142,60 @@ func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *test
 	}
 }
 
+func TestFloretEventProjectionReplacesDuplicateLiveActivityTail(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 4)
+	r := newRun(runOptions{})
+	r.id = "run_live_projection"
+	r.threadID = "thread_live_projection"
+	r.messageID = "msg_live_projection"
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+	r.assistantBlocks = []any{
+		activityTimelinePlaceholder("run_live_projection"),
+		&persistedMarkdownBlock{Type: "markdown", Content: "live text"},
+		activityTimelinePlaceholder("run_live_projection"),
+	}
+	r.nextBlockIndex = len(r.assistantBlocks)
+
+	floretEventSink{run: r}.EmitEvent(flruntime.Event{
+		Type:     "thread_entry_committed",
+		RunID:    "run_live_projection",
+		ThreadID: "thread_live_projection",
+		TurnID:   "msg_live_projection",
+		Projection: &flruntime.ThreadTurnProjection{
+			ThreadID: "thread_live_projection",
+			TurnID:   "msg_live_projection",
+			RunID:    "run_live_projection",
+			TraceID:  "run_live_projection",
+			Segments: []flruntime.ThreadTurnProjectionSegment{
+				{
+					Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+					ActivityTimeline: floretProjectionTimeline("run_live_projection", "thread_live_projection", "msg_live_projection", "exec-1", "terminal.exec"),
+				},
+				{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "live text"},
+			},
+		},
+	})
+
+	if len(r.assistantBlocks) != 2 {
+		t.Fatalf("assistantBlocks len=%d, want canonical activity plus markdown: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	}
+	if _, ok := r.assistantBlocks[0].(ActivityTimelineBlock); !ok {
+		t.Fatalf("assistantBlocks[0]=%T, want activity timeline", r.assistantBlocks[0])
+	}
+	if block, ok := r.assistantBlocks[1].(*persistedMarkdownBlock); !ok || block.Content != "live text" {
+		t.Fatalf("assistantBlocks[1]=%T %#v, want canonical markdown", r.assistantBlocks[1], r.assistantBlocks[1])
+	}
+	if len(events) != 3 {
+		t.Fatalf("stream events=%d, want two canonical block sets plus stale tail clear: %#v", len(events), events)
+	}
+	cleared, ok := events[2].(streamEventBlockSet)
+	if !ok || cleared.BlockIndex != 2 {
+		t.Fatalf("events[2]=%T %#v, want stale duplicate clear at index 2", events[2], events[2])
+	}
+}
+
 func TestSettlePendingToolWithActiveFloretRunUsesActiveHost(t *testing.T) {
 	host := &recordingFloretHost{
 		settleResult: flruntime.PendingToolSettlementResult{
