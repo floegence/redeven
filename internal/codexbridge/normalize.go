@@ -12,6 +12,7 @@ func normalizeThread(in wireThread) Thread {
 		ID:             strings.TrimSpace(in.ID),
 		Preview:        strings.TrimSpace(in.Preview),
 		Ephemeral:      in.Ephemeral,
+		HistoryMode:    strings.TrimSpace(in.HistoryMode),
 		ModelProvider:  strings.TrimSpace(in.ModelProvider),
 		CreatedAtUnixS: in.CreatedAt,
 		UpdatedAtUnixS: in.UpdatedAt,

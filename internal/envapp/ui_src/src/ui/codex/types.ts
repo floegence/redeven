@@ -62,6 +62,7 @@ export type CodexCapabilitiesSnapshot = Readonly<{
 
 export type CodexForkThreadRequest = Readonly<{
   thread_id: string;
+  last_turn_id?: string;
   model?: string;
   approval_policy?: string;
   sandbox_mode?: string;
@@ -276,6 +277,7 @@ export type CodexThread = Readonly<{
   id: string;
   preview: string;
   ephemeral: boolean;
+  history_mode?: string;
   model_provider: string;
   created_at_unix_s: number;
   updated_at_unix_s: number;

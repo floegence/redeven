@@ -50,6 +50,7 @@ type wireThread struct {
 	ID            string           `json:"id"`
 	Preview       string           `json:"preview"`
 	Ephemeral     bool             `json:"ephemeral"`
+	HistoryMode   string           `json:"historyMode,omitempty"`
 	ModelProvider string           `json:"modelProvider"`
 	CreatedAt     int64            `json:"createdAt"`
 	UpdatedAt     int64            `json:"updatedAt"`
@@ -153,11 +154,14 @@ type wireModel struct {
 }
 
 type wireModelListParams struct {
-	IncludeHidden *bool `json:"includeHidden,omitempty"`
+	IncludeHidden *bool   `json:"includeHidden,omitempty"`
+	Cursor        *string `json:"cursor,omitempty"`
+	Limit         int     `json:"limit,omitempty"`
 }
 
 type wireModelListResponse struct {
-	Data []wireModel `json:"data"`
+	Data       []wireModel `json:"data"`
+	NextCursor *string     `json:"nextCursor"`
 }
 
 type wireConfigReadParams struct {
@@ -278,6 +282,7 @@ type wireTurnSteerResponse struct {
 
 type wireThreadForkParams struct {
 	ThreadID          string  `json:"threadId"`
+	LastTurnID        *string `json:"lastTurnId,omitempty"`
 	Model             *string `json:"model,omitempty"`
 	ApprovalPolicy    *string `json:"approvalPolicy,omitempty"`
 	Sandbox           *string `json:"sandbox,omitempty"`

@@ -37,6 +37,7 @@ import {
   codexModelLabel,
   codexModelSupportsImages,
   localizedCodexApprovalPolicyLabel,
+  localizedCodexReasoningEffortLabel,
   localizedCodexSandboxModeLabel,
   codexSupportedReasoningEfforts,
   resolveCodexWorkingDir,
@@ -294,10 +295,10 @@ export function CodexPageShell() {
       const normalized = String(value ?? '').trim();
       if (!normalized || seen.has(normalized)) continue;
       seen.add(normalized);
-      out.push({ value: normalized, label: normalized.toUpperCase() });
+      out.push({ value: normalized, label: localizedCodexReasoningEffortLabel(normalized, i18n.t) });
     }
     if (out.length === 0 && effortValue()) {
-      out.push({ value: effortValue(), label: effortValue().toUpperCase() });
+      out.push({ value: effortValue(), label: localizedCodexReasoningEffortLabel(effortValue(), i18n.t) });
     }
     return out;
   });

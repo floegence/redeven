@@ -73,6 +73,7 @@ type StartThreadRequest struct {
 
 type ForkThreadRequest struct {
 	ThreadID          string `json:"thread_id"`
+	LastTurnID        string `json:"last_turn_id,omitempty"`
 	Model             string `json:"model,omitempty"`
 	ApprovalPolicy    string `json:"approval_policy,omitempty"`
 	SandboxMode       string `json:"sandbox_mode,omitempty"`
@@ -150,6 +151,7 @@ type Thread struct {
 	ID             string   `json:"id"`
 	Preview        string   `json:"preview"`
 	Ephemeral      bool     `json:"ephemeral"`
+	HistoryMode    string   `json:"history_mode,omitempty"`
 	ModelProvider  string   `json:"model_provider"`
 	CreatedAtUnixS int64    `json:"created_at_unix_s"`
 	UpdatedAtUnixS int64    `json:"updated_at_unix_s"`

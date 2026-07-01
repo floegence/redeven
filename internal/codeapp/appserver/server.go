@@ -2693,6 +2693,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		case len(parts) == 2 && r.Method == http.MethodPost && parts[1] == "fork":
 			type reqBody struct {
 				Model             string `json:"model"`
+				LastTurnID        string `json:"last_turn_id"`
 				ApprovalPolicy    string `json:"approval_policy"`
 				SandboxMode       string `json:"sandbox_mode"`
 				ApprovalsReviewer string `json:"approvals_reviewer"`
@@ -2710,6 +2711,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			detail, err := g.codex.ForkThread(r.Context(), codexbridge.ForkThreadRequest{
 				ThreadID:          threadID,
+				LastTurnID:        strings.TrimSpace(body.LastTurnID),
 				Model:             strings.TrimSpace(body.Model),
 				ApprovalPolicy:    strings.TrimSpace(body.ApprovalPolicy),
 				SandboxMode:       strings.TrimSpace(body.SandboxMode),

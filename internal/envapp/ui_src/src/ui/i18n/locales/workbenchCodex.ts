@@ -70,6 +70,12 @@ export const zhTWWorkbenchCodex = {
       effort: "Effort",
       approval: "Approval",
       sandbox: "Sandbox",
+      reasoningEffort: {
+        low: "Low",
+        medium: "Medium",
+        high: "High",
+        max: "Max",
+      },
       approvalPolicy: {
         untrusted: "Untrusted",
         onFailure: "On failure",
@@ -355,6 +361,12 @@ const enLikeWorkbenchCodex = {
       effort: "Effort",
       approval: "Approval",
       sandbox: "Sandbox",
+      reasoningEffort: {
+        low: "Low",
+        medium: "Medium",
+        high: "High",
+        max: "Max",
+      },
       approvalPolicy: {
         untrusted: "Untrusted",
         onFailure: "On failure",
