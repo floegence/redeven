@@ -264,6 +264,344 @@ describe('FlowerSurface navigation threads', () => {
     expect(loadThread.mock.calls.map((call) => call[0])).toEqual(['thread-focused']);
   });
 
+  it('shows the sidebar selection before starting the thread detail load', async () => {
+    const frames = mockAnimationFrames();
+    try {
+      const slowThread = thread({
+        thread_id: 'thread-slow-selection',
+        title: 'Slow detail',
+        created_at_ms: 3_000,
+        updated_at_ms: 3_000,
+      });
+      const loadThread = vi.fn(() => new Promise<FlowerLiveBootstrap>(() => undefined));
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [slowThread]),
+        loadThread,
+      });
+
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-slow-selection"] button')));
+      (runtime.querySelector('[data-thread-id="thread-slow-selection"] button') as HTMLButtonElement).click();
+
+      expect(runtime.querySelector('[data-thread-id="thread-slow-selection"]')?.getAttribute('data-flower-thread-active')).toBe('true');
+      expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('thread-slow-selection');
+      expect(loadThread).not.toHaveBeenCalled();
+
+      frames.runAll();
+      await flush();
+
+      expect(loadThread).toHaveBeenCalledWith('thread-slow-selection');
+    } finally {
+      frames.restore();
+    }
+  });
+
+  it('shows a safe loading detail while a newly selected thread is pending', async () => {
+    const frames = mockAnimationFrames();
+    const originalClipboard = navigator.clipboard;
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    try {
+      const runningThread = thread({
+        thread_id: 'thread-running-before-pending',
+        title: 'Running before pending',
+        status: 'running',
+        active_run_id: 'run-before-pending',
+        model_io_status: modelIOStatus({ run_id: 'run-before-pending' }),
+        messages: [{
+          id: 'm-running-before-pending',
+          role: 'assistant',
+          content: 'Old running detail body.',
+          status: 'streaming',
+          created_at_ms: 10,
+        }],
+      });
+      const pendingThread = thread({
+        thread_id: 'thread-pending-safe-detail',
+        title: 'Pending safe detail',
+        created_at_ms: 3_000,
+        updated_at_ms: 3_000,
+        messages: [],
+      });
+      const loadThread = vi.fn((threadID: string) => (
+        threadID === 'thread-running-before-pending'
+          ? Promise.resolve(liveBootstrap(runningThread))
+          : new Promise<FlowerLiveBootstrap>(() => undefined)
+      ));
+      const listThreadLiveEvents = vi.fn(async () => ({
+        stream_generation: 1,
+        events: [],
+        next_cursor: 0,
+        retained_from_seq: 1,
+      }));
+      const setThreadPermissionType = vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, permission_type: 'full_access' })));
+      const stopThread = vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, status: 'canceled' })));
+      const launchTurn = vi.fn(async () => liveBootstrap(thread()));
+      const compactThreadContext = vi.fn(async (input) => liveBootstrap(thread({ thread_id: input.thread_id, status: 'running' })));
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [pendingThread, runningThread]),
+        loadThread,
+        listThreadLiveEvents,
+        setThreadPermissionType,
+        stopThread,
+        launchTurn,
+        compactThreadContext,
+      });
+
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-before-pending"] button')));
+      (runtime.querySelector('[data-thread-id="thread-running-before-pending"] button') as HTMLButtonElement).click();
+      frames.runAll();
+      await flush();
+      await waitFor(() => runtime.textContent?.includes('Old running detail body.') ?? false);
+      loadThread.mockClear();
+      listThreadLiveEvents.mockClear();
+
+      (runtime.querySelector('[data-thread-id="thread-pending-safe-detail"] button') as HTMLButtonElement).click();
+      await flush();
+
+      expect(runtime.querySelector('[data-thread-id="thread-pending-safe-detail"]')?.getAttribute('data-flower-thread-active')).toBe('true');
+      expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('thread-pending-safe-detail');
+      expect(runtime.textContent).not.toContain('Old running detail body.');
+      expect(runtime.querySelector('.flower-thread-loading-panel')).toBeTruthy();
+      expect((runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled).toBe(true);
+      expect(runtime.querySelector('button.flower-permission-trigger')).toBeNull();
+      expect(loadThread).not.toHaveBeenCalled();
+      expect(listThreadLiveEvents).not.toHaveBeenCalled();
+
+      frames.runAll();
+      await flush();
+      await waitFor(() => loadThread.mock.calls.length === 1);
+      expect(loadThread).toHaveBeenCalledWith('thread-pending-safe-detail');
+      expect(runtime.textContent).not.toContain('Old running detail body.');
+      expect(runtime.querySelector('.flower-thread-loading-panel')).toBeTruthy();
+      expect((runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled).toBe(true);
+      expect(runtime.querySelector('button.flower-permission-trigger')).toBeNull();
+      expect(listThreadLiveEvents).not.toHaveBeenCalled();
+
+      const composer = runtime.querySelector('textarea') as HTMLTextAreaElement;
+      composer.value = 'try to send while loading';
+      composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      await flush();
+      composer.value = '/compact';
+      composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      await flush();
+      composer.value = '';
+      composer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      await flush();
+      (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+      (runtime.querySelector('.flower-permission-trigger') as HTMLElement | null)?.click();
+      await flush();
+
+      const workingDirectoryChip = runtime.querySelector('.flower-composer-footer .flower-working-dir-chip') as HTMLButtonElement | null;
+      expect(workingDirectoryChip).toBeTruthy();
+      expect(workingDirectoryChip?.getAttribute('aria-disabled')).toBe('true');
+      workingDirectoryChip?.click();
+
+      expect(stopThread).not.toHaveBeenCalled();
+      expect(launchTurn).not.toHaveBeenCalled();
+      expect(compactThreadContext).not.toHaveBeenCalled();
+      expect(setThreadPermissionType).not.toHaveBeenCalled();
+      expect(runtime.querySelector('.flower-permission-menu')).toBeNull();
+      expect(writeText).not.toHaveBeenCalled();
+    } finally {
+      frames.restore();
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: originalClipboard,
+      });
+    }
+  });
+
+  it('only loads the last thread when selections change before the deferred load starts', async () => {
+    const frames = mockAnimationFrames();
+    try {
+      const firstThread = thread({
+        thread_id: 'thread-pending-first',
+        title: 'Pending first',
+        created_at_ms: 1_000,
+      });
+      const secondThread = thread({
+        thread_id: 'thread-pending-second',
+        title: 'Pending second',
+        created_at_ms: 2_000,
+      });
+      const loadThread = vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID })));
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [secondThread, firstThread]),
+        loadThread,
+      });
+
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-pending-first"] button')));
+      (runtime.querySelector('[data-thread-id="thread-pending-first"] button') as HTMLButtonElement).click();
+      (runtime.querySelector('[data-thread-id="thread-pending-second"] button') as HTMLButtonElement).click();
+      frames.runAll();
+      await flush();
+
+      await waitFor(() => loadThread.mock.calls.length === 1);
+      expect(loadThread.mock.calls.map((call) => call[0])).toEqual(['thread-pending-second']);
+      expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('thread-pending-second');
+    } finally {
+      frames.restore();
+    }
+  });
+
+  it('cancels a pending thread selection when starting a new chat', async () => {
+    const frames = mockAnimationFrames();
+    try {
+      const pendingThread = thread({
+        thread_id: 'thread-pending-canceled-by-new-chat',
+        title: 'Pending canceled by new chat',
+        created_at_ms: 3_000,
+      });
+      const loadThread = vi.fn(async () => liveBootstrap(pendingThread));
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [pendingThread]),
+        loadThread,
+      });
+
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-pending-canceled-by-new-chat"] button')));
+      (runtime.querySelector('[data-thread-id="thread-pending-canceled-by-new-chat"] button') as HTMLButtonElement).click();
+      (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
+      frames.runAll();
+      await flush();
+
+      expect(loadThread).not.toHaveBeenCalled();
+      expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('');
+      expect(runtime.querySelector('[data-thread-id="thread-pending-canceled-by-new-chat"]')?.getAttribute('data-flower-thread-active')).toBe('false');
+    } finally {
+      frames.restore();
+    }
+  });
+
+  it('ignores an in-flight thread selection after starting a new chat', async () => {
+    const frames = mockAnimationFrames();
+    try {
+      const pendingLoad = deferred<FlowerLiveBootstrap>();
+      const pendingThread = thread({
+        thread_id: 'thread-inflight-canceled-by-new-chat',
+        title: 'Inflight canceled by new chat',
+        created_at_ms: 3_000,
+        messages: [{
+          id: 'm-inflight-canceled',
+          role: 'assistant',
+          content: 'This stale in-flight detail must not appear.',
+          status: 'complete',
+          created_at_ms: 3_000,
+        }],
+      });
+      const loadThread = vi.fn(async () => pendingLoad.promise);
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [pendingThread]),
+        loadThread,
+      });
+
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-inflight-canceled-by-new-chat"] button')));
+      (runtime.querySelector('[data-thread-id="thread-inflight-canceled-by-new-chat"] button') as HTMLButtonElement).click();
+      frames.runAll();
+      await flush();
+      await waitFor(() => loadThread.mock.calls.length === 1);
+
+      (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
+      pendingLoad.resolve(liveBootstrap(pendingThread));
+      await flush();
+      await wait(40);
+
+      expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('');
+      expect(runtime.textContent).not.toContain('This stale in-flight detail must not appear.');
+      expect(runtime.querySelector('[data-thread-id="thread-inflight-canceled-by-new-chat"]')?.getAttribute('data-flower-thread-active')).toBe('false');
+    } finally {
+      frames.restore();
+    }
+  });
+
+  it('cancels a pending thread selection when refresh removes that thread', async () => {
+    const frames = mockAnimationFrames();
+    try {
+      const pendingThread = thread({
+        thread_id: 'thread-pending-removed-refresh',
+        title: 'Pending removed refresh',
+        created_at_ms: 3_000,
+      });
+      let listSnapshot: readonly FlowerThreadSnapshot[] = [pendingThread];
+      const listThreads = vi.fn(async () => listSnapshot);
+      const loadThread = vi.fn(async () => liveBootstrap(pendingThread));
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads,
+        loadThread,
+      });
+
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-pending-removed-refresh"] button')));
+      (runtime.querySelector('[data-thread-id="thread-pending-removed-refresh"] button') as HTMLButtonElement).click();
+      listSnapshot = [];
+      (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+      await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === '');
+      frames.runAll();
+      await flush();
+
+      expect(loadThread).not.toHaveBeenCalled();
+      expect(runtime.querySelector('[data-thread-id="thread-pending-removed-refresh"]')).toBeNull();
+    } finally {
+      frames.restore();
+    }
+  });
+
+  it('ignores an in-flight thread selection when refresh removes that thread', async () => {
+    const frames = mockAnimationFrames();
+    try {
+      const pendingLoad = deferred<FlowerLiveBootstrap>();
+      const pendingThread = thread({
+        thread_id: 'thread-inflight-removed-refresh',
+        title: 'Inflight removed refresh',
+        created_at_ms: 3_000,
+        messages: [],
+      });
+      const loadedThread = thread({
+        ...pendingThread,
+        messages: [{
+          id: 'm-inflight-removed',
+          role: 'assistant',
+          content: 'Removed in-flight detail must not appear.',
+          status: 'complete',
+          created_at_ms: 3_000,
+        }],
+      });
+      let listSnapshot: readonly FlowerThreadSnapshot[] = [pendingThread];
+      const listThreads = vi.fn(async () => listSnapshot);
+      const loadThread = vi.fn(async () => pendingLoad.promise);
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads,
+        loadThread,
+      });
+
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-inflight-removed-refresh"] button')));
+      (runtime.querySelector('[data-thread-id="thread-inflight-removed-refresh"] button') as HTMLButtonElement).click();
+      frames.runAll();
+      await flush();
+      await waitFor(() => loadThread.mock.calls.length === 1);
+
+      listSnapshot = [];
+      (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+      await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === '');
+      pendingLoad.resolve(liveBootstrap(loadedThread));
+      await flush();
+      await wait(40);
+
+      expect(runtime.textContent).not.toContain('Removed in-flight detail must not appear.');
+      expect(runtime.querySelector('[data-thread-id="thread-inflight-removed-refresh"]')).toBeNull();
+    } finally {
+      frames.restore();
+    }
+  });
+
   it('does not replay a slow consumed focus request when the surface remounts before loading finishes', async () => {
     const focusedThread = thread({
       thread_id: 'thread-pending-focus',
@@ -1643,6 +1981,7 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stale-same-load"] button')));
     (runtime.querySelector('[data-thread-id="thread-stale-same-load"] button') as HTMLButtonElement).click();
+    await waitFor(() => loadThread.mock.calls.length === 1);
     (runtime.querySelector('[data-thread-id="thread-stale-same-load"] button') as HTMLButtonElement).click();
     await waitFor(() => runtime.textContent?.includes('Fresh selected detail.') ?? false);
 
@@ -2472,6 +2811,7 @@ describe('FlowerSurface navigation threads', () => {
       });
 
       (runtime.querySelector('[data-thread-id="thread-long-on-load"] button') as HTMLButtonElement).click();
+      frames.runAll();
       await flush();
 
       expect(runtime.querySelector('[data-flower-message-id="m-long-agent"]')).toBeTruthy();
@@ -2536,6 +2876,7 @@ describe('FlowerSurface navigation threads', () => {
       });
 
       (runtime.querySelector('[data-thread-id="thread-detail-before-reveal"] button') as HTMLButtonElement).click();
+      frames.runAll();
       await flush();
       expect(transcript.getAttribute('data-flower-tail-preparing')).toBe('true');
 
@@ -2594,6 +2935,7 @@ describe('FlowerSurface navigation threads', () => {
       });
 
       (runtime.querySelector('[data-thread-id="thread-tail-reveal-interrupt"] button') as HTMLButtonElement).click();
+      frames.runAll();
       await flush();
       expect(transcript.getAttribute('data-flower-tail-preparing')).toBe('true');
 
@@ -2822,61 +3164,72 @@ describe('FlowerSurface navigation threads', () => {
   });
 
   it('ignores stale selected-thread load scrolls after a faster thread switch', async () => {
-    const firstThread = thread({
-      thread_id: 'thread-stale-scroll-first',
-      title: 'First stale scroll',
-      messages: [{
-        id: 'm-stale-first',
-        role: 'assistant',
-        content: 'First loaded late',
-        status: 'complete',
-        created_at_ms: 1,
-      }],
-    });
-    const secondThread = thread({
-      thread_id: 'thread-stale-scroll-second',
-      title: 'Second current scroll',
-      messages: [{
-        id: 'm-stale-second',
-        role: 'assistant',
-        content: 'Second current',
-        status: 'complete',
-        created_at_ms: 2,
-      }],
-    });
-    const firstLoad = deferred<FlowerLiveBootstrap>();
-    const loadThread = vi.fn(async (threadID: string) => {
-      if (threadID === 'thread-stale-scroll-first') return firstLoad.promise;
-      if (threadID === 'thread-stale-scroll-second') return liveBootstrap(secondThread);
-      throw new Error(`unexpected thread ${threadID}`);
-    });
-    const runtime = renderSurfaceWithAdapter({
-      ...adapter(true),
-      listThreads: vi.fn(async () => [firstThread, secondThread]),
-      loadThread,
-    });
+    const frames = mockAnimationFrames();
+    try {
+      const firstThread = thread({
+        thread_id: 'thread-stale-scroll-first',
+        title: 'First stale scroll',
+        messages: [{
+          id: 'm-stale-first',
+          role: 'assistant',
+          content: 'First loaded late',
+          status: 'complete',
+          created_at_ms: 1,
+        }],
+      });
+      const secondThread = thread({
+        thread_id: 'thread-stale-scroll-second',
+        title: 'Second current scroll',
+        messages: [{
+          id: 'm-stale-second',
+          role: 'assistant',
+          content: 'Second current',
+          status: 'complete',
+          created_at_ms: 2,
+        }],
+      });
+      const firstLoad = deferred<FlowerLiveBootstrap>();
+      const loadThread = vi.fn(async (threadID: string) => {
+        if (threadID === 'thread-stale-scroll-first') return firstLoad.promise;
+        if (threadID === 'thread-stale-scroll-second') return liveBootstrap(secondThread);
+        throw new Error(`unexpected thread ${threadID}`);
+      });
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [firstThread, secondThread]),
+        loadThread,
+      });
 
-    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stale-scroll-first"] button')));
-    const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
-    const scrollMetrics = attachTranscriptScrollMetrics(transcript, {
-      clientHeight: 180,
-      scrollHeight: 920,
-      scrollTop: 0,
-    });
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stale-scroll-first"] button')));
+      const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
+      const scrollMetrics = attachTranscriptScrollMetrics(transcript, {
+        clientHeight: 180,
+        scrollHeight: 920,
+        scrollTop: 0,
+      });
 
-    (runtime.querySelector('[data-thread-id="thread-stale-scroll-first"] button') as HTMLButtonElement).click();
-    (runtime.querySelector('[data-thread-id="thread-stale-scroll-second"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.textContent?.includes('Second current') === true);
-    await waitFor(() => scrollMetrics.scrollTop() === 740);
+      (runtime.querySelector('[data-thread-id="thread-stale-scroll-first"] button') as HTMLButtonElement).click();
+      frames.runAll();
+      await flush();
+      await waitFor(() => loadThread.mock.calls.map((call) => call[0]).includes('thread-stale-scroll-first'));
 
-    scrollMetrics.setScrollTop(500);
-    scrollMetrics.setScrollHeight(1600);
-    firstLoad.resolve(liveBootstrap(firstThread));
-    await flush();
-    await wait(40);
+      (runtime.querySelector('[data-thread-id="thread-stale-scroll-second"] button') as HTMLButtonElement).click();
+      frames.runAll();
+      await flush();
+      await waitFor(() => runtime.textContent?.includes('Second current') === true);
+      await waitFor(() => scrollMetrics.scrollTop() === 740);
 
-    expect(runtime.textContent).toContain('Second current');
-    expect(runtime.textContent).not.toContain('First loaded late');
-    expect(scrollMetrics.scrollTop()).toBe(500);
+      scrollMetrics.setScrollTop(500);
+      scrollMetrics.setScrollHeight(1600);
+      firstLoad.resolve(liveBootstrap(firstThread));
+      await flush();
+      await wait(40);
+
+      expect(runtime.textContent).toContain('Second current');
+      expect(runtime.textContent).not.toContain('First loaded late');
+      expect(scrollMetrics.scrollTop()).toBe(500);
+    } finally {
+      frames.restore();
+    }
   });
 });
