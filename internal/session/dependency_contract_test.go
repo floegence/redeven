@@ -145,6 +145,53 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	}
 }
 
+func TestFloretDefaultPromptBoundaryStaysInFloret(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	forbidden := []string{
+		"Default" + "FloretSystemPrompt",
+		"Default" + "SystemPrompt",
+		"PromptSource" + "DefaultFloret",
+		"PromptSource" + "DefaultAgent",
+		"default_" + "floret",
+		"default_" + "agent",
+		"You are " + "Floret.",
+		"You are a helpful AI " + "assistant.",
+		"Floret default " + "assistant",
+		"Default interactive Floret " + "agent.",
+		"Floret Compaction " + "Summary",
+		"Floret's context compaction " + "writer.",
+		"Context Compaction " + "Summary",
+	}
+	err := filepath.WalkDir(filepath.Join(root, "internal", "ai"), func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		content := string(data)
+		for _, marker := range forbidden {
+			if strings.Contains(content, marker) {
+				rel, _ := filepath.Rel(root, path)
+				t.Fatalf("%s must not depend on Floret default prompt/profile marker %q", rel, marker)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan ai package: %v", err)
+	}
+}
+
 func TestFloretAssistantProjectionIsNotStoredAsThreadstoreShadowCopy(t *testing.T) {
 	t.Parallel()
 
