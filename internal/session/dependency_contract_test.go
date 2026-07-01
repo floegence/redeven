@@ -53,30 +53,30 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedPackages := map[string][]string{
 		"desktop/package.json": {
-			"\"@floegence/floe-webapp-core\": \"^0.36.68\"",
+			"\"@floegence/floe-webapp-core\": \"^0.36.69\"",
 		},
 		"desktop/package-lock.json": {
-			"floe-webapp-core-0.36.68.tgz",
+			"floe-webapp-core-0.36.69.tgz",
 		},
 		"desktop/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-core@0.36.68",
+			"@floegence/floe-webapp-core@0.36.69",
 		},
 		"internal/envapp/ui_src/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"^0.36.68\"",
-			"\"@floegence/floe-webapp-core\": \"^0.36.68\"",
-			"\"@floegence/floe-webapp-protocol\": \"^0.36.68\"",
+			"\"@floegence/floe-webapp-boot\": \"^0.36.69\"",
+			"\"@floegence/floe-webapp-core\": \"^0.36.69\"",
+			"\"@floegence/floe-webapp-protocol\": \"^0.36.69\"",
 			"\"@floegence/flowersec-core\": \"^0.19.10\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
-			"floe-webapp-boot-0.36.68.tgz",
-			"floe-webapp-core-0.36.68.tgz",
-			"floe-webapp-protocol-0.36.68.tgz",
+			"floe-webapp-boot-0.36.69.tgz",
+			"floe-webapp-core-0.36.69.tgz",
+			"floe-webapp-protocol-0.36.69.tgz",
 			"flowersec-core-0.19.10.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.36.68",
-			"@floegence/floe-webapp-core@0.36.68",
-			"@floegence/floe-webapp-protocol@0.36.68",
+			"@floegence/floe-webapp-boot@0.36.69",
+			"@floegence/floe-webapp-core@0.36.69",
+			"@floegence/floe-webapp-protocol@0.36.69",
 			"@floegence/flowersec-core@0.19.10",
 		},
 		"internal/codeapp/ui_src/package.json": {
@@ -86,9 +86,9 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"flowersec-core-0.19.10.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
-			"@floegence/floe-webapp-boot | 0.36.68",
-			"@floegence/floe-webapp-core | 0.36.68",
-			"@floegence/floe-webapp-protocol | 0.36.68",
+			"@floegence/floe-webapp-boot | 0.36.69",
+			"@floegence/floe-webapp-core | 0.36.69",
+			"@floegence/floe-webapp-protocol | 0.36.69",
 			"@floegence/flowersec-core | 0.19.10",
 		},
 	}
