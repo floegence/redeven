@@ -52,6 +52,9 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	r.applyFloretContextStatus(ev.ContextStatus)
 	r.applyFloretCompaction(ev.Compaction)
 	r.persistFloretCompactionDebug(ev.CompactionDebug)
+	if ev.Projection != nil {
+		r.applyFloretThreadProjection(*ev.Projection)
+	}
 	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
 	case floretEventProviderRequest:

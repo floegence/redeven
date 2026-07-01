@@ -40,8 +40,6 @@ func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTur
 	r.currentThinkingBlockIndex = -1
 	r.needNewTextBlock = true
 	r.needNewThinkingBlock = true
-	r.activitySegmentActive = false
-	r.activitySegmentBlockIndex = -1
 	r.mu.Unlock()
 	r.muAssistant.Lock()
 	if r.assistantCreatedAtUnixMs == 0 {
@@ -114,7 +112,11 @@ func (r *run) flowerBlocksFromFloretThreadProjectionChecked(projection flruntime
 			if !r.validateActivityTimelineForProjection(timeline, "floret_thread_projection") {
 				return nil, false
 			}
-			blocks = append(blocks, newActivityTimelineBlock(timeline, r.activityTimelineFileActions(timeline)))
+			blocks = append(blocks, newActivityTimelineBlockWithSidecars(
+				timeline,
+				r.activityTimelineFileActions(timeline),
+				r.activityTimelineSubagentActions(timeline),
+			))
 		case flruntime.ThreadTurnProjectionSegmentControlSignal:
 			continue
 		}
