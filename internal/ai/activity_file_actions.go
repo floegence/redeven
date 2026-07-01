@@ -280,7 +280,8 @@ func sanitizeActivityTimelineBlockRecord(block map[string]any) {
 			delete(item, "metadata")
 		}
 		renderer := observation.ActivityRenderer(strings.TrimSpace(fmt.Sprint(item["renderer"])))
-		if payload, ok := sanitizeActivityPayloadValue(item["payload"], renderer); ok {
+		toolName := strings.TrimSpace(fmt.Sprint(item["tool_name"]))
+		if payload, ok := sanitizeActivityPayloadValue(item["payload"], renderer, toolName); ok {
 			item["payload"] = payload
 		} else {
 			delete(item, "payload")
@@ -475,10 +476,13 @@ func sanitizeActivityMetadataValue(value any) map[string]any {
 	return out
 }
 
-func sanitizeActivityPayloadValue(value any, renderer observation.ActivityRenderer) (map[string]any, bool) {
+func sanitizeActivityPayloadValue(value any, renderer observation.ActivityRenderer, toolName string) (map[string]any, bool) {
 	payload, ok := value.(map[string]any)
 	if !ok || len(payload) == 0 {
 		return nil, false
+	}
+	if strings.TrimSpace(toolName) == "subagents" {
+		return sanitizeSubagentsActivityPayloadValue(payload)
 	}
 	allowed := activityPayloadAllowedKeys(renderer)
 	if len(allowed) == 0 {
@@ -502,6 +506,179 @@ func sanitizeActivityPayloadValue(value any, renderer observation.ActivityRender
 		return nil, false
 	}
 	return out, true
+}
+
+func sanitizeSubagentsActivityPayloadValue(payload map[string]any) (map[string]any, bool) {
+	allowed := activitySubagentsPayloadAllowedKeys()
+	out := make(map[string]any, len(payload))
+	for key, value := range payload {
+		key = strings.TrimSpace(key)
+		if _, ok := allowed[key]; !ok {
+			continue
+		}
+		switch key {
+		case "items":
+			if items := sanitizeSubagentsActivityItems(value); len(items) > 0 {
+				out[key] = items
+			}
+		case "counts":
+			if counts := sanitizeSubagentsActivityCounts(value); len(counts) > 0 {
+				out[key] = counts
+			}
+		case "final_handoff_report":
+			if report := sanitizeSubagentsHandoffReport(value); len(report) > 0 {
+				out[key] = report
+			}
+		case "progress_summary":
+			if summary := sanitizeSubagentsProgressSummary(value); len(summary) > 0 {
+				out[key] = summary
+			}
+		default:
+			out[key] = sanitizeActivityPublicValue(value)
+		}
+	}
+	if len(out) == 0 {
+		return nil, false
+	}
+	return out, true
+}
+
+func sanitizeSubagentsActivityItems(value any) []any {
+	items, _ := value.([]any)
+	if len(items) == 0 {
+		return nil
+	}
+	allowed := activitySubagentsItemAllowedKeys()
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		record, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		next := sanitizeSubagentsRecordWithAllowedKeys(record, allowed)
+		if len(next) > 0 {
+			out = append(out, next)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func sanitizeSubagentsActivityCounts(value any) map[string]any {
+	counts, _ := value.(map[string]any)
+	if len(counts) == 0 {
+		return nil
+	}
+	allowed := activitySubagentsCountAllowedKeys()
+	out := make(map[string]any, len(counts))
+	for key, value := range counts {
+		key = strings.TrimSpace(key)
+		if _, ok := allowed[key]; !ok {
+			continue
+		}
+		out[key] = sanitizeActivityPublicValue(value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func sanitizeSubagentsHandoffReport(value any) map[string]any {
+	report, _ := value.(map[string]any)
+	if len(report) == 0 {
+		return nil
+	}
+	allowed := activitySubagentsHandoffAllowedKeys()
+	out := sanitizeSubagentsRecordWithAllowedKeys(report, allowed)
+	if out == nil {
+		out = map[string]any{}
+	}
+	if reports, ok := report["reports"].([]any); ok {
+		items := make([]any, 0, len(reports))
+		reportAllowed := activitySubagentsHandoffItemAllowedKeys()
+		for _, item := range reports {
+			record, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			next := sanitizeSubagentsRecordWithAllowedKeys(record, reportAllowed)
+			if len(next) > 0 {
+				items = append(items, next)
+			}
+		}
+		if len(items) > 0 {
+			out["reports"] = items
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func sanitizeSubagentsProgressSummary(value any) map[string]any {
+	summary, _ := value.(map[string]any)
+	if len(summary) == 0 {
+		return nil
+	}
+	allowed := activitySubagentsProgressAllowedKeys()
+	out := sanitizeSubagentsRecordWithAllowedKeys(summary, allowed)
+	if out == nil {
+		out = map[string]any{}
+	}
+	if items, ok := summary["items"].([]any); ok {
+		outItems := sanitizeSubagentsProgressItems(items)
+		if len(outItems) > 0 {
+			out["items"] = outItems
+		}
+	}
+	if progress, ok := summary["progress"].([]any); ok {
+		outItems := sanitizeSubagentsProgressItems(progress)
+		if len(outItems) > 0 {
+			out["progress"] = outItems
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func sanitizeSubagentsProgressItems(items []any) []any {
+	allowed := activitySubagentsProgressItemAllowedKeys()
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		record, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		next := sanitizeSubagentsRecordWithAllowedKeys(record, allowed)
+		if len(next) > 0 {
+			out = append(out, next)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func sanitizeSubagentsRecordWithAllowedKeys(record map[string]any, allowed map[string]struct{}) map[string]any {
+	out := make(map[string]any, len(record))
+	for key, value := range record {
+		key = strings.TrimSpace(key)
+		if _, ok := allowed[key]; !ok {
+			continue
+		}
+		out[key] = sanitizeActivityPublicValue(value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func sanitizeActivityPayloadMutations(value any) []any {
@@ -621,12 +798,46 @@ func activityPayloadAllowedKeys(renderer observation.ActivityRenderer) map[strin
 	}
 }
 
+func activitySubagentsPayloadAllowedKeys() map[string]struct{} {
+	return stringSet(
+		"operation", "action", "status", "task_name", "title", "agent_type", "context_mode",
+		"accepted", "closed", "stopped", "closed_count", "stopped_count", "agent_count",
+		"total", "running_only", "counts", "final_handoff_report", "progress_summary",
+		"timed_out", "requested_count", "found_count", "missing_count", "items",
+		"delegation_runtime", "truncated", "omitted_count", "summary", "details", "error",
+	)
+}
+
+func activitySubagentsItemAllowedKeys() map[string]struct{} {
+	return stringSet("task_name", "title", "agent_type", "context_mode", "status", "closed", "truncated")
+}
+
+func activitySubagentsCountAllowedKeys() map[string]struct{} {
+	return stringSet("queued", "running", "waiting_input", "waiting", "completed", "failed", "canceled", "cancelled", "timed_out", "total")
+}
+
+func activitySubagentsHandoffAllowedKeys() map[string]struct{} {
+	return stringSet("summary", "evidence", "changed_files", "verification", "open_risks", "suggested_parent_actions", "truncated", "omitted_count", "omitted_reports")
+}
+
+func activitySubagentsHandoffItemAllowedKeys() map[string]struct{} {
+	return stringSet("task_name", "agent_type", "status", "handoff", "changed_files", "verification", "open_risks", "suggested_parent_actions")
+}
+
+func activitySubagentsProgressAllowedKeys() map[string]struct{} {
+	return stringSet("summary", "current_state", "blockers", "next_expected_step", "suggested_parent_actions", "truncated", "omitted_count", "omitted_items")
+}
+
+func activitySubagentsProgressItemAllowedKeys() map[string]struct{} {
+	return stringSet("task_name", "agent_type", "status", "current_signal", "state", "blockers", "next_expected_step")
+}
+
 func activityFileMutationAllowedKeys() map[string]struct{} {
 	return stringSet("display_name", "file_action_id", "change_type", "additions", "deletions", "unified_diff", "diff_unavailable_reason", "truncated")
 }
 
 func activitySubagentActionAllowedKeys() map[string]struct{} {
-	return stringSet("operation", "action", "delegation_runtime", "thread_id", "subagent_id", "parent_thread_id", "task_name", "title", "agent_type", "context_mode", "status", "last_message", "waiting_prompt", "queued_inputs", "can_send_input", "can_interrupt", "can_close", "updated_at_ms")
+	return stringSet("operation", "action", "delegation_runtime", "thread_id", "subagent_id", "parent_thread_id", "task_name", "title", "agent_type", "context_mode", "status", "updated_at_ms")
 }
 
 func stringSet(values ...string) map[string]struct{} {

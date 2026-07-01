@@ -4724,7 +4724,66 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </div>
   );
 
+  const errorDetailBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'error' }>) => (
+    <section class="flower-activity-error-panel" aria-label="Failure reason">
+      <div class="flower-activity-error-message">{block.error.message}</div>
+    </section>
+  );
+
+  const subagentsDetailBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'subagents' }>) => {
+    const detail = block.subagents;
+    const meta = [detail.action, detail.agent_type, detail.status, detail.context_mode].filter(Boolean);
+    return (
+      <section class="flower-activity-subagents-panel" aria-label="Subagents">
+        <div class="flower-activity-subagents-head">
+          <div class="flower-activity-subagents-title">{detail.task || detail.action || 'Subagents'}</div>
+          <Show when={meta.length > 0}>
+            <div class="flower-activity-subagents-meta">
+              <For each={meta}>{(value) => <span>{value}</span>}</For>
+            </div>
+          </Show>
+        </div>
+        <Show when={detail.summary}>
+          {(summary) => <div class="flower-activity-subagents-summary">{summary()}</div>}
+        </Show>
+        <Show when={detail.counts.length > 0}>
+          <div class="flower-activity-subagents-counts" aria-label="Subagent counts">
+            <For each={detail.counts}>
+              {(line) => (
+                <span class="flower-activity-subagents-chip">
+                  <span>{line.label}</span>
+                  <strong>{line.value}</strong>
+                </span>
+              )}
+            </For>
+          </div>
+        </Show>
+        <Show when={detail.items.length > 0}>
+          <div class="flower-activity-subagents-list" role="list">
+            <For each={detail.items}>
+              {(agent) => (
+                <div class="flower-activity-subagents-item" role="listitem">
+                  <div class="flower-activity-subagents-item-main">
+                    <span class="flower-activity-subagents-item-title">{agent.title || agent.task || 'Subagent'}</span>
+                    <span class="flower-activity-subagents-item-meta">
+                      {[agent.agent_type, agent.status, agent.context_mode].filter(Boolean).join(' · ')}
+                    </span>
+                  </div>
+                  <Show when={agent.handoff || agent.progress}>
+                    {(body) => <div class="flower-activity-subagents-item-note">{body()}</div>}
+                  </Show>
+                </div>
+              )}
+            </For>
+          </div>
+        </Show>
+      </section>
+    );
+  };
+
   const activityDetailBlock = (messageID: string, blockIndex: number, itemID: string, block: FlowerActivityDetailBlock, runID: string) => {
+    if (block.kind === 'error') return errorDetailBlock(block);
+    if (block.kind === 'subagents') return subagentsDetailBlock(block);
     if (block.kind === 'todos') {
       return (
         <div class="flower-activity-todo-list" role="list" aria-label="Todos">

@@ -1357,16 +1357,10 @@ func TestSubagentChildEventRefreshesParentTimeline(t *testing.T) {
 		t.Fatalf("timeline tool name=%q, want subagents", got)
 	}
 	payload := block.Items[0].Payload
-	if got := strings.TrimSpace(anyToString(payload["thread_id"])); got != childID {
-		t.Fatalf("payload thread_id=%q, want %q; payload=%#v", got, childID, payload)
-	}
 	if got := strings.TrimSpace(anyToString(payload["status"])); got != subagentStatusCompleted {
 		t.Fatalf("payload status=%q, want %q; payload=%#v", got, subagentStatusCompleted, payload)
 	}
-	if got := strings.TrimSpace(anyToString(payload["last_message"])); got != "review complete" {
-		t.Fatalf("payload last_message=%q, want review complete; payload=%#v", got, payload)
-	}
-	for _, key := range []string{"operation", "action", "delegation_runtime", "context_mode"} {
+	for _, key := range []string{"thread_id", "subagent_id", "last_message", "waiting_prompt", "can_send_input", "can_interrupt", "can_close", "operation", "action", "delegation_runtime"} {
 		if _, ok := payload[key]; ok {
 			t.Fatalf("payload %q should stay out of Floret activity payload; payload=%#v", key, payload)
 		}
@@ -1378,7 +1372,7 @@ func TestSubagentChildEventRefreshesParentTimeline(t *testing.T) {
 	if action.Action != subagentActionInspect || action.DelegationRuntime != "floret" || action.ContextMode != subagentContextModeMissionOnly {
 		t.Fatalf("subagent action sidecar=%#v, want inspect/floret/mission_only", action)
 	}
-	if action.ThreadID != childID || action.Status != subagentStatusCompleted || action.LastMessage != "review complete" {
+	if action.ThreadID != childID || action.Status != subagentStatusCompleted {
 		t.Fatalf("subagent action sidecar did not preserve child presentation metadata: %#v", action)
 	}
 }

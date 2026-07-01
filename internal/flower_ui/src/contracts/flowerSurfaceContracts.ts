@@ -277,12 +277,6 @@ export type FlowerActivitySubagentAction = Readonly<{
   agent_type?: string;
   context_mode?: string;
   status?: string;
-  last_message?: string;
-  waiting_prompt?: string;
-  queued_inputs?: number;
-  can_send_input?: boolean;
-  can_interrupt?: boolean;
-  can_close?: boolean;
   updated_at_ms?: number;
 }>;
 

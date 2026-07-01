@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type {
   FlowerActivityItem,
+  FlowerActivitySubagentAction,
   FlowerActivityTimelineBlock,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
@@ -21,7 +22,10 @@ function activityItem(overrides: Partial<FlowerActivityItem>): FlowerActivityIte
   };
 }
 
-function timeline(items: readonly FlowerActivityItem[]): FlowerActivityTimelineBlock {
+function timeline(
+  items: readonly FlowerActivityItem[],
+  subagentActions?: Readonly<Record<string, FlowerActivitySubagentAction>>,
+): FlowerActivityTimelineBlock {
   return {
     type: 'activity-timeline',
     schema_version: 1,
@@ -35,6 +39,7 @@ function timeline(items: readonly FlowerActivityItem[]): FlowerActivityTimelineB
       counts: { success: items.length },
     },
     items,
+    ...(subagentActions ? { subagent_actions: subagentActions } : {}),
   };
 }
 
@@ -66,24 +71,30 @@ function thread(blocks: FlowerThreadSnapshot['messages'][number]['blocks']): Flo
 }
 
 describe('buildFlowerSubagentPanelItems', () => {
-  it('projects subagents from activity timeline snapshots', () => {
-    const items = buildFlowerSubagentPanelItems(thread([timeline([
-      activityItem({
+  it('projects subagents from display payload and sidecar routing fields', () => {
+    const item = activityItem({
+      item_id: 'subagent:review-api',
+      status: 'running',
+      payload: {
+        action: 'spawn',
+        task_name: 'Review API',
+        agent_type: 'reviewer',
         status: 'running',
-        payload: {
-          action: 'spawn',
-          snapshot: {
-            thread_id: 'child-1',
-            subagent_id: 'child-1',
-            task_name: 'Review API',
-            agent_type: 'reviewer',
-            status: 'running',
-            last_message: 'Reading service contracts',
-            updated_at_ms: 120,
-          },
-        },
-      }),
-    ])]));
+      },
+    });
+    const items = buildFlowerSubagentPanelItems(thread([timeline([item], {
+      'subagent:review-api': {
+        operation: 'subagents',
+        action: 'spawn',
+        delegation_runtime: 'floret',
+        thread_id: 'child-1',
+        subagent_id: 'child-1',
+        task_name: 'Review API',
+        agent_type: 'reviewer',
+        status: 'running',
+        updated_at_ms: 120,
+      },
+    })]));
 
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
@@ -91,9 +102,9 @@ describe('buildFlowerSubagentPanelItems', () => {
       title: 'Review API',
       agentType: 'reviewer',
       status: 'running',
-      lastMessage: 'Reading service contracts',
       canOpen: true,
     });
+    expect(items[0] as Record<string, unknown>).not.toHaveProperty('lastMessage');
   });
 
   it('projects subagents from activity timeline sidecars without Flower fields in payload', () => {
@@ -124,7 +135,6 @@ describe('buildFlowerSubagentPanelItems', () => {
           agent_type: 'reviewer',
           context_mode: 'mission_only',
           status: 'completed',
-          last_message: 'Done.',
           updated_at_ms: 120,
         },
       },
@@ -136,146 +146,199 @@ describe('buildFlowerSubagentPanelItems', () => {
       title: 'Review API',
       agentType: 'reviewer',
       status: 'completed',
-      lastMessage: 'Done.',
       action: 'inspect',
       canOpen: true,
     });
+    expect(items[0] as Record<string, unknown>).not.toHaveProperty('lastMessage');
   });
 
   it('merges later updates and keeps active subagents before settled ones', () => {
-    const items = buildFlowerSubagentPanelItems(thread([timeline([
-      activityItem({
-        item_id: 'spawn-child-1',
-        payload: {
-          action: 'spawn',
-          snapshot: {
-            thread_id: 'child-1',
-            task_name: 'Implement worker',
-            agent_type: 'worker',
-            status: 'running',
-            updated_at_ms: 100,
-          },
-        },
-      }),
-      activityItem({
-        item_id: 'wait-child-1',
-        payload: {
-          action: 'wait',
-          items: [{
-            thread_id: 'child-1',
-            task_name: 'Implement worker',
-            agent_type: 'worker',
-            status: 'completed',
-            last_message: 'Worker handoff ready',
-            updated_at_ms: 220,
-          }],
-        },
-      }),
-      activityItem({
-        item_id: 'spawn-child-2',
+    const spawnChild1 = activityItem({
+      item_id: 'spawn-child-1',
+      payload: {
+        action: 'spawn',
+        task_name: 'Implement worker',
+        agent_type: 'worker',
         status: 'running',
-        payload: {
-          action: 'spawn',
-          snapshot: {
-            thread_id: 'child-2',
-            task_name: 'Review tests',
-            agent_type: 'reviewer',
-            status: 'running',
-            updated_at_ms: 180,
-          },
-        },
-      }),
-    ])]));
+      },
+    });
+    const waitChild1 = activityItem({
+      item_id: 'wait-child-1',
+      payload: {
+        action: 'wait',
+        items: [{
+          task_name: 'Implement worker',
+          agent_type: 'worker',
+          status: 'completed',
+          updated_at_ms: 220,
+        }],
+      },
+    });
+    const spawnChild2 = activityItem({
+      item_id: 'spawn-child-2',
+      status: 'running',
+      payload: {
+        action: 'spawn',
+        task_name: 'Review tests',
+        agent_type: 'reviewer',
+        status: 'running',
+      },
+    });
+    const items = buildFlowerSubagentPanelItems(thread([timeline([spawnChild1, waitChild1, spawnChild2], {
+      'spawn-child-1': {
+        operation: 'subagents',
+        action: 'spawn',
+        delegation_runtime: 'floret',
+        thread_id: 'child-1',
+        subagent_id: 'child-1',
+        task_name: 'Implement worker',
+        agent_type: 'worker',
+        status: 'running',
+        updated_at_ms: 100,
+      },
+      'wait-child-1': {
+        operation: 'subagents',
+        action: 'wait',
+        delegation_runtime: 'floret',
+        thread_id: 'child-1',
+        subagent_id: 'child-1',
+        task_name: 'Implement worker',
+        agent_type: 'worker',
+        status: 'completed',
+        updated_at_ms: 220,
+      },
+      'spawn-child-2': {
+        operation: 'subagents',
+        action: 'spawn',
+        delegation_runtime: 'floret',
+        thread_id: 'child-2',
+        subagent_id: 'child-2',
+        task_name: 'Review tests',
+        agent_type: 'reviewer',
+        status: 'running',
+        updated_at_ms: 180,
+      },
+    })]));
 
-    expect(items.map((item) => [item.threadID, item.status, item.lastMessage])).toEqual([
-      ['child-2', 'running', ''],
-      ['child-1', 'completed', 'Worker handoff ready'],
+    expect(items.map((item) => [item.threadID, item.status, item.title])).toEqual([
+      ['child-2', 'running', 'Review tests'],
+      ['child-1', 'completed', 'Implement worker'],
     ]);
   });
 
   it('keeps settled status when updates have the same timestamp', () => {
-    const items = buildFlowerSubagentPanelItems(thread([timeline([
-      activityItem({
-        item_id: 'spawn-child-1',
-        payload: {
-          action: 'spawn',
-          snapshot: {
-            thread_id: 'child-1',
-            task_name: 'Review prompt contract',
-            agent_type: 'reviewer',
-            status: 'running',
-            updated_at_ms: 100,
-          },
-        },
-      }),
-      activityItem({
-        item_id: 'wait-child-1',
-        payload: {
-          action: 'wait',
-          items: [{
-            thread_id: 'child-1',
-            task_name: 'Review prompt contract',
-            agent_type: 'reviewer',
-            status: 'completed',
-            last_message: 'No prompt regressions found.',
-            updated_at_ms: 100,
-          }],
-        },
-      }),
-    ])]));
+    const spawn = activityItem({
+      item_id: 'spawn-child-1',
+      payload: {
+        action: 'spawn',
+        task_name: 'Review prompt contract',
+        agent_type: 'reviewer',
+        status: 'running',
+      },
+    });
+    const wait = activityItem({
+      item_id: 'wait-child-1',
+      payload: {
+        action: 'wait',
+        items: [{
+          task_name: 'Review prompt contract',
+          agent_type: 'reviewer',
+          status: 'completed',
+          updated_at_ms: 100,
+        }],
+      },
+    });
+    const items = buildFlowerSubagentPanelItems(thread([timeline([spawn, wait], {
+      'spawn-child-1': {
+        operation: 'subagents',
+        action: 'spawn',
+        delegation_runtime: 'floret',
+        thread_id: 'child-1',
+        subagent_id: 'child-1',
+        task_name: 'Review prompt contract',
+        agent_type: 'reviewer',
+        status: 'running',
+        updated_at_ms: 100,
+      },
+      'wait-child-1': {
+        operation: 'subagents',
+        action: 'wait',
+        delegation_runtime: 'floret',
+        thread_id: 'child-1',
+        subagent_id: 'child-1',
+        task_name: 'Review prompt contract',
+        agent_type: 'reviewer',
+        status: 'completed',
+        updated_at_ms: 100,
+      },
+    })]));
 
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
       threadID: 'child-1',
       status: 'completed',
-      lastMessage: 'No prompt regressions found.',
     });
   });
 
-  it('uses close snapshots to replace older running state', () => {
-    const items = buildFlowerSubagentPanelItems(thread([timeline([
-      activityItem({
-        item_id: 'spawn-child-1',
+  it('uses close updates to replace older running state', () => {
+    const spawn = activityItem({
+      item_id: 'spawn-child-1',
+      status: 'running',
+      payload: {
+        action: 'spawn',
+        task_name: 'Review prompt contract',
+        agent_type: 'reviewer',
         status: 'running',
-        payload: {
-          action: 'spawn',
-          snapshot: {
-            thread_id: 'child-1',
-            subagent_id: 'child-1',
-            task_name: 'Review prompt contract',
-            agent_type: 'reviewer',
-            status: 'running',
-            updated_at_ms: 100,
-          },
-        },
-      }),
-      activityItem({
-        item_id: 'close-child-1',
-        payload: {
-          action: 'close',
-          target: 'child-1',
+      },
+    });
+    const close = activityItem({
+      item_id: 'close-child-1',
+      payload: {
+        action: 'close',
+        target: 'child-1',
+        closed: true,
+        items: [{
+          task_name: 'Review prompt contract',
+          agent_type: 'reviewer',
+          status: 'canceled',
           closed: true,
-          snapshot: {
-            thread_id: 'child-1',
-            subagent_id: 'child-1',
-            task_name: 'Review prompt contract',
-            agent_type: 'reviewer',
-            status: 'canceled',
-            closed: true,
-            can_close: false,
-            last_message: 'Reviewer handoff archived.',
-            updated_at_ms: 220,
-          },
-        },
-      }),
-    ])]));
+          can_close: false,
+          last_message: 'Reviewer handoff archived.',
+          updated_at_ms: 220,
+        }],
+      },
+    });
+    const items = buildFlowerSubagentPanelItems(thread([timeline([spawn, close], {
+      'spawn-child-1': {
+        operation: 'subagents',
+        action: 'spawn',
+        delegation_runtime: 'floret',
+        thread_id: 'child-1',
+        subagent_id: 'child-1',
+        task_name: 'Review prompt contract',
+        agent_type: 'reviewer',
+        status: 'running',
+        updated_at_ms: 100,
+      },
+      'close-child-1': {
+        operation: 'subagents',
+        action: 'close',
+        delegation_runtime: 'floret',
+        thread_id: 'child-1',
+        subagent_id: 'child-1',
+        task_name: 'Review prompt contract',
+        agent_type: 'reviewer',
+        status: 'canceled',
+        updated_at_ms: 220,
+      },
+    })]));
 
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
       threadID: 'child-1',
       status: 'canceled',
-      lastMessage: 'Reviewer handoff archived.',
     });
+    expect(items[0] as Record<string, unknown>).not.toHaveProperty('lastMessage');
   });
 
   it('does not treat unrelated thread_id payloads as subagents', () => {
@@ -310,6 +373,21 @@ describe('buildFlowerSubagentPanelItems', () => {
       activityItem({
         payload: {
           action: 'wait',
+          snapshot: {
+            thread_id: 'legacy-child-0',
+            task_name: 'Legacy snapshot',
+            status: 'running',
+          },
+          subagent: {
+            thread_id: 'legacy-child-subagent',
+            task_name: 'Legacy subagent',
+            status: 'running',
+          },
+          item: {
+            thread_id: 'legacy-child-item',
+            task_name: 'Legacy item',
+            status: 'running',
+          },
           snapshots: {
             legacy1: {
               thread_id: 'legacy-child-1',

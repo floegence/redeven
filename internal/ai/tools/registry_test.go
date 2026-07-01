@@ -128,7 +128,7 @@ func TestBuiltInPresentationSpecsCarryProjectionFacts(t *testing.T) {
 			operation:           "subagents",
 			labelFields:         []string{"task_name", "title", "action"},
 			callPayloadFields:   []string{"action", "task_name", "agent_type", "context_mode", "target", "thread_id", "ids", "interrupt", "limit", "running_only"},
-			resultPayloadFields: []string{"action", "status", "subagent_id", "thread_id", "task_name", "title", "agent_type", "context_mode", "target", "target_ids", "ids", "accepted", "closed", "stopped", "closed_count", "stopped_count", "affected_ids", "agent_count", "total", "running_only", "counts", "detail_ref", "detail_available", "detail_omitted", "detail_strategy", "final_handoff_report", "progress_summary", "requested_timeout_ms", "effective_timeout_ms", "timeout_ms", "timeout_source", "timed_out", "requested_ids", "requested_count", "found_count", "missing_count", "missing_ids", "items", "result_digest", "last_message", "waiting_prompt", "queued_inputs", "can_send_input", "can_interrupt", "can_close", "delegation_runtime", "truncated", "omitted_count"},
+			resultPayloadFields: []string{"action", "status", "task_name", "title", "agent_type", "context_mode", "accepted", "closed", "stopped", "closed_count", "stopped_count", "agent_count", "total", "running_only", "counts", "final_handoff_report", "progress_summary", "requested_count", "found_count", "missing_count", "items", "delegation_runtime", "timed_out", "truncated", "omitted_count"},
 		},
 	}
 

@@ -812,6 +812,21 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
 .chat-activity-detail-section-title { font-size: 0.7rem; font-weight: 650; color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground)); }
 .chat-activity-detail-section-meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.62rem; color: var(--muted-foreground); }
 .chat-activity-detail-field-label { font-size: 0.58rem; font-weight: 650; letter-spacing: 0.02em; text-transform: uppercase; color: color-mix(in srgb, var(--muted-foreground) 78%, transparent); }
+.chat-activity-error-section { border-color: color-mix(in srgb, var(--destructive) 32%, var(--border)); background: color-mix(in srgb, var(--destructive) 5%, var(--background)); }
+.chat-activity-error-message { min-width: 0; color: color-mix(in srgb, var(--foreground) 84%, var(--destructive) 16%); font-size: 0.7rem; font-weight: 650; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-activity-subagents-section { gap: 0.48rem; }
+.chat-activity-subagents-section .chat-activity-detail-section-meta { display: flex; flex-wrap: wrap; gap: 0.24rem; white-space: normal; overflow: visible; text-overflow: clip; }
+.chat-activity-subagents-section .chat-activity-detail-section-meta span,
+.chat-activity-subagents-chip { display: inline-flex; align-items: center; gap: 0.24rem; max-width: 100%; padding: 0.08rem 0.36rem; border: 1px solid color-mix(in srgb, var(--border) 68%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--muted) 18%, transparent); color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground)); font-size: 0.6rem; font-weight: 650; line-height: 1.25; }
+.chat-activity-subagents-chip strong { color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground)); font-weight: 760; }
+.chat-activity-subagents-summary,
+.chat-activity-subagents-item-note { min-width: 0; color: color-mix(in srgb, var(--foreground) 74%, var(--muted-foreground)); font-size: 0.68rem; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-activity-subagents-counts { display: flex; min-width: 0; flex-wrap: wrap; gap: 0.28rem; }
+.chat-activity-subagents-list { display: grid; min-width: 0; gap: 0.38rem; }
+.chat-activity-subagents-item { display: grid; min-width: 0; gap: 0.2rem; border-left: 1px solid color-mix(in srgb, var(--border) 68%, transparent); padding-left: 0.5rem; }
+.chat-activity-subagents-item-main { display: grid; min-width: 0; gap: 0.08rem; }
+.chat-activity-subagents-item-title { min-width: 0; color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground)); font-size: 0.69rem; font-weight: 680; line-height: 1.35; overflow-wrap: anywhere; }
+.chat-activity-subagents-item-meta { min-width: 0; color: var(--muted-foreground); font-size: 0.62rem; line-height: 1.35; overflow-wrap: anywhere; }
 .chat-activity-file-preview { margin: 0; max-height: 24rem; overflow: auto; padding: 0.55rem; border-radius: 0.42rem; background: color-mix(in srgb, var(--muted) 24%, transparent); font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.66rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground)); }
 .chat-activity-todo-list, .chat-activity-structured-groups { display: grid; gap: 0.38rem; min-width: 0; }
 .chat-activity-todo-item { display: grid; gap: 0.42rem; min-width: 0; border-radius: 0.48rem; }

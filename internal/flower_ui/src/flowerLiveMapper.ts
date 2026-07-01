@@ -670,12 +670,6 @@ function mapActivitySubagentAction(raw: unknown, actionKey: string): FlowerActiv
     'agent_type',
     'context_mode',
     'status',
-    'last_message',
-    'waiting_prompt',
-    'queued_inputs',
-    'can_send_input',
-    'can_interrupt',
-    'can_close',
     'updated_at_ms',
   ]);
   for (const key of Object.keys(record)) {
@@ -695,12 +689,6 @@ function mapActivitySubagentAction(raw: unknown, actionKey: string): FlowerActiv
     ...(trim(record.agent_type) ? { agent_type: trim(record.agent_type) } : {}),
     ...(trim(record.context_mode) ? { context_mode: trim(record.context_mode) } : {}),
     ...(trim(record.status) ? { status: trim(record.status) } : {}),
-    ...(trim(record.last_message) ? { last_message: trim(record.last_message) } : {}),
-    ...(trim(record.waiting_prompt) ? { waiting_prompt: trim(record.waiting_prompt) } : {}),
-    ...(integerOrZero(record.queued_inputs) ? { queued_inputs: integerOrZero(record.queued_inputs) } : {}),
-    ...(record.can_send_input ? { can_send_input: true } : {}),
-    ...(record.can_interrupt ? { can_interrupt: true } : {}),
-    ...(record.can_close ? { can_close: true } : {}),
     ...(positiveInteger(record.updated_at_ms) ? { updated_at_ms: positiveInteger(record.updated_at_ms) } : {}),
   };
   return Object.keys(out).length > 0 ? out : null;

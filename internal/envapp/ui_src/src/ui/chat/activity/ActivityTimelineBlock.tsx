@@ -548,6 +548,67 @@ function CompletionDetailBlock(props: { block: Extract<FlowerActivityDetailBlock
   );
 }
 
+function ErrorDetailBlock(props: { block: Extract<FlowerActivityDetailBlock, { kind: 'error' }> }) {
+  return (
+    <section class="chat-activity-detail-section chat-activity-error-section" aria-label="Failure reason">
+      <div class="chat-activity-error-message">{props.block.error.message}</div>
+    </section>
+  );
+}
+
+function SubagentsDetailBlock(props: { block: Extract<FlowerActivityDetailBlock, { kind: 'subagents' }> }) {
+  const detail = props.block.subagents;
+  const meta = createMemo(() => [detail.action, detail.agent_type, detail.status, detail.context_mode].filter(Boolean));
+  return (
+    <section class="chat-activity-detail-section chat-activity-subagents-section" aria-label="Subagents">
+      <div class="chat-activity-detail-section-head">
+        <div class="chat-activity-detail-section-copy">
+          <div class="chat-activity-detail-section-title">{detail.task || detail.action || 'Subagents'}</div>
+          <Show when={meta().length > 0}>
+            <div class="chat-activity-detail-section-meta">
+              <For each={meta()}>{(value) => <span>{value}</span>}</For>
+            </div>
+          </Show>
+        </div>
+      </div>
+      <Show when={detail.summary}>
+        {(summary) => <div class="chat-activity-subagents-summary">{summary()}</div>}
+      </Show>
+      <Show when={detail.counts.length > 0}>
+        <div class="chat-activity-subagents-counts" aria-label="Subagent counts">
+          <For each={detail.counts}>
+            {(line) => (
+              <span class="chat-activity-subagents-chip">
+                <span>{line.label}</span>
+                <strong>{line.value}</strong>
+              </span>
+            )}
+          </For>
+        </div>
+      </Show>
+      <Show when={detail.items.length > 0}>
+        <div class="chat-activity-subagents-list" role="list">
+          <For each={detail.items}>
+            {(agent) => (
+              <div class="chat-activity-subagents-item" role="listitem">
+                <div class="chat-activity-subagents-item-main">
+                  <span class="chat-activity-subagents-item-title">{agent.title || agent.task || 'Subagent'}</span>
+                  <span class="chat-activity-subagents-item-meta">
+                    {[agent.agent_type, agent.status, agent.context_mode].filter(Boolean).join(' · ')}
+                  </span>
+                </div>
+                <Show when={agent.handoff || agent.progress}>
+                  {(body) => <div class="chat-activity-subagents-item-note">{body()}</div>}
+                </Show>
+              </div>
+            )}
+          </For>
+        </div>
+      </Show>
+    </section>
+  );
+}
+
 function DetailBlock(props: {
   block: FlowerActivityDetailBlock;
   item: ActivityItem;
@@ -555,6 +616,8 @@ function DetailBlock(props: {
   onPreviewFile?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
   onBrowseDirectory?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
 }) {
+  if (props.block.kind === 'error') return <ErrorDetailBlock block={props.block} />;
+  if (props.block.kind === 'subagents') return <SubagentsDetailBlock block={props.block} />;
   if (props.block.kind === 'terminal_output') return <TerminalDetailBlock item={props.item} runID={props.runID} />;
   if (props.block.kind === 'web_search') return <WebSearchDetailBlock block={props.block} />;
   if (props.block.kind === 'question') return <QuestionDetailBlock block={props.block} />;

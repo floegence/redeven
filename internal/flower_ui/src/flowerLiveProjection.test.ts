@@ -2926,6 +2926,26 @@ describe('Flower live projection', () => {
       next_cursor: 1,
       retained_from_seq: 1,
     })).toThrow(/activity_timeline\.subagent_actions\.subagent:review-api\.raw_payload/);
+
+    expect(() => mapFlowerLiveEvents({
+      events: [{
+        ...baseEvent,
+        payload: {
+          ...baseEvent.payload,
+          block: {
+            ...baseEvent.payload.block,
+            subagent_actions: {
+              'subagent:review-api': {
+                ...baseEvent.payload.block.subagent_actions['subagent:review-api'],
+                last_message: 'legacy handoff text',
+              },
+            },
+          },
+        },
+      }],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    })).toThrow(/activity_timeline\.subagent_actions\.subagent:review-api\.last_message/);
   });
 
   it('rejects unsupported activity item statuses instead of falling back', () => {

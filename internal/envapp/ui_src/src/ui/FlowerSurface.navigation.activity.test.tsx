@@ -74,17 +74,31 @@ function parentThreadWithRunningSubagent(): FlowerThreadSnapshot {
               payload: {
                 action: 'spawn',
                 status: 'ok',
-                snapshot: {
-                  thread_id: 'thread-child-review',
-                  subagent_id: 'thread-child-review',
+                task_name: 'Review API contract',
+                agent_type: 'reviewer',
+                context_mode: 'mission_only',
+                items: [{
                   task_name: 'Review API contract',
                   agent_type: 'reviewer',
                   status: 'running',
-                  last_message: 'Reading the API boundary.',
-                  updated_at_ms: 120,
-                },
+                  context_mode: 'mission_only',
+                }],
               },
             })],
+            subagent_actions: {
+              'tool-subagents-spawn': {
+                operation: 'subagents',
+                action: 'spawn',
+                delegation_runtime: 'floret',
+                thread_id: 'thread-child-review',
+                subagent_id: 'thread-child-review',
+                task_name: 'Review API contract',
+                agent_type: 'reviewer',
+                context_mode: 'mission_only',
+                status: 'running',
+                updated_at_ms: 120,
+              },
+            },
           }),
         ],
       },
@@ -607,17 +621,31 @@ describe('FlowerSurface navigation activity', () => {
                 payload: {
                   action: 'spawn',
                   status: 'ok',
-                  snapshot: {
-                    thread_id: 'thread-child-review',
-                    subagent_id: 'thread-child-review',
+                  task_name: 'Review API contract',
+                  agent_type: 'reviewer',
+                  context_mode: 'mission_only',
+                  items: [{
                     task_name: 'Review API contract',
                     agent_type: 'reviewer',
                     status: 'running',
-                    last_message: 'Reading the API boundary.',
-                    updated_at_ms: 120,
-                  },
+                    context_mode: 'mission_only',
+                  }],
                 },
               })],
+              subagent_actions: {
+                'tool-subagents-spawn': {
+                  operation: 'subagents',
+                  action: 'spawn',
+                  delegation_runtime: 'floret',
+                  thread_id: 'thread-child-review',
+                  subagent_id: 'thread-child-review',
+                  task_name: 'Review API contract',
+                  agent_type: 'reviewer',
+                  context_mode: 'mission_only',
+                  status: 'running',
+                  updated_at_ms: 120,
+                },
+              },
             }),
           ],
         },
@@ -1340,6 +1368,160 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.textContent).not.toContain('"results"');
     expect(runtime.textContent).not.toContain('"questions"');
     expect(runtime.textContent).not.toContain('evidence_refs');
+  });
+
+  it('renders failed write_todos details as a failure reason without raw fields', async () => {
+    const todosThread = thread({
+      thread_id: 'thread-failed-todos',
+      title: 'Failed todos',
+      created_at_ms: 6_700,
+      updated_at_ms: 6_750,
+      status: 'failed',
+      messages: [
+        {
+          id: 'm-failed-todos',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 6_750,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-failed-todos',
+              turn_id: 'm-failed-todos',
+              status: 'error',
+              items: [
+                activityItem({
+                  item_id: 'item-failed-todos',
+                  tool_id: 'item-failed-todos',
+                  tool_name: 'write_todos',
+                  renderer: 'todos',
+                  label: 'Update todos',
+                  status: 'error',
+                  severity: 'error',
+                  needs_attention: true,
+                  payload: {
+                    status: 'error',
+                    todos: [{ content: 'Keep final review open', status: 'in_progress' }],
+                    error: { code: 'UNKNOWN', message: 'Todo update failed', retryable: false },
+                  },
+                }),
+              ],
+            }),
+          ],
+        },
+      ],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [todosThread]),
+      loadThread: vi.fn(async () => liveBootstrap(todosThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-failed-todos"] button')));
+    (runtime.querySelector('[data-thread-id="thread-failed-todos"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="item-failed-todos"]')));
+
+    const row = runtime.querySelector('[data-flower-activity-item-id="item-failed-todos"]') as HTMLElement;
+    const button = row.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
+    if (button.getAttribute('aria-expanded') !== 'true') {
+      button.click();
+    }
+
+    await waitFor(() => row.textContent?.includes('Todo update failed') ?? false);
+    expect(row.textContent).toContain('Todo update failed');
+    expect(row.textContent).toContain('Keep final review open');
+    expect(row.textContent).not.toContain('result status');
+    expect(row.textContent).not.toContain('error code');
+    expect(row.textContent).not.toContain('UNKNOWN');
+    expect(row.textContent).not.toContain('kind');
+    expect(row.textContent).not.toContain('tool');
+    expect(row.textContent).not.toContain('item-failed-todos');
+  });
+
+  it('renders subagent details without legacy ids or debug fields', async () => {
+    const subagentsThread = thread({
+      thread_id: 'thread-subagent-details',
+      title: 'Subagent details',
+      created_at_ms: 6_760,
+      updated_at_ms: 6_780,
+      status: 'success',
+      messages: [
+        {
+          id: 'm-subagent-details',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 6_780,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-subagent-details',
+              turn_id: 'm-subagent-details',
+              items: [
+                activityItem({
+                  item_id: 'item-subagents',
+                  tool_id: 'item-subagents',
+                  tool_name: 'subagents',
+                  renderer: 'structured',
+                  label: 'subagents',
+                  status: 'success',
+                  payload: {
+                    action: 'wait',
+                    status: 'ok',
+                    agent_count: 1,
+                    items: [{
+                      thread_id: 'thread-child-hidden',
+                      subagent_id: 'thread-child-hidden',
+                      task_name: 'Review API contract',
+                      agent_type: 'reviewer',
+                      context_mode: 'mission_only',
+                      status: 'completed',
+                      last_message: 'Hidden handoff preview',
+                      waiting_prompt: 'Hidden waiting prompt',
+                      can_close: true,
+                    }],
+                    final_handoff_report: {
+                      summary: 'Delegated subagents finished wait: 1 completed.',
+                      reports: [{
+                        thread_id: 'thread-child-hidden',
+                        task_name: 'Review API contract',
+                        agent_type: 'reviewer',
+                        status: 'completed',
+                        handoff: 'API boundary is consistent.',
+                      }],
+                    },
+                    snapshot: { thread_id: 'legacy-hidden', task_name: 'Legacy snapshot' },
+                  },
+                }),
+              ],
+            }),
+          ],
+        },
+      ],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [subagentsThread]),
+      loadThread: vi.fn(async () => liveBootstrap(subagentsThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-subagent-details"] button')));
+    (runtime.querySelector('[data-thread-id="thread-subagent-details"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="item-subagents"]')));
+
+    const row = runtime.querySelector('[data-flower-activity-item-id="item-subagents"]') as HTMLElement;
+    (row.querySelector('.flower-activity-inline-button') as HTMLButtonElement).click();
+
+    await waitFor(() => row.textContent?.includes('Review API contract') ?? false);
+    expect(row.textContent).toContain('Review API contract');
+    expect(row.textContent).toContain('Reviewer');
+    expect(row.textContent).toContain('Completed');
+    expect(row.textContent).toContain('API boundary is consistent.');
+    expect(row.textContent).not.toContain('thread-child-hidden');
+    expect(row.textContent).not.toContain('Hidden handoff preview');
+    expect(row.textContent).not.toContain('Hidden waiting prompt');
+    expect(row.textContent).not.toContain('can_close');
+    expect(row.textContent).not.toContain('legacy-hidden');
+    expect(row.textContent).not.toContain('Legacy snapshot');
   });
 
   it('renders approval controls in the composer while preserving the activity audit row', async () => {
