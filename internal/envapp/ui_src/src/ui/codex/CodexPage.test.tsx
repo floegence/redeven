@@ -107,6 +107,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Code: Icon,
     FileText: Icon,
     Folder: Icon,
+    MoreHorizontal: Icon,
     Refresh: Icon,
     Search: Icon,
     Send: Icon,
