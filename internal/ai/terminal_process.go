@@ -41,7 +41,7 @@ type terminalProcessManager struct {
 	mu        sync.Mutex
 	processes map[string]*terminalProcess
 	active    int
-	onDone    func(terminalProcessSnapshot)
+	onDone    func(terminalProcessSnapshot) error
 }
 
 type terminalProcessStartRequest struct {
@@ -91,36 +91,37 @@ type terminalProcessSnapshot struct {
 }
 
 type terminalProcess struct {
-	mu         sync.Mutex
-	cond       *sync.Cond
-	manager    *terminalProcessManager
-	id         string
-	endpointID string
-	threadID   string
-	runID      string
-	turnID     string
-	toolID     string
-	toolName   string
-	command    string
-	cwd        string
-	cmd        *exec.Cmd
-	tty        *os.File
-	readDone   chan struct{}
-	startedAt  time.Time
-	endedAt    time.Time
-	status     string
-	exitCode   int
-	err        *aitools.ToolError
-	buf        []byte
-	firstSeq   int64
-	lastSeq    int64
-	total      int64
-	truncated  bool
-	pending    bool
-	settled    bool
+	mu                     sync.Mutex
+	cond                   *sync.Cond
+	manager                *terminalProcessManager
+	id                     string
+	endpointID             string
+	threadID               string
+	runID                  string
+	turnID                 string
+	toolID                 string
+	toolName               string
+	command                string
+	cwd                    string
+	cmd                    *exec.Cmd
+	tty                    *os.File
+	readDone               chan struct{}
+	startedAt              time.Time
+	endedAt                time.Time
+	status                 string
+	exitCode               int
+	err                    *aitools.ToolError
+	buf                    []byte
+	firstSeq               int64
+	lastSeq                int64
+	total                  int64
+	truncated              bool
+	pending                bool
+	settlementAcknowledged bool
+	settlementInFlight     bool
 }
 
-func newTerminalProcessManager(onDone func(terminalProcessSnapshot)) *terminalProcessManager {
+func newTerminalProcessManager(onDone func(terminalProcessSnapshot) error) *terminalProcessManager {
 	return &terminalProcessManager{
 		processes: make(map[string]*terminalProcess),
 		onDone:    onDone,
@@ -269,12 +270,9 @@ func (p *terminalProcess) MarkPending() terminalProcessSnapshot {
 	}
 	p.mu.Lock()
 	p.pending = true
-	done := p.status != terminalProcessStatusRunning && !p.settled
 	snapshot := p.snapshotLocked(0)
 	p.mu.Unlock()
-	if done {
-		p.publishDone()
-	}
+	p.publishDone()
 	return snapshot
 }
 
@@ -526,16 +524,25 @@ func (p *terminalProcess) publishDone() {
 		return
 	}
 	p.mu.Lock()
-	if !p.pending || p.settled || p.status == terminalProcessStatusRunning {
+	if !p.pending || p.settlementAcknowledged || p.settlementInFlight || p.status == terminalProcessStatusRunning {
 		p.mu.Unlock()
 		return
 	}
-	p.settled = true
+	if p.manager.onDone == nil {
+		p.settlementAcknowledged = true
+		p.mu.Unlock()
+		return
+	}
+	p.settlementInFlight = true
 	snapshot := p.snapshotLocked(0)
 	p.mu.Unlock()
-	if p.manager.onDone != nil {
-		p.manager.onDone(snapshot)
+	err := p.manager.onDone(snapshot)
+	p.mu.Lock()
+	if err == nil {
+		p.settlementAcknowledged = true
 	}
+	p.settlementInFlight = false
+	p.mu.Unlock()
 }
 
 func (p *terminalProcess) snapshotLocked(maxBytes int64) terminalProcessSnapshot {

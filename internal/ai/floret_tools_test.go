@@ -122,6 +122,30 @@ func TestFloretToolDefinitionStripsRedevenTargetSchema(t *testing.T) {
 	}
 }
 
+func TestFloretTerminalReadDefinitionDeclaresPollingRepeatPolicy(t *testing.T) {
+	t.Parallel()
+
+	def, err := floretToolDefinition(newRun(runOptions{}), ToolDef{
+		Name:         "terminal.read",
+		ParallelSafe: true,
+		Visibility:   ToolVisibilityStandard,
+	})
+	if err != nil {
+		t.Fatalf("floretToolDefinition: %v", err)
+	}
+	if got := def.Annotations[fltools.AnnotationRepeatPolicy]; got != fltools.RepeatPolicyPolling {
+		t.Fatalf("terminal.read repeat policy=%#v, want polling", got)
+	}
+
+	execDef, err := floretToolDefinition(newRun(runOptions{}), ToolDef{Name: "terminal.exec"})
+	if err != nil {
+		t.Fatalf("floretToolDefinition terminal.exec: %v", err)
+	}
+	if _, ok := execDef.Annotations[fltools.AnnotationRepeatPolicy]; ok {
+		t.Fatalf("terminal.exec must not declare polling repeat policy: %#v", execDef.Annotations)
+	}
+}
+
 func TestFloretOpenWorldToolDefinitionUsesConservativeStaticPermission(t *testing.T) {
 	t.Parallel()
 
@@ -1111,6 +1135,42 @@ func TestFloretToolResultFromFlowerMapsAbortedToCanceledActivityStatus(t *testin
 	}
 	if result.Activity == nil || result.Activity.Payload["status"] != toolResultStatusAborted {
 		t.Fatalf("activity=%#v, want aborted product payload", result.Activity)
+	}
+}
+
+func TestFloretToolResultFromFlowerAddsTerminalReadProgressToken(t *testing.T) {
+	t.Parallel()
+
+	result, err := floretToolResultFromFlower(newRun(runOptions{}), ToolResult{
+		ToolID:   "call_terminal_read",
+		ToolName: "terminal.read",
+		Status:   toolResultStatusSuccess,
+		Summary:  "terminal.read",
+		Data: map[string]any{
+			"status":      terminalProcessStatusRunning,
+			"process_id":  "tp_progress",
+			"last_seq":    int64(7),
+			"ended_at_ms": int64(0),
+		},
+	})
+	if err != nil {
+		t.Fatalf("floretToolResultFromFlower: %v", err)
+	}
+	if got := result.Metadata[fltools.ResultMetadataProgressToken]; got != "tp_progress:7:running:0" {
+		t.Fatalf("progress token=%#v, want process/last_seq/status/ended_at_ms token", got)
+	}
+
+	execResult, err := floretToolResultFromFlower(newRun(runOptions{}), ToolResult{
+		ToolID:   "call_terminal_exec",
+		ToolName: "terminal.exec",
+		Status:   toolResultStatusSuccess,
+		Data:     map[string]any{"status": terminalProcessStatusSuccess, "process_id": "tp_progress", "last_seq": int64(7)},
+	})
+	if err != nil {
+		t.Fatalf("floretToolResultFromFlower terminal.exec: %v", err)
+	}
+	if _, ok := execResult.Metadata[fltools.ResultMetadataProgressToken]; ok {
+		t.Fatalf("terminal.exec must not carry polling progress token: %#v", execResult.Metadata)
 	}
 }
 

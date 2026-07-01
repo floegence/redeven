@@ -4460,6 +4460,7 @@ func (r *run) terminalProcessForTool(processID string) (*terminalProcess, error)
 		strings.TrimSpace(snapshot.ThreadID) != strings.TrimSpace(r.threadID) {
 		return nil, errors.New("terminal process not found")
 	}
+	proc.publishDone()
 	return proc, nil
 }
 

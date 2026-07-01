@@ -678,7 +678,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.read",
-			Description:      "Read the latest output from a running or completed terminal process started by terminal.exec. Use after_seq with wait_ms to poll for new output.",
+			Description:      "Read the latest output from a running or completed terminal process started by terminal.exec. Use the returned last_seq as the next after_seq with wait_ms to poll for new output.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "after_seq": map[string]any{"type": "integer", "minimum": 0}, "wait_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000}, "max_bytes": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000000}}, "required": []string{"process_id"}, "additionalProperties": false}),
 			ParallelSafe:     true,
 			Mutating:         false,

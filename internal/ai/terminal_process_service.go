@@ -30,18 +30,20 @@ func (s *Service) ReadTerminalProcess(ctx context.Context, meta *session.Meta, r
 	if manager == nil {
 		return nil, errors.New("terminal process manager unavailable")
 	}
-	snapshot, err := manager.Read(terminalProcessReadRequest{
+	proc, ok := manager.Get(processID)
+	if !ok || proc == nil {
+		return nil, errors.New("terminal process not found")
+	}
+	snapshot := proc.Read(terminalProcessReadRequest{
 		ProcessID: strings.TrimSpace(processID),
 		AfterSeq:  afterSeq,
 		WaitMS:    waitMS,
 		MaxBytes:  maxBytes,
 	})
-	if err != nil {
-		return nil, err
-	}
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), snapshot); err != nil {
 		return nil, err
 	}
+	proc.publishDone()
 	return &snapshot, nil
 }
 
@@ -56,14 +58,16 @@ func (s *Service) WriteTerminalProcess(ctx context.Context, meta *session.Meta, 
 	if manager == nil {
 		return nil, errors.New("terminal process manager unavailable")
 	}
-	before, err := manager.Read(terminalProcessReadRequest{ProcessID: strings.TrimSpace(processID)})
-	if err != nil {
-		return nil, err
+	proc, ok := manager.Get(processID)
+	if !ok || proc == nil {
+		return nil, errors.New("terminal process not found")
 	}
+	before := proc.Read(terminalProcessReadRequest{ProcessID: strings.TrimSpace(processID)})
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), before); err != nil {
 		return nil, err
 	}
-	snapshot, err := manager.Write(processID, input)
+	proc.publishDone()
+	snapshot, err := proc.Write(input)
 	if err != nil {
 		return &snapshot, err
 	}
@@ -78,14 +82,16 @@ func (s *Service) TerminateTerminalProcess(ctx context.Context, meta *session.Me
 	if manager == nil {
 		return nil, errors.New("terminal process manager unavailable")
 	}
-	before, err := manager.Read(terminalProcessReadRequest{ProcessID: strings.TrimSpace(processID)})
-	if err != nil {
-		return nil, err
+	proc, ok := manager.Get(processID)
+	if !ok || proc == nil {
+		return nil, errors.New("terminal process not found")
 	}
+	before := proc.Read(terminalProcessReadRequest{ProcessID: strings.TrimSpace(processID)})
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), before); err != nil {
 		return nil, err
 	}
-	snapshot, err := manager.Terminate(processID)
+	proc.publishDone()
+	snapshot, err := proc.Terminate()
 	if err != nil {
 		return &snapshot, err
 	}
@@ -105,20 +111,20 @@ func validateTerminalProcessAccess(meta *session.Meta, runID string, snapshot te
 	return nil
 }
 
-func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) {
+func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) error {
 	if s == nil {
-		return
+		return errors.New("terminal process service unavailable")
 	}
 	db := s.threadsDB
 	if db == nil {
-		return
+		return errors.New("terminal process thread store unavailable")
 	}
 	if strings.TrimSpace(snapshot.EndpointID) == "" ||
 		strings.TrimSpace(snapshot.ThreadID) == "" ||
 		strings.TrimSpace(snapshot.RunID) == "" ||
 		strings.TrimSpace(snapshot.TurnID) == "" ||
 		strings.TrimSpace(snapshot.ToolID) == "" {
-		return
+		return errors.New("terminal process settlement identity incomplete")
 	}
 
 	resultPayload := terminalProcessResultPayload(snapshot)
@@ -137,6 +143,23 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) {
 	if toolErr != nil {
 		toolErr.Normalize()
 	}
+	settlementReq := terminalProcessSettlementRequest(snapshot, resultPayload)
+	settleCtx, settleCancel := context.WithTimeout(context.Background(), s.persistTimeout())
+	settled, err := s.settlePendingToolWithActiveFloretRun(settleCtx, snapshot.EndpointID, snapshot.ThreadID, settlementReq)
+	settleCancel()
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("ai: settle terminal process failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
+		}
+		return err
+	}
+	if err := s.applyFloretPendingToolSettlementProjection(context.Background(), snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, snapshot.TurnID, settled.Projection); err != nil {
+		if s.log != nil {
+			s.log.Warn("ai: apply terminal settlement projection failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
+		}
+		return err
+	}
+
 	startedAt := snapshot.StartedAtUnixMs
 	if startedAt <= 0 {
 		startedAt = time.Now().UnixMilli()
@@ -158,7 +181,7 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) {
 		retryable = toolErr.Retryable
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
-	err := db.UpsertToolCall(ctx, threadstore.ToolCallRecord{
+	err = db.UpsertToolCall(ctx, threadstore.ToolCallRecord{
 		RunID:           snapshot.RunID,
 		ToolID:          snapshot.ToolID,
 		ToolName:        "terminal.exec",
@@ -177,22 +200,10 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) {
 		if s.log != nil {
 			s.log.Warn("ai: persist terminal process result failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
 		}
-		return
+		return nil
 	}
 	s.appendTerminalProcessRunEvent(snapshot, status, resultPayload, toolErr)
-	settlementReq := terminalProcessSettlementRequest(snapshot, resultPayload)
-	settleCtx, settleCancel := context.WithTimeout(context.Background(), s.persistTimeout())
-	settled, err := s.settlePendingToolWithActiveFloretRun(settleCtx, snapshot.EndpointID, snapshot.ThreadID, settlementReq)
-	settleCancel()
-	if err != nil {
-		if s.log != nil {
-			s.log.Warn("ai: settle terminal process failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
-		}
-		return
-	}
-	if err := s.applyFloretPendingToolSettlementProjection(context.Background(), snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, snapshot.TurnID, settled.Projection); err != nil && s.log != nil {
-		s.log.Warn("ai: apply terminal settlement projection failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
-	}
+	return nil
 }
 
 func (s *Service) persistTimeout() time.Duration {

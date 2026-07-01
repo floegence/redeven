@@ -3,20 +3,18 @@
   "release_review": {
     "release_version": "unreleased",
     "previous_release": "v0.7.0",
-    "reviewed_at": "2026-06-25",
-    "review_id": "flower-manual-context-compaction",
-    "summary": "Flower adds a /compact thread action, typed live timeline anchors, and Desktop Local UI routing without changing the Runtime Service compatibility window.",
+    "reviewed_at": "2026-07-01",
+    "review_id": "flower-terminal-pending-settlement",
+    "summary": "Flower settles hosted terminal pending tool activity through published Floret pending-settlement and polling-repeat contracts without changing the Runtime Service compatibility window.",
     "checked_surfaces": [
-      "Runtime Service protocol_version remains redeven-runtime-v1; Flower /compact is exposed through existing Local UI and Env App RPC surfaces rather than a runtime-service protocol version change",
-      "Env App redeven_v1 ai.compactThreadContext request/response codecs, SDK, and wire type ids were regenerated and tested as Env App UI protocol assets",
-      "Desktop Local Environment Flower adapter and main-process runtime request allowlist include /threads/:thread_id/context/compact while preserving startup reports, attach flows, sys.ping, and Local UI health checks",
-      "Flower live context compaction events use the single context.compaction.updated event with typed timeline anchors; old anchor_message_id plus placement and started/applied event shapes are rejected by protocol checks",
-      "Flower composer /compact command does not create transcript messages, does not stop a running or waiting-approval run, and carries active_run_id only as the active-run identity guard",
-      "Floret is consumed only from the published github.com/floegence/floret v0.3.72 module with GOWORK=off validation and no replace, go.work, package-manager link, or local sibling path wiring",
-      "Flower post-compaction continuation keeps active runs and queued follow-ups on Redeven thread actors while Floret owns compact lifecycle cancellation and diagnostic observation",
-      "Compatibility epoch, minimum Desktop version, and minimum Runtime version remain unchanged because Desktop-managed startup, runtime snapshot protocol, SSH bootstrap, gateway lifecycle, and Runtime Service control methods are not expanded"
+      "Runtime Service protocol_version remains redeven-runtime-v1; terminal pending-tool settlement is internal to Flower's AI runtime and Floret public runtime APIs rather than a runtime-service protocol version change",
+      "Floret is consumed only from the published github.com/floegence/floret v0.3.75 module with GOWORK=off validation and no replace, go.work, package-manager link, or local sibling path wiring",
+      "Terminal process ownership remains Redeven-local: process start/read/write/terminate, output tails, exit state, and local access checks still use existing Flower appserver surfaces",
+      "Completed pending terminal processes call Floret SettlePendingTool and apply the returned ThreadTurnProjection before writing Redeven diagnostic audit rows, so Flower UI activity stays sourced from Floret projection rather than ai_tool_calls or run events",
+      "terminal.read polling metadata uses the published Floret repeat_policy and progress_token contracts inside tool definitions/results; no Env App, Desktop, gateway, or Runtime Service wire field is added",
+      "Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance UI, SSH runtime bootstrap, gateway lifecycle, and Runtime Service control methods are unchanged"
     ],
-    "same_window_rationale": "The compatibility window is unchanged because the feature is implemented inside Flower, Env App UI protocol assets, and Desktop Local UI request routing. The Runtime Service snapshot protocol remains redeven-runtime-v1, Desktop-managed startup still uses structured machine presentation and startup reports, sys.ping and attach semantics are unchanged, and SSH/runtime bootstrap compatibility does not require a newer Desktop or Runtime binary pair."
+    "same_window_rationale": "The compatibility window is unchanged because the feature is implemented inside Flower's AI runtime integration with the published Floret runtime module and does not add or change Runtime Service protocol messages. The Runtime Service snapshot protocol remains redeven-runtime-v1, Desktop-managed startup still uses structured machine presentation and startup reports, sys.ping and attach semantics are unchanged, Env App maintenance UI and gateway lifecycle are unchanged, and SSH/runtime bootstrap compatibility does not require a newer Desktop or Runtime binary pair."
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 5,
