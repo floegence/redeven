@@ -152,8 +152,8 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentActionSidecar(t *testin
 		"timestamp":1700000000000,
 		"blocks":[
 			{"type":"activity-timeline","schema_version":1,"run_id":"run_1","thread_id":"thread_1","turn_id":"msg_1","trace_id":"trace_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[
-				{"item_id":"subagent:review","tool_id":"subagents","tool_name":"subagents","kind":"control","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Review API","renderer":"structured","payload":{"thread_id":"child_1","task_name":"Review API","status":"completed"}}
-			],"subagent_actions":{"subagent:review":{"operation":"subagents","action":"inspect","delegation_runtime":"floret","thread_id":"child_1","subagent_id":"child_1","task_name":"Review API","agent_type":"reviewer","context_mode":"mission_only","status":"completed","last_message":"Done","private_path":"/Users/alice/work","can_send_input":false,"can_close":true,"updated_at_ms":1700000000100}}}
+				{"item_id":"subagent:review","tool_id":"subagents","tool_name":"subagents","kind":"control","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Review API","renderer":"structured","payload":{"thread_id":"child_1","task_name":"Review API","task_description":"Review the public API boundary.","status":"completed"}}
+			],"subagent_actions":{"subagent:review":{"operation":"subagents","action":"inspect","delegation_runtime":"floret","thread_id":"child_1","subagent_id":"child_1","task_name":"Review API","task_description":"Review the public API boundary.","agent_type":"reviewer","context_mode":"mission_only","status":"completed","last_message":"Done","private_path":"/Users/alice/work","can_send_input":false,"can_close":true,"updated_at_ms":1700000000100}}}
 		]
 	}`
 	sanitized, err := SanitizeActivityTimelineMessageJSON(raw)
@@ -161,12 +161,12 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentActionSidecar(t *testin
 		t.Fatalf("SanitizeActivityTimelineMessageJSON: %v", err)
 	}
 	body := string(sanitized)
-	for _, required := range []string{`"subagent_actions"`, `"action":"inspect"`, `"context_mode":"mission_only"`, `"thread_id":"child_1"`, `"subagent_id":"child_1"`, `"updated_at_ms":1700000000100`} {
+	for _, required := range []string{`"subagent_actions"`, `"action":"inspect"`, `"thread_id":"child_1"`, `"subagent_id":"child_1"`, `"task_description":"Review the public API boundary."`, `"updated_at_ms":1700000000100`} {
 		if !strings.Contains(body, required) {
 			t.Fatalf("sanitized message missing %q: %s", required, body)
 		}
 	}
-	for _, forbidden := range []string{"private_path", "/Users/alice/work", `"can_send_input"`, `"can_close"`, `"last_message"`, `"waiting_prompt"`} {
+	for _, forbidden := range []string{"private_path", "/Users/alice/work", `"can_send_input"`, `"can_close"`, `"last_message"`, `"waiting_prompt"`, `"context_mode"`} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("sanitized message contains %q: %s", forbidden, body)
 		}
@@ -183,7 +183,7 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentProjectionPayload(t *te
 		"timestamp":1700000000000,
 		"blocks":[
 			{"type":"activity-timeline","schema_version":1,"run_id":"run_subagents","thread_id":"thread_parent","turn_id":"msg_subagents","trace_id":"trace_subagents","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[
-				{"item_id":"tool_subagents_spawn","tool_id":"tool_subagents_spawn","tool_name":"subagents","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Spawn reviewer","renderer":"structured","payload":{"action":"spawn","status":"ok","context_mode":"mission_only","subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","last_message":"Reading the API boundary.","snapshot":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","status":"running","context_mode":"mission_only","last_message":"Reading the API boundary.","updated_at_ms":120,"path":"/root/review_api","private_path":"/Users/alice/work/redeven/snapshot","privatePath":"/Users/alice/work/redeven/camel"},"items":[{"subagent_id":"thread_child_review","thread_id":"thread_child_review","status":"completed","context_mode":"mission_only","private_path":"/Users/alice/work/redeven/item"}],"item":{"subagent_id":"legacy_item"},"subagent":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","status":"running","context_mode":"mission_only","last_message":"Reading the API boundary.","updated_at_ms":120},"final_handoff_report":{"summary":"Review complete.","reports":[{"subagent_id":"thread_child_review","handoff":"API boundary is consistent.","changed_files":["internal/ai/subagents_floret.go"],"verification":["go test ./internal/ai"],"open_risks":["none"],"suggested_parent_actions":["continue"]}],"truncated":false,"omitted_count":0},"progress_summary":{"summary":"Review is still running.","progress":[{"subagent_id":"thread_child_review","state":"reading tests","blockers":[],"next_expected_step":"finish review"}],"suggested_parent_actions":["wait again"]},"subagents":[{"subagent_id":"legacy_child","thread_id":"legacy_child"}],"snapshots":{"legacy":{"thread_id":"legacy_snapshot"}},"snapshots_by_id":{"legacy":{"thread_id":"legacy_snapshot_by_id"}},"private_path":"/Users/alice/work/redeven"}}
+				{"item_id":"tool_subagents_spawn","tool_id":"tool_subagents_spawn","tool_name":"subagents","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Spawn reviewer","renderer":"structured","payload":{"action":"spawn","status":"ok","context_mode":"mission_only","subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","task_description":"Review the public API boundary.","agent_type":"reviewer","last_message":"Reading the API boundary.","snapshot":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","task_description":"Review the public API boundary.","agent_type":"reviewer","status":"running","context_mode":"mission_only","last_message":"Reading the API boundary.","updated_at_ms":120,"path":"/root/review_api","private_path":"/Users/alice/work/redeven/snapshot","privatePath":"/Users/alice/work/redeven/camel"},"items":[{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_description":"Review the public API boundary.","agent_type":"reviewer","status":"completed","context_mode":"mission_only","private_path":"/Users/alice/work/redeven/item"}],"item":{"subagent_id":"legacy_item"},"subagent":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","task_description":"Review the public API boundary.","agent_type":"reviewer","status":"running","context_mode":"mission_only","last_message":"Reading the API boundary.","updated_at_ms":120},"final_handoff_report":{"summary":"Review complete.","reports":[{"subagent_id":"thread_child_review","handoff":"API boundary is consistent.","changed_files":["internal/ai/subagents_floret.go"],"verification":["go test ./internal/ai"],"open_risks":["none"],"suggested_parent_actions":["continue"]}],"truncated":false,"omitted_count":0},"progress_summary":{"summary":"Review is still running.","progress":[{"subagent_id":"thread_child_review","state":"reading tests","blockers":[],"next_expected_step":"finish review"}],"suggested_parent_actions":["wait again"]},"subagents":[{"subagent_id":"legacy_child","thread_id":"legacy_child"}],"snapshots":{"legacy":{"thread_id":"legacy_snapshot"}},"snapshots_by_id":{"legacy":{"thread_id":"legacy_snapshot_by_id"}},"private_path":"/Users/alice/work/redeven"}}
 			]}
 		]
 	}`
@@ -196,6 +196,8 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentProjectionPayload(t *te
 	for _, required := range []string{
 		`"items"`,
 		`"task_name":"Review API"`,
+		`"task_description":"Review the public API boundary."`,
+		`"agent_type":"reviewer"`,
 		`"status":"completed"`,
 	} {
 		if !strings.Contains(body, required) {
@@ -205,7 +207,6 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentProjectionPayload(t *te
 	for _, forbidden := range []string{
 		`thread_child_review`,
 		`"subagent_id"`,
-		`"agent_type"`,
 		`"context_mode"`,
 		`"final_handoff_report"`,
 		`"progress_summary"`,

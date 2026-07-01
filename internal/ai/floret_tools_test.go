@@ -610,14 +610,11 @@ func TestFloretToolResultActivityForOKFUsesKnowledgeLookupFallback(t *testing.T)
 	if activityHasChip(activity.Chips, "truncated", "") {
 		t.Fatalf("okf.search short list should not show truncated chip: %#v", activity.Chips)
 	}
-	if activity.Payload["summary"] != "okf.knowledge.lookup" {
-		t.Fatalf("summary payload=%v, want okf.knowledge.lookup", activity.Payload["summary"])
-	}
 	if activity.Label == "okf.search" || activity.Label == "Search OKF" {
 		t.Fatalf("label=%q keeps search-engine wording", activity.Label)
 	}
-	if activity.Payload["summary"] == "okf.search" || activity.Payload["summary"] == "Search OKF" {
-		t.Fatalf("summary payload=%q keeps search-engine wording", activity.Payload["summary"])
+	if _, ok := activity.Payload["summary"]; ok {
+		t.Fatalf("okf.search should not project summary into Flower detail payload: %#v", activity.Payload)
 	}
 
 	withQuery := mustFloretToolResultActivity(t, r, ToolResult{
@@ -995,15 +992,16 @@ func TestFloretToolResultActivityProjectsPublicSubagentDisplayPayload(t *testing
 		"thread_id":   "subagent-1",
 		"closed":      true,
 		"items": []any{map[string]any{
-			"subagent_id":   "subagent-1",
-			"thread_id":     "subagent-1",
-			"task_name":     "Review prompt contract",
-			"agent_type":    "reviewer",
-			"status":        "canceled",
-			"last_message":  strings.Repeat("handoff evidence ", 800),
-			"updated_at_ms": 1782219585489,
-			"closed":        true,
-			"can_close":     false,
+			"subagent_id":      "subagent-1",
+			"thread_id":        "subagent-1",
+			"task_name":        "Review prompt contract",
+			"task_description": "Review whether the prompt contract is user-facing and concise.",
+			"agent_type":       "reviewer",
+			"status":           "canceled",
+			"last_message":     strings.Repeat("handoff evidence ", 800),
+			"updated_at_ms":    1782219585489,
+			"closed":           true,
+			"can_close":        false,
 		}},
 		"snapshot": map[string]any{"thread_id": "forbidden-snapshot-single"},
 		"subagent": map[string]any{"thread_id": "forbidden-subagent-single"},
@@ -1042,10 +1040,10 @@ func TestFloretToolResultActivityProjectsPublicSubagentDisplayPayload(t *testing
 	if anyToString(activity.Payload["action"]) != "close" || anyToString(item["status"]) != "canceled" {
 		t.Fatalf("activity lost close lifecycle state: %#v", activity.Payload)
 	}
-	if anyToString(item["task_name"]) != "Review prompt contract" {
+	if anyToString(item["task_name"]) != "Review prompt contract" || anyToString(item["task_description"]) == "" || anyToString(item["agent_type"]) != "reviewer" {
 		t.Fatalf("activity lost subagent display fields: %#v", item)
 	}
-	for _, field := range []string{"thread_id", "subagent_id", "agent_type", "context_mode", "last_message", "result_digest", "waiting_prompt", "queued_inputs", "can_send_input", "can_interrupt", "can_close", "detail_ref"} {
+	for _, field := range []string{"thread_id", "subagent_id", "context_mode", "last_message", "result_digest", "waiting_prompt", "queued_inputs", "can_send_input", "can_interrupt", "can_close", "detail_ref"} {
 		if _, ok := item[field]; ok {
 			t.Fatalf("activity item retained non-display field %s: %#v", field, item)
 		}

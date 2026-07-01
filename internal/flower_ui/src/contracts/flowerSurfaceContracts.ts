@@ -269,9 +269,9 @@ export type FlowerActivitySubagentActionItem = Readonly<{
   thread_id?: string;
   subagent_id?: string;
   task_name?: string;
+  task_description?: string;
   title?: string;
   agent_type?: string;
-  context_mode?: string;
   status?: string;
   started_at_ms?: number;
   created_at_ms?: number;
@@ -286,9 +286,9 @@ export type FlowerActivitySubagentAction = Readonly<{
   subagent_id?: string;
   parent_thread_id?: string;
   task_name?: string;
+  task_description?: string;
   title?: string;
   agent_type?: string;
-  context_mode?: string;
   status?: string;
   started_at_ms?: number;
   created_at_ms?: number;
@@ -442,6 +442,7 @@ export type FlowerSubagentSummary = Readonly<{
   subagent_id: string;
   thread_id: string;
   task_name?: string;
+  task_description?: string;
   title?: string;
   agent_type?: string;
   context_mode?: string;

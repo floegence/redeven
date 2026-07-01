@@ -361,7 +361,7 @@ func buildPromptSubagentSection(spec promptProfileSpec) promptSection {
 		"- Delegate only when work can be parallelized, isolated, or independently reviewed.",
 		"- Do NOT delegate trivial single-step tasks that can be completed directly.",
 		"- Do NOT use subagents for one-off local inspection work such as reading a single file, checking one command, or answering a direct question about the current workspace.",
-		"- Spawn subagents with subagents(action=\"spawn\", agent_type=\"explore|worker|reviewer\", task_name=\"short stable name\", message=\"specific delegated mission\", context_mode=\"mission_only|full_history\").",
+		"- Spawn subagents with subagents(action=\"spawn\", agent_type=\"explore|worker|reviewer\", task_name=\"short stable name\", task_description=\"one sentence user-facing responsibility\", message=\"specific delegated mission\", context_mode=\"mission_only|full_history\").",
 		"- Use context_mode=\"mission_only\" by default; choose context_mode=\"full_history\" only when the child genuinely needs the parent thread's full prior conversation to decide correctly.",
 		"- Use explore for readonly investigation, worker for bounded implementation, and reviewer for independent consistency/risk review.",
 		"- Keep each delegated mission self-contained: include scope, files or modules, expected evidence, and what the parent needs back.",

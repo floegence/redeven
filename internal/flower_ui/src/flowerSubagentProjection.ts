@@ -21,12 +21,15 @@ export type FlowerSubagentPanelItem = Readonly<{
   threadID: string;
   subagentID: string;
   taskName: string;
+  taskDescription: string;
   title: string;
   agentType: string;
   status: FlowerSubagentPanelStatus;
   action: string;
   canOpen: boolean;
   parentThreadID: string;
+  startedAtMs: number;
+  createdAtMs: number;
   updatedAtMs: number;
   itemStatus: FlowerActivityItem['status'];
 }>;
@@ -172,10 +175,13 @@ function itemFromSnapshot(
   if (threadID && threadID === ownerThreadID) return null;
   const action = payloadString(activityPayload, 'action') || payloadString(source, 'action');
   const taskName = payloadString(source, 'task_name', 'title');
+  const taskDescription = payloadString(source, 'task_description') || payloadString(activityPayload, 'task_description');
   const title = payloadString(source, 'title', 'task_name') || payloadString(activityPayload, 'task_name', 'title') || 'Subagent';
+  const startedAtMs = numberValue(source.started_at_ms ?? source.created_at_ms);
+  const createdAtMs = numberValue(source.created_at_ms ?? source.started_at_ms);
   const updatedAtMs = numberValue(source.updated_at_ms ?? source.updatedAtMs)
     || numberValue(source.ended_at_ms)
-    || numberValue(source.created_at_ms ?? source.started_at_ms)
+    || startedAtMs
     || fallbackUpdatedAtMs;
   const status = normalizeStatus(source.status, activityItem.status);
   return {
@@ -183,12 +189,15 @@ function itemFromSnapshot(
     threadID,
     subagentID: subagentID || threadID,
     taskName,
+    taskDescription,
     title,
     agentType: payloadString(source, 'agent_type') || payloadString(activityPayload, 'agent_type'),
     status,
     action,
     canOpen: Boolean(threadID),
     parentThreadID: payloadString(source, 'parent_thread_id', 'parentThreadID'),
+    startedAtMs,
+    createdAtMs,
     updatedAtMs,
     itemStatus: activityItem.status,
   };
@@ -213,11 +222,14 @@ function mergeItem(current: FlowerSubagentPanelItem | undefined, incoming: Flowe
     threadID: base.threadID || patch.threadID,
     subagentID: base.subagentID || patch.subagentID,
     taskName: base.taskName || patch.taskName,
+    taskDescription: base.taskDescription || patch.taskDescription,
     title: base.title || patch.title,
     agentType: base.agentType || patch.agentType,
     action: base.action || patch.action,
     canOpen: base.canOpen || patch.canOpen,
     parentThreadID: base.parentThreadID || patch.parentThreadID,
+    startedAtMs: base.startedAtMs || patch.startedAtMs,
+    createdAtMs: base.createdAtMs || patch.createdAtMs,
   };
 }
 

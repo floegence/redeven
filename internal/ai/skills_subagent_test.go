@@ -448,11 +448,12 @@ func TestFloretSubagents_DelegateAndWait(t *testing.T) {
 	prepareSubagentPermissionSnapshot(t, r)
 
 	created, err := r.manageSubagents(context.Background(), map[string]any{
-		"action":     "spawn",
-		"task_name":  "Workspace status summary",
-		"message":    "Summarize current workspace status and cite concrete evidence.",
-		"objective":  "Summarize current workspace status.",
-		"agent_type": "explore",
+		"action":           "spawn",
+		"task_name":        "Workspace status summary",
+		"task_description": "Summarize current workspace status and cite concrete evidence.",
+		"message":          "Summarize current workspace status and cite concrete evidence.",
+		"objective":        "Summarize current workspace status.",
+		"agent_type":       "explore",
 	})
 	if err != nil {
 		t.Fatalf("manageSubagents(spawn): %v", err)
@@ -650,10 +651,11 @@ func TestFloretSubagents_DoNotProjectChildThreadForFlowerNavigation(t *testing.T
 	prepareSubagentPermissionSnapshot(t, r)
 
 	created, err := r.manageSubagents(context.Background(), map[string]any{
-		"action":     "spawn",
-		"task_name":  "Review API contract",
-		"message":    "Review the API contract and return a complete final handoff.",
-		"agent_type": "reviewer",
+		"action":           "spawn",
+		"task_name":        "Review API contract",
+		"task_description": "Review the API contract and return a complete final handoff.",
+		"message":          "Review the API contract and return a complete final handoff.",
+		"agent_type":       "reviewer",
 	})
 	if err != nil {
 		t.Fatalf("manageSubagents(spawn): %v", err)
@@ -999,11 +1001,12 @@ func TestFloretSubagents_InheritsWebSearchResolver(t *testing.T) {
 	prepareSubagentPermissionSnapshot(t, r)
 
 	created, err := r.manageSubagents(context.Background(), map[string]any{
-		"action":     "spawn",
-		"task_name":  "Web source summary",
-		"message":    "Search the web and summarize the results with source URLs.",
-		"objective":  "Search the web and summarize the results.",
-		"agent_type": "explore",
+		"action":           "spawn",
+		"task_name":        "Web source summary",
+		"task_description": "Search the web and summarize the results with source URLs.",
+		"message":          "Search the web and summarize the results with source URLs.",
+		"objective":        "Search the web and summarize the results.",
+		"agent_type":       "explore",
 	})
 	if err != nil {
 		t.Fatalf("manageSubagents(spawn): %v", err)
@@ -1869,12 +1872,20 @@ func TestSubagentsTool_RejectsOldActions(t *testing.T) {
 	}
 }
 
-func TestSubagentsTool_SpawnRequiresMessageAndAgentType(t *testing.T) {
+func TestSubagentsTool_SpawnRequiresDescriptionMessageAndAgentType(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{Log: slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})), AgentHomeDir: t.TempDir()})
 
 	_, err := r.manageSubagents(context.Background(), map[string]any{"action": "spawn", "agent_type": "explore"})
+	if err == nil {
+		t.Fatalf("expected missing task_description to fail")
+	}
+	if !strings.Contains(err.Error(), "spawn requires task_description") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	_, err = r.manageSubagents(context.Background(), map[string]any{"action": "spawn", "task_description": "Summarize workspace.", "agent_type": "explore"})
 	if err == nil {
 		t.Fatalf("expected missing message to fail")
 	}
@@ -1882,7 +1893,7 @@ func TestSubagentsTool_SpawnRequiresMessageAndAgentType(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	_, err = r.manageSubagents(context.Background(), map[string]any{"action": "spawn", "message": "summarize workspace", "agent_type": "invalid"})
+	_, err = r.manageSubagents(context.Background(), map[string]any{"action": "spawn", "task_description": "Summarize workspace.", "message": "summarize workspace", "agent_type": "invalid"})
 	if err == nil {
 		t.Fatalf("expected invalid agent_type to fail")
 	}

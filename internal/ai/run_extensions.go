@@ -155,6 +155,9 @@ func invalidSubagentArguments(code string, msg string, meta map[string]any) erro
 func validateSubagentsArgsByAction(action string, args map[string]any) error {
 	switch action {
 	case subagentActionSpawn:
+		if strings.TrimSpace(anyToString(args["task_description"])) == "" {
+			return invalidSubagentArguments("invalid_arguments.subagents.spawn_requires_task_description", "spawn requires task_description", nil)
+		}
 		if strings.TrimSpace(anyToString(args["message"])) == "" && strings.TrimSpace(anyToString(args["objective"])) == "" {
 			return invalidSubagentArguments("invalid_arguments.subagents.spawn_requires_message", "spawn requires message", nil)
 		}

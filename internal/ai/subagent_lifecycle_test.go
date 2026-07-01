@@ -157,17 +157,18 @@ func (h *recordingFloretHost) SpawnSubAgent(_ context.Context, req flruntime.Spa
 	}
 	now := time.Now()
 	snapshot := flruntime.SubAgentSnapshot{
-		ThreadID:       req.ThreadID,
-		ParentThreadID: req.ParentThreadID,
-		TaskName:       req.TaskName,
-		HostProfileRef: req.HostProfileRef,
-		ForkMode:       req.ForkMode,
-		Status:         flruntime.SubAgentStatusRunning,
-		CreatedAt:      now,
-		UpdatedAt:      now,
-		CanSendInput:   true,
-		CanInterrupt:   true,
-		CanClose:       true,
+		ThreadID:        req.ThreadID,
+		ParentThreadID:  req.ParentThreadID,
+		TaskName:        req.TaskName,
+		TaskDescription: req.TaskDescription,
+		HostProfileRef:  req.HostProfileRef,
+		ForkMode:        req.ForkMode,
+		Status:          flruntime.SubAgentStatusRunning,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		CanSendInput:    true,
+		CanInterrupt:    true,
+		CanClose:        true,
 	}
 	h.snapshots = append(h.snapshots, snapshot)
 	return snapshot, nil
@@ -249,6 +250,7 @@ func (h *recordingFloretHost) ListSubAgentActivityTimeline(_ context.Context, re
 				"thread_id":        threadID,
 				"host_profile_ref": strings.TrimSpace(snapshot.HostProfileRef),
 				"task_name":        strings.TrimSpace(snapshot.TaskName),
+				"task_description": strings.TrimSpace(snapshot.TaskDescription),
 				"title":            firstNonEmptyString(strings.TrimSpace(snapshot.TaskName), threadID),
 				"status":           strings.TrimSpace(string(snapshot.Status)),
 				"last_message":     strings.TrimSpace(snapshot.LastMessage),
@@ -551,9 +553,10 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 	runtime := &floretSubagentRuntime{parent: parent, host: host}
 	spawnToolCallID := "tool_subagents_spawn_identity"
 	if _, err := runtime.spawn(context.Background(), spawnToolCallID, map[string]any{
-		"agent_type": "worker",
-		"task_name":  "identity check",
-		"message":    "check child approval identity",
+		"agent_type":       "worker",
+		"task_name":        "identity check",
+		"task_description": "Check child approval identity.",
+		"message":          "check child approval identity",
 	}); err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
@@ -642,9 +645,10 @@ func TestSubagentSpawnFailureLeavesNoFinalizedChildPermissionSnapshot(t *testing
 	runtime := &floretSubagentRuntime{parent: parent, host: host}
 	spawnToolCallID := "tool_subagents_spawn_failure"
 	if _, err := runtime.spawn(context.Background(), spawnToolCallID, map[string]any{
-		"agent_type": "worker",
-		"task_name":  "failure check",
-		"message":    "fail before child starts",
+		"agent_type":       "worker",
+		"task_name":        "failure check",
+		"task_description": "Fail before child starts.",
+		"message":          "fail before child starts",
 	}); err == nil {
 		t.Fatalf("spawn succeeded, want host error")
 	}
@@ -1281,17 +1285,18 @@ func TestSubagentChildEventRefreshesParentTimeline(t *testing.T) {
 	childID := "child_completed"
 	host := &recordingFloretHost{
 		snapshots: []flruntime.SubAgentSnapshot{{
-			ThreadID:       flruntime.ThreadID(childID),
-			TaskName:       "review ui",
-			ParentThreadID: flruntime.ThreadID("parent-thread"),
-			ParentTurnID:   flruntime.TurnID("parent-turn"),
-			LatestTurnID:   flruntime.TurnID("child-turn"),
-			HostProfileRef: subagentAgentTypeReviewer,
-			Status:         flruntime.SubAgentStatusCompleted,
-			LastMessage:    "review complete",
-			CreatedAt:      now.Add(-2 * time.Second),
-			UpdatedAt:      now,
-			Closed:         true,
+			ThreadID:        flruntime.ThreadID(childID),
+			TaskName:        "review ui",
+			TaskDescription: "Review the Flower tool detail UI and report concise fixes.",
+			ParentThreadID:  flruntime.ThreadID("parent-thread"),
+			ParentTurnID:    flruntime.TurnID("parent-turn"),
+			LatestTurnID:    flruntime.TurnID("child-turn"),
+			HostProfileRef:  subagentAgentTypeReviewer,
+			Status:          flruntime.SubAgentStatusCompleted,
+			LastMessage:     "review complete",
+			CreatedAt:       now.Add(-2 * time.Second),
+			UpdatedAt:       now,
+			Closed:          true,
 		}},
 	}
 	var (
@@ -1369,10 +1374,10 @@ func TestSubagentChildEventRefreshesParentTimeline(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing subagent action sidecar for item %q: %#v", block.Items[0].ItemID, block.SubagentActions)
 	}
-	if action.Action != subagentActionInspect || action.DelegationRuntime != "floret" || action.ContextMode != subagentContextModeMissionOnly {
-		t.Fatalf("subagent action sidecar=%#v, want inspect/floret/mission_only", action)
+	if action.Action != subagentActionInspect || action.DelegationRuntime != "floret" {
+		t.Fatalf("subagent action sidecar=%#v, want inspect/floret", action)
 	}
-	if action.ThreadID != childID || action.Status != subagentStatusCompleted {
+	if action.ThreadID != childID || action.Status != subagentStatusCompleted || strings.TrimSpace(action.TaskDescription) == "" {
 		t.Fatalf("subagent action sidecar did not preserve child presentation metadata: %#v", action)
 	}
 }

@@ -39,7 +39,8 @@ export type ActivitySubagentMessagesRequest = Readonly<{
   threadID: string;
   subagentID: string;
   name: string;
-  task: string;
+  taskDescription: string;
+  agentType: string;
 }>;
 
 function toActivityStatus(status: string | undefined): ActivityStatus {
@@ -604,19 +605,12 @@ function SubagentsDetailBlock(props: {
       threadID: action.thread_id,
       subagentID: action.subagent_id || action.thread_id,
       name: agent.name,
-      task: agent.task,
+      taskDescription: agent.description,
+      agentType: agent.agent_type,
     });
   };
   return (
     <section class="chat-activity-detail-section chat-activity-subagents-section" aria-label="Subagents">
-      <div class="chat-activity-detail-section-head">
-        <div class="chat-activity-detail-section-copy">
-          <div class="chat-activity-detail-section-title">{detail.title}</div>
-          <Show when={detail.task_preview}>
-            {(preview) => <div class="chat-activity-detail-section-meta">{preview()}</div>}
-          </Show>
-        </div>
-      </div>
       <Show when={detail.items.length > 0}>
         <div class="chat-activity-subagents-list" role="list">
           <For each={detail.items}>
@@ -629,8 +623,11 @@ function SubagentsDetailBlock(props: {
                       {[agent.show_status ? agent.status : '', elapsedText(agent)].filter(Boolean).join(' · ')}
                     </span>
                   </div>
-                  <Show when={agent.task && agent.task !== agent.name}>
-                    {(task) => <div class="chat-activity-subagents-item-task">{task()}</div>}
+                  <Show when={agent.description}>
+                    {(description) => <div class="chat-activity-subagents-item-task">{description()}</div>}
+                  </Show>
+                  <Show when={agent.agent_type}>
+                    {(agentType) => <div class="chat-activity-subagents-item-agent">Agent: {agentType()}</div>}
                   </Show>
                 </div>
                 <Show when={agent.open_messages && props.onOpenSubagentMessages}>
