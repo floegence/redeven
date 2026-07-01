@@ -1,7 +1,7 @@
 import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Plus, Settings, Shield, Terminal } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Plus, Settings, Shield, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, FloatingWindow, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -70,9 +70,12 @@ import {
   type FlowerActivityDetailBlock,
   type FlowerActivityDiffFile,
   type FlowerActivityFileAction,
+  type FlowerActivityPresentation,
+  type FlowerActivitySubagentDetailItem,
   type FlowerActivityTitle,
   type FlowerActivityTodoStatus,
 } from './flowerActivityPresentation';
+import { createFlowerActivityDisclosurePresence } from './activityDisclosure';
 import { formatGitPatchLineNumber, getGitPatchRenderSnapshot, type GitPatchRenderedLine } from './gitPatch';
 import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
@@ -719,6 +722,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadRailWidth, setThreadRailWidth] = createSignal(THREAD_RAIL_WIDTH_DEFAULT);
   const [threadRailResizing, setThreadRailResizing] = createSignal(false);
   const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
+  const [activityClockNow, setActivityClockNow] = createSignal(Date.now());
   const [approvalSubmitting, setApprovalSubmitting] = createSignal<Record<string, FlowerApprovalSubmittingState>>({});
   const [composerApprovalError, setComposerApprovalError] = createSignal('');
   const [copiedMessageAction, setCopiedMessageAction] = createSignal('');
@@ -774,12 +778,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const liveStreamGenerations = new Map<string, number>();
   let copiedMessageResetTimer: number | undefined;
   let copiedApprovalResetTimer: number | undefined;
+  let activityClockTimer: number | undefined;
 
   const reducedMotionPreferred = (): boolean => (
     typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches
   );
+
+  onMount(() => {
+    activityClockTimer = window.setInterval(() => setActivityClockNow(Date.now()), 1000);
+  });
+
+  onCleanup(() => {
+    if (activityClockTimer !== undefined) {
+      window.clearInterval(activityClockTimer);
+      activityClockTimer = undefined;
+    }
+  });
 
   const requestTranscriptAnimationFrame = (callback: FrameRequestCallback): number => {
     if (typeof window.requestAnimationFrame === 'function') {
@@ -4724,6 +4740,45 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </div>
   );
 
+  const subagentsDetailForPresentation = (presentation: FlowerActivityPresentation) => (
+    presentation.detailBlocks.find((block): block is Extract<FlowerActivityDetailBlock, { kind: 'subagents' }> => block.kind === 'subagents')?.subagents
+  );
+
+  const subagentElapsedText = (agent: FlowerActivitySubagentDetailItem, mode: 'none' | 'running' | 'final'): string => {
+    const startedAt = agent.started_at_ms || agent.created_at_ms || 0;
+    if (!startedAt || mode === 'none') return '';
+    const endAt = mode === 'final' && agent.updated_at_ms ? agent.updated_at_ms : activityClockNow();
+    const label = formatActivityDuration(Math.max(0, endAt - startedAt));
+    if (!label) return '';
+    return mode === 'running' ? `running ${label}` : label;
+  };
+
+  const subagentInlineElapsed = (presentation: FlowerActivityPresentation): string => {
+    const detail = subagentsDetailForPresentation(presentation);
+    if (!detail || detail.elapsed_mode === 'none') return '';
+    const first = detail.items.find((agent) => agent.started_at_ms || agent.created_at_ms);
+    return first ? subagentElapsedText(first, detail.elapsed_mode) : '';
+  };
+
+  const openSubagentMessages = (agent: FlowerActivitySubagentDetailItem) => {
+    const action = agent.open_messages;
+    if (!action?.thread_id) return;
+    void openSubagentDetail({
+      key: action.thread_id,
+      threadID: action.thread_id,
+      subagentID: action.subagent_id || action.thread_id,
+      taskName: agent.task,
+      title: agent.name,
+      agentType: '',
+      status: 'unknown',
+      action: 'inspect',
+      canOpen: true,
+      parentThreadID: selectedThreadID(),
+      updatedAtMs: agent.updated_at_ms || agent.started_at_ms || agent.created_at_ms || activityClockNow(),
+      itemStatus: 'success',
+    });
+  };
+
   const errorDetailBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'error' }>) => (
     <section class="flower-activity-error-panel" aria-label="Failure reason">
       <div class="flower-activity-error-message">{block.error.message}</div>
@@ -4732,45 +4787,39 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const subagentsDetailBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'subagents' }>) => {
     const detail = block.subagents;
-    const meta = [detail.action, detail.agent_type, detail.status, detail.context_mode].filter(Boolean);
     return (
       <section class="flower-activity-subagents-panel" aria-label="Subagents">
         <div class="flower-activity-subagents-head">
-          <div class="flower-activity-subagents-title">{detail.task || detail.action || 'Subagents'}</div>
-          <Show when={meta.length > 0}>
-            <div class="flower-activity-subagents-meta">
-              <For each={meta}>{(value) => <span>{value}</span>}</For>
-            </div>
+          <div class="flower-activity-subagents-title">{detail.title}</div>
+          <Show when={detail.task_preview}>
+            {(preview) => <div class="flower-activity-subagents-preview">{preview()}</div>}
           </Show>
         </div>
-        <Show when={detail.summary}>
-          {(summary) => <div class="flower-activity-subagents-summary">{summary()}</div>}
-        </Show>
-        <Show when={detail.counts.length > 0}>
-          <div class="flower-activity-subagents-counts" aria-label="Subagent counts">
-            <For each={detail.counts}>
-              {(line) => (
-                <span class="flower-activity-subagents-chip">
-                  <span>{line.label}</span>
-                  <strong>{line.value}</strong>
-                </span>
-              )}
-            </For>
-          </div>
-        </Show>
         <Show when={detail.items.length > 0}>
           <div class="flower-activity-subagents-list" role="list">
             <For each={detail.items}>
               {(agent) => (
                 <div class="flower-activity-subagents-item" role="listitem">
                   <div class="flower-activity-subagents-item-main">
-                    <span class="flower-activity-subagents-item-title">{agent.title || agent.task || 'Subagent'}</span>
-                    <span class="flower-activity-subagents-item-meta">
-                      {[agent.agent_type, agent.status, agent.context_mode].filter(Boolean).join(' · ')}
-                    </span>
+                    <div class="flower-activity-subagents-item-head">
+                      <span class="flower-activity-subagents-item-title">{agent.name}</span>
+                      <span class="flower-activity-subagents-item-meta">
+                        {[agent.show_status ? agent.status : '', subagentElapsedText(agent, detail.elapsed_mode)].filter(Boolean).join(' · ')}
+                      </span>
+                    </div>
+                    <Show when={agent.task && agent.task !== agent.name}>
+                      {(task) => <div class="flower-activity-subagents-item-task">{task()}</div>}
+                    </Show>
                   </div>
-                  <Show when={agent.handoff || agent.progress}>
-                    {(body) => <div class="flower-activity-subagents-item-note">{body()}</div>}
+                  <Show when={agent.open_messages}>
+                    <button
+                      type="button"
+                      class="flower-activity-subagents-open"
+                      onClick={() => openSubagentMessages(agent)}
+                    >
+                      <ExternalLink class="h-3.5 w-3.5" />
+                      <span>{agent.open_messages!.label}</span>
+                    </button>
                   </Show>
                 </div>
               )}
@@ -4831,31 +4880,51 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ) => {
     const open = createMemo(() => activityItemOpen(timeline(), item(), blockKey(), index()));
     const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, { subagents: subagentsCopy() }, { subagentAction: activitySubagentAction(timeline(), item()) }));
+    const subagentsDetail = createMemo(() => subagentsDetailForPresentation(presentation()));
+    const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
+    const expandable = createMemo(() => hasDetails() && !activityItemAwaitingApproval(item()));
+    let toggleButtonRef: HTMLButtonElement | undefined;
+    let detailPanelRef: HTMLDivElement | undefined;
+    const disclosure = createFlowerActivityDisclosurePresence(
+      () => open() && expandable(),
+      {
+        onBeforeClose: () => {
+          if (detailPanelRef && detailPanelRef.contains(document.activeElement)) {
+            toggleButtonRef?.focus();
+          }
+        },
+      },
+    );
     const rowFileAction = createMemo(() => {
       const value = presentation();
       return value.primaryAction ?? (value.title.kind === 'file' ? disabledFileAction(value.title.display_name) : null);
     });
     const displayStatus = createMemo(() => item().status);
-    const isReadOnly = createMemo(() => activityItemAwaitingApproval(item()));
     const duration = createMemo(() => {
+      const subagentDuration = subagentInlineElapsed(presentation());
+      if (subagentDuration) return subagentDuration;
       const value = item();
       return formatActivityDuration((value.started_at_unix_ms && value.ended_at_unix_ms
         ? value.ended_at_unix_ms - value.started_at_unix_ms
         : undefined) ?? timeline().summary.duration_ms);
     });
+    const showStatus = createMemo(() => !subagentsDetail());
     return (
       <div
-        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`)}
+        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`, subagentsDetail() && 'flower-activity-inline-row-subagents')}
         data-flower-activity-item-id={item().item_id}
         data-flower-activity-status={displayStatus()}
+        data-state={disclosure.state()}
         aria-label={activityItemAriaLabel(item(), timeline())}
       >
         <div class="flower-activity-inline-line">
           <button
+            ref={toggleButtonRef}
             type="button"
-            class="flower-activity-inline-button"
-            aria-expanded={isReadOnly() ? undefined : open()}
-            onClick={isReadOnly() ? undefined : () => toggleActivityItem(timeline(), item(), blockKey(), index())}
+            class={cn('flower-activity-inline-button', !expandable() && 'flower-activity-inline-button-static')}
+            aria-expanded={expandable() ? open() : undefined}
+            disabled={!expandable()}
+            onClick={expandable() ? () => toggleActivityItem(timeline(), item(), blockKey(), index()) : undefined}
           >
             <span class="flower-activity-inline-icon">{statusIcon(displayStatus())}</span>
             <span class="flower-activity-inline-copy">
@@ -4867,10 +4936,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <Show when={duration()}>
               {(value) => <span class="flower-activity-inline-duration">{value()}</span>}
             </Show>
-            <span class={cn('flower-activity-inline-status', `flower-activity-inline-status-${displayStatus()}`)}>
-              {copy().chat.toolStatuses[displayStatus()]}
-            </span>
-            <Show when={!isReadOnly()}>
+            <Show when={showStatus()}>
+              <span class={cn('flower-activity-inline-status', `flower-activity-inline-status-${displayStatus()}`)}>
+                {copy().chat.toolStatuses[displayStatus()]}
+              </span>
+            </Show>
+            <Show when={expandable()}>
               <ChevronDown class={cn('flower-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-activity-inline-chevron-open')} />
             </Show>
           </button>
@@ -4878,8 +4949,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             {(action) => fileActionButtons(messageID(), blockIndex(), item().item_id, action())}
           </Show>
         </div>
-        <Show when={open() && !isReadOnly()}>
-          <div class="flower-activity-inline-details">
+        <Show when={disclosure.mounted() && expandable()}>
+          <div
+            ref={detailPanelRef}
+            class="flower-activity-inline-details"
+            data-state={disclosure.state()}
+          >
             <For each={presentation().detailBlocks}>
               {(block) => activityDetailBlock(messageID(), blockIndex(), item().item_id, block, trimString(timeline().run_id))}
             </For>
@@ -5221,20 +5296,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const subagentStatusLabel = (status: FlowerSubagentPanelStatus): string => subagentsCopy().statusLabels[status] ?? subagentsCopy().statusLabels.unknown;
-  const subagentTypeLabel = (agentType: string): string => {
-    const value = trimString(agentType);
-    const labels = subagentsCopy().typeLabels;
-    switch (value) {
-      case 'explore':
-        return labels.explore;
-      case 'worker':
-        return labels.worker;
-      case 'reviewer':
-        return labels.reviewer;
-      default:
-        return labels.unknown;
-    }
-  };
   const formatSubagentRelativeTime = (updatedAtMs: number): string => {
     const diffMs = Date.now() - updatedAtMs;
     const seconds = Math.round(diffMs / 1000);
@@ -5301,9 +5362,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentDetailMeta = createMemo(() => {
     const detail = subagentDetail();
     const item = activeSubagentItem();
-    const agentType = subagentTypeLabel(detail?.summary.agent_type || item?.agentType || '');
-    const id = trimString(detail?.summary.thread_id || item?.threadID || item?.subagentID || activeSubagentID());
-    return [agentType, id].filter(Boolean).join(' · ');
+    return trimString(detail?.summary.task_name || item?.taskName || '');
   });
   const subagentDetailHasRunningActivity = createMemo(() => (
     subagentDetail()?.timeline.some((row) => row.activity?.items.some((item) => item.status === 'running')) ?? false

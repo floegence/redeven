@@ -1042,13 +1042,16 @@ func TestFloretToolResultActivityProjectsPublicSubagentDisplayPayload(t *testing
 	if anyToString(activity.Payload["action"]) != "close" || anyToString(item["status"]) != "canceled" {
 		t.Fatalf("activity lost close lifecycle state: %#v", activity.Payload)
 	}
-	if anyToString(item["task_name"]) != "Review prompt contract" || anyToString(item["agent_type"]) != "reviewer" {
+	if anyToString(item["task_name"]) != "Review prompt contract" {
 		t.Fatalf("activity lost subagent display fields: %#v", item)
 	}
-	for _, field := range []string{"thread_id", "subagent_id", "last_message", "result_digest", "waiting_prompt", "queued_inputs", "can_send_input", "can_interrupt", "can_close", "detail_ref"} {
+	for _, field := range []string{"thread_id", "subagent_id", "agent_type", "context_mode", "last_message", "result_digest", "waiting_prompt", "queued_inputs", "can_send_input", "can_interrupt", "can_close", "detail_ref"} {
 		if _, ok := item[field]; ok {
 			t.Fatalf("activity item retained non-display field %s: %#v", field, item)
 		}
+	}
+	if _, ok := activity.Payload["details"]; ok {
+		t.Fatalf("activity retained generic completion details: %#v", activity.Payload)
 	}
 	if activity.Payload["truncated"] != true {
 		t.Fatalf("activity payload truncated flag=%#v, want true", activity.Payload["truncated"])

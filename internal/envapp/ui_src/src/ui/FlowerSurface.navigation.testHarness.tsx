@@ -38,6 +38,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Clock: Icon,
     Code: Icon,
     Copy: Icon,
+    ExternalLink: Icon,
     FileText: Icon,
     Folder: Icon,
     FolderOpen: Icon,

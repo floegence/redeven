@@ -655,6 +655,51 @@ function mapActivityFileActions(raw: unknown): Readonly<Record<string, FlowerAct
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+type FlowerActivitySubagentActionItem = NonNullable<FlowerActivitySubagentAction['items']>[number];
+
+function mapActivitySubagentActionItem(raw: unknown, actionKey: string, itemIndex: number): FlowerActivitySubagentActionItem | null {
+  const record = plainRecordValue(raw);
+  if (!record) return null;
+  const allowed = new Set([
+    'thread_id',
+    'subagent_id',
+    'task_name',
+    'title',
+    'agent_type',
+    'context_mode',
+    'status',
+    'started_at_ms',
+    'created_at_ms',
+    'updated_at_ms',
+  ]);
+  for (const key of Object.keys(record)) {
+    if (!allowed.has(key)) {
+      throw new Error(`Flower contract error: activity_timeline.subagent_actions.${actionKey}.items.${itemIndex}.${key} is not part of the subagent action item contract.`);
+    }
+  }
+  const out = {
+    ...(trim(record.thread_id) ? { thread_id: trim(record.thread_id) } : {}),
+    ...(trim(record.subagent_id) ? { subagent_id: trim(record.subagent_id) } : {}),
+    ...(trim(record.task_name) ? { task_name: trim(record.task_name) } : {}),
+    ...(trim(record.title) ? { title: trim(record.title) } : {}),
+    ...(trim(record.agent_type) ? { agent_type: trim(record.agent_type) } : {}),
+    ...(trim(record.context_mode) ? { context_mode: trim(record.context_mode) } : {}),
+    ...(trim(record.status) ? { status: trim(record.status) } : {}),
+    ...(positiveInteger(record.started_at_ms) ? { started_at_ms: positiveInteger(record.started_at_ms) } : {}),
+    ...(positiveInteger(record.created_at_ms) ? { created_at_ms: positiveInteger(record.created_at_ms) } : {}),
+    ...(positiveInteger(record.updated_at_ms) ? { updated_at_ms: positiveInteger(record.updated_at_ms) } : {}),
+  };
+  return Object.keys(out).length > 0 ? out : null;
+}
+
+function mapActivitySubagentActionItems(raw: unknown, actionKey: string): FlowerActivitySubagentAction['items'] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw
+    .map((value, index) => mapActivitySubagentActionItem(value, actionKey, index))
+    .filter((value): value is NonNullable<ReturnType<typeof mapActivitySubagentActionItem>> => value !== null);
+  return out.length > 0 ? out : undefined;
+}
+
 function mapActivitySubagentAction(raw: unknown, actionKey: string): FlowerActivitySubagentAction | null {
   const record = plainRecordValue(raw);
   if (!record) return null;
@@ -670,13 +715,17 @@ function mapActivitySubagentAction(raw: unknown, actionKey: string): FlowerActiv
     'agent_type',
     'context_mode',
     'status',
+    'started_at_ms',
+    'created_at_ms',
     'updated_at_ms',
+    'items',
   ]);
   for (const key of Object.keys(record)) {
     if (!allowed.has(key)) {
       throw new Error(`Flower contract error: activity_timeline.subagent_actions.${actionKey}.${key} is not part of the subagent action contract.`);
     }
   }
+  const items = mapActivitySubagentActionItems(record.items, actionKey);
   const out = {
     ...(trim(record.operation) ? { operation: trim(record.operation) } : {}),
     ...(trim(record.action) ? { action: trim(record.action) } : {}),
@@ -689,7 +738,10 @@ function mapActivitySubagentAction(raw: unknown, actionKey: string): FlowerActiv
     ...(trim(record.agent_type) ? { agent_type: trim(record.agent_type) } : {}),
     ...(trim(record.context_mode) ? { context_mode: trim(record.context_mode) } : {}),
     ...(trim(record.status) ? { status: trim(record.status) } : {}),
+    ...(positiveInteger(record.started_at_ms) ? { started_at_ms: positiveInteger(record.started_at_ms) } : {}),
+    ...(positiveInteger(record.created_at_ms) ? { created_at_ms: positiveInteger(record.created_at_ms) } : {}),
     ...(positiveInteger(record.updated_at_ms) ? { updated_at_ms: positiveInteger(record.updated_at_ms) } : {}),
+    ...(items ? { items } : {}),
   };
   return Object.keys(out).length > 0 ? out : null;
 }
