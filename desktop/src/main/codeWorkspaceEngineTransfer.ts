@@ -9,7 +9,7 @@ import {
 import type { CodeWorkspaceEngineArtifactManifest } from './codeWorkspaceEnginePackageCache';
 
 export const DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024;
-export const DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_ARCHIVE_LIMIT = 256 * 1024 * 1024;
+export const DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_ARCHIVE_LIMIT = 2 * 1024 * 1024 * 1024;
 
 export type CodeWorkspaceEngineImportSession = Readonly<{
   upload_id: string;

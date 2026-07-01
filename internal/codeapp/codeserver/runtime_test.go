@@ -107,6 +107,36 @@ func TestRuntimeManagerStatusKeepsSelectedManagedRuntimeVisibleWhenOverrideIsAct
 	}
 }
 
+func TestWorkspaceEngineManifestAcceptsTwoGiBArchiveLimit(t *testing.T) {
+	manifest, _ := writeFakeWorkspaceEngineArchive(t, "4.126.0", t.TempDir())
+	manifest.Archive.SizeBytes = defaultWorkspaceEngineArchiveLimit
+
+	if err := validateWorkspaceEngineManifest(manifest, currentWorkspaceEnginePlatform()); err != nil {
+		t.Fatalf("validateWorkspaceEngineManifest() error = %v", err)
+	}
+}
+
+func TestWorkspaceEngineManifestRejectsArchiveOverTwoGiBLimit(t *testing.T) {
+	manifest, _ := writeFakeWorkspaceEngineArchive(t, "4.126.0", t.TempDir())
+	manifest.Archive.SizeBytes = defaultWorkspaceEngineArchiveLimit + 1
+
+	err := validateWorkspaceEngineManifest(manifest, currentWorkspaceEnginePlatform())
+	want := fmt.Sprintf("workspace engine archive is too large: %d bytes", defaultWorkspaceEngineArchiveLimit+1)
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("validateWorkspaceEngineManifest() error = %v, want containing %q", err, want)
+	}
+}
+
+func TestExtractWorkspaceEngineArchiveRejectsExpandedDataOverTwoGiBLimit(t *testing.T) {
+	archivePath := writeWorkspaceEngineArchiveHeaderOnly(t, defaultWorkspaceEngineArchiveLimit+1)
+
+	err := extractWorkspaceEngineArchive(context.Background(), archivePath, t.TempDir())
+	want := fmt.Sprintf("workspace engine archive extracts too much data: %d bytes", defaultWorkspaceEngineArchiveLimit+1)
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("extractWorkspaceEngineArchive() error = %v, want containing %q", err, want)
+	}
+}
+
 func TestRuntimeManagerInstallPromotesSharedVersionAndSelectsEnvironment(t *testing.T) {
 	stateDir := t.TempDir()
 	stateRoot := t.TempDir()
@@ -803,4 +833,31 @@ func appendArchiveToSession(t *testing.T, mgr *RuntimeManager, uploadID string, 
 	if _, err := mgr.AppendImportChunk(context.Background(), uploadID, 0, f); err != nil {
 		t.Fatalf("AppendImportChunk() error = %v", err)
 	}
+}
+
+func writeWorkspaceEngineArchiveHeaderOnly(t *testing.T, size int64) string {
+	t.Helper()
+	archivePath := filepath.Join(t.TempDir(), "oversized-code-server.tar.gz")
+	file, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("create archive: %v", err)
+	}
+	gz := gzip.NewWriter(file)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "code-server-oversized/bin/code-server",
+		Typeflag: tar.TypeReg,
+		Mode:     0o755,
+		Size:     size,
+	}); err != nil {
+		t.Fatalf("write tar header: %v", err)
+	}
+	// The extractor rejects by header-declared size before copying file data.
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close archive: %v", err)
+	}
+	return archivePath
 }
