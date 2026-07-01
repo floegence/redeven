@@ -11,6 +11,7 @@ import {
   adapter,
   decision,
   deferred,
+  flush,
   inputRequest,
   activityItem,
   activityTimeline,
@@ -26,6 +27,12 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+
+function selectedThreadReady(root: ParentNode, threadID: string): boolean {
+  const surface = root.querySelector('#redeven-flower-surface');
+  return surface?.getAttribute('data-flower-selected-thread-id') === threadID
+    && surface?.getAttribute('data-flower-selected-thread-loading') === 'false';
+}
 
 function withLaunchUserMessageID<T extends { readonly messages: readonly { readonly id: string }[] }>(threadValue: T, currentUserID: string, nextUserID: string): T {
   return {
@@ -124,9 +131,10 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-permission-existing"] button')));
     (runtime.querySelector('[data-thread-id="thread-permission-existing"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger[data-permission-type="approval_required"]')));
+    await waitFor(() => selectedThreadReady(runtime, 'thread-permission-existing'));
+    await waitFor(() => Boolean(runtime.querySelector('button.flower-permission-trigger[data-permission-type="approval_required"]')));
 
-    const trigger = runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement;
+    const trigger = runtime.querySelector('button.flower-permission-trigger') as HTMLButtonElement;
     expect(trigger.disabled).toBe(false);
     trigger.click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
@@ -134,7 +142,58 @@ describe('FlowerSurface navigation launch/send', () => {
     await waitFor(() => setThreadPermissionType.mock.calls.length === 1);
 
     expect(setThreadPermissionType).toHaveBeenCalledWith('thread-permission-existing', 'full_access');
-    await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'full_access');
+    await waitFor(() => runtime.querySelector('button.flower-permission-trigger')?.getAttribute('data-permission-type') === 'full_access');
+  });
+
+  it('does not reselect a thread when a permission patch resolves after switching away', async () => {
+    const baseThread = thread({
+      thread_id: 'thread-permission-slow-source',
+      title: 'Permission slow source',
+      permission_type: 'approval_required',
+    });
+    const targetThread = thread({
+      thread_id: 'thread-permission-switch-target',
+      title: 'Permission switch target',
+      permission_type: 'approval_required',
+      messages: [{
+        id: 'm-permission-switch-target',
+        role: 'assistant',
+        content: 'Target thread remains selected.',
+        status: 'complete',
+        created_at_ms: 5,
+      }],
+    });
+    const updatedThread = {
+      ...baseThread,
+      permission_type: 'full_access' as const,
+      updated_at_ms: baseThread.updated_at_ms + 1,
+    };
+    const permissionPatch = deferred<FlowerLiveBootstrap>();
+    const setThreadPermissionType = vi.fn(async () => permissionPatch.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [targetThread, baseThread]),
+      loadThread: vi.fn(async (threadID: string) => liveBootstrap(threadID === targetThread.thread_id ? targetThread : baseThread)),
+      setThreadPermissionType,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-permission-slow-source"] button')));
+    (runtime.querySelector('[data-thread-id="thread-permission-slow-source"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-permission-slow-source'));
+    (runtime.querySelector('button.flower-permission-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
+    (runtime.querySelector('.flower-permission-menu-item[data-permission-type="full_access"]') as HTMLButtonElement).click();
+    await waitFor(() => setThreadPermissionType.mock.calls.length === 1);
+
+    (runtime.querySelector('[data-thread-id="thread-permission-switch-target"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-permission-switch-target'));
+
+    permissionPatch.resolve(liveBootstrap(updatedThread));
+    await flush();
+
+    expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('thread-permission-switch-target');
+    expect(runtime.textContent).toContain('Target thread remains selected.');
+    expect(runtime.querySelector('button.flower-permission-trigger')?.getAttribute('data-permission-type')).toBe('approval_required');
   });
 
   it('keeps the permission selector available while a thread is running', async () => {
@@ -162,11 +221,11 @@ describe('FlowerSurface navigation launch/send', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-permission-running"] button')));
     (runtime.querySelector('[data-thread-id="thread-permission-running"] button') as HTMLButtonElement).click();
     await waitFor(() => {
-      const trigger = runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement | null;
+      const trigger = runtime.querySelector('button.flower-permission-trigger') as HTMLButtonElement | null;
       return !!trigger && trigger.getAttribute('data-permission-type') === 'approval_required' && !trigger.disabled;
     });
 
-    (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
+    (runtime.querySelector('button.flower-permission-trigger') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
     (runtime.querySelector('.flower-permission-menu-item[data-permission-type="readonly"]') as HTMLButtonElement).click();
     await waitFor(() => setThreadPermissionType.mock.calls.length === 1);
@@ -192,14 +251,14 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-permission-failed"] button')));
     (runtime.querySelector('[data-thread-id="thread-permission-failed"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger[data-permission-type="approval_required"]')));
+    await waitFor(() => Boolean(runtime.querySelector('button.flower-permission-trigger[data-permission-type="approval_required"]')));
 
-    (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
+    (runtime.querySelector('button.flower-permission-trigger') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
     (runtime.querySelector('.flower-permission-menu-item[data-permission-type="full_access"]') as HTMLButtonElement).click();
     await waitFor(() => runtime.textContent?.includes('permission denied') === true);
 
-    expect(runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type')).toBe('approval_required');
+    expect(runtime.querySelector('button.flower-permission-trigger')?.getAttribute('data-permission-type')).toBe('approval_required');
     expect(runtime.textContent).toContain('Flower could not save permission.');
   });
 
@@ -226,11 +285,11 @@ describe('FlowerSurface navigation launch/send', () => {
       launchTurn,
     });
 
-    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger[data-permission-type="approval_required"]')));
-    (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('button.flower-permission-trigger[data-permission-type="approval_required"]')));
+    (runtime.querySelector('button.flower-permission-trigger') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
     (runtime.querySelector('.flower-permission-menu-item[data-permission-type="full_access"]') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'full_access');
+    await waitFor(() => runtime.querySelector('button.flower-permission-trigger')?.getAttribute('data-permission-type') === 'full_access');
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'start with full access';
@@ -943,6 +1002,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-compact-keyboard-suggest"] button')));
     (runtime.querySelector('[data-thread-id="thread-compact-keyboard-suggest"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-compact-keyboard-suggest'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -1026,6 +1086,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-compact-pending-clears"] button')));
     (runtime.querySelector('[data-thread-id="thread-compact-pending-clears"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-compact-pending-clears'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -1230,6 +1291,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-compact-already-running"] button')));
     (runtime.querySelector('[data-thread-id="thread-compact-already-running"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-compact-already-running'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -1283,6 +1345,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-idle-compact-pending-send"] button')));
     (runtime.querySelector('[data-thread-id="thread-idle-compact-pending-send"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-idle-compact-pending-send'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -1743,6 +1806,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-repeat-pending"] button')));
     (runtime.querySelector('[data-thread-id="thread-repeat-pending"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-repeat-pending'));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'continue';
@@ -1846,6 +1910,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-pending-before-assistant"] button')));
     (runtime.querySelector('[data-thread-id="thread-pending-before-assistant"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-pending-before-assistant'));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'start work';

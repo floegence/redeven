@@ -307,6 +307,7 @@ describe('FlowerSurface navigation activity', () => {
 
     (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
     await waitFor(() => selectedThreadID(runtime) === 'thread-parent-subagents');
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-subagents-spawn"]')));
     (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-subagents-dropdown')));
     (runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]') as HTMLButtonElement).click();
