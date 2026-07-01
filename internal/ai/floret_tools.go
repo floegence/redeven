@@ -1412,10 +1412,10 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 	if status != "" {
 		payload["status"] = status
 	}
-	if summary := strings.TrimSpace(result.Summary); summary != "" {
+	if summary := strings.TrimSpace(result.Summary); summary != "" && !isNonInformativeToolActivityText(summary) {
 		payload["summary"] = summary
 	}
-	if details := strings.TrimSpace(result.Details); details != "" {
+	if details := strings.TrimSpace(result.Details); details != "" && !isNonInformativeToolActivityText(details) {
 		payload["details"] = details
 	}
 	if result.Truncated || readBoolField(rawPayload, "truncated") || readBoolField(payload, "truncated") || (!isOKFToolName(toolName) && dataTruncated) {
@@ -1439,6 +1439,16 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 		Payload:  payload,
 	}
 	return contractSafeActivityPresentationForTool(toolName, activity), nil
+}
+
+func isNonInformativeToolActivityText(value string) bool {
+	normalized := strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(value))), " ")
+	switch normalized {
+	case "tool execution completed", "tool completed", "execution completed", "completed", "success", "ok", "done":
+		return true
+	default:
+		return false
+	}
 }
 
 func publicActivityPayloadForTool(toolName string, payload map[string]any) map[string]any {

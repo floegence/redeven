@@ -3582,11 +3582,30 @@ html.dark .flower-component-shell {
 
 .flower-activity-inline-chevron {
   color: currentColor;
-  transition: transform 140ms ease;
+  transition: transform 160ms ease;
 }
 
 .flower-activity-inline-chevron-open {
   transform: rotate(180deg);
+}
+
+.flower-activity-inline-row-subagents .flower-activity-inline-button {
+  grid-template-columns: 1rem minmax(0, 1fr) auto 1rem;
+}
+
+.flower-activity-inline-row-subagents .flower-activity-inline-title,
+.flower-activity-inline-row-subagents .flower-activity-inline-detail,
+.flower-activity-inline-row-subagents .flower-activity-inline-duration {
+  font-family: var(--font-sans, inherit);
+}
+
+.flower-activity-inline-row-subagents .flower-activity-inline-title {
+  font-weight: 680;
+}
+
+.flower-activity-inline-row-subagents .flower-activity-inline-detail {
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
+  font-weight: 520;
 }
 
 @keyframes flower-activity-running-sheen {
@@ -3669,8 +3688,8 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-inline-details {
-  max-height: 20rem;
-  margin: 0.125rem 0 0.25rem 1.375rem;
+  max-height: 0;
+  margin: 0 0 0 1.375rem;
   overflow: auto;
   border-left: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
   padding-left: 0.625rem;
@@ -3678,7 +3697,22 @@ html.dark .flower-component-shell {
   font-family: var(--font-sans, inherit);
   font-size: 0.6875rem;
   line-height: 1.45;
+  opacity: 0;
   overflow-wrap: anywhere;
+  transform: translateY(-0.125rem);
+  transition:
+    max-height 180ms ease,
+    margin 180ms ease,
+    opacity 160ms ease,
+    transform 180ms ease;
+}
+
+.flower-activity-inline-details[data-state='opening'],
+.flower-activity-inline-details[data-state='open'] {
+  max-height: min(42rem, 72vh);
+  margin: 0.125rem 0 0.25rem 1.375rem;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .flower-activity-inline-detail-line + .flower-activity-inline-detail-line {
@@ -3711,7 +3745,7 @@ html.dark .flower-component-shell {
 .flower-activity-subagents-panel {
   display: grid;
   min-width: 0;
-  gap: 0.375rem;
+  gap: 0.5rem;
   font-family: var(--font-sans, inherit);
 }
 
@@ -3732,13 +3766,15 @@ html.dark .flower-component-shell {
 
 .flower-activity-subagents-head,
 .flower-activity-subagents-item {
-  display: grid;
   min-width: 0;
+}
+
+.flower-activity-subagents-head {
+  display: grid;
   gap: 0.1875rem;
 }
 
-.flower-activity-subagents-title,
-.flower-activity-subagents-item-title {
+.flower-activity-subagents-title {
   min-width: 0;
   color: color-mix(in srgb, var(--foreground) 82%, var(--muted-foreground) 18%);
   font-size: 0.75rem;
@@ -3747,68 +3783,88 @@ html.dark .flower-component-shell {
   overflow-wrap: anywhere;
 }
 
-.flower-activity-subagents-meta,
-.flower-activity-subagents-counts {
-  display: flex;
+.flower-activity-subagents-preview,
+.flower-activity-subagents-item-task {
   min-width: 0;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
-.flower-activity-subagents-meta span,
-.flower-activity-subagents-chip {
-  display: inline-flex;
-  max-width: 100%;
-  align-items: center;
-  gap: 0.25rem;
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 66%, transparent);
-  border-radius: 999px;
-  padding: 0.0625rem 0.375rem;
-  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
-  font-size: 0.65625rem;
-  font-weight: 650;
-  line-height: 1.35;
-}
-
-.flower-activity-subagents-chip strong {
-  color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);
-  font-weight: 760;
-}
-
-.flower-activity-subagents-summary,
-.flower-activity-subagents-item-note {
-  min-width: 0;
-  color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%);
+  color: color-mix(in srgb, var(--foreground) 68%, var(--muted-foreground) 32%);
   font-size: 0.71875rem;
-  line-height: 1.45;
+  line-height: 1.4;
   overflow-wrap: anywhere;
-  white-space: pre-wrap;
 }
 
 .flower-activity-subagents-list {
   display: grid;
   min-width: 0;
-  gap: 0.3125rem;
+  gap: 0.375rem;
 }
 
 .flower-activity-subagents-item {
-  border-left: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
-  padding-left: 0.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.5rem;
+  border-left: 1px solid color-mix(in srgb, var(--primary) 24%, var(--flower-chat-surface-border));
+  padding-left: 0.5625rem;
 }
 
 .flower-activity-subagents-item-main {
   display: grid;
   min-width: 0;
-  gap: 0.0625rem;
+  gap: 0.125rem;
+}
+
+.flower-activity-subagents-item-head {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.flower-activity-subagents-item-title {
+  min-width: 0;
+  color: color-mix(in srgb, var(--foreground) 86%, var(--muted-foreground) 14%);
+  font-size: 0.75rem;
+  font-weight: 720;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .flower-activity-subagents-item-meta {
-  min-width: 0;
+  flex: 0 0 auto;
   color: color-mix(in srgb, var(--muted-foreground) 80%, transparent);
   font-size: 0.65625rem;
-  font-weight: 620;
+  font-weight: 650;
   line-height: 1.35;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+}
+
+.flower-activity-subagents-open {
+  display: inline-flex;
+  min-height: 1.5rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--background) 72%, transparent);
+  color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%);
+  padding: 0.125rem 0.4375rem;
+  font: inherit;
+  font-size: 0.6875rem;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.flower-activity-subagents-open:hover,
+.flower-activity-subagents-open:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--flower-chat-surface-border));
+  background: color-mix(in srgb, var(--primary) 6%, var(--background));
+  color: var(--foreground);
+  outline: none;
 }
 
 .flower-activity-terminal-panel {
@@ -6647,5 +6703,14 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     content: none !important;
     opacity: 0 !important;
     background: none !important;
+  }
+
+  .flower-activity-inline-chevron,
+  .flower-activity-inline-details {
+    transition: none !important;
+  }
+
+  .flower-activity-inline-details {
+    transform: none !important;
   }
 }

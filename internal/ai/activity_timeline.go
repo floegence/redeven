@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 
 	"github.com/floegence/floret/observation"
@@ -78,18 +79,34 @@ func cloneFlowerActivityFileActions(in map[string]FlowerActivityFileAction) map[
 }
 
 type FlowerActivitySubagentAction struct {
-	Operation         string `json:"operation,omitempty"`
-	Action            string `json:"action,omitempty"`
-	DelegationRuntime string `json:"delegation_runtime,omitempty"`
-	ThreadID          string `json:"thread_id,omitempty"`
-	SubagentID        string `json:"subagent_id,omitempty"`
-	ParentThreadID    string `json:"parent_thread_id,omitempty"`
-	TaskName          string `json:"task_name,omitempty"`
-	Title             string `json:"title,omitempty"`
-	AgentType         string `json:"agent_type,omitempty"`
-	ContextMode       string `json:"context_mode,omitempty"`
-	Status            string `json:"status,omitempty"`
-	UpdatedAtMS       int64  `json:"updated_at_ms,omitempty"`
+	Operation         string                             `json:"operation,omitempty"`
+	Action            string                             `json:"action,omitempty"`
+	DelegationRuntime string                             `json:"delegation_runtime,omitempty"`
+	ThreadID          string                             `json:"thread_id,omitempty"`
+	SubagentID        string                             `json:"subagent_id,omitempty"`
+	ParentThreadID    string                             `json:"parent_thread_id,omitempty"`
+	TaskName          string                             `json:"task_name,omitempty"`
+	Title             string                             `json:"title,omitempty"`
+	AgentType         string                             `json:"agent_type,omitempty"`
+	ContextMode       string                             `json:"context_mode,omitempty"`
+	Status            string                             `json:"status,omitempty"`
+	StartedAtMS       int64                              `json:"started_at_ms,omitempty"`
+	CreatedAtMS       int64                              `json:"created_at_ms,omitempty"`
+	UpdatedAtMS       int64                              `json:"updated_at_ms,omitempty"`
+	Items             []FlowerActivitySubagentActionItem `json:"items,omitempty"`
+}
+
+type FlowerActivitySubagentActionItem struct {
+	ThreadID    string `json:"thread_id,omitempty"`
+	SubagentID  string `json:"subagent_id,omitempty"`
+	TaskName    string `json:"task_name,omitempty"`
+	Title       string `json:"title,omitempty"`
+	AgentType   string `json:"agent_type,omitempty"`
+	ContextMode string `json:"context_mode,omitempty"`
+	Status      string `json:"status,omitempty"`
+	StartedAtMS int64  `json:"started_at_ms,omitempty"`
+	CreatedAtMS int64  `json:"created_at_ms,omitempty"`
+	UpdatedAtMS int64  `json:"updated_at_ms,omitempty"`
 }
 
 func cloneFlowerActivitySubagentActions(in map[string]FlowerActivitySubagentAction) map[string]FlowerActivitySubagentAction {
@@ -113,10 +130,35 @@ func cloneFlowerActivitySubagentActions(in map[string]FlowerActivitySubagentActi
 		value.AgentType = strings.TrimSpace(value.AgentType)
 		value.ContextMode = strings.TrimSpace(value.ContextMode)
 		value.Status = strings.TrimSpace(value.Status)
+		value.Items = cloneFlowerActivitySubagentActionItems(value.Items)
 		if value.Operation == "" && value.Action == "" && value.ThreadID == "" && value.SubagentID == "" {
 			continue
 		}
 		out[key] = value
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func cloneFlowerActivitySubagentActionItems(in []FlowerActivitySubagentActionItem) []FlowerActivitySubagentActionItem {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]FlowerActivitySubagentActionItem, 0, len(in))
+	for _, value := range in {
+		value.ThreadID = strings.TrimSpace(value.ThreadID)
+		value.SubagentID = strings.TrimSpace(value.SubagentID)
+		value.TaskName = strings.TrimSpace(value.TaskName)
+		value.Title = strings.TrimSpace(value.Title)
+		value.AgentType = strings.TrimSpace(value.AgentType)
+		value.ContextMode = strings.TrimSpace(value.ContextMode)
+		value.Status = strings.TrimSpace(value.Status)
+		if value.ThreadID == "" && value.SubagentID == "" && value.TaskName == "" && value.Title == "" {
+			continue
+		}
+		out = append(out, value)
 	}
 	if len(out) == 0 {
 		return nil
@@ -306,7 +348,7 @@ func subagentActionMapsEqual(a map[string]FlowerActivitySubagentAction, b map[st
 		return false
 	}
 	for key, value := range a {
-		if b[key] != value {
+		if !reflect.DeepEqual(b[key], value) {
 			return false
 		}
 	}

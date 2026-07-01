@@ -1,16 +1,19 @@
-import { For, Show, createMemo, createSignal } from 'solid-js';
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { FileText, FolderOpen } from '@floegence/floe-webapp-core/icons';
+import { ExternalLink, FileText, FolderOpen } from '@floegence/floe-webapp-core/icons';
 
 import {
   presentFlowerActivityItem,
   type FlowerActivityDetailBlock,
   type FlowerActivityFileAction,
   type FlowerActivityFileActions,
+  type FlowerActivityPresentation,
+  type FlowerActivitySubagentDetailItem,
   type FlowerActivityTitle,
   type FlowerActivityTodoStatus,
 } from '../../../../../../flower_ui/src/flowerActivityPresentation';
+import { createFlowerActivityDisclosurePresence } from '../../../../../../flower_ui/src/activityDisclosure';
 import type { FlowerActivityItem, FlowerActivityRenderer, FlowerActivitySubagentAction } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { formatGitPatchLineNumber, getGitPatchRenderSnapshot, type GitPatchRenderedLine } from '../../../../../../flower_ui/src/gitPatch';
 import { normalizeAskUserQuestions, type AskUserQuestion } from '../askUserContract';
@@ -28,8 +31,16 @@ export interface ActivityTimelineBlockProps {
   blockIndex: number;
   onPreviewFile?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
   onBrowseDirectory?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
+  onOpenSubagentMessages?: (request: ActivitySubagentMessagesRequest) => void;
   class?: string;
 }
+
+export type ActivitySubagentMessagesRequest = Readonly<{
+  threadID: string;
+  subagentID: string;
+  name: string;
+  task: string;
+}>;
 
 function toActivityStatus(status: string | undefined): ActivityStatus {
   switch (String(status ?? '').trim().toLowerCase()) {
@@ -168,6 +179,22 @@ function payloadString(payload: Readonly<Record<string, unknown>>, key: string):
 function payloadNumber(payload: Readonly<Record<string, unknown>>, key: string): number | undefined {
   const value = Number(payload[key] ?? NaN);
   return Number.isFinite(value) ? value : undefined;
+}
+
+function subagentsDetailForPresentation(presentation: FlowerActivityPresentation) {
+  return presentation.detailBlocks.find((block): block is Extract<FlowerActivityDetailBlock, { kind: 'subagents' }> => block.kind === 'subagents')?.subagents;
+}
+
+function subagentElapsedText(presentation: FlowerActivityPresentation, now: number): string {
+  const detail = subagentsDetailForPresentation(presentation);
+  if (!detail || detail.elapsed_mode === 'none') return '';
+  const first = detail.items.find((agent) => agent.started_at_ms || agent.created_at_ms);
+  if (!first) return '';
+  const startedAt = first.started_at_ms || first.created_at_ms || 0;
+  const endAt = detail.elapsed_mode === 'final' && first.updated_at_ms ? first.updated_at_ms : now;
+  const label = formatActivityDuration(Math.max(0, endAt - startedAt));
+  if (!label) return '';
+  return detail.elapsed_mode === 'running' ? `running ${label}` : label;
 }
 
 function shellStatusForItem(item: ActivityItem): 'running' | 'success' | 'error' {
@@ -556,49 +583,65 @@ function ErrorDetailBlock(props: { block: Extract<FlowerActivityDetailBlock, { k
   );
 }
 
-function SubagentsDetailBlock(props: { block: Extract<FlowerActivityDetailBlock, { kind: 'subagents' }> }) {
+function SubagentsDetailBlock(props: {
+  block: Extract<FlowerActivityDetailBlock, { kind: 'subagents' }>;
+  now: number;
+  onOpenSubagentMessages?: (request: ActivitySubagentMessagesRequest) => void;
+}) {
   const detail = props.block.subagents;
-  const meta = createMemo(() => [detail.action, detail.agent_type, detail.status, detail.context_mode].filter(Boolean));
+  const elapsedText = (agent: FlowerActivitySubagentDetailItem): string => {
+    const startedAt = agent.started_at_ms || agent.created_at_ms || 0;
+    if (!startedAt || detail.elapsed_mode === 'none') return '';
+    const endAt = detail.elapsed_mode === 'final' && agent.updated_at_ms ? agent.updated_at_ms : props.now;
+    const label = formatActivityDuration(Math.max(0, endAt - startedAt));
+    if (!label) return '';
+    return detail.elapsed_mode === 'running' ? `running ${label}` : label;
+  };
+  const openMessages = (agent: FlowerActivitySubagentDetailItem) => {
+    const action = agent.open_messages;
+    if (!action?.thread_id || !props.onOpenSubagentMessages) return;
+    props.onOpenSubagentMessages({
+      threadID: action.thread_id,
+      subagentID: action.subagent_id || action.thread_id,
+      name: agent.name,
+      task: agent.task,
+    });
+  };
   return (
     <section class="chat-activity-detail-section chat-activity-subagents-section" aria-label="Subagents">
       <div class="chat-activity-detail-section-head">
         <div class="chat-activity-detail-section-copy">
-          <div class="chat-activity-detail-section-title">{detail.task || detail.action || 'Subagents'}</div>
-          <Show when={meta().length > 0}>
-            <div class="chat-activity-detail-section-meta">
-              <For each={meta()}>{(value) => <span>{value}</span>}</For>
-            </div>
+          <div class="chat-activity-detail-section-title">{detail.title}</div>
+          <Show when={detail.task_preview}>
+            {(preview) => <div class="chat-activity-detail-section-meta">{preview()}</div>}
           </Show>
         </div>
       </div>
-      <Show when={detail.summary}>
-        {(summary) => <div class="chat-activity-subagents-summary">{summary()}</div>}
-      </Show>
-      <Show when={detail.counts.length > 0}>
-        <div class="chat-activity-subagents-counts" aria-label="Subagent counts">
-          <For each={detail.counts}>
-            {(line) => (
-              <span class="chat-activity-subagents-chip">
-                <span>{line.label}</span>
-                <strong>{line.value}</strong>
-              </span>
-            )}
-          </For>
-        </div>
-      </Show>
       <Show when={detail.items.length > 0}>
         <div class="chat-activity-subagents-list" role="list">
           <For each={detail.items}>
             {(agent) => (
               <div class="chat-activity-subagents-item" role="listitem">
                 <div class="chat-activity-subagents-item-main">
-                  <span class="chat-activity-subagents-item-title">{agent.title || agent.task || 'Subagent'}</span>
-                  <span class="chat-activity-subagents-item-meta">
-                    {[agent.agent_type, agent.status, agent.context_mode].filter(Boolean).join(' · ')}
-                  </span>
+                  <div class="chat-activity-subagents-item-head">
+                    <span class="chat-activity-subagents-item-title">{agent.name}</span>
+                    <span class="chat-activity-subagents-item-meta">
+                      {[agent.show_status ? agent.status : '', elapsedText(agent)].filter(Boolean).join(' · ')}
+                    </span>
+                  </div>
+                  <Show when={agent.task && agent.task !== agent.name}>
+                    {(task) => <div class="chat-activity-subagents-item-task">{task()}</div>}
+                  </Show>
                 </div>
-                <Show when={agent.handoff || agent.progress}>
-                  {(body) => <div class="chat-activity-subagents-item-note">{body()}</div>}
+                <Show when={agent.open_messages && props.onOpenSubagentMessages}>
+                  <button
+                    type="button"
+                    class="chat-activity-subagents-open"
+                    onClick={() => openMessages(agent)}
+                  >
+                    <ExternalLink class="h-3.5 w-3.5" />
+                    <span>{agent.open_messages!.label}</span>
+                  </button>
                 </Show>
               </div>
             )}
@@ -613,11 +656,13 @@ function DetailBlock(props: {
   block: FlowerActivityDetailBlock;
   item: ActivityItem;
   runID?: string;
+  now: number;
   onPreviewFile?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
   onBrowseDirectory?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
+  onOpenSubagentMessages?: (request: ActivitySubagentMessagesRequest) => void;
 }) {
   if (props.block.kind === 'error') return <ErrorDetailBlock block={props.block} />;
-  if (props.block.kind === 'subagents') return <SubagentsDetailBlock block={props.block} />;
+  if (props.block.kind === 'subagents') return <SubagentsDetailBlock block={props.block} now={props.now} onOpenSubagentMessages={props.onOpenSubagentMessages} />;
   if (props.block.kind === 'terminal_output') return <TerminalDetailBlock item={props.item} runID={props.runID} />;
   if (props.block.kind === 'web_search') return <WebSearchDetailBlock block={props.block} />;
   if (props.block.kind === 'question') return <QuestionDetailBlock block={props.block} />;
@@ -649,6 +694,19 @@ function DetailBlock(props: {
 export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (props) => {
   const [open, setOpen] = createSignal<boolean | null>(null);
   const [openByItem, setOpenByItem] = createSignal<Record<string, boolean>>({});
+  const [clockNow, setClockNow] = createSignal(Date.now());
+  let clockTimer: number | undefined;
+
+  onMount(() => {
+    clockTimer = window.setInterval(() => setClockNow(Date.now()), 1000);
+  });
+
+  onCleanup(() => {
+    if (clockTimer !== undefined) {
+      window.clearInterval(clockTimer);
+      clockTimer = undefined;
+    }
+  });
 
   const items = createMemo(() => Array.isArray(props.block.items) ? props.block.items : []);
   const hasItems = createMemo(() => items().length > 0);
@@ -694,6 +752,8 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                 const id = createMemo(() => itemKey(item, itemIndex()));
                 const presentation = createMemo(() => presentFlowerActivityItem(flowerItem(item), fileActions(), undefined, { subagentAction: subagentActionForItem(props.block, item) }));
                 const isOpen = createMemo(() => itemOpen(item, id()));
+                const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
+                const itemMeta = createMemo(() => [presentation().meta, subagentElapsedText(presentation(), clockNow())].filter(Boolean).join(' · '));
                 const panelId = createMemo(() => `activity-detail-${props.blockIndex}-${id().replace(/[^a-zA-Z0-9_-]/g, '-')}`);
                 const rowFileAction = createMemo(() => {
                   const primary = presentation().primaryAction;
@@ -701,35 +761,56 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                   const title = presentation().title;
                   return title.kind === 'file' ? disabledFileAction(title.display_name) : null;
                 });
+                let itemButtonRef: HTMLDivElement | undefined;
+                let detailPanelRef: HTMLDivElement | undefined;
+                const disclosure = createFlowerActivityDisclosurePresence(
+                  () => isOpen() && hasDetails(),
+                  {
+                    onBeforeClose: () => {
+                      if (detailPanelRef && detailPanelRef.contains(document.activeElement)) {
+                        itemButtonRef?.focus();
+                      }
+                    },
+                  },
+                );
                 return (
                   <div
-                    class={cn('chat-activity-item-shell', isOpen() && 'chat-activity-item-shell-expanded')}
+                    class={cn('chat-activity-item-shell', isOpen() && hasDetails() && 'chat-activity-item-shell-expanded', subagentsDetailForPresentation(presentation()) && 'chat-activity-item-shell-subagents')}
                     data-item-id={id()}
+                    data-state={disclosure.state()}
                   >
                     <div
+                      ref={itemButtonRef}
                       class={cn(
-                        'chat-activity-item chat-activity-item-clickable',
+                        'chat-activity-item',
+                        hasDetails() && 'chat-activity-item-clickable',
                         isBlockingItem(item) && 'chat-activity-item-blocking',
                       )}
-                      role="button"
-                      tabIndex={0}
-                      aria-expanded={isOpen()}
-                      aria-controls={panelId()}
-                      onClick={() => toggleItem(item, id())}
+                      role={hasDetails() ? 'button' : undefined}
+                      tabIndex={hasDetails() ? 0 : undefined}
+                      aria-expanded={hasDetails() ? isOpen() : undefined}
+                      aria-controls={hasDetails() ? panelId() : undefined}
+                      onClick={hasDetails() ? () => toggleItem(item, id()) : undefined}
                       onKeyDown={(event) => {
+                        if (!hasDetails()) return;
                         if (event.key !== 'Enter' && event.key !== ' ') return;
                         event.preventDefault();
                         toggleItem(item, id());
                       }}
                     >
-                      <span class={cn('chat-activity-item-chevron', isOpen() && 'chat-activity-item-chevron-open')} aria-hidden="true">
-                        <svg viewBox="0 0 16 16"><path d="M5.5 3.75 9.75 8 5.5 12.25" /></svg>
-                      </span>
+                      <Show
+                        when={hasDetails()}
+                        fallback={<span class="chat-activity-item-chevron-placeholder" aria-hidden="true" />}
+                      >
+                        <span class={cn('chat-activity-item-chevron', isOpen() && 'chat-activity-item-chevron-open')} aria-hidden="true">
+                          <svg viewBox="0 0 16 16"><path d="M5.5 3.75 9.75 8 5.5 12.25" /></svg>
+                        </span>
+                      </Show>
                       <ActivityStatusIcon status={toActivityStatus(item.status)} class="chat-activity-item-status" />
                       <div class="chat-activity-item-main">
                         <div class="chat-activity-item-line">
                           <span class="chat-activity-item-label">{titleNode(presentation().title)}</span>
-                          <Show when={presentation().meta}>
+                          <Show when={itemMeta()}>
                             {(meta) => <span class="chat-activity-item-target">{meta()}</span>}
                           </Show>
                         </div>
@@ -751,8 +832,13 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                         </Show>
                       </div>
                     </div>
-                    <Show when={isOpen()}>
-                      <div id={panelId()} class="chat-activity-detail-panel">
+                    <Show when={disclosure.mounted() && hasDetails()}>
+                      <div
+                        ref={detailPanelRef}
+                        id={panelId()}
+                        class="chat-activity-detail-panel"
+                        data-state={disclosure.state()}
+                      >
                         <div class="chat-activity-detail-sections">
                           <For each={presentation().detailBlocks}>
                             {(block) => (
@@ -760,8 +846,10 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                                 block={block}
                                 item={item}
                                 runID={props.block.run_id}
+                                now={clockNow()}
                                 onPreviewFile={props.onPreviewFile}
                                 onBrowseDirectory={props.onBrowseDirectory}
+                                onOpenSubagentMessages={props.onOpenSubagentMessages}
                               />
                             )}
                           </For>

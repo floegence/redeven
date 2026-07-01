@@ -196,14 +196,7 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentProjectionPayload(t *te
 	for _, required := range []string{
 		`"items"`,
 		`"task_name":"Review API"`,
-		`"agent_type":"reviewer"`,
-		`"context_mode":"mission_only"`,
 		`"status":"completed"`,
-		`"final_handoff_report"`,
-		`"progress_summary"`,
-		`"handoff":"API boundary is consistent."`,
-		`"changed_files":["internal/ai/subagents_floret.go"]`,
-		`"next_expected_step":"finish review"`,
 	} {
 		if !strings.Contains(body, required) {
 			t.Fatalf("sanitized subagent payload missing %q: %s", required, body)
@@ -212,6 +205,13 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentProjectionPayload(t *te
 	for _, forbidden := range []string{
 		`thread_child_review`,
 		`"subagent_id"`,
+		`"agent_type"`,
+		`"context_mode"`,
+		`"final_handoff_report"`,
+		`"progress_summary"`,
+		`"handoff"`,
+		`"changed_files"`,
+		`"next_expected_step"`,
 		`"last_message"`,
 		`"waiting_prompt"`,
 		`"can_send_input"`,

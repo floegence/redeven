@@ -338,6 +338,12 @@ func sanitizeActivitySubagentActionsRecord(block map[string]any) {
 			if _, ok := allowed[field]; !ok {
 				continue
 			}
+			if field == "items" {
+				if items := sanitizeActivitySubagentActionItems(fieldValue); len(items) > 0 {
+					publicRecord[field] = items
+				}
+				continue
+			}
 			switch v := fieldValue.(type) {
 			case string:
 				if trimmed := strings.TrimSpace(v); trimmed != "" {
@@ -370,6 +376,57 @@ func sanitizeActivitySubagentActionsRecord(block map[string]any) {
 		return
 	}
 	block["subagent_actions"] = publicActions
+}
+
+func sanitizeActivitySubagentActionItems(value any) []any {
+	items, ok := value.([]any)
+	if !ok || len(items) == 0 {
+		return nil
+	}
+	allowed := activitySubagentActionItemAllowedKeys()
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		record, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		publicRecord := make(map[string]any, len(record))
+		for field, fieldValue := range record {
+			field = strings.TrimSpace(field)
+			if _, ok := allowed[field]; !ok {
+				continue
+			}
+			switch v := fieldValue.(type) {
+			case string:
+				if trimmed := strings.TrimSpace(v); trimmed != "" {
+					publicRecord[field] = trimmed
+				}
+			case bool:
+				if v {
+					publicRecord[field] = v
+				}
+			case float64:
+				if v > 0 {
+					publicRecord[field] = v
+				}
+			case int:
+				if v > 0 {
+					publicRecord[field] = v
+				}
+			case int64:
+				if v > 0 {
+					publicRecord[field] = v
+				}
+			}
+		}
+		if len(publicRecord) > 0 {
+			out = append(out, publicRecord)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func sanitizeActivityTargetRefsValue(value any) []any {
@@ -800,16 +857,13 @@ func activityPayloadAllowedKeys(renderer observation.ActivityRenderer) map[strin
 
 func activitySubagentsPayloadAllowedKeys() map[string]struct{} {
 	return stringSet(
-		"operation", "action", "status", "task_name", "title", "agent_type", "context_mode",
-		"accepted", "closed", "stopped", "closed_count", "stopped_count", "agent_count",
-		"total", "running_only", "counts", "final_handoff_report", "progress_summary",
-		"timed_out", "requested_count", "found_count", "missing_count", "items",
-		"delegation_runtime", "truncated", "omitted_count", "summary", "details", "error",
+		"operation", "action", "status", "task_name", "title", "items",
+		"timed_out", "truncated", "error",
 	)
 }
 
 func activitySubagentsItemAllowedKeys() map[string]struct{} {
-	return stringSet("task_name", "title", "agent_type", "context_mode", "status", "closed", "truncated")
+	return stringSet("task_name", "title", "status", "started_at_ms", "created_at_ms", "updated_at_ms")
 }
 
 func activitySubagentsCountAllowedKeys() map[string]struct{} {
@@ -837,7 +891,11 @@ func activityFileMutationAllowedKeys() map[string]struct{} {
 }
 
 func activitySubagentActionAllowedKeys() map[string]struct{} {
-	return stringSet("operation", "action", "delegation_runtime", "thread_id", "subagent_id", "parent_thread_id", "task_name", "title", "agent_type", "context_mode", "status", "updated_at_ms")
+	return stringSet("operation", "action", "delegation_runtime", "thread_id", "subagent_id", "parent_thread_id", "task_name", "title", "agent_type", "context_mode", "status", "started_at_ms", "created_at_ms", "updated_at_ms", "items")
+}
+
+func activitySubagentActionItemAllowedKeys() map[string]struct{} {
+	return stringSet("thread_id", "subagent_id", "task_name", "title", "agent_type", "context_mode", "status", "started_at_ms", "created_at_ms", "updated_at_ms")
 }
 
 func stringSet(values ...string) map[string]struct{} {

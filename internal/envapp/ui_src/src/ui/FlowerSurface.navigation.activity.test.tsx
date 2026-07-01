@@ -1339,6 +1339,21 @@ describe('FlowerSurface navigation activity', () => {
                   },
                 }),
               ],
+              subagent_actions: {
+                'item-subagents': {
+                  operation: 'subagents',
+                  action: 'wait',
+                  delegation_runtime: 'floret',
+                  items: [{
+                    thread_id: 'thread-child-hidden',
+                    subagent_id: 'thread-child-hidden',
+                    task_name: 'Review API contract',
+                    status: 'completed',
+                    started_at_ms: 6_000,
+                    updated_at_ms: 6_700,
+                  }],
+                },
+              },
             }),
           ],
         },
@@ -1498,10 +1513,12 @@ describe('FlowerSurface navigation activity', () => {
         },
       ],
     });
+    const loadSubagentDetail = vi.fn(async () => subagentDetail());
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [subagentsThread]),
       loadThread: vi.fn(async () => liveBootstrap(subagentsThread)),
+      loadSubagentDetail,
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-subagent-details"] button')));
@@ -1513,15 +1530,21 @@ describe('FlowerSurface navigation activity', () => {
 
     await waitFor(() => row.textContent?.includes('Review API contract') ?? false);
     expect(row.textContent).toContain('Review API contract');
-    expect(row.textContent).toContain('Reviewer');
-    expect(row.textContent).toContain('Completed');
-    expect(row.textContent).toContain('API boundary is consistent.');
+    expect(row.textContent).toContain('Open messages');
+    expect(row.textContent).not.toContain('Reviewer');
+    expect(row.textContent).not.toContain('Completed');
+    expect(row.textContent).not.toContain('API boundary is consistent.');
     expect(row.textContent).not.toContain('thread-child-hidden');
     expect(row.textContent).not.toContain('Hidden handoff preview');
     expect(row.textContent).not.toContain('Hidden waiting prompt');
     expect(row.textContent).not.toContain('can_close');
     expect(row.textContent).not.toContain('legacy-hidden');
     expect(row.textContent).not.toContain('Legacy snapshot');
+
+    (row.querySelector('.flower-activity-subagents-open') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-detail-id="thread-child-hidden"]')));
+    expect(loadSubagentDetail).toHaveBeenCalledWith('thread-subagent-details', 'thread-child-hidden', 0, 200);
+    expect(selectedThreadID(runtime)).toBe('thread-subagent-details');
   });
 
   it('renders approval controls in the composer while preserving the activity audit row', async () => {

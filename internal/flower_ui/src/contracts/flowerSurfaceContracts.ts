@@ -265,6 +265,19 @@ export type FlowerActivityFileAction = Readonly<{
   can_browse_directory: boolean;
 }>;
 
+export type FlowerActivitySubagentActionItem = Readonly<{
+  thread_id?: string;
+  subagent_id?: string;
+  task_name?: string;
+  title?: string;
+  agent_type?: string;
+  context_mode?: string;
+  status?: string;
+  started_at_ms?: number;
+  created_at_ms?: number;
+  updated_at_ms?: number;
+}>;
+
 export type FlowerActivitySubagentAction = Readonly<{
   operation?: string;
   action?: string;
@@ -277,7 +290,10 @@ export type FlowerActivitySubagentAction = Readonly<{
   agent_type?: string;
   context_mode?: string;
   status?: string;
+  started_at_ms?: number;
+  created_at_ms?: number;
   updated_at_ms?: number;
+  items?: readonly FlowerActivitySubagentActionItem[];
 }>;
 
 export type FlowerActivityTimelineBlock = Readonly<{

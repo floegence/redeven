@@ -2214,6 +2214,9 @@ func (s *floretSubagentRuntime) flowerParentSubagentActivityActions(timeline obs
 		if rawStatus := strings.TrimSpace(anyToString(payload["status"])); rawStatus != "" {
 			status = flowerSubagentStatus(flruntime.SubAgentStatus(rawStatus))
 		}
+		startedAtMS := nonNegativeInt64Local(parseInt64Raw(payload["started_at_ms"], 0))
+		createdAtMS := nonNegativeInt64Local(parseInt64Raw(payload["created_at_ms"], 0))
+		updatedAtMS := nonNegativeInt64Local(parseInt64Raw(payload["updated_at_ms"], 0))
 		out[itemID] = FlowerActivitySubagentAction{
 			Operation:         "subagents",
 			Action:            subagentActionInspect,
@@ -2226,8 +2229,57 @@ func (s *floretSubagentRuntime) flowerParentSubagentActivityActions(timeline obs
 			AgentType:         agentType,
 			ContextMode:       contextModeForSubagentForkMode(flruntime.SubAgentForkMode(anyToString(payload["fork_mode"]))),
 			Status:            status,
-			UpdatedAtMS:       nonNegativeInt64Local(parseInt64Raw(payload["updated_at_ms"], 0)),
+			StartedAtMS:       startedAtMS,
+			CreatedAtMS:       createdAtMS,
+			UpdatedAtMS:       updatedAtMS,
+			Items:             flowerSubagentActionItemsFromPayload(payload),
 		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func flowerSubagentActionItemsFromPayload(payload map[string]any) []FlowerActivitySubagentActionItem {
+	items := subagentItemsFromAny(payload["items"])
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]FlowerActivitySubagentActionItem, 0, len(items))
+	for _, item := range items {
+		threadID := strings.TrimSpace(anyToString(item["thread_id"]))
+		if threadID == "" {
+			threadID = strings.TrimSpace(anyToString(item["subagent_id"]))
+		}
+		if threadID == "" {
+			continue
+		}
+		agentType := strings.TrimSpace(anyToString(item["agent_type"]))
+		if agentType == "" {
+			agentType = normalizeSubagentAgentType(anyToString(item["host_profile_ref"]))
+		}
+		status := ""
+		if rawStatus := strings.TrimSpace(anyToString(item["status"])); rawStatus != "" {
+			status = flowerSubagentStatus(flruntime.SubAgentStatus(rawStatus))
+		}
+		title := strings.TrimSpace(anyToString(item["title"]))
+		taskName := strings.TrimSpace(anyToString(item["task_name"]))
+		if title == "" {
+			title = taskName
+		}
+		out = append(out, FlowerActivitySubagentActionItem{
+			ThreadID:    threadID,
+			SubagentID:  threadID,
+			TaskName:    taskName,
+			Title:       title,
+			AgentType:   agentType,
+			ContextMode: normalizeSubagentContextMode(anyToString(item["context_mode"])),
+			Status:      status,
+			StartedAtMS: nonNegativeInt64Local(parseInt64Raw(item["started_at_ms"], 0)),
+			CreatedAtMS: nonNegativeInt64Local(parseInt64Raw(item["created_at_ms"], 0)),
+			UpdatedAtMS: nonNegativeInt64Local(parseInt64Raw(item["updated_at_ms"], 0)),
+		})
 	}
 	if len(out) == 0 {
 		return nil

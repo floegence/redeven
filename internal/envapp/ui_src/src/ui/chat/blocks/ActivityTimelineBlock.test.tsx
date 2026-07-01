@@ -104,9 +104,33 @@ function renderActivityWithFileActions(
   return host;
 }
 
+function renderActivityWithSubagentMessages(
+  block: ActivityTimelineBlockType,
+  onOpenSubagentMessages?: Parameters<typeof ActivityTimelineBlock>[0]['onOpenSubagentMessages'],
+) {
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const dispose = render(() => (
+    <ActivityTimelineBlock
+      block={block}
+      messageId="msg_1"
+      blockIndex={0}
+      onOpenSubagentMessages={onOpenSubagentMessages}
+    />
+  ), host);
+  renderDisposers.push(dispose);
+  return host;
+}
+
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+}
+
+async function waitMs(ms: number): Promise<void> {
+  await new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 function expandTimeline(host: HTMLElement): void {
@@ -141,6 +165,32 @@ describe('ActivityTimelineBlock', () => {
     expect(host.textContent).toContain('stdout');
     expect(host.textContent).toContain('ok');
     expect(host.textContent).toContain('exit');
+  });
+
+  it('keeps detail content mounted during disclosure close animation', async () => {
+    const host = renderActivity();
+
+    expandTimeline(host);
+    await flushAsync();
+
+    const shell = host.querySelector('.chat-activity-item-shell') as HTMLDivElement | null;
+    const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
+    row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    expect(['opening', 'open']).toContain(shell?.getAttribute('data-state'));
+    expect(host.querySelector('.chat-activity-detail-panel')).not.toBeNull();
+
+    row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    expect(shell?.getAttribute('data-state')).toBe('closing');
+    expect(host.querySelector('.chat-activity-detail-panel')).not.toBeNull();
+
+    await waitMs(220);
+
+    expect(shell?.getAttribute('data-state')).toBe('closed');
+    expect(host.querySelector('.chat-activity-detail-panel')).toBeNull();
   });
 
   it('supports keyboard expansion without endpoint detail refs', async () => {
@@ -482,5 +532,70 @@ describe('ActivityTimelineBlock', () => {
     const audit = host.querySelector('.chat-activity-user-input-audit');
     expect(audit).not.toBeNull();
     expect(audit?.querySelectorAll('input, textarea, button')).toHaveLength(0);
+  });
+
+  it('renders subagent wait rows with message entry and no diagnostic fields', async () => {
+    const openMessages = vi.fn();
+    const now = Date.now();
+    const block = baseBlock({
+      summary: baseSummary('success'),
+      items: [baseItem({
+        item_id: 'tool_subagents_wait',
+        tool_id: 'tool_subagents_wait',
+        tool_name: 'subagents',
+        renderer: 'structured',
+        label: 'subagents',
+        payload: {
+          action: 'wait',
+          status: 'ok',
+          summary: 'tool execution completed',
+        },
+      })],
+      subagent_actions: {
+        tool_subagents_wait: {
+          operation: 'subagents',
+          action: 'wait',
+          delegation_runtime: 'floret',
+          items: [{
+            thread_id: 'child_frontend_review',
+            subagent_id: 'child_frontend_review',
+            title: 'Frontend polish review',
+            task_name: 'Review Flower tool detail UI and propose concise fixes.',
+            agent_type: 'worker',
+            status: 'running',
+            started_at_ms: now - 258000,
+            updated_at_ms: now - 1000,
+          }],
+        },
+      },
+    });
+    const host = renderActivityWithSubagentMessages(block, openMessages);
+
+    expandTimeline(host);
+    await flushAsync();
+
+    expect(host.textContent).toContain('Waiting');
+    expect(host.textContent).toContain('Frontend polish review');
+    expect(host.textContent).toContain('running');
+
+    const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
+    row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    expect(host.textContent).toContain('Review Flower tool detail UI and propose concise fixes.');
+    expect(host.textContent).toContain('Open messages');
+    for (const hidden of ['Worker', 'action wait', 'status success', 'agents count', 'thread_id', 'subagent_id', 'tool execution completed']) {
+      expect(host.textContent).not.toContain(hidden);
+    }
+
+    const button = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent === 'Open messages') as HTMLButtonElement | undefined;
+    button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(openMessages).toHaveBeenCalledWith({
+      threadID: 'child_frontend_review',
+      subagentID: 'child_frontend_review',
+      name: 'Frontend polish review',
+      task: 'Review Flower tool detail UI and propose concise fixes.',
+    });
   });
 });
