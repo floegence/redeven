@@ -236,10 +236,10 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 		}
 		projectionTurns = append(projectionTurns, projectionTurn{turn: turn, run: run, rawID: turnID})
 	}
-	var host flruntime.LifecycleHost
+	var host flruntime.ThreadMaintenanceHost
 	if len(projectionTurns) > 0 {
 		var hostErr error
-		host, hostErr = s.openFloretLifecycleHost()
+		host, hostErr = s.openFloretMaintenanceHost()
 		if hostErr != nil {
 			return nil, hostErr
 		}
@@ -337,7 +337,7 @@ func loadAllThreadTimelineConversationTurns(ctx context.Context, db *threadstore
 	return out, nil
 }
 
-func (s *Service) floretProjectionMessageJSON(ctx context.Context, host flruntime.LifecycleHost, endpointID string, threadID string, turn threadstore.ConversationTurn, runRecord *threadstore.RunRecord) (json.RawMessage, int64, bool, error) {
+func (s *Service) floretProjectionMessageJSON(ctx context.Context, host flruntime.ThreadMaintenanceHost, endpointID string, threadID string, turn threadstore.ConversationTurn, runRecord *threadstore.RunRecord) (json.RawMessage, int64, bool, error) {
 	if host == nil {
 		return nil, 0, false, nil
 	}

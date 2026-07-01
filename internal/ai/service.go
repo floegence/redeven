@@ -552,7 +552,7 @@ func (s *Service) closeThreadSubagents(ctx context.Context, endpointID string, t
 			runtime.closeAllExisting(closeCtx)
 			return
 		}
-		s.closeThreadSubagentsWithLifecycleHost(closeCtx, threadID)
+		s.closeThreadSubagentsWithMaintenanceHost(closeCtx, threadID)
 		return
 	}
 	if timeout <= 0 {
@@ -560,10 +560,10 @@ func (s *Service) closeThreadSubagents(ctx context.Context, endpointID string, t
 	}
 	closeCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), timeout)
 	defer cancel()
-	s.closeThreadSubagentsWithLifecycleHost(closeCtx, threadID)
+	s.closeThreadSubagentsWithMaintenanceHost(closeCtx, threadID)
 }
 
-func (s *Service) closeThreadSubagentsWithLifecycleHost(ctx context.Context, threadID string) {
+func (s *Service) closeThreadSubagentsWithMaintenanceHost(ctx context.Context, threadID string) {
 	if s == nil {
 		return
 	}
@@ -571,7 +571,7 @@ func (s *Service) closeThreadSubagentsWithLifecycleHost(ctx context.Context, thr
 	if threadID == "" {
 		return
 	}
-	host, err := s.openFloretLifecycleHost()
+	host, err := s.openFloretMaintenanceHost()
 	if err != nil {
 		return
 	}
@@ -609,10 +609,10 @@ func (s *Service) deleteFloretThreadTree(ctx context.Context, meta *session.Meta
 			return host.DeleteThread(opCtx, flruntime.ThreadID(threadID))
 		}
 	}
-	return s.deleteFloretThreadTreeWithLifecycleHost(opCtx, threadID)
+	return s.deleteFloretThreadTreeWithMaintenanceHost(opCtx, threadID)
 }
 
-func (s *Service) deleteFloretThreadTreeWithLifecycleHost(ctx context.Context, threadID string) error {
+func (s *Service) deleteFloretThreadTreeWithMaintenanceHost(ctx context.Context, threadID string) error {
 	if s == nil {
 		return nil
 	}
@@ -620,7 +620,7 @@ func (s *Service) deleteFloretThreadTreeWithLifecycleHost(ctx context.Context, t
 	if threadID == "" {
 		return nil
 	}
-	host, err := s.openFloretLifecycleHost()
+	host, err := s.openFloretMaintenanceHost()
 	if err != nil {
 		return err
 	}
@@ -703,7 +703,7 @@ func (s *Service) updateThreadLastMessagePreviewFromRun(ctx context.Context, db 
 	return db.UpdateThreadLastMessagePreview(pctx, endpointID, threadID, preview, atUnixMs, updatedByID, updatedByEmail)
 }
 
-func (s *Service) openFloretLifecycleHost() (flruntime.LifecycleHost, error) {
+func (s *Service) openFloretMaintenanceHost() (flruntime.ThreadMaintenanceHost, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -715,7 +715,7 @@ func (s *Service) openFloretLifecycleHost() (flruntime.LifecycleHost, error) {
 	if err != nil {
 		return nil, err
 	}
-	host, err := flruntime.NewLifecycleHost(flruntime.LifecycleHostOptions{Store: store})
+	host, err := flruntime.NewThreadMaintenanceHost(flruntime.ThreadMaintenanceHostOptions{Store: store})
 	if err != nil {
 		_ = store.Close()
 		return nil, err

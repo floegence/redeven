@@ -158,13 +158,14 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	}
 	defer func() { _ = store.Close() }()
 	host, err := flruntime.NewHost(flruntime.HostOptions{
-		Config:              floretCfg,
-		ModelGateway:        flProvider,
-		Store:               store,
-		Tools:               initialSurface.FloretTools,
-		Approver:            floretToolApproverForRun(r),
-		Sink:                floretEventSink{run: r},
-		ToolSurfaceProvider: toolSurfaceProvider,
+		Config:               floretCfg,
+		ModelGateway:         flProvider,
+		ModelGatewayIdentity: redevenFloretGatewayIdentity(providerCfg.ID, capability.WireModelName),
+		Store:                store,
+		Tools:                initialSurface.FloretTools,
+		Approver:             floretToolApproverForRun(r),
+		Sink:                 floretEventSink{run: r},
+		ToolSurfaceProvider:  toolSurfaceProvider,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
@@ -324,11 +325,16 @@ func enableFlowerWebSearchTool(providerCfg config.AIProvider, capability provide
 
 func redevenFloretAdapterConfig(systemPrompt string, contextPolicy flconfig.ContextPolicy, reasoning config.AIReasoningSelection) flconfig.Config {
 	return flconfig.Config{
-		Provider:      flconfig.ProviderFake,
-		Model:         "redeven-model-adapter",
 		SystemPrompt:  systemPrompt,
 		ContextPolicy: contextPolicy,
 		Reasoning:     reasoning,
+	}
+}
+
+func redevenFloretGatewayIdentity(providerID string, modelName string) flruntime.ModelGatewayIdentity {
+	return flruntime.ModelGatewayIdentity{
+		Provider: strings.TrimSpace(providerID),
+		Model:    strings.TrimSpace(modelName),
 	}
 }
 

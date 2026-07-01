@@ -802,10 +802,11 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	}
 	defer func() { _ = store.Close() }()
 	host, err := flruntime.NewHost(flruntime.HostOptions{
-		Config:       flconfig.Config{Provider: flconfig.ProviderFake, Model: strings.TrimSpace(modelCapability.WireModelName), SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, 0), Reasoning: reasoning},
-		ModelGateway: flProvider,
-		Store:        store,
-		Sink:         floretEventSink{run: r},
+		Config:               flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, 0), Reasoning: reasoning},
+		ModelGateway:         flProvider,
+		ModelGatewayIdentity: redevenFloretGatewayIdentity(providerCfg.ID, modelCapability.WireModelName),
+		Store:                store,
+		Sink:                 floretEventSink{run: r},
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,

@@ -134,7 +134,7 @@ func (s *Service) settlePendingToolWithActiveFloretRun(ctx context.Context, endp
 			return host.SettlePendingTool(ctx, req)
 		}
 	}
-	host, err := s.openFloretLifecycleHost()
+	host, err := s.openFloretMaintenanceHost()
 	if err != nil {
 		return flruntime.PendingToolSettlementResult{}, err
 	}

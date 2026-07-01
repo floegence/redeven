@@ -1180,6 +1180,61 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 	}
 }
 
+func TestServiceGetFlowerSubagentDetailUsesMaintenanceHostWithoutCachedRuntime(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	parent, err := svc.CreateThread(ctx, meta, "parent", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread parent: %v", err)
+	}
+	childID := "floret_child_detail_without_cached_runtime"
+	seedTestFloretSubagentTree(t, ctx, svc, parent.ThreadID, childID)
+
+	svc.mu.Lock()
+	if len(svc.subagentRuntimes) != 0 {
+		t.Fatalf("test setup unexpectedly cached subagent runtimes: %#v", svc.subagentRuntimes)
+	}
+	svc.mu.Unlock()
+
+	detail, err := svc.GetFlowerSubagentDetail(ctx, meta, parent.ThreadID, childID, 0, 50)
+	if err != nil {
+		t.Fatalf("GetFlowerSubagentDetail: %v", err)
+	}
+	if detail == nil || detail.Summary.ThreadID != childID || detail.Summary.ParentThreadID != parent.ThreadID {
+		t.Fatalf("unexpected detail summary: %#v", detail)
+	}
+	if detail.Summary.ContextMode != subagentContextModeFullHistory {
+		t.Fatalf("context mode=%q, want full_history from Floret fork mode", detail.Summary.ContextMode)
+	}
+	if len(detail.Timeline) == 0 {
+		t.Fatalf("detail timeline is empty: %#v", detail)
+	}
+	childRecord, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, childID)
+	if err != nil {
+		t.Fatalf("GetThread child detail: %v", err)
+	}
+	if childRecord != nil {
+		t.Fatalf("detail lookup created child threadstore row: %#v", childRecord)
+	}
+	childMeta, err := svc.threadsDB.GetFlowerThreadMetadata(ctx, meta.EndpointID, childID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadMetadata child detail: %v", err)
+	}
+	if childMeta != nil {
+		t.Fatalf("detail lookup created child thread metadata: %#v", childMeta)
+	}
+	encoded, err := json.Marshal(detail)
+	if err != nil {
+		t.Fatalf("marshal detail: %v", err)
+	}
+	if strings.Contains(string(encoded), `"content"`) || strings.Contains(string(encoded), `"args_json"`) {
+		t.Fatalf("maintenance detail leaked raw fields: %s", string(encoded))
+	}
+}
+
 func TestServiceGetFlowerSubagentDetailRejectsWrongParentBeforeRuntime(t *testing.T) {
 	t.Parallel()
 

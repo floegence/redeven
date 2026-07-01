@@ -183,7 +183,7 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentProjectionPayload(t *te
 		"timestamp":1700000000000,
 		"blocks":[
 			{"type":"activity-timeline","schema_version":1,"run_id":"run_subagents","thread_id":"thread_parent","turn_id":"msg_subagents","trace_id":"trace_subagents","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[
-				{"item_id":"tool_subagents_spawn","tool_id":"tool_subagents_spawn","tool_name":"subagents","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Spawn reviewer","renderer":"structured","payload":{"action":"spawn","status":"ok","context_mode":"mission_only","subagent_id":"thread_child_review","thread_id":"thread_child_review","snapshot":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","status":"running","context_mode":"mission_only","last_message":"Reading the API boundary.","updated_at_ms":120,"path":"/root/review_api","private_path":"/Users/alice/work/redeven/snapshot","privatePath":"/Users/alice/work/redeven/camel"},"items":[{"subagent_id":"thread_child_review","thread_id":"thread_child_review","status":"completed","context_mode":"mission_only","private_path":"/Users/alice/work/redeven/item"}],"subagent":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","status":"running","context_mode":"mission_only","last_message":"Reading the API boundary.","updated_at_ms":120},"final_handoff_report":{"summary":"Review complete.","reports":[{"subagent_id":"thread_child_review","handoff":"API boundary is consistent.","changed_files":["internal/ai/subagents_floret.go"],"verification":["go test ./internal/ai"],"open_risks":["none"],"suggested_parent_actions":["continue"]}],"truncated":false,"omitted_count":0},"progress_summary":{"summary":"Review is still running.","progress":[{"subagent_id":"thread_child_review","state":"reading tests","blockers":[],"next_expected_step":"finish review"}],"suggested_parent_actions":["wait again"]},"subagents":[{"subagent_id":"legacy_child","thread_id":"legacy_child"}],"snapshots":{"legacy":{"thread_id":"legacy_snapshot"}},"snapshots_by_id":{"legacy":{"thread_id":"legacy_snapshot_by_id"}},"private_path":"/Users/alice/work/redeven"}}
+				{"item_id":"tool_subagents_spawn","tool_id":"tool_subagents_spawn","tool_name":"subagents","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Spawn reviewer","renderer":"structured","payload":{"action":"spawn","status":"ok","context_mode":"mission_only","subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","last_message":"Reading the API boundary.","snapshot":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","status":"running","context_mode":"mission_only","last_message":"Reading the API boundary.","updated_at_ms":120,"path":"/root/review_api","private_path":"/Users/alice/work/redeven/snapshot","privatePath":"/Users/alice/work/redeven/camel"},"items":[{"subagent_id":"thread_child_review","thread_id":"thread_child_review","status":"completed","context_mode":"mission_only","private_path":"/Users/alice/work/redeven/item"}],"item":{"subagent_id":"legacy_item"},"subagent":{"subagent_id":"thread_child_review","thread_id":"thread_child_review","task_name":"Review API","agent_type":"reviewer","status":"running","context_mode":"mission_only","last_message":"Reading the API boundary.","updated_at_ms":120},"final_handoff_report":{"summary":"Review complete.","reports":[{"subagent_id":"thread_child_review","handoff":"API boundary is consistent.","changed_files":["internal/ai/subagents_floret.go"],"verification":["go test ./internal/ai"],"open_risks":["none"],"suggested_parent_actions":["continue"]}],"truncated":false,"omitted_count":0},"progress_summary":{"summary":"Review is still running.","progress":[{"subagent_id":"thread_child_review","state":"reading tests","blockers":[],"next_expected_step":"finish review"}],"suggested_parent_actions":["wait again"]},"subagents":[{"subagent_id":"legacy_child","thread_id":"legacy_child"}],"snapshots":{"legacy":{"thread_id":"legacy_snapshot"}},"snapshots_by_id":{"legacy":{"thread_id":"legacy_snapshot_by_id"}},"private_path":"/Users/alice/work/redeven"}}
 			]}
 		]
 	}`
@@ -196,9 +196,7 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentProjectionPayload(t *te
 	for _, required := range []string{
 		`"subagent_id":"thread_child_review"`,
 		`"thread_id":"thread_child_review"`,
-		`"snapshot"`,
 		`"items"`,
-		`"subagent"`,
 		`"task_name":"Review API"`,
 		`"agent_type":"reviewer"`,
 		`"context_mode":"mission_only"`,
@@ -217,6 +215,9 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentProjectionPayload(t *te
 		`"path"`,
 		`private_path`,
 		`privatePath`,
+		`"snapshot"`,
+		`"subagent":`,
+		`"item":`,
 		`"subagents":[`,
 		`"snapshots"`,
 		`snapshots_by_id`,

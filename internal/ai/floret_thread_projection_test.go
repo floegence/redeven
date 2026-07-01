@@ -223,7 +223,7 @@ func TestSettlePendingToolWithDetachedRunUsesRunHost(t *testing.T) {
 	}
 }
 
-func TestSettlePendingToolWithoutActiveHostUsesLifecycleHost(t *testing.T) {
+func TestSettlePendingToolWithoutActiveHostUsesMaintenanceHost(t *testing.T) {
 	svc := &Service{
 		stateDir:      t.TempDir(),
 		activeRunByTh: map[string]string{runThreadKey("env_terminal", "thread_terminal"): "run_terminal"},

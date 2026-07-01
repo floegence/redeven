@@ -273,7 +273,7 @@ func TestNormalizeTruncatedToolPayload_PreservesTodosStructure(t *testing.T) {
 	}
 }
 
-func TestNormalizeTruncatedToolPayload_PreservesSubagentLifecycleSnapshot(t *testing.T) {
+func TestNormalizeTruncatedToolPayload_PreservesSubagentLifecycleItems(t *testing.T) {
 	t.Parallel()
 
 	payload := map[string]any{
@@ -283,7 +283,7 @@ func TestNormalizeTruncatedToolPayload_PreservesSubagentLifecycleSnapshot(t *tes
 		"closed":      true,
 		"subagent_id": "subagent-1",
 		"thread_id":   "subagent-1",
-		"snapshot": map[string]any{
+		"items": []any{map[string]any{
 			"subagent_id":     "subagent-1",
 			"thread_id":       "subagent-1",
 			"task_name":       "Review prompt contract",
@@ -294,10 +294,13 @@ func TestNormalizeTruncatedToolPayload_PreservesSubagentLifecycleSnapshot(t *tes
 			"updated_at_ms":   1782219585489,
 			"closed":          true,
 			"can_close":       false,
-		},
-		"subagents":       []any{map[string]any{"thread_id": "legacy-list"}},
-		"snapshots":       map[string]any{"legacy": map[string]any{"thread_id": "legacy-snapshot"}},
-		"snapshots_by_id": map[string]any{"legacy": map[string]any{"thread_id": "legacy-snapshot-by-id"}},
+		}},
+		"snapshot":        map[string]any{"thread_id": "forbidden-snapshot-single"},
+		"subagent":        map[string]any{"thread_id": "forbidden-subagent-single"},
+		"item":            map[string]any{"thread_id": "forbidden-item-single"},
+		"subagents":       []any{map[string]any{"thread_id": "forbidden-list"}},
+		"snapshots":       map[string]any{"forbidden": map[string]any{"thread_id": "forbidden-snapshot"}},
+		"snapshots_by_id": map[string]any{"forbidden": map[string]any{"thread_id": "forbidden-snapshot-by-id"}},
 		"messages":        []any{"child transcript must stay out of model results"},
 		"tool_result":     map[string]any{"stdout": "raw child output"},
 	}
@@ -313,25 +316,29 @@ func TestNormalizeTruncatedToolPayload_PreservesSubagentLifecycleSnapshot(t *tes
 	if _, ok := root["raw"]; ok {
 		t.Fatalf("subagents payload must not collapse to raw: %#v", root)
 	}
-	for _, field := range []string{"subagents", "snapshots", "snapshots_by_id", "messages", "tool_result"} {
+	for _, field := range []string{"snapshot", "subagent", "item", "subagents", "snapshots", "snapshots_by_id", "messages", "tool_result"} {
 		if _, ok := root[field]; ok {
 			t.Fatalf("subagents payload retained forbidden field %s: %#v", field, root)
 		}
 	}
-	snapshot, ok := root["snapshot"].(map[string]any)
+	items := toAnySlice(root["items"])
+	if len(items) != 1 {
+		t.Fatalf("items=%#v, want one canonical item", root["items"])
+	}
+	item, ok := items[0].(map[string]any)
 	if !ok {
-		t.Fatalf("snapshot type=%T, want map", root["snapshot"])
+		t.Fatalf("item type=%T, want map", items[0])
 	}
 	for _, field := range []string{"subagent_id", "thread_id", "task_name", "agent_type", "status", "updated_at_ms", "closed", "can_close"} {
-		if _, ok := snapshot[field]; !ok {
-			t.Fatalf("snapshot missing %s: %#v", field, snapshot)
+		if _, ok := item[field]; !ok {
+			t.Fatalf("item missing %s: %#v", field, item)
 		}
 	}
-	if anyToString(snapshot["status"]) != "canceled" || anyToString(root["action"]) != "close" {
+	if anyToString(item["status"]) != "canceled" || anyToString(root["action"]) != "close" {
 		t.Fatalf("unexpected lifecycle status payload: %#v", root)
 	}
-	if len([]rune(anyToString(snapshot["last_message"]))) > 3000 {
-		t.Fatalf("subagent last_message was not field-truncated: %d", len([]rune(anyToString(snapshot["last_message"]))))
+	if len([]rune(anyToString(item["last_message"]))) > 3000 {
+		t.Fatalf("subagent last_message was not field-truncated: %d", len([]rune(anyToString(item["last_message"]))))
 	}
 	if !readBoolField(root, "truncated") {
 		t.Fatalf("root missing truncated marker: %#v", root)

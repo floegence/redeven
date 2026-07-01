@@ -191,7 +191,7 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) {
 		return
 	}
 	if err := s.applyFloretPendingToolSettlementProjection(context.Background(), snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, snapshot.TurnID, settled.Projection); err != nil && s.log != nil {
-		s.log.Warn("ai: persist terminal settlement projection failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
+		s.log.Warn("ai: apply terminal settlement projection failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
 	}
 }
 
