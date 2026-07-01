@@ -334,8 +334,9 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.meta).toContain('Subagent');
-    expect(JSON.stringify(presentation.detailBlocks)).toContain('custom-profile');
+    expect(presentation.meta).toBe('');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Subagent');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('custom-profile');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('paused_elsewhere');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('accepted');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('can_close');

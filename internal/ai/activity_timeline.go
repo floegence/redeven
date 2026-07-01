@@ -294,7 +294,20 @@ func (r *run) refreshActivityTimelineSidecars(timeline observation.ActivityTimel
 	if !r.validateActivityTimelineForProjection(timeline, "sidecar_refresh") {
 		return false
 	}
-	refreshedActions := filterSubagentActionsForTimeline(timeline, subagentActions)
+	return r.upsertActivityTimelineSubagentActions(subagentActions)
+}
+
+func (r *run) upsertActivityTimelineSubagentActions(subagentActions map[string]FlowerActivitySubagentAction) bool {
+	if r == nil {
+		return false
+	}
+	if !r.acceptsPresentationUpdates() {
+		return false
+	}
+	upsertedActions := cloneFlowerActivitySubagentActions(subagentActions)
+	if len(upsertedActions) == 0 {
+		return false
+	}
 
 	type update struct {
 		index int
@@ -306,16 +319,8 @@ func (r *run) refreshActivityTimelineSidecars(timeline observation.ActivityTimel
 	if r.activitySubagentActions == nil {
 		r.activitySubagentActions = map[string]FlowerActivitySubagentAction{}
 	}
-	for _, item := range timeline.Items {
-		itemID := strings.TrimSpace(item.ItemID)
-		if itemID == "" {
-			continue
-		}
-		if action, ok := refreshedActions[itemID]; ok {
-			r.activitySubagentActions[itemID] = action
-		} else {
-			delete(r.activitySubagentActions, itemID)
-		}
+	for itemID, action := range upsertedActions {
+		r.activitySubagentActions[itemID] = action
 	}
 	for idx, raw := range r.assistantBlocks {
 		block, ok := activityTimelineBlockFromValue(raw)

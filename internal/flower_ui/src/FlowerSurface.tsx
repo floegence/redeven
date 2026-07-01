@@ -4984,9 +4984,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     <Show when={agent.description}>
                       {(description) => <div class="flower-activity-subagents-item-task">{description()}</div>}
                     </Show>
-                    <Show when={agent.agent_type}>
-                      {(agentType) => <div class="flower-activity-subagents-item-agent">Agent: {agentType()}</div>}
-                    </Show>
                   </div>
                   <Show when={agent.open_messages}>
                     <button
