@@ -2,10 +2,13 @@ package ai
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"io"
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -90,6 +93,225 @@ func TestTerminalProcessManagerReadWriteAndTerminate(t *testing.T) {
 	}
 	if terminated.Status != terminalProcessStatusCanceled {
 		t.Fatalf("status=%q, want canceled", terminated.Status)
+	}
+}
+
+func TestTerminalProcessManagerSettlesPendingProcessOnceWhenProcessEnds(t *testing.T) {
+	workspace := t.TempDir()
+	var settlements atomic.Int32
+	var settlementErr atomic.Value
+	manager := newTerminalProcessManager(func(snapshot terminalProcessSnapshot) error {
+		settlements.Add(1)
+		if snapshot.Status != terminalProcessStatusSuccess {
+			settlementErr.Store("settlement status was not success")
+		}
+		if !strings.Contains(snapshot.Output, "settled-output") {
+			settlementErr.Store("settlement output did not include settled-output")
+		}
+		return nil
+	})
+	defer manager.Close()
+
+	proc, err := manager.Start(terminalProcessStartRequest{
+		EndpointID: "env_test",
+		ThreadID:   "thread_test",
+		RunID:      "run_test",
+		TurnID:     "turn_test",
+		ToolID:     "tool_test",
+		ToolName:   "terminal.exec",
+		Command:    "sleep 0.05; printf settled-output",
+		CwdAbs:     workspace,
+		Shell:      "/bin/bash",
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	running := proc.WaitForYield(1)
+	if running.Status != terminalProcessStatusRunning {
+		t.Fatalf("status=%q, want running", running.Status)
+	}
+	proc.MarkPending()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		snapshot, err := manager.Read(terminalProcessReadRequest{ProcessID: running.ProcessID, WaitMS: 50})
+		if err != nil {
+			t.Fatalf("Read: %v", err)
+		}
+		if snapshot.Status == terminalProcessStatusSuccess && settlements.Load() == 1 {
+			break
+		}
+	}
+	if got := settlements.Load(); got != 1 {
+		t.Fatalf("settlements=%d, want one", got)
+	}
+	if raw := settlementErr.Load(); raw != nil {
+		t.Fatalf("settlement callback error: %v", raw)
+	}
+	if _, err := manager.Read(terminalProcessReadRequest{ProcessID: running.ProcessID}); err != nil {
+		t.Fatalf("Read after settlement: %v", err)
+	}
+	if got := settlements.Load(); got != 1 {
+		t.Fatalf("settlements after reread=%d, want one", got)
+	}
+}
+
+func TestTerminalProcessManagerRetriesDoneUntilSettlementAcknowledged(t *testing.T) {
+	workspace := t.TempDir()
+	var settlements atomic.Int32
+	var settlementErr atomic.Value
+	manager := newTerminalProcessManager(func(snapshot terminalProcessSnapshot) error {
+		if snapshot.Status != terminalProcessStatusSuccess {
+			settlementErr.Store("settlement status was not success")
+		}
+		if settlements.Add(1) == 1 {
+			return errors.New("floret settlement unavailable")
+		}
+		return nil
+	})
+	defer manager.Close()
+
+	proc, err := manager.Start(terminalProcessStartRequest{
+		EndpointID: "env_test",
+		ThreadID:   "thread_test",
+		RunID:      "run_test",
+		TurnID:     "turn_test",
+		ToolID:     "tool_test",
+		ToolName:   "terminal.exec",
+		Command:    "printf retry-output",
+		CwdAbs:     workspace,
+		Shell:      "/bin/bash",
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	snapshot := proc.WaitForYield(1000)
+	if snapshot.Status != terminalProcessStatusSuccess {
+		t.Fatalf("status=%q, want success; output=%q", snapshot.Status, snapshot.Output)
+	}
+	if got := settlements.Load(); got != 0 {
+		t.Fatalf("settlements before pending=%d, want zero", got)
+	}
+
+	proc.MarkPending()
+	if got := settlements.Load(); got != 1 {
+		t.Fatalf("settlements after failed mark pending=%d, want one", got)
+	}
+	if raw := settlementErr.Load(); raw != nil {
+		t.Fatalf("settlement callback error: %v", raw)
+	}
+	proc.mu.Lock()
+	acknowledged := proc.settlementAcknowledged
+	proc.mu.Unlock()
+	if acknowledged {
+		t.Fatalf("process acknowledged settlement before Floret success")
+	}
+
+	proc.publishDone()
+	if got := settlements.Load(); got != 2 {
+		t.Fatalf("settlements after retry=%d, want two", got)
+	}
+	proc.mu.Lock()
+	acknowledged = proc.settlementAcknowledged
+	proc.mu.Unlock()
+	if !acknowledged {
+		t.Fatalf("process did not acknowledge settlement after retry success")
+	}
+}
+
+func TestReadTerminalProcessPublishesDoneOnlyAfterAccessValidation(t *testing.T) {
+	workspace := t.TempDir()
+	var settlements atomic.Int32
+	manager := newTerminalProcessManager(func(snapshot terminalProcessSnapshot) error {
+		settlements.Add(1)
+		if snapshot.EndpointID != "env_owner" {
+			return errors.New("unexpected endpoint settled")
+		}
+		return nil
+	})
+	defer manager.Close()
+
+	proc, err := manager.Start(terminalProcessStartRequest{
+		EndpointID: "env_owner",
+		ThreadID:   "thread_owner",
+		RunID:      "run_owner",
+		TurnID:     "turn_owner",
+		ToolID:     "tool_owner",
+		ToolName:   "terminal.exec",
+		Command:    "printf owner-output",
+		CwdAbs:     workspace,
+		Shell:      "/bin/bash",
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	snapshot := proc.WaitForYield(1000)
+	if snapshot.Status != terminalProcessStatusSuccess {
+		t.Fatalf("status=%q, want success", snapshot.Status)
+	}
+	proc.mu.Lock()
+	proc.pending = true
+	proc.mu.Unlock()
+
+	svc := &Service{terminalProcesses: manager}
+	wrongMeta := &session.Meta{EndpointID: "env_other", CanRead: true, CanWrite: true, CanExecute: true}
+	if _, err := svc.ReadTerminalProcess(context.Background(), wrongMeta, "run_owner", snapshot.ProcessID, 0, 0, 0); err == nil {
+		t.Fatalf("ReadTerminalProcess with wrong endpoint succeeded")
+	}
+	if got := settlements.Load(); got != 0 {
+		t.Fatalf("settlements after denied read=%d, want zero", got)
+	}
+
+	ownerMeta := &session.Meta{EndpointID: "env_owner", CanRead: true, CanWrite: true, CanExecute: true}
+	if _, err := svc.ReadTerminalProcess(context.Background(), ownerMeta, "run_owner", snapshot.ProcessID, 0, 0, 0); err != nil {
+		t.Fatalf("ReadTerminalProcess owner: %v", err)
+	}
+	if got := settlements.Load(); got != 1 {
+		t.Fatalf("settlements after authorized read=%d, want one", got)
+	}
+}
+
+func TestHandleTerminalProcessDoneDoesNotAuditBeforeSettlement(t *testing.T) {
+	store := openTerminalProcessTestStore(t)
+	defer func() { _ = store.Close() }()
+	upsertTerminalProcessTestRun(t, store, "env_1", "thread_1", "run_settlement_first", "turn_1")
+
+	host := &recordingFloretHost{settleErr: errors.New("settlement failed")}
+	activeRun := &run{id: "run_settlement_first", endpointID: "env_1", threadID: "thread_1", messageID: "turn_1"}
+	activeRun.setActiveFloretHost(host)
+	svc := &Service{
+		threadsDB: store,
+		runs:      map[string]*run{"run_settlement_first": activeRun},
+		log:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	err := svc.handleTerminalProcessDone(terminalProcessSnapshot{
+		ProcessID:       "tp_settlement_first",
+		EndpointID:      "env_1",
+		ThreadID:        "thread_1",
+		RunID:           "run_settlement_first",
+		TurnID:          "turn_1",
+		ToolID:          "tool_settlement_first",
+		ToolName:        "terminal.exec",
+		Command:         "printf done",
+		Cwd:             t.TempDir(),
+		Status:          terminalProcessStatusSuccess,
+		Output:          "done",
+		StartedAtUnixMs: 100,
+		EndedAtUnixMs:   200,
+	})
+	if err == nil {
+		t.Fatalf("handleTerminalProcessDone succeeded despite settlement failure")
+	}
+	if len(host.settleRequests) != 1 {
+		t.Fatalf("settle requests=%d, want one", len(host.settleRequests))
+	}
+	rec, err := store.GetToolCall(context.Background(), "env_1", "run_settlement_first", "tool_settlement_first")
+	if err == nil {
+		t.Fatalf("tool call was persisted before settlement success: %#v", rec)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("GetToolCall error=%v, want sql.ErrNoRows", err)
 	}
 }
 

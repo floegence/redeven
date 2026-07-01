@@ -674,24 +674,32 @@ func contractSafeToolResultPayload(result ToolResult) (map[string]any, error) {
 
 func floretToolDefinition(r *run, def ToolDef) (fltools.Definition, error) {
 	def = normalizeToolPermissionMetadata(def)
+	toolName := strings.TrimSpace(def.Name)
 	inputSchema := map[string]any{"type": "object", "additionalProperties": true}
 	if len(def.InputSchema) > 0 {
 		var parsed map[string]any
 		if err := json.Unmarshal(def.InputSchema, &parsed); err != nil || parsed == nil {
-			return fltools.Definition{}, fmt.Errorf("invalid input schema for Floret tool %s", strings.TrimSpace(def.Name))
+			return fltools.Definition{}, fmt.Errorf("invalid input schema for Floret tool %s", toolName)
 		}
-		inputSchema = stripRedevenTargetFieldsFromFloretToolSchema(strings.TrimSpace(def.Name), parsed)
+		inputSchema = stripRedevenTargetFieldsFromFloretToolSchema(toolName, parsed)
 	}
 	effects := floretToolEffects(def)
-	readOnly := !def.Mutating && !floretToolOpenWorld(def) && def.Name != "terminal.exec"
+	readOnly := !def.Mutating && !floretToolOpenWorld(def) && toolName != "terminal.exec"
 	permissionType := FlowerPermissionApprovalRequired
 	if r != nil && r.permissionType != "" {
 		permissionType = r.permissionType
 	}
 	permission := floretToolPermission(permissionType, def)
+	annotations := map[string]any{
+		"source":    strings.TrimSpace(def.Source),
+		"namespace": strings.TrimSpace(def.Namespace),
+	}
+	if toolName == "terminal.read" {
+		annotations[fltools.AnnotationRepeatPolicy] = fltools.RepeatPolicyPolling
+	}
 	return fltools.Definition{
-		Name:         strings.TrimSpace(def.Name),
-		Title:        strings.TrimSpace(def.Name),
+		Name:         toolName,
+		Title:        toolName,
 		Description:  strings.TrimSpace(def.Description),
 		InputSchema:  inputSchema,
 		Effects:      effects,
@@ -715,12 +723,9 @@ func floretToolDefinition(r *run, def ToolDef) (fltools.Definition, error) {
 		},
 		Activity: func(inv fltools.Invocation[any]) (*observation.ActivityPresentation, error) {
 			args, _ := inv.Args.(map[string]any)
-			return floretActivityForToolCall(strings.TrimSpace(def.Name), args), nil
+			return floretActivityForToolCall(toolName, args), nil
 		},
-		Annotations: map[string]any{
-			"source":    strings.TrimSpace(def.Source),
-			"namespace": strings.TrimSpace(def.Namespace),
-		},
+		Annotations: annotations,
 	}, nil
 }
 
@@ -1008,6 +1013,12 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		metadata = map[string]any{"tool_result_status": string(observation.ActivityStatusCanceled)}
 		isError = false
 	}
+	if token := floretToolResultProgressToken(result, structured); token != "" {
+		if metadata == nil {
+			metadata = map[string]any{}
+		}
+		metadata[fltools.ResultMetadataProgressToken] = token
+	}
 	activity, err := floretActivityForToolResult(r, result)
 	if err != nil {
 		return fltools.Result{}, err
@@ -1021,6 +1032,24 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 		Activity:   activity,
 		IsError:    isError,
 	}, nil
+}
+
+func floretToolResultProgressToken(result ToolResult, structured map[string]any) string {
+	if strings.TrimSpace(result.ToolName) != "terminal.read" || structured == nil {
+		return ""
+	}
+	data, _ := structured["data"].(map[string]any)
+	if data == nil {
+		return ""
+	}
+	processID := strings.TrimSpace(anyToString(data["process_id"]))
+	if processID == "" {
+		return ""
+	}
+	lastSeq := readInt64Field(data, "last_seq")
+	status := strings.TrimSpace(anyToString(data["status"]))
+	endedAt := readInt64Field(data, "ended_at_ms")
+	return fmt.Sprintf("%s:%d:%s:%d", processID, lastSeq, status, endedAt)
 }
 
 func pendingToolActivityFromFlower(result ToolResult, structured map[string]any) *observation.ActivityPresentation {
