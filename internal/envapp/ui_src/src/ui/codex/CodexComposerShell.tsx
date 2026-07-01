@@ -1,6 +1,6 @@
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, type Component } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Send } from '@floegence/floe-webapp-core/icons';
+import { MoreHorizontal, Send } from '@floegence/floe-webapp-core/icons';
 import { Select } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
@@ -46,6 +46,32 @@ type ComposerSlashParameterSession = Readonly<{
 
 type ComposerSelectVariant = 'value' | 'policy';
 type ComposerSelectLabelMode = 'always' | 'auto';
+type ComposerControlLocation = 'inline' | 'overflow';
+type ComposerMeasureControlID = 'attachment' | 'working_dir' | CodexComposerControlID;
+type ComposerOverflowControlID = Exclude<ComposerMeasureControlID, 'attachment'>;
+type ComposerControlLayout = Readonly<{
+  availableWidth: number;
+  moreWidth: number;
+  itemWidths: Partial<Record<ComposerMeasureControlID, number>>;
+}>;
+
+const CODEX_COMPOSER_CONTROL_GAP_PX = 8;
+const CODEX_COMPOSER_MORE_WIDTH_FALLBACK_PX = 32;
+const CODEX_COMPOSER_MEASURE_CONTROL_ORDER: readonly ComposerMeasureControlID[] = [
+  'attachment',
+  'working_dir',
+  'model',
+  'effort',
+  'approval',
+  'sandbox',
+];
+const CODEX_COMPOSER_MORE_CONTROL_ORDER: readonly ComposerOverflowControlID[] = [
+  'working_dir',
+  'model',
+  'effort',
+  'approval',
+  'sandbox',
+];
 
 function ComposerSelectChip(props: {
   label: string;
@@ -201,9 +227,19 @@ export function CodexComposerShell(props: {
   const [dismissedPopupSignature, setDismissedPopupSignature] = createSignal('');
   const [slashParameterSession, setSlashParameterSession] = createSignal<ComposerSlashParameterSession | null>(null);
   const [fileIndexRevision, setFileIndexRevision] = createSignal(0);
+  const [composerMoreOpen, setComposerMoreOpen] = createSignal(false);
+  const [composerControlLayout, setComposerControlLayout] = createSignal<ComposerControlLayout>({
+    availableWidth: 0,
+    moreWidth: CODEX_COMPOSER_MORE_WIDTH_FALLBACK_PX,
+    itemWidths: {},
+  });
   let textareaRef: HTMLTextAreaElement | undefined;
   let fileInputRef: HTMLInputElement | undefined;
   let workingDirChipRef: HTMLButtonElement | undefined;
+  let composerMetaViewportRef: HTMLDivElement | undefined;
+  let composerMetaMeasureRef: HTMLDivElement | undefined;
+  let composerMoreButtonRef: HTMLButtonElement | undefined;
+  let composerMorePanelRef: HTMLDivElement | undefined;
   const autosizeController = createCodexComposerAutosizeController();
 
   const hasDraftContent = () => (
@@ -444,6 +480,128 @@ export function CodexComposerShell(props: {
       ? i18n.t('codex.composer.placeholderWithImages')
       : i18n.t('codex.composer.placeholderTextOnly');
   };
+  const composerMoreControlIDs = createMemo<readonly ComposerOverflowControlID[]>(() => (
+    CODEX_COMPOSER_MORE_CONTROL_ORDER.filter((id) => (
+      id === 'working_dir' || findCodexComposerControlSpec(props.runtimeControls, id) !== null
+    ))
+  ));
+  const composerMeasuredControlIDs = createMemo<readonly ComposerMeasureControlID[]>(() => [
+    'attachment',
+    ...composerMoreControlIDs(),
+  ]);
+  const composerControlsWidth = (ids: readonly ComposerMeasureControlID[], includeMore: boolean): number => {
+    const layout = composerControlLayout();
+    const controlsWidth = ids.reduce((total, id) => total + Math.max(0, layout.itemWidths[id] ?? 0), 0);
+    const controlGaps = Math.max(0, ids.length - 1) * CODEX_COMPOSER_CONTROL_GAP_PX;
+    if (!includeMore) return controlsWidth + controlGaps;
+    return controlsWidth
+      + controlGaps
+      + (ids.length > 0 ? CODEX_COMPOSER_CONTROL_GAP_PX : 0)
+      + Math.max(CODEX_COMPOSER_MORE_WIDTH_FALLBACK_PX, layout.moreWidth);
+  };
+  const composerMetaOverflowing = createMemo(() => {
+    const availableWidth = composerControlLayout().availableWidth;
+    if (availableWidth <= 0) return false;
+    return composerControlsWidth(composerMeasuredControlIDs(), false) > availableWidth;
+  });
+  const setComposerControlLayoutIfChanged = (next: ComposerControlLayout) => {
+    const previous = composerControlLayout();
+    const same = previous.availableWidth === next.availableWidth
+      && previous.moreWidth === next.moreWidth
+      && CODEX_COMPOSER_MEASURE_CONTROL_ORDER.every((id) => (previous.itemWidths[id] ?? 0) === (next.itemWidths[id] ?? 0));
+    if (!same) setComposerControlLayout(next);
+  };
+  const measureComposerControls = () => {
+    const availableWidth = Math.ceil(
+      composerMetaViewportRef?.getBoundingClientRect().width
+        || composerMetaViewportRef?.clientWidth
+        || 0,
+    );
+    const itemWidths: Partial<Record<ComposerMeasureControlID, number>> = {};
+    for (const id of CODEX_COMPOSER_MEASURE_CONTROL_ORDER) {
+      const node = composerMetaMeasureRef?.querySelector<HTMLElement>(`[data-codex-composer-control-measure="${id}"]`);
+      const width = Math.ceil(node?.getBoundingClientRect().width || node?.offsetWidth || 0);
+      if (width > 0) itemWidths[id] = width;
+    }
+    const moreNode = composerMetaMeasureRef?.querySelector<HTMLElement>('[data-codex-composer-more-measure="true"]');
+    const moreWidth = Math.max(
+      CODEX_COMPOSER_MORE_WIDTH_FALLBACK_PX,
+      Math.ceil(moreNode?.getBoundingClientRect().width || moreNode?.offsetWidth || 0),
+    );
+    setComposerControlLayoutIfChanged({
+      availableWidth,
+      moreWidth,
+      itemWidths,
+    });
+  };
+  let composerControlMeasureFrame = 0;
+  const scheduleComposerControlMeasure = () => {
+    if (typeof window === 'undefined') return;
+    if (composerControlMeasureFrame) return;
+    composerControlMeasureFrame = window.requestAnimationFrame(() => {
+      composerControlMeasureFrame = 0;
+      measureComposerControls();
+    });
+  };
+  onMount(() => {
+    measureComposerControls();
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => scheduleComposerControlMeasure());
+    if (composerMetaViewportRef) resizeObserver?.observe(composerMetaViewportRef);
+    if (composerMetaMeasureRef) resizeObserver?.observe(composerMetaMeasureRef);
+    const onResize = () => scheduleComposerControlMeasure();
+    window.addEventListener('resize', onResize);
+    onCleanup(() => {
+      if (composerControlMeasureFrame) {
+        window.cancelAnimationFrame(composerControlMeasureFrame);
+        composerControlMeasureFrame = 0;
+      }
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', onResize);
+    });
+  });
+  createEffect(() => {
+    void props.hostAvailable;
+    void props.supportsImages;
+    void props.workingDirDisabled;
+    void props.workingDirLocked;
+    void workingDirChipLabel();
+    void workingDirChipTitle();
+    void props.runtimeControls.map((control) => [
+      control.id,
+      control.label,
+      control.value,
+      control.placeholder,
+      control.disabled,
+      control.variant,
+      control.options.map((option) => `${option.value}:${option.label}`).join(','),
+    ].join('|')).join('||');
+    measureComposerControls();
+  });
+  createEffect(() => {
+    if (!composerMetaOverflowing()) setComposerMoreOpen(false);
+  });
+  createEffect(() => {
+    if (!composerMoreOpen()) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (composerMoreButtonRef?.contains(target) || composerMorePanelRef?.contains(target)) return;
+      setComposerMoreOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setComposerMoreOpen(false);
+      queueMicrotask(() => composerMoreButtonRef?.focus());
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown, true);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+    });
+  });
   const primaryActionDisabled = () => props.primaryActionDisabled;
   const primaryActionTitle = () => (
     String(props.primaryActionDisabledReason ?? '').trim() || primaryActionAriaLabel()
@@ -612,6 +770,195 @@ export function CodexComposerShell(props: {
       return true;
     }
     return false;
+  };
+
+  const attachmentControl = () => (
+    <button
+      type="button"
+      class="codex-chat-meta-btn codex-chat-attachment-trigger"
+      data-codex-composer-control="attachment"
+      onClick={() => fileInputRef?.click()}
+      disabled={!props.hostAvailable || !props.supportsImages}
+      aria-label={i18n.t('codex.composer.addAttachments')}
+      title={i18n.t('codex.composer.addAttachments')}
+    >
+      <PaperclipIcon />
+    </button>
+  );
+
+  const attachmentInput = () => (
+    <input
+      ref={fileInputRef}
+      type="file"
+      multiple
+      accept="image/*"
+      class="hidden"
+      onChange={(event) => {
+        const files = event.currentTarget.files;
+        if (!files || files.length === 0) return;
+        void props.onAddAttachments(Array.from(files));
+        event.currentTarget.value = '';
+      }}
+    />
+  );
+
+  const workingDirectoryControl = (location: ComposerControlLocation = 'inline') => (
+    <button
+      ref={(element) => {
+        workingDirChipRef = element;
+      }}
+      type="button"
+      class={cn(
+        'codex-chat-chip codex-chat-working-dir-chip codex-chat-path-chip',
+        `codex-chat-composer-control-${location}`,
+        canOpenWorkingDirPicker()
+          ? 'codex-chat-chip-actionable'
+          : 'codex-chat-chip-disabled',
+        props.workingDirLocked && 'codex-chat-working-dir-chip-locked',
+      )}
+      data-codex-composer-control="working_dir"
+      onClick={() => {
+        if (!canOpenWorkingDirPicker()) return;
+        setComposerMoreOpen(false);
+        props.onOpenWorkingDirPicker();
+      }}
+      disabled={props.workingDirDisabled}
+      title={workingDirChipTitle()}
+      aria-label={props.workingDirLocked ? i18n.t('codex.composer.workingDirectoryLocked') : i18n.t('codex.composer.selectWorkingDirectory')}
+      aria-disabled={!canOpenWorkingDirPicker()}
+      tabIndex={canOpenWorkingDirPicker() ? 0 : -1}
+    >
+      <FolderIcon />
+      <span class="codex-chat-working-dir-chip-label">{workingDirChipLabel()}</span>
+      <Show when={props.workingDirLocked}>
+        <LockIcon />
+      </Show>
+    </button>
+  );
+
+  const runtimeControlChip = (control: CodexComposerControlSpec, location: ComposerControlLocation = 'inline') => (
+    <span
+      class={cn(
+        'codex-chat-composer-control-slot',
+        `codex-chat-composer-control-${location}`,
+      )}
+      data-codex-composer-control={control.id}
+    >
+      <ComposerSelectChip
+        label={control.label}
+        value={control.value}
+        options={control.options}
+        placeholder={control.placeholder}
+        disabled={control.disabled}
+        variant={control.variant}
+        onChange={control.onChange}
+      />
+    </span>
+  );
+
+  const controlDisplayLabel = (control: CodexComposerControlSpec) => {
+    const selected = control.options.find((option) => option.value === control.value);
+    return String(selected?.label ?? control.value ?? control.placeholder ?? '').trim() || control.label;
+  };
+
+  const composerMoreControlLabel = (id: ComposerOverflowControlID): string => {
+    if (id === 'working_dir') return i18n.t('codex.common.workingDirectory');
+    return findCodexComposerControlSpec(props.runtimeControls, id)?.label ?? '';
+  };
+
+  const composerMoreControl = (id: ComposerOverflowControlID) => {
+    if (id === 'working_dir') return workingDirectoryControl('overflow');
+    const control = findCodexComposerControlSpec(props.runtimeControls, id);
+    return control ? runtimeControlChip(control, 'overflow') : null;
+  };
+
+  const composerMorePanel = () => (
+    <Show when={composerMoreOpen() && composerMetaOverflowing()}>
+      <div
+        ref={composerMorePanelRef}
+        class="codex-chat-composer-more-panel"
+        role="dialog"
+        aria-label={i18n.t('codex.composer.moreInputControls')}
+        data-codex-composer-more-panel="true"
+      >
+        <For each={composerMoreControlIDs()}>
+          {(id) => (
+            <div class="codex-chat-composer-more-row" data-codex-composer-more-item={id}>
+              <span class="codex-chat-composer-more-label">{composerMoreControlLabel(id)}</span>
+              <span class="codex-chat-composer-more-control">{composerMoreControl(id)}</span>
+            </div>
+          )}
+        </For>
+      </div>
+    </Show>
+  );
+
+  const composerMoreButton = () => (
+    <Show when={composerMetaOverflowing()}>
+      <div class="codex-chat-composer-more-anchor">
+        <button
+          ref={composerMoreButtonRef}
+          type="button"
+          class="codex-chat-composer-more-button"
+          aria-label={i18n.t('codex.composer.moreInputControls')}
+          title={i18n.t('codex.composer.moreControls')}
+          aria-haspopup="dialog"
+          aria-expanded={composerMoreOpen()}
+          onClick={() => setComposerMoreOpen((open) => !open)}
+        >
+          <MoreHorizontal class="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+        {composerMorePanel()}
+      </div>
+    </Show>
+  );
+
+  const composerMeasureControl = (id: ComposerMeasureControlID) => {
+    if (id === 'attachment') {
+      return (
+        <span class="codex-chat-meta-btn codex-chat-attachment-trigger codex-chat-composer-control-measure">
+          <PaperclipIcon />
+        </span>
+      );
+    }
+    if (id === 'working_dir') {
+      return (
+        <span class={cn(
+          'codex-chat-chip codex-chat-working-dir-chip codex-chat-path-chip codex-chat-composer-control-measure',
+          props.workingDirLocked && 'codex-chat-working-dir-chip-locked',
+        )}>
+          <FolderIcon />
+          <span class="codex-chat-working-dir-chip-label">{workingDirChipLabel()}</span>
+          <Show when={props.workingDirLocked}>
+            <LockIcon />
+          </Show>
+        </span>
+      );
+    }
+    const control = findCodexComposerControlSpec(props.runtimeControls, id);
+    if (!control) return null;
+    return (
+      <span class={cn(
+        'codex-chat-select-chip codex-chat-composer-control-measure',
+        control.variant === 'value'
+          ? 'codex-chat-select-chip-value'
+          : 'codex-chat-select-chip-policy',
+        control.value && 'codex-chat-select-chip-value-only',
+        control.disabled && 'codex-chat-select-chip-disabled',
+      )}>
+        <Show when={!control.value}>
+          <span class="codex-chat-select-chip-label">{control.label}</span>
+        </Show>
+        <span class={cn(
+          'codex-chat-select-chip-control',
+          control.variant === 'value'
+            ? 'codex-chat-select-chip-control-value'
+            : 'codex-chat-select-chip-control-policy',
+        )}>
+          {controlDisplayLabel(control)}
+        </span>
+      </span>
+    );
   };
 
   return (
@@ -796,92 +1143,68 @@ export function CodexComposerShell(props: {
         </Show>
 
         <div class="codex-chat-input-meta">
-          <div class="codex-chat-input-meta-rail" role="toolbar" aria-label={i18n.t('codex.composer.inputControls')}>
-            <div class="codex-chat-input-meta-group codex-chat-input-meta-group-context">
-              <button
-                type="button"
-                class="codex-chat-meta-btn codex-chat-attachment-trigger"
-                onClick={() => fileInputRef?.click()}
-                disabled={!props.hostAvailable || !props.supportsImages}
-                aria-label={i18n.t('codex.composer.addAttachments')}
-                title={i18n.t('codex.composer.addAttachments')}
-              >
-                <PaperclipIcon />
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*"
-                class="hidden"
-                onChange={(event) => {
-                  const files = event.currentTarget.files;
-                  if (!files || files.length === 0) return;
-                  void props.onAddAttachments(Array.from(files));
-                  event.currentTarget.value = '';
-                }}
-              />
+          <div
+            ref={composerMetaViewportRef}
+            class="codex-chat-input-meta-rail"
+            role="toolbar"
+            aria-label={i18n.t('codex.composer.inputControls')}
+            data-codex-composer-overflow={composerMetaOverflowing() ? 'true' : 'false'}
+          >
+            <Show when={!composerMetaOverflowing()} fallback={(
+              <>
+                <div class="codex-chat-input-meta-group codex-chat-input-meta-group-context" data-codex-composer-inline-item="attachment">
+                  {attachmentControl()}
+                  {attachmentInput()}
+                </div>
+                {composerMoreButton()}
+              </>
+            )}>
+              <div class="codex-chat-input-meta-group codex-chat-input-meta-group-context">
+                <span class="codex-chat-composer-control-slot" data-codex-composer-inline-item="attachment">
+                  {attachmentControl()}
+                </span>
+                {attachmentInput()}
+                <span class="codex-chat-composer-control-slot" data-codex-composer-inline-item="working_dir">
+                  {workingDirectoryControl('inline')}
+                </span>
+              </div>
 
-              <button
-                ref={workingDirChipRef}
-                type="button"
-                class={cn(
-                  'codex-chat-chip codex-chat-working-dir-chip codex-chat-path-chip',
-                  canOpenWorkingDirPicker()
-                    ? 'codex-chat-chip-actionable'
-                    : 'codex-chat-chip-disabled',
-                  props.workingDirLocked && 'codex-chat-working-dir-chip-locked',
+              <div class="codex-chat-input-meta-group codex-chat-input-meta-group-strategy">
+                <div class="codex-chat-input-meta-subgroup codex-chat-input-meta-subgroup-values">
+                  <For each={valueControls()}>
+                    {(control) => (
+                      <span data-codex-composer-inline-item={control.id}>
+                        {runtimeControlChip(control, 'inline')}
+                      </span>
+                    )}
+                  </For>
+                </div>
+
+                <div class="codex-chat-input-meta-subgroup codex-chat-input-meta-subgroup-policies">
+                  <For each={policyControls()}>
+                    {(control) => (
+                      <span data-codex-composer-inline-item={control.id}>
+                        {runtimeControlChip(control, 'inline')}
+                      </span>
+                    )}
+                  </For>
+                </div>
+              </div>
+            </Show>
+
+            <div ref={composerMetaMeasureRef} class="codex-chat-input-meta-measure" aria-hidden="true">
+              <For each={composerMeasuredControlIDs()}>
+                {(id) => (
+                  <span data-codex-composer-control-measure={id}>
+                    {composerMeasureControl(id)}
+                  </span>
                 )}
-                onClick={() => {
-                  if (!canOpenWorkingDirPicker()) return;
-                  props.onOpenWorkingDirPicker();
-                }}
-                disabled={props.workingDirDisabled}
-                title={workingDirChipTitle()}
-                aria-label={props.workingDirLocked ? i18n.t('codex.composer.workingDirectoryLocked') : i18n.t('codex.composer.selectWorkingDirectory')}
-                aria-disabled={!canOpenWorkingDirPicker()}
-                tabIndex={canOpenWorkingDirPicker() ? 0 : -1}
-              >
-                <FolderIcon />
-                <span class="codex-chat-working-dir-chip-label">{workingDirChipLabel()}</span>
-                <Show when={props.workingDirLocked}>
-                  <LockIcon />
-                </Show>
-              </button>
-            </div>
-
-            <div class="codex-chat-input-meta-group codex-chat-input-meta-group-strategy">
-              <div class="codex-chat-input-meta-subgroup codex-chat-input-meta-subgroup-values">
-                <For each={valueControls()}>
-                  {(control) => (
-                    <ComposerSelectChip
-                      label={control.label}
-                      value={control.value}
-                      options={control.options}
-                      placeholder={control.placeholder}
-                      disabled={control.disabled}
-                      variant={control.variant}
-                      onChange={control.onChange}
-                    />
-                  )}
-                </For>
-              </div>
-
-              <div class="codex-chat-input-meta-subgroup codex-chat-input-meta-subgroup-policies">
-                <For each={policyControls()}>
-                  {(control) => (
-                    <ComposerSelectChip
-                      label={control.label}
-                      value={control.value}
-                      options={control.options}
-                      placeholder={control.placeholder}
-                      disabled={control.disabled}
-                      variant={control.variant}
-                      onChange={control.onChange}
-                    />
-                  )}
-                </For>
-              </div>
+              </For>
+              <span data-codex-composer-more-measure="true">
+                <span class="codex-chat-composer-more-button codex-chat-composer-control-measure">
+                  <MoreHorizontal class="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
+              </span>
             </div>
           </div>
 

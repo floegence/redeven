@@ -554,6 +554,8 @@ export const enUS = defineDictionary({
       indexingFiles: 'Indexing files in the current working directory...',
       noMatchingFiles: 'No matching files found in the current working directory.',
       inputControls: 'Codex input controls',
+      moreControls: 'More',
+      moreInputControls: 'More Codex input controls',
       addAttachments: 'Add attachments',
       removeAttachment: 'Remove {name}',
       removeMention: 'Remove {name}',

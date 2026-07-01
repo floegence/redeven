@@ -534,6 +534,8 @@ export const zhCN = {
       indexingFiles: "正在索引当前工作目录中的文件...",
       noMatchingFiles: "当前工作目录中没有匹配文件。",
       inputControls: "Codex 输入控件",
+      moreControls: "更多",
+      moreInputControls: "更多 Codex 输入控件",
       addAttachments: "添加附件",
       removeAttachment: "移除 {name}",
       removeMention: "移除 {name}",

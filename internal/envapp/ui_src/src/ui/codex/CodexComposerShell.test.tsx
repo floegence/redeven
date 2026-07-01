@@ -25,6 +25,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
+    MoreHorizontal: Icon,
     Send: Icon,
   };
 });
@@ -54,6 +55,79 @@ vi.mock('@chenglou/pretext', () => pretextMocks);
 
 function flushAsync(): Promise<void> {
   return Promise.resolve().then(() => Promise.resolve());
+}
+
+function layoutRect(width: number, height = 22): DOMRect {
+  return {
+    x: 0,
+    y: 0,
+    width,
+    height,
+    top: 0,
+    right: width,
+    bottom: height,
+    left: 0,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
+
+function installComposerLayoutMock(input: {
+  availableWidth: number;
+  moreWidth?: number;
+  itemWidths: Partial<Record<'attachment' | 'working_dir' | 'model' | 'effort' | 'approval' | 'sandbox', number>>;
+}) {
+  const resizeRecords: Array<{ callback: ResizeObserverCallback; elements: Element[] }> = [];
+  vi.stubGlobal('ResizeObserver', class {
+    private readonly record: { callback: ResizeObserverCallback; elements: Element[] };
+
+    constructor(callback: ResizeObserverCallback) {
+      this.record = { callback, elements: [] };
+      resizeRecords.push(this.record);
+    }
+
+    observe(element: Element) {
+      this.record.elements.push(element);
+    }
+
+    disconnect() {
+      this.record.elements = [];
+    }
+  });
+  const rectSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function composerControlRect(this: HTMLElement) {
+    if (this.classList.contains('codex-chat-input-meta-rail')) {
+      return layoutRect(input.availableWidth);
+    }
+    const itemID = this.getAttribute('data-codex-composer-control-measure');
+    if (itemID) {
+      return layoutRect(input.itemWidths[itemID as keyof typeof input.itemWidths] ?? 80);
+    }
+    if (this.getAttribute('data-codex-composer-more-measure') === 'true') {
+      return layoutRect(input.moreWidth ?? 32);
+    }
+    return layoutRect(0);
+  });
+  const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
+  });
+  const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
+
+  return {
+    triggerResize: () => {
+      for (const record of resizeRecords) {
+        record.callback(
+          record.elements.map((target) => ({ target }) as ResizeObserverEntry),
+          {} as ResizeObserver,
+        );
+      }
+    },
+    restore: () => {
+      rectSpy.mockRestore();
+      rafSpy.mockRestore();
+      cancelSpy.mockRestore();
+      vi.unstubAllGlobals();
+    },
+  };
 }
 
 function renderComposer(options?: {
@@ -314,6 +388,239 @@ describe('CodexComposerShell', () => {
     expect(strategyGroup.querySelectorAll('[data-codex-select-collapsed="true"]').length).toBe(4);
     expect(strategyGroup.querySelector('.codex-chat-select-chip-label')).toBeNull();
     dispose();
+  });
+
+  it('keeps composer controls inline when they fit in one row', async () => {
+    const layout = installComposerLayoutMock({
+      availableWidth: 760,
+      moreWidth: 32,
+      itemWidths: {
+        attachment: 32,
+        working_dir: 132,
+        model: 104,
+        effort: 82,
+        approval: 96,
+        sandbox: 126,
+      },
+    });
+    const { host, dispose } = renderComposer({
+      workingDirPath: '/workspace/ui',
+      workingDirLabel: '~/ui',
+      workingDirTitle: '/workspace/ui',
+    });
+
+    layout.triggerResize();
+    await flushAsync();
+
+    expect(host.querySelector('.codex-chat-input-meta-rail')?.getAttribute('data-codex-composer-overflow')).toBe('false');
+    expect(host.querySelector('button[aria-label="More Codex input controls"]')).toBeNull();
+    expect(host.querySelector('[data-codex-composer-inline-item="attachment"] button[title="Add attachments"]')).not.toBeNull();
+    expect(host.querySelector('[data-codex-composer-inline-item="working_dir"] .codex-chat-working-dir-chip')).not.toBeNull();
+    expect(host.querySelectorAll('.codex-chat-input-meta-group-strategy [data-codex-select-collapsed="true"]').length).toBe(4);
+
+    dispose();
+    layout.restore();
+  });
+
+  it('moves non-attachment controls into the More panel when the bottom bar overflows', async () => {
+    const layout = installComposerLayoutMock({
+      availableWidth: 96,
+      moreWidth: 32,
+      itemWidths: {
+        attachment: 32,
+        working_dir: 132,
+        model: 104,
+        effort: 82,
+        approval: 96,
+        sandbox: 126,
+      },
+    });
+    const onModelChange = vi.fn();
+    const onApprovalPolicyChange = vi.fn();
+    const onSandboxModeChange = vi.fn();
+    const { host, dispose } = renderComposer({
+      workingDirPath: '/workspace/ui',
+      workingDirLabel: '~/ui',
+      workingDirTitle: '/workspace/ui',
+      modelOptions: [
+        { value: 'gpt-5.4', label: 'GPT-5.4' },
+        { value: 'gpt-5.5', label: 'GPT-5.5' },
+      ],
+      approvalPolicyOptions: [
+        { value: 'on-request', label: 'On request' },
+        { value: 'never', label: 'Never' },
+      ],
+      sandboxModeOptions: [
+        { value: 'workspace-write', label: 'Workspace write' },
+        { value: 'danger-full-access', label: 'Full access' },
+      ],
+      onModelChange,
+      onApprovalPolicyChange,
+      onSandboxModeChange,
+    });
+
+    layout.triggerResize();
+    await flushAsync();
+
+    const moreButton = host.querySelector('button[aria-label="More Codex input controls"]') as HTMLButtonElement | null;
+    if (!moreButton) throw new Error('more button not found');
+    expect(host.querySelector('.codex-chat-input-meta-rail')?.getAttribute('data-codex-composer-overflow')).toBe('true');
+    expect(host.querySelector('[data-codex-composer-inline-item="attachment"] button[title="Add attachments"]')).not.toBeNull();
+    expect(host.querySelector('[data-codex-composer-inline-item="working_dir"]')).toBeNull();
+    expect(host.querySelector('.codex-chat-input-meta-group-strategy')).toBeNull();
+
+    moreButton.click();
+    await flushAsync();
+
+    const panel = host.querySelector('[data-codex-composer-more-panel="true"]') as HTMLDivElement | null;
+    if (!panel) throw new Error('more panel not found');
+    expect(Array.from(panel.querySelectorAll('[data-codex-composer-more-item]')).map((node) => node.getAttribute('data-codex-composer-more-item'))).toEqual([
+      'working_dir',
+      'model',
+      'effort',
+      'approval',
+      'sandbox',
+    ]);
+    expect(panel.querySelector('[data-codex-composer-more-item="working_dir"] .codex-chat-working-dir-chip')?.textContent).toContain('~/ui');
+
+    const modelSelect = panel.querySelector('select[aria-label="Model"]') as HTMLSelectElement | null;
+    const approvalSelect = panel.querySelector('select[aria-label="Approval"]') as HTMLSelectElement | null;
+    const sandboxSelect = panel.querySelector('select[aria-label="Sandbox"]') as HTMLSelectElement | null;
+    if (!modelSelect || !approvalSelect || !sandboxSelect) throw new Error('panel select not found');
+
+    modelSelect.value = 'gpt-5.5';
+    modelSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    approvalSelect.value = 'never';
+    approvalSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    sandboxSelect.value = 'danger-full-access';
+    sandboxSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    expect(onModelChange).toHaveBeenCalledWith('gpt-5.5');
+    expect(onApprovalPolicyChange).toHaveBeenCalledWith('never');
+    expect(onSandboxModeChange).toHaveBeenCalledWith('danger-full-access');
+
+    dispose();
+    layout.restore();
+  });
+
+  it('keeps working directory behavior intact from the More panel', async () => {
+    const layout = installComposerLayoutMock({
+      availableWidth: 96,
+      moreWidth: 32,
+      itemWidths: {
+        attachment: 32,
+        working_dir: 132,
+        model: 104,
+        effort: 82,
+        approval: 96,
+        sandbox: 126,
+      },
+    });
+    const onOpenWorkingDirPicker = vi.fn();
+    const { host, dispose } = renderComposer({
+      workingDirPath: '/workspace/ui',
+      workingDirLabel: '~/ui',
+      workingDirTitle: '/workspace/ui',
+      onOpenWorkingDirPicker,
+    });
+
+    layout.triggerResize();
+    await flushAsync();
+
+    (host.querySelector('button[aria-label="More Codex input controls"]') as HTMLButtonElement | null)?.click();
+    await flushAsync();
+    const workingDirButton = host.querySelector('[data-codex-composer-more-item="working_dir"] .codex-chat-working-dir-chip') as HTMLButtonElement | null;
+    if (!workingDirButton) throw new Error('working directory more item not found');
+
+    workingDirButton.click();
+    await flushAsync();
+
+    expect(onOpenWorkingDirPicker).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[data-codex-composer-more-panel="true"]')).toBeNull();
+
+    dispose();
+    layout.restore();
+  });
+
+  it('keeps locked working directory inert from the More panel', async () => {
+    const layout = installComposerLayoutMock({
+      availableWidth: 96,
+      moreWidth: 32,
+      itemWidths: {
+        attachment: 32,
+        working_dir: 132,
+        model: 104,
+        effort: 82,
+        approval: 96,
+        sandbox: 126,
+      },
+    });
+    const onOpenWorkingDirPicker = vi.fn();
+    const { host, dispose } = renderComposer({
+      workingDirPath: '/workspace/ui',
+      workingDirLabel: '~/ui',
+      workingDirTitle: '/workspace/ui',
+      workingDirLocked: true,
+      onOpenWorkingDirPicker,
+    });
+
+    layout.triggerResize();
+    await flushAsync();
+
+    (host.querySelector('button[aria-label="More Codex input controls"]') as HTMLButtonElement | null)?.click();
+    await flushAsync();
+    const workingDirButton = host.querySelector('[data-codex-composer-more-item="working_dir"] .codex-chat-working-dir-chip') as HTMLButtonElement | null;
+    if (!workingDirButton) throw new Error('locked working directory more item not found');
+
+    workingDirButton.click();
+
+    expect(workingDirButton.className).toContain('codex-chat-working-dir-chip-locked');
+    expect(workingDirButton.getAttribute('aria-disabled')).toBe('true');
+    expect(workingDirButton.tabIndex).toBe(-1);
+    expect(onOpenWorkingDirPicker).not.toHaveBeenCalled();
+
+    dispose();
+    layout.restore();
+  });
+
+  it('closes the More panel with Escape and outside pointer input', async () => {
+    const layout = installComposerLayoutMock({
+      availableWidth: 96,
+      moreWidth: 32,
+      itemWidths: {
+        attachment: 32,
+        working_dir: 132,
+        model: 104,
+        effort: 82,
+        approval: 96,
+        sandbox: 126,
+      },
+    });
+    const { host, dispose } = renderComposer();
+
+    layout.triggerResize();
+    await flushAsync();
+
+    const moreButton = host.querySelector('button[aria-label="More Codex input controls"]') as HTMLButtonElement | null;
+    if (!moreButton) throw new Error('more button not found');
+    moreButton.click();
+    await flushAsync();
+    expect(host.querySelector('[data-codex-composer-more-panel="true"]')).not.toBeNull();
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await flushAsync();
+    expect(host.querySelector('[data-codex-composer-more-panel="true"]')).toBeNull();
+    expect(document.activeElement).toBe(moreButton);
+
+    moreButton.click();
+    await flushAsync();
+    expect(host.querySelector('[data-codex-composer-more-panel="true"]')).not.toBeNull();
+    document.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    await flushAsync();
+    expect(host.querySelector('[data-codex-composer-more-panel="true"]')).toBeNull();
+
+    dispose();
+    layout.restore();
   });
 
   it('renders mentions and attachments in a lower-priority draft object lane', () => {
