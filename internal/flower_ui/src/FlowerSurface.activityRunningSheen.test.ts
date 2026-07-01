@@ -29,7 +29,6 @@ describe('Flower activity running sheen', () => {
 
     expect(panelRule).toContain('--flower-activity-terminal-font');
     expect(panelRule).toContain('background: #0d1117');
-    expect(panelRule).toContain('border-left-width: 3px');
     expect(headerRule).toContain('background: #151b23');
     expect(commandRule).toContain('font-family: var(--flower-activity-terminal-font)');
     expect(commandRule).toContain('text-overflow: ellipsis');

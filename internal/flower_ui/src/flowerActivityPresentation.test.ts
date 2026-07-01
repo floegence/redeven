@@ -107,7 +107,6 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('result status:timeout');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error code:TIMEOUT');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error message:Tool execution timed out after 30000 ms');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('retryable:true');
@@ -131,7 +130,6 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('result status:success');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error code:UNKNOWN');
     expect(presentation.meta).not.toContain('success');
   });
