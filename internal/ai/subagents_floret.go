@@ -16,7 +16,6 @@ import (
 	flconfig "github.com/floegence/floret/config"
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/websearch"
@@ -405,16 +404,21 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, erro
 		return nil, err
 	}
 	systemPrompt := parent.buildSubagentHostSystemPrompt(activeTools, childContract)
-	surfaceProvider := s.dynamicSubagentToolSurfaceProvider(state, flruntime.SubAgentForkNone)
+	surfaceProvider := s.dynamicSubagentToolSurfaceProvider(state)
+	contextWindow := modelGatewayDefaultContextWindowTokens
+	if modelCapability.MaxContextTokens > 0 {
+		contextWindow = modelCapability.MaxContextTokens
+	}
 	host, err := flruntime.NewHost(flruntime.HostOptions{
-		Config:              flconfig.Config{Provider: flconfig.ProviderFake, Model: modelName, SystemPrompt: systemPrompt, Reasoning: config.NormalizeAIReasoningSelection(parent.currentReasoning)},
-		ModelGateway:        flProvider,
-		Store:               store,
-		Tools:               flTools,
-		Approver:            floretToolApproverForRun(childRun),
-		Sink:                floretSubagentEventSink{runtime: s},
-		ToolSurfaceProvider: surfaceProvider,
-		SubAgentRunTimeout:  subagentRunTimeout,
+		Config:               flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, 0), Reasoning: config.NormalizeAIReasoningSelection(parent.currentReasoning)},
+		ModelGateway:         flProvider,
+		ModelGatewayIdentity: redevenFloretGatewayIdentity(resolved.provider.ID, modelName),
+		Store:                store,
+		Tools:                flTools,
+		Approver:             floretToolApproverForRun(childRun),
+		Sink:                 floretSubagentEventSink{runtime: s},
+		ToolSurfaceProvider:  surfaceProvider,
+		SubAgentRunTimeout:   subagentRunTimeout,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
@@ -609,7 +613,7 @@ func (r *run) subagentToolSurface(all []ToolDef, forkMode flruntime.SubAgentFork
 	return activeTools, contract
 }
 
-func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floretToolRuntimeState, fallbackForkMode flruntime.SubAgentForkMode) flruntime.ToolSurfaceProvider {
+func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floretToolRuntimeState) flruntime.ToolSurfaceProvider {
 	var mu sync.Mutex
 	lastEpochByThread := map[string]string{}
 	return func(ctx context.Context, req flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
@@ -637,7 +641,18 @@ func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floret
 		if err := registerBuiltInTools(registry, childRun); err != nil {
 			return flruntime.ToolSurface{}, err
 		}
-		forkMode := s.childForkModeForThread(ctx, childThreadID, fallbackForkMode)
+		forkMode, err := s.childForkModeForThread(ctx, childThreadID)
+		if err != nil {
+			parent.persistRunEvent("subagent.tool_surface.error", RealtimeStreamKindLifecycle, map[string]any{
+				"phase":           strings.TrimSpace(req.Phase),
+				"step":            req.Step,
+				"subagent_id":     childThreadID,
+				"child_thread_id": childThreadID,
+				"child_run_id":    childRunID,
+				"error":           err.Error(),
+			})
+			return flruntime.ToolSurface{}, err
+		}
 		activeTools, childContract := childRun.subagentToolSurface(registry.Snapshot(), forkMode)
 		childSnapshot := permissionSnapshotWithOwnerIdentity(buildPermissionSnapshot(childRun.permissionType, activeTools, nil), parent.endpointID, childThreadID, childRunID)
 		childRun.permissionSnapshot = childSnapshot
@@ -690,26 +705,26 @@ func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floret
 	}
 }
 
-func (s *floretSubagentRuntime) childForkModeForThread(ctx context.Context, childThreadID string, fallback flruntime.SubAgentForkMode) flruntime.SubAgentForkMode {
+func (s *floretSubagentRuntime) childForkModeForThread(ctx context.Context, childThreadID string) (flruntime.SubAgentForkMode, error) {
 	childThreadID = strings.TrimSpace(childThreadID)
 	if childThreadID == "" {
-		return fallback
+		return "", errors.New("missing subagent child thread identity")
 	}
 	parent := s.parentRun()
 	host := s.currentHost()
 	if parent == nil || host == nil {
-		return fallback
+		return "", errors.New("subagent runtime host unavailable")
 	}
 	snapshots, err := host.ListSubAgents(ctx, flruntime.ThreadID(strings.TrimSpace(parent.threadID)))
 	if err != nil {
-		return fallback
+		return "", fmt.Errorf("read subagent fork mode: %w", err)
 	}
 	for _, snapshot := range snapshots {
 		if strings.TrimSpace(string(snapshot.ThreadID)) == childThreadID && snapshot.ForkMode != "" {
-			return snapshot.ForkMode
+			return snapshot.ForkMode, nil
 		}
 	}
-	return fallback
+	return "", fmt.Errorf("subagent %q fork mode not found", childThreadID)
 }
 
 func filterSubagentChildTools(in []ToolDef, contract subagentCapabilityContract) []ToolDef {
@@ -891,9 +906,7 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 		"context_mode": bounded["context_mode"],
 		"task_name":    bounded["task_name"],
 		"title":        bounded["title"],
-		"subagent":     bounded,
-		"snapshot":     bounded,
-		"item":         bounded,
+		"items":        []map[string]any{bounded},
 	}), nil
 }
 
@@ -1038,9 +1051,6 @@ func (s *floretSubagentRuntime) inspect(ctx context.Context, args map[string]any
 	}
 	if len(targets) > 0 {
 		out["ids"] = targets
-	}
-	if len(items) == 1 {
-		out["item"] = boundedSubagentItem(items[0])
 	}
 	return trimSubagentToolResult(out), nil
 }
@@ -1222,11 +1232,7 @@ func trimSubagentToolResult(out map[string]any) map[string]any {
 	}
 	if items != nil {
 		out["items"] = items
-		if len(items) == 1 {
-			out["item"] = items[0]
-		} else {
-			delete(out, "item")
-		}
+		delete(out, "item")
 	}
 	body, err := json.Marshal(out)
 	if err != nil || len(body) <= subagentToolResultHardBytes {
@@ -1236,11 +1242,7 @@ func trimSubagentToolResult(out map[string]any) map[string]any {
 	for _, limit := range []int{480, 240, 120, 60} {
 		shrinkSubagentToolItems(items, limit)
 		out["items"] = items
-		if len(items) == 1 {
-			out["item"] = items[0]
-		} else {
-			delete(out, "item")
-		}
+		delete(out, "item")
 		body, err = json.Marshal(out)
 		if err != nil || len(body) <= subagentToolResultHardBytes {
 			return out
@@ -1578,9 +1580,6 @@ func minimalSubagentToolResult(out map[string]any, items []map[string]any) map[s
 			minimal[key] = value
 		}
 	}
-	if len(minimalItems) == 1 {
-		minimal["item"] = minimalItems[0]
-	}
 	return minimal
 }
 
@@ -1589,7 +1588,7 @@ func scrubSubagentForbiddenFields(in map[string]any) map[string]any {
 		"tool_call", "tool_calls", "tool_result", "tool_results", "stdout", "stderr",
 		"command", "args", "args_json", "history", "transcript", "timeline",
 		"messages", "entries", "raw", "result_struct",
-		"subagents", "snapshots", "snapshots_by_id", "snapshot_count", "task_id",
+		"subagent", "subagents", "snapshot", "snapshots", "snapshots_by_id", "item", "snapshot_count", "task_id",
 		"parent_turn_id", "latest_turn_id",
 	} {
 		delete(in, key)
@@ -1704,9 +1703,7 @@ func (s *floretSubagentRuntime) sendInput(ctx context.Context, args map[string]a
 		"subagent_id": bounded["subagent_id"],
 		"thread_id":   bounded["thread_id"],
 		"accepted":    true,
-		"subagent":    bounded,
-		"snapshot":    bounded,
-		"item":        bounded,
+		"items":       []map[string]any{bounded},
 	}), nil
 }
 
@@ -1778,9 +1775,6 @@ func (s *floretSubagentRuntime) close(ctx context.Context, args map[string]any) 
 		"closed":      true,
 		"stopped":     true,
 		"items":       []map[string]any{bounded},
-		"subagent":    bounded,
-		"snapshot":    bounded,
-		"item":        bounded,
 	}
 	return trimSubagentToolResult(applySubagentTimeoutFields(out, requestedTimeoutMS, effectiveTimeoutMS, timeoutSource)), nil
 }
@@ -1940,19 +1934,22 @@ func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Met
 	if parent == nil {
 		return nil, sql.ErrNoRows
 	}
-	if runtime == nil {
-		r := s.detachedSubagentParentRun(meta, *parent)
-		if r == nil {
-			return nil, errors.New("subagent runtime unavailable")
+	var detailHost interface {
+		ReadSubAgentDetail(context.Context, flruntime.ReadSubAgentDetailRequest) (flruntime.SubAgentDetail, error)
+		Close() error
+	}
+	if runtime != nil {
+		detailHost = runtime.currentHost()
+	}
+	if detailHost == nil {
+		host, err := s.openFloretMaintenanceHost()
+		if err != nil {
+			return nil, err
 		}
-		runtime = newFloretSubagentRuntime(r)
-		defer runtime.release()
+		detailHost = host
+		defer detailHost.Close()
 	}
-	host, err := runtime.ensureHost(ctxOrBackground(ctx))
-	if err != nil {
-		return nil, err
-	}
-	detail, err := host.ReadSubAgentDetail(ctxOrBackground(ctx), flruntime.ReadSubAgentDetailRequest{
+	detail, err := detailHost.ReadSubAgentDetail(ctxOrBackground(ctx), flruntime.ReadSubAgentDetailRequest{
 		ParentThreadID: flruntime.ThreadID(parentThreadID),
 		ChildThreadID:  flruntime.ThreadID(childThreadID),
 		AfterOrdinal:   afterOrdinal,
@@ -1978,54 +1975,6 @@ func isFloretSubagentNotFoundError(err error) bool {
 		return false
 	}
 	return errors.Is(err, flruntime.ErrSubAgentNotFound)
-}
-
-func (s *Service) detachedSubagentParentRun(meta *session.Meta, th threadstore.Thread) *run {
-	if s == nil || meta == nil {
-		return nil
-	}
-	workingDir := strings.TrimSpace(th.WorkingDir)
-	if workingDir == "" {
-		workingDir = strings.TrimSpace(s.agentHomeDir)
-	}
-	modelID := strings.TrimSpace(th.ModelID)
-	cfg := s.cfg
-	r := newRun(runOptions{
-		Log:                   s.log,
-		StateDir:              s.stateDir,
-		AgentHomeDir:          s.agentHomeDir,
-		WorkingDir:            workingDir,
-		FilesystemScope:       s.scope,
-		Shell:                 s.shell,
-		AIConfig:              cfg,
-		SessionMeta:           meta,
-		ResolveProviderKey:    s.resolveProviderKey,
-		ResolveWebSearchKey:   s.resolveWebSearchKey,
-		DesktopModelSource:    s.desktopModelSource,
-		EndpointID:            strings.TrimSpace(meta.EndpointID),
-		ThreadID:              strings.TrimSpace(th.ThreadID),
-		UserPublicID:          strings.TrimSpace(meta.UserPublicID),
-		UploadsDir:            s.uploadsDir,
-		ThreadsDB:             s.threadsDB,
-		PersistOpTimeout:      s.persistOpTO,
-		SkillManager:          s.skillManager,
-		ToolTargetPolicy:      s.toolTargetPolicy,
-		TargetToolExecutor:    s.targetToolExecutor,
-		AllowSubagentDelegate: false,
-		NoUserInteraction:     true,
-		SubagentDepth:         1,
-	})
-	r.currentModelID = modelID
-	if r.currentModelID == "" && cfg != nil {
-		r.currentModelID = strings.TrimSpace(cfg.CurrentModelID)
-	}
-	r.currentReasoning = unmarshalReasoningSelection(th.ReasoningSelectionJSON)
-	if permissionType, err := normalizePermissionType(threadPermissionTypeString(&th, ""), FlowerPermissionApprovalRequired); err == nil {
-		r.permissionType = permissionType
-	} else {
-		r.permissionType = FlowerPermissionApprovalRequired
-	}
-	return r
 }
 
 func flowerSubagentDetailResponse(detail flruntime.SubAgentDetail) FlowerSubagentDetailResponse {

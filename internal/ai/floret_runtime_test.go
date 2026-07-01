@@ -1011,17 +1011,24 @@ func TestRedevenFloretGatewayConfigDoesNotCarryProviderConfiguration(t *testing.
 	t.Parallel()
 
 	cfg := redevenFloretAdapterConfig("system", floretModelContextPolicy(1000, 200), config.AIReasoningSelection{Level: config.AIReasoningLevelLow})
-	if cfg.Provider != flconfig.ProviderFake {
-		t.Fatalf("provider=%q, want fake adapter identity", cfg.Provider)
+	if cfg.Provider != "" {
+		t.Fatalf("provider=%q, want empty transport field", cfg.Provider)
 	}
-	if cfg.Model != "redeven-model-adapter" {
-		t.Fatalf("model=%q, want adapter placeholder", cfg.Model)
+	if cfg.Model != "" {
+		t.Fatalf("model=%q, want empty transport field", cfg.Model)
 	}
 	if cfg.BaseURL != "" || cfg.APIKey != "" {
 		t.Fatalf("Floret config must not carry Redeven provider endpoint or secret: base_url=%q api_key=%q", cfg.BaseURL, cfg.APIKey)
 	}
 	if cfg.Reasoning.Level != config.AIReasoningLevelLow {
 		t.Fatalf("reasoning=%+v, want low selection", cfg.Reasoning)
+	}
+	identity := redevenFloretGatewayIdentity(" provider-a ", " gpt-test ")
+	if identity.Provider != "provider-a" || identity.Model != "gpt-test" {
+		t.Fatalf("identity=%+v, want trimmed provider id/model", identity)
+	}
+	if identity == redevenFloretGatewayIdentity("provider-b", "gpt-test") {
+		t.Fatalf("gateway identity must distinguish same-type providers by provider id")
 	}
 }
 

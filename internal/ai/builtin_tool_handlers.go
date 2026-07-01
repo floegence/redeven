@@ -323,11 +323,6 @@ func truncateSubagentsPayloadRecord(record map[string]any) bool {
 		record[field] = trimmed
 		truncated = truncated || hit
 	}
-	for _, field := range []string{"snapshot", "subagent", "item"} {
-		if nested, ok := record[field].(map[string]any); ok && nested != nil {
-			truncated = truncateSubagentsPayloadRecord(nested) || truncated
-		}
-	}
 	for _, field := range []string{"items"} {
 		for _, raw := range toAnySlice(record[field]) {
 			nested, ok := raw.(map[string]any)

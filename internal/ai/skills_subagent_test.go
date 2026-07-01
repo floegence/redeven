@@ -1154,9 +1154,12 @@ func assertNoSubagentModelDetailFields(t *testing.T, value any) {
 		"entries",
 		"raw",
 		"result_struct",
+		"subagent",
 		"subagents",
+		"snapshot",
 		"snapshots",
 		"snapshots_by_id",
+		"item",
 		"snapshot_count",
 		"task_id",
 		"parent_turn_id",
@@ -1264,6 +1267,59 @@ func TestSubagentsTool_TrimmedResultHasHardCapAndDetailRefs(t *testing.T) {
 		if _, ok := first[forbidden]; ok {
 			t.Fatalf("wait status item must not include %s: %#v", forbidden, first)
 		}
+	}
+}
+
+func TestSubagentsTool_TrimmedResultRemovesForbiddenSingleItemFields(t *testing.T) {
+	t.Parallel()
+
+	out := trimSubagentToolResult(map[string]any{
+		"status":   "ok",
+		"action":   subagentActionSpawn,
+		"snapshot": map[string]any{"thread_id": "forbidden_snapshot"},
+		"subagent": map[string]any{"thread_id": "forbidden_subagent"},
+		"item":     map[string]any{"thread_id": "forbidden_item"},
+		"items": []map[string]any{{
+			"subagent_id": "child-1",
+			"thread_id":   "child-1",
+			"status":      subagentStatusRunning,
+		}},
+	})
+	assertNoRecursiveKey(t, out, "snapshot")
+	assertNoRecursiveKey(t, out, "subagent")
+	assertNoRecursiveKey(t, out, "item")
+	items := subagentItemsFromAny(out["items"])
+	if len(items) != 1 || strings.TrimSpace(anyToString(items[0]["thread_id"])) != "child-1" {
+		t.Fatalf("canonical items payload = %#v", out)
+	}
+}
+
+func TestSubagentsTool_ChildForkModeFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	parent := newRun(runOptions{ThreadID: "parent_thread"})
+	runtime := newFloretSubagentRuntime(parent)
+	if _, err := runtime.childForkModeForThread(context.Background(), "child"); err == nil || !strings.Contains(err.Error(), "host unavailable") {
+		t.Fatalf("missing host err = %v, want fail closed", err)
+	}
+
+	host := &recordingFloretHost{snapshots: []flruntime.SubAgentSnapshot{{ThreadID: "other_child", ForkMode: flruntime.SubAgentForkNone}}}
+	runtime.mu.Lock()
+	runtime.host = host
+	runtime.mu.Unlock()
+	if _, err := runtime.childForkModeForThread(context.Background(), "child"); err == nil || !strings.Contains(err.Error(), "fork mode not found") {
+		t.Fatalf("missing child err = %v, want fail closed", err)
+	}
+
+	host.snapshots = []flruntime.SubAgentSnapshot{{ThreadID: "child"}}
+	if _, err := runtime.childForkModeForThread(context.Background(), "child"); err == nil || !strings.Contains(err.Error(), "fork mode not found") {
+		t.Fatalf("missing fork mode err = %v, want fail closed", err)
+	}
+
+	host.snapshots = []flruntime.SubAgentSnapshot{{ThreadID: "child", ForkMode: flruntime.SubAgentForkFullPath}}
+	mode, err := runtime.childForkModeForThread(context.Background(), "child")
+	if err != nil || mode != flruntime.SubAgentForkFullPath {
+		t.Fatalf("fork mode=%q err=%v, want full path", mode, err)
 	}
 }
 

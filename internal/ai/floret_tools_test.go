@@ -959,7 +959,7 @@ func TestFloretToolResultActivityPayloadsMeetFullContract(t *testing.T) {
 	}
 }
 
-func TestFloretToolResultActivityPreservesSubagentLifecycleSnapshot(t *testing.T) {
+func TestFloretToolResultActivityPreservesSubagentLifecycleItems(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{})
@@ -970,7 +970,7 @@ func TestFloretToolResultActivityPreservesSubagentLifecycleSnapshot(t *testing.T
 		"subagent_id": "subagent-1",
 		"thread_id":   "subagent-1",
 		"closed":      true,
-		"snapshot": map[string]any{
+		"items": []any{map[string]any{
 			"subagent_id":   "subagent-1",
 			"thread_id":     "subagent-1",
 			"task_name":     "Review prompt contract",
@@ -980,7 +980,10 @@ func TestFloretToolResultActivityPreservesSubagentLifecycleSnapshot(t *testing.T
 			"updated_at_ms": 1782219585489,
 			"closed":        true,
 			"can_close":     false,
-		},
+		}},
+		"snapshot": map[string]any{"thread_id": "forbidden-snapshot-single"},
+		"subagent": map[string]any{"thread_id": "forbidden-subagent-single"},
+		"item":     map[string]any{"thread_id": "forbidden-item-single"},
 	})
 	if !truncated {
 		t.Fatal("expected large subagent payload to be field-truncated")
@@ -994,18 +997,27 @@ func TestFloretToolResultActivityPreservesSubagentLifecycleSnapshot(t *testing.T
 		Data:      normalized,
 		Truncated: truncated,
 	})
-	snapshot, ok := activity.Payload["snapshot"].(map[string]any)
-	if !ok {
-		t.Fatalf("activity snapshot type=%T payload=%#v", activity.Payload["snapshot"], activity.Payload)
+	for _, field := range []string{"snapshot", "subagent", "item"} {
+		if _, ok := activity.Payload[field]; ok {
+			t.Fatalf("activity retained legacy subagent field %s: %#v", field, activity.Payload)
+		}
 	}
-	if anyToString(activity.Payload["action"]) != "close" || anyToString(snapshot["status"]) != "canceled" {
+	items := toAnySlice(activity.Payload["items"])
+	if len(items) != 1 {
+		t.Fatalf("activity items=%#v, want one canonical item", activity.Payload["items"])
+	}
+	item, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("activity item type=%T payload=%#v", items[0], activity.Payload)
+	}
+	if anyToString(activity.Payload["action"]) != "close" || anyToString(item["status"]) != "canceled" {
 		t.Fatalf("activity lost close lifecycle state: %#v", activity.Payload)
 	}
-	if anyToString(snapshot["thread_id"]) != "subagent-1" || anyToString(snapshot["agent_type"]) != "reviewer" {
-		t.Fatalf("activity lost subagent identity: %#v", snapshot)
+	if anyToString(item["thread_id"]) != "subagent-1" || anyToString(item["agent_type"]) != "reviewer" {
+		t.Fatalf("activity lost subagent identity: %#v", item)
 	}
-	if len([]rune(anyToString(snapshot["last_message"]))) > 3000 {
-		t.Fatalf("activity last_message was not field-truncated: %d", len([]rune(anyToString(snapshot["last_message"]))))
+	if len([]rune(anyToString(item["last_message"]))) > 3000 {
+		t.Fatalf("activity last_message was not field-truncated: %d", len([]rune(anyToString(item["last_message"]))))
 	}
 	if activity.Payload["truncated"] != true {
 		t.Fatalf("activity payload truncated flag=%#v, want true", activity.Payload["truncated"])

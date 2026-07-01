@@ -112,8 +112,8 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
-	const floretVersion = "v0.3.70"
-	oldFloretVersions := []string{"v0.3." + "45", "v0.3." + "46", "v0.3." + "47", "v0.3." + "53", "v0.3." + "54", "v0.3." + "55", "v0.3." + "56", "v0.3." + "57", "v0.3." + "58", "v0.3." + "59", "v0.3." + "60", "v0.3." + "61", "v0.3." + "62", "v0.3." + "63", "v0.3." + "64", "v0.3." + "65", "v0.3." + "66", "v0.3." + "67", "v0.3." + "68", "v0.3." + "69"}
+	const floretVersion = "v0.3.72"
+	oldFloretVersions := []string{"v0.3." + "45", "v0.3." + "46", "v0.3." + "47", "v0.3." + "53", "v0.3." + "54", "v0.3." + "55", "v0.3." + "56", "v0.3." + "57", "v0.3." + "58", "v0.3." + "59", "v0.3." + "60", "v0.3." + "61", "v0.3." + "62", "v0.3." + "63", "v0.3." + "64", "v0.3." + "65", "v0.3." + "66", "v0.3." + "67", "v0.3." + "68", "v0.3." + "69", "v0.3." + "70", "v0.3." + "71"}
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
 	goSum := readRepoFile(t, root, "go.sum")
@@ -170,7 +170,7 @@ func TestFloretAssistantProjectionIsNotStoredAsThreadstoreShadowCopy(t *testing.
 	}
 }
 
-func TestFloretLifecycleBoundaryUsesProviderFreeLifecycleHost(t *testing.T) {
+func TestFloretMaintenanceBoundaryUsesProviderFreeThreadMaintenanceHost(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
@@ -179,13 +179,85 @@ func TestFloretLifecycleBoundaryUsesProviderFreeLifecycleHost(t *testing.T) {
 		"flconfig." + "ProviderFake",
 		"Fake" + "Response",
 		"flruntime." + "NewHost",
+		"flruntime." + "NewLifecycleHost",
+		"flruntime." + "LifecycleHost",
+		"Lifecycle" + "HostOptions",
+		"open" + "FloretLifecycleHost",
 	} {
 		if strings.Contains(content, marker) {
-			t.Fatalf("service.go lifecycle cleanup must use Floret NewLifecycleHost instead of retaining marker %q", marker)
+			t.Fatalf("service.go maintenance cleanup must use Floret NewThreadMaintenanceHost instead of retaining marker %q", marker)
 		}
 	}
-	if !strings.Contains(content, "flruntime."+"NewLifecycleHost") {
-		t.Fatalf("service.go must use Floret NewLifecycleHost for lifecycle-only cleanup")
+	if !strings.Contains(content, "flruntime."+"NewThreadMaintenanceHost") {
+		t.Fatalf("service.go must use Floret NewThreadMaintenanceHost for provider-free maintenance")
+	}
+}
+
+func TestFloretGatewayBoundaryUsesGatewayIdentity(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	for _, rel := range []string{
+		filepath.Join("internal", "ai", "floret_runtime.go"),
+		filepath.Join("internal", "ai", "compact_thread_context.go"),
+		filepath.Join("internal", "ai", "subagents_floret.go"),
+	} {
+		content := readRepoFile(t, root, rel)
+		for _, marker := range []string{
+			"flconfig." + "ProviderFake",
+			"Fake" + "Response",
+		} {
+			if strings.Contains(content, marker) {
+				t.Fatalf("%s must not configure gateway-backed Floret hosts with fake provider marker %q", rel, marker)
+			}
+		}
+		if !strings.Contains(content, "ModelGatewayIdentity:") {
+			t.Fatalf("%s must pass Floret ModelGatewayIdentity for gateway-backed hosts", rel)
+		}
+	}
+}
+
+func TestFloretSubagentDetailUsesProviderFreeMaintenanceHost(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	content := readRepoFile(t, root, filepath.Join("internal", "ai", "subagents_floret.go"))
+	for _, marker := range []string{
+		"detached" + "SubagentParentRun",
+		"out[\"item\"] =",
+		"minimal[\"item\"] =",
+		"\"snapshot\":",
+		"\"subagent\":",
+		"\"item\":",
+	} {
+		if strings.Contains(content, marker) {
+			t.Fatalf("subagents_floret.go must not retain provider-backed detail or legacy subagent shape marker %q", marker)
+		}
+	}
+	if !strings.Contains(content, "open"+"FloretMaintenanceHost") {
+		t.Fatalf("subagents_floret.go must use provider-free Floret maintenance host for detached subagent detail reads")
+	}
+}
+
+func TestFloretOKFAndContractsUseThreadMaintenanceHost(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	for _, rel := range []string{
+		filepath.Join("okf", "ai", "ai-tool-runtime.md"),
+		filepath.Join("okf", "ui", "flower-live-timeline.md"),
+		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"),
+	} {
+		content := readRepoFile(t, root, rel)
+		for _, marker := range []string{
+			"Lifecycle" + "Host",
+			"v0.3." + "70",
+			"v0.3." + "71",
+		} {
+			if strings.Contains(content, marker) {
+				t.Fatalf("%s must not retain old Floret boundary marker %q", rel, marker)
+			}
+		}
 	}
 }
 
