@@ -161,12 +161,12 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentActionSidecar(t *testin
 		t.Fatalf("SanitizeActivityTimelineMessageJSON: %v", err)
 	}
 	body := string(sanitized)
-	for _, required := range []string{`"subagent_actions"`, `"action":"inspect"`, `"context_mode":"mission_only"`, `"can_close":true`, `"updated_at_ms":1700000000100`} {
+	for _, required := range []string{`"subagent_actions"`, `"action":"inspect"`, `"context_mode":"mission_only"`, `"thread_id":"child_1"`, `"subagent_id":"child_1"`, `"updated_at_ms":1700000000100`} {
 		if !strings.Contains(body, required) {
 			t.Fatalf("sanitized message missing %q: %s", required, body)
 		}
 	}
-	for _, forbidden := range []string{"private_path", "/Users/alice/work", `"can_send_input":false`} {
+	for _, forbidden := range []string{"private_path", "/Users/alice/work", `"can_send_input"`, `"can_close"`, `"last_message"`, `"waiting_prompt"`} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("sanitized message contains %q: %s", forbidden, body)
 		}
@@ -194,24 +194,30 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentProjectionPayload(t *te
 	}
 	body := string(sanitized)
 	for _, required := range []string{
-		`"subagent_id":"thread_child_review"`,
-		`"thread_id":"thread_child_review"`,
 		`"items"`,
 		`"task_name":"Review API"`,
 		`"agent_type":"reviewer"`,
 		`"context_mode":"mission_only"`,
+		`"status":"completed"`,
 		`"final_handoff_report"`,
 		`"progress_summary"`,
 		`"handoff":"API boundary is consistent."`,
 		`"changed_files":["internal/ai/subagents_floret.go"]`,
 		`"next_expected_step":"finish review"`,
-		`"last_message":"Reading the API boundary."`,
 	} {
 		if !strings.Contains(body, required) {
 			t.Fatalf("sanitized subagent payload missing %q: %s", required, body)
 		}
 	}
 	for _, forbidden := range []string{
+		`thread_child_review`,
+		`"subagent_id"`,
+		`"last_message"`,
+		`"waiting_prompt"`,
+		`"can_send_input"`,
+		`"can_interrupt"`,
+		`"can_close"`,
+		`"detail_ref"`,
 		`"path"`,
 		`private_path`,
 		`privatePath`,

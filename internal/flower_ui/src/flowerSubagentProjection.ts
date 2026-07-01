@@ -24,15 +24,9 @@ export type FlowerSubagentPanelItem = Readonly<{
   title: string;
   agentType: string;
   status: FlowerSubagentPanelStatus;
-  lastMessage: string;
   action: string;
-	canOpen: boolean;
-	parentThreadID: string;
-	waitingPrompt: string;
-	queuedInputs: number;
-	canSendInput: boolean;
-  canInterrupt: boolean;
-  canClose: boolean;
+  canOpen: boolean;
+  parentThreadID: string;
   updatedAtMs: number;
   itemStatus: FlowerActivityItem['status'];
 }>;
@@ -158,9 +152,6 @@ function nestedSnapshots(payload: SnapshotSource): readonly SnapshotSource[] {
     const record = asRecord(value);
     if (Object.keys(record).length > 0) out.push(record);
   };
-  for (const key of ['snapshot', 'subagent', 'item']) {
-    pushRecord(payload[key]);
-  }
   for (const key of ['items']) {
     const list = Array.isArray(payload[key]) ? payload[key] as readonly unknown[] : [];
     list.forEach(pushRecord);
@@ -175,8 +166,8 @@ function itemFromSnapshot(
   fallbackUpdatedAtMs: number,
   ownerThreadID: string,
 ): FlowerSubagentPanelItem | null {
-  const threadID = payloadString(source, 'thread_id', 'subagent_id');
-  const subagentID = payloadString(source, 'subagent_id', 'thread_id');
+  const threadID = payloadString(source, 'thread_id', 'subagent_id') || payloadString(activityPayload, 'thread_id', 'subagent_id');
+  const subagentID = payloadString(source, 'subagent_id', 'thread_id') || payloadString(activityPayload, 'subagent_id', 'thread_id');
   if (!threadID && !subagentID) return null;
   if (threadID && threadID === ownerThreadID) return null;
   const action = payloadString(activityPayload, 'action') || payloadString(source, 'action');
@@ -195,15 +186,9 @@ function itemFromSnapshot(
     title,
     agentType: payloadString(source, 'agent_type') || payloadString(activityPayload, 'agent_type'),
     status,
-    lastMessage: payloadString(source, 'last_message', 'waiting_prompt'),
-	    action,
-	    canOpen: Boolean(threadID),
-	    parentThreadID: payloadString(source, 'parent_thread_id', 'parentThreadID'),
-	    waitingPrompt: payloadString(source, 'waiting_prompt', 'waitingPrompt'),
-	    queuedInputs: numberValue(source.queued_inputs ?? source.queuedInputs),
-	    canSendInput: Boolean(source.can_send_input ?? source.canSendInput),
-    canInterrupt: Boolean(source.can_interrupt ?? source.canInterrupt),
-    canClose: Boolean(source.can_close ?? source.canClose),
+    action,
+    canOpen: Boolean(threadID),
+    parentThreadID: payloadString(source, 'parent_thread_id', 'parentThreadID'),
     updatedAtMs,
     itemStatus: activityItem.status,
   };
@@ -230,15 +215,9 @@ function mergeItem(current: FlowerSubagentPanelItem | undefined, incoming: Flowe
     taskName: base.taskName || patch.taskName,
     title: base.title || patch.title,
     agentType: base.agentType || patch.agentType,
-	    lastMessage: base.lastMessage || patch.lastMessage,
-	    action: base.action || patch.action,
-	    canOpen: base.canOpen || patch.canOpen,
-	    parentThreadID: base.parentThreadID || patch.parentThreadID,
-	    waitingPrompt: base.waitingPrompt || patch.waitingPrompt,
-	    queuedInputs: base.queuedInputs || patch.queuedInputs,
-    canSendInput: base.canSendInput || patch.canSendInput,
-    canInterrupt: base.canInterrupt || patch.canInterrupt,
-    canClose: base.canClose || patch.canClose,
+    action: base.action || patch.action,
+    canOpen: base.canOpen || patch.canOpen,
+    parentThreadID: base.parentThreadID || patch.parentThreadID,
   };
 }
 

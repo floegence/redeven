@@ -1083,6 +1083,7 @@ func floretActivityForToolCall(toolName string, args map[string]any) *observatio
 	payload := activityPayloadFromFieldList(spec.CallPayloadFields, args)
 	payload = activityPayloadWithSpecOperation(payload, spec, hasSpec)
 	payload = activityPayloadWithHostDisplayFields(payload, args, spec, hasSpec)
+	payload = publicActivityPayloadForTool(toolName, payload)
 	payload, _ = contractSafePayloadMap(payload, 0)
 	activity := &observation.ActivityPresentation{
 		Label:    activityCallLabel(toolName, spec, hasSpec, renderer, args, payload),
@@ -1426,6 +1427,7 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 	if result.Error != nil {
 		payload["error"] = activityToolErrorPayload(result.Error)
 	}
+	payload = publicActivityPayloadForTool(toolName, payload)
 	payload, payloadTruncated := contractSafePayloadMapForTool(toolName, payload, 0)
 	if payloadTruncated && !isOKFToolName(toolName) {
 		payload["truncated"] = true
@@ -1437,6 +1439,16 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 		Payload:  payload,
 	}
 	return contractSafeActivityPresentationForTool(toolName, activity), nil
+}
+
+func publicActivityPayloadForTool(toolName string, payload map[string]any) map[string]any {
+	if strings.TrimSpace(toolName) != "subagents" || len(payload) == 0 {
+		return payload
+	}
+	if sanitized, ok := sanitizeSubagentsActivityPayloadValue(payload); ok {
+		return sanitized
+	}
+	return map[string]any{}
 }
 
 func activityPayloadFromResultDataForTool(toolName string, data any) (map[string]any, bool) {

@@ -121,10 +121,43 @@ export type FlowerActivityCompletionDetail = Readonly<{
   next_actions: readonly string[];
 }>;
 
+export type FlowerActivityErrorDetail = Readonly<{
+  message: string;
+}>;
+
+export type FlowerActivitySubagentDetailItem = Readonly<{
+  title: string;
+  task: string;
+  agent_type: string;
+  status: string;
+  context_mode: string;
+  handoff: string;
+  progress: string;
+}>;
+
+export type FlowerActivitySubagentsDetail = Readonly<{
+  action: string;
+  task: string;
+  agent_type: string;
+  status: string;
+  context_mode: string;
+  summary: string;
+  counts: readonly FlowerActivityDetailLine[];
+  items: readonly FlowerActivitySubagentDetailItem[];
+}>;
+
 export type FlowerActivityDetailBlock =
   | Readonly<{
     kind: 'structured';
     lines: readonly FlowerActivityDetailLine[];
+  }>
+  | Readonly<{
+    kind: 'error';
+    error: FlowerActivityErrorDetail;
+  }>
+  | Readonly<{
+    kind: 'subagents';
+    subagents: FlowerActivitySubagentsDetail;
   }>
   | Readonly<{
     kind: 'terminal_output';
@@ -271,11 +304,6 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
   missing_ids: 'missing ids',
   final_handoff_report: 'final handoff',
   progress_summary: 'progress summary',
-  last_message: 'last message',
-  waiting_prompt: 'waiting prompt',
-  can_send_input: 'can send input',
-  can_interrupt: 'can interrupt',
-  can_close: 'can close',
   delegation_runtime: 'runtime',
   evidence_refs: 'evidence',
   remaining_risks: 'risks',
@@ -290,64 +318,8 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
 };
 
 const RENDERER_DETAIL_KEYS: Readonly<Record<'structured', readonly string[]>> = {
-  structured: ['operation', 'name', 'action', 'content', 'content_ref', 'activation_id', 'already_active', 'permission_hints', 'dependencies', 'dependency_degraded', 'reason', 'id', 'status', 'message', 'timed_out', 'targets', 'stats', 'output', 'structured', 'key_files', 'rows', 'cards', 'items', 'query', 'count', 'provider', 'okf_version', 'total_sections', 'sections', 'filters', 'total_concepts', 'total_matches', 'match_count', 'max_results', 'has_more', 'omitted_count', 'matches', 'concept_title', 'concept', 'body_offset', 'body_length', 'returned_body_length', 'link_count', 'backlink_count', 'links', 'backlinks', 'data', 'result', 'limit', 'evidence_refs', 'remaining_risks', 'next_actions', 'truncated', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
+  structured: ['operation', 'name', 'action', 'content', 'content_ref', 'activation_id', 'already_active', 'permission_hints', 'dependencies', 'dependency_degraded', 'reason', 'id', 'status', 'message', 'timed_out', 'targets', 'stats', 'output', 'structured', 'key_files', 'rows', 'cards', 'items', 'query', 'count', 'provider', 'okf_version', 'total_sections', 'sections', 'filters', 'total_concepts', 'total_matches', 'match_count', 'max_results', 'has_more', 'omitted_count', 'matches', 'concept_title', 'concept', 'body_offset', 'body_length', 'returned_body_length', 'link_count', 'backlink_count', 'links', 'backlinks', 'data', 'result', 'limit', 'evidence_refs', 'remaining_risks', 'next_actions', 'truncated', 'summary', 'details'],
 };
-
-const SUBAGENT_DETAIL_KEYS: readonly string[] = [
-  'action',
-  'status',
-  'thread_id',
-  'subagent_id',
-  'task_name',
-  'title',
-  'agent_type',
-  'context_mode',
-  'target',
-  'target_ids',
-  'ids',
-  'accepted',
-  'closed',
-  'closed_count',
-  'affected_ids',
-  'agent_count',
-  'total',
-  'running_only',
-  'queued',
-  'running',
-  'waiting_input',
-  'completed',
-  'failed',
-  'canceled',
-  'timed_out',
-  'requested_ids',
-  'requested_count',
-  'found_count',
-  'missing_count',
-  'missing_ids',
-  'final_handoff_report',
-  'progress_summary',
-  'last_message',
-  'waiting_prompt',
-  'can_send_input',
-  'can_interrupt',
-  'can_close',
-  'delegation_runtime',
-  'summary',
-  'details',
-  'error_code',
-  'error_message',
-  'error_retryable',
-];
-
-const SUBAGENT_BOOLEAN_DETAIL_KEYS = new Set([
-  'accepted',
-  'closed',
-  'running_only',
-  'can_send_input',
-  'can_interrupt',
-  'can_close',
-  'error_retryable',
-]);
 
 const FILE_RAW_DETAIL_KEYS = new Set([
   'args',
@@ -440,10 +412,6 @@ function rawPayloadText(payload: Readonly<Record<string, unknown>> | undefined, 
 function compactTextArray(value: unknown): readonly string[] {
   const source = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
   return source.map((entry) => compactJSON(entry).trim()).filter(Boolean);
-}
-
-function isSubagentBooleanDetailKey(key: string): boolean {
-  return SUBAGENT_BOOLEAN_DETAIL_KEYS.has(key);
 }
 
 function isContentRefSuffix(value: string): boolean {
@@ -679,16 +647,6 @@ function detailLabel(key: string, copy?: FlowerActivityPresentationCopy): string
       return subagents?.missing ?? DETAIL_LABELS[key] ?? key;
     case 'missing_ids':
       return subagents?.missingIds ?? DETAIL_LABELS[key] ?? key;
-    case 'last_message':
-      return subagents?.lastMessage ?? DETAIL_LABELS[key] ?? key;
-    case 'waiting_prompt':
-      return subagents?.waitingPrompt ?? DETAIL_LABELS[key] ?? key;
-    case 'can_send_input':
-      return subagents?.canSendInput ?? DETAIL_LABELS[key] ?? key;
-    case 'can_interrupt':
-      return subagents?.canInterrupt ?? DETAIL_LABELS[key] ?? key;
-    case 'can_close':
-      return subagents?.canClose ?? DETAIL_LABELS[key] ?? key;
     case 'delegation_runtime':
       return subagents?.runtime ?? DETAIL_LABELS[key] ?? key;
     case 'summary':
@@ -706,55 +664,29 @@ function detailLabel(key: string, copy?: FlowerActivityPresentationCopy): string
   }
 }
 
-function errorDetailLineFromPayload(payload: Readonly<Record<string, unknown>>, key: string, copy?: FlowerActivityPresentationCopy): FlowerActivityDetailLine | null {
-  if (key === 'error_code' || key === 'error_message' || key === 'error_retryable') {
-    const error = asRecord(payload.error);
-    const nestedKey = key === 'error_code' ? 'code' : key === 'error_message' ? 'message' : 'retryable';
-    const value = compactJSON(error[nestedKey]);
-    if (!value) return null;
-    return {
-      label: detailLabel(key, copy),
-      value,
-    };
-  }
-  return null;
+function errorMessageFromPayload(payload: Readonly<Record<string, unknown>> | undefined): string {
+  if (!payload) return '';
+  const error = asRecord(payload.error);
+  const nestedMessage = payloadValue(error, 'message');
+  if (nestedMessage) return nestedMessage;
+  const scalarError = scalarText(payload.error);
+  if (scalarError) return scalarError;
+  return payloadValue(payload, 'details', 'summary', 'message', 'reason');
 }
 
-function errorDetailLinesFromPayload(payload: Readonly<Record<string, unknown>> | undefined, copy?: FlowerActivityPresentationCopy): readonly FlowerActivityDetailLine[] {
-  if (!payload) return [];
-  return (['error_code', 'error_message', 'error_retryable'] as const)
-    .map((key) => errorDetailLineFromPayload(payload, key, copy))
-    .filter((line): line is FlowerActivityDetailLine => line !== null);
-}
-
-function detailLineFromPayload(payload: Readonly<Record<string, unknown>>, key: string, copy?: FlowerActivityPresentationCopy): FlowerActivityDetailLine | null {
-  const errorLine = errorDetailLineFromPayload(payload, key, copy);
-  if (errorLine) return errorLine;
-  if (!(key in payload)) return null;
-  const value = compactJSON(payload[key]);
-  if (!value) return null;
+function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>> | undefined): Extract<FlowerActivityDetailBlock, { kind: 'error' }> | null {
+  const message = errorMessageFromPayload(payload) || (item.status === 'error' ? 'Tool failed.' : '');
+  if (!message) return null;
   return {
-    label: detailLabel(key, copy),
-    value,
-    ...(detailLineTone(key) ? { tone: detailLineTone(key) } : {}),
+    kind: 'error',
+    error: { message },
   };
 }
 
-function subagentDetailLineFromPayload(payload: Readonly<Record<string, unknown>>, key: string, copy?: FlowerActivityPresentationCopy): FlowerActivityDetailLine | null {
+function detailLineFromPayload(payload: Readonly<Record<string, unknown>>, key: string, copy?: FlowerActivityPresentationCopy): FlowerActivityDetailLine | null {
   if (!(key in payload)) return null;
-  const rawValue = compactJSON(payload[key]);
-  if (!rawValue) return null;
-  let value = rawValue;
-  if (key === 'action') {
-    value = subagentActionLabel(rawValue, copy);
-  } else if (key === 'status') {
-    if (rawValue === 'ok') return null;
-    value = subagentStatusLabel(rawValue, copy);
-  } else if (key === 'agent_type') {
-    value = subagentTypeLabel(rawValue, copy);
-  } else if (isSubagentBooleanDetailKey(key) && typeof payload[key] === 'boolean') {
-    value = payload[key] ? subagentsCopy(copy).activity.values.yes : subagentsCopy(copy).activity.values.no;
-  }
+  const value = compactJSON(payload[key]);
+  if (!value) return null;
   return {
     label: detailLabel(key, copy),
     value,
@@ -786,34 +718,7 @@ function genericDetailLinesForItem(item: FlowerActivityItem, renderer: 'structur
       value: trimString(item.approval_state) || 'requested',
     });
   }
-  if (lines.length === 0) {
-    const defaultLines = [
-      { label: 'status', value: item.status },
-      { label: 'kind', value: item.kind },
-      { label: 'tool', value: trimString(item.tool_name) },
-      { label: 'item', value: trimString(item.item_id) },
-    ].filter((line) => trimString(line.value));
-    lines.push(...defaultLines);
-  }
   return uniqueDetailLines(lines);
-}
-
-function nestedSubagentRecords(payload: Readonly<Record<string, unknown>> | undefined): readonly Readonly<Record<string, unknown>>[] {
-  if (!payload) return [];
-  const out: Readonly<Record<string, unknown>>[] = [];
-  const pushRecord = (value: unknown) => {
-    const record = asRecord(value);
-    if (Object.keys(record).length > 0) out.push(record);
-  };
-  for (const key of ['snapshot', 'subagent', 'item']) pushRecord(payload[key]);
-  for (const key of ['items']) asArray(payload[key]).forEach(pushRecord);
-  return out;
-}
-
-function subagentDetailLinesFromRecord(record: Readonly<Record<string, unknown>>, copy?: FlowerActivityPresentationCopy): readonly FlowerActivityDetailLine[] {
-  return SUBAGENT_DETAIL_KEYS
-    .map((key) => subagentDetailLineFromPayload(record, key, copy))
-    .filter((line): line is FlowerActivityDetailLine => line !== null);
 }
 
 function subagentsCopy(copy?: FlowerActivityPresentationCopy): FlowerSubagentsCopy {
@@ -881,18 +786,179 @@ function subagentTypeLabel(agentType: string, copy?: FlowerActivityPresentationC
   }
 }
 
+function subagentContextModeLabel(value: string): string {
+  switch (trimString(value)) {
+    case 'full_history':
+      return 'Full history';
+    case 'mission_only':
+      return 'Mission only';
+    default:
+      return '';
+  }
+}
+
+function subagentItemRecords(payload: Readonly<Record<string, unknown>> | undefined): readonly Readonly<Record<string, unknown>>[] {
+  return asArray(payload?.items)
+    .map((entry) => asRecord(entry))
+    .filter((record) => Object.keys(record).length > 0);
+}
+
+function normalizedSubagentStatus(value: string): string {
+  switch (trimString(value).toLowerCase()) {
+    case 'queued':
+    case 'running':
+    case 'waiting_input':
+    case 'completed':
+    case 'failed':
+    case 'canceled':
+    case 'timed_out':
+      return trimString(value).toLowerCase();
+    case 'waiting':
+    case 'interrupted':
+      return 'waiting_input';
+    case 'cancelled':
+    case 'closed':
+      return 'canceled';
+    default:
+      return '';
+  }
+}
+
+function subagentStatusFromItemStatus(status: FlowerActivityItem['status']): string {
+  switch (status) {
+    case 'running':
+      return 'running';
+    case 'waiting':
+    case 'pending':
+      return 'queued';
+    case 'error':
+      return 'failed';
+    case 'canceled':
+      return 'canceled';
+    default:
+      return '';
+  }
+}
+
+function subagentDisplayStatus(raw: string, copy?: FlowerActivityPresentationCopy): string {
+  const status = normalizedSubagentStatus(raw);
+  return status ? subagentStatusLabel(status, copy) : '';
+}
+
+function subagentRecordTitle(record: Readonly<Record<string, unknown>>): string {
+  return payloadValue(record, 'task_name', 'title');
+}
+
+function subagentDetailItemFromRecord(record: Readonly<Record<string, unknown>>, copy?: FlowerActivityPresentationCopy): FlowerActivitySubagentDetailItem | null {
+  const title = subagentRecordTitle(record);
+  const task = payloadValue(record, 'task_name');
+  const agentType = payloadValue(record, 'agent_type');
+  const status = subagentDisplayStatus(payloadValue(record, 'status'), copy);
+  const contextMode = subagentContextModeLabel(payloadValue(record, 'context_mode'));
+  const handoff = payloadValue(record, 'handoff');
+  const progress = payloadValue(record, 'current_signal', 'state', 'next_expected_step');
+  if (!title && !task && !status && !contextMode && !handoff && !progress) return null;
+  return {
+    title: title || task || status,
+    task,
+    agent_type: agentType ? subagentTypeLabel(agentType, copy) : '',
+    status,
+    context_mode: contextMode,
+    handoff,
+    progress,
+  };
+}
+
+function subagentDetailItemsFromSummary(summary: Readonly<Record<string, unknown>>, key: 'reports' | 'items' | 'progress', copy?: FlowerActivityPresentationCopy): readonly FlowerActivitySubagentDetailItem[] {
+  return asArray(summary[key])
+    .map((entry) => subagentDetailItemFromRecord(asRecord(entry), copy))
+    .filter((item): item is FlowerActivitySubagentDetailItem => item !== null);
+}
+
+function uniqueSubagentDetailItems(items: readonly FlowerActivitySubagentDetailItem[]): readonly FlowerActivitySubagentDetailItem[] {
+  const seen = new Set<string>();
+  const out: FlowerActivitySubagentDetailItem[] = [];
+  for (const item of items) {
+    const key = [item.title, item.task, item.agent_type, item.status, item.context_mode, item.handoff, item.progress].join('\x1e');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+function subagentCountLines(payload: Readonly<Record<string, unknown>> | undefined, copy?: FlowerActivityPresentationCopy): readonly FlowerActivityDetailLine[] {
+  if (!payload) return [];
+  const out: FlowerActivityDetailLine[] = [];
+  const counts = asRecord(payload.counts);
+  const add = (key: string, value: unknown) => {
+    const text = scalarText(value);
+    if (!text || text === '0') return;
+    out.push({ label: detailLabel(key, copy), value: text });
+  };
+  for (const key of ['agent_count', 'total', 'queued', 'running', 'waiting_input', 'completed', 'failed', 'canceled', 'timed_out', 'requested_count', 'found_count', 'missing_count', 'closed_count', 'stopped_count', 'omitted_count']) {
+    if (key in payload) add(key, payload[key]);
+  }
+  for (const key of ['queued', 'running', 'waiting_input', 'waiting', 'completed', 'failed', 'canceled', 'cancelled', 'timed_out', 'total']) {
+    if (key in counts) add(key, counts[key]);
+  }
+  return uniqueDetailLines(out);
+}
+
+function subagentSummaryText(payload: Readonly<Record<string, unknown>> | undefined): string {
+  if (!payload) return '';
+  const handoff = asRecord(payload.final_handoff_report);
+  const progress = asRecord(payload.progress_summary);
+  return payloadValue(handoff, 'summary')
+    || payloadValue(progress, 'summary')
+    || payloadValue(payload, 'summary');
+}
+
+function subagentsDetailFromPayload(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>>, copy?: FlowerActivityPresentationCopy): FlowerActivitySubagentsDetail {
+  const items = subagentItemRecords(payload);
+  const primary = items[0] ?? payload;
+  const handoff = asRecord(payload.final_handoff_report);
+  const progress = asRecord(payload.progress_summary);
+  const handoffItems = subagentDetailItemsFromSummary(handoff, 'reports', copy);
+  const progressItems = [
+    ...subagentDetailItemsFromSummary(progress, 'items', copy),
+    ...subagentDetailItemsFromSummary(progress, 'progress', copy),
+  ];
+  const directItems = items.map((record) => subagentDetailItemFromRecord(record, copy)).filter((entry): entry is FlowerActivitySubagentDetailItem => entry !== null);
+  const topLevelItem = directItems.length === 0 ? subagentDetailItemFromRecord(payload, copy) : null;
+  const rawStatus = payloadValue(payload, 'status') !== 'ok'
+    ? payloadValue(payload, 'status')
+    : payloadValue(primary, 'status') || subagentStatusFromItemStatus(item.status);
+  const agentType = payloadValue(payload, 'agent_type') || payloadValue(primary, 'agent_type');
+  return {
+    action: subagentActionLabel(payloadValue(payload, 'action'), copy),
+    task: payloadValue(payload, 'task_name', 'title') || payloadValue(primary, 'task_name', 'title'),
+    agent_type: agentType ? subagentTypeLabel(agentType, copy) : '',
+    status: subagentDisplayStatus(rawStatus, copy),
+    context_mode: subagentContextModeLabel(payloadValue(payload, 'context_mode') || payloadValue(primary, 'context_mode')),
+    summary: subagentSummaryText(payload),
+    counts: subagentCountLines(payload, copy),
+    items: uniqueSubagentDetailItems([
+      ...(topLevelItem ? [topLevelItem] : []),
+      ...directItems,
+      ...handoffItems,
+      ...progressItems,
+    ]),
+  };
+}
+
 function subagentTitleText(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy, subagentAction?: FlowerActivitySubagentActionRecord): string {
   const payload = subagentPayloadForItem(item, subagentAction);
   const action = payloadValue(payload, 'action');
-  const directTitle = payloadValue(payload, 'task_name', 'title', 'target', 'subagent_id', 'thread_id');
+  const directTitle = payloadValue(payload, 'task_name', 'title');
   const verbs = subagentsCopy(copy).activity.titleVerbs;
   if (directTitle) {
     const verb = action ? verbs[action as keyof typeof verbs] ?? subagentActionLabel(action, copy) : '';
     return verb ? `${verb} ${directTitle}` : directTitle;
   }
-  const nested = nestedSubagentRecords(payload);
+  const nested = subagentItemRecords(payload);
   if (nested.length === 1) {
-    const title = payloadValue(nested[0], 'task_name', 'title', 'subagent_id', 'thread_id');
+    const title = payloadValue(nested[0], 'task_name', 'title');
     if (title && action === 'spawn') return `${verbs.spawn} ${title}`;
     if (title) return action ? `${verbs[action as keyof typeof verbs] ?? subagentActionLabel(action, copy)} ${title}` : title;
   }
@@ -903,19 +969,20 @@ function subagentTitleText(item: FlowerActivityItem, copy?: FlowerActivityPresen
 
 function metaForSubagents(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy, subagentAction?: FlowerActivitySubagentActionRecord): string {
   const payload = subagentPayloadForItem(item, subagentAction);
-  const nested = nestedSubagentRecords(payload);
+  const nested = subagentItemRecords(payload);
   const primary = nested[0] ?? {};
   const action = payloadValue(payload, 'action');
   const agentType = payloadValue(payload, 'agent_type') || payloadValue(primary, 'agent_type');
   const topLevelStatus = payloadValue(payload, 'status');
-  const status = topLevelStatus && topLevelStatus !== 'ok' ? topLevelStatus : payloadValue(primary, 'status');
+  const status = topLevelStatus && topLevelStatus !== 'ok' ? topLevelStatus : payloadValue(primary, 'status') || subagentStatusFromItemStatus(item.status);
   const count = payloadValue(payload, 'agent_count', 'total', 'found_count', 'requested_count');
+  const publicChips = chipText(item).filter((chip) => !/^status\s+ok$/i.test(chip));
   const parts = [
     action ? subagentActionLabel(action, copy) : '',
-    subagentTypeLabel(agentType, copy),
+    agentType ? subagentTypeLabel(agentType, copy) : '',
     count ? subagentsCopy(copy).activity.agentsCount(count) : '',
-    status && status !== 'ok' ? subagentStatusLabel(status, copy) : '',
-    ...chipText(item),
+    subagentDisplayStatus(status, copy),
+    ...publicChips,
   ].filter(Boolean);
   return Array.from(new Set(parts)).join(' · ');
 }
@@ -923,25 +990,23 @@ function metaForSubagents(item: FlowerActivityItem, copy?: FlowerActivityPresent
 function presentationForSubagents(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy, subagentAction?: FlowerActivitySubagentActionRecord): FlowerActivityPresentation {
   const payload = subagentPayloadForItem(item, subagentAction);
   const title: FlowerActivityTitle = { kind: 'plain', text: subagentTitleText(item, copy, subagentAction) };
-  const lines: FlowerActivityDetailLine[] = [];
+  const detail = subagentsDetailFromPayload(item, payload, copy);
+  const approvalLines: FlowerActivityDetailLine[] = [];
   if (item.requires_approval) {
-    lines.push({ label: subagentsCopy(copy).activity.labels.approval, value: trimString(item.approval_state) || 'requested' });
+    approvalLines.push({ label: subagentsCopy(copy).activity.labels.approval, value: trimString(item.approval_state) || 'requested' });
   }
-  lines.push(...subagentDetailLinesFromRecord(payload, copy));
-  const nested = nestedSubagentRecords(payload);
-  nested.forEach((record) => {
-    lines.push(...subagentDetailLinesFromRecord(record, copy));
-  });
-  if (lines.length === 0) {
-    lines.push(...genericDetailLinesForItem(item, 'structured'));
-  }
-  const detailLines = uniqueDetailLines(lines);
+  const detailLines = uniqueDetailLines([...approvalLines, ...detail.counts]);
+  const detailBlocks: FlowerActivityDetailBlock[] = [];
+  const errorBlock = errorDetailBlockForItem(item, payload);
+  if (errorBlock) detailBlocks.push(errorBlock);
+  detailBlocks.push({ kind: 'subagents', subagents: detail });
+  if (approvalLines.length > 0) detailBlocks.push({ kind: 'structured', lines: approvalLines });
   return {
     label: title.text,
     title,
     meta: metaForSubagents(item, copy, subagentAction),
     detailLines,
-    detailBlocks: [{ kind: 'structured', lines: detailLines }],
+    detailBlocks,
   };
 }
 
@@ -951,12 +1016,12 @@ function fileStatusLines(item: FlowerActivityItem, payload: Readonly<Record<stri
     lines.push({ label: 'approval', value: trimString(item.approval_state) || 'requested' });
   }
   for (const key of ['status', 'summary', 'details', 'truncated']) {
+    if (item.status === 'error' && key === 'status') continue;
     if (!payload || FILE_RAW_DETAIL_KEYS.has(key)) continue;
     if (key === 'truncated' && !boolValue(payload.truncated)) continue;
     const line = detailLineFromPayload(payload, key);
     if (line) lines.push(line);
   }
-  lines.push(...errorDetailLinesFromPayload(payload));
   return uniqueDetailLines(lines);
 }
 
@@ -967,11 +1032,11 @@ function resultStatusLines(item: FlowerActivityItem, payload: Readonly<Record<st
   }
   if (payload) {
     for (const key of ['status', 'summary', 'details', 'truncated']) {
+      if (item.status === 'error' && key === 'status') continue;
       if (key === 'truncated' && !boolValue(payload.truncated)) continue;
       const line = detailLineFromPayload(payload, key);
       if (line) lines.push(line);
     }
-    lines.push(...errorDetailLinesFromPayload(payload));
   }
   return uniqueDetailLines(lines);
 }
@@ -1030,6 +1095,8 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
   if (displayName === 'apply_patch') displayName = 'files';
   const title: FlowerActivityTitle = { kind: 'file', verb, display_name: displayName };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
+  const errorBlock = errorDetailBlockForItem(item, payload);
+  if (errorBlock) detailBlocks.push(errorBlock);
   if (verb === 'Read') {
     detailBlocks.push({
       kind: 'file_read',
@@ -1065,6 +1132,8 @@ function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActi
   const title = titleForPatchItem(item, files);
   const payload = item.payload ?? {};
   const detailBlocks: FlowerActivityDetailBlock[] = [];
+  const errorBlock = errorDetailBlockForItem(item, payload);
+  if (errorBlock) detailBlocks.push(errorBlock);
   if (files.length > 0) {
     detailBlocks.push({ kind: 'file_diff', files });
   }
@@ -1085,8 +1154,12 @@ function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActi
 function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentation {
   const title: FlowerActivityTitle = { kind: 'plain', text: trimString(item.label) || 'Update todos' };
   const items = todoItemsFromPayload(item.payload);
-  const statusLines = resultStatusLines(item, item.payload);
+  const errorBlock = errorDetailBlockForItem(item, item.payload);
+  const statusLines = errorBlock ? [] : resultStatusLines(item, item.payload);
   const detailBlocks: FlowerActivityDetailBlock[] = [];
+  if (errorBlock) {
+    detailBlocks.push(errorBlock);
+  }
   if (items.length > 0) {
     detailBlocks.push({ kind: 'todos', items });
   }
@@ -1130,8 +1203,10 @@ function terminalOutputFromPayload(payload: Readonly<Record<string, unknown>>): 
 }
 
 function terminalStatusLines(item: FlowerActivityItem): readonly FlowerActivityDetailLine[] {
-  const payload = item.payload ?? {};
-  return uniqueDetailLines(errorDetailLinesFromPayload(payload));
+  if (item.requires_approval) {
+    return [{ label: 'approval', value: trimString(item.approval_state) || 'requested' }];
+  }
+  return [];
 }
 
 function presentationForTerminal(item: FlowerActivityItem): FlowerActivityPresentation {
@@ -1154,7 +1229,10 @@ function presentationForTerminal(item: FlowerActivityItem): FlowerActivityPresen
     truncated: boolValue(payload.truncated),
     timed_out: boolValue(payload.timed_out),
   };
-  const detailBlocks: FlowerActivityDetailBlock[] = [{ kind: 'terminal_output', terminal }];
+  const detailBlocks: FlowerActivityDetailBlock[] = [];
+  const errorBlock = errorDetailBlockForItem(item, payload);
+  if (errorBlock) detailBlocks.push(errorBlock);
+  detailBlocks.push({ kind: 'terminal_output', terminal });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   return {
     label: command,
@@ -1202,7 +1280,8 @@ function countFromPayload(payload: Readonly<Record<string, unknown>>): number | 
 function presentationForWebSearch(item: FlowerActivityItem): FlowerActivityPresentation {
   const payload = item.payload ?? {};
   const title = titleForGenericItem(item, 'web_search');
-  const detailLines = resultStatusLines(item, payload);
+  const errorBlock = errorDetailBlockForItem(item, payload);
+  const detailLines = errorBlock ? resultStatusLines(item, payload).filter((line) => line.label !== 'summary' && line.label !== 'details') : resultStatusLines(item, payload);
   const search: FlowerActivityWebSearchDetail = {
     query: payloadValue(payload, 'query') || trimString(item.label),
     provider: payloadValue(payload, 'provider', 'okf_version'),
@@ -1212,7 +1291,9 @@ function presentationForWebSearch(item: FlowerActivityItem): FlowerActivityPrese
     matches: firstAvailableEntries(payload, ['matches']),
     sections: firstAvailableEntries(payload, ['sections']),
   };
-  const detailBlocks: FlowerActivityDetailBlock[] = [{ kind: 'web_search', search }];
+  const detailBlocks: FlowerActivityDetailBlock[] = [];
+  if (errorBlock) detailBlocks.push(errorBlock);
+  detailBlocks.push({ kind: 'web_search', search });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   return {
     label: titleText(title),
@@ -1260,14 +1341,17 @@ function questionItems(payload: Readonly<Record<string, unknown>>): readonly Flo
 function presentationForQuestion(item: FlowerActivityItem): FlowerActivityPresentation {
   const payload = item.payload ?? {};
   const title = titleForGenericItem(item, 'question');
-  const detailLines = resultStatusLines(item, payload);
+  const errorBlock = errorDetailBlockForItem(item, payload);
+  const detailLines = errorBlock ? resultStatusLines(item, payload).filter((line) => line.label !== 'summary' && line.label !== 'details') : resultStatusLines(item, payload);
   const question: FlowerActivityQuestionDetail = {
     reason: payloadValue(payload, 'reason_code', 'reason'),
     required: compactTextArray(payload.required_from_user),
     questions: questionItems(payload),
     contains_secret: boolValue(payload.contains_secret),
   };
-  const detailBlocks: FlowerActivityDetailBlock[] = [{ kind: 'question', question }];
+  const detailBlocks: FlowerActivityDetailBlock[] = [];
+  if (errorBlock) detailBlocks.push(errorBlock);
+  detailBlocks.push({ kind: 'question', question });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   return {
     label: titleText(title),
@@ -1281,7 +1365,8 @@ function presentationForQuestion(item: FlowerActivityItem): FlowerActivityPresen
 function presentationForCompletion(item: FlowerActivityItem): FlowerActivityPresentation {
   const payload = item.payload ?? {};
   const title = titleForGenericItem(item, 'completion');
-  const detailLines = resultStatusLines(item, payload);
+  const errorBlock = errorDetailBlockForItem(item, payload);
+  const detailLines = errorBlock ? resultStatusLines(item, payload).filter((line) => line.label !== 'summary' && line.label !== 'details') : resultStatusLines(item, payload);
   const completion: FlowerActivityCompletionDetail = {
     result: payloadValue(payload, 'result'),
     summary: payloadValue(payload, 'summary'),
@@ -1290,7 +1375,9 @@ function presentationForCompletion(item: FlowerActivityItem): FlowerActivityPres
     remaining_risks: compactTextArray(payload.remaining_risks),
     next_actions: compactTextArray(payload.next_actions),
   };
-  const detailBlocks: FlowerActivityDetailBlock[] = [{ kind: 'completion', completion }];
+  const detailBlocks: FlowerActivityDetailBlock[] = [];
+  if (errorBlock) detailBlocks.push(errorBlock);
+  detailBlocks.push({ kind: 'completion', completion });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   return {
     label: titleText(title),
@@ -1349,11 +1436,11 @@ export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?
   if (renderer === 'question') return presentationForQuestion(item);
   if (renderer === 'completion') return presentationForCompletion(item);
   const title = titleForGenericItem(item, renderer);
+  const errorBlock = errorDetailBlockForItem(item, item.payload);
   const detailLines = genericDetailLinesForItem(item, 'structured');
-  const detailBlocks: FlowerActivityDetailBlock[] = [{
-    kind: 'structured',
-    lines: detailLines,
-  }];
+  const detailBlocks: FlowerActivityDetailBlock[] = [];
+  if (errorBlock) detailBlocks.push(errorBlock);
+  if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   return {
     label: titleText(title),
     title,

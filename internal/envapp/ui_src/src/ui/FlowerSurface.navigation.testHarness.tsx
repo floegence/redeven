@@ -367,6 +367,7 @@ export function activityTimeline(args: {
   needs_attention?: boolean;
   items: readonly FlowerActivityItem[];
   file_actions?: FlowerActivityTimelineBlock['file_actions'];
+  subagent_actions?: FlowerActivityTimelineBlock['subagent_actions'];
 }): FlowerActivityTimelineBlock {
   const status = args.status ?? 'success';
   const severity = args.severity ?? (status === 'success' ? 'quiet' : status === 'error' ? 'error' : 'normal');
@@ -402,6 +403,7 @@ export function activityTimeline(args: {
     },
     items: args.items,
     ...(args.file_actions ? { file_actions: args.file_actions } : {}),
+    ...(args.subagent_actions ? { subagent_actions: args.subagent_actions } : {}),
   };
 }
 

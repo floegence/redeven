@@ -3707,6 +3707,110 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, var(--foreground) 76%, var(--muted-foreground) 24%);
 }
 
+.flower-activity-error-panel,
+.flower-activity-subagents-panel {
+  display: grid;
+  min-width: 0;
+  gap: 0.375rem;
+  font-family: var(--font-sans, inherit);
+}
+
+.flower-activity-error-panel {
+  border-left: 2px solid color-mix(in srgb, var(--destructive) 62%, transparent);
+  padding: 0.125rem 0 0.125rem 0.5rem;
+}
+
+.flower-activity-error-message {
+  min-width: 0;
+  color: color-mix(in srgb, var(--foreground) 84%, var(--destructive) 16%);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.flower-activity-subagents-head,
+.flower-activity-subagents-item {
+  display: grid;
+  min-width: 0;
+  gap: 0.1875rem;
+}
+
+.flower-activity-subagents-title,
+.flower-activity-subagents-item-title {
+  min-width: 0;
+  color: color-mix(in srgb, var(--foreground) 82%, var(--muted-foreground) 18%);
+  font-size: 0.75rem;
+  font-weight: 680;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.flower-activity-subagents-meta,
+.flower-activity-subagents-counts {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.flower-activity-subagents-meta span,
+.flower-activity-subagents-chip {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 66%, transparent);
+  border-radius: 999px;
+  padding: 0.0625rem 0.375rem;
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
+  font-size: 0.65625rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.flower-activity-subagents-chip strong {
+  color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);
+  font-weight: 760;
+}
+
+.flower-activity-subagents-summary,
+.flower-activity-subagents-item-note {
+  min-width: 0;
+  color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%);
+  font-size: 0.71875rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.flower-activity-subagents-list {
+  display: grid;
+  min-width: 0;
+  gap: 0.3125rem;
+}
+
+.flower-activity-subagents-item {
+  border-left: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
+  padding-left: 0.5rem;
+}
+
+.flower-activity-subagents-item-main {
+  display: grid;
+  min-width: 0;
+  gap: 0.0625rem;
+}
+
+.flower-activity-subagents-item-meta {
+  min-width: 0;
+  color: color-mix(in srgb, var(--muted-foreground) 80%, transparent);
+  font-size: 0.65625rem;
+  font-weight: 620;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .flower-activity-terminal-panel {
   --flower-activity-terminal-font: Iosevka, 'JetBrains Mono', 'IBM Plex Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', ui-monospace, monospace;
   display: grid;

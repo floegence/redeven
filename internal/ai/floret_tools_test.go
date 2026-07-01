@@ -983,7 +983,7 @@ func TestFloretToolResultActivityPayloadsMeetFullContract(t *testing.T) {
 	}
 }
 
-func TestFloretToolResultActivityPreservesSubagentLifecycleItems(t *testing.T) {
+func TestFloretToolResultActivityProjectsPublicSubagentDisplayPayload(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{})
@@ -1026,6 +1026,11 @@ func TestFloretToolResultActivityPreservesSubagentLifecycleItems(t *testing.T) {
 			t.Fatalf("activity retained legacy subagent field %s: %#v", field, activity.Payload)
 		}
 	}
+	for _, field := range []string{"thread_id", "subagent_id", "target", "target_ids", "ids", "detail_ref", "detail_available", "detail_strategy", "last_message", "waiting_prompt", "can_send_input", "can_interrupt", "can_close"} {
+		if _, ok := activity.Payload[field]; ok {
+			t.Fatalf("activity retained non-display subagent field %s: %#v", field, activity.Payload)
+		}
+	}
 	items := toAnySlice(activity.Payload["items"])
 	if len(items) != 1 {
 		t.Fatalf("activity items=%#v, want one canonical item", activity.Payload["items"])
@@ -1037,11 +1042,13 @@ func TestFloretToolResultActivityPreservesSubagentLifecycleItems(t *testing.T) {
 	if anyToString(activity.Payload["action"]) != "close" || anyToString(item["status"]) != "canceled" {
 		t.Fatalf("activity lost close lifecycle state: %#v", activity.Payload)
 	}
-	if anyToString(item["thread_id"]) != "subagent-1" || anyToString(item["agent_type"]) != "reviewer" {
-		t.Fatalf("activity lost subagent identity: %#v", item)
+	if anyToString(item["task_name"]) != "Review prompt contract" || anyToString(item["agent_type"]) != "reviewer" {
+		t.Fatalf("activity lost subagent display fields: %#v", item)
 	}
-	if len([]rune(anyToString(item["last_message"]))) > 3000 {
-		t.Fatalf("activity last_message was not field-truncated: %d", len([]rune(anyToString(item["last_message"]))))
+	for _, field := range []string{"thread_id", "subagent_id", "last_message", "result_digest", "waiting_prompt", "queued_inputs", "can_send_input", "can_interrupt", "can_close", "detail_ref"} {
+		if _, ok := item[field]; ok {
+			t.Fatalf("activity item retained non-display field %s: %#v", field, item)
+		}
 	}
 	if activity.Payload["truncated"] != true {
 		t.Fatalf("activity payload truncated flag=%#v, want true", activity.Payload["truncated"])
@@ -1097,6 +1104,19 @@ func TestFloretToolResultFromFlowerUsesContractSafeStructuredAndText(t *testing.
 	}
 	if _, ok := todos[0].(map[string]any); !ok {
 		t.Fatalf("structured todo item=%T, want map", todos[0])
+	}
+	if result.Activity == nil {
+		t.Fatal("activity=nil, want write_todos error activity")
+	}
+	activityError, ok := result.Activity.Payload["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("activity error=%#v, want map", result.Activity.Payload["error"])
+	}
+	if got := anyToString(activityError["message"]); got != "Denied" {
+		t.Fatalf("activity error message=%q, want Denied", got)
+	}
+	if _, ok := activityError["suggested_fixes"]; ok {
+		t.Fatalf("activity error kept old envelope: %#v", activityError)
 	}
 	var textPayload map[string]any
 	if err := json.Unmarshal([]byte(result.Text), &textPayload); err != nil {

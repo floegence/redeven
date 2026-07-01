@@ -26,12 +26,30 @@ func newActivityTimelineBlockWithSidecars(timeline observation.ActivityTimeline,
 	if timeline.SchemaVersion <= 0 {
 		timeline.SchemaVersion = observation.ActivityTimelineSchemaVersion
 	}
+	timeline = publicActivityTimelineForBlock(timeline)
 	return ActivityTimelineBlock{
 		Type:             activityTimelineBlockType,
 		FileActions:      cloneFlowerActivityFileActions(fileActions),
 		SubagentActions:  cloneFlowerActivitySubagentActions(subagentActions),
 		ActivityTimeline: timeline,
 	}
+}
+
+func publicActivityTimelineForBlock(timeline observation.ActivityTimeline) observation.ActivityTimeline {
+	if len(timeline.Items) == 0 {
+		return timeline
+	}
+	items := make([]observation.ActivityItem, len(timeline.Items))
+	copy(items, timeline.Items)
+	for index := range items {
+		toolName := strings.TrimSpace(items[index].ToolName)
+		if toolName != "subagents" || len(items[index].Payload) == 0 {
+			continue
+		}
+		items[index].Payload = publicActivityPayloadForTool(toolName, items[index].Payload)
+	}
+	timeline.Items = items
+	return timeline
 }
 
 func cloneFlowerActivityFileActions(in map[string]FlowerActivityFileAction) map[string]FlowerActivityFileAction {
@@ -71,12 +89,6 @@ type FlowerActivitySubagentAction struct {
 	AgentType         string `json:"agent_type,omitempty"`
 	ContextMode       string `json:"context_mode,omitempty"`
 	Status            string `json:"status,omitempty"`
-	LastMessage       string `json:"last_message,omitempty"`
-	WaitingPrompt     string `json:"waiting_prompt,omitempty"`
-	QueuedInputs      int    `json:"queued_inputs,omitempty"`
-	CanSendInput      bool   `json:"can_send_input,omitempty"`
-	CanInterrupt      bool   `json:"can_interrupt,omitempty"`
-	CanClose          bool   `json:"can_close,omitempty"`
 	UpdatedAtMS       int64  `json:"updated_at_ms,omitempty"`
 }
 
@@ -101,8 +113,6 @@ func cloneFlowerActivitySubagentActions(in map[string]FlowerActivitySubagentActi
 		value.AgentType = strings.TrimSpace(value.AgentType)
 		value.ContextMode = strings.TrimSpace(value.ContextMode)
 		value.Status = strings.TrimSpace(value.Status)
-		value.LastMessage = strings.TrimSpace(value.LastMessage)
-		value.WaitingPrompt = strings.TrimSpace(value.WaitingPrompt)
 		if value.Operation == "" && value.Action == "" && value.ThreadID == "" && value.SubagentID == "" {
 			continue
 		}

@@ -89,7 +89,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.label).toBe('pnpm test -- src/ui/chat/activity/ActivityTimelineBlock.test.tsx');
   });
 
-  it('renders terminal result status and structured error details separately', () => {
+  it('renders terminal failures as a semantic error block before output', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',
       status: 'error',
@@ -107,14 +107,17 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error code:TIMEOUT');
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error message:Tool execution timed out after 30000 ms');
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('retryable:true');
-    expect(presentation.detailLines.map((line) => line.label)).not.toContain('error');
-    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['terminal_output', 'structured']);
+    expect(presentation.detailLines).toHaveLength(0);
+    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['error', 'terminal_output']);
+    expect(presentation.detailBlocks[0]).toEqual({
+      kind: 'error',
+      error: { message: 'Tool execution timed out after 30000 ms' },
+    });
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('TIMEOUT');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('retryable');
   });
 
-  it('keeps payload result status as detail data when it conflicts with the item status', () => {
+  it('keeps payload result status out of compact meta when it conflicts with the item status', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',
       status: 'error',
@@ -130,7 +133,10 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error code:UNKNOWN');
+    expect(presentation.detailBlocks[0]).toEqual({
+      kind: 'error',
+      error: { message: 'The final activity item failed.' },
+    });
     expect(presentation.meta).not.toContain('success');
   });
 
@@ -167,25 +173,44 @@ describe('presentFlowerActivityItem', () => {
       payload: {
         action: 'spawn',
         status: 'ok',
-        snapshot: {
+        task_name: 'Review API boundary',
+        agent_type: 'reviewer',
+        context_mode: 'mission_only',
+        items: [{
           thread_id: 'child-thread-1',
-          subagent_id: 'child-thread-1',
           task_name: 'Review API boundary',
           agent_type: 'reviewer',
           status: 'running',
           last_message: 'Reading contracts',
-          delegation_runtime: 'floret',
-        },
+          context_mode: 'mission_only',
+        }],
       },
     }));
 
     expect(presentation.label).toBe('Spawn Review API boundary');
     expect(presentation.title).toEqual({ kind: 'plain', text: 'Spawn Review API boundary' });
     expect(presentation.meta).toContain('Spawn subagent');
+    expect(presentation.meta).toContain('Reviewer');
     expect(presentation.meta).toContain('Running');
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('thread:child-thread-1');
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('profile:Reviewer');
-    expect(presentation.detailLines.some((line) => line.value.includes('"snapshot"'))).toBe(false);
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`).join('\n')).not.toContain('child-thread-1');
+    expect(presentation.detailBlocks[0]).toMatchObject({
+      kind: 'subagents',
+      subagents: {
+        action: 'Spawn subagent',
+        task: 'Review API boundary',
+        agent_type: 'Reviewer',
+        status: 'Running',
+        context_mode: 'Mission only',
+        items: [{
+          title: 'Review API boundary',
+          agent_type: 'Reviewer',
+          status: 'Running',
+          context_mode: 'Mission only',
+        }],
+      },
+    });
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('child-thread-1');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Reading contracts');
   });
 
   it('renders subagent timeline activity from sidecar metadata without Flower fields in payload', () => {
@@ -219,7 +244,16 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.meta).toContain('Inspect subagent');
     expect(presentation.meta).toContain('Reviewer');
     expect(presentation.meta).toContain('Completed');
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('context mode:mission_only');
+    expect(presentation.detailBlocks[0]).toMatchObject({
+      kind: 'subagents',
+      subagents: {
+        task: 'Review API boundary',
+        agent_type: 'Reviewer',
+        status: 'Completed',
+        context_mode: 'Mission only',
+      },
+    });
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('child-thread-1');
   });
 
   it('renders subagent context mode and wait handoff fields as first-class details', () => {
@@ -231,54 +265,79 @@ describe('presentFlowerActivityItem', () => {
         action: 'wait',
         status: 'ok',
         items: [{
-          thread_id: 'child-thread-1',
-          subagent_id: 'child-thread-1',
           task_name: 'Review API boundary',
           agent_type: 'reviewer',
           context_mode: 'mission_only',
           status: 'completed',
-          final_handoff_report: 'Reviewed API boundary. No blocking risks remain.',
-          progress_summary: 'Should not be used for completed waits.',
         }],
+        final_handoff_report: {
+          summary: 'Delegated subagents finished wait: 1 completed.',
+          reports: [{
+            thread_id: 'child-thread-1',
+            task_name: 'Review API boundary',
+            agent_type: 'reviewer',
+            status: 'completed',
+            handoff: 'Reviewed API boundary. No blocking risks remain.',
+          }],
+        },
+        progress_summary: {
+          summary: 'Should not be used for completed waits.',
+          progress: [{
+            thread_id: 'child-thread-1',
+            task_name: 'Review API boundary',
+            agent_type: 'reviewer',
+            status: 'running',
+            state: 'reading tests',
+          }],
+        },
       },
     }));
 
-    const rows = presentation.detailLines.map((line) => `${line.label}:${line.value}`);
-    expect(rows).toContain('context mode:mission_only');
-    expect(rows).toContain('final handoff:Reviewed API boundary. No blocking risks remain.');
-    expect(rows).toContain('progress summary:Should not be used for completed waits.');
-    expect(rows).not.toContain('last message:Reviewed API boundary. No blocking risks remain.');
+    const block = presentation.detailBlocks[0];
+    expect(block.kind).toBe('subagents');
+    if (block.kind !== 'subagents') return;
+    expect(block.subagents.summary).toBe('Delegated subagents finished wait: 1 completed.');
+    expect(block.subagents.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        title: 'Review API boundary',
+        agent_type: 'Reviewer',
+        status: 'Completed',
+        context_mode: 'Mission only',
+      }),
+      expect.objectContaining({
+        title: 'Review API boundary',
+        handoff: 'Reviewed API boundary. No blocking risks remain.',
+      }),
+      expect.objectContaining({
+        title: 'Review API boundary',
+        progress: 'reading tests',
+      }),
+    ]));
+    expect(JSON.stringify(block)).not.toContain('child-thread-1');
   });
 
-  it('localizes unknown subagent status, type, and boolean detail values', () => {
+  it('does not render unknown subagent diagnostics or control flags', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'subagents',
       renderer: 'structured',
       label: 'subagents',
       payload: {
         action: 'inspect',
-        snapshot: {
-          thread_id: 'child-thread-unknown',
+        items: [{
           agent_type: 'custom-profile',
           status: 'paused_elsewhere',
           accepted: true,
           can_close: false,
           delegation_runtime: 'floret',
-        },
+        }],
       },
     }));
 
-    const rows = presentation.detailLines.map((line) => `${line.label}:${line.value}`);
     expect(presentation.meta).toContain('Subagent');
-    expect(presentation.meta).toContain('Unknown');
-    expect(rows).toContain('profile:Subagent');
-    expect(rows).toContain('result status:Unknown');
-    expect(rows).toContain('accepted:Yes');
-    expect(rows).toContain('can close:No');
-    expect(rows.join('\n')).not.toContain('custom-profile');
-    expect(rows.join('\n')).not.toContain('paused_elsewhere');
-    expect(rows.join('\n')).not.toContain(':true');
-    expect(rows.join('\n')).not.toContain(':false');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('custom-profile');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('paused_elsewhere');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('accepted');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('can_close');
   });
 
   it('does not render legacy subagent collection fields as detail records', () => {
@@ -311,13 +370,12 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    const rows = presentation.detailLines.map((line) => `${line.label}:${line.value}`).join('\n');
     expect(presentation.label).toBe('Wait');
-    expect(rows).not.toContain('legacy-child-1');
-    expect(rows).not.toContain('legacy-child-2');
-    expect(rows).not.toContain('legacy-child-3');
-    expect(rows).not.toContain('Legacy snapshot');
-    expect(rows).not.toContain('Legacy subagents list');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('legacy-child-1');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('legacy-child-2');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('legacy-child-3');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Legacy snapshot');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Legacy subagents list');
   });
 
   it('does not render unrelated nested result ids as delegation', () => {
@@ -336,7 +394,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('profile');
   });
 
-  it('renders web search error records as separate detail lines', () => {
+  it('renders web search errors as a semantic failure reason', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'web.search',
       renderer: 'web_search',
@@ -352,11 +410,12 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    const rows = presentation.detailLines.map((line) => `${line.label}:${line.value}`);
-    expect(rows).toContain('error code:NETWORK');
-    expect(rows).toContain('error message:Search provider failed');
-    expect(rows).toContain('retryable:true');
-    expect(presentation.detailLines.map((line) => line.label)).not.toContain('error');
+    expect(presentation.detailBlocks[0]).toEqual({
+      kind: 'error',
+      error: { message: 'Search provider failed' },
+    });
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('NETWORK');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('retryable');
   });
 
   it('renders web search payloads as result cards instead of a field table', () => {
@@ -487,7 +546,7 @@ describe('presentFlowerActivityItem', () => {
     });
   });
 
-  it('renders todo result status and error details without hiding the todo block', () => {
+  it('renders todo failure reason without raw tool fields while keeping the todo block', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'write_todos',
       renderer: 'todos',
@@ -506,11 +565,18 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['todos', 'structured']);
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('result status:error');
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error code:UNKNOWN');
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error message:Todo update failed');
-    expect(presentation.detailLines.map((line) => line.label)).not.toContain('error');
+    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['error', 'todos']);
+    expect(presentation.detailBlocks[0]).toEqual({
+      kind: 'error',
+      error: { message: 'Todo update failed' },
+    });
+    expect(presentation.detailLines).toHaveLength(0);
+    const rendered = JSON.stringify(presentation.detailBlocks);
+    expect(rendered).not.toContain('result status');
+    expect(rendered).not.toContain('error code');
+    expect(rendered).not.toContain('UNKNOWN');
+    expect(rendered).not.toContain('tool');
+    expect(rendered).not.toContain('item_id');
   });
 
   it('reads todo details from result payloads without exposing JSON', () => {
@@ -684,12 +750,13 @@ describe('presentFlowerActivityItem', () => {
       },
     }), fileActions);
 
-    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['file_read', 'structured']);
-    const rows = presentation.detailLines.map((line) => `${line.label}:${line.value}`);
-    expect(rows).toContain('result status:error');
-    expect(rows).toContain('error code:PERMISSION_DENIED');
-    expect(rows).toContain('error message:permission denied');
-    expect(presentation.detailLines.map((line) => line.label)).not.toContain('error');
+    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['error', 'file_read']);
+    expect(presentation.detailBlocks[0]).toEqual({
+      kind: 'error',
+      error: { message: 'permission denied' },
+    });
+    expect(presentation.detailLines).toHaveLength(0);
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('PERMISSION_DENIED');
   });
 
   it('renders multi-file apply_patch as Edit N files and keeps per-file actions', () => {
@@ -761,10 +828,13 @@ describe('presentFlowerActivityItem', () => {
       },
     }), fileActions);
 
-    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['file_diff', 'structured']);
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error code:INVALID_ARGUMENTS');
-    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error message:patch failed');
-    expect(presentation.detailLines.map((line) => line.label)).not.toContain('error');
+    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['error', 'file_diff']);
+    expect(presentation.detailBlocks[0]).toEqual({
+      kind: 'error',
+      error: { message: 'patch failed' },
+    });
+    expect(presentation.detailLines).toHaveLength(0);
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('INVALID_ARGUMENTS');
   });
 
   it('renders single-file apply_patch deletion as Delete', () => {
@@ -792,7 +862,7 @@ describe('presentFlowerActivityItem', () => {
     });
   });
 
-  it('keeps every row expandable with an explicit tool fallback title', () => {
+  it('does not invent raw fallback detail rows for empty structured payloads', () => {
     const presentation = presentFlowerActivityItem(item({
       payload: undefined,
       renderer: undefined,
@@ -801,9 +871,8 @@ describe('presentFlowerActivityItem', () => {
 
     expect(presentation.label).toBe('terminal.exec');
     expect(presentation.meta).toBe('');
-    expect(presentation.detailLines.length).toBeGreaterThan(0);
-    expect(presentation.detailLines.map((line) => line.label)).toContain('status');
-    expect(presentation.detailBlocks.length).toBeGreaterThan(0);
+    expect(presentation.detailLines).toHaveLength(0);
+    expect(presentation.detailBlocks).toHaveLength(0);
   });
 
   it('renders structured use_skill payloads with their real result fields', () => {

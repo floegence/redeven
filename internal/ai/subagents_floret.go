@@ -2226,12 +2226,6 @@ func (s *floretSubagentRuntime) flowerParentSubagentActivityActions(timeline obs
 			AgentType:         agentType,
 			ContextMode:       contextModeForSubagentForkMode(flruntime.SubAgentForkMode(anyToString(payload["fork_mode"]))),
 			Status:            status,
-			LastMessage:       strings.TrimSpace(anyToString(payload["last_message"])),
-			WaitingPrompt:     strings.TrimSpace(anyToString(payload["waiting_prompt"])),
-			QueuedInputs:      nonNegativeInt(int(parseInt64Raw(payload["queued_inputs"], 0))),
-			CanSendInput:      anyToBool(payload["can_send_input"]),
-			CanInterrupt:      anyToBool(payload["can_interrupt"]),
-			CanClose:          anyToBool(payload["can_close"]),
 			UpdatedAtMS:       nonNegativeInt64Local(parseInt64Raw(payload["updated_at_ms"], 0)),
 		}
 	}
