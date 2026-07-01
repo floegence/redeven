@@ -1131,16 +1131,7 @@ function terminalOutputFromPayload(payload: Readonly<Record<string, unknown>>): 
 
 function terminalStatusLines(item: FlowerActivityItem): readonly FlowerActivityDetailLine[] {
   const payload = item.payload ?? {};
-  const lines: FlowerActivityDetailLine[] = [];
-  if (item.requires_approval) {
-    lines.push({ label: 'approval', value: trimString(item.approval_state) || 'requested' });
-  }
-  for (const key of ['status', 'summary', 'details']) {
-    const line = detailLineFromPayload(payload, key);
-    if (line) lines.push(line);
-  }
-  lines.push(...errorDetailLinesFromPayload(payload));
-  return uniqueDetailLines(lines);
+  return uniqueDetailLines(errorDetailLinesFromPayload(payload));
 }
 
 function presentationForTerminal(item: FlowerActivityItem): FlowerActivityPresentation {
