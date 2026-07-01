@@ -212,6 +212,7 @@ export async function forkCodexThread(args: CodexForkThreadRequest): Promise<Cod
   return fetchCodexJSON<CodexThreadDetail>(`/_redeven_proxy/api/codex/threads/${id}/fork`, {
     method: 'POST',
     body: JSON.stringify({
+      last_turn_id: String(args.last_turn_id ?? '').trim(),
       model: String(args.model ?? '').trim(),
       approval_policy: String(args.approval_policy ?? '').trim(),
       sandbox_mode: String(args.sandbox_mode ?? '').trim(),

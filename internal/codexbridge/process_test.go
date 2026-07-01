@@ -149,6 +149,27 @@ func TestParseLoginShellEnvironmentOutput_RejectsMalformedOutput(t *testing.T) {
 	}
 }
 
+func TestAppServerProcessStructuredStderrFiltering(t *testing.T) {
+	t.Parallel()
+
+	proc := &appServerProcess{}
+	proc.handleStderrLine(`{"level":"INFO","fields":{"message":"processor task exited","exit_reason":"last_connection_closed","remaining_connection_count":0,"shutdown_forced":false},"target":"codex_app_server"}`)
+	if got := proc.lastStderr(); got != "" {
+		t.Fatalf("lastStderr=%q, want empty", got)
+	}
+
+	proc.handleStderrLine(`{"level":"WARN","fields":{"message":"processor task exited","exit_reason":"last_connection_closed","shutdown_forced":false},"target":"codex_app_server"}`)
+	if got := proc.lastStderr(); got == "" {
+		t.Fatalf("expected WARN structured stderr to be retained")
+	}
+
+	proc = &appServerProcess{}
+	proc.handleStderrLine("env: node: No such file or directory")
+	if got := proc.lastStderr(); got != "env: node: No such file or directory" {
+		t.Fatalf("lastStderr=%q", got)
+	}
+}
+
 func TestBuildAppServerCommand_RejectsNonExecutableResolvedOutput(t *testing.T) {
 	_, err := buildAppServerCommand("", "alias codex='codex --dangerously-bypass-approvals-and-sandbox'")
 	if err == nil || !strings.Contains(err.Error(), "not executable") {

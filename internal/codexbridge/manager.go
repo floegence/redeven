@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -417,11 +418,8 @@ func (m *Manager) ReadCapabilities(ctx context.Context, cwd string) (*Capabiliti
 	if cwd == "" {
 		cwd = m.agentHomeDir
 	}
-	includeHidden := false
-	var modelResp wireModelListResponse
-	if err := m.call(ctx, "model/list", wireModelListParams{
-		IncludeHidden: &includeHidden,
-	}, &modelResp); err != nil {
+	models, err := m.readModelListPages(ctx)
+	if err != nil {
 		return nil, err
 	}
 	var configResp wireConfigReadResponse
@@ -440,13 +438,42 @@ func (m *Manager) ReadCapabilities(ctx context.Context, cwd string) (*Capabiliti
 		Requirements:    normalizeConfigRequirements(requirementsResp.Requirements),
 		Operations:      defaultCapabilityOperations(),
 	}
-	if len(modelResp.Data) > 0 {
-		out.Models = make([]ModelOption, 0, len(modelResp.Data))
-		for i := range modelResp.Data {
-			out.Models = append(out.Models, normalizeModelOption(modelResp.Data[i]))
+	if len(models) > 0 {
+		out.Models = make([]ModelOption, 0, len(models))
+		for i := range models {
+			out.Models = append(out.Models, normalizeModelOption(models[i]))
 		}
 	}
 	return out, nil
+}
+
+func (m *Manager) readModelListPages(ctx context.Context) ([]wireModel, error) {
+	includeHidden := false
+	var out []wireModel
+	var cursor string
+	seenCursors := map[string]struct{}{}
+	for {
+		params := wireModelListParams{
+			IncludeHidden: &includeHidden,
+		}
+		if cursor != "" {
+			params.Cursor = stringPtr(cursor)
+		}
+		var resp wireModelListResponse
+		if err := m.call(ctx, "model/list", params, &resp); err != nil {
+			return nil, err
+		}
+		out = append(out, resp.Data...)
+		nextCursor := strings.TrimSpace(stringValue(resp.NextCursor))
+		if nextCursor == "" {
+			return out, nil
+		}
+		if _, ok := seenCursors[nextCursor]; ok {
+			return nil, fmt.Errorf("codex model/list returned repeated cursor %q", nextCursor)
+		}
+		seenCursors[nextCursor] = struct{}{}
+		cursor = nextCursor
+	}
 }
 
 func (m *Manager) StartTurn(ctx context.Context, req StartTurnRequest) (*Turn, error) {
@@ -626,8 +653,9 @@ func (m *Manager) ForkThread(ctx context.Context, req ForkThreadRequest) (*Threa
 	sandboxMode := normalizeSandboxModeRequest(req.SandboxMode)
 	approvalsReviewer := normalizeApprovalsReviewer(req.ApprovalsReviewer)
 	params := wireThreadForkParams{
-		ThreadID: threadID,
-		Model:    stringPtr(req.Model),
+		ThreadID:   threadID,
+		LastTurnID: stringPtr(req.LastTurnID),
+		Model:      stringPtr(req.Model),
 	}
 	if approvalPolicy != "" {
 		params.ApprovalPolicy = stringPtr(approvalPolicy)

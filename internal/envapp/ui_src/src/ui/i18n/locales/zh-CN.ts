@@ -450,6 +450,12 @@ export const zhCN = {
       effort: "Effort",
       approval: "Approval",
       sandbox: "Sandbox",
+      reasoningEffort: {
+        low: "Low",
+        medium: "Medium",
+        high: "High",
+        max: "Max",
+      },
       approvalPolicy: {
         untrusted: "Untrusted",
         onFailure: "On failure",

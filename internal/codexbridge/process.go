@@ -279,12 +279,65 @@ func (p *appServerProcess) stderrLoop(r io.Reader) {
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 1024*1024)
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
+		p.handleStderrLine(scanner.Text())
+	}
+}
+
+func (p *appServerProcess) handleStderrLine(line string) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return
+	}
+	if !shouldRecordAppServerStderrLine(line) {
+		if p != nil && p.log != nil {
+			p.log.Debug("codex app-server", "stderr", line)
 		}
-		p.appendStderr(line)
+		return
+	}
+	p.appendStderr(line)
+	if p != nil && p.log != nil {
 		p.log.Warn("codex app-server", "stderr", line)
+	}
+}
+
+type appServerStructuredStderrLog struct {
+	Level  string `json:"level"`
+	Target string `json:"target"`
+	Fields struct {
+		Message        string `json:"message"`
+		ExitReason     string `json:"exit_reason"`
+		ShutdownForced *bool  `json:"shutdown_forced"`
+	} `json:"fields"`
+}
+
+func shouldRecordAppServerStderrLine(line string) bool {
+	var entry appServerStructuredStderrLog
+	if err := json.Unmarshal([]byte(line), &entry); err != nil {
+		return true
+	}
+	if !strings.EqualFold(strings.TrimSpace(entry.Level), "INFO") {
+		return true
+	}
+	if strings.TrimSpace(entry.Target) != "codex_app_server" {
+		return true
+	}
+	if entry.Fields.ShutdownForced != nil && *entry.Fields.ShutdownForced {
+		return true
+	}
+	switch strings.TrimSpace(entry.Fields.Message) {
+	case "processor task exited":
+		return !isNormalAppServerProcessorExitReason(entry.Fields.ExitReason)
+	default:
+		return true
+	}
+}
+
+func isNormalAppServerProcessorExitReason(reason string) bool {
+	switch strings.TrimSpace(reason) {
+	case "", "channel_closed", "connection_closed", "last_connection_closed":
+		return true
+	default:
+		return false
 	}
 }
 

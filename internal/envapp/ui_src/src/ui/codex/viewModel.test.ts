@@ -6,7 +6,9 @@ import {
   buildCodexPendingRequestViewModel,
   buildCodexSidebarSummary,
   buildCodexWorkbenchSummary,
+  codexReasoningEffortLabel,
   codexSupportsOperation,
+  localizedCodexReasoningEffortLabel,
   resolveCodexWorkingDir,
 } from './viewModel';
 
@@ -161,6 +163,23 @@ describe('buildCodexWorkbenchSummary', () => {
     });
 
     expect(summary.statusLabel).toBe('idle');
+  });
+});
+
+describe('codex reasoning effort labels', () => {
+  it('labels max as a first-class effort while keeping unknown values readable', () => {
+    expect(codexReasoningEffortLabel('max')).toBe('Max');
+    expect(codexReasoningEffortLabel('ultra-high')).toBe('ultra high');
+
+    const t = ((key: string) => ({
+      'codex.controls.reasoningEffort.low': 'Low',
+      'codex.controls.reasoningEffort.medium': 'Medium',
+      'codex.controls.reasoningEffort.high': 'High',
+      'codex.controls.reasoningEffort.max': 'Max',
+    }[key] ?? key)) as any;
+
+    expect(localizedCodexReasoningEffortLabel('max', t)).toBe('Max');
+    expect(localizedCodexReasoningEffortLabel('custom-effort', t)).toBe('custom effort');
   });
 });
 

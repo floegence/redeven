@@ -202,6 +202,39 @@ export function codexSupportedReasoningEfforts(
   ]);
 }
 
+export function codexReasoningEffortLabel(value: string | null | undefined): string {
+  switch (String(value ?? '').trim().toLowerCase()) {
+    case 'low':
+      return 'Low';
+    case 'medium':
+      return 'Medium';
+    case 'high':
+      return 'High';
+    case 'max':
+      return 'Max';
+    default:
+      return displayStatus(String(value ?? '').trim(), 'Medium');
+  }
+}
+
+export function localizedCodexReasoningEffortLabel(
+  value: string | null | undefined,
+  t: I18nHelpers['t'],
+): string {
+  switch (String(value ?? '').trim().toLowerCase()) {
+    case 'low':
+      return t('codex.controls.reasoningEffort.low');
+    case 'medium':
+      return t('codex.controls.reasoningEffort.medium');
+    case 'high':
+      return t('codex.controls.reasoningEffort.high');
+    case 'max':
+      return t('codex.controls.reasoningEffort.max');
+    default:
+      return displayStatus(String(value ?? '').trim(), t('codex.controls.reasoningEffort.medium'));
+  }
+}
+
 export function codexAllowedApprovalPolicies(
   capabilities: CodexCapabilitiesSnapshot | null | undefined,
 ): string[] {

@@ -3,6 +3,7 @@ package codexbridge
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -831,6 +832,172 @@ func TestReadCapabilities_DefaultOperationsMatchActiveOnlyBrowserSurface(t *test
 	}
 }
 
+func TestReadCapabilities_PaginatesModelList(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "model/list",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				var params wireModelListParams
+				if err := json.Unmarshal(env.Params, &params); err != nil {
+					t.Fatalf("json.Unmarshal params: %v", err)
+				}
+				if params.IncludeHidden == nil || *params.IncludeHidden {
+					t.Fatalf("IncludeHidden=%v, want false", params.IncludeHidden)
+				}
+				if params.Cursor != nil {
+					t.Fatalf("Cursor=%q, want nil", stringValue(params.Cursor))
+				}
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireModelListResponse{
+						Data: []wireModel{
+							{
+								ID:                     "gpt-5.4",
+								DisplayName:            "GPT-5.4",
+								DefaultReasoningEffort: "medium",
+								SupportedReasoningEfforts: []wireReasoningEffortOption{
+									{ReasoningEffort: "medium"},
+								},
+							},
+						},
+						NextCursor: stringPtr("page-2"),
+					}),
+				})
+			},
+		},
+		{
+			method: "model/list",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				var params wireModelListParams
+				if err := json.Unmarshal(env.Params, &params); err != nil {
+					t.Fatalf("json.Unmarshal params: %v", err)
+				}
+				if stringValue(params.Cursor) != "page-2" {
+					t.Fatalf("Cursor=%q, want page-2", stringValue(params.Cursor))
+				}
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireModelListResponse{
+						Data: []wireModel{
+							{
+								ID:                     "gpt-5.5",
+								DisplayName:            "GPT-5.5",
+								DefaultReasoningEffort: "max",
+								SupportedReasoningEfforts: []wireReasoningEffortOption{
+									{ReasoningEffort: "high"},
+									{ReasoningEffort: "max"},
+								},
+							},
+						},
+					}),
+				})
+			},
+		},
+		{
+			method: "config/read",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireConfigReadResponse{
+						Config: wireConfig{
+							Model:         stringPtr("gpt-5.4"),
+							ModelProvider: stringPtr("openai"),
+						},
+					}),
+				})
+			},
+		},
+		{
+			method: "configRequirements/read",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID:     env.ID,
+					Result: mustJSONRaw(wireConfigRequirementsReadResponse{}),
+				})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	capabilities, err := manager.ReadCapabilities(context.Background(), "")
+	if err != nil {
+		t.Fatalf("ReadCapabilities: %v", err)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
+	}
+	if len(capabilities.Models) != 2 {
+		t.Fatalf("Models=%+v", capabilities.Models)
+	}
+	if capabilities.Models[1].ID != "gpt-5.5" {
+		t.Fatalf("Models[1]=%+v", capabilities.Models[1])
+	}
+	if got := capabilities.Models[1].SupportedReasoningEfforts; len(got) != 2 || got[0] != "high" || got[1] != "max" {
+		t.Fatalf("SupportedReasoningEfforts=%+v", got)
+	}
+}
+
+func TestReadCapabilities_RejectsRepeatedModelListCursor(t *testing.T) {
+	t.Parallel()
+
+	manager, err := NewManager(Options{AgentHomeDir: "/workspace"})
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+
+	proc, transport := newScriptedProcess(t, []scriptedRPCStep{
+		{
+			method: "model/list",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireModelListResponse{
+						NextCursor: stringPtr("loop"),
+					}),
+				})
+			},
+		},
+		{
+			method: "model/list",
+			respond: func(t *testing.T, proc *appServerProcess, env rpcEnvelope) {
+				var params wireModelListParams
+				if err := json.Unmarshal(env.Params, &params); err != nil {
+					t.Fatalf("json.Unmarshal params: %v", err)
+				}
+				if stringValue(params.Cursor) != "loop" {
+					t.Fatalf("Cursor=%q, want loop", stringValue(params.Cursor))
+				}
+				proc.dispatchEnvelope(rpcEnvelope{
+					ID: env.ID,
+					Result: mustJSONRaw(wireModelListResponse{
+						NextCursor: stringPtr("loop"),
+					}),
+				})
+			},
+		},
+	})
+	manager.mu.Lock()
+	manager.proc = proc
+	manager.mu.Unlock()
+
+	_, err = manager.ReadCapabilities(context.Background(), "")
+	if err == nil || !strings.Contains(err.Error(), "repeated cursor") {
+		t.Fatalf("ReadCapabilities error=%v, want repeated cursor", err)
+	}
+	if len(transport.steps) != 0 {
+		t.Fatalf("unexpected remaining rpc steps: %d", len(transport.steps))
+	}
+}
+
 func TestSteerTurn_ProjectsSteerableRegularTurn(t *testing.T) {
 	t.Parallel()
 
@@ -1000,6 +1167,9 @@ func TestForkThread_UsesNormalizedOverrides(t *testing.T) {
 				if params.ThreadID != "thread_1" {
 					t.Fatalf("ThreadID=%q, want thread_1", params.ThreadID)
 				}
+				if stringValue(params.LastTurnID) != "turn_3" {
+					t.Fatalf("LastTurnID=%q", stringValue(params.LastTurnID))
+				}
 				if stringValue(params.Model) != "gpt-5.4" {
 					t.Fatalf("Model=%q", stringValue(params.Model))
 				}
@@ -1039,6 +1209,7 @@ func TestForkThread_UsesNormalizedOverrides(t *testing.T) {
 
 	detail, err := manager.ForkThread(context.Background(), ForkThreadRequest{
 		ThreadID:          "thread_1",
+		LastTurnID:        "turn_3",
 		Model:             "gpt-5.4",
 		ApprovalPolicy:    "on-request",
 		SandboxMode:       "workspace-write",

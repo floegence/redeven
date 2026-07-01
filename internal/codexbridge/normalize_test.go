@@ -5,6 +5,23 @@ import (
 	"testing"
 )
 
+func TestNormalizeThread_MapsHistoryMode(t *testing.T) {
+	t.Parallel()
+
+	thread := normalizeThread(wireThread{
+		ID:          "thread_1",
+		Preview:     "Paginated history",
+		Ephemeral:   false,
+		HistoryMode: "paginated",
+		Status:      wireThreadStatus{Type: "idle"},
+		CWD:         "/workspace",
+	})
+
+	if thread.HistoryMode != "paginated" {
+		t.Fatalf("HistoryMode=%q", thread.HistoryMode)
+	}
+}
+
 func TestNormalizeItem_UsesContentTextWhenDirectTextMissing(t *testing.T) {
 	t.Parallel()
 
@@ -297,6 +314,28 @@ func TestNormalizeCapabilitiesParts_KeepModelAndRequirementSemantics(t *testing.
 	}
 	if requirements.AllowedSandboxModes[0] != "workspace-write" || requirements.AllowedSandboxModes[1] != "danger-full-access" {
 		t.Fatalf("unexpected normalized sandbox modes: %+v", requirements.AllowedSandboxModes)
+	}
+
+	var requirementsResp wireConfigRequirementsReadResponse
+	if err := json.Unmarshal([]byte(`{
+		"requirements": {
+			"allowedApprovalPolicies": ["never"],
+			"allowedSandboxModes": ["readOnly"],
+			"allowedPermissionProfiles": {"trusted": true},
+			"models": {"newThread": {"modelReasoningEffort": "max"}}
+		}
+	}`), &requirementsResp); err != nil {
+		t.Fatalf("json.Unmarshal requirements: %v", err)
+	}
+	requirements = normalizeConfigRequirements(requirementsResp.Requirements)
+	if requirements == nil {
+		t.Fatalf("expected requirements with extra upstream fields")
+	}
+	if len(requirements.AllowedApprovalPolicies) != 1 || requirements.AllowedApprovalPolicies[0] != "never" {
+		t.Fatalf("unexpected approval policies with extra fields: %+v", requirements.AllowedApprovalPolicies)
+	}
+	if len(requirements.AllowedSandboxModes) != 1 || requirements.AllowedSandboxModes[0] != "read-only" {
+		t.Fatalf("unexpected sandbox modes with extra fields: %+v", requirements.AllowedSandboxModes)
 	}
 }
 

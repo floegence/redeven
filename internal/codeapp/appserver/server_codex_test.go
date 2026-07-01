@@ -647,6 +647,22 @@ func TestServer_CodexRoutes_ExposeIndependentServerSurface(t *testing.T) {
 		}
 	})
 
+	t.Run("fork thread through last turn", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads/thread_1/fork", bytes.NewBufferString(`{
+				"last_turn_id":"turn_3"
+			}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		srv.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		if gotForkThread.ThreadID != "thread_1" || gotForkThread.LastTurnID != "turn_3" {
+			t.Fatalf("unexpected fork request: %+v", gotForkThread)
+		}
+	})
+
 	t.Run("interrupt active turn", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads/thread_1/interrupt", bytes.NewBufferString(`{"turn_id":"turn_1"}`))
 		req.Header.Set("Origin", envOrigin)
