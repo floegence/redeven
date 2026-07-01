@@ -75,13 +75,13 @@ function parentThreadWithRunningSubagent(): FlowerThreadSnapshot {
                 action: 'spawn',
                 status: 'ok',
                 task_name: 'Review API contract',
+                task_description: 'Review the API boundary.',
                 agent_type: 'reviewer',
-                context_mode: 'mission_only',
                 items: [{
                   task_name: 'Review API contract',
+                  task_description: 'Review the API boundary.',
                   agent_type: 'reviewer',
                   status: 'running',
-                  context_mode: 'mission_only',
                 }],
               },
             })],
@@ -93,8 +93,8 @@ function parentThreadWithRunningSubagent(): FlowerThreadSnapshot {
                 thread_id: 'thread-child-review',
                 subagent_id: 'thread-child-review',
                 task_name: 'Review API contract',
+                task_description: 'Review the API boundary.',
                 agent_type: 'reviewer',
-                context_mode: 'mission_only',
                 status: 'running',
                 updated_at_ms: 120,
               },
@@ -271,8 +271,8 @@ describe('FlowerSurface navigation activity', () => {
     expect(lifecycleRow).toBeTruthy();
     (lifecycleRow?.querySelector('.flower-activity-inline-button') as HTMLButtonElement).click();
     await waitFor(() => runtime.textContent?.includes('handoff') ?? false);
-    expect(runtime.textContent).toContain('phase');
     expect(runtime.textContent).toContain('handoff');
+    expect(runtime.textContent).not.toContain('phase');
     expect(runtime.textContent).toContain('Second page handoff detail.');
     const composer = runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement;
     expect(composer.disabled).toBe(false);
@@ -623,13 +623,13 @@ describe('FlowerSurface navigation activity', () => {
                   action: 'spawn',
                   status: 'ok',
                   task_name: 'Review API contract',
+                  task_description: 'Review the API boundary.',
                   agent_type: 'reviewer',
-                  context_mode: 'mission_only',
                   items: [{
                     task_name: 'Review API contract',
+                    task_description: 'Review the API boundary.',
                     agent_type: 'reviewer',
                     status: 'running',
-                    context_mode: 'mission_only',
                   }],
                 },
               })],
@@ -641,8 +641,8 @@ describe('FlowerSurface navigation activity', () => {
                   thread_id: 'thread-child-review',
                   subagent_id: 'thread-child-review',
                   task_name: 'Review API contract',
+                  task_description: 'Review the API boundary.',
                   agent_type: 'reviewer',
-                  context_mode: 'mission_only',
                   status: 'running',
                   updated_at_ms: 120,
                 },
@@ -1485,11 +1485,9 @@ describe('FlowerSurface navigation activity', () => {
                     status: 'ok',
                     agent_count: 1,
                     items: [{
-                      thread_id: 'thread-child-hidden',
-                      subagent_id: 'thread-child-hidden',
                       task_name: 'Review API contract',
+                      task_description: 'Review the public API boundary.',
                       agent_type: 'reviewer',
-                      context_mode: 'mission_only',
                       status: 'completed',
                       last_message: 'Hidden handoff preview',
                       waiting_prompt: 'Hidden waiting prompt',
@@ -1509,6 +1507,29 @@ describe('FlowerSurface navigation activity', () => {
                   },
                 }),
               ],
+              subagent_actions: {
+                'item-subagents': {
+                  operation: 'subagents',
+                  action: 'wait',
+                  delegation_runtime: 'floret',
+                  thread_id: 'thread-child-hidden',
+                  subagent_id: 'thread-child-hidden',
+                  task_name: 'Review API contract',
+                  task_description: 'Review the public API boundary.',
+                  agent_type: 'reviewer',
+                  status: 'completed',
+                  updated_at_ms: 1_700_000_000_100,
+                  items: [{
+                    thread_id: 'thread-child-hidden',
+                    subagent_id: 'thread-child-hidden',
+                    task_name: 'Review API contract',
+                    task_description: 'Review the public API boundary.',
+                    agent_type: 'reviewer',
+                    status: 'completed',
+                    updated_at_ms: 1_700_000_000_100,
+                  }],
+                },
+              },
             }),
           ],
         },
@@ -1531,8 +1552,9 @@ describe('FlowerSurface navigation activity', () => {
 
     await waitFor(() => row.textContent?.includes('Review API contract') ?? false);
     expect(row.textContent).toContain('Review API contract');
+    expect(row.textContent).toContain('Review the public API boundary.');
+    expect(row.textContent).toContain('Agent: reviewer');
     expect(row.textContent).toContain('Open messages');
-    expect(row.textContent).not.toContain('Reviewer');
     expect(row.textContent).not.toContain('Completed');
     expect(row.textContent).not.toContain('API boundary is consistent.');
     expect(row.textContent).not.toContain('thread-child-hidden');

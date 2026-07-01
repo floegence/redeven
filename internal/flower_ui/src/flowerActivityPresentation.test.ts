@@ -174,11 +174,13 @@ describe('presentFlowerActivityItem', () => {
         action: 'spawn',
         status: 'ok',
         task_name: 'Review API boundary',
+        task_description: 'Review the API boundary and identify contract risks.',
         agent_type: 'reviewer',
         context_mode: 'mission_only',
         items: [{
           thread_id: 'child-thread-1',
           task_name: 'Review API boundary',
+          task_description: 'Review the API boundary and identify contract risks.',
           agent_type: 'reviewer',
           status: 'running',
           last_message: 'Reading contracts',
@@ -189,28 +191,23 @@ describe('presentFlowerActivityItem', () => {
 
     expect(presentation.label).toBe('Started subagent');
     expect(presentation.title).toEqual({ kind: 'plain', text: 'Started subagent' });
-    expect(presentation.meta).toBe('Review API boundary');
+    expect(presentation.meta).toBe('Review API boundary · Review the API boundary and identify contract risks.');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`).join('\n')).not.toContain('child-thread-1');
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'subagents',
       subagents: {
-        title: 'Started subagent',
         action: 'spawn',
-        task_preview: '',
+        task_preview: 'Review the API boundary and identify contract risks.',
         items: [{
           name: 'Review API boundary',
-          task: 'Review API boundary',
+          description: 'Review the API boundary and identify contract risks.',
+          agent_type: 'reviewer',
           raw_status: 'running',
           show_status: false,
-          open_messages: {
-            thread_id: 'child-thread-1',
-            subagent_id: 'child-thread-1',
-            label: 'Open messages',
-          },
         }],
       },
     });
-    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Reviewer');
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('open_messages');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Mission only');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Reading contracts');
   });
@@ -224,6 +221,7 @@ describe('presentFlowerActivityItem', () => {
       payload: {
         thread_id: 'child-thread-1',
         task_name: 'Review API boundary',
+        task_description: 'Review the API boundary and identify contract risks.',
         host_profile_ref: 'reviewer',
         fork_mode: 'none',
         status: 'completed',
@@ -236,21 +234,21 @@ describe('presentFlowerActivityItem', () => {
         thread_id: 'child-thread-1',
         subagent_id: 'child-thread-1',
         task_name: 'Review API boundary',
+        task_description: 'Review the API boundary and identify contract risks.',
         agent_type: 'reviewer',
-        context_mode: 'mission_only',
         status: 'completed',
       },
     });
 
     expect(presentation.label).toBe('Subagents');
-    expect(presentation.meta).toBe('Review API boundary');
+    expect(presentation.meta).toBe('Review API boundary · Review the API boundary and identify contract risks.');
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'subagents',
       subagents: {
-        title: 'Subagents',
         items: [{
           name: 'Review API boundary',
-          task: 'Review API boundary',
+          description: 'Review the API boundary and identify contract risks.',
+          agent_type: 'reviewer',
           raw_status: 'completed',
           show_status: false,
           open_messages: {
@@ -259,7 +257,6 @@ describe('presentFlowerActivityItem', () => {
         }],
       },
     });
-    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Reviewer');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Mission only');
   });
 
@@ -273,6 +270,7 @@ describe('presentFlowerActivityItem', () => {
         status: 'ok',
         items: [{
           task_name: 'Review API boundary',
+          task_description: 'Review the API boundary and identify contract risks.',
           agent_type: 'reviewer',
           context_mode: 'mission_only',
           status: 'completed',
@@ -303,17 +301,16 @@ describe('presentFlowerActivityItem', () => {
     const block = presentation.detailBlocks[0];
     expect(block.kind).toBe('subagents');
     if (block.kind !== 'subagents') return;
-    expect(block.subagents.title).toBe('Waiting');
     expect(block.subagents.items).toEqual([
       expect.objectContaining({
         name: 'Review API boundary',
-        task: 'Review API boundary',
+        description: 'Review the API boundary and identify contract risks.',
+        agent_type: 'reviewer',
         raw_status: 'completed',
         show_status: false,
       }),
     ]);
     expect(JSON.stringify(block)).not.toContain('child-thread-1');
-    expect(JSON.stringify(block)).not.toContain('Reviewer');
     expect(JSON.stringify(block)).not.toContain('Mission only');
     expect(JSON.stringify(block)).not.toContain('Delegated subagents finished wait');
     expect(JSON.stringify(block)).not.toContain('Reviewed API boundary');
@@ -338,7 +335,7 @@ describe('presentFlowerActivityItem', () => {
     }));
 
     expect(presentation.meta).toContain('Subagent');
-    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('custom-profile');
+    expect(JSON.stringify(presentation.detailBlocks)).toContain('custom-profile');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('paused_elsewhere');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('accepted');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('can_close');

@@ -3764,32 +3764,23 @@ html.dark .flower-component-shell {
   white-space: pre-wrap;
 }
 
-.flower-activity-subagents-head,
 .flower-activity-subagents-item {
   min-width: 0;
 }
 
-.flower-activity-subagents-head {
-  display: grid;
-  gap: 0.1875rem;
-}
-
-.flower-activity-subagents-title {
-  min-width: 0;
-  color: color-mix(in srgb, var(--foreground) 82%, var(--muted-foreground) 18%);
-  font-size: 0.75rem;
-  font-weight: 680;
-  line-height: 1.35;
-  overflow-wrap: anywhere;
-}
-
-.flower-activity-subagents-preview,
-.flower-activity-subagents-item-task {
+.flower-activity-subagents-item-task,
+.flower-activity-subagents-item-agent {
   min-width: 0;
   color: color-mix(in srgb, var(--foreground) 68%, var(--muted-foreground) 32%);
   font-size: 0.71875rem;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+
+.flower-activity-subagents-item-agent {
+  color: color-mix(in srgb, var(--muted-foreground) 82%, transparent);
+  font-size: 0.65625rem;
+  font-weight: 650;
 }
 
 .flower-activity-subagents-list {
@@ -5392,10 +5383,11 @@ html.dark .flower-component-shell {
 }
 
 .flower-subagent-dropdown-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1.125rem minmax(0, 1fr) 1rem;
   min-width: 0;
   cursor: pointer;
-  align-items: center;
+  align-items: start;
   gap: 0.5rem;
   border: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--flower-subagents-border) 16%, transparent);
@@ -5450,6 +5442,20 @@ html.dark .flower-component-shell {
   flex-shrink: 0;
 }
 
+.flower-subagent-dropdown-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.125rem;
+}
+
+.flower-subagent-dropdown-headline {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.625rem;
+}
+
 .flower-subagent-status-indicator {
   display: inline-flex;
   flex: 0 0 auto;
@@ -5486,7 +5492,6 @@ html.dark .flower-component-shell {
 }
 
 .flower-subagent-dropdown-name {
-  flex: 1 1 auto;
   min-width: 0;
   color: var(--foreground);
   overflow: hidden;
@@ -5494,6 +5499,16 @@ html.dark .flower-component-shell {
   white-space: nowrap;
   font-size: 0.8125rem;
   font-weight: 540;
+}
+
+.flower-subagent-dropdown-description {
+  min-width: 0;
+  color: color-mix(in srgb, var(--muted-foreground) 84%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.71875rem;
+  line-height: 1.35;
 }
 
 .flower-subagent-dropdown-time {

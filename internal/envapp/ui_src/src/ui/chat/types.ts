@@ -145,9 +145,9 @@ export interface ActivitySubagentAction {
   subagent_id?: string;
   parent_thread_id?: string;
   task_name?: string;
+  task_description?: string;
   title?: string;
   agent_type?: string;
-  context_mode?: string;
   status?: string;
   started_at_ms?: number;
   created_at_ms?: number;
@@ -159,9 +159,9 @@ export interface ActivitySubagentActionItem {
   thread_id?: string;
   subagent_id?: string;
   task_name?: string;
+  task_description?: string;
   title?: string;
   agent_type?: string;
-  context_mode?: string;
   status?: string;
   started_at_ms?: number;
   created_at_ms?: number;

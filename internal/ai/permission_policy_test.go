@@ -1323,10 +1323,11 @@ func TestPermissionPolicy_SubagentsRuntimeActionsDoNotRequestApproval(t *testing
 		{
 			name: "spawn",
 			args: map[string]any{
-				"action":     "spawn",
-				"agent_type": "worker",
-				"task_name":  "runtime no approval",
-				"message":    "run without approving the orchestration action",
+				"action":           "spawn",
+				"agent_type":       "worker",
+				"task_name":        "runtime no approval",
+				"task_description": "Run without approving the orchestration action.",
+				"message":          "run without approving the orchestration action",
 			},
 		},
 		{

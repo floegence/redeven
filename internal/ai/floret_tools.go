@@ -1412,12 +1412,6 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 	if status != "" {
 		payload["status"] = status
 	}
-	if summary := strings.TrimSpace(result.Summary); summary != "" && !isNonInformativeToolActivityText(summary) {
-		payload["summary"] = summary
-	}
-	if details := strings.TrimSpace(result.Details); details != "" && !isNonInformativeToolActivityText(details) {
-		payload["details"] = details
-	}
 	if result.Truncated || readBoolField(rawPayload, "truncated") || readBoolField(payload, "truncated") || (!isOKFToolName(toolName) && dataTruncated) {
 		payload["truncated"] = true
 	}
@@ -1426,6 +1420,10 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 	}
 	if result.Error != nil {
 		payload["error"] = activityToolErrorPayload(result.Error)
+	} else if status != toolResultStatusSuccess {
+		if message := firstActionableToolActivityText(result.Details, result.Summary); message != "" {
+			payload["error"] = map[string]any{"message": message}
+		}
 	}
 	payload = publicActivityPayloadForTool(toolName, payload)
 	payload, payloadTruncated := contractSafePayloadMapForTool(toolName, payload, 0)
@@ -1444,11 +1442,37 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 func isNonInformativeToolActivityText(value string) bool {
 	normalized := strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(value))), " ")
 	switch normalized {
-	case "tool execution completed", "tool completed", "execution completed", "completed", "success", "ok", "done":
+	case "",
+		"tool execution completed",
+		"tool completed",
+		"execution completed",
+		"completed",
+		"success",
+		"ok",
+		"done",
+		"tool execution failed",
+		"tool failed",
+		"tool.error",
+		"tool error",
+		"tool.timeout",
+		"tool aborted",
+		"tool.aborted",
+		"permission_denied":
 		return true
 	default:
 		return false
 	}
+}
+
+func firstActionableToolActivityText(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || isNonInformativeToolActivityText(value) {
+			continue
+		}
+		return value
+	}
+	return ""
 }
 
 func publicActivityPayloadForTool(toolName string, payload map[string]any) map[string]any {

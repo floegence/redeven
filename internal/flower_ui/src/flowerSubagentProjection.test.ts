@@ -133,7 +133,6 @@ describe('buildFlowerSubagentPanelItems', () => {
           subagent_id: 'child-1',
           task_name: 'Review API',
           agent_type: 'reviewer',
-          context_mode: 'mission_only',
           status: 'completed',
           updated_at_ms: 120,
         },

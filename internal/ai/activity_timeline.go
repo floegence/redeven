@@ -86,9 +86,9 @@ type FlowerActivitySubagentAction struct {
 	SubagentID        string                             `json:"subagent_id,omitempty"`
 	ParentThreadID    string                             `json:"parent_thread_id,omitempty"`
 	TaskName          string                             `json:"task_name,omitempty"`
+	TaskDescription   string                             `json:"task_description,omitempty"`
 	Title             string                             `json:"title,omitempty"`
 	AgentType         string                             `json:"agent_type,omitempty"`
-	ContextMode       string                             `json:"context_mode,omitempty"`
 	Status            string                             `json:"status,omitempty"`
 	StartedAtMS       int64                              `json:"started_at_ms,omitempty"`
 	CreatedAtMS       int64                              `json:"created_at_ms,omitempty"`
@@ -97,16 +97,16 @@ type FlowerActivitySubagentAction struct {
 }
 
 type FlowerActivitySubagentActionItem struct {
-	ThreadID    string `json:"thread_id,omitempty"`
-	SubagentID  string `json:"subagent_id,omitempty"`
-	TaskName    string `json:"task_name,omitempty"`
-	Title       string `json:"title,omitempty"`
-	AgentType   string `json:"agent_type,omitempty"`
-	ContextMode string `json:"context_mode,omitempty"`
-	Status      string `json:"status,omitempty"`
-	StartedAtMS int64  `json:"started_at_ms,omitempty"`
-	CreatedAtMS int64  `json:"created_at_ms,omitempty"`
-	UpdatedAtMS int64  `json:"updated_at_ms,omitempty"`
+	ThreadID        string `json:"thread_id,omitempty"`
+	SubagentID      string `json:"subagent_id,omitempty"`
+	TaskName        string `json:"task_name,omitempty"`
+	TaskDescription string `json:"task_description,omitempty"`
+	Title           string `json:"title,omitempty"`
+	AgentType       string `json:"agent_type,omitempty"`
+	Status          string `json:"status,omitempty"`
+	StartedAtMS     int64  `json:"started_at_ms,omitempty"`
+	CreatedAtMS     int64  `json:"created_at_ms,omitempty"`
+	UpdatedAtMS     int64  `json:"updated_at_ms,omitempty"`
 }
 
 func cloneFlowerActivitySubagentActions(in map[string]FlowerActivitySubagentAction) map[string]FlowerActivitySubagentAction {
@@ -126,9 +126,9 @@ func cloneFlowerActivitySubagentActions(in map[string]FlowerActivitySubagentActi
 		value.SubagentID = strings.TrimSpace(value.SubagentID)
 		value.ParentThreadID = strings.TrimSpace(value.ParentThreadID)
 		value.TaskName = strings.TrimSpace(value.TaskName)
+		value.TaskDescription = strings.TrimSpace(value.TaskDescription)
 		value.Title = strings.TrimSpace(value.Title)
 		value.AgentType = strings.TrimSpace(value.AgentType)
-		value.ContextMode = strings.TrimSpace(value.ContextMode)
 		value.Status = strings.TrimSpace(value.Status)
 		value.Items = cloneFlowerActivitySubagentActionItems(value.Items)
 		if value.Operation == "" && value.Action == "" && value.ThreadID == "" && value.SubagentID == "" {
@@ -151,9 +151,9 @@ func cloneFlowerActivitySubagentActionItems(in []FlowerActivitySubagentActionIte
 		value.ThreadID = strings.TrimSpace(value.ThreadID)
 		value.SubagentID = strings.TrimSpace(value.SubagentID)
 		value.TaskName = strings.TrimSpace(value.TaskName)
+		value.TaskDescription = strings.TrimSpace(value.TaskDescription)
 		value.Title = strings.TrimSpace(value.Title)
 		value.AgentType = strings.TrimSpace(value.AgentType)
-		value.ContextMode = strings.TrimSpace(value.ContextMode)
 		value.Status = strings.TrimSpace(value.Status)
 		if value.ThreadID == "" && value.SubagentID == "" && value.TaskName == "" && value.Title == "" {
 			continue

@@ -133,7 +133,8 @@ export type FlowerActivitySubagentMessageAction = Readonly<{
 
 export type FlowerActivitySubagentDetailItem = Readonly<{
   name: string;
-  task: string;
+  description: string;
+  agent_type: string;
   raw_status: string;
   status: string;
   show_status: boolean;
@@ -144,7 +145,6 @@ export type FlowerActivitySubagentDetailItem = Readonly<{
 }>;
 
 export type FlowerActivitySubagentsDetail = Readonly<{
-  title: string;
   action: string;
   status: string;
   task_preview: string;
@@ -284,6 +284,7 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
   thread_id: 'thread',
   subagent_id: 'subagent',
   task_name: 'task',
+  task_description: 'task',
   title: 'title',
   agent_type: 'profile',
   context_mode: 'context mode',
@@ -324,28 +325,8 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
 };
 
 const RENDERER_DETAIL_KEYS: Readonly<Record<'structured', readonly string[]>> = {
-  structured: ['operation', 'name', 'action', 'content', 'content_ref', 'activation_id', 'already_active', 'permission_hints', 'dependencies', 'dependency_degraded', 'reason', 'id', 'status', 'message', 'timed_out', 'targets', 'stats', 'output', 'structured', 'key_files', 'rows', 'cards', 'items', 'query', 'count', 'provider', 'okf_version', 'total_sections', 'sections', 'filters', 'total_concepts', 'total_matches', 'match_count', 'max_results', 'has_more', 'omitted_count', 'matches', 'concept_title', 'concept', 'body_offset', 'body_length', 'returned_body_length', 'link_count', 'backlink_count', 'links', 'backlinks', 'data', 'result', 'limit', 'evidence_refs', 'remaining_risks', 'next_actions', 'truncated', 'summary', 'details'],
+  structured: ['operation', 'name', 'action', 'content', 'content_ref', 'activation_id', 'already_active', 'permission_hints', 'dependencies', 'dependency_degraded', 'reason', 'id', 'message', 'timed_out', 'targets', 'stats', 'output', 'structured', 'key_files', 'rows', 'cards', 'items', 'query', 'count', 'provider', 'okf_version', 'total_sections', 'sections', 'filters', 'total_concepts', 'total_matches', 'match_count', 'max_results', 'has_more', 'omitted_count', 'matches', 'concept_title', 'concept', 'body_offset', 'body_length', 'returned_body_length', 'link_count', 'backlink_count', 'links', 'backlinks', 'data', 'result', 'limit', 'evidence_refs', 'remaining_risks', 'next_actions', 'truncated'],
 };
-
-const FILE_RAW_DETAIL_KEYS = new Set([
-  'args',
-  'additions',
-  'content',
-  'deletions',
-  'diff_unavailable_reason',
-  'display_name',
-  'file_action_id',
-  'files',
-  'line_count',
-  'line_offset',
-  'mutations',
-  'operation',
-  'patch',
-  'patch_text',
-  'result',
-  'total_lines',
-  'unified_diff',
-]);
 
 function scalarText(value: unknown): string {
   if (typeof value === 'string') return trimString(value);
@@ -606,6 +587,7 @@ function detailLabel(key: string, copy?: FlowerActivityPresentationCopy): string
     case 'subagent_id':
       return subagents?.subagent ?? DETAIL_LABELS[key] ?? key;
     case 'task_name':
+    case 'task_description':
       return subagents?.task ?? DETAIL_LABELS[key] ?? key;
     case 'title':
       return subagents?.title ?? DETAIL_LABELS[key] ?? key;
@@ -677,11 +659,11 @@ function errorMessageFromPayload(payload: Readonly<Record<string, unknown>> | un
   if (nestedMessage) return nestedMessage;
   const scalarError = scalarText(payload.error);
   if (scalarError) return scalarError;
-  return payloadValue(payload, 'details', 'summary', 'message', 'reason');
+  return payloadValue(payload, 'message', 'reason');
 }
 
 function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>> | undefined): Extract<FlowerActivityDetailBlock, { kind: 'error' }> | null {
-  const message = errorMessageFromPayload(payload) || (item.status === 'error' ? 'Tool failed.' : '');
+  const message = errorMessageFromPayload(payload);
   if (!message) return null;
   return {
     kind: 'error',
@@ -691,13 +673,20 @@ function errorDetailBlockForItem(item: FlowerActivityItem, payload: Readonly<Rec
 
 function isNonInformativeSuccessText(value: string): boolean {
   const normalized = trimString(value).toLowerCase().replace(/\s+/g, ' ');
-  return normalized === 'tool execution completed'
+  if (normalized === 'tool execution completed'
     || normalized === 'tool completed'
     || normalized === 'execution completed'
+    || normalized === 'tool execution failed'
+    || normalized === 'tool failed'
     || normalized === 'completed'
     || normalized === 'success'
     || normalized === 'ok'
-    || normalized === 'done';
+    || normalized === 'done'
+    || normalized === 'tool.error'
+    || normalized === 'tool.timeout'
+    || normalized === 'tool.aborted'
+    || normalized === 'permission_denied') return true;
+  return /^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$/.test(normalized);
 }
 
 function shouldHideDetailLine(key: string, value: string): boolean {
@@ -837,13 +826,8 @@ function subagentNameFromRecord(record: Readonly<Record<string, unknown>>): stri
   return safeTitle || task || 'Subagent';
 }
 
-function subagentTaskFromRecord(record: Readonly<Record<string, unknown>>, fallback: Readonly<Record<string, unknown>>): string {
-  const task = payloadValue(record, 'task_name');
-  if (task) return task;
-  const title = payloadValue(record, 'title');
-  const threadID = subagentThreadID(record);
-  if (title && title !== threadID && title !== subagentSubagentID(record)) return title;
-  return payloadValue(fallback, 'task_name');
+function subagentDescriptionFromRecord(record: Readonly<Record<string, unknown>>, fallback: Readonly<Record<string, unknown>>): string {
+  return payloadValue(record, 'task_description') || payloadValue(fallback, 'task_description');
 }
 
 function shouldShowSubagentStatus(status: string): boolean {
@@ -867,6 +851,7 @@ function subagentDetailItemFromRecord(
   record: Readonly<Record<string, unknown>>,
   item: FlowerActivityItem,
   payload: Readonly<Record<string, unknown>>,
+  allowMessageActions: boolean,
   copy?: FlowerActivityPresentationCopy,
 ): FlowerActivitySubagentDetailItem | null {
   const rawStatus = payloadValue(record, 'status') || payloadValue(payload, 'status') || subagentStatusFromItemStatus(item.status);
@@ -875,18 +860,20 @@ function subagentDetailItemFromRecord(
   const threadID = subagentThreadID(record);
   const subagentID = subagentSubagentID(record);
   const name = subagentNameFromRecord(record);
-  const task = subagentTaskFromRecord(record, payload);
-  if (!name && !task && !status) return null;
+  const description = subagentDescriptionFromRecord(record, payload);
+  const agentType = payloadValue(record, 'agent_type') || payloadValue(payload, 'agent_type');
+  if (!name && !description && !status) return null;
   return {
-    name: name || task || 'Subagent',
-    task,
+    name: name || 'Subagent',
+    description,
+    agent_type: agentType,
     raw_status: normalizedStatus,
     status,
     show_status: shouldShowSubagentStatus(rawStatus),
     ...(optionalNumericValue(record.started_at_ms) ? { started_at_ms: optionalNumericValue(record.started_at_ms) } : {}),
     ...(optionalNumericValue(record.created_at_ms) ? { created_at_ms: optionalNumericValue(record.created_at_ms) } : {}),
     ...(optionalNumericValue(record.updated_at_ms) ? { updated_at_ms: optionalNumericValue(record.updated_at_ms) } : {}),
-    ...(threadID ? {
+    ...(allowMessageActions && threadID ? {
       open_messages: {
         thread_id: threadID,
         subagent_id: subagentID || threadID,
@@ -900,7 +887,7 @@ function uniqueSubagentDetailItems(items: readonly FlowerActivitySubagentDetailI
   const seen = new Set<string>();
   const out: FlowerActivitySubagentDetailItem[] = [];
   for (const item of items) {
-    const key = [item.open_messages?.thread_id, item.name, item.task].join('\x1e');
+    const key = [item.open_messages?.thread_id, item.name, item.description].join('\x1e');
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(item);
@@ -911,11 +898,12 @@ function uniqueSubagentDetailItems(items: readonly FlowerActivitySubagentDetailI
 function subagentsDetailItemsFromPayload(
   item: FlowerActivityItem,
   payload: Readonly<Record<string, unknown>>,
+  allowMessageActions: boolean,
   copy?: FlowerActivityPresentationCopy,
 ): readonly FlowerActivitySubagentDetailItem[] {
   return uniqueSubagentDetailItems(
     subagentActionItems(payload)
-      .map((record) => subagentDetailItemFromRecord(record, item, payload, copy))
+      .map((record) => subagentDetailItemFromRecord(record, item, payload, allowMessageActions, copy))
       .filter((entry): entry is FlowerActivitySubagentDetailItem => entry !== null),
   );
 }
@@ -952,14 +940,14 @@ function subagentTaskPreview(items: readonly FlowerActivitySubagentDetailItem[])
   if (items.length === 0) return '';
   if (items.length > 1) return `${items.length} subagents`;
   const item = items[0];
-  return item.task && item.task !== item.name ? item.task : '';
+  return item.description;
 }
 
 function subagentMetaText(items: readonly FlowerActivitySubagentDetailItem[]): string {
   if (items.length === 0) return '';
   if (items.length > 1) return `${items.length} subagents`;
   const item = items[0];
-  return [item.name, item.task && item.task !== item.name ? item.task : ''].filter(Boolean).join(' · ');
+  return [item.name, item.description].filter(Boolean).join(' · ');
 }
 
 function subagentsElapsedMode(action: string, items: readonly FlowerActivitySubagentDetailItem[]): FlowerActivitySubagentsDetail['elapsed_mode'] {
@@ -971,13 +959,11 @@ function subagentsElapsedMode(action: string, items: readonly FlowerActivitySuba
   return 'final';
 }
 
-function subagentsDetailFromPayload(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>>, copy?: FlowerActivityPresentationCopy): FlowerActivitySubagentsDetail {
+function subagentsDetailFromPayload(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>>, allowMessageActions: boolean, copy?: FlowerActivityPresentationCopy): FlowerActivitySubagentsDetail {
   const action = payloadValue(payload, 'action');
-  const items = subagentsDetailItemsFromPayload(item, payload, copy);
-  const title = subagentActionTitle(action, items, item);
+  const items = subagentsDetailItemsFromPayload(item, payload, allowMessageActions, copy);
   const firstStatus = items.find((entry) => entry.show_status)?.status ?? '';
   return {
-    title,
     action,
     status: subagentNeedsAttention(items) ? firstStatus : '',
     task_preview: subagentTaskPreview(items),
@@ -988,8 +974,9 @@ function subagentsDetailFromPayload(item: FlowerActivityItem, payload: Readonly<
 
 function presentationForSubagents(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy, subagentAction?: FlowerActivitySubagentActionRecord): FlowerActivityPresentation {
   const payload = subagentPayloadForItem(item, subagentAction);
-  const detail = subagentsDetailFromPayload(item, payload, copy);
-  const title: FlowerActivityTitle = { kind: 'plain', text: detail.title };
+  const detail = subagentsDetailFromPayload(item, payload, Boolean(subagentAction), copy);
+  const titleText = subagentActionTitle(detail.action, detail.items, item);
+  const title: FlowerActivityTitle = { kind: 'plain', text: titleText };
   const approvalLines: FlowerActivityDetailLine[] = [];
   if (item.requires_approval) {
     approvalLines.push({ label: subagentsCopy(copy).activity.labels.approval, value: trimString(item.approval_state) || 'requested' });
@@ -1015,11 +1002,8 @@ function fileStatusLines(item: FlowerActivityItem, payload: Readonly<Record<stri
   if (item.requires_approval) {
     lines.push({ label: 'approval', value: trimString(item.approval_state) || 'requested' });
   }
-  for (const key of ['status', 'summary', 'details', 'truncated']) {
-    if (item.status === 'error' && key === 'status') continue;
-    if (!payload || FILE_RAW_DETAIL_KEYS.has(key)) continue;
-    if (key === 'truncated' && !boolValue(payload.truncated)) continue;
-    const line = detailLineFromPayload(payload, key);
+  if (payload && boolValue(payload.truncated)) {
+    const line = detailLineFromPayload(payload, 'truncated');
     if (line) lines.push(line);
   }
   return uniqueDetailLines(lines);
@@ -1030,13 +1014,9 @@ function resultStatusLines(item: FlowerActivityItem, payload: Readonly<Record<st
   if (item.requires_approval) {
     lines.push({ label: 'approval', value: trimString(item.approval_state) || 'requested' });
   }
-  if (payload) {
-    for (const key of ['status', 'summary', 'details', 'truncated']) {
-      if (item.status === 'error' && key === 'status') continue;
-      if (key === 'truncated' && !boolValue(payload.truncated)) continue;
-      const line = detailLineFromPayload(payload, key);
-      if (line) lines.push(line);
-    }
+  if (payload && boolValue(payload.truncated)) {
+    const line = detailLineFromPayload(payload, 'truncated');
+    if (line) lines.push(line);
   }
   return uniqueDetailLines(lines);
 }

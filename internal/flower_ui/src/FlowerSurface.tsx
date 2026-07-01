@@ -4944,13 +4944,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       key: action.thread_id,
       threadID: action.thread_id,
       subagentID: action.subagent_id || action.thread_id,
-      taskName: agent.task,
+      taskName: agent.name,
+      taskDescription: agent.description,
       title: agent.name,
-      agentType: '',
+      agentType: agent.agent_type,
       status: 'unknown',
       action: 'inspect',
       canOpen: true,
       parentThreadID: selectedThreadID(),
+      startedAtMs: agent.started_at_ms || agent.created_at_ms || 0,
+      createdAtMs: agent.created_at_ms || agent.started_at_ms || 0,
       updatedAtMs: agent.updated_at_ms || agent.started_at_ms || agent.created_at_ms || activityClockNow(),
       itemStatus: 'success',
     });
@@ -4966,12 +4969,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const detail = block.subagents;
     return (
       <section class="flower-activity-subagents-panel" aria-label="Subagents">
-        <div class="flower-activity-subagents-head">
-          <div class="flower-activity-subagents-title">{detail.title}</div>
-          <Show when={detail.task_preview}>
-            {(preview) => <div class="flower-activity-subagents-preview">{preview()}</div>}
-          </Show>
-        </div>
         <Show when={detail.items.length > 0}>
           <div class="flower-activity-subagents-list" role="list">
             <For each={detail.items}>
@@ -4984,8 +4981,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         {[agent.show_status ? agent.status : '', subagentElapsedText(agent, detail.elapsed_mode)].filter(Boolean).join(' · ')}
                       </span>
                     </div>
-                    <Show when={agent.task && agent.task !== agent.name}>
-                      {(task) => <div class="flower-activity-subagents-item-task">{task()}</div>}
+                    <Show when={agent.description}>
+                      {(description) => <div class="flower-activity-subagents-item-task">{description()}</div>}
+                    </Show>
+                    <Show when={agent.agent_type}>
+                      {(agentType) => <div class="flower-activity-subagents-item-agent">Agent: {agentType()}</div>}
                     </Show>
                   </div>
                   <Show when={agent.open_messages}>
@@ -5488,6 +5488,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentMeta = (item: FlowerSubagentPanelItem): string => (
     item.updatedAtMs ? formatSubagentRelativeTime(item.updatedAtMs) : ''
   );
+  const subagentElapsedMeta = (item: FlowerSubagentPanelItem): string => {
+    if (item.status === 'queued' || item.status === 'running' || item.status === 'waiting_input') {
+      const startedAt = item.startedAtMs || item.createdAtMs || 0;
+      const elapsed = startedAt ? formatActivityDuration(Math.max(0, activityClockNow() - startedAt)) : '';
+      return [subagentStatusLabel(item.status).toLowerCase(), elapsed].filter(Boolean).join(' ');
+    }
+    return subagentStatusLabel(item.status).toLowerCase() || subagentMeta(item);
+  };
   const subagentStatusIndicator = (status: FlowerSubagentPanelStatus) => {
     switch (status) {
       case 'queued':
@@ -5539,7 +5547,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentDetailMeta = createMemo(() => {
     const detail = subagentDetail();
     const item = activeSubagentItem();
-    return trimString(detail?.summary.task_name || item?.taskName || '');
+    return trimString(detail?.summary.task_description || item?.taskDescription || detail?.summary.task_name || item?.taskName || '');
   });
   const subagentDetailHasRunningActivity = createMemo(() => (
     subagentDetail()?.timeline.some((row) => row.activity?.items.some((item) => item.status === 'running')) ?? false
@@ -5612,8 +5620,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     onClick={() => void openSubagentDetail(item)}
                   >
                     <span class="flower-subagent-dropdown-status">{subagentStatusIndicator(item.status)}</span>
-                    <span class="flower-subagent-dropdown-name">{subagentRowTitle(item)}</span>
-                    <span class="flower-subagent-dropdown-time">{subagentMeta(item)}</span>
+                    <span class="flower-subagent-dropdown-copy">
+                      <span class="flower-subagent-dropdown-headline">
+                        <span class="flower-subagent-dropdown-name">{subagentRowTitle(item)}</span>
+                        <span class="flower-subagent-dropdown-time">{subagentElapsedMeta(item)}</span>
+                      </span>
+                      <Show when={item.taskDescription}>
+                        {(description) => <span class="flower-subagent-dropdown-description">{description()}</span>}
+                      </Show>
+                    </span>
                     <span class="flower-subagent-dropdown-action" aria-hidden="true">
                       <ChevronRight class="h-3.5 w-3.5" />
                     </span>

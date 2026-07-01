@@ -818,7 +818,6 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
 .chat-activity-error-section { border-color: color-mix(in srgb, var(--destructive) 32%, var(--border)); background: color-mix(in srgb, var(--destructive) 5%, var(--background)); }
 .chat-activity-error-message { min-width: 0; color: color-mix(in srgb, var(--foreground) 84%, var(--destructive) 16%); font-size: 0.7rem; font-weight: 650; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .chat-activity-subagents-section { gap: 0.5rem; }
-.chat-activity-subagents-section .chat-activity-detail-section-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-activity-subagents-list { display: grid; min-width: 0; gap: 0.38rem; }
 .chat-activity-subagents-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; min-width: 0; align-items: start; gap: 0.5rem; border-left: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border)); padding-left: 0.5rem; }
 .chat-activity-subagents-item-main { display: grid; min-width: 0; gap: 0.12rem; }
@@ -826,6 +825,7 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
 .chat-activity-subagents-item-title { min-width: 0; color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground)); font-size: 0.69rem; font-weight: 720; line-height: 1.35; overflow-wrap: anywhere; }
 .chat-activity-subagents-item-meta { flex: 0 0 auto; color: var(--muted-foreground); font-size: 0.62rem; font-weight: 650; line-height: 1.35; white-space: nowrap; }
 .chat-activity-subagents-item-task { min-width: 0; color: color-mix(in srgb, var(--foreground) 70%, var(--muted-foreground)); font-size: 0.68rem; line-height: 1.42; overflow-wrap: anywhere; }
+.chat-activity-subagents-item-agent { min-width: 0; color: var(--muted-foreground); font-size: 0.62rem; font-weight: 650; line-height: 1.35; overflow-wrap: anywhere; }
 .chat-activity-subagents-open { display: inline-flex; min-height: 1.45rem; cursor: pointer; align-items: center; justify-content: center; gap: 0.24rem; border: 1px solid color-mix(in srgb, var(--border) 74%, transparent); border-radius: 0.4rem; background: color-mix(in srgb, var(--background) 82%, transparent); color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground)); padding: 0.12rem 0.4rem; font: inherit; font-size: 0.62rem; font-weight: 650; line-height: 1; white-space: nowrap; transition: border-color 140ms ease, background 140ms ease, color 140ms ease; }
 .chat-activity-subagents-open:hover,
 .chat-activity-subagents-open:focus-visible { border-color: color-mix(in srgb, var(--primary) 34%, var(--border)); background: color-mix(in srgb, var(--primary) 7%, var(--background)); color: var(--foreground); outline: none; }

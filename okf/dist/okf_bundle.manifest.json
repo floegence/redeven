@@ -2,6 +2,6 @@
   "schema_version": 2,
   "okf_version": "0.1",
   "concept_count": 23,
-  "bundle_sha256": "78dd4f18e3b256a5d19e91af4fcdba3eed983c10e13047d246e6c1c3e21945d5",
-  "source_sha256": "d53316ffe6469b23583936330188b8a52910ff113710960d50b52078df1d83cf"
+  "bundle_sha256": "195f2a04246fd2904c9e417d9e94595c29444c528ed10522e4c776accc0e73d5",
+  "source_sha256": "5d044fd52866d89cda28d954adb55433d9cdaf74168ab8a8e6ebb759801889f6"
 }
