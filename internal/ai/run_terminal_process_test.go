@@ -209,7 +209,9 @@ func TestTerminalProcessManagerRetriesDoneUntilSettlementAcknowledged(t *testing
 		t.Fatalf("process acknowledged settlement before Floret success")
 	}
 
-	proc.publishDone()
+	if err := proc.publishDone(); err != nil {
+		t.Fatalf("publishDone retry: %v", err)
+	}
 	if got := settlements.Load(); got != 2 {
 		t.Fatalf("settlements after retry=%d, want two", got)
 	}
