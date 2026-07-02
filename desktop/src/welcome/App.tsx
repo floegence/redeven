@@ -6804,10 +6804,10 @@ function ConnectEnvironmentSurface(props: Readonly<{
     && shouldUseSpaciousEnvironmentGrid(layoutReferenceEnvironmentCardCount())
   ));
   const useSpaciousControlPlaneLayout = createMemo(() => (
-    props.activeTab === 'control_planes' && props.controlPlanes.length > 0
+    props.activeTab === 'control_planes'
   ));
   const useSpaciousGatewayLayout = createMemo(() => (
-    props.activeTab === 'gateways' && props.gatewaySources.length > 0
+    props.activeTab === 'gateways'
   ));
   const useSpaciousWelcomeShell = createMemo(() => (
     useSpaciousEnvironmentLibraryLayout() || useSpaciousControlPlaneLayout() || useSpaciousGatewayLayout()
