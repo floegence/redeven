@@ -27,6 +27,7 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   envLabel: string;
   rpc: RedevenV1Rpc;
   copy?: EnvLocalFlowerSurfaceAdapterCopy;
+  onSettingsChanged?: () => void | Promise<unknown>;
   uploadAttachment?: (file: File) => Promise<string>;
   openFileBrowser?: FlowerSurfaceAdapter['openFileBrowser'];
   openFilePreview?: FlowerSurfaceAdapter['openFilePreview'];
@@ -379,6 +380,17 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         }),
       });
       return loadSettingsSnapshot();
+    },
+    setCurrentModel: async (modelID) => {
+      const mid = trim(modelID);
+      if (!mid) throw new Error('Missing model id.');
+      await fetchLocalApiJSON<ModelsResponse>('/_redeven_proxy/api/ai/current_model', {
+        method: 'PUT',
+        body: JSON.stringify({ model_id: mid }),
+      });
+      const snapshot = await loadSettingsSnapshot();
+      if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
+      return snapshot;
     },
     getWorkingDirectoryPathContext: () => options.rpc.fs.getPathContext(),
     listWorkingDirectoryEntries: async (input) => {

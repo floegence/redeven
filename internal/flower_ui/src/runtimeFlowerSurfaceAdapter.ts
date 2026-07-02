@@ -112,6 +112,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   mapperOptions: FlowerLiveThreadMapperOptions;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   saveSettings: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
+  setCurrentModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerLiveBootstrap>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
@@ -222,6 +223,11 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       if (!tid) throw new Error(missingThreadIDMessage(options));
       const threadResp = await options.transport.patchThread(tid, { permission_type: permissionType });
       return loadThread(trim(threadResp.thread?.thread_id) || tid);
+    },
+    setCurrentModel: async (modelID) => {
+      const mid = trim(modelID);
+      if (!mid) throw new Error('Missing model id.');
+      return options.setCurrentModel(mid);
     },
     setThreadModel: async (threadID, modelID) => {
       const tid = trim(threadID);

@@ -215,6 +215,7 @@ export function EnvAIPage() {
       selectModelBeforeChat: i18n.t('flowerChat.router.selectModelBeforeChat'),
       failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
     },
+    onSettingsChanged: env.bumpSettingsSeq,
     uploadAttachment: async (file) => {
       const { uploadLocalApiFile } = await import('../services/localApi');
       return uploadLocalApiFile(file);

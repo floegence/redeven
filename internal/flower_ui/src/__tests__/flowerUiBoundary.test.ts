@@ -153,6 +153,7 @@ describe('shared Flower UI boundary', () => {
 		expect(surfaceSrc).toContain('...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {})');
 		expect(contractsSrc).toContain('model_id?: string');
 		expect(contractsSrc).toContain('setThreadModel?:');
+		expect(contractsSrc).toContain('setCurrentModel:');
 	});
 
   it('keeps composer reasoning as a compact badge menu', () => {

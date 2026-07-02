@@ -1207,6 +1207,7 @@ export function createAIChatContextValue(): AIChatContextValue {
       );
       setDraftCurrentModelId(mid);
       mutateModels(resp);
+      env.bumpSettingsSeq();
       return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -1267,8 +1268,10 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (prev === id) return;
 
     setThreadModelOverride((prevMap) => ({ ...prevMap, [tid]: id }));
-    // Thread model changes are intentionally thread-scoped. Do not mutate current_model_id here.
-    void patchThreadModel(tid, id, prev, false);
+    void patchThreadModel(tid, id, prev, false).then((ok) => {
+      if (!ok) return;
+      void patchCurrentModel(id, false);
+    });
   };
 
   // Clear local overrides once the server state catches up.

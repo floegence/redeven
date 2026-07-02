@@ -632,6 +632,7 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
       },
     })),
     resolveHandler: vi.fn(async () => decision()),
+    setCurrentModel: vi.fn(async () => settingsSnapshot(configured)),
     launchTurn: vi.fn(async () => liveBootstrap(thread())),
     compactThreadContext: vi.fn(async (input) => liveBootstrap(thread({
       thread_id: input.thread_id,
@@ -645,6 +646,7 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
 
 export function mutableSettingsAdapter(configured = true): FlowerSurfaceAdapter & Readonly<{
   saveSettings: ReturnType<typeof vi.fn>;
+  setCurrentModel: ReturnType<typeof vi.fn>;
 }> {
   let snapshot = settingsSnapshot(configured);
   return {
@@ -663,6 +665,16 @@ export function mutableSettingsAdapter(configured = true): FlowerSurfaceAdapter 
             web_search: provider.web_search,
             models: provider.models,
           })),
+        },
+      };
+      return snapshot;
+    }),
+    setCurrentModel: vi.fn(async (modelID: string) => {
+      snapshot = {
+        ...snapshot,
+        config: {
+          ...snapshot.config,
+          current_model_id: modelID,
         },
       };
       return snapshot;

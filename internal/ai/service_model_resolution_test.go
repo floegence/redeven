@@ -121,6 +121,31 @@ func TestResolveRunModel_FallsBackToCurrentConfigModel(t *testing.T) {
 	}
 }
 
+func TestSetCurrentModelID_UpdatesConfigFutureDefault(t *testing.T) {
+	t.Parallel()
+
+	cfg := testModelResolutionConfig()
+	svc := &Service{cfg: cfg}
+	var persisted *config.AIConfig
+	err := svc.SetCurrentModelID("openai/gpt-4o-mini", func(next *config.AIConfig) error {
+		copy := *next
+		persisted = &copy
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("SetCurrentModelID: %v", err)
+	}
+	if persisted == nil {
+		t.Fatalf("persist was not called")
+	}
+	if persisted.CurrentModelID != "openai/gpt-4o-mini" {
+		t.Fatalf("persisted CurrentModelID=%q, want %q", persisted.CurrentModelID, "openai/gpt-4o-mini")
+	}
+	if svc.cfg.CurrentModelID != "openai/gpt-4o-mini" {
+		t.Fatalf("service CurrentModelID=%q, want %q", svc.cfg.CurrentModelID, "openai/gpt-4o-mini")
+	}
+}
+
 func TestResolveRunModel_PrefersDesktopModelSourceDefaultBeforeConfigCurrent(t *testing.T) {
 	t.Parallel()
 
