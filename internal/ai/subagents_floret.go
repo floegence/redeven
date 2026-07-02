@@ -953,6 +953,9 @@ func (s *floretSubagentRuntime) wait(ctx context.Context, toolCallID string, arg
 		snapshots = append(snapshots, local)
 	}
 	s.refreshSubagentTimeline(ctx, snapshots...)
+	if err := s.cleanupTerminalProcessesForSnapshots(ctx, snapshots); err != nil {
+		return nil, fmt.Errorf("cleanup subagent terminal processes: %w", err)
+	}
 	contextMode := aggregateSubagentContextMode(snapshots)
 	forkMode := subagentForkModeForContextMode(contextMode)
 	waitContract := resolveSubagentCapabilityContract(parent, nil, forkMode)
@@ -1020,6 +1023,9 @@ func (s *floretSubagentRuntime) list(ctx context.Context, _ string, args map[str
 	out["total"] = len(snapshots)
 	out["running_only"] = runningOnly
 	out["updated_at_unix_ms"] = time.Now().UnixMilli()
+	if err := s.cleanupTerminalProcessesForSnapshots(ctx, snapshots); err != nil {
+		return nil, fmt.Errorf("cleanup subagent terminal processes: %w", err)
+	}
 	return trimSubagentToolResult(out), nil
 }
 
@@ -1063,6 +1069,9 @@ func (s *floretSubagentRuntime) inspect(ctx context.Context, _ string, args map[
 	}
 	if len(targets) > 0 {
 		out["ids"] = targets
+	}
+	if err := s.cleanupTerminalProcessesForSnapshots(ctx, all); err != nil {
+		return nil, fmt.Errorf("cleanup subagent terminal processes: %w", err)
 	}
 	return trimSubagentToolResult(out), nil
 }
@@ -1794,6 +1803,9 @@ func (s *floretSubagentRuntime) close(ctx context.Context, _ string, args map[st
 		"stopped":     true,
 		"items":       []map[string]any{bounded},
 	}
+	if err := s.cleanupTerminalProcessesForSnapshots(closeCtx, []subagentSnapshot{snapshot}); err != nil {
+		return nil, fmt.Errorf("cleanup subagent terminal processes: %w", err)
+	}
 	return trimSubagentToolResult(applySubagentTimeoutFields(out, requestedTimeoutMS, effectiveTimeoutMS, timeoutSource)), nil
 }
 
@@ -1853,7 +1865,100 @@ func (s *floretSubagentRuntime) closeAllAction(ctx context.Context, _ string, ar
 	out["closed_count"] = result.Closed
 	out["stopped_count"] = result.Closed
 	out["affected_ids"] = affected
+	if err := s.cleanupTerminalProcessesForSnapshots(closeCtx, snapshots); err != nil {
+		return nil, fmt.Errorf("cleanup subagent terminal processes: %w", err)
+	}
 	return trimSubagentToolResult(applySubagentTimeoutFields(out, requestedTimeoutMS, effectiveTimeoutMS, timeoutSource)), nil
+}
+
+func (s *floretSubagentRuntime) cleanupTerminalProcessesForTerminalSubagents(ctx context.Context) error {
+	parent := s.parentRun()
+	if parent == nil {
+		return nil
+	}
+	host := s.currentHost()
+	if host == nil {
+		return nil
+	}
+	snapshots, err := host.ListSubAgents(ctx, flruntime.ThreadID(strings.TrimSpace(parent.threadID)))
+	if err != nil {
+		return err
+	}
+	local := make([]subagentSnapshot, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		local = append(local, subagentSnapshotFromFloret(snapshot))
+	}
+	return s.cleanupTerminalProcessesForSnapshots(ctx, local)
+}
+
+func (r *run) cleanupSubagentTerminalProcesses(ctx context.Context) error {
+	if r == nil || r.service == nil {
+		return nil
+	}
+	runtime := r.service.subagentRuntimeForParent(strings.TrimSpace(r.endpointID), strings.TrimSpace(r.threadID))
+	if runtime == nil {
+		return nil
+	}
+	return runtime.cleanupTerminalProcessesForTerminalSubagents(ctx)
+}
+
+func (s *Service) subagentRuntimeForParent(endpointID string, threadID string) *floretSubagentRuntime {
+	if s == nil {
+		return nil
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.subagentRuntimes[runThreadKey(endpointID, threadID)]
+}
+
+func (s *floretSubagentRuntime) cleanupTerminalProcessesForSnapshots(_ context.Context, snapshots []subagentSnapshot) error {
+	parent := s.parentRun()
+	if parent == nil || parent.service == nil || len(snapshots) == 0 {
+		return nil
+	}
+	manager := parent.service.terminalProcessManager()
+	if manager == nil {
+		return nil
+	}
+	endpointID := strings.TrimSpace(parent.endpointID)
+	if endpointID == "" {
+		return nil
+	}
+	var errs []error
+	cleaned := 0
+	for _, snapshot := range snapshots {
+		if !isSubagentTerminalStatus(snapshot.Status) {
+			continue
+		}
+		childThreadID := strings.TrimSpace(snapshot.ThreadID)
+		childRunID := s.childRunIDForThread(childThreadID)
+		if childThreadID == "" || childRunID == "" {
+			continue
+		}
+		for _, proc := range manager.ProcessesForRun(endpointID, childThreadID, childRunID) {
+			settled, err := proc.settlePendingForRunEnd()
+			if settled {
+				cleaned++
+			}
+			if err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	if cleaned > 0 {
+		parent.persistRunEvent("delegation.terminal_cleanup", RealtimeStreamKindLifecycle, map[string]any{
+			"settled_count": cleaned,
+		})
+	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
 }
 
 func (s *floretSubagentRuntime) closeAllExisting(ctx context.Context) {
@@ -1999,6 +2104,7 @@ func flowerSubagentDetailResponse(detail flruntime.SubAgentDetail) FlowerSubagen
 	return FlowerSubagentDetailResponse{
 		Summary:       flowerSubagentSummary(detail.Snapshot),
 		Timeline:      flowerSubagentTimelineRows(detail.Events),
+		Activity:      flowerSubagentActivityBlockValue(detail.ActivityTimeline),
 		NextOrdinal:   detail.NextOrdinal,
 		HasMore:       detail.HasMore,
 		RetainedFrom:  detail.RetainedFrom,
@@ -2047,7 +2153,6 @@ func flowerSubagentTimelineRow(event flruntime.SubAgentDetailEvent) FlowerSubage
 		Kind:        strings.TrimSpace(string(event.Kind)),
 		Type:        strings.TrimSpace(event.Type),
 		CreatedAtMs: timeUnixMS(event.CreatedAt),
-		Activity:    flowerSubagentActivityBlock(event.ActivityTimeline),
 		Message:     flowerSubagentDetailMessage(event.Message),
 		ToolCall:    flowerSubagentToolCallView(event.ToolCall),
 		ToolResult:  flowerSubagentToolResultView(event.ToolResult),
@@ -2060,11 +2165,11 @@ func flowerSubagentTimelineRow(event flruntime.SubAgentDetailEvent) FlowerSubage
 	}
 }
 
-func flowerSubagentActivityBlock(timeline *observation.ActivityTimeline) *ActivityTimelineBlock {
-	if timeline == nil || len(timeline.Items) == 0 {
+func flowerSubagentActivityBlockValue(timeline observation.ActivityTimeline) *ActivityTimelineBlock {
+	if len(timeline.Items) == 0 {
 		return nil
 	}
-	block := newActivityTimelineBlock(*timeline, nil)
+	block := newActivityTimelineBlock(timeline, nil)
 	return &block
 }
 

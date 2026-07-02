@@ -210,6 +210,14 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	} else if cleanupChanged {
 		result.Projection = cleanupProjection
 	}
+	if subagentCleanupErr := r.cleanupSubagentTerminalProcesses(context.Background()); subagentCleanupErr != nil {
+		if r.log != nil {
+			r.log.Warn("ai: cleanup subagent terminal processes failed", "run_id", r.id, "thread_id", r.threadID, "error", subagentCleanupErr)
+		}
+		r.persistRunEvent("subagent.terminal_cleanup_failed", RealtimeStreamKindLifecycle, map[string]any{
+			"error": subagentCleanupErr.Error(),
+		})
+	}
 	projectionReady := !(cleanupChanged && cleanupErr != nil)
 	if err != nil && result.Status == "" {
 		if cleanupChanged && cleanupErr == nil {

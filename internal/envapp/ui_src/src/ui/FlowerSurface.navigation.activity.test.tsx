@@ -163,24 +163,6 @@ describe('FlowerSurface navigation activity', () => {
               kind: 'custom',
               type: 'delegated_lifecycle',
               created_at_ms: 180,
-              activity: activityTimeline({
-                run_id: 'subagent:thread-child-review',
-                turn_id: 'child-row-5',
-                items: [activityItem({
-                  item_id: 'event-delegated-lifecycle',
-                  tool_id: 'event-delegated-lifecycle',
-                  tool_name: 'subagent.event',
-                  kind: 'control',
-                  renderer: 'structured',
-                  label: 'delegated_lifecycle',
-                  description: 'Subagent queued follow-up evidence.',
-                  status: 'success',
-                  payload: {
-                    summary: 'Subagent queued follow-up evidence.',
-                    details: 'phase: handoff\nsource: floret',
-                  },
-                })],
-              }),
               generic: {
                 title: 'delegated_lifecycle',
                 body: 'Subagent queued follow-up evidence.',
@@ -197,6 +179,52 @@ describe('FlowerSurface navigation activity', () => {
               },
             },
           ],
+          activity: activityTimeline({
+            run_id: 'subagent:thread-child-review',
+            turn_id: 'child-canonical',
+            items: [
+              activityItem({
+                item_id: 'call-terminal-running',
+                tool_id: 'call-terminal-running',
+                tool_name: 'terminal.exec',
+                renderer: 'terminal',
+                label: 'go test ./internal/ui',
+                status: 'running',
+                payload: {
+                  command: 'go test ./internal/ui',
+                  status: 'running',
+                },
+              }),
+              activityItem({
+                item_id: 'call-terminal',
+                tool_id: 'call-terminal',
+                tool_name: 'terminal.exec',
+                renderer: 'terminal',
+                label: 'go test ./internal/ai',
+                status: 'success',
+                payload: {
+                  command: 'go test ./internal/ai',
+                  status: 'success',
+                  stdout: 'PASS ./internal/ai',
+                  content_ref: 'hash-tool-result',
+                },
+              }),
+              activityItem({
+                item_id: 'event-delegated-lifecycle',
+                tool_id: 'event-delegated-lifecycle',
+                tool_name: 'subagent.event',
+                kind: 'control',
+                renderer: 'structured',
+                label: 'delegated_lifecycle',
+                description: 'Subagent queued follow-up evidence.',
+                status: 'success',
+                payload: {
+                  summary: 'Subagent queued follow-up evidence.',
+                  details: 'phase: handoff\nsource: floret',
+                },
+              }),
+            ],
+          }),
           next_ordinal: 7,
           has_more: false,
           generated_at_ms: 200,
@@ -382,45 +410,12 @@ describe('FlowerSurface navigation activity', () => {
         return Promise.resolve(subagentDetail({
           has_more: false,
           next_ordinal: 7,
-          timeline: [
-            {
-              ordinal: 6,
-              kind: 'custom',
-              type: 'delegated_lifecycle',
-              created_at_ms: 220,
-              activity: activityTimeline({
-                run_id: sharedRunID,
-                turn_id: 'child-row-6',
-                items: [activityItem({
-                  item_id: 'shared-run-second',
-                  tool_id: 'shared-run-second',
-                  tool_name: 'subagent.event',
-                  kind: 'control',
-                  renderer: 'structured',
-                  label: 'second shared run activity',
-                  description: 'Second shared run activity.',
-                  status: 'success',
-                  payload: { summary: 'Second shared run activity.' },
-                })],
-              }),
-            },
-          ],
-          generated_at_ms: 230,
-        }));
-      }
-      return Promise.resolve(subagentDetail({
-        has_more: true,
-        next_ordinal: 5,
-        timeline: [
-          {
-            ordinal: 2,
-            kind: 'custom',
-            type: 'delegated_lifecycle',
-            created_at_ms: 120,
-            activity: activityTimeline({
-              run_id: sharedRunID,
-              turn_id: 'child-row-2',
-              items: [activityItem({
+          timeline: [],
+          activity: activityTimeline({
+            run_id: sharedRunID,
+            turn_id: 'child-canonical',
+            items: [
+              activityItem({
                 item_id: 'shared-run-first',
                 tool_id: 'shared-run-first',
                 tool_name: 'subagent.event',
@@ -430,10 +425,42 @@ describe('FlowerSurface navigation activity', () => {
                 description: 'First shared run activity.',
                 status: 'success',
                 payload: { summary: 'First shared run activity.' },
-              })],
-            }),
-          },
-        ],
+              }),
+              activityItem({
+                item_id: 'shared-run-second',
+                tool_id: 'shared-run-second',
+                tool_name: 'subagent.event',
+                kind: 'control',
+                renderer: 'structured',
+                label: 'second shared run activity',
+                description: 'Second shared run activity.',
+                status: 'success',
+                payload: { summary: 'Second shared run activity.' },
+              }),
+            ],
+          }),
+          generated_at_ms: 230,
+        }));
+      }
+      return Promise.resolve(subagentDetail({
+        has_more: true,
+        next_ordinal: 5,
+        timeline: [],
+        activity: activityTimeline({
+          run_id: sharedRunID,
+          turn_id: 'child-canonical',
+          items: [activityItem({
+            item_id: 'shared-run-first',
+            tool_id: 'shared-run-first',
+            tool_name: 'subagent.event',
+            kind: 'control',
+            renderer: 'structured',
+            label: 'first shared run activity',
+            description: 'First shared run activity.',
+            status: 'success',
+            payload: { summary: 'First shared run activity.' },
+          })],
+        }),
         generated_at_ms: 180,
       }));
     });
