@@ -25,6 +25,9 @@ describe('Flower activity running sheen', () => {
     const panelRule = cssRule(css, '.flower-activity-terminal-panel');
     const headerRule = cssRule(css, '.flower-activity-terminal-header');
     const commandRule = cssRule(css, '.flower-activity-terminal-command');
+    const actionRule = cssRule(css, '.flower-activity-terminal-action-button');
+    const commandPanelRule = cssRule(css, '.flower-activity-terminal-command-panel');
+    const fullCommandRule = cssRule(css, '.flower-activity-terminal-command-full');
     const outputRule = cssRule(css, '.flower-activity-terminal-output');
 
     expect(panelRule).toContain('--flower-activity-terminal-font');
@@ -32,9 +35,17 @@ describe('Flower activity running sheen', () => {
     expect(headerRule).toContain('background: #151b23');
     expect(commandRule).toContain('font-family: var(--flower-activity-terminal-font)');
     expect(commandRule).toContain('text-overflow: ellipsis');
+    expect(actionRule).toContain('width: 1.75rem');
+    expect(actionRule).toContain('height: 1.75rem');
+    expect(actionRule).toContain('cursor: pointer');
+    expect(commandPanelRule).toContain('background: #10161f');
+    expect(fullCommandRule).toContain('white-space: pre-wrap');
+    expect(fullCommandRule).toContain('overflow-wrap: anywhere');
     expect(outputRule).toContain('font-family: var(--flower-activity-terminal-font)');
     expect(outputRule).toContain('max-height: 16rem');
     expect(css).toContain('.flower-activity-terminal-command-code');
+    expect(css).not.toContain('.flower-activity-terminal-chips');
+    expect(css).not.toContain('.flower-activity-terminal-chip');
     expect(css).toContain('.flower-activity-terminal-command-token-command');
     expect(css).toContain('.flower-activity-web-panel,');
     expect(css).toContain('.flower-activity-question-panel,');

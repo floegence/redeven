@@ -4714,20 +4714,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </>
   );
 
-  const terminalDetailChips = (terminal: Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>['terminal']): readonly string[] => {
-    const chips = [
-      terminal.exit_code !== undefined ? `exit ${terminal.exit_code}` : '',
-      terminal.duration_ms !== undefined ? formatActivityDuration(terminal.duration_ms) : '',
-      terminal.truncated ? 'truncated' : '',
-      terminal.timed_out ? 'timed out' : '',
-      terminal.process_id ? terminal.process_id : '',
-      terminal.total_bytes !== undefined ? `${terminal.total_bytes} bytes` : '',
-      terminal.first_seq !== undefined || terminal.last_seq !== undefined ? `seq ${terminal.first_seq ?? 0}-${terminal.last_seq ?? 0}` : '',
-      terminal.execution_location,
-    ].filter(Boolean);
-    return Array.from(new Set(chips));
-  };
-
   const normalizeTerminalSnapshotStatus = (raw: unknown): FlowerActivityStatus | '' => {
     const value = String(raw ?? '').trim().toLowerCase();
     if (value === 'success' || value === 'succeeded' || value === 'complete' || value === 'completed') return 'success';
@@ -4758,10 +4744,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     block: Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>,
   ) => {
     const terminal = block.terminal;
+    const [commandExpanded, setCommandExpanded] = createSignal(false);
+    const [commandCopied, setCommandCopied] = createSignal(false);
     const [liveStatus, setLiveStatus] = createSignal<FlowerActivityStatus | ''>('');
     const [liveLastSeq, setLiveLastSeq] = createSignal<number | undefined>(terminal.last_seq);
-    const [liveTotalBytes, setLiveTotalBytes] = createSignal<number | undefined>(terminal.total_bytes);
     const [liveError, setLiveError] = createSignal('');
+    let commandCopyResetTimer: number | undefined;
+    const command = () => trimString(terminal.command);
+    const commandPanelID = () => `flower-terminal-command-${[
+      context.ownerThreadID,
+      context.renderThreadID,
+      context.messageID,
+      String(context.blockIndex),
+      context.itemID,
+      context.toolID,
+    ].map((part) => trimString(part).replace(/[^a-zA-Z0-9_-]+/g, '-')).filter(Boolean).join('-') || 'detail'}`;
     const processID = () => trimString(terminal.process_id);
     const terminalIdentity = (): TerminalVisibleOutputIdentity => ({
       surface_scope: 'flower-surface',
@@ -4803,15 +4800,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return 'No output captured.';
     };
     const muted = () => !visibleOutput().trim();
-    const chips = createMemo(() => {
-      const base = terminalDetailChips({
-        ...terminal,
-        status: displayStatus(),
-        last_seq: liveLastSeq() ?? terminal.last_seq,
-        total_bytes: liveTotalBytes() ?? terminal.total_bytes,
-      });
-      return base;
-    });
+    const copyTerminalCommand = async () => {
+      const value = command();
+      if (!value) return;
+      try {
+        await writeTextToClipboard(value);
+        setCommandCopied(true);
+        if (commandCopyResetTimer !== undefined) {
+          window.clearTimeout(commandCopyResetTimer);
+        }
+        commandCopyResetTimer = window.setTimeout(() => {
+          setCommandCopied(false);
+          commandCopyResetTimer = undefined;
+        }, MESSAGE_COPY_RESET_MS);
+      } catch (error) {
+        setCommandCopied(false);
+        notifyThreadActionError(getErrorMessage(error));
+      }
+    };
 
     const applyTerminalSnapshot = (snapshot: FlowerTerminalProcessSnapshot) => {
       const output = terminalSnapshotOutput(snapshot);
@@ -4830,9 +4836,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       if (typeof snapshot.last_seq === 'number' && Number.isFinite(snapshot.last_seq)) {
         setLiveLastSeq(Math.max(0, Math.floor(snapshot.last_seq)));
-      }
-      if (typeof snapshot.total_bytes === 'number' && Number.isFinite(snapshot.total_bytes)) {
-        setLiveTotalBytes(Math.max(0, Math.floor(snapshot.total_bytes)));
       }
     };
 
@@ -4873,6 +4876,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       });
     });
 
+    onCleanup(() => {
+      if (commandCopyResetTimer !== undefined) {
+        window.clearTimeout(commandCopyResetTimer);
+      }
+    });
+
     return (
       <section
         class={cn('flower-activity-terminal-panel', `flower-activity-terminal-panel-${displayStatus()}`)}
@@ -4888,12 +4897,53 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               tokenClassPrefix="flower-activity-terminal-command-token"
             />
           </span>
-          <div class="flower-activity-terminal-chips" aria-label="Terminal result">
-            <For each={chips()}>
-              {(chip) => <span class="flower-activity-terminal-chip" title={chip}>{chip}</span>}
-            </For>
+          <div class="flower-activity-terminal-actions" aria-label="Terminal command actions">
+            <Show when={command()}>
+              <button
+                type="button"
+                class={cn('flower-activity-terminal-action-button', commandExpanded() && 'flower-activity-terminal-action-button-active')}
+                aria-label={commandExpanded() ? copy().chat.hideFullCommand : copy().chat.showFullCommand}
+                title={commandExpanded() ? copy().chat.hideFullCommand : copy().chat.showFullCommand}
+                aria-expanded={commandExpanded()}
+                aria-controls={commandPanelID()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setCommandExpanded((open) => !open);
+                }}
+              >
+                <Show when={commandExpanded()} fallback={<ChevronRight class="h-3.5 w-3.5" />}>
+                  <ChevronDown class="h-3.5 w-3.5" />
+                </Show>
+              </button>
+              <button
+                type="button"
+                class={cn('flower-activity-terminal-action-button', commandCopied() && 'flower-activity-terminal-action-button-copied')}
+                aria-label={commandCopied() ? copy().chat.commandCopied : copy().chat.copyCommand}
+                title={commandCopied() ? copy().chat.commandCopied : copy().chat.copyCommand}
+                data-copied={commandCopied() ? 'true' : 'false'}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void copyTerminalCommand();
+                }}
+              >
+                <Show when={commandCopied()} fallback={<Copy class="h-3.5 w-3.5" />}>
+                  <Check class="h-3.5 w-3.5" />
+                </Show>
+              </button>
+            </Show>
           </div>
         </div>
+        <Show when={command() && commandExpanded()}>
+          <div id={commandPanelID()} class="flower-activity-terminal-command-panel">
+            <pre class="flower-activity-terminal-command-full">
+              <FlowerShellCommandHighlight
+                command={command()}
+                class="flower-activity-terminal-command-full-code"
+                tokenClassPrefix="flower-activity-terminal-command-token"
+              />
+            </pre>
+          </div>
+        </Show>
         <div class={cn('flower-activity-terminal-output', muted() && 'flower-activity-terminal-output-muted')}>
           <pre>{displayOutput()}</pre>
         </div>

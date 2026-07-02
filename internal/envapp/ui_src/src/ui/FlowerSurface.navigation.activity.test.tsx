@@ -1240,13 +1240,30 @@ describe('FlowerSurface navigation activity', () => {
     const terminalPanel = firstTerminalRow?.querySelector('[data-flower-activity-terminal-panel]') as HTMLElement | null;
     expect(terminalPanel?.textContent).toContain('npm run check:0');
     expect(terminalPanel?.textContent).toContain('check 0 ok');
-    expect(terminalPanel?.textContent).toContain('exit 0');
-    expect(terminalPanel?.textContent).toContain('1s');
-    expect(terminalPanel?.textContent).toContain('truncated');
+    expect(terminalPanel?.textContent).not.toContain('exit 0');
+    expect(terminalPanel?.textContent).not.toContain('1.2s');
+    expect(terminalPanel?.textContent).not.toContain('truncated');
+    expect(terminalPanel?.textContent).not.toContain('tp_check_0');
+    expect(terminalPanel?.querySelector('.flower-activity-terminal-chip')).toBeNull();
     expect(terminalPanel?.querySelector('.flower-activity-inline-detail-key')).toBeNull();
-    expect(terminalPanel?.textContent).not.toContain('command');
     expect(terminalPanel?.textContent).not.toContain('process');
     expect(terminalPanel?.querySelector('input')).toBeNull();
+
+    const commandToggle = terminalPanel?.querySelector('button[aria-label="Show full command"]') as HTMLButtonElement | null;
+    expect(commandToggle?.textContent?.trim()).toBe('');
+    commandToggle?.click();
+    await waitFor(() => Boolean(terminalPanel?.querySelector('.flower-activity-terminal-command-panel')));
+    expect(commandToggle?.getAttribute('aria-expanded')).toBe('true');
+    expect(terminalPanel?.querySelector('.flower-activity-terminal-command-full')?.textContent).toContain('npm run check:0');
+
+    writeTextToClipboardMock.mockResolvedValueOnce(undefined);
+    const copyButton = terminalPanel?.querySelector('button[aria-label="Copy command"]') as HTMLButtonElement | null;
+    expect(copyButton?.textContent?.trim()).toBe('');
+    copyButton?.click();
+    await waitFor(() => writeTextToClipboardMock.mock.calls.length === 1);
+    expect(writeTextToClipboardMock).toHaveBeenCalledWith('npm run check:0');
+    expect(copyButton?.getAttribute('data-copied')).toBe('true');
+    expect(copyButton?.getAttribute('aria-label')).toBe('Command copied');
   });
 
   it('reads live terminal output when an expanded running activity has a process id', async () => {
@@ -2168,6 +2185,14 @@ describe('FlowerSurface navigation activity', () => {
     (runtime.querySelector('[data-flower-activity-item-id="terminal-real"] .flower-activity-inline-button') as HTMLButtonElement).click();
     await waitFor(() => runtime.textContent?.includes('example response') ?? false);
     expect(runtime.textContent).toContain('example response');
+    const terminalPanel = runtime.querySelector('[data-flower-activity-terminal-panel]') as HTMLElement | null;
+    expect(terminalPanel?.querySelector('.flower-activity-terminal-chip')).toBeNull();
+    expect(terminalPanel?.textContent).not.toContain('exit 0');
+    const commandToggle = terminalPanel?.querySelector('button[aria-label="Show full command"]') as HTMLButtonElement | null;
+    expect(commandToggle).toBeTruthy();
+    commandToggle?.click();
+    await waitFor(() => Boolean(terminalPanel?.querySelector('.flower-activity-terminal-command-panel')));
+    expect(terminalPanel?.querySelector('.flower-activity-terminal-command-full')?.textContent).toContain('curl -s https://example.com');
   });
 
   it('allows approved terminal activity rows that required approval to expand', async () => {

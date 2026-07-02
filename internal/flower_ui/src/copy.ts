@@ -281,6 +281,10 @@ export type FlowerSurfaceCopy = Readonly<{
     messageErrorFallback: string;
     copyCode: string;
     codeCopied: string;
+    showFullCommand: string;
+    hideFullCommand: string;
+    copyCommand: string;
+    commandCopied: string;
     copyMessage: string;
     messageCopied: string;
     loadErrorTitle: string;
@@ -438,6 +442,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     messageErrorFallback: 'This message failed before Flower produced visible text.',
     copyCode: 'Copy code',
     codeCopied: 'Copied',
+    showFullCommand: 'Show full command',
+    hideFullCommand: 'Hide full command',
+    copyCommand: 'Copy command',
+    commandCopied: 'Command copied',
     copyMessage: 'Copy message',
     messageCopied: 'Copied',
     loadErrorTitle: 'Flower could not load.',

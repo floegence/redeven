@@ -1,10 +1,11 @@
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { Check, ChevronDown, ChevronRight, Copy } from '@floegence/floe-webapp-core/icons';
 import { prepareLocalApiRequestInit } from '../../services/localApi';
 import { writeTextToClipboard } from '../../utils/clipboard';
 import { ActivityStatusIcon, type ActivityStatus } from '../status/ActivityLine';
-import { useI18n, type I18nHelpers } from '../../i18n';
+import { useI18n } from '../../i18n';
 import {
   createTerminalVisibleOutputStore,
   terminalListeningPlaceholderVisible,
@@ -312,50 +313,14 @@ function summarizeCommandPreview(command: string, maxLength = COMMAND_PREVIEW_MA
   return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
-function formatCommandLineCount(count: number, i18n: I18nHelpers): string {
-  return i18n.tn('shellBlock.lineCount', count);
-}
-
-function formatShellStatus(status: ShellBlockProps['status'], i18n: I18nHelpers): string {
-  switch (status) {
-    case 'running':
-      return i18n.t('shellBlock.status.running');
-    case 'error':
-      return i18n.t('shellBlock.status.error');
-    default:
-      return i18n.t('shellBlock.status.success');
-  }
-}
-
-function formatDuration(durationMs: number | undefined): string | null {
-  if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs < 0) return null;
-  if (durationMs < 1000) return `${Math.round(durationMs)}ms`;
-  if (durationMs < 60_000) return `${(durationMs / 1000).toFixed(durationMs < 10_000 ? 1 : 0)}s`;
-  const totalSeconds = Math.round(durationMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
-}
-
 function composeDeferredOutput(parts: {
   stdout?: string;
   stderr?: string;
   output?: string;
-  cwd: string;
-  durationMs?: number;
-  truncated: boolean;
 }): string {
-  const info: string[] = [];
-  if (parts.cwd) info.push(`[cwd] ${parts.cwd}`);
-  if (typeof parts.durationMs === 'number' && Number.isFinite(parts.durationMs) && parts.durationMs >= 0) {
-    info.push(`[duration] ${Math.round(parts.durationMs)}ms`);
-  }
-  if (parts.truncated) info.push('[notice] output truncated');
-
   const sections: string[] = [];
   const stdout = String(parts.stdout ?? '').trimEnd() || String(parts.output ?? '').trimEnd();
   const stderr = String(parts.stderr ?? '').trimEnd();
-  if ((stdout || stderr) && info.length > 0) sections.push(info.join('\n'));
   if (stdout) sections.push(stdout);
   if (stderr) sections.push(stdout ? `[stderr]\n${stderr}` : stderr);
 
@@ -403,13 +368,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const [loadAttempted, setLoadAttempted] = createSignal(false);
   const [runtimeStatus, setRuntimeStatus] = createSignal<'success' | 'error' | undefined>(undefined);
   const [runtimeProcessId, setRuntimeProcessId] = createSignal<string | undefined>(undefined);
-  const [runtimeExitCode, setRuntimeExitCode] = createSignal<number | undefined>(undefined);
-  const [runtimeDurationMs, setRuntimeDurationMs] = createSignal<number | undefined>(undefined);
-  const [runtimeTruncated, setRuntimeTruncated] = createSignal<boolean | undefined>(undefined);
-  const [runtimeCwd, setRuntimeCwd] = createSignal<string | undefined>(undefined);
-  const [runtimeFirstSeq, setRuntimeFirstSeq] = createSignal<number | undefined>(undefined);
   const [runtimeLastSeq, setRuntimeLastSeq] = createSignal<number | undefined>(undefined);
-  const [runtimeTotalBytes, setRuntimeTotalBytes] = createSignal<number | undefined>(undefined);
   const [terminalInput, setTerminalInput] = createSignal('');
   const [terminalActionBusy, setTerminalActionBusy] = createSignal(false);
   const [terminalActionError, setTerminalActionError] = createSignal('');
@@ -423,17 +382,12 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const commandPreviewSource = createMemo(() => normalizeCommandPreviewSource(props.command));
   const commandPreview = createMemo(() => summarizeCommandPreview(props.command));
   const commandPreviewTokens = createMemo(() => tokenizeShellCommand(commandPreview()));
-  const commandLineCount = createMemo(() => Math.max(1, meaningfulCommandLines(props.command).length || 1));
 
   const hasOutputRef = () =>
     String(props.outputRef?.runId ?? '').trim().length > 0 &&
     String(props.outputRef?.toolId ?? '').trim().length > 0;
   const displayProcessId = () => String(props.processId ?? runtimeProcessId() ?? '').trim();
   const displayStatus = () => (props.status === 'running' ? runtimeStatus() ?? 'running' : props.status);
-  const displayExitCode = () => props.exitCode ?? runtimeExitCode();
-  const displayDurationMs = () => props.durationMs ?? runtimeDurationMs();
-  const displayTruncated = () => (typeof props.truncated === 'boolean' ? props.truncated : runtimeTruncated() ?? false);
-  const displayCwd = () => props.cwd ?? runtimeCwd() ?? '';
   const displayLastSeq = () => runtimeLastSeq();
   const visibleOutputStore = () => props.outputStore ?? localVisibleOutputStore;
   const outputIdentity = (): TerminalVisibleOutputIdentity => ({
@@ -454,9 +408,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const hasOutput = () => String(resolvedOutput() ?? '').trim().length > 0;
   const canUseProcessControls = () => displayProcessId() !== '' && String(props.outputRef?.runId ?? '').trim() !== '';
   const canToggle = () => hasOutput() || hasOutputRef() || canUseProcessControls() || displayStatus() === 'running';
-  const showCommandDetails = createMemo(
-    () => normalizedCommand().length > 0 && (commandLineCount() > 1 || commandPreview() !== commandPreviewSource()),
-  );
+  const showCommandDetails = createMemo(() => normalizedCommand().length > 0);
 
   let lastOutputIdentityKey = outputIdentityKey();
   createEffect(() => {
@@ -465,13 +417,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     lastOutputIdentityKey = nextOutputIdentityKey;
     setRuntimeStatus(undefined);
     setRuntimeProcessId(undefined);
-    setRuntimeExitCode(undefined);
-    setRuntimeDurationMs(undefined);
-    setRuntimeTruncated(undefined);
-    setRuntimeCwd(undefined);
-    setRuntimeFirstSeq(undefined);
     setRuntimeLastSeq(undefined);
-    setRuntimeTotalBytes(undefined);
     setTerminalInput('');
     setTerminalActionBusy(false);
     setTerminalActionError('');
@@ -550,9 +496,6 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     output: String(data.output ?? data.stdout ?? data.latest_output ?? ''),
     stdout: String(data.stdout ?? ''),
     stderr: String(data.stderr ?? ''),
-    cwd: String(data.cwd ?? displayCwd()),
-    durationMs: typeof data.duration_ms === 'number' ? data.duration_ms : displayDurationMs(),
-    truncated: typeof data.truncated === 'boolean' ? data.truncated : displayTruncated(),
   });
 
   const applyRuntimeMetadata = (data: TerminalToolOutputPayload) => {
@@ -563,31 +506,13 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     if (typeof data.process_id === 'string' && data.process_id.trim()) {
       setRuntimeProcessId(data.process_id.trim());
     }
-    if (typeof data.exit_code === 'number' && Number.isFinite(data.exit_code)) {
-      setRuntimeExitCode(Math.round(data.exit_code));
-    }
-    if (typeof data.duration_ms === 'number' && Number.isFinite(data.duration_ms) && data.duration_ms >= 0) {
-      setRuntimeDurationMs(Math.round(data.duration_ms));
-    }
-    if (typeof data.truncated === 'boolean') {
-      setRuntimeTruncated(data.truncated);
-    }
-    if (typeof data.cwd === 'string' && data.cwd.trim()) {
-      setRuntimeCwd(data.cwd.trim());
-    }
-    if (typeof data.first_seq === 'number' && Number.isFinite(data.first_seq)) {
-      setRuntimeFirstSeq(Math.round(data.first_seq));
-    }
     if (typeof data.last_seq === 'number' && Number.isFinite(data.last_seq)) {
       setRuntimeLastSeq(Math.round(data.last_seq));
-    }
-    if (typeof data.total_bytes === 'number' && Number.isFinite(data.total_bytes)) {
-      setRuntimeTotalBytes(Math.round(data.total_bytes));
     }
   };
 
   const ensureOutputLoaded = async () => {
-    if (resolvedOutput() || loadingOutput()) return;
+    if (resolvedOutput() || loadingOutput() || loadAttempted()) return;
     if (!hasOutputRef() && !canUseProcessControls()) return;
 
     setLoadingOutput(true);
@@ -776,41 +701,32 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
           </span>
         </div>
 
-        <div class="chat-shell-header-meta">
-          <Show when={commandLineCount() > 1}>
-            <span class="chat-shell-inline-chip chat-shell-inline-chip-muted">
-              {formatCommandLineCount(commandLineCount(), i18n)}
-            </span>
-          </Show>
-
-          <Show when={displayStatus() !== 'running' && displayExitCode() !== undefined}>
-            <span
-              class={cn(
-                'chat-shell-exit-inline',
-                displayExitCode() === 0 ? 'chat-shell-exit-inline-success' : 'chat-shell-exit-inline-error',
-              )}
-            >
-              {i18n.t('shellBlock.exitCodeInline', { code: displayExitCode() ?? '' })}
-            </span>
-          </Show>
-
-          <Show when={displayProcessId()}>
-            {(processId) => (
-              <span class="chat-shell-inline-chip chat-shell-inline-chip-muted" title={processId()}>
-                {processId()}
-              </span>
-            )}
-          </Show>
-
+        <div class="chat-shell-header-actions">
           <Show when={showCommandDetails()}>
             <button
               type="button"
-              class="chat-shell-detail-link"
+              class={cn('chat-shell-command-action', commandDetailsOpen() && 'chat-shell-command-action-active')}
               onClick={() => setCommandDetailsOpen((open) => !open)}
               aria-expanded={commandDetailsOpen()}
               aria-controls={commandPanelId}
+              aria-label={commandDetailsOpen() ? i18n.t('shellBlock.hideFullCommand') : i18n.t('shellBlock.showFullCommand')}
+              title={commandDetailsOpen() ? i18n.t('shellBlock.hideFullCommand') : i18n.t('shellBlock.showFullCommand')}
             >
-              {i18n.t('shellBlock.command')}
+              <Show when={commandDetailsOpen()} fallback={<ChevronRight class="h-3.5 w-3.5" />}>
+                <ChevronDown class="h-3.5 w-3.5" />
+              </Show>
+            </button>
+            <button
+              type="button"
+              class={cn('chat-shell-command-action', commandCopied() && 'chat-shell-command-action-copied')}
+              onClick={() => void handleCopyCommand()}
+              aria-label={commandCopied() ? i18n.t('shellBlock.commandCopied') : i18n.t('shellBlock.copyCommand')}
+              title={commandCopied() ? i18n.t('shellBlock.commandCopied') : i18n.t('shellBlock.copyCommand')}
+              data-copied={commandCopied() ? 'true' : 'false'}
+            >
+              <Show when={commandCopied()} fallback={<Copy class="h-3.5 w-3.5" />}>
+                <Check class="h-3.5 w-3.5" />
+              </Show>
             </button>
           </Show>
 
@@ -836,75 +752,9 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
 
       <Show when={showCommandDetails() && commandDetailsOpen()}>
         <div id={commandPanelId} class="chat-shell-detail-panel">
-          <div class="chat-shell-detail-meta-grid">
-            <div class="chat-shell-detail-meta-card">
-              <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.statusLabel')}</div>
-              <div class="chat-shell-detail-meta-value">{formatShellStatus(displayStatus(), i18n)}</div>
-            </div>
-            <Show when={displayExitCode() !== undefined}>
-              <div class="chat-shell-detail-meta-card">
-                <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.exitCodeLabel')}</div>
-                <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">{displayExitCode()}</div>
-              </div>
-            </Show>
-            <div class="chat-shell-detail-meta-card">
-              <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.linesLabel')}</div>
-              <div class="chat-shell-detail-meta-value">{formatCommandLineCount(commandLineCount(), i18n)}</div>
-            </div>
-            <Show when={displayCwd()}>
-              <div class="chat-shell-detail-meta-card">
-                <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.workingDirectory')}</div>
-                <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">{displayCwd()}</div>
-              </div>
-            </Show>
-            <Show when={displayProcessId()}>
-              {(processId) => (
-                <div class="chat-shell-detail-meta-card">
-                  <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.process')}</div>
-                  <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">{processId()}</div>
-                </div>
-              )}
-            </Show>
-            <Show when={runtimeTotalBytes() !== undefined}>
-              <div class="chat-shell-detail-meta-card">
-                <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.outputBytes')}</div>
-                <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">{runtimeTotalBytes()}</div>
-              </div>
-            </Show>
-            <Show when={runtimeLastSeq() !== undefined}>
-              <div class="chat-shell-detail-meta-card">
-                <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.sequence')}</div>
-                <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">
-                  {runtimeFirstSeq() ?? 0}-{runtimeLastSeq() ?? 0}
-                </div>
-              </div>
-            </Show>
-            <Show when={formatDuration(displayDurationMs())}>
-              {(value) => (
-                <div class="chat-shell-detail-meta-card">
-                  <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.duration')}</div>
-                  <div class="chat-shell-detail-meta-value">{value()}</div>
-                </div>
-              )}
-            </Show>
-          </div>
-
-          <div class="chat-shell-detail-toolbar">
-            <button
-              type="button"
-              class="chat-shell-detail-copy"
-              onClick={() => void handleCopyCommand()}
-            >
-              {commandCopied() ? i18n.t('common.actions.copied') : i18n.t('shellBlock.copyCommand')}
-            </button>
-          </div>
-
-          <div class="chat-shell-detail-section">
-            <div class="chat-shell-detail-label">{i18n.t('shellBlock.fullCommand')}</div>
-            <pre class="chat-shell-detail-command">
-              {normalizedCommand() || i18n.t('shellBlock.emptyCommand')}
-            </pre>
-          </div>
+          <pre class="chat-shell-detail-command">
+            {normalizedCommand() || i18n.t('shellBlock.emptyCommand')}
+          </pre>
         </div>
       </Show>
 

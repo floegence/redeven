@@ -214,9 +214,19 @@ func (f *fixture) requireDocker(ctx context.Context) {
 
 func (f *fixture) startContainer(ctx context.Context) {
 	f.t.Helper()
-	_, _ = f.runHost(ctx, f.repoRoot, nil, "docker", "pull", ubuntuImage)
+	f.ensureUbuntuImage(ctx)
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "run", "-d", "--name", f.containerName, ubuntuImage, "sleep", "infinity"); err != nil {
 		f.t.Fatalf("start container: %v", err)
+	}
+}
+
+func (f *fixture) ensureUbuntuImage(ctx context.Context) {
+	f.t.Helper()
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "image", "inspect", ubuntuImage); err == nil {
+		return
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "pull", ubuntuImage); err != nil {
+		f.t.Fatalf("pull %s: %v", ubuntuImage, err)
 	}
 }
 
