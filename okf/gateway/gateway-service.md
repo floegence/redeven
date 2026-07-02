@@ -24,6 +24,8 @@ OpenAPI is intentionally limited to the Gateway HTTP JSON wire contract. It does
 
 Gateway should not depend on the Flowersec DSL for this API contract. Flowersec remains a transport/session dependency boundary, while Gateway's control API is a small HTTP surface with explicit OpenAPI schemas and focused contract tests.
 
+Gateway does not host plugin management APIs. The `/gateway/v1/*` protocol remains a standalone Gateway service surface for pairing, environment catalog, open-session artifacts, profile management, and environment lifecycle requests. Future plugin install, enable, surface bootstrap, asset, RPC, diagnostics, export/import, update, or uninstall routes belong to Local UI/AppServer-mounted ReDevPlugin handlers or thin wrappers, not to `redeven-gateway`. Gateway bridge tokens and open-session artifacts must not be reused as plugin grants or plugin capability credentials.
+
 # Citations
 
 [1] redeven:cmd/redeven-gateway/main.go:83 - `serve` accepts state root, listen address, private target, profile write, and pairing flags.
@@ -45,3 +47,8 @@ Gateway should not depend on the Flowersec DSL for this API contract. Flowersec 
 [17] redeven:internal/gatewayservice/server.go:1019 - The profile proxy injects only server-side jar cookies into target requests.
 [18] redeven:internal/gatewayservice/server.go:1034 - The profile proxy strips target `Set-Cookie` before responding to the browser.
 [19] redeven:scripts/check_gateway_protocol_contract.sh:9 - The standalone contract check runs the Gateway OpenAPI and naming-boundary tests.
+[20] redeven:spec/openapi/gateway-v1.yaml:2 - Gateway OpenAPI explicitly scopes itself to `/gateway/v1/*` JSON protocol endpoints only.
+[21] redeven:spec/openapi/gateway-v1.yaml:36 - Gateway protocol paths start with pairing routes under `/gateway/v1/*`.
+[22] redeven:spec/openapi/gateway-v1.yaml:111 - Gateway open-session is an environment artifact endpoint, not a plugin grant endpoint.
+[23] redeven:spec/openapi/gateway-v1.yaml:140 - Gateway profile management lives under Gateway environment profile routes.
+[24] redeven:spec/openapi/gateway-v1.yaml:202 - Gateway lifecycle requests are environment lifecycle operations.

@@ -15,6 +15,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.
 - [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.
 - [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Published plugin-platform dependency and Redeven adapter ownership.
+- [Plugin platform integration](architecture/plugin-platform-integration.md) - Local UI, AppServer, product adapter, and Flower orchestration shape for future ReDevPlugin integration.
 
 ## Security
 
@@ -52,7 +53,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 ## Protocol
 
 - [Gateway v1 protocol](protocol/gateway-v1-protocol.md) - OpenAPI source contract for Gateway HTTP JSON endpoints, auth, envelopes, and Desktop behavior boundaries.
-- [RCPP v2 provider API](protocol/rcpp-v2-provider-api.md) - Provider discovery, auth, environment catalog, health, bootstrap, and launch data.
+- [RCPP v2 provider API](protocol/rcpp-v2-provider-api.md) - Provider discovery, Desktop auth, environment catalog, health, open-session, and bootstrap.
 
 ## Release
 
