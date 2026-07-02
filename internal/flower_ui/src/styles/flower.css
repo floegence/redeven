@@ -4111,16 +4111,69 @@ html.dark .flower-component-shell {
   color: #d2a8ff;
 }
 
-.flower-activity-terminal-chips {
+.flower-activity-terminal-actions {
   display: inline-flex;
-  min-width: 0;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: flex-end;
   gap: 0.25rem;
 }
 
-.flower-activity-terminal-chip,
+.flower-activity-terminal-action-button {
+  appearance: none;
+  display: inline-flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: #8b949e;
+  cursor: pointer;
+  padding: 0;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
+}
+
+.flower-activity-terminal-action-button:hover,
+.flower-activity-terminal-action-button:focus-visible,
+.flower-activity-terminal-action-button-active {
+  border-color: color-mix(in srgb, #58a6ff 38%, transparent);
+  background: color-mix(in srgb, #58a6ff 12%, transparent);
+  color: #c9d1d9;
+  outline: none;
+}
+
+.flower-activity-terminal-action-button-copied {
+  border-color: color-mix(in srgb, #3fb950 42%, transparent);
+  background: color-mix(in srgb, #3fb950 14%, transparent);
+  color: #7ee787;
+}
+
+.flower-activity-terminal-command-panel {
+  border-bottom: 1px solid #26313d;
+  background: #10161f;
+  padding: 0.625rem;
+}
+
+.flower-activity-terminal-command-full {
+  margin: 0;
+  color: #e6edf3;
+  font-family: var(--flower-activity-terminal-font);
+  font-size: 0.71875rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.flower-activity-terminal-command-full-code {
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: inherit;
+}
+
 .flower-activity-web-chip,
 .flower-activity-question-chip {
   display: inline-flex;
