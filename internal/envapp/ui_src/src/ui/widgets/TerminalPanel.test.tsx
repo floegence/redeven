@@ -276,6 +276,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
     Copy: Icon,
+    ExternalLink: Icon,
     Folder: Icon,
     Sparkles: Icon,
     Terminal: Icon,
@@ -772,6 +773,11 @@ vi.mock('./PermissionEmptyState', () => ({
 
 vi.mock('../utils/askFlowerPath', () => ({
   normalizeAbsolutePath: (value: string) => value,
+  basenameFromAbsolutePath: (value: string) => {
+    const normalized = String(value ?? '').replace(/\/+$/, '');
+    const parts = normalized.split('/').filter(Boolean);
+    return parts[parts.length - 1] || 'File';
+  },
   expandHomeDisplayPath: (value: string) => value,
   toHomeDisplayPath: (value: string) => value,
   resolveSuggestedWorkingDirAbsolute: ({ suggestedWorkingDirAbs }: { suggestedWorkingDirAbs?: string | null }) => suggestedWorkingDirAbs ?? '',
@@ -898,11 +904,13 @@ function findTerminalTabsRoot(host: HTMLElement): HTMLElement | null {
 }
 
 function findTerminalTabStatus(host: HTMLElement, label: string, status: 'running' | 'unread' | 'none'): Element | null {
-  return findTerminalTab(host, label)?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
+  const tab = findTerminalTab(host, label);
+  return tab?.parentElement?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? tab?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
 
 function findPendingTerminalTabStatus(host: HTMLElement, label: string, status: 'creating' | 'failed'): Element | null {
-  return findTerminalTab(host, label)?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
+  const tab = findTerminalTab(host, label);
+  return tab?.parentElement?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? tab?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
 
 function findTerminalWorkIndicator(host: HTMLElement): HTMLElement | null {
@@ -1198,6 +1206,134 @@ describe('TerminalPanel', () => {
 
     expect(terminalCoreInstances.length).toBeGreaterThan(0);
     expect(host.textContent).toContain('Terminal 1');
+  });
+
+  it('renders terminal sidebar items with directory title, avatar initial, and path action', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace/redeven',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const tab = findTerminalTab(host, 'Terminal 1');
+    expect(tab).toBeTruthy();
+    const row = tab?.parentElement;
+    expect(row?.textContent).toContain('redeven');
+    expect(row?.querySelector('[data-terminal-session-avatar="session-1"]')?.textContent).toContain('R');
+
+    const pathAction = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-path-session-1"]');
+    expect(pathAction).toBeTruthy();
+    expect(pathAction?.textContent).toContain('/workspace/redeven');
+    expect(pathAction?.getAttribute('title')).toBe('Browse files: /workspace/redeven');
+    expect(pathAction?.className).toContain('underline');
+  });
+
+  it('opens the sidebar path in the activity file browser without switching terminal sessions', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace/alpha',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/beta',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 20,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-path-session-2"]')?.click();
+    await settleTerminalPanel();
+
+    expect(openFileBrowserAtPathSpy).toHaveBeenCalledWith('/workspace/beta', {
+      homePath: '/workspace',
+      title: 'beta',
+      openStrategy: undefined,
+    });
+    expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
+    expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('false');
+  });
+
+  it('opens the sidebar path as a new workbench file browser surface', async () => {
+    envContextState.viewMode = 'workbench';
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace/redeven',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-path-session-1"]')?.click();
+    await settleTerminalPanel();
+
+    expect(openFileBrowserAtPathSpy).toHaveBeenCalledWith('/workspace/redeven', {
+      homePath: '/workspace',
+      title: 'redeven',
+      openStrategy: 'create_new',
+    });
+  });
+
+  it('shows the terminal path without a browse action when files cannot be read', async () => {
+    terminalEnvPermissionsState.canRead = false;
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace/redeven',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    expect(host.querySelector('[data-testid="terminal-session-path-session-1"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-session-path="session-1"]')?.textContent).toContain('/workspace/redeven');
+
+    host.querySelector<HTMLElement>('[data-terminal-session-path="session-1"]')?.click();
+    await settleTerminalPanel();
+
+    expect(openFileBrowserAtPathSpy).not.toHaveBeenCalled();
   });
 
   it('configures TerminalCore with focus-triggered remote resize handoff enabled', async () => {
@@ -2083,7 +2219,7 @@ describe('TerminalPanel', () => {
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
   });
 
-  it('switches a background interactive session from running spinner to an unread dot after output goes quiet', async () => {
+  it('keeps a background interactive session marked running after output goes quiet', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -2125,11 +2261,11 @@ describe('TerminalPanel', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 3_800));
     await settleTerminalPanel();
 
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
   });
 
-  it('lets a quiet background command drop its spinner after the start grace window when no new output arrives', async () => {
+  it('keeps a quiet background command marked running after the start grace window', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -2170,7 +2306,7 @@ describe('TerminalPanel', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 1_700));
     await settleTerminalPanel();
 
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('running');
 
@@ -2319,7 +2455,8 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(inactiveCore?.write).not.toHaveBeenCalled();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
 
     findTerminalTab(host, 'Terminal 2')?.click();
     await settleTerminalPanel();

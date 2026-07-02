@@ -1,7 +1,7 @@
-import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
+import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
-import { Copy, Folder, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { Copy, ExternalLink, Folder, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 
 import {
   Button,
@@ -63,7 +63,7 @@ import { createClientId } from '../utils/clientId';
 import { sortContextActionMenuItems } from '../contextActions/menu';
 import { PermissionEmptyState } from './PermissionEmptyState';
 import { attachAskFlowerContextAction, type EnvFlowerTurnLauncherContextItem } from '../contextActions/askFlower';
-import { normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../utils/askFlowerPath';
+import { basenameFromAbsolutePath, normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../utils/askFlowerPath';
 import { resolveTerminalSurfaceTouchAction } from '../mobileViewportPolicy';
 import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSettingsDialog';
 import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
@@ -344,10 +344,15 @@ type resolved_pending_terminal_session = {
 type terminal_session_sidebar_item = Readonly<{
   id: string;
   label: string;
-  workingDir: string;
-  icon: JSX.Element;
+  title: string;
+  avatarInitial: string;
+  fullPath: string;
+  status: terminal_session_sidebar_status;
+  canBrowsePath: boolean;
   closable: boolean;
 }>;
+
+type terminal_session_sidebar_status = 'none' | 'running' | 'unread' | 'creating' | 'failed';
 
 type terminal_panel_created_session = {
   sessionId: string;
@@ -414,6 +419,40 @@ function buildTerminalSessionLabel(session: TerminalSessionInfo, fallbackLabel: 
 
 function buildPendingTerminalSessionLabel(session: pending_terminal_session, fallbackLabel: string): string {
   return session.name?.trim() ? session.name.trim() : fallbackLabel;
+}
+
+function buildTerminalSidebarDirectoryTitle(workingDir: string, fallbackLabel: string): string {
+  const normalizedWorkingDir = normalizeAskFlowerAbsolutePath(workingDir);
+  if (normalizedWorkingDir === '/') {
+    return 'Root';
+  }
+
+  if (normalizedWorkingDir) {
+    const basename = basenameFromAbsolutePath(normalizedWorkingDir).trim();
+    if (basename && basename !== 'File') {
+      return basename;
+    }
+  }
+
+  const fallback = String(fallbackLabel ?? '').trim();
+  return fallback || 'Terminal';
+}
+
+function buildTerminalSidebarAvatarInitial(title: string): string {
+  const trimmed = String(title ?? '').trim();
+  const readableTitle = trimmed.replace(/^[^A-Za-z0-9]+/, '') || trimmed;
+  const first = Array.from(readableTitle)[0] ?? 'T';
+  return first.toLocaleUpperCase();
+}
+
+function resolveTerminalSidebarStatus(
+  workState: TerminalSessionWorkState | undefined,
+  visualState: TerminalTabVisualState | undefined,
+): terminal_session_sidebar_status {
+  if (workState && workState !== 'idle') {
+    return 'running';
+  }
+  return visualState === 'unread' ? 'unread' : 'none';
 }
 
 function buildTerminalPanelTitle(session: TerminalSessionInfo | null, terminalLabel: string): string {
@@ -614,12 +653,38 @@ function mergeTerminalSessionWorkStates(
   return hasRunning ? 'running' : 'idle';
 }
 
-const TerminalTabStatusIcon = (props: { state: 'none' | 'running' | 'unread' }) => {
-  if (props.state === 'running') {
+const TerminalSidebarStatusBadge = (props: { status: terminal_session_sidebar_status }) => {
+  if (props.status === 'running') {
     return (
-      <span class="inline-flex h-3 w-3 items-center justify-center text-muted-foreground" data-terminal-tab-status="running" aria-hidden="true">
+      <span
+        class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar bg-[color:var(--success)] shadow-sm"
+        data-terminal-tab-status="running"
+        aria-hidden="true"
+      >
+        <span class="absolute inset-0 rounded-full bg-[color:var(--success)] opacity-40 animate-ping" />
+      </span>
+    );
+  }
+
+  if (props.status === 'unread') {
+    return (
+      <span
+        class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar bg-primary/75 shadow-sm"
+        data-terminal-tab-status="unread"
+        aria-hidden="true"
+      />
+    );
+  }
+
+  if (props.status === 'creating') {
+    return (
+      <span
+        class="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full border-2 border-sidebar bg-sidebar text-muted-foreground shadow-sm"
+        data-terminal-tab-status="creating"
+        aria-hidden="true"
+      >
         <svg
-          class="h-3 w-3 animate-spin"
+          class="h-2.5 w-2.5 animate-spin"
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
           fill="none"
@@ -631,15 +696,17 @@ const TerminalTabStatusIcon = (props: { state: 'none' | 'running' | 'unread' }) 
     );
   }
 
-  if (props.state === 'unread') {
+  if (props.status === 'failed') {
     return (
-      <span class="inline-flex h-3 w-3 items-center justify-center" data-terminal-tab-status="unread" aria-hidden="true">
-        <span class="h-2 w-2 rounded-full bg-amber-400 shadow-[0_0_0_1px_rgba(0,0,0,0.18)]" />
-      </span>
+      <span
+        class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar bg-error shadow-sm"
+        data-terminal-tab-status="failed"
+        aria-hidden="true"
+      />
     );
   }
 
-  return <span class="inline-block h-3 w-3 opacity-0" data-terminal-tab-status="none" aria-hidden="true" />;
+  return <span class="hidden" data-terminal-tab-status="none" aria-hidden="true" />;
 };
 
 const PendingTerminalTabStatusIcon = (props: { status: pending_terminal_session_status }) => {
@@ -3052,20 +3119,38 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const sessionListItems = createMemo<terminal_session_sidebar_item[]>(() => {
     const list = sessions();
     const tabStates = tabVisualStateBySession();
-    const sessionItems = list.map((s, index) => ({
-      id: s.id,
-      label: buildTerminalSessionLabel(s, i18n.t('terminal.terminalName', { index: index + 1 })),
-      workingDir: normalizeAskFlowerAbsolutePath(String(s.workingDir ?? '').trim()),
-      icon: <TerminalTabStatusIcon state={tabStates[s.id] ?? 'none'} />,
-      closable: true,
-    }));
-    const pendingItems = visiblePendingTerminalSessions().map((session) => ({
-      id: session.id,
-      label: buildPendingTerminalSessionLabel(session, i18n.t('terminal.title')),
-      workingDir: normalizeAskFlowerAbsolutePath(String(session.workingDir ?? '').trim()),
-      icon: <PendingTerminalTabStatusIcon status={session.status} />,
-      closable: session.status === 'failed',
-    }));
+    const workStates = workStateBySession();
+    const canOpenPath = canBrowseFiles();
+    const sessionItems = list.map((s, index) => {
+      const fullPath = normalizeAskFlowerAbsolutePath(String(s.workingDir ?? '').trim());
+      const fallbackLabel = buildTerminalSessionLabel(s, i18n.t('terminal.terminalName', { index: index + 1 }));
+      const title = buildTerminalSidebarDirectoryTitle(fullPath, fallbackLabel);
+      return {
+        id: s.id,
+        label: fallbackLabel,
+        title,
+        avatarInitial: buildTerminalSidebarAvatarInitial(title),
+        fullPath,
+        status: resolveTerminalSidebarStatus(workStates[s.id], tabStates[s.id]),
+        canBrowsePath: Boolean(fullPath) && canOpenPath,
+        closable: true,
+      };
+    });
+    const pendingItems = visiblePendingTerminalSessions().map((session) => {
+      const fullPath = normalizeAskFlowerAbsolutePath(String(session.workingDir ?? '').trim());
+      const fallbackLabel = buildPendingTerminalSessionLabel(session, i18n.t('terminal.title'));
+      const title = buildTerminalSidebarDirectoryTitle(fullPath, fallbackLabel);
+      return {
+        id: session.id,
+        label: fallbackLabel,
+        title,
+        avatarInitial: buildTerminalSidebarAvatarInitial(title),
+        fullPath,
+        status: session.status,
+        canBrowsePath: Boolean(fullPath) && canOpenPath,
+        closable: session.status === 'failed',
+      };
+    });
     return [...sessionItems, ...pendingItems];
   });
 
@@ -3470,6 +3555,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   };
 
+  const openSidebarItemFiles = (item: terminal_session_sidebar_item) => {
+    if (!item.canBrowsePath || !item.fullPath) return;
+
+    void env.openFileBrowserAtPath(item.fullPath, {
+      homePath: normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || undefined,
+      title: item.title,
+      openStrategy: env.viewMode() === 'workbench' ? 'create_new' : undefined,
+    });
+  };
+
   const askFlowerFromTerminal = () => {
     const menu = terminalAskMenu();
     if (!menu) return;
@@ -3737,10 +3832,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!activeId) return null;
     return sessionListItems().find((item) => item.id === activeId) ?? null;
   });
-  const activeToolbarTitle = createMemo(() => activeSessionListItem()?.label ?? i18n.t('terminal.title'));
+  const activeToolbarTitle = createMemo(() => activeSessionListItem()?.title ?? i18n.t('terminal.title'));
   const activeToolbarSubtitle = createMemo(() => {
     const activeItem = activeSessionListItem();
-    if (activeItem?.workingDir) return activeItem.workingDir;
+    if (activeItem?.fullPath) return activeItem.fullPath;
     const pending = activePendingSession();
     if (pending?.workingDir) return pending.workingDir;
     return activeSession()?.id ?? '';
@@ -3825,45 +3920,86 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                     {(item, index) => {
                       const active = () => activeDisplaySessionId() === item.id;
                       return (
-                        <div class="group relative">
+                        <div
+                          class={`group relative rounded-md border px-2.5 py-2 pr-8 text-xs transition-colors duration-75 ${
+                            active()
+                              ? 'border-border/20 bg-sidebar-accent text-sidebar-accent-foreground shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
+                              : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'
+                          }`}
+                        >
                           <button
                             type="button"
-                            class={`relative flex w-full cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 pr-8 text-xs transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring ${
-                              active()
-                                ? 'border-border/20 bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
-                                : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'
-                            }`}
+                            class="absolute inset-0 z-0 w-full cursor-pointer rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
                             data-terminal-session-id={item.id}
                             data-terminal-session-active={active() ? 'true' : 'false'}
                             data-terminal-session-index={index() + 1}
+                            aria-label={`${item.label}: ${item.title}${item.fullPath ? ` ${item.fullPath}` : ''}`}
                             aria-current={active() ? 'page' : undefined}
                             onClick={() => {
                               setActiveSessionId(item.id);
                               restoreActiveTerminalFocus();
                             }}
                           >
-                            <Show when={active()}>
-                              <span class="absolute left-0 top-2 bottom-2 w-[2px] rounded-full bg-primary" aria-hidden="true" />
-                            </Show>
-                            <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
-                              {item.icon}
+                            <span class="sr-only">{item.label}</span>
+                            <span class="sr-only" data-terminal-tab-status={item.status}>
+                              {item.status}
+                            </span>
+                          </button>
+                          <Show when={active()}>
+                            <span class="absolute left-0 top-2 bottom-2 z-10 w-[2px] rounded-full bg-primary" aria-hidden="true" />
+                          </Show>
+                          <div class="relative z-10 flex min-w-0 items-start gap-2.5 pointer-events-none">
+                            <span
+                              class="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-sidebar-border/70 bg-sidebar-accent/75 text-[13px] font-semibold uppercase leading-none text-sidebar-accent-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]"
+                              data-terminal-session-avatar={item.id}
+                              aria-hidden="true"
+                            >
+                              {item.avatarInitial}
+                              <TerminalSidebarStatusBadge status={item.status} />
                             </span>
                             <span class="min-w-0 flex-1 text-left">
                               <span class="flex min-w-0 items-center gap-1.5">
-                                <span class="truncate text-xs font-semibold">{item.label}</span>
+                                <span class="truncate text-sm font-semibold leading-5">{item.title}</span>
                                 <span class="shrink-0 rounded border border-sidebar-border/80 bg-sidebar/35 px-1 py-[1px] text-[9px] leading-none text-muted-foreground/80">{index() + 1}</span>
                               </span>
-                              <Show when={item.workingDir}>
-                                <span class="mt-1 block truncate text-[10px] leading-4 text-muted-foreground/70">{item.workingDir}</span>
+                              <Show when={item.fullPath}>
+                                <Show
+                                  when={item.canBrowsePath}
+                                  fallback={
+                                    <span
+                                      class="mt-0.5 block h-6 truncate text-[11px] leading-6 text-muted-foreground/70"
+                                      title={item.fullPath}
+                                      data-terminal-session-path={item.id}
+                                    >
+                                      {item.fullPath}
+                                    </span>
+                                  }
+                                >
+                                  <button
+                                    type="button"
+                                    class="pointer-events-auto mt-0.5 flex h-6 max-w-full min-w-0 items-center gap-1 rounded-sm text-left text-[11px] leading-6 text-muted-foreground/80 underline decoration-sidebar-border/70 underline-offset-[3px] transition-colors duration-75 hover:text-sidebar-foreground hover:decoration-primary/70 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
+                                    title={`${i18n.t('terminal.browseFiles')}: ${item.fullPath}`}
+                                    aria-label={`${i18n.t('terminal.browseFiles')}: ${item.fullPath}`}
+                                    data-terminal-session-path={item.id}
+                                    data-testid={`terminal-session-path-${item.id}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      openSidebarItemFiles(item);
+                                    }}
+                                  >
+                                    <span class="min-w-0 truncate">{item.fullPath}</span>
+                                    <ExternalLink class="h-3 w-3 shrink-0" />
+                                  </button>
+                                </Show>
                               </Show>
                             </span>
-                          </button>
+                          </div>
                           <Show when={item.closable}>
                             <button
                               type="button"
-                              class="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded text-[11px] text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-error/10 hover:text-error focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
+                              class="absolute right-1.5 top-1.5 z-20 flex h-5 w-5 items-center justify-center rounded text-[11px] text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-error/10 hover:text-error focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
                               data-testid={`close-session-${item.id}`}
-                              aria-label={`${i18n.t('terminal.close')} ${item.label}`}
+                              aria-label={`${i18n.t('terminal.close')} ${item.title}`}
                               onClick={(event) => {
                                 event.stopPropagation();
                                 closeSession(item.id);
