@@ -1,12 +1,49 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ActivityTimelineBlock } from './ActivityTimelineBlock';
 import type { ActivityItem, ActivityTimelineBlock as ActivityTimelineBlockType } from '../types';
 
 const approveToolCallMock = vi.hoisted(() => vi.fn());
+const terminalVisibleOutputStoreMock = vi.hoisted(() => {
+  const entries = new Map<string, string>();
+  const key = (identity: any) => [
+    identity?.surface_scope ?? '',
+    identity?.owner_thread_id ?? '',
+    identity?.render_thread_id ?? '',
+    identity?.run_id ?? '',
+    identity?.turn_id ?? '',
+    identity?.message_id ?? '',
+    identity?.block_index ?? '',
+    identity?.tool_id || identity?.item_id || '',
+    identity?.item_id ?? '',
+  ].join('\x1e');
+  const mergeOutput = (previous: unknown, next: unknown) => {
+    const current = String(previous ?? '').replace(/\r\n?/g, '\n');
+    const incoming = String(next ?? '').replace(/\r\n?/g, '\n');
+    if (!incoming.trim()) return current;
+    if (!current.trim() || incoming.startsWith(current)) return incoming;
+    if (current.includes(incoming)) return current;
+    return `${current}${current.endsWith('\n') || incoming.startsWith('\n') ? '' : '\n'}${incoming}`;
+  };
+  return {
+    get: (identity: any) => entries.get(key(identity)) ?? '',
+    merge: (identity: any, current: unknown, next: unknown) => {
+      const storeKey = key(identity);
+      const merged = mergeOutput(entries.get(storeKey) ?? current, next);
+      if (merged.trim()) entries.set(storeKey, merged);
+      return merged;
+    },
+    remember: (identity: any, output: unknown) => {
+      const normalized = String(output ?? '').replace(/\r\n?/g, '\n');
+      if (normalized.trim()) entries.set(key(identity), normalized);
+    },
+    clear: () => entries.clear(),
+  };
+});
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
@@ -15,6 +52,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 vi.mock('../ChatProvider', () => ({
   useChatContext: () => ({
     approveToolCall: approveToolCallMock,
+    terminalVisibleOutputStore: terminalVisibleOutputStoreMock,
   }),
 }));
 
@@ -143,6 +181,7 @@ afterEach(() => {
     renderDisposers.pop()?.();
   }
   approveToolCallMock.mockReset();
+  terminalVisibleOutputStoreMock.clear();
   document.body.innerHTML = '';
 });
 
@@ -165,6 +204,47 @@ describe('ActivityTimelineBlock', () => {
     expect(host.textContent).toContain('stdout');
     expect(host.textContent).toContain('ok');
     expect(host.textContent).toContain('exit');
+  });
+
+  it('keeps terminal output visible when the same activity item is replaced by an empty running frame', async () => {
+    const runningBlock = (output: string): ActivityTimelineBlockType => baseBlock({
+      summary: baseSummary('running'),
+      items: [baseItem({
+        status: 'running',
+        severity: 'normal',
+        needs_attention: true,
+        payload: {
+          command: 'npm test',
+          process_id: 'tp_live',
+          output,
+          stdout: '',
+          last_seq: output ? 1 : 0,
+          total_bytes: output.length,
+        },
+      })],
+    });
+    const [block, setBlock] = createSignal(runningBlock('tick 1\n'));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <ActivityTimelineBlock block={block()} messageId="msg_1" blockIndex={0} />
+    ), host);
+    renderDisposers.push(dispose);
+
+    const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
+    row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+    const outputToggle = host.querySelector('button[aria-label="Show output for command output"]') as HTMLButtonElement | null;
+    outputToggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    expect(host.textContent).toContain('tick 1');
+    setBlock(runningBlock(''));
+    await flushAsync();
+
+    expect(host.textContent).toContain('tick 1');
+    expect(host.textContent).not.toContain('Listening for output');
+    expect(host.textContent).not.toContain('No output captured');
   });
 
   it('keeps detail content mounted during disclosure close animation', async () => {

@@ -35,6 +35,22 @@ async function flushAsync(): Promise<void> {
   await Promise.resolve();
 }
 
+async function waitForCondition(assertion: () => void): Promise<void> {
+  const deadline = Date.now() + 1000;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => window.setTimeout(resolve, 10));
+    }
+  }
+  if (lastError) throw lastError;
+  assertion();
+}
+
 afterEach(() => {
   while (renderDisposers.length > 0) {
     const dispose = renderDisposers.pop();
@@ -139,5 +155,58 @@ describe('ShellBlock', () => {
     expect(host.textContent).toContain('No output captured.');
     expect(host.textContent).not.toContain('sk-secret');
     expect(host.textContent).not.toContain('"api_key"');
+  });
+
+  it('keeps fetched output visible when a running poll returns empty output', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({
+          ok: true,
+          data: {
+            status: 'running',
+            process_id: 'tp_live',
+            output: 'tick 1\n',
+            last_seq: 1,
+            total_bytes: 7,
+          },
+        }),
+      })
+      .mockResolvedValue({
+        ok: true,
+        text: async () => JSON.stringify({
+          ok: true,
+          data: {
+            status: 'running',
+            process_id: 'tp_live',
+            output: '',
+            stdout: '',
+            last_seq: 1,
+            total_bytes: 7,
+          },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { host } = renderShellBlock({
+      command: 'npm test',
+      outputRef: { runId: 'run_live', toolId: 'tool_live' },
+      processId: 'tp_live',
+      status: 'running',
+    });
+
+    const toggleButton = host.querySelector('button[aria-label="Show output for command output"]') as HTMLButtonElement | null;
+    toggleButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    await waitForCondition(() => {
+      expect(host.textContent).toContain('tick 1');
+    });
+    await waitForCondition(() => {
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    });
+
+    expect(host.textContent).toContain('tick 1');
+    expect(host.textContent).not.toContain('Listening for output');
+    expect(host.textContent).not.toContain('No output captured');
   });
 });

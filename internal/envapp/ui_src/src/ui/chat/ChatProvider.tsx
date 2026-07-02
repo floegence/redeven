@@ -33,6 +33,10 @@ import type {
 import { DEFAULT_VIRTUAL_LIST_CONFIG } from './types';
 import { createClientId } from '../utils/clientId';
 import { applyStreamEventBatchToMessages, buildUserBlocks } from './messageState';
+import {
+  createTerminalVisibleOutputStore,
+  type TerminalVisibleOutputStore,
+} from '../../../../../flower_ui/src/flowerTerminalOutput';
 
 // ---- Defer helper (avoids blocking the UI thread) ----
 
@@ -167,6 +171,7 @@ export interface ChatContextValue {
   isWorking: Accessor<boolean>;
   config: Accessor<ChatConfig>;
   virtualListConfig: Accessor<VirtualListConfig>;
+  terminalVisibleOutputStore: TerminalVisibleOutputStore;
 
   sendMessage: (content: string, attachments?: Attachment[]) => Promise<void>;
   loadMoreHistory: () => Promise<void>;
@@ -234,6 +239,7 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
   // Message store (Solid.js fine-grained reactive store)
   const [messages, setMessages] = createStore<Message[]>(props.initialMessages || []);
   const coldMessages: Map<string, ColdMessage> = new Map();
+  const terminalVisibleOutputStore = createTerminalVisibleOutputStore();
 
   // Reconcile when initialMessages changes externally
   createEffect(
@@ -384,6 +390,7 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
     isWorking,
     config,
     virtualListConfig,
+    terminalVisibleOutputStore,
 
     sendMessage: async (content, attachments = []) => {
       const userMsg: Message = {
