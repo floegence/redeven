@@ -18,6 +18,8 @@ Desktop Welcome uses the same Flower adapter contract as Env App for thread oper
 
 Runtime-control is not a general network API. It is scoped to the local Desktop/runtime bridge and protected by loopback, Desktop owner id, and bearer token checks. Flower warmup is a Desktop presentation context over the existing runtime lifecycle operation, not a separate readiness source or a parser for runtime terminal output. Desktop must not implement alternate Flower thread semantics locally; thread stop, send, compact, working-directory path context/list reads, and live reload flow through the runtime proxy contract.
 
+Runtime-control is also not a plugin grant, plugin management, or plugin capability plane. Its token and routes are reserved for Desktop-managed runtime coordination such as provider-link, code-workspace-engine import, and Desktop model source binding. Plugin workers and sandbox surfaces must not receive runtime-control endpoint data, use runtime-control bearer tokens, or treat runtime-control routes as plugin capabilities; plugin access to Redeven resources must go through released ReDevPlugin brokers and Redeven-registered adapters.
+
 # Citations
 
 [1] redeven:cmd/redeven/main.go:292 - Desktop-managed startup is rejected for remote-only mode.
@@ -37,3 +39,5 @@ Runtime-control is not a general network API. It is scoped to the local Desktop/
 [15] redeven:desktop/src/main/main.ts:7450 - The Desktop Flower bridge allowlist admits the fixed FS path context route.
 [16] redeven:desktop/src/main/main.ts:7486 - The Desktop Flower bridge method allowlist permits `POST` for the fixed FS list route.
 [17] redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:496 - The Desktop Flower adapter reads working-directory path context and list data through the runtime bridge.
+[18] redeven:internal/localui/runtime_control.go:134 - Runtime-control routes are limited to provider-link, code-workspace-engine, and Desktop model source handlers.
+[19] redeven:okf/security/plugin-platform-integration-security.md:58 - Plugin surfaces and workers must not receive Desktop runtime-control tokens as ambient authority.
