@@ -358,7 +358,9 @@ describe('ActivityTimelineBlock', () => {
         payload: {
           todos: [
             { id: 't1', content: 'Inspect current implementation', status: 'completed' },
-            { id: 't2', content: 'Draft renderer contract', status: 'in_progress' },
+            { id: 't2', content: 'Draft renderer contract', status: 'in_progress', note: 'keep this inline' },
+            { id: 't3', content: 'Wait for review', status: 'pending' },
+            { id: 't4', content: 'Remove abandoned branch', status: 'cancelled' },
           ],
         },
       })],
@@ -371,6 +373,15 @@ describe('ActivityTimelineBlock', () => {
 
     expect(host.textContent).toContain('Inspect current implementation');
     expect(host.textContent).toContain('in progress');
+    expect(host.textContent).toContain('keep this inline');
+    expect(host.querySelectorAll('.chat-activity-todo-item')).toHaveLength(4);
+    expect(host.querySelectorAll('.chat-activity-todo-badge')).toHaveLength(4);
+    expect(host.querySelector('.chat-activity-todo-badge-completed')?.textContent).toContain('completed');
+    expect(host.querySelector('.chat-activity-todo-badge-in_progress')?.textContent).toContain('in progress');
+    expect(host.querySelector('.chat-activity-todo-item[data-status="pending"] .chat-activity-todo-badge')?.textContent).toContain('pending');
+    expect(host.querySelector('.chat-activity-todo-badge-cancelled')?.textContent).toContain('cancelled');
+    expect(host.querySelector('.chat-activity-todo-note')?.textContent).toContain('keep this inline');
+    expect(host.querySelector('.chat-activity-todo-meta')).toBeNull();
     expect(host.textContent).not.toContain('"todos"');
   });
 

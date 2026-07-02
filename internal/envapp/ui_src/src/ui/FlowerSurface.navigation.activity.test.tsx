@@ -1224,6 +1224,14 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.textContent).toContain('Update todos');
     expect(runtime.textContent).toContain('completed 1');
     expect(runtime.textContent).toContain('task_complete');
+    const todosRow = runtime.querySelector('[data-flower-activity-item-id="item-5"]') as HTMLElement | null;
+    expect(todosRow).toBeTruthy();
+    (todosRow?.querySelector('.flower-activity-inline-button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(todosRow?.querySelector('.flower-activity-todo-badge')));
+    expect(todosRow?.querySelectorAll('.flower-activity-todo-item')).toHaveLength(1);
+    expect(todosRow?.querySelector('.flower-activity-todo-badge-completed')?.textContent).toContain('Completed');
+    expect(todosRow?.querySelector('.flower-activity-todo-item[data-status="completed"]')).toBeTruthy();
+    expect(todosRow?.querySelector('.flower-activity-todo-meta')).toBeNull();
     const firstTerminalRow = runtime.querySelector('[data-flower-activity-item-id="item-0"]') as HTMLElement | null;
     expect(firstTerminalRow).toBeTruthy();
     expect(firstTerminalRow?.textContent).toContain('npm run check:0');
@@ -1515,7 +1523,7 @@ describe('FlowerSurface navigation activity', () => {
                   needs_attention: true,
                   payload: {
                     status: 'error',
-                    todos: [{ content: 'Keep final review open', status: 'in_progress' }],
+                    todos: [{ content: 'Keep final review open', status: 'in_progress', note: 'needs another pass' }],
                     error: { code: 'UNKNOWN', message: 'Todo update failed', retryable: false },
                   },
                 }),
@@ -1544,6 +1552,10 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => row.textContent?.includes('Todo update failed') ?? false);
     expect(row.textContent).toContain('Todo update failed');
     expect(row.textContent).toContain('Keep final review open');
+    expect(row.textContent).toContain('needs another pass');
+    expect(row.querySelector('.flower-activity-todo-badge-in_progress')?.textContent).toContain('In progress');
+    expect(row.querySelector('.flower-activity-todo-note')?.textContent).toContain('needs another pass');
+    expect(row.querySelector('.flower-activity-todo-meta')).toBeNull();
     expect(row.textContent).not.toContain('result status');
     expect(row.textContent).not.toContain('error code');
     expect(row.textContent).not.toContain('UNKNOWN');
