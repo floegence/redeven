@@ -1,5 +1,5 @@
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
-import { useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
+import { isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Copy, Folder, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 
 import {
@@ -91,6 +91,7 @@ const TERMINAL_HISTORY_REPLAY_MAX_BYTES = 512 * 1024;
 const TERMINAL_HISTORY_REPLAY_MODE_MS = 120_000;
 const TERMINAL_HISTORY_REPLAY_MAX_PAGES = 4096;
 const TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX = 3.5;
+const TERMINAL_TAB_SHORTCUT_MAX_INDEX = 8;
 
 export type TerminalPanelSessionGroupState = Readonly<{
   sessionIds: string[];
@@ -681,6 +682,24 @@ function TerminalLoadingPane(props: {
 
 function TerminalCreatingPane() {
   return <TerminalLoadingPane dataStage="creating" />;
+}
+
+function matchesPlainPrimaryModShortcut(event: KeyboardEvent, key: string): boolean {
+  if (event.altKey || event.shiftKey) return false;
+  if (isMacLikePlatform()) {
+    if (!event.metaKey || event.ctrlKey) return false;
+  } else if (!event.ctrlKey || event.metaKey) {
+    return false;
+  }
+  return matchKeybind(event, `mod+${key}`);
+}
+
+function terminalTabShortcutIndex(event: KeyboardEvent): number | null {
+  const key = event.key?.toLowerCase?.() ?? '';
+  if (!/^[1-9]$/u.test(key)) return null;
+  if (!matchesPlainPrimaryModShortcut(event, key)) return null;
+  const index = Number(key) - 1;
+  return index >= 0 && index <= TERMINAL_TAB_SHORTCUT_MAX_INDEX ? index : null;
 }
 
 const PlusIcon = (props: { class?: string }) => (
@@ -3455,12 +3474,21 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const handleRootKeyDown: (e: KeyboardEvent) => void = (e) => {
-    const key = e.key?.toLowerCase?.() ?? '';
-
-    if ((e.ctrlKey || e.metaKey) && key === 'f') {
+    if (matchesPlainPrimaryModShortcut(e, 'f')) {
       // Common terminal shortcut: intercept browser find.
       e.preventDefault();
       openSearch();
+      return;
+    }
+
+    const shortcutTabIndex = terminalTabShortcutIndex(e);
+    if (shortcutTabIndex !== null) {
+      const target = tabItems()[shortcutTabIndex] ?? null;
+      if (target && !target.disabled) {
+        e.preventDefault();
+        setActiveSessionId(target.id);
+        restoreActiveTerminalFocus();
+      }
       return;
     }
 
