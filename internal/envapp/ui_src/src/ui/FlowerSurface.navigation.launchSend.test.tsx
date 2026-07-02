@@ -656,6 +656,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-stop"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-stop"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-running-stop'));
     await waitFor(() => {
       const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
       return button?.getAttribute('aria-label') === 'Stop' && !button.disabled;
@@ -704,6 +705,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-stop-once"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-stop-once"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-running-stop-once'));
     await waitFor(() => {
       const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
       return button?.getAttribute('aria-label') === 'Stop' && !button.disabled;
@@ -753,6 +755,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-send-queue"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-send-queue"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-running-send-queue'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -813,6 +816,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-compact"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-compact"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-running-compact'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -859,6 +863,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-compact-needs-setup"] button')));
     (runtime.querySelector('[data-thread-id="thread-compact-needs-setup"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-compact-needs-setup'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -911,6 +916,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-compact-menu"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-compact-menu"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-running-compact-menu'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLElement;
@@ -1417,6 +1423,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-idle-compact-multi-pending"] button')));
     (runtime.querySelector('[data-thread-id="thread-idle-compact-multi-pending"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-idle-compact-multi-pending'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(50_000);
@@ -1486,6 +1493,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-waiting-approval-compact"] button')));
     (runtime.querySelector('[data-thread-id="thread-waiting-approval-compact"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-waiting-approval-compact'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -1530,6 +1538,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-read-only-status"] button')));
     (runtime.querySelector('[data-thread-id="thread-read-only-status"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-read-only-status'));
     await waitFor(() => Boolean(runtime.querySelector('.flower-composer-readonly-chip')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -1561,6 +1570,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-enter-send"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-enter-send"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-running-enter-send'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -1652,6 +1662,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-enter-send-activity-order"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-enter-send-activity-order"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-running-enter-send-activity-order'));
     await waitFor(() => runtime.querySelector('[data-flower-message-id="m-first-assistant"]')?.textContent?.includes('printf ENTER_A_BEGIN') ?? false);
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -1738,6 +1749,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-enter-send-stale-poll"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-enter-send-stale-poll"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-running-enter-send-stale-poll'));
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -1996,6 +2008,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-send-stale-bootstrap"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-send-stale-bootstrap"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-running-send-stale-bootstrap'));
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -2046,6 +2059,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-context-meter"] button')));
     (runtime.querySelector('[data-thread-id="thread-context-meter"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-context-meter'));
     await waitFor(() => Boolean(runtime.querySelector('.flower-composer-submit')));
 
     const actions = runtime.querySelector('.flower-composer-actions') as HTMLElement;
@@ -2173,6 +2187,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-waiting-user-continue"] button')));
     (runtime.querySelector('[data-thread-id="thread-waiting-user-continue"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-waiting-user-continue'));
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-request-prompt]')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -2531,6 +2546,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-send-order"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-send-order"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-running-send-order'));
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
