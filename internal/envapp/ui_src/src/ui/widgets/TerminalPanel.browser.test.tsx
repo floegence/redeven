@@ -140,12 +140,25 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Sparkles: Icon,
     Terminal: Icon,
     Trash: Icon,
+    X: Icon,
   };
 });
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
   Panel: (props: any) => <div>{props.children}</div>,
   PanelContent: (props: any) => <div>{props.children}</div>,
+  Sidebar: (props: any) => <aside class={props.class}>{props.children}</aside>,
+  SidebarContent: (props: any) => <div class={props.class}>{props.children}</div>,
+  SidebarItemList: (props: any) => <div class={props.class}>{props.children}</div>,
+  SidebarSection: (props: any) => (
+    <section class={props.class}>
+      <div>
+        <span>{props.title}</span>
+        {props.actions}
+      </div>
+      <div>{props.children}</div>
+    </section>
+  ),
 }));
 
 vi.mock('@floegence/floe-webapp-core/loading', () => ({
@@ -157,7 +170,13 @@ vi.mock('@floegence/floe-webapp-core/ui', async () => {
   return {
     ...actual,
     Button: (props: any) => (
-      <button type="button" onClick={props.onClick} disabled={props.disabled} title={props.title}>
+      <button
+        type="button"
+        data-testid={props['data-testid']}
+        onClick={props.onClick}
+        disabled={props.disabled}
+        title={props.title}
+      >
         {props.children}
       </button>
     ),
@@ -403,7 +422,7 @@ function emitTerminalData(sessionId: string, data: string, sequence?: number) {
 }
 
 function findTerminalTab(host: HTMLElement, label: string): HTMLElement | undefined {
-  return Array.from(host.querySelectorAll<HTMLElement>('[role="tab"], button')).find((button) => button.textContent?.includes(label));
+  return Array.from(host.querySelectorAll<HTMLElement>('button[data-terminal-session-id]')).find((button) => button.textContent?.includes(label));
 }
 
 function findTerminalTabStatus(host: HTMLElement, label: string, status: 'running' | 'unread'): Element | null {
@@ -477,7 +496,7 @@ describe('TerminalPanel browser activity integration', () => {
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
   });
 
-  it('keeps tab switching responsive while a background session is receiving heavy live output', async () => {
+  it('keeps session switching responsive while a background session is receiving heavy live output', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -497,14 +516,14 @@ describe('TerminalPanel browser activity integration', () => {
     await settleTerminalPanel();
 
     const terminal2TabBeforeSwitch = findTerminalTab(host, 'Terminal 2');
-    expect(terminal2TabBeforeSwitch?.getAttribute('aria-selected')).toBe('false');
+    expect(terminal2TabBeforeSwitch?.dataset.terminalSessionActive).toBe('false');
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
 
     terminal2TabBeforeSwitch?.click();
     await settleTerminalPanel();
 
     const terminal2TabAfterSwitch = findTerminalTab(host, 'Terminal 2');
-    expect(terminal2TabAfterSwitch?.getAttribute('aria-selected')).toBe('true');
+    expect(terminal2TabAfterSwitch?.dataset.terminalSessionActive).toBe('true');
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
   });

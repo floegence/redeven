@@ -1,16 +1,15 @@
-import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack, type JSX } from 'solid-js';
 import { deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { Copy, Folder, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
+import { Copy, Folder, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 
 import {
   Button,
   Dropdown,
   Input,
   MobileKeyboard,
-  Tabs,
   TabPanel,
   type DropdownItem,
-  type TabItem,
 } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
@@ -340,6 +339,14 @@ type resolved_pending_terminal_session = {
   sessionId: string;
   session: TerminalSessionInfo;
 };
+
+type terminal_session_sidebar_item = Readonly<{
+  id: string;
+  label: string;
+  workingDir: string;
+  icon: JSX.Element;
+  closable: boolean;
+}>;
 
 type terminal_panel_created_session = {
   sessionId: string;
@@ -3041,22 +3048,24 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     writeActiveSessionId(activeSessionStorageKey, id && !pendingTerminalSessionById(id) ? id : null);
   });
 
-  const tabItems = createMemo<TabItem[]>(() => {
+  const sessionListItems = createMemo<terminal_session_sidebar_item[]>(() => {
     const list = sessions();
     const tabStates = tabVisualStateBySession();
-    const sessionTabs = list.map((s, index) => ({
+    const sessionItems = list.map((s, index) => ({
       id: s.id,
       label: buildTerminalSessionLabel(s, i18n.t('terminal.terminalName', { index: index + 1 })),
+      workingDir: normalizeAskFlowerAbsolutePath(String(s.workingDir ?? '').trim()),
       icon: <TerminalTabStatusIcon state={tabStates[s.id] ?? 'none'} />,
       closable: true,
     }));
-    const pendingTabs = visiblePendingTerminalSessions().map((session) => ({
+    const pendingItems = visiblePendingTerminalSessions().map((session) => ({
       id: session.id,
       label: buildPendingTerminalSessionLabel(session, i18n.t('terminal.title')),
+      workingDir: normalizeAskFlowerAbsolutePath(String(session.workingDir ?? '').trim()),
       icon: <PendingTerminalTabStatusIcon status={session.status} />,
       closable: session.status === 'failed',
     }));
-    return [...sessionTabs, ...pendingTabs];
+    return [...sessionItems, ...pendingItems];
   });
 
   let searchInputEl: HTMLInputElement | null = null;
@@ -3676,8 +3685,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     const shortcutTabIndex = terminalTabShortcutIndex(e);
     if (shortcutTabIndex !== null) {
-      const target = tabItems()[shortcutTabIndex] ?? null;
-      if (target && !target.disabled) {
+      const target = sessionListItems()[shortcutTabIndex] ?? null;
+      if (target) {
         e.preventDefault();
         setActiveSessionId(target.id);
         restoreActiveTerminalFocus();
@@ -3720,10 +3729,26 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   };
 
+  const terminalShortcutModLabel = createMemo(() => (isMacLikePlatform() ? 'Cmd' : 'Ctrl'));
+  const terminalSidebarWidth = createMemo(() => (isMobileLayout() ? 232 : 286));
+  const activeSessionListItem = createMemo(() => {
+    const activeId = activeDisplaySessionId();
+    if (!activeId) return null;
+    return sessionListItems().find((item) => item.id === activeId) ?? null;
+  });
+  const activeToolbarTitle = createMemo(() => activeSessionListItem()?.label ?? i18n.t('terminal.title'));
+  const activeToolbarSubtitle = createMemo(() => {
+    const activeItem = activeSessionListItem();
+    if (activeItem?.workingDir) return activeItem.workingDir;
+    const pending = activePendingSession();
+    if (pending?.workingDir) return pending.workingDir;
+    return activeSession()?.id ?? '';
+  });
+
   const body = (
     <div
       ref={(n) => (rootEl = n)}
-      class="h-full flex flex-col"
+      class="h-full min-h-0 flex flex-col"
       onKeyDown={handleRootKeyDown}
       onFocusIn={() => setPanelHasFocus(true)}
       onPointerDown={() => setPanelHasFocus(true)}
@@ -3735,293 +3760,392 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         });
       }}
     >
-      <div
-        class={`relative pt-2 px-2 pb-0 flex items-end gap-2 ${variant === 'panel' ? 'justify-between' : 'justify-end'}`}
-      >
-        <Show
-          when={tabItems().length > 0}
-          fallback={
-            <Show when={variant === 'panel'}>
-              <div class="text-xs font-medium border-b border-border pb-2">{i18n.t('terminal.title')}</div>
-            </Show>
-          }
-        >
-          <Tabs
-            items={tabItems()}
-            activeId={activeDisplaySessionId() ?? undefined}
-            onChange={(id) => {
-              setActiveSessionId(id);
-            }}
-            onClose={(id) => closeSession(id)}
-            onAdd={createSession}
-            showAdd={connected()}
-            closable
-            features={{
-              indicator: { mode: 'activeBorder', thicknessPx: 2, colorToken: 'primary', animated: false },
-              closeButton: { enabledByDefault: true, dangerHover: true },
-              addButton: { enabled: connected() },
-            }}
-            slotClassNames={{
-              tab: 'transition-none duration-0',
-              tabActive: 'transition-none duration-0',
-              tabInactive: 'transition-none duration-0',
-              indicator: 'transition-none duration-0',
-            }}
-            class="flex-1 min-w-0"
-          />
-        </Show>
-
-        <div class="flex items-center gap-1 border-b border-border h-8 shrink-0">
-          <Show when={tabItems().length === 0}>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={createSession}
-              disabled={!connected()}
-              title={i18n.t('terminal.newSession')}
-            >
-              <PlusIcon class="w-3.5 h-3.5" />
-            </Button>
-          </Show>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleRefresh}
-            disabled={!connected() || refreshing()}
-            loading={refreshing()}
-            title={i18n.t('terminal.refresh')}
-          >
-            <RefreshIcon class="w-3.5 h-3.5" />
-          </Button>
-          <Show when={tabItems().length > 0}>
-            <Button size="sm" variant="ghost" onClick={clearActive} disabled={!connected() || !activeSessionId()} title={i18n.t('terminal.clear')}>
-              <Trash class="w-3.5 h-3.5" />
-            </Button>
-            <Dropdown
-              trigger={
-                <Button size="sm" variant="ghost" disabled={!connected()} title={i18n.t('terminal.moreOptions')}>
-                  <MoreVerticalIcon class="w-3.5 h-3.5" />
-                </Button>
-              }
-              items={moreItems()}
-              onSelect={handleMoreSelect}
-              align="end"
-            />
-          </Show>
-        </div>
-      </div>
-
       <Show when={connected()} fallback={<div class="p-4 text-xs text-muted-foreground">{i18n.t('terminal.notConnected')}</div>}>
-        <div
-          ref={setTerminalContextMenuHostEl}
-          data-testid="terminal-content"
-          data-terminal-work-state={terminalWorkIndicatorState()}
-          data-terminal-work-theme={terminalWorkIndicatorTheme()}
-          class="flex-1 min-h-0 relative"
-          style={terminalLoadingVars()}
-        >
-          <Show when={workIndicatorEnabled()}>
+        <div class="flex min-h-0 flex-1 overflow-hidden bg-background">
+          <Sidebar
+            width={terminalSidebarWidth()}
+            ariaLabel={i18n.t('terminal.title')}
+            class="redeven-terminal-session-sidebar"
+          >
+            <SidebarContent class="flex h-full min-h-0 flex-col overflow-hidden">
+              <div class="shrink-0 space-y-2">
+                <div class="flex items-center gap-2 px-0.5">
+                  <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent/55 text-sidebar-accent-foreground">
+                    <Terminal class="h-3.5 w-3.5" />
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">{i18n.t('terminal.title')}</div>
+                    <div class="truncate text-xs font-semibold text-sidebar-foreground">{activeToolbarTitle()}</div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    class="h-7 w-7 p-0"
+                    data-testid="terminal-sidebar-add-session"
+                    onClick={createSession}
+                    disabled={!connected()}
+                    title={i18n.t('terminal.newSession')}
+                  >
+                    <PlusIcon class="w-3.5 h-3.5" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    class="h-7 w-7 p-0"
+                    data-testid="terminal-sidebar-refresh"
+                    onClick={handleRefresh}
+                    disabled={!connected() || refreshing()}
+                    loading={refreshing()}
+                    title={i18n.t('terminal.refresh')}
+                  >
+                    <RefreshIcon class="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+
+              <SidebarSection
+                title={i18n.t('terminal.title')}
+                actions={<span class="text-[9px] font-medium normal-case tracking-normal text-muted-foreground/60">{terminalShortcutModLabel()}+1-9</span>}
+                class="min-h-0 flex flex-1 flex-col overflow-hidden [&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:overflow-hidden"
+              >
+                <div data-testid="terminal-session-list" class="min-h-0 flex-1 overflow-hidden">
+                  <SidebarItemList class="min-h-0 h-full overflow-y-auto overflow-x-hidden pr-0.5 [scrollbar-gutter:stable]">
+                  <For
+                    each={sessionListItems()}
+                    fallback={
+                      <div class="rounded-md border border-sidebar-border/70 bg-sidebar-accent/25 px-2.5 py-3 text-xs text-muted-foreground">
+                        {emptySessionListLoading() ? i18n.t('terminal.loadingSessions') : i18n.t('terminal.noSessionsTitle')}
+                      </div>
+                    }
+                  >
+                    {(item, index) => {
+                      const active = () => activeDisplaySessionId() === item.id;
+                      return (
+                        <div class="group relative">
+                          <button
+                            type="button"
+                            class={`relative flex w-full cursor-pointer items-start gap-2 rounded-md border px-2.5 py-2 pr-8 text-xs transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring ${
+                              active()
+                                ? 'border-border/20 bg-sidebar-accent text-sidebar-accent-foreground font-medium shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
+                                : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'
+                            }`}
+                            data-terminal-session-id={item.id}
+                            data-terminal-session-active={active() ? 'true' : 'false'}
+                            data-terminal-session-index={index() + 1}
+                            aria-current={active() ? 'page' : undefined}
+                            onClick={() => {
+                              setActiveSessionId(item.id);
+                              restoreActiveTerminalFocus();
+                            }}
+                          >
+                            <Show when={active()}>
+                              <span class="absolute left-0 top-2 bottom-2 w-[2px] rounded-full bg-primary" aria-hidden="true" />
+                            </Show>
+                            <span class="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center">
+                              {item.icon}
+                            </span>
+                            <span class="min-w-0 flex-1 text-left">
+                              <span class="flex min-w-0 items-center gap-1.5">
+                                <span class="truncate text-xs font-semibold">{item.label}</span>
+                                <span class="shrink-0 rounded border border-sidebar-border/80 bg-sidebar/35 px-1 py-[1px] text-[9px] leading-none text-muted-foreground/80">{index() + 1}</span>
+                              </span>
+                              <Show when={item.workingDir}>
+                                <span class="mt-1 block truncate text-[10px] leading-4 text-muted-foreground/70">{item.workingDir}</span>
+                              </Show>
+                            </span>
+                          </button>
+                          <Show when={item.closable}>
+                            <button
+                              type="button"
+                              class="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded text-[11px] text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-error/10 hover:text-error focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
+                              data-testid={`close-session-${item.id}`}
+                              aria-label={`${i18n.t('terminal.close')} ${item.label}`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                closeSession(item.id);
+                              }}
+                            >
+                              <X class="h-3 w-3" />
+                            </button>
+                          </Show>
+                        </div>
+                      );
+                    }}
+                  </For>
+                  </SidebarItemList>
+                </div>
+              </SidebarSection>
+            </SidebarContent>
+          </Sidebar>
+
+          <div class="min-w-0 min-h-0 flex flex-1 flex-col">
+            <div class="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background/90 px-2">
+              <div class="flex min-w-0 flex-1 items-center gap-2">
+                <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground">
+                  <Terminal class="h-3.5 w-3.5" />
+                </div>
+                <div class="min-w-0">
+                  <div class="truncate text-xs font-semibold text-foreground">{activeToolbarTitle()}</div>
+                  <Show when={activeToolbarSubtitle()}>
+                    <div class="truncate text-[10px] leading-3 text-muted-foreground">{activeToolbarSubtitle()}</div>
+                  </Show>
+                </div>
+              </div>
+              <Button size="sm" variant="ghost" onClick={clearActive} disabled={!connected() || !activeSessionId()} title={i18n.t('terminal.clear')}>
+                <Trash class="w-3.5 h-3.5" />
+              </Button>
+              <Dropdown
+                trigger={
+                  <Button size="sm" variant="ghost" disabled={!connected()} title={i18n.t('terminal.moreOptions')}>
+                    <MoreVerticalIcon class="w-3.5 h-3.5" />
+                  </Button>
+                }
+                items={moreItems()}
+                onSelect={handleMoreSelect}
+                align="end"
+              />
+            </div>
+
             <div
-              class="redeven-terminal-work-indicator"
+              ref={setTerminalContextMenuHostEl}
+              data-testid="terminal-content"
               data-terminal-work-state={terminalWorkIndicatorState()}
               data-terminal-work-theme={terminalWorkIndicatorTheme()}
-              style={{
-                '--redeven-terminal-work-indicator-size': `${terminalWorkIndicatorThicknessPx()}px`,
-              }}
-              aria-hidden="true"
-            />
-          </Show>
-          <Show when={searchOpen()}>
-            <div class="absolute top-2 right-2 z-20 flex items-center gap-1 rounded-md border border-white/15 bg-[#0b0f14]/95 px-2 py-1 shadow-md backdrop-blur">
-              <Input
-                ref={(n) => (searchInputEl = n)}
-                size="sm"
-                value={searchQuery()}
-                placeholder={i18n.t('terminal.searchPlaceholder')}
-                class="w-[220px] bg-black/20 border-white/20 text-[#e5e7eb] placeholder:text-[#94a3b8] focus:ring-yellow-400 focus:border-yellow-400 shadow-none"
-                onInput={(e) => setSearchQuery(e.currentTarget.value)}
-              />
-              <div class="text-[10px] text-[#94a3b8] tabular-nums min-w-[54px] text-right">
-                {searchResultCount() <= 0 || searchResultIndex() < 0 ? '0/0' : `${searchResultIndex() + 1}/${searchResultCount()}`}
-              </div>
-              <Button
-                size="sm"
-                variant="ghost"
-                class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
-                onClick={goPrevMatch}
-                disabled={searchResultCount() <= 0}
-                title={i18n.t('terminal.previous')}
-              >
-                {i18n.t('terminal.previousShort')}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
-                onClick={goNextMatch}
-                disabled={searchResultCount() <= 0}
-                title={i18n.t('terminal.next')}
-              >
-                {i18n.t('terminal.next')}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
-                onClick={closeSearch}
-                title={i18n.t('terminal.close')}
-              >
-                {i18n.t('terminal.close')}
-              </Button>
-            </div>
-          </Show>
-          <Show when={sessions().length > 0 || visiblePendingTerminalSessions().length > 0}>
-            <div class="h-full">
-              <For each={sessionPanelIds()}>
-                {(sessionId) => {
-                  const sessionForId = createMemo(() => renderableSessions().find((session) => session.id === sessionId) ?? null);
-                  const mountedSessionForId = createMemo(() => (
-                    mountedSessionIds().has(sessionId) ? sessionForId() : null
-                  ));
-                  return (
-                    <Show when={mountedSessionForId()}>
-                      {/* Keep TerminalSessionView identity tied to sessionId; metadata snapshots may replace session objects. */}
-                      <TabPanel active={activeDisplaySessionId() === sessionId} keepMounted class="h-full">
-                        <TerminalSessionView
-                          session={mountedSessionForId() as TerminalSessionInfo}
-                          variant={variant}
-                          active={() => activeDisplaySessionId() === sessionId}
-                          connected={connected}
-                          protocolClient={() => protocol.client()}
-                          viewActive={viewActive}
-                          autoFocus={shouldAutoFocus}
-                          themeColors={terminalThemeColors}
-                          fontSize={fontSize}
-                          fontFamily={fontFamily}
-                          agentHomePathAbs={agentHomePathAbs}
-                          canOpenFilePreview={canBrowseFiles}
-                          bottomInsetPx={terminalViewportInsetPx}
-                          connId={connId}
-                          transport={transport}
-                          eventSource={eventSource}
-                          registerCore={registerCore}
-                          registerSurfaceElement={registerSurfaceElement}
-                          registerActions={registerActions}
-                          onSurfaceClick={handleWorkbenchTerminalSurfaceClick}
-                          onBell={handleSessionBell}
-                          onShellIntegrationEvent={handleShellIntegrationEvent}
-                          onVisibleOutput={handleVisibleOutput}
-                          onTerminalFileLinkOpen={openTerminalFileLinkTarget}
-                          onNameUpdate={handleNameUpdate}
-                        />
-                      </TabPanel>
-                    </Show>
-                  );
-                }}
-              </For>
-              <Show when={activeUnmountedSession()}>
-                <TabPanel active keepMounted class="h-full">
-                  <div
-                    class="h-full min-h-0 relative overflow-hidden redeven-terminal-surface"
-                    data-terminal-deferred-surface="true"
-                    style={{
-                      'background-color': terminalThemeBackground(),
-                      color: terminalThemeForeground(),
-                      ...terminalLoadingVars(),
-                    }}
-                  >
-                    <TerminalLoadingPane
-                      message={i18n.t('terminal.initializing')}
-                      progressLabel={i18n.t('terminal.initializing')}
-                      dataStage="initializing"
-                    />
-                  </div>
-                </TabPanel>
+              class="flex-1 min-h-0 relative"
+              style={terminalLoadingVars()}
+            >
+              <Show when={workIndicatorEnabled()}>
+                <div
+                  class="redeven-terminal-work-indicator"
+                  data-terminal-work-state={terminalWorkIndicatorState()}
+                  data-terminal-work-theme={terminalWorkIndicatorTheme()}
+                  style={{
+                    '--redeven-terminal-work-indicator-size': `${terminalWorkIndicatorThicknessPx()}px`,
+                  }}
+                  aria-hidden="true"
+                />
               </Show>
-              <Index each={visiblePendingTerminalSessions()}>
-                {(session) => (
-                  <TabPanel active={activeDisplaySessionId() === session().id} keepMounted class="h-full">
-                    <div
-                      class="h-full min-h-0 relative overflow-hidden redeven-terminal-surface"
-                      data-terminal-pending-surface="true"
-                      style={{
-                        'background-color': terminalThemeBackground(),
-                        color: terminalThemeForeground(),
-                        ...terminalLoadingVars(),
-                      }}
-                    >
-                      <Show
-                        when={session().status === 'failed'}
-                        fallback={<TerminalCreatingPane />}
+              <Show when={searchOpen()}>
+                <div class="absolute top-2 right-2 z-20 flex items-center gap-1 rounded-md border border-white/15 bg-[#0b0f14]/95 px-2 py-1 shadow-md backdrop-blur">
+                  <Input
+                    ref={(n) => (searchInputEl = n)}
+                    size="sm"
+                    value={searchQuery()}
+                    placeholder={i18n.t('terminal.searchPlaceholder')}
+                    class="w-[220px] bg-black/20 border-white/20 text-[#e5e7eb] placeholder:text-[#94a3b8] focus:ring-yellow-400 focus:border-yellow-400 shadow-none"
+                    onInput={(e) => setSearchQuery(e.currentTarget.value)}
+                  />
+                  <div class="text-[10px] text-[#94a3b8] tabular-nums min-w-[54px] text-right">
+                    {searchResultCount() <= 0 || searchResultIndex() < 0 ? '0/0' : `${searchResultIndex() + 1}/${searchResultCount()}`}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
+                    onClick={goPrevMatch}
+                    disabled={searchResultCount() <= 0}
+                    title={i18n.t('terminal.previous')}
+                  >
+                    {i18n.t('terminal.previousShort')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
+                    onClick={goNextMatch}
+                    disabled={searchResultCount() <= 0}
+                    title={i18n.t('terminal.next')}
+                  >
+                    {i18n.t('terminal.next')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
+                    onClick={closeSearch}
+                    title={i18n.t('terminal.close')}
+                  >
+                    {i18n.t('terminal.close')}
+                  </Button>
+                </div>
+              </Show>
+              <Show when={sessions().length > 0 || visiblePendingTerminalSessions().length > 0}>
+                <div class="h-full">
+                  <For each={sessionPanelIds()}>
+                    {(sessionId) => {
+                      const sessionForId = createMemo(() => renderableSessions().find((session) => session.id === sessionId) ?? null);
+                      const mountedSessionForId = createMemo(() => (
+                        mountedSessionIds().has(sessionId) ? sessionForId() : null
+                      ));
+                      return (
+                        <Show when={mountedSessionForId()}>
+                          {/* Keep TerminalSessionView identity tied to sessionId; metadata snapshots may replace session objects. */}
+                          <TabPanel active={activeDisplaySessionId() === sessionId} keepMounted class="h-full">
+                            <TerminalSessionView
+                              session={mountedSessionForId() as TerminalSessionInfo}
+                              variant={variant}
+                              active={() => activeDisplaySessionId() === sessionId}
+                              connected={connected}
+                              protocolClient={() => protocol.client()}
+                              viewActive={viewActive}
+                              autoFocus={shouldAutoFocus}
+                              themeColors={terminalThemeColors}
+                              fontSize={fontSize}
+                              fontFamily={fontFamily}
+                              agentHomePathAbs={agentHomePathAbs}
+                              canOpenFilePreview={canBrowseFiles}
+                              bottomInsetPx={terminalViewportInsetPx}
+                              connId={connId}
+                              transport={transport}
+                              eventSource={eventSource}
+                              registerCore={registerCore}
+                              registerSurfaceElement={registerSurfaceElement}
+                              registerActions={registerActions}
+                              onSurfaceClick={handleWorkbenchTerminalSurfaceClick}
+                              onBell={handleSessionBell}
+                              onShellIntegrationEvent={handleShellIntegrationEvent}
+                              onVisibleOutput={handleVisibleOutput}
+                              onTerminalFileLinkOpen={openTerminalFileLinkTarget}
+                              onNameUpdate={handleNameUpdate}
+                            />
+                          </TabPanel>
+                        </Show>
+                      );
+                    }}
+                  </For>
+                  <Show when={activeUnmountedSession()}>
+                    <TabPanel active keepMounted class="h-full">
+                      <div
+                        class="h-full min-h-0 relative overflow-hidden redeven-terminal-surface"
+                        data-terminal-deferred-surface="true"
+                        style={{
+                          'background-color': terminalThemeBackground(),
+                          color: terminalThemeForeground(),
+                          ...terminalLoadingVars(),
+                        }}
                       >
-                        <div class="absolute inset-0 flex items-center justify-center p-8">
-                          <div class="max-w-sm text-center flex flex-col items-center gap-3">
-                            <PendingTerminalTabStatusIcon status="failed" />
-                            <div class="text-sm font-medium">{i18n.t('terminal.creationFailed')}</div>
-                            <div class="text-xs break-words" style={{ color: terminalThemeMutedForeground() }}>
-                              {session().errorMessage || i18n.t('terminal.creationFailedMessage')}
+                        <TerminalLoadingPane
+                          message={i18n.t('terminal.initializing')}
+                          progressLabel={i18n.t('terminal.initializing')}
+                          dataStage="initializing"
+                        />
+                      </div>
+                    </TabPanel>
+                  </Show>
+                  <Index each={visiblePendingTerminalSessions()}>
+                    {(session) => (
+                      <TabPanel active={activeDisplaySessionId() === session().id} keepMounted class="h-full">
+                        <div
+                          class="h-full min-h-0 relative overflow-hidden redeven-terminal-surface"
+                          data-terminal-pending-surface="true"
+                          style={{
+                            'background-color': terminalThemeBackground(),
+                            color: terminalThemeForeground(),
+                            ...terminalLoadingVars(),
+                          }}
+                        >
+                          <Show
+                            when={session().status === 'failed'}
+                            fallback={<TerminalCreatingPane />}
+                          >
+                            <div class="absolute inset-0 flex items-center justify-center p-8">
+                              <div class="max-w-sm text-center flex flex-col items-center gap-3">
+                                <PendingTerminalTabStatusIcon status="failed" />
+                                <div class="text-sm font-medium">{i18n.t('terminal.creationFailed')}</div>
+                                <div class="text-xs break-words" style={{ color: terminalThemeMutedForeground() }}>
+                                  {session().errorMessage || i18n.t('terminal.creationFailedMessage')}
+                                </div>
+                                <div class="flex items-center justify-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="primary"
+                                    onClick={() => {
+                                      const failedSession = session();
+                                      removePendingSession(failedSession.id);
+                                      void beginCreateSession(failedSession.name, failedSession.workingDir);
+                                    }}
+                                    disabled={!connected()}
+                                  >
+                                    {i18n.t('terminal.retry')}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => removePendingSession(session().id)}
+                                  >
+                                    {i18n.t('terminal.dismiss')}
+                                  </Button>
+                                </div>
+                              </div>
                             </div>
-                            <div class="flex items-center justify-center gap-2">
-                              <Button
-                                size="sm"
-                                variant="primary"
-                                onClick={() => {
-                                  const failedSession = session();
-                                  removePendingSession(failedSession.id);
-                                  void beginCreateSession(failedSession.name, failedSession.workingDir);
-                                }}
-                                disabled={!connected()}
-                              >
-                                {i18n.t('terminal.retry')}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => removePendingSession(session().id)}
-                              >
-                                {i18n.t('terminal.dismiss')}
-                              </Button>
-                            </div>
-                          </div>
+                          </Show>
                         </div>
-                      </Show>
+                      </TabPanel>
+                    )}
+                  </Index>
+                </div>
+              </Show>
+
+              <Show when={emptySessionListLoading()}>
+                <TerminalLoadingPane
+                  message={i18n.t('terminal.loadingSessions')}
+                  progressLabel={i18n.t('terminal.loadingSessions')}
+                  dataStage="sessions"
+                  tone="system"
+                />
+              </Show>
+
+              <Show when={sessionsHydrated() && !sessionsLoading() && sessions().length === 0 && visiblePendingTerminalSessions().length === 0}>
+                <div class="absolute inset-0 flex items-center justify-center p-8">
+                  <div class="max-w-sm text-center flex flex-col items-center gap-4">
+                    <div class="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                      <Terminal class="w-5 h-5 text-muted-foreground" />
                     </div>
-                  </TabPanel>
-                )}
-              </Index>
+                    <div class="text-sm font-medium text-foreground">{i18n.t('terminal.noSessionsTitle')}</div>
+                    <div class="text-xs text-muted-foreground">
+                      {i18n.t('terminal.noSessionsDescription')}
+                    </div>
+                    <Button
+                      size="lg"
+                      variant="primary"
+                      onClick={createSession}
+                      disabled={!connected()}
+                    >
+                      {i18n.t('terminal.createSession')}
+                    </Button>
+                  </div>
+                </div>
+              </Show>
             </div>
-          </Show>
 
-          <Show when={emptySessionListLoading()}>
-            <TerminalLoadingPane
-              message={i18n.t('terminal.loadingSessions')}
-              progressLabel={i18n.t('terminal.loadingSessions')}
-              dataStage="sessions"
-              tone="system"
+            <TerminalSettingsDialog
+              open={settingsOpen()}
+              userTheme={userTheme()}
+              fontSize={fontSize()}
+              fontFamilyId={fontFamilyId()}
+              mobileInputMode={mobileInputMode()}
+              workIndicatorEnabled={workIndicatorEnabled()}
+              fontScope={sharedGeometryPreferences() ? 'shared-workbench' : 'local'}
+              minFontSize={TERMINAL_MIN_FONT_SIZE}
+              maxFontSize={TERMINAL_MAX_FONT_SIZE}
+              onOpenChange={handleSettingsOpenChange}
+              onThemeChange={handleThemeChange}
+              onFontSizeChange={persistFontSize}
+              onFontFamilyChange={persistFontFamily}
+              onMobileInputModeChange={(value) => handleMobileInputModeChange(value, { focusTerminal: false })}
+              onWorkIndicatorEnabledChange={terminalPrefs.setWorkIndicatorEnabled}
             />
-          </Show>
 
-          <Show when={sessionsHydrated() && !sessionsLoading() && sessions().length === 0 && visiblePendingTerminalSessions().length === 0}>
-            <div class="absolute inset-0 flex items-center justify-center p-8">
-              <div class="max-w-sm text-center flex flex-col items-center gap-4">
-                <div class="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                  <Terminal class="w-5 h-5 text-muted-foreground" />
-                </div>
-                <div class="text-sm font-medium text-foreground">{i18n.t('terminal.noSessionsTitle')}</div>
-                <div class="text-xs text-muted-foreground">
-                  {i18n.t('terminal.noSessionsDescription')}
-                </div>
-                <Button
-                  size="lg"
-                  variant="primary"
-                  onClick={createSession}
-                  disabled={!connected()}
-                >
-                  {i18n.t('terminal.createSession')}
-                </Button>
+            <Show when={error()}>
+              <div class="p-2 text-[11px] text-error border-t border-border bg-background/80 break-words">{error()}</div>
+            </Show>
+            <Show when={showTerminalStatusBar()}>
+              <div data-testid="terminal-status-bar" class="flex items-center justify-between px-3 py-1 border-t border-border text-[10px] text-muted-foreground">
+                <span>{i18n.t('terminal.statusSession')}: {statusBarSessionLabel()}</span>
+                <span>{i18n.t('terminal.statusHistory')}: {historyBytes() === null ? '-' : formatBytes(historyBytes() ?? 0)}</span>
               </div>
-            </div>
-          </Show>
+            </Show>
+          </div>
         </div>
       </Show>
 
@@ -4051,34 +4175,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           onSuggestionSelect={handleMobileKeyboardSuggestionSelect}
           onDismiss={() => setMobileKeyboardVisible(false)}
         />
-      </Show>
-
-      <TerminalSettingsDialog
-        open={settingsOpen()}
-        userTheme={userTheme()}
-        fontSize={fontSize()}
-        fontFamilyId={fontFamilyId()}
-        mobileInputMode={mobileInputMode()}
-        workIndicatorEnabled={workIndicatorEnabled()}
-        fontScope={sharedGeometryPreferences() ? 'shared-workbench' : 'local'}
-        minFontSize={TERMINAL_MIN_FONT_SIZE}
-        maxFontSize={TERMINAL_MAX_FONT_SIZE}
-        onOpenChange={handleSettingsOpenChange}
-        onThemeChange={handleThemeChange}
-        onFontSizeChange={persistFontSize}
-        onFontFamilyChange={persistFontFamily}
-        onMobileInputModeChange={(value) => handleMobileInputModeChange(value, { focusTerminal: false })}
-        onWorkIndicatorEnabledChange={terminalPrefs.setWorkIndicatorEnabled}
-      />
-
-      <Show when={error()}>
-        <div class="p-2 text-[11px] text-error border-t border-border bg-background/80 break-words">{error()}</div>
-      </Show>
-      <Show when={showTerminalStatusBar()}>
-        <div data-testid="terminal-status-bar" class="flex items-center justify-between px-3 py-1 border-t border-border text-[10px] text-muted-foreground">
-          <span>{i18n.t('terminal.statusSession')}: {statusBarSessionLabel()}</span>
-          <span>{i18n.t('terminal.statusHistory')}: {historyBytes() === null ? '-' : formatBytes(historyBytes() ?? 0)}</span>
-        </div>
       </Show>
     </div>
   );
