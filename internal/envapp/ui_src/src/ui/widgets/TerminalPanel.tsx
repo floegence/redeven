@@ -1660,6 +1660,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [sessionsLoading, setSessionsLoading] = createSignal(false);
   const [localActiveSessionId, setLocalActiveSessionId] = createSignal<string | null>(readActiveSessionId(activeSessionStorageKey));
   const [localActivePendingSessionId, setLocalActivePendingSessionId] = createSignal<string | null>(null);
+  const [optimisticActiveDisplaySessionId, setOptimisticActiveDisplaySessionId] = createSignal<string | null>(null);
   const [mountedSessionIds, setMountedSessionIds] = createSignal<Set<string>>(new Set());
   const [scheduledMountSessionIds, setScheduledMountSessionIds] = createSignal<Set<string>>(new Set());
   const [retainedClosingSessions, setRetainedClosingSessions] = createSignal<Record<string, TerminalSessionInfo>>({});
@@ -1691,6 +1692,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const mobileKeyboardPathCache = new Map<string, TerminalMobileKeyboardPathEntry[]>();
   const mobileKeyboardPackageScriptsCache = new Map<string, TerminalMobileKeyboardScript[]>();
   const deferredInitialMountSessionIds = new Set<string>();
+  const scheduledMountSelectionEpochs = new Map<string, number>();
+  let activeDisplaySelectionEpoch = 0;
+  const selectOptimisticActiveDisplaySessionId = (sessionId: string | null) => {
+    const normalizedSessionId = String(sessionId ?? '').trim() || null;
+    if (activeDisplaySessionId() !== normalizedSessionId) {
+      activeDisplaySelectionEpoch += 1;
+    }
+    setOptimisticActiveDisplaySessionId(normalizedSessionId);
+  };
   const tabActivityTracker = createTerminalTabActivityTracker({
     publishVisualState: (sessionId, state) => {
       setTabVisualStateBySession((prev) => {
@@ -1809,7 +1819,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return visiblePendingTerminalSessions().find((session) => session.id === normalizedSessionId) ?? null;
   };
 
-  const activeDisplaySessionId = createMemo<string | null>(() => {
+  const sessionDisplayIdExists = (sessionId: string | null): boolean => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) return false;
+    return sessions().some((session) => session.id === normalizedSessionId)
+      || visiblePendingTerminalSessionById(normalizedSessionId) !== null;
+  };
+
+  const canonicalActiveDisplaySessionId = createMemo<string | null>(() => {
     const activePendingId = localActivePendingSessionId();
     if (activePendingId) {
       const resolved = resolvedPendingTerminalSessionByPendingId(activePendingId);
@@ -1828,9 +1845,47 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return localActiveSessionId();
   });
 
+  const activeDisplaySessionId = createMemo<string | null>(() => {
+    const optimisticActiveId = optimisticActiveDisplaySessionId();
+    if (optimisticActiveId && sessionDisplayIdExists(optimisticActiveId)) {
+      return optimisticActiveId;
+    }
+
+    return canonicalActiveDisplaySessionId();
+  });
+
+  createEffect(() => {
+    const optimisticActiveId = optimisticActiveDisplaySessionId();
+    if (!optimisticActiveId) return;
+    if (canonicalActiveDisplaySessionId() === optimisticActiveId || !sessionDisplayIdExists(optimisticActiveId)) {
+      setOptimisticActiveDisplaySessionId(null);
+    }
+  });
+
   const activeSessionId = createMemo<string | null>(() => {
     const activeId = activeDisplaySessionId();
     return activeId && !visiblePendingTerminalSessionById(activeId) ? activeId : null;
+  });
+
+  createEffect(() => {
+    const activeId = activeSessionId();
+    for (const scheduledSessionId of [...scheduledMountSelectionEpochs.keys()]) {
+      if (scheduledSessionId !== activeId) {
+        scheduledMountSelectionEpochs.delete(scheduledSessionId);
+      }
+    }
+    setScheduledMountSessionIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const scheduledSessionId of prev) {
+        if (scheduledSessionId === activeId) {
+          next.add(scheduledSessionId);
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
   });
 
   const activePendingSession = createMemo<pending_terminal_session | null>(() => {
@@ -1883,6 +1938,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const normalizedSessionId = String(sessionId ?? '').trim();
     if (!normalizedSessionId) return;
     if (mountedSessionIds().has(normalizedSessionId)) return;
+    const selectionEpoch = activeDisplaySelectionEpoch;
+    scheduledMountSelectionEpochs.set(normalizedSessionId, selectionEpoch);
     if (scheduledMountSessionIds().has(normalizedSessionId)) return;
 
     setScheduledMountSessionIds((prev) => {
@@ -1893,6 +1950,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
 
     void waitForTerminalUiPaint().then(() => {
+      const scheduledSelectionEpoch = scheduledMountSelectionEpochs.get(normalizedSessionId);
+      scheduledMountSelectionEpochs.delete(normalizedSessionId);
       setScheduledMountSessionIds((prev) => {
         if (!prev.has(normalizedSessionId)) return prev;
         const next = new Set(prev);
@@ -1900,6 +1959,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         return next;
       });
       if (disposed) return;
+      if (scheduledSelectionEpoch !== activeDisplaySelectionEpoch) return;
       if (activeSessionId() !== normalizedSessionId) return;
       if (!sessions().some((session) => session.id === normalizedSessionId)) return;
       markSessionMounted(normalizedSessionId);
@@ -1952,6 +2012,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const activateResolvedPendingSession = (resolved: resolved_pending_terminal_session) => {
     deferInitialSessionMount(resolved.sessionId);
     ensureSessionInGroup(resolved.sessionId);
+    selectOptimisticActiveDisplaySessionId(resolved.sessionId);
     setActiveRealSessionId(resolved.sessionId);
   };
 
@@ -1976,6 +2037,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const setActiveSessionId = (value: string | null) => {
     const normalizedValue = String(value ?? '').trim() || null;
+    selectOptimisticActiveDisplaySessionId(normalizedValue);
     if (normalizedValue && pendingTerminalSessionById(normalizedValue)) {
       const resolved = resolvedPendingTerminalSessionByPendingId(normalizedValue);
       if (resolved) {
@@ -2628,6 +2690,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     batch(() => {
       setPendingTerminalSessions((previous) => [...previous, pendingSession]);
       setLocalActivePendingSessionId(pendingSession.id);
+      selectOptimisticActiveDisplaySessionId(pendingSession.id);
     });
     return pendingSession;
   };
@@ -3694,9 +3757,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             showAdd={connected()}
             closable
             features={{
-              indicator: { mode: 'slider', thicknessPx: 2, colorToken: 'primary', animated: true },
+              indicator: { mode: 'activeBorder', thicknessPx: 2, colorToken: 'primary', animated: false },
               closeButton: { enabledByDefault: true, dangerHover: true },
               addButton: { enabled: connected() },
+            }}
+            slotClassNames={{
+              tab: 'transition-none duration-0',
+              tabActive: 'transition-none duration-0',
+              tabInactive: 'transition-none duration-0',
+              indicator: 'transition-none duration-0',
             }}
             class="flex-1 min-w-0"
           />

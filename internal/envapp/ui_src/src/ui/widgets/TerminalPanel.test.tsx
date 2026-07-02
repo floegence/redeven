@@ -447,10 +447,25 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     );
   },
   Tabs: (props: any) => (
-    <div>
+    <div
+      data-testid="mock-tabs"
+      data-indicator-mode={props.features?.indicator?.mode ?? ''}
+      data-indicator-animated={String(props.features?.indicator?.animated ?? '')}
+      data-tab-class={props.slotClassNames?.tab ?? ''}
+      data-tab-active-class={props.slotClassNames?.tabActive ?? ''}
+      data-tab-inactive-class={props.slotClassNames?.tabInactive ?? ''}
+      data-indicator-class={props.slotClassNames?.indicator ?? ''}
+    >
       {props.items.map((item: any) => (
         <span>
-          <button type="button" onClick={() => props.onChange?.(item.id)}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={props.activeId === item.id ? 'true' : 'false'}
+            data-terminal-tab-id={item.id}
+            data-terminal-tab-active={props.activeId === item.id ? 'true' : 'false'}
+            onClick={() => props.onChange?.(item.id)}
+          >
             {item.icon}
             {item.label}
           </button>
@@ -852,6 +867,14 @@ function findTerminalTabs(host: HTMLElement, label: string): HTMLButtonElement[]
   return Array.from(host.querySelectorAll('button')).filter((button) => button.textContent?.includes(label)) as HTMLButtonElement[];
 }
 
+function findActiveTerminalTab(host: HTMLElement): HTMLButtonElement | null {
+  return host.querySelector('button[role="tab"][aria-selected="true"]') as HTMLButtonElement | null;
+}
+
+function findTerminalTabsRoot(host: HTMLElement): HTMLElement | null {
+  return host.querySelector('[data-testid="mock-tabs"]') as HTMLElement | null;
+}
+
 function findTerminalTabStatus(host: HTMLElement, label: string, status: 'running' | 'unread' | 'none'): Element | null {
   return findTerminalTab(host, label)?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
@@ -916,6 +939,7 @@ describe('TerminalPanel', () => {
     widgetState.currentWidgetId = null;
     viewActivationState.missing = false;
     viewActivationState.active = true;
+    sessionStorage.clear();
     focusSpy.mockClear();
     forceResizeSpy.mockClear();
     scrollLinesSpy.mockClear();
@@ -1611,6 +1635,12 @@ describe('TerminalPanel', () => {
     const closeButton = host.querySelector('[data-testid="close-tab-session-2"]') as HTMLButtonElement | null;
     expect(closeButton).toBeTruthy();
     closeButton?.click();
+
+    expect(findTerminalTab(host, 'Terminal 2')).toBeUndefined();
+    expect(findTerminalTab(host, 'Terminal 1')?.getAttribute('aria-selected')).toBe('true');
+    expect(sessionOperations.deleteSession).not.toHaveBeenCalled();
+    expect(mountedSecondCore?.dispose).not.toHaveBeenCalled();
+
     await settleTerminalPanel();
 
     expect(sessionOperations.deleteSession).not.toHaveBeenCalled();
@@ -1734,9 +1764,15 @@ describe('TerminalPanel', () => {
     expect(addButton).toBeTruthy();
 
     addButton?.click();
+
+    expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
+    expect(findTerminalTab(host, 'Terminal 2')?.getAttribute('aria-selected')).toBe('true');
+    expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
+
     await settleTerminalPanelMicrotasks();
 
     expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
+    expect(findTerminalTab(host, 'Terminal 2')?.getAttribute('aria-selected')).toBe('true');
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).not.toBeNull();
     expect(host.textContent).toContain('Creating terminal...');
     const pendingSurface = host.querySelector('[data-terminal-pending-surface="true"]') as HTMLElement | null;
@@ -1774,6 +1810,7 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
+    expect(findTerminalTab(host, 'Terminal 2')?.getAttribute('aria-selected')).toBe('true');
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
     expect(host.querySelector('[data-testid="close-tab-session-2"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-2');
@@ -3163,6 +3200,22 @@ describe('TerminalPanel', () => {
     expect(searchInput).toBeTruthy();
   });
 
+  it('uses an instant active-border indicator for terminal tabs', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const tabsRoot = findTerminalTabsRoot(host);
+    expect(tabsRoot?.dataset.indicatorMode).toBe('activeBorder');
+    expect(tabsRoot?.dataset.indicatorAnimated).toBe('false');
+    expect(tabsRoot?.dataset.tabClass).toContain('transition-none');
+    expect(tabsRoot?.dataset.tabActiveClass).toContain('transition-none');
+    expect(tabsRoot?.dataset.tabInactiveClass).toContain('transition-none');
+    expect(tabsRoot?.dataset.indicatorClass).toContain('transition-none');
+  });
+
   it('switches terminal tabs with the platform primary digit shortcut', async () => {
     terminalSessionsState.sessions = [
       {
@@ -3197,9 +3250,15 @@ describe('TerminalPanel', () => {
       ctrlKey: true,
       key: '2',
     });
+
+    expect(findTerminalTab(host, 'Terminal 2')?.getAttribute('aria-selected')).toBe('true');
+    expect(findActiveTerminalTab(host)?.textContent).toContain('Terminal 2');
+    expect(terminalCoreInstances).toHaveLength(1);
+
     await settleTerminalPanel();
 
     expect(event.defaultPrevented).toBe(true);
+    expect(findTerminalTab(host, 'Terminal 2')?.getAttribute('aria-selected')).toBe('true');
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-2');
     expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeTruthy();
     expect(terminalCoreInstances).toHaveLength(1);
@@ -3209,6 +3268,71 @@ describe('TerminalPanel', () => {
 
     expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeNull();
     expect(terminalCoreInstances).toHaveLength(2);
+  });
+
+  it('keeps rapid terminal digit shortcuts visually on the final tab without mounting skipped tabs', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+      {
+        id: 'session-3',
+        name: 'Terminal 3',
+        workingDir: '/workspace/logs',
+        createdAtMs: 3,
+        isActive: false,
+        lastActiveAtMs: 3,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+    expect(terminalCoreInstances).toHaveLength(1);
+
+    const secondEvent = dispatchTerminalKeydown(terminalSurface!, {
+      ctrlKey: true,
+      key: '2',
+    });
+    const thirdEvent = dispatchTerminalKeydown(terminalSurface!, {
+      ctrlKey: true,
+      key: '3',
+    });
+    const firstEvent = dispatchTerminalKeydown(terminalSurface!, {
+      ctrlKey: true,
+      key: '1',
+    });
+
+    expect(secondEvent.defaultPrevented).toBe(true);
+    expect(thirdEvent.defaultPrevented).toBe(true);
+    expect(firstEvent.defaultPrevented).toBe(true);
+    expect(findTerminalTab(host, 'Terminal 1')?.getAttribute('aria-selected')).toBe('true');
+    expect(findActiveTerminalTab(host)?.textContent).toContain('Terminal 1');
+    expect(terminalCoreInstances).toHaveLength(1);
+
+    await settleTerminalPanelAfterPaint();
+
+    expect(findTerminalTab(host, 'Terminal 1')?.getAttribute('aria-selected')).toBe('true');
+    expect(terminalCoreInstances).toHaveLength(1);
+    expect(transportMocks.attach.mock.calls.every((call) => call[0] !== 'session-2' && call[0] !== 'session-3')).toBe(true);
   });
 
   it('does not prevent default for terminal digit shortcuts outside the visible tab range', async () => {
@@ -3269,6 +3393,112 @@ describe('TerminalPanel', () => {
 
     expect(event.defaultPrevented).toBe(false);
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-1');
+  });
+
+  it('keeps controlled workbench tab visuals instant while parent group state catches up', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+      {
+        id: 'session-3',
+        name: 'Terminal 3',
+        workingDir: '/workspace/logs',
+        createdAtMs: 3,
+        isActive: false,
+        lastActiveAtMs: 3,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const groupStateSpy = vi.fn();
+    let applyLatestPanelAState: () => void = () => {
+      throw new Error('Panel A state applier was not initialized');
+    };
+
+    render(() => (
+      (() => {
+        const [groupA, setGroupA] = createSignal({
+          sessionIds: ['session-1', 'session-2'],
+          activeSessionId: 'session-1' as string | null,
+        });
+        const [groupB, setGroupB] = createSignal({
+          sessionIds: ['session-3'],
+          activeSessionId: 'session-3' as string | null,
+        });
+
+        applyLatestPanelAState = () => {
+          const calls = groupStateSpy.mock.calls;
+          const next = calls[calls.length - 1]?.[0];
+          if (next) setGroupA(next);
+        };
+
+        return (
+          <>
+            <div data-testid="terminal-panel-a">
+              <TerminalPanel
+                variant="workbench"
+                sessionGroupState={groupA()}
+                onSessionGroupStateChange={(next) => {
+                  groupStateSpy(next);
+                }}
+              />
+            </div>
+            <div data-testid="terminal-panel-b">
+              <TerminalPanel
+                variant="workbench"
+                sessionGroupState={groupB()}
+                onSessionGroupStateChange={setGroupB}
+              />
+            </div>
+          </>
+        );
+      })()
+    ), host);
+    await settleTerminalPanel();
+
+    const panelA = host.querySelector('[data-testid="terminal-panel-a"]') as HTMLElement | null;
+    const panelB = host.querySelector('[data-testid="terminal-panel-b"]') as HTMLElement | null;
+    expect(panelA).toBeTruthy();
+    expect(panelB).toBeTruthy();
+    expect(findActiveTerminalTab(panelA!)?.textContent).toContain('Terminal 1');
+    expect(findActiveTerminalTab(panelB!)?.textContent).toContain('Terminal 3');
+
+    const terminalSurface = panelA?.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    const event = dispatchTerminalKeydown(terminalSurface!, {
+      ctrlKey: true,
+      key: '2',
+    });
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(groupStateSpy).toHaveBeenLastCalledWith({
+      sessionIds: ['session-1', 'session-2'],
+      activeSessionId: 'session-2',
+    });
+    expect(findActiveTerminalTab(panelA!)?.textContent).toContain('Terminal 2');
+    expect(findActiveTerminalTab(panelB!)?.textContent).toContain('Terminal 3');
+
+    applyLatestPanelAState();
+    await settleTerminalPanel();
+
+    expect(findActiveTerminalTab(panelA!)?.textContent).toContain('Terminal 2');
+    expect(findActiveTerminalTab(panelB!)?.textContent).toContain('Terminal 3');
   });
 
   it('keeps terminal digit shortcuts scoped to the owning workbench terminal panel', async () => {
