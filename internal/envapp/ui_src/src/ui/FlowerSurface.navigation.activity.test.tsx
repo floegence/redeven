@@ -18,6 +18,7 @@ import {
   activityTimeline,
   adapter,
   deferred,
+  flowerSurfaceNotifications,
   inputRequest,
   liveBootstrap,
   modelIOStatus,
@@ -2040,7 +2041,12 @@ describe('FlowerSurface navigation activity', () => {
 
     await waitFor(() => submitApproval.mock.calls.length === 1);
     await waitFor(() => loadThread.mock.calls.length >= 2);
-    expect(runtime.textContent).toContain('approval no longer pending');
+    expect(flowerSurfaceNotifications()).toContainEqual(expect.objectContaining({
+      tone: 'error',
+      title: 'Flower could not send.',
+      message: 'approval no longer pending',
+    }));
+    expect(runtime.querySelector('.flower-composer-error')).toBeNull();
     await waitFor(() => runtime.querySelector('[data-flower-approval-action-id="appr-stale"]') === null);
   });
 

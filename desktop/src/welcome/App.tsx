@@ -6173,6 +6173,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),
               onSettingsChanged: refreshSnapshot,
             })}
+            notify={(notice) => {
+              showActionToast(notice.message, notice.tone, {
+                ...(notice.title ? { title: notice.title } : {}),
+              });
+            }}
             copy={createDesktopFlowerSurfaceCopy(i18n())}
             warmup={flowerWarmupState()}
             focusThreadRequest={flowerFocusThreadRequest()}

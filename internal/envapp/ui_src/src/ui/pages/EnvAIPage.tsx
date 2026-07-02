@@ -1,6 +1,8 @@
 import { createMemo } from 'solid-js';
+import { useNotification } from '@floegence/floe-webapp-core';
 
 import { FlowerSurface } from '../../../../../flower_ui/src';
+import type { FlowerSurfaceNotification } from '../../../../../flower_ui/src';
 import { DEFAULT_FLOWER_SURFACE_COPY, type FlowerSurfaceCopy } from '../../../../../flower_ui/src/copy';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { createEnvLocalFlowerSurfaceAdapter } from '../flower/envLocalFlowerSurfaceAdapter';
@@ -202,6 +204,7 @@ export function EnvAIPage() {
   const env = useEnvContext();
   const rpc = useRedevenRpc();
   const i18n = useI18n();
+  const notification = useNotification();
   const adapter = createMemo(() => createEnvLocalFlowerSurfaceAdapter({
     envPublicID: trim(env.env_id()),
     envLabel: trim(env.env()?.name) || trim(env.env_id()) || 'This environment',
@@ -227,6 +230,16 @@ export function EnvAIPage() {
   return (
     <FlowerSurface
       adapter={adapter()}
+      notify={(notice: FlowerSurfaceNotification) => {
+        const title = trim(notice.title) || (notice.tone === 'error' ? 'Flower could not complete.' : 'Flower');
+        if (notice.tone === 'success') {
+          notification.success(title, notice.message);
+        } else if (notice.tone === 'info') {
+          notification.info(title, notice.message);
+        } else {
+          notification.error(title, notice.message);
+        }
+      }}
       copy={createEnvFlowerSurfaceCopy(i18n)}
       focusThreadRequest={env.aiThreadFocusRequest()}
       onFocusThreadRequestConsumed={env.consumeAIThreadFocusRequest}

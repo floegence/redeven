@@ -2,7 +2,7 @@ import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { Dynamic, render } from 'solid-js/web';
 import { afterEach, vi } from 'vitest';
 
-import { FlowerSurface, type FlowerThreadFocusRequest } from '../../../../flower_ui/src';
+import { FlowerSurface, type FlowerSurfaceNotification, type FlowerThreadFocusRequest } from '../../../../flower_ui/src';
 import type {
   FlowerActivityItem,
   FlowerActivityTimelineBlock,
@@ -688,6 +688,15 @@ export function threadOrder(runtime: HTMLElement): string[] {
 }
 
 const disposers: Array<() => void> = [];
+const notifications: FlowerSurfaceNotification[] = [];
+
+export function flowerSurfaceNotifications(): readonly FlowerSurfaceNotification[] {
+  return notifications;
+}
+
+export function clearFlowerSurfaceNotifications(): void {
+  notifications.length = 0;
+}
 
 const mountFlowerSurface = (
   surfaceAdapter: FlowerSurfaceAdapter,
@@ -701,6 +710,9 @@ const mountFlowerSurface = (
   disposers.push(render(() => (
     <FlowerSurface
       adapter={surfaceAdapter}
+      notify={(notification) => {
+        notifications.push(notification);
+      }}
       focusThreadRequest={props.focusThreadRequest}
       onFocusThreadRequestConsumed={props.onFocusThreadRequestConsumed}
     />
@@ -742,6 +754,9 @@ export function renderSurfaceWithFocusController(
   disposers.push(render(() => (
     <FlowerSurface
       adapter={surfaceAdapter}
+      notify={(notification) => {
+        notifications.push(notification);
+      }}
       focusThreadRequest={focusThreadRequest()}
       onFocusThreadRequestConsumed={(requestID) => {
         consumed.push(requestID);
@@ -763,5 +778,6 @@ afterEach(() => {
   while (disposers.length > 0) {
     disposers.pop()?.();
   }
+  clearFlowerSurfaceNotifications();
   document.body.innerHTML = '';
 });

@@ -224,6 +224,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<FlowerIcon class="h-5 w-5" />');
     expect(appSrc).not.toContain('<FlowerNavigationIcon class="h-5 w-5" />');
     expect(appSrc).toContain('copy={createDesktopFlowerSurfaceCopy(i18n())}');
+    expect(appSrc).toContain('notify={(notice) => {');
+    expect(appSrc).toContain('showActionToast(notice.message, notice.tone');
     expect(appSrc).toContain("runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment')");
     expect(appSrc).toContain('sidebarLeadingAction={(');
     expect(appSrc).toContain('class="flower-sidebar-leading-action"');

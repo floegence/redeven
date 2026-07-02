@@ -135,6 +135,11 @@ const mocks = vi.hoisted(() => {
   const openFlowerFileBrowserMock = vi.fn(async () => undefined);
   const openFlowerFilePreviewMock = vi.fn(async () => undefined);
   const consumeAIThreadFocusRequestMock = vi.fn(() => undefined);
+  const notificationMock = {
+    error: vi.fn(),
+    info: vi.fn(),
+    success: vi.fn(),
+  };
 
   return {
     consumeAIThreadFocusRequestMock,
@@ -144,6 +149,7 @@ const mocks = vi.hoisted(() => {
     openFilePreviewMock,
     openFlowerFileBrowserMock,
     openFlowerFilePreviewMock,
+    notificationMock,
     sendUserTurnMock,
     state,
     subscribeThreadMock,
@@ -152,6 +158,7 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
+  useNotification: () => mocks.notificationMock,
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => {
@@ -342,6 +349,9 @@ export function registerEnvAIPageSendTests() {
       mocks.openFilePreviewMock.mockClear();
       mocks.openFlowerFileBrowserMock.mockClear();
       mocks.openFlowerFilePreviewMock.mockClear();
+      mocks.notificationMock.error.mockClear();
+      mocks.notificationMock.info.mockClear();
+      mocks.notificationMock.success.mockClear();
       mocks.consumeAIThreadFocusRequestMock.mockClear();
       mocks.state.liveState = {
         thread_patch: {},

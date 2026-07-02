@@ -11,6 +11,7 @@ import {
   activityTimeline,
   adapter,
   flush,
+  flowerSurfaceNotifications,
   inputRequest,
   liveBootstrap,
   renderSurfaceWithAdapter,
@@ -254,10 +255,15 @@ describe('FlowerSurface navigation structured input', () => {
       .find((button) => button.textContent?.includes('Production'))?.click();
     await flush();
     (runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-error')));
+    await waitFor(() => flowerSurfaceNotifications().some((notice) => notice.message.includes('Flower is no longer waiting for that input.')));
 
-    expect(runtime.querySelector('.flower-composer-error')?.textContent).toContain('Flower is no longer waiting for that input.');
-    expect(runtime.querySelector('.flower-composer-continue')?.textContent).toContain('Retry');
+    expect(flowerSurfaceNotifications()).toContainEqual(expect.objectContaining({
+      tone: 'error',
+      title: 'Flower could not send.',
+      message: 'Flower is no longer waiting for that input.',
+    }));
+    expect(runtime.querySelector('.flower-composer-error')).toBeNull();
+    expect(runtime.querySelector('.flower-composer-continue')?.textContent).toContain('Continue');
     expect(runtime.querySelector('.flower-input-request-choice-selected')?.textContent).toContain('Production');
   });
 
