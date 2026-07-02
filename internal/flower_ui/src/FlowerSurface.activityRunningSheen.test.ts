@@ -111,6 +111,22 @@ describe('Flower activity running sheen', () => {
     expect(css).not.toContain('.flower-activity-inline-row-running::before');
   });
 
+  it('animates only the subagent badge ring when a subagent is running', () => {
+    const css = flowerStyles();
+    const badgeRule = cssRule(css, '.flower-header-icon-badge');
+    const runningRule = cssRule(css, ".flower-header-icon-badge[data-running='true']");
+    const ringRule = cssRule(css, ".flower-header-icon-badge[data-running='true']::after");
+
+    expect(badgeRule).not.toContain('animation:');
+    expect(runningRule).toContain('overflow: visible');
+    expect(ringRule).toContain('border-top-color');
+    expect(ringRule).toContain('animation: flower-subagent-badge-ring-spin 920ms linear infinite');
+    expect(css).toContain('@keyframes flower-subagent-badge-ring-spin');
+    expect(css).toContain(".flower-header-icon-badge[data-running='true']::after {");
+    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(css).toContain(".flower-header-icon-badge[data-running='true']::after {\n    animation: none !important;");
+  });
+
   it('uses the shared running loader and named layers for subagent overlays', () => {
     const css = flowerStyles();
     const shellRule = cssRule(css, '.flower-chat-shell');

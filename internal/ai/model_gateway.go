@@ -246,7 +246,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 			return
 		}
 		pc.Started = true
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: strings.TrimSpace(pc.Name)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: canonicalProviderToolName(pc.Name, aliasToReal)}})
 	}
 	emitDelta := func(pc *partialCall) {
 		if pc == nil {
@@ -261,7 +261,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 		if raw != "" {
 			_ = json.Unmarshal([]byte(raw), &args) // Streaming deltas may be incomplete; ignore parse failures.
 		}
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: strings.TrimSpace(pc.Name), ArgumentsJSON: raw, Arguments: cloneAnyMap(args)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: canonicalProviderToolName(pc.Name, aliasToReal), ArgumentsJSON: raw, Arguments: cloneAnyMap(args)}})
 	}
 	emitEnd := func(pc *partialCall, rawArgs string) {
 		if pc == nil || pc.Ended {
@@ -275,7 +275,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 		}
 		pc.Args = args
 		emitStart(pc)
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: strings.TrimSpace(pc.Name), Arguments: cloneAnyMap(args)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: canonicalProviderToolName(pc.Name, aliasToReal), Arguments: cloneAnyMap(args)}})
 	}
 
 	getPartial := func(itemID string) *partialCall {
@@ -317,10 +317,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 			if cid := strings.TrimSpace(item.CallID); cid != "" {
 				pc.CallID = cid
 			}
-			name := strings.TrimSpace(item.Name)
-			if realName, ok := aliasToReal[name]; ok {
-				name = realName
-			}
+			name := canonicalProviderToolName(item.Name, aliasToReal)
 			if name != "" {
 				pc.Name = name
 			}
@@ -366,10 +363,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 			if cid := strings.TrimSpace(item.CallID); cid != "" {
 				pc.CallID = cid
 			}
-			name := strings.TrimSpace(item.Name)
-			if realName, ok := aliasToReal[name]; ok {
-				name = realName
-			}
+			name := canonicalProviderToolName(item.Name, aliasToReal)
 			if name != "" {
 				pc.Name = name
 			}
@@ -446,7 +440,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 		seen[id] = struct{}{}
 		ordered = append(ordered, orderedToolCall{
 			OutputIndex: pc.OutputIndex,
-			Call:        ToolCall{ID: id, Name: strings.TrimSpace(pc.Name), Args: cloneAnyMap(pc.Args)},
+			Call:        ToolCall{ID: id, Name: canonicalProviderToolName(pc.Name, aliasToReal), Args: cloneAnyMap(pc.Args)},
 		})
 	}
 	sort.SliceStable(ordered, func(i, j int) bool {
@@ -483,10 +477,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 			if _, ok := seen[callID]; ok {
 				continue
 			}
-			toolName := strings.TrimSpace(item.Name)
-			if realName, ok := aliasToReal[toolName]; ok {
-				toolName = realName
-			}
+			toolName := canonicalProviderToolName(item.Name, aliasToReal)
 			rawArgs := strings.TrimSpace(item.Arguments)
 			args := map[string]any{}
 			if rawArgs != "" {
@@ -615,7 +606,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 			return
 		}
 		callID := ensureCallID(pc)
-		name := strings.TrimSpace(pc.Name)
+		name := canonicalProviderToolName(pc.Name, aliasToReal)
 		if callID == "" || name == "" {
 			return
 		}
@@ -627,7 +618,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 			return
 		}
 		callID := ensureCallID(pc)
-		name := strings.TrimSpace(pc.Name)
+		name := canonicalProviderToolName(pc.Name, aliasToReal)
 		if callID == "" || name == "" {
 			return
 		}
@@ -644,7 +635,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 			return
 		}
 		callID := ensureCallID(pc)
-		name := strings.TrimSpace(pc.Name)
+		name := canonicalProviderToolName(pc.Name, aliasToReal)
 		if callID == "" || name == "" {
 			return
 		}
@@ -685,10 +676,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 				if id := strings.TrimSpace(tc.ID); id != "" {
 					pc.CallID = id
 				}
-				name := strings.TrimSpace(tc.Function.Name)
-				if realName, ok := aliasToReal[name]; ok {
-					name = realName
-				}
+				name := canonicalProviderToolName(tc.Function.Name, aliasToReal)
 				if name != "" {
 					pc.Name = name
 				}
@@ -715,7 +703,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 		if !pc.Ended {
 			continue
 		}
-		result.ToolCalls = append(result.ToolCalls, ToolCall{ID: ensureCallID(pc), Name: strings.TrimSpace(pc.Name), Args: cloneAnyMap(pc.Args)})
+		result.ToolCalls = append(result.ToolCalls, ToolCall{ID: ensureCallID(pc), Name: canonicalProviderToolName(pc.Name, aliasToReal), Args: cloneAnyMap(pc.Args)})
 	}
 	result.Text = strings.TrimSpace(textBuf.String())
 	if len(result.ToolCalls) > 0 {
@@ -834,7 +822,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 			return
 		}
 		callID := ensureCallID(pc)
-		name := strings.TrimSpace(pc.Name)
+		name := canonicalProviderToolName(pc.Name, aliasToReal)
 		if callID == "" || name == "" {
 			return
 		}
@@ -852,7 +840,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 			return
 		}
 		callID := ensureCallID(pc)
-		name := strings.TrimSpace(pc.Name)
+		name := canonicalProviderToolName(pc.Name, aliasToReal)
 		if callID == "" || name == "" {
 			return
 		}
@@ -877,7 +865,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 			return
 		}
 		callID := ensureCallID(pc)
-		name := strings.TrimSpace(pc.Name)
+		name := canonicalProviderToolName(pc.Name, aliasToReal)
 		if callID == "" || name == "" {
 			return
 		}
@@ -932,10 +920,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 				if id := strings.TrimSpace(tc.ID); id != "" {
 					pc.CallID = id
 				}
-				name := strings.TrimSpace(tc.Function.Name)
-				if realName, ok := aliasToReal[name]; ok {
-					name = realName
-				}
+				name := canonicalProviderToolName(tc.Function.Name, aliasToReal)
 				if name != "" {
 					pc.Name = name
 				}
@@ -964,7 +949,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 		}
 		result.ToolCalls = append(result.ToolCalls, ToolCall{
 			ID:   ensureCallID(pc),
-			Name: strings.TrimSpace(pc.Name),
+			Name: canonicalProviderToolName(pc.Name, aliasToReal),
 			Args: cloneAnyMap(pc.Args),
 		})
 	}
@@ -1056,10 +1041,7 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 	result.Text = strings.TrimSpace(choice.Message.Content)
 	result.Reasoning = strings.TrimSpace(extractMoonshotReasoningJSON(choice.Message.RawJSON()))
 	for _, tc := range choice.Message.ToolCalls {
-		name := strings.TrimSpace(tc.Function.Name)
-		if realName, ok := aliasToReal[name]; ok {
-			name = realName
-		}
+		name := canonicalProviderToolName(tc.Function.Name, aliasToReal)
 		args := map[string]any{}
 		rawArgs := strings.TrimSpace(tc.Function.Arguments)
 		if rawArgs != "" {
@@ -1749,7 +1731,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 			return
 		}
 		pc.Started = true
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: strings.TrimSpace(pc.Name)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: canonicalProviderToolName(pc.Name, aliasToReal)}})
 	}
 	emitDelta := func(pc *partialCall) {
 		if pc == nil {
@@ -1764,7 +1746,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 		if raw != "" {
 			_ = json.Unmarshal([]byte(raw), &args) // Streaming deltas may be incomplete; ignore parse failures.
 		}
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: strings.TrimSpace(pc.Name), ArgumentsJSON: raw, Arguments: cloneAnyMap(args)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: canonicalProviderToolName(pc.Name, aliasToReal), ArgumentsJSON: raw, Arguments: cloneAnyMap(args)}})
 	}
 	emitEnd := func(pc *partialCall, rawArgs string) {
 		if pc == nil || pc.Ended {
@@ -1778,7 +1760,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 		}
 		pc.Args = args
 		emitStart(pc)
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: strings.TrimSpace(pc.Name), Arguments: cloneAnyMap(args)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: canonicalProviderToolName(pc.Name, aliasToReal), Arguments: cloneAnyMap(args)}})
 	}
 
 	for stream.Next() {
@@ -1795,10 +1777,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 			if callID == "" {
 				callID = fmt.Sprintf("anthropic_call_%d", len(partials)+1)
 			}
-			toolName := strings.TrimSpace(variant.ContentBlock.Name)
-			if realName, ok := aliasToReal[toolName]; ok {
-				toolName = realName
-			}
+			toolName := canonicalProviderToolName(variant.ContentBlock.Name, aliasToReal)
 			pc := &partialCall{Index: variant.Index, ID: callID, Name: toolName}
 			partials[variant.Index] = pc
 			emitStart(pc)
@@ -1885,7 +1864,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 			continue
 		}
 		seen[id] = struct{}{}
-		result.ToolCalls = append(result.ToolCalls, ToolCall{ID: id, Name: strings.TrimSpace(pc.Name), Args: cloneAnyMap(pc.Args)})
+		result.ToolCalls = append(result.ToolCalls, ToolCall{ID: id, Name: canonicalProviderToolName(pc.Name, aliasToReal), Args: cloneAnyMap(pc.Args)})
 	}
 
 	for _, block := range msg.Content {
@@ -1906,10 +1885,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 			if _, ok := seen[callID]; ok {
 				continue
 			}
-			toolName := strings.TrimSpace(variant.Name)
-			if realName, ok := aliasToReal[toolName]; ok {
-				toolName = realName
-			}
+			toolName := canonicalProviderToolName(variant.Name, aliasToReal)
 			call := ToolCall{ID: callID, Name: toolName, Args: args}
 			result.ToolCalls = append(result.ToolCalls, call)
 			raw := ""
@@ -3219,6 +3195,17 @@ func sanitizeProviderToolName(name string) string {
 		return "web_search_tool"
 	}
 	return out
+}
+
+func canonicalProviderToolName(name string, aliasToReal map[string]string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	if realName, ok := aliasToReal[name]; ok {
+		return strings.TrimSpace(realName)
+	}
+	return name
 }
 
 func toStringSlice(raw any) ([]string, bool) {

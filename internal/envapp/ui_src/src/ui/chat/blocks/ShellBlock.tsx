@@ -5,6 +5,7 @@ import { prepareLocalApiRequestInit } from '../../services/localApi';
 import { writeTextToClipboard } from '../../utils/clipboard';
 import { ActivityStatusIcon, type ActivityStatus } from '../status/ActivityLine';
 import { useI18n, type I18nHelpers } from '../../i18n';
+import { mergeTerminalVisibleOutput, terminalListeningPlaceholderVisible } from '../../../../../../flower_ui/src/flowerTerminalOutput';
 
 export interface ShellBlockProps {
   command: string;
@@ -426,7 +427,11 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const displayTruncated = () => (typeof props.truncated === 'boolean' ? props.truncated : runtimeTruncated() ?? false);
   const displayCwd = () => props.cwd ?? runtimeCwd() ?? '';
   const displayLastSeq = () => runtimeLastSeq();
-  const resolvedOutput = () => props.output ?? loadedOutput() ?? props.latestOutput;
+  const resolvedOutput = () => mergeTerminalVisibleOutput(loadedOutput(), props.output ?? props.latestOutput ?? '', displayStatus());
+  const applyLoadedOutput = (output: string, status?: ShellBlockProps['status']) => {
+    const merged = mergeTerminalVisibleOutput(loadedOutput(), output, status ?? displayStatus());
+    setLoadedOutput(merged || undefined);
+  };
   const hasOutput = () => String(resolvedOutput() ?? '').trim().length > 0;
   const canUseProcessControls = () => displayProcessId() !== '' && String(props.outputRef?.runId ?? '').trim() !== '';
   const canToggle = () => hasOutput() || hasOutputRef() || canUseProcessControls() || displayStatus() === 'running';
@@ -577,7 +582,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
         : await fetchToolOutput(false);
       applyRuntimeMetadata(data);
       const output = outputFromPayload(data);
-      setLoadedOutput(output || i18n.t('shellBlock.noOutputCaptured'));
+      applyLoadedOutput(output, normalizeShellStatus(data.status) ?? displayStatus());
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setLoadError(message || i18n.t('shellBlock.failedToLoadOutput'));
@@ -605,17 +610,15 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
           : await fetchToolOutput(true);
         if (disposed) return;
         applyRuntimeMetadata(data);
+        const status = normalizeShellStatus(data.status);
         if (expanded()) {
           const output = outputFromPayload(data);
-          if (output) {
-            setLoadedOutput(output);
-          }
+          applyLoadedOutput(output, status ?? displayStatus());
         }
-        const status = normalizeShellStatus(data.status);
         if (status && status !== 'running') {
           if (expanded()) {
             const output = outputFromPayload(data);
-            setLoadedOutput(output || i18n.t('shellBlock.noOutputCaptured'));
+            applyLoadedOutput(output, status);
           }
           return;
         }
@@ -691,7 +694,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
       const data = (payload?.data ?? {}) as TerminalToolOutputPayload;
       applyRuntimeMetadata(data);
       const output = outputFromPayload(data);
-      if (output) setLoadedOutput(output);
+      applyLoadedOutput(output, normalizeShellStatus(data.status) ?? displayStatus());
       setTerminalInput('');
     } catch (err) {
       setTerminalActionError(err instanceof Error ? err.message : String(err));
@@ -726,7 +729,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
       const status = normalizeShellStatus(data.status);
       if (status) setRuntimeStatus(status === 'running' ? undefined : status);
       const output = outputFromPayload(data);
-      if (output) setLoadedOutput(output);
+      applyLoadedOutput(output, status ?? displayStatus());
     } catch (err) {
       setTerminalActionError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -898,7 +901,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
               >
                 <div class={cn('chat-shell-output', loadError() ? 'chat-shell-output-error' : 'chat-shell-output-muted')}>
                   <pre>
-                    {displayStatus() === 'running'
+                    {terminalListeningPlaceholderVisible(resolvedOutput(), displayStatus())
                       ? i18n.t('shellBlock.waitingForOutput')
                       : loadingOutput()
                         ? i18n.t('shellBlock.loadingOutput')

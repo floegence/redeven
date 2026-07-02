@@ -618,7 +618,23 @@ function SubagentsDetailBlock(props: {
               <div class="chat-activity-subagents-item" role="listitem">
                 <div class="chat-activity-subagents-item-main">
                   <div class="chat-activity-subagents-item-head">
-                    <span class="chat-activity-subagents-item-title">{agent.name}</span>
+                    <span class="chat-activity-subagents-item-title-row">
+                      <span class="chat-activity-subagents-item-title">{agent.name}</span>
+                      <Show when={agent.open_messages && props.onOpenSubagentMessages}>
+                        <button
+                          type="button"
+                          class="chat-activity-subagents-open"
+                          aria-label={`Open subagent messages for ${agent.name}`}
+                          title="Open subagent messages"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openMessages(agent);
+                          }}
+                        >
+                          <ExternalLink class="h-3.5 w-3.5" />
+                        </button>
+                      </Show>
+                    </span>
                     <span class="chat-activity-subagents-item-meta">
                       {[agent.show_status ? agent.status : '', elapsedText(agent)].filter(Boolean).join(' · ')}
                     </span>
@@ -627,16 +643,6 @@ function SubagentsDetailBlock(props: {
                     {(description) => <div class="chat-activity-subagents-item-task">{description()}</div>}
                   </Show>
                 </div>
-                <Show when={agent.open_messages && props.onOpenSubagentMessages}>
-                  <button
-                    type="button"
-                    class="chat-activity-subagents-open"
-                    onClick={() => openMessages(agent)}
-                  >
-                    <ExternalLink class="h-3.5 w-3.5" />
-                    <span>{agent.open_messages!.label}</span>
-                  </button>
-                </Show>
               </div>
             )}
           </For>

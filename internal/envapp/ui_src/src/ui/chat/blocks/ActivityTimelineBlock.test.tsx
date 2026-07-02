@@ -584,19 +584,22 @@ describe('ActivityTimelineBlock', () => {
     await flushAsync();
 
     expect(host.textContent).toContain('Review Flower tool detail UI and propose concise fixes.');
-    expect(host.textContent).toContain('Open messages');
+    expect(host.textContent).not.toContain('Open messages');
     for (const hidden of ['Worker', 'action wait', 'status success', 'agents count', 'thread_id', 'subagent_id', 'tool execution completed']) {
       expect(host.textContent).not.toContain(hidden);
     }
 
-    const button = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent === 'Open messages') as HTMLButtonElement | undefined;
+    const button = host.querySelector('button.chat-activity-subagents-open') as HTMLButtonElement | undefined;
+    expect(button?.getAttribute('aria-label')).toBe('Open subagent messages for Frontend polish review');
+    expect(button?.textContent).toBe('');
     button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     expect(openMessages).toHaveBeenCalledWith({
       threadID: 'child_frontend_review',
       subagentID: 'child_frontend_review',
       name: 'Frontend polish review',
-      task: 'Review Flower tool detail UI and propose concise fixes.',
+      taskDescription: 'Review Flower tool detail UI and propose concise fixes.',
+      agentType: 'worker',
     });
   });
 });

@@ -76,6 +76,7 @@ import {
   type FlowerActivityTodoStatus,
 } from './flowerActivityPresentation';
 import { createFlowerActivityDisclosurePresence } from './activityDisclosure';
+import { mergeTerminalVisibleOutput, terminalListeningPlaceholderVisible } from './flowerTerminalOutput';
 import { formatGitPatchLineNumber, getGitPatchRenderSnapshot, type GitPatchRenderedLine } from './gitPatch';
 import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
@@ -677,6 +678,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     itemWidths: {},
   });
   let workingDirectoryCopyResetTimer: number | undefined;
+  const terminalVisibleOutputByKey = new Map<string, string>();
 
   const clearWorkingDirectoryCopyTimer = () => {
     if (workingDirectoryCopyResetTimer !== undefined) {
@@ -704,6 +706,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     (next) => {
       setSidebarActiveThreadID(next);
       if (next) setPreviewChip(null);
+      terminalVisibleOutputByKey.clear();
       clearWorkingDirectoryCopyConfirmation();
     },
     { defer: false },
@@ -3304,6 +3307,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
   const selectedSubagentItems = createMemo(() => buildFlowerSubagentPanelItems(selectedThread()));
+  const selectedRunningSubagentCount = createMemo(() => selectedSubagentItems().filter((item) => item.status === 'running').length);
   const selectedActiveSubagentCount = createMemo(() => selectedSubagentItems().filter((item) => (
     item.status === 'queued' || item.status === 'running' || item.status === 'waiting_input'
   )).length);
@@ -4608,12 +4612,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const terminalOutputBlock = (runID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>) => {
     const terminal = block.terminal;
-    const [liveOutput, setLiveOutput] = createSignal('');
     const [liveStatus, setLiveStatus] = createSignal<FlowerActivityStatus | ''>('');
     const [liveLastSeq, setLiveLastSeq] = createSignal<number | undefined>(terminal.last_seq);
     const [liveTotalBytes, setLiveTotalBytes] = createSignal<number | undefined>(terminal.total_bytes);
     const [liveError, setLiveError] = createSignal('');
     const processID = () => trimString(terminal.process_id);
+    const terminalCacheKey = () => [trimString(runID), processID(), trimString(terminal.command)].join('\x1e');
+    const payloadOutput = () => String(terminal.output || terminal.latest_output || '').replace(/\r\n?/g, '\n');
+    const initialOutput = mergeTerminalVisibleOutput(terminalVisibleOutputByKey.get(terminalCacheKey()) ?? '', payloadOutput(), terminal.status);
+    const [liveOutput, setLiveOutput] = createSignal(initialOutput);
+    if (initialOutput.trim()) {
+      terminalVisibleOutputByKey.set(terminalCacheKey(), initialOutput);
+    }
     const canReadLiveOutput = () => (
       !!props.adapter.readTerminalProcess &&
       trimString(runID) !== '' &&
@@ -4622,12 +4632,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
     const displayStatus = () => liveStatus() || terminal.status;
     const displayOutput = () => {
-      const live = liveOutput();
-      const payload = String(terminal.output || terminal.latest_output || '').replace(/\r\n?/g, '\n');
-      const output = live || payload;
+      const output = mergeTerminalVisibleOutput(liveOutput(), payloadOutput(), displayStatus());
       if (output.trim()) return output;
       if (liveError()) return `Live output unavailable: ${liveError()}`;
-      if (canReadLiveOutput()) return 'Listening for output...';
+      if (canReadLiveOutput() && terminalListeningPlaceholderVisible(output, displayStatus())) return 'Listening for output...';
       if ((terminal.status === 'running' || terminal.status === 'pending') && processID() === '') {
         return 'Live output handle is not available yet.';
       }
@@ -4646,10 +4654,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
     const applyTerminalSnapshot = (snapshot: FlowerTerminalProcessSnapshot) => {
       const output = terminalSnapshotOutput(snapshot);
-      if (output) {
-        setLiveOutput(output);
+      const status = normalizeTerminalSnapshotStatus(snapshot.status) || displayStatus();
+      const mergedOutput = mergeTerminalVisibleOutput(
+        terminalVisibleOutputByKey.get(terminalCacheKey()) ?? liveOutput(),
+        output,
+        status,
+      );
+      if (mergedOutput !== liveOutput()) {
+        setLiveOutput(mergedOutput);
       }
-      const status = normalizeTerminalSnapshotStatus(snapshot.status);
+      if (mergedOutput.trim()) {
+        terminalVisibleOutputByKey.set(terminalCacheKey(), mergedOutput);
+      }
       if (status) {
         setLiveStatus(status);
       }
@@ -4976,7 +4992,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 <div class="flower-activity-subagents-item" role="listitem">
                   <div class="flower-activity-subagents-item-main">
                     <div class="flower-activity-subagents-item-head">
-                      <span class="flower-activity-subagents-item-title">{agent.name}</span>
+                      <span class="flower-activity-subagents-item-title-row">
+                        <span class="flower-activity-subagents-item-title">{agent.name}</span>
+                        <Show when={agent.open_messages}>
+                          <button
+                            type="button"
+                            class="flower-activity-subagents-open"
+                            aria-label={`Open subagent messages for ${agent.name}`}
+                            title="Open subagent messages"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openSubagentMessages(agent);
+                            }}
+                          >
+                            <ExternalLink class="h-3.5 w-3.5" />
+                          </button>
+                        </Show>
+                      </span>
                       <span class="flower-activity-subagents-item-meta">
                         {[agent.show_status ? agent.status : '', subagentElapsedText(agent, detail.elapsed_mode)].filter(Boolean).join(' · ')}
                       </span>
@@ -4985,16 +5017,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       {(description) => <div class="flower-activity-subagents-item-task">{description()}</div>}
                     </Show>
                   </div>
-                  <Show when={agent.open_messages}>
-                    <button
-                      type="button"
-                      class="flower-activity-subagents-open"
-                      onClick={() => openSubagentMessages(agent)}
-                    >
-                      <ExternalLink class="h-3.5 w-3.5" />
-                      <span>{agent.open_messages!.label}</span>
-                    </button>
-                  </Show>
                 </div>
               )}
             </For>
@@ -6089,7 +6111,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               >
                 <GitBranch class="h-4 w-4" />
                 <Show when={selectedSubagentItems().length > 0}>
-                  <span class="flower-header-icon-badge" aria-hidden="true">{subagentBadgeText()}</span>
+                  <span
+                    class="flower-header-icon-badge"
+                    data-running={selectedRunningSubagentCount() > 0 ? 'true' : 'false'}
+                    aria-hidden="true"
+                  >
+                    {subagentBadgeText()}
+                  </span>
                 </Show>
               </button>
               {subagentDropdown()}

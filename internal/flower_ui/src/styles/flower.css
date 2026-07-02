@@ -409,6 +409,28 @@ html.dark .flower-component-shell {
   box-shadow: 0 0 0 2px var(--flower-chat-surface, var(--background));
 }
 
+.flower-header-icon-badge[data-running='true'] {
+  overflow: visible;
+}
+
+.flower-header-icon-badge[data-running='true']::after {
+  content: "";
+  position: absolute;
+  inset: -0.1875rem;
+  pointer-events: none;
+  border: 1.5px solid color-mix(in srgb, var(--primary) 22%, transparent);
+  border-top-color: color-mix(in srgb, var(--primary) 88%, white 12%);
+  border-right-color: color-mix(in srgb, var(--primary) 58%, transparent);
+  border-radius: inherit;
+  animation: flower-subagent-badge-ring-spin 920ms linear infinite;
+}
+
+@keyframes flower-subagent-badge-ring-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .flower-composer-footer {
   display: flex;
   align-items: flex-end;
@@ -3791,9 +3813,8 @@ html.dark .flower-component-shell {
 
 .flower-activity-subagents-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 0.5rem;
   border-left: 1px solid color-mix(in srgb, var(--primary) 24%, var(--flower-chat-surface-border));
   padding-left: 0.5625rem;
 }
@@ -3807,12 +3828,20 @@ html.dark .flower-component-shell {
 .flower-activity-subagents-item-head {
   display: flex;
   min-width: 0;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
 }
 
+.flower-activity-subagents-item-title-row {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .flower-activity-subagents-item-title {
+  flex: 1 1 auto;
   min-width: 0;
   color: color-mix(in srgb, var(--foreground) 86%, var(--muted-foreground) 14%);
   font-size: 0.75rem;
@@ -3832,21 +3861,19 @@ html.dark .flower-component-shell {
 
 .flower-activity-subagents-open {
   display: inline-flex;
-  min-height: 1.5rem;
+  width: 1.375rem;
+  height: 1.375rem;
+  flex: 0 0 auto;
   cursor: pointer;
   align-items: center;
   justify-content: center;
-  gap: 0.25rem;
   border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, transparent);
   border-radius: 6px;
   background: color-mix(in srgb, var(--background) 72%, transparent);
   color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%);
-  padding: 0.125rem 0.4375rem;
+  padding: 0;
   font: inherit;
-  font-size: 0.6875rem;
-  font-weight: 650;
   line-height: 1;
-  white-space: nowrap;
   transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
 }
 
@@ -6692,7 +6719,8 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   .flower-model-chip-warmup::after,
   .redeven-flower-icon-spin,
   .redeven-flower-icon-breathe,
-  .flower-thread-wave-bar {
+  .flower-thread-wave-bar,
+  .flower-header-icon-badge[data-running='true']::after {
     animation: none !important;
     transform: none !important;
   }
