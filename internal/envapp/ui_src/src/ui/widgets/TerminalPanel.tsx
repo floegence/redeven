@@ -1,5 +1,5 @@
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
-import { isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
+import { deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Copy, Folder, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 
 import {
@@ -258,6 +258,27 @@ function takeTerminalChunkBatch(
   return queue.splice(0, Math.max(1, count));
 }
 
+function takeTerminalHistoryChunkBatch(
+  queue: terminal_history_chunk[],
+  maxChunks: number,
+  maxBytes: number,
+): terminal_history_chunk[] {
+  if (queue.length === 0) return [];
+
+  let count = 0;
+  let byteLength = 0;
+  while (count < queue.length && count < maxChunks) {
+    const next = queue[count];
+    if (!next) break;
+    if (count > 0 && byteLength + next.data.byteLength > maxBytes) break;
+    byteLength += next.data.byteLength;
+    count += 1;
+    if (byteLength >= maxBytes) break;
+  }
+
+  return queue.splice(0, Math.max(1, count));
+}
+
 function terminalNowMs(): number {
   if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
     return performance.now();
@@ -332,18 +353,14 @@ type terminal_touch_scroll_target = {
   input?: (data: string, wasUserInput?: boolean) => void;
 };
 
-function waitForOptimisticTerminalTabPaint(): Promise<void> {
-  return new Promise((resolve) => {
-    const resolveAfterPaint = () => {
-      globalThis.setTimeout(resolve, 0);
-    };
-    if (typeof globalThis.requestAnimationFrame === 'function') {
-      globalThis.requestAnimationFrame(resolveAfterPaint);
-      return;
-    }
-    resolveAfterPaint();
-  });
+function waitForTerminalUiPaint(): Promise<void> {
+  return new Promise((resolve) => deferAfterPaint(resolve));
 }
+
+type terminal_history_chunk = {
+  sequence: number;
+  data: Uint8Array;
+};
 
 type terminal_selection_snapshot = {
   sessionId: string;
@@ -949,7 +966,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
     unsubNameUpdate = null;
   };
 
-  const writeHistoryChunks = async (chunks: Uint8Array[]) => {
+  const writeHistoryChunks = async (chunks: terminal_history_chunk[], seq: number) => {
     const core = term;
     if (!core) return;
 
@@ -957,12 +974,20 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
     await new Promise<void>((resolve) => {
       const step = () => {
-        const batch = takeTerminalChunkBatch(
+        if (seq !== initSeq) {
+          resolve();
+          return;
+        }
+
+        const batch = takeTerminalHistoryChunkBatch(
           chunks,
           TERMINAL_HISTORY_REPLAY_MAX_CHUNKS,
           TERMINAL_HISTORY_REPLAY_MAX_BYTES,
         );
-        const merged = mergeTerminalChunks(batch);
+        const displayChunks = batch
+          .map((chunk) => consumeTerminalChunk(chunk.data, 'history'))
+          .filter((chunk) => chunk.byteLength > 0);
+        const merged = mergeTerminalChunks(displayChunks);
         if (merged) {
           core.write(merged);
         }
@@ -1018,9 +1043,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
         }
 
         const sorted = [...page.chunks].sort((a, b) => a.sequence - b.sequence);
-        await writeHistoryChunks(sorted
-          .map((chunk) => consumeTerminalChunk(chunk.data, 'history'))
-          .filter((chunk) => chunk.byteLength > 0));
+        await writeHistoryChunks(sorted, seq);
         if (seq !== initSeq) return;
 
         if (!page.hasMore) return;
@@ -1638,6 +1661,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [localActiveSessionId, setLocalActiveSessionId] = createSignal<string | null>(readActiveSessionId(activeSessionStorageKey));
   const [localActivePendingSessionId, setLocalActivePendingSessionId] = createSignal<string | null>(null);
   const [mountedSessionIds, setMountedSessionIds] = createSignal<Set<string>>(new Set());
+  const [scheduledMountSessionIds, setScheduledMountSessionIds] = createSignal<Set<string>>(new Set());
+  const [retainedClosingSessions, setRetainedClosingSessions] = createSignal<Record<string, TerminalSessionInfo>>({});
   const [error, setError] = createSignal<string | null>(null);
   const [mobileKeyboardVisible, setMobileKeyboardVisible] = createSignal(
     isMobileLayout() && mobileInputMode() === 'floe',
@@ -1665,6 +1690,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const actionsRegistry = new Map<string, { reload: () => Promise<void> }>();
   const mobileKeyboardPathCache = new Map<string, TerminalMobileKeyboardPathEntry[]>();
   const mobileKeyboardPackageScriptsCache = new Map<string, TerminalMobileKeyboardScript[]>();
+  const deferredInitialMountSessionIds = new Set<string>();
   const tabActivityTracker = createTerminalTabActivityTracker({
     publishVisualState: (sessionId, state) => {
       setTabVisualStateBySession((prev) => {
@@ -1832,11 +1858,79 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const markSessionMounted = (sessionId: string) => {
     const normalizedSessionId = String(sessionId ?? '').trim();
     if (!normalizedSessionId) return;
+    deferredInitialMountSessionIds.delete(normalizedSessionId);
+    setScheduledMountSessionIds((prev) => {
+      if (!prev.has(normalizedSessionId)) return prev;
+      const next = new Set(prev);
+      next.delete(normalizedSessionId);
+      return next;
+    });
     setMountedSessionIds((prev) => {
       if (prev.has(normalizedSessionId)) return prev;
       const next = new Set(prev);
       next.add(normalizedSessionId);
       return next;
+    });
+  };
+
+  const deferInitialSessionMount = (sessionId: string) => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) return;
+    deferredInitialMountSessionIds.add(normalizedSessionId);
+  };
+
+  const scheduleSessionMountAfterPaint = (sessionId: string) => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) return;
+    if (mountedSessionIds().has(normalizedSessionId)) return;
+    if (scheduledMountSessionIds().has(normalizedSessionId)) return;
+
+    setScheduledMountSessionIds((prev) => {
+      if (prev.has(normalizedSessionId)) return prev;
+      const next = new Set(prev);
+      next.add(normalizedSessionId);
+      return next;
+    });
+
+    void waitForTerminalUiPaint().then(() => {
+      setScheduledMountSessionIds((prev) => {
+        if (!prev.has(normalizedSessionId)) return prev;
+        const next = new Set(prev);
+        next.delete(normalizedSessionId);
+        return next;
+      });
+      if (disposed) return;
+      if (activeSessionId() !== normalizedSessionId) return;
+      if (!sessions().some((session) => session.id === normalizedSessionId)) return;
+      markSessionMounted(normalizedSessionId);
+    });
+  };
+
+  const retainMountedSessionUntilAfterPaint = (sessionId: string) => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) return;
+    if (!mountedSessionIds().has(normalizedSessionId)) return;
+
+    const retainedSession = sessions().find((session) => session.id === normalizedSessionId);
+    if (!retainedSession) return;
+
+    setRetainedClosingSessions((previous) => (
+      previous[normalizedSessionId]
+        ? previous
+        : {
+          ...previous,
+          [normalizedSessionId]: retainedSession,
+        }
+    ));
+
+    void waitForTerminalUiPaint().then(() => {
+      if (disposed) return;
+      setRetainedClosingSessions((previous) => {
+        if (!previous[normalizedSessionId]) return previous;
+        const next = { ...previous };
+        delete next[normalizedSessionId];
+        return next;
+      });
     });
   };
 
@@ -1856,9 +1950,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const activateResolvedPendingSession = (resolved: resolved_pending_terminal_session) => {
+    deferInitialSessionMount(resolved.sessionId);
     ensureSessionInGroup(resolved.sessionId);
     setActiveRealSessionId(resolved.sessionId);
-    markSessionMounted(resolved.sessionId);
   };
 
   createEffect(() => {
@@ -2447,7 +2541,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     ensureSessionInGroup(normalizedSessionId);
     setActiveSessionId(normalizedSessionId);
-    markSessionMounted(normalizedSessionId);
   };
 
   const mergeOptimisticTerminalSession = (session: TerminalSessionInfo): TerminalSessionInfo | null => {
@@ -2576,10 +2669,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!normalizedPendingSessionId || !normalizedSessionId) return;
 
     if (!pendingTerminalSessionById(normalizedPendingSessionId)) {
+      deferInitialSessionMount(normalizedSessionId);
       activateSession(normalizedSessionId);
       return;
     }
     removePendingSession(normalizedPendingSessionId);
+    deferInitialSessionMount(normalizedSessionId);
     activateSession(normalizedSessionId);
   };
 
@@ -2591,7 +2686,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const beginCreateSession = async (name: string | undefined, workingDir: string): Promise<string | null> => {
     const pendingSession = createPendingSession(name, workingDir);
     // Let the optimistic tab reach the screen before starting the heavier RPC/state reconciliation path.
-    await waitForOptimisticTerminalTabPaint();
+    await waitForTerminalUiPaint();
     if (disposed || !pendingTerminalSessionById(pendingSession.id)) return null;
     try {
       const sessionId = await createPanelSession(name, pendingSession.workingDir);
@@ -2601,6 +2696,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     } catch (e) {
       const resolvedSessionId = findResolvedSessionForRemovedPendingSession(pendingSession);
       if (resolvedSessionId) {
+        deferInitialSessionMount(resolvedSessionId);
         activateSession(resolvedSessionId);
         return resolvedSessionId;
       }
@@ -2726,17 +2822,22 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           removePendingSession(normalizedSessionId);
           return;
         }
+
+        const nextActiveSessionId = activeDisplaySessionId() === normalizedSessionId
+          ? pickActiveSessionAfterClose(normalizedSessionId)
+          : activeDisplaySessionId();
+        retainMountedSessionUntilAfterPaint(normalizedSessionId);
+        setOptimisticSessionClosing(normalizedSessionId, true);
+        removeOptimisticTerminalSession(normalizedSessionId);
+        if (activeDisplaySessionId() === normalizedSessionId) {
+          setActiveSessionId(nextActiveSessionId);
+        }
+
+        await waitForTerminalUiPaint();
+        if (disposed) return;
+
         if (props.sessionOperations) {
-          const nextActiveSessionId = activeDisplaySessionId() === normalizedSessionId
-            ? pickActiveSessionAfterClose(normalizedSessionId)
-            : activeDisplaySessionId();
-          setOptimisticSessionClosing(normalizedSessionId, true);
-          removeOptimisticTerminalSession(normalizedSessionId);
-          if (activeDisplaySessionId() === normalizedSessionId) {
-            setActiveSessionId(nextActiveSessionId);
-          }
           await props.sessionOperations.deleteSession(normalizedSessionId);
-          setOptimisticSessionClosing(normalizedSessionId, false);
           void sessionsCoordinator.refresh().catch(() => undefined);
         } else {
           await sessionsCoordinator.deleteSession(normalizedSessionId);
@@ -2787,11 +2888,37 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   });
 
+  const renderableSessions = createMemo<TerminalSessionInfo[]>((previous) => {
+    const list = sessions();
+    const visibleSessionIds = new Set(list.map((session) => session.id));
+    const retainedSessions = Object.values(retainedClosingSessions())
+      .filter((session) => !visibleSessionIds.has(session.id));
+    return preserveStableTerminalSessionReferences([...list, ...retainedSessions], previous);
+  }, []);
+  const sessionPanelIds = createMemo(() => renderableSessions().map((session) => session.id));
+  const activeUnmountedSession = createMemo<TerminalSessionInfo | null>(() => {
+    const activeId = activeSessionId();
+    if (!activeId) return null;
+    if (mountedSessionIds().has(activeId)) return null;
+    return sessions().find((session) => session.id === activeId) ?? null;
+  });
+
+  let mountedInitialActiveSession = false;
   createEffect(() => {
     const id = activeSessionId();
     if (!id) return;
     if (!sessions().some((s) => s.id === id)) return;
-    markSessionMounted(id);
+    if (mountedSessionIds().has(id)) return;
+
+    const shouldDeferInitialMount = deferredInitialMountSessionIds.has(id);
+    if (!mountedInitialActiveSession && !shouldDeferInitialMount) {
+      mountedInitialActiveSession = true;
+      markSessionMounted(id);
+      return;
+    }
+
+    mountedInitialActiveSession = true;
+    scheduleSessionMountAfterPaint(id);
   });
 
   createEffect(() => {
@@ -2802,16 +2929,20 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
-    const ids = new Set(sessions().map((s) => s.id));
+    const mountedIds = new Set(renderableSessions().map((s) => s.id));
     setMountedSessionIds((prev) => {
       let changed = false;
       const next = new Set<string>();
       for (const id of prev) {
-        if (ids.has(id)) next.add(id);
+        if (mountedIds.has(id)) next.add(id);
         else changed = true;
       }
       return changed ? next : prev;
     });
+  });
+
+  createEffect(() => {
+    const ids = new Set(sessions().map((s) => s.id));
 
     tabActivityTracker.pruneSessions(ids);
 
@@ -2864,7 +2995,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }));
     return [...sessionTabs, ...pendingTabs];
   });
-  const sessionPanelIds = createMemo(() => sessions().map((session) => session.id));
 
   let searchInputEl: HTMLInputElement | null = null;
   let rootEl: HTMLDivElement | null = null;
@@ -3680,7 +3810,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             <div class="h-full">
               <For each={sessionPanelIds()}>
                 {(sessionId) => {
-                  const sessionForId = createMemo(() => sessions().find((session) => session.id === sessionId) ?? null);
+                  const sessionForId = createMemo(() => renderableSessions().find((session) => session.id === sessionId) ?? null);
                   const mountedSessionForId = createMemo(() => (
                     mountedSessionIds().has(sessionId) ? sessionForId() : null
                   ));
@@ -3720,6 +3850,25 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   );
                 }}
               </For>
+              <Show when={activeUnmountedSession()}>
+                <TabPanel active keepMounted class="h-full">
+                  <div
+                    class="h-full min-h-0 relative overflow-hidden redeven-terminal-surface"
+                    data-terminal-deferred-surface="true"
+                    style={{
+                      'background-color': terminalThemeBackground(),
+                      color: terminalThemeForeground(),
+                      ...terminalLoadingVars(),
+                    }}
+                  >
+                    <TerminalLoadingPane
+                      message={i18n.t('terminal.initializing')}
+                      progressLabel={i18n.t('terminal.initializing')}
+                      dataStage="initializing"
+                    />
+                  </div>
+                </TabPanel>
+              </Show>
               <Index each={visiblePendingTerminalSessions()}>
                 {(session) => (
                   <TabPanel active={activeDisplaySessionId() === session().id} keepMounted class="h-full">
