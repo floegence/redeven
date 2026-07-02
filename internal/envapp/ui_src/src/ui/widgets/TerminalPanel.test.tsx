@@ -293,7 +293,10 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
     </aside>
   ),
   SidebarContent: (props: any) => <div data-testid="mock-sidebar-content" class={props.class}>{props.children}</div>,
-  SidebarItemList: (props: any) => <div class={props.class}>{props.children}</div>,
+  SidebarItemList: (props: any) => {
+    const { children, class: className, ...rest } = props;
+    return <div {...rest} class={className}>{children}</div>;
+  },
   SidebarSection: (props: any) => (
     <section class={props.class}>
       <div data-testid="mock-sidebar-section-title">
@@ -3230,6 +3233,7 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-testid="mock-sidebar"]')).toBeTruthy();
     const listRoot = findTerminalTabsRoot(host);
     expect(listRoot).toBeTruthy();
+    expect(listRoot?.querySelector('[data-floe-canvas-wheel-interactive="true"][data-redeven-workbench-wheel-role="local-scroll-viewport"]')).toBeTruthy();
     expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
     expect(listRoot?.textContent).not.toContain('Running');
     expect(listRoot?.textContent).not.toContain('Unread');

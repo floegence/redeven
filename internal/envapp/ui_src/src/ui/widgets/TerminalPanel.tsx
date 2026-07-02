@@ -73,6 +73,7 @@ import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from 
 import { TerminalShellIntegrationParser, type TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
 import { createTerminalTabActivityTracker, type TerminalSessionWorkState, type TerminalTabVisualState } from '../services/terminalTabActivity';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { useI18n } from '../i18n';
@@ -3809,7 +3810,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 class="min-h-0 flex flex-1 flex-col overflow-hidden [&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:overflow-hidden"
               >
                 <div data-testid="terminal-session-list" class="min-h-0 flex-1 overflow-hidden">
-                  <SidebarItemList class="min-h-0 h-full overflow-y-auto overflow-x-hidden pr-0.5 [scrollbar-gutter:stable]">
+                  <SidebarItemList
+                    {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+                    class="min-h-0 h-full overflow-y-auto overflow-x-hidden pr-0.5 [scrollbar-gutter:stable]"
+                  >
                   <For
                     each={sessionListItems()}
                     fallback={

@@ -149,7 +149,10 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   PanelContent: (props: any) => <div>{props.children}</div>,
   Sidebar: (props: any) => <aside class={props.class}>{props.children}</aside>,
   SidebarContent: (props: any) => <div class={props.class}>{props.children}</div>,
-  SidebarItemList: (props: any) => <div class={props.class}>{props.children}</div>,
+  SidebarItemList: (props: any) => {
+    const { children, class: className, ...rest } = props;
+    return <div {...rest} class={className}>{children}</div>;
+  },
   SidebarSection: (props: any) => (
     <section class={props.class}>
       <div>
