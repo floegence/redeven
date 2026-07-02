@@ -139,6 +139,7 @@ describe('Flower model status indicator', () => {
     expect(menuRule).toContain('box-shadow');
     expect(itemRule).toContain('grid-template-columns: auto minmax(0, 1fr)');
     expect(itemRule).toContain('grid-template-rows: auto auto');
+    expect(css).toContain(".flower-composer-command-item[aria-selected='true'],");
     expect(css).toContain('.flower-composer-command-item:hover,');
     expect(css).toContain('transform: translateY(-0.5px);');
     expect(descriptionRule).toContain('font-size: 0.74rem');

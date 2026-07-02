@@ -983,7 +983,7 @@ describe('FlowerSurface navigation launch/send', () => {
     await waitFor(() => compactThreadContext.mock.calls.length === 1);
   });
 
-  it('keyboard selection completes slash suggestions before executing compact', async () => {
+  it('executes the selected slash command from keyboard Enter without completing first', async () => {
     const runningThread = thread({
       thread_id: 'thread-compact-keyboard-suggest',
       title: 'Compact keyboard suggest',
@@ -998,12 +998,15 @@ describe('FlowerSurface navigation launch/send', () => {
         created_at_ms: 10,
       }],
     });
-    const compactThreadContext = vi.fn(async () => liveBootstrap(runningThread));
+    const compactDeferred = deferred<FlowerLiveBootstrap>();
+    const compactThreadContext = vi.fn(() => compactDeferred.promise);
+    const launchTurn = vi.fn(async () => liveBootstrap(runningThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
       loadThread: vi.fn(async () => liveBootstrap(runningThread)),
       compactThreadContext,
+      launchTurn,
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-compact-keyboard-suggest"] button')));
@@ -1015,12 +1018,21 @@ describe('FlowerSurface navigation launch/send', () => {
     textarea.value = '/com';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     await waitFor(() => Boolean(runtime.querySelector('.flower-composer-command-menu')));
+    const menu = runtime.querySelector('.flower-composer-command-menu') as HTMLElement;
+    const option = runtime.querySelector('.flower-composer-command-item') as HTMLButtonElement;
+    expect(option.getAttribute('aria-selected')).toBe('true');
+    expect(menu.getAttribute('aria-activedescendant')).toBe(option.id);
+    expect(textarea.getAttribute('aria-controls')).toBe(menu.id);
+    expect(textarea.getAttribute('aria-expanded')).toBe('true');
+    expect(textarea.getAttribute('aria-activedescendant')).toBe(option.id);
 
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-    await waitFor(() => textarea.value === '/compact');
-    expect(compactThreadContext).not.toHaveBeenCalled();
+    await waitFor(() => compactThreadContext.mock.calls.length === 1);
+    expect(textarea.value).toBe('');
+    expect(runtime.querySelector('.flower-compaction-divider[data-flower-compaction-status="compacting"]')).not.toBeNull();
+    expect(launchTurn).not.toHaveBeenCalled();
 
-    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    compactDeferred.resolve(liveBootstrap(runningThread));
     await waitFor(() => compactThreadContext.mock.calls.length === 1);
   });
 

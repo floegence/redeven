@@ -650,6 +650,7 @@ html.dark .flower-component-shell {
   grid-row: 1 / span 2;
 }
 
+.flower-composer-command-item[aria-selected='true'],
 .flower-composer-command-item:hover,
 .flower-composer-command-item:focus-visible {
   border-color: color-mix(in srgb, var(--primary) 36%, var(--flower-chat-surface-border) 64%);
