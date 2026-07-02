@@ -130,7 +130,7 @@ export const ruRU = {
     quitDesktopDescription: "Выйти из Redeven Desktop",
     closeLauncherDescription: "Закрыть окно launcher",
     changeLanguageTitle: "Изменить язык",
-    changeLanguageDescription: "Открыть настройки интерфейса, чтобы выбрать язык UI для Redeven Desktop и Env App",
+    changeLanguageDescription: "Открыть языковое меню в верхней панели для Redeven Desktop и Env App",
     toggleThemeTitle: "Переключить тему",
     toggleThemeDescription: "Переключить светлую и темную темы",
     openCommandPaletteTitle: "Открыть Command Palette",

@@ -130,7 +130,7 @@ export const deDE = {
     quitDesktopDescription: "Redeven Desktop beenden",
     closeLauncherDescription: "Launcher-Fenster schließen",
     changeLanguageTitle: "Sprache ändern",
-    changeLanguageDescription: "Oberflächeneinstellungen öffnen, um die UI-Sprache für Redeven Desktop und Env App zu wählen",
+    changeLanguageDescription: "Das Sprachmenü in der Kopfzeile für Redeven Desktop und Env App öffnen",
     toggleThemeTitle: "Theme wechseln",
     toggleThemeDescription: "Zwischen hellem und dunklem Theme wechseln",
     openCommandPaletteTitle: "Command Palette öffnen",

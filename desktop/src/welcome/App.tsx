@@ -2324,18 +2324,6 @@ function localizedVisibleLabel(i18n: DesktopI18n, count: number): string {
   return i18n.t('launcher.visibleCount', { count });
 }
 
-function languageSourceLabel(i18n: DesktopI18n, source: RedevenLanguageSnapshot['source']): string {
-  switch (source) {
-    case 'explicit':
-      return i18n.t('settings.languageSourceExplicit');
-    case 'system':
-      return i18n.t('settings.languageSourceSystem');
-    case 'fallback':
-    default:
-      return i18n.t('settings.languageSourceFallback');
-  }
-}
-
 function settingsAddressCardTitle(i18n: DesktopI18n, accessMode: DesktopAccessMode): string {
   return accessMode === 'custom_exposure' ? i18n.t('settings.bindAddressTitle') : i18n.t('settings.portTitle');
 }
@@ -2617,7 +2605,7 @@ function DesktopLanguagePicker(props: Readonly<{
             event.preventDefault();
             setOpen(true);
             moveHighlight(event.key === 'ArrowDown' ? 1 : -1);
-          } else if (event.key === 'Enter' && open()) {
+          } else if ((event.key === 'Enter' || event.key === ' ') && open()) {
             event.preventDefault();
             const option = options()[highlightedIndex()];
             if (option) {
@@ -2817,8 +2805,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [languageSnapshot, setLanguageSnapshot] = createSignal<RedevenLanguageSnapshot>(
     shellLanguage?.getSnapshot() ?? FALLBACK_DESKTOP_LANGUAGE_SNAPSHOT,
   );
-  const [languagePickerOpenRequest] = createSignal(0);
-  const [languageSettingsOpen, setLanguageSettingsOpen] = createSignal(false);
+  const [languagePickerOpenRequest, setLanguagePickerOpenRequest] = createSignal(0);
   const [actionToasts, setActionToasts] = createSignal<readonly DesktopActionToast[]>([]);
   const [liveActionProgress, setLiveActionProgress] = createSignal<readonly DesktopLauncherActionProgress[]>([]);
   const [retainedGatewayFailures, setRetainedGatewayFailures] = createSignal<readonly DesktopLauncherActionProgress[]>([]);
@@ -3722,7 +3709,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectionDialogState(null);
     setGatewaySetupDialogState(null);
     setControlPlaneDialogState(null);
-    setLanguageSettingsOpen(true);
+    setLanguagePickerOpenRequest((current) => current + 1);
   }
 
   function openCreateConnectionDialog(
@@ -3822,7 +3809,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           focus_section: gatewaySetupFocusForGateway(gateway, focusSection),
         }
       : {}));
-    setLanguageSettingsOpen(false);
   }
 
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
@@ -5144,9 +5130,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         setSettingsError(result.error);
         return;
       }
-      const nextSnapshot = await refreshSnapshot();
-      setSettingsDraftSession(createDesktopSettingsDraftSession(nextSnapshot.settings_surface));
       showActionToast(i18n().t('toast.settingsSaved'));
+      cancelSettings();
+      try {
+        const nextSnapshot = await refreshSnapshot();
+        setSettingsDraftSession(createDesktopSettingsDraftSession(nextSnapshot.settings_surface));
+      } catch (error) {
+        showActionToast(getErrorMessage(error) || i18n().t('toast.actionFailedFallback'), 'error');
+      }
     } catch (error) {
       setSettingsError(getErrorMessage(error));
     } finally {
@@ -6239,7 +6230,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         snapshot={settingsSurface()}
         baselineSnapshot={settingsBaselineSurface()}
         draft={draft()}
-        languageSnapshot={languageSnapshot()}
         i18n={i18n()}
         busyState={busyState()}
         settingsError={settingsError()}
@@ -6253,15 +6243,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         saveSettings={saveSettings}
         cancelSettings={cancelSettings}
         clearStoredLocalUIPassword={clearStoredLocalUIPassword}
-        updateLanguagePreference={updateDesktopLanguagePreference}
-      />
-
-      <DesktopInterfaceSettingsDialog
-        open={languageSettingsOpen()}
-        languageSnapshot={languageSnapshot()}
-        i18n={i18n()}
-        onOpenChange={setLanguageSettingsOpen}
-        updateLanguagePreference={updateDesktopLanguagePreference}
       />
 
       <ConnectionDialog
@@ -12609,260 +12590,11 @@ function SettingsSectionHeader(props: Readonly<{
   );
 }
 
-function DesktopLanguageSettingsPanel(props: Readonly<{
-  languageSnapshot: RedevenLanguageSnapshot;
-  i18n: DesktopI18n;
-  updateLanguagePreference: (preference: RedevenLocalePreference) => void;
-}>) {
-  const [open, setOpen] = createSignal(false);
-  const [highlightedIndex, setHighlightedIndex] = createSignal(0);
-  const languageSelectID = createUniqueId();
-  const languageListboxID = createUniqueId();
-  let buttonRef: HTMLButtonElement | undefined;
-  let listboxRef: HTMLDivElement | undefined;
-
-  const languagePreferenceOptions = createMemo(() => (
-    REDEVEN_LOCALE_PREFERENCES.map((preference) => ({
-      value: preference,
-      label: preference === SYSTEM_LOCALE_PREFERENCE
-        ? props.i18n.t('language.systemDefault')
-        : localePreferenceDisplayName(preference),
-      secondary: preference === SYSTEM_LOCALE_PREFERENCE
-        ? props.i18n.t('language.usingLanguage', { language: localePreferenceDisplayName(props.languageSnapshot.resolved_locale) })
-        : REDEVEN_LOCALE_META[preference].english_name,
-    }))
-  ));
-  const selectedIndex = createMemo(() => Math.max(0, languagePreferenceOptions().findIndex((option) => option.value === props.languageSnapshot.preference)));
-  const selectedOption = createMemo(() => languagePreferenceOptions()[selectedIndex()]);
-
-  createEffect(on(
-    [open, () => props.languageSnapshot.preference],
-    ([isOpen]) => {
-      if (isOpen) {
-        setHighlightedIndex(selectedIndex());
-      }
-    },
-  ));
-
-  createEffect(() => {
-    if (open()) {
-      scrollListboxOptionIntoView(listboxRef, `${languageListboxID}-option-${highlightedIndex()}`);
-    }
-  });
-
-  createEffect(() => {
-    if (!open()) {
-      return;
-    }
-    const containsTarget = (target: EventTarget | null): boolean => (
-      target instanceof Node && (buttonRef?.contains(target) === true || listboxRef?.contains(target) === true)
-    );
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!containsTarget(event.target)) {
-        setOpen(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setOpen(false);
-        buttonRef?.focus();
-      }
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    onCleanup(() => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    });
-  });
-
-  const moveHighlight = (delta: number) => {
-    const count = languagePreferenceOptions().length;
-    if (count <= 0) {
-      return;
-    }
-    setHighlightedIndex((current) => (current + delta + count) % count);
-  };
-  const selectPreference = (preference: RedevenLocalePreference) => {
-    props.updateLanguagePreference(preference);
-    setOpen(false);
-    buttonRef?.focus();
-  };
-
-  return (
-    <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
-      <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-start">
-        <div class="space-y-2">
-          <SettingsCardHeading
-            title={props.i18n.t('settings.languageTitle')}
-            help={props.i18n.t('settings.languageDescription')}
-            i18n={props.i18n}
-          />
-          <div class="mt-2">
-            <label id={languageSelectID} class="sr-only">{props.i18n.t('settings.languageSelectLabel')}</label>
-            <button
-              ref={buttonRef}
-              type="button"
-              class="flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2 text-left text-sm text-foreground outline-none transition-colors hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
-              aria-labelledby={languageSelectID}
-              aria-haspopup="listbox"
-              aria-expanded={open() ? 'true' : 'false'}
-              aria-controls={languageListboxID}
-              aria-activedescendant={open() ? `${languageListboxID}-option-${highlightedIndex()}` : undefined}
-              onClick={() => setOpen((current) => !current)}
-              onKeyDown={(event) => {
-                if (!open() && (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ')) {
-                  event.preventDefault();
-                  setOpen(true);
-                  if (event.key === 'ArrowDown') {
-                    moveHighlight(1);
-                  } else if (event.key === 'ArrowUp') {
-                    moveHighlight(-1);
-                  }
-                  return;
-                }
-                if (!open()) {
-                  return;
-                }
-                if (event.key === 'ArrowDown') {
-                  event.preventDefault();
-                  moveHighlight(1);
-                } else if (event.key === 'ArrowUp') {
-                  event.preventDefault();
-                  moveHighlight(-1);
-                } else if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  const option = languagePreferenceOptions()[highlightedIndex()];
-                  if (option) {
-                    selectPreference(option.value);
-                  }
-                } else if (event.key === 'Escape') {
-                  event.preventDefault();
-                  setOpen(false);
-                }
-              }}
-            >
-              <span class="min-w-0">
-                <span class="block truncate font-medium">{selectedOption()?.label}</span>
-                <span class="block truncate text-[11px] text-muted-foreground">{selectedOption()?.secondary}</span>
-              </span>
-              <ChevronDown class={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', open() && 'rotate-180')} />
-            </button>
-            <Show when={open()}>
-              <DesktopAnchoredListbox
-                id={languageListboxID}
-                anchorRef={buttonRef}
-                class="p-1"
-                maxHeight={320}
-                role="listbox"
-                open={open()}
-                onOverlayRef={(element) => {
-                  listboxRef = element;
-                }}
-              >
-                <div class="min-h-0 flex-1 overflow-auto">
-                  <For each={languagePreferenceOptions()}>
-                    {(option, index) => {
-                      const selected = createMemo(() => props.languageSnapshot.preference === option.value);
-                      const highlighted = createMemo(() => highlightedIndex() === index());
-                      return (
-                        <button
-                          type="button"
-                          id={`${languageListboxID}-option-${index()}`}
-                          role="option"
-                          tabIndex={-1}
-                          aria-selected={selected() ? 'true' : 'false'}
-                          class={cn(
-                            'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
-                            highlighted()
-                              ? 'bg-accent text-accent-foreground'
-                              : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
-                          )}
-                          title={`${option.label} - ${option.secondary}`}
-                          onClick={() => selectPreference(option.value)}
-                          onMouseEnter={() => setHighlightedIndex(index())}
-                          onMouseDown={(event) => {
-                            event.preventDefault();
-                            selectPreference(option.value);
-                          }}
-                        >
-                          <span class="min-w-0">
-                            <span class="block whitespace-normal text-xs font-medium leading-snug">{option.label}</span>
-                            <span class="block whitespace-normal text-[11px] leading-snug text-muted-foreground">{option.secondary}</span>
-                          </span>
-                          <Show when={selected()}>
-                            <Check class="h-3.5 w-3.5 shrink-0" />
-                          </Show>
-                        </button>
-                      );
-                    }}
-                  </For>
-                </div>
-              </DesktopAnchoredListbox>
-            </Show>
-          </div>
-          <p class="text-[11px] leading-relaxed text-muted-foreground">
-            {props.i18n.t('language.appliesToDesktopAndEnvApp')}
-          </p>
-        </div>
-        <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-2.5">
-          <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            {props.i18n.t('settings.languageSourceLabel')}
-          </div>
-          <div class="mt-1 text-sm font-medium text-foreground">
-            {languageSourceLabel(props.i18n, props.languageSnapshot.source)}
-          </div>
-          <div class="mt-1 text-[11px] text-muted-foreground">
-            {props.i18n.t('language.usingLanguage', { language: localePreferenceDisplayName(props.languageSnapshot.resolved_locale) })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-function DesktopInterfaceSettingsDialog(props: Readonly<{
-  open: boolean;
-  languageSnapshot: RedevenLanguageSnapshot;
-  i18n: DesktopI18n;
-  onOpenChange: (open: boolean) => void;
-  updateLanguagePreference: (preference: RedevenLocalePreference) => void;
-}>) {
-  return (
-    <Dialog
-      open={props.open}
-      onOpenChange={props.onOpenChange}
-      title={props.i18n.t('settings.interfaceTitle')}
-      class={LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS}
-      footer={(
-        <div class="flex justify-end">
-          <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
-            {props.i18n.t('common.close')}
-          </Button>
-        </div>
-      )}
-    >
-      <div class="space-y-3">
-        <SettingsSectionHeader
-          label={props.i18n.t('settings.interfaceTitle')}
-          hint={props.i18n.t('settings.interfaceDescription')}
-        />
-        <DesktopLanguageSettingsPanel
-          languageSnapshot={props.languageSnapshot}
-          i18n={props.i18n}
-          updateLanguagePreference={props.updateLanguagePreference}
-        />
-      </div>
-    </Dialog>
-  );
-}
-
 function LocalEnvironmentSettingsDialog(props: Readonly<{
   open: boolean;
   snapshot: DesktopSettingsSurfaceSnapshot;
   baselineSnapshot: DesktopSettingsSurfaceSnapshot;
   draft: DesktopSettingsDraft;
-  languageSnapshot: RedevenLanguageSnapshot;
   i18n: DesktopI18n;
   busyState: DesktopLauncherBusyState;
   settingsError: string;
@@ -12874,7 +12606,6 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   saveSettings: () => Promise<void>;
   cancelSettings: () => void;
   clearStoredLocalUIPassword: () => void;
-  updateLanguagePreference: (preference: RedevenLocalePreference) => void;
 }>) {
   const [accessModeOverride, setAccessModeOverride] = createSignal<DesktopAccessMode | null>(null);
   const accessModelOptions = createMemo(() => ({
@@ -13014,18 +12745,6 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
             </div>
           </div>
         </div>
-
-        <section class="space-y-3">
-          <SettingsSectionHeader
-            label={props.i18n.t('settings.interfaceTitle')}
-            hint={props.i18n.t('settings.interfaceDescription')}
-          />
-          <DesktopLanguageSettingsPanel
-            languageSnapshot={props.languageSnapshot}
-            i18n={props.i18n}
-            updateLanguagePreference={props.updateLanguagePreference}
-          />
-        </section>
 
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>

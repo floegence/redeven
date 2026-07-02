@@ -130,7 +130,7 @@ export const koKR = {
     quitDesktopDescription: "Redeven Desktop 종료",
     closeLauncherDescription: "launcher 창 닫기",
     changeLanguageTitle: "언어 변경",
-    changeLanguageDescription: "Interface 설정을 열어 Redeven Desktop 및 Env App UI 언어를 선택합니다",
+    changeLanguageDescription: "헤더 언어 메뉴를 열어 Redeven Desktop 및 Env App UI 언어를 전환합니다",
     toggleThemeTitle: "테마 전환",
     toggleThemeDescription: "라이트/다크 테마 전환",
     openCommandPaletteTitle: "Command Palette 열기",
