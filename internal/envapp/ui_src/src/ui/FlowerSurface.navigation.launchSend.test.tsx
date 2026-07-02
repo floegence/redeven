@@ -2087,11 +2087,16 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-stop-fails"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-stop-fails"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-running-stop-fails'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'do not lose this draft';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => {
+      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return button?.getAttribute('aria-label') === 'Send' && !button.disabled;
+    });
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-composer-error')));
 
@@ -2121,6 +2126,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-send-fails"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-send-fails"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-running-send-fails'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
