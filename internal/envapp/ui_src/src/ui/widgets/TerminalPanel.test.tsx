@@ -221,6 +221,28 @@ const sessionsCoordinatorMocks = vi.hoisted(() => ({
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
+  isMacLikePlatform: () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/u.test(navigator.userAgent),
+  matchKeybind: (event: KeyboardEvent, keybind: string | { mod?: boolean; ctrl?: boolean; alt?: boolean; shift?: boolean; key: string }) => {
+    const parsed = typeof keybind === 'string'
+      ? (() => {
+        const parts = keybind.toLowerCase().split('+');
+        const key = parts.pop() || '';
+        return {
+          mod: parts.includes('mod'),
+          ctrl: parts.includes('ctrl'),
+          alt: parts.includes('alt'),
+          shift: parts.includes('shift'),
+          key,
+        };
+      })()
+      : keybind;
+    const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/u.test(navigator.userAgent);
+    if (parsed.mod && !(mac ? event.metaKey : event.ctrlKey)) return false;
+    if (parsed.ctrl && !event.ctrlKey) return false;
+    if (parsed.alt && !event.altKey) return false;
+    if (parsed.shift && !event.shiftKey) return false;
+    return event.key.toLowerCase() === parsed.key;
+  },
   useCurrentWidgetId: () => widgetState.currentWidgetId,
   useLayout: () => ({
     isMobile: () => layoutState.mobile,
@@ -839,6 +861,23 @@ function findTerminalWorkIndicator(host: HTMLElement): HTMLElement | null {
   return host.querySelector('.redeven-terminal-work-indicator');
 }
 
+function setNavigatorUserAgent(userAgent: string) {
+  Object.defineProperty(window.navigator, 'userAgent', {
+    configurable: true,
+    value: userAgent,
+  });
+}
+
+function dispatchTerminalKeydown(target: Element, init: KeyboardEventInit): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', {
+    bubbles: true,
+    cancelable: true,
+    ...init,
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
 function installRequestAnimationFrameMock(mode: 'microtask' | 'timer' = 'microtask') {
   let nextAnimationFrameId = 0;
   const pendingAnimationFrames = new Map<number, FrameRequestCallback>();
@@ -915,6 +954,7 @@ describe('TerminalPanel', () => {
       configurable: true,
       value: 320,
     });
+    setNavigatorUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36');
     Object.values(transportMocks).forEach((mock) => {
       if ('mockClear' in mock) mock.mockClear();
     });
@@ -2958,7 +2998,8 @@ describe('TerminalPanel', () => {
     expect(browseButton).toBeUndefined();
   });
 
-  it('keeps terminal search as the product-owned mod+f shortcut', async () => {
+  it('opens terminal search with Cmd+F on macOS without stealing Ctrl+F', async () => {
+    setNavigatorUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15');
     terminalSelectionState.text = 'pnpm test';
 
     const host = document.createElement('div');
@@ -2970,18 +3011,242 @@ describe('TerminalPanel', () => {
     const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
     expect(terminalSurface).toBeTruthy();
 
-    const event = new KeyboardEvent('keydown', {
-      bubbles: true,
-      cancelable: true,
+    const ctrlEvent = dispatchTerminalKeydown(terminalSurface!, {
+      ctrlKey: true,
+      key: 'f',
+    });
+    await settleTerminalPanel();
+
+    expect(ctrlEvent.defaultPrevented).toBe(false);
+    expect(host.querySelector('input[placeholder="Search..."]')).toBeNull();
+
+    const cmdEvent = dispatchTerminalKeydown(terminalSurface!, {
       metaKey: true,
       key: 'f',
     });
-    terminalSurface?.dispatchEvent(event);
+    await settleTerminalPanel();
+
+    expect(cmdEvent.defaultPrevented).toBe(true);
+    const searchInput = host.querySelector('input[placeholder="Search..."]') as HTMLInputElement | null;
+    expect(searchInput).toBeTruthy();
+  });
+
+  it('opens terminal search with Ctrl+F off macOS without stealing Cmd+F', async () => {
+    setNavigatorUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36');
+    terminalSelectionState.text = 'pnpm test';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    const cmdEvent = dispatchTerminalKeydown(terminalSurface!, {
+      metaKey: true,
+      key: 'f',
+    });
+    await settleTerminalPanel();
+
+    expect(cmdEvent.defaultPrevented).toBe(false);
+    expect(host.querySelector('input[placeholder="Search..."]')).toBeNull();
+
+    const ctrlEvent = dispatchTerminalKeydown(terminalSurface!, {
+      ctrlKey: true,
+      key: 'f',
+    });
+    await settleTerminalPanel();
+
+    expect(ctrlEvent.defaultPrevented).toBe(true);
+    const searchInput = host.querySelector('input[placeholder="Search..."]') as HTMLInputElement | null;
+    expect(searchInput).toBeTruthy();
+  });
+
+  it('switches terminal tabs with the platform primary digit shortcut', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+    expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-1');
+
+    const event = dispatchTerminalKeydown(terminalSurface!, {
+      ctrlKey: true,
+      key: '2',
+    });
     await settleTerminalPanel();
 
     expect(event.defaultPrevented).toBe(true);
-    const searchInput = host.querySelector('input[placeholder="Search..."]') as HTMLInputElement | null;
-    expect(searchInput).toBeTruthy();
+    expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-2');
+  });
+
+  it('does not prevent default for terminal digit shortcuts outside the visible tab range', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    const event = dispatchTerminalKeydown(terminalSurface!, {
+      ctrlKey: true,
+      key: '9',
+    });
+    await settleTerminalPanel();
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-1');
+  });
+
+  it('does not steal shifted primary digit shortcuts from shell navigation commands', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    const event = dispatchTerminalKeydown(terminalSurface!, {
+      ctrlKey: true,
+      shiftKey: true,
+      key: '1',
+    });
+    await settleTerminalPanel();
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-1');
+  });
+
+  it('keeps terminal digit shortcuts scoped to the owning workbench terminal panel', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+      {
+        id: 'session-3',
+        name: 'Terminal 3',
+        workingDir: '/workspace/logs',
+        createdAtMs: 3,
+        isActive: false,
+        lastActiveAtMs: 3,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      (() => {
+        const [groupA, setGroupA] = createSignal({
+          sessionIds: ['session-1', 'session-2'],
+          activeSessionId: 'session-1' as string | null,
+        });
+        const [groupB, setGroupB] = createSignal({
+          sessionIds: ['session-3'],
+          activeSessionId: 'session-3' as string | null,
+        });
+
+        return (
+          <>
+            <div data-testid="terminal-panel-a">
+              <TerminalPanel
+                variant="workbench"
+                sessionGroupState={groupA()}
+                onSessionGroupStateChange={setGroupA}
+              />
+            </div>
+            <div data-testid="terminal-panel-b">
+              <TerminalPanel
+                variant="workbench"
+                sessionGroupState={groupB()}
+                onSessionGroupStateChange={setGroupB}
+              />
+            </div>
+          </>
+        );
+      })()
+    ), host);
+    await settleTerminalPanel();
+
+    const panelA = host.querySelector('[data-testid="terminal-panel-a"]') as HTMLElement | null;
+    const panelB = host.querySelector('[data-testid="terminal-panel-b"]') as HTMLElement | null;
+    expect(panelA).toBeTruthy();
+    expect(panelB).toBeTruthy();
+    expect(panelA?.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-1');
+    expect(panelB?.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-3');
+
+    const terminalSurface = panelA?.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    const event = dispatchTerminalKeydown(terminalSurface!, {
+      ctrlKey: true,
+      key: '2',
+    });
+    await settleTerminalPanel();
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(panelA?.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-2');
+    expect(panelB?.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-3');
   });
 
   it('does not keep a product-owned Cmd/Ctrl+C copy workaround at the panel shell', async () => {

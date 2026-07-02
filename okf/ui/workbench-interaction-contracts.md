@@ -10,11 +10,11 @@ Workbench input ownership is explicit. Canvas zoom, widget activation, local scr
 
 # Mechanism
 
-Wheel ownership uses exported local scroll viewport props that set `data-floe-canvas-wheel-interactive="true"` and a local-scroll role. Layout-only regions can declare a non-interactive wheel role. Text selection surfaces use separate marker props and do not receive wheel ownership unless combined with local scroll viewport props. Action surfaces declare their own marker so clickable controls can remain interactive inside widgets without becoming text selection surfaces.
+Wheel ownership uses exported local scroll viewport props that set `data-floe-canvas-wheel-interactive="true"` and a local-scroll role. Layout-only regions can declare a non-interactive wheel role. Text selection surfaces use separate marker props and do not receive wheel ownership unless combined with local scroll viewport props. Action surfaces declare their own marker so clickable controls can remain interactive inside widgets without becoming text selection surfaces. Terminal keyboard shortcuts such as panel-local search and tab switching are scoped to the owning TerminalPanel event tree; they do not create a window-level shortcut owner and do not widen wheel, selection, copy, or widget activation ownership.
 
 # Boundaries
 
-Selected widget boundaries guard canvas zoom. A surface that supports text selection does not automatically own wheel input, and a surface that owns local scrolling must declare the exported wheel contract props.
+Selected widget boundaries guard canvas zoom. A surface that supports text selection does not automatically own wheel input, and a surface that owns local scrolling must declare the exported wheel contract props. Terminal shortcuts may switch only the current panel's visible tabs and must preserve platform primary-mod behavior so terminal-native Ctrl sequences are not stolen on macOS.
 
 # Citations
 
@@ -26,3 +26,5 @@ Selected widget boundaries guard canvas zoom. A surface that supports text selec
 [6] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.test.ts:51 - Tests enforce that text-selection props do not grant wheel ownership by themselves.
 [7] redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.interaction.test.tsx:864 - Interaction tests cover selected text-selection surfaces versus widget-body activation.
 [8] redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewContent.tsx:211 - File preview content uses the combined text-selection scroll viewport props.
+[9] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:94 - Terminal tab shortcut bounds are local to the visible tab list.
+[10] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:3476 - Terminal root key handling applies panel-scoped primary-mod search and tab shortcuts.
