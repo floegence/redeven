@@ -12,9 +12,25 @@ Redeven keeps CI and local release checks aligned around source validation and g
 
 CI has a dedicated OKF bundle check that validates source integrity and verifies checked-in dist files. The main check installs Go, Node, corepack, golangci-lint, gitleaks, and ripgrep, then runs shell syntax checks, third-party notice validation, open-source hygiene, release note generator tests, Runtime Service compatibility checks, Gateway protocol contract checks, Flower protocol checks, Flower UI behavior contracts, UI lint, Desktop checks, embedded asset builds, Go tests, and golangci-lint. Release tags run the compatibility contract check and Gateway protocol contract check before building assets and packaging binaries.
 
+ReDevPlugin consumption is a published dependency upgrade gate, not a source
+sync. A Redeven change that integrates or upgrades ReDevPlugin must update the
+released Go module, npm packages, signed runtime artifact reference,
+schema/contract hashes, compatibility manifest inputs, and verification scripts
+together. Local checks must prove the build does not depend on `../redevplugin`,
+`go.work`, `replace`, local npm links, copied contracts, or copied runtime
+binaries. Once plugin integration code exists, the focused gate should cover
+mounted route matrix, released-contract hash verification, session adapter
+mapping, Env App and Workbench surface smoke, Flower-generated minimal fixture
+flow, and concrete business capability adapters.
+
 # Boundaries
 
 Checked-in generated OKF dist files must match source. Release automation should collect `okf/dist` verification files from the current tree, not from removed `internal/okf` or knowledge paths. Gateway protocol drift must fail before Gateway binaries are packaged, because `spec/openapi/gateway-v1.yaml` is the active source contract for the Gateway HTTP API.
+
+Unreleased ReDevPlugin behavior is not a valid Redeven integration target.
+Feature branches may explore adapters against parallel upstream work, but
+committed Redeven code and release validation must consume published
+ReDevPlugin artifacts only.
 
 # Citations
 
@@ -31,5 +47,8 @@ Checked-in generated OKF dist files must match source. Release automation should
 [11] redeven:.github/workflows/release.yml:48 - Release tags validate the runtime compatibility contract for the tag.
 [12] redeven:.github/workflows/release.yml:51 - Release tags validate the Gateway protocol contract before packaging.
 [13] redeven:.github/workflows/release.yml:54 - Release tags build embedded assets before packaging.
-[14] redeven:AGENTS.md:326 - Repository local quality gates include OKF integrity, dist verification, assets, Go tests, and golangci-lint.
+[14] redeven:AGENTS.md:689 - Repository local quality gates include OKF integrity, dist verification, assets, Go tests, and golangci-lint.
 [15] redeven:scripts/check_gateway_protocol_contract.sh:9 - The local script executes the focused Gateway OpenAPI and naming-boundary tests.
+[16] redeven:AGENTS.md:495 - ReDevPlugin upgrades are dependency changes that update released artifacts together.
+[17] redeven:AGENTS.md:501 - ReDevPlugin upgrade review must identify released versions, adapters, surfaces, capabilities, and local checks.
+[18] redeven:AGENTS.md:513 - Redeven local checks must prove integration does not depend on local ReDevPlugin wiring or copied artifacts.

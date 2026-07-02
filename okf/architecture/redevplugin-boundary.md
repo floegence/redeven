@@ -134,16 +134,16 @@ fixtures and tests.
 
 [1] redeven:AGENTS.md:223 - Published dependency policy lists `redevplugin` as an upstream dependency consumed by Redeven.
 [2] redeven:AGENTS.md:256 - Redeven must consume ReDevPlugin through published artifacts.
-[3] redeven:AGENTS.md:293 - Local sibling checkout wiring for ReDevPlugin is forbidden.
-[4] redeven:AGENTS.md:300 - ReDevPlugin owns platform-general plugin concerns.
-[5] redeven:AGENTS.md:316 - Redeven owns only product integration and business adapters.
-[6] redeven:AGENTS.md:376 - Redeven imports released ReDevPlugin artifacts one-way and keeps Redeven-specific behavior in adapters.
-[7] redeven:AGENTS.md:385 - Redeven integration must keep ReDevPlugin platform state opaque.
-[8] redeven:AGENTS.md:404 - Platform contract bugs found during Redeven integration must be fixed upstream in ReDevPlugin first.
-[9] redeven:AGENTS.md:409 - Redeven must not fork or reimplement the plugin platform core.
-[10] redeven:AGENTS.md:418 - Redeven integration code must not bypass ReDevPlugin tokens, brokers, sandboxing, or lifecycle policy.
-[11] redeven:AGENTS.md:424 - Containers are Redeven business capabilities, not a plugin runtime mechanism.
-[12] redeven:AGENTS.md:431 - Flower-generated plugin flows are Redeven product orchestration over ReDevPlugin primitives.
-[13] redeven:AGENTS.md:439 - ReDevPlugin upgrades in Redeven must consume released artifacts together.
-[14] redeven:AGENTS.md:463 - Redeven plugin integration review must reject alternate platform cores and enforce adapter-only business capabilities.
+[3] redeven:AGENTS.md:331 - Local sibling checkout wiring for ReDevPlugin is forbidden.
+[4] redeven:AGENTS.md:338 - ReDevPlugin owns platform-general plugin concerns.
+[5] redeven:AGENTS.md:354 - Redeven owns only product integration and business adapters.
+[6] redeven:AGENTS.md:408 - Redeven treats ReDevPlugin as a published upstream dependency, not a source folder.
+[7] redeven:AGENTS.md:441 - Redeven integration must keep ReDevPlugin platform state opaque.
+[8] redeven:AGENTS.md:460 - Platform contract bugs found during Redeven integration must be fixed upstream in ReDevPlugin first.
+[9] redeven:AGENTS.md:465 - Redeven must not fork or reimplement the plugin platform core.
+[10] redeven:AGENTS.md:474 - Redeven integration code must not bypass ReDevPlugin tokens, brokers, sandboxing, or lifecycle policy.
+[11] redeven:AGENTS.md:480 - Containers are Redeven business capabilities, not a plugin runtime mechanism.
+[12] redeven:AGENTS.md:487 - Flower-generated plugin flows are Redeven product orchestration over ReDevPlugin primitives.
+[13] redeven:AGENTS.md:495 - ReDevPlugin upgrades in Redeven must consume released artifacts together.
+[14] redeven:AGENTS.md:535 - Redeven plugin integration review must reject alternate platform cores and enforce adapter-only business capabilities.
 [15] redeven:go.mod:5 - Redeven's current required module list is the active Go dependency surface for released upstream modules.
