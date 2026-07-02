@@ -10,7 +10,7 @@ Redeven keeps CI and local release checks aligned around source validation and g
 
 # Mechanism
 
-CI has a dedicated OKF bundle check that validates source integrity and verifies checked-in dist files. The main check installs Go, Node, corepack, golangci-lint, gitleaks, and ripgrep, then runs shell syntax checks, third-party notice validation, open-source hygiene, release note generator tests, Runtime Service compatibility checks, Gateway protocol contract checks, Flower protocol checks, Flower UI behavior contracts, UI lint, Desktop checks, embedded asset builds, Go tests, and golangci-lint. Release tags run the compatibility contract check and Gateway protocol contract check before building assets and packaging binaries.
+CI has a dedicated OKF bundle check that validates source integrity and verifies checked-in dist files. The main check installs Go, Node, corepack, golangci-lint, gitleaks, and ripgrep, then runs shell syntax checks, third-party notice validation, open-source hygiene, release note generator tests, Runtime Service compatibility checks, ReDevPlugin dependency boundary checks, Gateway protocol contract checks, Flower protocol checks, Flower UI behavior contracts, UI lint, Desktop checks, embedded asset builds, Go tests, and golangci-lint. Release tags run the compatibility contract check and Gateway protocol contract check before building assets and packaging binaries.
 
 ReDevPlugin consumption is a published dependency upgrade gate, not a source
 sync. A Redeven change that integrates or upgrades ReDevPlugin must update the
@@ -18,10 +18,12 @@ released Go module, npm packages, signed runtime artifact reference,
 schema/contract hashes, compatibility manifest inputs, and verification scripts
 together. Local checks must prove the build does not depend on `../redevplugin`,
 `go.work`, `replace`, local npm links, copied contracts, or copied runtime
-binaries. Once plugin integration code exists, the focused gate should cover
-mounted route matrix, released-contract hash verification, session adapter
-mapping, Env App and Workbench surface smoke, Flower-generated minimal fixture
-flow, and concrete business capability adapters.
+binaries. The current dependency boundary script enforces the no-local-wiring
+baseline before any ReDevPlugin package is consumed. Once plugin integration
+code exists, the focused gate should cover mounted route matrix,
+released-contract hash verification, session adapter mapping, Env App and
+Workbench surface smoke, Flower-generated minimal fixture flow, and concrete
+business capability adapters.
 
 # Boundaries
 
@@ -40,10 +42,10 @@ ReDevPlugin artifacts only.
 [4] redeven:.github/workflows/ci-check.yml:55 - CI runs shell script syntax checks across release and validation scripts.
 [5] redeven:.github/workflows/ci-check.yml:92 - Open-source hygiene runs with `--all`.
 [6] redeven:.github/workflows/ci-check.yml:98 - Runtime compatibility contract source checks run in CI.
-[7] redeven:.github/workflows/ci-check.yml:101 - CI runs the Gateway protocol contract guard.
-[8] redeven:.github/workflows/ci-check.yml:107 - CI runs the Flower UI behavior contract script.
+[7] redeven:.github/workflows/ci-check.yml:105 - CI runs the Gateway protocol contract guard.
+[8] redeven:.github/workflows/ci-check.yml:111 - CI runs the Flower UI behavior contract script.
 [9] redeven:scripts/check_flower_ui.sh:16 - The local Flower UI gate runs stop/send interaction, shared timeline projection, and markdown readability tests.
-[10] redeven:.github/workflows/ci-check.yml:116 - Embedded assets are built before Go tests and lint.
+[10] redeven:.github/workflows/ci-check.yml:120 - Embedded assets are built before Go tests and lint.
 [11] redeven:.github/workflows/release.yml:48 - Release tags validate the runtime compatibility contract for the tag.
 [12] redeven:.github/workflows/release.yml:51 - Release tags validate the Gateway protocol contract before packaging.
 [13] redeven:.github/workflows/release.yml:54 - Release tags build embedded assets before packaging.
@@ -52,3 +54,6 @@ ReDevPlugin artifacts only.
 [16] redeven:AGENTS.md:495 - ReDevPlugin upgrades are dependency changes that update released artifacts together.
 [17] redeven:AGENTS.md:501 - ReDevPlugin upgrade review must identify released versions, adapters, surfaces, capabilities, and local checks.
 [18] redeven:AGENTS.md:513 - Redeven local checks must prove integration does not depend on local ReDevPlugin wiring or copied artifacts.
+[19] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The local boundary script rejects Go workspaces, local ReDevPlugin wiring, and copied platform-core paths.
+[20] redeven:.github/workflows/ci-check.yml:102 - CI runs the ReDevPlugin dependency boundary guard before protocol and UI checks.
+[21] redeven:.githooks/pre-commit:7 - The local pre-commit hook runs the ReDevPlugin dependency boundary guard before Gateway and heavyweight local checks.

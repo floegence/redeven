@@ -128,7 +128,10 @@ fixtures must come from released ReDevPlugin artifacts. Redeven tests should
 prove host adapter behavior, permission mapping, route mounting, lifecycle
 wiring, and product UX, while reusable manifest, package, bridge, runtime,
 storage, network, and lifecycle semantics remain covered by ReDevPlugin
-fixtures and tests.
+fixtures and tests. The local dependency boundary guard enforces the current
+no-local-wiring baseline by rejecting Go workspaces, local ReDevPlugin module or
+package-manager wiring, copied platform contracts, and `internal/plugins*`
+platform-core directories.
 
 # Citations
 
@@ -147,3 +150,4 @@ fixtures and tests.
 [13] redeven:AGENTS.md:495 - ReDevPlugin upgrades in Redeven must consume released artifacts together.
 [14] redeven:AGENTS.md:535 - Redeven plugin integration review must reject alternate platform cores and enforce adapter-only business capabilities.
 [15] redeven:go.mod:5 - Redeven's current required module list is the active Go dependency surface for released upstream modules.
+[16] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The dependency boundary guard blocks local ReDevPlugin wiring and copied platform-core paths.
