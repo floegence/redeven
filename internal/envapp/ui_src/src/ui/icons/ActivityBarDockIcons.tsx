@@ -56,16 +56,23 @@ export function ActivityBarMonitorIcon(props: { class?: string }) {
 export function ActivityBarCodespacesIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" stroke-opacity=".55" stroke-width="1" fill="currentColor" fill-opacity=".12" />
-      <rect x="5" y="5" width="3.5" height="14" rx="2" fill="currentColor" fill-opacity=".1" />
-      <line x1="8.5" y1="5" x2="8.5" y2="19" stroke="currentColor" stroke-opacity=".15" stroke-width=".5" />
-      <rect x="9.5" y="6" width="3" height="1.5" rx=".75" fill="currentColor" fill-opacity=".75" />
-      <rect x="13" y="6" width="4.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".28" />
-      <rect x="9.5" y="8.5" width="2.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".6" />
-      <rect x="12.5" y="8.5" width="4.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".24" />
-      <rect x="9.5" y="11" width="4.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".22" />
-      <rect x="9.5" y="11" width="2.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".55" />
-      <rect x="9.5" y="13.5" width="3.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".5" />
+      <rect x="4.75" y="4.75" width="6.3" height="6.3" rx="1.45" fill="currentColor" fill-opacity=".12" stroke="currentColor" stroke-opacity=".42" stroke-width="1" />
+      <rect x="12.95" y="4.75" width="6.3" height="6.3" rx="1.45" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".32" stroke-width="1" />
+      <rect x="4.75" y="12.95" width="6.3" height="6.3" rx="1.45" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-opacity=".32" stroke-width="1" />
+      <rect x="12.95" y="12.95" width="6.3" height="6.3" rx="1.45" fill="currentColor" fill-opacity=".12" stroke="currentColor" stroke-opacity=".42" stroke-width="1" />
+      <text
+        x="12"
+        y="16.35"
+        text-anchor="middle"
+        font-family="ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+        font-size="12.4"
+        font-weight="800"
+        letter-spacing="0"
+        fill="currentColor"
+        fill-opacity=".9"
+      >
+        C
+      </text>
     </svg>
   );
 }

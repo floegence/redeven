@@ -238,20 +238,23 @@ function CodespacesDockIcon(props: { class?: string }) {
       </defs>
       <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#cs-bg)" />
       <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#cs-rim)" />
-      <rect x="10" y="10" width="28" height="28" rx="4" fill="var(--foreground)" fill-opacity=".06" stroke="var(--foreground)" stroke-opacity=".3" stroke-width="1.1" />
-      <rect x="10" y="10" width="7.5" height="28" rx="4" fill="var(--foreground)" fill-opacity=".05" />
-      <line x1="17.5" y1="10" x2="17.5" y2="38" stroke="var(--foreground)" stroke-opacity=".08" stroke-width=".5" />
-      <circle cx="13.8" cy="14" r=".9" fill="var(--foreground)" fill-opacity=".22" />
-      <circle cx="13.8" cy="19.5" r=".9" fill="var(--foreground)" fill-opacity=".22" />
-      <circle cx="13.8" cy="25" r=".9" fill="var(--foreground)" fill-opacity=".22" />
-      <circle cx="13.8" cy="30.5" r=".9" fill="var(--foreground)" fill-opacity=".22" />
-      <rect x="18.8" y="11.8" width="6" height="2.6" rx="1.2" fill="#4338ca" fill-opacity=".7" />
-      <rect x="25.5" y="11.8" width="10" height="2.6" rx="1.2" fill="var(--foreground)" fill-opacity=".18" />
-      <rect x="18.8" y="17.3" width="5" height="2.6" rx="1.2" fill="#ea580c" fill-opacity=".6" />
-      <rect x="24.5" y="17.3" width="10" height="2.6" rx="1.2" fill="var(--foreground)" fill-opacity=".14" />
-      <rect x="18.8" y="22.8" width="10" height="2.6" rx="1.2" fill="var(--foreground)" fill-opacity=".12" />
-      <rect x="18.8" y="22.8" width="5" height="2.6" rx="1.2" fill="#16a34a" fill-opacity=".6" />
-      <rect x="18.8" y="28.3" width="7" height="2.6" rx="1.2" fill="#0d9488" fill-opacity=".55" />
+      <rect x="9.5" y="9.5" width="12.6" height="12.6" rx="3" fill="var(--foreground)" fill-opacity=".12" stroke="var(--foreground)" stroke-opacity=".42" stroke-width="1.15" />
+      <rect x="25.9" y="9.5" width="12.6" height="12.6" rx="3" fill="var(--foreground)" fill-opacity=".08" stroke="var(--foreground)" stroke-opacity=".32" stroke-width="1.15" />
+      <rect x="9.5" y="25.9" width="12.6" height="12.6" rx="3" fill="var(--foreground)" fill-opacity=".08" stroke="var(--foreground)" stroke-opacity=".32" stroke-width="1.15" />
+      <rect x="25.9" y="25.9" width="12.6" height="12.6" rx="3" fill="var(--foreground)" fill-opacity=".12" stroke="var(--foreground)" stroke-opacity=".42" stroke-width="1.15" />
+      <text
+        x="24"
+        y="32.7"
+        text-anchor="middle"
+        font-family="'Inter','SF Pro Display',-apple-system,sans-serif"
+        font-size="24.8"
+        font-weight="800"
+        letter-spacing="0"
+        fill="var(--foreground)"
+        fill-opacity=".9"
+      >
+        C
+      </text>
     </svg>
   );
 }
