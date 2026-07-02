@@ -280,12 +280,29 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Sparkles: Icon,
     Terminal: Icon,
     Trash: Icon,
+    X: Icon,
   };
 });
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
   Panel: (props: any) => <div>{props.children}</div>,
   PanelContent: (props: any) => <div>{props.children}</div>,
+  Sidebar: (props: any) => (
+    <aside data-testid="mock-sidebar" data-sidebar-width={String(props.width ?? '')} aria-label={props.ariaLabel} class={props.class}>
+      {props.children}
+    </aside>
+  ),
+  SidebarContent: (props: any) => <div data-testid="mock-sidebar-content" class={props.class}>{props.children}</div>,
+  SidebarItemList: (props: any) => <div class={props.class}>{props.children}</div>,
+  SidebarSection: (props: any) => (
+    <section class={props.class}>
+      <div data-testid="mock-sidebar-section-title">
+        <span>{props.title}</span>
+        {props.actions}
+      </div>
+      <div>{props.children}</div>
+    </section>
+  ),
 }));
 
 vi.mock('@floegence/floe-webapp-core/loading', () => ({
@@ -302,6 +319,8 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
     <button
       type="button"
+      data-testid={props['data-testid']}
+      aria-label={props['aria-label']}
       class={props.class}
       disabled={props.disabled}
       title={props.title}
@@ -473,7 +492,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
             <button
               type="button"
               aria-label={`Close ${item.label}`}
-              data-testid={`close-tab-${item.id}`}
+              data-testid={`close-session-${item.id}`}
               onClick={() => props.onClose?.(item.id)}
             >
               ×
@@ -860,19 +879,19 @@ function publishTerminalSessions() {
 }
 
 function findTerminalTab(host: HTMLElement, label: string): HTMLButtonElement | undefined {
-  return Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes(label)) as HTMLButtonElement | undefined;
+  return Array.from(host.querySelectorAll<HTMLButtonElement>('button[data-terminal-session-id]')).find((button) => button.textContent?.includes(label));
 }
 
 function findTerminalTabs(host: HTMLElement, label: string): HTMLButtonElement[] {
-  return Array.from(host.querySelectorAll('button')).filter((button) => button.textContent?.includes(label)) as HTMLButtonElement[];
+  return Array.from(host.querySelectorAll<HTMLButtonElement>('button[data-terminal-session-id]')).filter((button) => button.textContent?.includes(label));
 }
 
 function findActiveTerminalTab(host: HTMLElement): HTMLButtonElement | null {
-  return host.querySelector('button[role="tab"][aria-selected="true"]') as HTMLButtonElement | null;
+  return host.querySelector('button[data-terminal-session-active="true"]') as HTMLButtonElement | null;
 }
 
 function findTerminalTabsRoot(host: HTMLElement): HTMLElement | null {
-  return host.querySelector('[data-testid="mock-tabs"]') as HTMLElement | null;
+  return host.querySelector('[data-testid="terminal-session-list"]') as HTMLElement | null;
 }
 
 function findTerminalTabStatus(host: HTMLElement, label: string, status: 'running' | 'unread' | 'none'): Element | null {
@@ -1617,7 +1636,7 @@ describe('TerminalPanel', () => {
     ), host);
     await settleTerminalPanel();
 
-    const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
+    const addButton = host.querySelector('[data-testid="terminal-sidebar-add-session"]') as HTMLButtonElement | null;
     expect(addButton).toBeTruthy();
 
     addButton?.click();
@@ -1626,18 +1645,18 @@ describe('TerminalPanel', () => {
     expect(sessionOperations.createSession).toHaveBeenCalledWith('Terminal 2', '/workspace');
     expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
-    expect(host.querySelector('[data-testid="close-tab-session-2"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
 
     await settleTerminalPanelAfterPaint();
     expect(terminalCoreInstances).toHaveLength(2);
     const mountedSecondCore = terminalCoreInstances[1];
 
-    const closeButton = host.querySelector('[data-testid="close-tab-session-2"]') as HTMLButtonElement | null;
+    const closeButton = host.querySelector('[data-testid="close-session-session-2"]') as HTMLButtonElement | null;
     expect(closeButton).toBeTruthy();
     closeButton?.click();
 
     expect(findTerminalTab(host, 'Terminal 2')).toBeUndefined();
-    expect(findTerminalTab(host, 'Terminal 1')?.getAttribute('aria-selected')).toBe('true');
+    expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
     expect(sessionOperations.deleteSession).not.toHaveBeenCalled();
     expect(mountedSecondCore?.dispose).not.toHaveBeenCalled();
 
@@ -1708,7 +1727,7 @@ describe('TerminalPanel', () => {
     expect(terminalCoreInstances).toHaveLength(1);
     expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
 
-    const closeButton = host.querySelector('[data-testid="close-tab-session-2"]') as HTMLButtonElement | null;
+    const closeButton = host.querySelector('[data-testid="close-session-session-2"]') as HTMLButtonElement | null;
     expect(closeButton).toBeTruthy();
     closeButton?.click();
     await settleTerminalPanel();
@@ -1731,7 +1750,7 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
+    const button = host.querySelector('[data-testid="terminal-sidebar-add-session"]') as HTMLButtonElement | null;
     expect(button).toBeTruthy();
 
     button?.click();
@@ -1760,19 +1779,19 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanelAfterPaint();
 
-    const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
+    const addButton = host.querySelector('[data-testid="terminal-sidebar-add-session"]') as HTMLButtonElement | null;
     expect(addButton).toBeTruthy();
 
     addButton?.click();
 
     expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
-    expect(findTerminalTab(host, 'Terminal 2')?.getAttribute('aria-selected')).toBe('true');
+    expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('true');
     expect(sessionsCoordinatorMocks.createSession).not.toHaveBeenCalled();
 
     await settleTerminalPanelMicrotasks();
 
     expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
-    expect(findTerminalTab(host, 'Terminal 2')?.getAttribute('aria-selected')).toBe('true');
+    expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('true');
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).not.toBeNull();
     expect(host.textContent).toContain('Creating terminal...');
     const pendingSurface = host.querySelector('[data-terminal-pending-surface="true"]') as HTMLElement | null;
@@ -1810,9 +1829,9 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(findTerminalTab(host, 'Terminal 2')).toBeTruthy();
-    expect(findTerminalTab(host, 'Terminal 2')?.getAttribute('aria-selected')).toBe('true');
+    expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('true');
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
-    expect(host.querySelector('[data-testid="close-tab-session-2"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-2');
     expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeTruthy();
     expect(terminalCoreInstances).toHaveLength(1);
@@ -1839,7 +1858,7 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
+    const addButton = host.querySelector('[data-testid="terminal-sidebar-add-session"]') as HTMLButtonElement | null;
     addButton?.click();
     await settleTerminalPanelAfterPaint();
 
@@ -1863,7 +1882,7 @@ describe('TerminalPanel', () => {
     expect(findTerminalTabs(host, 'Terminal 2')).toHaveLength(1);
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
     expect(host.textContent).not.toContain('Creating terminal...');
-    expect(host.querySelector('[data-testid="close-tab-session-2"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
 
     const completeCreate = resolveCreateRef.current;
     expect(completeCreate).not.toBeNull();
@@ -1873,7 +1892,7 @@ describe('TerminalPanel', () => {
 
     expect(findTerminalTabs(host, 'Terminal 2')).toHaveLength(1);
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
-    expect(host.querySelector('[data-testid="close-tab-session-2"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
   });
 
   it('keeps a failed optimistic terminal tab in place with retry and dismiss actions', async () => {
@@ -1901,7 +1920,7 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    const addButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'Add') as HTMLButtonElement | undefined;
+    const addButton = host.querySelector('[data-testid="terminal-sidebar-add-session"]') as HTMLButtonElement | null;
     addButton?.click();
     await settleTerminalPanelAfterPaint();
 
@@ -1916,7 +1935,7 @@ describe('TerminalPanel', () => {
 
     expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledTimes(2);
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'failed')).toBeNull();
-    expect(host.querySelector('[data-testid="close-tab-session-2"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
   });
 
   it('attaches with measured dimensions and performs one final size confirmation after attach', async () => {
@@ -1989,10 +2008,10 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Terminal 2')?.click();
+    findTerminalTab(host, 'Terminal 2')?.click();
     await settleTerminalPanelAfterPaint();
 
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Terminal 1')?.click();
+    findTerminalTab(host, 'Terminal 1')?.click();
     await settleTerminalPanel();
 
     terminalCoreInstances[1]?.emitBell();
@@ -2002,14 +2021,14 @@ describe('TerminalPanel', () => {
 
     expect(notificationMocks.info).not.toHaveBeenCalled();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
-    const terminal2Tab = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Terminal 2'));
+    const terminal2Tab = findTerminalTab(host, 'Terminal 2');
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).not.toBeNull();
     expect(host.textContent).not.toContain('! Terminal 2');
 
     terminal2Tab?.click();
     await settleTerminalPanel();
 
-    const activeTerminal2Tab = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Terminal 2'));
+    const activeTerminal2Tab = findTerminalTab(host, 'Terminal 2');
     expect(activeTerminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).toBeNull();
   });
 
@@ -2039,23 +2058,23 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="panel" />, host);
     await settleTerminalPanel();
 
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Terminal 2')?.click();
+    findTerminalTab(host, 'Terminal 2')?.click();
     await settleTerminalPanelAfterPaint();
 
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Terminal 1')?.click();
+    findTerminalTab(host, 'Terminal 1')?.click();
     await settleTerminalPanel();
 
     emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
     await settleTerminalPanel();
 
-    let terminal2Tab = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Terminal 2'));
+    let terminal2Tab = findTerminalTab(host, 'Terminal 2');
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="running"]')).not.toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
 
     emitTerminalData('session-2', '\x1b]633;D;0\u0007', 2);
     await settleTerminalPanel();
 
-    terminal2Tab = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Terminal 2'));
+    terminal2Tab = findTerminalTab(host, 'Terminal 2');
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="running"]')).toBeNull();
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).not.toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
@@ -3200,23 +3219,24 @@ describe('TerminalPanel', () => {
     expect(searchInput).toBeTruthy();
   });
 
-  it('uses an instant active-border indicator for terminal tabs', async () => {
+  it('renders terminal sessions in a floe sidebar instead of tabs', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    const tabsRoot = findTerminalTabsRoot(host);
-    expect(tabsRoot?.dataset.indicatorMode).toBe('activeBorder');
-    expect(tabsRoot?.dataset.indicatorAnimated).toBe('false');
-    expect(tabsRoot?.dataset.tabClass).toContain('transition-none');
-    expect(tabsRoot?.dataset.tabActiveClass).toContain('transition-none');
-    expect(tabsRoot?.dataset.tabInactiveClass).toContain('transition-none');
-    expect(tabsRoot?.dataset.indicatorClass).toContain('transition-none');
+    expect(host.querySelector('[data-testid="mock-tabs"]')).toBeNull();
+    expect(host.querySelector('[data-testid="mock-sidebar"]')).toBeTruthy();
+    const listRoot = findTerminalTabsRoot(host);
+    expect(listRoot).toBeTruthy();
+    expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
+    expect(listRoot?.textContent).not.toContain('Running');
+    expect(listRoot?.textContent).not.toContain('Unread');
+    expect(listRoot?.textContent).not.toContain('History');
   });
 
-  it('switches terminal tabs with the platform primary digit shortcut', async () => {
+  it('switches terminal sessions with the platform primary digit shortcut', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -3251,14 +3271,14 @@ describe('TerminalPanel', () => {
       key: '2',
     });
 
-    expect(findTerminalTab(host, 'Terminal 2')?.getAttribute('aria-selected')).toBe('true');
+    expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('true');
     expect(findActiveTerminalTab(host)?.textContent).toContain('Terminal 2');
     expect(terminalCoreInstances).toHaveLength(1);
 
     await settleTerminalPanel();
 
     expect(event.defaultPrevented).toBe(true);
-    expect(findTerminalTab(host, 'Terminal 2')?.getAttribute('aria-selected')).toBe('true');
+    expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('true');
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-2');
     expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeTruthy();
     expect(terminalCoreInstances).toHaveLength(1);
@@ -3324,13 +3344,13 @@ describe('TerminalPanel', () => {
     expect(secondEvent.defaultPrevented).toBe(true);
     expect(thirdEvent.defaultPrevented).toBe(true);
     expect(firstEvent.defaultPrevented).toBe(true);
-    expect(findTerminalTab(host, 'Terminal 1')?.getAttribute('aria-selected')).toBe('true');
+    expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
     expect(findActiveTerminalTab(host)?.textContent).toContain('Terminal 1');
     expect(terminalCoreInstances).toHaveLength(1);
 
     await settleTerminalPanelAfterPaint();
 
-    expect(findTerminalTab(host, 'Terminal 1')?.getAttribute('aria-selected')).toBe('true');
+    expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
     expect(terminalCoreInstances).toHaveLength(1);
     expect(transportMocks.attach.mock.calls.every((call) => call[0] !== 'session-2' && call[0] !== 'session-3')).toBe(true);
   });
