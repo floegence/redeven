@@ -130,7 +130,7 @@ export const ptBR = {
     quitDesktopDescription: "Sair do Redeven Desktop",
     closeLauncherDescription: "Fechar a janela launcher",
     changeLanguageTitle: "Alterar idioma",
-    changeLanguageDescription: "Abrir configurações de Interface para escolher o idioma da UI do Redeven Desktop e Env App",
+    changeLanguageDescription: "Abrir o menu de idioma do cabeçalho para Redeven Desktop e Env App",
     toggleThemeTitle: "Alternar tema",
     toggleThemeDescription: "Alternar entre tema claro e escuro",
     openCommandPaletteTitle: "Abrir Command Palette",

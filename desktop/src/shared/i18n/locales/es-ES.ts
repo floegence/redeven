@@ -130,7 +130,7 @@ export const esES = {
     quitDesktopDescription: "Salir de Redeven Desktop",
     closeLauncherDescription: "Cerrar la ventana launcher",
     changeLanguageTitle: "Cambiar idioma",
-    changeLanguageDescription: "Abrir ajustes de Interfaz para elegir el idioma de UI de Redeven Desktop y Env App",
+    changeLanguageDescription: "Abrir el menú de idioma del encabezado para Redeven Desktop y Env App",
     toggleThemeTitle: "Cambiar tema",
     toggleThemeDescription: "Cambiar entre tema claro y oscuro",
     openCommandPaletteTitle: "Abrir Command Palette",

@@ -130,7 +130,7 @@ export const jaJP = {
     quitDesktopDescription: "Redeven Desktop を終了します",
     closeLauncherDescription: "launcher ウィンドウを閉じます",
     changeLanguageTitle: "言語を変更",
-    changeLanguageDescription: "Interface 設定を開き、Redeven Desktop と Env App の UI 言語を選びます",
+    changeLanguageDescription: "ヘッダーの言語メニューを開き、Redeven Desktop と Env App の UI 言語を切り替えます",
     toggleThemeTitle: "テーマを切り替え",
     toggleThemeDescription: "ライトテーマとダークテーマを切り替えます",
     openCommandPaletteTitle: "Command Palette を開く",

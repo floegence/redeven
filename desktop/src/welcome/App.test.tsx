@@ -1250,31 +1250,31 @@ describe('DesktopWelcomeShell', () => {
     expect(listboxSrc).toContain('IMPORTANT: Dialog form listboxes must live outside dialog scroll containers.');
   });
 
-  it('renders the Desktop settings language control as an anchored rich listbox', () => {
+  it('renders the Desktop header language picker as an anchored rich listbox', () => {
     const appSrc = readWelcomeSource();
-    const panelStart = appSrc.indexOf('function DesktopLanguageSettingsPanel');
-    const panelEnd = appSrc.indexOf('function DesktopInterfaceSettingsDialog', panelStart);
-    const panelSrc = appSrc.slice(panelStart, panelEnd);
+    const pickerStart = appSrc.indexOf('function DesktopLanguagePicker');
+    const pickerEnd = appSrc.indexOf('function DesktopCommandRegistrar', pickerStart);
+    const pickerSrc = appSrc.slice(pickerStart, pickerEnd);
 
-    expect(panelSrc).toContain('const languageSelectID = createUniqueId();');
-    expect(panelSrc).toContain('const languageListboxID = createUniqueId();');
-    expect(panelSrc).not.toContain('<select');
-    expect(panelSrc).not.toContain('<option');
-    expect(panelSrc).toContain('<DesktopAnchoredListbox');
-    expect(panelSrc).toContain('anchorRef={buttonRef}');
-    expect(panelSrc).toContain('role="listbox"');
-    expect(panelSrc).toContain('role="option"');
-    expect(panelSrc).toContain('tabIndex={-1}');
-    expect(panelSrc).toContain('scrollListboxOptionIntoView');
-    expect(panelSrc).toContain('aria-haspopup="listbox"');
-    expect(panelSrc).toContain("aria-expanded={open() ? 'true' : 'false'}");
-    expect(panelSrc).toContain('aria-controls={languageListboxID}');
-    expect(panelSrc).toContain("aria-activedescendant={open() ? `${languageListboxID}-option-${highlightedIndex()}` : undefined}");
-    expect(panelSrc).toContain("props.i18n.t('settings.languageSelectLabel')");
-    expect(panelSrc).toContain("props.i18n.t('language.usingLanguage'");
-    expect(panelSrc).toContain('REDEVEN_LOCALE_META[preference].english_name');
-    expect(panelSrc).toContain('<ChevronDown');
-    expect(panelSrc).toContain('<Check');
+    expect(pickerSrc).not.toContain('<select');
+    expect(pickerSrc).not.toContain('<option');
+    expect(pickerSrc).toContain('<TopBarIconButton');
+    expect(pickerSrc).toContain('<DesktopAnchoredListbox');
+    expect(pickerSrc).toContain('anchorRef={buttonRef}');
+    expect(pickerSrc).toContain('width={288}');
+    expect(pickerSrc).toContain('role="listbox"');
+    expect(pickerSrc).toContain('role="option"');
+    expect(pickerSrc).toContain('tabIndex={-1}');
+    expect(pickerSrc).toContain('scrollListboxOptionIntoView');
+    expect(pickerSrc).toContain('aria-haspopup="listbox"');
+    expect(pickerSrc).toContain("aria-expanded={open() ? 'true' : 'false'}");
+    expect(pickerSrc).toContain('aria-controls="redeven-desktop-language-options"');
+    expect(pickerSrc).toContain("aria-activedescendant={open() ? `redeven-desktop-language-option-${highlightedIndex()}` : undefined}");
+    expect(pickerSrc).toContain("props.i18n.t('common.language')");
+    expect(pickerSrc).toContain("props.i18n.t('language.usingLanguage'");
+    expect(pickerSrc).toContain('REDEVEN_LOCALE_META[preference].english_name');
+    expect(pickerSrc).toContain('<Globe');
+    expect(pickerSrc).toContain('<Check');
   });
 
   it('does not use native browser selects in the Desktop welcome surface', () => {
@@ -1340,25 +1340,25 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).toContain("onSelect={(gatewayID) => props.updateField('gateway_id', gatewayID)}");
   });
 
-  it('preserves keyboard and focus behavior for the Desktop settings language listbox', () => {
+  it('preserves keyboard and focus behavior for the Desktop header language listbox', () => {
     const appSrc = readWelcomeSource();
-    const panelStart = appSrc.indexOf('function DesktopLanguageSettingsPanel');
-    const panelEnd = appSrc.indexOf('function DesktopInterfaceSettingsDialog', panelStart);
-    const panelSrc = appSrc.slice(panelStart, panelEnd);
+    const pickerStart = appSrc.indexOf('function DesktopLanguagePicker');
+    const pickerEnd = appSrc.indexOf('function DesktopCommandRegistrar', pickerStart);
+    const pickerSrc = appSrc.slice(pickerStart, pickerEnd);
 
-    expect(panelSrc).toContain("event.key === 'ArrowDown'");
-    expect(panelSrc).toContain("event.key === 'ArrowUp'");
-    expect(panelSrc).toContain("event.key === 'Enter' || event.key === ' '");
-    expect(panelSrc).toContain("event.key === 'Escape'");
-    expect(panelSrc).toContain('createEffect(on(');
-    expect(panelSrc).toContain('setHighlightedIndex(selectedIndex());');
-    expect(panelSrc).toContain('setHighlightedIndex((current) => (current + delta + count) % count);');
-    expect(panelSrc).toContain('document.addEventListener(\'mousedown\', handlePointerDown);');
-    expect(panelSrc).toContain('document.addEventListener(\'keydown\', handleKeyDown);');
-    expect(panelSrc).toContain('buttonRef?.focus();');
-    expect(panelSrc).toContain('props.updateLanguagePreference(preference);');
-    expect(panelSrc).toContain('onMouseDown={(event) => {');
-    expect(panelSrc).toContain('event.preventDefault();');
+    expect(pickerSrc).toContain("event.key === 'ArrowDown'");
+    expect(pickerSrc).toContain("event.key === 'ArrowUp'");
+    expect(pickerSrc).toContain("event.key === 'Enter' || event.key === ' '");
+    expect(pickerSrc).toContain("event.key === 'Escape'");
+    expect(pickerSrc).toContain('createEffect(on(');
+    expect(pickerSrc).toContain('setHighlightedIndex(selectedIndex());');
+    expect(pickerSrc).toContain('setHighlightedIndex((current) => (current + delta + count) % count);');
+    expect(pickerSrc).toContain('document.addEventListener(\'mousedown\', handlePointerDown);');
+    expect(pickerSrc).toContain('document.addEventListener(\'keydown\', handleKeyDown);');
+    expect(pickerSrc).toContain('buttonRef?.focus();');
+    expect(pickerSrc).toContain('props.onPreferenceChange(preference);');
+    expect(pickerSrc).toContain('onMouseDown={(event) => {');
+    expect(pickerSrc).toContain('event.preventDefault();');
   });
 
   it('routes Desktop language and command chrome through i18n dictionaries', () => {
@@ -1372,8 +1372,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('execute: () => props.openLanguageSettings()');
     expect(appSrc).toContain('openLanguageSettings={openLanguageSettings}');
     expect(appSrc).toContain('function openLanguageSettings(): void');
-    expect(appSrc).toContain('<DesktopInterfaceSettingsDialog');
-    expect(appSrc).toContain('open={languageSettingsOpen()}');
+    expect(appSrc).toContain('const [languagePickerOpenRequest, setLanguagePickerOpenRequest] = createSignal(0);');
+    expect(appSrc).toContain('setLanguagePickerOpenRequest((current) => current + 1);');
+    expect(appSrc).toContain('openRequest={languagePickerOpenRequest()}');
+    expect(appSrc).not.toContain('<DesktopInterfaceSettingsDialog');
+    expect(appSrc).not.toContain('open={languageSettingsOpen()}');
+    expect(appSrc).not.toContain('setLanguageSettingsOpen');
     expect(appSrc).toContain("props.i18n.t('commandPalette.toggleThemeTitle')");
     expect(appSrc).toContain("i18n().t('shell.useDarkTheme')");
     expect(appSrc).toContain("i18n().t('shell.useLightTheme')");
@@ -2005,6 +2009,33 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("i18n.t('settings.sharedPasswordHelp')");
   });
 
+  it('keeps global language controls out of Local Environment Settings', () => {
+    const appSrc = readWelcomeSource();
+    const dialogStart = appSrc.indexOf('function LocalEnvironmentSettingsDialog');
+    const dialogEnd = appSrc.indexOf('function ConnectionDialog', dialogStart);
+    const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
+
+    expect(dialogSrc).not.toContain('DesktopLanguageSettingsPanel');
+    expect(dialogSrc).not.toContain('languageSnapshot');
+    expect(dialogSrc).not.toContain('updateLanguagePreference');
+    expect(dialogSrc).not.toContain("props.i18n.t('settings.interfaceTitle')");
+    expect(dialogSrc).not.toContain("props.i18n.t('settings.languageTitle')");
+  });
+
+  it('closes Local Environment Settings after a successful save', () => {
+    const appSrc = readWelcomeSource();
+    const saveStart = appSrc.indexOf('async function saveSettings()');
+    const saveEnd = appSrc.indexOf('function cancelSettings()', saveStart);
+    const saveSrc = appSrc.slice(saveStart, saveEnd);
+
+    expect(saveSrc).toContain("showActionToast(i18n().t('toast.settingsSaved'));");
+    expect(saveSrc).toContain('cancelSettings();');
+    expect(saveSrc.indexOf('if (!result.ok)')).toBeLessThan(saveSrc.indexOf('cancelSettings();'));
+    expect(saveSrc.indexOf('return;')).toBeLessThan(saveSrc.indexOf('cancelSettings();'));
+    expect(saveSrc.indexOf('cancelSettings();')).toBeLessThan(saveSrc.indexOf('await refreshSnapshot();'));
+    expect(saveSrc).toContain("showActionToast(getErrorMessage(error) || i18n().t('toast.actionFailedFallback'), 'error');");
+  });
+
   it('includes Local Environment Settings copy inside the source', () => {
     const appSrc = readWelcomeSource();
 
@@ -2012,7 +2043,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("props.i18n.t('settings.visibilityTitle')");
     expect(appSrc).toContain("props.i18n.t('settings.detailsTitle')");
     expect(appSrc).toContain("props.i18n.t('settings.runtimeLabel')");
-    expect(appSrc).toContain("props.i18n.t('settings.interfaceTitle')");
+    expect(appSrc).toContain("props.i18n.t('settings.accessSecurityTitle')");
   });
 
   it('exposes auto status detection only on non-provider runtime forms', () => {
@@ -2103,8 +2134,8 @@ describe('DesktopWelcomeShell', () => {
     expect((styles.match(/100dvh/g) ?? []).length).toBe(1);
 
     expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(3);
-    expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(6);
-    expect((appSrc.match(/class=\{LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS\}/g) ?? []).length).toBe(2);
+    expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(5);
+    expect((appSrc.match(/class=\{LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS\}/g) ?? []).length).toBe(1);
     expect((appSrc.match(/class=\{CONNECTION_DIALOG_CLASS\}/g) ?? []).length).toBe(2);
     expect(appSrc).toContain('function ControlPlaneDialog');
     expect(appSrc).toContain("title={props.i18n.t('connectionDialog.addProviderTitle')}");

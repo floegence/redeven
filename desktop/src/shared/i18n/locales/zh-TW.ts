@@ -130,7 +130,7 @@ export const zhTW = {
     quitDesktopDescription: "結束 Redeven Desktop",
     closeLauncherDescription: "關閉 launcher 視窗",
     changeLanguageTitle: "變更語言",
-    changeLanguageDescription: "開啟介面設定，選擇 Redeven Desktop 和 Env App 的 UI 語言",
+    changeLanguageDescription: "開啟頂部列語言選單，切換 Redeven Desktop 和 Env App 的 UI 語言",
     toggleThemeTitle: "切換主題",
     toggleThemeDescription: "在淺色和深色主題之間切換",
     openCommandPaletteTitle: "開啟 Command Palette",

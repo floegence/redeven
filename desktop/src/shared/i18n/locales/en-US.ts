@@ -129,7 +129,7 @@ export const enUS = {
     quitDesktopDescription: 'Quit Redeven Desktop',
     closeLauncherDescription: 'Close the launcher window',
     changeLanguageTitle: 'Change Language',
-    changeLanguageDescription: 'Open Interface settings to choose the Redeven Desktop and Env App UI language',
+    changeLanguageDescription: 'Open the header language menu for Redeven Desktop and Env App',
     toggleThemeTitle: 'Toggle Theme',
     toggleThemeDescription: 'Switch between light and dark theme',
     openCommandPaletteTitle: 'Open Command Palette',
