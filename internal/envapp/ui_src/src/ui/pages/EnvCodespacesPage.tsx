@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createResource, createSignal, onCleanup } from "solid-js";
 import { cn, useNotification } from "@floegence/floe-webapp-core";
-import { Terminal } from "@floegence/floe-webapp-core/icons";
+import { AlertTriangle, RefreshIcon, Terminal } from "@floegence/floe-webapp-core/icons";
 import type { FileItem } from "@floegence/floe-webapp-core/file-browser";
 import { Panel, PanelContent } from "@floegence/floe-webapp-core/layout";
 import { SnakeLoader } from "@floegence/floe-webapp-core/loading";
@@ -678,6 +678,47 @@ function CodeRuntimePreparePanel(props: {
   );
 }
 
+function BrowserEditorReadinessInlineStatus(props: {
+  loading: boolean;
+  error?: string | null;
+  onRefresh: () => void;
+}) {
+  const i18n = useI18n();
+  const label = () => (props.error ? i18n.t("common.actions.retry") : i18n.t("common.status.checking"));
+  const title = () => {
+    if (!props.error) return i18n.t("codeRuntime.activity.checkingReadiness");
+    return `${i18n.t("codeRuntime.activity.failure.runtimeStatus")} ${props.error}`;
+  };
+
+  return (
+    <Show when={props.loading || props.error}>
+      <button
+        type="button"
+        data-testid="browser-editor-readiness-inline-status"
+        class={cn(
+          "inline-flex h-8 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors",
+          "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+          props.error
+            ? "border-amber-500/30 bg-amber-500/[0.06] text-amber-700 hover:bg-amber-500/[0.1] dark:text-amber-300"
+            : "border-border bg-background/70 text-muted-foreground",
+        )}
+        onClick={() => {
+          if (!props.loading) props.onRefresh();
+        }}
+        disabled={props.loading}
+        title={title()}
+        aria-label={title()}
+        aria-live="polite"
+      >
+        <Show when={props.error} fallback={<RefreshIcon class="h-3.5 w-3.5 animate-spin" />}>
+          <AlertTriangle class="h-3.5 w-3.5" />
+        </Show>
+        <span class="hidden lg:inline">{label()}</span>
+      </button>
+    </Show>
+  );
+}
+
 export function EnvCodespacesPage() {
   const notification = useNotification();
   const protocol = useProtocol();
@@ -1132,8 +1173,6 @@ export function EnvCodespacesPage() {
   const showWizard = () => {
     const status = runtimeStatus();
     if (runtimePrepareLocalFailure()) return true;
-    if (runtimeStatusError()) return true;
-    if (runtimeStatus.loading) return true;
     if (!status) return false;
     if (codeRuntimeReady(status) && !pendingIntent()) return false;
     const prepareFlowActive = status?.operation.action !== "remove_local_environment_version";
@@ -1143,6 +1182,7 @@ export function EnvCodespacesPage() {
     if (status.active_runtime.detection_state === "unusable") return true;
     return false;
   };
+  const showCompactRuntimeStatus = () => !showWizard() && (runtimeStatus.loading || Boolean(runtimeStatusError()));
   const handleRefreshAll = async () => {
     await Promise.all([refetch(), refetchRuntimeStatus()]);
   };
@@ -1168,6 +1208,15 @@ export function EnvCodespacesPage() {
               </div>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
+              <Show when={showCompactRuntimeStatus()}>
+                <BrowserEditorReadinessInlineStatus
+                  loading={runtimeStatus.loading}
+                  error={runtimeStatusError()}
+                  onRefresh={() => {
+                    void refetchRuntimeStatus();
+                  }}
+                />
+              </Show>
               <Button
                 size="sm"
                 variant="outline"
@@ -1205,7 +1254,7 @@ export function EnvCodespacesPage() {
             <CodeRuntimePreparePanel
               status={runtimeStatus()}
               loading={runtimeStatus.loading}
-              error={runtimeStatusError()}
+              error={null}
               localFailure={runtimePrepareLocalFailure()}
               pendingIntent={pendingIntent()}
               prepareSubmitting={runtimePrepareSubmitting()}

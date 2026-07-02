@@ -58,6 +58,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  AlertTriangle: (props: any) => <span class={props.class} data-testid="alert-triangle-icon" />,
   Check: (props: any) => <span class={props.class} data-testid="check-icon" />,
   ChevronDown: (props: any) => <span class={props.class} data-testid="chevron-down-icon" />,
   ChevronRight: (props: any) => <span class={props.class} data-testid="chevron-right-icon" />,
@@ -479,7 +480,7 @@ describe('EnvCodespacesPage', () => {
     expect(wizard?.textContent).toContain('send it to the connected environment');
   });
 
-  it('shows the Browser Editor setup panel inline while the initial runtime check is still running', async () => {
+  it('keeps the initial Browser Editor runtime check in the header while showing codespaces', async () => {
     let resolveRuntimeStatus!: (value: any) => void;
 
     localApiMocks.fetchLocalApiJSON.mockImplementation((url: string) => {
@@ -512,15 +513,18 @@ describe('EnvCodespacesPage', () => {
     render(() => <EnvCodespacesPage />, host);
     await flushPage();
 
-    const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;
-    expect(wizard).toBeTruthy();
-    expect(wizard?.textContent).toContain('Browser Editor');
-    expect(wizard?.textContent).toContain('Checking');
+    expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')).toBeNull();
+    expect(host.querySelector('[data-testid="codespace-card"]')).toBeTruthy();
+    const inlineStatus = host.querySelector('[data-testid="browser-editor-readiness-inline-status"]') as HTMLButtonElement | null;
+    expect(inlineStatus).toBeTruthy();
+    expect(inlineStatus?.textContent).toContain('Checking');
+    expect(inlineStatus?.title).toContain('Checking Browser Editor readiness');
 
     resolveRuntimeStatus(makeRuntimeStatus());
     await flushPage();
 
     expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')).toBeNull();
+    expect(host.querySelector('[data-testid="browser-editor-readiness-inline-status"]')).toBeNull();
   });
 
   it('shows Retry setup when the Browser Editor setup operation failed', async () => {
