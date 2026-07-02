@@ -240,6 +240,7 @@ export type FlowerSurfaceCopy = Readonly<{
     placeholder: string;
     fromSource: (source: string) => string;
     modelLabel: string;
+    reasoningLabel: string;
     noModelSelected: string;
     linkedContextLabel: string;
     permissionSelectorLabel: string;
@@ -396,6 +397,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     placeholder: 'Ask Flower anything...',
     fromSource: (source) => `From ${source}`,
     modelLabel: 'Model',
+    reasoningLabel: 'Reasoning',
     noModelSelected: 'No model selected',
     linkedContextLabel: 'Linked context',
     permissionSelectorLabel: 'Thread permission',

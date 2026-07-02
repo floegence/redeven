@@ -19,6 +19,14 @@ function cssRule(css: string, selector: string): string {
   return css.slice(start, end + 2);
 }
 
+function cssRuleStartingWith(css: string, selector: string): string {
+  const start = css.indexOf(selector);
+  expect(start).toBeGreaterThanOrEqual(0);
+  const end = css.indexOf('\n}', start);
+  expect(end).toBeGreaterThan(start);
+  return css.slice(start, end + 2);
+}
+
 describe('Flower model status indicator', () => {
   it('uses readable localized dock text with a decorative left-to-right shimmer', () => {
     const css = flowerStyles();
@@ -79,6 +87,39 @@ describe('Flower model status indicator', () => {
     expect(css).toContain(".flower-composer-context-indicator[data-context-pressure='warning'] .flower-composer-context-progress");
     expect(css).toContain(".flower-composer-context-indicator[data-context-pressure='danger'] .flower-composer-context-progress");
     expect(css).toContain(".flower-composer-context-tooltip[data-open='true']");
+  });
+
+  it('aligns composer model and reasoning as one segmented control', () => {
+    const css = flowerStyles();
+    const controlRule = cssRule(css, '.flower-model-reasoning-control');
+    const modelTriggerRule = cssRule(css, '.flower-model-reasoning-model-trigger');
+    const reasoningSegmentRule = cssRuleStartingWith(css, '.flower-reasoning-segment-button,');
+    const dividerRule = cssRule(css, '.flower-model-reasoning-divider');
+
+    expect(controlRule).toContain('display: inline-flex');
+    expect(controlRule).toContain('height: 1.5rem');
+    expect(controlRule).toContain('align-items: stretch');
+    expect(controlRule).toContain('font-size: 0.6875rem');
+    expect(controlRule).toContain('line-height: 1');
+    expect(modelTriggerRule).toContain('height: 100%');
+    expect(modelTriggerRule).toContain('font: inherit');
+    expect(modelTriggerRule).toContain('line-height: 1');
+    expect(reasoningSegmentRule).toContain('height: 100%');
+    expect(reasoningSegmentRule).toContain('font-size: 0.6875rem');
+    expect(reasoningSegmentRule).toContain('line-height: 1');
+    expect(dividerRule).toContain('margin-block: 0.25rem');
+    expect(css).toContain('.flower-reasoning-menu-segment');
+    expect(css).not.toContain('.flower-composer-reasoning-control');
+  });
+
+  it('keeps the composer More panel clamped through a viewport shift variable', () => {
+    const css = flowerStyles();
+    const panelRule = cssRule(css, '.flower-composer-more-panel');
+    const modelMenuRule = cssRule(css, '.flower-model-menu');
+
+    expect(panelRule).toContain('width: min(22rem, calc(100vw - 2rem))');
+    expect(panelRule).toContain('transform: translateX(var(--flower-composer-more-panel-shift-x, 0px))');
+    expect(modelMenuRule).toContain('transform: translateX(var(--flower-model-menu-shift-x, 0px))');
   });
 
   it('renders compaction dividers as accessible timeline separators', () => {

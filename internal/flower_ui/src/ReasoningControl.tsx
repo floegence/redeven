@@ -20,7 +20,7 @@ export type FlowerReasoningControlProps = Readonly<{
   selection?: FlowerReasoningSelection | null;
   label?: string;
   compact?: boolean;
-  variant?: 'full' | 'badge';
+  variant?: 'full' | 'badge' | 'segment';
   readOnly?: boolean;
   resettable?: boolean;
   resetLabel?: string;
@@ -97,6 +97,8 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
   const interactive = createMemo(() => !props.readOnly && typeof props.onChange === 'function');
   const label = createMemo(() => props.label ?? 'Reasoning');
   const badgeMode = createMemo(() => props.variant === 'badge');
+  const segmentMode = createMemo(() => props.variant === 'segment');
+  const menuVariant = createMemo(() => badgeMode() || segmentMode());
   const chipText = createMemo(() => {
     const cap = capability();
     if (!cap) return '';
@@ -105,16 +107,16 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
     if (supportsBudget() && selection?.budget_tokens) return `${selection.budget_tokens} tokens`;
     if (supportsBudget()) return 'Budget';
     const level = selection?.level ?? cap.default_level ?? 'default';
-    return badgeMode() ? badgeReasoningLevelLabel(level) : flowerReasoningLevelLabel(level);
+    return menuVariant() ? badgeReasoningLevelLabel(level) : flowerReasoningLevelLabel(level);
   });
-  const menuEnabled = createMemo(() => interactive() && (badgeMode() ? badgeLevels().length > 1 || supportsBudget() : levels().length > 1 || supportsBudget()));
+  const menuEnabled = createMemo(() => interactive() && (menuVariant() ? badgeLevels().length > 1 || supportsBudget() : levels().length > 1 || supportsBudget()));
   const emitLevel = (level: FlowerReasoningLevel) => {
     const current = normalizeFlowerReasoningSelection(props.selection) ?? {};
     props.onChange?.({
       level,
       ...(level === 'off' ? {} : { budget_tokens: current.budget_tokens }),
     });
-    if (badgeMode()) setMenuOpen(false);
+    if (menuVariant()) setMenuOpen(false);
   };
   const emitBudget = (raw: unknown) => {
     const cap = capability();
@@ -173,9 +175,17 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
 
   return (
     <Show when={visible()}>
-      <div ref={rootRef} class={cn('flower-reasoning-control', props.compact && 'flower-reasoning-control-compact', badgeMode() && 'flower-reasoning-control-badge')}>
+      <div
+        ref={rootRef}
+        class={cn(
+          'flower-reasoning-control',
+          props.compact && 'flower-reasoning-control-compact',
+          badgeMode() && 'flower-reasoning-control-badge',
+          segmentMode() && 'flower-reasoning-control-segment',
+        )}
+      >
         <Show
-          when={badgeMode()}
+          when={menuVariant()}
           fallback={(
             <>
               <span class="flower-reasoning-label">{label()}</span>
@@ -228,12 +238,19 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
             </>
           )}
         >
-          <Show when={menuEnabled()} fallback={<span class="flower-reasoning-chip">{chipText()}</span>}>
+          <Show
+            when={menuEnabled()}
+            fallback={<span class={segmentMode() ? 'flower-reasoning-segment-static' : 'flower-reasoning-chip'}>{chipText()}</span>}
+          >
             <button
               type="button"
-              class={cn('flower-reasoning-badge-button', menuOpen() && 'flower-reasoning-badge-button-open')}
+              class={cn(
+                segmentMode() ? 'flower-reasoning-segment-button' : 'flower-reasoning-badge-button',
+                menuOpen() && (segmentMode() ? 'flower-reasoning-segment-button-open' : 'flower-reasoning-badge-button-open'),
+              )}
               aria-haspopup="menu"
               aria-expanded={menuOpen()}
+              aria-label={`${label()}: ${chipText()}`}
               title={`${label()}: ${chipText()}`}
               onClick={() => {
                 const next = !menuOpen();
@@ -245,7 +262,7 @@ export function FlowerReasoningControl(props: FlowerReasoningControlProps) {
               <ChevronDown class="flower-reasoning-badge-icon" />
             </button>
             <Show when={menuOpen()}>
-              <div ref={menuRef} class="flower-reasoning-menu" role="menu" aria-label={label()}>
+              <div ref={menuRef} class={cn('flower-reasoning-menu', segmentMode() && 'flower-reasoning-menu-segment')} role="menu" aria-label={label()}>
                 <Show when={badgeLevels().length > 1}>
                   <For each={badgeLevels()}>
                     {(level) => (

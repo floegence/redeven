@@ -286,7 +286,7 @@ describe('FlowerSurface navigation launch/send', () => {
         },
       ],
     });
-    const launchTurn = vi.fn(async () => liveBootstrap(launchedThread));
+    const launchTurn = vi.fn(async (_input: unknown) => liveBootstrap(launchedThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
@@ -354,7 +354,7 @@ describe('FlowerSurface navigation launch/send', () => {
       }
       return [];
     });
-    const launchTurn = vi.fn(async () => liveBootstrap(launchedThread));
+    const launchTurn = vi.fn(async (_input: unknown) => liveBootstrap(launchedThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
@@ -398,8 +398,7 @@ describe('FlowerSurface navigation launch/send', () => {
       itemWidths: {
         working_dir: 118,
         permission: 94,
-        model: 172,
-        reasoning: 76,
+        model_reasoning: 248,
       },
       moreWidth: 30,
     });
@@ -421,9 +420,97 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(runtime.querySelector('.flower-chat-header .flower-working-dir-chip')).toBeNull();
     expect(runtime.querySelector('[data-flower-composer-inline-item="working_dir"] .flower-working-dir-chip')).toBeTruthy();
     expect(runtime.querySelector('[data-flower-composer-inline-item="permission"] .flower-permission-trigger')).toBeTruthy();
-    expect(runtime.querySelector('[data-flower-composer-inline-item="model"] .flower-model-select-trigger')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-composer-inline-item="model_reasoning"] .flower-model-reasoning-control')).toBeTruthy();
     expect(runtime.querySelector('[data-flower-composer-more-panel="true"]')).toBeNull();
     expect(runtime.querySelector('button.flower-composer-more-button')).toBeNull();
+  });
+
+  it('hides reasoning for models without reasoning support and omits stale reasoning on launch', async () => {
+    let currentSnapshot: FlowerSettingsSnapshot = {
+      ...settingsSnapshot(true),
+      config: {
+        ...settingsSnapshot(true).config,
+        current_model_id: 'openai/gpt-5.2',
+        providers: [{
+          ...settingsSnapshot(true).config.providers[0],
+          models: [
+            {
+              model_name: 'gpt-5.2',
+              context_window: 400000,
+              input_modalities: ['text'],
+              reasoning_capability: {
+                supported_levels: ['low', 'medium', 'high'],
+                default_level: 'medium',
+              },
+              default_reasoning_selection: { level: 'medium' },
+            },
+            {
+              model_name: 'plain-text',
+              context_window: 200000,
+              input_modalities: ['text'],
+            },
+          ],
+        }],
+      },
+    };
+    const launchedThread = thread({
+      thread_id: 'thread-no-reasoning-launch',
+      title: 'No reasoning launch',
+      model_id: 'openai/plain-text',
+    });
+    const launchTurn = vi.fn(async (_input: unknown) => liveBootstrap(launchedThread));
+    const surfaceAdapter = {
+      ...adapter(true),
+      loadSettings: vi.fn(async () => currentSnapshot),
+      listThreads: vi.fn(async () => []),
+      setCurrentModel: vi.fn(async (modelID: string) => {
+        currentSnapshot = {
+          ...currentSnapshot,
+          config: {
+            ...currentSnapshot.config,
+            current_model_id: modelID,
+          },
+        };
+        return currentSnapshot;
+      }),
+      launchTurn,
+    };
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
+    const modelReasoningControl = () => runtime.querySelector('[data-flower-composer-control="model_reasoning"]') as HTMLElement | null;
+
+    await waitFor(() => modelReasoningControl()?.getAttribute('data-has-reasoning') === 'true');
+    expect(runtime.querySelector('.flower-reasoning-control-segment')).toBeTruthy();
+
+    (runtime.querySelector('.flower-reasoning-segment-button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-reasoning-menu')));
+    const highOption = Array.from(runtime.querySelectorAll('.flower-reasoning-menu-item'))
+      .find((button) => button.textContent?.trim() === 'High') as HTMLButtonElement | undefined;
+    highOption?.click();
+    await waitFor(() => runtime.querySelector('.flower-reasoning-segment-button')?.textContent?.includes('High') === true);
+
+    (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-menu')));
+    const plainOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
+      .find((button) => button.textContent?.includes('plain-text')) as HTMLButtonElement | undefined;
+    plainOption?.click();
+
+    await waitFor(() => surfaceAdapter.setCurrentModel.mock.calls.length === 1);
+    await waitFor(() => modelReasoningControl()?.getAttribute('data-has-reasoning') === 'false');
+    expect(surfaceAdapter.setCurrentModel).toHaveBeenCalledWith('openai/plain-text');
+    expect(runtime.querySelector('.flower-reasoning-control-segment')).toBeNull();
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'launch without reasoning';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+
+    expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'launch without reasoning',
+      model_id: 'openai/plain-text',
+    }));
+    const launchInput = launchTurn.mock.calls[0]?.[0];
+    expect(launchInput).not.toHaveProperty('reasoning_selection');
   });
 
   it('writes a selected thread model as the next new-thread default', async () => {
@@ -472,9 +559,9 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-model-default"] button')));
     (runtime.querySelector('[data-thread-id="thread-model-default"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-model-select-trigger')?.textContent?.includes('gpt-5.2') ?? false);
+    await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('gpt-5.2') ?? false);
 
-    (runtime.querySelector('.flower-model-select-trigger') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-menu')));
     const nextModelOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
       .find((button) => button.textContent?.includes('gpt-5.4')) as HTMLButtonElement | undefined;
@@ -484,7 +571,7 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(surfaceAdapter.setThreadModel).toHaveBeenCalledWith('thread-model-default', 'openai/gpt-5.4');
     expect(surfaceAdapter.setCurrentModel).toHaveBeenCalledWith('openai/gpt-5.4');
     expect(surfaceAdapter.setThreadModel.mock.invocationCallOrder[0]).toBeLessThan(surfaceAdapter.setCurrentModel.mock.invocationCallOrder[0]);
-    expect(runtime.querySelector('.flower-model-select-trigger')?.textContent).toContain('OpenAI / gpt-5.4');
+    expect(runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent).toContain('OpenAI / gpt-5.4');
   });
 
   it('keeps the selected thread model and toasts when updating the future default fails', async () => {
@@ -527,9 +614,9 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-model-default-fails"] button')));
     (runtime.querySelector('[data-thread-id="thread-model-default-fails"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-model-select-trigger')?.textContent?.includes('gpt-5.2') ?? false);
+    await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('gpt-5.2') ?? false);
 
-    (runtime.querySelector('.flower-model-select-trigger') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-menu')));
     const nextModelOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
       .find((button) => button.textContent?.includes('gpt-5.4')) as HTMLButtonElement | undefined;
@@ -544,7 +631,7 @@ describe('FlowerSurface navigation launch/send', () => {
       message: 'default save failed',
     }));
     expect(runtime.querySelector('.flower-composer-error')).toBeNull();
-    expect(runtime.querySelector('.flower-model-select-trigger')?.textContent).toContain('OpenAI / gpt-5.4');
+    expect(runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent).toContain('OpenAI / gpt-5.4');
   });
 
   it('moves overflowing composer controls into the More panel without changing working directory launch behavior', async () => {
@@ -553,8 +640,7 @@ describe('FlowerSurface navigation launch/send', () => {
       itemWidths: {
         working_dir: 122,
         permission: 90,
-        model: 170,
-        reasoning: 78,
+        model_reasoning: 248,
       },
       moreWidth: 30,
     });
@@ -634,8 +720,7 @@ describe('FlowerSurface navigation launch/send', () => {
       itemWidths: {
         working_dir: 122,
         permission: 90,
-        model: 170,
-        reasoning: 78,
+        model_reasoning: 248,
       },
       moreWidth: 30,
     });
@@ -715,8 +800,7 @@ describe('FlowerSurface navigation launch/send', () => {
       itemWidths: {
         working_dir: 122,
         permission: 90,
-        model: 170,
-        reasoning: 78,
+        model_reasoning: 248,
       },
       moreWidth: 30,
     });

@@ -29,6 +29,7 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
       placeholder: t(i18n, k('chat.placeholder')),
       fromSource: (source) => t(i18n, k('chat.fromSource'), { source }),
       modelLabel: t(i18n, k('chat.modelLabel')),
+      reasoningLabel: t(i18n, k('chat.reasoningLabel')),
       noModelSelected: t(i18n, k('chat.noModelSelected')),
       linkedContextLabel: t(i18n, 'environmentCenter.askFlowerCardContextLabel'),
       permissionSelectorLabel: t(i18n, k('chat.permissionSelectorLabel')),
