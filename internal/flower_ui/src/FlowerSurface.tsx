@@ -5125,12 +5125,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   <span class={cn('flower-activity-todo-content', todo.status === 'completed' && 'flower-activity-todo-content-completed')}>
                     {todo.content}
                   </span>
-                  <span class="flower-activity-todo-meta">
-                    {todoStatusLabel(todo.status)}
-                    <Show when={todo.note}>
-                      {(note) => <span class="flower-activity-todo-note"> · {note()}</span>}
-                    </Show>
-                  </span>
+                  <Show when={todo.note}>
+                    {(note) => <span class="flower-activity-todo-note"> · {note()}</span>}
+                  </Show>
+                </span>
+                <span class={cn('flower-activity-todo-badge', `flower-activity-todo-badge-${todo.status}`)}>
+                  {todoStatusLabel(todo.status)}
                 </span>
               </div>
             )}

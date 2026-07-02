@@ -403,14 +403,14 @@ function TodoBlock(props: { block: Extract<FlowerActivityDetailBlock, { kind: 't
             <div class="chat-activity-todo-item" data-status={todo.status} role="listitem">
               <span class="chat-activity-todo-marker" aria-hidden="true">{todoStatusMarker(todo.status)}</span>
               <div class="chat-activity-todo-copy">
-                <div class={cn('chat-activity-todo-content', todo.status === 'completed' && 'chat-activity-todo-content-completed')}>{todo.content}</div>
-                <div class="chat-activity-todo-meta">
-                  <span>{todoStatusLabel(todo.status)}</span>
-                  <Show when={todo.note}>
-                    {(note) => <span>{note()}</span>}
-                  </Show>
-                </div>
+                <span class={cn('chat-activity-todo-content', todo.status === 'completed' && 'chat-activity-todo-content-completed')}>{todo.content}</span>
+                <Show when={todo.note}>
+                  {(note) => <span class="chat-activity-todo-note"> · {note()}</span>}
+                </Show>
               </div>
+              <span class={cn('chat-activity-todo-badge', `chat-activity-todo-badge-${todo.status}`)}>
+                {todoStatusLabel(todo.status)}
+              </span>
             </div>
           )}
         </For>
