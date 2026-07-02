@@ -121,9 +121,12 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-subagents-spawn"]')));
 
     const trigger = runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement;
+    const badge = trigger.querySelector('.flower-header-icon-badge') as HTMLElement;
     expect(trigger.getAttribute('aria-haspopup')).toBe('dialog');
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
     expect(trigger.getAttribute('aria-controls')).toBe('flower-subagents-dropdown');
+    expect(badge.textContent).toBe('1');
+    expect(badge.getAttribute('data-running')).toBe('true');
     trigger.focus();
     trigger.click();
     await waitFor(() => Boolean(runtime.querySelector('#flower-subagents-dropdown')));
@@ -1211,13 +1214,24 @@ describe('FlowerSurface navigation activity', () => {
   });
 
   it('reads live terminal output when an expanded running activity has a process id', async () => {
-    const readTerminalProcess = vi.fn(async () => ({
-      process_id: 'tp_live_terminal',
-      status: 'success',
-      output: 'tick 1\ntick 2\n',
-      last_seq: 2,
-      total_bytes: 14,
-    }));
+    const readTerminalProcess = vi.fn(async () => {
+      if (readTerminalProcess.mock.calls.length <= 1) {
+        return {
+          process_id: 'tp_live_terminal',
+          status: 'running',
+          output: 'tick 1\ntick 2\n',
+          last_seq: 2,
+          total_bytes: 14,
+        };
+      }
+      return {
+        process_id: 'tp_live_terminal',
+        status: 'running',
+        output: '',
+        last_seq: 2,
+        total_bytes: 14,
+      };
+    });
     const liveTerminalThread = thread({
       thread_id: 'thread-live-terminal-output',
       title: 'Live terminal output',
@@ -1275,8 +1289,10 @@ describe('FlowerSurface navigation activity', () => {
       max_bytes: 1000000,
     });
     await waitFor(() => runtime.textContent?.includes('tick 2') ?? false);
+    await waitFor(() => readTerminalProcess.mock.calls.length > 1);
     expect(runtime.textContent).toContain('tick 1');
-    expect(runtime.textContent).not.toContain('Waiting for output...');
+    expect(runtime.textContent).toContain('tick 2');
+    expect(runtime.textContent).not.toContain('Listening for output...');
     expect(runtime.querySelector('[data-flower-activity-terminal-panel] input')).toBeNull();
   });
 
@@ -1554,7 +1570,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(row.textContent).toContain('Review API contract');
     expect(row.textContent).toContain('Review the public API boundary.');
     expect(row.textContent).not.toContain('Agent:');
-    expect(row.textContent).toContain('Open messages');
+    expect(row.textContent).not.toContain('Open messages');
     expect(row.textContent).not.toContain('Completed');
     expect(row.textContent).not.toContain('API boundary is consistent.');
     expect(row.textContent).not.toContain('thread-child-hidden');
@@ -1564,7 +1580,10 @@ describe('FlowerSurface navigation activity', () => {
     expect(row.textContent).not.toContain('legacy-hidden');
     expect(row.textContent).not.toContain('Legacy snapshot');
 
-    (row.querySelector('.flower-activity-subagents-open') as HTMLButtonElement).click();
+    const openButton = row.querySelector('.flower-activity-subagents-open') as HTMLButtonElement;
+    expect(openButton.getAttribute('aria-label')).toBe('Open subagent messages for Review API contract');
+    expect(openButton.textContent).toBe('');
+    openButton.click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-detail-id="thread-child-hidden"]')));
     expect(loadSubagentDetail).toHaveBeenCalledWith('thread-subagent-details', 'thread-child-hidden', 0, 200);
     expect(selectedThreadID(runtime)).toBe('thread-subagent-details');

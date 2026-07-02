@@ -95,6 +95,16 @@ func TestBuildLayeredSystemPrompt_UsesGenericSkillRoutingInsteadOfRedevenEnvSpec
 	assertPromptNotContains(t, prompt, "Do not infer Docker, SSH, systemd, launchctl, or process-manager commands from a Redeven target string")
 }
 
+func TestBuildLayeredSystemPrompt_UsesCanonicalToolNamesAndTerminalLimits(t *testing.T) {
+	t.Parallel()
+
+	prompt := buildPromptForToolRoutingTest(t)
+	assertPromptContains(t, prompt, "Use canonical tool names exactly as listed in Current Context")
+	assertPromptContains(t, prompt, "terminal.exec yield_ms and terminal.read wait_ms must be <= 30000")
+	assertPromptContains(t, prompt, "file.read")
+	assertPromptNotContains(t, prompt, "file_read")
+}
+
 func TestBuildLayeredSystemPrompt_ReadonlyRoutesThroughReadonlyExclusiveTools(t *testing.T) {
 	t.Parallel()
 

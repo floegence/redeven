@@ -179,6 +179,18 @@ func TestSanitizeProviderToolName_WebSearchAvoidsHostedCollision(t *testing.T) {
 	}
 }
 
+func TestCanonicalProviderToolName_OnlyMapsRegisteredAliases(t *testing.T) {
+	t.Parallel()
+
+	aliases := map[string]string{"file_read": "file.read"}
+	if got := canonicalProviderToolName("file_read", aliases); got != "file.read" {
+		t.Fatalf("canonicalProviderToolName(file_read)=%q, want file.read", got)
+	}
+	if got := canonicalProviderToolName("terminal_exec", aliases); got != "terminal_exec" {
+		t.Fatalf("canonicalProviderToolName(terminal_exec)=%q, want terminal_exec", got)
+	}
+}
+
 func TestOpenAICompatibleResponses_WebSearchToolAliasRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -261,6 +273,157 @@ func TestOpenAICompatibleResponses_WebSearchToolAliasRoundTrip(t *testing.T) {
 	}
 	if got := strings.TrimSpace(res.ToolCalls[0].Name); got != "web.search" {
 		t.Fatalf("tool name=%q, want web.search", got)
+	}
+}
+
+func TestOpenAICompatibleChat_FileReadToolAliasRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/chat/completions") {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		var req map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		tools, _ := req["tools"].([]any)
+		if len(tools) != 1 {
+			t.Fatalf("tools=%d, want 1", len(tools))
+		}
+		tool, _ := tools[0].(map[string]any)
+		fn, _ := tool["function"].(map[string]any)
+		if got := strings.TrimSpace(anyString(fn["name"])); got != "file_read" {
+			t.Fatalf("tool function name=%q, want file_read", got)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		f, ok := w.(http.Flusher)
+		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+			return
+		}
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_file_read_alias",
+			"object":  "chat.completion.chunk",
+			"created": time.Now().Unix(),
+			"model":   "gpt-5-mini",
+			"choices": []any{
+				map[string]any{
+					"index":         0,
+					"finish_reason": nil,
+					"delta": map[string]any{
+						"role": "assistant",
+						"tool_calls": []any{
+							map[string]any{
+								"index": 0,
+								"id":    "call_file_read_alias",
+								"type":  "function",
+								"function": map[string]any{
+									"name": "file_read",
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_file_read_alias",
+			"object":  "chat.completion.chunk",
+			"created": time.Now().Unix(),
+			"model":   "gpt-5-mini",
+			"choices": []any{
+				map[string]any{
+					"index":         0,
+					"finish_reason": nil,
+					"delta": map[string]any{
+						"tool_calls": []any{
+							map[string]any{
+								"index": 0,
+								"function": map[string]any{
+									"arguments": `{"file_path":`,
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_file_read_alias",
+			"object":  "chat.completion.chunk",
+			"created": time.Now().Unix(),
+			"model":   "gpt-5-mini",
+			"choices": []any{
+				map[string]any{
+					"index":         0,
+					"finish_reason": nil,
+					"delta": map[string]any{
+						"tool_calls": []any{
+							map[string]any{
+								"index": 0,
+								"function": map[string]any{
+									"arguments": `"README.md"}`,
+								},
+							},
+						},
+					},
+				},
+			},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id":      "chatcmpl_file_read_alias",
+			"object":  "chat.completion.chunk",
+			"created": time.Now().Unix(),
+			"model":   "gpt-5-mini",
+			"choices": []any{
+				map[string]any{
+					"index":         0,
+					"finish_reason": "tool_calls",
+					"delta":         map[string]any{},
+				},
+			},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
+	}))
+	t.Cleanup(srv.Close)
+
+	adapter, err := newProviderAdapter("openai_compatible", strings.TrimSuffix(srv.URL, "/")+"/v1", "sk-test", nil)
+	if err != nil {
+		t.Fatalf("newProviderAdapter: %v", err)
+	}
+	events := []StreamEvent{}
+	res, err := adapter.StreamTurn(context.Background(), ModelGatewayRequest{
+		Model:    "gpt-5-mini",
+		Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "read"}}}},
+		Tools: []ToolDef{
+			{Name: "file.read", InputSchema: json.RawMessage(`{"type":"object","properties":{"file_path":{"type":"string"}},"required":["file_path"],"additionalProperties":false}`)},
+		},
+	}, func(event StreamEvent) {
+		if event.ToolCall != nil {
+			events = append(events, event)
+		}
+	})
+	if err != nil {
+		t.Fatalf("StreamTurn: %v", err)
+	}
+	if len(res.ToolCalls) != 1 {
+		t.Fatalf("tool calls=%d, want 1", len(res.ToolCalls))
+	}
+	if got := strings.TrimSpace(res.ToolCalls[0].Name); got != "file.read" {
+		t.Fatalf("tool name=%q, want file.read", got)
+	}
+	if len(events) == 0 {
+		t.Fatal("missing streamed tool call events")
+	}
+	for _, event := range events {
+		if got := strings.TrimSpace(event.ToolCall.Name); got != "file.read" {
+			t.Fatalf("streamed tool name=%q, want file.read", got)
+		}
 	}
 }
 

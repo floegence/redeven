@@ -128,7 +128,6 @@ export type FlowerActivityErrorDetail = Readonly<{
 export type FlowerActivitySubagentMessageAction = Readonly<{
   thread_id: string;
   subagent_id: string;
-  label: string;
 }>;
 
 export type FlowerActivitySubagentDetailItem = Readonly<{
@@ -878,7 +877,6 @@ function subagentDetailItemFromRecord(
       open_messages: {
         thread_id: threadID,
         subagent_id: subagentID || threadID,
-        label: 'Open messages',
       },
     } : {}),
   };
