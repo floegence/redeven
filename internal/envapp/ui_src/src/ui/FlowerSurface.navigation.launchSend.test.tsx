@@ -1217,6 +1217,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-compact-pending-history"] button')));
     (runtime.querySelector('[data-thread-id="thread-compact-pending-history"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-compact-pending-history'));
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
