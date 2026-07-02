@@ -17,6 +17,7 @@ import {
   adapter,
   deferred,
   flush,
+  flowerSurfaceNotifications,
   inputRequest,
   liveBootstrap,
   modelIOStatus,
@@ -1672,7 +1673,7 @@ describe('FlowerSurface navigation threads', () => {
 
     expect(runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-active')).toBe('true');
     expect(runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread-dot')).toBe('false');
-    expect(runtime.querySelector('.flower-thread-action-error')?.textContent ?? '').not.toContain('read state unavailable');
+    expect(flowerSurfaceNotifications().map((notice) => notice.message).join('\n')).not.toContain('read state unavailable');
 
     (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-active') === 'false');
@@ -1790,7 +1791,11 @@ describe('FlowerSurface navigation threads', () => {
     await flush();
 
     expect(execCommand).toHaveBeenCalledWith('copy');
-    expect(runtime.textContent).toContain('Copied thread id.');
+    expect(flowerSurfaceNotifications()).toContainEqual(expect.objectContaining({
+      tone: 'success',
+      message: 'Copied thread id.',
+    }));
+    expect(runtime.querySelector('.flower-thread-action-success')).toBeNull();
     expect(document.activeElement).toBe(runtime.querySelector('[data-thread-id="thread-1"] button'));
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -1828,6 +1833,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(renameThread).toHaveBeenCalled();
     expect(dialog.textContent).toContain('title too long');
     expect(runtime.querySelector('.flower-thread-action-error')).toBeNull();
+    expect(flowerSurfaceNotifications()).toHaveLength(0);
   });
 
   it('disables all thread actions while a fork action is pending', async () => {

@@ -13,6 +13,7 @@ import {
   decision,
   deferred,
   flush,
+  flowerSurfaceNotifications,
   inputRequest,
   activityItem,
   activityTimeline,
@@ -259,10 +260,15 @@ describe('FlowerSurface navigation launch/send', () => {
     (runtime.querySelector('button.flower-permission-trigger') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu')));
     (runtime.querySelector('.flower-permission-menu-item[data-permission-type="full_access"]') as HTMLButtonElement).click();
-    await waitFor(() => runtime.textContent?.includes('permission denied') === true);
+    await waitFor(() => flowerSurfaceNotifications().some((notice) => notice.message === 'permission denied'));
 
     expect(runtime.querySelector('button.flower-permission-trigger')?.getAttribute('data-permission-type')).toBe('approval_required');
-    expect(runtime.textContent).toContain('Flower could not save permission.');
+    expect(flowerSurfaceNotifications()).toContainEqual(expect.objectContaining({
+      tone: 'error',
+      title: 'Flower could not save permission.',
+      message: 'permission denied',
+    }));
+    expect(runtime.querySelector('.flower-composer-error')).toBeNull();
   });
 
   it('sends the local permission draft when launching a new thread', async () => {
@@ -478,6 +484,66 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(surfaceAdapter.setThreadModel).toHaveBeenCalledWith('thread-model-default', 'openai/gpt-5.4');
     expect(surfaceAdapter.setCurrentModel).toHaveBeenCalledWith('openai/gpt-5.4');
     expect(surfaceAdapter.setThreadModel.mock.invocationCallOrder[0]).toBeLessThan(surfaceAdapter.setCurrentModel.mock.invocationCallOrder[0]);
+    expect(runtime.querySelector('.flower-model-select-trigger')?.textContent).toContain('OpenAI / gpt-5.4');
+  });
+
+  it('keeps the selected thread model and toasts when updating the future default fails', async () => {
+    let selectedModelThread = thread({
+      thread_id: 'thread-model-default-fails',
+      title: 'Model default failure',
+      model_id: 'openai/gpt-5.2',
+    });
+    const currentSnapshot: FlowerSettingsSnapshot = {
+      ...settingsSnapshot(true),
+      config: {
+        ...settingsSnapshot(true).config,
+        current_model_id: 'openai/gpt-5.2',
+        providers: [{
+          ...settingsSnapshot(true).config.providers[0],
+          models: [
+            ...settingsSnapshot(true).config.providers[0].models,
+            { model_name: 'gpt-5.4', context_window: 400000, input_modalities: ['text'] },
+          ],
+        }],
+      },
+    };
+    const surfaceAdapter = {
+      ...mutableSettingsAdapter(true),
+      loadSettings: vi.fn(async () => currentSnapshot),
+      listThreads: vi.fn(async () => [selectedModelThread]),
+      loadThread: vi.fn(async () => liveBootstrap(selectedModelThread)),
+      setThreadModel: vi.fn(async (_threadID: string, modelID: string) => {
+        selectedModelThread = {
+          ...selectedModelThread,
+          model_id: modelID,
+        };
+        return liveBootstrap(selectedModelThread);
+      }),
+      setCurrentModel: vi.fn(async () => {
+        throw new Error('default save failed');
+      }),
+    };
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-model-default-fails"] button')));
+    (runtime.querySelector('[data-thread-id="thread-model-default-fails"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-model-select-trigger')?.textContent?.includes('gpt-5.2') ?? false);
+
+    (runtime.querySelector('.flower-model-select-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-menu')));
+    const nextModelOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
+      .find((button) => button.textContent?.includes('gpt-5.4')) as HTMLButtonElement | undefined;
+    nextModelOption?.click();
+
+    await waitFor(() => flowerSurfaceNotifications().some((notice) => notice.message.includes('default save failed')));
+    expect(surfaceAdapter.setThreadModel).toHaveBeenCalledWith('thread-model-default-fails', 'openai/gpt-5.4');
+    expect(surfaceAdapter.setCurrentModel).toHaveBeenCalledWith('openai/gpt-5.4');
+    expect(flowerSurfaceNotifications()).toContainEqual(expect.objectContaining({
+      tone: 'error',
+      title: 'Default model was not updated.',
+      message: 'default save failed',
+    }));
+    expect(runtime.querySelector('.flower-composer-error')).toBeNull();
     expect(runtime.querySelector('.flower-model-select-trigger')?.textContent).toContain('OpenAI / gpt-5.4');
   });
 
@@ -2188,9 +2254,14 @@ describe('FlowerSurface navigation launch/send', () => {
       return button?.getAttribute('aria-label') === 'Send' && !button.disabled;
     });
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-error')));
+    await waitFor(() => flowerSurfaceNotifications().some((notice) => notice.message.includes('Send failed.')));
 
-    expect(runtime.querySelector('.flower-composer-error')?.textContent).toContain('Send failed.');
+    expect(flowerSurfaceNotifications()).toContainEqual(expect.objectContaining({
+      tone: 'error',
+      title: 'Flower could not send.',
+      message: 'Send failed.',
+    }));
+    expect(runtime.querySelector('.flower-composer-error')).toBeNull();
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('do not lose this draft');
     expect(stopThread).not.toHaveBeenCalled();
     expect(launchTurn).toHaveBeenCalledTimes(1);
@@ -2227,11 +2298,16 @@ describe('FlowerSurface navigation launch/send', () => {
       return button?.getAttribute('aria-label') === 'Send' && !button.disabled;
     });
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-error')));
+    await waitFor(() => flowerSurfaceNotifications().some((notice) => notice.message.includes('Send failed.')));
 
     expect(stopThread).not.toHaveBeenCalled();
     expect(launchTurn).toHaveBeenCalledTimes(1);
-    expect(runtime.querySelector('.flower-composer-error')?.textContent).toContain('Send failed.');
+    expect(flowerSurfaceNotifications()).toContainEqual(expect.objectContaining({
+      tone: 'error',
+      title: 'Flower could not send.',
+      message: 'Send failed.',
+    }));
+    expect(runtime.querySelector('.flower-composer-error')).toBeNull();
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('keep this draft after send fails');
   });
 

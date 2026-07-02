@@ -7424,95 +7424,83 @@ async function attachLocalEnvironmentRuntime(
   );
 }
 
+type RuntimeFlowerRoute = Readonly<{
+  path: string | RegExp;
+  methods: readonly RuntimeFlowerRequest['method'][];
+  allowsQuery?: (parsed: URL) => boolean;
+}>;
+
+const runtimeFlowerNoQuery = (parsed: URL): boolean => parsed.search === '';
+const runtimeFlowerLimitQuery = (parsed: URL): boolean => parsed.search === '' || /^\?limit=\d{1,4}$/u.test(parsed.search);
+const runtimeFlowerLiveEventsQuery = (parsed: URL): boolean => parsed.search === ''
+  || /^\?after_seq=\d+$/u.test(parsed.search)
+  || /^\?after_seq=\d+&limit=\d{1,3}$/u.test(parsed.search)
+  || /^\?limit=\d{1,3}&after_seq=\d+$/u.test(parsed.search);
+const runtimeFlowerSubagentDetailQuery = (parsed: URL): boolean => parsed.search === ''
+  || /^\?after_ordinal=\d+$/u.test(parsed.search)
+  || /^\?limit=\d{1,4}$/u.test(parsed.search)
+  || /^\?after_ordinal=\d+&limit=\d{1,4}$/u.test(parsed.search)
+  || /^\?limit=\d{1,4}&after_ordinal=\d+$/u.test(parsed.search);
+const runtimeFlowerTerminalReadQuery = (parsed: URL): boolean => {
+  const allowed = new Set(['after_seq', 'wait_ms', 'max_bytes']);
+  for (const key of parsed.searchParams.keys()) {
+    const values = parsed.searchParams.getAll(key);
+    if (!allowed.has(key) || values.length !== 1 || !/^\d{1,18}$/u.test(values[0] ?? '')) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
+  { path: '/_redeven_proxy/api/settings', methods: ['GET'] },
+  { path: '/_redeven_proxy/api/fs/path_context', methods: ['GET'] },
+  { path: '/_redeven_proxy/api/fs/list', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/ai/provider_bundle', methods: ['PUT'] },
+  { path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] },
+  { path: '/_redeven_proxy/api/ai/models', methods: ['GET'] },
+  { path: '/_redeven_proxy/api/ai/uploads', methods: ['POST'] },
+  { path: '/_redeven_proxy/api/ai/threads', methods: ['GET', 'POST'], allowsQuery: runtimeFlowerLimitQuery },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['GET', 'PATCH', 'DELETE'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/bootstrap$/u, methods: ['GET'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/events$/u, methods: ['GET'], allowsQuery: runtimeFlowerLiveEventsQuery },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/subagents\/[^/]+\/detail$/u, methods: ['GET'], allowsQuery: runtimeFlowerSubagentDetailQuery },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u, methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/turns$/u, methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/fork$/u, methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/input_response$/u, methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/approvals$/u, methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/context\/compact$/u, methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/cancel$/u, methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/terminal\/[^/]+\/read$/u, methods: ['GET'], allowsQuery: runtimeFlowerTerminalReadQuery },
+  { path: /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u, methods: ['GET'] },
+];
+
+function runtimeFlowerRouteMatches(route: RuntimeFlowerRoute, parsed: URL): boolean {
+  const pathMatches = typeof route.path === 'string' ? parsed.pathname === route.path : route.path.test(parsed.pathname);
+  return pathMatches && (route.allowsQuery ?? runtimeFlowerNoQuery)(parsed);
+}
+
+function runtimeFlowerAllowedRoute(parsed: URL): RuntimeFlowerRoute | null {
+  return RUNTIME_FLOWER_ROUTES.find((route) => runtimeFlowerRouteMatches(route, parsed)) ?? null;
+}
+
 function runtimeFlowerPath(rawPath: unknown): string {
   const raw = compact(rawPath);
   if (!raw.startsWith('/')) {
     throw new Error('Flower runtime request path must be absolute.');
   }
   const parsed = new URL(raw, 'http://runtime-flower.local');
-  const pathname = parsed.pathname;
-  if (parsed.hash) {
+  if (parsed.hash || !runtimeFlowerAllowedRoute(parsed)) {
     throw new Error('Flower runtime request path is not allowed.');
   }
-  const query = parsed.search;
-  const pathWithQuery = `${pathname}${query}`;
-  const allowsLimitQuery = (value: string) => value === '' || /^\?limit=\d{1,4}$/u.test(value);
-  const allowsLiveEventsQuery = (value: string) => value === ''
-    || /^\?after_seq=\d+$/u.test(value)
-    || /^\?after_seq=\d+&limit=\d{1,3}$/u.test(value)
-    || /^\?limit=\d{1,3}&after_seq=\d+$/u.test(value);
-  const allowsSubagentDetailQuery = (value: string) => value === ''
-    || /^\?after_ordinal=\d+$/u.test(value)
-    || /^\?limit=\d{1,4}$/u.test(value)
-    || /^\?after_ordinal=\d+&limit=\d{1,4}$/u.test(value)
-    || /^\?limit=\d{1,4}&after_ordinal=\d+$/u.test(value);
-  const allowsTerminalReadQuery = (params: URLSearchParams) => {
-    const allowed = new Set(['after_seq', 'wait_ms', 'max_bytes']);
-    for (const key of params.keys()) {
-      const values = params.getAll(key);
-      if (!allowed.has(key) || values.length !== 1 || !/^\d{1,18}$/u.test(values[0] ?? '')) {
-        return false;
-      }
-    }
-    return true;
-  };
-  if (pathname === '/_redeven_proxy/api/settings' && query === '') return pathWithQuery;
-  if (pathname === '/_redeven_proxy/api/fs/path_context' && query === '') return pathWithQuery;
-  if (pathname === '/_redeven_proxy/api/fs/list' && query === '') return pathWithQuery;
-  if (pathname === '/_redeven_proxy/api/ai/provider_bundle' && query === '') return pathWithQuery;
-  if (pathname === '/_redeven_proxy/api/ai/models' && query === '') return pathWithQuery;
-  if (pathname === '/_redeven_proxy/api/ai/uploads' && query === '') return pathWithQuery;
-  if (pathname === '/_redeven_proxy/api/ai/threads' && allowsLimitQuery(query)) return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/bootstrap$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/events$/u.test(pathname) && allowsLiveEventsQuery(query)) return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/subagents\/[^/]+\/detail$/u.test(pathname) && allowsSubagentDetailQuery(query)) return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/turns$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/fork$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/input_response$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/approvals$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/context\/compact$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/cancel$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/terminal\/[^/]+\/read$/u.test(pathname) && allowsTerminalReadQuery(parsed.searchParams)) return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(pathname) && query === '') return pathWithQuery;
-  throw new Error('Flower runtime request path is not allowed.');
+  return `${parsed.pathname}${parsed.search}`;
 }
 
 function runtimeFlowerMethodAllowed(path: string, method: RuntimeFlowerRequest['method']): boolean {
-  const pathname = new URL(path, 'http://runtime-flower.local').pathname;
-  switch (method) {
-    case 'GET':
-      return pathname === '/_redeven_proxy/api/settings'
-        || pathname === '/_redeven_proxy/api/fs/path_context'
-        || pathname === '/_redeven_proxy/api/ai/models'
-        || pathname === '/_redeven_proxy/api/ai/threads'
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/bootstrap$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/events$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/subagents\/[^/]+\/detail$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/terminal\/[^/]+\/read$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(pathname);
-    case 'POST':
-      return pathname === '/_redeven_proxy/api/ai/uploads'
-        || pathname === '/_redeven_proxy/api/fs/list'
-        || pathname === '/_redeven_proxy/api/ai/threads'
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/turns$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/fork$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/input_response$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/approvals$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/context\/compact$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/cancel$/u.test(pathname);
-    case 'PUT':
-      return pathname === '/_redeven_proxy/api/ai/provider_bundle';
-    case 'PATCH':
-      return /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname);
-    case 'DELETE':
-      return /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname);
-    default:
-      return false;
-  }
+  const parsed = new URL(path, 'http://runtime-flower.local');
+  const route = runtimeFlowerAllowedRoute(parsed);
+  return !!route && route.methods.includes(method);
 }
 
 function runtimeFlowerMethod(rawMethod: unknown): RuntimeFlowerRequest['method'] {

@@ -622,8 +622,15 @@ export type FlowerThreadFocusRequest = Readonly<{
   thread_id: string;
 }>;
 
+export type FlowerSurfaceNotification = Readonly<{
+  tone: 'info' | 'success' | 'warning' | 'error';
+  title?: string;
+  message: string;
+}>;
+
 export type FlowerSurfaceProps = Readonly<{
   adapter: FlowerSurfaceAdapter;
+  notify: (notification: FlowerSurfaceNotification) => void;
   copy?: FlowerSurfaceCopy;
   warmup?: FlowerSurfaceWarmupState | null;
   focusThreadRequest?: FlowerThreadFocusRequest | null;
@@ -635,6 +642,44 @@ export type FlowerSurfaceProps = Readonly<{
 export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY;
   const subagentsCopy = (): FlowerSubagentsCopy => copy().subagents ?? DEFAULT_FLOWER_SURFACE_COPY.subagents!;
+  const notify = (notification: FlowerSurfaceNotification) => {
+    const message = trimString(notification.message);
+    if (!message) return;
+    const title = trimString(notification.title);
+    props.notify({
+      tone: notification.tone,
+      message,
+      ...(title ? { title } : {}),
+    });
+  };
+  const notifyComposerError = (message: string) => notify({
+    tone: 'error',
+    title: copy().chat.composerErrorTitle,
+    message,
+  });
+  const notifyPermissionError = (message: string) => notify({
+    tone: 'error',
+    title: copy().chat.permissionSelectorErrorTitle,
+    message,
+  });
+  const notifyModelError = (message: string) => notify({
+    tone: 'error',
+    title: 'Flower could not update the model.',
+    message,
+  });
+  const notifyFutureDefaultModelError = (message: string) => notify({
+    tone: 'error',
+    title: 'Default model was not updated.',
+    message,
+  });
+  const notifyThreadActionError = (message: string) => notify({
+    tone: 'error',
+    message,
+  });
+  const notifySuccess = (message: string) => notify({
+    tone: 'success',
+    message,
+  });
   const [loadError, setLoadError] = createSignal('');
   const [saveError, setSaveError] = createSignal('');
   const [savedAt, setSavedAt] = createSignal<number | null>(null);
@@ -644,9 +689,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [selectedThreadDetailID, setSelectedThreadDetailID] = createSignal('');
   const [sidebarActiveThreadID, setSidebarActiveThreadID] = createSignal('');
   const [composerSessionDrafts, setComposerSessionDrafts] = createSignal<Record<string, FlowerComposerSessionDraft>>({});
-  const [chatSubmitError, setChatSubmitError] = createSignal('');
-  const [inputSubmitError, setInputSubmitError] = createSignal('');
-  const [permissionSubmitError, setPermissionSubmitError] = createSignal('');
   const [inputSubmitting, setInputSubmitting] = createSignal(false);
   const [chatRunning, setChatRunning] = createSignal(false);
   const [threadStopping, setThreadStopping] = createSignal(false);
@@ -712,8 +754,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [isComposing, setIsComposing] = createSignal(false);
   const [handlerState, setHandlerState] = createSignal<FlowerHandlerResolutionState>({ status: 'starting' });
   const [threadLoadError, setThreadLoadError] = createSignal('');
-  const [threadActionError, setThreadActionError] = createSignal('');
-  const [threadActionSuccess, setThreadActionSuccess] = createSignal('');
   const [localReadVisibilityRevision, setLocalReadVisibilityRevision] = createSignal(0);
   const [threadActionBusy, setThreadActionBusy] = createSignal<{ threadID: string; action: FlowerThreadMenuAction } | null>(null);
   const [renameThreadID, setRenameThreadID] = createSignal('');
@@ -727,7 +767,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
   const [activityClockNow, setActivityClockNow] = createSignal(Date.now());
   const [approvalSubmitting, setApprovalSubmitting] = createSignal<Record<string, FlowerApprovalSubmittingState>>({});
-  const [composerApprovalError, setComposerApprovalError] = createSignal('');
   const [copiedMessageAction, setCopiedMessageAction] = createSignal('');
   const [copiedApprovalAction, setCopiedApprovalAction] = createSignal('');
   const [transcriptLayoutRevision, setTranscriptLayoutRevision] = createSignal(0);
@@ -1193,14 +1232,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const openWorkingDirectoryPicker = async () => {
     if (!canPickWorkingDirectory()) return;
-    setChatSubmitError('');
     try {
       const context = await loadWorkingDirectoryPathContext();
       if (!context && !workingDirectoryPathContext()) return;
       workingDirectoryPicker.reset();
       setWorkingDirectoryPickerOpen(true);
     } catch (error) {
-      setChatSubmitError(getErrorMessage(error));
+      notifyComposerError(getErrorMessage(error));
     }
   };
   const handleWorkingDirectoryChipClick = async () => {
@@ -1209,12 +1247,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const path = displayedWorkingDirectory();
       if (!path) return;
       setComposerMoreOpen(false);
-      setThreadActionError('');
       try {
         await writeClipboardText(path, copy().threadList.workingDirectoryLabel);
         confirmWorkingDirectoryCopied();
       } catch (error) {
-        setThreadActionError(getErrorMessage(error));
+        notifyThreadActionError(getErrorMessage(error));
       }
       return;
     }
@@ -1351,7 +1388,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!mid) return;
     if (!modelSelectOptions().some((option) => option.id === mid)) return;
     const threadID = trimString(selectedThreadID());
-    setChatSubmitError('');
     if (!threadID) {
       const previous = selectedComposerModelID();
       if (previous === mid) return;
@@ -1373,7 +1409,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         updateCurrentComposerSessionDraft((draft) => (
           trimString(draft.modelIDOverride) === mid ? { ...draft, modelIDOverride: previousDraftOverride } : draft
         ));
-        setChatSubmitError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+        notifyModelError(getErrorMessage(error) || copy().chat.messageErrorFallback);
       } finally {
         setPendingModelPatch((current) => (
           current?.threadID === PENDING_NEW_THREAD_ID && current.requested === mid ? null : current
@@ -1397,17 +1433,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       } catch (error) {
         setSnapshot(previousSnapshot);
         if (selectedThreadDetailMatches(threadID)) {
-          setChatSubmitError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+          notifyFutureDefaultModelError(getErrorMessage(error) || copy().chat.messageErrorFallback);
         }
       }
       if (selectedThreadDetailMatches(threadID)) {
         setSelectedThreadWithDetail(updated.thread_id);
-        if (currentModelID() === mid) setChatSubmitError('');
       }
     } catch (error) {
       applyThreadModelLocally(threadID, previous);
       if (selectedThreadDetailMatches(threadID)) {
-        setChatSubmitError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+        notifyModelError(getErrorMessage(error) || copy().chat.messageErrorFallback);
       }
     } finally {
       setPendingModelPatch((current) => (current?.threadID === threadID && current.requested === mid ? null : current));
@@ -1416,7 +1451,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const updateComposerReasoningSelection = async (selection: FlowerReasoningSelection | undefined) => {
     const normalized = serializeFlowerReasoningSelection(selection);
     const threadID = trimString(selectedThreadID());
-    setChatSubmitError('');
     if (!threadID || selectedInputRequest()) {
       updateCurrentComposerSessionDraft((draft) => (
         sameFlowerReasoningSelection(draft.reasoningOverride, normalized)
@@ -1434,7 +1468,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const updated = applyLiveBootstrap(live, 'user_action');
       if (selectedThreadDetailMatches(threadID)) {
         setSelectedThreadWithDetail(updated.thread_id);
-        setChatSubmitError('');
       }
       updateComposerSessionDraft(threadID, (draft) => (
         draft.reasoningOverride ? { ...draft, reasoningOverride: undefined } : draft
@@ -1442,14 +1475,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     } catch (error) {
       applyThreadReasoningLocally(threadID, previous);
       if (selectedThreadDetailMatches(threadID)) {
-        setChatSubmitError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+        notifyComposerError(getErrorMessage(error) || copy().chat.messageErrorFallback);
       }
     }
   };
   const updateComposerPermissionType = async (permissionType: FlowerPermissionType) => {
     const threadID = trimString(selectedThreadID());
     closePermissionMenu(true);
-    setPermissionSubmitError('');
     if (!threadID) {
       updateCurrentComposerSessionDraft((draft) => (
         draft.permissionTypeOverride === permissionType
@@ -1468,7 +1500,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const updated = applyLiveBootstrap(live, 'user_action');
       if (selectedThreadDetailMatches(threadID)) {
         setSelectedThreadWithDetail(updated.thread_id);
-        setPermissionSubmitError('');
       }
     } catch (error) {
       applyThreadPermissionLocally(threadID, previous);
@@ -1478,7 +1509,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         // Keep the concise permission error; the previous snapshot has already been restored locally.
       }
       if (selectedThreadDetailMatches(threadID)) {
-        setPermissionSubmitError(getErrorMessage(error));
+        notifyPermissionError(getErrorMessage(error));
       }
     } finally {
       setPendingPermissionPatch((pending) => (
@@ -2098,7 +2129,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && previous.model_id !== thread.model_id
       && !sameFlowerReasoningSelection(previous.reasoning_selection, thread.reasoning_selection)
     ) {
-      setThreadActionSuccess('Reasoning adjusted for this model.');
+      notifySuccess('Reasoning adjusted for this model.');
     }
     return thread;
   };
@@ -2197,14 +2228,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const text = trimString(value);
     if (!text) return;
     await writeTextToClipboard(text);
-    setThreadActionSuccess(copy().threadList.copied(label));
+    notifySuccess(copy().threadList.copied(label));
   };
 
   const openRenameDialog = (threadID: string, title: string, restore?: HTMLElement) => {
     setRenameThreadID(trimString(threadID));
     setRenameDraft(title);
     setRenameError('');
-    setThreadActionError('');
     renameRestoreRef = restore;
     queueMicrotask(() => {
       renameInputRef?.focus();
@@ -2225,7 +2255,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const threadID = renameThreadID();
     if (!threadID || !props.adapter.renameThread || renameUnchanged()) return;
     setRenameSaving(true);
-    setThreadActionError('');
     setRenameError('');
     try {
       applyLiveBootstrap(await props.adapter.renameThread(threadID, renameDraft()));
@@ -2260,8 +2289,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       restoreThreadMenuFocus(restore);
       return;
     }
-    setThreadActionError('');
-    setThreadActionSuccess('');
     const shouldRestoreFocus = action !== 'rename';
     try {
       switch (action) {
@@ -2292,7 +2319,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
       }
     } catch (error) {
-      setThreadActionError(getErrorMessage(error));
+      notifyThreadActionError(getErrorMessage(error));
     } finally {
       setThreadActionBusy(null);
       if (shouldRestoreFocus) {
@@ -2317,11 +2344,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setSidebarActiveThreadID(tid);
     }
     scheduleSelectedThreadTailReveal(tid, sequence);
-    setChatSubmitError('');
-    setInputSubmitError('');
-    setPermissionSubmitError('');
     setThreadLoadError('');
-    setThreadActionError('');
     returnToChat();
     if (existing?.read_status.is_unread) {
       persistThreadRead(tid, existing.read_status.snapshot, sequence);
@@ -2711,7 +2734,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         )
         : '',
     }));
-    setInputSubmitError('');
   });
 
   const saveSettings = async (draft: FlowerSettingsDraft) => {
@@ -2732,7 +2754,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const returnToChat = () => {
-    setChatSubmitError('');
     setSidePanel('chat');
   };
 
@@ -2843,7 +2864,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const launchChatTurn = async (promptInput: string) => {
     const prompt = trimString(promptInput);
     if (!snapshot()) {
-      setChatSubmitError(copy().chat.loadingSettings);
+      notifyComposerError(copy().chat.loadingSettings);
       return;
     }
     if (!readyForChat() && !settingsReadOnly()) {
@@ -2851,24 +2872,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     if (!readyForChat()) {
-      setChatSubmitError(copy().chat.configureProviderBeforeChat);
+      notifyComposerError(copy().chat.configureProviderBeforeChat);
       return;
     }
     if (!prompt) {
-      setChatSubmitError(copy().chat.enterMessageBeforeSending);
+      notifyComposerError(copy().chat.enterMessageBeforeSending);
       return;
     }
     if (selectedThreadDetailPending()) {
-      setChatSubmitError(copy().chat.threadLoading);
+      notifyComposerError(copy().chat.threadLoading);
       return;
     }
     if (selectedThreadReadOnly()) {
-      setChatSubmitError(selectedThreadReadOnlyDisplay());
+      notifyComposerError(selectedThreadReadOnlyDisplay());
       return;
     }
     if (!handlerAllowsSubmitIntent()) {
       const state = handlerState();
-      setChatSubmitError('message' in state ? state.message : copy().chat.handlerStillStarting);
+      notifyComposerError('message' in state ? state.message : copy().chat.handlerStillStarting);
       return;
     }
     const selectedID = trimString(selectedThreadID());
@@ -2908,7 +2929,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           chatDraft: prompt,
         }));
         if (composerSessionStillCurrent(launchSessionKey)) {
-          setChatSubmitError(decision.blocker?.message || copy().chat.handlerStillStarting);
+          notifyComposerError(decision.blocker?.message || copy().chat.handlerStillStarting);
         }
         return;
       }
@@ -2959,7 +2980,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         chatDraft: prompt,
       }));
       if (composerSessionStillCurrent(launchSessionKey)) {
-        setChatSubmitError(getErrorMessage(error));
+        notifyComposerError(getErrorMessage(error));
       }
     } finally {
       if (accepted) {
@@ -3095,7 +3116,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const compactSelectedThreadContext = async () => {
     if (!snapshot()) {
-      setChatSubmitError(copy().chat.loadingSettings);
+      notifyComposerError(copy().chat.loadingSettings);
       return;
     }
     if (!readyForChat() && !settingsReadOnly()) {
@@ -3103,38 +3124,38 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     if (!readyForChat()) {
-      setChatSubmitError(copy().chat.configureProviderBeforeChat);
+      notifyComposerError(copy().chat.configureProviderBeforeChat);
       return;
     }
     if (!handlerAllowsSubmitIntent()) {
       const state = handlerState();
-      setChatSubmitError('message' in state ? state.message : copy().chat.handlerStillStarting);
+      notifyComposerError('message' in state ? state.message : copy().chat.handlerStillStarting);
       return;
     }
     const thread = selectedThread();
     if (selectedThreadDetailPending()) {
-      setChatSubmitError(copy().chat.threadLoading);
+      notifyComposerError(copy().chat.threadLoading);
       return;
     }
     if (!thread) {
-      setChatSubmitError(copy().chat.compactChooseThread);
+      notifyComposerError(copy().chat.compactChooseThread);
       return;
     }
     const threadID = trimString(thread.thread_id);
     if (!threadID) {
-      setChatSubmitError(copy().chat.compactChooseThread);
+      notifyComposerError(copy().chat.compactChooseThread);
       return;
     }
     if (selectedThreadReadOnly()) {
-      setChatSubmitError(selectedThreadReadOnlyDisplay());
+      notifyComposerError(selectedThreadReadOnlyDisplay());
       return;
     }
     if (selectedInputRequest()) {
-      setChatSubmitError(copy().chat.compactFinishInputRequest);
+      notifyComposerError(copy().chat.compactFinishInputRequest);
       return;
     }
     if (!selectedThreadHasContent()) {
-      setChatSubmitError(copy().chat.compactNeedsConversation);
+      notifyComposerError(copy().chat.compactNeedsConversation);
       return;
     }
     if (compactSubmitting()) return;
@@ -3178,7 +3199,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         chatDraft: FLOWER_COMPACT_CONTEXT_COMMAND,
       }));
       if (selectedThreadDetailMatches(threadID)) {
-        setChatSubmitError(getErrorMessage(error));
+        notifyComposerError(getErrorMessage(error));
       }
     } finally {
       setCompactSubmitting(false);
@@ -3187,9 +3208,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const submitChat = async () => {
     const prompt = trimString(composerRef?.value ?? currentComposerSessionDraft().chatDraft);
-    setChatSubmitError('');
     if (selectedThreadReadOnly()) {
-      setChatSubmitError(selectedThreadReadOnlyDisplay());
+      notifyComposerError(selectedThreadReadOnlyDisplay());
       return;
     }
     if (selectedInputRequest()) {
@@ -3198,7 +3218,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     const command = parseFlowerSlashCommand(prompt);
     if (command.kind === 'invalid') {
-      setChatSubmitError(command.message);
+      notifyComposerError(command.message);
       return;
     }
     if (command.kind === 'suggest') {
@@ -3220,7 +3240,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
       } catch (error) {
         if (selectedThreadDetailMatches(stoppingThreadID)) {
-          setChatSubmitError(getErrorMessage(error));
+          notifyComposerError(getErrorMessage(error));
         }
         return;
       } finally {
@@ -3246,9 +3266,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSelectedThreadDetailID('');
     setSidebarActiveThreadID('');
     clearPendingTurns();
-    setChatSubmitError('');
-    setInputSubmitError('');
-    setPermissionSubmitError('');
     setThreadLoadError('');
     requestComposerFocus();
     void resolveHandlerDecision();
@@ -3537,7 +3554,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const executeCompactContextCommand = async () => {
-    setChatSubmitError('');
     await compactSelectedThreadContext();
   };
 
@@ -3810,7 +3826,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         copiedMessageResetTimer = undefined;
       }, MESSAGE_COPY_RESET_MS);
     } catch (error) {
-      setThreadActionError(getErrorMessage(error));
+      notifyThreadActionError(getErrorMessage(error));
     }
   };
 
@@ -3865,7 +3881,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       return { ...draft, inputDrafts: nextInputDrafts };
     });
-    setInputSubmitError('');
   };
 
   const selectInputChoice = (question: FlowerInputRequestQuestion, choice: FlowerInputRequestChoice) => {
@@ -3885,11 +3900,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const waitingQuestion = activeInputQuestion();
     if (selectedInputRequest() && waitingQuestion) {
       updateInputText(waitingQuestion, value);
-      setInputSubmitError('');
       return;
     }
     updateCurrentComposerSessionDraft((draft) => (draft.chatDraft === value ? draft : { ...draft, chatDraft: value }));
-    setChatSubmitError('');
   };
 
   const inputTextQuestions = createMemo(() => selectedInputRequest()?.questions.filter(questionAllowsText) ?? []);
@@ -3986,7 +3999,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const inputRequestReadyToSubmit = createMemo(() => !!selectedInputRequest() && inputRequestAnswers() !== null);
-  const composerErrorMessage = createMemo(() => composerApprovalError() || inputSubmitError() || chatSubmitError());
 
   const submitInputRequest = async () => {
     const thread = selectedThread();
@@ -3996,11 +4008,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const threadID = trimString(thread.thread_id);
     const answers = inputRequestAnswers();
     if (!answers) {
-      setInputSubmitError(chatCopyValue('inputRequestAnswerRequired', 'Answer every question before continuing.'));
+      notifyComposerError(chatCopyValue('inputRequestAnswerRequired', 'Answer every question before continuing.'));
       return;
     }
     setInputSubmitting(true);
-    setInputSubmitError('');
     try {
       const reasoningSelection = serializeFlowerReasoningSelection(composerReasoningOverride() ?? selectedWaitingReasoningSelection());
       const next = await props.adapter.submitInput({
@@ -4023,12 +4034,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }));
       if (selectionCurrent) {
         requestComposerFocus();
-        setInputSubmitError('');
         await refreshSelectedThread(nextThread.thread_id);
       }
     } catch (error) {
       if (selectedThreadDetailMatches(threadID)) {
-        setInputSubmitError(getErrorMessage(error));
+        notifyComposerError(getErrorMessage(error));
       }
     } finally {
       setInputSubmitting(false);
@@ -4040,8 +4050,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedThreadDetailPending()) return;
     if (!thread || approvalSubmitting()[action.action_id]) return;
     const threadID = trimString(thread.thread_id);
-    setThreadActionError('');
-    setComposerApprovalError('');
     setApprovalSubmitting((current) => ({ ...current, [action.action_id]: approved ? 'approve' : 'reject' }));
     try {
       if (action.origin === 'delegated_subagent') {
@@ -4071,13 +4079,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       if (selectedThreadDetailMatches(threadID)) {
         void applySelectedThreadLiveEvents(threadID, threadLoadSequence);
-        setComposerApprovalError('');
       }
     } catch (error) {
       const message = getErrorMessage(error);
       if (selectedThreadDetailMatches(threadID)) {
-        setComposerApprovalError(message);
-        setThreadActionError(message);
+        notifyComposerError(message);
         await reloadSelectedThread(threadID);
       }
     } finally {
@@ -4106,7 +4112,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         copiedApprovalResetTimer = undefined;
       }, 1600);
     } catch (error) {
-      setThreadActionError(getErrorMessage(error));
+      notifyThreadActionError(getErrorMessage(error));
     }
   };
 
@@ -4552,7 +4558,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       item_id: itemID,
       action_id: action.action_id,
     }).catch((error) => {
-      setThreadActionError(getErrorMessage(error));
+      notifyThreadActionError(getErrorMessage(error));
     });
   };
 
@@ -4566,7 +4572,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       item_id: itemID,
       action_id: action.action_id,
     }).catch((error) => {
-      setThreadActionError(getErrorMessage(error));
+      notifyThreadActionError(getErrorMessage(error));
     });
   };
 
@@ -6401,9 +6407,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             >
                               {inputSubmitting()
                                 ? chatCopyValue('inputRequestSubmitting', 'Submitting...')
-                                : inputSubmitError()
-                                  ? chatCopyValue('inputRequestRetry', 'Retry')
-                                  : chatCopyValue('inputRequestSubmit', 'Continue')}
+                                : chatCopyValue('inputRequestSubmit', 'Continue')}
                             </Button>
                           </Show>
                         )}
@@ -6447,12 +6451,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </div>
               </div>
             </div>
-            <Show when={composerErrorMessage()}>
-              {(message) => <div class="flower-composer-error">{errorNotice(copy().chat.composerErrorTitle, message())}</div>}
-            </Show>
-            <Show when={permissionSubmitError()}>
-              {(message) => <div class="flower-composer-error">{errorNotice(copy().chat.permissionSelectorErrorTitle, message())}</div>}
-            </Show>
           </div>
         </div>
       </div>
@@ -6503,12 +6501,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           actionsBusy={threadActionBusy() !== null}
           onMenuAction={(action, item, restore) => void handleThreadMenuAction(action, item, restore)}
         />
-        <Show when={threadActionError()}>
-          {(message) => <div class="flower-thread-action-error" role="alert">{message()}</div>}
-        </Show>
-        <Show when={threadActionSuccess()}>
-          {(message) => <div class="flower-thread-action-success" role="status" aria-live="polite">{message()}</div>}
-        </Show>
       </aside>
       <Show when={renameThreadID()}>
         <div class="flower-rename-backdrop" role="presentation" onMouseDown={closeRenameDialog}>

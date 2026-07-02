@@ -2496,10 +2496,6 @@ html.dark .flower-component-shell {
   margin-top: 0.625rem;
 }
 
-.flower-composer-error {
-  margin-top: 0.625rem;
-}
-
 .flower-thread-loading {
   display: grid;
   width: 100%;
@@ -4977,26 +4973,6 @@ html.dark .flower-component-shell {
   height: 1px;
   margin: 0.25rem 0.375rem;
   background: color-mix(in srgb, var(--border) 72%, transparent);
-}
-
-.flower-thread-action-error {
-  margin: 0 0.75rem 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--error, #ef4444) 28%, transparent);
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.625rem;
-  color: color-mix(in srgb, var(--error, #ef4444) 86%, var(--foreground));
-  background: color-mix(in srgb, var(--error, #ef4444) 7%, transparent);
-  font-size: 0.75rem;
-}
-
-.flower-thread-action-success {
-  margin: 0 0.75rem 0.75rem;
-  border: 1px solid color-mix(in srgb, #10b981 26%, transparent);
-  border-radius: 0.5rem;
-  padding: 0.5rem 0.625rem;
-  color: color-mix(in srgb, #10b981 76%, var(--foreground));
-  background: color-mix(in srgb, #10b981 7%, transparent);
-  font-size: 0.75rem;
 }
 
 .flower-rename-backdrop {
