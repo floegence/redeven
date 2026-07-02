@@ -20,6 +20,7 @@ const hoisted = vi.hoisted(() => {
 
   const envContextState = {
     settingsSeq: () => 0,
+    bumpSettingsSeq: (() => undefined) as () => void,
   };
 
   return {
@@ -36,6 +37,7 @@ const hoisted = vi.hoisted(() => {
       env_id: () => 'env-1',
       env: envResource,
       settingsSeq: () => envContextState.settingsSeq(),
+      bumpSettingsSeq: () => envContextState.bumpSettingsSeq(),
       aiThreadFocusRequest: () => null,
       consumeAIThreadFocusRequest: () => undefined,
     },
@@ -111,6 +113,7 @@ let threadPatchRequests: Array<{ threadId: string; body: { model_id?: string } }
 let createThreadBodies: Array<Record<string, unknown>>;
 let modelRequests: number;
 let bumpSettingsSeq: () => void;
+let settingsSeqBumps: number;
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   useNotification: () => hoisted.notificationMock,
@@ -186,9 +189,14 @@ describe('AIChatContext model selection', () => {
     threadPatchRequests = [];
     createThreadBodies = [];
     modelRequests = 0;
+    settingsSeqBumps = 0;
     const [settingsSeq, setSettingsSeq] = createSignal(0);
     hoisted.envContextState.settingsSeq = settingsSeq;
-    bumpSettingsSeq = () => setSettingsSeq((seq) => seq + 1);
+    bumpSettingsSeq = () => {
+      settingsSeqBumps += 1;
+      setSettingsSeq((seq) => seq + 1);
+    };
+    hoisted.envContextState.bumpSettingsSeq = bumpSettingsSeq;
     fetchLocalApiJSONMock.mockReset();
     fetchLocalApiJSONMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
@@ -391,7 +399,7 @@ describe('AIChatContext model selection', () => {
     dispose();
   });
 
-  it('changes an unlocked thread model without mutating current_model_id', async () => {
+  it('changes an unlocked thread model and stores it as the next thread default', async () => {
     threadsState = [makeThread()];
     const { ctx, dispose } = await renderContext();
 
@@ -407,9 +415,10 @@ describe('AIChatContext model selection', () => {
     await vi.waitFor(() => {
       expect(threadPatchRequests).toEqual([{ threadId: 'thread-1', body: { model_id: 'openai/model-b' } }]);
       expect(threadsState[0]?.model_id).toBe('openai/model-b');
+      expect(currentModelRequests).toEqual([{ model_id: 'openai/model-b' }]);
     });
-    expect(currentModelRequests).toEqual([]);
-    expect(ctx.selectedCurrentModel()).toBe('openai/model-a');
+    expect(ctx.selectedCurrentModel()).toBe('openai/model-b');
+    expect(settingsSeqBumps).toBeGreaterThan(0);
 
     dispose();
   });
@@ -452,12 +461,41 @@ describe('AIChatContext model selection', () => {
     dispose();
   });
 
+  it('keeps the changed thread model when storing the next thread default fails', async () => {
+    threadsState = [makeThread()];
+    currentModelError = new Error('save failed');
+    const { ctx, dispose } = await renderContext();
+
+    ctx.selectThreadId('thread-1');
+    await vi.waitFor(() => {
+      expect(ctx.activeThreadId()).toBe('thread-1');
+    });
+
+    ctx.selectThreadModel('openai/model-b');
+
+    await vi.waitFor(() => {
+      expect(threadPatchRequests).toEqual([{ threadId: 'thread-1', body: { model_id: 'openai/model-b' } }]);
+      expect(currentModelRequests).toEqual([{ model_id: 'openai/model-b' }]);
+      expect(notificationMock.error).toHaveBeenCalledWith('Failed to update current model', 'save failed');
+    });
+    expect(ctx.selectedThreadModel()).toBe('openai/model-b');
+    expect(ctx.selectedCurrentModel()).toBe('openai/model-a');
+    expect(threadsState[0]?.model_id).toBe('openai/model-b');
+
+    dispose();
+  });
+
   it('uses the selected current model when creating a new thread', async () => {
     const { ctx, dispose } = await renderContext();
 
     ctx.selectCurrentModel('openai/model-b');
     await vi.waitFor(() => {
       expect(modelsState.current_model).toBe('openai/model-b');
+      expect(modelRequests).toBeGreaterThanOrEqual(2);
+      expect(ctx.modelsReady()).toBe(true);
+      expect(ctx.modelOptions().map((item) => item.value)).toContain('openai/model-b');
+      expect(ctx.selectedCurrentModel()).toBe('openai/model-b');
+      expect(ctx.threads.loading).toBe(false);
     });
 
     const threadId = await ctx.ensureThreadForSend();

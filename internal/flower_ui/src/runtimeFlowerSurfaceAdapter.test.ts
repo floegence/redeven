@@ -115,6 +115,7 @@ function adapterOptions(
     },
     loadSettings: vi.fn(async () => settingsSnapshot()),
     saveSettings: vi.fn(async (_draft: FlowerSettingsDraft) => settingsSnapshot()),
+    setCurrentModel: vi.fn(async (_modelID: string) => settingsSnapshot()),
     resolveHandler: vi.fn(async () => routerDecision()),
     launchTurn: vi.fn(async () => {
       throw new Error('launchTurn should not be called.');
@@ -133,6 +134,23 @@ function adapterOptions(
 }
 
 describe('runtime Flower surface adapter read state', () => {
+  it('delegates current model updates through the host option', async () => {
+    const nextSnapshot = {
+      ...settingsSnapshot(),
+      config: {
+        ...settingsSnapshot().config,
+        current_model_id: 'default/gpt-5.4',
+      },
+    };
+    const setCurrentModel = vi.fn(async () => nextSnapshot);
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, { setCurrentModel }));
+
+    const snapshot = await adapter.setCurrentModel(' default/gpt-5.4 ');
+
+    expect(setCurrentModel).toHaveBeenCalledWith('default/gpt-5.4');
+    expect(snapshot.config.current_model_id).toBe('default/gpt-5.4');
+  });
+
   it('returns read_status from markThreadRead without reloading the thread', async () => {
     const status = readStatus();
     const markThreadRead = vi.fn(async () => ({ read_status: status }));

@@ -1132,6 +1132,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   renameThread?: (threadID: string, title: string) => Promise<FlowerLiveBootstrap>;
   setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerLiveBootstrap>;
   setThreadPermissionType?: (threadID: string, permissionType: FlowerPermissionType) => Promise<FlowerLiveBootstrap>;
+  setCurrentModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
   setThreadModel?: (threadID: string, modelID: string) => Promise<FlowerLiveBootstrap>;
   setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerLiveBootstrap>;
   forkThread?: (threadID: string) => Promise<FlowerLiveBootstrap>;

@@ -1314,6 +1314,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return changed ? next : current;
     });
   };
+  const applyCurrentModelLocally = (modelID: string) => {
+    const mid = trimString(modelID);
+    if (!mid) return;
+    setSnapshot((current) => (current
+      ? {
+          ...current,
+          config: {
+            ...current.config,
+            current_model_id: mid,
+          },
+        }
+      : current));
+  };
   const applyThreadReasoningLocally = (threadID: string, selection: FlowerReasoningSelection | undefined) => {
     const tid = trimString(threadID);
     if (!tid) return;
@@ -1340,22 +1353,56 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const threadID = trimString(selectedThreadID());
     setChatSubmitError('');
     if (!threadID) {
+      const previous = selectedComposerModelID();
+      if (previous === mid) return;
+      const previousSnapshot = snapshot();
+      const previousDraftOverride = trimString(currentComposerSessionDraft().modelIDOverride);
+      setPendingModelPatch({ threadID: PENDING_NEW_THREAD_ID, requested: mid, previous });
       updateCurrentComposerSessionDraft((draft) => (
         trimString(draft.modelIDOverride) === mid ? draft : { ...draft, modelIDOverride: mid }
       ));
+      applyCurrentModelLocally(mid);
+      try {
+        const next = await props.adapter.setCurrentModel(mid);
+        setSnapshot(next);
+        updateCurrentComposerSessionDraft((draft) => (
+          trimString(draft.modelIDOverride) === mid ? { ...draft, modelIDOverride: '' } : draft
+        ));
+      } catch (error) {
+        setSnapshot(previousSnapshot);
+        updateCurrentComposerSessionDraft((draft) => (
+          trimString(draft.modelIDOverride) === mid ? { ...draft, modelIDOverride: previousDraftOverride } : draft
+        ));
+        setChatSubmitError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+      } finally {
+        setPendingModelPatch((current) => (
+          current?.threadID === PENDING_NEW_THREAD_ID && current.requested === mid ? null : current
+        ));
+      }
       return;
     }
     if (!props.adapter.setThreadModel || !composerModelInteractive()) return;
     const previous = selectedComposerModelID();
     if (previous === mid) return;
+    const previousSnapshot = snapshot();
     setPendingModelPatch({ threadID, requested: mid, previous });
     applyThreadModelLocally(threadID, mid);
     try {
       const live = await props.adapter.setThreadModel(threadID, mid);
       const updated = applyLiveBootstrap(live, 'user_action');
+      applyCurrentModelLocally(mid);
+      try {
+        const next = await props.adapter.setCurrentModel(mid);
+        setSnapshot(next);
+      } catch (error) {
+        setSnapshot(previousSnapshot);
+        if (selectedThreadDetailMatches(threadID)) {
+          setChatSubmitError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+        }
+      }
       if (selectedThreadDetailMatches(threadID)) {
         setSelectedThreadWithDetail(updated.thread_id);
-        setChatSubmitError('');
+        if (currentModelID() === mid) setChatSubmitError('');
       }
     } catch (error) {
       applyThreadModelLocally(threadID, previous);

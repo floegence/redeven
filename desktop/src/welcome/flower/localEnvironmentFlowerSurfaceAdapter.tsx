@@ -48,6 +48,7 @@ export type DesktopSettingsBridge = Readonly<{
 export type LocalEnvironmentFlowerSurfaceAdapterOptions = Readonly<{
   runtimeDisplayName?: string;
   runtimeSubtitle?: string;
+  onSettingsChanged?: () => void | Promise<unknown>;
 }>;
 
 type ModelsResponse = Readonly<{
@@ -505,6 +506,14 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     saveSettings: async (draft) => {
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));
       return loadSettingsSnapshot(bridge);
+    },
+    setCurrentModel: async (modelID) => {
+      const mid = trim(modelID);
+      if (!mid) throw new Error('Missing model id.');
+      await runtimeJSON<ModelsResponse>(bridge, 'PUT', '/_redeven_proxy/api/ai/current_model', { model_id: mid });
+      const snapshot = await loadSettingsSnapshot(bridge);
+      if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
+      return snapshot;
     },
     getWorkingDirectoryPathContext: async () => mapRuntimeWorkingDirectoryPathContext(
       await runtimeJSON<RuntimeFSPathContextResponse>(bridge, 'GET', '/_redeven_proxy/api/fs/path_context'),

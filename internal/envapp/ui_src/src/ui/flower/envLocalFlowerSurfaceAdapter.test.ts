@@ -514,4 +514,47 @@ describe('Env local Flower surface adapter', () => {
     expect(patchBodies).toEqual([{ model_id: 'default/gpt-5.4' }]);
     expect(live?.thread.model_id).toBe('default/gpt-5.4');
   });
+
+  it('updates the current model through the local API and refreshes settings', async () => {
+    const currentModelBodies: unknown[] = [];
+    const onSettingsChanged = vi.fn();
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/ai/current_model' && init?.method === 'PUT') {
+        currentModelBodies.push(JSON.parse(String(init.body ?? '{}')));
+        return jsonResponse({ current_model: 'default/gpt-5.4', models: [{ id: 'default/gpt-5.4' }] });
+      }
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({
+          ai: {
+            current_model_id: 'default/gpt-5.4',
+            providers: [{
+              id: 'default',
+              type: 'openai',
+              models: [{ model_name: 'gpt-5.4' }],
+            }],
+          },
+          ai_secrets: {
+            provider_api_key_set: { default: true },
+            web_search_provider_api_key_set: {},
+          },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+        return jsonResponse({ current_model: 'default/gpt-5.4', models: [{ id: 'default/gpt-5.4' }] });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+      onSettingsChanged,
+    });
+
+    const snapshot = await adapter.setCurrentModel('default/gpt-5.4');
+
+    expect(currentModelBodies).toEqual([{ model_id: 'default/gpt-5.4' }]);
+    expect(snapshot.config.current_model_id).toBe('default/gpt-5.4');
+    expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+  });
 });

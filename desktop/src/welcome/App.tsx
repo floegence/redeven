@@ -6171,6 +6171,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             adapter={createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
               runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment'),
               runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),
+              onSettingsChanged: refreshSnapshot,
             })}
             copy={createDesktopFlowerSurfaceCopy(i18n())}
             warmup={flowerWarmupState()}

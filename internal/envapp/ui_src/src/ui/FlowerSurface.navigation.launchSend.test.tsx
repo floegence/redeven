@@ -6,6 +6,7 @@ import type {
   FlowerLiveBootstrap,
   FlowerLiveEventsResponse,
   FlowerRouterDecision,
+  FlowerSettingsSnapshot,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
   adapter,
@@ -17,7 +18,9 @@ import {
   activityTimeline,
   liveBootstrap,
   modelIOStatus,
+  mutableSettingsAdapter,
   renderSurfaceWithAdapter,
+  settingsSnapshot,
   thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
@@ -415,6 +418,67 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(runtime.querySelector('[data-flower-composer-inline-item="model"] .flower-model-select-trigger')).toBeTruthy();
     expect(runtime.querySelector('[data-flower-composer-more-panel="true"]')).toBeNull();
     expect(runtime.querySelector('button.flower-composer-more-button')).toBeNull();
+  });
+
+  it('writes a selected thread model as the next new-thread default', async () => {
+    let selectedModelThread = thread({
+      thread_id: 'thread-model-default',
+      title: 'Model default',
+      model_id: 'openai/gpt-5.2',
+    });
+    let currentSnapshot: FlowerSettingsSnapshot = {
+      ...settingsSnapshot(true),
+      config: {
+        ...settingsSnapshot(true).config,
+        providers: [{
+          ...settingsSnapshot(true).config.providers[0],
+          models: [
+            ...settingsSnapshot(true).config.providers[0].models,
+            { model_name: 'gpt-5.4', context_window: 400000, input_modalities: ['text'] },
+          ],
+        }],
+      },
+    };
+    const surfaceAdapter = {
+      ...mutableSettingsAdapter(true),
+      loadSettings: vi.fn(async () => currentSnapshot),
+      listThreads: vi.fn(async () => [selectedModelThread]),
+      loadThread: vi.fn(async () => liveBootstrap(selectedModelThread)),
+      setThreadModel: vi.fn(async (_threadID: string, modelID: string) => {
+        selectedModelThread = {
+          ...selectedModelThread,
+          model_id: modelID,
+        };
+        return liveBootstrap(selectedModelThread);
+      }),
+      setCurrentModel: vi.fn(async (modelID: string) => {
+        currentSnapshot = {
+          ...currentSnapshot,
+          config: {
+            ...currentSnapshot.config,
+            current_model_id: modelID,
+          },
+        };
+        return currentSnapshot;
+      }),
+    };
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-model-default"] button')));
+    (runtime.querySelector('[data-thread-id="thread-model-default"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-model-select-trigger')?.textContent?.includes('gpt-5.2') ?? false);
+
+    (runtime.querySelector('.flower-model-select-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-menu')));
+    const nextModelOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
+      .find((button) => button.textContent?.includes('gpt-5.4')) as HTMLButtonElement | undefined;
+    nextModelOption?.click();
+
+    await waitFor(() => surfaceAdapter.setCurrentModel.mock.calls.length === 1);
+    expect(surfaceAdapter.setThreadModel).toHaveBeenCalledWith('thread-model-default', 'openai/gpt-5.4');
+    expect(surfaceAdapter.setCurrentModel).toHaveBeenCalledWith('openai/gpt-5.4');
+    expect(surfaceAdapter.setThreadModel.mock.invocationCallOrder[0]).toBeLessThan(surfaceAdapter.setCurrentModel.mock.invocationCallOrder[0]);
+    expect(runtime.querySelector('.flower-model-select-trigger')?.textContent).toContain('OpenAI / gpt-5.4');
   });
 
   it('moves overflowing composer controls into the More panel without changing working directory launch behavior', async () => {

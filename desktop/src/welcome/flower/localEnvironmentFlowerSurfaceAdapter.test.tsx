@@ -263,6 +263,48 @@ describe('Local Environment Flower surface adapter', () => {
     });
   });
 
+  it('updates the current model through runtime Flower IPC', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const onSettingsChanged = vi.fn();
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/ai/current_model') {
+        return { current_model: 'default/gpt-5.4', models: [{ id: 'default/gpt-5.4' }] };
+      }
+      if (request.path === '/_redeven_proxy/api/settings') {
+        const settings = settingsResponse();
+        return {
+          ...settings,
+          ai: settings.ai
+            ? {
+                ...settings.ai,
+                current_model_id: 'default/gpt-5.4',
+                providers: [{
+                  ...settings.ai.providers[0]!,
+                  models: [{ model_name: 'gpt-5.4' }],
+                }],
+              }
+            : settings.ai,
+        };
+      }
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge, { onSettingsChanged });
+
+    const snapshot = await adapter.setCurrentModel('default/gpt-5.4');
+
+    expect(calls).toEqual([
+      {
+        method: 'PUT',
+        path: '/_redeven_proxy/api/ai/current_model',
+        body: { model_id: 'default/gpt-5.4' },
+      },
+      { method: 'GET', path: '/_redeven_proxy/api/settings' },
+    ]);
+    expect(snapshot.config.current_model_id).toBe('default/gpt-5.4');
+    expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+  });
+
   it('loads working directory picker data through read-only runtime FS IPC', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {

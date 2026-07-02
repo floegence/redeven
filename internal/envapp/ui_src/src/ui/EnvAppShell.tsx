@@ -1139,6 +1139,7 @@ export function EnvAppShell() {
           selectModelBeforeChat: i18n.t('flowerChat.router.selectModelBeforeChat'),
           failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
         },
+        onSettingsChanged: () => { bumpSettingsSeq(); },
         uploadAttachment: uploadLocalApiFile,
         openFileBrowser: openFlowerFileBrowser,
         openFilePreview: openFlowerFilePreview,
