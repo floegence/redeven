@@ -17,6 +17,18 @@ export type LocalUploadResponse = {
   url?: string;
 };
 
+export class LocalApiError extends Error {
+  readonly status: number;
+  readonly code: string;
+
+  constructor(args: Readonly<{ message: string; status?: number; code?: string }>) {
+    super(String(args.message ?? 'Local API request failed'));
+    this.name = 'LocalApiError';
+    this.status = Number.isFinite(args.status) ? Math.max(0, Math.floor(args.status!)) : 0;
+    this.code = String(args.code ?? '').trim();
+  }
+}
+
 function localApiErrorMessage(data: any, status: number): string {
   const nested = String(data?.error?.message ?? '').trim();
   if (nested) return nested;
@@ -26,7 +38,7 @@ function localApiErrorMessage(data: any, status: number): string {
 }
 
 function localApiErrorCode(data: any): string {
-  return String(data?.error?.code ?? '').trim();
+  return String(data?.error_code ?? data?.error?.code ?? '').trim();
 }
 
 function localApiRetryAfterMs(data: any): number {
@@ -89,7 +101,7 @@ export async function fetchLocalApiJSON<T>(url: string, init: RequestInit): Prom
     if (retryAfterMs > 0 || isKnownAccessUnlockErrorCode(code)) {
       throw new AccessUnlockError({ message, status: resp.status, code, retryAfterMs });
     }
-    throw new Error(message);
+    throw new LocalApiError({ message, status: resp.status, code });
   }
   if (data?.ok === false) {
     const message = localApiErrorMessage(data, resp.status || 400);
@@ -98,7 +110,7 @@ export async function fetchLocalApiJSON<T>(url: string, init: RequestInit): Prom
     if (retryAfterMs > 0 || isKnownAccessUnlockErrorCode(code)) {
       throw new AccessUnlockError({ message, status: resp.status || 400, code, retryAfterMs });
     }
-    throw new Error(message);
+    throw new LocalApiError({ message, status: resp.status || 400, code });
   }
   return (data?.data ?? data) as T;
 }

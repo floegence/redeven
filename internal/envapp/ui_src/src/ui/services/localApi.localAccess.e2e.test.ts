@@ -29,6 +29,17 @@ function errorResponseWithRetry(message: string, status: number, retryAfterMs: n
   });
 }
 
+function flatAppserverErrorResponse(message: string, status: number, code: string): Response {
+  return new Response(JSON.stringify({
+    ok: false,
+    error: message,
+    error_code: code,
+  }), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 describe('localApi access credentials', () => {
   beforeEach(() => {
     vi.resetModules();
@@ -177,6 +188,38 @@ describe('localApi access credentials', () => {
 
     const mod = await import('./localApi');
     await expect(mod.unlockEnvAppAccess('wrong')).rejects.toThrow('invalid password');
+  });
+
+  it('preserves flat appserver error_code on HTTP failures', async () => {
+    vi.doMock('./controlplaneApi', () => ({
+      getLocalRuntime: vi.fn(async () => null),
+    }));
+    const fetchMock = vi.fn(async () => flatAppserverErrorResponse('confirmation required', 403, 'PLUGIN_CONFIRMATION_REQUIRED'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./localApi');
+    await expect(mod.fetchLocalApiJSON('/_redeven_proxy/api/plugins/rpc', { method: 'POST' })).rejects.toMatchObject({
+      name: 'LocalApiError',
+      message: 'confirmation required',
+      status: 403,
+      code: 'PLUGIN_CONFIRMATION_REQUIRED',
+    });
+  });
+
+  it('preserves flat appserver error_code on ok false envelopes', async () => {
+    vi.doMock('./controlplaneApi', () => ({
+      getLocalRuntime: vi.fn(async () => null),
+    }));
+    const fetchMock = vi.fn(async () => flatAppserverErrorResponse('permission denied', 200, 'PLUGIN_PERMISSION_DENIED'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./localApi');
+    await expect(mod.fetchLocalApiJSON('/_redeven_proxy/api/plugins/rpc', { method: 'POST' })).rejects.toMatchObject({
+      name: 'LocalApiError',
+      message: 'permission denied',
+      status: 200,
+      code: 'PLUGIN_PERMISSION_DENIED',
+    });
   });
 
   it('preserves retry-after metadata for local unlock cooldown responses', async () => {
