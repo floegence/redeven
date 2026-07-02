@@ -160,6 +160,24 @@ func writeTestConfig(t *testing.T) string {
 	return p
 }
 
+func newDistRouteTestServer(t *testing.T, dist fs.FS, backend Backend) *Server {
+	t.Helper()
+	if backend == nil {
+		backend = &stubBackend{}
+	}
+	srv, err := New(Options{
+		Backend:            backend,
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	return srv
+}
+
 func writeTestConfigWithAI(t *testing.T) string {
 	t.Helper()
 
@@ -555,6 +573,183 @@ func TestServer_DistRoutes_DoNotExposeEnvAppDirectoryListings(t *testing.T) {
 	}
 	if rr := request("/_redeven_proxy/env/workbench"); rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "env") {
 		t.Fatalf("SPA fallback status/body = %d/%q, want index.html", rr.Code, rr.Body.String())
+	}
+}
+
+func TestServer_EnvAppDistCacheHeadersScope(t *testing.T) {
+	t.Parallel()
+
+	const immutableCache = "private, max-age=31536000, immutable"
+	dist := fstest.MapFS{
+		"env/index.html":                  {Data: []byte("<html>env</html>")},
+		"env/favicon.svg":                 {Data: []byte("<svg>icon</svg>")},
+		"env/logo.png":                    {Data: []byte("png")},
+		"env/assets/index-DXRlscZd.js":    {Data: []byte("console.log('env');")},
+		"env/assets/index-DXRlscZd.js.gz": {Data: []byte("compressed")},
+		"env/assets/index.js":             {Data: []byte("console.log('unhashed');")},
+		"env/assets/index-BU2ORefM.css":   {Data: []byte("body{}")},
+		"env/assets/icon-DXRlscZd.woff2":  {Data: []byte("font")},
+		"inject.js":                       {Data: []byte("console.log('inject');")},
+	}
+	srv := newDistRouteTestServer(t, dist, &stubBackend{
+		listSpaces: func(ctx context.Context) ([]SpaceStatus, error) {
+			return nil, nil
+		},
+	})
+	request := func(method string, target string, origin string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, target, nil)
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		req.Header.Set("Accept", "text/html")
+		rr := httptest.NewRecorder()
+		srv.serveHTTP(rr, req)
+		return rr
+	}
+	assertCache := func(target string, wantStatus int, wantCache string) {
+		t.Helper()
+		rr := request(http.MethodGet, target, "https://env-123.example.com")
+		if rr.Code != wantStatus {
+			t.Fatalf("%s status = %d, want %d; body=%q", target, rr.Code, wantStatus, rr.Body.String())
+		}
+		if got := rr.Header().Get("Cache-Control"); got != wantCache {
+			t.Fatalf("%s Cache-Control = %q, want %q", target, got, wantCache)
+		}
+	}
+
+	assertCache("/_redeven_proxy/env/", http.StatusOK, "no-store")
+	assertCache("/_redeven_proxy/env/index.html", http.StatusOK, "no-store")
+	assertCache("/_redeven_proxy/env/workbench", http.StatusOK, "no-store")
+	assertCache("/_redeven_proxy/inject.js", http.StatusOK, "no-store")
+	assertCache("/_redeven_proxy/env/favicon.svg", http.StatusOK, "no-store")
+	assertCache("/_redeven_proxy/env/logo.png", http.StatusOK, "no-store")
+	assertCache("/_redeven_proxy/api/spaces", http.StatusBadRequest, "no-store")
+	assertCache("/_redeven_proxy/env/assets/index.js", http.StatusOK, "no-store")
+	assertCache("/_redeven_proxy/env/assets/index-DXRlscZd.js?v=1", http.StatusOK, "no-store")
+	assertCache("/_redeven_proxy/env/assets/index-DXRlscZd.js.gz", http.StatusNotFound, "no-store")
+	assertCache("/_redeven_proxy/env/assets/index-DXRlscZd.js.br", http.StatusNotFound, "no-store")
+	assertCache("/_redeven_proxy/env/assets/index-DXRlscZd.js", http.StatusOK, immutableCache)
+	assertCache("/_redeven_proxy/env/assets/index-BU2ORefM.css", http.StatusOK, immutableCache)
+	assertCache("/_redeven_proxy/env/assets/icon-DXRlscZd.woff2", http.StatusOK, immutableCache)
+
+	rr := request(http.MethodGet, "/_redeven_proxy/env/assets/index-DXRlscZd.js", "https://cs-abc.example.com")
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("cs origin asset status = %d, want %d", rr.Code, http.StatusNotFound)
+	}
+	if got := rr.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("cs origin asset Cache-Control = %q, want no-store", got)
+	}
+}
+
+func TestServer_EnvAppDistCompressedAssetNegotiation(t *testing.T) {
+	t.Parallel()
+
+	const immutableCache = "private, max-age=31536000, immutable"
+	original := []byte("console.log('env');")
+	gzipBody := []byte("gzip bytes")
+	brotliBody := []byte("brotli bytes")
+	dist := fstest.MapFS{
+		"env/index.html":                  {Data: []byte("<html>env</html>")},
+		"env/assets/index-DXRlscZd.js":    {Data: original},
+		"env/assets/index-DXRlscZd.js.gz": {Data: gzipBody},
+		"env/assets/index-DXRlscZd.js.br": {Data: brotliBody},
+	}
+	srv := newDistRouteTestServer(t, dist, nil)
+	request := func(acceptEncoding string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/env/assets/index-DXRlscZd.js", nil)
+		req.Header.Set("Origin", "https://env-123.example.com")
+		if acceptEncoding != "" {
+			req.Header.Set("Accept-Encoding", acceptEncoding)
+		}
+		rr := httptest.NewRecorder()
+		srv.serveHTTP(rr, req)
+		return rr
+	}
+
+	for _, tc := range []struct {
+		name           string
+		acceptEncoding string
+		wantEncoding   string
+		wantBody       []byte
+	}{
+		{name: "brotli preferred", acceptEncoding: "gzip, br", wantEncoding: "br", wantBody: brotliBody},
+		{name: "gzip fallback", acceptEncoding: "gzip", wantEncoding: "gzip", wantBody: gzipBody},
+		{name: "brotli disabled", acceptEncoding: "br;q=0, gzip;q=1", wantEncoding: "gzip", wantBody: gzipBody},
+		{name: "wildcard", acceptEncoding: "*;q=1", wantEncoding: "br", wantBody: brotliBody},
+		{name: "disabled", acceptEncoding: "br;q=0, gzip;q=0, *;q=0", wantEncoding: "", wantBody: original},
+		{name: "identity", acceptEncoding: "", wantEncoding: "", wantBody: original},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			rr := request(tc.acceptEncoding)
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d; body=%q", rr.Code, http.StatusOK, rr.Body.String())
+			}
+			if got := rr.Header().Get("Cache-Control"); got != immutableCache {
+				t.Fatalf("Cache-Control = %q, want %q", got, immutableCache)
+			}
+			if got := rr.Header().Get("Vary"); got != "Accept-Encoding" {
+				t.Fatalf("Vary = %q, want Accept-Encoding", got)
+			}
+			if got := rr.Header().Get("Content-Encoding"); got != tc.wantEncoding {
+				t.Fatalf("Content-Encoding = %q, want %q", got, tc.wantEncoding)
+			}
+			if got := rr.Header().Get("Content-Type"); got != "text/javascript; charset=utf-8" {
+				t.Fatalf("Content-Type = %q, want text/javascript; charset=utf-8", got)
+			}
+			if got := rr.Body.Bytes(); !bytes.Equal(got, tc.wantBody) {
+				t.Fatalf("body = %q, want %q", got, tc.wantBody)
+			}
+		})
+	}
+}
+
+func TestServer_EnvAppDistCompressedAssetHeadAndRange(t *testing.T) {
+	t.Parallel()
+
+	original := []byte("0123456789")
+	gzipBody := []byte("gzip bytes")
+	dist := fstest.MapFS{
+		"env/index.html":                  {Data: []byte("<html>env</html>")},
+		"env/assets/index-DXRlscZd.js":    {Data: original},
+		"env/assets/index-DXRlscZd.js.gz": {Data: gzipBody},
+	}
+	srv := newDistRouteTestServer(t, dist, nil)
+
+	headReq := httptest.NewRequest(http.MethodHead, "/_redeven_proxy/env/assets/index-DXRlscZd.js", nil)
+	headReq.Header.Set("Origin", "https://env-123.example.com")
+	headReq.Header.Set("Accept-Encoding", "gzip")
+	headResp := httptest.NewRecorder()
+	srv.serveHTTP(headResp, headReq)
+	if headResp.Code != http.StatusOK {
+		t.Fatalf("HEAD status = %d, want %d", headResp.Code, http.StatusOK)
+	}
+	if got := headResp.Header().Get("Content-Encoding"); got != "gzip" {
+		t.Fatalf("HEAD Content-Encoding = %q, want gzip", got)
+	}
+	if got := headResp.Header().Get("Content-Length"); got != fmt.Sprint(len(gzipBody)) {
+		t.Fatalf("HEAD Content-Length = %q, want %d", got, len(gzipBody))
+	}
+	if got := headResp.Body.String(); got != "" {
+		t.Fatalf("HEAD body = %q, want empty", got)
+	}
+
+	rangeReq := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/env/assets/index-DXRlscZd.js", nil)
+	rangeReq.Header.Set("Origin", "https://env-123.example.com")
+	rangeReq.Header.Set("Accept-Encoding", "br, gzip")
+	rangeReq.Header.Set("Range", "bytes=2-5")
+	rangeResp := httptest.NewRecorder()
+	srv.serveHTTP(rangeResp, rangeReq)
+	if rangeResp.Code != http.StatusPartialContent {
+		t.Fatalf("Range status = %d, want %d; body=%q", rangeResp.Code, http.StatusPartialContent, rangeResp.Body.String())
+	}
+	if got := rangeResp.Header().Get("Content-Encoding"); got != "" {
+		t.Fatalf("Range Content-Encoding = %q, want empty", got)
+	}
+	if got := rangeResp.Header().Get("Content-Range"); got != "bytes 2-5/10" {
+		t.Fatalf("Range Content-Range = %q, want bytes 2-5/10", got)
+	}
+	if got := rangeResp.Body.String(); got != "2345" {
+		t.Fatalf("Range body = %q, want 2345", got)
 	}
 }
 

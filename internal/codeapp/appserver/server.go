@@ -234,9 +234,12 @@ type Server struct {
 }
 
 var (
-	envAppShellRootPattern     = regexp.MustCompile(`(?i)<div\b[^>]*\bid\s*=\s*["']root["'][^>]*>`)
-	envAppShellAssetRefPattern = regexp.MustCompile(`(?i)\b(?:src|href)\s*=\s*["']/_redeven_proxy/env/assets/([^"']+)["']`)
+	envAppShellRootPattern          = regexp.MustCompile(`(?i)<div\b[^>]*\bid\s*=\s*["']root["'][^>]*>`)
+	envAppShellAssetRefPattern      = regexp.MustCompile(`(?i)\b(?:src|href)\s*=\s*["']/_redeven_proxy/env/assets/([^"']+)["']`)
+	envAppImmutableAssetPathPattern = regexp.MustCompile(`^env/assets/[^/]+-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|wasm|woff2?|ttf|otf)$`)
 )
+
+const envAppImmutableAssetCacheControl = "private, max-age=31536000, immutable"
 
 type localUIRouteKind int
 
@@ -600,6 +603,10 @@ func (g *Server) serveEnvAppDist(w http.ResponseWriter, r *http.Request) {
 	}
 
 	distPath := strings.TrimPrefix(p, "/_redeven_proxy/")
+	if isEnvAppCompressedAssetSidecarPath(cleanDistPath(distPath)) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	if info, err := stdfs.Stat(g.distFS, distPath); err == nil {
 		if info.IsDir() {
 			http.Error(w, "not found", http.StatusNotFound)
@@ -648,6 +655,10 @@ func (g *Server) serveDistFile(w http.ResponseWriter, r *http.Request, distPath 
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	if isEnvAppCompressedAssetSidecarPath(cleanPath) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	info, err := stdfs.Stat(g.distFS, cleanPath)
 	if err != nil || info.IsDir() {
 		http.Error(w, "not found", http.StatusNotFound)
@@ -657,6 +668,15 @@ func (g *Server) serveDistFile(w http.ResponseWriter, r *http.Request, distPath 
 	if err != nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
+	}
+	if isImmutableEnvAppAssetRequest(r, cleanPath) {
+		w.Header().Set("Cache-Control", envAppImmutableAssetCacheControl)
+		w.Header().Set("Vary", "Accept-Encoding")
+		if strings.TrimSpace(r.Header.Get("Range")) == "" {
+			if g.serveCompressedDistFile(w, r, cleanPath, info.ModTime(), data) {
+				return
+			}
+		}
 	}
 	http.ServeContent(w, r, path.Base(cleanPath), info.ModTime(), bytes.NewReader(data))
 }
@@ -671,6 +691,144 @@ func cleanDistPath(raw string) string {
 
 func isDistRequestMethod(method string) bool {
 	return method == http.MethodGet || method == http.MethodHead
+}
+
+func isImmutableEnvAppAssetRequest(r *http.Request, cleanPath string) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	if strings.TrimSpace(r.URL.RawQuery) != "" {
+		return false
+	}
+	return envAppImmutableAssetPathPattern.MatchString(cleanPath)
+}
+
+func isEnvAppCompressedAssetSidecarPath(cleanPath string) bool {
+	if !strings.HasPrefix(cleanPath, "env/assets/") {
+		return false
+	}
+	return strings.HasSuffix(cleanPath, ".br") || strings.HasSuffix(cleanPath, ".gz")
+}
+
+func (g *Server) serveCompressedDistFile(w http.ResponseWriter, r *http.Request, cleanPath string, modTime time.Time, originalData []byte) bool {
+	if g == nil || w == nil || r == nil {
+		return false
+	}
+	for _, variant := range compressedDistVariantsForAcceptEncoding(r.Header.Get("Accept-Encoding")) {
+		sidecarPath := cleanPath + variant.suffix
+		info, err := stdfs.Stat(g.distFS, sidecarPath)
+		if err != nil || info.IsDir() {
+			continue
+		}
+		data, err := stdfs.ReadFile(g.distFS, sidecarPath)
+		if err != nil {
+			continue
+		}
+		w.Header().Set("Content-Type", distContentType(cleanPath, originalData))
+		w.Header().Set("Content-Encoding", variant.encoding)
+		w.Header().Set("Content-Length", strconv.FormatInt(int64(len(data)), 10))
+		http.ServeContent(w, r, path.Base(cleanPath), modTime, bytes.NewReader(data))
+		return true
+	}
+	return false
+}
+
+type compressedDistVariant struct {
+	encoding string
+	suffix   string
+}
+
+func compressedDistVariantsForAcceptEncoding(acceptEncoding string) []compressedDistVariant {
+	if strings.TrimSpace(acceptEncoding) == "" {
+		return nil
+	}
+	var variants []compressedDistVariant
+	if acceptEncodingQuality(acceptEncoding, "br") > 0 {
+		variants = append(variants, compressedDistVariant{encoding: "br", suffix: ".br"})
+	}
+	if acceptEncodingQuality(acceptEncoding, "gzip") > 0 {
+		variants = append(variants, compressedDistVariant{encoding: "gzip", suffix: ".gz"})
+	}
+	return variants
+}
+
+func acceptEncodingQuality(acceptEncoding string, coding string) float64 {
+	coding = strings.ToLower(strings.TrimSpace(coding))
+	if coding == "" {
+		return 0
+	}
+	var (
+		exactQ   float64
+		exactSet bool
+		starQ    float64
+		starSet  bool
+	)
+	for _, item := range strings.Split(acceptEncoding, ",") {
+		parts := strings.Split(item, ";")
+		name := strings.ToLower(strings.TrimSpace(parts[0]))
+		if name == "" {
+			continue
+		}
+		q := 1.0
+		for _, param := range parts[1:] {
+			key, value, ok := strings.Cut(strings.TrimSpace(param), "=")
+			if !ok || !strings.EqualFold(strings.TrimSpace(key), "q") {
+				continue
+			}
+			parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+			if err != nil {
+				q = 0
+				continue
+			}
+			switch {
+			case parsed < 0:
+				q = 0
+			case parsed > 1:
+				q = 1
+			default:
+				q = parsed
+			}
+		}
+		switch name {
+		case coding:
+			exactQ = q
+			exactSet = true
+		case "*":
+			starQ = q
+			starSet = true
+		}
+	}
+	if exactSet {
+		return exactQ
+	}
+	if starSet {
+		return starQ
+	}
+	return 0
+}
+
+func distContentType(cleanPath string, data []byte) string {
+	switch strings.ToLower(path.Ext(cleanPath)) {
+	case ".js", ".mjs":
+		return "text/javascript; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".wasm":
+		return "application/wasm"
+	case ".woff":
+		return "font/woff"
+	case ".woff2":
+		return "font/woff2"
+	case ".ttf":
+		return "font/ttf"
+	case ".otf":
+		return "font/otf"
+	default:
+		if ct := strings.TrimSpace(mime.TypeByExtension(path.Ext(cleanPath))); ct != "" {
+			return ct
+		}
+		return http.DetectContentType(data)
+	}
 }
 
 func validateEnvAppShellFS(distFS stdfs.FS) error {

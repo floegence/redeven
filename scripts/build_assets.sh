@@ -24,7 +24,65 @@ build_envapp_ui() {
     fi
     ui_pkg_run_pnpm build
   )
+  compress_envapp_assets
   ui_pkg_log "Env App UI: done."
+}
+
+compress_envapp_assets() {
+  local assets_dir="$ROOT_DIR/internal/envapp/ui/dist/env/assets"
+  if [ ! -d "$assets_dir" ]; then
+    ui_pkg_die "Env App UI assets directory missing after build: $assets_dir"
+  fi
+
+  ui_pkg_log "Env App UI: precompressing hashed assets..."
+  node - "$assets_dir" <<'NODE'
+const fs = require('node:fs');
+const path = require('node:path');
+const zlib = require('node:zlib');
+
+const assetsDir = process.argv[2];
+const hashAssetPattern = /-[A-Za-z0-9_-]{8,}\.(?:js|mjs|css|wasm|woff2?|ttf|otf)$/;
+let rawBytes = 0;
+let gzipBytes = 0;
+let brotliBytes = 0;
+let gzipCount = 0;
+let brotliCount = 0;
+
+for (const entry of fs.readdirSync(assetsDir, { withFileTypes: true })) {
+  if (!entry.isFile()) continue;
+  if (entry.name.endsWith('.gz') || entry.name.endsWith('.br')) {
+    fs.unlinkSync(path.join(assetsDir, entry.name));
+  }
+}
+
+for (const entry of fs.readdirSync(assetsDir, { withFileTypes: true })) {
+  if (!entry.isFile() || !hashAssetPattern.test(entry.name)) continue;
+  const filePath = path.join(assetsDir, entry.name);
+  const data = fs.readFileSync(filePath);
+  rawBytes += data.byteLength;
+
+  const gzip = zlib.gzipSync(data, { level: zlib.constants.Z_BEST_COMPRESSION });
+  fs.writeFileSync(`${filePath}.gz`, gzip);
+  gzipBytes += gzip.byteLength;
+  gzipCount += 1;
+
+  if (typeof zlib.brotliCompressSync === 'function') {
+    const brotli = zlib.brotliCompressSync(data, {
+      params: {
+        [zlib.constants.BROTLI_PARAM_QUALITY]: zlib.constants.BROTLI_MAX_QUALITY,
+      },
+    });
+    fs.writeFileSync(`${filePath}.br`, brotli);
+    brotliBytes += brotli.byteLength;
+    brotliCount += 1;
+  }
+}
+
+const fmtMiB = (value) => `${(value / 1024 / 1024).toFixed(2)} MiB`;
+const details = [`gzip ${gzipCount} files ${fmtMiB(gzipBytes)}`];
+if (brotliCount > 0) details.push(`brotli ${brotliCount} files ${fmtMiB(brotliBytes)}`);
+console.log(`precompressed ${fmtMiB(rawBytes)} raw -> ${details.join(', ')}`);
+NODE
 }
 
 build_codeapp_ui() {
