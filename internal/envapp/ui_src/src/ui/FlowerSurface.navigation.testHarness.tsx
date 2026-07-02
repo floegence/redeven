@@ -439,22 +439,6 @@ export function subagentDetail(overrides: Partial<FlowerSubagentDetail> = {}): F
         ordinal: 2,
         kind: 'tool_call',
         created_at_ms: 130,
-        activity: activityTimeline({
-          run_id: 'subagent:thread-child-review:running',
-          turn_id: 'child-row-2',
-          items: [activityItem({
-            item_id: 'call-terminal-running',
-            tool_id: 'call-terminal-running',
-            tool_name: 'terminal.exec',
-            renderer: 'terminal',
-            label: 'go test ./internal/ui',
-            status: 'running',
-            payload: {
-              command: 'go test ./internal/ui',
-              status: 'running',
-            },
-          })],
-        }),
         tool_call: {
           id: 'call-terminal-running',
           name: 'terminal.exec',
@@ -465,24 +449,6 @@ export function subagentDetail(overrides: Partial<FlowerSubagentDetail> = {}): F
         ordinal: 3,
         kind: 'tool_result',
         created_at_ms: 140,
-        activity: activityTimeline({
-          run_id: 'subagent:thread-child-review',
-          turn_id: 'child-row-3',
-          items: [activityItem({
-            item_id: 'call-terminal',
-            tool_id: 'call-terminal',
-            tool_name: 'terminal.exec',
-            renderer: 'terminal',
-            label: 'go test ./internal/ai',
-            status: 'success',
-            payload: {
-              command: 'go test ./internal/ai',
-              status: 'success',
-              stdout: 'PASS ./internal/ai',
-              content_ref: 'hash-tool-result',
-            },
-          })],
-        }),
         tool_result: {
           call_id: 'call-terminal',
           tool_name: 'terminal.exec',
@@ -501,6 +467,38 @@ export function subagentDetail(overrides: Partial<FlowerSubagentDetail> = {}): F
         },
       },
     ],
+    activity: activityTimeline({
+      run_id: 'subagent:thread-child-review',
+      turn_id: 'child-canonical',
+      items: [
+        activityItem({
+          item_id: 'call-terminal-running',
+          tool_id: 'call-terminal-running',
+          tool_name: 'terminal.exec',
+          renderer: 'terminal',
+          label: 'go test ./internal/ui',
+          status: 'running',
+          payload: {
+            command: 'go test ./internal/ui',
+            status: 'running',
+          },
+        }),
+        activityItem({
+          item_id: 'call-terminal',
+          tool_id: 'call-terminal',
+          tool_name: 'terminal.exec',
+          renderer: 'terminal',
+          label: 'go test ./internal/ai',
+          status: 'success',
+          payload: {
+            command: 'go test ./internal/ai',
+            status: 'success',
+            stdout: 'PASS ./internal/ai',
+            content_ref: 'hash-tool-result',
+          },
+        }),
+      ],
+    }),
     next_ordinal: 5,
     generated_at_ms: 170,
     ...overrides,

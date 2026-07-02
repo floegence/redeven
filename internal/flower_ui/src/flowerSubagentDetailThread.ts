@@ -72,15 +72,16 @@ function messageForTextRow(threadID: string, row: FlowerSubagentTimelineRow): Fl
   };
 }
 
-function messageForActivityRow(threadID: string, row: FlowerSubagentTimelineRow): FlowerChatMessage | null {
-  if (!row.activity) return null;
+function messageForCanonicalActivity(threadID: string, detail: FlowerSubagentDetail): FlowerChatMessage | null {
+  const activity = detail.activity;
+  if (!activity || activity.items.length === 0) return null;
   return {
-    id: rowMessageID(threadID, row, 'activity'),
+    id: `${safeIDPart(threadID)}:activity:canonical`,
     role: 'assistant',
     content: '',
     status: 'complete',
-    created_at_ms: Math.max(0, Math.floor(Number(row.created_at_ms ?? 0))),
-    blocks: [row.activity],
+    created_at_ms: Math.max(0, Math.floor(Number(detail.generated_at_ms ?? detail.summary.updated_at_ms ?? 0))),
+    blocks: [activity],
   };
 }
 
@@ -205,8 +206,9 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null,
       lastMessageID = message.id;
       continue;
     }
-    const activityMessage = messageForActivityRow(threadID, row);
-    if (!activityMessage) continue;
+  }
+  const activityMessage = messageForCanonicalActivity(threadID, detail);
+  if (activityMessage) {
     messages.push(activityMessage);
     lastMessageID = activityMessage.id;
   }

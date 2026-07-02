@@ -249,7 +249,6 @@ type FlowerSubagentTimelineRow struct {
 	Kind        string                        `json:"kind"`
 	Type        string                        `json:"type,omitempty"`
 	CreatedAtMs int64                         `json:"created_at_ms"`
-	Activity    *ActivityTimelineBlock        `json:"activity,omitempty"`
 	Message     *FlowerSubagentDetailMessage  `json:"message,omitempty"`
 	ToolCall    *FlowerSubagentToolCallView   `json:"tool_call,omitempty"`
 	ToolResult  *FlowerSubagentToolResultView `json:"tool_result,omitempty"`
@@ -264,6 +263,7 @@ type FlowerSubagentTimelineRow struct {
 type FlowerSubagentDetailResponse struct {
 	Summary       FlowerSubagentSummary       `json:"summary"`
 	Timeline      []FlowerSubagentTimelineRow `json:"timeline"`
+	Activity      *ActivityTimelineBlock      `json:"activity,omitempty"`
 	NextOrdinal   int64                       `json:"next_ordinal,omitempty"`
 	HasMore       bool                        `json:"has_more,omitempty"`
 	RetainedFrom  int64                       `json:"retained_from,omitempty"`

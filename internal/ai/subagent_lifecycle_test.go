@@ -19,6 +19,7 @@ import (
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/websearch"
 )
@@ -54,6 +55,93 @@ func TestRunCancelDoesNotReleaseSubagentRuntime(t *testing.T) {
 
 	if got := runtime.releaseCount.Load(); got != 0 {
 		t.Fatalf("releaseCount=%d, want 0; parent cancellation must not close durable subagent runtime", got)
+	}
+}
+
+func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *testing.T) {
+	workspace := t.TempDir()
+	store := openTerminalProcessTestStore(t)
+	defer func() { _ = store.Close() }()
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
+	svc := &Service{
+		threadsDB:         store,
+		terminalProcesses: manager,
+		log:               slog.Default(),
+		persistOpTO:       5 * time.Second,
+	}
+	manager.onDone = svc.handleTerminalProcessDone
+
+	endpointID := "env_subagent_cleanup"
+	parentThreadID := "parent_thread_cleanup"
+	parentRunID := "run_parent_cleanup"
+	parentTurnID := "turn_parent_cleanup"
+	parent := newTerminalProcessTestRun(workspace, svc, store, endpointID, parentThreadID, parentRunID, parentTurnID)
+	parent.permissionSnapshot = PermissionSnapshot{SnapshotID: "parent_snapshot_cleanup", PermissionType: FlowerPermissionFullAccess}
+
+	completedChildThreadID := "child_thread_completed"
+	completedChildRunID := "run_child_completed"
+	completedChildTurnID := "turn_child_completed"
+	runningChildThreadID := "child_thread_running"
+	runningChildRunID := "run_child_running"
+	runningChildTurnID := "turn_child_running"
+	if err := parent.insertChildPermissionSnapshot(completedChildThreadID, completedChildRunID, "tool_spawn_completed", PermissionSnapshot{SnapshotID: "child_snapshot_completed", PermissionType: FlowerPermissionFullAccess}); err != nil {
+		t.Fatalf("insert completed child snapshot: %v", err)
+	}
+	if err := parent.insertChildPermissionSnapshot(runningChildThreadID, runningChildRunID, "tool_spawn_running", PermissionSnapshot{SnapshotID: "child_snapshot_running", PermissionType: FlowerPermissionFullAccess}); err != nil {
+		t.Fatalf("insert running child snapshot: %v", err)
+	}
+	upsertTerminalProcessTestRun(t, store, endpointID, completedChildThreadID, completedChildRunID, completedChildTurnID)
+	upsertTerminalProcessTestRun(t, store, endpointID, runningChildThreadID, runningChildRunID, runningChildTurnID)
+
+	host := &recordingFloretHost{
+		snapshots: []flruntime.SubAgentSnapshot{
+			{ParentThreadID: flruntime.ThreadID(parentThreadID), ThreadID: flruntime.ThreadID(completedChildThreadID), Status: flruntime.SubAgentStatusCompleted, LatestTurnID: flruntime.TurnID(completedChildTurnID)},
+			{ParentThreadID: flruntime.ThreadID(parentThreadID), ThreadID: flruntime.ThreadID(runningChildThreadID), Status: flruntime.SubAgentStatusRunning, LatestTurnID: flruntime.TurnID(runningChildTurnID)},
+		},
+		settleResult: flruntime.PendingToolSettlementResult{
+			Projection: terminalProcessTestProjection(completedChildRunID, completedChildThreadID, completedChildTurnID, "tool_completed"),
+		},
+	}
+	completedChildRun := newTerminalProcessTestRun(workspace, svc, store, endpointID, completedChildThreadID, completedChildRunID, completedChildTurnID)
+	completedChildRun.setActiveFloretHost(host)
+	svc.runs = map[string]*run{completedChildRunID: completedChildRun}
+
+	runtime := newFloretSubagentRuntime(parent)
+	runtime.host = host
+	completedProc := startPendingTerminalProcessForTest(t, manager, workspace, endpointID, completedChildThreadID, completedChildRunID, completedChildTurnID, "tool_completed")
+	runningProc := startPendingTerminalProcessForTest(t, manager, workspace, endpointID, runningChildThreadID, runningChildRunID, runningChildTurnID, "tool_running")
+
+	if err := runtime.cleanupTerminalProcessesForTerminalSubagents(context.Background()); err != nil {
+		t.Fatalf("cleanupTerminalProcessesForTerminalSubagents: %v", err)
+	}
+
+	host.mu.Lock()
+	settleRequests := append([]flruntime.PendingToolSettlementRequest(nil), host.settleRequests...)
+	host.mu.Unlock()
+	if len(settleRequests) != 1 {
+		t.Fatalf("settle requests=%d, want 1", len(settleRequests))
+	}
+	if settleRequests[0].ThreadID != flruntime.ThreadID(completedChildThreadID) ||
+		settleRequests[0].RunID != flruntime.RunID(completedChildRunID) ||
+		settleRequests[0].ToolCallID != "tool_completed" ||
+		settleRequests[0].Status != flruntime.PendingToolSettlementCanceled {
+		t.Fatalf("settle request=%#v, want completed child terminal cancellation", settleRequests[0])
+	}
+	completedSnapshot := completedProc.Read(terminalProcessReadRequest{ProcessID: completedProc.id})
+	if completedSnapshot.Status != terminalProcessStatusCanceled {
+		t.Fatalf("completed child terminal status=%q, want canceled", completedSnapshot.Status)
+	}
+	runningSnapshot := runningProc.Read(terminalProcessReadRequest{ProcessID: runningProc.id})
+	if runningSnapshot.Status != terminalProcessStatusRunning {
+		t.Fatalf("running child terminal status=%q, want running", runningSnapshot.Status)
+	}
+	rec, err := store.GetToolCall(context.Background(), endpointID, completedChildRunID, "tool_completed")
+	if err != nil {
+		t.Fatalf("GetToolCall completed child: %v", err)
+	}
+	if rec.Status != toolCallStatusError || rec.ErrorCode != string(aitools.ErrorCodeCanceled) {
+		t.Fatalf("completed child audit record=%#v, want canceled error", rec)
 	}
 }
 
@@ -1058,8 +1146,41 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 					},
 				},
 				{
-					ID:        "event-approval",
+					ID:        "event-tool-activity",
 					Ordinal:   4,
+					ThreadID:  flruntime.ThreadID("child-detail"),
+					TurnID:    flruntime.TurnID("child-turn"),
+					Kind:      flruntime.SubAgentDetailEventToolActivity,
+					Type:      observation.EventTypeToolActivityUpdated,
+					CreatedAt: now.Add(-35 * time.Second),
+					ToolCall:  &flruntime.SubAgentDetailToolCall{ID: "call-1", Name: "terminal.exec", ArgsHash: "hash-args"},
+					ActivityTimeline: &observation.ActivityTimeline{
+						SchemaVersion: 1,
+						RunID:         "child-run",
+						ThreadID:      "child-detail",
+						TurnID:        "child-turn",
+						TraceID:       "child-run",
+						Summary: observation.ActivitySummary{
+							Status:     observation.ActivityStatusRunning,
+							Severity:   observation.ActivitySeverityNormal,
+							TotalItems: 1,
+							Counts:     observation.ActivityCounts{Running: 1},
+						},
+						Items: []observation.ActivityItem{{
+							ItemID:   "tool:call-1",
+							ToolID:   "call-1",
+							ToolName: "terminal.exec",
+							Kind:     observation.ActivityKindTool,
+							Status:   observation.ActivityStatusRunning,
+							Severity: observation.ActivitySeverityNormal,
+							Label:    "Run command",
+							Renderer: observation.ActivityRendererTerminal,
+						}},
+					},
+				},
+				{
+					ID:        "event-approval",
+					Ordinal:   5,
 					ThreadID:  flruntime.ThreadID("child-detail"),
 					Kind:      flruntime.SubAgentDetailEventApproval,
 					CreatedAt: now.Add(-20 * time.Second),
@@ -1094,12 +1215,43 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 				},
 				{
 					ID:        "event-error",
-					Ordinal:   5,
+					Ordinal:   6,
 					ThreadID:  flruntime.ThreadID("child-detail"),
 					Kind:      flruntime.SubAgentDetailEventError,
 					CreatedAt: now.Add(-10 * time.Second),
 					Error:     "tool blocked",
 				},
+			},
+			ActivityTimeline: observation.ActivityTimeline{
+				SchemaVersion: 1,
+				RunID:         "child-run",
+				ThreadID:      "child-detail",
+				TurnID:        "child-turn",
+				TraceID:       "child-run",
+				Summary: observation.ActivitySummary{
+					Status:         observation.ActivityStatusSuccess,
+					Severity:       observation.ActivitySeverityNormal,
+					TotalItems:     1,
+					Counts:         observation.ActivityCounts{Success: 1},
+					DurationMS:     10,
+					NeedsAttention: false,
+				},
+				Items: []observation.ActivityItem{{
+					ItemID:           "tool:call-1",
+					ToolID:           "call-1",
+					ToolName:         "terminal.exec",
+					Kind:             observation.ActivityKindTool,
+					Status:           observation.ActivityStatusSuccess,
+					Severity:         observation.ActivitySeverityNormal,
+					RequiresApproval: false,
+					Label:            "Run command",
+					Description:      "Command completed",
+					Renderer:         observation.ActivityRendererTerminal,
+					Payload: map[string]any{
+						"stdout":      "total 4",
+						"content_ref": "hash-content",
+					},
+				}},
 			},
 			NextOrdinal:  6,
 			HasMore:      true,
@@ -1156,24 +1308,36 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 	if detail == nil || detail.Summary.ThreadID != "child-detail" || detail.Summary.ParentThreadID != parent.ThreadID {
 		t.Fatalf("unexpected detail summary: %#v", detail)
 	}
-	if len(detail.Timeline) != 5 {
-		t.Fatalf("timeline rows=%d, want 5: %#v", len(detail.Timeline), detail.Timeline)
+	if len(detail.Timeline) != 6 {
+		t.Fatalf("timeline rows=%d, want 6: %#v", len(detail.Timeline), detail.Timeline)
+	}
+	for _, index := range []int{1, 2, 3, 4} {
+		rowJSON, err := json.Marshal(detail.Timeline[index])
+		if err != nil {
+			t.Fatalf("marshal row %d: %v", index, err)
+		}
+		if strings.Contains(string(rowJSON), `"activity"`) {
+			t.Fatalf("timeline row %d should not expose per-event activity: %s", index, string(rowJSON))
+		}
 	}
 	if detail.Timeline[1].ToolCall == nil || detail.Timeline[1].ToolCall.Name != "terminal.exec" || detail.Timeline[1].ToolCall.ArgsHash == "" {
 		t.Fatalf("tool call row not projected: %#v", detail.Timeline[1])
 	}
-	if detail.Timeline[1].Activity != nil {
-		t.Fatalf("paired tool call should not duplicate result activity: %#v", detail.Timeline[1].Activity)
-	}
 	if detail.Timeline[2].ToolResult == nil || detail.Timeline[2].ToolResult.Preview != "total 4" || !detail.Timeline[2].ToolResult.Truncated {
 		t.Fatalf("tool result row not projected: %#v", detail.Timeline[2])
 	}
-	if detail.Timeline[2].Activity == nil || len(detail.Timeline[2].Activity.Items) != 1 {
-		t.Fatalf("tool result activity not projected: %#v", detail.Timeline[2])
+	if detail.Timeline[3].ToolCall == nil || detail.Timeline[3].Kind != "tool_activity" {
+		t.Fatalf("tool activity row not projected as journal fact: %#v", detail.Timeline[3])
 	}
-	resultActivity := detail.Timeline[2].Activity.Items[0]
+	if detail.Activity == nil || len(detail.Activity.Items) != 1 {
+		t.Fatalf("canonical subagent activity not projected: %#v", detail)
+	}
+	resultActivity := detail.Activity.Items[0]
 	if resultActivity.Renderer != observation.ActivityRendererTerminal || resultActivity.Payload["stdout"] != "total 4" || resultActivity.Payload["content_ref"] != "hash-content" {
 		t.Fatalf("tool result activity does not use canonical terminal presentation: %#v", resultActivity)
+	}
+	if resultActivity.Status != observation.ActivityStatusSuccess {
+		t.Fatalf("canonical activity did not settle stale running row: %#v", resultActivity)
 	}
 	encoded, err := json.Marshal(detail)
 	if err != nil {
@@ -1182,14 +1346,11 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 	if strings.Contains(string(encoded), "raw-full-output") || strings.Contains(string(encoded), "full_output") {
 		t.Fatalf("detail leaked full output artifact reference: %s", string(encoded))
 	}
-	if detail.Timeline[3].Approval == nil || detail.Timeline[3].Approval.State != "denied" {
-		t.Fatalf("approval row not projected: %#v", detail.Timeline[3])
+	if detail.Timeline[4].Approval == nil || detail.Timeline[4].Approval.State != "denied" {
+		t.Fatalf("approval row not projected: %#v", detail.Timeline[4])
 	}
-	if detail.Timeline[3].Activity == nil || len(detail.Timeline[3].Activity.Items) != 1 || detail.Timeline[3].Activity.Items[0].Kind != observation.ActivityKindTool {
-		t.Fatalf("approval activity not projected through canonical activity block: %#v", detail.Timeline[3])
-	}
-	if detail.Timeline[4].Error != "tool blocked" {
-		t.Fatalf("error row not projected: %#v", detail.Timeline[4])
+	if detail.Timeline[5].Error != "tool blocked" {
+		t.Fatalf("error row not projected: %#v", detail.Timeline[5])
 	}
 	if !detail.HasMore || detail.NextOrdinal != 6 || detail.RetainedFrom != 1 {
 		t.Fatalf("pagination metadata not projected: %#v", detail)

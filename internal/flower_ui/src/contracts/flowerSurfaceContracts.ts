@@ -521,7 +521,6 @@ export type FlowerSubagentTimelineRow = Readonly<{
   kind: string;
   type?: string;
   created_at_ms: number;
-  activity?: FlowerActivityTimelineBlock;
   message?: FlowerSubagentDetailMessage;
   tool_call?: FlowerSubagentToolCallView;
   tool_result?: FlowerSubagentToolResultView;
@@ -536,6 +535,7 @@ export type FlowerSubagentTimelineRow = Readonly<{
 export type FlowerSubagentDetail = Readonly<{
   summary: FlowerSubagentSummary;
   timeline: readonly FlowerSubagentTimelineRow[];
+  activity?: FlowerActivityTimelineBlock;
   next_ordinal?: number;
   has_more?: boolean;
   retained_from?: number;

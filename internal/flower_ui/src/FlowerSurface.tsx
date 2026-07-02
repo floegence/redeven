@@ -534,17 +534,6 @@ function subagentTimelineRowIdentity(row: FlowerSubagentTimelineRow): string {
   if (toolCallID) return `${base}:tool-call:${toolCallID}`;
   const toolResultID = trimString(row.tool_result?.call_id);
   if (toolResultID) return `${base}:tool-result:${toolResultID}`;
-  const activityItems = row.activity?.items.map((item) => (
-    trimString(item.item_id)
-    || trimString(item.tool_id)
-    || trimString(item.tool_name)
-    || trimString(item.label)
-  )).filter(Boolean).join('\x1e') ?? '';
-  const activityID = activityItems
-    || trimString(row.activity?.turn_id)
-    || trimString(row.activity?.trace_id)
-    || trimString(row.activity?.run_id);
-  if (activityID) return `${base}:activity:${activityID}`;
   const preview = [
     row.message?.text,
     row.message?.preview,
@@ -580,6 +569,7 @@ function mergeSubagentDetailPage(current: FlowerSubagentDetail | null, page: Flo
   return {
     ...metadataSource,
     timeline,
+    activity: pageIsNewer ? page.activity : current.activity,
     summary: metadataSource.summary,
     next_ordinal: Math.max(
       Math.floor(Number(current.next_ordinal ?? 0)),
@@ -5569,7 +5559,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return trimString(detail?.summary.task_description || item?.taskDescription || detail?.summary.task_name || item?.taskName || '');
   });
   const subagentDetailHasRunningActivity = createMemo(() => (
-    subagentDetail()?.timeline.some((row) => row.activity?.items.some((item) => item.status === 'running')) ?? false
+    subagentDetail()?.activity?.items.some((item) => item.status === 'running') ?? false
   ));
   const subagentDetailModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => {
     const now = Date.now();
