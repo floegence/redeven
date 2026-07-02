@@ -23,6 +23,7 @@ function createEnvFlowerSurfaceCopy(i18n: I18nHelpers): FlowerSurfaceCopy {
       openSettings: i18n.t('common.actions.settings'),
       placeholder: i18n.t('flowerChat.composer.typeMessagePlaceholder'),
       modelLabel: i18n.t('flowerChat.model.label'),
+      reasoningLabel: i18n.t('chatChrome.reasoning'),
       noModelSelected: i18n.t('flowerSettings.noModelSelected'),
       linkedContextLabel: i18n.t('flowerTurnLauncher.linkedContextLabel'),
       send: i18n.t('flowerChat.composer.launchTurn'),

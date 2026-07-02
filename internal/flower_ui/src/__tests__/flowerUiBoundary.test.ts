@@ -146,34 +146,44 @@ describe('shared Flower UI boundary', () => {
 		expect(surfaceSrc).toContain('const selectedWaitingReasoningSelection = createMemo');
 		expect(surfaceSrc).toContain('const composerReasoningOverride = createMemo');
 		expect(surfaceSrc).toContain('const composerReasoningSelection = createMemo(() => composerReasoningOverride() ?? selectedWaitingReasoningSelection() ?? selectedThreadReasoningSelection())');
+		expect(surfaceSrc).toContain('const composerLaunchReasoningSelection = createMemo(() => (composerReasoningEnabled() ? composerReasoningSelection() : undefined))');
 		expect(surfaceSrc).toContain('props.adapter.setThreadReasoningSelection(threadID, normalized)');
-		expect(surfaceSrc).toContain('const draftReasoningSelection = !selectedID ? serializeFlowerReasoningSelection(composerReasoningSelection()) : undefined');
+		expect(surfaceSrc).toContain('const draftReasoningSelection = !selectedID ? serializeFlowerReasoningSelection(composerLaunchReasoningSelection()) : undefined');
 		expect(surfaceSrc).toContain('...(!selectedID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {})');
-		expect(surfaceSrc).toContain('const reasoningSelection = serializeFlowerReasoningSelection(composerReasoningOverride() ?? selectedWaitingReasoningSelection())');
+		expect(surfaceSrc).toContain('composerReasoningEnabled() ? composerReasoningOverride() ?? selectedWaitingReasoningSelection() : undefined');
 		expect(surfaceSrc).toContain('...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {})');
 		expect(contractsSrc).toContain('model_id?: string');
 		expect(contractsSrc).toContain('setThreadModel?:');
 		expect(contractsSrc).toContain('setCurrentModel:');
 	});
 
-  it('keeps composer reasoning as a compact badge menu', () => {
+  it('fuses composer model and reasoning into one segmented control', () => {
     const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
     const controlSrc = readText(path.join(flowerRoot, 'ReasoningControl.tsx'));
     const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));
 
-		expect(surfaceSrc).toContain('variant="badge"');
-		expect(surfaceSrc).toContain('label="Reasoning"');
+		expect(surfaceSrc).toContain("type FlowerComposerControlID = 'working_dir' | 'permission' | 'model_reasoning' | 'read_only'");
+		expect(surfaceSrc).toContain("data-flower-composer-control=\"model_reasoning\"");
+		expect(surfaceSrc).toContain("data-has-reasoning={composerReasoningEnabled() ? 'true' : 'false'}");
+		expect(surfaceSrc).toContain('variant="segment"');
+		expect(surfaceSrc).toContain('label={reasoningControlLabel()}');
+		expect(surfaceSrc).not.toContain("data-flower-composer-control=\"model\"");
+		expect(surfaceSrc).not.toContain("data-flower-composer-control=\"reasoning\"");
+		expect(surfaceSrc).not.toContain('variant="badge"');
 		expect(surfaceSrc).not.toContain('label="Thread"');
 		expect(surfaceSrc).not.toContain('label="This turn"');
 		expect(surfaceSrc).not.toContain('resetLabel="Reset thread reasoning"');
 		expect(surfaceSrc).not.toContain('persistThreadReasoningSelection');
-		expect(controlSrc).toContain("variant?: 'full' | 'badge'");
-		expect(controlSrc).toContain('class={cn(\'flower-reasoning-badge-button\'');
+		expect(controlSrc).toContain("variant?: 'full' | 'badge' | 'segment'");
+		expect(controlSrc).toContain("segmentMode() ? 'flower-reasoning-segment-button' : 'flower-reasoning-badge-button'");
 		expect(controlSrc).toContain("normalizeFlowerReasoningLevel(level) === 'default' ? 'On'");
 		expect(controlSrc).toContain('class="flower-reasoning-reset"');
 		expect(controlSrc).toContain('onClick={() => props.onChange?.(undefined)}');
 		expect(readText(path.join(flowerRoot, 'runtimeFlowerSurfaceAdapter.ts'))).toContain('reasoning_selection: selection ?? null');
-		expect(cssSrc).toContain('.flower-reasoning-badge-button');
+		expect(cssSrc).toContain('.flower-model-reasoning-control');
+		expect(cssSrc).toContain('.flower-model-reasoning-divider');
+		expect(cssSrc).toContain('.flower-reasoning-segment-button');
+		expect(cssSrc).toContain('.flower-reasoning-menu-segment');
 		expect(cssSrc).toContain('.flower-reasoning-menu');
 		expect(cssSrc).toContain('.flower-reasoning-reset');
 		expect(cssSrc).toContain('cursor: pointer;');

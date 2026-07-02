@@ -549,6 +549,7 @@ html.dark .flower-component-shell {
   border-radius: 0.625rem;
   background: color-mix(in srgb, var(--popover, var(--background)) 96%, transparent);
   padding: 0.35rem;
+  transform: translateX(var(--flower-composer-more-panel-shift-x, 0px));
   box-shadow:
     0 18px 44px -26px color-mix(in srgb, black 54%, transparent),
     0 8px 20px -16px color-mix(in srgb, var(--foreground) 36%, transparent),
@@ -588,6 +589,7 @@ html.dark .flower-component-shell {
 
 .flower-composer-more-control .flower-working-dir-chip,
 .flower-composer-more-control .flower-permission-trigger,
+.flower-composer-more-control .flower-model-reasoning-control,
 .flower-composer-more-control .flower-model-select-trigger,
 .flower-composer-more-control .flower-model-chip,
 .flower-composer-more-control .flower-reasoning-control,
@@ -1121,6 +1123,96 @@ html.dark .flower-component-shell {
   opacity: 0.82;
 }
 
+.flower-model-reasoning-control {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  max-width: min(26rem, 64vw);
+  height: 1.5rem;
+  flex: 0 1 auto;
+  align-items: stretch;
+  overflow: visible;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--muted) 17%, transparent);
+  color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
+  font-size: 0.6875rem;
+  font-weight: 680;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.flower-model-reasoning-control[data-has-reasoning='false'] {
+  max-width: min(22rem, 54vw);
+}
+
+.flower-model-reasoning-control:hover,
+.flower-model-reasoning-control:focus-within {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border) 66%);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.flower-model-reasoning-control:focus-within {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.flower-model-reasoning-control[data-model-pending='true'] {
+  opacity: 0.72;
+}
+
+.flower-model-reasoning-model-trigger {
+  display: inline-flex;
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0 0.35rem 0 0.5rem;
+  font: inherit;
+  line-height: 1;
+}
+
+.flower-model-reasoning-model-trigger:hover,
+.flower-model-reasoning-model-trigger:focus-visible {
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+  outline: none;
+}
+
+.flower-model-reasoning-model-trigger:disabled {
+  cursor: not-allowed;
+}
+
+.flower-model-reasoning-model-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-model-reasoning-chevron {
+  width: 0.6875rem;
+  height: 0.6875rem;
+  flex: 0 0 auto;
+  opacity: 0.82;
+}
+
+.flower-model-reasoning-divider {
+  width: 1px;
+  margin-block: 0.25rem;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--border) 66%, transparent);
+}
+
 .flower-model-menu {
   position: absolute;
   bottom: calc(100% + 0.45rem);
@@ -1135,6 +1227,7 @@ html.dark .flower-component-shell {
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--popover, var(--background)) 96%, transparent);
   padding: 0.25rem;
+  transform: translateX(var(--flower-model-menu-shift-x, 0px));
   box-shadow:
     0 18px 44px -26px color-mix(in srgb, black 54%, transparent),
     0 8px 20px -16px color-mix(in srgb, var(--foreground) 36%, transparent);
@@ -1217,6 +1310,13 @@ html.dark .flower-component-shell {
   flex: 0 0 auto;
 }
 
+.flower-reasoning-control-segment {
+  height: 100%;
+  flex: 0 0 auto;
+  align-items: stretch;
+  gap: 0;
+}
+
 .flower-reasoning-label {
   flex: 0 0 auto;
   color: var(--muted-foreground);
@@ -1277,6 +1377,43 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, currentColor 72%, transparent);
 }
 
+.flower-reasoning-segment-button,
+.flower-reasoning-segment-static {
+  display: inline-flex;
+  min-width: 3.25rem;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--foreground) 82%, var(--primary) 18%);
+  padding: 0 0.48rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.flower-reasoning-segment-button {
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.flower-reasoning-segment-button:hover,
+.flower-reasoning-segment-button:focus-visible,
+.flower-reasoning-segment-button-open {
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  color: color-mix(in srgb, var(--foreground) 90%, var(--primary) 10%);
+  outline: none;
+}
+
+.flower-reasoning-segment-static {
+  color: color-mix(in srgb, var(--muted-foreground) 74%, var(--foreground) 26%);
+}
+
 .flower-reasoning-menu {
   position: absolute;
   right: 0;
@@ -1292,6 +1429,11 @@ html.dark .flower-component-shell {
     0 1rem 2rem color-mix(in srgb, var(--foreground) 13%, transparent),
     0 0 0 1px color-mix(in srgb, white 28%, transparent) inset;
   padding: 0.25rem;
+}
+
+.flower-reasoning-menu-segment {
+  right: 0;
+  bottom: calc(100% + 0.45rem);
 }
 
 .flower-reasoning-menu-item {
@@ -1547,6 +1689,7 @@ html.dark .flower-component-shell {
     max-width: 100%;
   }
 
+  .flower-model-reasoning-control,
   .flower-model-select-trigger {
     max-width: 100%;
   }
