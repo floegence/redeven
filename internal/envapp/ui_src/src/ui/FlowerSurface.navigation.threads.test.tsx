@@ -10,6 +10,7 @@ import type {
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { DEFAULT_FLOWER_SURFACE_COPY } from '../../../../flower_ui/src/copy';
 import {
   activityItem,
   activityTimeline,
@@ -1252,7 +1253,11 @@ describe('FlowerSurface navigation threads', () => {
     (runtime.querySelector('[data-thread-id="thread-idle-compacting-live"] button') as HTMLButtonElement).click();
 
     await waitFor(() => listThreadLiveEvents.mock.calls.some((call) => call[0] === 'thread-idle-compacting-live'));
-    expect(runtime.querySelector('[data-flower-compaction-status="compacting"]')).toBeTruthy();
+    const divider = runtime.querySelector('[data-flower-compaction-status="compacting"]');
+    expect(divider).toBeTruthy();
+    expect(divider?.textContent).toContain(DEFAULT_FLOWER_SURFACE_COPY.chat.compactionDivider.compacting);
+    expect(divider?.querySelector('.flower-compaction-divider-running-clock')).toBeTruthy();
+    expect(divider?.querySelector('.flower-compaction-divider-status-icon')).toBeNull();
   });
 
   it('persists read state when a selected running thread receives unread detail refreshes', async () => {

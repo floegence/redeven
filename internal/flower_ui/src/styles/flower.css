@@ -2134,6 +2134,7 @@ html.dark .flower-component-shell {
 .flower-compaction-divider-pill-running {
   border-color: color-mix(in srgb, var(--primary) 30%, var(--flower-chat-surface-border) 70%);
   background: color-mix(in srgb, var(--primary) 8%, var(--flower-chat-surface-elevated) 92%);
+  color: color-mix(in srgb, var(--primary) 68%, var(--foreground) 18%);
 }
 
 .flower-compaction-divider-status-icon {
@@ -2144,24 +2145,38 @@ html.dark .flower-component-shell {
 .flower-compaction-divider-running-clock {
   position: relative;
   display: inline-block;
-  width: 0.85rem;
-  height: 0.85rem;
+  width: 0.875rem;
+  height: 0.875rem;
   flex: 0 0 auto;
   border-radius: 9999px;
-  border: 1.5px solid color-mix(in srgb, var(--primary) 52%, var(--foreground) 22%);
+  border: 1.5px solid currentColor;
+  opacity: 0.88;
 }
 
 .flower-compaction-divider-running-clock::before {
   content: '';
   position: absolute;
-  top: 50%;
+  bottom: 50%;
   left: 50%;
   width: 1px;
-  height: 38%;
+  height: 40%;
   border-radius: 1px;
-  background: color-mix(in srgb, var(--primary) 68%, var(--foreground) 18%);
-  transform-origin: top center;
-  animation: flower-compaction-divider-clock-tick 2s linear infinite;
+  background: currentColor;
+  transform-origin: bottom center;
+  animation: flower-waiting-clock-minute 3s linear infinite;
+}
+
+.flower-compaction-divider-running-clock::after {
+  content: '';
+  position: absolute;
+  bottom: 50%;
+  left: 50%;
+  width: 1.5px;
+  height: 26%;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: bottom center;
+  animation: flower-waiting-clock-hour 12s linear infinite;
 }
 
 .flower-compaction-divider-copy {
@@ -2275,15 +2290,6 @@ html.dark .flower-component-shell {
 
   100% {
     background-position: 180% 0;
-  }
-}
-
-@keyframes flower-compaction-divider-clock-tick {
-  0% {
-    transform: translate(-50%, -100%) rotate(0deg);
-  }
-  100% {
-    transform: translate(-50%, -100%) rotate(360deg);
   }
 }
 
@@ -6714,6 +6720,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   .flower-activity-inline-loader-square,
   .flower-subagent-status-loader .flower-activity-inline-loader-square,
   .flower-compaction-divider-running-clock::before,
+  .flower-compaction-divider-running-clock::after,
   .flower-compaction-divider-label-shimmer::after,
   .flower-thread-warmup-card::after,
   .flower-model-chip-warmup::after,
