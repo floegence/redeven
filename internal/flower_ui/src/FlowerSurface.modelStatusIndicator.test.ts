@@ -126,6 +126,8 @@ describe('Flower model status indicator', () => {
     const pillRule = cssRule(css, '.flower-compaction-divider-pill');
     const dividerRunningRule = cssRule(css, '.flower-compaction-divider-pill-running');
     const dividerIconRule = cssRule(css, '.flower-compaction-divider-running-clock');
+    const dividerIconMinuteRule = cssRule(css, '.flower-compaction-divider-running-clock::before');
+    const dividerIconHourRule = cssRule(css, '.flower-compaction-divider-running-clock::after');
     const dividerLabelRule = cssRule(css, '.flower-compaction-divider-label-shimmer');
     const dividerShimmerRule = cssRule(css, ".flower-compaction-divider[data-flower-compaction-status='compacting'] .flower-compaction-divider-label-shimmer::after");
 
@@ -144,12 +146,19 @@ describe('Flower model status indicator', () => {
     expect(dividerRunningRule).toContain('border-color: color-mix(in srgb, var(--primary) 30%, var(--flower-chat-surface-border) 70%)');
     expect(dividerIconRule).toContain('display: inline-block');
     expect(dividerIconRule).toContain('border-radius: 9999px');
+    expect(dividerIconRule).toContain('border: 1.5px solid currentColor');
+    expect(dividerIconMinuteRule).toContain('bottom: 50%');
+    expect(dividerIconMinuteRule).toContain('transform-origin: bottom center');
+    expect(dividerIconMinuteRule).toContain('animation: flower-waiting-clock-minute 3s linear infinite');
+    expect(dividerIconHourRule).toContain('bottom: 50%');
+    expect(dividerIconHourRule).toContain('transform-origin: bottom center');
+    expect(dividerIconHourRule).toContain('animation: flower-waiting-clock-hour 12s linear infinite');
     expect(dividerLabelRule).toContain('position: relative');
     expect(dividerLabelRule).toContain('display: inline-block');
     expect(dividerShimmerRule).toContain('content: attr(data-text)');
     expect(dividerShimmerRule).toContain('animation: flower-compaction-divider-shimmer 2.2s ease-in-out infinite');
     expect(css).toContain('@keyframes flower-compaction-divider-shimmer');
-    expect(css).toContain('@keyframes flower-compaction-divider-clock-tick');
+    expect(css).not.toContain('flower-compaction-divider-clock-tick');
     expect(pillRule).toContain('box-shadow');
   });
 
