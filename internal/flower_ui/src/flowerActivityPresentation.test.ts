@@ -140,6 +140,29 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.meta).not.toContain('success');
   });
 
+  it('uses canonical terminal item status even when payload status is stale running', () => {
+    const presentation = presentFlowerActivityItem(item({
+      renderer: 'terminal',
+      status: 'canceled',
+      label: 'npm test',
+      payload: {
+        command: 'npm test',
+        status: 'running',
+        process_id: 'tp_stale',
+        output: 'stopped\n',
+      },
+    }));
+
+    expect(presentation.meta).not.toContain('running');
+    expect(presentation.detailBlocks[0]).toMatchObject({
+      kind: 'terminal_output',
+      terminal: {
+        status: 'canceled',
+        process_id: 'tp_stale',
+      },
+    });
+  });
+
   it('keeps real running descriptions in compact meta text', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',

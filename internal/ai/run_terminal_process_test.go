@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -315,6 +317,209 @@ func TestHandleTerminalProcessDoneDoesNotAuditBeforeSettlement(t *testing.T) {
 	}
 }
 
+func TestToolTerminalReadSettlesOriginalExecWhenWaitObservesCompletion(t *testing.T) {
+	workspace := t.TempDir()
+	store := openTerminalProcessTestStore(t)
+	defer func() { _ = store.Close() }()
+	upsertTerminalProcessTestRun(t, store, "env_1", "thread_1", "run_read_settle", "turn_1")
+
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
+	svc := &Service{
+		threadsDB:         store,
+		terminalProcesses: manager,
+		log:               slog.New(slog.NewTextHandler(io.Discard, nil)),
+		persistOpTO:       5 * time.Second,
+	}
+	manager.onDone = svc.handleTerminalProcessDone
+	r := newTerminalProcessTestRun(workspace, svc, store, "env_1", "thread_1", "run_read_settle", "turn_1")
+	svc.runs = map[string]*run{"run_read_settle": r}
+	projection := terminalProcessTestProjection("run_read_settle", "thread_1", "turn_1", "tool_exec")
+	host := &recordingFloretHost{
+		settleResult:   flruntime.PendingToolSettlementResult{Projection: projection},
+		readProjection: projection,
+	}
+	r.setActiveFloretHost(host)
+
+	outcome, err := r.handleToolCall(context.Background(), "tool_exec", "terminal.exec", map[string]any{
+		"command":  "sleep 0.05; printf read-settled",
+		"yield_ms": 1,
+	})
+	if err != nil {
+		t.Fatalf("terminal.exec: %v", err)
+	}
+	if outcome == nil || outcome.Pending == nil {
+		t.Fatalf("outcome=%#v, want pending terminal exec", outcome)
+	}
+	processID := strings.TrimSpace(outcome.Pending.Handle)
+	if processID == "" {
+		t.Fatalf("pending handle is empty: %#v", outcome.Pending)
+	}
+
+	readOutcome, err := r.handleToolCall(context.Background(), "tool_read", "terminal.read", map[string]any{
+		"process_id": processID,
+		"after_seq":  1,
+		"wait_ms":    1000,
+		"max_bytes":  10000,
+	})
+	if err != nil {
+		t.Fatalf("terminal.read: %v", err)
+	}
+	readResult, _ := readOutcome.Result.(map[string]any)
+	if got := strings.TrimSpace(anyToString(readResult["status"])); got != terminalProcessStatusSuccess {
+		t.Fatalf("terminal.read status=%q, want success; result=%#v", got, readResult)
+	}
+	if len(host.settleRequests) != 1 {
+		t.Fatalf("settle requests=%d, want one", len(host.settleRequests))
+	}
+	settleReq := host.settleRequests[0]
+	if settleReq.ToolCallID != "tool_exec" || settleReq.Status != flruntime.PendingToolSettlementCompleted {
+		t.Fatalf("settle request=%#v, want original exec completed", settleReq)
+	}
+	rec, err := store.GetToolCall(context.Background(), "env_1", "run_read_settle", "tool_exec")
+	if err != nil {
+		t.Fatalf("GetToolCall: %v", err)
+	}
+	if rec.Status != toolCallStatusSuccess {
+		t.Fatalf("tool call status=%q, want success", rec.Status)
+	}
+}
+
+func TestToolTerminalTerminateSettlesOriginalExec(t *testing.T) {
+	workspace := t.TempDir()
+	store := openTerminalProcessTestStore(t)
+	defer func() { _ = store.Close() }()
+	upsertTerminalProcessTestRun(t, store, "env_1", "thread_1", "run_terminate_settle", "turn_1")
+
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
+	svc := &Service{
+		threadsDB:         store,
+		terminalProcesses: manager,
+		log:               slog.New(slog.NewTextHandler(io.Discard, nil)),
+		persistOpTO:       5 * time.Second,
+	}
+	manager.onDone = svc.handleTerminalProcessDone
+	r := newTerminalProcessTestRun(workspace, svc, store, "env_1", "thread_1", "run_terminate_settle", "turn_1")
+	svc.runs = map[string]*run{"run_terminate_settle": r}
+	projection := terminalProcessTestProjection("run_terminate_settle", "thread_1", "turn_1", "tool_exec")
+	host := &recordingFloretHost{
+		settleResult:   flruntime.PendingToolSettlementResult{Projection: projection},
+		readProjection: projection,
+	}
+	r.setActiveFloretHost(host)
+
+	outcome, err := r.handleToolCall(context.Background(), "tool_exec", "terminal.exec", map[string]any{
+		"command":  "sleep 5",
+		"yield_ms": 1,
+	})
+	if err != nil {
+		t.Fatalf("terminal.exec: %v", err)
+	}
+	if outcome == nil || outcome.Pending == nil {
+		t.Fatalf("outcome=%#v, want pending terminal exec", outcome)
+	}
+	processID := strings.TrimSpace(outcome.Pending.Handle)
+
+	terminateOutcome, err := r.handleToolCall(context.Background(), "tool_terminate", "terminal.terminate", map[string]any{
+		"process_id": processID,
+	})
+	if err != nil {
+		t.Fatalf("terminal.terminate: %v", err)
+	}
+	terminateResult, _ := terminateOutcome.Result.(map[string]any)
+	if got := strings.TrimSpace(anyToString(terminateResult["status"])); got != terminalProcessStatusCanceled {
+		t.Fatalf("terminal.terminate status=%q, want canceled; result=%#v", got, terminateResult)
+	}
+	if len(host.settleRequests) != 1 {
+		t.Fatalf("settle requests=%d, want one", len(host.settleRequests))
+	}
+	settleReq := host.settleRequests[0]
+	if settleReq.ToolCallID != "tool_exec" || settleReq.Status != flruntime.PendingToolSettlementCanceled {
+		t.Fatalf("settle request=%#v, want original exec canceled", settleReq)
+	}
+	rec, err := store.GetToolCall(context.Background(), "env_1", "run_terminate_settle", "tool_exec")
+	if err != nil {
+		t.Fatalf("GetToolCall: %v", err)
+	}
+	if rec.Status != toolCallStatusError || rec.ErrorCode != string(aitools.ErrorCodeCanceled) {
+		t.Fatalf("tool call record=%#v, want canceled error audit", rec)
+	}
+}
+
+func TestRunTerminalCleanupSettlesPendingProcessesForRun(t *testing.T) {
+	workspace := t.TempDir()
+	store := openTerminalProcessTestStore(t)
+	defer func() { _ = store.Close() }()
+	upsertTerminalProcessTestRun(t, store, "env_1", "thread_1", "run_cleanup", "turn_1")
+
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
+	svc := &Service{
+		threadsDB:         store,
+		terminalProcesses: manager,
+		log:               slog.New(slog.NewTextHandler(io.Discard, nil)),
+		persistOpTO:       5 * time.Second,
+	}
+	manager.onDone = svc.handleTerminalProcessDone
+	r := newTerminalProcessTestRun(workspace, svc, store, "env_1", "thread_1", "run_cleanup", "turn_1")
+	svc.runs = map[string]*run{"run_cleanup": r}
+	projection := terminalProcessTestProjection("run_cleanup", "thread_1", "turn_1", "tool_cleanup_a")
+	host := &recordingFloretHost{
+		settleResult:   flruntime.PendingToolSettlementResult{Projection: projection},
+		readProjection: projection,
+	}
+	r.setActiveFloretHost(host)
+
+	first := startPendingTerminalProcessForTest(t, manager, workspace, "env_1", "thread_1", "run_cleanup", "turn_1", "tool_cleanup_a")
+	second := startPendingTerminalProcessForTest(t, manager, workspace, "env_1", "thread_1", "run_cleanup", "turn_1", "tool_cleanup_b")
+	otherRun := startPendingTerminalProcessForTest(t, manager, workspace, "env_1", "thread_1", "run_other", "turn_1", "tool_other")
+
+	finalProjection, changed, err := r.cleanupRunTerminalProcesses(host)
+	if err != nil {
+		t.Fatalf("cleanupRunTerminalProcesses: %v", err)
+	}
+	if !changed {
+		t.Fatalf("cleanupRunTerminalProcesses changed=false, want true")
+	}
+	if finalProjection.RunID != "run_cleanup" {
+		t.Fatalf("projection=%#v, want refreshed run projection", finalProjection)
+	}
+	if len(host.settleRequests) != 2 {
+		t.Fatalf("settle requests=%d, want two for this run", len(host.settleRequests))
+	}
+	settled := map[string]flruntime.PendingToolSettlementStatus{}
+	for _, req := range host.settleRequests {
+		settled[req.ToolCallID] = req.Status
+	}
+	if settled["tool_cleanup_a"] != flruntime.PendingToolSettlementCanceled ||
+		settled["tool_cleanup_b"] != flruntime.PendingToolSettlementCanceled {
+		t.Fatalf("settled=%#v, want cleanup tools canceled", settled)
+	}
+	for _, entry := range []struct {
+		toolID string
+		proc   *terminalProcess
+	}{
+		{toolID: "tool_cleanup_a", proc: first},
+		{toolID: "tool_cleanup_b", proc: second},
+	} {
+		snapshot := entry.proc.Read(terminalProcessReadRequest{})
+		if snapshot.Status != terminalProcessStatusCanceled {
+			t.Fatalf("%s status=%q, want canceled", entry.toolID, snapshot.Status)
+		}
+		rec, err := store.GetToolCall(context.Background(), "env_1", "run_cleanup", entry.toolID)
+		if err != nil {
+			t.Fatalf("GetToolCall %s: %v", entry.toolID, err)
+		}
+		if rec.Status != toolCallStatusError {
+			t.Fatalf("%s audit status=%q, want error", entry.toolID, rec.Status)
+		}
+	}
+	if snapshot := otherRun.Read(terminalProcessReadRequest{}); snapshot.Status != terminalProcessStatusRunning {
+		t.Fatalf("other run status=%q, want running", snapshot.Status)
+	}
+}
+
 func TestTerminalProcessWaitForYieldContextTerminatesOnCancel(t *testing.T) {
 	workspace := t.TempDir()
 	manager := newTerminalProcessManager(nil)
@@ -597,4 +802,41 @@ func newTerminalProcessTestRun(workspace string, svc *Service, store *threadstor
 			CanExecute: true,
 		},
 	})
+}
+
+func terminalProcessTestProjection(runID string, threadID string, turnID string, toolID string) flruntime.ThreadTurnProjection {
+	return flruntime.ThreadTurnProjection{
+		ThreadID: flruntime.ThreadID(threadID),
+		TurnID:   flruntime.TurnID(turnID),
+		RunID:    flruntime.RunID(runID),
+		TraceID:  flruntime.TraceID(runID),
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: floretProjectionTimeline(runID, threadID, turnID, toolID, "terminal.exec"),
+		}},
+	}
+}
+
+func startPendingTerminalProcessForTest(t *testing.T, manager *terminalProcessManager, workspace string, endpointID string, threadID string, runID string, turnID string, toolID string) *terminalProcess {
+	t.Helper()
+	proc, err := manager.Start(terminalProcessStartRequest{
+		EndpointID: endpointID,
+		ThreadID:   threadID,
+		RunID:      runID,
+		TurnID:     turnID,
+		ToolID:     toolID,
+		ToolName:   "terminal.exec",
+		Command:    "sleep 5",
+		CwdAbs:     workspace,
+		Shell:      "/bin/bash",
+	})
+	if err != nil {
+		t.Fatalf("Start %s: %v", toolID, err)
+	}
+	snapshot := proc.WaitForYield(1)
+	if snapshot.Status != terminalProcessStatusRunning {
+		t.Fatalf("%s status=%q, want running", toolID, snapshot.Status)
+	}
+	proc.MarkPending()
+	return proc
 }

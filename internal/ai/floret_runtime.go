@@ -199,21 +199,46 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		Reasoning:         req.Options.ReasoningSelection,
 		ManualCompactions: r,
 	})
+	cleanupProjection, cleanupChanged, cleanupErr := r.cleanupRunTerminalProcesses(host)
+	if cleanupErr != nil {
+		if r.log != nil {
+			r.log.Warn("ai: cleanup run terminal processes failed", "run_id", r.id, "thread_id", r.threadID, "error", cleanupErr)
+		}
+		r.persistRunEvent("terminal.cleanup_failed", RealtimeStreamKindLifecycle, map[string]any{
+			"error": cleanupErr.Error(),
+		})
+	} else if cleanupChanged {
+		result.Projection = cleanupProjection
+	}
+	projectionReady := !(cleanupChanged && cleanupErr != nil)
 	if err != nil && result.Status == "" {
+		if cleanupChanged && cleanupErr == nil {
+			if r.isDetached() {
+				r.applyFloretTerminalThreadProjection(result.Projection)
+			} else if r.acceptsEngineResultProjection() {
+				r.applyFloretThreadProjection(result.Projection)
+			}
+		}
 		return r.failRunWithCode(classifyRunFailureCode(err, runErrorCodeFloretEngineFailed), "", err)
 	}
 	if result.Status == flruntime.TurnStatusCompleted || result.Status == flruntime.TurnStatusWaiting {
 		if !r.acceptsEngineResultProjection() {
 			return nil
 		}
-		r.applyFloretThreadProjection(result.Projection)
+		if projectionReady {
+			r.applyFloretThreadProjection(result.Projection)
+		}
 	}
 	if result.Status == flruntime.TurnStatusCancelled {
 		if r.isDetached() {
-			r.applyFloretTerminalThreadProjection(result.Projection)
+			if projectionReady {
+				r.applyFloretTerminalThreadProjection(result.Projection)
+			}
 			return nil
 		}
-		r.applyFloretThreadProjection(result.Projection)
+		if projectionReady {
+			r.applyFloretThreadProjection(result.Projection)
+		}
 	}
 	if r.acceptsEngineResultProjection() {
 		r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), 0)
