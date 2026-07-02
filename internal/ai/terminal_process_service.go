@@ -43,7 +43,7 @@ func (s *Service) ReadTerminalProcess(ctx context.Context, meta *session.Meta, r
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), snapshot); err != nil {
 		return nil, err
 	}
-	proc.publishDone()
+	_ = proc.publishDone()
 	return &snapshot, nil
 }
 
@@ -66,11 +66,12 @@ func (s *Service) WriteTerminalProcess(ctx context.Context, meta *session.Meta, 
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), before); err != nil {
 		return nil, err
 	}
-	proc.publishDone()
+	_ = proc.publishDone()
 	snapshot, err := proc.Write(input)
 	if err != nil {
 		return &snapshot, err
 	}
+	_ = proc.publishDone()
 	return &snapshot, nil
 }
 
@@ -90,11 +91,12 @@ func (s *Service) TerminateTerminalProcess(ctx context.Context, meta *session.Me
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), before); err != nil {
 		return nil, err
 	}
-	proc.publishDone()
+	_ = proc.publishDone()
 	snapshot, err := proc.Terminate()
 	if err != nil {
 		return &snapshot, err
 	}
+	_ = proc.publishDone()
 	return &snapshot, nil
 }
 

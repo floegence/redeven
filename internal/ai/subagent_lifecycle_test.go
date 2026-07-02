@@ -75,6 +75,9 @@ type recordingFloretHost struct {
 	settleRequests      []flruntime.PendingToolSettlementRequest
 	settleResult        flruntime.PendingToolSettlementResult
 	settleErr           error
+	readProjection      flruntime.ThreadTurnProjection
+	readProjectionErr   error
+	readProjectionReqs  []flruntime.ReadTurnProjectionRequest
 	deleteThreadIDs     []flruntime.ThreadID
 	pendingApprovals    []flruntime.PendingApproval
 }
@@ -122,7 +125,16 @@ func (h *recordingFloretHost) ListPendingApprovals(_ context.Context, req flrunt
 	}, nil
 }
 
-func (h *recordingFloretHost) ReadTurnProjection(context.Context, flruntime.ReadTurnProjectionRequest) (flruntime.ThreadTurnProjection, error) {
+func (h *recordingFloretHost) ReadTurnProjection(_ context.Context, req flruntime.ReadTurnProjectionRequest) (flruntime.ThreadTurnProjection, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.readProjectionReqs = append(h.readProjectionReqs, req)
+	if h.readProjectionErr != nil {
+		return flruntime.ThreadTurnProjection{}, h.readProjectionErr
+	}
+	if h.readProjection.RunID != "" || h.readProjection.ThreadID != "" || h.readProjection.TurnID != "" || len(h.readProjection.Segments) > 0 {
+		return h.readProjection, nil
+	}
 	return flruntime.ThreadTurnProjection{}, flruntime.ErrTurnNotFound
 }
 

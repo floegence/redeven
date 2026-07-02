@@ -223,6 +223,37 @@ func (m *terminalProcessManager) Get(processID string) (*terminalProcess, bool) 
 	return proc, ok
 }
 
+func (m *terminalProcessManager) ProcessesForRun(endpointID string, threadID string, runID string) []*terminalProcess {
+	if m == nil {
+		return nil
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	runID = strings.TrimSpace(runID)
+	if endpointID == "" || threadID == "" || runID == "" {
+		return nil
+	}
+	m.mu.Lock()
+	processes := make([]*terminalProcess, 0, len(m.processes))
+	for _, proc := range m.processes {
+		if proc != nil {
+			processes = append(processes, proc)
+		}
+	}
+	m.mu.Unlock()
+
+	matched := make([]*terminalProcess, 0, len(processes))
+	for _, proc := range processes {
+		proc.mu.Lock()
+		ok := proc.endpointID == endpointID && proc.threadID == threadID && proc.runID == runID
+		proc.mu.Unlock()
+		if ok {
+			matched = append(matched, proc)
+		}
+	}
+	return matched
+}
+
 func (m *terminalProcessManager) Read(req terminalProcessReadRequest) (terminalProcessSnapshot, error) {
 	proc, ok := m.Get(req.ProcessID)
 	if !ok {
@@ -261,6 +292,7 @@ func (m *terminalProcessManager) Close() {
 	m.mu.Unlock()
 	for _, proc := range processes {
 		_, _ = proc.Terminate()
+		_ = proc.publishDone()
 	}
 }
 
@@ -272,7 +304,7 @@ func (p *terminalProcess) MarkPending() terminalProcessSnapshot {
 	p.pending = true
 	snapshot := p.snapshotLocked(0)
 	p.mu.Unlock()
-	p.publishDone()
+	_ = p.publishDone()
 	return snapshot
 }
 
@@ -457,7 +489,7 @@ func (p *terminalProcess) waitLoop() {
 	p.cond.Broadcast()
 	p.mu.Unlock()
 	p.managerProcessEnded()
-	p.publishDone()
+	_ = p.publishDone()
 }
 
 func (p *terminalProcess) waitForOutputDrain() {
@@ -519,19 +551,19 @@ func (p *terminalProcess) managerProcessEnded() {
 	p.manager.mu.Unlock()
 }
 
-func (p *terminalProcess) publishDone() {
+func (p *terminalProcess) publishDone() error {
 	if p == nil || p.manager == nil {
-		return
+		return nil
 	}
 	p.mu.Lock()
 	if !p.pending || p.settlementAcknowledged || p.settlementInFlight || p.status == terminalProcessStatusRunning {
 		p.mu.Unlock()
-		return
+		return nil
 	}
 	if p.manager.onDone == nil {
 		p.settlementAcknowledged = true
 		p.mu.Unlock()
-		return
+		return nil
 	}
 	p.settlementInFlight = true
 	snapshot := p.snapshotLocked(0)
@@ -543,6 +575,33 @@ func (p *terminalProcess) publishDone() {
 	}
 	p.settlementInFlight = false
 	p.mu.Unlock()
+	return err
+}
+
+func (p *terminalProcess) settlePendingForRunEnd() (bool, error) {
+	if p == nil {
+		return false, nil
+	}
+	p.mu.Lock()
+	if !p.pending || p.settlementAcknowledged {
+		p.mu.Unlock()
+		return false, nil
+	}
+	running := p.status == terminalProcessStatusRunning
+	p.mu.Unlock()
+
+	var terminateErr error
+	if running {
+		_, terminateErr = p.Terminate()
+	}
+	publishErr := p.publishDone()
+	if publishErr != nil {
+		if terminateErr != nil {
+			return true, errors.Join(terminateErr, publishErr)
+		}
+		return true, publishErr
+	}
+	return true, nil
 }
 
 func (p *terminalProcess) snapshotLocked(maxBytes int64) terminalProcessSnapshot {
