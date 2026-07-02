@@ -85,6 +85,7 @@ const BlockSkeleton: Component = () => (
  */
 export const BlockRenderer: Component<BlockRendererProps> = (props) => {
   const i18n = useI18n();
+  const ctx = useChatContext();
 
   return (
     <Switch
@@ -171,6 +172,16 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               truncated={b.truncated}
               exitCode={b.exitCode}
               status={b.status}
+              outputIdentity={{
+                surface_scope: 'env-shell-block',
+                run_id: b.outputRef?.runId,
+                message_id: props.messageId,
+                block_index: props.blockIndex,
+                tool_id: b.outputRef?.toolId,
+                process_id: b.processId,
+                command: b.command,
+              }}
+              outputStore={ctx.terminalVisibleOutputStore}
             />
           );
         })()}

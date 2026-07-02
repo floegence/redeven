@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Index, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { ExternalLink, FileText, FolderOpen } from '@floegence/floe-webapp-core/icons';
@@ -16,6 +16,7 @@ import {
 import { createFlowerActivityDisclosurePresence } from '../../../../../../flower_ui/src/activityDisclosure';
 import type { FlowerActivityItem, FlowerActivityRenderer, FlowerActivitySubagentAction } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { formatGitPatchLineNumber, getGitPatchRenderSnapshot, type GitPatchRenderedLine } from '../../../../../../flower_ui/src/gitPatch';
+import type { TerminalVisibleOutputStore } from '../../../../../../flower_ui/src/flowerTerminalOutput';
 import { normalizeAskUserQuestions, type AskUserQuestion } from '../askUserContract';
 import { useChatContext } from '../ChatProvider';
 import { ActivityStatusIcon, formatActivityDuration, type ActivityStatus } from '../status/ActivityLine';
@@ -218,14 +219,23 @@ function terminalCommandForItem(item: ActivityItem, payload: Readonly<Record<str
     || String(item.tool_name ?? 'terminal').trim();
 }
 
-function TerminalDetailBlock(props: { item: ActivityItem; runID?: string }) {
+function TerminalDetailBlock(props: {
+  item: ActivityItem;
+  runID?: string;
+  turnID?: string;
+  threadID?: string;
+  messageID: string;
+  blockIndex: number;
+  outputStore?: TerminalVisibleOutputStore;
+}) {
   const payload = createMemo(() => itemPayloadRecord(props.item));
   const processId = createMemo(() => payloadString(payload(), 'process_id') || String(props.item.metadata?.process_id ?? '').trim());
   const output = createMemo(() => payloadString(payload(), 'output') || payloadString(payload(), 'stdout'));
   const latestOutput = createMemo(() => payloadString(payload(), 'latest_output'));
+  const command = createMemo(() => terminalCommandForItem(props.item, payload()));
   return (
     <ShellBlock
-      command={terminalCommandForItem(props.item, payload())}
+      command={command()}
       output={output() || undefined}
       latestOutput={latestOutput() || undefined}
       outputRef={props.runID && props.item.tool_id ? { runId: props.runID, toolId: props.item.tool_id } : undefined}
@@ -234,6 +244,20 @@ function TerminalDetailBlock(props: { item: ActivityItem; runID?: string }) {
       truncated={Boolean(payload().truncated)}
       exitCode={payloadNumber(payload(), 'exit_code')}
       status={shellStatusForItem(props.item)}
+      outputIdentity={{
+        surface_scope: 'env-activity',
+        owner_thread_id: props.threadID,
+        render_thread_id: props.threadID,
+        run_id: props.runID,
+        turn_id: props.turnID,
+        message_id: props.messageID,
+        block_index: props.blockIndex,
+        item_id: props.item.item_id,
+        tool_id: props.item.tool_id,
+        process_id: processId(),
+        command: command(),
+      }}
+      outputStore={props.outputStore}
       class="chat-activity-terminal-shell"
     />
   );
@@ -656,14 +680,31 @@ function DetailBlock(props: {
   block: FlowerActivityDetailBlock;
   item: ActivityItem;
   runID?: string;
+  turnID?: string;
+  threadID?: string;
+  messageID: string;
+  blockIndex: number;
   now: number;
+  outputStore?: TerminalVisibleOutputStore;
   onPreviewFile?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
   onBrowseDirectory?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
   onOpenSubagentMessages?: (request: ActivitySubagentMessagesRequest) => void;
 }) {
   if (props.block.kind === 'error') return <ErrorDetailBlock block={props.block} />;
   if (props.block.kind === 'subagents') return <SubagentsDetailBlock block={props.block} now={props.now} onOpenSubagentMessages={props.onOpenSubagentMessages} />;
-  if (props.block.kind === 'terminal_output') return <TerminalDetailBlock item={props.item} runID={props.runID} />;
+  if (props.block.kind === 'terminal_output') {
+    return (
+      <TerminalDetailBlock
+        item={props.item}
+        runID={props.runID}
+        turnID={props.turnID}
+        threadID={props.threadID}
+        messageID={props.messageID}
+        blockIndex={props.blockIndex}
+        outputStore={props.outputStore}
+      />
+    );
+  }
   if (props.block.kind === 'web_search') return <WebSearchDetailBlock block={props.block} />;
   if (props.block.kind === 'question') return <QuestionDetailBlock block={props.block} />;
   if (props.block.kind === 'completion') return <CompletionDetailBlock block={props.block} />;
@@ -692,6 +733,7 @@ function DetailBlock(props: {
 }
 
 export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (props) => {
+  const ctx = useChatContext();
   const [open, setOpen] = createSignal<boolean | null>(null);
   const [openByItem, setOpenByItem] = createSignal<Record<string, boolean>>({});
   const [clockNow, setClockNow] = createSignal(Date.now());
@@ -714,6 +756,8 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
   const durationLabel = createMemo(() => formatActivityDuration(props.block.summary?.duration_ms));
   const expanded = createMemo(() => open() ?? defaultTimelineOpen(props.block));
   const fileActions = createMemo(() => props.block.file_actions as FlowerActivityFileActions | undefined);
+  const itemKeys = createMemo(() => items().map((item, index) => itemKey(item, index)));
+  const itemsByKey = createMemo(() => new Map(itemKeys().map((key, index) => [key, { item: items()[index], index }] as const)));
 
   const itemOpen = (item: ActivityItem, id: string): boolean => {
     const local = openByItem()[id];
@@ -747,11 +791,16 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
 
         <Show when={expanded()}>
           <div class="chat-activity-items">
-            <For each={items()}>
-              {(item, itemIndex) => {
-                const id = createMemo(() => itemKey(item, itemIndex()));
-                const presentation = createMemo(() => presentFlowerActivityItem(flowerItem(item), fileActions(), undefined, { subagentAction: subagentActionForItem(props.block, item) }));
-                const isOpen = createMemo(() => itemOpen(item, id()));
+            <For each={itemKeys()}>
+              {(itemKeyValue) => {
+                const itemRecord = createMemo(() => itemsByKey().get(itemKeyValue) ?? null);
+                return (
+                  <Show when={itemRecord()}>
+                    {(record) => {
+                      const item = createMemo(() => record().item);
+                      const id = createMemo(() => itemKey(item(), record().index));
+                      const presentation = createMemo(() => presentFlowerActivityItem(flowerItem(item()), fileActions(), undefined, { subagentAction: subagentActionForItem(props.block, item()) }));
+                      const isOpen = createMemo(() => itemOpen(item(), id()));
                 const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
                 const itemMeta = createMemo(() => [presentation().meta, subagentElapsedText(presentation(), clockNow())].filter(Boolean).join(' · '));
                 const panelId = createMemo(() => `activity-detail-${props.blockIndex}-${id().replace(/[^a-zA-Z0-9_-]/g, '-')}`);
@@ -784,18 +833,18 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                       class={cn(
                         'chat-activity-item',
                         hasDetails() && 'chat-activity-item-clickable',
-                        isBlockingItem(item) && 'chat-activity-item-blocking',
+                        isBlockingItem(item()) && 'chat-activity-item-blocking',
                       )}
                       role={hasDetails() ? 'button' : undefined}
                       tabIndex={hasDetails() ? 0 : undefined}
                       aria-expanded={hasDetails() ? isOpen() : undefined}
                       aria-controls={hasDetails() ? panelId() : undefined}
-                      onClick={hasDetails() ? () => toggleItem(item, id()) : undefined}
+                      onClick={hasDetails() ? () => toggleItem(item(), id()) : undefined}
                       onKeyDown={(event) => {
                         if (!hasDetails()) return;
                         if (event.key !== 'Enter' && event.key !== ' ') return;
                         event.preventDefault();
-                        toggleItem(item, id());
+                        toggleItem(item(), id());
                       }}
                     >
                       <Show
@@ -806,7 +855,7 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                           <svg viewBox="0 0 16 16"><path d="M5.5 3.75 9.75 8 5.5 12.25" /></svg>
                         </span>
                       </Show>
-                      <ActivityStatusIcon status={toActivityStatus(item.status)} class="chat-activity-item-status" />
+                      <ActivityStatusIcon status={toActivityStatus(item().status)} class="chat-activity-item-status" />
                       <div class="chat-activity-item-main">
                         <div class="chat-activity-item-line">
                           <span class="chat-activity-item-label">{titleNode(presentation().title)}</span>
@@ -814,17 +863,17 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                             {(meta) => <span class="chat-activity-item-target">{meta()}</span>}
                           </Show>
                         </div>
-                        <Show when={item.renderer === 'question' || item.tool_name === 'ask_user'}>
-                          <AskUserAudit item={item} />
+                        <Show when={item().renderer === 'question' || item().tool_name === 'ask_user'}>
+                          <AskUserAudit item={item()} />
                         </Show>
                       </div>
                       <div class="chat-activity-item-actions">
-                        <ApprovalActions messageId={props.messageId} item={item} />
+                        <ApprovalActions messageId={props.messageId} item={item()} />
                         <Show when={rowFileAction()}>
                           {(action) => (
                             <FileActionButtons
                               action={action()}
-                              item={item}
+                              item={item()}
                               onPreviewFile={props.onPreviewFile}
                               onBrowseDirectory={props.onBrowseDirectory}
                             />
@@ -840,23 +889,31 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                         data-state={disclosure.state()}
                       >
                         <div class="chat-activity-detail-sections">
-                          <For each={presentation().detailBlocks}>
+                          <Index each={presentation().detailBlocks}>
                             {(block) => (
                               <DetailBlock
-                                block={block}
-                                item={item}
+                                block={block()}
+                                item={item()}
                                 runID={props.block.run_id}
+                                turnID={props.block.turn_id}
+                                threadID={props.block.thread_id}
+                                messageID={props.messageId}
+                                blockIndex={props.blockIndex}
                                 now={clockNow()}
+                                outputStore={ctx.terminalVisibleOutputStore}
                                 onPreviewFile={props.onPreviewFile}
                                 onBrowseDirectory={props.onBrowseDirectory}
                                 onOpenSubagentMessages={props.onOpenSubagentMessages}
                               />
                             )}
-                          </For>
+                          </Index>
                         </div>
                       </div>
                     </Show>
                   </div>
+                );
+                    }}
+                  </Show>
                 );
               }}
             </For>

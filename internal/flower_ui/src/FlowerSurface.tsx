@@ -76,7 +76,11 @@ import {
   type FlowerActivityTodoStatus,
 } from './flowerActivityPresentation';
 import { createFlowerActivityDisclosurePresence } from './activityDisclosure';
-import { mergeTerminalVisibleOutput, terminalListeningPlaceholderVisible } from './flowerTerminalOutput';
+import {
+  createTerminalVisibleOutputStore,
+  terminalListeningPlaceholderVisible,
+  type TerminalVisibleOutputIdentity,
+} from './flowerTerminalOutput';
 import { formatGitPatchLineNumber, getGitPatchRenderSnapshot, type GitPatchRenderedLine } from './gitPatch';
 import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
@@ -711,7 +715,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     itemWidths: {},
   });
   let workingDirectoryCopyResetTimer: number | undefined;
-  const terminalVisibleOutputByKey = new Map<string, string>();
+  const terminalVisibleOutputStore = createTerminalVisibleOutputStore();
 
   const clearWorkingDirectoryCopyTimer = () => {
     if (workingDirectoryCopyResetTimer !== undefined) {
@@ -739,7 +743,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     (next) => {
       setSidebarActiveThreadID(next);
       if (next) setPreviewChip(null);
-      terminalVisibleOutputByKey.clear();
       clearWorkingDirectoryCopyConfirmation();
     },
     { defer: false },
@@ -4655,29 +4658,58 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     String(snapshot.output || snapshot.stdout || snapshot.latest_output || '').replace(/\r\n?/g, '\n')
   );
 
-  const terminalOutputBlock = (runID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>) => {
+  type FlowerTerminalOutputContext = Readonly<{
+    ownerThreadID: string;
+    renderThreadID: string;
+    runID: string;
+    turnID: string;
+    messageID: string;
+    blockIndex: number;
+    itemID: string;
+    toolID: string;
+  }>;
+
+  const terminalOutputBlock = (
+    context: FlowerTerminalOutputContext,
+    block: Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>,
+  ) => {
     const terminal = block.terminal;
     const [liveStatus, setLiveStatus] = createSignal<FlowerActivityStatus | ''>('');
     const [liveLastSeq, setLiveLastSeq] = createSignal<number | undefined>(terminal.last_seq);
     const [liveTotalBytes, setLiveTotalBytes] = createSignal<number | undefined>(terminal.total_bytes);
     const [liveError, setLiveError] = createSignal('');
     const processID = () => trimString(terminal.process_id);
-    const terminalCacheKey = () => [trimString(runID), processID(), trimString(terminal.command)].join('\x1e');
+    const terminalIdentity = (): TerminalVisibleOutputIdentity => ({
+      surface_scope: 'flower-surface',
+      owner_thread_id: context.ownerThreadID,
+      render_thread_id: context.renderThreadID,
+      run_id: context.runID,
+      turn_id: context.turnID,
+      message_id: context.messageID,
+      block_index: context.blockIndex,
+      item_id: context.itemID,
+      tool_id: context.toolID,
+      process_id: processID(),
+      command: terminal.command,
+    });
     const payloadOutput = () => String(terminal.output || terminal.latest_output || '').replace(/\r\n?/g, '\n');
-    const initialOutput = mergeTerminalVisibleOutput(terminalVisibleOutputByKey.get(terminalCacheKey()) ?? '', payloadOutput(), terminal.status);
+    const initialOutput = terminalVisibleOutputStore.merge(terminalIdentity(), '', payloadOutput(), terminal.status);
     const [liveOutput, setLiveOutput] = createSignal(initialOutput);
-    if (initialOutput.trim()) {
-      terminalVisibleOutputByKey.set(terminalCacheKey(), initialOutput);
-    }
     const canReadLiveOutput = () => (
       !!props.adapter.readTerminalProcess &&
-      trimString(runID) !== '' &&
+      context.runID !== '' &&
       processID() !== '' &&
       (terminal.status === 'running' || terminal.status === 'pending')
     );
     const displayStatus = () => liveStatus() || terminal.status;
+    const visibleOutput = () => terminalVisibleOutputStore.merge(
+      terminalIdentity(),
+      liveOutput(),
+      payloadOutput(),
+      displayStatus(),
+    );
     const displayOutput = () => {
-      const output = mergeTerminalVisibleOutput(liveOutput(), payloadOutput(), displayStatus());
+      const output = visibleOutput();
       if (output.trim()) return output;
       if (liveError()) return `Live output unavailable: ${liveError()}`;
       if (canReadLiveOutput() && terminalListeningPlaceholderVisible(output, displayStatus())) return 'Listening for output...';
@@ -4686,7 +4718,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       return 'No output captured.';
     };
-    const muted = () => !String(liveOutput() || terminal.output || terminal.latest_output || '').trim();
+    const muted = () => !visibleOutput().trim();
     const chips = createMemo(() => {
       const base = terminalDetailChips({
         ...terminal,
@@ -4700,16 +4732,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const applyTerminalSnapshot = (snapshot: FlowerTerminalProcessSnapshot) => {
       const output = terminalSnapshotOutput(snapshot);
       const status = normalizeTerminalSnapshotStatus(snapshot.status) || displayStatus();
-      const mergedOutput = mergeTerminalVisibleOutput(
-        terminalVisibleOutputByKey.get(terminalCacheKey()) ?? liveOutput(),
+      const mergedOutput = terminalVisibleOutputStore.merge(
+        terminalIdentity(),
+        liveOutput(),
         output,
         status,
       );
       if (mergedOutput !== liveOutput()) {
         setLiveOutput(mergedOutput);
-      }
-      if (mergedOutput.trim()) {
-        terminalVisibleOutputByKey.set(terminalCacheKey(), mergedOutput);
       }
       if (status) {
         setLiveStatus(status);
@@ -4730,7 +4760,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (disposed || !canReadLiveOutput() || !props.adapter.readTerminalProcess) return;
         try {
           const snapshot = await props.adapter.readTerminalProcess({
-            run_id: trimString(runID),
+            run_id: context.runID,
             process_id: processID(),
             after_seq: untrack(() => liveLastSeq()) ?? terminal.last_seq ?? undefined,
             wait_ms: 1000,
@@ -5071,7 +5101,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const activityDetailBlock = (messageID: string, blockIndex: number, itemID: string, block: FlowerActivityDetailBlock, runID: string) => {
+  const activityDetailBlock = (
+    messageID: string,
+    blockIndex: number,
+    item: FlowerActivityItem,
+    timeline: FlowerActivityTimelineBlock,
+    block: FlowerActivityDetailBlock,
+  ) => {
     if (block.kind === 'error') return errorDetailBlock(block);
     if (block.kind === 'subagents') return subagentsDetailBlock(block);
     if (block.kind === 'todos') {
@@ -5102,12 +5138,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       );
     }
-    if (block.kind === 'terminal_output') return terminalOutputBlock(runID, block);
+    if (block.kind === 'terminal_output') {
+      return terminalOutputBlock({
+        ownerThreadID: trimString(selectedThreadID()),
+        renderThreadID: trimString(timeline.thread_id) || trimString(selectedThreadDetailID()) || trimString(selectedThreadID()),
+        runID: trimString(timeline.run_id),
+        turnID: trimString(timeline.turn_id),
+        messageID,
+        blockIndex,
+        itemID: trimString(item.item_id),
+        toolID: trimString(item.tool_id),
+      }, block);
+    }
     if (block.kind === 'web_search') return webSearchBlock(block);
     if (block.kind === 'question') return questionBlock(block);
     if (block.kind === 'completion') return completionBlock(block);
-    if (block.kind === 'file_read') return fileReadBlock(messageID, blockIndex, itemID, block);
-    if (block.kind === 'file_diff') return fileDiffBlock(messageID, blockIndex, itemID, block);
+    if (block.kind === 'file_read') return fileReadBlock(messageID, blockIndex, item.item_id, block);
+    if (block.kind === 'file_diff') return fileDiffBlock(messageID, blockIndex, item.item_id, block);
     return detailLinesBlock(block);
   };
 
@@ -5197,7 +5244,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             data-state={disclosure.state()}
           >
             <For each={presentation().detailBlocks}>
-              {(block) => activityDetailBlock(messageID(), blockIndex(), item().item_id, block, trimString(timeline().run_id))}
+              {(block) => activityDetailBlock(messageID(), blockIndex(), item(), timeline(), block)}
             </For>
           </div>
         </Show>

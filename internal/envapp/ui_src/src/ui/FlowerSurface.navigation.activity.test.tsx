@@ -1296,9 +1296,62 @@ describe('FlowerSurface navigation activity', () => {
         },
       ],
     });
+    let deliveredEmptyBlockSet = false;
+    const listThreadLiveEvents = vi.fn(async (_threadID: string, cursor: number) => {
+      if (!deliveredEmptyBlockSet && cursor < 1 && readTerminalProcess.mock.calls.length > 0) {
+        deliveredEmptyBlockSet = true;
+        return {
+          stream_generation: 1,
+          events: [{
+            schema_version: 1,
+            seq: 1,
+            endpoint_id: 'test-runtime',
+            thread_id: 'thread-live-terminal-output',
+            run_id: 'run-live-terminal',
+            turn_id: 'm-live-terminal-output',
+            at_unix_ms: 6_710,
+            kind: 'message.block_set',
+            payload: {
+              message_id: 'm-live-terminal-output',
+              block_index: 0,
+              block: {
+                type: 'activity-timeline',
+                block: activityTimeline({
+                  run_id: 'run-live-terminal',
+                  turn_id: 'm-live-terminal-output',
+                  status: 'running',
+                  items: [activityItem({
+                    item_id: 'terminal-live',
+                    tool_id: 'terminal-live',
+                    tool_name: 'terminal.exec',
+                    kind: 'tool',
+                    status: 'running',
+                    renderer: 'terminal',
+                    label: 'for i in 1 2; do echo tick:$i; done',
+                    payload: {
+                      command: 'for i in 1 2; do echo tick:$i; done',
+                      status: 'running',
+                      process_id: 'tp_live_terminal',
+                      output: '',
+                      stdout: '',
+                      last_seq: 2,
+                      total_bytes: 14,
+                    },
+                  })],
+                }),
+              },
+            },
+          } satisfies FlowerLiveEvent],
+          next_cursor: 1,
+          retained_from_seq: 1,
+        };
+      }
+      return { stream_generation: 1, events: [], next_cursor: cursor, retained_from_seq: 1 };
+    });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       readTerminalProcess,
+      listThreadLiveEvents,
       listThreads: vi.fn(async () => [liveTerminalThread]),
       loadThread: vi.fn(async () => liveBootstrap(liveTerminalThread)),
     });
@@ -1318,6 +1371,7 @@ describe('FlowerSurface navigation activity', () => {
     });
     await waitFor(() => runtime.textContent?.includes('tick 2') ?? false);
     await waitFor(() => readTerminalProcess.mock.calls.length > 1);
+    await waitFor(() => deliveredEmptyBlockSet);
     expect(runtime.textContent).toContain('tick 1');
     expect(runtime.textContent).toContain('tick 2');
     expect(runtime.textContent).not.toContain('Listening for output...');

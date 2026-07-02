@@ -5,7 +5,13 @@ import { prepareLocalApiRequestInit } from '../../services/localApi';
 import { writeTextToClipboard } from '../../utils/clipboard';
 import { ActivityStatusIcon, type ActivityStatus } from '../status/ActivityLine';
 import { useI18n, type I18nHelpers } from '../../i18n';
-import { mergeTerminalVisibleOutput, terminalListeningPlaceholderVisible } from '../../../../../../flower_ui/src/flowerTerminalOutput';
+import {
+  createTerminalVisibleOutputStore,
+  terminalListeningPlaceholderVisible,
+  terminalVisibleOutputIdentityKey,
+  type TerminalVisibleOutputIdentity,
+  type TerminalVisibleOutputStore,
+} from '../../../../../../flower_ui/src/flowerTerminalOutput';
 
 export interface ShellBlockProps {
   command: string;
@@ -21,6 +27,8 @@ export interface ShellBlockProps {
   truncated?: boolean;
   exitCode?: number;
   status: 'running' | 'success' | 'error';
+  outputIdentity?: TerminalVisibleOutputIdentity;
+  outputStore?: TerminalVisibleOutputStore;
   class?: string;
 }
 
@@ -345,10 +353,9 @@ function composeDeferredOutput(parts: {
   if (parts.truncated) info.push('[notice] output truncated');
 
   const sections: string[] = [];
-  if (info.length > 0) sections.push(info.join('\n'));
-
-  const stdout = String(parts.stdout ?? parts.output ?? '').trimEnd();
+  const stdout = String(parts.stdout ?? '').trimEnd() || String(parts.output ?? '').trimEnd();
   const stderr = String(parts.stderr ?? '').trimEnd();
+  if ((stdout || stderr) && info.length > 0) sections.push(info.join('\n'));
   if (stdout) sections.push(stdout);
   if (stderr) sections.push(stdout ? `[stderr]\n${stderr}` : stderr);
 
@@ -388,6 +395,7 @@ function terminalProcessURL(runID: string, processID: string, action: 'read' | '
 
 export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const i18n = useI18n();
+  const localVisibleOutputStore = createTerminalVisibleOutputStore(20);
   const [expanded, setExpanded] = createSignal(false);
   const [loadingOutput, setLoadingOutput] = createSignal(false);
   const [loadedOutput, setLoadedOutput] = createSignal<string | undefined>(undefined);
@@ -427,9 +435,20 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const displayTruncated = () => (typeof props.truncated === 'boolean' ? props.truncated : runtimeTruncated() ?? false);
   const displayCwd = () => props.cwd ?? runtimeCwd() ?? '';
   const displayLastSeq = () => runtimeLastSeq();
-  const resolvedOutput = () => mergeTerminalVisibleOutput(loadedOutput(), props.output ?? props.latestOutput ?? '', displayStatus());
+  const visibleOutputStore = () => props.outputStore ?? localVisibleOutputStore;
+  const outputIdentity = (): TerminalVisibleOutputIdentity => ({
+    surface_scope: 'env-shell',
+    ...props.outputIdentity,
+    run_id: props.outputIdentity?.run_id ?? props.outputRef?.runId,
+    tool_id: props.outputIdentity?.tool_id ?? props.outputRef?.toolId,
+    process_id: props.outputIdentity?.process_id ?? displayProcessId(),
+    command: props.outputIdentity?.command ?? props.command,
+  });
+  const outputIdentityKey = () => terminalVisibleOutputIdentityKey(outputIdentity());
+  const propOutput = () => props.output ?? props.latestOutput ?? '';
+  const resolvedOutput = () => visibleOutputStore().merge(outputIdentity(), loadedOutput(), propOutput(), displayStatus());
   const applyLoadedOutput = (output: string, status?: ShellBlockProps['status']) => {
-    const merged = mergeTerminalVisibleOutput(loadedOutput(), output, status ?? displayStatus());
+    const merged = visibleOutputStore().merge(outputIdentity(), loadedOutput(), output, status ?? displayStatus());
     setLoadedOutput(merged || undefined);
   };
   const hasOutput = () => String(resolvedOutput() ?? '').trim().length > 0;
@@ -439,13 +458,11 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     () => normalizedCommand().length > 0 && (commandLineCount() > 1 || commandPreview() !== commandPreviewSource()),
   );
 
+  let lastOutputIdentityKey = outputIdentityKey();
   createEffect(() => {
-    const runID = String(props.outputRef?.runId ?? '').trim();
-    const toolID = String(props.outputRef?.toolId ?? '').trim();
-    const command = props.command;
-    void runID;
-    void toolID;
-    void command;
+    const nextOutputIdentityKey = outputIdentityKey();
+    if (nextOutputIdentityKey === lastOutputIdentityKey) return;
+    lastOutputIdentityKey = nextOutputIdentityKey;
     setRuntimeStatus(undefined);
     setRuntimeProcessId(undefined);
     setRuntimeExitCode(undefined);
@@ -570,7 +587,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   };
 
   const ensureOutputLoaded = async () => {
-    if (props.output || loadedOutput() || loadingOutput()) return;
+    if (resolvedOutput() || loadingOutput()) return;
     if (!hasOutputRef() && !canUseProcessControls()) return;
 
     setLoadingOutput(true);
