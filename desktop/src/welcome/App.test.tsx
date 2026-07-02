@@ -694,7 +694,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-welcome-surface h-full min-h-0 w-full min-w-0 overflow-auto bg-background');
   });
 
-  it('uses one shared welcome shell so dense environments and control planes stay aligned', () => {
+  it('uses one shared welcome shell so dense environments and management tabs stay aligned', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
@@ -704,6 +704,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('shouldUseSpaciousEnvironmentGrid');
     expect(appSrc).toContain('props.libraryEntries.length + (showQuickAddCards() ? 1 : 0)');
     expect(appSrc).toContain('useSpaciousControlPlaneLayout');
+    expect(appSrc).toContain("props.activeTab === 'control_planes'");
+    expect(appSrc).toContain('useSpaciousGatewayLayout');
+    expect(appSrc).toContain("props.activeTab === 'gateways'");
+    expect(appSrc).not.toContain("props.activeTab === 'control_planes' && props.controlPlanes.length > 0");
+    expect(appSrc).not.toContain("props.activeTab === 'gateways' && props.gatewaySources.length > 0");
     expect(styles).toContain('--redeven-welcome-shell-max-width: 80rem;');
     expect(styles).toContain('--redeven-welcome-shell-spacious-max-width: 100rem;');
     expect(styles).toContain('.redeven-welcome-shell--spacious');
