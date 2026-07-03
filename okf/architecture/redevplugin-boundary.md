@@ -104,7 +104,11 @@ identity, permission, confirmation, lease/token, quota, and audit checks.
 Container management, if exposed as an official plugin experience, is a Redeven
 business capability registered through ReDevPlugin. It is not a plugin runtime
 mechanism and must still pass through ReDevPlugin permission, confirmation,
-token, lease, audit, and lifecycle contracts.
+token, lease, audit, and lifecycle contracts. The Redeven-owned v1 business
+contract lives under `spec/capabilities/container-resources-v1.schema.json` and
+`internal/capabilities/containers`, which keeps the adapter contract visible
+without creating an `internal/plugins*` platform-core tree or copying
+ReDevPlugin `spec/plugin` contracts.
 
 Flower-generated plugin flows are Redeven orchestration over ReDevPlugin
 primitives. Flower may draft source, call released ReDevPlugin validators and
@@ -175,11 +179,12 @@ published ReDevPlugin artifact is selected by Redeven.
 [12] redeven:AGENTS.md:487 - Flower-generated plugin flows are Redeven product orchestration over ReDevPlugin primitives.
 [13] redeven:AGENTS.md:495 - ReDevPlugin upgrades in Redeven must consume released artifacts together.
 [14] redeven:AGENTS.md:535 - Redeven plugin integration review must reject alternate platform cores and enforce adapter-only business capabilities.
-[15] redeven:go.mod:5 - Redeven's current required module list is the active Go dependency surface for released upstream modules.
-[16] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The dependency boundary guard blocks local ReDevPlugin wiring and copied platform-core paths.
-[17] redeven:scripts/check_redevplugin_release_artifacts.sh:10 - The consumer-side release artifact verifier validates checksums, signature evidence, stress counters, internal manifests, compatibility metadata, third-party notices, and runtime binary presence.
-[18] redeven:scripts/check_redevplugin_consumption_gate.sh:10 - The consumption gate fails release staging or Desktop bundling when ReDevPlugin payloads appear without verifier markers.
-[19] redeven:.github/workflows/ci-check.yml:108 - CI runs the ReDevPlugin release artifact verifier self-test and consumption gate self-test before a real artifact is wired into release packaging.
-[20] redeven:scripts/stage_redevplugin_release_artifacts.sh:14 - The release artifact staging helper verifies downloaded or copied ReDevPlugin artifacts before extracting a runtime payload.
-[21] redeven:.github/workflows/release.yml:93 - Release packaging stages ReDevPlugin runtime payloads only when explicit release inputs are configured.
-[22] redeven:scripts/build_desktop_bundled_runtime.sh:113 - Desktop bundled-runtime preparation stages ReDevPlugin runtime payloads only when explicit desktop inputs are configured.
+[15] redeven:okf/architecture/container-resources-capability.md:9 - The active container resources contract is Redeven-owned business capability surface.
+[16] redeven:go.mod:5 - Redeven's current required module list is the active Go dependency surface for released upstream modules.
+[17] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The dependency boundary guard blocks local ReDevPlugin wiring and copied platform-core paths.
+[18] redeven:scripts/check_redevplugin_release_artifacts.sh:10 - The consumer-side release artifact verifier validates checksums, signature evidence, stress counters, internal manifests, compatibility metadata, third-party notices, and runtime binary presence.
+[19] redeven:scripts/check_redevplugin_consumption_gate.sh:10 - The consumption gate fails release staging or Desktop bundling when ReDevPlugin payloads appear without verifier markers.
+[20] redeven:.github/workflows/ci-check.yml:108 - CI runs the ReDevPlugin release artifact verifier self-test and consumption gate self-test before a real artifact is wired into release packaging.
+[21] redeven:scripts/stage_redevplugin_release_artifacts.sh:14 - The release artifact staging helper verifies downloaded or copied ReDevPlugin artifacts before extracting a runtime payload.
+[22] redeven:.github/workflows/release.yml:93 - Release packaging stages ReDevPlugin runtime payloads only when explicit release inputs are configured.
+[23] redeven:scripts/build_desktop_bundled_runtime.sh:113 - Desktop bundled-runtime preparation stages ReDevPlugin runtime payloads only when explicit desktop inputs are configured.

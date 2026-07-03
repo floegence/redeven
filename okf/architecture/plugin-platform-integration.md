@@ -17,6 +17,13 @@ routes, or bundled `redevplugin-runtime` artifacts. This OKF entry records the
 required integration shape and boundary for the future implementation, not an
 already-shipped local plugin platform.
 
+The same baseline does include a Redeven-owned container resources business
+capability contract under `spec/capabilities/container-resources-v1.schema.json`
+and `internal/capabilities/containers`. That contract is adapter input/output
+shape for Docker and Podman resources; it is not a plugin-platform schema copy
+and it does not introduce a ReDevPlugin dependency before a published release is
+selected.
+
 # Mechanism
 
 The intended dependency shape is library and artifact consumption. Redeven
@@ -79,8 +86,8 @@ Redeven-registered adapter.
 Containers are a Redeven business capability when exposed to plugins, not a
 plugin runtime mechanism. Gateway environment profiles and RCPP provider
 environment catalogs are external environment access/control constructs, not
-plugin installation identities, plugin capability namespaces, or plugin broker
-state.
+plugin installation identities, plugin broker state, or a substitute for the
+closed-world container resources capability contract.
 
 # Citations
 
@@ -103,3 +110,4 @@ state.
 [17] redeven:okf/security/plugin-platform-integration-security.md:58 - Plugin surfaces and workers must not receive runtime-control, direct-session, Gateway, or Flower artifacts as ambient authority.
 [18] redeven:okf/ui/plugin-surfaces.md:17 - Front-end plugin platform implementation arrives as released ReDevPlugin npm packages.
 [19] redeven:okf/ai/flower-plugin-generation.md:18 - Flower-generated plugin flow is approved product orchestration over released ReDevPlugin APIs.
+[20] redeven:okf/architecture/container-resources-capability.md:9 - The container resources contract is Redeven-owned business capability surface, not plugin-platform core.

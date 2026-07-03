@@ -39,6 +39,14 @@ quota, revoke-epoch, and audit construction. Redeven product policy may narrow
 or deny a capability; it must not mint plugin tokens, grant storage/network
 access, or call the business adapter outside ReDevPlugin brokers.
 
+The container resources v1 contract follows that boundary. Its start preflight
+plan is a Redeven business DTO that summarizes Docker and Podman runtime state
+without leaking raw environment values, raw label values, raw inspect JSON, or
+sensitive host paths. It records risk flags and admin-required hints for the
+future trusted confirmation UI, but ReDevPlugin remains responsible for the
+actual confirmation intent, plan hash binding, token, lease, audit, and revoke
+enforcement when the adapter is registered.
+
 # Boundaries
 
 Redeven must not point builds, tests, release validation, examples, or committed
@@ -75,3 +83,5 @@ Redeven-registered adapter.
 [10] redeven:internal/localui/localui.go:65 - Direct sessions are served by the agent after E2EE handshake.
 [11] redeven:internal/codeapp/appserver/server_test.go:1070 - Management API tests forbid admin actions when `can_admin=false`.
 [12] redeven:internal/envapp/ui_src/src/ui/services/localApi.localAccess.e2e.test.ts:193 - Local UI preserves flat appserver `error_code` values on HTTP failures.
+[13] redeven:okf/architecture/container-resources-capability.md:33 - Container start preflight records risk flags and admin hints without owning ReDevPlugin confirmation enforcement.
+[14] redeven:internal/capabilities/containers/preflight_test.go:14 - Tests verify container preflight redacts secret values and sensitive paths.
