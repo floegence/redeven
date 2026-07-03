@@ -213,7 +213,15 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.git-branch-history-details::before {');
     expect(src).toContain('.git-branch-history-files {');
     expect(src).toContain('.git-branch-history-files__table :where(th, td):first-child');
+    expect(src).toContain('.git-branch-header-inline-status {');
+    expect(src).toContain('.git-branch-detail-banner {');
+    expect(src).toContain(".git-branch-detail-banner[data-git-branch-detail-state='error'] {");
+    expect(src).toContain('.git-branch-stable-placeholder {');
+    expect(src).toContain('.git-branch-stable-placeholder__body {');
+    expect(src).toContain('.git-branch-stable-placeholder__rows {');
     expect(src).toContain('html.dark .git-branch-history-details-row {');
+    expect(src).toContain('html.dark .git-branch-detail-banner {');
+    expect(src).toContain('html.dark .git-branch-stable-placeholder {');
     expect(src).toContain('@media (prefers-reduced-motion: reduce) {');
     expect(src).toContain('.git-branch-history-reveal[data-state=\'closing\']');
   });
