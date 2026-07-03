@@ -191,6 +191,10 @@ func TestContainerResourcesSchemaContract(t *testing.T) {
 	assertSchemaConst(t, schemaMap(t, defs, "capability_version"), CapabilityVersion)
 	assertStringEnum(t, schemaMap(t, defs, "engine"), []string{string(EngineDocker), string(EnginePodman)})
 	assertStringEnum(t, schemaMap(t, defs, "method"), methodStrings(Methods()))
+	statusRequestProps := schemaMap(t, schemaMap(t, defs, "status_request"), "properties")
+	if _, ok := statusRequestProps["engine"]; !ok {
+		t.Fatal("status_request schema must expose optional engine")
+	}
 
 	plan := schemaMap(t, defs, "start_preflight_plan")
 	props := schemaMap(t, plan, "properties")
