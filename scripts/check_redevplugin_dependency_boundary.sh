@@ -125,7 +125,7 @@ check_local_source_wiring() {
     fi
   done
 
-  if [ "${#scan_paths[@]}" -gt 0 ] && matches=$(rg -n --pcre2 --glob '!scripts/check_redevplugin_dependency_boundary.sh' --glob '!scripts/check_redevplugin_release_artifacts.sh' --glob '!scripts/check_redevplugin_consumption_gate.sh' '(?i)(\.\./redevplugin|/redevplugin\b|file:[^\n]*redevplugin|link:[^\n]*redevplugin|workspace:[^\n]*redevplugin|portal:[^\n]*redevplugin)' "${scan_paths[@]}" 2>/dev/null); then
+  if [ "${#scan_paths[@]}" -gt 0 ] && matches=$(rg -n --pcre2 --glob '!scripts/check_redevplugin_dependency_boundary.sh' --glob '!scripts/check_redevplugin_release_artifacts.sh' --glob '!scripts/check_redevplugin_consumption_gate.sh' --glob '!scripts/stage_redevplugin_release_artifacts.sh' '(?i)(\.\./redevplugin|/redevplugin\b|file:[^\n]*redevplugin|link:[^\n]*redevplugin|workspace:[^\n]*redevplugin|portal:[^\n]*redevplugin)' "${scan_paths[@]}" 2>/dev/null); then
     printf '%s\n' "$matches"
     fail "Build, script, and source files must not point at a local ReDevPlugin checkout."
   fi

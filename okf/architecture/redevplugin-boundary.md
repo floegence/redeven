@@ -128,7 +128,12 @@ runtime binary hashes before any checked payload is staged into a Redeven releas
 or Desktop bundle. Redeven's release and Desktop bundle gates scan for
 ReDevPlugin payloads and fail when a runtime binary, release tarball, embedded
 runtime inside a Redeven tarball, or release stress summary appears without a
-matching marker hash.
+matching marker hash. The released-artifact staging path keeps that boundary
+explicit: it can download a ReDevPlugin GitHub Release or copy an already
+downloaded artifact directory, runs the verifier with marker output, validates
+the staged root with the consumption gate, and only then extracts an optional
+target `redevplugin-runtime` binary with its marker for downstream bundle
+staging.
 
 Redeven-side plugin code layout must make the adapter boundary visible. It may
 contain host integration, route mounting, capability adapters, and product UI,
@@ -165,4 +170,5 @@ published ReDevPlugin artifact is selected by Redeven.
 [16] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The dependency boundary guard blocks local ReDevPlugin wiring and copied platform-core paths.
 [17] redeven:scripts/check_redevplugin_release_artifacts.sh:10 - The consumer-side release artifact verifier validates checksums, signature evidence, stress counters, internal manifests, compatibility metadata, and runtime binary presence.
 [18] redeven:scripts/check_redevplugin_consumption_gate.sh:10 - The consumption gate fails release staging or Desktop bundling when ReDevPlugin payloads appear without verifier markers.
-[19] redeven:.github/workflows/ci-check.yml:106 - CI runs the ReDevPlugin release artifact verifier self-test and consumption gate self-test before a real artifact is wired into release packaging.
+[19] redeven:.github/workflows/ci-check.yml:108 - CI runs the ReDevPlugin release artifact verifier self-test and consumption gate self-test before a real artifact is wired into release packaging.
+[20] redeven:scripts/stage_redevplugin_release_artifacts.sh:14 - The release artifact staging helper verifies downloaded or copied ReDevPlugin artifacts before extracting a runtime payload.
