@@ -65,9 +65,12 @@ jobs:
 
       - name: Build binary
         env:
+          GH_TOKEN: ${{ github.token }}
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
+          REDEVEN_RELEASE_REDEVPLUGIN_VERSION: ${{ vars.REDEVEN_RELEASE_REDEVPLUGIN_VERSION }}
+          REDEVEN_RELEASE_REDEVPLUGIN_REPO: ${{ vars.REDEVEN_RELEASE_REDEVPLUGIN_REPO }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME}"
@@ -86,22 +89,50 @@ jobs:
             -o dist/redeven-gateway \
             ./cmd/redeven-gateway
 
-          tar -C dist -czf "dist/redeven_${GOOS}_${GOARCH}.tar.gz" redeven LICENSE THIRD_PARTY_NOTICES.md
+          if [ -n "${REDEVEN_RELEASE_REDEVPLUGIN_VERSION:-}" ]; then
+            args=(
+              --version "$REDEVEN_RELEASE_REDEVPLUGIN_VERSION"
+              --dest-dir "dist/redevplugin-release"
+              --redeven-goos "$GOOS"
+              --redeven-goarch "$GOARCH"
+              --runtime-out "dist/redevplugin-runtime"
+            )
+            if [ -n "${REDEVEN_RELEASE_REDEVPLUGIN_REPO:-}" ]; then
+              args+=(--repo "$REDEVEN_RELEASE_REDEVPLUGIN_REPO")
+            fi
+            ./scripts/stage_redevplugin_release_artifacts.sh "${args[@]}"
+          fi
+
+          redeven_entries=(redeven LICENSE THIRD_PARTY_NOTICES.md)
+          if [ -f dist/redevplugin-runtime ]; then
+            redeven_entries+=(redevplugin-runtime .redevplugin-release-artifacts-verified.json)
+          fi
+          (
+            cd dist
+            tar -czf "redeven_${GOOS}_${GOARCH}.tar.gz" "${redeven_entries[@]}"
+          )
           tar -C dist -czf "dist/redeven-gateway_${GOOS}_${GOARCH}.tar.gz" redeven-gateway LICENSE THIRD_PARTY_NOTICES.md
-          rm -f dist/redeven dist/redeven-gateway
+          rm -f dist/redeven dist/redeven-gateway dist/redevplugin-runtime
+
+          upload_dir="dist/package-${GOOS}-${GOARCH}"
+          mkdir -p "$upload_dir"
+          cp "dist/redeven_${GOOS}_${GOARCH}.tar.gz" "$upload_dir/"
+          cp "dist/redeven-gateway_${GOOS}_${GOARCH}.tar.gz" "$upload_dir/"
+          cp dist/okf_bundle.manifest.json "$upload_dir/"
+          cp dist/okf_bundle.sha256 "$upload_dir/"
+          cp dist/LICENSE "$upload_dir/"
+          cp dist/THIRD_PARTY_NOTICES.md "$upload_dir/"
+          if [ -f dist/.redevplugin-release-artifacts-verified.json ]; then
+            cp dist/.redevplugin-release-artifacts-verified.json "$upload_dir/"
+          fi
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v6
         with:
           name: package-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: |
-            dist/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
-            dist/redeven-gateway_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
-            dist/okf_bundle.manifest.json
-            dist/okf_bundle.sha256
-            dist/LICENSE
-            dist/THIRD_PARTY_NOTICES.md
+          path: dist/package-${{ matrix.goos }}-${{ matrix.goarch }}
           if-no-files-found: error
+          include-hidden-files: true
 
   desktop:
     name: Desktop ${{ matrix.goos }}-${{ matrix.goarch }}
@@ -206,6 +237,8 @@ jobs:
           REDEVEN_DESKTOP_RUNTIME_TARBALL: ${{ github.workspace }}/dist/agent/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
           REDEVEN_DESKTOP_GATEWAY_TARBALL: ${{ github.workspace }}/dist/agent/redeven-gateway_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
           REDEVEN_DESKTOP_VERSION: ${{ github.ref_name }}
+          REDEVEN_DESKTOP_REDEVPLUGIN_VERSION: ${{ vars.REDEVEN_RELEASE_REDEVPLUGIN_VERSION }}
+          REDEVEN_DESKTOP_REDEVPLUGIN_REPO: ${{ vars.REDEVEN_RELEASE_REDEVPLUGIN_REPO }}
         run: |
           set -euo pipefail
           cd desktop
@@ -278,6 +311,7 @@ jobs:
           find dist/downloads -type f -name 'redeven_*.tar.gz' -exec cp {} dist/ \;
           find dist/downloads -type f -name 'redeven-gateway_*.tar.gz' -exec cp {} dist/ \;
           find dist/downloads -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.dmg' \) -exec cp {} dist/ \;
+          find dist/downloads -type f -name '.redevplugin-release-artifacts-verified.json' -exec cp {} dist/ \;
 
           manifest_src="$(find dist/downloads -type f -name 'okf_bundle.manifest.json' -print -quit)"
           checksum_src="$(find dist/downloads -type f -name 'okf_bundle.sha256' -print -quit)"

@@ -133,7 +133,12 @@ explicit: it can download a ReDevPlugin GitHub Release or copy an already
 downloaded artifact directory, runs the verifier with marker output, validates
 the staged root with the consumption gate, and only then extracts an optional
 target `redevplugin-runtime` binary with its marker for downstream bundle
-staging.
+staging. Redeven release tarballs and Desktop bundles use this path only when a
+published ReDevPlugin version is explicitly selected; copied artifact
+directories remain a local fixture and preflight input for the helper, not a
+GitHub release workflow selector. The default release and Desktop packaging
+paths remain no-op for ReDevPlugin payloads until such a version is configured,
+so the repository does not silently consume unreleased local behavior.
 
 Redeven-side plugin code layout must make the adapter boundary visible. It may
 contain host integration, route mounting, capability adapters, and product UI,
@@ -172,3 +177,5 @@ published ReDevPlugin artifact is selected by Redeven.
 [18] redeven:scripts/check_redevplugin_consumption_gate.sh:10 - The consumption gate fails release staging or Desktop bundling when ReDevPlugin payloads appear without verifier markers.
 [19] redeven:.github/workflows/ci-check.yml:108 - CI runs the ReDevPlugin release artifact verifier self-test and consumption gate self-test before a real artifact is wired into release packaging.
 [20] redeven:scripts/stage_redevplugin_release_artifacts.sh:14 - The release artifact staging helper verifies downloaded or copied ReDevPlugin artifacts before extracting a runtime payload.
+[21] redeven:.github/workflows/release.yml:93 - Release packaging stages ReDevPlugin runtime payloads only when explicit release inputs are configured.
+[22] redeven:scripts/build_desktop_bundled_runtime.sh:113 - Desktop bundled-runtime preparation stages ReDevPlugin runtime payloads only when explicit desktop inputs are configured.

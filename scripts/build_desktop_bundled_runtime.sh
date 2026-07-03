@@ -110,6 +110,46 @@ bundle_gateway_from_tarball() {
   tar -xzf "$tarball_path" -C "$bundle_dir"
 }
 
+stage_redevplugin_runtime_if_configured() {
+  local bundle_dir="$1"
+  local goos="$2"
+  local goarch="$3"
+  local version="${REDEVEN_DESKTOP_REDEVPLUGIN_VERSION:-}"
+  local source_dir="${REDEVEN_DESKTOP_REDEVPLUGIN_SOURCE_DIR:-}"
+  local repo="${REDEVEN_DESKTOP_REDEVPLUGIN_REPO:-floegence/redevplugin}"
+  local skip_cosign="${REDEVEN_DESKTOP_REDEVPLUGIN_SKIP_COSIGN:-}"
+  local tmpdir args
+
+  if [ -z "$version$source_dir" ]; then
+    return 0
+  fi
+
+  tmpdir="$(mktemp -d)"
+  args=(
+    --dest-dir "$tmpdir/redevplugin-release"
+    --redeven-goos "$goos"
+    --redeven-goarch "$goarch"
+    --runtime-out "$bundle_dir/redevplugin-runtime"
+    --repo "$repo"
+  )
+  if [ -n "$version" ]; then
+    args+=(--version "$version")
+  fi
+  if [ -n "$source_dir" ]; then
+    args+=(--source-dir "$source_dir")
+  fi
+  if [ "$skip_cosign" = "1" ]; then
+    args+=(--skip-cosign)
+  fi
+
+  ui_pkg_log "Staging verified ReDevPlugin runtime for desktop bundle..."
+  if ! "$SCRIPT_DIR/stage_redevplugin_release_artifacts.sh" "${args[@]}"; then
+    rm -rf "$tmpdir"
+    return 1
+  fi
+  rm -rf "$tmpdir"
+}
+
 build_go_command() {
   local goos="$1"
   local goarch="$2"
@@ -178,6 +218,8 @@ main() {
     prepare_bundle_dir "$bundle_dir"
     bundle_from_source "$goos" "$goarch" "$bundle_path" "$gateway_bundle_path"
   fi
+
+  stage_redevplugin_runtime_if_configured "$bundle_dir" "$goos" "$goarch"
 
   if [ ! -f "$bundle_path" ]; then
     ui_pkg_die "desktop bundled runtime not found after preparation: $bundle_path"

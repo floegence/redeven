@@ -9,6 +9,7 @@ Usage:
   ./scripts/stage_redevplugin_release_artifacts.sh --version <vX.Y.Z> --dest-dir <dir> [--repo <owner/repo>] [--skip-cosign]
   ./scripts/stage_redevplugin_release_artifacts.sh --source-dir <dir> --dest-dir <dir> [--version <vX.Y.Z>] [--skip-cosign]
   ./scripts/stage_redevplugin_release_artifacts.sh --version <vX.Y.Z> --dest-dir <dir> --runtime-target <target> --runtime-out <file> [--repo <owner/repo>] [--skip-cosign]
+  ./scripts/stage_redevplugin_release_artifacts.sh --version <vX.Y.Z> --dest-dir <dir> --redeven-goos <goos> --redeven-goarch <goarch> --runtime-out <file> [--repo <owner/repo>] [--skip-cosign]
   ./scripts/stage_redevplugin_release_artifacts.sh --self-test
 
 Downloads or copies a released ReDevPlugin artifact set, verifies the release
@@ -27,6 +28,8 @@ SOURCE_DIR=""
 DEST_DIR=""
 REPO="floegence/redevplugin"
 RUNTIME_TARGET=""
+REDEVEN_GOOS=""
+REDEVEN_GOARCH=""
 RUNTIME_OUT=""
 MARKER_OUT=""
 SKIP_COSIGN=0
@@ -77,6 +80,24 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       RUNTIME_TARGET="$2"
+      shift 2
+      ;;
+    --redeven-goos)
+      if [[ $# -lt 2 ]]; then
+        echo "--redeven-goos requires a GOOS value" >&2
+        usage >&2
+        exit 2
+      fi
+      REDEVEN_GOOS="$2"
+      shift 2
+      ;;
+    --redeven-goarch)
+      if [[ $# -lt 2 ]]; then
+        echo "--redeven-goarch requires a GOARCH value" >&2
+        usage >&2
+        exit 2
+      fi
+      REDEVEN_GOARCH="$2"
       shift 2
       ;;
     --runtime-out)
@@ -138,6 +159,29 @@ assert_release_tag() {
   if [[ ! "$tag" =~ ^v[0-9]+(\.[0-9]+){2}([-.][A-Za-z0-9._-]+)?$ ]]; then
     die "ReDevPlugin release tag must look like vX.Y.Z: $tag"
   fi
+}
+
+resolve_redevplugin_runtime_target() {
+  local goos="$1"
+  local goarch="$2"
+
+  case "${goos}/${goarch}" in
+    linux/amd64)
+      printf 'x86_64-unknown-linux-gnu\n'
+      ;;
+    linux/arm64)
+      printf 'aarch64-unknown-linux-gnu\n'
+      ;;
+    darwin/amd64)
+      printf 'x86_64-apple-darwin\n'
+      ;;
+    darwin/arm64)
+      printf 'aarch64-apple-darwin\n'
+      ;;
+    *)
+      die "unsupported Redeven target for ReDevPlugin runtime artifact: ${goos}/${goarch}"
+      ;;
+  esac
 }
 
 assert_safe_clean_dir() {
@@ -280,6 +324,18 @@ run_stage() {
   fi
   if [[ -n "$VERSION" ]]; then
     assert_release_tag "$VERSION"
+  fi
+  if [[ -n "$REDEVEN_GOOS$REDEVEN_GOARCH" ]]; then
+    if [[ -z "$REDEVEN_GOOS" || -z "$REDEVEN_GOARCH" ]]; then
+      die "--redeven-goos and --redeven-goarch must be provided together"
+    fi
+    if [[ -n "$RUNTIME_TARGET" ]]; then
+      die "--runtime-target cannot be combined with --redeven-goos/--redeven-goarch"
+    fi
+    if [[ -z "$RUNTIME_OUT" ]]; then
+      die "--redeven-goos/--redeven-goarch require --runtime-out"
+    fi
+    RUNTIME_TARGET="$(resolve_redevplugin_runtime_target "$REDEVEN_GOOS" "$REDEVEN_GOARCH")"
   fi
   if [[ -n "$RUNTIME_TARGET" && -z "$RUNTIME_OUT" ]] || [[ -z "$RUNTIME_TARGET" && -n "$RUNTIME_OUT" ]]; then
     die "--runtime-target and --runtime-out must be provided together"
@@ -453,7 +509,8 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
     --source-dir "$source_dir" \
     --dest-dir "$dest_dir" \
     --version "$version" \
-    --runtime-target "$target" \
+    --redeven-goos linux \
+    --redeven-goarch amd64 \
     --runtime-out "$runtime_out" \
     --marker-out "$marker_out" \
     --skip-cosign
@@ -476,6 +533,17 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
   rm -f "$bad_source/SHA256SUMS.bundle"
   if "$0" --source-dir "$bad_source" --dest-dir "$tmpdir/bad-staged" --version "$version" --skip-cosign >/dev/null 2>&1; then
     echo "self-test expected missing signature evidence to fail" >&2
+    exit 1
+  fi
+  if "$0" \
+    --source-dir "$source_dir" \
+    --dest-dir "$tmpdir/bad-target-staged" \
+    --version "$version" \
+    --redeven-goos linux \
+    --redeven-goarch riscv64 \
+    --runtime-out "$tmpdir/bad-target-runtime" \
+    --skip-cosign >/dev/null 2>&1; then
+    echo "self-test expected unsupported Redeven target to fail" >&2
     exit 1
   fi
   exit 0
