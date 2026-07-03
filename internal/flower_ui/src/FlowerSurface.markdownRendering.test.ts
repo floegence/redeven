@@ -65,8 +65,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const timelineListIndex = src.indexOf('<For each={visibleTimelineEntryKeys()}>');
     const headerIndex = src.indexOf('flower-chat-header flower-chat-header');
     const headerRowIndex = src.indexOf('flower-chat-header-row');
-    const dockIndex = src.indexOf('flower-chat-bottom-dock-track');
-    const statusLaneIndex = src.indexOf('flower-model-status-lane');
+    const dockIndex = src.indexOf('flower-chat-bottom-dock-track flower-chat-bottom-dock-track', timelineListIndex);
+    const statusLaneIndex = src.indexOf('flower-model-status-lane', dockIndex);
     const commandMenuIndex = src.indexOf('flower-composer-command-menu', statusLaneIndex);
     const composerAnchorIndex = src.indexOf('flower-composer-anchor', statusLaneIndex);
     const composerIndex = src.indexOf('flower-composer flower-chat-input-floating');

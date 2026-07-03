@@ -279,7 +279,8 @@ describe('FlowerSurface navigation activity', () => {
     expect(floatingWindow?.querySelector('[data-flower-message-role="assistant"]')).toBeTruthy();
     expect(floatingWindow?.querySelector('.flower-subagent-status-pill .flower-activity-inline-loader')).toBeTruthy();
     expect(floatingWindow?.querySelector('.flower-subagent-detail-bottom-dock')).toBeTruthy();
-    expect(floatingWindow?.querySelector('.flower-subagent-detail-live-lane .flower-model-status-text')?.textContent).toBe('Waiting for model response...');
+    expect(floatingWindow?.querySelector('.flower-subagent-detail-bottom-track .flower-model-status-lane')).toBeTruthy();
+    expect(floatingWindow?.querySelector('.flower-subagent-detail-bottom-track .flower-model-status-text')).toBeNull();
     expect(floatingWindow?.querySelector('.flower-composer')).toBeNull();
     expect(floatingWindow?.querySelector('textarea')).toBeNull();
     expect(floatingWindow?.querySelector('.flower-composer-submit')).toBeNull();
@@ -587,7 +588,32 @@ describe('FlowerSurface navigation activity', () => {
     expect(loadSubagentDetail).toHaveBeenCalledTimes(1);
     const floatingWindow = runtime.querySelector('[data-floe-geometry-surface="floating-window"]');
     expect(floatingWindow?.querySelector('.flower-subagent-status-pill')?.textContent).toContain('Completed');
-    expect(floatingWindow?.querySelector('.flower-subagent-detail-live-lane .flower-model-status-text')).toBeNull();
+    expect(floatingWindow?.querySelector('.flower-subagent-detail-bottom-track .flower-model-status-text')).toBeNull();
+  });
+
+  it('shows subagent bottom model status only when backend provides model_io_status', async () => {
+    const parentThread = parentThreadWithRunningSubagent();
+    const loadSubagentDetail = vi.fn(async () => subagentDetail({
+      model_io_status: modelIOStatus({ phase: 'waiting_response', run_id: 'child-run' }),
+    }));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [parentThread]),
+      loadThread: vi.fn(async () => liveBootstrap(parentThread)),
+      loadSubagentDetail,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-parent-subagents"] button')));
+    (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-subagents-spawn"]')));
+    (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(subagentDropdownRow(runtime)));
+    subagentDropdownRow(runtime)?.click();
+    await waitFor(() => Boolean(subagentDetailSurface(runtime)));
+
+    const floatingWindow = runtime.querySelector('[data-floe-geometry-surface="floating-window"]') as HTMLElement;
+    expect(floatingWindow.querySelector('.flower-subagent-detail-bottom-track .flower-model-status-lane')).toBeTruthy();
+    expectModelStatusIndicator(floatingWindow, 'Waiting for model response...');
   });
 
   it('ignores stale subagent tail pages after the detail is closed', async () => {

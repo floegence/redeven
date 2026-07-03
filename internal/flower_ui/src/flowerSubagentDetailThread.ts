@@ -7,13 +7,11 @@ import type {
   FlowerActivityStatus,
   FlowerActivitySeverity,
   FlowerActivityTimelineBlock,
-  FlowerContextCompaction,
   FlowerSubagentDetail,
   FlowerSubagentTimelineRow,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
   FlowerThreadStatus,
-  FlowerTimelineDecoration,
 } from './contracts/flowerSurfaceContracts';
 import { trimString } from './flowerSurfaceModel';
 
@@ -286,71 +284,6 @@ function messageForSummaryOnlyDetail(threadID: string, detail: FlowerSubagentDet
   };
 }
 
-function subagentCompactionPhase(phase: string): FlowerContextCompaction['phase'] {
-  const normalized = trimString(phase);
-  switch (normalized) {
-    case 'start':
-      return 'start';
-    case 'failed':
-      return 'failed';
-    case 'cancelled':
-      return 'cancelled';
-    case 'noop':
-      return 'noop';
-    case 'complete':
-    case 'compacted':
-      return 'complete';
-    default:
-      return normalized ? 'checkpoint' : 'complete';
-  }
-}
-
-function subagentCompactionStatus(phase: FlowerContextCompaction['phase']): FlowerContextCompaction['status'] {
-  switch (phase) {
-    case 'start':
-      return 'compacting';
-    case 'failed':
-      return 'failed';
-    case 'cancelled':
-      return 'cancelled';
-    case 'noop':
-      return 'noop';
-    case 'checkpoint':
-      return 'checkpoint';
-    case 'complete':
-    default:
-      return 'compacted';
-  }
-}
-
-function compactionDecoration(threadID: string, row: FlowerSubagentTimelineRow, anchorMessageID: string): FlowerTimelineDecoration | null {
-  if (row.kind !== 'compaction' || !row.compaction || !trimString(anchorMessageID)) return null;
-  const ordinal = Math.max(0, Math.floor(Number(row.ordinal ?? 0)));
-  const operationID = `${safeIDPart(threadID)}:compaction:${ordinal}`;
-  const phase = subagentCompactionPhase(row.compaction.phase ?? '');
-  const compaction: FlowerContextCompaction = {
-    operation_id: operationID,
-    phase,
-    status: subagentCompactionStatus(phase),
-    trigger: trimString(row.compaction.trigger),
-    reason: trimString(row.compaction.reason) || trimString(row.compaction.summary),
-    tokens_before: Number(row.compaction.tokens_before ?? 0) || undefined,
-    tokens_after_estimate: Number(row.compaction.tokens_after_estimate ?? 0) || undefined,
-    updated_at_ms: Math.max(0, Math.floor(Number(row.created_at_ms ?? 0))),
-  };
-  return {
-    decoration_id: operationID,
-    kind: 'context_compaction',
-    anchor: {
-      target_kind: 'message',
-      message_id: anchorMessageID,
-      edge: 'after',
-    },
-    ordinal,
-    compaction,
-  };
-}
-
 function readStatus(thread: FlowerThreadSnapshot): FlowerThreadReadStatus {
   const signature = `status:${thread.status}\x1fmessages:${thread.messages.length}\x1fupdated:${thread.updated_at_ms}`;
   return {
@@ -375,28 +308,19 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null,
   if (!threadID) return null;
   const title = trimString(summary.title) || trimString(summary.task_name) || trimString(fallbackTitle) || threadID;
   const orderedMessages: OrderedMessage[] = [];
-  const decorations: FlowerTimelineDecoration[] = [];
-  let lastMessageID = '';
   let messageSequence = 0;
   for (const row of [...detail.timeline].sort((left, right) => rowOrdinal(left) - rowOrdinal(right))) {
-    if (row.kind === 'compaction') {
-      const decoration = compactionDecoration(threadID, row, lastMessageID);
-      if (decoration) decorations.push(decoration);
-      continue;
-    }
     const message = row.kind === 'user_message' || row.kind === 'assistant_message' || row.kind === 'error'
       ? messageForTextRow(threadID, row)
       : null;
     if (message) {
       orderedMessages.push({ message, ordinal: rowOrdinal(row), sequence: messageSequence++ });
-      lastMessageID = message.id;
       continue;
     }
   }
   const activityMessages = messagesForCanonicalActivity(threadID, detail);
   for (const entry of activityMessages) {
     orderedMessages.push({ ...entry, sequence: messageSequence++ });
-    lastMessageID = entry.message.id;
   }
   orderedMessages.sort(orderedMessageSort);
   const messages = orderedMessages.map((entry) => entry.message);
@@ -420,7 +344,10 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null,
     read_only_reason: 'Subagent details are managed by the parent Flower thread.',
     parent_thread_id: trimString(summary.parent_thread_id),
     messages,
-    timeline_decorations: decorations,
+    model_io_status: detail.model_io_status ?? null,
+    context_usage: detail.context_usage ?? null,
+    context_compactions: detail.context_compactions ?? [],
+    timeline_decorations: detail.timeline_decorations ?? [],
     approval_actions: [],
     read_status: {
       is_unread: false,

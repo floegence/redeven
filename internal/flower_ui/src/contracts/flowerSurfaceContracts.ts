@@ -520,6 +520,10 @@ export type FlowerSubagentDetail = Readonly<{
   summary: FlowerSubagentSummary;
   timeline: readonly FlowerSubagentTimelineRow[];
   activity?: FlowerActivityTimelineBlock;
+  model_io_status?: FlowerModelIOStatus | null;
+  context_usage?: FlowerContextUsage | null;
+  context_compactions?: readonly FlowerContextCompaction[];
+  timeline_decorations?: readonly FlowerTimelineDecoration[];
   next_ordinal?: number;
   has_more?: boolean;
   retained_from?: number;

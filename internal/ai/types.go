@@ -261,13 +261,17 @@ type FlowerSubagentTimelineRow struct {
 }
 
 type FlowerSubagentDetailResponse struct {
-	Summary       FlowerSubagentSummary       `json:"summary"`
-	Timeline      []FlowerSubagentTimelineRow `json:"timeline"`
-	Activity      *ActivityTimelineBlock      `json:"activity,omitempty"`
-	NextOrdinal   int64                       `json:"next_ordinal,omitempty"`
-	HasMore       bool                        `json:"has_more,omitempty"`
-	RetainedFrom  int64                       `json:"retained_from,omitempty"`
-	GeneratedAtMs int64                       `json:"generated_at_ms"`
+	Summary             FlowerSubagentSummary       `json:"summary"`
+	Timeline            []FlowerSubagentTimelineRow `json:"timeline"`
+	Activity            *ActivityTimelineBlock      `json:"activity,omitempty"`
+	ModelIOStatus       *FlowerModelIOStatus        `json:"model_io_status,omitempty"`
+	ContextUsage        *FlowerContextUsage         `json:"context_usage,omitempty"`
+	ContextCompactions  []FlowerContextCompaction   `json:"context_compactions,omitempty"`
+	TimelineDecorations []FlowerTimelineDecoration  `json:"timeline_decorations,omitempty"`
+	NextOrdinal         int64                       `json:"next_ordinal,omitempty"`
+	HasMore             bool                        `json:"has_more,omitempty"`
+	RetainedFrom        int64                       `json:"retained_from,omitempty"`
+	GeneratedAtMs       int64                       `json:"generated_at_ms"`
 }
 
 type CreateThreadRequest struct {

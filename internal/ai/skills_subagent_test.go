@@ -375,9 +375,9 @@ func prepareSubagentPermissionSnapshot(t *testing.T, r *run) {
 		t.Cleanup(func() { _ = store.Close() })
 		r.threadsDB = store
 	}
-	if resolved, err := r.resolveSubagentModelGateway(); err == nil {
-		webSearchCapability := resolveProviderWebSearchCapability(resolved.provider, strings.TrimSpace(resolved.modelName))
-		if enableFlowerWebSearchTool(resolved.provider, webSearchCapability) {
+	if resolved, err := r.resolveSubagentRunModel(context.Background()); err == nil {
+		webSearchCapability := resolveProviderWebSearchCapability(resolved.RunModel.Provider, strings.TrimSpace(resolved.ModelName))
+		if enableFlowerWebSearchTool(resolved.RunModel.Provider, webSearchCapability) {
 			webSearchCapability.RegisterTool = true
 		}
 		r.webSearchMode = webSearchCapability.Mode

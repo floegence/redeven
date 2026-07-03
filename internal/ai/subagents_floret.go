@@ -16,6 +16,7 @@ import (
 	flconfig "github.com/floegence/floret/config"
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
+	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/websearch"
@@ -140,6 +141,16 @@ type floretSubagentRuntime struct {
 	timelineQueued map[string]struct{}
 }
 
+type resolvedSubagentRunModel struct {
+	RunModel        resolvedRunModel
+	Capability      contextmodel.ModelCapability
+	ProviderType    string
+	ModelName       string
+	WireModelName   string
+	AdapterOverride ModelGateway
+	APIKey          string
+}
+
 func newFloretSubagentRuntime(parent *run) *floretSubagentRuntime {
 	runtime := &floretSubagentRuntime{}
 	runtime.attachParentRun(parent)
@@ -246,7 +257,11 @@ func (s *floretSubagentRuntime) ensureHost(ctx context.Context) (flruntime.Host,
 	}
 	s.mu.Unlock()
 
-	hostKey, err := parent.subagentHostConfigKey()
+	resolvedModel, err := parent.resolveSubagentRunModel(ctx)
+	if err != nil {
+		return nil, err
+	}
+	hostKey, err := parent.subagentHostConfigKey(ctx, resolvedModel)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +285,7 @@ func (s *floretSubagentRuntime) ensureHost(ctx context.Context) (flruntime.Host,
 		s.host = nil
 		s.hostKey = ""
 	}
-	host, err := s.newHostLocked(parent)
+	host, err := s.newHostLocked(parent, resolvedModel)
 	if err != nil {
 		return nil, err
 	}
@@ -355,31 +370,35 @@ func (s *floretSubagentRuntime) scheduleParentSubagentTimelineRefresh(threadID s
 	}()
 }
 
-func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, error) {
+func (s *floretSubagentRuntime) newHostLocked(parent *run, resolved resolvedSubagentRunModel) (flruntime.Host, error) {
 	if parent == nil {
 		return nil, errors.New("subagent runtime unavailable")
 	}
-	resolved, err := parent.resolveSubagentModelGateway()
-	if err != nil {
-		return nil, err
+	providerType := strings.ToLower(strings.TrimSpace(resolved.RunModel.Provider.Type))
+	if providerType == "" {
+		providerType = strings.ToLower(strings.TrimSpace(resolved.ProviderType))
 	}
-	providerType := strings.ToLower(strings.TrimSpace(resolved.provider.Type))
-	modelName := strings.TrimSpace(resolved.modelName)
-	adapter := resolved.adapterOverride
+	modelName := strings.TrimSpace(resolved.ModelName)
+	wireModelName := strings.TrimSpace(resolved.WireModelName)
+	if wireModelName == "" {
+		wireModelName = modelName
+	}
+	adapter := resolved.AdapterOverride
 	if adapter == nil {
-		adapter, err = newProviderAdapter(providerType, strings.TrimSpace(resolved.provider.BaseURL), strings.TrimSpace(resolved.apiKey), resolved.provider.StrictToolSchema)
+		var err error
+		adapter, err = newProviderAdapter(providerType, strings.TrimSpace(resolved.RunModel.Provider.BaseURL), strings.TrimSpace(resolved.APIKey), resolved.RunModel.Provider.StrictToolSchema)
 		if err != nil {
 			return nil, err
 		}
 	}
-	webSearchCapability := resolveProviderWebSearchCapability(resolved.provider, modelName)
-	if enableFlowerWebSearchTool(resolved.provider, webSearchCapability) {
+	webSearchCapability := resolveProviderWebSearchCapability(resolved.RunModel.Provider, modelName)
+	if enableFlowerWebSearchTool(resolved.RunModel.Provider, webSearchCapability) {
 		webSearchCapability.RegisterTool = true
 	}
 	parent.webSearchMode = webSearchCapability.Mode
 	parent.webSearchToolEnabled = webSearchCapability.RegisterTool
 
-	modelCapability := parent.resolveRunModelCapability(parent.currentModelID)
+	modelCapability := resolved.Capability
 	childRun := parent.subagentChildRun()
 	registry := NewInMemoryToolRegistry()
 	if err := registerBuiltInTools(registry, childRun); err != nil {
@@ -394,7 +413,7 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, erro
 	flProvider := newFloretProviderAdapter(
 		adapter,
 		providerType,
-		modelName,
+		wireModelName,
 		ProviderControls{
 			ReasoningSelection:  config.NormalizeAIReasoningSelection(parent.currentReasoning),
 			ReasoningCapability: modelCapability.ReasoningCapability,
@@ -413,10 +432,14 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, erro
 	if modelCapability.MaxContextTokens > 0 {
 		contextWindow = modelCapability.MaxContextTokens
 	}
+	maxOutputTokens := 0
+	if modelCapability.MaxOutputTokens > 0 {
+		maxOutputTokens = modelCapability.MaxOutputTokens
+	}
 	host, err := flruntime.NewHost(flruntime.HostOptions{
-		Config:               flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, 0), Reasoning: config.NormalizeAIReasoningSelection(parent.currentReasoning)},
+		Config:               flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, maxOutputTokens), Reasoning: config.NormalizeAIReasoningSelection(parent.currentReasoning)},
 		ModelGateway:         flProvider,
-		ModelGatewayIdentity: redevenFloretGatewayIdentity(resolved.provider.ID, modelName),
+		ModelGatewayIdentity: redevenFloretGatewayIdentity(resolved.RunModel.Provider.ID, wireModelName),
 		Store:                store,
 		Tools:                flTools,
 		Approver:             floretToolApproverForRun(childRun),
@@ -435,22 +458,83 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run) (flruntime.Host, erro
 	return host, nil
 }
 
-func (r *run) subagentHostConfigKey() (string, error) {
+func (r *run) resolveSubagentRunModel(ctx context.Context) (resolvedSubagentRunModel, error) {
+	if r == nil {
+		return resolvedSubagentRunModel{}, errors.New("nil run")
+	}
+	resolved, err := r.service.resolveRunModel(ctxOrBackground(ctx), r.cfg, "", r.currentModelID, r)
+	if err != nil {
+		return resolvedSubagentRunModel{}, err
+	}
+	capability := contextmodel.NormalizeCapability(resolved.Capability)
+	modelName := strings.TrimSpace(resolved.ModelName)
+	if modelName == "" {
+		modelName = strings.TrimSpace(resolved.ID)
+	}
+	if capability.ModelName == "" {
+		capability.ModelName = modelName
+	}
+	if capability.ProviderID == "" {
+		capability.ProviderID = strings.TrimSpace(resolved.ProviderID)
+	}
+	if capability.ProviderType == "" {
+		capability.ProviderType = strings.ToLower(strings.TrimSpace(resolved.Provider.Type))
+	}
+	if capability.WireModelName == "" {
+		capability.WireModelName = modelName
+	}
+	wireModelName := strings.TrimSpace(capability.WireModelName)
+	providerIDOK := strings.TrimSpace(resolved.ProviderID) != ""
+	gateway, err := r.resolveModelGatewayForModel(resolved.ID, strings.TrimSpace(resolved.ProviderID), providerIDOK)
+	if err != nil {
+		return resolvedSubagentRunModel{}, err
+	}
+	if strings.TrimSpace(gateway.userMessage) != "" {
+		return resolvedSubagentRunModel{}, gateway.err
+	}
+	if strings.TrimSpace(gateway.modelName) == "" && modelName == "" {
+		return resolvedSubagentRunModel{}, fmt.Errorf("missing model name for subagent")
+	}
+	providerType := strings.ToLower(strings.TrimSpace(resolved.Provider.Type))
+	if providerType == "" {
+		providerType = strings.ToLower(strings.TrimSpace(gateway.provider.Type))
+	}
+	if modelName == "" {
+		modelName = strings.TrimSpace(gateway.modelName)
+	}
+	if wireModelName == "" {
+		wireModelName = modelName
+	}
+	return resolvedSubagentRunModel{
+		RunModel:        resolved,
+		Capability:      capability,
+		ProviderType:    providerType,
+		ModelName:       modelName,
+		WireModelName:   wireModelName,
+		AdapterOverride: gateway.adapterOverride,
+		APIKey:          gateway.apiKey,
+	}, nil
+}
+
+func (r *run) subagentHostConfigKey(ctx context.Context, resolved resolvedSubagentRunModel) (string, error) {
 	if r == nil {
 		return "", errors.New("nil run")
 	}
-	resolved, err := r.resolveSubagentModelGateway()
-	if err != nil {
-		return "", err
+	if strings.TrimSpace(resolved.RunModel.ID) == "" {
+		var err error
+		resolved, err = r.resolveSubagentRunModel(ctx)
+		if err != nil {
+			return "", err
+		}
 	}
 	providerAPIKeyDigest := ""
-	if strings.TrimSpace(resolved.apiKey) != "" {
-		providerAPIKeyDigest = stableSecretDigest(resolved.apiKey)
+	if strings.TrimSpace(resolved.APIKey) != "" {
+		providerAPIKeyDigest = stableSecretDigest(resolved.APIKey)
 	}
-	webSearchCapability := resolveProviderWebSearchCapability(resolved.provider, strings.TrimSpace(resolved.modelName))
+	webSearchCapability := resolveProviderWebSearchCapability(resolved.RunModel.Provider, strings.TrimSpace(resolved.ModelName))
 	webSearchKeyDigest := ""
 	webSearchKeyState := "unused"
-	if enableFlowerWebSearchTool(resolved.provider, webSearchCapability) && r.resolveWebSearchKey != nil {
+	if enableFlowerWebSearchTool(resolved.RunModel.Provider, webSearchCapability) && r.resolveWebSearchKey != nil {
 		key, ok, err := r.resolveWebSearchKey(websearch.ProviderBrave)
 		switch {
 		case err != nil:
@@ -468,20 +552,22 @@ func (r *run) subagentHostConfigKey() (string, error) {
 	allowedTargets := append([]string(nil), targetPolicy.AllowedTargetIDs...)
 	sort.Strings(allowedTargets)
 	payload := map[string]any{
-		"model_id":             strings.TrimSpace(r.currentModelID),
-		"provider_id":          strings.TrimSpace(resolved.provider.ID),
-		"provider_type":        strings.TrimSpace(resolved.provider.Type),
-		"provider_base_url":    strings.TrimSpace(resolved.provider.BaseURL),
+		"model_id":             strings.TrimSpace(resolved.RunModel.ID),
+		"provider_id":          strings.TrimSpace(resolved.RunModel.Provider.ID),
+		"provider_type":        strings.TrimSpace(resolved.RunModel.Provider.Type),
+		"provider_base_url":    strings.TrimSpace(resolved.RunModel.Provider.BaseURL),
 		"provider_api_key":     providerAPIKeyDigest,
-		"model_name":           strings.TrimSpace(resolved.modelName),
+		"model_name":           strings.TrimSpace(resolved.ModelName),
+		"wire_model_name":      strings.TrimSpace(resolved.WireModelName),
+		"model_capability":     subagentModelCapabilityFingerprint(resolved.Capability),
 		"reasoning_selection":  config.NormalizeAIReasoningSelection(r.currentReasoning),
-		"strict_tool_schema":   resolved.provider.StrictToolSchema,
-		"web_search_mode":      providerWebSearchConfigKey(resolved.provider.WebSearch),
+		"strict_tool_schema":   resolved.RunModel.Provider.StrictToolSchema,
+		"web_search_mode":      providerWebSearchConfigKey(resolved.RunModel.Provider.WebSearch),
 		"web_search_resolved":  webSearchCapability.Mode,
-		"web_search_tool":      enableFlowerWebSearchTool(resolved.provider, webSearchCapability),
+		"web_search_tool":      enableFlowerWebSearchTool(resolved.RunModel.Provider, webSearchCapability),
 		"web_search_key_state": webSearchKeyState,
 		"web_search_api_key":   webSearchKeyDigest,
-		"adapter_override":     resolved.adapterOverride != nil,
+		"adapter_override":     resolved.AdapterOverride != nil,
 		"permission_type":      permissionTypeString(subagentPermissionLimit(r)),
 		"tool_allowlist":       allowlist,
 		"no_user_interaction":  r.noUserInteraction,
@@ -512,6 +598,16 @@ func stableSecretDigest(value string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+func subagentModelCapabilityFingerprint(capability contextmodel.ModelCapability) string {
+	capability = contextmodel.NormalizeCapability(capability)
+	body, err := json.Marshal(capability)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:])
+}
+
 func providerWebSearchConfigKey(in *config.AIProviderWebSearch) map[string]string {
 	if in == nil {
 		return nil
@@ -519,33 +615,6 @@ func providerWebSearchConfigKey(in *config.AIProviderWebSearch) map[string]strin
 	return map[string]string{
 		"mode": strings.ToLower(strings.TrimSpace(in.Mode)),
 	}
-}
-
-func (r *run) resolveSubagentModelGateway() (resolvedRunModelGateway, error) {
-	if r == nil {
-		return resolvedRunModelGateway{}, errors.New("nil run")
-	}
-	modelID := strings.TrimSpace(r.currentModelID)
-	if modelID == "" && r.cfg != nil {
-		if def := strings.TrimSpace(r.cfg.CurrentModelID); def != "" && r.cfg.IsAllowedModelID(def) {
-			modelID = def
-		}
-	}
-	if modelID == "" {
-		return resolvedRunModelGateway{}, fmt.Errorf("missing model for subagent")
-	}
-	providerID, _, ok := strings.Cut(modelID, "/")
-	resolved, err := r.resolveModelGatewayForModel(modelID, strings.TrimSpace(providerID), ok)
-	if err != nil {
-		return resolvedRunModelGateway{}, err
-	}
-	if strings.TrimSpace(resolved.userMessage) != "" {
-		return resolvedRunModelGateway{}, resolved.err
-	}
-	if strings.TrimSpace(resolved.modelName) == "" {
-		return resolvedRunModelGateway{}, fmt.Errorf("missing model name for subagent")
-	}
-	return resolved, nil
 }
 
 func (r *run) subagentChildRun() *run {
@@ -826,7 +895,7 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 	if err != nil {
 		return nil, err
 	}
-	if err := s.requireCurrentHostForSpawn(parent); err != nil {
+	if err := s.requireCurrentHostForSpawn(ctx, parent); err != nil {
 		return nil, err
 	}
 	agentType := normalizeSubagentAgentType(anyToString(args["agent_type"]))
@@ -1737,11 +1806,11 @@ func (s *floretSubagentRuntime) sendInput(ctx context.Context, _ string, args ma
 	}), nil
 }
 
-func (s *floretSubagentRuntime) requireCurrentHostForSpawn(parent *run) error {
+func (s *floretSubagentRuntime) requireCurrentHostForSpawn(ctx context.Context, parent *run) error {
 	if s == nil || parent == nil {
 		return errors.New("subagent runtime unavailable")
 	}
-	want, err := parent.subagentHostConfigKey()
+	want, err := parent.subagentHostConfigKey(ctx, resolvedSubagentRunModel{})
 	if err != nil {
 		return err
 	}
@@ -2107,15 +2176,212 @@ func isFloretSubagentNotFoundError(err error) bool {
 }
 
 func flowerSubagentDetailResponse(detail flruntime.SubAgentDetail) FlowerSubagentDetailResponse {
+	contextUsage := flowerSubagentDetailContextUsage(detail.Context)
+	contextCompactions := flowerSubagentDetailContextCompactions(detail.Context)
+	timelineDecorations := flowerSubagentDetailTimelineDecorations(detail, contextCompactions)
 	return FlowerSubagentDetailResponse{
-		Summary:       flowerSubagentSummary(detail.Snapshot),
-		Timeline:      flowerSubagentTimelineRows(detail.Events),
-		Activity:      flowerSubagentActivityBlockValue(detail.ActivityTimeline),
-		NextOrdinal:   detail.NextOrdinal,
-		HasMore:       detail.HasMore,
-		RetainedFrom:  detail.RetainedFrom,
-		GeneratedAtMs: timeUnixMS(detail.GeneratedAt),
+		Summary:             flowerSubagentSummary(detail.Snapshot),
+		Timeline:            flowerSubagentTimelineRows(detail.Events),
+		Activity:            flowerSubagentActivityBlockValue(detail.ActivityTimeline),
+		ContextUsage:        contextUsage,
+		ContextCompactions:  contextCompactions,
+		TimelineDecorations: timelineDecorations,
+		NextOrdinal:         detail.NextOrdinal,
+		HasMore:             detail.HasMore,
+		RetainedFrom:        detail.RetainedFrom,
+		GeneratedAtMs:       timeUnixMS(detail.GeneratedAt),
 	}
+}
+
+func flowerSubagentDetailContextUsage(contextBlock flruntime.SubAgentDetailContext) *FlowerContextUsage {
+	if contextBlock.Usage == nil {
+		return nil
+	}
+	usage := flowerContextUsageFromFloret(contextBlock.Usage, strings.TrimSpace(contextBlock.Usage.RunID))
+	return &usage
+}
+
+func flowerSubagentDetailContextCompactions(contextBlock flruntime.SubAgentDetailContext) []FlowerContextCompaction {
+	if len(contextBlock.Compactions) == 0 {
+		return nil
+	}
+	out := make([]FlowerContextCompaction, 0, len(contextBlock.Compactions))
+	for _, compaction := range contextBlock.Compactions {
+		projected := flowerContextCompactionFromSubagentDetail(compaction)
+		if strings.TrimSpace(projected.OperationID) == "" {
+			continue
+		}
+		out = append(out, projected)
+	}
+	return out
+}
+
+func flowerContextCompactionFromSubagentDetail(compaction flruntime.SubAgentDetailContextCompaction) FlowerContextCompaction {
+	updatedAt := compaction.ObservedAt.UnixMilli()
+	if updatedAt <= 0 {
+		updatedAt = 0
+	}
+	return FlowerContextCompaction{
+		OperationID:         strings.TrimSpace(compaction.OperationID),
+		RunID:               strings.TrimSpace(compaction.RunID),
+		StepIndex:           compaction.Step,
+		Phase:               normalizeFlowerContextCompactionPhase(compaction.Phase),
+		Status:              normalizeFlowerContextCompactionStatus(compaction.Status),
+		Trigger:             strings.TrimSpace(compaction.Trigger),
+		Reason:              strings.TrimSpace(compaction.Reason),
+		TokensBefore:        compaction.TokensBefore,
+		TokensAfterEstimate: compaction.TokensAfterEstimate,
+		Error:               strings.TrimSpace(compaction.Error),
+		UpdatedAtMs:         updatedAt,
+	}
+}
+
+func flowerSubagentDetailTimelineDecorations(detail flruntime.SubAgentDetail, compactions []FlowerContextCompaction) []FlowerTimelineDecoration {
+	if len(compactions) == 0 {
+		return nil
+	}
+	anchorsByOperationID := flowerSubagentDetailCompactionAnchors(detail)
+	if len(anchorsByOperationID) == 0 {
+		return nil
+	}
+	out := make([]FlowerTimelineDecoration, 0, len(compactions))
+	ordinalByAnchor := map[string]int{}
+	for _, compaction := range compactions {
+		operationID := strings.TrimSpace(compaction.OperationID)
+		anchor, ok := anchorsByOperationID[operationID]
+		if !ok {
+			continue
+		}
+		anchorKey := strings.Join([]string{
+			anchor.TargetKind,
+			anchor.MessageID,
+			fmt.Sprint(valueOrDefaultInt(anchor.BlockIndex, -1)),
+			anchor.ActivityItemID,
+			anchor.Edge,
+		}, "\x1f")
+		ordinal := ordinalByAnchor[anchorKey]
+		ordinalByAnchor[anchorKey] = ordinal + 1
+		out = append(out, FlowerTimelineDecoration{
+			DecorationID: "subagent-context-compaction:" + operationID,
+			Kind:         "context_compaction",
+			Anchor:       anchor,
+			Ordinal:      ordinal,
+			Compaction:   compaction,
+		})
+	}
+	return out
+}
+
+func flowerSubagentDetailCompactionAnchors(detail flruntime.SubAgentDetail) map[string]FlowerTimelineAnchor {
+	out := map[string]FlowerTimelineAnchor{}
+	threadID := strings.TrimSpace(string(detail.Snapshot.ThreadID))
+	if threadID == "" {
+		return out
+	}
+	events := append([]flruntime.SubAgentDetailEvent(nil), detail.Events...)
+	sort.SliceStable(events, func(i, j int) bool {
+		return events[i].Ordinal < events[j].Ordinal
+	})
+	latestMessageByTurn := map[string]string{}
+	for _, event := range events {
+		if messageID := flowerSubagentVisibleMessageID(threadID, event); messageID != "" {
+			latestMessageByTurn[strings.TrimSpace(string(event.TurnID))] = messageID
+		}
+		if event.Compaction == nil {
+			continue
+		}
+		turnID := strings.TrimSpace(string(event.TurnID))
+		if turnID == "" {
+			continue
+		}
+		operationID := strings.TrimSpace(event.Metadata["operation_id"])
+		if operationID == "" {
+			operationID = strings.TrimSpace(event.Metadata["context_operation_id"])
+		}
+		if operationID == "" {
+			continue
+		}
+		messageID := strings.TrimSpace(latestMessageByTurn[turnID])
+		if messageID == "" {
+			continue
+		}
+		out[operationID] = FlowerTimelineAnchor{
+			TargetKind: "message",
+			MessageID:  messageID,
+			Edge:       "after",
+		}
+	}
+	return out
+}
+
+func flowerSubagentVisibleMessageID(threadID string, event flruntime.SubAgentDetailEvent) string {
+	switch event.Kind {
+	case flruntime.SubAgentDetailEventUserMessage:
+		if flowerSubagentRawDelegatedMission(event.Metadata) {
+			return ""
+		}
+	case flruntime.SubAgentDetailEventAssistantMessage, flruntime.SubAgentDetailEventError:
+	default:
+		return ""
+	}
+	text := ""
+	if event.Message != nil {
+		text = strings.TrimSpace(event.Message.Preview)
+	}
+	if text == "" {
+		text = strings.TrimSpace(event.Error)
+	}
+	if text == "" {
+		return ""
+	}
+	suffix := "message"
+	if event.Kind == flruntime.SubAgentDetailEventError {
+		suffix = "error"
+	}
+	return fmt.Sprintf("%s:%d:%s", flowerSubagentSafeIDPart(threadID), maxInt64(0, event.Ordinal), suffix)
+}
+
+func flowerSubagentRawDelegatedMission(metadata map[string]string) bool {
+	if strings.TrimSpace(metadata["raw_omitted"]) == "true" {
+		return false
+	}
+	return strings.TrimSpace(metadata["subagent_prompt_kind"]) == "delegated_mission"
+}
+
+func flowerSubagentSafeIDPart(value string) string {
+	value = strings.TrimSpace(value)
+	var b strings.Builder
+	invalid := false
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '.' || r == ':' || r == '-' {
+			b.WriteRune(r)
+			invalid = false
+			continue
+		}
+		if !invalid {
+			b.WriteByte('_')
+			invalid = true
+		}
+	}
+	out := b.String()
+	if out == "" {
+		return "subagent"
+	}
+	return out
+}
+
+func valueOrDefaultInt(value *int, fallback int) int {
+	if value == nil {
+		return fallback
+	}
+	return *value
+}
+
+func maxInt64(left int64, right int64) int64 {
+	if left > right {
+		return left
+	}
+	return right
 }
 
 func flowerSubagentSummary(snapshot flruntime.SubAgentSnapshot) FlowerSubagentSummary {

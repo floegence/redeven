@@ -698,4 +698,127 @@ describe('projectSubagentDetailThread', () => {
     expect(thread?.owner_kind).toBeUndefined();
     expect(thread?.read_only_reason).toContain('parent Flower thread');
   });
+
+  it('passes canonical context fields through without synthesizing row-only compaction dividers', () => {
+    const detail: FlowerSubagentDetail = {
+      summary: {
+        parent_thread_id: 'parent-1',
+        subagent_id: 'child-1',
+        thread_id: 'child-1',
+        task_name: 'Review context',
+        title: 'Review context',
+        agent_type: 'reviewer',
+        status: 'running',
+        can_send_input: false,
+        can_interrupt: true,
+        can_close: true,
+        created_at_ms: 100,
+        updated_at_ms: 300,
+      },
+      timeline: [
+        {
+          ordinal: 1,
+          kind: 'assistant_message',
+          created_at_ms: 100,
+          message: { role: 'assistant', text: 'Before compaction.' },
+        },
+        {
+          ordinal: 2,
+          kind: 'compaction',
+          created_at_ms: 150,
+          compaction: {
+            phase: 'complete',
+            trigger: 'pressure',
+            reason: 'near limit',
+            tokens_before: 900,
+            tokens_after_estimate: 350,
+          },
+        },
+      ],
+      model_io_status: {
+        phase: 'waiting_response',
+        run_id: 'child-run',
+        updated_at_ms: 200,
+      },
+      context_usage: {
+        run_id: 'child-run',
+        phase: 'projected_request',
+        input_tokens: 600,
+        context_window_tokens: 1000,
+        pressure_status: 'stable',
+        updated_at_ms: 200,
+      },
+      context_compactions: [{
+        operation_id: 'compact-child-1',
+        run_id: 'child-run',
+        phase: 'complete',
+        status: 'compacted',
+        trigger: 'pressure',
+        reason: 'near limit',
+        updated_at_ms: 220,
+      }],
+      generated_at_ms: 300,
+    };
+
+    const thread = projectSubagentDetailThread(detail, '', '');
+
+    expect(thread?.model_io_status?.phase).toBe('waiting_response');
+    expect(thread?.context_usage?.context_window_tokens).toBe(1000);
+    expect(thread?.context_compactions?.[0]?.operation_id).toBe('compact-child-1');
+    expect(thread?.timeline_decorations).toEqual([]);
+  });
+
+  it('uses backend canonical compaction decorations unchanged', () => {
+    const detail: FlowerSubagentDetail = {
+      summary: {
+        parent_thread_id: 'parent-1',
+        subagent_id: 'child-1',
+        thread_id: 'child-1',
+        task_name: 'Review context',
+        title: 'Review context',
+        agent_type: 'reviewer',
+        status: 'completed',
+        can_send_input: false,
+        can_interrupt: false,
+        can_close: true,
+        created_at_ms: 100,
+        updated_at_ms: 300,
+      },
+      timeline: [{
+        ordinal: 1,
+        kind: 'assistant_message',
+        created_at_ms: 100,
+        message: { role: 'assistant', text: 'Before compaction.' },
+      }],
+      context_compactions: [{
+        operation_id: 'compact-child-1',
+        run_id: 'child-run',
+        phase: 'complete',
+        status: 'compacted',
+        updated_at_ms: 220,
+      }],
+      timeline_decorations: [{
+        decoration_id: 'subagent-context-compaction:compact-child-1',
+        kind: 'context_compaction',
+        anchor: {
+          target_kind: 'message',
+          message_id: 'child-1:1:message',
+          edge: 'after',
+        },
+        ordinal: 0,
+        compaction: {
+          operation_id: 'compact-child-1',
+          run_id: 'child-run',
+          phase: 'complete',
+          status: 'compacted',
+          updated_at_ms: 220,
+        },
+      }],
+      generated_at_ms: 300,
+    };
+
+    const thread = projectSubagentDetailThread(detail, '', '');
+
+    expect(thread?.timeline_decorations).toEqual(detail.timeline_decorations);
+  });
 });

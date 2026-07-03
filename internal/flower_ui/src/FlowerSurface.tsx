@@ -5786,25 +5786,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const item = activeSubagentItem();
     return trimString(detail?.summary.task_description || item?.taskDescription || detail?.summary.task_name || item?.taskName || '');
   });
-  const subagentDetailHasRunningActivity = createMemo(() => (
-    subagentDetail()?.activity?.items.some((item) => item.status === 'running') ?? false
-  ));
-  const subagentDetailModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => {
-    const now = Date.now();
-    const runID = trimString(subagentDetail()?.summary.thread_id || activeSubagentID()) || 'subagent';
-    switch (subagentDetailActiveStatus()) {
-      case 'queued':
-        return { phase: 'preparing', run_id: runID, updated_at_ms: now };
-      case 'running':
-        return {
-          phase: subagentDetailHasRunningActivity() ? 'streaming' : 'waiting_response',
-          run_id: runID,
-          updated_at_ms: now,
-        };
-      default:
-        return null;
-    }
-  });
+  const subagentDetailModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => subagentDetail()?.model_io_status ?? null);
   const subagentDetailModelStatusLabel = createMemo(() => {
     const status = subagentDetailModelIOStatus();
     return status ? modelStatusLabel(status.phase) : '';
@@ -5979,23 +5961,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {subagentDetailLoadingMore() ? (subagentsCopy().loadingMore ?? 'Loading...') : (subagentsCopy().loadMore ?? 'Load more')}
             </button>
           </Show>
-          <div class="flower-subagent-detail-live-lane" role="status" aria-live="polite" aria-atomic="true">
-            <Show when={subagentDetailModelIOStatus()}>
-              {(status) => modelStatusIndicator(status(), subagentDetailModelStatusLabel())}
-            </Show>
-            <Show when={subagentDetailTailLoading()}>
-              <span class="flower-subagent-detail-tail-state">
-                {activityInlineLoader('flower-subagent-detail-tail-loader')}
-              </span>
-            </Show>
-            <Show when={subagentDetailTailError()}>
-              {(message) => (
-                <span class="flower-subagent-detail-tail-error">
-                  <AlertTriangle class="h-3.5 w-3.5" />
-                  <span>{message()}</span>
+          <div class="flower-chat-bottom-dock-track flower-subagent-detail-bottom-track">
+            <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
+              <Show when={subagentDetailModelIOStatus()}>
+                {(status) => modelStatusIndicator(status(), subagentDetailModelStatusLabel())}
+              </Show>
+              <Show when={subagentDetailTailLoading()}>
+                <span class="flower-subagent-detail-tail-state">
+                  {activityInlineLoader('flower-subagent-detail-tail-loader')}
                 </span>
-              )}
-            </Show>
+              </Show>
+              <Show when={subagentDetailTailError()}>
+                {(message) => (
+                  <span class="flower-subagent-detail-tail-error">
+                    <AlertTriangle class="h-3.5 w-3.5" />
+                    <span>{message()}</span>
+                  </span>
+                )}
+              </Show>
+            </div>
           </div>
         </div>
       </div>
