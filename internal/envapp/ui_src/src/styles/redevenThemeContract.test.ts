@@ -199,6 +199,25 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain('perspective: 1400px;');
   });
 
+  it('keeps git branch history expansion quiet and motion-aware', () => {
+    const src = readRedevenCss();
+
+    expect(src).toContain('.git-branch-history-row {');
+    expect(src).toContain('.git-branch-history-row--expanded {');
+    expect(src).toContain('.git-branch-history-details-row {');
+    expect(src).toContain('.git-branch-history-reveal {');
+    expect(src).toContain('grid-template-rows: 0fr;');
+    expect(src).toContain(".git-branch-history-reveal[data-state='open'] {");
+    expect(src).toContain('grid-template-rows: 1fr;');
+    expect(src).toContain(".git-branch-history-reveal[data-state='closing'] {");
+    expect(src).toContain('.git-branch-history-details::before {');
+    expect(src).toContain('.git-branch-history-files {');
+    expect(src).toContain('.git-branch-history-files__table :where(th, td):first-child');
+    expect(src).toContain('html.dark .git-branch-history-details-row {');
+    expect(src).toContain('@media (prefers-reduced-motion: reduce) {');
+    expect(src).toContain('.git-branch-history-reveal[data-state=\'closing\']');
+  });
+
   it('defines a non-interactive terminal work indicator with reduced-motion support', () => {
     const src = readRedevenCss();
 

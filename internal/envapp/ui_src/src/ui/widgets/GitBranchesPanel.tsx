@@ -6,6 +6,7 @@ import {
   createSignal,
   onCleanup,
   type Component,
+  type JSX,
 } from "solid-js";
 import { cn, useLayout, useNotification } from "@floegence/floe-webapp-core";
 import {
@@ -384,6 +385,7 @@ function branchStatusEmptyState(
 
 interface BranchCompareFilesTableProps {
   layout?: GitBranchHeaderLayout;
+  surface?: "framed" | "inline";
   items: GitCommitFileSummary[];
   selectedKey?: string;
   onOpenDiff?: (item: GitCommitFileSummary) => void;
@@ -455,12 +457,11 @@ function BranchCompareFilesCompactList(
 }
 
 function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
-  return (
-    <GitTableFrame class="flex min-h-0 flex-1 flex-col">
+  const content = () => (
       <Show
         when={props.items.length > 0}
         fallback={
-          <div class="px-4 py-8">
+          <div class={cn("px-4 py-8", props.surface === "inline" && "px-0 py-3")}>
             <GitSubtleNote>
               No changed files were found in this comparison.
             </GitSubtleNote>
@@ -472,7 +473,12 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
           fallback={
             <GitVirtualTable
               items={props.items}
-              tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[46rem] md:min-w-0`}
+              viewportClass={props.surface === "inline" ? "git-branch-history-files__viewport" : undefined}
+              tableClass={cn(
+                GIT_CHANGED_FILES_TABLE_CLASS,
+                "min-w-[34rem] sm:min-w-[46rem] md:min-w-0",
+                props.surface === "inline" && "git-branch-history-files__table",
+              )}
               header={
                 <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
                   <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
@@ -540,6 +546,18 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
           />
         </Show>
       </Show>
+  );
+
+  return props.surface === "inline" ? (
+    <div
+      class="git-branch-history-files flex min-h-0 flex-1 flex-col"
+      data-git-branch-commit-files-surface="inline"
+    >
+      {content()}
+    </div>
+  ) : (
+    <GitTableFrame class="flex min-h-0 flex-1 flex-col">
+      {content()}
     </GitTableFrame>
   );
 }
@@ -935,6 +953,285 @@ function summarizeCommitFileChanges(files: GitCommitFileSummary[]): {
   );
 }
 
+const BRANCH_HISTORY_REVEAL_CLOSE_MS = 220;
+
+type BranchHistoryRevealState = "opening" | "open" | "closing";
+
+interface BranchHistoryCommitDetailsRevealProps {
+  expanded: boolean;
+  children: JSX.Element;
+}
+
+function BranchHistoryCommitDetailsReveal(
+  props: BranchHistoryCommitDetailsRevealProps,
+) {
+  const [shouldRender, setShouldRender] = createSignal(props.expanded);
+  const [revealState, setRevealState] = createSignal<BranchHistoryRevealState>(
+    props.expanded ? "open" : "closing",
+  );
+  let closeTimer: number | undefined;
+  let openFrame: number | undefined;
+
+  const clearCloseTimer = () => {
+    if (closeTimer === undefined || typeof window === "undefined") return;
+    window.clearTimeout(closeTimer);
+    closeTimer = undefined;
+  };
+  const clearOpenFrame = () => {
+    if (
+      openFrame === undefined ||
+      typeof window === "undefined" ||
+      typeof window.cancelAnimationFrame !== "function"
+    ) {
+      return;
+    }
+    window.cancelAnimationFrame(openFrame);
+    openFrame = undefined;
+  };
+  const finishClose = () => {
+    if (props.expanded || revealState() !== "closing") return;
+    setShouldRender(false);
+    clearCloseTimer();
+  };
+
+  createEffect(() => {
+    if (props.expanded) {
+      clearCloseTimer();
+      setShouldRender(true);
+      setRevealState("opening");
+      clearOpenFrame();
+      if (
+        typeof window === "undefined" ||
+        typeof window.requestAnimationFrame !== "function"
+      ) {
+        setRevealState("open");
+        return;
+      }
+      openFrame = window.requestAnimationFrame(() => {
+        openFrame = undefined;
+        setRevealState("open");
+      });
+      return;
+    }
+
+    clearOpenFrame();
+    if (!shouldRender()) return;
+    setRevealState("closing");
+    clearCloseTimer();
+    if (typeof window === "undefined") {
+      finishClose();
+      return;
+    }
+    closeTimer = window.setTimeout(finishClose, BRANCH_HISTORY_REVEAL_CLOSE_MS);
+  });
+
+  onCleanup(() => {
+    clearCloseTimer();
+    clearOpenFrame();
+  });
+
+  return (
+    <Show when={shouldRender()}>
+      <tr
+        class="git-branch-history-details-row"
+        data-state={revealState()}
+        data-git-branch-history-details-row
+      >
+        <td colSpan={3} class="p-0 align-top">
+          <div
+            class="git-branch-history-reveal"
+            data-state={revealState()}
+            onTransitionEnd={(event) => {
+              if (event.target !== event.currentTarget) return;
+              finishClose();
+            }}
+          >
+            <div class="git-branch-history-reveal__content">
+              {props.children}
+            </div>
+          </div>
+        </td>
+      </tr>
+    </Show>
+  );
+}
+
+interface BranchHistoryCommitDetailsProps {
+  commit: GitCommitSummary;
+  detail?: BranchHistoryCommitDetailState;
+  files: GitCommitFileSummary[];
+  presentation?: GitCommitDiffPresentation;
+  fileTotals: ReturnType<typeof summarizeCommitFileChanges>;
+  layout?: GitBranchHeaderLayout;
+  selectedDiffKey?: string;
+  repoRootPath: string;
+  branchName?: string;
+  askFlowerLabel: string;
+  switchDetachedBusy?: boolean;
+  alreadyDetachedHere?: boolean;
+  onAskFlower?: GitBranchesPanelProps["onAskFlower"];
+  onSwitchDetached?: GitBranchesPanelProps["onSwitchDetached"];
+  onOpenDiff?: (item: GitCommitFileSummary) => void;
+}
+
+function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
+  const presentationBadge = () =>
+    gitCommitDiffPresentationBadge(props.presentation);
+  const presentationDetail = () =>
+    gitCommitDiffPresentationDetail(props.presentation);
+  const fileCountLabel = () =>
+    `${props.files.length} file${props.files.length === 1 ? "" : "s"}`;
+
+  return (
+    <div class="git-branch-history-details" data-git-branch-history-details>
+      <Show
+        when={props.detail && !props.detail.loading}
+        fallback={
+          <GitStatePane
+            loading
+            message="Loading changed files..."
+            class="git-branch-history-state min-h-[5rem] px-1 py-2"
+          />
+        }
+      >
+        <Show
+          when={!props.detail?.error}
+          fallback={
+            <GitStatePane
+              tone="error"
+              message={props.detail?.error}
+              class="git-branch-history-state min-h-[5rem] px-1 py-2"
+            />
+          }
+        >
+          <Show
+            when={props.files.length > 0}
+            fallback={
+              <div class="git-branch-history-note">
+                No changed files are available for this commit.
+              </div>
+            }
+          >
+            <div class="git-branch-history-detail-stack">
+              <div class="git-branch-history-summary">
+                <div class="git-branch-history-summary-main">
+                  <span
+                    class={cn(
+                      "git-branch-history-summary-dot",
+                      gitToneDotClass("info"),
+                    )}
+                    aria-hidden="true"
+                  />
+                  <div class="min-w-0">
+                    <div class="git-branch-history-summary-title">
+                      Files in Commit
+                    </div>
+                    <Show when={presentationDetail()}>
+                      {(detail) => (
+                        <div class="git-branch-history-summary-detail">
+                          {detail()}
+                        </div>
+                      )}
+                    </Show>
+                  </div>
+                </div>
+                <div class="git-branch-history-summary-meta">
+                  <GitMetaPill tone="neutral">{fileCountLabel()}</GitMetaPill>
+                  <Show when={presentationBadge()}>
+                    {(badge) => (
+                      <GitMetaPill tone="violet">{badge()}</GitMetaPill>
+                    )}
+                  </Show>
+                  <div class="git-branch-history-metrics">
+                    <GitChangeMetrics
+                      additions={props.fileTotals.additions}
+                      deletions={props.fileTotals.deletions}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div class="git-branch-history-actions">
+                <div class="git-branch-history-action-group">
+                  <Show when={props.onSwitchDetached}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      class={cn(
+                        "rounded-md bg-background/70",
+                        redevenSurfaceRoleClass("control"),
+                      )}
+                      disabled={
+                        Boolean(props.switchDetachedBusy) ||
+                        Boolean(props.alreadyDetachedHere)
+                      }
+                      onClick={() =>
+                        props.onSwitchDetached?.({
+                          commitHash: props.commit.hash,
+                          shortHash:
+                            props.commit.shortHash ||
+                            shortGitHash(props.commit.hash),
+                          source: "branch_history",
+                          branchName: props.branchName,
+                        })
+                      }
+                    >
+                      {props.switchDetachedBusy
+                        ? "Switching..."
+                        : props.alreadyDetachedHere
+                          ? "Already detached here"
+                          : "Switch --detach here"}
+                    </Button>
+                  </Show>
+                  <Show when={props.onAskFlower}>
+                    <GitShortcutOrbDock>
+                      <GitShortcutOrbButton
+                        label={props.askFlowerLabel}
+                        tone="flower"
+                        icon={FlowerIcon}
+                        size="sm"
+                        onClick={() =>
+                          props.onAskFlower?.({
+                            kind: "commit",
+                            repoRootPath: props.repoRootPath,
+                            location: "branch_history",
+                            branchName: props.branchName,
+                            commit: props.commit,
+                            files: props.files,
+                          })
+                        }
+                      />
+                    </GitShortcutOrbDock>
+                  </Show>
+                </div>
+                <div class="git-branch-history-hint">
+                  Select a file to inspect the diff.
+                </div>
+              </div>
+
+              <Show
+                when={props.onSwitchDetached && props.alreadyDetachedHere}
+              >
+                <div class="git-branch-history-note">
+                  Repository is already detached at this commit.
+                </div>
+              </Show>
+
+              <BranchCompareFilesTable
+                layout={props.layout}
+                surface="inline"
+                items={props.files}
+                selectedKey={props.selectedDiffKey}
+                onOpenDiff={props.onOpenDiff}
+              />
+            </div>
+          </Show>
+        </Show>
+      </Show>
+    </div>
+  );
+}
+
 function HistoryList(
   props: Pick<
     GitBranchesPanelProps,
@@ -1162,12 +1459,13 @@ function HistoryList(
                                   <>
                                     <tr
                                       class={cn(
-                                        "cursor-pointer border-b",
+                                        "git-branch-history-row cursor-pointer border-b",
                                         redevenDividerRoleClass(),
                                         expanded()
-                                          ? "bg-muted/30"
+                                          ? "git-branch-history-row--expanded"
                                           : "hover:bg-muted/25",
                                       )}
+                                      data-expanded={expanded() ? "true" : "false"}
                                       onClick={() => toggleCommit(commit.hash)}
                                     >
                                       <td class="px-3 py-2.5 align-top">
@@ -1246,226 +1544,45 @@ function HistoryList(
                                       </td>
                                     </tr>
 
-                                    <Show when={expanded()}>
-                                      <tr
-                                        class={cn(
-                                          "border-b bg-background/70 last:border-b-0",
-                                          redevenDividerRoleClass(),
-                                        )}
-                                      >
-                                        <td colSpan={3} class="px-3 pb-3 pt-0">
-                                          <div
-                                            class={cn(
-                                              "ml-7 mt-2 space-y-2 rounded-md bg-background/88 p-2.5",
-                                              redevenSurfaceRoleClass("inset"),
-                                            )}
-                                          >
-                                            <Show
-                                              when={!detail()?.loading}
-                                              fallback={
-                                                <GitStatePane
-                                                  loading
-                                                  message="Loading changed files..."
-                                                  surface
-                                                  class="min-h-[5rem] px-1 py-2"
-                                                />
-                                              }
-                                            >
-                                              <Show
-                                                when={!detail()?.error}
-                                                fallback={
-                                                  <GitStatePane
-                                                    tone="error"
-                                                    message={detail()?.error}
-                                                    surface
-                                                    class="min-h-[5rem] px-1 py-2"
-                                                  />
-                                                }
-                                              >
-                                                <Show
-                                                  when={files().length > 0}
-                                                  fallback={
-                                                    <GitSubtleNote>
-                                                      No changed files are
-                                                      available for this commit.
-                                                    </GitSubtleNote>
-                                                  }
-                                                >
-                                                  <div class="space-y-2">
-                                                    <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-                                                      <GitLabelBlock
-                                                        class="min-w-0 flex-1"
-                                                        label="Files in Commit"
-                                                        tone="info"
-                                                        meta={
-                                                          <>
-                                                            <GitMetaPill tone="neutral">
-                                                              {files().length}{" "}
-                                                              file
-                                                              {files()
-                                                                .length === 1
-                                                                ? ""
-                                                                : "s"}
-                                                            </GitMetaPill>
-                                                            <Show
-                                                              when={gitCommitDiffPresentationBadge(
-                                                                presentation(),
-                                                              )}
-                                                            >
-                                                              <GitMetaPill tone="violet">
-                                                                {gitCommitDiffPresentationBadge(
-                                                                  presentation(),
-                                                                )}
-                                                              </GitMetaPill>
-                                                            </Show>
-                                                            <div class="text-[11px] text-muted-foreground">
-                                                              <GitChangeMetrics
-                                                                additions={
-                                                                  fileTotals()
-                                                                    .additions
-                                                                }
-                                                                deletions={
-                                                                  fileTotals()
-                                                                    .deletions
-                                                                }
-                                                              />
-                                                            </div>
-                                                          </>
-                                                        }
-                                                      />
-                                                      <div class="flex flex-wrap items-center gap-2 sm:justify-end">
-                                                        <Show
-                                                          when={
-                                                            props.onSwitchDetached
-                                                          }
-                                                        >
-                                                          <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            class={cn(
-                                                              "rounded-md bg-background/80",
-                                                              redevenSurfaceRoleClass(
-                                                                "control",
-                                                              ),
-                                                            )}
-                                                            disabled={
-                                                              Boolean(
-                                                                props.switchDetachedBusy,
-                                                              ) ||
-                                                              alreadyDetachedHere()
-                                                            }
-                                                            onClick={() =>
-                                                              props.onSwitchDetached?.(
-                                                                {
-                                                                  commitHash:
-                                                                    commit.hash,
-                                                                  shortHash:
-                                                                    commit.shortHash ||
-                                                                    shortGitHash(
-                                                                      commit.hash,
-                                                                    ),
-                                                                  source:
-                                                                    "branch_history",
-                                                                  branchName:
-                                                                    props.selectedBranch
-                                                                      ? branchDisplayName(
-                                                                          props.selectedBranch,
-                                                                        )
-                                                                      : undefined,
-                                                                },
-                                                              )
-                                                            }
-                                                          >
-                                                            {props.switchDetachedBusy
-                                                              ? "Switching..."
-                                                              : alreadyDetachedHere()
-                                                                ? "Already detached here"
-                                                                : "Switch --detach here"}
-                                                          </Button>
-                                                        </Show>
-                                                        <Show
-                                                          when={
-                                                            props.onAskFlower
-                                                          }
-                                                        >
-                                                          <GitShortcutOrbDock>
-                                                            <GitShortcutOrbButton
-                                                              label={i18n.t("git.changes.askFlower")}
-                                                              tone="flower"
-                                                              icon={FlowerIcon}
-                                                              size="sm"
-                                                              onClick={() =>
-                                                                props.onAskFlower?.(
-                                                                  {
-                                                                    kind: "commit",
-                                                                    repoRootPath:
-                                                                      repoRootPath(),
-                                                                    location:
-                                                                      "branch_history",
-                                                                    branchName:
-                                                                      props.selectedBranch
-                                                                        ? branchDisplayName(
-                                                                            props.selectedBranch,
-                                                                          )
-                                                                        : undefined,
-                                                                    commit,
-                                                                    files:
-                                                                      files(),
-                                                                  },
-                                                                )
-                                                              }
-                                                            />
-                                                          </GitShortcutOrbDock>
-                                                        </Show>
-                                                        <div class="text-[11px] text-muted-foreground">
-                                                          Select a file to
-                                                          inspect the diff.
-                                                        </div>
-                                                      </div>
-                                                    </div>
-                                                    <Show
-                                                      when={
-                                                        props.onSwitchDetached &&
-                                                        alreadyDetachedHere()
-                                                      }
-                                                    >
-                                                      <GitSubtleNote>
-                                                        Repository is already
-                                                        detached at this commit.
-                                                      </GitSubtleNote>
-                                                    </Show>
-                                                    <Show
-                                                      when={gitCommitDiffPresentationDetail(
-                                                        presentation(),
-                                                      )}
-                                                    >
-                                                      <GitSubtleNote>
-                                                        {gitCommitDiffPresentationDetail(
-                                                          presentation(),
-                                                        )}
-                                                      </GitSubtleNote>
-                                                    </Show>
-
-                                                    <BranchCompareFilesTable
-                                                      layout={props.layout}
-                                                      items={files()}
-                                                      selectedKey={selectedDiffKey()}
-                                                      onOpenDiff={(item) => {
-                                                        setDiffDialogItem(item);
-                                                        setDiffDialogCommitHash(
-                                                          commit.hash,
-                                                        );
-                                                        setDiffDialogOpen(true);
-                                                      }}
-                                                    />
-                                                  </div>
-                                                </Show>
-                                              </Show>
-                                            </Show>
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    </Show>
+                                    <BranchHistoryCommitDetailsReveal
+                                      expanded={expanded()}
+                                    >
+                                      <BranchHistoryCommitDetails
+                                        commit={commit}
+                                        detail={detail()}
+                                        files={files()}
+                                        presentation={presentation()}
+                                        fileTotals={fileTotals()}
+                                        layout={props.layout}
+                                        selectedDiffKey={selectedDiffKey()}
+                                        repoRootPath={repoRootPath()}
+                                        branchName={
+                                          props.selectedBranch
+                                            ? branchDisplayName(
+                                                props.selectedBranch,
+                                              )
+                                            : undefined
+                                        }
+                                        askFlowerLabel={i18n.t("git.changes.askFlower")}
+                                        switchDetachedBusy={
+                                          props.switchDetachedBusy
+                                        }
+                                        alreadyDetachedHere={
+                                          alreadyDetachedHere()
+                                        }
+                                        onSwitchDetached={
+                                          props.onSwitchDetached
+                                        }
+                                        onAskFlower={props.onAskFlower}
+                                        onOpenDiff={(item) => {
+                                          setDiffDialogItem(item);
+                                          setDiffDialogCommitHash(
+                                            commit.hash,
+                                          );
+                                          setDiffDialogOpen(true);
+                                        }}
+                                      />
+                                    </BranchHistoryCommitDetailsReveal>
                                   </>
                                 );
                               }}

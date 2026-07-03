@@ -3522,6 +3522,9 @@ describe("GitBranchesPanel interactions", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const onAskFlower = vi.fn();
+    const [selectedCommitHash, setSelectedCommitHash] = createSignal(
+      "2222222222222222",
+    );
 
     mockGetCommitDetail.mockResolvedValue({
       repoRootPath: "/workspace/repo",
@@ -3583,7 +3586,8 @@ describe("GitBranchesPanel interactions", () => {
                       authorTimeMs: 1706003600000,
                     },
                   ]}
-                  selectedCommitHash="2222222222222222"
+                  selectedCommitHash={selectedCommitHash()}
+                  onSelectCommit={setSelectedCommitHash}
                   onAskFlower={onAskFlower}
                 />
               </div>
@@ -3615,6 +3619,25 @@ describe("GitBranchesPanel interactions", () => {
         "#git-branch-subview-panel-history:not([hidden])",
       ) as HTMLElement | null;
       expect(historyPanel).toBeTruthy();
+      const expandedToggle = historyPanel!.querySelector(
+        'button[aria-label="Collapse commit"]',
+      ) as HTMLButtonElement | null;
+      expect(expandedToggle?.getAttribute("aria-expanded")).toBe("true");
+      const detailRow = historyPanel!.querySelector(
+        "[data-git-branch-history-details-row]",
+      ) as HTMLElement | null;
+      expect(detailRow).toBeTruthy();
+      const details = historyPanel!.querySelector(
+        "[data-git-branch-history-details]",
+      ) as HTMLElement | null;
+      expect(details).toBeTruthy();
+      expect(details?.querySelector(".redeven-surface-inset")).toBeFalsy();
+      const inlineFiles = historyPanel!.querySelector(
+        "[data-git-branch-commit-files-surface='inline']",
+      ) as HTMLElement | null;
+      expect(inlineFiles).toBeTruthy();
+      expect(inlineFiles?.className).not.toContain("rounded");
+      expect(inlineFiles?.querySelector("table")).toBeTruthy();
       const askFlowerButton = historyPanel!.querySelector(
         'button[aria-label="Ask Flower"]',
       ) as HTMLButtonElement | null;
@@ -3659,6 +3682,15 @@ describe("GitBranchesPanel interactions", () => {
       expect(document.body.textContent).toContain("Commit Diff");
       expect(document.body.textContent).toContain("Merge Commit");
       expect(document.body.textContent).toContain("history updated");
+
+      expandedToggle!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      expect(selectedCommitHash()).toBe("");
+      expect(
+        historyPanel!
+          .querySelector("[data-git-branch-history-details-row]")
+          ?.getAttribute("data-state"),
+      ).toBe("closing");
     } finally {
       dispose();
     }
