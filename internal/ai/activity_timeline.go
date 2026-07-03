@@ -19,15 +19,26 @@ type ActivityTimelineBlock struct {
 	observation.ActivityTimeline
 }
 
+type activityTimelinePublicIdentity struct {
+	RunID    string
+	ThreadID string
+	TurnID   string
+	TraceID  string
+}
+
 func newActivityTimelineBlock(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction) ActivityTimelineBlock {
 	return newActivityTimelineBlockWithSidecars(timeline, fileActions, nil)
 }
 
 func newActivityTimelineBlockWithSidecars(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction, subagentActions map[string]FlowerActivitySubagentAction) ActivityTimelineBlock {
+	return newActivityTimelineBlockWithPublicIdentity(timeline, fileActions, subagentActions, activityTimelinePublicIdentity{})
+}
+
+func newActivityTimelineBlockWithPublicIdentity(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction, subagentActions map[string]FlowerActivitySubagentAction, publicIdentity activityTimelinePublicIdentity) ActivityTimelineBlock {
 	if timeline.SchemaVersion <= 0 {
 		timeline.SchemaVersion = observation.ActivityTimelineSchemaVersion
 	}
-	timeline = publicActivityTimelineForBlock(timeline)
+	timeline = publicActivityTimelineForBlock(timeline, publicIdentity)
 	return ActivityTimelineBlock{
 		Type:             activityTimelineBlockType,
 		FileActions:      cloneFlowerActivityFileActions(fileActions),
@@ -36,7 +47,24 @@ func newActivityTimelineBlockWithSidecars(timeline observation.ActivityTimeline,
 	}
 }
 
-func publicActivityTimelineForBlock(timeline observation.ActivityTimeline) observation.ActivityTimeline {
+func (r *run) newActivityTimelineBlockWithSidecars(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction, subagentActions map[string]FlowerActivitySubagentAction) ActivityTimelineBlock {
+	publicIdentity := activityTimelinePublicIdentity{}
+	if r != nil {
+		publicIdentity = activityTimelinePublicIdentity{
+			RunID:    strings.TrimSpace(r.id),
+			ThreadID: strings.TrimSpace(r.threadID),
+			TurnID:   strings.TrimSpace(r.messageID),
+			TraceID:  strings.TrimSpace(r.id),
+		}
+	}
+	return newActivityTimelineBlockWithPublicIdentity(timeline, fileActions, subagentActions, publicIdentity)
+}
+
+func publicActivityTimelineForBlock(timeline observation.ActivityTimeline, publicIdentity activityTimelinePublicIdentity) observation.ActivityTimeline {
+	timeline.RunID = strings.TrimSpace(publicIdentity.RunID)
+	timeline.ThreadID = strings.TrimSpace(publicIdentity.ThreadID)
+	timeline.TurnID = strings.TrimSpace(publicIdentity.TurnID)
+	timeline.TraceID = strings.TrimSpace(publicIdentity.TraceID)
 	if len(timeline.Items) == 0 {
 		return timeline
 	}
@@ -85,28 +113,12 @@ type FlowerActivitySubagentAction struct {
 	ThreadID          string                             `json:"thread_id,omitempty"`
 	SubagentID        string                             `json:"subagent_id,omitempty"`
 	ParentThreadID    string                             `json:"parent_thread_id,omitempty"`
-	TaskName          string                             `json:"task_name,omitempty"`
-	TaskDescription   string                             `json:"task_description,omitempty"`
-	Title             string                             `json:"title,omitempty"`
-	AgentType         string                             `json:"agent_type,omitempty"`
-	Status            string                             `json:"status,omitempty"`
-	StartedAtMS       int64                              `json:"started_at_ms,omitempty"`
-	CreatedAtMS       int64                              `json:"created_at_ms,omitempty"`
-	UpdatedAtMS       int64                              `json:"updated_at_ms,omitempty"`
 	Items             []FlowerActivitySubagentActionItem `json:"items,omitempty"`
 }
 
 type FlowerActivitySubagentActionItem struct {
-	ThreadID        string `json:"thread_id,omitempty"`
-	SubagentID      string `json:"subagent_id,omitempty"`
-	TaskName        string `json:"task_name,omitempty"`
-	TaskDescription string `json:"task_description,omitempty"`
-	Title           string `json:"title,omitempty"`
-	AgentType       string `json:"agent_type,omitempty"`
-	Status          string `json:"status,omitempty"`
-	StartedAtMS     int64  `json:"started_at_ms,omitempty"`
-	CreatedAtMS     int64  `json:"created_at_ms,omitempty"`
-	UpdatedAtMS     int64  `json:"updated_at_ms,omitempty"`
+	ThreadID   string `json:"thread_id,omitempty"`
+	SubagentID string `json:"subagent_id,omitempty"`
 }
 
 func cloneFlowerActivitySubagentActions(in map[string]FlowerActivitySubagentAction) map[string]FlowerActivitySubagentAction {
@@ -125,11 +137,6 @@ func cloneFlowerActivitySubagentActions(in map[string]FlowerActivitySubagentActi
 		value.ThreadID = strings.TrimSpace(value.ThreadID)
 		value.SubagentID = strings.TrimSpace(value.SubagentID)
 		value.ParentThreadID = strings.TrimSpace(value.ParentThreadID)
-		value.TaskName = strings.TrimSpace(value.TaskName)
-		value.TaskDescription = strings.TrimSpace(value.TaskDescription)
-		value.Title = strings.TrimSpace(value.Title)
-		value.AgentType = strings.TrimSpace(value.AgentType)
-		value.Status = strings.TrimSpace(value.Status)
 		value.Items = cloneFlowerActivitySubagentActionItems(value.Items)
 		if value.Operation == "" && value.Action == "" && value.ThreadID == "" && value.SubagentID == "" {
 			continue
@@ -150,12 +157,7 @@ func cloneFlowerActivitySubagentActionItems(in []FlowerActivitySubagentActionIte
 	for _, value := range in {
 		value.ThreadID = strings.TrimSpace(value.ThreadID)
 		value.SubagentID = strings.TrimSpace(value.SubagentID)
-		value.TaskName = strings.TrimSpace(value.TaskName)
-		value.TaskDescription = strings.TrimSpace(value.TaskDescription)
-		value.Title = strings.TrimSpace(value.Title)
-		value.AgentType = strings.TrimSpace(value.AgentType)
-		value.Status = strings.TrimSpace(value.Status)
-		if value.ThreadID == "" && value.SubagentID == "" && value.TaskName == "" && value.Title == "" {
+		if value.ThreadID == "" && value.SubagentID == "" {
 			continue
 		}
 		out = append(out, value)

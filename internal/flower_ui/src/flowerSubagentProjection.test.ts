@@ -89,10 +89,6 @@ describe('buildFlowerSubagentPanelItems', () => {
         delegation_runtime: 'floret',
         thread_id: 'child-1',
         subagent_id: 'child-1',
-        task_name: 'Review API',
-        agent_type: 'reviewer',
-        status: 'running',
-        updated_at_ms: 120,
       },
     })]));
 
@@ -131,10 +127,6 @@ describe('buildFlowerSubagentPanelItems', () => {
           delegation_runtime: 'floret',
           thread_id: 'child-1',
           subagent_id: 'child-1',
-          task_name: 'Review API',
-          agent_type: 'reviewer',
-          status: 'completed',
-          updated_at_ms: 120,
         },
       },
     }]));
@@ -143,9 +135,9 @@ describe('buildFlowerSubagentPanelItems', () => {
     expect(items[0]).toMatchObject({
       threadID: 'child-1',
       title: 'Review API',
-      agentType: 'reviewer',
       status: 'completed',
-      action: 'inspect',
+      agentType: '',
+      action: '',
       canOpen: true,
     });
     expect(items[0] as Record<string, unknown>).not.toHaveProperty('lastMessage');
@@ -190,10 +182,6 @@ describe('buildFlowerSubagentPanelItems', () => {
         delegation_runtime: 'floret',
         thread_id: 'child-1',
         subagent_id: 'child-1',
-        task_name: 'Implement worker',
-        agent_type: 'worker',
-        status: 'running',
-        updated_at_ms: 100,
       },
       'wait-child-1': {
         operation: 'subagents',
@@ -201,10 +189,6 @@ describe('buildFlowerSubagentPanelItems', () => {
         delegation_runtime: 'floret',
         thread_id: 'child-1',
         subagent_id: 'child-1',
-        task_name: 'Implement worker',
-        agent_type: 'worker',
-        status: 'completed',
-        updated_at_ms: 220,
       },
       'spawn-child-2': {
         operation: 'subagents',
@@ -212,10 +196,6 @@ describe('buildFlowerSubagentPanelItems', () => {
         delegation_runtime: 'floret',
         thread_id: 'child-2',
         subagent_id: 'child-2',
-        task_name: 'Review tests',
-        agent_type: 'reviewer',
-        status: 'running',
-        updated_at_ms: 180,
       },
     })]));
 
@@ -254,10 +234,6 @@ describe('buildFlowerSubagentPanelItems', () => {
         delegation_runtime: 'floret',
         thread_id: 'child-1',
         subagent_id: 'child-1',
-        task_name: 'Review prompt contract',
-        agent_type: 'reviewer',
-        status: 'running',
-        updated_at_ms: 100,
       },
       'wait-child-1': {
         operation: 'subagents',
@@ -265,10 +241,6 @@ describe('buildFlowerSubagentPanelItems', () => {
         delegation_runtime: 'floret',
         thread_id: 'child-1',
         subagent_id: 'child-1',
-        task_name: 'Review prompt contract',
-        agent_type: 'reviewer',
-        status: 'completed',
-        updated_at_ms: 100,
       },
     })]));
 
@@ -314,10 +286,6 @@ describe('buildFlowerSubagentPanelItems', () => {
         delegation_runtime: 'floret',
         thread_id: 'child-1',
         subagent_id: 'child-1',
-        task_name: 'Review prompt contract',
-        agent_type: 'reviewer',
-        status: 'running',
-        updated_at_ms: 100,
       },
       'close-child-1': {
         operation: 'subagents',
@@ -325,10 +293,6 @@ describe('buildFlowerSubagentPanelItems', () => {
         delegation_runtime: 'floret',
         thread_id: 'child-1',
         subagent_id: 'child-1',
-        task_name: 'Review prompt contract',
-        agent_type: 'reviewer',
-        status: 'canceled',
-        updated_at_ms: 220,
       },
     })]));
 

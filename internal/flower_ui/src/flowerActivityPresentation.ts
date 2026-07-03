@@ -531,35 +531,7 @@ function metaForItem(item: FlowerActivityItem): string {
 }
 
 function metaForTerminalItem(item: FlowerActivityItem): string {
-  const payload = item.payload ?? {};
-  const exit = payloadValue(payload, 'exit_code');
-  const duration = payloadValue(payload, 'duration_ms');
-  const timeout = payloadValue(payload, 'timed_out') === 'true' ? 'timed out' : '';
-  const parts = [
-    trimString(item.description),
-    ...chipText(item),
-    exit ? `exit ${exit}` : '',
-    duration ? `${duration}ms` : '',
-    timeout,
-  ].filter(Boolean);
-  return Array.from(new Set(parts)).join(' · ');
-}
-
-function sidecarRecord(value: FlowerActivitySubagentActionRecord | undefined): Readonly<Record<string, unknown>> {
-  return value && typeof value === 'object' ? value as Readonly<Record<string, unknown>> : {};
-}
-
-function subagentPayloadForItem(item: FlowerActivityItem, subagentAction?: FlowerActivitySubagentActionRecord): Readonly<Record<string, unknown>> {
-  const payload = item.payload ?? {};
-  if (!subagentAction) return payload;
-  const sidecar = sidecarRecord(subagentAction);
-  return {
-    ...payload,
-    ...sidecar,
-    operation: payloadValue(payload, 'operation') || payloadValue(sidecar, 'operation') || 'subagents',
-    action: payloadValue(payload, 'action') || payloadValue(sidecar, 'action'),
-    delegation_runtime: payloadValue(payload, 'delegation_runtime') || payloadValue(sidecar, 'delegation_runtime') || 'floret',
-  };
+  return trimString(item.description);
 }
 
 function isSubagentsActivityItem(item: FlowerActivityItem, subagentAction?: FlowerActivitySubagentActionRecord): boolean {
@@ -847,18 +819,32 @@ function subagentActionItems(payload: Readonly<Record<string, unknown>>): readon
   return nested.length > 0 ? nested : [payload];
 }
 
+function subagentRouteItems(sidecar?: FlowerActivitySubagentActionRecord): readonly Readonly<Record<string, unknown>>[] {
+  if (!sidecar) return [];
+  const records = asArray(sidecar.items)
+    .map((entry) => asRecord(entry))
+    .filter((record) => subagentThreadID(record) !== '');
+  if (records.length > 0) return records;
+  const direct = asRecord(sidecar);
+  return subagentThreadID(direct) ? [direct] : [];
+}
+
+function subagentRouteItemAt(routes: readonly Readonly<Record<string, unknown>>[], index: number): Readonly<Record<string, unknown>> {
+  return routes[index] ?? (routes.length === 1 && index === 0 ? routes[0] : {});
+}
+
 function subagentDetailItemFromRecord(
   record: Readonly<Record<string, unknown>>,
+  routeRecord: Readonly<Record<string, unknown>>,
   item: FlowerActivityItem,
   payload: Readonly<Record<string, unknown>>,
-  allowMessageActions: boolean,
   copy?: FlowerActivityPresentationCopy,
 ): FlowerActivitySubagentDetailItem | null {
   const rawStatus = payloadValue(record, 'status') || payloadValue(payload, 'status') || subagentStatusFromItemStatus(item.status);
   const normalizedStatus = normalizedSubagentStatus(rawStatus);
   const status = subagentDisplayStatus(rawStatus, copy);
-  const threadID = subagentThreadID(record);
-  const subagentID = subagentSubagentID(record);
+  const threadID = subagentThreadID(routeRecord);
+  const subagentID = subagentSubagentID(routeRecord);
   const name = subagentNameFromRecord(record);
   const description = subagentDescriptionFromRecord(record, payload);
   const agentType = payloadValue(record, 'agent_type') || payloadValue(payload, 'agent_type');
@@ -873,7 +859,7 @@ function subagentDetailItemFromRecord(
     ...(optionalNumericValue(record.started_at_ms) ? { started_at_ms: optionalNumericValue(record.started_at_ms) } : {}),
     ...(optionalNumericValue(record.created_at_ms) ? { created_at_ms: optionalNumericValue(record.created_at_ms) } : {}),
     ...(optionalNumericValue(record.updated_at_ms) ? { updated_at_ms: optionalNumericValue(record.updated_at_ms) } : {}),
-    ...(allowMessageActions && threadID ? {
+    ...(threadID ? {
       open_messages: {
         thread_id: threadID,
         subagent_id: subagentID || threadID,
@@ -897,12 +883,13 @@ function uniqueSubagentDetailItems(items: readonly FlowerActivitySubagentDetailI
 function subagentsDetailItemsFromPayload(
   item: FlowerActivityItem,
   payload: Readonly<Record<string, unknown>>,
-  allowMessageActions: boolean,
+  subagentAction?: FlowerActivitySubagentActionRecord,
   copy?: FlowerActivityPresentationCopy,
 ): readonly FlowerActivitySubagentDetailItem[] {
+  const routes = subagentRouteItems(subagentAction);
   return uniqueSubagentDetailItems(
     subagentActionItems(payload)
-      .map((record) => subagentDetailItemFromRecord(record, item, payload, allowMessageActions, copy))
+      .map((record, index) => subagentDetailItemFromRecord(record, subagentRouteItemAt(routes, index), item, payload, copy))
       .filter((entry): entry is FlowerActivitySubagentDetailItem => entry !== null),
   );
 }
@@ -958,9 +945,9 @@ function subagentsElapsedMode(action: string, items: readonly FlowerActivitySuba
   return 'final';
 }
 
-function subagentsDetailFromPayload(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>>, allowMessageActions: boolean, copy?: FlowerActivityPresentationCopy): FlowerActivitySubagentsDetail {
+function subagentsDetailFromPayload(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>>, subagentAction?: FlowerActivitySubagentActionRecord, copy?: FlowerActivityPresentationCopy): FlowerActivitySubagentsDetail {
   const action = payloadValue(payload, 'action');
-  const items = subagentsDetailItemsFromPayload(item, payload, allowMessageActions, copy);
+  const items = subagentsDetailItemsFromPayload(item, payload, subagentAction, copy);
   const firstStatus = items.find((entry) => entry.show_status)?.status ?? '';
   return {
     action,
@@ -972,8 +959,8 @@ function subagentsDetailFromPayload(item: FlowerActivityItem, payload: Readonly<
 }
 
 function presentationForSubagents(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy, subagentAction?: FlowerActivitySubagentActionRecord): FlowerActivityPresentation {
-  const payload = subagentPayloadForItem(item, subagentAction);
-  const detail = subagentsDetailFromPayload(item, payload, Boolean(subagentAction), copy);
+  const payload = item.payload ?? {};
+  const detail = subagentsDetailFromPayload(item, payload, subagentAction, copy);
   const titleText = subagentActionTitle(detail.action, detail.items, item);
   const title: FlowerActivityTitle = { kind: 'plain', text: titleText };
   const approvalLines: FlowerActivityDetailLine[] = [];

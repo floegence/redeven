@@ -44,18 +44,6 @@ function activitySubagentAction(timeline: FlowerActivityTimelineBlock, item: Flo
   return timeline.subagent_actions?.[trimString(item.item_id)];
 }
 
-function subagentPayloadForItem(item: FlowerActivityItem, sidecar: FlowerActivitySubagentAction | undefined): SnapshotSource {
-  const payload = item.payload ?? {};
-  if (!sidecar) return payload;
-  return {
-    ...payload,
-    ...asRecord(sidecar),
-    operation: payloadString(payload, 'operation') || payloadString(asRecord(sidecar), 'operation') || 'subagents',
-    action: payloadString(payload, 'action') || payloadString(asRecord(sidecar), 'action'),
-    delegation_runtime: payloadString(payload, 'delegation_runtime') || payloadString(asRecord(sidecar), 'delegation_runtime') || 'floret',
-  };
-}
-
 function scalarText(value: unknown): string {
   if (typeof value === 'string') return trimString(value);
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
@@ -162,15 +150,30 @@ function nestedSnapshots(payload: SnapshotSource): readonly SnapshotSource[] {
   return out;
 }
 
+function routeSnapshots(sidecar: FlowerActivitySubagentAction | undefined): readonly SnapshotSource[] {
+  if (!sidecar) return [];
+  const direct = asRecord(sidecar);
+  const records = Array.isArray(direct.items)
+    ? (direct.items as readonly unknown[]).map(asRecord).filter((record) => payloadString(record, 'thread_id', 'subagent_id') !== '')
+    : [];
+  if (records.length > 0) return records;
+  return payloadString(direct, 'thread_id', 'subagent_id') ? [direct] : [];
+}
+
+function routeSnapshotAt(routes: readonly SnapshotSource[], index: number): SnapshotSource {
+  return routes[index] ?? (routes.length === 1 && index === 0 ? routes[0] : {});
+}
+
 function itemFromSnapshot(
   source: SnapshotSource,
+  routeSource: SnapshotSource,
   activityItem: FlowerActivityItem,
   activityPayload: SnapshotSource,
   fallbackUpdatedAtMs: number,
   ownerThreadID: string,
 ): FlowerSubagentPanelItem | null {
-  const threadID = payloadString(source, 'thread_id', 'subagent_id') || payloadString(activityPayload, 'thread_id', 'subagent_id');
-  const subagentID = payloadString(source, 'subagent_id', 'thread_id') || payloadString(activityPayload, 'subagent_id', 'thread_id');
+  const threadID = payloadString(routeSource, 'thread_id', 'subagent_id');
+  const subagentID = payloadString(routeSource, 'subagent_id', 'thread_id');
   if (!threadID && !subagentID) return null;
   if (threadID && threadID === ownerThreadID) return null;
   const action = payloadString(activityPayload, 'action') || payloadString(source, 'action');
@@ -187,8 +190,10 @@ function itemFromSnapshot(
     || startedAtMs
     || fallbackUpdatedAtMs;
   const status = normalizeStatus(source.status, activityItem.status);
+  const key = threadID || subagentID;
+  if (!key) return null;
   return {
-    key: threadID || subagentID,
+    key,
     threadID,
     subagentID: subagentID || threadID,
     taskName,
@@ -204,14 +209,6 @@ function itemFromSnapshot(
     updatedAtMs,
     itemStatus: activityItem.status,
   };
-}
-
-function directItemFromActivity(item: FlowerActivityItem, payload: SnapshotSource, fallbackUpdatedAtMs: number, ownerThreadID: string): FlowerSubagentPanelItem | null {
-  const nested = nestedSnapshots(payload);
-  if (nested.length > 0) {
-    return null;
-  }
-  return itemFromSnapshot(payload, item, payload, fallbackUpdatedAtMs, ownerThreadID);
 }
 
 function mergeItem(current: FlowerSubagentPanelItem | undefined, incoming: FlowerSubagentPanelItem): FlowerSubagentPanelItem {
@@ -261,20 +258,21 @@ function collectSubagentItemsFromTimeline(timeline: FlowerActivityTimelineBlock,
   for (const item of timeline.items) {
     const sidecar = activitySubagentAction(timeline, item);
     if (!isSubagentsActivityItem(item, sidecar)) continue;
-    const payload = subagentPayloadForItem(item, sidecar);
+    const payload = item.payload ?? {};
+    const routes = routeSnapshots(sidecar);
     const fallbackUpdatedAtMs = numberValue(item.ended_at_unix_ms)
       || numberValue(item.started_at_unix_ms)
       || numberValue(timeline.summary.duration_ms ? messageCreatedAtMs + timeline.summary.duration_ms : 0)
       || messageCreatedAtMs;
     const nested = nestedSnapshots(payload);
     if (nested.length > 0) {
-      nested.forEach((snapshot) => {
-        const panelItem = itemFromSnapshot(snapshot, item, payload, fallbackUpdatedAtMs, ownerThreadID);
+      nested.forEach((snapshot, index) => {
+        const panelItem = itemFromSnapshot(snapshot, routeSnapshotAt(routes, index), item, payload, fallbackUpdatedAtMs, ownerThreadID);
         if (panelItem) out.push(panelItem);
       });
       continue;
     }
-    const panelItem = directItemFromActivity(item, payload, fallbackUpdatedAtMs, ownerThreadID);
+    const panelItem = itemFromSnapshot(payload, routeSnapshotAt(routes, 0), item, payload, fallbackUpdatedAtMs, ownerThreadID);
     if (panelItem) out.push(panelItem);
   }
   return out;

@@ -59,7 +59,7 @@ describe('presentFlowerActivityItem', () => {
 
     expect(presentation.label).toBe('npm run build -- --mode production');
     expect(presentation.title).toEqual({ kind: 'command', command: 'npm run build -- --mode production' });
-    expect(presentation.meta).toContain('exit 0');
+    expect(presentation.meta).not.toContain('exit 0');
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'terminal_output',
       terminal: {
@@ -163,7 +163,7 @@ describe('presentFlowerActivityItem', () => {
     });
   });
 
-  it('keeps real running descriptions in compact meta text', () => {
+  it('keeps real running descriptions without terminal execution chips in compact meta text', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',
       status: 'running',
@@ -174,8 +174,8 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.meta).toContain('512ms');
     expect(presentation.meta).toContain('Compiling the workspace');
+    expect(presentation.meta).not.toContain('512ms');
   });
 
   it('keeps the generic fallback title independent from tool_name', () => {
@@ -235,7 +235,7 @@ describe('presentFlowerActivityItem', () => {
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Reading contracts');
   });
 
-  it('renders subagent timeline activity from sidecar metadata without Flower fields in payload', () => {
+  it('renders subagent timeline activity from visible payload joined with routing sidecar', () => {
     const presentation = presentFlowerActivityItem(item({
       item_id: 'subagent:review-api',
       tool_name: 'subagents',
@@ -245,7 +245,7 @@ describe('presentFlowerActivityItem', () => {
         thread_id: 'child-thread-1',
         task_name: 'Review API boundary',
         task_description: 'Review the API boundary and identify contract risks.',
-        host_profile_ref: 'reviewer',
+        agent_type: 'reviewer',
         fork_mode: 'none',
         status: 'completed',
       },
@@ -256,10 +256,6 @@ describe('presentFlowerActivityItem', () => {
         delegation_runtime: 'floret',
         thread_id: 'child-thread-1',
         subagent_id: 'child-thread-1',
-        task_name: 'Review API boundary',
-        task_description: 'Review the API boundary and identify contract risks.',
-        agent_type: 'reviewer',
-        status: 'completed',
       },
     });
 

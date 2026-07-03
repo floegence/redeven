@@ -260,8 +260,6 @@ const FLOWER_SURFACE_LAYER = {
   subagentWindow: 160,
   contextPreview: 162,
 } as const;
-const FLOWER_SUBAGENT_TERMINAL_STATUSES = new Set<FlowerSubagentPanelStatus>(['completed', 'failed', 'canceled', 'timed_out']);
-
 function isModelIOPresentationBoundary(kind: string): boolean {
   return kind === 'model_io.updated';
 }
@@ -615,10 +613,6 @@ function normalizeSubagentPanelStatus(value: unknown): FlowerSubagentPanelStatus
     default:
       return 'unknown';
   }
-}
-
-function isSubagentTerminalStatus(status: FlowerSubagentPanelStatus): boolean {
-  return FLOWER_SUBAGENT_TERMINAL_STATUSES.has(status);
 }
 
 export type FlowerThreadFocusRequest = Readonly<{
@@ -3466,8 +3460,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentDetailActiveStatus = createMemo<FlowerSubagentPanelStatus>(() => {
     const itemStatus = activeSubagentItem()?.status ?? 'unknown';
     const detailStatus = normalizeSubagentPanelStatus(subagentDetail()?.summary.status);
-    if (isSubagentTerminalStatus(itemStatus)) return itemStatus;
-    if (isSubagentTerminalStatus(detailStatus)) return detailStatus;
     if (detailStatus !== 'unknown') return detailStatus;
     return itemStatus;
   });
@@ -5851,7 +5843,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           >
             <div class="flower-subagents-dropdown-list" role="list">
               <For each={selectedSubagentItems()}>
-                {(item) => (
+                {(item, index) => (
                   <button
                     type="button"
                     class={cn(
@@ -5859,7 +5851,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       `flower-subagent-dropdown-row-${item.status}`,
                       activeSubagentID() === trimString(item.threadID || item.subagentID) && 'flower-subagent-dropdown-row-active',
                     )}
-                    data-flower-subagent-thread-id={item.threadID}
+                    data-flower-subagent-row={index()}
                     data-flower-subagent-status={item.status}
                     title={subagentsCopy().openThread}
                     onClick={() => void openSubagentDetail(item)}
@@ -5891,7 +5883,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const subagentDetailTimelineEntries = createMemo(() => buildFlowerTimelineEntries(subagentDetailThread()));
   const subagentDetailTimelineEntryKeys = createMemo(() => subagentDetailTimelineEntries().map((entry) => entry.key));
   const subagentDetailTimelineEntriesByKey = createMemo(() => new Map(subagentDetailTimelineEntries().map((entry) => [entry.key, entry] as const)));
-  const subagentDetailWindowTitle = createMemo(() => [activeSubagentTitle(), subagentSummaryStatus()].filter(Boolean).join(' · '));
+  const subagentDetailWindowTitle = createMemo(() => activeSubagentTitle());
   const showSubagentDetailScrollToLatestButton = createMemo(() => (
     Boolean(subagentDetailThread())
     && !subagentDetailScroll.nearBottom()
@@ -5912,7 +5904,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       draggable
       zIndex={FLOWER_SURFACE_LAYER.subagentWindow}
     >
-      <div class="flower-subagent-detail-surface" data-flower-subagent-detail-id={activeSubagentID()}>
+      <div class="flower-subagent-detail-surface" data-flower-subagent-detail="open">
         <div class="flower-subagent-detail-toolbar">
           <span class={cn('flower-subagent-status-pill', `flower-subagent-status-${subagentDetailActiveStatus()}`)}>
             {subagentStatusIndicator(subagentDetailActiveStatus())}

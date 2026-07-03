@@ -45,12 +45,22 @@ function selectedThreadID(root: ParentNode): string | null {
   return root.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') ?? null;
 }
 
+function subagentDropdownRow(root: ParentNode, title = 'Review API contract'): HTMLButtonElement | null {
+  return Array.from(root.querySelectorAll('.flower-subagent-dropdown-row'))
+    .find((row) => row.textContent?.includes(title)) as HTMLButtonElement | undefined ?? null;
+}
+
+function subagentDetailSurface(root: ParentNode): HTMLElement | null {
+  return root.querySelector('.flower-subagent-detail-surface[data-flower-subagent-detail="open"]') as HTMLElement | null;
+}
+
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
 }
 
-function parentThreadWithRunningSubagent(): FlowerThreadSnapshot {
+function parentThreadWithRunningSubagent(childStatus = 'running'): FlowerThreadSnapshot {
+  const toolStatus: FlowerActivityStatus = childStatus === 'failed' ? 'error' : childStatus === 'completed' ? 'success' : 'running';
   return thread({
     thread_id: 'thread-parent-subagents',
     title: 'Parent with subagents',
@@ -71,7 +81,7 @@ function parentThreadWithRunningSubagent(): FlowerThreadSnapshot {
               tool_name: 'subagents',
               renderer: 'structured',
               label: 'subagents',
-              status: 'running',
+              status: toolStatus,
               payload: {
                 action: 'spawn',
                 status: 'ok',
@@ -82,7 +92,7 @@ function parentThreadWithRunningSubagent(): FlowerThreadSnapshot {
                   task_name: 'Review API contract',
                   task_description: 'Review the API boundary.',
                   agent_type: 'reviewer',
-                  status: 'running',
+                  status: childStatus,
                 }],
               },
             })],
@@ -93,11 +103,6 @@ function parentThreadWithRunningSubagent(): FlowerThreadSnapshot {
                 delegation_runtime: 'floret',
                 thread_id: 'thread-child-review',
                 subagent_id: 'thread-child-review',
-                task_name: 'Review API contract',
-                task_description: 'Review the API boundary.',
-                agent_type: 'reviewer',
-                status: 'running',
-                updated_at_ms: 120,
               },
             },
           }),
@@ -133,13 +138,13 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => Boolean(runtime.querySelector('#flower-subagents-dropdown')));
 
     const dropdown = runtime.querySelector('#flower-subagents-dropdown') as HTMLElement;
-    const row = runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]') as HTMLElement;
+    const row = subagentDropdownRow(runtime);
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
     expect(dropdown.getAttribute('role')).toBe('dialog');
     expect(dropdown.getAttribute('aria-label')).toBe('Subagents');
-    expect(row.getAttribute('data-flower-subagent-status')).toBe('running');
-    expect(row.querySelector('.flower-activity-inline-loader')).toBeTruthy();
-    expect(row.querySelector('.flower-subagent-status-dot-running')).toBeNull();
+    expect(row?.getAttribute('data-flower-subagent-status')).toBe('running');
+    expect(row?.querySelector('.flower-activity-inline-loader')).toBeTruthy();
+    expect(row?.querySelector('.flower-subagent-status-dot-running')).toBeNull();
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await waitFor(() => !runtime.querySelector('#flower-subagents-dropdown'));
@@ -255,12 +260,12 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.querySelector('.flower-subagents-dropdown-layer')).toBeTruthy();
     expect(runtime.querySelector('.flower-subagents-dropdown')?.getAttribute('role')).toBe('dialog');
     expect(runtime.textContent).toContain('Review API contract');
-    expect(runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]')).toBeTruthy();
-    expect(runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"] .flower-activity-inline-loader')).toBeTruthy();
+    expect(subagentDropdownRow(runtime)).toBeTruthy();
+    expect(subagentDropdownRow(runtime)?.querySelector('.flower-activity-inline-loader')).toBeTruthy();
     expect(runtime.querySelector('.flower-subagent-status-dot-running')).toBeNull();
 
-    (runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-detail-id="thread-child-review"]')));
+    subagentDropdownRow(runtime)?.click();
+    await waitFor(() => Boolean(subagentDetailSurface(runtime)));
 
     expect(loadSubagentDetail).toHaveBeenCalledWith('thread-parent-subagents', 'thread-child-review', 0, 200);
     expect(loadThread).not.toHaveBeenCalledWith('thread-child-review');
@@ -292,10 +297,18 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => runtime.textContent?.includes('PASS ./internal/ai') ?? false);
     expect(runtime.textContent).toContain('PASS ./internal/ai');
     expect(runtime.textContent).toContain('Child handoff ready.');
-    const loadMore = Array.from(runtime.querySelectorAll('button'))
-      .find((button) => button.textContent?.includes('Load more')) as HTMLButtonElement;
-    expect(loadMore).toBeTruthy();
-    loadMore.click();
+    await waitFor(() => {
+      if (runtime.textContent?.includes('Subagent queued follow-up evidence.')) return true;
+      const button = Array.from(runtime.querySelectorAll('button'))
+        .find((candidate) => candidate.textContent?.includes('Load more')) as HTMLButtonElement | undefined;
+      return Boolean(button && !button.disabled);
+    });
+    if (!runtime.textContent?.includes('Subagent queued follow-up evidence.')) {
+      const loadMore = Array.from(runtime.querySelectorAll('button'))
+        .find((button) => button.textContent?.includes('Load more')) as HTMLButtonElement;
+      expect(loadMore).toBeTruthy();
+      loadMore.click();
+    }
     await waitFor(() => runtime.textContent?.includes('Subagent queued follow-up evidence.') ?? false);
     expect(loadSubagentDetail).toHaveBeenCalledWith('thread-parent-subagents', 'thread-child-review', 5, 200);
     expect(runtime.textContent).toContain('delegated_lifecycle');
@@ -315,7 +328,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(stopThread).not.toHaveBeenCalled();
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    await waitFor(() => !runtime.querySelector('[data-flower-subagent-detail-id="thread-child-review"]'));
+    await waitFor(() => !subagentDetailSurface(runtime));
 
     (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-subagents-dropdown')));
@@ -324,30 +337,30 @@ describe('FlowerSurface navigation activity', () => {
 
     (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-subagents-dropdown')));
-    (runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-detail-id="thread-child-review"]')));
+    subagentDropdownRow(runtime)?.click();
+    await waitFor(() => Boolean(subagentDetailSurface(runtime)));
     (runtime.querySelector('[data-floe-geometry-surface="floating-window"] button[aria-label="Close"]') as HTMLButtonElement).click();
-    await waitFor(() => !runtime.querySelector('[data-flower-subagent-detail-id="thread-child-review"]'));
+    await waitFor(() => !subagentDetailSurface(runtime));
 
     (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-subagents-dropdown')));
-    (runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-detail-id="thread-child-review"]')));
+    subagentDropdownRow(runtime)?.click();
+    await waitFor(() => Boolean(subagentDetailSurface(runtime)));
     (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
     await waitFor(() => selectedThreadID(runtime) === '');
-    expect(runtime.querySelector('[data-flower-subagent-detail-id="thread-child-review"]')).toBeNull();
+    expect(subagentDetailSurface(runtime)).toBeNull();
 
     (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
     await waitFor(() => selectedThreadID(runtime) === 'thread-parent-subagents');
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-subagents-spawn"]')));
     (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-subagents-dropdown')));
-    (runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-detail-id="thread-child-review"]')));
+    subagentDropdownRow(runtime)?.click();
+    await waitFor(() => Boolean(subagentDetailSurface(runtime)));
 
     (runtime.querySelector('[data-thread-id="thread-sibling"] button') as HTMLButtonElement).click();
     await waitFor(() => selectedThreadID(runtime) === 'thread-sibling');
-    expect(runtime.querySelector('[data-flower-subagent-detail-id="thread-child-review"]')).toBeNull();
+    expect(subagentDetailSurface(runtime)).toBeNull();
   });
 
   it('tails an open running subagent detail without overlapping requests', async () => {
@@ -368,9 +381,9 @@ describe('FlowerSurface navigation activity', () => {
     (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-subagents-spawn"]')));
     (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]')));
+    await waitFor(() => Boolean(subagentDropdownRow(runtime)));
     vi.useFakeTimers();
-    (runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]') as HTMLButtonElement).click();
+    subagentDropdownRow(runtime)?.click();
     await flushMicrotasks();
     expect(loadSubagentDetail).toHaveBeenCalledTimes(1);
 
@@ -476,8 +489,8 @@ describe('FlowerSurface navigation activity', () => {
     (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-subagents-spawn"]')));
     (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]')));
-    (runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(subagentDropdownRow(runtime)));
+    subagentDropdownRow(runtime)?.click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="shared-run-first"]')));
 
     const loadMore = Array.from(runtime.querySelectorAll('button'))
@@ -508,9 +521,9 @@ describe('FlowerSurface navigation activity', () => {
     (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-subagents-spawn"]')));
     (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]')));
+    await waitFor(() => Boolean(subagentDropdownRow(runtime)));
     vi.useFakeTimers();
-    (runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]') as HTMLButtonElement).click();
+    subagentDropdownRow(runtime)?.click();
     await flushMicrotasks();
     await vi.advanceTimersByTimeAsync(1500);
     await flushMicrotasks();
@@ -542,7 +555,7 @@ describe('FlowerSurface navigation activity', () => {
   });
 
   it('stops tailing when the subagent detail reports a terminal status', async () => {
-    const parentThread = parentThreadWithRunningSubagent();
+    const parentThread = parentThreadWithRunningSubagent('failed');
     const loadSubagentDetail = vi.fn(async () => subagentDetail({
       summary: {
         ...subagentDetail().summary,
@@ -563,9 +576,9 @@ describe('FlowerSurface navigation activity', () => {
     (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-subagents-spawn"]')));
     (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]')));
-    (runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-detail-id="thread-child-review"]')));
+    await waitFor(() => Boolean(subagentDropdownRow(runtime)));
+    subagentDropdownRow(runtime)?.click();
+    await waitFor(() => Boolean(subagentDetailSurface(runtime)));
 
     vi.useFakeTimers();
     await vi.advanceTimersByTimeAsync(1500);
@@ -595,9 +608,9 @@ describe('FlowerSurface navigation activity', () => {
     (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-subagents-spawn"]')));
     (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]')));
+    await waitFor(() => Boolean(subagentDropdownRow(runtime)));
     vi.useFakeTimers();
-    (runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]') as HTMLButtonElement).click();
+    subagentDropdownRow(runtime)?.click();
     await flushMicrotasks();
     expect(loadSubagentDetail).toHaveBeenCalledTimes(1);
 
@@ -606,7 +619,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(loadSubagentDetail).toHaveBeenCalledTimes(2);
     (runtime.querySelector('[data-floe-geometry-surface="floating-window"] button[aria-label="Close"]') as HTMLButtonElement).click();
     await flushMicrotasks();
-    expect(runtime.querySelector('[data-flower-subagent-detail-id="thread-child-review"]')).toBeNull();
+    expect(subagentDetailSurface(runtime)).toBeNull();
 
     staleTailPage.resolve(subagentDetail({
       timeline: [
@@ -671,14 +684,9 @@ describe('FlowerSurface navigation activity', () => {
                   delegation_runtime: 'floret',
                   thread_id: 'thread-child-review',
                   subagent_id: 'thread-child-review',
-                  task_name: 'Review API contract',
-                  task_description: 'Review the API boundary.',
-                  agent_type: 'reviewer',
-                  status: 'running',
-                  updated_at_ms: 120,
                 },
               },
-            }),
+          }),
           ],
         },
       ],
@@ -709,15 +717,15 @@ describe('FlowerSurface navigation activity', () => {
     (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-subagents-spawn"]')));
     (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]')));
-    (runtime.querySelector('[data-flower-subagent-thread-id="thread-child-review"]') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-detail-id="thread-child-review"]')));
+    await waitFor(() => Boolean(subagentDropdownRow(runtime)));
+    subagentDropdownRow(runtime)?.click();
+    await waitFor(() => Boolean(subagentDetailSurface(runtime)));
 
     listed = parentWithoutSubagents;
     (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
     await waitFor(() => runtime.textContent?.includes('No active child work remains.') ?? false);
 
-    expect(runtime.querySelector('[data-flower-subagent-detail-id="thread-child-review"]')).toBeNull();
+    expect(subagentDetailSurface(runtime)).toBeNull();
   });
 
   it('prioritizes read-only child state over waiting input submission', async () => {
@@ -1471,10 +1479,6 @@ describe('FlowerSurface navigation activity', () => {
                   items: [{
                     thread_id: 'thread-child-hidden',
                     subagent_id: 'thread-child-hidden',
-                    task_name: 'Review API contract',
-                    status: 'completed',
-                    started_at_ms: 6_000,
-                    updated_at_ms: 6_700,
                   }],
                 },
               },
@@ -1641,19 +1645,9 @@ describe('FlowerSurface navigation activity', () => {
                   delegation_runtime: 'floret',
                   thread_id: 'thread-child-hidden',
                   subagent_id: 'thread-child-hidden',
-                  task_name: 'Review API contract',
-                  task_description: 'Review the public API boundary.',
-                  agent_type: 'reviewer',
-                  status: 'completed',
-                  updated_at_ms: 1_700_000_000_100,
                   items: [{
                     thread_id: 'thread-child-hidden',
                     subagent_id: 'thread-child-hidden',
-                    task_name: 'Review API contract',
-                    task_description: 'Review the public API boundary.',
-                    agent_type: 'reviewer',
-                    status: 'completed',
-                    updated_at_ms: 1_700_000_000_100,
                   }],
                 },
               },
@@ -1695,7 +1689,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(openButton.getAttribute('aria-label')).toBe('Open subagent messages for Review API contract');
     expect(openButton.textContent).toBe('');
     openButton.click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-subagent-detail-id="thread-child-hidden"]')));
+    await waitFor(() => Boolean(subagentDetailSurface(runtime)));
     expect(loadSubagentDetail).toHaveBeenCalledWith('thread-subagent-details', 'thread-child-hidden', 0, 200);
     expect(selectedThreadID(runtime)).toBe('thread-subagent-details');
   });

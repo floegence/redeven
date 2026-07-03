@@ -2972,9 +2972,6 @@ describe('Flower live projection', () => {
               delegation_runtime: 'floret',
               thread_id: 'child-1',
               subagent_id: 'child-1',
-              task_name: 'Review API',
-              agent_type: 'reviewer',
-              status: 'completed',
             },
           },
         },
@@ -2995,7 +2992,6 @@ describe('Flower live projection', () => {
         'subagent:review-api': {
           action: 'inspect',
           thread_id: 'child-1',
-          task_name: 'Review API',
         },
       },
     });
@@ -3059,6 +3055,26 @@ describe('Flower live projection', () => {
       next_cursor: 1,
       retained_from_seq: 1,
     })).toThrow(/activity_timeline\.subagent_actions\.subagent:review-api\.context_mode/);
+
+    expect(() => mapFlowerLiveEvents({
+      events: [{
+        ...baseEvent,
+        payload: {
+          ...baseEvent.payload,
+          block: {
+            ...baseEvent.payload.block,
+            subagent_actions: {
+              'subagent:review-api': {
+                ...baseEvent.payload.block.subagent_actions['subagent:review-api'],
+                status: 'completed',
+              },
+            },
+          },
+        },
+      }],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    })).toThrow(/activity_timeline\.subagent_actions\.subagent:review-api\.status/);
   });
 
   it('rejects unsupported activity item statuses instead of falling back', () => {

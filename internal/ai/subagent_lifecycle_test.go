@@ -82,6 +82,8 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 	completedChildThreadID := "child_thread_completed"
 	completedChildRunID := "run_child_completed"
 	completedChildTurnID := "turn_child_completed"
+	completedFloretRunID := "floret_run_completed"
+	completedFloretTurnID := "floret_turn_completed"
 	runningChildThreadID := "child_thread_running"
 	runningChildRunID := "run_child_running"
 	runningChildTurnID := "turn_child_running"
@@ -96,20 +98,24 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 
 	host := &recordingFloretHost{
 		snapshots: []flruntime.SubAgentSnapshot{
-			{ParentThreadID: flruntime.ThreadID(parentThreadID), ThreadID: flruntime.ThreadID(completedChildThreadID), Status: flruntime.SubAgentStatusCompleted, LatestTurnID: flruntime.TurnID(completedChildTurnID)},
+			{ParentThreadID: flruntime.ThreadID(parentThreadID), ThreadID: flruntime.ThreadID(completedChildThreadID), Status: flruntime.SubAgentStatusCompleted, LatestTurnID: flruntime.TurnID(completedFloretTurnID)},
 			{ParentThreadID: flruntime.ThreadID(parentThreadID), ThreadID: flruntime.ThreadID(runningChildThreadID), Status: flruntime.SubAgentStatusRunning, LatestTurnID: flruntime.TurnID(runningChildTurnID)},
 		},
 		settleResult: flruntime.PendingToolSettlementResult{
-			Projection: terminalProcessTestProjection(completedChildRunID, completedChildThreadID, completedChildTurnID, "tool_completed"),
+			RunID:      flruntime.RunID(completedFloretRunID),
+			Projection: terminalProcessTestProjection(completedFloretRunID, completedChildThreadID, completedFloretTurnID, "tool_completed"),
 		},
 	}
 	completedChildRun := newTerminalProcessTestRun(workspace, svc, store, endpointID, completedChildThreadID, completedChildRunID, completedChildTurnID)
+	completedChildRun.settlementThreadID = completedChildThreadID
+	completedChildRun.settlementRunID = completedFloretRunID
+	completedChildRun.settlementTurnID = completedFloretTurnID
 	completedChildRun.setActiveFloretHost(host)
 	svc.runs = map[string]*run{completedChildRunID: completedChildRun}
 
 	runtime := newFloretSubagentRuntime(parent)
 	runtime.host = host
-	completedProc := startPendingTerminalProcessForTest(t, manager, workspace, endpointID, completedChildThreadID, completedChildRunID, completedChildTurnID, "tool_completed")
+	completedProc := startPendingTerminalProcessForTestWithSettlement(t, manager, workspace, endpointID, completedChildThreadID, completedChildRunID, completedChildTurnID, completedFloretRunID, completedFloretTurnID, "tool_completed")
 	runningProc := startPendingTerminalProcessForTest(t, manager, workspace, endpointID, runningChildThreadID, runningChildRunID, runningChildTurnID, "tool_running")
 
 	if err := runtime.cleanupTerminalProcessesForTerminalSubagents(context.Background()); err != nil {
@@ -123,7 +129,8 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 		t.Fatalf("settle requests=%d, want 1", len(settleRequests))
 	}
 	if settleRequests[0].ThreadID != flruntime.ThreadID(completedChildThreadID) ||
-		settleRequests[0].RunID != flruntime.RunID(completedChildRunID) ||
+		settleRequests[0].RunID != flruntime.RunID(completedFloretRunID) ||
+		settleRequests[0].TurnID != flruntime.TurnID(completedFloretTurnID) ||
 		settleRequests[0].ToolCallID != "tool_completed" ||
 		settleRequests[0].Status != flruntime.PendingToolSettlementCanceled {
 		t.Fatalf("settle request=%#v, want completed child terminal cancellation", settleRequests[0])
@@ -131,6 +138,12 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 	completedSnapshot := completedProc.Read(terminalProcessReadRequest{ProcessID: completedProc.id})
 	if completedSnapshot.Status != terminalProcessStatusCanceled {
 		t.Fatalf("completed child terminal status=%q, want canceled", completedSnapshot.Status)
+	}
+	if completedSnapshot.RunID != completedChildRunID ||
+		completedSnapshot.SettlementRunID != completedFloretRunID ||
+		completedSnapshot.TurnID != completedChildTurnID ||
+		completedSnapshot.SettlementTurnID != completedFloretTurnID {
+		t.Fatalf("completed child snapshot identities=%#v, want audit and Floret settlement identities preserved", completedSnapshot)
 	}
 	runningSnapshot := runningProc.Read(terminalProcessReadRequest{ProcessID: runningProc.id})
 	if runningSnapshot.Status != terminalProcessStatusRunning {
@@ -1550,7 +1563,7 @@ func TestSubagentChildEventRefreshesParentTimeline(t *testing.T) {
 	if action.Action != subagentActionInspect || action.DelegationRuntime != "floret" {
 		t.Fatalf("subagent action sidecar=%#v, want inspect/floret", action)
 	}
-	if action.ThreadID != childID || action.Status != subagentStatusCompleted || strings.TrimSpace(action.TaskDescription) == "" {
-		t.Fatalf("subagent action sidecar did not preserve child presentation metadata: %#v", action)
+	if action.ThreadID != childID || action.SubagentID != childID {
+		t.Fatalf("subagent action sidecar did not preserve child route target: %#v", action)
 	}
 }
