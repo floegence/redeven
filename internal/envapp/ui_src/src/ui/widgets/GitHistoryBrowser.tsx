@@ -288,7 +288,8 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                     <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
                       <div class="space-y-3">
                         <GitPanelFrame as="section">
-                          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+                          <div class="space-y-2">
+                            <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
                             <GitLabelBlock
                               class="min-w-0 flex-1"
                               label="Commit Overview"
@@ -324,49 +325,8 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                   </GitMetaPill>
                                 </Show>
                               </div>
-                              <Show when={commitBodyText()}>
-                                <div class="space-y-1 pt-0.5">
-                                  <GitSubtleNote>
-                                    <div
-                                      class="whitespace-pre-wrap break-words text-foreground"
-                                      style={
-                                        commitBodyExpanded()
-                                          ? undefined
-                                          : {
-                                              display: "-webkit-box",
-                                              "-webkit-box-orient": "vertical",
-                                              "-webkit-line-clamp": String(
-                                                COMMIT_BODY_PREVIEW_LINES,
-                                              ),
-                                              overflow: "hidden",
-                                            }
-                                      }
-                                    >
-                                      {commitBodyText()}
-                                    </div>
-                                  </GitSubtleNote>
-                                  <Show when={hasExpandableCommitBody()}>
-                                    <div class="flex justify-end">
-                                      <button
-                                        type="button"
-                                        aria-expanded={commitBodyExpanded()}
-                                        class="cursor-pointer text-[11px] text-muted-foreground transition-colors duration-150 hover:text-foreground"
-                                        onClick={() =>
-                                          setCommitBodyExpanded(
-                                            (value) => !value,
-                                          )
-                                        }
-                                      >
-                                        {commitBodyExpanded()
-                                          ? "Show less"
-                                          : "Show more"}
-                                      </button>
-                                    </div>
-                                  </Show>
-                                </div>
-                              </Show>
                             </GitLabelBlock>
-                            <div class="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end lg:w-auto">
+                            <div class="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start lg:w-auto lg:justify-end">
                               <Show when={props.onSwitchDetached}>
                                 <Button
                                   size="sm"
@@ -413,6 +373,53 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 </GitShortcutOrbDock>
                               </Show>
                             </div>
+                            </div>
+                            <Show when={commitBodyText()}>
+                              <div
+                                data-git-commit-body-group
+                                class="max-w-3xl space-y-1.5 pl-0 pt-0.5 sm:pl-4"
+                              >
+                                <GitSubtleNote class="max-w-full">
+                                  <div
+                                    data-git-commit-body
+                                    class="whitespace-pre-wrap break-words text-foreground"
+                                    style={
+                                      commitBodyExpanded()
+                                        ? undefined
+                                        : {
+                                            display: "-webkit-box",
+                                            "-webkit-box-orient": "vertical",
+                                            "-webkit-line-clamp": String(
+                                              COMMIT_BODY_PREVIEW_LINES,
+                                            ),
+                                            overflow: "hidden",
+                                          }
+                                    }
+                                  >
+                                    {commitBodyText()}
+                                  </div>
+                                </GitSubtleNote>
+                                <Show when={hasExpandableCommitBody()}>
+                                  <div class="flex justify-start">
+                                    <button
+                                      type="button"
+                                      data-git-commit-body-toggle
+                                      aria-expanded={commitBodyExpanded()}
+                                      class="cursor-pointer rounded px-1 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/[0.12] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+                                      onClick={() =>
+                                        setCommitBodyExpanded(
+                                          (value) => !value,
+                                        )
+                                      }
+                                    >
+                                      {commitBodyExpanded()
+                                        ? "Show less"
+                                        : "Show more"}
+                                    </button>
+                                  </div>
+                                </Show>
+                              </div>
+                            </Show>
                           </div>
                           <Show
                             when={

@@ -31,7 +31,6 @@ import {
   gitToneSelectableCardClass,
   workspaceSectionTone,
 } from './GitChrome';
-import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitCommitGraph } from './GitCommitGraph';
 import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from './gitWorkbenchScrollRegion';
 import { GitMetaPill, GitSection, GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
@@ -165,7 +164,7 @@ function selectorDescription(view: GitWorkbenchSubview): string {
       return 'Pick a commit to inspect it on the right.';
     case 'changes':
     default:
-      return 'Use section cards to open the matching file table in the main pane.';
+      return 'Use section rows to open the matching file table in the main pane.';
   }
 }
 
@@ -355,7 +354,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
         data-testid="git-sidebar-scroll-region"
         class="min-h-0 flex-1 overflow-auto overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]"
       >
-        <div class="space-y-1.5 sm:space-y-2">
+        <div class="space-y-2">
           <Show
               when={!props.repoInfoLoading}
               fallback={<GitStatePane loading message="Checking repository..." class="min-h-[4.5rem] py-3" />}
@@ -365,7 +364,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                 when={props.repoAvailable}
                 fallback={<div class="py-3 text-xs text-muted-foreground">{props.repoUnavailableReason || 'Current path is not inside a Git repository.'}</div>}
               >
-                <div class="space-y-1.5 sm:space-y-2">
+                <div class="space-y-2">
                   <div class="px-1 pb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/65">
                     {selectorLabel(activeSubview())}
                   </div>
@@ -379,8 +378,8 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                       fallback={<GitStatePane loading message="Loading workspace changes..." class="min-h-[4.5rem] py-3" />}
                     >
                       <Show when={!props.workspaceError} fallback={<div class="py-3 text-xs break-words text-error">{props.workspaceError}</div>}>
-                        <div class={cn('rounded-md border p-2.5', redevenSurfaceRoleClass('panelStrong'))}>
-                          <div class="flex items-start justify-between gap-2 px-0.5">
+                        <div class="rounded-md bg-muted/[0.08] px-2.5 py-2.5">
+                          <div class="flex items-start justify-between gap-2">
                             <div class="min-w-0 flex-1">
                               <div class="flex flex-wrap items-center gap-1.5">
                                 <div class="text-xs font-medium text-foreground">{headDisplay().label}</div>
@@ -400,7 +399,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                             </GitMetaPill>
                           </div>
 
-                          <div class="mt-2 grid grid-cols-1 gap-1">
+                          <div class="mt-2 grid grid-cols-1 gap-0.5">
                             <For each={WORKSPACE_VIEW_SECTIONS}>
                               {(section) => {
                                 const count = () => workspaceViewSectionCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary, section);
@@ -449,7 +448,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                       <Show when={!props.branchesError} fallback={<div class="py-3 text-xs break-words text-error">{props.branchesError}</div>}>
                         <GitSection label="Local" description="Branches in this checkout." aside={String(localBranchCount())} tone="brand">
                           <Show when={localBranchCount() > 0} fallback={<GitSubtleNote>No local branches.</GitSubtleNote>}>
-                            <div class="space-y-1">
+                            <div class="space-y-px">
                               <For each={props.branches?.local ?? []}>
                                 {(branch) => {
                                   const tone = () => gitBranchTone(branch);
@@ -459,7 +458,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                       ref={(element) => registerBranchButton(branch, element)}
                                       type="button"
                                       data-git-sidebar-branch-key={branchIdentity(branch)}
-                                      class={cn('w-full rounded-lg px-3 py-2.5 text-left', gitToneSelectableCardClass(tone(), active()))}
+                                      class={cn('w-full rounded px-2.5 py-1.5 text-left', gitToneSelectableCardClass(tone(), active()))}
                                       onClick={(event) => {
                                         captureSelectionScrollAnchor(branch, event.currentTarget);
                                         props.onSelectBranch?.(branch);
@@ -483,7 +482,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
 
                         <GitSection label="Remote" description="Tracking and shared refs." aside={String(remoteBranchCount())} tone="violet">
                           <Show when={remoteBranchCount() > 0} fallback={<GitSubtleNote>No remote branches.</GitSubtleNote>}>
-                            <div class="space-y-1">
+                            <div class="space-y-px">
                               <For each={props.branches?.remote ?? []}>
                                 {(branch) => {
                                   const active = () => props.selectedBranchKey === branchIdentity(branch);
@@ -492,7 +491,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                       ref={(element) => registerBranchButton(branch, element)}
                                       type="button"
                                       data-git-sidebar-branch-key={branchIdentity(branch)}
-                                      class={cn('w-full rounded-lg px-3 py-2.5 text-left', gitToneSelectableCardClass('violet', active()))}
+                                      class={cn('w-full rounded px-2.5 py-1.5 text-left', gitToneSelectableCardClass('violet', active()))}
                                       onClick={(event) => {
                                         captureSelectionScrollAnchor(branch, event.currentTarget);
                                         props.onSelectBranch?.(branch);

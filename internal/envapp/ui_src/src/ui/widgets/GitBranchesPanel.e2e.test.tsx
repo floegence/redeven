@@ -372,6 +372,13 @@ describe("GitBranchesPanel interactions", () => {
       const untrackedButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.includes("Untracked"),
       ) as HTMLButtonElement | undefined;
+      const conflictedButton = Array.from(host.querySelectorAll("button")).find(
+        (node) =>
+          node.getAttribute("aria-label")?.startsWith("Conflicted:"),
+      ) as HTMLButtonElement | undefined;
+      const stagedButton = Array.from(host.querySelectorAll("button")).find(
+        (node) => node.textContent?.includes("Staged"),
+      ) as HTMLButtonElement | undefined;
       const checkoutButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.includes("Checkout"),
       ) as HTMLButtonElement | undefined;
@@ -382,8 +389,12 @@ describe("GitBranchesPanel interactions", () => {
         (node) => node.textContent?.trim() === "Delete",
       ) as HTMLButtonElement | undefined;
       expect(changesButton).toBeTruthy();
+      expect(changesButton?.getAttribute("aria-pressed")).toBe("true");
+      expect(changesButton?.getAttribute("aria-label")).toBe(
+        "Changes: 2 files",
+      );
       expect(changesButton?.className).toContain("cursor-pointer");
-      expect(changesButton?.className).toContain("rounded-lg");
+      expect(changesButton?.className).toContain("rounded-md");
       expect(changesButton?.className).toContain(
         "redeven-surface-segmented__item--active",
       );
@@ -393,6 +404,12 @@ describe("GitBranchesPanel interactions", () => {
       );
       expect(unstagedButton).toBeFalsy();
       expect(untrackedButton).toBeFalsy();
+      expect(conflictedButton?.getAttribute("aria-pressed")).toBe("false");
+      expect(conflictedButton?.getAttribute("aria-label")).toBe(
+        "Conflicted: No files",
+      );
+      expect(stagedButton?.getAttribute("aria-pressed")).toBe("false");
+      expect(stagedButton?.getAttribute("aria-label")).toBe("Staged: 1 file");
       expect(checkoutButton).toBeTruthy();
       expect(mergeButton).toBeTruthy();
       expect(deleteButton).toBeTruthy();
@@ -1175,6 +1192,8 @@ describe("GitBranchesPanel interactions", () => {
         (node) => node.textContent?.includes("Staged"),
       ) as HTMLButtonElement | undefined;
       expect(stagedButton).toBeTruthy();
+      expect(stagedButton?.getAttribute("aria-pressed")).toBe("false");
+      expect(stagedButton?.getAttribute("aria-label")).toBe("Staged: 1 file");
 
       stagedButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flush();
@@ -1188,6 +1207,12 @@ describe("GitBranchesPanel interactions", () => {
       });
       expect(host.textContent).toContain("src/indexed.ts");
       expect(host.textContent).not.toContain("src/pending.ts");
+      const selectedStagedButton = Array.from(
+        host.querySelectorAll("button"),
+      ).find((node) => node.textContent?.includes("Staged")) as
+        | HTMLButtonElement
+        | undefined;
+      expect(selectedStagedButton?.getAttribute("aria-pressed")).toBe("true");
     } finally {
       dispose();
     }
@@ -1293,6 +1318,10 @@ describe("GitBranchesPanel interactions", () => {
         (node) => node.textContent?.includes("Staged"),
       ) as HTMLButtonElement | undefined;
       expect(stagedButton).toBeTruthy();
+      expect(stagedButton?.getAttribute("aria-pressed")).toBe("false");
+      expect(stagedButton?.getAttribute("aria-label")).toBe(
+        "Staged: No files",
+      );
 
       stagedButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flush();
@@ -1306,6 +1335,15 @@ describe("GitBranchesPanel interactions", () => {
       });
       expect(host.textContent).toContain("src/indexed.ts");
       expect(host.textContent).not.toContain("src/pending.ts");
+      const selectedStagedButton = Array.from(
+        host.querySelectorAll("button"),
+      ).find((node) => node.textContent?.includes("Staged")) as
+        | HTMLButtonElement
+        | undefined;
+      expect(selectedStagedButton?.getAttribute("aria-pressed")).toBe("true");
+      expect(selectedStagedButton?.getAttribute("aria-label")).toBe(
+        "Staged: 1 file",
+      );
     } finally {
       dispose();
     }
@@ -1413,6 +1451,21 @@ describe("GitBranchesPanel interactions", () => {
         limit: 200,
       });
       expect(host.textContent).toContain("src/conflict.ts");
+      const changesButton = Array.from(host.querySelectorAll("button")).find(
+        (node) => node.textContent?.includes("Changes"),
+      ) as HTMLButtonElement | undefined;
+      const conflictedButton = Array.from(host.querySelectorAll("button")).find(
+        (node) =>
+          node.getAttribute("aria-label")?.startsWith("Conflicted:"),
+      ) as HTMLButtonElement | undefined;
+      expect(changesButton?.getAttribute("aria-pressed")).toBe("false");
+      expect(changesButton?.getAttribute("aria-label")).toBe(
+        "Changes: No files",
+      );
+      expect(conflictedButton?.getAttribute("aria-pressed")).toBe("true");
+      expect(conflictedButton?.getAttribute("aria-label")).toBe(
+        "Conflicted: 1 file",
+      );
     } finally {
       dispose();
     }
@@ -2196,12 +2249,9 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
 
-      const controlBar = Array.from(host.querySelectorAll("div")).find(
-        (node) =>
-          node.className.includes("rounded-xl") &&
-          node.className.includes("redeven-surface-control") &&
-          node.className.includes("bg-muted/[0.12]"),
-      ) as HTMLDivElement | undefined;
+      const commandRail = host.querySelector(
+        "[data-git-branch-header-actions]",
+      ) as HTMLDivElement | null;
       const checkoutButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.includes("Checkout"),
       ) as HTMLButtonElement | undefined;
@@ -2217,31 +2267,32 @@ describe("GitBranchesPanel interactions", () => {
       const shortcutDock = host.querySelector(
         "[data-git-shortcut-dock]",
       ) as HTMLDivElement | null;
-      const actionsGroup = Array.from(
-        controlBar?.querySelectorAll("div") ?? [],
-      ).find(
-        (node) =>
-          node.className.includes("lg:ml-auto") &&
-          node.textContent?.includes("Actions") &&
-          node.textContent.includes("Checkout") &&
-          node.textContent.includes("Delete"),
-      ) as HTMLDivElement | undefined;
+      const actionsGroup = checkoutButton?.parentElement as
+        | HTMLDivElement
+        | undefined;
 
       expect(branchHeaderTopRow).toBeTruthy();
       defineElementWidth(branchHeaderTopRow!, 420);
       triggerResizeObservers();
       await flush();
 
-      expect(controlBar).toBeTruthy();
+      expect(commandRail).toBeTruthy();
       expect(shortcutDock).toBeTruthy();
       expect(actionsGroup).toBeTruthy();
+      expect(commandRail?.className).not.toContain("border-t");
+      expect(commandRail?.className).not.toContain("pt-2");
+      expect(commandRail?.className).toContain("flex-wrap");
+      expect(commandRail?.className).not.toContain("grid-cols-1");
+      expect(commandRail?.className).not.toContain("bg-muted/[0.08]");
+      expect(commandRail?.textContent).toContain("Checkout");
+      expect(commandRail?.textContent).not.toContain("Workspace");
+      expect(commandRail?.textContent).not.toContain("Actions");
       expect(actionsGroup?.className).toContain("flex");
       expect(actionsGroup?.className).toContain("flex-wrap");
-      expect(actionsGroup?.className).toContain("lg:ml-auto");
       expect(checkoutButton?.className).toContain("rounded-md");
       expect(deleteButton?.className).toContain("rounded-md");
       expect(checkoutButton?.className).toContain("cursor-pointer");
-      expect(deleteButton?.className).toContain("bg-destructive/[0.08]");
+      expect(deleteButton?.className).toContain("bg-destructive/[0.06]");
       expect(checkoutButton?.className).not.toContain("w-full");
       expect(deleteButton?.className).not.toContain("w-full");
       expect(tablistRow?.className).toContain("flex");
@@ -2251,15 +2302,14 @@ describe("GitBranchesPanel interactions", () => {
       expect(branchHeaderTopRow?.className).toContain("grid");
       expect(branchHeaderTopRow?.className).toContain("grid-cols-1");
       expect(branchHeaderTopRow?.className).not.toContain(
-        "grid-cols-[minmax(0,1fr)_auto]",
+        "grid-cols-[minmax(0,1fr)_auto_auto]",
       );
-      expect(branchHeaderTopRow?.textContent).not.toContain("Checkout");
       expect(tablist?.className).toContain("grid");
       expect(tablist?.className).toContain("w-full");
       expect(tablist?.className).toContain("grid-cols-2");
-      expect(tablist?.className).toContain("rounded-lg");
+      expect(tablist?.className).toContain("rounded-md");
       expect(tablist?.className).toContain("redeven-surface-segmented");
-      expect(tablist?.className).not.toContain("w-[15rem]");
+      expect(tablist?.className).not.toContain("w-[12rem]");
       const activeTab = host.querySelector(
         "#git-branch-subview-tab-status",
       ) as HTMLButtonElement | null;
@@ -2336,18 +2386,26 @@ describe("GitBranchesPanel interactions", () => {
         tablistRow?.parentElement as HTMLDivElement | null;
 
       expect(branchHeaderTopRow).toBeTruthy();
-      defineElementWidth(branchHeaderTopRow!, 860);
+      defineElementWidth(branchHeaderTopRow!, 1040);
       triggerResizeObservers();
       await flush();
 
       expect(branchHeaderTopRow?.className).toContain(
-        "grid-cols-[minmax(0,1fr)_auto]",
+        "grid-cols-[minmax(0,1fr)_auto_auto]",
       );
-      expect(branchHeaderTopRow?.className).toContain("items-start");
+      expect(branchHeaderTopRow?.className).toContain("items-center");
       expect(tablistRow?.className).toContain("w-auto");
       expect(tablistRow?.className).toContain("justify-end");
-      expect(tablist?.className).toContain("w-[15rem]");
+      expect(tablist?.className).toContain("w-[12rem]");
       expect(tablist?.className).not.toContain("w-full");
+
+      defineElementWidth(branchHeaderTopRow!, 420);
+      triggerResizeObservers();
+      await flush();
+
+      expect(branchHeaderTopRow?.className).toContain("grid-cols-1");
+      expect(tablistRow?.className).toContain("w-full");
+      expect(tablist?.className).toContain("w-full");
     } finally {
       dispose();
     }
@@ -2458,12 +2516,34 @@ describe("GitBranchesPanel interactions", () => {
     }, host);
 
     try {
+      await flush();
+
+      const tablist = host.querySelector(
+        '[aria-label="Branch detail tabs"]',
+      ) as HTMLDivElement | null;
       const statusTab = host.querySelector(
         "#git-branch-subview-tab-status",
       ) as HTMLButtonElement | null;
+      const statusPanel = host.querySelector(
+        "#git-branch-subview-panel-status",
+      ) as HTMLDivElement | null;
+      expect(tablist?.getAttribute("role")).toBe("tablist");
+      expect(tablist?.getAttribute("aria-orientation")).toBe("horizontal");
+      expect(statusTab?.getAttribute("role")).toBe("tab");
+      expect(statusTab?.getAttribute("id")).toBe(
+        "git-branch-subview-tab-status",
+      );
       expect(statusTab?.getAttribute("aria-controls")).toBe(
         "git-branch-subview-panel-status",
       );
+      expect(statusTab?.getAttribute("aria-selected")).toBe("true");
+      expect(statusTab?.getAttribute("tabindex")).toBe("0");
+      expect(statusPanel?.getAttribute("role")).toBe("tabpanel");
+      expect(statusPanel?.getAttribute("aria-labelledby")).toBe(
+        "git-branch-subview-tab-status",
+      );
+      expect(statusPanel?.hasAttribute("hidden")).toBe(false);
+
       statusTab!.dispatchEvent(
         new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
       );
@@ -2472,12 +2552,24 @@ describe("GitBranchesPanel interactions", () => {
       const historyTab = host.querySelector(
         "#git-branch-subview-tab-history",
       ) as HTMLButtonElement | null;
+      const historyPanel = host.querySelector(
+        "#git-branch-subview-panel-history",
+      ) as HTMLDivElement | null;
+      expect(historyTab?.getAttribute("role")).toBe("tab");
+      expect(historyTab?.getAttribute("aria-controls")).toBe(
+        "git-branch-subview-panel-history",
+      );
       expect(historyTab?.getAttribute("aria-selected")).toBe("true");
       expect(historyTab?.getAttribute("tabindex")).toBe("0");
       expect(document.activeElement).toBe(historyTab);
+      expect(historyPanel?.getAttribute("role")).toBe("tabpanel");
+      expect(historyPanel?.getAttribute("aria-labelledby")).toBe(
+        "git-branch-subview-tab-history",
+      );
+      expect(historyPanel?.hasAttribute("hidden")).toBe(false);
       expect(
-        host.querySelector("#git-branch-subview-panel-history"),
-      ).toBeTruthy();
+        host.querySelectorAll("#git-branch-subview-panel-history"),
+      ).toHaveLength(1);
     } finally {
       dispose();
     }
@@ -4104,6 +4196,9 @@ describe("GitBranchesPanel interactions", () => {
       expect(host.textContent).toContain("Branch verification timed out.");
       expect(host.textContent).toContain("Refresh branches");
       expect(host.textContent).not.toContain("Merge feature");
+      expect(
+        host.querySelectorAll("#git-branch-subview-panel-history"),
+      ).toHaveLength(1);
 
       const refreshButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.trim() === "Refresh branches",

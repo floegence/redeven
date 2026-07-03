@@ -104,17 +104,19 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitToneAccentColor('neutral')).toBe('text-muted-foreground');
   });
 
-  it('uses the dedicated git browser blue-black selection surface for selectable items', () => {
-    expect(gitToneSelectableCardClass('brand', true)).toContain('git-browser-selection-surface');
+  it('uses a quiet git browser row selection surface for selectable items', () => {
+    expect(gitToneSelectableCardClass('brand', true)).toContain('git-browser-selection-row');
+    expect(gitToneSelectableCardClass('brand', true)).toContain('border-l-[2px]');
+    expect(gitToneSelectableCardClass('brand', true)).not.toContain('git-browser-selection-surface');
     expect(gitToneSelectableCardClass('brand', true)).toContain('cursor-pointer');
     expect(gitToneSelectableCardClass('brand', true)).toContain('focus-visible:ring-2');
 
-    expect(gitToneSelectableCardClass('info', false)).toContain('redeven-surface-control');
+    expect(gitToneSelectableCardClass('info', false)).toContain('border-transparent');
     expect(gitToneSelectableCardClass('info', false)).toContain('bg-transparent');
-    expect(gitToneSelectableCardClass('info', false)).toContain('hover:bg-sidebar-accent/70');
-    expect(gitToneSelectableCardClass('info', false)).toContain('hover:text-sidebar-accent-foreground');
+    expect(gitToneSelectableCardClass('info', false)).toContain('hover:bg-muted/[0.18]');
+    expect(gitToneSelectableCardClass('info', false)).toContain('hover:text-foreground');
     expect(gitToneSelectableCardClass('info', false)).toContain('cursor-pointer');
-    expect(gitToneSelectableCardClass('neutral', false)).toContain('hover:border-sidebar-accent/55');
+    expect(gitToneSelectableCardClass('neutral', false)).not.toContain('redeven-surface-control');
     expect(gitToneSelectableCardClass('neutral', false)).not.toContain('hover:-translate-y-px');
     expect(gitSelectedSecondaryTextClass(true)).toBe('git-browser-selection-secondary');
     expect(gitSelectedSecondaryTextClass(false)).toBe('text-muted-foreground');

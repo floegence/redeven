@@ -1,7 +1,6 @@
 import { For, Show } from 'solid-js';
 import type { GitWorkspaceChange, GitWorkspaceSection } from '../protocol/redeven_v1';
 import { changeSecondaryPath, gitDiffEntryIdentity, workspaceSectionLabel } from '../utils/gitWorkbench';
-import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitChangePathClass } from './GitChrome';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
@@ -15,6 +14,7 @@ import {
   GitChangeMetrics,
   GitChangeStatusPill,
   GitSubtleNote,
+  GitTableFrame,
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
@@ -46,7 +46,7 @@ export interface GitWorkspaceStatusTableProps {
 
 export function GitWorkspaceStatusTable(props: GitWorkspaceStatusTableProps) {
   return (
-    <div class={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border ${redevenSurfaceRoleClass('panelStrong')}`}>
+    <GitTableFrame class="flex min-h-0 flex-1 flex-col">
       <Show
         when={props.items.length > 0}
         fallback={(
@@ -105,6 +105,6 @@ export function GitWorkspaceStatusTable(props: GitWorkspaceStatusTableProps) {
           </table>
         </div>
       </Show>
-    </div>
+    </GitTableFrame>
   );
 }

@@ -121,7 +121,7 @@ describe('GitWorkbenchSidebar interactions', () => {
     })).toBe(40);
   });
 
-  it('uses section cards instead of file rows in changes mode', () => {
+  it('uses quiet section rows instead of file rows in changes mode', () => {
     let selectedSection = '';
     let closeCount = 0;
     const host = document.createElement('div');
@@ -164,7 +164,8 @@ describe('GitWorkbenchSidebar interactions', () => {
     try {
       const activeButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Changes')) as HTMLButtonElement | undefined;
       const sectionButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Staged'));
-      expect(activeButton?.className).toContain('git-browser-selection-surface');
+      expect(activeButton?.className).toContain('git-browser-selection-row');
+      expect(activeButton?.className).not.toContain('git-browser-selection-surface');
       expect(sectionButton).toBeTruthy();
       sectionButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 

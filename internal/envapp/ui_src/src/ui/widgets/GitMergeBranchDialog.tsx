@@ -21,6 +21,7 @@ import {
   GitMetaPill,
   GitStatePane,
   GitSubtleNote,
+  GitTableFrame,
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
@@ -294,7 +295,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                       </div>
 
                       <div class="flex min-h-0 flex-1 overflow-hidden">
-                        <div class={cn('flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border', redevenSurfaceRoleClass('panelStrong'))}>
+                        <GitTableFrame class="flex min-h-0 flex-1 flex-col">
                           <Show
                             when={files().length > 0}
                             fallback={(
@@ -361,7 +362,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                               </table>
                             </div>
                           </Show>
-                        </div>
+                        </GitTableFrame>
                       </div>
                     </div>
                   </div>

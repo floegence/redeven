@@ -19,7 +19,7 @@ import {
   type GitStashWindowRequest,
   type GitWorkspaceViewSection,
 } from '../utils/gitWorkbench';
-import { gitChangePathClass, workspaceSectionTone } from './GitChrome';
+import { gitChangePathClass, gitToneDotClass, workspaceSectionTone } from './GitChrome';
 import { GitCommitDialog } from './GitCommitDialog';
 import { GitDiffDialog } from './GitDiffDialog';
 import {
@@ -32,7 +32,6 @@ import {
   GitChangedFilesActionButton,
   GitChangeMetrics,
   GitChangeStatusPill,
-  GitLabelBlock,
   GitMetaPill,
   GitPanelFrame,
   GitPagedTableFooter,
@@ -451,30 +450,29 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
     && breadcrumbSegments().length > 0
   );
   const useInlineQuietHeaderActions = () => (
-    headerDensity() === 'comfortable'
-    && headerPresentation().layoutMode === 'quiet_inline'
+    headerDensity() !== 'collapsed'
   );
   const showSeparateActionRow = () => showActionRow() && !useInlineQuietHeaderActions();
   const headerContainerClass = () => (
     useInlineQuietHeaderActions()
-      ? 'flex flex-col gap-1.5'
-      : 'flex flex-col gap-2.5'
+      ? 'flex flex-col gap-2'
+      : 'flex flex-col gap-2'
   );
   const headerTopRowClass = () => (
     useInlineQuietHeaderActions()
-      ? 'grid gap-2 grid-cols-[minmax(0,1fr)_auto] items-start'
+      ? 'grid gap-2.5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center'
       : headerDensity() === 'comfortable'
-      ? 'grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-start'
-      : 'grid gap-2.5 grid-cols-1'
+      ? 'grid gap-2.5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center'
+      : 'grid grid-cols-1 gap-2'
   );
   const headerActionRowClass = () => {
-    if (headerDensity() === 'comfortable') return 'flex flex-wrap items-center justify-end gap-2';
-    return 'grid gap-2 grid-cols-[minmax(0,1fr)_auto] items-start';
+    if (headerDensity() === 'comfortable') return 'flex flex-wrap items-center justify-end gap-1.5';
+    return 'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2';
   };
   const headerPrimaryActionRailClass = () => (
     headerDensity() === 'collapsed'
       ? 'flex min-w-0 flex-wrap items-center gap-1.5'
-      : 'flex min-w-0 flex-wrap items-center gap-2'
+      : 'flex min-w-0 flex-wrap items-center gap-1.5'
   );
   const headerSecondaryActionRailClass = () => (
     headerDensity() === 'collapsed'
@@ -702,7 +700,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const renderInlineHeaderActions = () => (
     <div
       data-git-changes-header-actions="inline"
-      class="flex flex-wrap items-center justify-end gap-2"
+      class="flex min-w-0 flex-wrap items-center justify-start gap-1.5 md:justify-end"
     >
       <Show when={headerUtilityActions().length > 0}>
         <GitShortcutOrbDock class="justify-end">
@@ -736,8 +734,12 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                   class={headerContainerClass()}
                 >
                   <div class={headerTopRowClass()}>
-                    <GitLabelBlock class="min-w-0" label={i18n.t('git.changes.workspace')} tone={headerTone()}>
-                      <div class="flex flex-wrap items-center gap-2">
+                    <div class="min-w-0 space-y-1">
+                      <div class="flex min-w-0 flex-wrap items-center gap-2">
+                        <span class={`h-2 w-2 shrink-0 rounded-full ring-1 ring-current/20 ${gitToneDotClass(headerTone())}`} aria-hidden="true" />
+                        <div class="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75">
+                          {i18n.t('git.changes.workspace')}
+                        </div>
                         <GitPrimaryTitle>{sectionTitle()}</GitPrimaryTitle>
                         <GitMetaPill tone={headerPresentation().isCleanState ? 'success' : headerTone()}>
                           {countBadgeLabel()}
@@ -747,11 +749,11 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                         </Show>
                       </div>
                       <Show when={headerPresentation().showSummaryCopy}>
-                        <div class="max-w-full text-[11px] leading-relaxed text-muted-foreground line-clamp-2 sm:max-w-[32rem]">
+                        <div class="line-clamp-1 max-w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[32rem]">
                           {summaryCopy()}
                         </div>
                       </Show>
-                    </GitLabelBlock>
+                    </div>
 
                     <Show when={useInlineQuietHeaderActions()} fallback={(
                       <Show when={headerPresentation().density === 'comfortable' && headerUtilityActions().length > 0}>

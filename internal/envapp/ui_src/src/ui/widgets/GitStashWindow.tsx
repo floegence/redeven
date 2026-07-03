@@ -45,6 +45,7 @@ import {
   GitSection,
   GitStatePane,
   GitSubtleNote,
+  GitTableFrame,
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
@@ -301,7 +302,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
               size="md"
               aria-label="Stash tabs"
               class={cn(
-                'grid w-full grid-cols-2 rounded-lg shadow-sm shadow-black/5 sm:w-[16rem] [&_button]:w-full',
+                'grid w-full grid-cols-2 rounded-md sm:w-[16rem] [&_button]:w-full',
                 redevenSurfaceRoleClass('segmented'),
               )}
               options={stashTabOptions()}
@@ -329,7 +330,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                       {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
                       class="flex h-full min-h-0 flex-col gap-3 overflow-auto xl:grid xl:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)] xl:overflow-hidden"
                     >
-                      <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class={cn('min-h-0 overflow-auto rounded-md p-2', redevenSurfaceRoleClass('panelStrong'))}>
+                      <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 overflow-auto rounded-md bg-muted/[0.08] p-2">
                         <Show
                           when={props.stashes.length > 0}
                           fallback={<GitStatePane message="No stashes yet. Save a snapshot from the other tab to see it here." class="h-full" surface />}
@@ -399,12 +400,12 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                   </div>
                                 </GitSection>
 
-                                <section class={cn('rounded-md border px-3 py-2.5 shadow-sm shadow-black/[0.05] ring-1 ring-black/[0.02]', redevenSurfaceRoleClass('panelStrong'))}>
+                                <section class="rounded-md bg-muted/[0.08] px-3 py-2.5">
                                   <GitLabelBlock class="min-w-0" label="Changed Files" tone="info" meta={<GitMetaPill tone="neutral">{String(detailFiles().length)}</GitMetaPill>}>
                                     <div class="text-xs leading-relaxed text-muted-foreground">Click a file to inspect its diff in a dialog.</div>
                                   </GitLabelBlock>
                                   <Show when={detailFiles().length > 0} fallback={<GitSubtleNote class="mt-2.5">No changed files are available for this stash.</GitSubtleNote>}>
-                                    <div class={cn('mt-2.5 overflow-hidden rounded-md border', redevenSurfaceRoleClass('panelStrong'))}>
+                                    <GitTableFrame class="mt-2.5">
                                       <GitVirtualTable
                                         items={detailFiles()}
                                         tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
@@ -464,7 +465,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                           );
                                         }}
                                       />
-                                    </div>
+                                    </GitTableFrame>
                                   </Show>
                                 </section>
 

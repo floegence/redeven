@@ -9,18 +9,18 @@ function normalizeTone(tone: GitChromeTone | undefined): GitChromeTone {
   return tone || 'neutral';
 }
 
-const badgeBaseClass = 'shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] border';
+const badgeBaseClass = 'border';
 const insetBaseClass = cn(
-  'border shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]',
+  'border',
   redevenSurfaceRoleClass('inset'),
 );
 const actionButtonBaseClass =
   cn(
-    'cursor-pointer rounded-lg border text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] transition-[background-color,color,box-shadow] duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
+    'cursor-pointer rounded-lg border text-muted-foreground transition-[background-color,color,border-color] duration-200 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1',
     redevenSurfaceRoleClass('controlMuted'),
   );
 const headerActionButtonBaseClass =
-  'cursor-pointer rounded-lg bg-background/72 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset] transition-[background-color,color,box-shadow] duration-200 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
+  'cursor-pointer rounded-lg bg-background/72 text-muted-foreground transition-[background-color,color,border-color] duration-200 hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
 
 export function gitToneBadgeClass(tone?: GitChromeTone): string {
   switch (normalizeTone(tone)) {
@@ -119,16 +119,15 @@ export function gitToneHeaderActionButtonClass(): string {
 
 export function gitToneSelectableCardClass(_tone: GitChromeTone | undefined, active: boolean): string {
   const interactiveBase =
-    'cursor-pointer select-none border transition-[background-color,border-color,box-shadow,color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
+    'cursor-pointer select-none border border-transparent transition-[background-color,border-color,color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1';
 
   if (active) {
-    return `${interactiveBase} git-browser-selection-surface`;
+    return `${interactiveBase} border-l-[2px] git-browser-selection-row`;
   }
 
   return cn(
     interactiveBase,
-    redevenSurfaceRoleClass('control'),
-    'bg-transparent text-foreground hover:border-sidebar-accent/55 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground',
+    'bg-transparent text-foreground hover:bg-muted/[0.18] hover:text-foreground',
   );
 }
 

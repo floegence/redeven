@@ -97,6 +97,7 @@ describe('GitWorkspace interactions', () => {
     try {
       expect(host.textContent).toContain('Mode');
       expect(host.textContent).toContain('View');
+      expect(host.querySelector('.redeven-git-browser')).toBeTruthy();
       expect(host.querySelectorAll('[role="radiogroup"][aria-label="Browser mode"]').length).toBe(1);
       expect(host.querySelectorAll('[role="tablist"][aria-label="Git views"]').length).toBe(1);
       const scrollRegion = host.querySelector('[data-testid="git-sidebar-scroll-region"]');
