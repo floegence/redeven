@@ -2759,7 +2759,69 @@ describe('TerminalPanel', () => {
     expect(firstWrite ? new TextDecoder().decode(firstWrite) : '').toBe('alpha beta gamma');
   });
 
-  it('keeps inactive sessions from repainting live output until they are activated again', async () => {
+  it('catches up inactive mounted sessions without reloading the terminal core', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    const inactiveCore = terminalCoreInstances[1];
+    inactiveCore?.write.mockClear();
+    inactiveCore?.clear.mockClear();
+    inactiveCore?.startHistoryReplay.mockClear();
+    inactiveCore?.initialize.mockClear();
+    inactiveCore?.dispose.mockClear();
+    transportMocks.attach.mockClear();
+    transportMocks.historyPage.mockClear();
+
+    emitTerminalData('session-2', 'background output', 1);
+    await settleTerminalPanel();
+
+    expect(inactiveCore?.write).not.toHaveBeenCalled();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanel();
+    await settleTerminalPanel();
+
+    expect(terminalCoreInstances).toHaveLength(2);
+    expect(inactiveCore?.dispose).not.toHaveBeenCalled();
+    expect(inactiveCore?.initialize).not.toHaveBeenCalled();
+    expect(transportMocks.attach).not.toHaveBeenCalled();
+    expect(transportMocks.historyPage).not.toHaveBeenCalled();
+    expect(inactiveCore?.clear).not.toHaveBeenCalled();
+    expect(inactiveCore?.startHistoryReplay).not.toHaveBeenCalled();
+    const firstWrite = inactiveCore?.write.mock.calls[0]?.[0] as Uint8Array | undefined;
+    expect(firstWrite ? new TextDecoder().decode(firstWrite) : '').toBe('background output');
+  });
+
+  it('keeps inactive catchup ordered and does not replay it twice across tab switches', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -2793,37 +2855,237 @@ describe('TerminalPanel', () => {
     const inactiveCore = terminalCoreInstances[1];
     inactiveCore?.write.mockClear();
     transportMocks.historyPage.mockClear();
-    transportMocks.historyPage.mockResolvedValue({
-      chunks: [
-        {
-          sequence: 1,
-          timestampMs: 42,
-          data: textEncoder.encode('background output'),
-        },
-      ],
-      nextStartSeq: 0,
-      hasMore: false,
-      firstSequence: 1,
-      lastSequence: 1,
-      coveredBytes: 'background output'.length,
-      totalBytes: 'background output'.length,
-    });
 
-    emitTerminalData('session-2', 'background output', 1);
+    emitTerminalData('session-2', 'alpha ', 1);
+    emitTerminalData('session-2', 'beta', 2);
     await settleTerminalPanel();
-
-    expect(inactiveCore?.write).not.toHaveBeenCalled();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
 
     findTerminalTab(host, 'Terminal 2')?.click();
     await settleTerminalPanel();
     await settleTerminalPanel();
 
-    const reloadedCore = terminalCoreInstances[terminalCoreInstances.length - 1];
-    expect(transportMocks.historyPage).toHaveBeenCalledWith('session-2', 0, -1);
-    const firstWrite = reloadedCore?.write.mock.calls[0]?.[0] as Uint8Array | undefined;
-    expect(firstWrite ? new TextDecoder().decode(firstWrite) : '').toBe('background output');
+    expect(transportMocks.historyPage).not.toHaveBeenCalled();
+    expect(inactiveCore?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['alpha beta']);
+
+    inactiveCore?.write.mockClear();
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanel();
+
+    expect(inactiveCore?.write).not.toHaveBeenCalled();
+  });
+
+  it('uses history catchup for inactive sequence gaps without recreating the terminal core', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    const inactiveCore = terminalCoreInstances[1];
+    inactiveCore?.write.mockClear();
+    inactiveCore?.dispose.mockClear();
+    transportMocks.attach.mockClear();
+    transportMocks.historyPage.mockClear();
+    transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
+      chunks: [
+        { sequence: 1, timestampMs: 10, data: textEncoder.encode('one ') },
+        { sequence: 2, timestampMs: 20, data: textEncoder.encode('two ') },
+        { sequence: 3, timestampMs: 30, data: textEncoder.encode('three') },
+      ],
+      firstSequence: 1,
+      lastSequence: 3,
+      coveredBytes: 13,
+      totalBytes: 13,
+    }));
+
+    emitTerminalData('session-2', 'one ', 1);
+    emitTerminalData('session-2', 'three', 3);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledWith('session-2', 0, -1);
+      expect(inactiveCore?.write).toHaveBeenCalled();
+    });
+
+    expect(terminalCoreInstances).toHaveLength(2);
+    expect(inactiveCore?.dispose).not.toHaveBeenCalled();
+    expect(transportMocks.attach).not.toHaveBeenCalled();
+    expect(inactiveCore?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['one two three']);
+  });
+
+  it('clears and replays available history when inactive catchup falls behind retained history', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
+    const inactiveCore = terminalCoreInstances[1];
+    inactiveCore?.write.mockClear();
+    emitTerminalData('session-2', 'before-overflow', 1);
+    await settleTerminalPanel();
+    await settleTerminalPanel();
+
+    inactiveCore?.write.mockClear();
+    inactiveCore?.clear.mockClear();
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    transportMocks.historyPage.mockClear();
+    transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
+      chunks: [
+        { sequence: 250, timestampMs: 250, data: textEncoder.encode('retained') },
+      ],
+      firstSequence: 250,
+      lastSequence: 250,
+      coveredBytes: 8,
+      totalBytes: 8,
+    }));
+
+    emitTerminalData('session-2', 'after-gap', 300);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledWith('session-2', 2, -1);
+      expect(inactiveCore?.write).toHaveBeenCalled();
+    });
+
+    expect(inactiveCore?.clear).toHaveBeenCalled();
+    expect(inactiveCore?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['retained']);
+  });
+
+  it('does not duplicate shell integration side effects during inactive history catchup', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    const inactiveCore = terminalCoreInstances[1];
+    inactiveCore?.write.mockClear();
+    sessionsCoordinatorMocks.updateSessionMeta.mockClear();
+    transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
+      chunks: [
+        { sequence: 1, timestampMs: 10, data: textEncoder.encode('one ') },
+        { sequence: 2, timestampMs: 20, data: textEncoder.encode('two ') },
+        { sequence: 3, timestampMs: 30, data: textEncoder.encode('\x1b]633;P;Cwd=/workspace/repo\u0007three') },
+      ],
+      firstSequence: 1,
+      lastSequence: 3,
+      coveredBytes: 13,
+      totalBytes: 13,
+    }));
+
+    emitTerminalData('session-2', '\x1b]633;P;Cwd=/workspace/repo\u0007three', 3);
+    await settleTerminalPanel();
+
+    expect(sessionsCoordinatorMocks.updateSessionMeta).toHaveBeenCalledTimes(1);
+    expect(sessionsCoordinatorMocks.updateSessionMeta).toHaveBeenCalledWith('session-2', { workingDir: '/workspace/repo' });
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(inactiveCore?.write).toHaveBeenCalled();
+    });
+
+    expect(sessionsCoordinatorMocks.updateSessionMeta).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts fresh sequence-one output after clearing a terminal session', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const core = terminalCoreInstances[0];
+    core?.write.mockClear();
+
+    emitTerminalData('session-1', 'before-clear', 1);
+    await settleTerminalPanel();
+    expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['before-clear']);
+
+    core?.write.mockClear();
+    host.querySelector<HTMLButtonElement>('button[title="Clear"]')?.click();
+    await settleTerminalPanel();
+
+    expect(transportMocks.clear).toHaveBeenCalledWith('session-1');
+    emitTerminalData('session-1', 'after-clear', 1);
+    await settleTerminalPanel();
+
+    expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['after-clear']);
   });
 
   it('replays terminal history page-by-page and shows progress while a later page is loading', async () => {
