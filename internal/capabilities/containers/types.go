@@ -87,6 +87,7 @@ const (
 
 type StatusRequest struct {
 	SchemaVersion string `json:"schema_version"`
+	Engine        Engine `json:"engine,omitempty"`
 }
 
 type StatusResponse struct {

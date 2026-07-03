@@ -73,7 +73,8 @@
       "additionalProperties": false,
       "required": ["schema_version"],
       "properties": {
-        "schema_version": { "$ref": "#/$defs/schema_version" }
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "engine": { "$ref": "#/$defs/engine" }
       }
     },
     "status_response": {
