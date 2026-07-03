@@ -8,8 +8,10 @@ import (
 )
 
 var (
-	ErrEngineUnavailable = errors.New("container engine is unavailable")
-	ErrInvalidEngine     = errors.New("container engine is invalid")
+	ErrEngineUnavailable     = errors.New("container engine is unavailable")
+	ErrInvalidEngine         = errors.New("container engine is invalid")
+	ErrInvalidMethod         = errors.New("container method is invalid")
+	ErrLogsFollowUnsupported = errors.New("logs follow requires a streaming adapter")
 )
 
 type EngineStatus struct {
@@ -29,10 +31,48 @@ type EngineContainer struct {
 	Ports           []PortSummary
 }
 
+type EngineActionRequest struct {
+	Engine      Engine
+	Method      Method
+	ContainerID string
+	Force       bool
+	TimeoutSec  int
+}
+
+type EngineActionResult struct {
+	Engine      Engine
+	Method      Method
+	ContainerID string
+	Completed   bool
+}
+
+type EngineLogsRequest struct {
+	Engine      Engine
+	ContainerID string
+	TailLines   int
+	SinceUnixMs int64
+	Follow      bool
+}
+
+type EngineLogsResult struct {
+	Engine      Engine
+	ContainerID string
+	Lines       []LogLine
+}
+
+type EngineImageResult struct {
+	Engine    Engine
+	Image     ImageInput
+	Completed bool
+}
+
 type EngineClient interface {
 	Status(ctx context.Context, engine Engine) (EngineStatus, error)
 	List(ctx context.Context, engine Engine, all bool) ([]EngineContainer, error)
 	Inspect(ctx context.Context, engine Engine, containerID string) (EngineContainer, error)
+	Action(ctx context.Context, req EngineActionRequest) (EngineActionResult, error)
+	TailLogs(ctx context.Context, req EngineLogsRequest) (EngineLogsResult, error)
+	PullImage(ctx context.Context, engine Engine, imageRef string) (EngineImageResult, error)
 }
 
 type Adapter struct {
@@ -130,6 +170,110 @@ func (a *Adapter) StartPreflight(ctx context.Context, req ContainerStartRequest)
 	})
 }
 
+func (a *Adapter) Start(ctx context.Context, req ContainerStartRequest) (ContainerActionResponse, error) {
+	return a.runAction(ctx, EngineActionRequest{
+		Engine:      req.Engine,
+		Method:      MethodStart,
+		ContainerID: req.ContainerID,
+	})
+}
+
+func (a *Adapter) Stop(ctx context.Context, req ContainerActionRequest) (ContainerActionResponse, error) {
+	return a.runAction(ctx, EngineActionRequest{
+		Engine:      req.Engine,
+		Method:      MethodStop,
+		ContainerID: req.ContainerID,
+		TimeoutSec:  req.TimeoutSec,
+	})
+}
+
+func (a *Adapter) Restart(ctx context.Context, req ContainerActionRequest) (ContainerActionResponse, error) {
+	return a.runAction(ctx, EngineActionRequest{
+		Engine:      req.Engine,
+		Method:      MethodRestart,
+		ContainerID: req.ContainerID,
+		TimeoutSec:  req.TimeoutSec,
+	})
+}
+
+func (a *Adapter) Remove(ctx context.Context, req ContainerActionRequest) (ContainerActionResponse, error) {
+	return a.runAction(ctx, EngineActionRequest{
+		Engine:      req.Engine,
+		Method:      MethodRemove,
+		ContainerID: req.ContainerID,
+		Force:       req.Force,
+	})
+}
+
+func (a *Adapter) TailLogs(ctx context.Context, req LogsTailRequest) (LogsTailResponse, error) {
+	if err := validateEngine(req.Engine); err != nil {
+		return LogsTailResponse{}, err
+	}
+	containerID := strings.TrimSpace(req.ContainerID)
+	if containerID == "" {
+		return LogsTailResponse{}, errors.New("container_id is required")
+	}
+	result, err := a.client.TailLogs(ctx, EngineLogsRequest{
+		Engine:      req.Engine,
+		ContainerID: containerID,
+		TailLines:   req.TailLines,
+		SinceUnixMs: req.SinceUnixMs,
+		Follow:      req.Follow,
+	})
+	if err != nil {
+		return LogsTailResponse{}, err
+	}
+	return LogsTailResponse{
+		SchemaVersion:     SchemaVersion,
+		CapabilityID:      CapabilityID,
+		CapabilityVersion: CapabilityVersion,
+		Engine:            result.Engine,
+		ContainerID:       strings.TrimSpace(result.ContainerID),
+		Lines:             append([]LogLine(nil), result.Lines...),
+	}, nil
+}
+
+func (a *Adapter) PullImage(ctx context.Context, req ImagePullRequest) (ImagePullResponse, error) {
+	if err := validateEngine(req.Engine); err != nil {
+		return ImagePullResponse{}, err
+	}
+	imageRef := strings.TrimSpace(req.ImageRef)
+	if imageRef == "" {
+		return ImagePullResponse{}, errors.New("image_ref is required")
+	}
+	result, err := a.client.PullImage(ctx, req.Engine, imageRef)
+	if err != nil {
+		return ImagePullResponse{}, err
+	}
+	return ImagePullResponse{
+		SchemaVersion:     SchemaVersion,
+		CapabilityID:      CapabilityID,
+		CapabilityVersion: CapabilityVersion,
+		Engine:            result.Engine,
+		Image:             imageSummary(result.Image),
+		Completed:         result.Completed,
+	}, nil
+}
+
+func (a *Adapter) runAction(ctx context.Context, req EngineActionRequest) (ContainerActionResponse, error) {
+	if err := validateAction(req); err != nil {
+		return ContainerActionResponse{}, err
+	}
+	result, err := a.client.Action(ctx, req)
+	if err != nil {
+		return ContainerActionResponse{}, err
+	}
+	return ContainerActionResponse{
+		SchemaVersion:     SchemaVersion,
+		CapabilityID:      CapabilityID,
+		CapabilityVersion: CapabilityVersion,
+		Engine:            result.Engine,
+		Method:            result.Method,
+		ContainerID:       strings.TrimSpace(result.ContainerID),
+		Completed:         result.Completed,
+	}, nil
+}
+
 func (a *Adapter) resolveEngine(ctx context.Context, requested Engine) (Engine, EngineStatus, error) {
 	if a == nil || a.client == nil {
 		return EngineDocker, EngineStatus{Engine: EngineDocker}, errors.New("container engine client is required")
@@ -162,6 +306,24 @@ func validateEngine(engine Engine) error {
 		return nil
 	}
 	return fmt.Errorf("%w: %q", ErrInvalidEngine, engine)
+}
+
+func validateAction(req EngineActionRequest) error {
+	if err := validateEngine(req.Engine); err != nil {
+		return err
+	}
+	switch req.Method {
+	case MethodStart, MethodStop, MethodRestart, MethodRemove:
+	default:
+		return fmt.Errorf("%w: %q", ErrInvalidMethod, req.Method)
+	}
+	if strings.TrimSpace(req.ContainerID) == "" {
+		return errors.New("container_id is required")
+	}
+	if req.TimeoutSec < 0 {
+		return errors.New("timeout_sec must be non-negative")
+	}
+	return nil
 }
 
 func containerSummary(container EngineContainer) ContainerSummary {

@@ -138,10 +138,83 @@ func TestAdapterStartPreflightUsesInspectedRuntime(t *testing.T) {
 	})
 }
 
+func TestAdapterActionsLogsAndPullReturnMinimalDTOs(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeEngineClient{
+		actions: map[string]EngineActionResult{
+			"docker:containers.stop:container_123": {
+				Engine:      EngineDocker,
+				Method:      MethodStop,
+				ContainerID: "container_123",
+				Completed:   true,
+			},
+		},
+		logs: map[string]EngineLogsResult{
+			"docker:container_123": {
+				Engine:      EngineDocker,
+				ContainerID: "container_123",
+				Lines: []LogLine{
+					{TimestampUnixMs: 1704067200000, Message: "ready"},
+				},
+			},
+		},
+		pulls: map[string]EngineImageResult{
+			"docker:ghcr.io/acme/api:latest": {
+				Engine:    EngineDocker,
+				Image:     ImageInput{Reference: "ghcr.io/acme/api:latest", Digest: "sha256:feedface"},
+				Completed: true,
+			},
+		},
+	}
+	adapter := NewAdapter(client)
+
+	action, err := adapter.Stop(context.Background(), ContainerActionRequest{
+		SchemaVersion: SchemaVersion,
+		Engine:        EngineDocker,
+		ContainerID:   "container_123",
+		TimeoutSec:    10,
+	})
+	if err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	if action.Method != MethodStop || action.ContainerID != "container_123" || !action.Completed {
+		t.Fatalf("action response = %+v", action)
+	}
+
+	logs, err := adapter.TailLogs(context.Background(), LogsTailRequest{
+		SchemaVersion: SchemaVersion,
+		Engine:        EngineDocker,
+		ContainerID:   "container_123",
+		TailLines:     50,
+	})
+	if err != nil {
+		t.Fatalf("TailLogs() error = %v", err)
+	}
+	if len(logs.Lines) != 1 || logs.Lines[0].Message != "ready" {
+		t.Fatalf("logs response = %+v", logs)
+	}
+
+	pull, err := adapter.PullImage(context.Background(), ImagePullRequest{
+		SchemaVersion: SchemaVersion,
+		Engine:        EngineDocker,
+		ImageRef:      "ghcr.io/acme/api:latest",
+	})
+	if err != nil {
+		t.Fatalf("PullImage() error = %v", err)
+	}
+	if !pull.Completed || !pull.Image.DigestPinned || pull.Image.Digest != "sha256:feedface" {
+		t.Fatalf("pull response = %+v", pull)
+	}
+}
+
 type fakeEngineClient struct {
 	status  map[Engine]EngineStatus
 	list    map[Engine][]EngineContainer
 	inspect map[string]EngineContainer
+	actions map[string]EngineActionResult
+	logs    map[string]EngineLogsResult
+	pulls   map[string]EngineImageResult
 }
 
 func (f *fakeEngineClient) Status(_ context.Context, engine Engine) (EngineStatus, error) {
@@ -161,6 +234,30 @@ func (f *fakeEngineClient) Inspect(_ context.Context, engine Engine, containerID
 		return EngineContainer{}, errors.New("not found")
 	}
 	return container, nil
+}
+
+func (f *fakeEngineClient) Action(_ context.Context, req EngineActionRequest) (EngineActionResult, error) {
+	result, ok := f.actions[string(req.Engine)+":"+string(req.Method)+":"+req.ContainerID]
+	if !ok {
+		return EngineActionResult{}, errors.New("not found")
+	}
+	return result, nil
+}
+
+func (f *fakeEngineClient) TailLogs(_ context.Context, req EngineLogsRequest) (EngineLogsResult, error) {
+	result, ok := f.logs[string(req.Engine)+":"+req.ContainerID]
+	if !ok {
+		return EngineLogsResult{}, errors.New("not found")
+	}
+	return result, nil
+}
+
+func (f *fakeEngineClient) PullImage(_ context.Context, engine Engine, imageRef string) (EngineImageResult, error) {
+	result, ok := f.pulls[string(engine)+":"+imageRef]
+	if !ok {
+		return EngineImageResult{}, errors.New("not found")
+	}
+	return result, nil
 }
 
 func testEngineContainer() EngineContainer {

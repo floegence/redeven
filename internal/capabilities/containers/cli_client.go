@@ -13,7 +13,11 @@ import (
 	"time"
 )
 
-const defaultCommandTimeout = 10 * time.Second
+const (
+	defaultCommandTimeout = 10 * time.Second
+	defaultLogTailLines   = 100
+	maxLogTailLines       = 1000
+)
 
 type CommandRunner interface {
 	Run(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -76,6 +80,80 @@ func (c *CLIClient) Inspect(ctx context.Context, engine Engine, containerID stri
 	return parseContainerInspect(engine, raw)
 }
 
+func (c *CLIClient) Action(ctx context.Context, req EngineActionRequest) (EngineActionResult, error) {
+	if err := validateAction(req); err != nil {
+		return EngineActionResult{}, err
+	}
+	containerID := strings.TrimSpace(req.ContainerID)
+	args := actionArgs(req.Method, containerID, req.Force, req.TimeoutSec)
+	if _, err := c.run(ctx, req.Engine, args...); err != nil {
+		return EngineActionResult{}, err
+	}
+	return EngineActionResult{
+		Engine:      req.Engine,
+		Method:      req.Method,
+		ContainerID: containerID,
+		Completed:   true,
+	}, nil
+}
+
+func (c *CLIClient) TailLogs(ctx context.Context, req EngineLogsRequest) (EngineLogsResult, error) {
+	if err := validateEngine(req.Engine); err != nil {
+		return EngineLogsResult{}, err
+	}
+	containerID := strings.TrimSpace(req.ContainerID)
+	if containerID == "" {
+		return EngineLogsResult{}, errors.New("container_id is required")
+	}
+	if req.Follow {
+		return EngineLogsResult{}, ErrLogsFollowUnsupported
+	}
+	tailLines, err := normalizeTailLines(req.TailLines)
+	if err != nil {
+		return EngineLogsResult{}, err
+	}
+	args := []string{"logs", "--timestamps", "--tail", strconv.Itoa(tailLines)}
+	if req.SinceUnixMs > 0 {
+		args = append(args, "--since", time.UnixMilli(req.SinceUnixMs).UTC().Format(time.RFC3339Nano))
+	}
+	args = append(args, containerID)
+	raw, err := c.run(ctx, req.Engine, args...)
+	if err != nil {
+		return EngineLogsResult{}, err
+	}
+	return EngineLogsResult{
+		Engine:      req.Engine,
+		ContainerID: containerID,
+		Lines:       parseLogLines(raw),
+	}, nil
+}
+
+func (c *CLIClient) PullImage(ctx context.Context, engine Engine, imageRef string) (EngineImageResult, error) {
+	if err := validateEngine(engine); err != nil {
+		return EngineImageResult{}, err
+	}
+	imageRef = strings.TrimSpace(imageRef)
+	if imageRef == "" {
+		return EngineImageResult{}, errors.New("image_ref is required")
+	}
+	raw, err := c.run(ctx, engine, "pull", imageRef)
+	if err != nil {
+		return EngineImageResult{}, err
+	}
+	digest := firstDigest([]string{imageRef, string(raw)})
+	if digest == "" {
+		digest = extractPullDigest(raw)
+	}
+	return EngineImageResult{
+		Engine: engine,
+		Image: ImageInput{
+			Reference: imageRef,
+			Digest:    digest,
+		},
+		Completed: true,
+	}, nil
+}
+
 func (c *CLIClient) run(ctx context.Context, engine Engine, args ...string) ([]byte, error) {
 	runner := c.Runner
 	if runner == nil {
@@ -88,6 +166,46 @@ func (c *CLIClient) run(ctx context.Context, engine Engine, args ...string) ([]b
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	return runner.Run(runCtx, string(engine), args...)
+}
+
+func actionArgs(method Method, containerID string, force bool, timeoutSec int) []string {
+	switch method {
+	case MethodStart:
+		return []string{"start", containerID}
+	case MethodStop:
+		args := []string{"stop"}
+		if timeoutSec > 0 {
+			args = append(args, "--time", strconv.Itoa(timeoutSec))
+		}
+		return append(args, containerID)
+	case MethodRestart:
+		args := []string{"restart"}
+		if timeoutSec > 0 {
+			args = append(args, "--time", strconv.Itoa(timeoutSec))
+		}
+		return append(args, containerID)
+	case MethodRemove:
+		args := []string{"rm"}
+		if force {
+			args = append(args, "--force")
+		}
+		return append(args, containerID)
+	default:
+		return nil
+	}
+}
+
+func normalizeTailLines(value int) (int, error) {
+	if value < 0 {
+		return 0, errors.New("tail_lines must be non-negative")
+	}
+	if value == 0 {
+		return defaultLogTailLines, nil
+	}
+	if value > maxLogTailLines {
+		return maxLogTailLines, nil
+	}
+	return value, nil
 }
 
 type execRunner struct{}
@@ -274,6 +392,36 @@ func parseContainerList(engine Engine, raw []byte) ([]EngineContainer, error) {
 	return out, nil
 }
 
+func parseLogLines(raw []byte) []LogLine {
+	text := strings.TrimRight(string(raw), "\r\n")
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	lines := strings.Split(text, "\n")
+	out := make([]LogLine, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSuffix(line, "\r")
+		timestampUnixMs, message := splitLogTimestamp(line)
+		out = append(out, LogLine{
+			TimestampUnixMs: timestampUnixMs,
+			Message:         message,
+		})
+	}
+	return out
+}
+
+func splitLogTimestamp(line string) (int64, string) {
+	token, rest, found := strings.Cut(line, " ")
+	if !found {
+		return 0, line
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, token)
+	if err != nil {
+		return 0, line
+	}
+	return parsed.UnixMilli(), rest
+}
+
 func extractVersion(raw []byte) string {
 	var value any
 	if err := json.Unmarshal(bytes.TrimSpace(raw), &value); err != nil {
@@ -421,6 +569,19 @@ func firstDigest(values []string) string {
 	for _, value := range values {
 		if _, digest, ok := strings.Cut(strings.TrimSpace(value), "@"); ok && strings.TrimSpace(digest) != "" {
 			return strings.TrimSpace(digest)
+		}
+	}
+	return ""
+}
+
+func extractPullDigest(raw []byte) string {
+	for _, line := range strings.Split(string(raw), "\n") {
+		key, value, found := strings.Cut(strings.TrimSpace(line), ":")
+		if !found || !strings.EqualFold(strings.TrimSpace(key), "digest") {
+			continue
+		}
+		if digest := strings.TrimSpace(value); digest != "" {
+			return digest
 		}
 	}
 	return ""
