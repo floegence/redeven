@@ -24,6 +24,19 @@ and the start preflight plan. The Go DTO constants and schema enum are bound by
 tests so method names, schema identity, and object closure cannot drift
 silently.
 
+Redeven also carries an integration-only generated plugin fixture for the
+official Containers experience under
+`internal/capabilities/containers/testdata/generated_plugins/containers_integration/`.
+That fixture models the expected ReDevPlugin manifest surface over this
+business capability: one `container_runtime` capability binding, the exact
+`Methods()` method set, read/write/execute/delete permission coverage,
+risk-based confirmation for `containers.start`, required confirmation for
+stop/restart/remove, subscription semantics for logs tail, and cancelable
+operation semantics for mutable actions and image pull. The fixture is tested
+against Redeven's Go constants and schema fields, but it is not a
+ReDevPlugin platform parser, package schema, runtime bridge, or substitute for
+consuming released ReDevPlugin artifacts.
+
 `Adapter` is the Redeven-owned business adapter for this capability. It wraps
 an `EngineClient`, resolves the first available local engine when the request
 does not pin one, maps status/list/inspect/action/log/image results into the
@@ -94,3 +107,5 @@ into Redeven.
 [17] redeven:internal/capabilities/containers/preflight_test.go:181 - Tests bind Go constants, method enums, response DTO fields, logs tail limits, required fields, and closed-world schema objects.
 [18] redeven:internal/capabilities/containers/adapter_test.go:12 - Adapter tests cover engine resolution, unavailable requested engines, DTO mapping, secret redaction, actions, logs, image pull, and preflight use of inspected runtime metadata.
 [19] redeven:internal/capabilities/containers/cli_client_test.go:10 - CLI client tests cover status version preference, Docker NDJSON, Podman arrays, Docker inspect runtime parsing, safe action argv, pull digest parsing, bounded logs tail, and follow-stream rejection.
+[20] redeven:internal/capabilities/containers/testdata/generated_plugins/containers_integration/manifest.json:1 - The integration-only official Containers fixture declares the capability binding, product surface, method manifest, confirmation policy, and cancel policy expected for future ReDevPlugin registration.
+[21] redeven:internal/capabilities/containers/manifest_fixture_test.go:114 - Fixture tests bind the manifest to `CapabilityID`, `CapabilityVersion`, `Methods()`, method effects, request fields, confirmation semantics, and cancel policies without importing ReDevPlugin code.
