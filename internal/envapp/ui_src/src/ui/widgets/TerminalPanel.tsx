@@ -87,6 +87,8 @@ export type TerminalPanelVariant = 'panel' | 'workbench';
 const TERMINAL_LIVE_FLUSH_MAX_CHUNKS = 64;
 const TERMINAL_LIVE_FLUSH_MAX_BYTES = 256 * 1024;
 const TERMINAL_LIVE_FLUSH_INTERVAL_MS = 100;
+const TERMINAL_DEFERRED_LIVE_MAX_CHUNKS = 256;
+const TERMINAL_DEFERRED_LIVE_MAX_BYTES = 512 * 1024;
 const TERMINAL_HISTORY_REPLAY_MAX_CHUNKS = 64;
 const TERMINAL_HISTORY_REPLAY_MAX_BYTES = 512 * 1024;
 const TERMINAL_HISTORY_REPLAY_MODE_MS = 120_000;
@@ -239,10 +241,10 @@ function mergeTerminalChunks(chunks: readonly Uint8Array[]): Uint8Array | null {
 }
 
 function takeTerminalChunkBatch(
-  queue: Uint8Array[],
+  queue: terminal_display_chunk[],
   maxChunks: number,
   maxBytes: number,
-): Uint8Array[] {
+): terminal_display_chunk[] {
   if (queue.length === 0) return [];
 
   let count = 0;
@@ -250,8 +252,8 @@ function takeTerminalChunkBatch(
   while (count < queue.length && count < maxChunks) {
     const next = queue[count];
     if (!next) break;
-    if (count > 0 && byteLength + next.byteLength > maxBytes) break;
-    byteLength += next.byteLength;
+    if (count > 0 && byteLength + next.data.byteLength > maxBytes) break;
+    byteLength += next.data.byteLength;
     count += 1;
     if (byteLength >= maxBytes) break;
   }
@@ -306,7 +308,7 @@ type terminal_session_view_props = {
   eventSource: TerminalEventSource;
   registerCore: (sessionId: string, core: TerminalCore | null) => void;
   registerSurfaceElement: (sessionId: string, surface: HTMLDivElement | null) => void;
-  registerActions: (sessionId: string, actions: { reload: () => Promise<void> } | null) => void;
+  registerActions: (sessionId: string, actions: terminal_session_actions | null) => void;
   onSurfaceClick?: (event: MouseEvent) => void;
   onBell?: (sessionId: string) => void;
   onShellIntegrationEvent?: (sessionId: string, event: TerminalShellIntegrationEvent, source: 'history' | 'live') => void;
@@ -389,6 +391,16 @@ function waitForTerminalUiPaint(): Promise<void> {
 type terminal_history_chunk = {
   sequence: number;
   data: Uint8Array;
+};
+
+type terminal_display_chunk = {
+  sequence?: number;
+  data: Uint8Array;
+};
+
+type terminal_session_actions = {
+  reload: () => Promise<void>;
+  resetAfterClear: () => void;
 };
 
 type terminal_selection_snapshot = {
@@ -1032,15 +1044,104 @@ function TerminalSessionView(props: terminal_session_view_props) {
   let bufferedLive: Array<{ sequence?: number; data: Uint8Array }> = [];
   const shellIntegrationParser = new TerminalShellIntegrationParser();
 
-  let queued: Uint8Array[] = [];
+  let queued: terminal_display_chunk[] = [];
   let flushScheduled = false;
   let flushRaf: number | null = null;
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let lastFlushAtMs = 0;
-  let skippedLiveOutput = false;
-  let liveOutputReloading = false;
+  let deferredLive: terminal_display_chunk[] = [];
+  let deferredLiveBytes = 0;
+  let firstDeferredSeq: number | null = null;
+  let needsHistoryCatchup = false;
+  let catchupInProgress = false;
+  let catchupRunSeq = 0;
+  let lastObservedSeq = 0;
+  let lastRenderedSeq = 0;
+  let focusAfterCatchup = false;
+  const appliedSequences = new Set<number>();
+  const observedUnrenderedSequences = new Set<number>();
 
   const liveRenderActive = () => props.viewActive() && props.active();
+
+  const normalizeLiveSequence = (sequence: number | undefined): number | undefined => (
+    typeof sequence === 'number' && Number.isFinite(sequence) && sequence > 0
+      ? Math.floor(sequence)
+      : undefined
+  );
+
+  const markSequenceApplied = (sequence: number | undefined) => {
+    const seq = normalizeLiveSequence(sequence);
+    if (!seq || seq <= lastRenderedSeq) return;
+    appliedSequences.add(seq);
+    while (appliedSequences.has(lastRenderedSeq + 1)) {
+      const nextSeq = lastRenderedSeq + 1;
+      appliedSequences.delete(nextSeq);
+      observedUnrenderedSequences.delete(nextSeq);
+      lastRenderedSeq = nextSeq;
+    }
+  };
+
+  const markChunksApplied = (chunks: readonly terminal_display_chunk[] | readonly terminal_history_chunk[]) => {
+    for (const chunk of chunks) {
+      markSequenceApplied(chunk.sequence);
+    }
+  };
+
+  const clearDeferredLive = () => {
+    deferredLive = [];
+    deferredLiveBytes = 0;
+    firstDeferredSeq = null;
+  };
+
+  const resetVisualCatchupState = (opts?: { resetParser?: boolean }) => {
+    queued = [];
+    clearDeferredLive();
+    needsHistoryCatchup = false;
+    catchupInProgress = false;
+    catchupRunSeq += 1;
+    focusAfterCatchup = false;
+    lastFlushAtMs = 0;
+    lastObservedSeq = 0;
+    lastRenderedSeq = 0;
+    historyMaxSeq = 0;
+    appliedSequences.clear();
+    observedUnrenderedSequences.clear();
+    if (opts?.resetParser) {
+      shellIntegrationParser.reset();
+    }
+  };
+
+  const markHistoryCatchupNeeded = () => {
+    needsHistoryCatchup = true;
+    clearDeferredLive();
+  };
+
+  const enqueueDeferredLive = (chunk: terminal_display_chunk) => {
+    if (needsHistoryCatchup) return;
+    const nextBytes = deferredLiveBytes + chunk.data.byteLength;
+    if (
+      deferredLive.length >= TERMINAL_DEFERRED_LIVE_MAX_CHUNKS
+      || nextBytes > TERMINAL_DEFERRED_LIVE_MAX_BYTES
+    ) {
+      markHistoryCatchupNeeded();
+      return;
+    }
+    if (firstDeferredSeq === null && typeof chunk.sequence === 'number') {
+      firstDeferredSeq = chunk.sequence;
+    }
+    deferredLive.push(chunk);
+    deferredLiveBytes = nextBytes;
+  };
+
+  const deferQueuedLive = () => {
+    if (queued.length === 0) return;
+    const pending = queued;
+    queued = [];
+    for (const chunk of pending) {
+      enqueueDeferredLive(chunk);
+      if (needsHistoryCatchup) break;
+    }
+  };
 
   const cancelPendingLiveFlush = () => {
     if (flushTimer) {
@@ -1061,8 +1162,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       flushRaf = null;
       flushScheduled = false;
       if (!liveRenderActive()) {
-        queued = [];
-        skippedLiveOutput = true;
+        deferQueuedLive();
         return;
       }
       lastFlushAtMs = terminalNowMs();
@@ -1071,19 +1171,26 @@ function TerminalSessionView(props: terminal_session_view_props) {
         TERMINAL_LIVE_FLUSH_MAX_CHUNKS,
         TERMINAL_LIVE_FLUSH_MAX_BYTES,
       );
-      const merged = mergeTerminalChunks(batch);
+      const merged = mergeTerminalChunks(batch.map((chunk) => chunk.data));
       if (merged) {
         term?.write(merged);
+        markChunksApplied(batch);
       }
-      if (queued.length > 0) scheduleFlush();
+      if (queued.length > 0) {
+        scheduleFlush();
+        return;
+      }
+      if (focusAfterCatchup) {
+        focusAfterCatchup = false;
+        scheduleTerminalActivationRefresh();
+      }
     });
   };
 
   const scheduleFlush = () => {
     if (flushScheduled || flushTimer) return;
     if (!liveRenderActive()) {
-      queued = [];
-      skippedLiveOutput = true;
+      deferQueuedLive();
       return;
     }
 
@@ -1107,7 +1214,11 @@ function TerminalSessionView(props: terminal_session_view_props) {
     unsubNameUpdate = null;
   };
 
-  const writeHistoryChunks = async (chunks: terminal_history_chunk[], seq: number) => {
+  const writeHistoryChunks = async (
+    chunks: terminal_history_chunk[],
+    seq: number,
+    opts?: { publishActivityForObservedLive?: boolean },
+  ) => {
     const core = term;
     if (!core) return;
 
@@ -1126,12 +1237,16 @@ function TerminalSessionView(props: terminal_session_view_props) {
           TERMINAL_HISTORY_REPLAY_MAX_BYTES,
         );
         const displayChunks = batch
-          .map((chunk) => consumeTerminalChunk(chunk.data, 'history'))
+          .map((chunk) => consumeTerminalChunk(chunk.data, 'history', {
+            publishActivity: opts?.publishActivityForObservedLive !== false
+              || !observedUnrenderedSequences.has(chunk.sequence),
+          }))
           .filter((chunk) => chunk.byteLength > 0);
         const merged = mergeTerminalChunks(displayChunks);
         if (merged) {
           core.write(merged);
         }
+        markChunksApplied(batch);
         if (chunks.length > 0) {
           requestAnimationFrame(step);
           return;
@@ -1142,13 +1257,19 @@ function TerminalSessionView(props: terminal_session_view_props) {
     });
   };
 
-  const consumeTerminalChunk = (data: Uint8Array, source: 'history' | 'live'): Uint8Array => {
+  const consumeTerminalChunk = (
+    data: Uint8Array,
+    source: 'history' | 'live',
+    opts?: { publishActivity?: boolean },
+  ): Uint8Array => {
     const result = shellIntegrationParser.parse(data);
-    for (const event of result.events) {
-      props.onShellIntegrationEvent?.(sessionId(), event, source);
-    }
-    if (result.displayData.byteLength > 0) {
-      props.onVisibleOutput?.(sessionId(), source, result.displayData.byteLength);
+    if (opts?.publishActivity !== false) {
+      for (const event of result.events) {
+        props.onShellIntegrationEvent?.(sessionId(), event, source);
+      }
+      if (result.displayData.byteLength > 0) {
+        props.onVisibleOutput?.(sessionId(), source, result.displayData.byteLength);
+      }
     }
     return result.displayData;
   };
@@ -1201,6 +1322,130 @@ function TerminalSessionView(props: terminal_session_view_props) {
     }
   };
 
+  const replayHistoryCatchupPages = async (id: string, startSeq: number, seq: number) => {
+    const core = term;
+    if (!core) return;
+
+    core.startHistoryReplay(TERMINAL_HISTORY_REPLAY_MODE_MS);
+
+    let cursor = Math.max(0, startSeq);
+    let resetForCoveredGap = false;
+
+    try {
+      for (let pageIndex = 0; pageIndex < TERMINAL_HISTORY_REPLAY_MAX_PAGES; pageIndex += 1) {
+        const page = await props.transport.historyPage(id, cursor, -1);
+        if (seq !== catchupRunSeq || !catchupInProgress) return;
+
+        if (page.lastSequence > historyMaxSeq) {
+          historyMaxSeq = page.lastSequence;
+        }
+
+        const sorted = [...page.chunks].sort((a, b) => a.sequence - b.sequence);
+        if (
+          !resetForCoveredGap
+          && cursor > 0
+          && page.firstSequence > cursor
+          && sorted.length > 0
+        ) {
+          core.clear();
+          shellIntegrationParser.reset();
+          appliedSequences.clear();
+          lastRenderedSeq = Math.max(0, page.firstSequence - 1);
+          resetForCoveredGap = true;
+        }
+
+        await writeHistoryChunks(sorted, initSeq, { publishActivityForObservedLive: false });
+        if (seq !== catchupRunSeq || !catchupInProgress) return;
+
+        if (!page.hasMore) return;
+        if (page.nextStartSeq <= cursor) {
+          throw new Error('terminal history pagination did not advance');
+        }
+        cursor = page.nextStartSeq;
+      }
+
+      throw new Error('terminal history pagination did not converge');
+    } finally {
+      core.endHistoryReplay();
+    }
+  };
+
+  const flushDeferredOrCatchup = () => {
+    if (!liveRenderActive()) return;
+    if (!term) return;
+    if (loading() !== 'idle') return;
+    if (catchupInProgress) return;
+
+    if (needsHistoryCatchup) {
+      const id = sessionId();
+      const startSeq = firstDeferredSeq ?? (lastRenderedSeq > 0 ? lastRenderedSeq + 1 : 0);
+      const seq = ++catchupRunSeq;
+      catchupInProgress = true;
+      needsHistoryCatchup = false;
+      focusAfterCatchup = true;
+      clearDeferredLive();
+      queued = [];
+      cancelPendingLiveFlush();
+      void replayHistoryCatchupPages(id, startSeq, seq)
+        .catch((e) => {
+          setError(e instanceof Error ? e.message : String(e));
+        })
+        .finally(() => {
+          if (seq !== catchupRunSeq) return;
+          catchupInProgress = false;
+          if (liveRenderActive()) {
+            scheduleTerminalActivationRefresh();
+          }
+          if (deferredLive.length > 0 || needsHistoryCatchup) {
+            flushDeferredOrCatchup();
+          }
+        });
+      return;
+    }
+
+    if (deferredLive.length > 0) {
+      queued.push(...deferredLive);
+      clearDeferredLive();
+      focusAfterCatchup = true;
+      scheduleFlush();
+    }
+  };
+
+  const handleLiveTerminalData = (data: Uint8Array, sequence: number | undefined) => {
+    const seq = normalizeLiveSequence(sequence);
+    if (seq) {
+      if (seq <= lastRenderedSeq || appliedSequences.has(seq) || observedUnrenderedSequences.has(seq)) {
+        return;
+      }
+      const expectedNextSeq = Math.max(lastObservedSeq, lastRenderedSeq) + 1;
+      if (seq > expectedNextSeq) {
+        markHistoryCatchupNeeded();
+      }
+      lastObservedSeq = Math.max(lastObservedSeq, seq);
+      observedUnrenderedSequences.add(seq);
+    }
+
+    const displayData = consumeTerminalChunk(data, 'live');
+    if (displayData.byteLength === 0) {
+      markSequenceApplied(seq);
+      return;
+    }
+
+    const displayChunk: terminal_display_chunk = { sequence: seq, data: displayData };
+    if (!liveRenderActive()) {
+      enqueueDeferredLive(displayChunk);
+      return;
+    }
+
+    if (needsHistoryCatchup) {
+      flushDeferredOrCatchup();
+      return;
+    }
+
+    queued.push(displayChunk);
+    scheduleFlush();
+  };
+
   let reloadSeq = 0;
   const disposeTerminal = () => {
     clearOutputSubscription();
@@ -1212,11 +1457,9 @@ function TerminalSessionView(props: terminal_session_view_props) {
     flushScheduled = false;
     cancelPendingLiveFlush();
     lastFlushAtMs = 0;
-    skippedLiveOutput = false;
-    liveOutputReloading = false;
     bufferedLive = [];
     replaying = false;
-    historyMaxSeq = 0;
+    resetVisualCatchupState({ resetParser: true });
     shellIntegrationParser.reset();
     setReadyOnce(false);
     props.registerCore(sessionId(), null);
@@ -1280,7 +1523,13 @@ function TerminalSessionView(props: terminal_session_view_props) {
   createEffect(() => {
     const id = sessionId();
     if (!id) return;
-    props.registerActions(id, { reload: () => reload() });
+    props.registerActions(id, {
+      reload: () => reload(),
+      resetAfterClear: () => {
+        cancelPendingLiveFlush();
+        resetVisualCatchupState({ resetParser: true });
+      },
+    });
     onCleanup(() => {
       props.registerActions(id, null);
     });
@@ -1322,6 +1571,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       {
         onData: (data: string) => {
           if (!props.viewActive() || !props.active()) return;
+          if (catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup) return;
           void props.transport.sendInput(id, data, props.connId);
         },
         onResize: (size: { cols: number; rows: number }) => {
@@ -1372,15 +1622,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
           return;
         }
         if (typeof ev.sequence === 'number' && ev.sequence > 0 && ev.sequence <= historyMaxSeq) return;
-        const displayData = consumeTerminalChunk(ev.data, 'live');
-        if (displayData.byteLength === 0) return;
-        if (!liveRenderActive()) {
-          skippedLiveOutput = true;
-          queued = [];
-          return;
-        }
-        queued.push(displayData);
-        scheduleFlush();
+        handleLiveTerminalData(ev.data, ev.sequence);
       });
 
       if (props.eventSource.onTerminalNameUpdate) {
@@ -1404,15 +1646,10 @@ function TerminalSessionView(props: terminal_session_view_props) {
         .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
       bufferedLive = [];
       for (const c of liveSorted) {
-        const displayData = consumeTerminalChunk(c.data, 'live');
-        if (displayData.byteLength === 0) continue;
-        if (!liveRenderActive()) {
-          skippedLiveOutput = true;
-          continue;
-        }
-        queued.push(displayData);
+        handleLiveTerminalData(c.data, c.sequence);
       }
       if (queued.length > 0) scheduleFlush();
+      flushDeferredOrCatchup();
 
       await confirmAttachedViewportSize(core, id, seq);
       if (seq !== initSeq) return;
@@ -1433,6 +1670,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       replaying = false;
       bufferedLive = [];
       queued = [];
+      clearDeferredLive();
       cancelPendingLiveFlush();
       setLoading('idle');
       setError(e instanceof Error ? e.message : String(e));
@@ -1443,18 +1681,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
   createEffect(() => {
     if (!liveRenderActive()) return;
-    if (!skippedLiveOutput) return;
-    if (liveOutputReloading) return;
-    if (!term) return;
-    if (loading() !== 'idle') return;
-
-    liveOutputReloading = true;
-    skippedLiveOutput = false;
-    queued = [];
-    cancelPendingLiveFlush();
-    void reload().finally(() => {
-      liveOutputReloading = false;
-    });
+    flushDeferredOrCatchup();
   });
 
   createEffect(() => {
@@ -1475,6 +1702,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
   createEffect(() => {
     if (!props.viewActive() || !props.active()) return;
     if (!term) return;
+    if (catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup) return;
     scheduleTerminalActivationRefresh();
   });
 
@@ -1872,7 +2100,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const coreRegistry = new Map<string, TerminalCore>();
   const surfaceRegistry = new Map<string, HTMLDivElement>();
-  const actionsRegistry = new Map<string, { reload: () => Promise<void> }>();
+  const actionsRegistry = new Map<string, terminal_session_actions>();
   const mobileKeyboardPathCache = new Map<string, TerminalMobileKeyboardPathEntry[]>();
   const mobileKeyboardPackageScriptsCache = new Map<string, TerminalMobileKeyboardScript[]>();
   const deferredInitialMountSessionIds = new Set<string>();
@@ -2312,7 +2540,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setSurfaceRegistrySeq((v) => v + 1);
   };
 
-  const registerActions = (id: string, actions: { reload: () => Promise<void> } | null) => {
+  const registerActions = (id: string, actions: terminal_session_actions | null) => {
     if (!id) return;
     if (actions) {
       actionsRegistry.set(id, actions);
@@ -3060,6 +3288,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     coreRegistry.get(sid)?.clear();
     try {
       await transport.clear(sid);
+      actionsRegistry.get(sid)?.resetAfterClear();
       await transport.sendInput(sid, '\r', connId);
     } catch (e) {
       if (handleExecuteDenied(e)) return;
