@@ -105,14 +105,14 @@ jobs:
 
           redeven_entries=(redeven LICENSE THIRD_PARTY_NOTICES.md)
           if [ -f dist/redevplugin-runtime ]; then
-            redeven_entries+=(redevplugin-runtime .redevplugin-release-artifacts-verified.json)
+            redeven_entries+=(redevplugin-runtime REDEVPLUGIN_THIRD_PARTY_NOTICES.md .redevplugin-release-artifacts-verified.json)
           fi
           (
             cd dist
             tar -czf "redeven_${GOOS}_${GOARCH}.tar.gz" "${redeven_entries[@]}"
           )
           tar -C dist -czf "dist/redeven-gateway_${GOOS}_${GOARCH}.tar.gz" redeven-gateway LICENSE THIRD_PARTY_NOTICES.md
-          rm -f dist/redeven dist/redeven-gateway dist/redevplugin-runtime
+          rm -f dist/redeven dist/redeven-gateway dist/redevplugin-runtime dist/REDEVPLUGIN_THIRD_PARTY_NOTICES.md
 
           upload_dir="dist/package-${GOOS}-${GOARCH}"
           mkdir -p "$upload_dir"

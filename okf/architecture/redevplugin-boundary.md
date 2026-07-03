@@ -122,23 +122,27 @@ is not a valid integration target. Before Redeven bundles a ReDevPlugin runtime
 artifact, the consumer-side release artifact verifier must validate the
 downloaded release directory: outer checksums and signature evidence,
 release-mode stress counters, each tarball's internal release manifest and
-checksum list, compatibility metadata, and runtime binary presence. The verifier
-must write a consumption marker that includes the verified tarball hashes and
-runtime binary hashes before any checked payload is staged into a Redeven release
-or Desktop bundle. Redeven's release and Desktop bundle gates scan for
-ReDevPlugin payloads and fail when a runtime binary, release tarball, embedded
-runtime inside a Redeven tarball, or release stress summary appears without a
-matching marker hash. The released-artifact staging path keeps that boundary
-explicit: it can download a ReDevPlugin GitHub Release or copy an already
-downloaded artifact directory, runs the verifier with marker output, validates
-the staged root with the consumption gate, and only then extracts an optional
-target `redevplugin-runtime` binary with its marker for downstream bundle
-staging. Redeven release tarballs and Desktop bundles use this path only when a
-published ReDevPlugin version is explicitly selected; copied artifact
-directories remain a local fixture and preflight input for the helper, not a
-GitHub release workflow selector. The default release and Desktop packaging
-paths remain no-op for ReDevPlugin payloads until such a version is configured,
-so the repository does not silently consume unreleased local behavior.
+checksum list, compatibility metadata, `THIRD_PARTY_NOTICES.md`, and runtime
+binary presence. The verifier must write a consumption marker that includes the
+verified tarball hashes, runtime binary hashes, and ReDevPlugin third-party
+notice hashes before any checked payload is staged into a Redeven release or
+Desktop bundle. Redeven's release and Desktop bundle gates scan for ReDevPlugin
+payloads and fail when a runtime binary, release tarball, embedded runtime inside
+a Redeven tarball, or release stress summary appears without a matching marker
+hash. Direct staged runtimes and embedded Redeven tarballs must also carry
+`REDEVPLUGIN_THIRD_PARTY_NOTICES.md` with a hash recorded in the marker, so
+license evidence moves with the runtime payload. The released-artifact staging
+path keeps that boundary explicit: it can download a ReDevPlugin GitHub Release
+or copy an already downloaded artifact directory, runs the verifier with marker
+output, validates the staged root with the consumption gate, and only then
+extracts an optional target `redevplugin-runtime` binary, marker, and
+`REDEVPLUGIN_THIRD_PARTY_NOTICES.md` for downstream bundle staging. Redeven
+release tarballs and Desktop bundles use this path only when a published
+ReDevPlugin version is explicitly selected; copied artifact directories remain a
+local fixture and preflight input for the helper, not a GitHub release workflow
+selector. The default release and Desktop packaging paths remain no-op for
+ReDevPlugin payloads until such a version is configured, so the repository does
+not silently consume unreleased local behavior.
 
 Redeven-side plugin code layout must make the adapter boundary visible. It may
 contain host integration, route mounting, capability adapters, and product UI,
@@ -173,7 +177,7 @@ published ReDevPlugin artifact is selected by Redeven.
 [14] redeven:AGENTS.md:535 - Redeven plugin integration review must reject alternate platform cores and enforce adapter-only business capabilities.
 [15] redeven:go.mod:5 - Redeven's current required module list is the active Go dependency surface for released upstream modules.
 [16] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The dependency boundary guard blocks local ReDevPlugin wiring and copied platform-core paths.
-[17] redeven:scripts/check_redevplugin_release_artifacts.sh:10 - The consumer-side release artifact verifier validates checksums, signature evidence, stress counters, internal manifests, compatibility metadata, and runtime binary presence.
+[17] redeven:scripts/check_redevplugin_release_artifacts.sh:10 - The consumer-side release artifact verifier validates checksums, signature evidence, stress counters, internal manifests, compatibility metadata, third-party notices, and runtime binary presence.
 [18] redeven:scripts/check_redevplugin_consumption_gate.sh:10 - The consumption gate fails release staging or Desktop bundling when ReDevPlugin payloads appear without verifier markers.
 [19] redeven:.github/workflows/ci-check.yml:108 - CI runs the ReDevPlugin release artifact verifier self-test and consumption gate self-test before a real artifact is wired into release packaging.
 [20] redeven:scripts/stage_redevplugin_release_artifacts.sh:14 - The release artifact staging helper verifies downloaded or copied ReDevPlugin artifacts before extracting a runtime payload.

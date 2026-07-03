@@ -2,6 +2,7 @@
 set -euo pipefail
 
 MARKER_BASENAME=".redevplugin-release-artifacts-verified.json"
+NOTICE_BASENAME="REDEVPLUGIN_THIRD_PARTY_NOTICES.md"
 
 usage() {
   cat <<'USAGE'
@@ -15,8 +16,9 @@ Usage:
 Downloads or copies a released ReDevPlugin artifact set, verifies the release
 evidence, writes a verifier marker, and validates the staged payloads with the
 Redeven consumption gate. When --runtime-target and --runtime-out are supplied,
-the matching verified redevplugin-runtime binary is extracted and the marker is
-copied next to it so downstream staging roots can be scanned directly.
+the matching verified redevplugin-runtime binary, verifier marker, and
+REDEVPLUGIN_THIRD_PARTY_NOTICES.md file are extracted so downstream staging
+roots can be scanned directly.
 USAGE
 }
 
@@ -283,7 +285,7 @@ extract_runtime_binary() {
   local target="$3"
   local runtime_out="$4"
   local marker="$dest/$MARKER_BASENAME"
-  local tarball tmpdir root runtime_source runtime_dir
+  local tarball tmpdir root runtime_source notices_source runtime_dir
 
   tarball="$(resolve_runtime_tarball "$dest" "$version" "$target")"
   tmpdir=$(mktemp -d)
@@ -297,11 +299,16 @@ extract_runtime_binary() {
   if [[ ! -f "$runtime_source" ]]; then
     die "verified runtime tarball does not contain bin/redevplugin-runtime"
   fi
+  notices_source="$root/THIRD_PARTY_NOTICES.md"
+  if [[ ! -f "$notices_source" ]]; then
+    die "verified runtime tarball does not contain THIRD_PARTY_NOTICES.md"
+  fi
 
   runtime_dir=$(dirname -- "$runtime_out")
   mkdir -p "$runtime_dir"
   cp "$runtime_source" "$runtime_out"
   chmod +x "$runtime_out"
+  cp "$notices_source" "$runtime_dir/$NOTICE_BASENAME"
 
   cp "$marker" "$runtime_dir/$MARKER_BASENAME"
   if [[ -n "$MARKER_OUT" ]]; then
@@ -439,6 +446,7 @@ create_self_test_artifacts() {
   printf 'self-test runtime\n' >"$bundle_dir/bin/redevplugin-runtime"
   printf 'self-test cli\n' >"$bundle_dir/bin/redevplugin"
   chmod +x "$bundle_dir/bin/redevplugin-runtime" "$bundle_dir/bin/redevplugin"
+  printf 'self-test third-party notices\n' >"$bundle_dir/THIRD_PARTY_NOTICES.md"
   printf '{}\n' >"$bundle_dir/contracts/spec/plugin/release-manifest-v1.schema.json"
   cat >"$bundle_dir/compatibility.json" <<JSON
 {
@@ -523,8 +531,16 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
     echo "self-test expected verifier markers to be written" >&2
     exit 1
   fi
+  if [[ ! -s "$(dirname -- "$runtime_out")/$NOTICE_BASENAME" ]]; then
+    echo "self-test expected third-party notices to be copied next to the runtime" >&2
+    exit 1
+  fi
   if ! cmp -s "$runtime_out" <(printf 'self-test runtime\n'); then
     echo "self-test extracted runtime content mismatch" >&2
+    exit 1
+  fi
+  if ! cmp -s "$(dirname -- "$runtime_out")/$NOTICE_BASENAME" <(printf 'self-test third-party notices\n'); then
+    echo "self-test extracted third-party notices content mismatch" >&2
     exit 1
   fi
 

@@ -24,41 +24,45 @@ verifier is the Redeven-side consumer gate for downloaded ReDevPlugin GitHub
 Release assets: it checks outer `SHA256SUMS`, `.sig`/`.bundle` evidence,
 keyless cosign signatures when not explicitly skipped for fixtures, release-mode
 stress counters, each tarball's internal `release-manifest.json`, internal
-`SHA256SUMS`, `compatibility.json`, and runtime binary presence. CI runs the
-verifier's self-test so the positive fixture passes and a tampered stress
-summary is rejected before a real ReDevPlugin artifact is wired into the release
-pipeline. When the verifier is used with `--write-marker`, it emits a
-machine-readable verification marker that records the checked checksum file,
-stress summary, runtime tarball hashes, and the runtime binary hashes extracted
-from those verified tarballs. The consumption gate scans release staging
-directories and Desktop bundle directories for ReDevPlugin payloads and fails if
-they appear without that marker. It also binds the marker to the staged payloads:
-direct ReDevPlugin tarballs must match marker tarball checksums, direct runtime
-binaries must match marker runtime hashes, embedded runtime binaries inside
-Redeven tarballs must match marker runtime hashes, and staged stress summaries
-must match the marker stress checksum. Release automation runs the gate before
-final checksums are generated, and the Desktop bundled-runtime preparation runs
-it before electron-builder can package the bundle resources. The release
-artifact staging helper is the explicit handoff path from a published
-ReDevPlugin artifact set into Redeven staging directories: it downloads a GitHub
-Release tag or copies a supplied artifact directory, invokes the verifier with
-marker output, validates the staged root with the consumption gate, and can
-extract a target `redevplugin-runtime` binary with a copied marker so downstream
-release and Desktop bundle roots remain directly scannable. Its CI self-test
-uses fixture release assets and verifies that missing signature evidence fails,
-keeping the staging flow executable before a real ReDevPlugin version is
-selected. Release packaging and Desktop packaging now call that staging path
-only when explicit ReDevPlugin release inputs are configured. Release tarball
-builds use `REDEVEN_RELEASE_REDEVPLUGIN_VERSION` to download and stage a target
-runtime into the Redeven tarball together with the verifier marker, then upload
-the marker as hidden package evidence so the final release job can scan embedded
-runtimes before checksums are generated. The helper still accepts a supplied
-artifact directory for local fixture and preflight checks, but the GitHub release
-workflow selects ReDevPlugin by published version only. Desktop bundling uses the
-same selected version through `REDEVEN_DESKTOP_REDEVPLUGIN_VERSION` and stages
-the runtime into `.bundle/<goos>-<goarch>` before electron-builder packaging.
-With no selected published version, both paths remain no-op and do not consume
-local source.
+`SHA256SUMS`, `compatibility.json`, `THIRD_PARTY_NOTICES.md`, and runtime binary
+presence. CI runs the verifier's self-test so the positive fixture passes and a
+tampered stress summary is rejected before a real ReDevPlugin artifact is wired
+into the release pipeline. When the verifier is used with `--write-marker`, it
+emits a machine-readable verification marker that records the checked checksum
+file, stress summary, runtime tarball hashes, runtime binary hashes, and
+ReDevPlugin third-party notice hashes extracted from those verified tarballs. The
+consumption gate scans release staging directories and Desktop bundle
+directories for ReDevPlugin payloads and fails if they appear without that
+marker. It also binds the marker to the staged payloads: direct ReDevPlugin
+tarballs must match marker tarball checksums, direct runtime binaries must match
+marker runtime hashes and sit next to matching
+`REDEVPLUGIN_THIRD_PARTY_NOTICES.md`, embedded runtime binaries inside Redeven
+tarballs must match marker runtime hashes and be packaged with matching
+`REDEVPLUGIN_THIRD_PARTY_NOTICES.md`, and staged stress summaries must match the
+marker stress checksum. Release automation runs the gate before final checksums
+are generated, and the Desktop bundled-runtime preparation runs it before
+electron-builder can package the bundle resources. The release artifact staging
+helper is the explicit handoff path from a published ReDevPlugin artifact set
+into Redeven staging directories: it downloads a GitHub Release tag or copies a
+supplied artifact directory, invokes the verifier with marker output, validates
+the staged root with the consumption gate, and can extract a target
+`redevplugin-runtime` binary together with the copied marker and
+`REDEVPLUGIN_THIRD_PARTY_NOTICES.md` so downstream release and Desktop bundle
+roots remain directly scannable. Its CI self-test uses fixture release assets
+and verifies that missing signature evidence fails, keeping the staging flow
+executable before a real ReDevPlugin version is selected. Release packaging and
+Desktop packaging now call that staging path only when explicit ReDevPlugin
+release inputs are configured. Release tarball builds use
+`REDEVEN_RELEASE_REDEVPLUGIN_VERSION` to download and stage a target runtime into
+the Redeven tarball together with the verifier marker and ReDevPlugin
+third-party notices, then upload the marker as hidden package evidence so the
+final release job can scan embedded runtimes before checksums are generated. The
+helper still accepts a supplied artifact directory for local fixture and
+preflight checks, but the GitHub release workflow selects ReDevPlugin by
+published version only. Desktop bundling uses the same selected version through
+`REDEVEN_DESKTOP_REDEVPLUGIN_VERSION` and stages the runtime plus notices into
+`.bundle/<goos>-<goarch>` before electron-builder packaging. With no selected
+published version, both paths remain no-op and do not consume local source.
 Once plugin integration code exists, the focused gate should cover mounted route
 matrix, released-contract hash verification, session adapter mapping, Env App
 and Workbench surface smoke, Flower-generated minimal fixture flow, and concrete
@@ -95,7 +99,7 @@ ReDevPlugin artifacts only.
 [18] redeven:AGENTS.md:513 - Redeven local checks must prove integration does not depend on local ReDevPlugin wiring or copied artifacts.
 [19] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The local boundary script rejects Go workspaces, local ReDevPlugin wiring, and copied platform-core paths.
 [20] redeven:scripts/check_redevplugin_release_artifacts.sh:6 - The release artifact verifier supports real artifact directories, marker output, and a CI self-test mode.
-[21] redeven:scripts/check_redevplugin_release_artifacts.sh:10 - The verifier checks outer checksums, signatures, release stress counters, tarball manifests, compatibility metadata, and runtime binary presence.
+[21] redeven:scripts/check_redevplugin_release_artifacts.sh:10 - The verifier checks outer checksums, signatures, release stress counters, tarball manifests, compatibility metadata, third-party notices, and runtime binary presence.
 [22] redeven:scripts/check_redevplugin_consumption_gate.sh:6 - The consumption gate scans release staging and Desktop bundle roots for ReDevPlugin payloads without verifier markers.
 [23] redeven:.github/workflows/release.yml:293 - Release automation validates the ReDevPlugin consumption gate before generating final checksums.
 [24] redeven:scripts/build_desktop_bundled_runtime.sh:188 - Desktop bundled-runtime preparation runs the ReDevPlugin consumption gate before packaging.
@@ -104,7 +108,7 @@ ReDevPlugin artifacts only.
 [27] redeven:.github/workflows/ci-check.yml:114 - CI runs the ReDevPlugin release artifact staging self-test.
 [28] redeven:scripts/stage_redevplugin_release_artifacts.sh:14 - The staging script downloads or copies ReDevPlugin release artifacts, verifies them, writes a marker, and validates consumption.
 [29] redeven:.github/workflows/release.yml:93 - Release tarball builds stage a selected ReDevPlugin runtime only when explicit release inputs are configured.
-[30] redeven:.github/workflows/release.yml:113 - Release tarballs include the staged ReDevPlugin runtime and verifier marker when present.
+[30] redeven:.github/workflows/release.yml:113 - Release tarballs include the staged ReDevPlugin runtime, third-party notices, and verifier marker when present.
 [31] redeven:scripts/build_desktop_bundled_runtime.sh:113 - Desktop bundle preparation has an env-gated ReDevPlugin runtime staging path.
 [32] redeven:.github/workflows/release.yml:241 - Desktop release packaging passes the selected ReDevPlugin version into bundled-runtime preparation.
 [33] redeven:.githooks/pre-commit:7 - The local pre-commit hook runs the ReDevPlugin dependency boundary guard before Gateway and heavyweight local checks.
