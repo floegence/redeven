@@ -9,7 +9,7 @@ import type {
 import { branchDisplayName, branchStatusSummary, describeGitHead, summarizeWorkspaceCount } from '../utils/gitWorkbench';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { gitCompareTone } from './GitChrome';
-import { GitSection, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
+import { GitInlineLoadingStatus, GitSection, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
 import { useI18n, type I18nHelpers } from '../i18n';
 
 export interface GitOverviewPanelProps {
@@ -42,7 +42,10 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
   const i18n = useI18n();
   return (
     <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="h-full min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
-      <Show when={!props.summaryLoading} fallback={<div class="text-xs text-muted-foreground">{i18n.t('git.overview.loadingRepositorySummary')}</div>}>
+      <Show
+        when={!props.summaryLoading}
+        fallback={<GitInlineLoadingStatus>{i18n.t('git.overview.loadingRepositorySummary')}</GitInlineLoadingStatus>}
+      >
         <Show when={!props.summaryError} fallback={<div class="text-xs break-words text-error">{props.summaryError}</div>}>
           <Show when={props.repoSummary} fallback={<div class="text-xs text-muted-foreground">{i18n.t('git.overview.repositorySummaryUnavailable')}</div>}>
             {(summaryAccessor) => {

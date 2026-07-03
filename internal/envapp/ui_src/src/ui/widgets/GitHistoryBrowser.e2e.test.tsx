@@ -205,6 +205,44 @@ afterEach(() => {
 });
 
 describe("GitHistoryBrowser interactions", () => {
+  it("shows the git sweep indicator while graph commit details are loading", async () => {
+    mockGetCommitDetail.mockImplementationOnce(() => new Promise(() => {}));
+
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <div class="h-[640px]">
+              <GitHistoryBrowser
+                repoInfo={{
+                  available: true,
+                  repoRootPath: "/workspace/repo",
+                  headRef: "main",
+                  headCommit: "3a47b67b1234567890",
+                }}
+                currentPath="/workspace/repo/src"
+                selectedCommitHash="3a47b67b1234567890"
+              />
+            </div>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+      expect(host.textContent).toContain("Loading commit details...");
+      expect(host.querySelector(".git-loading-indicator")).toBeTruthy();
+      expect(host.querySelector(".floe-grid-cell")).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
   it("renders merge commit presentation context alongside inline commit patches", async () => {
     mockGetCommitDetail.mockResolvedValueOnce({
       repoRootPath: "/workspace/repo",

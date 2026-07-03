@@ -3,7 +3,7 @@
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { GitMetaPill, GitPanelFrame, GitTableFrame } from './GitWorkbenchPrimitives';
+import { GitInlineLoadingStatus, GitMetaPill, GitPagedTableFooter, GitPanelFrame, GitStatePane, GitTableFrame } from './GitWorkbenchPrimitives';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -77,6 +77,94 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
       expect(pill).toBeTruthy();
       expect(pill?.className).toContain('custom-pill');
       expect(pill?.textContent).toContain('Git tag');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('renders GitStatePane loading with the git sweep indicator instead of the square grid loader', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <GitStatePane loading message="Loading branch status..." detail="Preparing changed files." />
+    ), host);
+
+    try {
+      const status = host.querySelector('[role="status"]');
+      expect(status).toBeTruthy();
+      expect(status?.getAttribute('aria-busy')).toBe('true');
+      expect(status?.getAttribute('aria-live')).toBe('polite');
+      expect(host.querySelector('.git-state-pane__loading-eyebrow')?.textContent).toContain('Loading');
+      expect(host.querySelector('.git-loading-indicator')).toBeTruthy();
+      expect(host.querySelector('.git-loading-indicator__bar')).toBeTruthy();
+      expect(host.querySelector('.floe-grid-cell')).toBeNull();
+      expect(host.textContent).toContain('Loading branch status...');
+      expect(host.textContent).toContain('Preparing changed files.');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('leaves non-loading GitStatePane states free of live loading semantics', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <GitStatePane tone="error" message="Failed to load branches." surface />
+    ), host);
+
+    try {
+      expect(host.querySelector('[role="status"]')).toBeNull();
+      expect(host.querySelector('.git-loading-indicator')).toBeNull();
+      expect(host.textContent).toContain('Failed to load branches.');
+      expect(host.firstElementChild?.className).toContain('border-error/20');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('renders inline loading status with the same sweep language', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <GitInlineLoadingStatus>Loading next page</GitInlineLoadingStatus>
+    ), host);
+
+    try {
+      const status = host.querySelector('.git-inline-loading-status');
+      expect(status).toBeTruthy();
+      expect(status?.getAttribute('role')).toBe('status');
+      expect(status?.getAttribute('aria-busy')).toBe('true');
+      expect(host.querySelector('.git-loading-indicator--inline')).toBeTruthy();
+      expect(host.querySelector('.floe-grid-cell')).toBeNull();
+      expect(host.textContent).toContain('Loading next page');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('uses the inline sweep status for paged table footer loading', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <GitPagedTableFooter
+        summary={<span>Loaded 2 of 40 files.</span>}
+        hasMore
+        loading
+        loadingStatus="Loading next page"
+      />
+    ), host);
+
+    try {
+      expect(host.querySelector('.git-inline-loading-status')).toBeTruthy();
+      expect(host.querySelector('.git-loading-indicator--inline')).toBeTruthy();
+      expect(host.querySelector('.floe-grid-cell')).toBeNull();
+      expect(host.textContent).toContain('Loading next page');
+      expect(host.textContent).toContain('Loading more...');
+      expect(host.textContent).toContain('Loaded 2 of 40 files.');
     } finally {
       dispose();
     }

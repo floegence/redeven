@@ -517,6 +517,8 @@ describe("GitDiffDialog", () => {
 
       expect(mockGetDiffContent).toHaveBeenCalledTimes(1);
       expect(document.body.textContent).toContain("Loading patch preview...");
+      expect(document.body.querySelector(".git-loading-indicator")).toBeTruthy();
+      expect(document.body.querySelector(".floe-grid-cell")).toBeNull();
       expect(document.body.textContent).not.toContain(
         "Select a file to inspect its diff.",
       );

@@ -554,6 +554,9 @@ describe('GitChangesPanel interactions', () => {
 
       expect(host.textContent).toContain('Loading next page');
       expect(host.textContent).toContain('Loading more...');
+      expect(host.querySelector('.git-inline-loading-status')).toBeTruthy();
+      expect(host.querySelector('.git-loading-indicator--inline')).toBeTruthy();
+      expect(host.querySelector('.floe-grid-cell')).toBeNull();
     } finally {
       dispose();
     }

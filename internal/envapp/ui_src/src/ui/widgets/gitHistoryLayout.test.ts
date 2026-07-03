@@ -502,7 +502,12 @@ describe('browser workspace layout wiring', () => {
 
     expect(primitivesSrc).toContain('export interface GitStatePaneProps');
     expect(primitivesSrc).toContain('flex w-full min-h-0 flex-1 items-center justify-center');
-    expect(primitivesSrc).toContain('<SnakeLoader size="sm"');
+    expect(primitivesSrc).toContain('export function GitLoadingIndicator');
+    expect(primitivesSrc).toContain('export function GitInlineLoadingStatus');
+    expect(primitivesSrc).toContain('<GitLoadingIndicator tone={tone()} />');
+    expect(primitivesSrc).toContain('<GitInlineLoadingStatus>{status()}</GitInlineLoadingStatus>');
+    expect(primitivesSrc).not.toContain("import { SnakeLoader } from '@floegence/floe-webapp-core/loading';");
+    expect(primitivesSrc).not.toContain('<SnakeLoader');
     expect(workspaceSrc).toContain('shellLoadingMessage?: string;');
     expect(workspaceSrc).toContain("i18n.t('git.workspace.preparingActiveView')");
     expect(workspaceSrc).toContain('<GitStatePane loading message={shellLoadingMessage()}');
