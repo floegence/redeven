@@ -46,6 +46,15 @@ selected engine and target container id, normalizes capability lists and
 mount/device summaries, computes a stable `target_hash`, and returns image,
 runtime, risk level, risk flags, `requires_admin`, and a short summary.
 
+`Adapter.CallMethod` is the Redeven-side method dispatcher for future
+ReDevPlugin capability route registration. It accepts a declared `Method` plus
+raw JSON, requires `schema_version` to match the active capability contract,
+decodes requests with unknown fields rejected, routes to the existing typed
+adapter methods, and returns the same typed DTOs. This keeps JSON boundary
+validation and method-to-DTO mapping in the business capability package rather
+than duplicating it in future product route glue. It is not a manifest parser,
+package validator, token issuer, or alternate ReDevPlugin method router.
+
 `CLIClient` is the concrete local engine client. It shells out to Docker or
 Podman with a bounded timeout, probes `version --format "{{json .}}"`, lists
 containers through `ps --no-trunc --format json`, inspects one container through
@@ -120,3 +129,5 @@ into Redeven.
 [20] redeven:internal/capabilities/containers/testdata/generated_plugins/containers_integration/manifest.json:1 - The integration-only official Containers fixture declares the capability binding, product surface, method manifest, confirmation policy, and cancel policy expected for future ReDevPlugin registration.
 [21] redeven:internal/capabilities/containers/manifest_fixture_test.go:114 - Fixture tests bind the manifest to `CapabilityID`, `CapabilityVersion`, `Methods()`, method effects, request fields, confirmation semantics, and cancel policies without importing ReDevPlugin code.
 [22] redeven:internal/capabilities/containers/cli_client_integration_test.go:21 - The opt-in real engine smoke is gated by `REDEVEN_CONTAINERS_ENGINE_SMOKE` and validates Docker/Podman CLI behavior only when an engine is explicitly available.
+[23] redeven:internal/capabilities/containers/method_dispatch.go:15 - `Adapter.CallMethod` maps raw JSON requests for each capability method to the typed adapter methods with schema-version and closed-world request checks.
+[24] redeven:internal/capabilities/containers/adapter_test.go:211 - Dispatcher tests cover every method plus invalid schema versions, unknown fields, unknown methods, and missing request bodies.
