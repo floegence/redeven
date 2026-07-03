@@ -120,7 +120,7 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
                     <div class="space-y-0.5 rounded-md bg-muted/[0.12] p-0.5">
                       <For each={repoSignals()}>
                         {(signal) => (
-                          <div class="flex flex-col gap-1.5 rounded bg-background/70 px-2 py-1.5 text-[11px] transition-shadow duration-150 hover:shadow-sm sm:flex-row sm:items-start sm:justify-between" title={signal.value}>
+                          <div class="flex flex-col gap-1.5 rounded px-2 py-1.5 text-[11px] transition-colors duration-150 hover:bg-muted/[0.14] sm:flex-row sm:items-start sm:justify-between" title={signal.value}>
                             <div class="shrink-0 text-muted-foreground/80">{signal.label}</div>
                             <div class="min-w-0 break-words text-left font-medium text-foreground sm:flex-1 sm:truncate sm:text-right">{signal.value}</div>
                           </div>

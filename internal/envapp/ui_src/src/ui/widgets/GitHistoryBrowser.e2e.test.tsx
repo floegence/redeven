@@ -470,29 +470,37 @@ describe("GitHistoryBrowser interactions", () => {
     try {
       await flush();
 
-      const messageBlock = Array.from(host.querySelectorAll("div")).find(
-        (node) => {
-          const className = node.className?.toString?.() ?? "";
-          return (
-            className.includes("whitespace-pre-wrap") &&
-            node.textContent?.includes(
-              "Move route props out of the recursive spread path.",
-            )
-          );
-        },
-      );
-      const toggleButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Show more"),
-      );
+      const messageBlock = host.querySelector(
+        "[data-git-commit-body]",
+      ) as HTMLDivElement | null;
+      const toggleButton = host.querySelector(
+        "[data-git-commit-body-toggle]",
+      ) as HTMLButtonElement | null;
+      const bodyGroup = host.querySelector(
+        "[data-git-commit-body-group]",
+      ) as HTMLDivElement | null;
 
       expect(messageBlock).toBeTruthy();
+      expect(bodyGroup).toBeTruthy();
+      expect(toggleButton).toBeTruthy();
+      expect(messageBlock?.closest("[data-git-commit-body-group]")).toBe(
+        bodyGroup,
+      );
+      expect(toggleButton?.closest("[data-git-commit-body-group]")).toBe(
+        bodyGroup,
+      );
+      expect(toggleButton?.parentElement?.className).toContain(
+        "justify-start",
+      );
+      expect(toggleButton?.parentElement?.className).not.toContain(
+        "justify-end",
+      );
       expect(messageBlock?.textContent).not.toContain(
         "fix(region): avoid route props spread recursion",
       );
       expect(messageBlock?.getAttribute("style")).toContain(
         "-webkit-line-clamp: 2",
       );
-      expect(toggleButton).toBeTruthy();
       expect(toggleButton?.getAttribute("aria-expanded")).toBe("false");
 
       toggleButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));

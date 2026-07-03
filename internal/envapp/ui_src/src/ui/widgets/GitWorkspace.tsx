@@ -289,7 +289,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
             />
           )
       )}
-      class={props.class}
+      class={['redeven-git-browser', props.class].filter(Boolean).join(' ')}
     />
   );
 }

@@ -216,7 +216,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
   };
 
   return (
-    <div class={cn('overflow-hidden rounded-md border', redevenSurfaceRoleClass('panelStrong'), props.class)}>
+    <div class={cn('overflow-hidden rounded-md border', redevenSurfaceRoleClass('panel'), redevenDividerRoleClass(), props.class)}>
       <div class="relative">
         <svg
           data-commit-graph-rails

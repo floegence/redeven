@@ -38,11 +38,11 @@ export interface GitSectionProps {
 
 export function GitSection(props: GitSectionProps) {
   return (
-    <section class={cn('rounded-md border px-3 py-2.5', redevenSurfaceRoleClass('panelStrong'), gitToneSurfaceClass(props.tone), props.class)}>
+    <section class={cn('rounded-md border-l bg-muted/[0.08] px-3 py-2.5', redevenDividerRoleClass(), gitToneSurfaceClass(props.tone), props.class)}>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-x-3 sm:gap-y-1.5">
         <div class="min-w-0 space-y-1">
           <div class="flex items-center gap-2">
-            <span class={cn('h-2 w-2 shrink-0 rounded-full shadow-[0_0_0_3px_rgba(255,255,255,0.04)]', gitToneDotClass(props.tone))} aria-hidden="true" />
+            <span class={cn('h-2 w-2 shrink-0 rounded-full ring-1 ring-current/20', gitToneDotClass(props.tone))} aria-hidden="true" />
             <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75">{props.label}</div>
           </div>
           <Show when={props.description}>
@@ -74,7 +74,7 @@ export function GitLabelBlock(props: GitLabelBlockProps) {
   return (
     <div class={cn('space-y-1', props.class)}>
       <div class="flex flex-wrap items-center gap-2">
-        <span class={cn('h-2 w-2 shrink-0 rounded-full shadow-[0_0_0_3px_rgba(255,255,255,0.04)]', gitToneDotClass(props.tone))} aria-hidden="true" />
+        <span class={cn('h-2 w-2 shrink-0 rounded-full ring-1 ring-current/20', gitToneDotClass(props.tone))} aria-hidden="true" />
         <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75">{props.label}</div>
         <Show when={props.meta}>
           <div class="flex min-w-0 flex-wrap items-center gap-1.5">{props.meta}</div>
@@ -88,13 +88,13 @@ export function GitLabelBlock(props: GitLabelBlockProps) {
 }
 
 const GIT_PANEL_FRAME_CLASS = cn(
-  'rounded-md border px-3 py-2.5 shadow-sm shadow-black/[0.05] ring-1 ring-black/[0.02]',
-  redevenSurfaceRoleClass('panelStrong'),
+  'rounded-md border border-transparent bg-muted/[0.08] px-3 py-2.5',
 );
 
 const GIT_TABLE_FRAME_CLASS = cn(
   'overflow-hidden rounded-md border',
-  redevenSurfaceRoleClass('panelStrong'),
+  redevenDividerRoleClass(),
+  redevenSurfaceRoleClass('panel'),
 );
 
 export interface GitPanelFrameProps {
@@ -134,10 +134,10 @@ export interface GitStatStripProps {
 
 export function GitStatStrip(props: GitStatStripProps) {
   return (
-    <div class={cn('grid gap-1 rounded-md bg-muted/[0.12] p-1 text-[11px]', props.columnsClass || 'grid-cols-2 lg:grid-cols-4', props.class)}>
+    <div class={cn('grid gap-1 rounded-md bg-muted/[0.08] p-1 text-[11px]', props.columnsClass || 'grid-cols-2 lg:grid-cols-4', props.class)}>
       <For each={props.items}>
         {(item) => (
-          <div class={cn('rounded-md border px-2.5 py-2 transition-shadow duration-150 hover:shadow-sm', redevenSurfaceRoleClass('inset'))}>
+          <div class="rounded px-2.5 py-2 transition-colors duration-150 hover:bg-muted/[0.14]">
             <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70">{item.label}</div>
             <div class="mt-1 text-xs font-semibold tracking-tight text-foreground">{item.value}</div>
             <Show when={item.hint}>
@@ -156,7 +156,7 @@ export interface GitSubtleNoteProps {
 }
 
 export function GitSubtleNote(props: GitSubtleNoteProps) {
-  return <div class={cn('rounded-md border px-2.5 py-2 text-xs leading-relaxed text-muted-foreground', redevenSurfaceRoleClass('inset'), props.class)}>{props.children}</div>;
+  return <div class={cn('rounded-md bg-muted/[0.10] px-2.5 py-2 text-xs leading-relaxed text-muted-foreground', props.class)}>{props.children}</div>;
 }
 
 export interface GitPagedTableFooterProps {
@@ -189,7 +189,7 @@ export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
           {(status) => (
             <div
               aria-live="polite"
-              class={cn('inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-medium leading-none tracking-[0.02em] text-muted-foreground shadow-sm shadow-black/5', redevenSurfaceRoleClass('controlMuted'))}
+              class={cn('inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-medium leading-none tracking-[0.02em] text-muted-foreground', redevenSurfaceRoleClass('controlMuted'))}
             >
               <span class="inline-grid h-3.5 w-3.5 shrink-0 place-items-center overflow-hidden text-primary/80">
                 <SnakeLoader size="sm" class="h-4 w-4 shrink-0 origin-center scale-[0.68]" />
@@ -204,7 +204,7 @@ export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
         <Button
           size="sm"
           variant="outline"
-          class={cn('w-full rounded-full px-3 text-[11px] font-medium shadow-sm shadow-black/5 transition-[box-shadow,background-color,border-color] duration-150 hover:bg-accent/60 hover:shadow-md sm:min-w-[8.75rem] sm:w-auto', redevenSurfaceRoleClass('control'))}
+          class={cn('w-full rounded-full px-3 text-[11px] font-medium transition-[background-color,border-color] duration-150 hover:bg-accent/60 sm:min-w-[8.75rem] sm:w-auto', redevenSurfaceRoleClass('control'))}
           onClick={() => props.onLoadMore?.()}
           loading={loading()}
           disabled={!props.hasMore || loading()}
@@ -214,7 +214,7 @@ export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
       </div>
 
       <div class="min-w-0 justify-self-stretch sm:justify-self-end">
-        <GitSubtleNote class={cn('w-full px-2 py-1 text-[10px] leading-4 shadow-sm shadow-black/5 sm:max-w-full', redevenSurfaceRoleClass('controlMuted'))}>
+        <GitSubtleNote class={cn('w-full px-2 py-1 text-[10px] leading-4 sm:max-w-full', redevenSurfaceRoleClass('controlMuted'))}>
           {props.summary}
         </GitSubtleNote>
       </div>
@@ -313,24 +313,24 @@ export function GitStatePane(props: GitStatePaneProps) {
 }
 
 export const GIT_CHANGED_FILES_TABLE_CLASS = 'w-full text-[11px] leading-4';
-export const GIT_CHANGED_FILES_HEAD_CLASS = 'sticky top-0 z-10 bg-muted/30 backdrop-blur';
-export const GIT_CHANGED_FILES_HEADER_ROW_CLASS = cn('border-b text-left text-[10px] uppercase tracking-[0.14em] text-muted-foreground', redevenDividerRoleClass('strong'));
+export const GIT_CHANGED_FILES_HEAD_CLASS = cn('sticky top-0 z-10', redevenSurfaceRoleClass('panel'));
+export const GIT_CHANGED_FILES_HEADER_ROW_CLASS = cn('border-b text-left text-[10px] uppercase tracking-[0.14em] text-muted-foreground', redevenDividerRoleClass());
 export const GIT_CHANGED_FILES_HEADER_CELL_CLASS = 'px-2.5 py-1 font-medium';
 export const GIT_CHANGED_FILES_CELL_CLASS = 'px-2.5 py-1 align-top';
-export const GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS = cn('sticky right-0 z-20 border-l bg-muted/30 px-2.5 py-1 text-right font-medium', redevenDividerRoleClass());
+export const GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS = cn('sticky right-0 z-20 border-l px-2.5 py-1 text-right font-medium', redevenDividerRoleClass(), redevenSurfaceRoleClass('panel'));
 export const GIT_CHANGED_FILES_SECONDARY_PATH_CLASS = 'mt-px truncate text-[10px] leading-3.5 text-muted-foreground';
 export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex cursor-pointer items-center whitespace-nowrap text-[11px] font-medium text-primary underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-45';
 
 export function gitChangedFilesRowClass(active: boolean): string {
   return active
-    ? cn('group border-b bg-muted/40 last:border-b-0', redevenDividerRoleClass())
-    : cn('group border-b bg-transparent hover:bg-muted/20 last:border-b-0', redevenDividerRoleClass());
+    ? cn('group border-b git-browser-selection-surface last:border-b-0', redevenDividerRoleClass())
+    : cn('group border-b bg-transparent hover:bg-muted/[0.14] last:border-b-0', redevenDividerRoleClass());
 }
 
 export function gitChangedFilesStickyCellClass(active: boolean): string {
   return active
-    ? cn('sticky right-0 z-10 border-l bg-muted/40 px-2.5 py-1 text-right align-top shadow-[-1px_0_0_rgba(0,0,0,0.03)]', redevenDividerRoleClass())
-    : cn('sticky right-0 z-10 border-l px-2.5 py-1 text-right align-top shadow-[-1px_0_0_rgba(0,0,0,0.03)] group-hover:bg-muted/20', redevenDividerRoleClass(), redevenSurfaceRoleClass('panel'));
+    ? cn('sticky right-0 z-10 border-l px-2.5 py-1 text-right align-top git-browser-selection-surface', redevenDividerRoleClass())
+    : cn('sticky right-0 z-10 border-l px-2.5 py-1 text-right align-top group-hover:bg-muted/[0.14]', redevenDividerRoleClass(), redevenSurfaceRoleClass('panel'));
 }
 
 export interface GitMetaPillProps {
@@ -401,7 +401,7 @@ export interface GitShortcutOrbButtonProps {
 
 function gitShortcutOrbShellClass(): string {
   return cn(
-    'shadow-sm text-slate-900 dark:text-slate-50',
+    'text-slate-900 dark:text-slate-50',
     redevenSurfaceRoleClass('control'),
     'hover:bg-slate-300 dark:hover:bg-slate-600',
   );
@@ -441,7 +441,7 @@ export function GitShortcutOrbButton(props: GitShortcutOrbButtonProps) {
     >
       <span
         class={cn(
-          'relative flex items-center justify-center rounded-full border shadow-sm transition-colors duration-150',
+          'relative flex items-center justify-center rounded-full border transition-colors duration-150',
           size() === 'sm' ? 'h-7 w-7' : 'h-8 w-8',
           gitShortcutOrbShellClass(),
         )}

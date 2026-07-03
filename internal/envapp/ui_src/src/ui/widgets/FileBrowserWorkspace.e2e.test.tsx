@@ -376,6 +376,8 @@ describe('FileBrowserWorkspace interactions', () => {
 
     try {
       expect(host.textContent).toContain('Mode');
+      expect(host.querySelector('.redeven-git-browser')).toBeNull();
+      expect(host.querySelector('[class*="git-browser-selection-"]')).toBeNull();
       const gitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Git'));
       expect(gitButton).toBeTruthy();
       gitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));

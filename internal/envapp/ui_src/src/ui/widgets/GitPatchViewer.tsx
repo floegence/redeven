@@ -84,7 +84,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
         {(fileAccessor) => {
           const file = fileAccessor();
           return (
-            <div class={cn('flex h-full min-h-0 flex-col gap-3 rounded-md border p-3', redevenSurfaceRoleClass('panelStrong'))}>
+            <div class="flex h-full min-h-0 flex-col gap-3 rounded-md bg-muted/[0.08] p-3">
               <div class="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div class="min-w-0 flex-1 space-y-1">
                   <div class="flex min-w-0 flex-wrap items-center gap-1.5">

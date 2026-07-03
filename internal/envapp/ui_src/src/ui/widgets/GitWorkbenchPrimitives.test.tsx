@@ -10,7 +10,7 @@ afterEach(() => {
 });
 
 describe('GitWorkbenchPrimitives shared panel frames', () => {
-  it('renders GitPanelFrame with the shared strong bordered surface geometry', () => {
+  it('renders GitPanelFrame with quiet git-specific panel geometry', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -24,10 +24,11 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
       const panel = host.querySelector('section');
       expect(panel).toBeTruthy();
       expect(panel?.className).toContain('rounded-md');
-      expect(panel?.className).toContain('border');
-      expect(panel?.className).toContain('shadow-sm');
-      expect(panel?.className).toContain('ring-1');
-      expect(panel?.className).toContain('redeven-surface-panel--strong');
+      expect(panel?.className).toContain('border-transparent');
+      expect(panel?.className).toContain('bg-muted/[0.08]');
+      expect(panel?.className).not.toContain('shadow-sm');
+      expect(panel?.className).not.toContain('ring-1');
+      expect(panel?.className).not.toContain('redeven-surface-panel--strong');
       expect(panel?.className).toContain('custom-frame');
       expect(panel?.textContent).toContain('Panel content');
     } finally {
@@ -35,7 +36,7 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
     }
   });
 
-  it('renders GitTableFrame with the shared bordered table surface shell', () => {
+  it('renders GitTableFrame with a light table surface shell', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -51,7 +52,9 @@ describe('GitWorkbenchPrimitives shared panel frames', () => {
       expect(panel?.className).toContain('overflow-hidden');
       expect(panel?.className).toContain('rounded-md');
       expect(panel?.className).toContain('border');
-      expect(panel?.className).toContain('redeven-surface-panel--strong');
+      expect(panel?.className).toContain('redeven-divider');
+      expect(panel?.className).toContain('redeven-surface-panel');
+      expect(panel?.className).not.toContain('redeven-surface-panel--strong');
       expect(panel?.className).toContain('flex');
       expect(panel?.textContent).toContain('Table content');
     } finally {
