@@ -57,6 +57,16 @@ Docker-like inspect payloads into the minimal internal `EngineContainer` shape
 used by the adapter, parses pull digests when the engine reports one, and parses
 timestamped log lines into stable millisecond timestamps.
 
+`TestCLIClientRealEngineSmoke` is an opt-in local integration smoke for real
+Docker or Podman engines. It is skipped unless
+`REDEVEN_CONTAINERS_ENGINE_SMOKE=1` is set, can be scoped with
+`REDEVEN_CONTAINERS_ENGINE_SMOKE_ENGINES`, and defaults to a BusyBox image
+unless `REDEVEN_CONTAINERS_ENGINE_SMOKE_IMAGE` overrides it. When enabled, it
+pulls the image, creates a disposable container, verifies inspect/list/start,
+observes a bounded log marker, restarts/stops the container, and removes it
+with cleanup. This gives release and developer machines a true engine smoke
+without making ordinary CI require a Docker or Podman daemon.
+
 The v1 preflight flags cover privileged containers, host network/PID/IPC
 namespaces, host devices, added Linux capabilities, Docker or Podman socket
 mounts, bind mounts, sensitive mount paths, secret-like environment variables,
@@ -109,3 +119,4 @@ into Redeven.
 [19] redeven:internal/capabilities/containers/cli_client_test.go:10 - CLI client tests cover status version preference, Docker NDJSON, Podman arrays, Docker inspect runtime parsing, safe action argv, pull digest parsing, bounded logs tail, and follow-stream rejection.
 [20] redeven:internal/capabilities/containers/testdata/generated_plugins/containers_integration/manifest.json:1 - The integration-only official Containers fixture declares the capability binding, product surface, method manifest, confirmation policy, and cancel policy expected for future ReDevPlugin registration.
 [21] redeven:internal/capabilities/containers/manifest_fixture_test.go:114 - Fixture tests bind the manifest to `CapabilityID`, `CapabilityVersion`, `Methods()`, method effects, request fields, confirmation semantics, and cancel policies without importing ReDevPlugin code.
+[22] redeven:internal/capabilities/containers/cli_client_integration_test.go:21 - The opt-in real engine smoke is gated by `REDEVEN_CONTAINERS_ENGINE_SMOKE` and validates Docker/Podman CLI behavior only when an engine is explicitly available.
