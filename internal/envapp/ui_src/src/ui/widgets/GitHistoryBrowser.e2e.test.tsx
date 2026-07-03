@@ -13,6 +13,13 @@ import { GitHistoryBrowser } from "./GitHistoryBrowser";
 const mockGetCommitDetail = vi.hoisted(() => vi.fn());
 const mockGetDiffContent = vi.hoisted(() => vi.fn());
 
+const resizeObserverState = {
+  observers: [] as Array<{
+    callback: ResizeObserverCallback;
+    elements: Element[];
+  }>,
+};
+
 vi.mock("@floegence/floe-webapp-protocol", async () => {
   const actual = await vi.importActual<
     typeof import("@floegence/floe-webapp-protocol")
@@ -46,7 +53,58 @@ async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function defineElementWidth(element: Element, width: number) {
+  Object.defineProperty(element, "offsetWidth", {
+    configurable: true,
+    get: () => width,
+  });
+}
+
+function triggerResizeObservers() {
+  for (const observer of resizeObserverState.observers) {
+    observer.callback(
+      observer.elements.map(
+        (element) =>
+          ({
+            target: element,
+            contentRect: {
+              width: (element as HTMLElement).offsetWidth ?? 0,
+              height: 0,
+              top: 0,
+              left: 0,
+              bottom: 0,
+              right: (element as HTMLElement).offsetWidth ?? 0,
+              x: 0,
+              y: 0,
+              toJSON: () => ({}),
+            },
+          }) as ResizeObserverEntry,
+      ),
+      {} as ResizeObserver,
+    );
+  }
+}
+
+async function setCommitOverviewWidth(host: HTMLElement, width: number) {
+  const overview = host.querySelector(
+    "[data-git-commit-overview-layout]",
+  ) as HTMLElement | null;
+  expect(overview).toBeTruthy();
+  defineElementWidth(overview!, width);
+  for (const observer of resizeObserverState.observers) {
+    for (const element of observer.elements) {
+      defineElementWidth(element, width);
+    }
+  }
+  triggerResizeObservers();
+  await flush();
+  return host.querySelector(
+    "[data-git-commit-overview-layout]",
+  ) as HTMLElement;
+}
+
 beforeEach(() => {
+  resizeObserverState.observers.length = 0;
   Object.defineProperty(window, "matchMedia", {
     writable: true,
     value: vi.fn().mockImplementation((query: string) => ({
@@ -60,6 +118,37 @@ beforeEach(() => {
       dispatchEvent: () => false,
     })),
   });
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      private readonly record: {
+        callback: ResizeObserverCallback;
+        elements: Element[];
+      };
+
+      constructor(callback: ResizeObserverCallback) {
+        this.record = {
+          callback,
+          elements: [],
+        };
+        resizeObserverState.observers.push(this.record);
+      }
+
+      observe(element: Element) {
+        this.record.elements.push(element);
+      }
+
+      unobserve(element: Element) {
+        this.record.elements = this.record.elements.filter(
+          (entry) => entry !== element,
+        );
+      }
+
+      disconnect() {
+        this.record.elements = [];
+      }
+    },
+  );
 
   mockGetCommitDetail.mockResolvedValue({
     repoRootPath: "/workspace/repo",
@@ -112,6 +201,7 @@ beforeEach(() => {
 afterEach(() => {
   document.body.innerHTML = "";
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("GitHistoryBrowser interactions", () => {
@@ -651,6 +741,157 @@ describe("GitHistoryBrowser interactions", () => {
         shortHash: "3a47b67b",
         source: "graph",
       });
+    } finally {
+      dispose();
+    }
+  });
+
+  it("switches graph commit detail between compact and inline container layouts", async () => {
+    mockGetCommitDetail.mockResolvedValueOnce({
+      repoRootPath: "/workspace/repo",
+      commit: {
+        hash: "a1b2c3d41234567890",
+        shortHash: "a1b2c3d4",
+        parents: ["1111111111111111"],
+        subject: "fix(ui): refine branch layout",
+        body: [
+          "fix(ui): refine branch layout",
+          "",
+          "Move the commit details into a stable single-column reading flow.",
+          "Keep the action rail close to the title and meta at narrow widths.",
+          "Ensure the expansion control follows the body instead of floating away.",
+        ].join("\n"),
+      },
+      files: [
+        {
+          changeType: "modified",
+          path: "internal/envapp/ui_src/src/ui/widgets/GitBranchesPanel.tsx",
+          displayPath:
+            "internal/envapp/ui_src/src/ui/widgets/GitBranchesPanel.tsx",
+          additions: 24,
+          deletions: 8,
+        },
+        {
+          changeType: "modified",
+          path: "internal/envapp/ui_src/src/ui/widgets/GitHistoryBrowser.tsx",
+          displayPath:
+            "internal/envapp/ui_src/src/ui/widgets/GitHistoryBrowser.tsx",
+          additions: 18,
+          deletions: 6,
+        },
+      ],
+    });
+
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const onSwitchDetached = vi.fn();
+    const onAskFlower = vi.fn();
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <div class="h-[640px] w-[420px]">
+              <GitHistoryBrowser
+                repoInfo={{
+                  available: true,
+                  repoRootPath: "/workspace/repo",
+                  headRef: "main",
+                  headCommit: "1111111111111111",
+                }}
+                repoSummary={{
+                  repoRootPath: "/workspace/repo",
+                  headRef: "main",
+                  headCommit: "1111111111111111",
+                  workspaceSummary: {
+                    stagedCount: 0,
+                    unstagedCount: 0,
+                    untrackedCount: 0,
+                    conflictedCount: 0,
+                  },
+                }}
+                currentPath="/workspace/repo/src"
+                selectedCommitHash="a1b2c3d41234567890"
+                onSwitchDetached={onSwitchDetached}
+                onAskFlower={onAskFlower}
+              />
+            </div>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+      const compactOverview = await setCommitOverviewWidth(host, 420);
+
+      const actionRail = host.querySelector(
+        "[data-git-commit-overview-actions]",
+      ) as HTMLElement | null;
+      const bodyGroup = host.querySelector(
+        "[data-git-commit-body-group]",
+      ) as HTMLElement | null;
+      const toggleButton = host.querySelector(
+        "[data-git-commit-body-toggle]",
+      ) as HTMLButtonElement | null;
+      const detachButton = Array.from(host.querySelectorAll("button")).find(
+        (node) => node.textContent?.includes("Switch --detach"),
+      ) as HTMLButtonElement | undefined;
+
+      expect(compactOverview.dataset.gitCommitOverviewLayout).toBe("compact");
+      expect(actionRail?.dataset.gitCommitOverviewActions).toBe("compact");
+      expect(actionRail?.className).toContain("w-full");
+      expect(actionRail?.className).toContain("justify-start");
+      expect(detachButton?.className).not.toContain("w-full");
+      expect(bodyGroup?.className).toContain("pl-0");
+      expect(toggleButton).toBeTruthy();
+      expect(toggleButton?.parentElement?.className).toContain(
+        "justify-start",
+      );
+      expect(
+        host.querySelector('[data-git-commit-files-list-layout="compact"]'),
+      ).toBeTruthy();
+
+      const stackedOverview = await setCommitOverviewWidth(host, 720);
+      const stackedActionRail = host.querySelector(
+        "[data-git-commit-overview-actions]",
+      ) as HTMLElement | null;
+      const stackedBodyGroup = host.querySelector(
+        "[data-git-commit-body-group]",
+      ) as HTMLElement | null;
+
+      expect(stackedOverview.dataset.gitCommitOverviewLayout).toBe("stacked");
+      expect(stackedActionRail?.dataset.gitCommitOverviewActions).toBe(
+        "stacked",
+      );
+      expect(stackedActionRail?.className).toContain("w-full");
+      expect(stackedActionRail?.className).toContain("justify-start");
+      expect(stackedBodyGroup?.className).toContain("pl-0");
+      expect(
+        host.querySelector('[data-git-commit-files-list-layout="compact"]'),
+      ).toBeFalsy();
+      expect(host.querySelectorAll("tbody tr")).toHaveLength(2);
+
+      const inlineOverview = await setCommitOverviewWidth(host, 1040);
+      const inlineActionRail = host.querySelector(
+        "[data-git-commit-overview-actions]",
+      ) as HTMLElement | null;
+      const inlineBodyGroup = host.querySelector(
+        "[data-git-commit-body-group]",
+      ) as HTMLElement | null;
+
+      expect(inlineOverview.dataset.gitCommitOverviewLayout).toBe("inline");
+      expect(inlineActionRail?.dataset.gitCommitOverviewActions).toBe(
+        "inline",
+      );
+      expect(inlineActionRail?.className).toContain("w-auto");
+      expect(inlineActionRail?.className).toContain("justify-end");
+      expect(inlineBodyGroup?.className).toContain("pl-4");
+      expect(
+        host.querySelector('[data-git-commit-files-list-layout="compact"]'),
+      ).toBeFalsy();
+      expect(host.querySelectorAll("tbody tr")).toHaveLength(2);
     } finally {
       dispose();
     }
