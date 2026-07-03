@@ -1,14 +1,28 @@
-import { page } from '@vitest/browser/context';
+import { page } from 'vitest/browser';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvWorkbenchPage } from './EnvWorkbenchPage';
 
 const storageMocks = vi.hoisted(() => ({
+  createUIStorageAdapter: vi.fn(() => ({
+    getItem: () => null,
+    setItem: () => undefined,
+    removeItem: () => undefined,
+    keys: () => [],
+  })),
   isDesktopStateStorageAvailable: vi.fn(() => false),
+  readUIStorageItem: vi.fn(() => null),
+  writeUIStorageItem: vi.fn(),
   readUIStorageJSON: vi.fn(() => null),
   writeUIStorageJSON: vi.fn(),
   removeUIStorageItem: vi.fn(),
+  rendererScopedUIStorageKey: vi.fn((key: string) => key),
+  readRendererScopedUIStorageItem: vi.fn(() => null),
+  writeRendererScopedUIStorageItem: vi.fn(),
+  removeRendererScopedUIStorageItem: vi.fn(),
+  readRendererScopedUIStorageJSON: vi.fn((_key: string, fallback: unknown) => fallback),
+  writeRendererScopedUIStorageJSON: vi.fn(),
 }));
 
 const layoutApiState = vi.hoisted(() => ({
@@ -66,6 +80,9 @@ const layoutApiMocks = vi.hoisted(() => ({
 
 const envContextState = vi.hoisted(() => ({
   envId: 'env-123',
+  workbenchSurfaceActivationSeq: 0,
+  workbenchSurfaceActivation: null as any,
+  consumeWorkbenchSurfaceActivation: vi.fn(),
 }));
 
 async function flushWork() {
@@ -86,21 +103,30 @@ vi.mock('../pages/EnvContext', () => ({
     connectionOverlayMessage: () => 'Connecting to runtime...',
     workbenchOverviewEntrySeq: () => 0,
     workbenchOverviewEntry: () => null,
-    workbenchSurfaceActivationSeq: () => 0,
-    workbenchSurfaceActivation: () => null,
+    workbenchSurfaceActivationSeq: () => envContextState.workbenchSurfaceActivationSeq,
+    workbenchSurfaceActivation: () => envContextState.workbenchSurfaceActivation,
     workbenchFilePreviewActivationSeq: () => 0,
     workbenchFilePreviewActivation: () => null,
     consumeWorkbenchOverviewEntry: vi.fn(),
-    consumeWorkbenchSurfaceActivation: vi.fn(),
+    consumeWorkbenchSurfaceActivation: envContextState.consumeWorkbenchSurfaceActivation,
     consumeWorkbenchFilePreviewActivation: vi.fn(),
   }),
 }));
 
 vi.mock('../services/uiStorage', () => ({
+  createUIStorageAdapter: storageMocks.createUIStorageAdapter,
   isDesktopStateStorageAvailable: storageMocks.isDesktopStateStorageAvailable,
+  readUIStorageItem: storageMocks.readUIStorageItem,
+  writeUIStorageItem: storageMocks.writeUIStorageItem,
   readUIStorageJSON: storageMocks.readUIStorageJSON,
   writeUIStorageJSON: storageMocks.writeUIStorageJSON,
   removeUIStorageItem: storageMocks.removeUIStorageItem,
+  rendererScopedUIStorageKey: storageMocks.rendererScopedUIStorageKey,
+  readRendererScopedUIStorageItem: storageMocks.readRendererScopedUIStorageItem,
+  writeRendererScopedUIStorageItem: storageMocks.writeRendererScopedUIStorageItem,
+  removeRendererScopedUIStorageItem: storageMocks.removeRendererScopedUIStorageItem,
+  readRendererScopedUIStorageJSON: storageMocks.readRendererScopedUIStorageJSON,
+  writeRendererScopedUIStorageJSON: storageMocks.writeRendererScopedUIStorageJSON,
 }));
 
 vi.mock('../services/workbenchLayoutApi', () => ({
@@ -250,6 +276,14 @@ describe('EnvWorkbenchPage click handoff', () => {
   beforeEach(() => {
     layoutApiState.lastStreamArgs = null;
     layoutApiState.clicks = [];
+    envContextState.workbenchSurfaceActivationSeq = 0;
+    envContextState.workbenchSurfaceActivation = null;
+    envContextState.consumeWorkbenchSurfaceActivation.mockReset();
+    envContextState.consumeWorkbenchSurfaceActivation.mockImplementation((requestId: string) => {
+      if (envContextState.workbenchSurfaceActivation?.requestId === requestId) {
+        envContextState.workbenchSurfaceActivation = null;
+      }
+    });
     storageMocks.readUIStorageJSON.mockReset();
     storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
       if (key === 'workbench:local_preferences:env-123') {
@@ -399,5 +433,37 @@ describe('EnvWorkbenchPage click handoff', () => {
 
     expect(document.activeElement).toBe(filesInput);
     expect(filesInput!.dataset.selected).toBe('true');
+  });
+
+  it('keeps the viewport transform stable when activating an already visible terminal widget', async () => {
+    const host = document.createElement('div');
+    host.style.position = 'fixed';
+    host.style.inset = '0';
+    document.body.appendChild(host);
+    envContextState.workbenchSurfaceActivationSeq = 1;
+    envContextState.workbenchSurfaceActivation = {
+      requestId: 'request-visible-terminal',
+      surfaceId: 'terminal',
+      focus: true,
+      ensureVisible: true,
+    };
+
+    render(() => <EnvWorkbenchPage />, host);
+    await flushWork();
+
+    const viewport = host.querySelector('.floe-infinite-canvas__viewport') as HTMLElement | null;
+    const terminalWidget = host.querySelector('[data-floe-workbench-widget-id="widget-terminal-1"]') as HTMLElement | null;
+    expect(viewport).toBeTruthy();
+    expect(terminalWidget).toBeTruthy();
+    const viewportTransform = getComputedStyle(viewport!).transform;
+    const terminalTransform = getComputedStyle(terminalWidget!).transform;
+
+    await flushWork();
+    await flushWork();
+
+    expect(getComputedStyle(viewport!).transform).toBe(viewportTransform);
+    expect(getComputedStyle(terminalWidget!).transform).toBe(terminalTransform);
+    expect(envContextState.consumeWorkbenchSurfaceActivation).toHaveBeenCalledTimes(1);
+    expect(envContextState.consumeWorkbenchSurfaceActivation).toHaveBeenCalledWith('request-visible-terminal');
   });
 });

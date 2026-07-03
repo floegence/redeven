@@ -1010,7 +1010,6 @@ export function EnvAppShell() {
         item: normalizedItem,
         focus: options?.focus ?? true,
         ensureVisible: options?.ensureVisible ?? true,
-        centerViewport: options?.ensureVisible ?? true,
         openStrategy,
       });
       setWorkbenchFilePreviewActivationSeq((n) => n + 1);
@@ -2108,7 +2107,7 @@ export function EnvAppShell() {
       surfaceId,
       focus: options?.focus ?? true,
       ensureVisible: options?.ensureVisible ?? true,
-      centerViewport: options?.centerViewport ?? options?.ensureVisible ?? true,
+      centerViewport: options?.centerViewport,
       openStrategy: options?.openStrategy,
       workbenchAnchor: options?.workbenchAnchor,
       terminalPayload: options?.terminalPayload,

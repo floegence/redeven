@@ -4,12 +4,13 @@ import {
   type WorkbenchContextMenuItem,
   type WorkbenchState,
   type WorkbenchWidgetDefinition,
+  type WorkbenchWidgetItem,
   type WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { TerminalSessionInfo } from '@floegence/floeterm-terminal-web';
 import { LayoutDashboard, Maximize, Minus } from '@floegence/floe-webapp-core/icons';
-import { batch, createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
+import { batch, createEffect, createMemo, createSignal, onCleanup, Show, untrack } from 'solid-js';
 import { Portal } from 'solid-js/web';
 
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from '../utils/askFlowerPath';
@@ -107,6 +108,17 @@ import {
 const WORKBENCH_PERSIST_DELAY_MS = 120;
 const WORKBENCH_LAYOUT_FLUSH_DELAY_MS = 160;
 const WORKBENCH_LAYOUT_FAST_FLUSH_DELAY_MS = 16;
+const WORKBENCH_WIDGET_VISIBLE_MIN_PX = 24;
+
+type WorkbenchViewportActivationPolicy = 'preserve' | 'center';
+
+type WorkbenchActivationWidgetSnapshot = Readonly<{
+  created: boolean;
+  visibleBeforeActivation: boolean;
+  requestedEnsureVisible: boolean;
+  requestedCenterViewport: boolean | undefined;
+  hasAnchorPoint: boolean;
+}>;
 
 function workbenchWidgetTypeFromMenuID(id: string, prefix: 'add' | 'goto'): WorkbenchWidgetType | null {
   const expectedPrefix = `${prefix}-`;
@@ -117,6 +129,49 @@ function workbenchWidgetTypeFromMenuID(id: string, prefix: 'add' | 'goto'): Work
 
 function fallbackWorkbenchContextMenuSubject(label: string, prefix: 'Add ' | 'Go to '): string {
   return label.startsWith(prefix) ? label.slice(prefix.length) : label;
+}
+
+function isFinitePositiveNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+function isWorkbenchWidgetProjectedVisible(
+  widget: WorkbenchWidgetItem,
+  viewport: WorkbenchState['viewport'],
+  frameSize: { width: number; height: number },
+): boolean {
+  if (!isFinitePositiveNumber(frameSize.width) || !isFinitePositiveNumber(frameSize.height)) {
+    return false;
+  }
+  const scale = isFinitePositiveNumber(viewport.scale) ? viewport.scale : 1;
+  const widgetLeft = viewport.x + (widget.x * scale);
+  const widgetTop = viewport.y + (widget.y * scale);
+  const widgetRight = widgetLeft + (widget.width * scale);
+  const widgetBottom = widgetTop + (widget.height * scale);
+  const visibleWidth = Math.min(widgetRight, frameSize.width) - Math.max(widgetLeft, 0);
+  const visibleHeight = Math.min(widgetBottom, frameSize.height) - Math.max(widgetTop, 0);
+  return visibleWidth >= WORKBENCH_WIDGET_VISIBLE_MIN_PX && visibleHeight >= WORKBENCH_WIDGET_VISIBLE_MIN_PX;
+}
+
+function resolveWorkbenchActivationViewportPolicy(
+  snapshot: WorkbenchActivationWidgetSnapshot,
+): WorkbenchViewportActivationPolicy {
+  if (snapshot.requestedCenterViewport === false) {
+    return 'preserve';
+  }
+  if (snapshot.hasAnchorPoint) {
+    return 'preserve';
+  }
+  if (!snapshot.requestedEnsureVisible && snapshot.requestedCenterViewport !== true) {
+    return 'preserve';
+  }
+  if (snapshot.visibleBeforeActivation) {
+    return 'preserve';
+  }
+  if (snapshot.created) {
+    return 'center';
+  }
+  return 'center';
 }
 const WORKBENCH_LAYOUT_RECONNECT_DELAY_MS = 900;
 const WORKBENCH_LAYOUT_VISUAL_SETTLE_MS = 90;
@@ -1743,105 +1798,129 @@ export function EnvWorkbenchPage() {
     }
     env.consumeWorkbenchSurfaceActivation(requestId);
 
-    const widgetType = envWidgetTypeForSurface(request.surfaceId);
-    const centerViewport = request.centerViewport ?? request.ensureVisible ?? true;
-    const anchorPoint = resolveWorkbenchAnchorWorldPoint(request.workbenchAnchor);
-    const shouldFocusWidget = request.focus !== false;
-    const createWidgetOptions = {
-      centerViewport: shouldFocusWidget ? false : centerViewport,
-      ...(anchorPoint ? anchorPoint : {}),
-    };
-    let widget = null;
+    untrack(() => {
+      const widgetType = envWidgetTypeForSurface(request.surfaceId);
+      const requestedEnsureVisible = request.ensureVisible ?? true;
+      const requestedCenterViewport = request.centerViewport;
+      const anchorPoint = resolveWorkbenchAnchorWorldPoint(request.workbenchAnchor);
+      const shouldFocusWidget = request.focus !== false;
+      const stateBeforeActivation = workbenchState();
+      const frameSizeBeforeActivation = resolveCanvasFrameSize();
+      const centerCreatedWidget = !anchorPoint
+        && requestedCenterViewport !== false
+        && (requestedCenterViewport === true || requestedEnsureVisible);
+      const createWidgetOptions = {
+        centerViewport: shouldFocusWidget ? false : centerCreatedWidget,
+        ...(anchorPoint ? anchorPoint : {}),
+      };
+      let widget: WorkbenchWidgetItem | null = null;
+      let createdWidget = false;
 
-    if (isRedevenWorkbenchMultiInstanceWidgetType(widgetType)) {
-      const normalizedRequestedWidgetId = compact(request.widgetId);
-      const openStrategy = request.openStrategy ?? 'focus_latest_or_create';
-      const latestWidgetId = instanceState().latestWidgetIdByType[widgetType] ?? null;
-      const preferredWidget = normalizedRequestedWidgetId
-        ? api.findWidgetById(normalizedRequestedWidgetId)
-        : null;
+      if (isRedevenWorkbenchMultiInstanceWidgetType(widgetType)) {
+        const normalizedRequestedWidgetId = compact(request.widgetId);
+        const openStrategy = request.openStrategy ?? 'focus_latest_or_create';
+        const latestWidgetId = instanceState().latestWidgetIdByType[widgetType] ?? null;
+        const preferredWidget = normalizedRequestedWidgetId
+          ? api.findWidgetById(normalizedRequestedWidgetId)
+          : null;
 
-      if (preferredWidget && preferredWidget.type === widgetType) {
-        widget = preferredWidget;
-      } else if (openStrategy === 'create_new') {
-        const release = terminalVisualCoordinator.beginInteraction('widget_create');
-        try {
-          widget = api.createWidget(widgetType, createWidgetOptions);
-        } finally {
-          requestPostInteractionFrame(() => release.end());
-        }
-      } else {
-        const latestWidget = latestWidgetId ? api.findWidgetById(latestWidgetId) : null;
-        widget = latestWidget?.type === widgetType
-          ? latestWidget
-          : pickLatestWorkbenchWidget(workbenchState().widgets, widgetType, normalizedRequestedWidgetId);
-
-        if (!widget) {
+        if (preferredWidget && preferredWidget.type === widgetType) {
+          widget = preferredWidget;
+        } else if (openStrategy === 'create_new') {
           const release = terminalVisualCoordinator.beginInteraction('widget_create');
           try {
             widget = api.createWidget(widgetType, createWidgetOptions);
+            createdWidget = Boolean(widget);
+          } finally {
+            requestPostInteractionFrame(() => release.end());
+          }
+        } else {
+          const latestWidget = latestWidgetId ? api.findWidgetById(latestWidgetId) : null;
+          widget = latestWidget?.type === widgetType
+            ? latestWidget
+            : pickLatestWorkbenchWidget(stateBeforeActivation.widgets, widgetType, normalizedRequestedWidgetId);
+
+          if (!widget) {
+            const release = terminalVisualCoordinator.beginInteraction('widget_create');
+            try {
+              widget = api.createWidget(widgetType, createWidgetOptions);
+              createdWidget = Boolean(widget);
+            } finally {
+              requestPostInteractionFrame(() => release.end());
+            }
+          }
+        }
+      } else {
+        const existingWidget = api.findWidgetByType(widgetType)
+          ?? stateBeforeActivation.widgets.find((entry) => entry.type === widgetType)
+          ?? null;
+        if (existingWidget && existingWidget.type === widgetType) {
+          widget = existingWidget;
+        } else {
+          const release = terminalVisualCoordinator.beginInteraction('widget_create');
+          try {
+            widget = api.createWidget(widgetType, createWidgetOptions);
+            createdWidget = Boolean(widget);
           } finally {
             requestPostInteractionFrame(() => release.end());
           }
         }
       }
-    } else {
-      const hadWidget = Boolean(api.findWidgetByType(widgetType));
-      const release = hadWidget ? null : terminalVisualCoordinator.beginInteraction('widget_create');
-      try {
-        widget = api.ensureWidget(
-          widgetType,
-          createWidgetOptions,
-        );
-      } finally {
-        if (release) {
-          requestPostInteractionFrame(() => release.end());
-        }
-      }
-    }
 
-    if (widget && shouldFocusWidget) {
-      api.focusWidget(widget, { centerViewport });
-    }
-
-    if (widget) {
-      setInstanceState((previous) => ({
-        ...previous,
-        latestWidgetIdByType: {
-          ...previous.latestWidgetIdByType,
-          [widget.type]: widget.id,
-        },
-      }));
-    }
-
-    if (widget?.type === 'redeven.terminal') {
-      const workingDir = normalizeAbsolutePath(request.terminalPayload?.workingDir ?? '');
-      if (workingDir) {
-        queueTerminalOpenRequest({
-          requestId,
-          widgetId: widget.id,
-          workingDir,
-          preferredName: compact(request.terminalPayload?.preferredName) || undefined,
+      if (widget && shouldFocusWidget) {
+        const viewportPolicy = resolveWorkbenchActivationViewportPolicy({
+          created: createdWidget,
+          visibleBeforeActivation: !createdWidget && isWorkbenchWidgetProjectedVisible(
+            widget,
+            stateBeforeActivation.viewport,
+            frameSizeBeforeActivation,
+          ),
+          requestedEnsureVisible,
+          requestedCenterViewport,
+          hasAnchorPoint: Boolean(anchorPoint),
         });
+        api.focusWidget(widget, { centerViewport: viewportPolicy === 'center' });
       }
-    }
 
-    if (widget?.type === 'redeven.files') {
-      const path = normalizeAbsolutePath(request.fileBrowserPayload?.path ?? '');
-      if (path) {
-        const homePath = normalizeAbsolutePath(request.fileBrowserPayload?.homePath ?? '');
-        setFileBrowserOpenRequests((previous) => ({
+      if (widget) {
+        setInstanceState((previous) => ({
           ...previous,
-          [widget.id]: {
-            requestId,
-            widgetId: widget.id,
-            path,
-            homePath: homePath || undefined,
-            title: compact(request.fileBrowserPayload?.title) || undefined,
+          latestWidgetIdByType: {
+            ...previous.latestWidgetIdByType,
+            [widget.type]: widget.id,
           },
         }));
       }
-    }
+
+      if (widget?.type === 'redeven.terminal') {
+        const workingDir = normalizeAbsolutePath(request.terminalPayload?.workingDir ?? '');
+        if (workingDir) {
+          queueTerminalOpenRequest({
+            requestId,
+            widgetId: widget.id,
+            workingDir,
+            preferredName: compact(request.terminalPayload?.preferredName) || undefined,
+          });
+        }
+      }
+
+      if (widget?.type === 'redeven.files') {
+        const path = normalizeAbsolutePath(request.fileBrowserPayload?.path ?? '');
+        if (path) {
+          const homePath = normalizeAbsolutePath(request.fileBrowserPayload?.homePath ?? '');
+          setFileBrowserOpenRequests((previous) => ({
+            ...previous,
+            [widget.id]: {
+              requestId,
+              widgetId: widget.id,
+              path,
+              homePath: homePath || undefined,
+              title: compact(request.fileBrowserPayload?.title) || undefined,
+            },
+          }));
+        }
+      }
+    });
   });
 
   createEffect(() => {
@@ -1854,88 +1933,103 @@ export function EnvWorkbenchPage() {
     }
     env.consumeWorkbenchFilePreviewActivation(requestId);
 
-    const previewPath = normalizeAbsolutePath(request.item?.path ?? '');
-    if (!previewPath) {
-      return;
-    }
+    untrack(() => {
+      const previewPath = normalizeAbsolutePath(request.item?.path ?? '');
+      if (!previewPath) {
+        return;
+      }
 
-    const centerViewport = request.centerViewport ?? request.ensureVisible ?? true;
-    const openStrategy: RuntimeWorkbenchOpenPreviewStrategy = request.openStrategy ?? 'same_file_or_create';
-    const normalizedItem: FileItem = {
-      ...request.item,
-      id: compact(request.item?.id) || previewPath,
-      type: 'file',
-      path: previewPath,
-      name: compact(request.item?.name) || basenameFromAbsolutePath(previewPath) || fileFallbackName(),
-    };
-    const previewDefinition = redevenWorkbenchWidgets.find((definition) => definition.type === 'redeven.preview');
-    const frameSize = resolveCanvasFrameSize();
-    const viewportCenter = resolveViewportWorldCenter(workbenchState().viewport, frameSize);
-    const defaultWidth = Number(previewDefinition?.defaultSize?.width);
-    const defaultHeight = Number(previewDefinition?.defaultSize?.height);
+      const requestedEnsureVisible = request.ensureVisible ?? true;
+      const requestedCenterViewport = request.centerViewport;
+      const openStrategy: RuntimeWorkbenchOpenPreviewStrategy = request.openStrategy ?? 'same_file_or_create';
+      const normalizedItem: FileItem = {
+        ...request.item,
+        id: compact(request.item?.id) || previewPath,
+        type: 'file',
+        path: previewPath,
+        name: compact(request.item?.name) || basenameFromAbsolutePath(previewPath) || fileFallbackName(),
+      };
+      const previewDefinition = redevenWorkbenchWidgets.find((definition) => definition.type === 'redeven.preview');
+      const stateBeforeActivation = workbenchState();
+      const frameSize = resolveCanvasFrameSize();
+      const viewportCenter = resolveViewportWorldCenter(stateBeforeActivation.viewport, frameSize);
+      const defaultWidth = Number(previewDefinition?.defaultSize?.width);
+      const defaultHeight = Number(previewDefinition?.defaultSize?.height);
 
-    void openWorkbenchPreview({
-      request_id: requestId,
-      item: fileItemToRuntimePreviewItem(normalizedItem, fileFallbackName()),
-      open_strategy: openStrategy,
-      viewport: {
-        ...(viewportCenter ? {
-          center_x: viewportCenter.x,
-          center_y: viewportCenter.y,
-        } : {}),
-        ...(Number.isFinite(defaultWidth) && defaultWidth > 0 ? { default_width: defaultWidth } : {}),
-        ...(Number.isFinite(defaultHeight) && defaultHeight > 0 ? { default_height: defaultHeight } : {}),
-      },
-    })
-      .then((result) => {
-        const release = result.created
-          ? terminalVisualCoordinator.beginInteraction('widget_create')
-          : null;
-        try {
-          batch(() => {
-            applyRuntimeSnapshot(result.snapshot);
-            applyRuntimeWidgetState(result.widget_state);
-            setInstanceState((previous) => ({
-              ...previous,
-              latestWidgetIdByType: {
-                ...previous.latestWidgetIdByType,
-                'redeven.preview': result.widget_id,
-              },
-              previewItemsByWidgetId: {
-                ...previous.previewItemsByWidgetId,
-                [result.widget_id]: normalizedItem,
-              },
-            }));
-            updateWidgetTitle(result.widget_id, buildWorkbenchFilePreviewTitle(normalizedItem, previewFallbackTitle()));
-            setPreviewOpenRequests((previous) => ({
-              ...previous,
-              [result.widget_id]: {
-                requestId,
-                widgetId: result.widget_id,
-                item: normalizedItem,
-              },
-            }));
-          });
-        } finally {
-          if (release) {
-            requestPostInteractionFrame(() => release.end());
-          }
-        }
-
-        const widget = api.findWidgetById(result.widget_id)
-          ?? workbenchState().widgets.find((entry) => entry.id === result.widget_id && entry.type === 'redeven.preview')
-          ?? null;
-        if (!widget) {
-          return;
-        }
-
-        if (request.focus !== false) {
-          api.focusWidget(widget, { centerViewport });
-        }
+      void openWorkbenchPreview({
+        request_id: requestId,
+        item: fileItemToRuntimePreviewItem(normalizedItem, fileFallbackName()),
+        open_strategy: openStrategy,
+        viewport: {
+          ...(viewportCenter ? {
+            center_x: viewportCenter.x,
+            center_y: viewportCenter.y,
+          } : {}),
+          ...(Number.isFinite(defaultWidth) && defaultWidth > 0 ? { default_width: defaultWidth } : {}),
+          ...(Number.isFinite(defaultHeight) && defaultHeight > 0 ? { default_height: defaultHeight } : {}),
+        },
       })
-      .catch((error) => {
-        console.warn('Failed to open workbench preview:', error);
-      });
+        .then((result) => {
+          const release = result.created
+            ? terminalVisualCoordinator.beginInteraction('widget_create')
+            : null;
+          try {
+            batch(() => {
+              applyRuntimeSnapshot(result.snapshot);
+              applyRuntimeWidgetState(result.widget_state);
+              setInstanceState((previous) => ({
+                ...previous,
+                latestWidgetIdByType: {
+                  ...previous.latestWidgetIdByType,
+                  'redeven.preview': result.widget_id,
+                },
+                previewItemsByWidgetId: {
+                  ...previous.previewItemsByWidgetId,
+                  [result.widget_id]: normalizedItem,
+                },
+              }));
+              updateWidgetTitle(result.widget_id, buildWorkbenchFilePreviewTitle(normalizedItem, previewFallbackTitle()));
+              setPreviewOpenRequests((previous) => ({
+                ...previous,
+                [result.widget_id]: {
+                  requestId,
+                  widgetId: result.widget_id,
+                  item: normalizedItem,
+                },
+              }));
+            });
+          } finally {
+            if (release) {
+              requestPostInteractionFrame(() => release.end());
+            }
+          }
+
+          const widget = api.findWidgetById(result.widget_id)
+            ?? workbenchState().widgets.find((entry) => entry.id === result.widget_id && entry.type === 'redeven.preview')
+            ?? null;
+          if (!widget) {
+            return;
+          }
+
+          if (request.focus !== false) {
+            const viewportPolicy = resolveWorkbenchActivationViewportPolicy({
+              created: Boolean(result.created),
+              visibleBeforeActivation: !result.created && isWorkbenchWidgetProjectedVisible(
+                widget,
+                stateBeforeActivation.viewport,
+                frameSize,
+              ),
+              requestedEnsureVisible,
+              requestedCenterViewport,
+              hasAnchorPoint: false,
+            });
+            api.focusWidget(widget, { centerViewport: viewportPolicy === 'center' });
+          }
+        })
+        .catch((error) => {
+          console.warn('Failed to open workbench preview:', error);
+        });
+    });
   });
 
   const updateWidgetTitle = (widgetId: string, title: string) => {

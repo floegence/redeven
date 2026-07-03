@@ -132,10 +132,14 @@ vi.mock('@floegence/floe-webapp-core', async () => {
   };
 });
 
-vi.mock('@floegence/floe-webapp-core/icons', () => {
-  const Icon = () => <span />;
+vi.mock('@floegence/floe-webapp-core/icons', async () => {
+  const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core/icons')>('@floegence/floe-webapp-core/icons');
+  const Icon = (props: any) => <span class={props.class} />;
   return {
+    ...actual,
+    Check: Icon,
     Copy: Icon,
+    ExternalLink: Icon,
     Folder: Icon,
     Sparkles: Icon,
     Terminal: Icon,
@@ -392,7 +396,8 @@ vi.mock('./PermissionEmptyState', () => ({
   PermissionEmptyState: () => <div>Permission denied</div>,
 }));
 
-vi.mock('../utils/askFlowerPath', () => ({
+vi.mock('../utils/askFlowerPath', async () => ({
+  ...await vi.importActual<typeof import('../utils/askFlowerPath')>('../utils/askFlowerPath'),
   normalizeAbsolutePath: (value: string) => value,
   expandHomeDisplayPath: (value: string) => value,
   toHomeDisplayPath: (value: string) => value,
@@ -472,7 +477,7 @@ afterEach(() => {
 });
 
 describe('TerminalPanel browser activity integration', () => {
-  it('shows a spinner during background output activity and decays to an unread dot once the session goes quiet', async () => {
+  it('keeps a spinner for background interactive output while the command remains open', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -495,8 +500,8 @@ describe('TerminalPanel browser activity integration', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 3_800));
     await settleTerminalPanel();
 
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
   });
 
   it('keeps session switching responsive while a background session is receiving heavy live output', async () => {
