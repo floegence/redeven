@@ -122,7 +122,11 @@ is not a valid integration target. Before Redeven bundles a ReDevPlugin runtime
 artifact, the consumer-side release artifact verifier must validate the
 downloaded release directory: outer checksums and signature evidence,
 release-mode stress counters, each tarball's internal release manifest and
-checksum list, compatibility metadata, and runtime binary presence.
+checksum list, compatibility metadata, and runtime binary presence. The verifier
+must write a consumption marker before any checked payload is staged into a
+Redeven release or Desktop bundle. Redeven's release and Desktop bundle gates
+scan for ReDevPlugin payloads and fail when a runtime binary or release tarball
+appears without that marker.
 
 Redeven-side plugin code layout must make the adapter boundary visible. It may
 contain host integration, route mounting, capability adapters, and product UI,
@@ -135,9 +139,9 @@ storage, network, and lifecycle semantics remain covered by ReDevPlugin
 fixtures and tests. The local dependency boundary guard enforces the current
 no-local-wiring baseline by rejecting Go workspaces, local ReDevPlugin module or
 package-manager wiring, copied platform contracts, and `internal/plugins*`
-platform-core directories. The release artifact verifier self-test keeps the
-future runtime-consumption gate executable in CI before a published ReDevPlugin
-artifact is selected by Redeven.
+platform-core directories. The release artifact verifier and consumption gate
+self-tests keep the future runtime-consumption path executable in CI before a
+published ReDevPlugin artifact is selected by Redeven.
 
 # Citations
 
@@ -158,4 +162,5 @@ artifact is selected by Redeven.
 [15] redeven:go.mod:5 - Redeven's current required module list is the active Go dependency surface for released upstream modules.
 [16] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The dependency boundary guard blocks local ReDevPlugin wiring and copied platform-core paths.
 [17] redeven:scripts/check_redevplugin_release_artifacts.sh:10 - The consumer-side release artifact verifier validates checksums, signature evidence, stress counters, internal manifests, compatibility metadata, and runtime binary presence.
-[18] redeven:.github/workflows/ci-check.yml:106 - CI runs the ReDevPlugin release artifact verifier self-test before a real artifact is wired into release packaging.
+[18] redeven:scripts/check_redevplugin_consumption_gate.sh:10 - The consumption gate fails release staging or Desktop bundling when ReDevPlugin payloads appear without verifier markers.
+[19] redeven:.github/workflows/ci-check.yml:106 - CI runs the ReDevPlugin release artifact verifier self-test and consumption gate self-test before a real artifact is wired into release packaging.

@@ -290,6 +290,9 @@ jobs:
           cp LICENSE dist/LICENSE
           cp THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
 
+      - name: Validate ReDevPlugin consumption gate
+        run: ./scripts/check_redevplugin_consumption_gate.sh --scan-root dist
+
       - name: Generate checksums
         run: |
           set -euo pipefail
