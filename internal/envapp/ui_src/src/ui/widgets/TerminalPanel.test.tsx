@@ -3383,11 +3383,22 @@ describe('TerminalPanel', () => {
 
     const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
     expect(terminalSurface).toBeTruthy();
+    let terminalSurfaceScrollTop = 73;
+    const terminalSurfaceScrollTopSetter = vi.fn((value: number) => {
+      terminalSurfaceScrollTop = value;
+    });
+    Object.defineProperty(terminalSurface!, 'scrollTop', {
+      configurable: true,
+      get: () => terminalSurfaceScrollTop,
+      set: terminalSurfaceScrollTopSetter,
+    });
 
     terminalSurface?.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
     await settleTerminalPanel();
 
     expect(focusSpy).toHaveBeenCalled();
+    expect(terminalSurfaceScrollTopSetter).not.toHaveBeenCalled();
+    expect(terminalSurface?.scrollTop).toBe(73);
   });
 
   it('does not restore focus on plain click inside an unselected workbench terminal', async () => {
