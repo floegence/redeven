@@ -335,6 +335,8 @@ describe('GitWorkspace interactions', () => {
     try {
       expect(host.textContent).toContain('Preparing the active Git view...');
       expect(host.textContent).toContain('Loading branches...');
+      expect(host.querySelector('.git-loading-indicator')).toBeTruthy();
+      expect(host.querySelector('.floe-grid-cell')).toBeNull();
       expect(host.querySelector('[data-testid="git-sidebar-scroll-region"]')).toBeNull();
       expect(host.textContent).not.toContain('Current path is not inside a Git repository.');
     } finally {
@@ -393,6 +395,8 @@ describe('GitWorkspace interactions', () => {
     try {
       expect(host.querySelector('[data-testid="git-sidebar-scroll-region"]')).toBeTruthy();
       expect(host.textContent).toContain('Loading commit history...');
+      expect(host.querySelector('.git-loading-indicator')).toBeTruthy();
+      expect(host.querySelector('.floe-grid-cell')).toBeNull();
       expect(host.textContent).not.toContain('Preparing the active Git view...');
     } finally {
       dispose();

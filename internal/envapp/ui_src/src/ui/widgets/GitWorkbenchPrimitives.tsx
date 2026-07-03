@@ -2,7 +2,6 @@ import { For, Show, type Component, type JSX } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import { Button, Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
-import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitChangeLabel, gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneInsetClass, gitToneSurfaceClass, type GitChromeTone } from './GitChrome';
@@ -159,6 +158,49 @@ export function GitSubtleNote(props: GitSubtleNoteProps) {
   return <div class={cn('rounded-md bg-muted/[0.10] px-2.5 py-2 text-xs leading-relaxed text-muted-foreground', props.class)}>{props.children}</div>;
 }
 
+export interface GitLoadingIndicatorProps {
+  variant?: 'block' | 'inline';
+  tone?: 'muted' | 'error';
+  class?: string;
+}
+
+export function GitLoadingIndicator(props: GitLoadingIndicatorProps) {
+  return (
+    <span
+      class={cn(
+        'git-loading-indicator',
+        props.variant === 'inline' && 'git-loading-indicator--inline',
+        props.tone === 'error' && 'git-loading-indicator--error',
+        props.class,
+      )}
+      aria-hidden="true"
+    >
+      <span class="git-loading-indicator__track">
+        <span class="git-loading-indicator__bar" />
+      </span>
+    </span>
+  );
+}
+
+export interface GitInlineLoadingStatusProps {
+  children: JSX.Element;
+  class?: string;
+}
+
+export function GitInlineLoadingStatus(props: GitInlineLoadingStatusProps) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      class={cn('git-inline-loading-status', redevenSurfaceRoleClass('controlMuted'), props.class)}
+    >
+      <GitLoadingIndicator variant="inline" />
+      <span class="git-inline-loading-status__label">{props.children}</span>
+    </div>
+  );
+}
+
 export interface GitPagedTableFooterProps {
   summary: JSX.Element;
   onLoadMore?: () => void;
@@ -187,15 +229,7 @@ export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
       <div class="min-w-0 justify-self-start">
         <Show when={loadingStatus()}>
           {(status) => (
-            <div
-              aria-live="polite"
-              class={cn('inline-flex max-w-full items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-medium leading-none tracking-[0.02em] text-muted-foreground', redevenSurfaceRoleClass('controlMuted'))}
-            >
-              <span class="inline-grid h-3.5 w-3.5 shrink-0 place-items-center overflow-hidden text-primary/80">
-                <SnakeLoader size="sm" class="h-4 w-4 shrink-0 origin-center scale-[0.68]" />
-              </span>
-              <span class="truncate">{status()}</span>
-            </div>
+            <GitInlineLoadingStatus>{status()}</GitInlineLoadingStatus>
           )}
         </Show>
       </div>
@@ -273,6 +307,7 @@ export interface GitStatePaneProps {
   message: JSX.Element;
   detail?: JSX.Element;
   loading?: boolean;
+  eyebrow?: JSX.Element;
   tone?: 'muted' | 'error';
   surface?: boolean;
   class?: string;
@@ -294,10 +329,18 @@ export function GitStatePane(props: GitStatePaneProps) {
         surfaceClass(),
         props.class,
       )}
+      role={props.loading ? 'status' : undefined}
+      aria-live={props.loading ? 'polite' : undefined}
+      aria-busy={props.loading ? 'true' : undefined}
     >
-      <div class={cn('flex max-w-sm flex-col items-center justify-center gap-2', props.contentClass)}>
+      <div class={cn('flex max-w-sm flex-col items-center justify-center gap-2.5', props.contentClass)}>
         <Show when={props.loading}>
-          <SnakeLoader size="sm" class={cn('shrink-0', tone() === 'error' ? 'text-error' : 'text-muted-foreground')} />
+          <div class="git-state-pane__loading-stack">
+            <div class={cn('git-state-pane__loading-eyebrow', tone() === 'error' && 'git-state-pane__loading-eyebrow--error')}>
+              {props.eyebrow ?? 'Loading'}
+            </div>
+            <GitLoadingIndicator tone={tone()} />
+          </div>
         </Show>
         <div class={cn('text-xs leading-relaxed break-words', tone() === 'error' ? 'text-error' : 'text-muted-foreground')}>
           {props.message}

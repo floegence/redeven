@@ -3110,8 +3110,138 @@ a.chat-sources-cell-url:focus-visible {
   font-weight: 480;
 }
 
+.git-state-pane__loading-stack {
+  width: min(12rem, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 0.625rem;
+}
+
+.git-state-pane__loading-eyebrow {
+  color: color-mix(in srgb, var(--foreground) 38%, transparent);
+  font-size: 0.625rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.git-state-pane__loading-eyebrow--error {
+  color: color-mix(in srgb, var(--error) 70%, var(--foreground) 20%);
+}
+
+.git-loading-indicator {
+  width: min(10.5rem, 100%);
+  height: 3px;
+  display: block;
+  color: var(--foreground);
+}
+
+.git-loading-indicator--inline {
+  width: 2.375rem;
+  height: 2px;
+  flex: 0 0 auto;
+}
+
+.git-loading-indicator__track {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 11%, transparent);
+}
+
+.git-loading-indicator__bar {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 42%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--primary) 30%, var(--foreground) 18%) 36%,
+    color-mix(in srgb, var(--foreground) 50%, var(--primary) 24%) 54%,
+    transparent 100%
+  );
+  animation: redeven-loading-curtain-sweep 1.35s cubic-bezier(0.42, 0, 0.2, 1) infinite;
+  will-change: transform;
+}
+
+.git-loading-indicator--error .git-loading-indicator__track {
+  background: color-mix(in srgb, var(--error) 15%, transparent);
+}
+
+.git-loading-indicator--error .git-loading-indicator__bar {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--error) 40%, transparent) 38%,
+    color-mix(in srgb, var(--error) 70%, var(--foreground) 18%) 54%,
+    transparent 100%
+  );
+}
+
+.git-inline-loading-status {
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 999px;
+  padding: 0.3125rem 0.625rem;
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 90%, var(--foreground) 10%);
+  font-size: 0.625rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.git-inline-loading-status__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 html.dark .redeven-loading-curtain {
   background: color-mix(in srgb, var(--background) 90%, transparent);
+}
+
+html.dark .git-loading-indicator__track {
+  background: color-mix(in srgb, var(--foreground) 13%, transparent);
+}
+
+html.dark .git-loading-indicator__bar {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--primary) 24%, var(--foreground) 16%) 36%,
+    color-mix(in srgb, var(--foreground) 42%, var(--primary) 18%) 54%,
+    transparent 100%
+  );
+}
+
+html.dark .git-loading-indicator--error .git-loading-indicator__track {
+  background: color-mix(in srgb, var(--error) 16%, transparent);
+}
+
+html.dark .git-loading-indicator--error .git-loading-indicator__bar {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--error) 36%, transparent) 38%,
+    color-mix(in srgb, var(--error) 62%, var(--foreground) 14%) 54%,
+    transparent 100%
+  );
+}
+
+html.dark .git-inline-loading-status {
+  border-color: color-mix(in srgb, var(--border) 46%, transparent);
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
 }
 
 .redeven-terminal-loading-curtain {
@@ -3170,6 +3300,13 @@ html.dark .redeven-workbench-progress-curtain {
     animation: none;
     background: color-mix(in srgb, var(--foreground) 15%, transparent);
     width: 100%;
+  }
+
+  .git-loading-indicator__bar {
+    animation: none;
+    transform: none;
+    width: 100%;
+    background: color-mix(in srgb, var(--foreground) 18%, transparent);
   }
 
   .redeven-environment-progress__step-dot[data-state='active'] {

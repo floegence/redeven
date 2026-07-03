@@ -12,9 +12,9 @@ import {
   GIT_CHANGED_FILES_TABLE_CLASS,
   GitChangeMetrics,
   GitChangeStatusPill,
+  GitInlineLoadingStatus,
   GitPagedTableFooter,
   GitStatStrip,
-  GitSubtleNote,
   GitTableFrame,
   gitChangedFilesRowClass,
 } from './GitWorkbenchPrimitives';
@@ -82,7 +82,7 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
             when={!props.loadingItems || props.stagedItems.length > 0}
             fallback={(
               <div class="px-4 py-8">
-                <GitSubtleNote>{i18n.t('git.commitDialog.loadingStagedFiles')}</GitSubtleNote>
+                <GitInlineLoadingStatus>{i18n.t('git.commitDialog.loadingStagedFiles')}</GitInlineLoadingStatus>
               </div>
             )}
           >
