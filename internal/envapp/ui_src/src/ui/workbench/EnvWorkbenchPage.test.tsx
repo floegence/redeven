@@ -2658,6 +2658,189 @@ describe('EnvWorkbenchPage', () => {
     expect(contextMocks.consumeWorkbenchSurfaceActivation).toHaveBeenCalledWith('request-terminal-new');
   });
 
+  it('creates unanchored terminal widgets without centering when ensureVisible is false', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [],
+      widget_states: [],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
+    const terminalWidget = persistedWidget('widget-terminal-new-no-reveal', 'redeven.terminal', 'Terminal', 120, 160);
+    surfaceApiMocks.createWidget.mockReturnValue(terminalWidget);
+    surfaceApiMocks.focusWidget.mockImplementation((widget: any) => widget);
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    setMockCanvasFrameRect(host, 1000, 720);
+
+    setWorkbenchSurfaceActivation({
+      requestId: 'request-terminal-new-no-reveal',
+      surfaceId: 'terminal',
+      focus: true,
+      ensureVisible: false,
+      openStrategy: 'create_new',
+    });
+    setWorkbenchSurfaceActivationSeq((value) => value + 1);
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.createWidget).toHaveBeenCalledWith('redeven.terminal', {
+      centerViewport: false,
+    });
+    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(terminalWidget, { centerViewport: false });
+    expect(contextMocks.consumeWorkbenchSurfaceActivation).toHaveBeenCalledWith('request-terminal-new-no-reveal');
+  });
+
+  it('focuses an already visible terminal widget without centering the workbench viewport', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const terminalWidget = persistedWidget('widget-terminal-visible', 'redeven.terminal', 'Terminal', 5, 500);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [runtimeWidgetFromWorkbenchWidget(terminalWidget)],
+      widget_states: [
+        {
+          widget_id: terminalWidget.id,
+          widget_type: 'redeven.terminal',
+          revision: 1,
+          updated_at_unix_ms: 120,
+          state: {
+            kind: 'terminal',
+            session_ids: ['session-1', 'session-2'],
+          },
+        },
+      ],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    setMockCanvasFrameRect(host, 1200, 800);
+    surfaceApiMocks.lastSetState((previous: any) => ({
+      ...previous,
+      selectedWidgetId: terminalWidget.id,
+    }));
+    await flushMicrotasks();
+
+    setWorkbenchSurfaceActivation({
+      requestId: 'request-terminal-visible',
+      surfaceId: 'terminal',
+      focus: true,
+      ensureVisible: true,
+      centerViewport: true,
+    });
+    setWorkbenchSurfaceActivationSeq((value) => value + 1);
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.createWidget).not.toHaveBeenCalled();
+    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(
+      expect.objectContaining({ id: terminalWidget.id, type: 'redeven.terminal' }),
+      { centerViewport: false },
+    );
+    expect(contextMocks.consumeWorkbenchSurfaceActivation).toHaveBeenCalledWith('request-terminal-visible');
+  });
+
+  it('centers an existing terminal widget when ensureVisible targets an offscreen widget', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const terminalWidget = {
+      ...persistedWidget('widget-terminal-offscreen', 'redeven.terminal', 'Terminal', 5, 500),
+      x: 5000,
+      y: 4200,
+    };
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [runtimeWidgetFromWorkbenchWidget(terminalWidget)],
+      widget_states: [
+        {
+          widget_id: terminalWidget.id,
+          widget_type: 'redeven.terminal',
+          revision: 1,
+          updated_at_unix_ms: 120,
+          state: {
+            kind: 'terminal',
+            session_ids: ['session-1', 'session-2'],
+          },
+        },
+      ],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    setMockCanvasFrameRect(host, 1200, 800);
+
+    setWorkbenchSurfaceActivation({
+      requestId: 'request-terminal-offscreen',
+      surfaceId: 'terminal',
+      focus: true,
+      ensureVisible: true,
+    });
+    setWorkbenchSurfaceActivationSeq((value) => value + 1);
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.createWidget).not.toHaveBeenCalled();
+    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(
+      expect.objectContaining({ id: terminalWidget.id, type: 'redeven.terminal' }),
+      { centerViewport: true },
+    );
+    expect(contextMocks.consumeWorkbenchSurfaceActivation).toHaveBeenCalledWith('request-terminal-offscreen');
+  });
+
+  it('reuses singleton widgets with focus disabled without implicit ensureWidget centering', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const monitorWidget = persistedWidget('widget-monitor-visible', 'redeven.monitor', 'Monitoring', 40, 90);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [runtimeWidgetFromWorkbenchWidget(monitorWidget)],
+      widget_states: [],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
+    surfaceApiMocks.findWidgetByType.mockImplementation((type: unknown) => (
+      type === 'redeven.monitor' ? monitorWidget : null
+    ));
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    setMockCanvasFrameRect(host, 1200, 800);
+
+    setWorkbenchSurfaceActivation({
+      requestId: 'request-monitor-no-focus',
+      surfaceId: 'monitor',
+      focus: false,
+      ensureVisible: true,
+    });
+    setWorkbenchSurfaceActivationSeq((value) => value + 1);
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.ensureWidget).not.toHaveBeenCalled();
+    expect(surfaceApiMocks.createWidget).not.toHaveBeenCalled();
+    expect(surfaceApiMocks.focusWidget).not.toHaveBeenCalled();
+    expect(contextMocks.consumeWorkbenchSurfaceActivation).toHaveBeenCalledWith('request-monitor-no-focus');
+  });
+
   it('applies shared preview items without changing layout state', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -2822,6 +3005,7 @@ describe('EnvWorkbenchPage', () => {
 
     mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
+    setMockCanvasFrameRect(host, 1200, 800);
 
     setWorkbenchFilePreviewActivation({
       requestId: 'request-preview-existing',
@@ -2852,7 +3036,7 @@ describe('EnvWorkbenchPage', () => {
         default_height: 620,
       }),
     }));
-    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(existingWidget, { centerViewport: true });
+    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(existingWidget, { centerViewport: false });
     expect(surfaceApiMocks.updateWidgetTitle).toHaveBeenCalledWith(existingWidget.id, 'Preview · demo.txt');
     expect(contextMocks.consumeWorkbenchFilePreviewActivation).toHaveBeenCalledWith('request-preview-existing');
   });
@@ -3090,6 +3274,7 @@ describe('EnvWorkbenchPage', () => {
 
     mount(() => <EnvWorkbenchPage />, host);
     await flushMicrotasks();
+    setMockCanvasFrameRect(host, 1200, 800);
 
     setWorkbenchFilePreviewActivation({
       requestId: 'request-preview-reuse-latest',
@@ -3115,7 +3300,7 @@ describe('EnvWorkbenchPage', () => {
         path: '/workspace/other.txt',
       }),
     }));
-    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(latestWidget, { centerViewport: true });
+    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(latestWidget, { centerViewport: false });
     expect(surfaceApiMocks.updateWidgetTitle).toHaveBeenCalledWith(latestWidget.id, 'Preview · other.txt');
   });
 

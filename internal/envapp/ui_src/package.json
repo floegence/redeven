@@ -13,7 +13,7 @@
     "preview": "vite preview --host 0.0.0.0 --port 8096",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --environment=node --exclude \"src/**/*.browser.test.tsx\" --maxWorkers=2 --testTimeout=10000",
-    "test:browser": "vitest run --config vitest.browser.config.ts"
+    "test:browser": "node scripts/runVitestBrowser.mjs"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",
@@ -90,6 +90,7 @@
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
     "@vitest/browser": "^4.1.8",
+    "@vitest/browser-playwright": "4.1.8",
     "eslint": "^9.39.4",
     "eslint-plugin-solid": "^0.14.5",
     "globals": "^17.4.0",
