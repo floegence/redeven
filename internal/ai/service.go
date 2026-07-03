@@ -2077,12 +2077,12 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	if model == "" {
 		model = threadModelID
 	}
-	if model == "" {
+	if model == "" && s != nil {
 		if id, ok := s.resolvedDesktopModelSourceOverrideModel(ctx); ok {
 			model = id
 		}
 	}
-	if model == "" {
+	if model == "" && s != nil {
 		if id, ok := s.resolvedDesktopModelSourceDefaultModel(ctx); ok {
 			model = id
 		}
@@ -2099,6 +2099,9 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	desktopModelSourceModelID := ""
 	var providerCfg config.AIProvider
 	if isDesktopModelSourceModelID(model) {
+		if s == nil {
+			return resolvedRunModel{}, ErrNotConfigured
+		}
 		allowed, err := s.desktopModelSourceModelAllowed(ctx, model)
 		if err != nil {
 			return resolvedRunModel{}, err
@@ -2138,7 +2141,7 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	}
 
 	modelCapability := r.resolveRunModelCapability(model)
-	if s.capabilityResolver != nil {
+	if s != nil && s.capabilityResolver != nil {
 		if capability, capErr := s.capabilityResolver.Resolve(ctx, providerCfg, model); capErr == nil {
 			modelCapability = capability
 		} else if r != nil && r.log != nil {

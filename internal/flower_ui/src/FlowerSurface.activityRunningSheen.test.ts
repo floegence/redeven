@@ -165,8 +165,8 @@ describe('Flower activity running sheen', () => {
     expect(detailDockRule).toContain('justify-content: flex-start');
     expect(detailDockRule).not.toContain('space-between');
     expect(detailScrollRule).toContain('position: sticky');
-    expect(cssRule(css, '.flower-subagent-detail-live-lane')).toContain('justify-content: flex-start');
-    expect(cssRule(css, '.flower-subagent-detail-live-lane')).not.toContain('flex-end');
+    expect(cssRule(css, '.flower-subagent-detail-bottom-track')).toContain('width: 100%');
+    expect(cssRule(css, '.flower-subagent-detail-bottom-track')).not.toContain('flex-end');
     expect(css).toContain('.flower-subagent-status-loader');
     expect(css).toContain('.flower-subagent-status-loader .flower-activity-inline-loader-square');
     expect(css).not.toContain('z-index: 50');

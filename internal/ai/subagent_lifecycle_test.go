@@ -561,9 +561,26 @@ func TestSubagentHostConfigKeyTracksRuntimeInputs(t *testing.T) {
 			Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
 		}},
 	}
+	svc, err := NewService(Options{
+		Logger:       slog.Default(),
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		Config:       cfg,
+		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
+			if strings.TrimSpace(providerID) == "compat" {
+				return providerKey, true, nil
+			}
+			return "", false, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
 	r := newRun(runOptions{
 		Log:      slog.Default(),
 		StateDir: t.TempDir(),
+		Service:  svc,
 		AIConfig: cfg,
 		ResolveProviderKey: func(providerID string) (string, bool, error) {
 			if strings.TrimSpace(providerID) == "compat" {
@@ -582,14 +599,14 @@ func TestSubagentHostConfigKeyTracksRuntimeInputs(t *testing.T) {
 	})
 	r.currentModelID = "compat/gpt-5-mini"
 
-	baseKey, err := r.subagentHostConfigKey()
+	baseKey, err := r.subagentHostConfigKey(context.Background(), resolvedSubagentRunModel{})
 	if err != nil {
 		t.Fatalf("subagentHostConfigKey base: %v", err)
 	}
 	assertSubagentHostKeyChanges := func(name string, mutate func(), restore func()) {
 		t.Helper()
 		mutate()
-		nextKey, err := r.subagentHostConfigKey()
+		nextKey, err := r.subagentHostConfigKey(context.Background(), resolvedSubagentRunModel{})
 		if err != nil {
 			t.Fatalf("%s subagentHostConfigKey: %v", name, err)
 		}
@@ -597,7 +614,7 @@ func TestSubagentHostConfigKeyTracksRuntimeInputs(t *testing.T) {
 			t.Fatalf("%s did not change subagent host config key", name)
 		}
 		restore()
-		restored, err := r.subagentHostConfigKey()
+		restored, err := r.subagentHostConfigKey(context.Background(), resolvedSubagentRunModel{})
 		if err != nil {
 			t.Fatalf("%s restored subagentHostConfigKey: %v", name, err)
 		}
@@ -625,6 +642,16 @@ func TestSubagentHostConfigKeyTracksRuntimeInputs(t *testing.T) {
 		cfg.Providers[0].WebSearch.Mode = config.AIProviderWebSearchModeDisabled
 	}, func() {
 		cfg.Providers[0].WebSearch.Mode = config.AIProviderWebSearchModeBrave
+	})
+	assertSubagentHostKeyChanges("model context capability", func() {
+		cfg.Providers[0].Models[0].ContextWindow = 1_000_000
+	}, func() {
+		cfg.Providers[0].Models[0].ContextWindow = 0
+	})
+	assertSubagentHostKeyChanges("wire model capability", func() {
+		cfg.Providers[0].Models[0].WireModelName = "provider/gpt-5-mini"
+	}, func() {
+		cfg.Providers[0].Models[0].WireModelName = ""
 	})
 }
 
@@ -1367,6 +1394,136 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 	}
 	if !detail.HasMore || detail.NextOrdinal != 6 || detail.RetainedFrom != 1 {
 		t.Fatalf("pagination metadata not projected: %#v", detail)
+	}
+}
+
+func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	parent, err := svc.CreateThread(ctx, meta, "parent", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread parent: %v", err)
+	}
+	now := time.UnixMilli(20_000)
+	host := &recordingFloretHost{
+		detail: flruntime.SubAgentDetail{
+			Snapshot: flruntime.SubAgentSnapshot{
+				ThreadID:       flruntime.ThreadID("child-context"),
+				TaskName:       "Inspect context",
+				ParentThreadID: flruntime.ThreadID(parent.ThreadID),
+				ParentTurnID:   flruntime.TurnID("parent-turn"),
+				HostProfileRef: subagentAgentTypeReviewer,
+				Status:         flruntime.SubAgentStatusCompleted,
+				CreatedAt:      now.Add(-time.Minute),
+				UpdatedAt:      now,
+			},
+			Events: []flruntime.SubAgentDetailEvent{
+				{
+					ID:        "message-1",
+					Ordinal:   1,
+					ThreadID:  flruntime.ThreadID("child-context"),
+					TurnID:    flruntime.TurnID("child-turn"),
+					Kind:      flruntime.SubAgentDetailEventAssistantMessage,
+					CreatedAt: now.Add(-40 * time.Second),
+					Message:   &flruntime.SubAgentDetailMessage{Role: "assistant", Preview: "I am about to compact context."},
+				},
+				{
+					ID:        "compaction-1",
+					Ordinal:   2,
+					ThreadID:  flruntime.ThreadID("child-context"),
+					TurnID:    flruntime.TurnID("child-turn"),
+					Kind:      flruntime.SubAgentDetailEventCompaction,
+					CreatedAt: now.Add(-30 * time.Second),
+					Compaction: &flruntime.SubAgentDetailCompaction{
+						Phase:               "complete",
+						Trigger:             "pressure",
+						Reason:              "near limit",
+						TokensBefore:        900,
+						TokensAfterEstimate: 350,
+					},
+					Metadata: map[string]string{"operation_id": "compact-child-1"},
+				},
+			},
+			Context: flruntime.SubAgentDetailContext{
+				Usage: &observation.ContextStatus{
+					RunID:    "child-run",
+					ThreadID: "child-context",
+					TurnID:   "child-turn",
+					Step:     2,
+					Phase:    observation.ContextPhaseProjectedRequest,
+					ContextPressure: flconfig.ContextPressure{
+						ProjectedInputTokens: 600,
+						ContextWindowTokens:  1000,
+						ThresholdTokens:      850,
+						RequestSafeLimit:     800,
+						OutputHeadroomTokens: 200,
+						Source:               flconfig.PressureSourceFullRequestEstimate,
+					},
+					UsedRatio:      0.6,
+					ThresholdRatio: 0.85,
+					Status:         observation.ContextStatusStable,
+					ObservedAt:     now.Add(-35 * time.Second),
+				},
+				Compactions: []flruntime.SubAgentDetailContextCompaction{{
+					RunID:               "child-run",
+					ThreadID:            "child-context",
+					TurnID:              "child-turn",
+					Step:                2,
+					OperationID:         "compact-child-1",
+					Phase:               "complete",
+					Status:              "compacted",
+					Trigger:             "pressure",
+					Reason:              "near limit",
+					TokensBefore:        900,
+					TokensAfterEstimate: 350,
+					ObservedAt:          now.Add(-30 * time.Second),
+				}},
+				UpdatedAt: now,
+			},
+			GeneratedAt: now,
+		},
+	}
+	key := runThreadKey(meta.EndpointID, parent.ThreadID)
+	svc.mu.Lock()
+	svc.subagentRuntimes[key] = &floretSubagentRuntime{
+		parent: newRun(runOptions{
+			Log:        slog.Default(),
+			ThreadID:   parent.ThreadID,
+			EndpointID: meta.EndpointID,
+		}),
+		host: host,
+	}
+	svc.mu.Unlock()
+
+	detail, err := svc.GetFlowerSubagentDetail(ctx, meta, parent.ThreadID, "child-context", 0, 50)
+	if err != nil {
+		t.Fatalf("GetFlowerSubagentDetail: %v", err)
+	}
+	if detail.ContextUsage == nil {
+		t.Fatalf("missing context usage: %#v", detail)
+	}
+	if detail.ContextUsage.ContextWindowTokens != 1000 || detail.ContextUsage.RequestSafeLimitTokens != 800 || detail.ContextUsage.PressureStatus != "stable" {
+		t.Fatalf("unexpected context usage: %#v", detail.ContextUsage)
+	}
+	if len(detail.ContextCompactions) != 1 {
+		t.Fatalf("context compactions=%#v, want one", detail.ContextCompactions)
+	}
+	compaction := detail.ContextCompactions[0]
+	if compaction.OperationID != "compact-child-1" || compaction.Status != "compacted" || compaction.TokensAfterEstimate != 350 {
+		t.Fatalf("unexpected context compaction: %#v", compaction)
+	}
+	if len(detail.TimelineDecorations) != 1 {
+		t.Fatalf("timeline decorations=%#v, want one", detail.TimelineDecorations)
+	}
+	decoration := detail.TimelineDecorations[0]
+	if decoration.Compaction.OperationID != "compact-child-1" || decoration.Anchor.MessageID != "child-context:1:message" || decoration.Anchor.Edge != "after" {
+		t.Fatalf("unexpected timeline decoration: %#v", decoration)
+	}
+	if detail.ModelIOStatus != nil {
+		t.Fatalf("subagent detail must not synthesize model_io_status: %#v", detail.ModelIOStatus)
 	}
 }
 
