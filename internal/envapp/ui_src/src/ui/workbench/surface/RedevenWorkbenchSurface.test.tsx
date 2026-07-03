@@ -240,7 +240,7 @@ describe('RedevenWorkbenchSurface', () => {
     expect(sharedSurfaceMocks.lastProps.resolveContextMenuItems).toBe(resolveContextMenuItems);
   });
 
-  it('keeps the projected layer anchored when browser focus scrolls it', async () => {
+  it('keeps the projected layer non-scrollable as a canvas invariant', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
