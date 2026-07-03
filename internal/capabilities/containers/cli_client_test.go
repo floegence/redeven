@@ -2,6 +2,7 @@ package containers
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -98,6 +99,110 @@ func TestCLIClientInspectParsesRuntimeInputs(t *testing.T) {
 	}
 	if len(container.Ports) != 1 || container.Ports[0].HostPort != 8080 || container.Ports[0].Port != 80 {
 		t.Fatalf("ports = %+v", container.Ports)
+	}
+}
+
+func TestCLIClientActionsBuildSafeArgv(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCommandRunner{
+		outputs: map[string]string{
+			"docker start container_123":            "container_123\n",
+			"docker stop --time 10 container_123":   "container_123\n",
+			"docker restart --time 3 container_123": "container_123\n",
+			"docker rm --force container_123":       "container_123\n",
+		},
+	}
+	client := &CLIClient{Runner: runner}
+
+	for _, req := range []EngineActionRequest{
+		{Engine: EngineDocker, Method: MethodStart, ContainerID: "container_123"},
+		{Engine: EngineDocker, Method: MethodStop, ContainerID: "container_123", TimeoutSec: 10},
+		{Engine: EngineDocker, Method: MethodRestart, ContainerID: "container_123", TimeoutSec: 3},
+		{Engine: EngineDocker, Method: MethodRemove, ContainerID: "container_123", Force: true},
+	} {
+		result, err := client.Action(context.Background(), req)
+		if err != nil {
+			t.Fatalf("Action(%s) error = %v", req.Method, err)
+		}
+		if !result.Completed || result.Method != req.Method || result.ContainerID != "container_123" {
+			t.Fatalf("Action(%s) = %+v", req.Method, result)
+		}
+	}
+	wantCalls := []string{
+		"docker start container_123",
+		"docker stop --time 10 container_123",
+		"docker restart --time 3 container_123",
+		"docker rm --force container_123",
+	}
+	if !reflect.DeepEqual(runner.calls, wantCalls) {
+		t.Fatalf("calls = %#v, want %#v", runner.calls, wantCalls)
+	}
+}
+
+func TestCLIClientPullImageParsesDigest(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCommandRunner{
+		outputs: map[string]string{
+			"docker pull ghcr.io/acme/api:latest": "latest: Pulling from acme/api\nDigest: sha256:feedface\nStatus: Downloaded newer image\n",
+		},
+	}
+	client := &CLIClient{Runner: runner}
+
+	result, err := client.PullImage(context.Background(), EngineDocker, "ghcr.io/acme/api:latest")
+	if err != nil {
+		t.Fatalf("PullImage() error = %v", err)
+	}
+	if !result.Completed || result.Image.Reference != "ghcr.io/acme/api:latest" || result.Image.Digest != "sha256:feedface" {
+		t.Fatalf("pull result = %+v", result)
+	}
+}
+
+func TestCLIClientTailLogsParsesBoundedBatch(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCommandRunner{
+		outputs: map[string]string{
+			"docker logs --timestamps --tail 2 --since 2024-01-01T00:00:00Z container_123": strings.Join([]string{
+				"2024-01-01T00:00:01Z ready",
+				"plain line",
+			}, "\n"),
+		},
+	}
+	client := &CLIClient{Runner: runner}
+
+	result, err := client.TailLogs(context.Background(), EngineLogsRequest{
+		Engine:      EngineDocker,
+		ContainerID: "container_123",
+		TailLines:   2,
+		SinceUnixMs: 1704067200000,
+	})
+	if err != nil {
+		t.Fatalf("TailLogs() error = %v", err)
+	}
+	if len(result.Lines) != 2 {
+		t.Fatalf("lines = %+v", result.Lines)
+	}
+	if result.Lines[0].TimestampUnixMs != 1704067201000 || result.Lines[0].Message != "ready" {
+		t.Fatalf("first line = %+v", result.Lines[0])
+	}
+	if result.Lines[1].TimestampUnixMs != 0 || result.Lines[1].Message != "plain line" {
+		t.Fatalf("second line = %+v", result.Lines[1])
+	}
+}
+
+func TestCLIClientTailLogsRejectsFollowWithoutStreamAdapter(t *testing.T) {
+	t.Parallel()
+
+	client := &CLIClient{Runner: &fakeCommandRunner{}}
+	_, err := client.TailLogs(context.Background(), EngineLogsRequest{
+		Engine:      EngineDocker,
+		ContainerID: "container_123",
+		Follow:      true,
+	})
+	if !errors.Is(err, ErrLogsFollowUnsupported) {
+		t.Fatalf("TailLogs() error = %v, want ErrLogsFollowUnsupported", err)
 	}
 }
 

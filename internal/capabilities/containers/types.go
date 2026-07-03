@@ -125,6 +125,16 @@ type ContainerInspectResponse struct {
 	Container     ContainerInspect `json:"container"`
 }
 
+type ContainerActionResponse struct {
+	SchemaVersion     string `json:"schema_version"`
+	CapabilityID      string `json:"capability_id"`
+	CapabilityVersion string `json:"capability_version"`
+	Engine            Engine `json:"engine"`
+	Method            Method `json:"method"`
+	ContainerID       string `json:"container_id"`
+	Completed         bool   `json:"completed"`
+}
+
 type ContainerActionRequest struct {
 	SchemaVersion string `json:"schema_version"`
 	Engine        Engine `json:"engine"`
@@ -152,6 +162,29 @@ type ImagePullRequest struct {
 	SchemaVersion string `json:"schema_version"`
 	Engine        Engine `json:"engine"`
 	ImageRef      string `json:"image_ref"`
+}
+
+type LogsTailResponse struct {
+	SchemaVersion     string    `json:"schema_version"`
+	CapabilityID      string    `json:"capability_id"`
+	CapabilityVersion string    `json:"capability_version"`
+	Engine            Engine    `json:"engine"`
+	ContainerID       string    `json:"container_id"`
+	Lines             []LogLine `json:"lines"`
+}
+
+type LogLine struct {
+	TimestampUnixMs int64  `json:"timestamp_unix_ms,omitempty"`
+	Message         string `json:"message"`
+}
+
+type ImagePullResponse struct {
+	SchemaVersion     string       `json:"schema_version"`
+	CapabilityID      string       `json:"capability_id"`
+	CapabilityVersion string       `json:"capability_version"`
+	Engine            Engine       `json:"engine"`
+	Image             ImageSummary `json:"image"`
+	Completed         bool         `json:"completed"`
 }
 
 type ContainerSummary struct {

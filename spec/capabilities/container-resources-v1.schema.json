@@ -11,9 +11,12 @@
     { "$ref": "#/$defs/container_inspect_request" },
     { "$ref": "#/$defs/container_inspect_response" },
     { "$ref": "#/$defs/container_action_request" },
+    { "$ref": "#/$defs/container_action_response" },
     { "$ref": "#/$defs/container_start_request" },
     { "$ref": "#/$defs/logs_tail_request" },
+    { "$ref": "#/$defs/logs_tail_response" },
     { "$ref": "#/$defs/image_pull_request" },
+    { "$ref": "#/$defs/image_pull_response" },
     { "$ref": "#/$defs/start_preflight_plan" }
   ],
   "$defs": {
@@ -47,6 +50,10 @@
         "containers.logs.tail",
         "images.pull"
       ]
+    },
+    "container_action_method": {
+      "type": "string",
+      "enum": ["containers.start", "containers.stop", "containers.restart", "containers.remove"]
     },
     "container_state": {
       "type": "string",
@@ -147,6 +154,28 @@
         "timeout_sec": { "type": "integer", "minimum": 0 }
       }
     },
+    "container_action_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "capability_id",
+        "capability_version",
+        "engine",
+        "method",
+        "container_id",
+        "completed"
+      ],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "capability_id": { "$ref": "#/$defs/capability_id" },
+        "capability_version": { "$ref": "#/$defs/capability_version" },
+        "engine": { "$ref": "#/$defs/engine" },
+        "method": { "$ref": "#/$defs/container_action_method" },
+        "container_id": { "type": "string", "minLength": 1 },
+        "completed": { "type": "boolean" }
+      }
+    },
     "container_start_request": {
       "type": "object",
       "additionalProperties": false,
@@ -165,9 +194,32 @@
         "schema_version": { "$ref": "#/$defs/schema_version" },
         "engine": { "$ref": "#/$defs/engine" },
         "container_id": { "type": "string", "minLength": 1 },
-        "tail_lines": { "type": "integer", "minimum": 0 },
+        "tail_lines": { "type": "integer", "minimum": 0, "maximum": 1000 },
         "since_unix_ms": { "type": "integer", "minimum": 0 },
         "follow": { "type": "boolean" }
+      }
+    },
+    "logs_tail_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "capability_id",
+        "capability_version",
+        "engine",
+        "container_id",
+        "lines"
+      ],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "capability_id": { "$ref": "#/$defs/capability_id" },
+        "capability_version": { "$ref": "#/$defs/capability_version" },
+        "engine": { "$ref": "#/$defs/engine" },
+        "container_id": { "type": "string", "minLength": 1 },
+        "lines": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/log_line" }
+        }
       }
     },
     "image_pull_request": {
@@ -178,6 +230,19 @@
         "schema_version": { "$ref": "#/$defs/schema_version" },
         "engine": { "$ref": "#/$defs/engine" },
         "image_ref": { "type": "string", "minLength": 1 }
+      }
+    },
+    "image_pull_response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "capability_id", "capability_version", "engine", "image", "completed"],
+      "properties": {
+        "schema_version": { "$ref": "#/$defs/schema_version" },
+        "capability_id": { "$ref": "#/$defs/capability_id" },
+        "capability_version": { "$ref": "#/$defs/capability_version" },
+        "engine": { "$ref": "#/$defs/engine" },
+        "image": { "$ref": "#/$defs/image_summary" },
+        "completed": { "type": "boolean" }
       }
     },
     "container_summary": {
@@ -230,6 +295,15 @@
         "reference": { "type": "string" },
         "digest": { "type": "string" },
         "digest_pinned": { "type": "boolean" }
+      }
+    },
+    "log_line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message"],
+      "properties": {
+        "timestamp_unix_ms": { "type": "integer", "minimum": 0 },
+        "message": { "type": "string" }
       }
     },
     "runtime_summary": {

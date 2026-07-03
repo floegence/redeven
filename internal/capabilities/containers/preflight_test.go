@@ -191,10 +191,25 @@ func TestContainerResourcesSchemaContract(t *testing.T) {
 	assertSchemaConst(t, schemaMap(t, defs, "capability_version"), CapabilityVersion)
 	assertStringEnum(t, schemaMap(t, defs, "engine"), []string{string(EngineDocker), string(EnginePodman)})
 	assertStringEnum(t, schemaMap(t, defs, "method"), methodStrings(Methods()))
+	assertStringEnum(t, schemaMap(t, defs, "container_action_method"), []string{
+		string(MethodStart),
+		string(MethodStop),
+		string(MethodRestart),
+		string(MethodRemove),
+	})
 	statusRequestProps := schemaMap(t, schemaMap(t, defs, "status_request"), "properties")
 	if _, ok := statusRequestProps["engine"]; !ok {
 		t.Fatal("status_request schema must expose optional engine")
 	}
+	logsTailProps := schemaMap(t, schemaMap(t, defs, "logs_tail_request"), "properties")
+	tailLinesProps := schemaMap(t, logsTailProps, "tail_lines")
+	if got, ok := tailLinesProps["maximum"].(float64); !ok || int(got) != maxLogTailLines {
+		t.Fatalf("tail_lines maximum = %#v, want %d", tailLinesProps["maximum"], maxLogTailLines)
+	}
+	assertJSONTagsCovered(t, reflect.TypeOf(ContainerActionResponse{}), schemaMap(t, schemaMap(t, defs, "container_action_response"), "properties"))
+	assertJSONTagsCovered(t, reflect.TypeOf(LogsTailResponse{}), schemaMap(t, schemaMap(t, defs, "logs_tail_response"), "properties"))
+	assertJSONTagsCovered(t, reflect.TypeOf(LogLine{}), schemaMap(t, schemaMap(t, defs, "log_line"), "properties"))
+	assertJSONTagsCovered(t, reflect.TypeOf(ImagePullResponse{}), schemaMap(t, schemaMap(t, defs, "image_pull_response"), "properties"))
 
 	plan := schemaMap(t, defs, "start_preflight_plan")
 	props := schemaMap(t, plan, "properties")
