@@ -646,14 +646,14 @@ func TestRefreshActivityTimelineSidecarsUpdatesOnlyExistingActivityBlock(t *test
 
 	if !r.upsertActivityTimelineSubagentActions(map[string]FlowerActivitySubagentAction{
 		"tool:call_wait": {Action: subagentActionWait, Items: []FlowerActivitySubagentActionItem{{
-			ThreadID: "child-1", TaskName: "Review UI", TaskDescription: "Review the Flower UI.",
+			ThreadID: "child-1",
 		}}},
 	}) {
 		t.Fatalf("upsertActivityTimelineSubagentActions returned false for existing tool row")
 	}
 	updated := r.refreshActivityTimelineSidecars(parentTimeline, map[string]FlowerActivitySubagentAction{
-		"subagent:child-1": {Action: subagentActionInspect, ThreadID: "child-1", Status: "running"},
-		"subagent:child-2": {Action: subagentActionInspect, ThreadID: "child-2", Status: "running"},
+		"subagent:child-1": {Action: subagentActionInspect, ThreadID: "child-1"},
+		"subagent:child-2": {Action: subagentActionInspect, ThreadID: "child-2"},
 	})
 
 	if !updated {
@@ -670,7 +670,7 @@ func TestRefreshActivityTimelineSidecarsUpdatesOnlyExistingActivityBlock(t *test
 		t.Fatalf("timeline items changed: %#v", block.Items)
 	}
 	if len(block.SubagentActions) != 2 ||
-		block.SubagentActions["tool:call_wait"].Items[0].TaskDescription != "Review the Flower UI." ||
+		block.SubagentActions["tool:call_wait"].Items[0].ThreadID != "child-1" ||
 		block.SubagentActions["subagent:child-1"].ThreadID != "child-1" {
 		t.Fatalf("subagent sidecars=%#v, want preserved tool sidecar plus parent sidecar", block.SubagentActions)
 	}
@@ -688,7 +688,7 @@ func TestRefreshActivityTimelineSidecarsUpdatesOnlyExistingActivityBlock(t *test
 		t.Fatalf("projected[0]=%T, want ActivityTimelineBlock", projected[0])
 	}
 	if len(projectedBlock.SubagentActions) != 2 ||
-		projectedBlock.SubagentActions["tool:call_wait"].Items[0].TaskName != "Review UI" ||
+		projectedBlock.SubagentActions["tool:call_wait"].Items[0].ThreadID != "child-1" ||
 		projectedBlock.SubagentActions["subagent:child-1"].ThreadID != "child-1" {
 		t.Fatalf("projected subagent sidecars=%#v, want replayed tool and parent sidecar decoration", projectedBlock.SubagentActions)
 	}
@@ -733,8 +733,17 @@ func TestFlowerToolSubagentActivityActionsUseToolItemID(t *testing.T) {
 	if !ok {
 		t.Fatalf("tool sidecar actions=%#v, want key tool:call_spawn_1", actions)
 	}
-	if action.ThreadID != "child-1" || action.TaskName != "Frontend polish review" || action.TaskDescription != "Review Flower tool detail UI and propose concise fixes." {
-		t.Fatalf("unexpected tool sidecar: %#v", action)
+	if action.ThreadID != "child-1" {
+		t.Fatalf("unexpected tool sidecar route target: %#v", action)
+	}
+	raw, err := json.Marshal(action)
+	if err != nil {
+		t.Fatalf("json.Marshal action: %v", err)
+	}
+	for _, forbidden := range []string{"task_name", "task_description", "agent_type", "status", "started_at_ms", "created_at_ms", "updated_at_ms"} {
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("subagent routing sidecar leaked %q: %s", forbidden, raw)
+		}
 	}
 	if _, ok := actions["call_spawn_1"]; ok {
 		t.Fatalf("tool sidecar must be keyed by real activity item id, got raw call id key: %#v", actions)
@@ -779,9 +788,7 @@ func TestFlowerWaitToolSidecarItemsFromTimelineFilterRequestedChildren(t *testin
 		t.Fatalf("items=%#v, want only requested child-2", items)
 	}
 	if items[0].ThreadID != "child-2" ||
-		items[0].TaskName != "Activity payload review" ||
-		items[0].TaskDescription != "Check whether subagent payloads expose only user-facing fields." ||
-		items[0].AgentType != "reviewer" {
+		items[0].SubagentID != "child-2" {
 		t.Fatalf("unexpected wait sidecar item: %#v", items[0])
 	}
 	action := flowerSubagentActivityActionFromItems(subagentActionWait, "parent-thread", items)
@@ -886,9 +893,19 @@ func TestActivityTimelineBlockJSONUsesSnakeCase(t *testing.T) {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	for _, key := range []string{"schema_version", "run_id", "thread_id", "turn_id", "trace_id", "summary", "items", "file_actions"} {
+	for _, key := range []string{"schema_version", "summary", "items", "file_actions"} {
 		if _, ok := decoded[key]; !ok {
 			t.Fatalf("missing key %q in %s", key, raw)
+		}
+	}
+	for _, key := range []string{"run_id", "thread_id", "turn_id", "trace_id"} {
+		if _, ok := decoded[key]; ok {
+			t.Fatalf("unexpected private identity key %q in %s", key, raw)
+		}
+	}
+	for _, value := range []string{"run_json", "thread_json", "msg_json", "trace_json"} {
+		if strings.Contains(string(raw), value) {
+			t.Fatalf("public activity block leaked private identity %q in %s", value, raw)
 		}
 	}
 	fileActions := decoded["file_actions"].(map[string]any)

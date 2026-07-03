@@ -891,11 +891,11 @@ func activityFileMutationAllowedKeys() map[string]struct{} {
 }
 
 func activitySubagentActionAllowedKeys() map[string]struct{} {
-	return stringSet("operation", "action", "delegation_runtime", "thread_id", "subagent_id", "parent_thread_id", "task_name", "task_description", "title", "agent_type", "status", "started_at_ms", "created_at_ms", "updated_at_ms", "items")
+	return stringSet("operation", "action", "delegation_runtime", "thread_id", "subagent_id", "parent_thread_id", "items")
 }
 
 func activitySubagentActionItemAllowedKeys() map[string]struct{} {
-	return stringSet("thread_id", "subagent_id", "task_name", "task_description", "title", "agent_type", "status", "started_at_ms", "created_at_ms", "updated_at_ms")
+	return stringSet("thread_id", "subagent_id")
 }
 
 func stringSet(values ...string) map[string]struct{} {

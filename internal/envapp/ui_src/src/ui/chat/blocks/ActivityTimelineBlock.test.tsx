@@ -201,9 +201,12 @@ describe('ActivityTimelineBlock', () => {
     await flushAsync();
 
     expect(row?.getAttribute('aria-expanded')).toBe('true');
-    expect(host.textContent).toContain('stdout');
+    const outputToggle = host.querySelector('.chat-shell-output-toggle') as HTMLButtonElement | null;
+    outputToggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
     expect(host.textContent).toContain('ok');
-    expect(host.textContent).toContain('exit');
+    expect(host.textContent).not.toContain('stdout');
+    expect(host.textContent).not.toContain('exit');
   });
 
   it('keeps terminal output visible when the same activity item is replaced by an empty running frame', async () => {
@@ -446,7 +449,7 @@ describe('ActivityTimelineBlock', () => {
     expect(host.textContent).toContain('+panel');
     expect(host.textContent).toContain('active agent UI tool details');
     expect(host.textContent).toContain('Agent UI');
-    expect(host.textContent).toContain('frontend-design');
+    expect(host.textContent).not.toContain('frontend-design');
     expect(host.textContent).not.toContain('"file_action_id"');
     expect(host.textContent).not.toContain('"sources"');
   });
@@ -640,6 +643,14 @@ describe('ActivityTimelineBlock', () => {
           action: 'wait',
           status: 'ok',
           summary: 'tool execution completed',
+          items: [{
+            title: 'Frontend polish review',
+            task_name: 'Frontend polish review',
+            task_description: 'Review Flower tool detail UI and propose concise fixes.',
+            status: 'running',
+            started_at_ms: now - 258000,
+            updated_at_ms: now - 1000,
+          }],
         },
       })],
       subagent_actions: {
@@ -650,13 +661,6 @@ describe('ActivityTimelineBlock', () => {
           items: [{
             thread_id: 'child_frontend_review',
             subagent_id: 'child_frontend_review',
-            title: 'Frontend polish review',
-            task_name: 'Frontend polish review',
-            task_description: 'Review Flower tool detail UI and propose concise fixes.',
-            agent_type: 'worker',
-            status: 'running',
-            started_at_ms: now - 258000,
-            updated_at_ms: now - 1000,
           }],
         },
       },
@@ -690,7 +694,7 @@ describe('ActivityTimelineBlock', () => {
       subagentID: 'child_frontend_review',
       name: 'Frontend polish review',
       taskDescription: 'Review Flower tool detail UI and propose concise fixes.',
-      agentType: 'worker',
+      agentType: '',
     });
   });
 });

@@ -45,17 +45,20 @@ type terminalProcessManager struct {
 }
 
 type terminalProcessStartRequest struct {
-	EndpointID string
-	ThreadID   string
-	RunID      string
-	TurnID     string
-	ToolID     string
-	ToolName   string
-	Command    string
-	Stdin      string
-	CwdAbs     string
-	Shell      string
-	Env        []string
+	EndpointID         string
+	ThreadID           string
+	RunID              string
+	TurnID             string
+	SettlementThreadID string
+	SettlementRunID    string
+	SettlementTurnID   string
+	ToolID             string
+	ToolName           string
+	Command            string
+	Stdin              string
+	CwdAbs             string
+	Shell              string
+	Env                []string
 }
 
 type terminalProcessReadRequest struct {
@@ -66,28 +69,33 @@ type terminalProcessReadRequest struct {
 }
 
 type terminalProcessSnapshot struct {
-	ProcessID         string             `json:"process_id"`
-	EndpointID        string             `json:"endpoint_id,omitempty"`
-	ThreadID          string             `json:"thread_id,omitempty"`
-	RunID             string             `json:"run_id,omitempty"`
-	TurnID            string             `json:"turn_id,omitempty"`
-	ToolID            string             `json:"tool_id,omitempty"`
-	ToolName          string             `json:"tool_name,omitempty"`
-	Command           string             `json:"command"`
-	Cwd               string             `json:"cwd"`
-	Status            string             `json:"status"`
-	Output            string             `json:"output"`
-	LatestOutput      string             `json:"latest_output,omitempty"`
-	FirstSeq          int64              `json:"first_seq"`
-	LastSeq           int64              `json:"last_seq"`
-	TotalBytes        int64              `json:"total_bytes"`
-	Truncated         bool               `json:"truncated"`
-	StartedAtUnixMs   int64              `json:"started_at_ms"`
-	EndedAtUnixMs     int64              `json:"ended_at_ms,omitempty"`
-	DurationMS        int64              `json:"duration_ms,omitempty"`
-	ExitCode          int                `json:"exit_code,omitempty"`
-	ExecutionLocation string             `json:"execution_location"`
-	Error             *aitools.ToolError `json:"error,omitempty"`
+	ProcessID  string `json:"process_id"`
+	EndpointID string `json:"endpoint_id,omitempty"`
+	ThreadID   string `json:"thread_id,omitempty"`
+	RunID      string `json:"run_id,omitempty"`
+	TurnID     string `json:"turn_id,omitempty"`
+	// Settlement*ID is the Floret execution target for host-owned pending work.
+	// It is intentionally internal-only and must not fall back at settlement time.
+	SettlementThreadID string             `json:"-"`
+	SettlementRunID    string             `json:"-"`
+	SettlementTurnID   string             `json:"-"`
+	ToolID             string             `json:"tool_id,omitempty"`
+	ToolName           string             `json:"tool_name,omitempty"`
+	Command            string             `json:"command"`
+	Cwd                string             `json:"cwd"`
+	Status             string             `json:"status"`
+	Output             string             `json:"output"`
+	LatestOutput       string             `json:"latest_output,omitempty"`
+	FirstSeq           int64              `json:"first_seq"`
+	LastSeq            int64              `json:"last_seq"`
+	TotalBytes         int64              `json:"total_bytes"`
+	Truncated          bool               `json:"truncated"`
+	StartedAtUnixMs    int64              `json:"started_at_ms"`
+	EndedAtUnixMs      int64              `json:"ended_at_ms,omitempty"`
+	DurationMS         int64              `json:"duration_ms,omitempty"`
+	ExitCode           int                `json:"exit_code,omitempty"`
+	ExecutionLocation  string             `json:"execution_location"`
+	Error              *aitools.ToolError `json:"error,omitempty"`
 }
 
 type terminalProcess struct {
@@ -99,6 +107,9 @@ type terminalProcess struct {
 	threadID               string
 	runID                  string
 	turnID                 string
+	settlementThreadID     string
+	settlementRunID        string
+	settlementTurnID       string
 	toolID                 string
 	toolName               string
 	command                string
@@ -147,6 +158,12 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 	if cwd == "" {
 		return nil, errors.New("missing terminal working directory")
 	}
+	settlementThreadID := strings.TrimSpace(req.SettlementThreadID)
+	settlementRunID := strings.TrimSpace(req.SettlementRunID)
+	settlementTurnID := strings.TrimSpace(req.SettlementTurnID)
+	if settlementThreadID == "" || settlementRunID == "" || settlementTurnID == "" {
+		return nil, errors.New("terminal process settlement target incomplete")
+	}
 	id, err := newTerminalProcessID()
 	if err != nil {
 		return nil, err
@@ -172,22 +189,25 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 		return nil, err
 	}
 	proc := &terminalProcess{
-		manager:    m,
-		id:         id,
-		endpointID: strings.TrimSpace(req.EndpointID),
-		threadID:   strings.TrimSpace(req.ThreadID),
-		runID:      strings.TrimSpace(req.RunID),
-		turnID:     strings.TrimSpace(req.TurnID),
-		toolID:     strings.TrimSpace(req.ToolID),
-		toolName:   firstNonEmptyString(req.ToolName, "terminal.exec"),
-		command:    command,
-		cwd:        cwd,
-		cmd:        cmd,
-		tty:        tty,
-		readDone:   make(chan struct{}),
-		startedAt:  time.Now(),
-		status:     terminalProcessStatusRunning,
-		exitCode:   0,
+		manager:            m,
+		id:                 id,
+		endpointID:         strings.TrimSpace(req.EndpointID),
+		threadID:           strings.TrimSpace(req.ThreadID),
+		runID:              strings.TrimSpace(req.RunID),
+		turnID:             strings.TrimSpace(req.TurnID),
+		settlementThreadID: settlementThreadID,
+		settlementRunID:    settlementRunID,
+		settlementTurnID:   settlementTurnID,
+		toolID:             strings.TrimSpace(req.ToolID),
+		toolName:           firstNonEmptyString(req.ToolName, "terminal.exec"),
+		command:            command,
+		cwd:                cwd,
+		cmd:                cmd,
+		tty:                tty,
+		readDone:           make(chan struct{}),
+		startedAt:          time.Now(),
+		status:             terminalProcessStatusRunning,
+		exitCode:           0,
 	}
 	proc.cond = sync.NewCond(&proc.mu)
 
@@ -670,28 +690,31 @@ func (p *terminalProcess) snapshotLocked(maxBytes int64) terminalProcessSnapshot
 		err = &cp
 	}
 	return terminalProcessSnapshot{
-		ProcessID:         p.id,
-		EndpointID:        p.endpointID,
-		ThreadID:          p.threadID,
-		RunID:             p.runID,
-		TurnID:            p.turnID,
-		ToolID:            p.toolID,
-		ToolName:          p.toolName,
-		Command:           p.command,
-		Cwd:               p.cwd,
-		Status:            p.status,
-		Output:            output,
-		LatestOutput:      latest,
-		FirstSeq:          p.firstSeq,
-		LastSeq:           p.lastSeq,
-		TotalBytes:        p.total,
-		Truncated:         truncated,
-		StartedAtUnixMs:   startedAtUnixMs,
-		EndedAtUnixMs:     endedAtUnixMs,
-		DurationMS:        duration,
-		ExitCode:          p.exitCode,
-		ExecutionLocation: ToolTargetModeLocalRuntime,
-		Error:             err,
+		ProcessID:          p.id,
+		EndpointID:         p.endpointID,
+		ThreadID:           p.threadID,
+		RunID:              p.runID,
+		TurnID:             p.turnID,
+		SettlementThreadID: p.settlementThreadID,
+		SettlementRunID:    p.settlementRunID,
+		SettlementTurnID:   p.settlementTurnID,
+		ToolID:             p.toolID,
+		ToolName:           p.toolName,
+		Command:            p.command,
+		Cwd:                p.cwd,
+		Status:             p.status,
+		Output:             output,
+		LatestOutput:       latest,
+		FirstSeq:           p.firstSeq,
+		LastSeq:            p.lastSeq,
+		TotalBytes:         p.total,
+		Truncated:          truncated,
+		StartedAtUnixMs:    startedAtUnixMs,
+		EndedAtUnixMs:      endedAtUnixMs,
+		DurationMS:         duration,
+		ExitCode:           p.exitCode,
+		ExecutionLocation:  ToolTargetModeLocalRuntime,
+		Error:              err,
 	}
 }
 

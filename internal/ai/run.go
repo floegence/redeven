@@ -101,12 +101,15 @@ type run struct {
 	resolveWebSearchKey func(providerID string) (string, bool, error)
 	desktopModelSource  *desktopModelSourceClient
 
-	id           string
-	channelID    string
-	endpointID   string
-	threadID     string
-	userPublicID string
-	messageID    string
+	id                 string
+	channelID          string
+	endpointID         string
+	threadID           string
+	userPublicID       string
+	messageID          string
+	settlementThreadID string
+	settlementRunID    string
+	settlementTurnID   string
 
 	maxWallTime    time.Duration
 	idleTimeout    time.Duration
@@ -279,6 +282,9 @@ func newRun(opts runOptions) *run {
 		threadID:                  strings.TrimSpace(opts.ThreadID),
 		userPublicID:              strings.TrimSpace(opts.UserPublicID),
 		messageID:                 strings.TrimSpace(opts.MessageID),
+		settlementThreadID:        strings.TrimSpace(opts.ThreadID),
+		settlementRunID:           runID,
+		settlementTurnID:          strings.TrimSpace(opts.MessageID),
 		uploadsDir:                strings.TrimSpace(opts.UploadsDir),
 		threadsDB:                 opts.ThreadsDB,
 		persistOpTimeout:          opts.PersistOpTimeout,
@@ -4353,17 +4359,20 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	defer endBusy()
 
 	proc, err := manager.Start(terminalProcessStartRequest{
-		EndpointID: strings.TrimSpace(r.endpointID),
-		ThreadID:   strings.TrimSpace(r.threadID),
-		RunID:      strings.TrimSpace(r.id),
-		TurnID:     strings.TrimSpace(r.messageID),
-		ToolID:     strings.TrimSpace(toolID),
-		ToolName:   "terminal.exec",
-		Command:    parsed.Command,
-		Stdin:      parsed.Stdin,
-		CwdAbs:     cwdAbs,
-		Shell:      shell,
-		Env:        prependRedevenBinToEnv(os.Environ()),
+		EndpointID:         strings.TrimSpace(r.endpointID),
+		ThreadID:           strings.TrimSpace(r.threadID),
+		RunID:              strings.TrimSpace(r.id),
+		TurnID:             strings.TrimSpace(r.messageID),
+		SettlementThreadID: strings.TrimSpace(r.settlementThreadID),
+		SettlementRunID:    strings.TrimSpace(r.settlementRunID),
+		SettlementTurnID:   strings.TrimSpace(r.settlementTurnID),
+		ToolID:             strings.TrimSpace(toolID),
+		ToolName:           "terminal.exec",
+		Command:            parsed.Command,
+		Stdin:              parsed.Stdin,
+		CwdAbs:             cwdAbs,
+		Shell:              shell,
+		Env:                prependRedevenBinToEnv(os.Environ()),
 	})
 	if err != nil {
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)

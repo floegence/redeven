@@ -179,6 +179,9 @@ func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawT
 	runID := strings.TrimSpace(rawRunID)
 	threadID := strings.TrimSpace(rawThreadID)
 	turnID := strings.TrimSpace(rawTurnID)
+	settlementRunID := runID
+	settlementThreadID := threadID
+	settlementTurnID := turnID
 	childThreadID := strings.TrimSpace(hostContext[subagentToolHostContextChildThreadIDKey])
 	if childThreadID == "" {
 		childThreadID = strings.TrimSpace(hostContext[subagentToolHostContextSubagentIDKey])
@@ -243,6 +246,9 @@ func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawT
 		TargetToolExecutor:    base.targetToolExecutor,
 	})
 	child.permissionType = base.permissionType
+	child.settlementThreadID = settlementThreadID
+	child.settlementRunID = settlementRunID
+	child.settlementTurnID = settlementTurnID
 	child.allowDelegatedApproval = base.allowDelegatedApproval
 	child.delegatedApprovalParent = base.delegatedApprovalParent
 	if permission := strings.TrimSpace(hostContext[subagentToolHostContextParentPermissionKey]); permission != "" {

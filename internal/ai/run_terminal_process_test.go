@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -24,15 +25,18 @@ func TestTerminalProcessManagerQuickCompletionCapturesPTYOutput(t *testing.T) {
 	defer manager.Close()
 
 	proc, err := manager.Start(terminalProcessStartRequest{
-		EndpointID: "env_test",
-		ThreadID:   "thread_test",
-		RunID:      "run_test",
-		TurnID:     "turn_test",
-		ToolID:     "tool_test",
-		ToolName:   "terminal.exec",
-		Command:    "printf quick-output",
-		CwdAbs:     workspace,
-		Shell:      "/bin/bash",
+		EndpointID:         "env_test",
+		ThreadID:           "thread_test",
+		RunID:              "run_test",
+		TurnID:             "turn_test",
+		SettlementThreadID: "thread_test",
+		SettlementRunID:    "run_test",
+		SettlementTurnID:   "turn_test",
+		ToolID:             "tool_test",
+		ToolName:           "terminal.exec",
+		Command:            "printf quick-output",
+		CwdAbs:             workspace,
+		Shell:              "/bin/bash",
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -56,21 +60,106 @@ func TestTerminalProcessManagerQuickCompletionCapturesPTYOutput(t *testing.T) {
 	}
 }
 
+func TestTerminalProcessManagerStartRequiresSettlementIdentity(t *testing.T) {
+	workspace := t.TempDir()
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
+
+	_, err := manager.Start(terminalProcessStartRequest{
+		EndpointID:         "env_test",
+		ThreadID:           "thread_audit",
+		RunID:              "run_audit",
+		TurnID:             "turn_audit",
+		SettlementThreadID: "thread_floret",
+		SettlementTurnID:   "turn_floret",
+		ToolID:             "tool_test",
+		ToolName:           "terminal.exec",
+		Command:            "printf should-not-run",
+		CwdAbs:             workspace,
+		Shell:              "/bin/bash",
+	})
+	if err == nil || !strings.Contains(err.Error(), "settlement target incomplete") {
+		t.Fatalf("Start err=%v, want settlement target incomplete", err)
+	}
+	manager.mu.Lock()
+	active := manager.active
+	processes := len(manager.processes)
+	manager.mu.Unlock()
+	if active != 0 || processes != 0 {
+		t.Fatalf("terminal process started without settlement identity: active=%d processes=%d", active, processes)
+	}
+}
+
+func TestTerminalProcessSnapshotDoesNotExposeSettlementIdentityJSON(t *testing.T) {
+	workspace := t.TempDir()
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
+
+	proc, err := manager.Start(terminalProcessStartRequest{
+		EndpointID:         "env_test",
+		ThreadID:           "thread_audit",
+		RunID:              "run_audit",
+		TurnID:             "turn_audit",
+		SettlementThreadID: "thread_floret",
+		SettlementRunID:    "run_floret",
+		SettlementTurnID:   "turn_floret",
+		ToolID:             "tool_test",
+		ToolName:           "terminal.exec",
+		Command:            "printf quick-output",
+		CwdAbs:             workspace,
+		Shell:              "/bin/bash",
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	snapshot := proc.WaitForYield(1000)
+	if snapshot.SettlementThreadID != "thread_floret" ||
+		snapshot.SettlementRunID != "run_floret" ||
+		snapshot.SettlementTurnID != "turn_floret" {
+		t.Fatalf("internal settlement identity = (%q,%q,%q), want Floret identity",
+			snapshot.SettlementThreadID, snapshot.SettlementRunID, snapshot.SettlementTurnID)
+	}
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	encoded := string(raw)
+	for _, forbidden := range []string{
+		"settlement_thread_id",
+		"settlement_run_id",
+		"settlement_turn_id",
+		"thread_floret",
+		"run_floret",
+		"turn_floret",
+	} {
+		if strings.Contains(encoded, forbidden) {
+			t.Fatalf("terminal snapshot JSON leaked %q: %s", forbidden, encoded)
+		}
+	}
+	if !strings.Contains(encoded, "run_audit") {
+		t.Fatalf("terminal snapshot JSON missing audit run id: %s", encoded)
+	}
+}
+
 func TestTerminalProcessManagerReadWriteAndTerminate(t *testing.T) {
 	workspace := t.TempDir()
 	manager := newTerminalProcessManager(nil)
 	defer manager.Close()
 
 	proc, err := manager.Start(terminalProcessStartRequest{
-		EndpointID: "env_test",
-		ThreadID:   "thread_test",
-		RunID:      "run_test",
-		TurnID:     "turn_test",
-		ToolID:     "tool_test",
-		ToolName:   "terminal.exec",
-		Command:    "read line; printf 'reply:%s\\n' \"$line\"; sleep 5",
-		CwdAbs:     workspace,
-		Shell:      "/bin/bash",
+		EndpointID:         "env_test",
+		ThreadID:           "thread_test",
+		RunID:              "run_test",
+		TurnID:             "turn_test",
+		SettlementThreadID: "thread_test",
+		SettlementRunID:    "run_test",
+		SettlementTurnID:   "turn_test",
+		ToolID:             "tool_test",
+		ToolName:           "terminal.exec",
+		Command:            "read line; printf 'reply:%s\\n' \"$line\"; sleep 5",
+		CwdAbs:             workspace,
+		Shell:              "/bin/bash",
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -115,15 +204,18 @@ func TestTerminalProcessManagerSettlesPendingProcessOnceWhenProcessEnds(t *testi
 	defer manager.Close()
 
 	proc, err := manager.Start(terminalProcessStartRequest{
-		EndpointID: "env_test",
-		ThreadID:   "thread_test",
-		RunID:      "run_test",
-		TurnID:     "turn_test",
-		ToolID:     "tool_test",
-		ToolName:   "terminal.exec",
-		Command:    "sleep 0.05; printf settled-output",
-		CwdAbs:     workspace,
-		Shell:      "/bin/bash",
+		EndpointID:         "env_test",
+		ThreadID:           "thread_test",
+		RunID:              "run_test",
+		TurnID:             "turn_test",
+		SettlementThreadID: "thread_test",
+		SettlementRunID:    "run_test",
+		SettlementTurnID:   "turn_test",
+		ToolID:             "tool_test",
+		ToolName:           "terminal.exec",
+		Command:            "sleep 0.05; printf settled-output",
+		CwdAbs:             workspace,
+		Shell:              "/bin/bash",
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -174,15 +266,18 @@ func TestTerminalProcessManagerRetriesDoneUntilSettlementAcknowledged(t *testing
 	defer manager.Close()
 
 	proc, err := manager.Start(terminalProcessStartRequest{
-		EndpointID: "env_test",
-		ThreadID:   "thread_test",
-		RunID:      "run_test",
-		TurnID:     "turn_test",
-		ToolID:     "tool_test",
-		ToolName:   "terminal.exec",
-		Command:    "printf retry-output",
-		CwdAbs:     workspace,
-		Shell:      "/bin/bash",
+		EndpointID:         "env_test",
+		ThreadID:           "thread_test",
+		RunID:              "run_test",
+		TurnID:             "turn_test",
+		SettlementThreadID: "thread_test",
+		SettlementRunID:    "run_test",
+		SettlementTurnID:   "turn_test",
+		ToolID:             "tool_test",
+		ToolName:           "terminal.exec",
+		Command:            "printf retry-output",
+		CwdAbs:             workspace,
+		Shell:              "/bin/bash",
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -236,15 +331,18 @@ func TestReadTerminalProcessPublishesDoneOnlyAfterAccessValidation(t *testing.T)
 	defer manager.Close()
 
 	proc, err := manager.Start(terminalProcessStartRequest{
-		EndpointID: "env_owner",
-		ThreadID:   "thread_owner",
-		RunID:      "run_owner",
-		TurnID:     "turn_owner",
-		ToolID:     "tool_owner",
-		ToolName:   "terminal.exec",
-		Command:    "printf owner-output",
-		CwdAbs:     workspace,
-		Shell:      "/bin/bash",
+		EndpointID:         "env_owner",
+		ThreadID:           "thread_owner",
+		RunID:              "run_owner",
+		TurnID:             "turn_owner",
+		SettlementThreadID: "thread_owner",
+		SettlementRunID:    "run_owner",
+		SettlementTurnID:   "turn_owner",
+		ToolID:             "tool_owner",
+		ToolName:           "terminal.exec",
+		Command:            "printf owner-output",
+		CwdAbs:             workspace,
+		Shell:              "/bin/bash",
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -290,19 +388,22 @@ func TestHandleTerminalProcessDoneDoesNotAuditBeforeSettlement(t *testing.T) {
 	}
 
 	err := svc.handleTerminalProcessDone(terminalProcessSnapshot{
-		ProcessID:       "tp_settlement_first",
-		EndpointID:      "env_1",
-		ThreadID:        "thread_1",
-		RunID:           "run_settlement_first",
-		TurnID:          "turn_1",
-		ToolID:          "tool_settlement_first",
-		ToolName:        "terminal.exec",
-		Command:         "printf done",
-		Cwd:             t.TempDir(),
-		Status:          terminalProcessStatusSuccess,
-		Output:          "done",
-		StartedAtUnixMs: 100,
-		EndedAtUnixMs:   200,
+		ProcessID:          "tp_settlement_first",
+		EndpointID:         "env_1",
+		ThreadID:           "thread_1",
+		RunID:              "run_settlement_first",
+		TurnID:             "turn_1",
+		SettlementThreadID: "thread_1",
+		SettlementRunID:    "run_settlement_first",
+		SettlementTurnID:   "turn_1",
+		ToolID:             "tool_settlement_first",
+		ToolName:           "terminal.exec",
+		Command:            "printf done",
+		Cwd:                t.TempDir(),
+		Status:             terminalProcessStatusSuccess,
+		Output:             "done",
+		StartedAtUnixMs:    100,
+		EndedAtUnixMs:      200,
 	})
 	if err == nil {
 		t.Fatalf("handleTerminalProcessDone succeeded despite settlement failure")
@@ -316,6 +417,109 @@ func TestHandleTerminalProcessDoneDoesNotAuditBeforeSettlement(t *testing.T) {
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("GetToolCall error=%v, want sql.ErrNoRows", err)
+	}
+}
+
+func TestHandleTerminalProcessDoneRequiresSettlementIdentity(t *testing.T) {
+	store := openTerminalProcessTestStore(t)
+	defer func() { _ = store.Close() }()
+	upsertTerminalProcessTestRun(t, store, "env_1", "thread_child", "run_child_audit", "turn_child_audit")
+
+	host := &recordingFloretHost{
+		settleResult: flruntime.PendingToolSettlementResult{
+			Projection: terminalProcessTestProjection("run_floret_child", "thread_child", "turn_floret_child", "tool_missing_target"),
+		},
+	}
+	activeRun := &run{id: "run_child_audit", endpointID: "env_1", threadID: "thread_child", messageID: "turn_child_audit"}
+	activeRun.setActiveFloretHost(host)
+	var events []any
+	activeRun.onStreamEvent = func(ev any) { events = append(events, ev) }
+	svc := &Service{
+		threadsDB: store,
+		runs:      map[string]*run{"run_child_audit": activeRun},
+		log:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	err := svc.handleTerminalProcessDone(terminalProcessSnapshot{
+		ProcessID:       "tp_missing_target",
+		EndpointID:      "env_1",
+		ThreadID:        "thread_child",
+		RunID:           "run_child_audit",
+		TurnID:          "turn_child_audit",
+		ToolID:          "tool_missing_target",
+		ToolName:        "terminal.exec",
+		Command:         "printf done",
+		Cwd:             t.TempDir(),
+		Status:          terminalProcessStatusSuccess,
+		Output:          "done",
+		StartedAtUnixMs: 100,
+		EndedAtUnixMs:   200,
+	})
+	if err == nil || !strings.Contains(err.Error(), "settlement target incomplete") {
+		t.Fatalf("handleTerminalProcessDone err=%v, want settlement target incomplete", err)
+	}
+	if len(host.settleRequests) != 0 {
+		t.Fatalf("Floret settlement was attempted without settlement target: %#v", host.settleRequests)
+	}
+	rec, err := store.GetToolCall(context.Background(), "env_1", "run_child_audit", "tool_missing_target")
+	if err == nil {
+		t.Fatalf("tool call was persisted without settlement target: %#v", rec)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("GetToolCall error=%v, want sql.ErrNoRows", err)
+	}
+	if len(activeRun.assistantBlocks) != 0 || len(events) != 0 {
+		t.Fatalf("terminal completion was published without settlement target: blocks=%#v events=%#v", activeRun.assistantBlocks, events)
+	}
+}
+
+func TestHandleTerminalProcessDoneDoesNotPublishCompletionBeforeAuditAck(t *testing.T) {
+	store := openTerminalProcessTestStore(t)
+	upsertTerminalProcessTestRun(t, store, "env_1", "thread_1", "run_audit_first", "turn_1")
+	host := &recordingFloretHost{
+		settleResult: flruntime.PendingToolSettlementResult{
+			Projection: terminalProcessTestProjection("run_audit_first", "thread_1", "turn_1", "tool_audit_first"),
+		},
+	}
+	activeRun := &run{id: "run_audit_first", endpointID: "env_1", threadID: "thread_1", messageID: "turn_1"}
+	activeRun.setActiveFloretHost(host)
+	var events []any
+	activeRun.onStreamEvent = func(ev any) { events = append(events, ev) }
+	svc := &Service{
+		threadsDB: store,
+		runs:      map[string]*run{"run_audit_first": activeRun},
+		log:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close store: %v", err)
+	}
+
+	err := svc.handleTerminalProcessDone(terminalProcessSnapshot{
+		ProcessID:          "tp_audit_first",
+		EndpointID:         "env_1",
+		ThreadID:           "thread_1",
+		RunID:              "run_audit_first",
+		TurnID:             "turn_1",
+		SettlementThreadID: "thread_1",
+		SettlementRunID:    "run_audit_first",
+		SettlementTurnID:   "turn_1",
+		ToolID:             "tool_audit_first",
+		ToolName:           "terminal.exec",
+		Command:            "printf done",
+		Cwd:                t.TempDir(),
+		Status:             terminalProcessStatusSuccess,
+		Output:             "done",
+		StartedAtUnixMs:    100,
+		EndedAtUnixMs:      200,
+	})
+	if err == nil {
+		t.Fatalf("handleTerminalProcessDone succeeded despite audit persistence failure")
+	}
+	if len(host.settleRequests) != 1 {
+		t.Fatalf("settle requests=%d, want one Floret settlement before audit failure", len(host.settleRequests))
+	}
+	if len(activeRun.assistantBlocks) != 0 || len(events) != 0 {
+		t.Fatalf("terminal completion was published before audit ack: blocks=%#v events=%#v", activeRun.assistantBlocks, events)
 	}
 }
 
@@ -522,6 +726,49 @@ func TestRunTerminalCleanupSettlesPendingProcessesForRun(t *testing.T) {
 	}
 }
 
+func TestServiceCloseSettlesTerminalProcessesBeforeClearingActiveRuns(t *testing.T) {
+	workspace := t.TempDir()
+	store := openTerminalProcessTestStore(t)
+	upsertTerminalProcessTestRun(t, store, "env_1", "thread_1", "run_shutdown", "turn_1")
+
+	svc := &Service{
+		threadsDB:         store,
+		log:               slog.New(slog.NewTextHandler(io.Discard, nil)),
+		persistOpTO:       5 * time.Second,
+		runs:              map[string]*run{},
+		activeRunByTh:     map[string]string{},
+		terminalProcesses: newTerminalProcessManager(nil),
+	}
+	svc.terminalProcesses.onDone = svc.handleTerminalProcessDone
+	r := newTerminalProcessTestRun(workspace, svc, store, "env_1", "thread_1", "run_shutdown", "turn_1")
+	projection := terminalProcessTestProjection("run_shutdown", "thread_1", "turn_1", "tool_shutdown")
+	host := &recordingFloretHost{
+		settleResult:   flruntime.PendingToolSettlementResult{Projection: projection},
+		readProjection: projection,
+	}
+	r.setActiveFloretHost(host)
+	svc.runs["run_shutdown"] = r
+	svc.activeRunByTh[runThreadKey("env_1", "thread_1")] = "run_shutdown"
+
+	proc := startPendingTerminalProcessForTest(t, svc.terminalProcesses, workspace, "env_1", "thread_1", "run_shutdown", "turn_1", "tool_shutdown")
+	if err := svc.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if len(host.settleRequests) != 1 {
+		t.Fatalf("settle requests=%d, want terminal settlement before active run registry is cleared", len(host.settleRequests))
+	}
+	req := host.settleRequests[0]
+	if req.ToolCallID != "tool_shutdown" || req.RunID != flruntime.RunID("run_shutdown") || req.Status != flruntime.PendingToolSettlementCanceled {
+		t.Fatalf("settlement request=%#v, want canceled shutdown settlement for active run", req)
+	}
+	if snapshot := proc.Read(terminalProcessReadRequest{}); snapshot.Status != terminalProcessStatusCanceled {
+		t.Fatalf("shutdown process status=%q, want canceled", snapshot.Status)
+	}
+	if svc.runForFloretSettlement("env_1", "thread_1", "run_shutdown") != nil {
+		t.Fatalf("active run registry was not cleared after terminal settlement drain")
+	}
+}
+
 func TestRunTerminalCleanupWaitsForInFlightSettlementBeforeProjectionRead(t *testing.T) {
 	workspace := t.TempDir()
 	store := openTerminalProcessTestStore(t)
@@ -548,15 +795,18 @@ func TestRunTerminalCleanupWaitsForInFlightSettlementBeforeProjectionRead(t *tes
 	host := &recordingFloretHost{readProjection: projection}
 
 	proc, err := manager.Start(terminalProcessStartRequest{
-		EndpointID: "env_1",
-		ThreadID:   "thread_1",
-		RunID:      "run_inflight",
-		TurnID:     "turn_1",
-		ToolID:     "tool_inflight",
-		ToolName:   "terminal.exec",
-		Command:    "printf inflight",
-		CwdAbs:     workspace,
-		Shell:      "/bin/bash",
+		EndpointID:         "env_1",
+		ThreadID:           "thread_1",
+		RunID:              "run_inflight",
+		TurnID:             "turn_1",
+		SettlementThreadID: "thread_1",
+		SettlementRunID:    "run_inflight",
+		SettlementTurnID:   "turn_1",
+		ToolID:             "tool_inflight",
+		ToolName:           "terminal.exec",
+		Command:            "printf inflight",
+		CwdAbs:             workspace,
+		Shell:              "/bin/bash",
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -611,15 +861,18 @@ func TestTerminalProcessWaitForYieldContextTerminatesOnCancel(t *testing.T) {
 	defer manager.Close()
 
 	proc, err := manager.Start(terminalProcessStartRequest{
-		EndpointID: "env_test",
-		ThreadID:   "thread_test",
-		RunID:      "run_test",
-		TurnID:     "turn_test",
-		ToolID:     "tool_test",
-		ToolName:   "terminal.exec",
-		Command:    "sleep 5",
-		CwdAbs:     workspace,
-		Shell:      "/bin/bash",
+		EndpointID:         "env_test",
+		ThreadID:           "thread_test",
+		RunID:              "run_test",
+		TurnID:             "turn_test",
+		SettlementThreadID: "thread_test",
+		SettlementRunID:    "run_test",
+		SettlementTurnID:   "turn_test",
+		ToolID:             "tool_test",
+		ToolName:           "terminal.exec",
+		Command:            "sleep 5",
+		CwdAbs:             workspace,
+		Shell:              "/bin/bash",
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
@@ -903,17 +1156,24 @@ func terminalProcessTestProjection(runID string, threadID string, turnID string,
 }
 
 func startPendingTerminalProcessForTest(t *testing.T, manager *terminalProcessManager, workspace string, endpointID string, threadID string, runID string, turnID string, toolID string) *terminalProcess {
+	return startPendingTerminalProcessForTestWithSettlement(t, manager, workspace, endpointID, threadID, runID, turnID, runID, turnID, toolID)
+}
+
+func startPendingTerminalProcessForTestWithSettlement(t *testing.T, manager *terminalProcessManager, workspace string, endpointID string, threadID string, runID string, turnID string, settlementRunID string, settlementTurnID string, toolID string) *terminalProcess {
 	t.Helper()
 	proc, err := manager.Start(terminalProcessStartRequest{
-		EndpointID: endpointID,
-		ThreadID:   threadID,
-		RunID:      runID,
-		TurnID:     turnID,
-		ToolID:     toolID,
-		ToolName:   "terminal.exec",
-		Command:    "sleep 5",
-		CwdAbs:     workspace,
-		Shell:      "/bin/bash",
+		EndpointID:         endpointID,
+		ThreadID:           threadID,
+		RunID:              runID,
+		TurnID:             turnID,
+		SettlementThreadID: threadID,
+		SettlementRunID:    settlementRunID,
+		SettlementTurnID:   settlementTurnID,
+		ToolID:             toolID,
+		ToolName:           "terminal.exec",
+		Command:            "sleep 5",
+		CwdAbs:             workspace,
+		Shell:              "/bin/bash",
 	})
 	if err != nil {
 		t.Fatalf("Start %s: %v", toolID, err)

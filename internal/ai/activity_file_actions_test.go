@@ -161,14 +161,28 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentActionSidecar(t *testin
 		t.Fatalf("SanitizeActivityTimelineMessageJSON: %v", err)
 	}
 	body := string(sanitized)
-	for _, required := range []string{`"subagent_actions"`, `"action":"inspect"`, `"thread_id":"child_1"`, `"subagent_id":"child_1"`, `"task_description":"Review the public API boundary."`, `"updated_at_ms":1700000000100`} {
+	for _, required := range []string{`"subagent_actions"`, `"action":"inspect"`, `"thread_id":"child_1"`, `"subagent_id":"child_1"`, `"task_description":"Review the public API boundary."`} {
 		if !strings.Contains(body, required) {
 			t.Fatalf("sanitized message missing %q: %s", required, body)
 		}
 	}
-	for _, forbidden := range []string{"private_path", "/Users/alice/work", `"can_send_input"`, `"can_close"`, `"last_message"`, `"waiting_prompt"`, `"context_mode"`} {
+	for _, forbidden := range []string{"private_path", "/Users/alice/work", `"can_send_input"`, `"can_close"`, `"last_message"`, `"waiting_prompt"`, `"context_mode"`, `"updated_at_ms":1700000000100`} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("sanitized message contains %q: %s", forbidden, body)
+		}
+	}
+	var message struct {
+		Blocks []struct {
+			SubagentActions map[string]map[string]any `json:"subagent_actions"`
+		} `json:"blocks"`
+	}
+	if err := json.Unmarshal(sanitized, &message); err != nil {
+		t.Fatalf("parse sanitized message: %v", err)
+	}
+	sidecar := message.Blocks[0].SubagentActions["subagent:review"]
+	for _, forbidden := range []string{"task_name", "task_description", "agent_type", "status", "started_at_ms", "created_at_ms", "updated_at_ms"} {
+		if _, ok := sidecar[forbidden]; ok {
+			t.Fatalf("subagent routing sidecar leaked %q: %#v", forbidden, sidecar)
 		}
 	}
 }

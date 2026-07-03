@@ -640,6 +640,9 @@ func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floret
 		childRun.threadID = childThreadID
 		childRun.id = childRunID
 		childRun.messageID = strings.TrimSpace(string(req.TurnID))
+		childRun.settlementThreadID = strings.TrimSpace(string(req.ThreadID))
+		childRun.settlementRunID = strings.TrimSpace(string(req.RunID))
+		childRun.settlementTurnID = strings.TrimSpace(string(req.TurnID))
 		childRun.permissionType = parent.currentThreadPermissionType(ctx, subagentPermissionLimit(parent))
 		registry := NewInMemoryToolRegistry()
 		if err := registerBuiltInTools(registry, childRun); err != nil {
@@ -2400,39 +2403,10 @@ func flowerSubagentActivityActionFromPayload(defaultAction string, payload map[s
 	if threadID == "" {
 		threadID = strings.TrimSpace(anyToString(payload["subagent_id"]))
 	}
-	agentType := strings.TrimSpace(anyToString(payload["agent_type"]))
-	if agentType == "" {
-		agentType = normalizeSubagentAgentType(anyToString(payload["host_profile_ref"]))
-	}
-	title := strings.TrimSpace(anyToString(payload["title"]))
-	taskName := strings.TrimSpace(anyToString(payload["task_name"]))
-	taskDescription := strings.TrimSpace(anyToString(payload["task_description"]))
-	if title == "" {
-		title = taskName
-	}
 	if threadID == "" && len(items) == 1 {
 		threadID = strings.TrimSpace(firstNonEmptyString(items[0].ThreadID, items[0].SubagentID))
-		if title == "" {
-			title = firstNonEmptyString(items[0].Title, items[0].TaskName)
-		}
-		if taskName == "" {
-			taskName = items[0].TaskName
-		}
-		if taskDescription == "" {
-			taskDescription = items[0].TaskDescription
-		}
-		if agentType == "" {
-			agentType = items[0].AgentType
-		}
 	}
-	status := ""
-	if rawStatus := strings.TrimSpace(anyToString(payload["status"])); rawStatus != "" {
-		status = flowerSubagentStatus(flruntime.SubAgentStatus(rawStatus))
-	}
-	startedAtMS := nonNegativeInt64Local(parseInt64Raw(payload["started_at_ms"], 0))
-	createdAtMS := nonNegativeInt64Local(parseInt64Raw(payload["created_at_ms"], 0))
-	updatedAtMS := nonNegativeInt64Local(parseInt64Raw(payload["updated_at_ms"], 0))
-	if threadID == "" && len(items) == 0 && taskName == "" && title == "" && taskDescription == "" {
+	if threadID == "" && len(items) == 0 {
 		return FlowerActivitySubagentAction{}, false
 	}
 	return FlowerActivitySubagentAction{
@@ -2442,14 +2416,6 @@ func flowerSubagentActivityActionFromPayload(defaultAction string, payload map[s
 		ThreadID:          threadID,
 		SubagentID:        threadID,
 		ParentThreadID:    strings.TrimSpace(anyToString(payload["parent_thread_id"])),
-		TaskName:          taskName,
-		TaskDescription:   taskDescription,
-		Title:             title,
-		AgentType:         agentType,
-		Status:            status,
-		StartedAtMS:       startedAtMS,
-		CreatedAtMS:       createdAtMS,
-		UpdatedAtMS:       updatedAtMS,
 		Items:             items,
 	}, true
 }
@@ -2469,14 +2435,6 @@ func flowerSubagentActivityActionFromItems(action string, parentThreadID string,
 		item := out.Items[0]
 		out.ThreadID = strings.TrimSpace(firstNonEmptyString(item.ThreadID, item.SubagentID))
 		out.SubagentID = out.ThreadID
-		out.TaskName = item.TaskName
-		out.TaskDescription = item.TaskDescription
-		out.Title = item.Title
-		out.AgentType = item.AgentType
-		out.Status = item.Status
-		out.StartedAtMS = item.StartedAtMS
-		out.CreatedAtMS = item.CreatedAtMS
-		out.UpdatedAtMS = item.UpdatedAtMS
 	}
 	return out
 }
@@ -2535,16 +2493,8 @@ func flowerSubagentActionItemFromAction(action FlowerActivitySubagentAction) (Fl
 		return FlowerActivitySubagentActionItem{}, false
 	}
 	return FlowerActivitySubagentActionItem{
-		ThreadID:        threadID,
-		SubagentID:      threadID,
-		TaskName:        action.TaskName,
-		TaskDescription: action.TaskDescription,
-		Title:           action.Title,
-		AgentType:       action.AgentType,
-		Status:          action.Status,
-		StartedAtMS:     action.StartedAtMS,
-		CreatedAtMS:     action.CreatedAtMS,
-		UpdatedAtMS:     action.UpdatedAtMS,
+		ThreadID:   threadID,
+		SubagentID: threadID,
 	}, true
 }
 
@@ -2562,31 +2512,9 @@ func flowerSubagentActionItemsFromPayload(payload map[string]any) []FlowerActivi
 		if threadID == "" {
 			continue
 		}
-		agentType := strings.TrimSpace(anyToString(item["agent_type"]))
-		if agentType == "" {
-			agentType = normalizeSubagentAgentType(anyToString(item["host_profile_ref"]))
-		}
-		status := ""
-		if rawStatus := strings.TrimSpace(anyToString(item["status"])); rawStatus != "" {
-			status = flowerSubagentStatus(flruntime.SubAgentStatus(rawStatus))
-		}
-		title := strings.TrimSpace(anyToString(item["title"]))
-		taskName := strings.TrimSpace(anyToString(item["task_name"]))
-		taskDescription := strings.TrimSpace(anyToString(item["task_description"]))
-		if title == "" {
-			title = taskName
-		}
 		out = append(out, FlowerActivitySubagentActionItem{
-			ThreadID:        threadID,
-			SubagentID:      threadID,
-			TaskName:        taskName,
-			TaskDescription: taskDescription,
-			Title:           title,
-			AgentType:       agentType,
-			Status:          status,
-			StartedAtMS:     nonNegativeInt64Local(parseInt64Raw(item["started_at_ms"], 0)),
-			CreatedAtMS:     nonNegativeInt64Local(parseInt64Raw(item["created_at_ms"], 0)),
-			UpdatedAtMS:     nonNegativeInt64Local(parseInt64Raw(item["updated_at_ms"], 0)),
+			ThreadID:   threadID,
+			SubagentID: threadID,
 		})
 	}
 	if len(out) == 0 {

@@ -128,6 +128,11 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) er
 		strings.TrimSpace(snapshot.ToolID) == "" {
 		return errors.New("terminal process settlement identity incomplete")
 	}
+	if strings.TrimSpace(snapshot.SettlementThreadID) == "" ||
+		strings.TrimSpace(snapshot.SettlementRunID) == "" ||
+		strings.TrimSpace(snapshot.SettlementTurnID) == "" {
+		return errors.New("terminal process settlement target incomplete")
+	}
 
 	resultPayload := terminalProcessResultPayload(snapshot)
 	status := toolCallStatusSuccess
@@ -147,7 +152,7 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) er
 	}
 	settlementReq := terminalProcessSettlementRequest(snapshot, resultPayload)
 	settleCtx, settleCancel := context.WithTimeout(context.Background(), s.persistTimeout())
-	settled, err := s.settlePendingToolWithActiveFloretRun(settleCtx, snapshot.EndpointID, snapshot.ThreadID, settlementReq)
+	settled, err := s.settlePendingToolWithActiveRedevenRun(settleCtx, snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, settlementReq)
 	settleCancel()
 	if err != nil {
 		if s.log != nil {
@@ -155,13 +160,6 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) er
 		}
 		return err
 	}
-	if err := s.applyFloretPendingToolSettlementProjection(context.Background(), snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, snapshot.TurnID, settled.Projection); err != nil {
-		if s.log != nil {
-			s.log.Warn("ai: apply terminal settlement projection failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
-		}
-		return err
-	}
-
 	startedAt := snapshot.StartedAtUnixMs
 	if startedAt <= 0 {
 		startedAt = time.Now().UnixMilli()
@@ -202,7 +200,13 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) er
 		if s.log != nil {
 			s.log.Warn("ai: persist terminal process result failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
 		}
-		return nil
+		return err
+	}
+	if err := s.applyFloretPendingToolSettlementProjection(context.Background(), snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, snapshot.TurnID, settled.Projection); err != nil {
+		if s.log != nil {
+			s.log.Warn("ai: apply terminal settlement projection failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
+		}
+		return err
 	}
 	s.appendTerminalProcessRunEvent(snapshot, status, resultPayload, toolErr)
 	return nil
@@ -247,9 +251,9 @@ func (s *Service) appendTerminalProcessRunEvent(snapshot terminalProcessSnapshot
 
 func terminalProcessSettlementRequest(snapshot terminalProcessSnapshot, resultPayload map[string]any) flruntime.PendingToolSettlementRequest {
 	return flruntime.PendingToolSettlementRequest{
-		ThreadID:   flruntime.ThreadID(snapshot.ThreadID),
-		TurnID:     flruntime.TurnID(snapshot.TurnID),
-		RunID:      flruntime.RunID(snapshot.RunID),
+		ThreadID:   flruntime.ThreadID(strings.TrimSpace(snapshot.SettlementThreadID)),
+		TurnID:     flruntime.TurnID(strings.TrimSpace(snapshot.SettlementTurnID)),
+		RunID:      flruntime.RunID(strings.TrimSpace(snapshot.SettlementRunID)),
 		ToolCallID: snapshot.ToolID,
 		ToolName:   "terminal.exec",
 		Handle:     snapshot.ProcessID,

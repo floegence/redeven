@@ -268,14 +268,6 @@ export type FlowerActivityFileAction = Readonly<{
 export type FlowerActivitySubagentActionItem = Readonly<{
   thread_id?: string;
   subagent_id?: string;
-  task_name?: string;
-  task_description?: string;
-  title?: string;
-  agent_type?: string;
-  status?: string;
-  started_at_ms?: number;
-  created_at_ms?: number;
-  updated_at_ms?: number;
 }>;
 
 export type FlowerActivitySubagentAction = Readonly<{
@@ -285,14 +277,6 @@ export type FlowerActivitySubagentAction = Readonly<{
   thread_id?: string;
   subagent_id?: string;
   parent_thread_id?: string;
-  task_name?: string;
-  task_description?: string;
-  title?: string;
-  agent_type?: string;
-  status?: string;
-  started_at_ms?: number;
-  created_at_ms?: number;
-  updated_at_ms?: number;
   items?: readonly FlowerActivitySubagentActionItem[];
 }>;
 

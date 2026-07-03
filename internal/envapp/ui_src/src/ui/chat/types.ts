@@ -144,28 +144,12 @@ export interface ActivitySubagentAction {
   thread_id?: string;
   subagent_id?: string;
   parent_thread_id?: string;
-  task_name?: string;
-  task_description?: string;
-  title?: string;
-  agent_type?: string;
-  status?: string;
-  started_at_ms?: number;
-  created_at_ms?: number;
-  updated_at_ms?: number;
   items?: ActivitySubagentActionItem[];
 }
 
 export interface ActivitySubagentActionItem {
   thread_id?: string;
   subagent_id?: string;
-  task_name?: string;
-  task_description?: string;
-  title?: string;
-  agent_type?: string;
-  status?: string;
-  started_at_ms?: number;
-  created_at_ms?: number;
-  updated_at_ms?: number;
 }
 
 export interface ActivityTimelineBlock {

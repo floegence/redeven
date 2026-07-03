@@ -436,9 +436,6 @@ func (s *Service) Close() error {
 			runtimes = append(runtimes, runtime)
 		}
 	}
-	s.runs = make(map[string]*run)
-	s.activeRunByTh = make(map[string]string)
-	s.subagentRuntimes = make(map[string]*floretSubagentRuntime)
 	s.mu.Unlock()
 
 	if coordinator != nil {
@@ -481,6 +478,9 @@ func (s *Service) Close() error {
 	if s.threadsDB == ts {
 		s.threadsDB = nil
 	}
+	s.runs = make(map[string]*run)
+	s.activeRunByTh = make(map[string]string)
+	s.subagentRuntimes = make(map[string]*floretSubagentRuntime)
 	s.idleCompactionByTh = make(map[string]*idleThreadCompaction)
 	s.mu.Unlock()
 	for _, runtime := range runtimes {

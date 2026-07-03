@@ -2,6 +2,11 @@ import type {
   FlowerChatMessage,
   FlowerChatMessageRole,
   FlowerChatMessageStatus,
+  FlowerActivityAttentionReason,
+  FlowerActivityItem,
+  FlowerActivityStatus,
+  FlowerActivitySeverity,
+  FlowerActivityTimelineBlock,
   FlowerContextCompaction,
   FlowerSubagentDetail,
   FlowerSubagentTimelineRow,
@@ -11,6 +16,18 @@ import type {
   FlowerTimelineDecoration,
 } from './contracts/flowerSurfaceContracts';
 import { trimString } from './flowerSurfaceModel';
+
+type OrderedMessage = {
+  message: FlowerChatMessage;
+  ordinal: number;
+  sequence: number;
+};
+
+type ActivityAnchor = {
+  ordinal: number;
+  createdAtMs: number;
+  key: string;
+};
 
 function safeIDPart(value: string): string {
   return trimString(value).replace(/[^a-zA-Z0-9_.:-]+/g, '_') || 'subagent';
@@ -58,9 +75,15 @@ function rowMessageID(threadID: string, row: FlowerSubagentTimelineRow, suffix: 
   return `${safeIDPart(threadID)}:${Math.max(0, Math.floor(Number(row.ordinal ?? 0)))}:${suffix}`;
 }
 
+function rowOrdinal(row: FlowerSubagentTimelineRow): number {
+  const ordinal = Number(row.ordinal ?? 0);
+  return Number.isFinite(ordinal) ? ordinal : 0;
+}
+
 function messageForTextRow(threadID: string, row: FlowerSubagentTimelineRow): FlowerChatMessage | null {
   const text = trimString(row.message?.text) || trimString(row.message?.preview) || trimString(row.error);
   if (!text) return null;
+  if (row.kind === 'user_message' && isRawDelegatedMission(row.metadata)) return null;
   const status = messageStatus(row);
   return {
     id: rowMessageID(threadID, row, status === 'error' ? 'error' : 'message'),
@@ -72,17 +95,179 @@ function messageForTextRow(threadID: string, row: FlowerSubagentTimelineRow): Fl
   };
 }
 
-function messageForCanonicalActivity(threadID: string, detail: FlowerSubagentDetail): FlowerChatMessage | null {
-  const activity = detail.activity;
-  if (!activity || activity.items.length === 0) return null;
+function isRawDelegatedMission(metadata?: Readonly<Record<string, string>>): boolean {
+  if (trimString(metadata?.raw_omitted) === 'true') return false;
+  return trimString(metadata?.subagent_prompt_kind) === 'delegated_mission';
+}
+
+function activityItemAnchorID(item: FlowerActivityItem): string {
+  const toolID = trimString(item.tool_id);
+  if (toolID) return toolID;
+  const itemID = trimString(item.item_id);
+  if (itemID.startsWith('tool:')) return trimString(itemID.slice('tool:'.length));
+  return itemID;
+}
+
+function rowActivityAnchorID(row: FlowerSubagentTimelineRow): string {
+  switch (row.kind) {
+    case 'tool_activity':
+    case 'tool_call':
+      return trimString(row.tool_call?.id);
+    case 'tool_result':
+      return trimString(row.tool_result?.call_id);
+    case 'approval':
+      return trimString(row.approval?.tool_id);
+    case 'custom': {
+      const eventType = trimString(row.type).replace(/_/g, '-');
+      return eventType ? `event-${eventType}` : '';
+    }
+    default:
+      return '';
+  }
+}
+
+function isActivityAnchorRow(row: FlowerSubagentTimelineRow): boolean {
+  return row.kind === 'tool_activity' || row.kind === 'tool_call' || row.kind === 'tool_result' || row.kind === 'approval' || row.kind === 'custom';
+}
+
+function activityAnchors(detail: FlowerSubagentDetail): ActivityAnchor[] {
+  return detail.timeline
+    .filter(isActivityAnchorRow)
+    .map((row) => ({
+      ordinal: rowOrdinal(row),
+      createdAtMs: Math.max(0, Math.floor(Number(row.created_at_ms ?? 0))),
+      key: rowActivityAnchorID(row),
+    }))
+    .filter((anchor) => anchor.ordinal > 0)
+    .sort((left, right) => left.ordinal - right.ordinal);
+}
+
+function activitySeverityRank(severity: FlowerActivitySeverity): number {
+  switch (severity) {
+    case 'blocking':
+      return 4;
+    case 'error':
+      return 3;
+    case 'warning':
+      return 2;
+    case 'normal':
+      return 1;
+    case 'quiet':
+    default:
+      return 0;
+  }
+}
+
+function maxActivitySeverity(left: FlowerActivitySeverity, right: FlowerActivitySeverity): FlowerActivitySeverity {
+  return activitySeverityRank(right) > activitySeverityRank(left) ? right : left;
+}
+
+function summarizeActivityItems(items: readonly FlowerActivityItem[], fallbackStatus: FlowerActivityStatus, fallbackSeverity: FlowerActivitySeverity) {
+  const counts: Record<string, number> = {};
+  let needsAttention = false;
+  let severity = fallbackSeverity;
+  const attentionReasons = new Set<FlowerActivityAttentionReason>();
+  for (const item of items) {
+    counts[item.status] = (counts[item.status] ?? 0) + 1;
+    if (item.requires_approval) counts.approval = (counts.approval ?? 0) + 1;
+    if (item.needs_attention) needsAttention = true;
+    severity = maxActivitySeverity(severity, item.severity);
+    for (const reason of item.attention_reasons ?? []) {
+      attentionReasons.add(reason);
+    }
+  }
+  let status: FlowerActivityStatus = fallbackStatus;
+  if ((counts.waiting ?? 0) > 0) status = 'waiting';
+  else if ((counts.running ?? 0) > 0) status = 'running';
+  else if ((counts.pending ?? 0) > 0) status = 'pending';
+  else if ((counts.error ?? 0) > 0) status = 'error';
+  else if ((counts.canceled ?? 0) > 0 && (counts.success ?? 0) === 0) status = 'canceled';
+  else status = 'success';
+  if ((counts.error ?? 0) > 0 && status !== 'waiting') status = 'error';
+  const attention = [...attentionReasons];
   return {
-    id: `${safeIDPart(threadID)}:activity:canonical`,
-    role: 'assistant',
-    content: '',
-    status: 'complete',
-    created_at_ms: Math.max(0, Math.floor(Number(detail.generated_at_ms ?? detail.summary.updated_at_ms ?? 0))),
-    blocks: [activity],
+    status,
+    severity,
+    needs_attention: needsAttention || attention.length > 0,
+    ...(attention.length > 0 ? { attention_reasons: attention } : {}),
+    total_items: items.length,
+    counts,
   };
+}
+
+function activityBlockForItems(detail: FlowerSubagentDetail, items: readonly FlowerActivityItem[]): FlowerActivityTimelineBlock | null {
+  const activity = detail.activity;
+  if (!activity || items.length === 0) return null;
+  return {
+    ...activity,
+    summary: summarizeActivityItems(items, activity.summary.status, activity.summary.severity),
+    items,
+  };
+}
+
+function messagesForCanonicalActivity(threadID: string, detail: FlowerSubagentDetail): OrderedMessage[] {
+  const activity = detail.activity;
+  if (!activity || activity.items.length === 0) return [];
+  const anchors = activityAnchors(detail);
+  const anchorsByID = new Map<string, ActivityAnchor>();
+  for (const anchor of anchors) {
+    if (anchor.key && !anchorsByID.has(anchor.key)) anchorsByID.set(anchor.key, anchor);
+  }
+  const fallbackAnchor: ActivityAnchor = {
+    ordinal: Number.MAX_SAFE_INTEGER,
+    createdAtMs: canonicalActivityCreatedAt(detail),
+    key: 'canonical',
+  };
+  const grouped = new Map<number, { anchor: ActivityAnchor; items: FlowerActivityItem[] }>();
+  for (const item of activity.items) {
+    const anchorID = activityItemAnchorID(item);
+    const anchor = anchorsByID.get(anchorID);
+    if (!anchor && anchors.length > 0) continue;
+    const targetAnchor = anchor ?? fallbackAnchor;
+    const existing = grouped.get(targetAnchor.ordinal);
+    if (existing) {
+      existing.items.push(item);
+    } else {
+      grouped.set(targetAnchor.ordinal, { anchor: targetAnchor, items: [item] });
+    }
+  }
+  const messages: OrderedMessage[] = [];
+  [...grouped.values()]
+    .sort((left, right) => left.anchor.ordinal - right.anchor.ordinal)
+    .forEach((entry, index) => {
+      const block = activityBlockForItems(detail, entry.items);
+      if (!block) return;
+      messages.push({
+        ordinal: entry.anchor.ordinal,
+        sequence: index,
+        message: {
+          id: `${safeIDPart(threadID)}:activity:${entry.anchor.ordinal}:${safeIDPart(entry.anchor.key || String(index))}`,
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: entry.anchor.createdAtMs || canonicalActivityCreatedAt(detail),
+          blocks: [block],
+        },
+      });
+    });
+  return messages;
+}
+
+function canonicalActivityCreatedAt(detail: FlowerSubagentDetail): number {
+  const toolRows = detail.timeline
+    .filter((row) => row.kind === 'tool_activity' || row.kind === 'tool_call' || row.kind === 'tool_result' || row.kind === 'approval')
+    .map((row) => Math.max(0, Math.floor(Number(row.created_at_ms ?? 0))))
+    .filter((value) => value > 0);
+  if (toolRows.length > 0) return Math.min(...toolRows);
+  return Math.max(0, Math.floor(Number(detail.generated_at_ms ?? detail.summary.updated_at_ms ?? 0)));
+}
+
+function orderedMessageSort(left: OrderedMessage, right: OrderedMessage): number {
+  if (left.ordinal !== right.ordinal) return left.ordinal - right.ordinal;
+  const leftCreatedAt = Math.max(0, Math.floor(Number(left.message.created_at_ms ?? 0)));
+  const rightCreatedAt = Math.max(0, Math.floor(Number(right.message.created_at_ms ?? 0)));
+  if (leftCreatedAt !== rightCreatedAt) return leftCreatedAt - rightCreatedAt;
+  return left.sequence - right.sequence;
 }
 
 function messageForSummaryOnlyDetail(threadID: string, detail: FlowerSubagentDetail): FlowerChatMessage | null {
@@ -189,10 +374,11 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null,
   const threadID = trimString(summary.thread_id || summary.subagent_id || fallbackThreadID);
   if (!threadID) return null;
   const title = trimString(summary.title) || trimString(summary.task_name) || trimString(fallbackTitle) || threadID;
-  const messages: FlowerChatMessage[] = [];
+  const orderedMessages: OrderedMessage[] = [];
   const decorations: FlowerTimelineDecoration[] = [];
   let lastMessageID = '';
-  for (const row of [...detail.timeline].sort((left, right) => left.ordinal - right.ordinal)) {
+  let messageSequence = 0;
+  for (const row of [...detail.timeline].sort((left, right) => rowOrdinal(left) - rowOrdinal(right))) {
     if (row.kind === 'compaction') {
       const decoration = compactionDecoration(threadID, row, lastMessageID);
       if (decoration) decorations.push(decoration);
@@ -202,16 +388,18 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null,
       ? messageForTextRow(threadID, row)
       : null;
     if (message) {
-      messages.push(message);
+      orderedMessages.push({ message, ordinal: rowOrdinal(row), sequence: messageSequence++ });
       lastMessageID = message.id;
       continue;
     }
   }
-  const activityMessage = messageForCanonicalActivity(threadID, detail);
-  if (activityMessage) {
-    messages.push(activityMessage);
-    lastMessageID = activityMessage.id;
+  const activityMessages = messagesForCanonicalActivity(threadID, detail);
+  for (const entry of activityMessages) {
+    orderedMessages.push({ ...entry, sequence: messageSequence++ });
+    lastMessageID = entry.message.id;
   }
+  orderedMessages.sort(orderedMessageSort);
+  const messages = orderedMessages.map((entry) => entry.message);
   if (messages.length === 0) {
     const summaryMessage = messageForSummaryOnlyDetail(threadID, detail);
     if (summaryMessage) messages.push(summaryMessage);

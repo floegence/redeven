@@ -282,13 +282,26 @@ func (r *run) floretThreadProjectionMatchesRun(projection flruntime.ThreadTurnPr
 	if requireIdentity && (runID == "" || threadID == "" || turnID == "") {
 		return false
 	}
-	if runID != "" && runID != strings.TrimSpace(r.id) {
+	if projectionIdentityMatchesRun(runID, threadID, turnID, strings.TrimSpace(r.id), strings.TrimSpace(r.threadID), strings.TrimSpace(r.messageID)) {
+		return true
+	}
+	return projectionIdentityMatchesRun(runID, threadID, turnID, strings.TrimSpace(r.settlementRunID), strings.TrimSpace(r.settlementThreadID), strings.TrimSpace(r.settlementTurnID))
+}
+
+func projectionIdentityMatchesRun(projectionRunID string, projectionThreadID string, projectionTurnID string, runID string, threadID string, turnID string) bool {
+	if projectionRunID == "" && projectionThreadID == "" && projectionTurnID == "" {
+		return true
+	}
+	if runID == "" && threadID == "" && turnID == "" {
 		return false
 	}
-	if threadID != "" && threadID != strings.TrimSpace(r.threadID) {
+	if projectionRunID != "" && projectionRunID != runID {
 		return false
 	}
-	if turnID != "" && turnID != strings.TrimSpace(r.messageID) {
+	if projectionThreadID != "" && projectionThreadID != threadID {
+		return false
+	}
+	if projectionTurnID != "" && projectionTurnID != turnID {
 		return false
 	}
 	return true
@@ -319,7 +332,7 @@ func (r *run) flowerBlocksFromFloretThreadProjectionChecked(projection flruntime
 			if !r.validateActivityTimelineForProjection(timeline, "floret_thread_projection") {
 				return nil, false
 			}
-			blocks = append(blocks, newActivityTimelineBlockWithSidecars(
+			blocks = append(blocks, r.newActivityTimelineBlockWithSidecars(
 				timeline,
 				r.activityTimelineFileActions(timeline),
 				r.activityTimelineSubagentActions(timeline),
@@ -332,13 +345,17 @@ func (r *run) flowerBlocksFromFloretThreadProjectionChecked(projection flruntime
 }
 
 func (s *Service) settlePendingToolWithActiveFloretRun(ctx context.Context, endpointID string, threadID string, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
+	return s.settlePendingToolWithActiveRedevenRun(ctx, endpointID, threadID, string(req.RunID), req)
+}
+
+func (s *Service) settlePendingToolWithActiveRedevenRun(ctx context.Context, endpointID string, threadID string, redevenRunID string, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
 	if s == nil {
 		return flruntime.PendingToolSettlementResult{}, errors.New("nil service")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if active := s.runForFloretSettlement(endpointID, threadID, string(req.RunID)); active != nil {
+	if active := s.runForFloretSettlement(endpointID, threadID, redevenRunID); active != nil {
 		if host := active.activeFloretHost(); host != nil {
 			return host.SettlePendingTool(ctx, req)
 		}

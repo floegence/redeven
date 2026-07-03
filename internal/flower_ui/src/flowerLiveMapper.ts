@@ -663,14 +663,6 @@ function mapActivitySubagentActionItem(raw: unknown, actionKey: string, itemInde
   const allowed = new Set([
     'thread_id',
     'subagent_id',
-    'task_name',
-    'task_description',
-    'title',
-    'agent_type',
-    'status',
-    'started_at_ms',
-    'created_at_ms',
-    'updated_at_ms',
   ]);
   for (const key of Object.keys(record)) {
     if (!allowed.has(key)) {
@@ -680,14 +672,6 @@ function mapActivitySubagentActionItem(raw: unknown, actionKey: string, itemInde
   const out = {
     ...(trim(record.thread_id) ? { thread_id: trim(record.thread_id) } : {}),
     ...(trim(record.subagent_id) ? { subagent_id: trim(record.subagent_id) } : {}),
-    ...(trim(record.task_name) ? { task_name: trim(record.task_name) } : {}),
-    ...(trim(record.task_description) ? { task_description: trim(record.task_description) } : {}),
-    ...(trim(record.title) ? { title: trim(record.title) } : {}),
-    ...(trim(record.agent_type) ? { agent_type: trim(record.agent_type) } : {}),
-    ...(trim(record.status) ? { status: trim(record.status) } : {}),
-    ...(positiveInteger(record.started_at_ms) ? { started_at_ms: positiveInteger(record.started_at_ms) } : {}),
-    ...(positiveInteger(record.created_at_ms) ? { created_at_ms: positiveInteger(record.created_at_ms) } : {}),
-    ...(positiveInteger(record.updated_at_ms) ? { updated_at_ms: positiveInteger(record.updated_at_ms) } : {}),
   };
   return Object.keys(out).length > 0 ? out : null;
 }
@@ -710,14 +694,6 @@ function mapActivitySubagentAction(raw: unknown, actionKey: string): FlowerActiv
     'thread_id',
     'subagent_id',
     'parent_thread_id',
-    'task_name',
-    'task_description',
-    'title',
-    'agent_type',
-    'status',
-    'started_at_ms',
-    'created_at_ms',
-    'updated_at_ms',
     'items',
   ]);
   for (const key of Object.keys(record)) {
@@ -733,14 +709,6 @@ function mapActivitySubagentAction(raw: unknown, actionKey: string): FlowerActiv
     ...(trim(record.thread_id) ? { thread_id: trim(record.thread_id) } : {}),
     ...(trim(record.subagent_id) ? { subagent_id: trim(record.subagent_id) } : {}),
     ...(trim(record.parent_thread_id) ? { parent_thread_id: trim(record.parent_thread_id) } : {}),
-    ...(trim(record.task_name) ? { task_name: trim(record.task_name) } : {}),
-    ...(trim(record.task_description) ? { task_description: trim(record.task_description) } : {}),
-    ...(trim(record.title) ? { title: trim(record.title) } : {}),
-    ...(trim(record.agent_type) ? { agent_type: trim(record.agent_type) } : {}),
-    ...(trim(record.status) ? { status: trim(record.status) } : {}),
-    ...(positiveInteger(record.started_at_ms) ? { started_at_ms: positiveInteger(record.started_at_ms) } : {}),
-    ...(positiveInteger(record.created_at_ms) ? { created_at_ms: positiveInteger(record.created_at_ms) } : {}),
-    ...(positiveInteger(record.updated_at_ms) ? { updated_at_ms: positiveInteger(record.updated_at_ms) } : {}),
     ...(items ? { items } : {}),
   };
   return Object.keys(out).length > 0 ? out : null;

@@ -776,6 +776,97 @@ func TestApplyFloretThreadProjectionDoesNotDowngradeSettledTerminalItem(t *testi
 	}
 }
 
+func TestApplyFloretThreadProjectionAcceptsSettlementIdentityForChildRun(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	r.id = "run_child_audit"
+	r.threadID = "thread_child"
+	r.messageID = "turn_child_audit"
+	r.settlementThreadID = "thread_child"
+	r.settlementRunID = "run_floret_execution"
+	r.settlementTurnID = "turn_floret_execution"
+
+	timeline := floretProjectionTimeline("run_floret_execution", "thread_child", "turn_floret_execution", "exec-1", "terminal.exec")
+	timeline.Items[0].Label = "printf child"
+	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID: "thread_child",
+		TurnID:   "turn_floret_execution",
+		RunID:    "run_floret_execution",
+		TraceID:  "run_floret_execution",
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: timeline,
+		}},
+	}) {
+		t.Fatalf("settlement identity projection was not applied")
+	}
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistantBlocks=%#v, want one activity block", r.assistantBlocks)
+	}
+	block, ok := r.assistantBlocks[0].(ActivityTimelineBlock)
+	if !ok {
+		t.Fatalf("assistant block=%T, want activity timeline", r.assistantBlocks[0])
+	}
+	item := activityBlockItemByToolID(t, block, "exec-1")
+	if item.Status != observation.ActivityStatusSuccess || item.Label != "printf child" {
+		t.Fatalf("terminal item=%#v, want Floret settlement projection", item)
+	}
+	if block.RunID != "run_child_audit" || block.TurnID != "turn_child_audit" || block.TraceID != "run_child_audit" {
+		t.Fatalf("public activity identity run=%q turn=%q trace=%q, want Redeven audit identity", block.RunID, block.TurnID, block.TraceID)
+	}
+	rawBlock, err := json.Marshal(block)
+	if err != nil {
+		t.Fatalf("json.Marshal activity block: %v", err)
+	}
+	for _, forbidden := range []string{"run_floret_execution", "turn_floret_execution"} {
+		if strings.Contains(string(rawBlock), forbidden) {
+			t.Fatalf("public activity block leaked Floret execution identity %q: %s", forbidden, rawBlock)
+		}
+	}
+
+	mixed := floretProjectionTimeline("run_floret_execution", "other_thread", "turn_floret_execution", "exec-2", "terminal.exec")
+	if r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID: "other_thread",
+		TurnID:   "turn_floret_execution",
+		RunID:    "run_floret_execution",
+		TraceID:  "run_floret_execution",
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: mixed,
+		}},
+	}) {
+		t.Fatalf("mixed settlement identity projection was applied")
+	}
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistantBlocks mutated by mixed identity: %#v", r.assistantBlocks)
+	}
+	block, ok = r.assistantBlocks[0].(ActivityTimelineBlock)
+	if !ok || len(block.Items) != 1 || block.Items[0].ToolID != "exec-1" {
+		t.Fatalf("assistantBlocks mutated by mixed identity: %#v", r.assistantBlocks)
+	}
+}
+
+func TestActivityTimelineBlockWithoutPublicIdentityStripsFloretExecutionIDs(t *testing.T) {
+	t.Parallel()
+
+	timeline := floretProjectionTimeline("run_floret_private", "thread_floret_private", "turn_floret_private", "exec-1", "terminal.exec")
+	timeline.TraceID = "trace_floret_private"
+	block := newActivityTimelineBlock(*timeline, nil)
+	if block.RunID != "" || block.ThreadID != "" || block.TurnID != "" || block.TraceID != "" {
+		t.Fatalf("activity block identity run=%q thread=%q turn=%q trace=%q, want stripped public identity", block.RunID, block.ThreadID, block.TurnID, block.TraceID)
+	}
+	rawBlock, err := json.Marshal(block)
+	if err != nil {
+		t.Fatalf("json.Marshal activity block: %v", err)
+	}
+	for _, forbidden := range []string{"run_floret_private", "thread_floret_private", "turn_floret_private", "trace_floret_private"} {
+		if strings.Contains(string(rawBlock), forbidden) {
+			t.Fatalf("public activity block leaked Floret execution identity %q: %s", forbidden, rawBlock)
+		}
+	}
+}
+
 func TestFloretTerminalThreadProjectionUpdatesDetachedSnapshotWithoutStream(t *testing.T) {
 	t.Parallel()
 

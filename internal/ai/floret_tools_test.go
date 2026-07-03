@@ -1347,6 +1347,9 @@ func TestFloretToolRegistryKeepsTerminalExecOnLocalRuntime(t *testing.T) {
 		AgentHomeDir:       t.TempDir(),
 		SessionMeta:        &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 		EndpointID:         "env_test",
+		ThreadID:           "thread_terminal_local",
+		RunID:              "run_terminal_local",
+		MessageID:          "turn_terminal_local",
 		Service:            &Service{terminalProcesses: manager},
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 		TargetToolExecutor: executor,
@@ -1393,6 +1396,9 @@ func TestFloretToolRegistryPublishesTerminalProcessActivityUpdateBeforeYieldResu
 		AgentHomeDir: t.TempDir(),
 		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 		EndpointID:   "env_test",
+		ThreadID:     "thread_terminal_activity",
+		RunID:        "run_terminal_activity",
+		MessageID:    "turn_terminal_activity",
 		Service:      &Service{terminalProcesses: manager},
 	})
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{

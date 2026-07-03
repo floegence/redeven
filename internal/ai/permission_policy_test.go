@@ -257,6 +257,16 @@ func TestPermissionPolicy_ChildInvocationUsesStoredPermissionSnapshot(t *testing
 	if got := execRun.permissionSnapshot.SnapshotID; got != snapshot.SnapshotID {
 		t.Fatalf("child snapshot id=%q, want stored snapshot %q", got, snapshot.SnapshotID)
 	}
+	if execRun.id != childRunID ||
+		execRun.settlementRunID != "floret-exec-child-snapshot-invocation" ||
+		execRun.threadID != childThreadID ||
+		execRun.settlementThreadID != childThreadID ||
+		execRun.messageID != "child-turn" ||
+		execRun.settlementTurnID != "child-turn" {
+		t.Fatalf("child run identities audit=(%s,%s,%s) settlement=(%s,%s,%s), want audit child_run_id plus Floret execution identity",
+			execRun.threadID, execRun.id, execRun.messageID,
+			execRun.settlementThreadID, execRun.settlementRunID, execRun.settlementTurnID)
+	}
 	if decision, ok := execRun.permissionDecisionForToolFromSnapshot("terminal.exec"); !ok || decision != ApprovalDecisionDeny {
 		t.Fatalf("terminal.exec decision=%q ok=%v, want snapshot deny", decision, ok)
 	}
