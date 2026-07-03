@@ -718,6 +718,64 @@ func TestApplyFloretThreadProjectionClearsStreamedBlocksWhenEmpty(t *testing.T) 
 	}
 }
 
+func TestApplyFloretThreadProjectionDoesNotDowngradeSettledTerminalItem(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	r.id = "run_terminal_floor"
+	r.threadID = "thread_terminal_floor"
+	r.messageID = "msg_terminal_floor"
+
+	successTimeline := floretProjectionTimeline("run_terminal_floor", "thread_terminal_floor", "msg_terminal_floor", "exec-1", "terminal.exec")
+	successTimeline.Items[0].Label = "printf done"
+	successTimeline.Items[0].Renderer = observation.ActivityRendererTerminal
+	successTimeline.Items[0].Payload = map[string]any{"command": "printf done", "output": "done"}
+	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID: "thread_terminal_floor",
+		TurnID:   "msg_terminal_floor",
+		RunID:    "run_terminal_floor",
+		TraceID:  "run_terminal_floor",
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: successTimeline,
+		}},
+	}) {
+		t.Fatalf("success projection was not applied")
+	}
+
+	runningTimeline := floretRunningProjectionTimeline("run_terminal_floor", "thread_terminal_floor", "msg_terminal_floor", "exec-1")
+	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID: "thread_terminal_floor",
+		TurnID:   "msg_terminal_floor",
+		RunID:    "run_terminal_floor",
+		TraceID:  "run_terminal_floor",
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: runningTimeline,
+		}},
+	}) {
+		t.Fatalf("running projection was not applied")
+	}
+
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistantBlocks=%#v, want one activity block", r.assistantBlocks)
+	}
+	block, ok := r.assistantBlocks[0].(ActivityTimelineBlock)
+	if !ok {
+		t.Fatalf("assistant block=%T, want activity timeline", r.assistantBlocks[0])
+	}
+	item := activityBlockItemByToolID(t, block, "exec-1")
+	if item.Status != observation.ActivityStatusSuccess {
+		t.Fatalf("terminal item status=%q, want success", item.Status)
+	}
+	if block.Summary.Status != observation.ActivityStatusSuccess || block.Summary.Counts.Running != 0 || block.Summary.Counts.Success != 1 {
+		t.Fatalf("summary=%#v, want success without running count", block.Summary)
+	}
+	if got := anyToString(item.Payload["output"]); got != "done" {
+		t.Fatalf("terminal payload output=%q, want preserved success payload", got)
+	}
+}
+
 func TestFloretTerminalThreadProjectionUpdatesDetachedSnapshotWithoutStream(t *testing.T) {
 	t.Parallel()
 
@@ -858,6 +916,94 @@ func TestApplyFloretPendingToolSettlementProjectionDoesNotPersistAssistantMessag
 	}
 }
 
+func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(ctx, meta, "terminal settlement live", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_terminal_settlement_live"
+	messageID := "msg_terminal_settlement_live"
+	activeRun := newRun(runOptions{
+		Service:    svc,
+		RunID:      runID,
+		EndpointID: meta.EndpointID,
+		ThreadID:   thread.ThreadID,
+		MessageID:  messageID,
+		OnStreamEvent: func(ev any) {
+			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, runID, ev)
+		},
+	})
+	svc.mu.Lock()
+	if svc.runs == nil {
+		svc.runs = map[string]*run{}
+	}
+	if svc.activeRunByTh == nil {
+		svc.activeRunByTh = map[string]string{}
+	}
+	svc.runs[runID] = activeRun
+	svc.activeRunByTh[runThreadKey(meta.EndpointID, thread.ThreadID)] = runID
+	svc.mu.Unlock()
+	svc.appendFlowerLiveEvent(FlowerLiveEvent{
+		EndpointID: meta.EndpointID,
+		ThreadID:   thread.ThreadID,
+		RunID:      runID,
+		Kind:       FlowerLiveRunStarted,
+		Payload:    mustFlowerPayload(FlowerLiveRunStartedPayload{RunID: runID, TurnID: messageID, MessageID: messageID, Status: string(RunStateRunning)}),
+	})
+	activeRun.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID: flruntime.ThreadID(thread.ThreadID),
+		TurnID:   flruntime.TurnID(messageID),
+		RunID:    flruntime.RunID(runID),
+		TraceID:  flruntime.TraceID(runID),
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: floretRunningProjectionTimeline(runID, thread.ThreadID, messageID, "exec-1"),
+		}},
+	})
+
+	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, messageID, flruntime.ThreadTurnProjection{
+		ThreadID: flruntime.ThreadID(thread.ThreadID),
+		TurnID:   flruntime.TurnID(messageID),
+		RunID:    flruntime.RunID(runID),
+		TraceID:  flruntime.TraceID(runID),
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: floretProjectionTimeline(runID, thread.ThreadID, messageID, "exec-1", "terminal.exec"),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("apply settlement projection: %v", err)
+	}
+
+	resp, err := svc.ListFlowerThreadLiveEvents(ctx, meta, thread.ThreadID, 0, 50)
+	if err != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents: %v", err)
+	}
+	var replacement *FlowerLiveEvent
+	for i := range resp.Events {
+		if resp.Events[i].Kind == FlowerLiveTimelineReplaced {
+			replacement = &resp.Events[i]
+			break
+		}
+	}
+	if replacement == nil {
+		t.Fatalf("events=%#v, want timeline.replaced", resp.Events)
+	}
+	var payload FlowerLiveTimelineReplacedPayload
+	if !decodeFlowerPayload(replacement.Payload, &payload) {
+		t.Fatalf("replacement payload decode failed: %#v", replacement)
+	}
+	block := firstActivityBlockInTimelineMessages(t, payload.Messages)
+	item := activityBlockItemByToolID(t, block, "exec-1")
+	if item.Status != observation.ActivityStatusSuccess {
+		t.Fatalf("replacement terminal item status=%q, want success", item.Status)
+	}
+}
+
 func floretProjectionTimeline(runID string, threadID string, turnID string, toolID string, toolName string) *observation.ActivityTimeline {
 	timeline := observation.ActivityTimeline{
 		SchemaVersion: observation.ActivityTimelineSchemaVersion,
@@ -876,6 +1022,40 @@ func floretProjectionTimeline(runID string, threadID string, turnID string, tool
 		}},
 	}
 	return &timeline
+}
+
+func floretRunningProjectionTimeline(runID string, threadID string, turnID string, toolID string) *observation.ActivityTimeline {
+	timeline := floretProjectionTimeline(runID, threadID, turnID, toolID, "terminal.exec")
+	timeline.Summary = observation.ActivitySummary{
+		Status:     observation.ActivityStatusRunning,
+		Severity:   observation.ActivitySeverityNormal,
+		TotalItems: 1,
+		Counts:     observation.ActivityCounts{Running: 1},
+	}
+	timeline.Items[0].Status = observation.ActivityStatusRunning
+	timeline.Items[0].Payload = map[string]any{"command": "sleep 5"}
+	return timeline
+}
+
+func firstActivityBlockInTimelineMessages(t *testing.T, messages []FlowerTimelineMessage) ActivityTimelineBlock {
+	t.Helper()
+	for _, message := range messages {
+		for _, raw := range message.Blocks {
+			if block, ok := activityTimelineBlockFromValue(raw); ok {
+				return block
+			}
+			b, err := json.Marshal(raw)
+			if err != nil {
+				continue
+			}
+			var decoded ActivityTimelineBlock
+			if err := json.Unmarshal(b, &decoded); err == nil && decoded.Type == activityTimelineBlockType {
+				return decoded
+			}
+		}
+	}
+	t.Fatalf("activity timeline block not found in messages: %#v", messages)
+	return ActivityTimelineBlock{}
 }
 
 func floretProjectionApprovalTimeline(runID string, threadID string, turnID string, toolID string, label string) *observation.ActivityTimeline {

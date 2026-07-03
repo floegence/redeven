@@ -218,6 +218,22 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 			"error": subagentCleanupErr.Error(),
 		})
 	}
+	if cleanupErr == nil && r.hasTerminalSettlementProjectionApplied() {
+		refreshCtx, refreshCancel := context.WithTimeout(context.Background(), r.persistTimeout())
+		finalProjection, refreshErr := r.readFloretTurnProjection(refreshCtx, host)
+		refreshCancel()
+		if refreshErr != nil {
+			if r.log != nil {
+				r.log.Warn("ai: refresh terminal settlement projection failed", "run_id", r.id, "thread_id", r.threadID, "error", refreshErr)
+			}
+			r.persistRunEvent("terminal.projection_refresh_failed", RealtimeStreamKindLifecycle, map[string]any{
+				"error": refreshErr.Error(),
+			})
+		} else {
+			result.Projection = finalProjection
+			cleanupChanged = true
+		}
+	}
 	projectionReady := !(cleanupChanged && cleanupErr != nil)
 	if err != nil && result.Status == "" {
 		if cleanupChanged && cleanupErr == nil {

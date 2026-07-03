@@ -2648,6 +2648,99 @@ describe('Flower live projection', () => {
     expect(result.thread.messages[3]).toMatchObject({ role: 'assistant', status: 'streaming', active_cursor: true });
   });
 
+  it('replaces a stale running terminal row with canonical terminal success', () => {
+    const runningBlock: FlowerActivityTimelineBlock = {
+      type: 'activity-timeline',
+      schema_version: 1,
+      summary: {
+        status: 'running',
+        severity: 'normal',
+        needs_attention: false,
+        total_items: 1,
+        counts: { running: 1 },
+      },
+      items: [{
+        item_id: 'tool:exec-1',
+        tool_id: 'exec-1',
+        tool_name: 'terminal.exec',
+        kind: 'tool',
+        status: 'running',
+        severity: 'normal',
+        needs_attention: false,
+        requires_approval: false,
+        label: 'sleep 5',
+        renderer: 'terminal',
+        payload: { command: 'sleep 5' },
+      }],
+    };
+    const successBlock: FlowerActivityTimelineBlock = {
+      ...runningBlock,
+      summary: {
+        status: 'success',
+        severity: 'normal',
+        needs_attention: false,
+        total_items: 1,
+        counts: { success: 1 },
+      },
+      items: [{
+        ...runningBlock.items[0],
+        status: 'success',
+        ended_at_unix_ms: 5000,
+        payload: { command: 'sleep 5', output: 'done', exit_code: 0 },
+      }],
+    };
+    const initial = thread({
+      status: 'running',
+      active_run_id: 'run-1',
+      model_io_status: {
+        phase: 'streaming',
+        run_id: 'run-1',
+        updated_at_ms: 4200,
+      },
+      messages: [message(), {
+        id: 'turn-1',
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        created_at_ms: 2000,
+        active_cursor: true,
+        blocks: [runningBlock],
+      }],
+    });
+
+    const result = applyFlowerLiveEvent(initial, 10, event(11, 'timeline.replaced', {
+      stream_generation: 1,
+      snapshot_through_seq: 11,
+      messages: [message(), {
+        id: 'turn-1',
+        role: 'assistant',
+        content: '',
+        status: 'complete',
+        created_at_ms: 2000,
+        blocks: [successBlock],
+      }],
+      thread_patch: {
+        run_status: 'success',
+      },
+      live_state: {
+        thread_patch: {
+          run_status: 'success',
+        },
+        runs: {},
+        approval_actions: {},
+        input_requests: {},
+      },
+    }));
+
+    const activityBlock = result.thread.messages[1]?.blocks?.[0] as FlowerActivityTimelineBlock | undefined;
+    expect(result.resyncRequired).toBe(false);
+    expect(result.thread.status).toBe('success');
+    expect(result.thread.active_run_id).toBeUndefined();
+    expect(result.thread.model_io_status).toBeNull();
+    expect(activityBlock?.items[0]?.status).toBe('success');
+    expect(activityBlock?.summary.counts?.running).toBeUndefined();
+  });
+
   it('replaces stale live state when canonical timeline includes materialized state', () => {
     const initial = thread({
       context_compactions: [{
