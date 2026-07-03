@@ -910,6 +910,11 @@ function findTerminalTabStatus(host: HTMLElement, label: string, status: 'runnin
   return tab?.parentElement?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? tab?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
 }
 
+function findTerminalRunningSpinner(host: HTMLElement, label: string): SVGElement | null {
+  const tab = findTerminalTab(host, label);
+  return tab?.parentElement?.querySelector<SVGElement>('[data-terminal-tab-status="running"] svg') ?? null;
+}
+
 function findPendingTerminalTabStatus(host: HTMLElement, label: string, status: 'creating' | 'failed'): Element | null {
   const tab = findTerminalTab(host, label);
   return tab?.parentElement?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? tab?.querySelector(`[data-terminal-tab-status="${status}"]`) ?? null;
@@ -1458,6 +1463,62 @@ describe('TerminalPanel', () => {
     });
     expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
     expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('false');
+  });
+
+  it('keeps a running sidebar spinner mounted when sidebar actions update row state', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace/alpha',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/beta',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 20,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
+    await settleTerminalPanel();
+
+    const runningSpinner = findTerminalRunningSpinner(host, 'Terminal 2');
+    expect(runningSpinner).not.toBeNull();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-path-copy-session-2"]')?.click();
+    await settleTerminalPanel();
+
+    expect(writeTextToClipboardSpy).toHaveBeenCalledWith('/workspace/beta');
+    expect(findTerminalRunningSpinner(host, 'Terminal 2')).toBe(runningSpinner);
+    expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-2"]')?.click();
+    await settleTerminalPanel();
+
+    expect(openFileBrowserAtPathSpy).toHaveBeenCalledWith('/workspace/beta', {
+      homePath: '/workspace',
+      title: 'beta',
+      openStrategy: undefined,
+    });
+    expect(findTerminalRunningSpinner(host, 'Terminal 2')).toBe(runningSpinner);
+    expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
   });
 
   it('deletes an inactive sidebar session without switching terminal sessions first', async () => {
@@ -2076,10 +2137,17 @@ describe('TerminalPanel', () => {
     const initialAttachCallCount = transportMocks.attach.mock.calls.length;
     const mountedCores = [...terminalCoreInstances];
 
+    emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
+    await settleTerminalPanel();
+
+    const runningSpinner = findTerminalRunningSpinner(host, 'Terminal 2');
+    expect(runningSpinner).not.toBeNull();
+
     terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => ({ ...session }));
     publishTerminalSessions();
     await settleTerminalPanel();
 
+    expect(findTerminalRunningSpinner(host, 'Terminal 2')).toBe(runningSpinner);
     expect(terminalCoreInstances).toEqual(mountedCores);
     expect(mountedCores[0]?.dispose).not.toHaveBeenCalled();
     expect(mountedCores[1]?.dispose).not.toHaveBeenCalled();
@@ -2575,6 +2643,69 @@ describe('TerminalPanel', () => {
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="running"]')).toBeNull();
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).not.toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
+  });
+
+  it('keeps the running sidebar spinner node mounted while switching workbench sessions', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      (() => {
+        const [groupState, setGroupState] = createSignal({
+          sessionIds: ['session-1', 'session-2'],
+          activeSessionId: 'session-1' as string | null,
+        });
+
+        return (
+          <TerminalPanel
+            variant="workbench"
+            sessionGroupState={groupState()}
+            onSessionGroupStateChange={setGroupState}
+          />
+        );
+      })()
+    ), host);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
+    await settleTerminalPanel();
+
+    const runningSpinner = findTerminalRunningSpinner(host, 'Terminal 2');
+    expect(runningSpinner).not.toBeNull();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanel();
+
+    expect(findTerminalRunningSpinner(host, 'Terminal 2')).toBe(runningSpinner);
+
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    expect(findTerminalRunningSpinner(host, 'Terminal 2')).toBe(runningSpinner);
   });
 
   it('keeps a background interactive session marked running after output goes quiet', async () => {
@@ -4398,6 +4529,131 @@ describe('TerminalPanel', () => {
     applyLatestPanelAState();
     await settleTerminalPanel();
 
+    expect(findActiveTerminalTab(panelA!)?.textContent).toContain('Terminal 2');
+    expect(findActiveTerminalTab(panelB!)?.textContent).toContain('Terminal 3');
+  });
+
+  it('keeps a running sidebar spinner mounted while controlled workbench group state catches up', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+      {
+        id: 'session-3',
+        name: 'Terminal 3',
+        workingDir: '/workspace/logs',
+        createdAtMs: 3,
+        isActive: false,
+        lastActiveAtMs: 3,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const groupStateSpy = vi.fn();
+    let applyLatestPanelAState: () => void = () => {
+      throw new Error('Panel A state applier was not initialized');
+    };
+
+    render(() => (
+      (() => {
+        const [groupA, setGroupA] = createSignal({
+          sessionIds: ['session-1', 'session-2'],
+          activeSessionId: 'session-1' as string | null,
+        });
+        const [groupB, setGroupB] = createSignal({
+          sessionIds: ['session-3'],
+          activeSessionId: 'session-3' as string | null,
+        });
+
+        applyLatestPanelAState = () => {
+          const calls = groupStateSpy.mock.calls;
+          const next = calls[calls.length - 1]?.[0];
+          if (next) setGroupA(next);
+        };
+
+        return (
+          <>
+            <div data-testid="terminal-panel-a">
+              <TerminalPanel
+                variant="workbench"
+                sessionGroupState={groupA()}
+                onSessionGroupStateChange={(next) => {
+                  groupStateSpy(next);
+                }}
+              />
+            </div>
+            <div data-testid="terminal-panel-b">
+              <TerminalPanel
+                variant="workbench"
+                sessionGroupState={groupB()}
+                onSessionGroupStateChange={setGroupB}
+              />
+            </div>
+          </>
+        );
+      })()
+    ), host);
+    await settleTerminalPanel();
+
+    const panelA = host.querySelector('[data-testid="terminal-panel-a"]') as HTMLElement | null;
+    const panelB = host.querySelector('[data-testid="terminal-panel-b"]') as HTMLElement | null;
+    expect(panelA).toBeTruthy();
+    expect(panelB).toBeTruthy();
+
+    findTerminalTab(panelA!, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
+    applyLatestPanelAState();
+    await settleTerminalPanel();
+
+    findTerminalTab(panelA!, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+    applyLatestPanelAState();
+    await settleTerminalPanel();
+
+    emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
+    await settleTerminalPanel();
+
+    const runningSpinner = findTerminalRunningSpinner(panelA!, 'Terminal 2');
+    expect(runningSpinner).not.toBeNull();
+    expect(findTerminalRunningSpinner(panelB!, 'Terminal 2')).toBeNull();
+
+    groupStateSpy.mockClear();
+    const terminal2Button = panelA!.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-2"]');
+    expect(terminal2Button).toBeTruthy();
+
+    dispatchTerminalPointerDown(terminal2Button!);
+
+    expect(findTerminalRunningSpinner(panelA!, 'Terminal 2')).toBe(runningSpinner);
+    expect(groupStateSpy).not.toHaveBeenCalled();
+
+    terminal2Button?.click();
+    await settleTerminalPanel();
+
+    expect(groupStateSpy).toHaveBeenLastCalledWith({
+      sessionIds: ['session-1', 'session-2'],
+      activeSessionId: 'session-2',
+    });
+    expect(findTerminalRunningSpinner(panelA!, 'Terminal 2')).toBe(runningSpinner);
+    expect(findTerminalRunningSpinner(panelB!, 'Terminal 2')).toBeNull();
+
+    applyLatestPanelAState();
+    await settleTerminalPanel();
+
+    expect(findTerminalRunningSpinner(panelA!, 'Terminal 2')).toBe(runningSpinner);
     expect(findActiveTerminalTab(panelA!)?.textContent).toContain('Terminal 2');
     expect(findActiveTerminalTab(panelB!)?.textContent).toContain('Terminal 3');
   });
