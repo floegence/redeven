@@ -702,6 +702,7 @@ Run the CI-aligned checks and local-only pre-commit checks before integration:
 - `bash -n scripts/check_redevplugin_dependency_boundary.sh`
 - `bash -n scripts/check_redevplugin_release_artifacts.sh`
 - `bash -n scripts/check_redevplugin_consumption_gate.sh`
+- `bash -n scripts/stage_redevplugin_release_artifacts.sh`
 - `bash -n scripts/check_runtime_compatibility_contract.sh`
 - `bash -n scripts/check_flower_live_protocol.sh`
 - `bash -n scripts/check_flower_ui.sh`
@@ -716,6 +717,7 @@ Run the CI-aligned checks and local-only pre-commit checks before integration:
 - `./scripts/check_redevplugin_dependency_boundary.sh --ci`
 - `./scripts/check_redevplugin_release_artifacts.sh --self-test`
 - `./scripts/check_redevplugin_consumption_gate.sh --self-test`
+- `./scripts/stage_redevplugin_release_artifacts.sh --self-test`
 - `./scripts/check_gateway_protocol_contract.sh`
 - `./scripts/check_flower_live_protocol.sh`
 - `./scripts/check_flower_ui.sh`
