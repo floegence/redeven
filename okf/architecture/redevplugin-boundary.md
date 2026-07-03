@@ -123,10 +123,12 @@ artifact, the consumer-side release artifact verifier must validate the
 downloaded release directory: outer checksums and signature evidence,
 release-mode stress counters, each tarball's internal release manifest and
 checksum list, compatibility metadata, and runtime binary presence. The verifier
-must write a consumption marker before any checked payload is staged into a
-Redeven release or Desktop bundle. Redeven's release and Desktop bundle gates
-scan for ReDevPlugin payloads and fail when a runtime binary or release tarball
-appears without that marker.
+must write a consumption marker that includes the verified tarball hashes and
+runtime binary hashes before any checked payload is staged into a Redeven release
+or Desktop bundle. Redeven's release and Desktop bundle gates scan for
+ReDevPlugin payloads and fail when a runtime binary, release tarball, embedded
+runtime inside a Redeven tarball, or release stress summary appears without a
+matching marker hash.
 
 Redeven-side plugin code layout must make the adapter boundary visible. It may
 contain host integration, route mounting, capability adapters, and product UI,
