@@ -86,6 +86,7 @@ const writeTextToClipboardSpy = vi.hoisted(() => vi.fn().mockResolvedValue(undef
 const openBrowserSpy = vi.hoisted(() => vi.fn(async () => undefined));
 const openPreviewSpy = vi.hoisted(() => vi.fn(async () => undefined));
 const openFileBrowserAtPathSpy = vi.hoisted(() => vi.fn(async () => undefined));
+const openFlowerTurnLauncherSpy = vi.hoisted(() => vi.fn());
 const terminalEnvPermissionsState = vi.hoisted(() => ({
   canRead: true,
   canExecute: true,
@@ -275,6 +276,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
+    Check: Icon,
     Copy: Icon,
     ExternalLink: Icon,
     Folder: Icon,
@@ -729,7 +731,7 @@ vi.mock('../pages/EnvContext', () => {
     useEnvContext: () => ({
       env: envAccessor,
       viewMode: () => envContextState.viewMode,
-      openFlowerTurnLauncher: vi.fn(),
+      openFlowerTurnLauncher: openFlowerTurnLauncherSpy,
       openTerminalInDirectoryRequestSeq: () => 0,
       openTerminalInDirectoryRequest: () => null,
       openTerminalInDirectory: vi.fn(),
@@ -917,6 +919,29 @@ function findTerminalWorkIndicator(host: HTMLElement): HTMLElement | null {
   return host.querySelector('.redeven-terminal-work-indicator');
 }
 
+async function openSidebarContextMenu(host: HTMLElement, label: string): Promise<HTMLDivElement> {
+  const row = findTerminalTab(host, label)?.parentElement;
+  expect(row).toBeTruthy();
+
+  row?.dispatchEvent(new MouseEvent('contextmenu', {
+    bubbles: true,
+    cancelable: true,
+    clientX: 48,
+    clientY: 64,
+  }));
+  await settleTerminalPanel();
+
+  const menu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
+  expect(menu).toBeTruthy();
+  return menu as HTMLDivElement;
+}
+
+function findContextMenuButton(menu: HTMLElement, label: string): HTMLButtonElement | undefined {
+  return Array.from(menu.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+    button.textContent?.includes(label)
+  );
+}
+
 function setNavigatorUserAgent(userAgent: string) {
   Object.defineProperty(window.navigator, 'userAgent', {
     configurable: true,
@@ -1002,6 +1027,7 @@ describe('TerminalPanel', () => {
     writeTextToClipboardSpy.mockClear();
     openBrowserSpy.mockClear();
     openFileBrowserAtPathSpy.mockClear();
+    openFlowerTurnLauncherSpy.mockClear();
     openPreviewSpy.mockClear();
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
@@ -1208,7 +1234,7 @@ describe('TerminalPanel', () => {
     expect(host.textContent).toContain('Terminal 1');
   });
 
-  it('renders terminal sidebar items with directory title, avatar initial, and path action', async () => {
+  it('renders terminal sidebar items with directory title, avatar initial, path text, and separate actions', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -1230,16 +1256,87 @@ describe('TerminalPanel', () => {
     expect(tab).toBeTruthy();
     const row = tab?.parentElement;
     expect(row?.textContent).toContain('redeven');
-    expect(row?.querySelector('[data-terminal-session-avatar="session-1"]')?.textContent).toContain('R');
+    const avatar = row?.querySelector<HTMLElement>('[data-terminal-session-avatar="session-1"]');
+    expect(avatar?.textContent).toContain('R');
+    expect(avatar?.getAttribute('style')).toContain('color-mix');
 
-    const pathAction = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-path-session-1"]');
-    expect(pathAction).toBeTruthy();
-    expect(pathAction?.textContent).toContain('/workspace/redeven');
-    expect(pathAction?.getAttribute('title')).toBe('Browse files: /workspace/redeven');
-    expect(pathAction?.className).toContain('underline');
+    const pathText = host.querySelector<HTMLElement>('[data-testid="terminal-session-path-session-1"]');
+    expect(pathText).toBeTruthy();
+    expect(pathText?.tagName).toBe('SPAN');
+    expect(pathText?.textContent).toContain('/workspace/redeven');
+    expect(pathText?.getAttribute('title')).toBe('/workspace/redeven');
+    expect(pathText?.className).not.toContain('underline');
+    expect(host.querySelector('[data-testid="terminal-session-path-copy-session-1"]')).toBeTruthy();
+    expect(host.querySelector('[data-testid="terminal-session-files-session-1"]')).toBeTruthy();
   });
 
-  it('opens the sidebar path in the activity file browser without switching terminal sessions', async () => {
+  it('keeps the sidebar path as plain text and copies it from the copy action', async () => {
+    vi.useFakeTimers();
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace/redeven',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    host.querySelector<HTMLElement>('[data-testid="terminal-session-path-session-1"]')?.click();
+    await settleTerminalPanel();
+
+    expect(openFileBrowserAtPathSpy).not.toHaveBeenCalled();
+    expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
+
+    const copyButton = host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-path-copy-session-1"]');
+    expect(copyButton).toBeTruthy();
+    expect(copyButton?.getAttribute('title')).toBe('Copy path');
+
+    copyButton?.click();
+    await settleTerminalPanel();
+
+    expect(writeTextToClipboardSpy).toHaveBeenCalledWith('/workspace/redeven');
+    expect(copyButton?.getAttribute('title')).toBe('Path copied');
+
+    await vi.advanceTimersByTimeAsync(1500);
+    await settleTerminalPanel();
+
+    expect(copyButton?.getAttribute('title')).toBe('Copy path');
+  });
+
+  it('reports a copy failure when the sidebar path copy action cannot write to the clipboard', async () => {
+    writeTextToClipboardSpy.mockRejectedValueOnce(new Error('clipboard denied'));
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace/redeven',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-path-copy-session-1"]')?.click();
+    await settleTerminalPanel();
+
+    expect(notificationMocks.error).toHaveBeenCalledWith('Copy failed', 'clipboard denied');
+  });
+
+  it('opens files from the sidebar files action without switching terminal sessions', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -1267,7 +1364,7 @@ describe('TerminalPanel', () => {
 
     expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
 
-    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-path-session-2"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-2"]')?.click();
     await settleTerminalPanel();
 
     expect(openFileBrowserAtPathSpy).toHaveBeenCalledWith('/workspace/beta', {
@@ -1279,7 +1376,7 @@ describe('TerminalPanel', () => {
     expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('false');
   });
 
-  it('opens the sidebar path as a new workbench file browser surface', async () => {
+  it('opens files as a new workbench file browser surface from the sidebar files action', async () => {
     envContextState.viewMode = 'workbench';
     terminalSessionsState.sessions = [
       {
@@ -1298,7 +1395,7 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-path-session-1"]')?.click();
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-files-session-1"]')?.click();
     await settleTerminalPanel();
 
     expect(openFileBrowserAtPathSpy).toHaveBeenCalledWith('/workspace/redeven', {
@@ -1327,13 +1424,148 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    expect(host.querySelector('[data-testid="terminal-session-path-session-1"]')).toBeNull();
+    expect(host.querySelector('[data-testid="terminal-session-files-session-1"]')).toBeNull();
     expect(host.querySelector('[data-terminal-session-path="session-1"]')?.textContent).toContain('/workspace/redeven');
+    expect(host.querySelector('[data-testid="terminal-session-path-copy-session-1"]')).toBeTruthy();
 
     host.querySelector<HTMLElement>('[data-terminal-session-path="session-1"]')?.click();
     await settleTerminalPanel();
 
     expect(openFileBrowserAtPathSpy).not.toHaveBeenCalled();
+
+    const menu = await openSidebarContextMenu(host, 'Terminal 1');
+    const filesButton = findContextMenuButton(menu, 'Files');
+    expect(filesButton).toBeTruthy();
+    expect(filesButton?.disabled).toBe(true);
+  });
+
+  it('opens sidebar context menu actions for the targeted terminal session', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace/alpha',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/beta',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 20,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const firstMenu = await openSidebarContextMenu(host, 'Terminal 2');
+    expect(Array.from(firstMenu.querySelectorAll('button')).map((button) => button.textContent?.trim())).toEqual([
+      'Files',
+      'Duplicate session',
+      'Clear terminal content',
+      'Ask Flower',
+      'Delete session',
+    ]);
+    expect(firstMenu.querySelectorAll('[role="separator"]')).toHaveLength(1);
+
+    findContextMenuButton(firstMenu, 'Files')?.click();
+    await settleTerminalPanel();
+
+    expect(openFileBrowserAtPathSpy).toHaveBeenCalledWith('/workspace/beta', {
+      homePath: '/workspace',
+      title: 'beta',
+      openStrategy: undefined,
+    });
+    expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
+
+    const clearMenu = await openSidebarContextMenu(host, 'Terminal 2');
+    findContextMenuButton(clearMenu, 'Clear terminal content')?.click();
+    await settleTerminalPanel();
+
+    expect(transportMocks.clear).toHaveBeenCalledWith('session-2');
+    expect(transportMocks.sendInput).toHaveBeenCalledWith('session-2', '\r', 'conn-1');
+    expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
+
+    const askMenu = await openSidebarContextMenu(host, 'Terminal 2');
+    findContextMenuButton(askMenu, 'Ask Flower')?.click();
+    await settleTerminalPanel();
+
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledTimes(1);
+    expect(openFlowerTurnLauncherSpy.mock.calls[0]?.[0]).toMatchObject({
+      source_surface: 'terminal',
+      suggested_working_dir: '/workspace/beta',
+      context_items: [
+        {
+          kind: 'terminal_selection',
+          working_dir: '/workspace/beta',
+          selection: '',
+          selection_chars: 0,
+        },
+      ],
+      context_action: {
+        context: [
+          {
+            kind: 'terminal_selection',
+            working_dir: '/workspace/beta',
+            selection: '',
+            selection_chars: 0,
+          },
+        ],
+      },
+    });
+
+    const deleteMenu = await openSidebarContextMenu(host, 'Terminal 2');
+    findContextMenuButton(deleteMenu, 'Delete session')?.click();
+    await settleTerminalPanelAfterPaint();
+
+    expect(sessionsCoordinatorMocks.deleteSession).toHaveBeenCalledWith('session-2');
+  });
+
+  it('duplicates a terminal session from the sidebar context menu using the target path', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace/redeven',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const menu = await openSidebarContextMenu(host, 'Terminal 1');
+    findContextMenuButton(menu, 'Duplicate session')?.click();
+    await settleTerminalPanelAfterPaint();
+
+    expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledWith('redeven', '/workspace/redeven');
+  });
+
+  it('disables clear and duplicate actions for pending sidebar terminal sessions', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-session"]')?.click();
+    await settleTerminalPanel();
+
+    const menu = await openSidebarContextMenu(host, 'Terminal 2');
+    expect(findContextMenuButton(menu, 'Duplicate session')?.disabled).toBe(true);
+    expect(findContextMenuButton(menu, 'Clear terminal content')?.disabled).toBe(true);
   });
 
   it('configures TerminalCore with focus-triggered remote resize handoff enabled', async () => {
@@ -2207,7 +2439,10 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     let terminal2Tab = findTerminalTab(host, 'Terminal 2');
-    expect(terminal2Tab?.querySelector('[data-terminal-tab-status="running"]')).not.toBeNull();
+    const runningStatuses = Array.from(terminal2Tab?.parentElement?.querySelectorAll('[data-terminal-tab-status="running"]') ?? []);
+    const runningStatusBadge = runningStatuses.find((status) => status.querySelector('svg'));
+    expect(runningStatusBadge).not.toBeUndefined();
+    expect(runningStatusBadge?.querySelector('svg')?.getAttribute('class')).toContain('animate-spin');
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
 
     emitTerminalData('session-2', '\x1b]633;D;0\u0007', 2);
