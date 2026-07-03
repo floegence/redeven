@@ -1,7 +1,7 @@
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
-import { Copy, ExternalLink, Folder, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { Check, Copy, ExternalLink, Folder, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 
 import {
   Button,
@@ -69,6 +69,7 @@ import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSet
 import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardInset';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { fileItemFromPath } from '../utils/filePreviewItem';
+import { writeTextToClipboard } from '../utils/clipboard';
 import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
 import { TerminalShellIntegrationParser, type TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
 import { createTerminalTabActivityTracker, type TerminalSessionWorkState, type TerminalTabVisualState } from '../services/terminalTabActivity';
@@ -346,13 +347,28 @@ type terminal_session_sidebar_item = Readonly<{
   label: string;
   title: string;
   avatarInitial: string;
+  avatarTone: terminal_session_avatar_tone;
   fullPath: string;
   status: terminal_session_sidebar_status;
   canBrowsePath: boolean;
+  canClear: boolean;
+  canDuplicate: boolean;
   closable: boolean;
 }>;
 
 type terminal_session_sidebar_status = 'none' | 'running' | 'unread' | 'creating' | 'failed';
+
+type terminal_session_avatar_tone = Readonly<{
+  background: string;
+  border: string;
+  foreground: string;
+}>;
+
+type terminal_sidebar_context_menu = Readonly<{
+  x: number;
+  y: number;
+  item: terminal_session_sidebar_item;
+}> | null;
 
 type terminal_panel_created_session = {
   sessionId: string;
@@ -443,6 +459,48 @@ function buildTerminalSidebarAvatarInitial(title: string): string {
   const readableTitle = trimmed.replace(/^[^A-Za-z0-9]+/, '') || trimmed;
   const first = Array.from(readableTitle)[0] ?? 'T';
   return first.toLocaleUpperCase();
+}
+
+const TERMINAL_SIDEBAR_AVATAR_TONES: readonly terminal_session_avatar_tone[] = [
+  {
+    background: 'color-mix(in srgb, var(--primary) 22%, var(--sidebar) 78%)',
+    border: 'color-mix(in srgb, var(--primary) 42%, var(--sidebar-border) 58%)',
+    foreground: 'color-mix(in srgb, var(--primary) 72%, var(--sidebar-foreground) 28%)',
+  },
+  {
+    background: 'color-mix(in srgb, #0891b2 24%, var(--sidebar) 76%)',
+    border: 'color-mix(in srgb, #0891b2 48%, var(--sidebar-border) 52%)',
+    foreground: 'color-mix(in srgb, #67e8f9 58%, var(--sidebar-foreground) 42%)',
+  },
+  {
+    background: 'color-mix(in srgb, #d97706 24%, var(--sidebar) 76%)',
+    border: 'color-mix(in srgb, #d97706 46%, var(--sidebar-border) 54%)',
+    foreground: 'color-mix(in srgb, #fbbf24 62%, var(--sidebar-foreground) 38%)',
+  },
+  {
+    background: 'color-mix(in srgb, #db2777 23%, var(--sidebar) 77%)',
+    border: 'color-mix(in srgb, #db2777 46%, var(--sidebar-border) 54%)',
+    foreground: 'color-mix(in srgb, #f9a8d4 62%, var(--sidebar-foreground) 38%)',
+  },
+  {
+    background: 'color-mix(in srgb, #16a34a 23%, var(--sidebar) 77%)',
+    border: 'color-mix(in srgb, #16a34a 44%, var(--sidebar-border) 56%)',
+    foreground: 'color-mix(in srgb, #86efac 60%, var(--sidebar-foreground) 40%)',
+  },
+  {
+    background: 'color-mix(in srgb, #7c3aed 24%, var(--sidebar) 76%)',
+    border: 'color-mix(in srgb, #7c3aed 46%, var(--sidebar-border) 54%)',
+    foreground: 'color-mix(in srgb, #c4b5fd 62%, var(--sidebar-foreground) 38%)',
+  },
+] as const;
+
+function buildTerminalSidebarAvatarTone(seed: string): terminal_session_avatar_tone {
+  let hash = 0;
+  for (const char of String(seed ?? '')) {
+    hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0;
+  }
+  const index = Math.abs(hash) % TERMINAL_SIDEBAR_AVATAR_TONES.length;
+  return TERMINAL_SIDEBAR_AVATAR_TONES[index] ?? TERMINAL_SIDEBAR_AVATAR_TONES[0];
 }
 
 function resolveTerminalSidebarStatus(
@@ -657,11 +715,19 @@ const TerminalSidebarStatusBadge = (props: { status: terminal_session_sidebar_st
   if (props.status === 'running') {
     return (
       <span
-        class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar bg-[color:var(--success)] shadow-sm"
+        class="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full border-2 border-sidebar bg-sidebar text-sidebar-foreground shadow-sm"
         data-terminal-tab-status="running"
         aria-hidden="true"
       >
-        <span class="absolute inset-0 rounded-full bg-[color:var(--success)] opacity-40 animate-ping" />
+        <svg
+          class="h-2.5 w-2.5 animate-spin motion-reduce:animate-none"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+        >
+          <circle cx="12" cy="12" r="8" class="opacity-20" stroke="currentColor" stroke-width="3" />
+          <path d="M20 12a8 8 0 0 0-8-8" class="opacity-100" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+        </svg>
       </span>
     );
   }
@@ -1533,6 +1599,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     showBrowseFiles: boolean;
   } | null>(null);
   let terminalAskMenuEl: HTMLDivElement | null = null;
+  const [terminalSidebarMenu, setTerminalSidebarMenu] = createSignal<terminal_sidebar_context_menu>(null);
+  let terminalSidebarMenuEl: HTMLDivElement | null = null;
+  const [copiedSidebarPathSessionId, setCopiedSidebarPathSessionId] = createSignal<string | null>(null);
+  let sidebarPathCopyResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   const [terminalContextMenuHostEl, setTerminalContextMenuHostEl] = createSignal<HTMLDivElement | null>(null);
 
   let searchLastAppliedKey = '';
@@ -1547,6 +1617,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   let disposed = false;
   onCleanup(() => {
     disposed = true;
+    if (sidebarPathCopyResetTimer !== undefined) {
+      globalThis.clearTimeout(sidebarPathCopyResetTimer);
+      sidebarPathCopyResetTimer = undefined;
+    }
   });
 
   const connected = () => Boolean(protocol.client());
@@ -1591,6 +1665,35 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         return;
       }
       if (terminalAskMenuEl?.contains(target)) return;
+      closeMenu();
+    };
+
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('resize', closeMenu);
+    window.addEventListener('scroll', closeMenu, true);
+
+    onCleanup(() => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('resize', closeMenu);
+      window.removeEventListener('scroll', closeMenu, true);
+    });
+  });
+
+  createEffect(() => {
+    const menu = terminalSidebarMenu();
+    if (!menu) return;
+
+    const closeMenu = () => {
+      setTerminalSidebarMenu(null);
+    };
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) {
+        closeMenu();
+        return;
+      }
+      if (terminalSidebarMenuEl?.contains(target)) return;
       closeMenu();
     };
 
@@ -2887,8 +2990,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     })();
   });
 
-  const clearActive = async () => {
-    const sid = activeSessionId();
+  const clearSession = async (sessionId: string) => {
+    const sid = String(sessionId ?? '').trim();
     if (!sid) return;
     setError(null);
 
@@ -2900,6 +3003,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       if (handleExecuteDenied(e)) return;
       setError(e instanceof Error ? e.message : String(e));
     }
+  };
+
+  const clearActive = async () => {
+    await clearSession(activeSessionId() ?? '');
   };
 
   const [refreshing, setRefreshing] = createSignal(false);
@@ -3130,9 +3237,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         label: fallbackLabel,
         title,
         avatarInitial: buildTerminalSidebarAvatarInitial(title),
+        avatarTone: buildTerminalSidebarAvatarTone(`${s.id}:${fullPath}:${title}`),
         fullPath,
         status: resolveTerminalSidebarStatus(workStates[s.id], tabStates[s.id]),
         canBrowsePath: Boolean(fullPath) && canOpenPath,
+        canClear: true,
+        canDuplicate: Boolean(fullPath),
         closable: true,
       };
     });
@@ -3145,9 +3255,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         label: fallbackLabel,
         title,
         avatarInitial: buildTerminalSidebarAvatarInitial(title),
+        avatarTone: buildTerminalSidebarAvatarTone(`${session.id}:${fullPath}:${title}`),
         fullPath,
         status: session.status,
         canBrowsePath: Boolean(fullPath) && canOpenPath,
+        canClear: false,
+        canDuplicate: false,
         closable: session.status === 'failed',
       };
     });
@@ -3497,6 +3610,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       setActiveSessionId(resolvedSession.id);
     }
 
+    setTerminalSidebarMenu(null);
     setTerminalAskMenu({
       x: event.clientX,
       y: event.clientY,
@@ -3558,6 +3672,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const openSidebarItemFiles = (item: terminal_session_sidebar_item) => {
     if (!item.canBrowsePath || !item.fullPath) return;
 
+    setTerminalSidebarMenu(null);
     void env.openFileBrowserAtPath(item.fullPath, {
       homePath: normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || undefined,
       title: item.title,
@@ -3565,12 +3680,64 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   };
 
-  const askFlowerFromTerminal = () => {
-    const menu = terminalAskMenu();
-    if (!menu) return;
-    setTerminalAskMenu(null);
+  const copySidebarItemPath = (item: terminal_session_sidebar_item) => {
+    const fullPath = normalizeAskFlowerAbsolutePath(item.fullPath);
+    if (!fullPath) return;
 
-    const selection = menu.selection.selectionText;
+    void writeTextToClipboard(fullPath)
+      .then(() => {
+        setCopiedSidebarPathSessionId(item.id);
+        if (sidebarPathCopyResetTimer !== undefined) {
+          globalThis.clearTimeout(sidebarPathCopyResetTimer);
+        }
+        sidebarPathCopyResetTimer = globalThis.setTimeout(() => {
+          sidebarPathCopyResetTimer = undefined;
+          setCopiedSidebarPathSessionId((current) => (current === item.id ? null : current));
+        }, 1500);
+      })
+      .catch(notifyTerminalCopyFailure);
+  };
+
+  const duplicateSidebarItemSession = (item: terminal_session_sidebar_item) => {
+    const fullPath = normalizeAskFlowerAbsolutePath(item.fullPath);
+    if (!connected() || !item.canDuplicate || !fullPath) return;
+    const nextIndex = sessions().length + pendingTerminalSessions().length + 1;
+    const fallbackName = i18n.t('terminal.terminalName', { index: nextIndex });
+    void beginCreateSession(resolveRequestedSessionName(undefined, fullPath, fallbackName), fullPath);
+  };
+
+  const clearSidebarItemSession = (item: terminal_session_sidebar_item) => {
+    if (!item.canClear) return;
+    setTerminalSidebarMenu(null);
+    void clearSession(item.id);
+  };
+
+  const askFlowerFromSidebarItem = (item: terminal_session_sidebar_item, anchor: { x: number; y: number }) => {
+    const workingDir = normalizeAskFlowerAbsolutePath(item.fullPath) || normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || '';
+    if (!workingDir) return;
+    setTerminalSidebarMenu(null);
+    openTerminalAskFlowerContext({
+      x: anchor.x,
+      y: anchor.y,
+      workingDir,
+      selection: {
+        sessionId: item.id,
+        selectionText: '',
+        hasSelection: false,
+      },
+    });
+  };
+
+  const openTerminalAskFlowerContext = (context: {
+    x: number;
+    y: number;
+    workingDir: string;
+    selection: terminal_selection_snapshot;
+  }) => {
+    const workingDir = normalizeAskFlowerAbsolutePath(context.workingDir) || normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || '';
+    if (!workingDir) return;
+
+    const selection = context.selection.selectionText;
     const trimmedSelection = selection.trim();
     const pendingAttachments: File[] = [];
     const notes: string[] = [];
@@ -3589,7 +3756,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         contextItems = [
           {
             kind: 'terminal_selection',
-            working_dir: menu.workingDir,
+            working_dir: workingDir,
             selection: '',
             selection_chars: trimmedSelection.length,
           },
@@ -3598,7 +3765,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         contextItems = [
           {
             kind: 'terminal_selection',
-            working_dir: menu.workingDir,
+            working_dir: workingDir,
             selection: trimmedSelection,
             selection_chars: trimmedSelection.length,
           },
@@ -3609,7 +3776,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       contextItems = [
         {
           kind: 'terminal_selection',
-          working_dir: menu.workingDir,
+          working_dir: workingDir,
           selection: '',
           selection_chars: 0,
         },
@@ -3619,11 +3786,23 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     env.openFlowerTurnLauncher(attachAskFlowerContextAction({
       id: createClientId('ask-flower'),
       source_surface: 'terminal',
-      suggested_working_dir: menu.workingDir,
+      suggested_working_dir: workingDir,
       context_items: contextItems,
       pending_attachments: pendingAttachments,
       notes,
-    }), { x: menu.x, y: menu.y });
+    }), { x: context.x, y: context.y });
+  };
+
+  const askFlowerFromTerminal = () => {
+    const menu = terminalAskMenu();
+    if (!menu) return;
+    setTerminalAskMenu(null);
+    openTerminalAskFlowerContext({
+      x: menu.x,
+      y: menu.y,
+      workingDir: menu.workingDir,
+      selection: menu.selection,
+    });
   };
 
   const buildTerminalAskMenuItems = (menu: NonNullable<ReturnType<typeof terminalAskMenu>>): FloatingContextMenuItem[] => {
@@ -3661,6 +3840,88 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
 
     return items;
+  };
+
+  const buildTerminalSidebarMenuItems = (menu: NonNullable<ReturnType<typeof terminalSidebarMenu>>): FloatingContextMenuItem[] => {
+    const item = menu.item;
+    return [
+      {
+        id: 'sidebar-files',
+        kind: 'action',
+        label: i18n.t('terminal.files'),
+        icon: Folder,
+        disabled: !item.canBrowsePath,
+        onSelect: () => openSidebarItemFiles(item),
+      },
+      {
+        id: 'sidebar-duplicate',
+        kind: 'action',
+        label: i18n.t('terminal.duplicateSession'),
+        icon: Copy,
+        disabled: !item.canDuplicate,
+        onSelect: () => {
+          setTerminalSidebarMenu(null);
+          duplicateSidebarItemSession(item);
+        },
+      },
+      {
+        id: 'sidebar-clear',
+        kind: 'action',
+        label: i18n.t('terminal.clearTerminalContent'),
+        icon: Trash,
+        disabled: !item.canClear,
+        onSelect: () => clearSidebarItemSession(item),
+      },
+      {
+        id: 'sidebar-ask-flower',
+        kind: 'action',
+        label: i18n.t('terminal.askFlower'),
+        icon: FlowerContextMenuIcon,
+        onSelect: () => askFlowerFromSidebarItem(item, { x: menu.x, y: menu.y }),
+      },
+      {
+        id: 'sidebar-danger-separator',
+        kind: 'separator',
+      },
+      {
+        id: 'sidebar-delete',
+        kind: 'action',
+        label: i18n.t('terminal.deleteSession'),
+        icon: X,
+        destructive: true,
+        disabled: !item.closable,
+        onSelect: () => {
+          setTerminalSidebarMenu(null);
+          closeSession(item.id);
+        },
+      },
+    ];
+  };
+
+  const openTerminalSidebarMenu = (event: MouseEvent, item: terminal_session_sidebar_item) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setTerminalAskMenu(null);
+    setTerminalSidebarMenu({
+      x: event.clientX,
+      y: event.clientY,
+      item,
+    });
+  };
+
+  const openTerminalSidebarKeyboardMenu = (event: KeyboardEvent, item: terminal_session_sidebar_item) => {
+    if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+    event.preventDefault();
+    event.stopPropagation();
+
+    const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    const rect = target?.getBoundingClientRect();
+    setTerminalAskMenu(null);
+    setTerminalSidebarMenu({
+      x: rect ? rect.left + Math.min(rect.width - 16, 64) : 0,
+      y: rect ? rect.top + Math.min(rect.height - 8, 44) : 0,
+      item,
+    });
   };
 
   const bindSearchCore = (core: TerminalCore | null) => {
@@ -3921,11 +4182,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                       const active = () => activeDisplaySessionId() === item.id;
                       return (
                         <div
-                          class={`group relative rounded-md border px-2.5 py-2 pr-8 text-xs transition-colors duration-75 ${
+                          class={`group relative rounded-md border px-2.5 py-2 pr-9 text-xs transition-colors duration-75 ${
                             active()
                               ? 'border-border/20 bg-sidebar-accent text-sidebar-accent-foreground shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
                               : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'
                           }`}
+                          onContextMenu={(event) => openTerminalSidebarMenu(event, item)}
                         >
                           <button
                             type="button"
@@ -3939,6 +4201,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               setActiveSessionId(item.id);
                               restoreActiveTerminalFocus();
                             }}
+                            onKeyDown={(event) => openTerminalSidebarKeyboardMenu(event, item)}
                           >
                             <span class="sr-only">{item.label}</span>
                             <span class="sr-only" data-terminal-tab-status={item.status}>
@@ -3950,7 +4213,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                           </Show>
                           <div class="relative z-10 flex min-w-0 items-start gap-2.5 pointer-events-none">
                             <span
-                              class="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-sidebar-border/70 bg-sidebar-accent/75 text-[13px] font-semibold uppercase leading-none text-sidebar-accent-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]"
+                              class="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[13px] font-semibold uppercase leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]"
+                              style={{
+                                background: item.avatarTone.background,
+                                'border-color': item.avatarTone.border,
+                                color: item.avatarTone.foreground,
+                              }}
                               data-terminal-session-avatar={item.id}
                               aria-hidden="true"
                             >
@@ -3963,51 +4231,71 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                                 <span class="shrink-0 rounded border border-sidebar-border/80 bg-sidebar/35 px-1 py-[1px] text-[9px] leading-none text-muted-foreground/80">{index() + 1}</span>
                               </span>
                               <Show when={item.fullPath}>
-                                <Show
-                                  when={item.canBrowsePath}
-                                  fallback={
-                                    <span
-                                      class="mt-0.5 block h-6 truncate text-[11px] leading-6 text-muted-foreground/70"
-                                      title={item.fullPath}
-                                      data-terminal-session-path={item.id}
-                                    >
-                                      {item.fullPath}
-                                    </span>
-                                  }
-                                >
-                                  <button
-                                    type="button"
-                                    class="pointer-events-auto mt-0.5 flex h-6 max-w-full min-w-0 items-center gap-1 rounded-sm text-left text-[11px] leading-6 text-muted-foreground/80 underline decoration-sidebar-border/70 underline-offset-[3px] transition-colors duration-75 hover:text-sidebar-foreground hover:decoration-primary/70 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring"
-                                    title={`${i18n.t('terminal.browseFiles')}: ${item.fullPath}`}
-                                    aria-label={`${i18n.t('terminal.browseFiles')}: ${item.fullPath}`}
+                                <span class="mt-0.5 flex h-6 min-w-0 max-w-full items-center gap-1.5">
+                                  <span
+                                    class="pointer-events-auto min-w-0 flex-1 truncate text-[11px] leading-6 text-muted-foreground/75"
+                                    title={item.fullPath}
                                     data-terminal-session-path={item.id}
                                     data-testid={`terminal-session-path-${item.id}`}
+                                    onClick={(event) => event.stopPropagation()}
+                                  >
+                                    {item.fullPath}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    class={`pointer-events-auto flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring ${
+                                      copiedSidebarPathSessionId() === item.id
+                                        ? 'bg-primary/10 text-primary'
+                                        : 'hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                                    }`}
+                                    title={copiedSidebarPathSessionId() === item.id ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}
+                                    aria-label={`${copiedSidebarPathSessionId() === item.id ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}: ${item.fullPath}`}
+                                    data-testid={`terminal-session-path-copy-${item.id}`}
                                     onClick={(event) => {
                                       event.stopPropagation();
-                                      openSidebarItemFiles(item);
+                                      copySidebarItemPath(item);
                                     }}
                                   >
-                                    <span class="min-w-0 truncate">{item.fullPath}</span>
-                                    <ExternalLink class="h-3 w-3 shrink-0" />
+                                    <Show when={copiedSidebarPathSessionId() === item.id} fallback={<Copy class="h-3 w-3" />}>
+                                      <Check class="h-3 w-3" />
+                                    </Show>
                                   </button>
-                                </Show>
+                                </span>
                               </Show>
                             </span>
                           </div>
-                          <Show when={item.closable}>
-                            <button
-                              type="button"
-                              class="absolute right-1.5 top-1.5 z-20 flex h-5 w-5 items-center justify-center rounded text-[11px] text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-error/10 hover:text-error focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
-                              data-testid={`close-session-${item.id}`}
-                              aria-label={`${i18n.t('terminal.close')} ${item.title}`}
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                closeSession(item.id);
-                              }}
-                            >
-                              <X class="h-3 w-3" />
-                            </button>
-                          </Show>
+                          <div class="absolute right-1.5 top-1.5 z-20 flex w-5 flex-col items-center gap-1">
+                            <Show when={item.closable}>
+                              <button
+                                type="button"
+                                class="flex h-5 w-5 items-center justify-center rounded text-[11px] text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-error/10 hover:text-error focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
+                                data-testid={`close-session-${item.id}`}
+                                aria-label={`${i18n.t('terminal.deleteSession')} ${item.title}`}
+                                title={i18n.t('terminal.deleteSession')}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  closeSession(item.id);
+                                }}
+                              >
+                                <X class="h-3 w-3" />
+                              </button>
+                            </Show>
+                            <Show when={item.canBrowsePath}>
+                              <button
+                                type="button"
+                                class="flex h-5 w-5 items-center justify-center rounded text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-sidebar-accent hover:text-sidebar-foreground focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
+                                data-testid={`terminal-session-files-${item.id}`}
+                                aria-label={`${i18n.t('terminal.files')}: ${item.fullPath}`}
+                                title={`${i18n.t('terminal.files')}: ${item.fullPath}`}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  openSidebarItemFiles(item);
+                                }}
+                              >
+                                <ExternalLink class="h-3 w-3" />
+                              </button>
+                            </Show>
+                          </div>
                         </div>
                       );
                     }}
@@ -4297,6 +4585,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             items={buildTerminalAskMenuItems(menu)}
             menuRef={(el) => {
               terminalAskMenuEl = el;
+            }}
+          />
+        )}
+      </Show>
+
+      <Show when={terminalSidebarMenu()} keyed>
+        {(menu) => (
+          <FloatingContextMenu
+            x={menu.x}
+            y={menu.y}
+            items={buildTerminalSidebarMenuItems(menu)}
+            menuRef={(el) => {
+              terminalSidebarMenuEl = el;
             }}
           />
         )}
