@@ -10,7 +10,7 @@ Redeven keeps CI and local release checks aligned around source validation and g
 
 # Mechanism
 
-CI has a dedicated OKF bundle check that validates source integrity and verifies checked-in dist files. The main check installs Go, Node, corepack, golangci-lint, gitleaks, and ripgrep, then runs shell syntax checks, third-party notice validation, open-source hygiene, release note generator tests, Runtime Service compatibility checks, ReDevPlugin dependency boundary checks, Gateway protocol contract checks, Flower protocol checks, Flower UI behavior contracts, UI lint, Desktop checks, embedded asset builds, Go tests, and golangci-lint. Release tags run the compatibility contract check and Gateway protocol contract check before building assets and packaging binaries.
+CI has a dedicated OKF bundle check that validates source integrity and verifies checked-in dist files. The main check installs Go, Node, corepack, golangci-lint, gitleaks, and ripgrep, then runs shell syntax checks, third-party notice validation, open-source hygiene, release note generator tests, Runtime Service compatibility checks, ReDevPlugin dependency boundary checks, the ReDevPlugin release artifact verifier self-test, Gateway protocol contract checks, Flower protocol checks, Flower UI behavior contracts, UI lint, Desktop checks, embedded asset builds, Go tests, and golangci-lint. Release tags run the compatibility contract check and Gateway protocol contract check before building assets and packaging binaries.
 
 ReDevPlugin consumption is a published dependency upgrade gate, not a source
 sync. A Redeven change that integrates or upgrades ReDevPlugin must update the
@@ -19,11 +19,18 @@ schema/contract hashes, compatibility manifest inputs, and verification scripts
 together. Local checks must prove the build does not depend on `../redevplugin`,
 `go.work`, `replace`, local npm links, copied contracts, or copied runtime
 binaries. The current dependency boundary script enforces the no-local-wiring
-baseline before any ReDevPlugin package is consumed. Once plugin integration
-code exists, the focused gate should cover mounted route matrix,
-released-contract hash verification, session adapter mapping, Env App and
-Workbench surface smoke, Flower-generated minimal fixture flow, and concrete
-business capability adapters.
+baseline before any ReDevPlugin package is consumed. The release artifact
+verifier is the Redeven-side consumer gate for downloaded ReDevPlugin GitHub
+Release assets: it checks outer `SHA256SUMS`, `.sig`/`.bundle` evidence,
+keyless cosign signatures when not explicitly skipped for fixtures, release-mode
+stress counters, each tarball's internal `release-manifest.json`, internal
+`SHA256SUMS`, `compatibility.json`, and runtime binary presence. CI runs the
+verifier's self-test so the positive fixture passes and a tampered stress
+summary is rejected before a real ReDevPlugin artifact is wired into the release
+pipeline. Once plugin integration code exists, the focused gate should cover
+mounted route matrix, released-contract hash verification, session adapter
+mapping, Env App and Workbench surface smoke, Flower-generated minimal fixture
+flow, and concrete business capability adapters.
 
 # Boundaries
 
@@ -55,5 +62,8 @@ ReDevPlugin artifacts only.
 [17] redeven:AGENTS.md:501 - ReDevPlugin upgrade review must identify released versions, adapters, surfaces, capabilities, and local checks.
 [18] redeven:AGENTS.md:513 - Redeven local checks must prove integration does not depend on local ReDevPlugin wiring or copied artifacts.
 [19] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The local boundary script rejects Go workspaces, local ReDevPlugin wiring, and copied platform-core paths.
-[20] redeven:.github/workflows/ci-check.yml:102 - CI runs the ReDevPlugin dependency boundary guard before protocol and UI checks.
-[21] redeven:.githooks/pre-commit:7 - The local pre-commit hook runs the ReDevPlugin dependency boundary guard before Gateway and heavyweight local checks.
+[20] redeven:scripts/check_redevplugin_release_artifacts.sh:6 - The release artifact verifier supports real artifact directories and a CI self-test mode.
+[21] redeven:scripts/check_redevplugin_release_artifacts.sh:10 - The verifier checks outer checksums, signatures, release stress counters, tarball manifests, compatibility metadata, and runtime binary presence.
+[22] redeven:.github/workflows/ci-check.yml:103 - CI runs the ReDevPlugin dependency boundary guard before protocol and UI checks.
+[23] redeven:.github/workflows/ci-check.yml:106 - CI runs the ReDevPlugin release artifact verifier self-test.
+[24] redeven:.githooks/pre-commit:7 - The local pre-commit hook runs the ReDevPlugin dependency boundary guard before Gateway and heavyweight local checks.

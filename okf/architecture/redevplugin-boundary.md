@@ -118,7 +118,11 @@ ReDevPlugin upgrades are ordinary published dependency upgrades. A Redeven
 change that depends on ReDevPlugin behavior must update the released Go module,
 npm package, runtime artifact reference, compatibility manifest or contract
 hashes, and verification scripts together; unreleased local ReDevPlugin behavior
-is not a valid integration target.
+is not a valid integration target. Before Redeven bundles a ReDevPlugin runtime
+artifact, the consumer-side release artifact verifier must validate the
+downloaded release directory: outer checksums and signature evidence,
+release-mode stress counters, each tarball's internal release manifest and
+checksum list, compatibility metadata, and runtime binary presence.
 
 Redeven-side plugin code layout must make the adapter boundary visible. It may
 contain host integration, route mounting, capability adapters, and product UI,
@@ -131,7 +135,9 @@ storage, network, and lifecycle semantics remain covered by ReDevPlugin
 fixtures and tests. The local dependency boundary guard enforces the current
 no-local-wiring baseline by rejecting Go workspaces, local ReDevPlugin module or
 package-manager wiring, copied platform contracts, and `internal/plugins*`
-platform-core directories.
+platform-core directories. The release artifact verifier self-test keeps the
+future runtime-consumption gate executable in CI before a published ReDevPlugin
+artifact is selected by Redeven.
 
 # Citations
 
@@ -151,3 +157,5 @@ platform-core directories.
 [14] redeven:AGENTS.md:535 - Redeven plugin integration review must reject alternate platform cores and enforce adapter-only business capabilities.
 [15] redeven:go.mod:5 - Redeven's current required module list is the active Go dependency surface for released upstream modules.
 [16] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The dependency boundary guard blocks local ReDevPlugin wiring and copied platform-core paths.
+[17] redeven:scripts/check_redevplugin_release_artifacts.sh:10 - The consumer-side release artifact verifier validates checksums, signature evidence, stress counters, internal manifests, compatibility metadata, and runtime binary presence.
+[18] redeven:.github/workflows/ci-check.yml:106 - CI runs the ReDevPlugin release artifact verifier self-test before a real artifact is wired into release packaging.
