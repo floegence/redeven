@@ -82,6 +82,38 @@ function triggerResizeObservers() {
   }
 }
 
+async function setBranchHeaderWidth(
+  host: HTMLElement,
+  width: number,
+): Promise<HTMLElement> {
+  const header = host.querySelector(
+    "[data-git-branch-header-layout]",
+  ) as HTMLElement | null;
+  expect(header).toBeTruthy();
+  defineElementWidth(header!, width);
+  triggerResizeObservers();
+  await flush();
+  return header!;
+}
+
+async function clickDropdownMenuItem(
+  trigger: HTMLButtonElement | null | undefined,
+  label: string,
+) {
+  expect(trigger).toBeTruthy();
+  trigger!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await flush();
+
+  const menuItem = Array.from(
+    document.body.querySelectorAll('[role="menu"] button'),
+  ).find((node) => node.textContent?.trim() === label) as
+    | HTMLButtonElement
+    | undefined;
+  expect(menuItem).toBeTruthy();
+  menuItem!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  await flush();
+}
+
 beforeEach(() => {
   vi.stubGlobal("queueMicrotask", (callback: VoidFunction) => callback());
   mockGetCommitDetail.mockReset();
@@ -332,6 +364,7 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
+      await setBranchHeaderWidth(host, 1040);
 
       expect(mockListWorkspacePage).toHaveBeenCalledWith({
         repoRootPath: "/workspace/repo-linked",
@@ -626,7 +659,7 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
-  it("enables checkout for a non-current remote branch", () => {
+  it("enables checkout for a non-current remote branch", async () => {
     let checkoutBranch: string | undefined;
     let mergeBranch: string | undefined;
     let deleteBranch: string | undefined;
@@ -684,6 +717,9 @@ describe("GitBranchesPanel interactions", () => {
     );
 
     try {
+      await flush();
+      await setBranchHeaderWidth(host, 1040);
+
       expect(host.textContent).toContain("Remote branch is not checked out");
       expect(host.textContent).toContain(
         "Status is only available for checked-out local worktrees.",
@@ -794,6 +830,7 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
+      await setBranchHeaderWidth(host, 1040);
 
       expect(mockListWorkspacePage).toHaveBeenCalledWith({
         repoRootPath: "/workspace/repo-linked",
@@ -894,6 +931,7 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
+      await setBranchHeaderWidth(host, 1040);
 
       expect(host.textContent).toContain("internal");
       expect(host.textContent).toContain("Folder");
@@ -903,6 +941,100 @@ describe("GitBranchesPanel interactions", () => {
       expect(host.textContent).not.toContain(
         "No pending files are available in this worktree.",
       );
+    } finally {
+      dispose();
+    }
+  });
+
+  it("renders branch-status rows as a compact list at narrow measured widths", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    mockListWorkspacePage.mockResolvedValueOnce({
+      repoRootPath: "/workspace/repo-linked",
+      section: "changes",
+      directoryPath: "",
+      breadcrumbs: [{ label: "repo-linked", path: "" }],
+      summary: {
+        stagedCount: 0,
+        unstagedCount: 5,
+        untrackedCount: 3,
+        conflictedCount: 0,
+      },
+      scopeFileCount: 8,
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [
+        {
+          section: "changes",
+          entryKind: "directory",
+          path: "internal",
+          displayPath: "internal",
+          directoryPath: "internal",
+          descendantFileCount: 8,
+          containsUnstaged: true,
+          containsUntracked: true,
+        },
+      ],
+    });
+
+    const branch = {
+      name: "feat-workbench-appearance",
+      fullName: "refs/heads/feat-workbench-appearance",
+      kind: "local" as const,
+      worktreePath: "/workspace/repo-linked",
+    };
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px] w-[420px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  selectedBranch={branch}
+                  branches={{
+                    repoRootPath: "/workspace/repo",
+                    currentRef: "main",
+                    local: [
+                      {
+                        name: "main",
+                        fullName: "refs/heads/main",
+                        kind: "local",
+                        current: true,
+                      },
+                      branch,
+                    ],
+                    remote: [],
+                  }}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+      const header = await setBranchHeaderWidth(host, 420);
+
+      expect(header.dataset.gitBranchHeaderLayout).toBe("compact");
+      expect(
+        host.querySelector('[data-git-branch-status-list-layout="compact"]'),
+      ).toBeTruthy();
+      expect(host.querySelectorAll("tbody tr")).toHaveLength(0);
+      expect(host.textContent).toContain("internal");
+      expect(host.textContent).toContain("Folder");
+      expect(host.textContent).toContain("Unstaged");
+      expect(host.textContent).toContain("Untracked");
+      expect(host.textContent).toContain("8 files");
+      expect(host.textContent).toContain("Open");
+      expect(host.textContent).not.toContain("Open Folder");
     } finally {
       dispose();
     }
@@ -1049,6 +1181,7 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
+      await setBranchHeaderWidth(host, 1040);
 
       const openFolderButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.trim() === "Open Folder",
@@ -1640,6 +1773,7 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
+      await setBranchHeaderWidth(host, 1040);
 
       const shortcutDocks = host.querySelectorAll("[data-git-shortcut-dock]");
       const askFlowerButton = host.querySelector(
@@ -1790,6 +1924,7 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
+      await setBranchHeaderWidth(host, 1040);
 
       const browseFilesButton = host.querySelector(
         'button[aria-label="Files"]',
@@ -1906,7 +2041,7 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
-  it("shows an unavailable status message for a local branch without a checked-out worktree", () => {
+  it("shows an unavailable status message for a local branch without a checked-out worktree", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
 
@@ -2013,6 +2148,7 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
+      await setBranchHeaderWidth(host, 1040);
 
       const askFlowerButton = host.querySelector(
         'button[aria-label="Ask Flower"]',
@@ -2147,6 +2283,9 @@ describe("GitBranchesPanel interactions", () => {
     }, host);
 
     try {
+      await flush();
+      await setBranchHeaderWidth(host, 1040);
+
       const deleteButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.trim() === "Delete",
       ) as HTMLButtonElement | undefined;
@@ -2197,6 +2336,7 @@ describe("GitBranchesPanel interactions", () => {
   });
 
   it("keeps branch header controls compact without squeezing branch metadata at narrow measured widths", async () => {
+    let deletedBranch = "";
     const host = document.createElement("div");
     document.body.appendChild(host);
 
@@ -2234,7 +2374,10 @@ describe("GitBranchesPanel interactions", () => {
                     remote: [],
                   }}
                   onCheckoutBranch={() => {}}
-                  onDeleteBranch={() => {}}
+                  onMergeBranch={() => {}}
+                  onDeleteBranch={(branch) => {
+                    deletedBranch = String(branch.name ?? "");
+                  }}
                   onOpenInTerminal={() => {}}
                   onBrowseFiles={() => {}}
                 />
@@ -2252,49 +2395,43 @@ describe("GitBranchesPanel interactions", () => {
       const commandRail = host.querySelector(
         "[data-git-branch-header-actions]",
       ) as HTMLDivElement | null;
-      const checkoutButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Checkout"),
+      const mergeButton = Array.from(host.querySelectorAll("button")).find(
+        (node) => node.textContent?.trim() === "Merge",
       ) as HTMLButtonElement | undefined;
-      const deleteButton = Array.from(host.querySelectorAll("button")).find(
+      const visibleDeleteButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.trim() === "Delete",
       ) as HTMLButtonElement | undefined;
+      const moreButton = host.querySelector(
+        'button[aria-label="More actions"]',
+      ) as HTMLButtonElement | null;
       const tablist = host.querySelector(
         '[aria-label="Branch detail tabs"]',
       ) as HTMLDivElement | null;
       const tablistRow = tablist?.parentElement as HTMLDivElement | null;
       const branchHeaderTopRow =
         tablistRow?.parentElement as HTMLDivElement | null;
-      const shortcutDock = host.querySelector(
-        "[data-git-shortcut-dock]",
-      ) as HTMLDivElement | null;
-      const actionsGroup = checkoutButton?.parentElement as
-        | HTMLDivElement
-        | undefined;
 
       expect(branchHeaderTopRow).toBeTruthy();
-      defineElementWidth(branchHeaderTopRow!, 420);
-      triggerResizeObservers();
-      await flush();
+      await setBranchHeaderWidth(host, 420);
 
       expect(commandRail).toBeTruthy();
-      expect(shortcutDock).toBeTruthy();
-      expect(actionsGroup).toBeTruthy();
+      expect(commandRail?.dataset.gitBranchHeaderActions).toBe("overflow");
+      expect(branchHeaderTopRow?.dataset.gitBranchHeaderLayout).toBe("compact");
       expect(commandRail?.className).not.toContain("border-t");
       expect(commandRail?.className).not.toContain("pt-2");
       expect(commandRail?.className).toContain("flex-wrap");
       expect(commandRail?.className).not.toContain("grid-cols-1");
       expect(commandRail?.className).not.toContain("bg-muted/[0.08]");
-      expect(commandRail?.textContent).toContain("Checkout");
+      expect(commandRail?.textContent).toContain("Merge");
+      expect(commandRail?.textContent).not.toContain("Delete");
       expect(commandRail?.textContent).not.toContain("Workspace");
       expect(commandRail?.textContent).not.toContain("Actions");
-      expect(actionsGroup?.className).toContain("flex");
-      expect(actionsGroup?.className).toContain("flex-wrap");
-      expect(checkoutButton?.className).toContain("rounded-md");
-      expect(deleteButton?.className).toContain("rounded-md");
-      expect(checkoutButton?.className).toContain("cursor-pointer");
-      expect(deleteButton?.className).toContain("bg-destructive/[0.06]");
-      expect(checkoutButton?.className).not.toContain("w-full");
-      expect(deleteButton?.className).not.toContain("w-full");
+      expect(mergeButton?.className).toContain("rounded-md");
+      expect(mergeButton?.className).toContain("cursor-pointer");
+      expect(visibleDeleteButton).toBeUndefined();
+      expect(moreButton).toBeTruthy();
+      await clickDropdownMenuItem(moreButton, "Delete branch");
+      expect(deletedBranch).toBe("feature/mobile");
       expect(tablistRow?.className).toContain("flex");
       expect(tablistRow?.className).toContain("w-full");
       expect(tablistRow?.className).not.toContain("w-auto");
@@ -2390,6 +2527,7 @@ describe("GitBranchesPanel interactions", () => {
       triggerResizeObservers();
       await flush();
 
+      expect(branchHeaderTopRow?.dataset.gitBranchHeaderLayout).toBe("inline");
       expect(branchHeaderTopRow?.className).toContain(
         "grid-cols-[minmax(0,1fr)_auto_auto]",
       );
@@ -2399,10 +2537,20 @@ describe("GitBranchesPanel interactions", () => {
       expect(tablist?.className).toContain("w-[12rem]");
       expect(tablist?.className).not.toContain("w-full");
 
+      defineElementWidth(branchHeaderTopRow!, 720);
+      triggerResizeObservers();
+      await flush();
+
+      expect(branchHeaderTopRow?.dataset.gitBranchHeaderLayout).toBe("stacked");
+      expect(branchHeaderTopRow?.className).toContain("grid-cols-1");
+      expect(tablistRow?.className).not.toContain("col-span-2");
+      expect(tablist?.className).toContain("w-full");
+
       defineElementWidth(branchHeaderTopRow!, 420);
       triggerResizeObservers();
       await flush();
 
+      expect(branchHeaderTopRow?.dataset.gitBranchHeaderLayout).toBe("compact");
       expect(branchHeaderTopRow?.className).toContain("grid-cols-1");
       expect(tablistRow?.className).toContain("w-full");
       expect(tablist?.className).toContain("w-full");
@@ -2645,6 +2793,9 @@ describe("GitBranchesPanel interactions", () => {
     }, host);
 
     try {
+      await flush();
+      await setBranchHeaderWidth(host, 1040);
+
       const deleteButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.trim() === "Delete",
       ) as HTMLButtonElement | undefined;
@@ -3446,6 +3597,7 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await Promise.resolve();
       await Promise.resolve();
+      await setBranchHeaderWidth(host, 1040);
 
       expect(host.textContent).toContain("First commit");
       expect(host.textContent).toContain("Merge feature");
@@ -3583,6 +3735,7 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
+      await setBranchHeaderWidth(host, 1040);
 
       const diffButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.includes("View Diff"),

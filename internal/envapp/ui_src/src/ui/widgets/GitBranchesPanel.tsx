@@ -11,9 +11,10 @@ import { cn, useLayout, useNotification } from "@floegence/floe-webapp-core";
 import {
   ChevronRight,
   Folder,
+  MoreHorizontal,
   Terminal,
 } from "@floegence/floe-webapp-core/icons";
-import { Button, Dialog } from "@floegence/floe-webapp-core/ui";
+import { Button, Dialog, Dropdown, type DropdownItem } from "@floegence/floe-webapp-core/ui";
 import { FlowerIcon } from "../icons/FlowerIcon";
 import {
   useRedevenRpc,
@@ -122,7 +123,10 @@ import {
   type GitMergeBranchDialogConfirmOptions,
   type GitMergeBranchDialogState,
 } from "./GitMergeBranchDialog";
-import { resolveGitBranchHeaderLayout } from "./gitBranchHeaderLayout";
+import {
+  resolveGitBranchHeaderLayout,
+  type GitBranchHeaderLayout,
+} from "./gitBranchHeaderLayout";
 import { useI18n } from "../i18n";
 
 const BRANCH_STATUS_PAGE_SIZE = 200;
@@ -308,6 +312,10 @@ type BranchShortcutPresentation = {
   onPress: () => void;
 };
 
+type BranchHeaderActionPresentation =
+  | (BranchPrimaryActionPresentation & { kind: "primary" })
+  | (BranchShortcutPresentation & { kind: "shortcut" });
+
 type BranchHeaderControlGroups = {
   primaryActions: BranchPrimaryActionPresentation[];
   secondaryShortcuts: BranchShortcutPresentation[];
@@ -375,9 +383,75 @@ function branchStatusEmptyState(
 }
 
 interface BranchCompareFilesTableProps {
+  layout?: GitBranchHeaderLayout;
   items: GitCommitFileSummary[];
   selectedKey?: string;
   onOpenDiff?: (item: GitCommitFileSummary) => void;
+}
+
+function BranchCompareFilesCompactList(
+  props: Pick<
+    BranchCompareFilesTableProps,
+    "items" | "selectedKey" | "onOpenDiff"
+  >,
+) {
+  return (
+    <div
+      {...GIT_WORKBENCH_SCROLL_REGION_PROPS}
+      role="list"
+      class="min-h-0 flex-1 overflow-auto divide-y divide-border/45"
+      data-git-branch-commit-files-list-layout="compact"
+    >
+      <For each={props.items}>
+        {(item) => {
+          const active = () => props.selectedKey === gitDiffEntryIdentity(item);
+          const primaryPath = () => compareFilePath(item);
+          const secondaryPath = () => changeSecondaryPath(item);
+          return (
+            <button
+              type="button"
+              role="listitem"
+              aria-selected={active()}
+              class={cn(
+                "grid w-full cursor-pointer gap-1.5 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-muted/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1",
+                active() && "git-browser-selection-row",
+              )}
+              onClick={() => props.onOpenDiff?.(item)}
+            >
+              <div class="flex min-w-0 items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div
+                    class={`truncate text-xs font-medium ${gitChangePathClass(item.changeType)}`}
+                    title={primaryPath()}
+                  >
+                    {primaryPath()}
+                  </div>
+                  <Show when={secondaryPath() !== primaryPath()}>
+                    <div
+                      class="mt-0.5 truncate text-[10px] text-muted-foreground"
+                      title={secondaryPath()}
+                    >
+                      {secondaryPath()}
+                    </div>
+                  </Show>
+                </div>
+                <span class="shrink-0 rounded-md bg-background/70 px-2 py-1 text-[10px] font-medium text-muted-foreground">
+                  View
+                </span>
+              </div>
+              <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                <GitChangeStatusPill change={item.changeType} />
+                <GitChangeMetrics
+                  additions={item.additions}
+                  deletions={item.deletions}
+                />
+              </div>
+            </button>
+          );
+        }}
+      </For>
+    </div>
+  );
 }
 
 function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
@@ -393,73 +467,85 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
           </div>
         }
       >
-        <GitVirtualTable
-          items={props.items}
-          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[46rem] md:min-w-0`}
-          header={
-            <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
-              <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
-            </tr>
-          }
-          renderRow={(item) => {
-            const active = () =>
-              props.selectedKey === gitDiffEntryIdentity(item);
-            return (
-              <tr
-                aria-selected={active()}
-                class={gitChangedFilesRowClass(active())}
-              >
-                <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                  <div class="min-w-0">
-                    <button
-                      type="button"
-                      class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
-                      title={changeSecondaryPath(item)}
-                      onClick={() => props.onOpenDiff?.(item)}
-                    >
-                      {compareFilePath(item)}
-                    </button>
-                    <Show
-                      when={changeSecondaryPath(item) !== compareFilePath(item)}
-                    >
-                      <div
-                        class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS}
-                        title={changeSecondaryPath(item)}
-                      >
-                        {changeSecondaryPath(item)}
-                      </div>
-                    </Show>
-                  </div>
-                </td>
-                <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                  <GitChangeStatusPill change={item.changeType} />
-                </td>
-                <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                  <GitChangeMetrics
-                    additions={item.additions}
-                    deletions={item.deletions}
-                  />
-                </td>
-                <td class={gitChangedFilesStickyCellClass(active())}>
-                  <GitChangedFilesActionButton
-                    onClick={() => props.onOpenDiff?.(item)}
+        <Show
+          when={props.layout === "compact"}
+          fallback={
+            <GitVirtualTable
+              items={props.items}
+              tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[46rem] md:min-w-0`}
+              header={
+                <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
+                  <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
+                  <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
+                  <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
+                  <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
+                </tr>
+              }
+              renderRow={(item) => {
+                const active = () =>
+                  props.selectedKey === gitDiffEntryIdentity(item);
+                return (
+                  <tr
+                    aria-selected={active()}
+                    class={gitChangedFilesRowClass(active())}
                   >
-                    View Diff
-                  </GitChangedFilesActionButton>
-                </td>
-              </tr>
-            );
-          }}
-        />
+                    <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                      <div class="min-w-0">
+                        <button
+                          type="button"
+                          class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
+                          title={changeSecondaryPath(item)}
+                          onClick={() => props.onOpenDiff?.(item)}
+                        >
+                          {compareFilePath(item)}
+                        </button>
+                        <Show
+                          when={changeSecondaryPath(item) !== compareFilePath(item)}
+                        >
+                          <div
+                            class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS}
+                            title={changeSecondaryPath(item)}
+                          >
+                            {changeSecondaryPath(item)}
+                          </div>
+                        </Show>
+                      </div>
+                    </td>
+                    <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                      <GitChangeStatusPill change={item.changeType} />
+                    </td>
+                    <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                      <GitChangeMetrics
+                        additions={item.additions}
+                        deletions={item.deletions}
+                      />
+                    </td>
+                    <td class={gitChangedFilesStickyCellClass(active())}>
+                      <GitChangedFilesActionButton
+                        onClick={() => props.onOpenDiff?.(item)}
+                      >
+                        View Diff
+                      </GitChangedFilesActionButton>
+                    </td>
+                  </tr>
+                );
+              }}
+            />
+          }
+        >
+          <BranchCompareFilesCompactList
+            items={props.items}
+            selectedKey={props.selectedKey}
+            onOpenDiff={props.onOpenDiff}
+          />
+        </Show>
       </Show>
     </GitTableFrame>
   );
 }
 
 interface BranchStatusTableProps {
+  layout?: GitBranchHeaderLayout;
   section: GitWorkspaceViewSection;
   items: GitWorkspaceChange[];
   totalCount: number;
@@ -471,6 +557,123 @@ interface BranchStatusTableProps {
   onOpenDiff?: (item: GitWorkspaceChange) => void;
   onOpenDirectory?: (directoryPath: string) => void;
   onLoadMore?: () => void;
+}
+
+function BranchStatusCompactList(
+  props: Pick<
+    BranchStatusTableProps,
+    | "section"
+    | "items"
+    | "selectedKey"
+    | "onOpenDiff"
+    | "onOpenDirectory"
+  >,
+) {
+  const openItem = (item: GitWorkspaceChange) => {
+    if (isGitWorkspaceDirectoryEntry(item)) {
+      const nextDirectoryPath = workspaceDirectoryPath(item);
+      if (nextDirectoryPath) {
+        props.onOpenDirectory?.(nextDirectoryPath);
+      }
+      return;
+    }
+    props.onOpenDiff?.(item);
+  };
+
+  return (
+    <div
+      {...GIT_WORKBENCH_SCROLL_REGION_PROPS}
+      role="list"
+      class="min-h-0 flex-1 overflow-auto divide-y divide-border/45"
+      data-git-branch-status-list-layout="compact"
+    >
+      <For each={props.items}>
+        {(item) => {
+          const active = () => props.selectedKey === workspaceEntryKey(item);
+          const primaryLabel = () =>
+            isGitWorkspaceDirectoryEntry(item)
+              ? branchStatusPrimaryLabel(item)
+              : worktreeFilePath(item);
+          const secondaryLabel = () =>
+            isGitWorkspaceDirectoryEntry(item)
+              ? workspaceDirectoryPath(item)
+              : changeSecondaryPath(item);
+          return (
+            <button
+              type="button"
+              role="listitem"
+              aria-selected={active()}
+              class={cn(
+                "grid w-full cursor-pointer gap-1.5 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-muted/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1",
+                active() && "git-browser-selection-row",
+              )}
+              onClick={() => openItem(item)}
+            >
+              <div class="flex min-w-0 items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div
+                    class={`flex min-w-0 items-center gap-1.5 truncate text-xs font-medium ${gitChangePathClass(item.changeType)}`}
+                    title={primaryLabel()}
+                  >
+                    <Show when={isGitWorkspaceDirectoryEntry(item)}>
+                      <Folder class="size-3.5 shrink-0" />
+                    </Show>
+                    <span class="truncate">{primaryLabel()}</span>
+                  </div>
+                  <Show when={secondaryLabel() !== primaryLabel()}>
+                    <div
+                      class="mt-0.5 truncate text-[10px] text-muted-foreground"
+                      title={secondaryLabel()}
+                    >
+                      {secondaryLabel()}
+                    </div>
+                  </Show>
+                </div>
+                <span class="shrink-0 rounded-md bg-background/70 px-2 py-1 text-[10px] font-medium text-muted-foreground">
+                  {isGitWorkspaceDirectoryEntry(item) ? "Open" : "View"}
+                </span>
+              </div>
+              <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                <GitMetaPill tone="neutral">
+                  {isGitWorkspaceDirectoryEntry(item)
+                    ? workspaceViewSectionLabel(props.section)
+                    : workspaceSectionLabel(
+                        (item.section as GitWorkspaceSection | undefined) ??
+                          "unstaged",
+                      )}
+                </GitMetaPill>
+                <Show
+                  when={isGitWorkspaceDirectoryEntry(item)}
+                  fallback={<GitChangeStatusPill change={item.changeType} />}
+                >
+                  <GitMetaPill tone="neutral">Folder</GitMetaPill>
+                  <Show when={item.containsUnstaged}>
+                    <GitMetaPill tone="warning">Unstaged</GitMetaPill>
+                  </Show>
+                  <Show when={item.containsUntracked}>
+                    <GitMetaPill tone="brand">Untracked</GitMetaPill>
+                  </Show>
+                </Show>
+                <Show
+                  when={isGitWorkspaceDirectoryEntry(item)}
+                  fallback={
+                    <GitChangeMetrics
+                      additions={item.additions}
+                      deletions={item.deletions}
+                    />
+                  }
+                >
+                  <span class="text-[11px] font-medium text-muted-foreground">
+                    {branchStatusDirectorySummary(item)}
+                  </span>
+                </Show>
+              </div>
+            </button>
+          );
+        }}
+      </For>
+    </div>
+  );
 }
 
 function BranchStatusTable(props: BranchStatusTableProps) {
@@ -529,140 +732,28 @@ function BranchStatusTable(props: BranchStatusTableProps) {
           </div>
         }
       >
-        <GitVirtualTable
-          items={props.items}
-          tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[36rem] sm:min-w-[52rem] md:min-w-0`}
-          header={
-            <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Section</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
-              <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
-            </tr>
-          }
-          renderRow={(item) => {
-            const active = () => props.selectedKey === workspaceEntryKey(item);
-            return (
-              <tr
-                aria-selected={active()}
-                class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
-                onClick={() => {
-                  if (isGitWorkspaceDirectoryEntry(item)) {
-                    const nextDirectoryPath = workspaceDirectoryPath(item);
-                    if (nextDirectoryPath) {
-                      props.onOpenDirectory?.(nextDirectoryPath);
-                    }
-                    return;
-                  }
-                  props.onOpenDiff?.(item);
-                }}
-              >
-                <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                  <div class="min-w-0">
-                    <button
-                      type="button"
-                      class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
-                      title={
-                        isGitWorkspaceDirectoryEntry(item)
-                          ? workspaceDirectoryPath(item)
-                          : changeSecondaryPath(item)
-                      }
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        if (isGitWorkspaceDirectoryEntry(item)) {
-                          const nextDirectoryPath = workspaceDirectoryPath(item);
-                          if (nextDirectoryPath) {
-                            props.onOpenDirectory?.(nextDirectoryPath);
-                          }
-                          return;
-                        }
-                        props.onOpenDiff?.(item);
-                      }}
-                    >
-                      <Show
-                        when={isGitWorkspaceDirectoryEntry(item)}
-                        fallback={worktreeFilePath(item)}
-                      >
-                        <span class="inline-flex items-center gap-1.5">
-                          <Folder class="size-3.5 shrink-0" />
-                          <span class="truncate">
-                            {branchStatusPrimaryLabel(item)}
-                          </span>
-                        </span>
-                      </Show>
-                    </button>
-                    <Show when={isGitWorkspaceDirectoryEntry(item)}>
-                      <div
-                        class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS}
-                        title={workspaceDirectoryPath(item)}
-                      >
-                        {workspaceDirectoryPath(item)}
-                      </div>
-                    </Show>
-                    <Show
-                      when={
-                        !isGitWorkspaceDirectoryEntry(item)
-                        && changeSecondaryPath(item) !== worktreeFilePath(item)
-                      }
-                    >
-                      <div
-                        class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS}
-                        title={changeSecondaryPath(item)}
-                      >
-                        {changeSecondaryPath(item)}
-                      </div>
-                    </Show>
-                  </div>
-                </td>
-                <td
-                  class={`${GIT_CHANGED_FILES_CELL_CLASS} text-muted-foreground`}
-                >
-                  <Show
-                    when={isGitWorkspaceDirectoryEntry(item)}
-                    fallback={workspaceSectionLabel(
-                      (item.section as GitWorkspaceSection | undefined) ??
-                        "unstaged",
-                    )}
-                  >
-                    {workspaceViewSectionLabel(props.section)}
-                  </Show>
-                </td>
-                <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                  <Show
-                    when={isGitWorkspaceDirectoryEntry(item)}
-                    fallback={<GitChangeStatusPill change={item.changeType} />}
-                  >
-                    <div class="flex flex-wrap items-center gap-1.5">
-                      <GitMetaPill tone="neutral">Folder</GitMetaPill>
-                      <Show when={item.containsUnstaged}>
-                        <GitMetaPill tone="warning">Unstaged</GitMetaPill>
-                      </Show>
-                      <Show when={item.containsUntracked}>
-                        <GitMetaPill tone="brand">Untracked</GitMetaPill>
-                      </Show>
-                    </div>
-                  </Show>
-                </td>
-                <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                  <Show
-                    when={isGitWorkspaceDirectoryEntry(item)}
-                    fallback={
-                      <GitChangeMetrics
-                        additions={item.additions}
-                        deletions={item.deletions}
-                      />
-                    }
-                  >
-                    <div class="text-[11px] font-medium text-muted-foreground">
-                      {branchStatusDirectorySummary(item)}
-                    </div>
-                  </Show>
-                </td>
-                <td class={gitChangedFilesStickyCellClass(active())}>
-                  <GitChangedFilesActionButton
-                    onClick={(event) => {
-                      event.stopPropagation();
+        <Show
+          when={props.layout === "compact"}
+          fallback={
+            <GitVirtualTable
+              items={props.items}
+              tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[36rem] sm:min-w-[52rem] md:min-w-0`}
+              header={
+                <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
+                  <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
+                  <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Section</th>
+                  <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
+                  <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
+                  <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
+                </tr>
+              }
+              renderRow={(item) => {
+                const active = () => props.selectedKey === workspaceEntryKey(item);
+                return (
+                  <tr
+                    aria-selected={active()}
+                    class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
+                    onClick={() => {
                       if (isGitWorkspaceDirectoryEntry(item)) {
                         const nextDirectoryPath = workspaceDirectoryPath(item);
                         if (nextDirectoryPath) {
@@ -673,15 +764,140 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                       props.onOpenDiff?.(item);
                     }}
                   >
-                    {isGitWorkspaceDirectoryEntry(item)
-                      ? "Open Folder"
-                      : "View Diff"}
-                  </GitChangedFilesActionButton>
-                </td>
-              </tr>
-            );
-          }}
-        />
+                    <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                      <div class="min-w-0">
+                        <button
+                          type="button"
+                          class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
+                          title={
+                            isGitWorkspaceDirectoryEntry(item)
+                              ? workspaceDirectoryPath(item)
+                              : changeSecondaryPath(item)
+                          }
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (isGitWorkspaceDirectoryEntry(item)) {
+                              const nextDirectoryPath = workspaceDirectoryPath(item);
+                              if (nextDirectoryPath) {
+                                props.onOpenDirectory?.(nextDirectoryPath);
+                              }
+                              return;
+                            }
+                            props.onOpenDiff?.(item);
+                          }}
+                        >
+                          <Show
+                            when={isGitWorkspaceDirectoryEntry(item)}
+                            fallback={worktreeFilePath(item)}
+                          >
+                            <span class="inline-flex items-center gap-1.5">
+                              <Folder class="size-3.5 shrink-0" />
+                              <span class="truncate">
+                                {branchStatusPrimaryLabel(item)}
+                              </span>
+                            </span>
+                          </Show>
+                        </button>
+                        <Show when={isGitWorkspaceDirectoryEntry(item)}>
+                          <div
+                            class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS}
+                            title={workspaceDirectoryPath(item)}
+                          >
+                            {workspaceDirectoryPath(item)}
+                          </div>
+                        </Show>
+                        <Show
+                          when={
+                            !isGitWorkspaceDirectoryEntry(item)
+                            && changeSecondaryPath(item) !== worktreeFilePath(item)
+                          }
+                        >
+                          <div
+                            class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS}
+                            title={changeSecondaryPath(item)}
+                          >
+                            {changeSecondaryPath(item)}
+                          </div>
+                        </Show>
+                      </div>
+                    </td>
+                    <td
+                      class={`${GIT_CHANGED_FILES_CELL_CLASS} text-muted-foreground`}
+                    >
+                      <Show
+                        when={isGitWorkspaceDirectoryEntry(item)}
+                        fallback={workspaceSectionLabel(
+                          (item.section as GitWorkspaceSection | undefined) ??
+                            "unstaged",
+                        )}
+                      >
+                        {workspaceViewSectionLabel(props.section)}
+                      </Show>
+                    </td>
+                    <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                      <Show
+                        when={isGitWorkspaceDirectoryEntry(item)}
+                        fallback={<GitChangeStatusPill change={item.changeType} />}
+                      >
+                        <div class="flex flex-wrap items-center gap-1.5">
+                          <GitMetaPill tone="neutral">Folder</GitMetaPill>
+                          <Show when={item.containsUnstaged}>
+                            <GitMetaPill tone="warning">Unstaged</GitMetaPill>
+                          </Show>
+                          <Show when={item.containsUntracked}>
+                            <GitMetaPill tone="brand">Untracked</GitMetaPill>
+                          </Show>
+                        </div>
+                      </Show>
+                    </td>
+                    <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                      <Show
+                        when={isGitWorkspaceDirectoryEntry(item)}
+                        fallback={
+                          <GitChangeMetrics
+                            additions={item.additions}
+                            deletions={item.deletions}
+                          />
+                        }
+                      >
+                        <div class="text-[11px] font-medium text-muted-foreground">
+                          {branchStatusDirectorySummary(item)}
+                        </div>
+                      </Show>
+                    </td>
+                    <td class={gitChangedFilesStickyCellClass(active())}>
+                      <GitChangedFilesActionButton
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (isGitWorkspaceDirectoryEntry(item)) {
+                            const nextDirectoryPath = workspaceDirectoryPath(item);
+                            if (nextDirectoryPath) {
+                              props.onOpenDirectory?.(nextDirectoryPath);
+                            }
+                            return;
+                          }
+                          props.onOpenDiff?.(item);
+                        }}
+                      >
+                        {isGitWorkspaceDirectoryEntry(item)
+                          ? "Open Folder"
+                          : "View Diff"}
+                      </GitChangedFilesActionButton>
+                    </td>
+                  </tr>
+                );
+              }}
+            />
+          }
+        >
+          <BranchStatusCompactList
+            section={props.section}
+            items={props.items}
+            selectedKey={props.selectedKey}
+            onOpenDiff={props.onOpenDiff}
+            onOpenDirectory={props.onOpenDirectory}
+          />
+        </Show>
         <Show
           when={(props.hasMore || props.loadingMore) && props.items.length > 0}
         >
@@ -737,7 +953,9 @@ function HistoryList(
     | "onLoadMore"
     | "onAskFlower"
     | "onSwitchDetached"
-  >,
+  > & {
+    layout?: GitBranchHeaderLayout;
+  },
 ) {
   const rpc = useRedevenRpc();
   const i18n = useI18n();
@@ -1229,6 +1447,7 @@ function HistoryList(
                                                     </Show>
 
                                                     <BranchCompareFilesTable
+                                                      layout={props.layout}
                                                       items={files()}
                                                       selectedKey={selectedDiffKey()}
                                                       onOpenDiff={(item) => {
@@ -1846,17 +2065,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     const primaryActions: BranchPrimaryActionPresentation[] = [];
     const secondaryShortcuts: BranchShortcutPresentation[] = [];
 
-    if (props.onCheckoutBranch && interactiveBranch()) {
-      const branch = interactiveBranch();
-      primaryActions.push({
-        key: "checkout",
-        label: checkoutLabel(),
-        emphasis: "neutral",
-        disabled: checkoutDisabled(),
-        onPress: () => branch && props.onCheckoutBranch?.(branch),
-      });
-    }
-
     if (mergeAvailable() && interactiveBranch()) {
       const branch = interactiveBranch();
       primaryActions.push({
@@ -1865,6 +2073,17 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         emphasis: mergeDisabled() ? "neutral" : "accent",
         disabled: mergeDisabled(),
         onPress: () => branch && props.onMergeBranch?.(branch),
+      });
+    }
+
+    if (props.onCheckoutBranch && interactiveBranch()) {
+      const branch = interactiveBranch();
+      primaryActions.push({
+        key: "checkout",
+        label: checkoutLabel(),
+        emphasis: "neutral",
+        disabled: checkoutDisabled(),
+        onPress: () => branch && props.onCheckoutBranch?.(branch),
       });
     }
 
@@ -1996,6 +2215,58 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const branchHeaderLayout = createMemo(() =>
     resolveGitBranchHeaderLayout(branchHeaderWidth()),
   );
+  const branchHeaderUsesOverflow = () => branchHeaderLayout() !== "inline";
+  const branchHeaderMainAction = createMemo<
+    BranchPrimaryActionPresentation | null
+  >(() => {
+    const actions = branchHeaderControls().primaryActions;
+    return (
+      actions.find((action) => action.key === "merge") ??
+      actions.find((action) => action.key !== "delete") ??
+      null
+    );
+  });
+  const branchHeaderOverflowActions = createMemo<
+    BranchHeaderActionPresentation[]
+  >(() => {
+    if (!branchHeaderUsesOverflow()) return [];
+    const mainKey = branchHeaderMainAction()?.key ?? "";
+    const controls = branchHeaderControls();
+    const nonDangerPrimary = controls.primaryActions
+      .filter((action) => action.key !== mainKey && action.key !== "delete")
+      .map((action) => ({ ...action, kind: "primary" as const }));
+    const shortcuts = controls.secondaryShortcuts.map((shortcut) => ({
+      ...shortcut,
+      kind: "shortcut" as const,
+    }));
+    const dangerPrimary = controls.primaryActions
+      .filter((action) => action.key !== mainKey && action.key === "delete")
+      .map((action) => ({ ...action, kind: "primary" as const }));
+
+    return [...nonDangerPrimary, ...shortcuts, ...dangerPrimary].filter(
+      (action) => !action.disabled,
+    );
+  });
+  const branchHeaderOverflowItems = createMemo<DropdownItem[]>(() =>
+    branchHeaderOverflowActions().map((action) => ({
+      id: action.key,
+      label:
+        action.key === "delete"
+          ? "Delete branch"
+          : action.key === "terminal"
+            ? i18n.t("git.changes.openInTerminal")
+            : action.key === "files"
+              ? i18n.t("git.changes.browseFiles")
+              : action.label,
+    })),
+  );
+  const branchHeaderOverflowActionById = (id: string) =>
+    branchHeaderOverflowActions().find((action) => action.key === id);
+  const runBranchHeaderOverflowAction = (id: string) => {
+    const action = branchHeaderOverflowActionById(id);
+    if (!action || action.disabled) return;
+    action.onPress();
+  };
   const branchHeaderSurfaceClass = () =>
     cn(
       "border-b px-3 py-2 sm:px-4",
@@ -2006,16 +2277,20 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const branchHeaderTopRowClass = () =>
     cn(
       "grid gap-2",
-      branchHeaderLayout() === "inline"
-        ? "grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1.5"
-        : "grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center",
+      branchHeaderLayout() === "inline" &&
+        "grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1.5",
+      branchHeaderLayout() === "stacked" &&
+        "grid-cols-1 items-start",
+      branchHeaderLayout() === "compact" && "grid-cols-1",
     );
   const branchHeaderTabRailClass = () =>
     cn(
       "flex",
       branchHeaderLayout() === "inline"
         ? "w-auto justify-end"
-        : "w-full justify-start sm:order-3 sm:col-span-2",
+        : "w-full justify-start",
+      branchHeaderLayout() === "stacked" && "order-3",
+      branchHeaderLayout() === "compact" && "order-3",
     );
   const branchHeaderTabListClass = () =>
     cn(
@@ -2028,15 +2303,15 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const branchHeaderSummaryClass = () =>
     cn(
       "text-[11px] leading-relaxed text-muted-foreground",
-      branchHeaderLayout() === "inline"
-        ? "truncate"
-        : "line-clamp-1 sm:line-clamp-2",
+      branchHeaderLayout() === "inline" ? "truncate" : "line-clamp-2",
     );
   const branchHeaderCommandRailClass = () =>
     cn(
       branchHeaderLayout() === "inline"
         ? "flex min-w-0 items-center justify-end gap-2"
-        : "flex min-w-0 flex-wrap items-center gap-1.5 sm:order-2 sm:justify-end",
+        : "flex min-w-0 flex-wrap items-center gap-1.5",
+      branchHeaderLayout() === "stacked" && "order-2 justify-start",
+      branchHeaderLayout() === "compact" && "order-2 justify-start",
     );
   const branchHeaderShortcutGroupClass = () =>
     cn(
@@ -2046,7 +2321,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const branchHeaderActionsGroupClass = () =>
     cn(
       "flex min-w-0 flex-wrap items-center gap-1.5",
-      branchHeaderLayout() === "inline" ? "justify-end" : "sm:justify-end",
+      branchHeaderLayout() === "inline" || branchHeaderLayout() === "stacked"
+        ? "justify-end"
+        : "justify-start",
     );
   const branchHeaderMetaClass = () =>
     cn(
@@ -2055,13 +2332,25 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     );
   const branchHeaderShortcutDockClass = "gap-1";
   const branchStatusToolbarClass = cn(
-    "shrink-0 rounded-md bg-muted/[0.045] px-2 py-1.5",
+    "shrink-0 rounded-md bg-muted/[0.035] px-2 py-2",
     redevenSurfaceRoleClass("inset"),
   );
-  const branchStatusToolbarGridClass =
-    "flex flex-wrap items-center gap-2";
+  const branchStatusToolbarGridClass = () =>
+    cn(
+      "grid gap-2",
+      branchHeaderLayout() === "inline"
+        ? "grid-cols-[minmax(0,1fr)_auto] items-center"
+        : "grid-cols-1",
+    );
+  const branchStatusSummaryRailClass = () =>
+    cn(
+      "grid min-w-0 gap-1.5",
+      branchHeaderLayout() === "inline"
+        ? "grid-cols-[auto_minmax(0,1fr)] items-center"
+        : "grid-cols-1",
+    );
   const branchStatusStripClass = cn(
-    "grid min-w-0 flex-1 grid-cols-3 gap-0.5 rounded-md bg-muted/[0.08] p-0.5 text-[11px] sm:min-w-[18rem]",
+    "grid w-full min-w-0 grid-cols-3 gap-0.5 rounded-md bg-muted/[0.08] p-0.5 text-[11px]",
     redevenSurfaceRoleClass("segmented"),
   );
   const branchStatusActionsClass =
@@ -2103,6 +2392,48 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         return secondaryActionButtonClass;
     }
   };
+  const renderBranchPrimaryAction = (
+    action: BranchPrimaryActionPresentation,
+  ) => (
+    <Button
+      size="sm"
+      variant={
+        action.emphasis === "accent"
+          ? "default"
+          : action.emphasis === "danger"
+            ? "ghost"
+            : "outline"
+      }
+      class={branchActionButtonClass(action.emphasis)}
+      disabled={action.disabled}
+      onClick={action.onPress}
+    >
+      {action.label}
+    </Button>
+  );
+  const renderBranchHeaderOverflow = () => (
+    <Show when={branchHeaderOverflowItems().length > 0}>
+      <Dropdown
+        trigger={(
+          <Button
+            size="sm"
+            variant="outline"
+            class={cn(
+              "rounded-md px-2.5",
+              redevenSurfaceRoleClass("control"),
+            )}
+            aria-label={i18n.t("git.common.moreActions")}
+            title={i18n.t("git.common.moreActions")}
+          >
+            <MoreHorizontal class="size-3.5" />
+          </Button>
+        )}
+        items={branchHeaderOverflowItems()}
+        onSelect={runBranchHeaderOverflowAction}
+        align="end"
+      />
+    </Show>
+  );
   const handleBranchSubviewKeyDown = (
     event: KeyboardEvent,
     currentView: GitBranchSubview,
@@ -2466,8 +2797,14 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         <div class="flex min-h-0 flex-1 flex-col px-3 py-2 sm:px-4">
           <div class="flex min-h-0 flex-1 flex-col gap-2">
             <section class={branchStatusToolbarClass}>
-              <div class={branchStatusToolbarGridClass}>
-                <div class="grid min-w-[min(100%,24rem)] max-w-[44rem] flex-[1_1_34rem] gap-1.5 md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
+              <div
+                class={branchStatusToolbarGridClass()}
+                data-git-branch-status-toolbar-layout={branchHeaderLayout()}
+              >
+                <div
+                  class={branchStatusSummaryRailClass()}
+                  data-git-branch-status-summary-layout={branchHeaderLayout()}
+                >
                   <div class="flex min-h-5 items-center gap-2">
                     <span
                       class={cn(
@@ -2554,12 +2891,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                                           : "text-muted-foreground/80",
                                       )}
                                     >
-                                      <span class="sm:hidden">
-                                        {item.shortLabel}
-                                      </span>
-                                      <span class="hidden sm:inline">
-                                        {item.compactLabel}
-                                      </span>
+                                      {branchHeaderLayout() === "compact"
+                                        ? item.shortLabel
+                                        : item.compactLabel}
                                     </div>
                                     <div
                                       class={cn(
@@ -2629,6 +2963,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             <Show when={visibleStatusWorkspace()}>
               <div class="flex min-h-0 flex-1 overflow-hidden">
                 <BranchStatusTable
+                  layout={branchHeaderLayout()}
                   section={selectedStatusSection()}
                   items={visibleStatusItems()}
                   totalCount={visibleStatusTotalRows()}
@@ -2691,10 +3026,12 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                   <div
                     ref={setBranchHeaderTopRowElement}
                     class={branchHeaderTopRowClass()}
+                    data-git-branch-header-layout={branchHeaderLayout()}
                   >
                     <div class="min-w-0 flex-1">
                       <GitLabelBlock
                         class="min-w-0 flex-1"
+                        bodyClass="!pl-0"
                         label="Branch"
                         tone={gitBranchTone(selectedBranch())}
                         meta={
@@ -2719,35 +3056,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           >
                             {branchDisplayName(selectedBranch())}
                           </GitPrimaryTitle>
-                          <Show
-                            when={
-                              branchHeaderControls().secondaryShortcuts.length > 0
-                            }
-                          >
-                            <div class={branchHeaderShortcutGroupClass()}>
-                              <GitShortcutOrbDock
-                                class={branchHeaderShortcutDockClass}
-                              >
-                                <For
-                                  each={
-                                    branchHeaderControls().secondaryShortcuts
-                                  }
-                                >
-                                  {(shortcut) => (
-                                    <GitShortcutOrbButton
-                                      label={shortcut.label}
-                                      tone={shortcut.tone}
-                                      icon={shortcut.icon}
-                                      size="sm"
-                                      disabled={shortcut.disabled}
-                                      disabledReason={shortcut.disabledReason}
-                                      onClick={shortcut.onPress}
-                                    />
-                                  )}
-                                </For>
-                              </GitShortcutOrbDock>
-                            </div>
-                          </Show>
                         </div>
                         <Show when={branchSummary().visible}>
                           <div
@@ -2798,34 +3106,68 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     </div>
 
                     <Show
-                      when={branchHeaderControls().primaryActions.length > 0}
+                      when={
+                        branchHeaderControls().primaryActions.length > 0 ||
+                        branchHeaderControls().secondaryShortcuts.length > 0
+                      }
                     >
                       <div
                         class={branchHeaderCommandRailClass()}
-                        data-git-branch-header-actions
+                        data-git-branch-header-actions={
+                          branchHeaderUsesOverflow() ? "overflow" : "inline"
+                        }
                       >
                         <div class={branchHeaderActionsGroupClass()}>
-                          <For each={branchHeaderControls().primaryActions}>
-                            {(action) => (
-                              <Button
-                                size="sm"
-                                variant={
-                                  action.emphasis === "accent"
-                                    ? "default"
-                                    : action.emphasis === "danger"
-                                      ? "ghost"
-                                      : "outline"
-                                }
-                                class={branchActionButtonClass(
-                                  action.emphasis,
-                                )}
-                                disabled={action.disabled}
-                                onClick={action.onPress}
-                              >
-                                {action.label}
-                              </Button>
-                            )}
-                          </For>
+                          <Show
+                            when={!branchHeaderUsesOverflow()}
+                            fallback={
+                              <>
+                                <Show when={branchHeaderMainAction()}>
+                                  {(action) =>
+                                    renderBranchPrimaryAction(action())
+                                  }
+                                </Show>
+                                {renderBranchHeaderOverflow()}
+                              </>
+                            }
+                          >
+                            <Show
+                              when={
+                                branchHeaderControls().secondaryShortcuts
+                                  .length > 0
+                              }
+                            >
+                              <div class={branchHeaderShortcutGroupClass()}>
+                                <GitShortcutOrbDock
+                                  class={branchHeaderShortcutDockClass}
+                                >
+                                  <For
+                                    each={
+                                      branchHeaderControls()
+                                        .secondaryShortcuts
+                                    }
+                                  >
+                                    {(shortcut) => (
+                                      <GitShortcutOrbButton
+                                        label={shortcut.label}
+                                        tone={shortcut.tone}
+                                        icon={shortcut.icon}
+                                        size="sm"
+                                        disabled={shortcut.disabled}
+                                        disabledReason={
+                                          shortcut.disabledReason
+                                        }
+                                        onClick={shortcut.onPress}
+                                      />
+                                    )}
+                                  </For>
+                                </GitShortcutOrbDock>
+                              </div>
+                            </Show>
+                            <For each={branchHeaderControls().primaryActions}>
+                              {(action) => renderBranchPrimaryAction(action)}
+                            </For>
+                          </Show>
                         </div>
                       </div>
                     </Show>
@@ -2902,6 +3244,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                   )}
                 >
                   <HistoryList
+                    layout={branchHeaderLayout()}
                     repoRootPath={activeRepoRootPath()}
                     repoSummary={props.repoSummary}
                     selectedBranch={interactiveBranch()}

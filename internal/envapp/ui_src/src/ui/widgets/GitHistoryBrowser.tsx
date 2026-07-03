@@ -1,4 +1,11 @@
-import { Show, createEffect, createMemo, createSignal } from "solid-js";
+import {
+  For,
+  Show,
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+} from "solid-js";
 import { cn } from "@floegence/floe-webapp-core";
 import { Button } from "@floegence/floe-webapp-core/ui";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
@@ -46,6 +53,10 @@ import {
   gitChangedFilesStickyCellClass,
 } from "./GitWorkbenchPrimitives";
 import { GitVirtualTable } from "./GitVirtualTable";
+import {
+  resolveGitBranchHeaderLayout,
+  type GitBranchHeaderLayout,
+} from "./gitBranchHeaderLayout";
 import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from "./gitWorkbenchScrollRegion";
 
 const COMMIT_BODY_PREVIEW_LINES = 2;
@@ -88,6 +99,63 @@ function normalizeCommitBody(
   return lines.slice(1).join("\n").trim();
 }
 
+interface CommitFilesCompactListProps {
+  items: GitCommitFileSummary[];
+  selectedKey?: string;
+  onOpenDiff?: (file: GitCommitFileSummary) => void;
+}
+
+function CommitFilesCompactList(props: CommitFilesCompactListProps) {
+  return (
+    <div
+      {...GIT_WORKBENCH_SCROLL_REGION_PROPS}
+      role="list"
+      class="min-h-0 flex-1 overflow-auto divide-y divide-border/45"
+      data-git-commit-files-list-layout="compact"
+    >
+      <For each={props.items}>
+        {(file) => {
+          const active = () => props.selectedKey === selectedFileIdentity(file);
+          const path = () => changeSecondaryPath(file);
+          return (
+            <button
+              type="button"
+              role="listitem"
+              aria-selected={active()}
+              class={cn(
+                "grid w-full cursor-pointer gap-1.5 px-3 py-2.5 text-left transition-colors duration-150 hover:bg-muted/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1",
+                active() && "git-browser-selection-row",
+              )}
+              onClick={() => props.onOpenDiff?.(file)}
+            >
+              <div class="flex min-w-0 items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div
+                    class={`truncate text-xs font-medium ${gitChangePathClass(file.changeType)}`}
+                    title={path()}
+                  >
+                    {path()}
+                  </div>
+                </div>
+                <span class="shrink-0 rounded-md bg-background/70 px-2 py-1 text-[10px] font-medium text-muted-foreground">
+                  View
+                </span>
+              </div>
+              <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                <GitChangeStatusPill change={file.changeType} />
+                <GitChangeMetrics
+                  additions={file.additions}
+                  deletions={file.deletions}
+                />
+              </div>
+            </button>
+          );
+        }}
+      </For>
+    </div>
+  );
+}
+
 export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -108,6 +176,9 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const [diffDialogItem, setDiffDialogItem] =
     createSignal<GitCommitFileSummary | null>(null);
   const [diffDialogCommitHash, setDiffDialogCommitHash] = createSignal("");
+  const [commitOverviewWidth, setCommitOverviewWidth] = createSignal(0);
+  const [commitOverviewElement, setCommitOverviewElement] =
+    createSignal<HTMLDivElement>();
 
   let detailReqSeq = 0;
 
@@ -147,6 +218,30 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const commitPresentationDetail = createMemo(() =>
     gitCommitDiffPresentationDetail(commitPresentation()),
   );
+  const commitOverviewLayout = createMemo<GitBranchHeaderLayout>(() =>
+    resolveGitBranchHeaderLayout(commitOverviewWidth()),
+  );
+  const commitOverviewGridClass = () =>
+    cn(
+      "grid gap-3",
+      commitOverviewLayout() === "inline"
+        ? "grid-cols-[minmax(0,1fr)_auto] items-start"
+        : "grid-cols-1",
+    );
+  const commitOverviewActionsClass = () =>
+    cn(
+      "flex min-w-0 flex-wrap items-center gap-2",
+      commitOverviewLayout() === "inline"
+        ? "w-auto justify-end"
+        : "w-full justify-start",
+    );
+  const commitOverviewActionButtonClass = () =>
+    "rounded-md";
+  const commitBodyGroupClass = () =>
+    cn(
+      "max-w-3xl space-y-1.5 pt-0.5",
+      commitOverviewLayout() === "inline" ? "pl-4" : "pl-0",
+    );
 
   const resetDetailState = () => {
     setCommitDetail(null);
@@ -216,6 +311,23 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
     if (!diffDialogOpen()) return;
     if (diffDialogItem()) return;
     setDiffDialogOpen(false);
+  });
+
+  createEffect(() => {
+    void commitDetail();
+    const element = commitOverviewElement();
+    if (!element) {
+      setCommitOverviewWidth(0);
+      return;
+    }
+    const syncCommitOverviewWidth = () => {
+      setCommitOverviewWidth(element.offsetWidth ?? 0);
+    };
+    syncCommitOverviewWidth();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(syncCommitOverviewWidth);
+    observer.observe(element);
+    onCleanup(() => observer.disconnect());
   });
 
   return (
@@ -289,9 +401,14 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                       <div class="space-y-3">
                         <GitPanelFrame as="section">
                           <div class="space-y-2">
-                            <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+                            <div
+                              ref={setCommitOverviewElement}
+                              class={commitOverviewGridClass()}
+                              data-git-commit-overview-layout={commitOverviewLayout()}
+                            >
                             <GitLabelBlock
                               class="min-w-0 flex-1"
+                              bodyClass="!pl-0"
                               label="Commit Overview"
                               tone="brand"
                               meta={
@@ -326,13 +443,16 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 </Show>
                               </div>
                             </GitLabelBlock>
-                            <div class="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-start lg:w-auto lg:justify-end">
+                            <div
+                              class={commitOverviewActionsClass()}
+                              data-git-commit-overview-actions={commitOverviewLayout()}
+                            >
                               <Show when={props.onSwitchDetached}>
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   class={cn(
-                                    "w-full rounded-md sm:w-auto",
+                                    commitOverviewActionButtonClass(),
                                     outlineControlClass,
                                   )}
                                   disabled={
@@ -353,7 +473,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 </Button>
                               </Show>
                               <Show when={props.onAskFlower}>
-                                <GitShortcutOrbDock class="w-full justify-start sm:w-auto sm:justify-end">
+                                <GitShortcutOrbDock class="justify-start">
                                   <GitShortcutOrbButton
                                     label="Ask Flower"
                                     tone="flower"
@@ -377,7 +497,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                             <Show when={commitBodyText()}>
                               <div
                                 data-git-commit-body-group
-                                class="max-w-3xl space-y-1.5 pl-0 pt-0.5 sm:pl-4"
+                                class={commitBodyGroupClass()}
                               >
                                 <GitSubtleNote class="max-w-full">
                                   <div
@@ -435,6 +555,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                         <GitPanelFrame as="section">
                           <GitLabelBlock
                             class="min-w-0"
+                            bodyClass="!pl-0"
                             label="Files in Commit"
                             tone="info"
                             meta={
@@ -461,103 +582,120 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                             }
                           >
                             <GitTableFrame class="mt-2.5">
-                              <GitVirtualTable
-                                items={commitFiles()}
-                                tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
-                                header={
-                                  <tr
-                                    class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}
-                                  >
-                                    <th
-                                      class={
-                                        GIT_CHANGED_FILES_HEADER_CELL_CLASS
-                                      }
-                                    >
-                                      Path
-                                    </th>
-                                    <th
-                                      class={
-                                        GIT_CHANGED_FILES_HEADER_CELL_CLASS
-                                      }
-                                    >
-                                      Status
-                                    </th>
-                                    <th
-                                      class={
-                                        GIT_CHANGED_FILES_HEADER_CELL_CLASS
-                                      }
-                                    >
-                                      Changes
-                                    </th>
-                                    <th
-                                      class={
-                                        GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS
-                                      }
-                                    >
-                                      Action
-                                    </th>
-                                  </tr>
-                                }
-                                renderRow={(file) => {
-                                  const active = () =>
-                                    selectedFileIdentity(diffDialogItem()) ===
-                                      selectedFileIdentity(file) &&
-                                    diffDialogOpen();
-                                  return (
-                                    <tr
-                                      aria-selected={active()}
-                                      class={gitChangedFilesRowClass(active())}
-                                    >
-                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                                        <div class="min-w-0">
-                                          <button
-                                            type="button"
-                                            class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(file.changeType)}`}
-                                            title={changeSecondaryPath(file)}
-                                            onClick={() => {
-                                              setDiffDialogCommitHash(
-                                                commitHash(),
-                                              );
-                                              setDiffDialogItem(file);
-                                              setDiffDialogOpen(true);
-                                            }}
-                                          >
-                                            {changeSecondaryPath(file)}
-                                          </button>
-                                        </div>
-                                      </td>
-                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                                        <GitChangeStatusPill
-                                          change={file.changeType}
-                                        />
-                                      </td>
-                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                                        <GitChangeMetrics
-                                          additions={file.additions}
-                                          deletions={file.deletions}
-                                        />
-                                      </td>
-                                      <td
-                                        class={gitChangedFilesStickyCellClass(
-                                          active(),
-                                        )}
+                              <Show
+                                when={commitOverviewLayout() === "compact"}
+                                fallback={
+                                  <GitVirtualTable
+                                    items={commitFiles()}
+                                    tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
+                                    header={
+                                      <tr
+                                        class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}
                                       >
-                                        <GitChangedFilesActionButton
-                                          onClick={() => {
-                                            setDiffDialogCommitHash(
-                                              commitHash(),
-                                            );
-                                            setDiffDialogItem(file);
-                                            setDiffDialogOpen(true);
-                                          }}
+                                        <th
+                                          class={
+                                            GIT_CHANGED_FILES_HEADER_CELL_CLASS
+                                          }
                                         >
-                                          View Diff
-                                        </GitChangedFilesActionButton>
-                                      </td>
-                                    </tr>
-                                  );
-                                }}
-                              />
+                                          Path
+                                        </th>
+                                        <th
+                                          class={
+                                            GIT_CHANGED_FILES_HEADER_CELL_CLASS
+                                          }
+                                        >
+                                          Status
+                                        </th>
+                                        <th
+                                          class={
+                                            GIT_CHANGED_FILES_HEADER_CELL_CLASS
+                                          }
+                                        >
+                                          Changes
+                                        </th>
+                                        <th
+                                          class={
+                                            GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS
+                                          }
+                                        >
+                                          Action
+                                        </th>
+                                      </tr>
+                                    }
+                                    renderRow={(file) => {
+                                      const active = () =>
+                                        selectedFileIdentity(diffDialogItem()) ===
+                                          selectedFileIdentity(file) &&
+                                        diffDialogOpen();
+                                      return (
+                                        <tr
+                                          aria-selected={active()}
+                                          class={gitChangedFilesRowClass(active())}
+                                        >
+                                          <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                                            <div class="min-w-0">
+                                              <button
+                                                type="button"
+                                                class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(file.changeType)}`}
+                                                title={changeSecondaryPath(file)}
+                                                onClick={() => {
+                                                  setDiffDialogCommitHash(
+                                                    commitHash(),
+                                                  );
+                                                  setDiffDialogItem(file);
+                                                  setDiffDialogOpen(true);
+                                                }}
+                                              >
+                                                {changeSecondaryPath(file)}
+                                              </button>
+                                            </div>
+                                          </td>
+                                          <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                                            <GitChangeStatusPill
+                                              change={file.changeType}
+                                            />
+                                          </td>
+                                          <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                                            <GitChangeMetrics
+                                              additions={file.additions}
+                                              deletions={file.deletions}
+                                            />
+                                          </td>
+                                          <td
+                                            class={gitChangedFilesStickyCellClass(
+                                              active(),
+                                            )}
+                                          >
+                                            <GitChangedFilesActionButton
+                                              onClick={() => {
+                                                setDiffDialogCommitHash(
+                                                  commitHash(),
+                                                );
+                                                setDiffDialogItem(file);
+                                                setDiffDialogOpen(true);
+                                              }}
+                                            >
+                                              View Diff
+                                            </GitChangedFilesActionButton>
+                                          </td>
+                                        </tr>
+                                      );
+                                    }}
+                                  />
+                                }
+                              >
+                                <CommitFilesCompactList
+                                  items={commitFiles()}
+                                  selectedKey={selectedFileIdentity(
+                                    diffDialogItem(),
+                                  )}
+                                  onOpenDiff={(file) => {
+                                    setDiffDialogCommitHash(commitHash());
+                                    setDiffDialogItem(file);
+                                    setDiffDialogOpen(true);
+                                  }}
+                                />
+                              </Show>
                             </GitTableFrame>
                           </Show>
                         </GitPanelFrame>
