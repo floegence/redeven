@@ -13,7 +13,7 @@ Verifies downloaded ReDevPlugin release artifacts before Redeven consumes them:
   - Cosign verifies keyless signatures unless --skip-cosign is used.
   - Release stress evidence is a release-mode pass with required counters.
   - Each tarball contains a valid release-manifest.json, internal SHA256SUMS,
-    compatibility.json, and redevplugin-runtime binary.
+    compatibility.json, THIRD_PARTY_NOTICES.md, and redevplugin-runtime binary.
 
 Set REDEVPLUGIN_COSIGN_CERT_IDENTITY_REGEXP to override the expected GitHub
 Actions keyless signing identity regexp. The default is the ReDevPlugin tagged
@@ -88,6 +88,7 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
   printf 'fake runtime\n' >"$bundle_dir/bin/redevplugin-runtime"
   printf 'fake cli\n' >"$bundle_dir/bin/redevplugin"
   chmod +x "$bundle_dir/bin/redevplugin-runtime" "$bundle_dir/bin/redevplugin"
+  printf 'fixture third-party notices\n' >"$bundle_dir/THIRD_PARTY_NOTICES.md"
   printf '{}\n' >"$bundle_dir/contracts/spec/plugin/release-manifest-v1.schema.json"
   cat >"$bundle_dir/compatibility.json" <<'JSON'
 {
@@ -202,11 +203,14 @@ JSON
 const { readFileSync } = require("node:fs");
 
 const marker = JSON.parse(readFileSync(process.env.MARKER_PATH, "utf8"));
-if (marker.schema_version !== "redeven.redevplugin_artifact_verification.v2") {
-  throw new Error("self-test expected v2 marker schema");
+if (marker.schema_version !== "redeven.redevplugin_artifact_verification.v3") {
+  throw new Error("self-test expected v3 marker schema");
 }
 if (!Array.isArray(marker.runtime_binaries) || marker.runtime_binaries.length !== 2) {
   throw new Error("self-test expected runtime binary hashes for both tarballs");
+}
+if (!Array.isArray(marker.third_party_notices) || marker.third_party_notices.length !== 2) {
+  throw new Error("self-test expected third-party notices hashes for both tarballs");
 }
 for (const runtime of marker.runtime_binaries) {
   if (!/^redevplugin-v0\.0\.0-test-.+\.tar\.gz$/u.test(runtime.tarball)) {
@@ -217,6 +221,17 @@ for (const runtime of marker.runtime_binaries) {
   }
   if (!/^[0-9a-f]{64}$/u.test(runtime.sha256)) {
     throw new Error(`unexpected runtime hash: ${runtime.sha256}`);
+  }
+}
+for (const notice of marker.third_party_notices) {
+  if (!/^redevplugin-v0\.0\.0-test-.+\.tar\.gz$/u.test(notice.tarball)) {
+    throw new Error(`unexpected notice tarball name: ${notice.tarball}`);
+  }
+  if (notice.path !== "THIRD_PARTY_NOTICES.md") {
+    throw new Error(`unexpected notice path: ${notice.path}`);
+  }
+  if (!/^[0-9a-f]{64}$/u.test(notice.sha256)) {
+    throw new Error(`unexpected notice hash: ${notice.sha256}`);
   }
 }
 NODE
@@ -394,12 +409,21 @@ function verifyTarball(tarballName) {
       fail(`${tarballName}: release manifest must contain exactly one bin/redevplugin-runtime entry`);
     }
     requireFile(join(bundleRoot, runtimeFiles[0].path), `${tarballName}: ${runtimeFiles[0].path}`);
+    const noticeFiles = manifestFiles.filter((file) => file.path === "THIRD_PARTY_NOTICES.md");
+    if (noticeFiles.length !== 1) {
+      fail(`${tarballName}: release manifest must contain exactly one THIRD_PARTY_NOTICES.md entry`);
+    }
+    requireFile(join(bundleRoot, noticeFiles[0].path), `${tarballName}: ${noticeFiles[0].path}`);
     return {
       name: tarballName,
       sha256: fileHash(join(artifactDir, tarballName)),
       runtime: {
         path: runtimeFiles[0].path,
         sha256: runtimeFiles[0].sha256,
+      },
+      thirdPartyNotices: {
+        path: noticeFiles[0].path,
+        sha256: noticeFiles[0].sha256,
       },
     };
   } finally {
@@ -705,7 +729,7 @@ function assertDeepEqual(actual, expected, label) {
 function writeMarker(verifiedTarballs) {
   mkdirSync(dirname(markerPath), { recursive: true });
   writeFileSync(markerPath, `${JSON.stringify({
-    schema_version: "redeven.redevplugin_artifact_verification.v2",
+    schema_version: "redeven.redevplugin_artifact_verification.v3",
     sha256sums_sha256: fileHash(sumsPath),
     stress_summary_sha256: fileHash(stressPath),
     tarballs: verifiedTarballs.map((tarball) => ({
@@ -716,6 +740,11 @@ function writeMarker(verifiedTarballs) {
       tarball: tarball.name,
       path: tarball.runtime.path,
       sha256: tarball.runtime.sha256,
+    })),
+    third_party_notices: verifiedTarballs.map((tarball) => ({
+      tarball: tarball.name,
+      path: tarball.thirdPartyNotices.path,
+      sha256: tarball.thirdPartyNotices.sha256,
     })),
   }, null, 2)}\n`);
 }
