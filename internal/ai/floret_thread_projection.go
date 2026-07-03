@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 )
 
@@ -45,6 +46,7 @@ func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTur
 	if r.assistantCreatedAtUnixMs == 0 {
 		r.assistantCreatedAtUnixMs = time.Now().UnixMilli()
 	}
+	blocks = r.blocksWithTerminalLifecycleFloorLocked(blocks)
 	oldLen := len(r.assistantBlocks)
 	r.assistantBlocks = blocks
 	r.muAssistant.Unlock()
@@ -63,6 +65,211 @@ func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTur
 		})
 	}
 	return true
+}
+
+func (r *run) markTerminalSettlementProjectionApplied() {
+	if r == nil {
+		return
+	}
+	r.terminalSettlement.Store(true)
+}
+
+func (r *run) hasTerminalSettlementProjectionApplied() bool {
+	return r != nil && r.terminalSettlement.Load()
+}
+
+func (r *run) blocksWithTerminalLifecycleFloorLocked(blocks []any) []any {
+	if r == nil || len(blocks) == 0 || len(r.assistantBlocks) == 0 {
+		return blocks
+	}
+	floor := r.terminalLifecycleFloorItemsLocked()
+	if len(floor) == 0 {
+		return blocks
+	}
+
+	var out []any
+	for idx, raw := range blocks {
+		block, ok := activityTimelineBlockFromValue(raw)
+		if !ok || len(block.Items) == 0 {
+			continue
+		}
+		timeline := observation.CloneActivityTimeline(&block.ActivityTimeline)
+		if timeline == nil {
+			continue
+		}
+		changed := false
+		for itemIdx, item := range timeline.Items {
+			key := terminalLifecycleItemKey(item)
+			if key == "" || !terminalActivityStatusCanBeDowngraded(item.Status) {
+				continue
+			}
+			preserved, ok := floor[key]
+			if !ok {
+				continue
+			}
+			timeline.Items[itemIdx] = preserved
+			changed = true
+		}
+		if !changed {
+			continue
+		}
+		timeline.Summary = redevenActivitySummaryForItems(timeline.Items)
+		block.ActivityTimeline = *timeline
+		if out == nil {
+			out = make([]any, len(blocks))
+			copy(out, blocks)
+		}
+		out[idx] = block
+	}
+	if out == nil {
+		return blocks
+	}
+	return out
+}
+
+func (r *run) terminalLifecycleFloorItemsLocked() map[string]observation.ActivityItem {
+	if r == nil {
+		return nil
+	}
+	out := map[string]observation.ActivityItem{}
+	for _, raw := range r.assistantBlocks {
+		block, ok := activityTimelineBlockFromValue(raw)
+		if !ok || len(block.Items) == 0 {
+			continue
+		}
+		timeline := observation.CloneActivityTimeline(&block.ActivityTimeline)
+		if timeline == nil {
+			continue
+		}
+		for _, item := range timeline.Items {
+			key := terminalLifecycleItemKey(item)
+			if key == "" || !terminalActivityStatusIsTerminal(item.Status) {
+				continue
+			}
+			out[key] = item
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func terminalLifecycleItemKey(item observation.ActivityItem) string {
+	if strings.TrimSpace(item.ToolName) != "terminal.exec" {
+		return ""
+	}
+	if toolID := strings.TrimSpace(item.ToolID); toolID != "" {
+		return toolID
+	}
+	itemID := strings.TrimSpace(item.ItemID)
+	if strings.HasPrefix(itemID, "tool:") {
+		itemID = strings.TrimSpace(strings.TrimPrefix(itemID, "tool:"))
+	}
+	return itemID
+}
+
+func terminalActivityStatusIsTerminal(status observation.ActivityStatus) bool {
+	switch status {
+	case observation.ActivityStatusSuccess, observation.ActivityStatusError, observation.ActivityStatusCanceled:
+		return true
+	default:
+		return false
+	}
+}
+
+func terminalActivityStatusCanBeDowngraded(status observation.ActivityStatus) bool {
+	switch status {
+	case observation.ActivityStatusPending, observation.ActivityStatusRunning, observation.ActivityStatusWaiting:
+		return true
+	default:
+		return false
+	}
+}
+
+func redevenActivitySummaryForItems(items []observation.ActivityItem) observation.ActivitySummary {
+	summary := observation.ActivitySummary{
+		Status:     observation.ActivityStatusPending,
+		Severity:   observation.ActivitySeverityQuiet,
+		TotalItems: len(items),
+	}
+	attentionSeen := map[observation.ActivityAttentionReason]struct{}{}
+	for _, item := range items {
+		switch item.Status {
+		case observation.ActivityStatusPending:
+			summary.Counts.Pending++
+		case observation.ActivityStatusRunning:
+			summary.Counts.Running++
+		case observation.ActivityStatusWaiting:
+			summary.Counts.Waiting++
+		case observation.ActivityStatusSuccess:
+			summary.Counts.Success++
+		case observation.ActivityStatusError:
+			summary.Counts.Error++
+		case observation.ActivityStatusCanceled:
+			summary.Counts.Canceled++
+		}
+		if item.RequiresApproval {
+			summary.Counts.Approval++
+		}
+		if item.NeedsAttention {
+			summary.NeedsAttention = true
+		}
+		summary.Severity = redevenActivityMaxSeverity(summary.Severity, item.Severity)
+		for _, reason := range item.AttentionReasons {
+			if _, ok := attentionSeen[reason]; ok {
+				continue
+			}
+			attentionSeen[reason] = struct{}{}
+			summary.AttentionReasons = append(summary.AttentionReasons, reason)
+		}
+	}
+	if len(summary.AttentionReasons) > 0 {
+		summary.NeedsAttention = true
+	}
+	switch {
+	case summary.Counts.Waiting > 0:
+		summary.Status = observation.ActivityStatusWaiting
+	case summary.Counts.Running > 0:
+		summary.Status = observation.ActivityStatusRunning
+	case summary.Counts.Pending > 0:
+		summary.Status = observation.ActivityStatusPending
+	case summary.Counts.Error > 0:
+		summary.Status = observation.ActivityStatusError
+	case summary.Counts.Canceled > 0 && summary.Counts.Success == 0:
+		summary.Status = observation.ActivityStatusCanceled
+	default:
+		summary.Status = observation.ActivityStatusSuccess
+	}
+	if summary.Counts.Error > 0 && summary.Status != observation.ActivityStatusWaiting {
+		summary.Status = observation.ActivityStatusError
+	}
+	if summary.NeedsAttention && summary.Severity == observation.ActivitySeverityQuiet {
+		summary.Severity = observation.ActivitySeverityWarning
+	}
+	return summary
+}
+
+func redevenActivityMaxSeverity(left observation.ActivitySeverity, right observation.ActivitySeverity) observation.ActivitySeverity {
+	if redevenActivitySeverityRank(right) > redevenActivitySeverityRank(left) {
+		return right
+	}
+	return left
+}
+
+func redevenActivitySeverityRank(severity observation.ActivitySeverity) int {
+	switch severity {
+	case observation.ActivitySeverityBlocking:
+		return 4
+	case observation.ActivitySeverityError:
+		return 3
+	case observation.ActivitySeverityWarning:
+		return 2
+	case observation.ActivitySeverityNormal:
+		return 1
+	default:
+		return 0
+	}
 }
 
 func (r *run) floretThreadProjectionMatchesRun(projection flruntime.ThreadTurnProjection, requireIdentity bool) bool {
@@ -166,16 +373,20 @@ func (s *Service) runForFloretSettlement(endpointID string, threadID string, run
 	return r
 }
 
-func (s *Service) applyFloretPendingToolSettlementProjection(_ context.Context, endpointID string, threadID string, runID string, messageID string, projection flruntime.ThreadTurnProjection) error {
+func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context, endpointID string, threadID string, runID string, messageID string, projection flruntime.ThreadTurnProjection) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
 	if active := s.runForFloretSettlement(endpointID, threadID, runID); active != nil {
+		active.markTerminalSettlementProjectionApplied()
 		if active.acceptsPresentationUpdates() {
 			active.applyFloretThreadProjection(projection)
 		} else {
 			active.applyFloretTerminalThreadProjection(projection)
 		}
+	}
+	if err := s.publishFlowerCanonicalTimelineReplacement(ctx, endpointID, threadID, runID, messageID, "terminal_settlement"); err != nil && s.log != nil {
+		s.log.Warn("ai: publish terminal settlement Flower timeline replacement failed", "run_id", runID, "thread_id", threadID, "error", err)
 	}
 	s.broadcastThreadSummary(endpointID, threadID)
 	if s.threadMgr != nil {

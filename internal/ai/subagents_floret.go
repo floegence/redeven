@@ -1916,10 +1916,13 @@ func (s *Service) subagentRuntimeForParent(endpointID string, threadID string) *
 	return s.subagentRuntimes[runThreadKey(endpointID, threadID)]
 }
 
-func (s *floretSubagentRuntime) cleanupTerminalProcessesForSnapshots(_ context.Context, snapshots []subagentSnapshot) error {
+func (s *floretSubagentRuntime) cleanupTerminalProcessesForSnapshots(ctx context.Context, snapshots []subagentSnapshot) error {
 	parent := s.parentRun()
 	if parent == nil || parent.service == nil || len(snapshots) == 0 {
 		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	manager := parent.service.terminalProcessManager()
 	if manager == nil {
@@ -1941,7 +1944,7 @@ func (s *floretSubagentRuntime) cleanupTerminalProcessesForSnapshots(_ context.C
 			continue
 		}
 		for _, proc := range manager.ProcessesForRun(endpointID, childThreadID, childRunID) {
-			settled, err := proc.settlePendingForRunEnd()
+			settled, err := proc.settlePendingForRunEnd(ctx)
 			if settled {
 				cleaned++
 			}

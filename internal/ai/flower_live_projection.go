@@ -404,6 +404,52 @@ func (s *Service) buildFlowerTimelineMessages(ctx context.Context, endpointID st
 	return out, nil
 }
 
+func (s *Service) publishFlowerCanonicalTimelineReplacement(ctx context.Context, endpointID string, threadID string, runID string, turnID string, reason string) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid request")
+	}
+
+	s.mu.Lock()
+	state := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
+	streamGeneration := s.flowerLiveStreamGenerationValue()
+	snapshotThroughSeq := s.flowerLiveCursorLocked(endpointID, threadID)
+	s.mu.Unlock()
+
+	timeline, err := s.buildFlowerTimelineMessages(ctx, endpointID, threadID, state)
+	if err != nil {
+		return err
+	}
+	payload := FlowerLiveTimelineReplacedPayload{
+		Messages:            timeline,
+		StreamGeneration:    streamGeneration,
+		SnapshotThroughSeq:  snapshotThroughSeq,
+		ThreadPatch:         cloneFlowerLiveThreadPatch(state.ThreadPatch),
+		LiveState:           cloneFlowerLiveMaterializedState(state),
+		ContextUsage:        cloneFlowerContextUsage(state.ContextUsage),
+		ContextCompactions:  cloneFlowerContextCompactions(state.ContextCompactions),
+		TimelineDecorations: cloneFlowerTimelineDecorations(state.TimelineDecorations),
+	}
+	s.appendFlowerLiveEvent(FlowerLiveEvent{
+		EndpointID: strings.TrimSpace(endpointID),
+		ThreadID:   strings.TrimSpace(threadID),
+		RunID:      strings.TrimSpace(runID),
+		TurnID:     strings.TrimSpace(turnID),
+		TraceID:    strings.TrimSpace(runID),
+		Step:       strings.TrimSpace(reason),
+		Kind:       FlowerLiveTimelineReplaced,
+		Payload:    mustFlowerPayload(payload),
+	})
+	return nil
+}
+
 func activeFlowerCursorMessageID(state FlowerLiveMaterializedState) string {
 	for _, run := range state.Runs {
 		status := NormalizeRunState(run.Status)
@@ -775,6 +821,9 @@ func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) FlowerLiveEvent {
 	}
 
 	s.mu.Lock()
+	if s.flowerLiveByThread == nil {
+		s.flowerLiveByThread = map[string]*flowerLiveThreadStream{}
+	}
 	stream := s.flowerLiveByThread[threadKey]
 	if stream == nil {
 		stream = newFlowerLiveThreadStream()

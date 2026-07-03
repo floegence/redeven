@@ -562,11 +562,13 @@ func (p *terminalProcess) publishDone() error {
 	}
 	if p.manager.onDone == nil {
 		p.settlementAcknowledged = true
+		p.cond.Broadcast()
 		p.mu.Unlock()
 		return nil
 	}
 	p.settlementInFlight = true
 	snapshot := p.snapshotLocked(0)
+	p.cond.Broadcast()
 	p.mu.Unlock()
 	err := p.manager.onDone(snapshot)
 	p.mu.Lock()
@@ -574,18 +576,40 @@ func (p *terminalProcess) publishDone() error {
 		p.settlementAcknowledged = true
 	}
 	p.settlementInFlight = false
+	p.cond.Broadcast()
 	p.mu.Unlock()
 	return err
 }
 
-func (p *terminalProcess) settlePendingForRunEnd() (bool, error) {
+func (p *terminalProcess) settlePendingForRunEnd(ctx context.Context) (bool, error) {
 	if p == nil {
 		return false, nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	stopWake := context.AfterFunc(ctx, func() {
+		p.mu.Lock()
+		p.cond.Broadcast()
+		p.mu.Unlock()
+	})
+	defer stopWake()
+
 	p.mu.Lock()
-	if !p.pending || p.settlementAcknowledged {
+	if !p.pending {
 		p.mu.Unlock()
 		return false, nil
+	}
+	for p.settlementInFlight {
+		if err := ctx.Err(); err != nil {
+			p.mu.Unlock()
+			return true, err
+		}
+		p.cond.Wait()
+	}
+	if p.settlementAcknowledged {
+		p.mu.Unlock()
+		return true, nil
 	}
 	running := p.status == terminalProcessStatusRunning
 	p.mu.Unlock()

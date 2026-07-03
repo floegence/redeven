@@ -522,6 +522,89 @@ func TestRunTerminalCleanupSettlesPendingProcessesForRun(t *testing.T) {
 	}
 }
 
+func TestRunTerminalCleanupWaitsForInFlightSettlementBeforeProjectionRead(t *testing.T) {
+	workspace := t.TempDir()
+	store := openTerminalProcessTestStore(t)
+	defer func() { _ = store.Close() }()
+	upsertTerminalProcessTestRun(t, store, "env_1", "thread_1", "run_inflight", "turn_1")
+
+	settlementStarted := make(chan struct{})
+	releaseSettlement := make(chan struct{})
+	manager := newTerminalProcessManager(func(snapshot terminalProcessSnapshot) error {
+		close(settlementStarted)
+		<-releaseSettlement
+		return nil
+	})
+	defer manager.Close()
+	svc := &Service{
+		threadsDB:         store,
+		terminalProcesses: manager,
+		log:               slog.New(slog.NewTextHandler(io.Discard, nil)),
+		persistOpTO:       5 * time.Second,
+	}
+	r := newTerminalProcessTestRun(workspace, svc, store, "env_1", "thread_1", "run_inflight", "turn_1")
+	svc.runs = map[string]*run{"run_inflight": r}
+	projection := terminalProcessTestProjection("run_inflight", "thread_1", "turn_1", "tool_inflight")
+	host := &recordingFloretHost{readProjection: projection}
+
+	proc, err := manager.Start(terminalProcessStartRequest{
+		EndpointID: "env_1",
+		ThreadID:   "thread_1",
+		RunID:      "run_inflight",
+		TurnID:     "turn_1",
+		ToolID:     "tool_inflight",
+		ToolName:   "terminal.exec",
+		Command:    "printf inflight",
+		CwdAbs:     workspace,
+		Shell:      "/bin/bash",
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	snapshot := proc.WaitForYield(1000)
+	if snapshot.Status != terminalProcessStatusSuccess {
+		t.Fatalf("status=%q, want success", snapshot.Status)
+	}
+	go proc.MarkPending()
+	select {
+	case <-settlementStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("settlement did not start")
+	}
+
+	done := make(chan struct{})
+	var finalProjection flruntime.ThreadTurnProjection
+	var changed bool
+	var cleanupErr error
+	go func() {
+		finalProjection, changed, cleanupErr = r.cleanupRunTerminalProcesses(host)
+		close(done)
+	}()
+	select {
+	case <-done:
+		t.Fatalf("cleanup returned before in-flight settlement completed")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(releaseSettlement)
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("cleanup did not finish after settlement completed")
+	}
+	if cleanupErr != nil {
+		t.Fatalf("cleanupRunTerminalProcesses: %v", cleanupErr)
+	}
+	if !changed {
+		t.Fatalf("cleanupRunTerminalProcesses changed=false, want true")
+	}
+	if finalProjection.RunID != "run_inflight" {
+		t.Fatalf("projection=%#v, want refreshed run projection", finalProjection)
+	}
+	if len(host.readProjectionReqs) != 1 {
+		t.Fatalf("ReadTurnProjection calls=%d, want one", len(host.readProjectionReqs))
+	}
+}
+
 func TestTerminalProcessWaitForYieldContextTerminatesOnCancel(t *testing.T) {
 	workspace := t.TempDir()
 	manager := newTerminalProcessManager(nil)

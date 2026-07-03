@@ -126,6 +126,7 @@ type run struct {
 	runtimeToolCalls   atomic.Int64
 	runtimeTokens      atomic.Int64
 	assistantPersisted atomic.Bool
+	terminalSettlement atomic.Bool
 
 	uploadsDir       string
 	threadsDB        *threadstore.Store

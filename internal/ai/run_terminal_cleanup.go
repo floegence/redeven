@@ -23,8 +23,10 @@ func (r *run) cleanupRunTerminalProcesses(host flruntime.Host) (flruntime.Thread
 
 	var errs []error
 	settledAny := false
+	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
+	defer cancel()
 	for _, proc := range processes {
-		settled, err := proc.settlePendingForRunEnd()
+		settled, err := proc.settlePendingForRunEnd(ctx)
 		if settled {
 			settledAny = true
 		}
@@ -38,19 +40,26 @@ func (r *run) cleanupRunTerminalProcesses(host flruntime.Host) (flruntime.Thread
 	if len(errs) > 0 {
 		return flruntime.ThreadTurnProjection{}, true, errors.Join(errs...)
 	}
-	if host == nil {
-		return flruntime.ThreadTurnProjection{}, true, errors.New("floret host unavailable for terminal cleanup projection")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
-	defer cancel()
-	projection, err := host.ReadTurnProjection(ctx, flruntime.ReadTurnProjectionRequest{
-		ThreadID: flruntime.ThreadID(strings.TrimSpace(r.threadID)),
-		TurnID:   flruntime.TurnID(strings.TrimSpace(r.messageID)),
-		RunID:    flruntime.RunID(strings.TrimSpace(r.id)),
-	})
+	projection, err := r.readFloretTurnProjection(ctx, host)
 	if err != nil {
 		return flruntime.ThreadTurnProjection{}, true, err
 	}
 	return projection, true, nil
+}
+
+func (r *run) readFloretTurnProjection(ctx context.Context, host flruntime.Host) (flruntime.ThreadTurnProjection, error) {
+	if r == nil {
+		return flruntime.ThreadTurnProjection{}, errors.New("nil run")
+	}
+	if host == nil {
+		return flruntime.ThreadTurnProjection{}, errors.New("floret host unavailable for terminal cleanup projection")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return host.ReadTurnProjection(ctx, flruntime.ReadTurnProjectionRequest{
+		ThreadID: flruntime.ThreadID(strings.TrimSpace(r.threadID)),
+		TurnID:   flruntime.TurnID(strings.TrimSpace(r.messageID)),
+		RunID:    flruntime.RunID(strings.TrimSpace(r.id)),
+	})
 }
