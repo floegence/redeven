@@ -102,6 +102,7 @@ import {
   GitChangeMetrics,
   GitChangeStatusPill,
   GitLabelBlock,
+  GitInlineLoadingStatus,
   GitMetaPill,
   GitPagedTableFooter,
   GitPrimaryTitle,
@@ -300,6 +301,8 @@ type BranchPrimaryActionPresentation = {
   label: string;
   emphasis: "neutral" | "accent" | "danger";
   disabled: boolean;
+  disabledReason?: string;
+  busy?: boolean;
   onPress: () => void;
 };
 
@@ -1252,6 +1255,7 @@ function HistoryList(
     | "onSwitchDetached"
   > & {
     layout?: GitBranchHeaderLayout;
+    active?: boolean;
   },
 ) {
   const rpc = useRedevenRpc();
@@ -1264,6 +1268,7 @@ function HistoryList(
   const [diffDialogItem, setDiffDialogItem] =
     createSignal<GitCommitFileSummary | null>(null);
   const [diffDialogCommitHash, setDiffDialogCommitHash] = createSignal("");
+  const requestedCommitDetailKeys = new Set<string>();
 
   const expandedCommitHash = createMemo(() =>
     String(props.selectedCommitHash ?? "").trim(),
@@ -1307,12 +1312,16 @@ function HistoryList(
   });
 
   createEffect(() => {
+    if (!props.active) return;
     const repo = repoRootPath();
     const hash = expandedCommitHash();
     const contextKey = historyContextKey();
     if (!repo || !hash || !contextKey) return;
     const existing = commitDetails()[hash];
     if (existing?.loading || existing?.loaded) return;
+    const requestKey = `${contextKey}|${hash}`;
+    if (requestedCommitDetailKeys.has(requestKey)) return;
+    requestedCommitDetailKeys.add(requestKey);
 
     setCommitDetailsByContext((prev) => {
       const currentContext = prev[contextKey] ?? {};
@@ -1938,11 +1947,29 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       ? { kind: "ready", branch: props.selectedBranch }
       : { kind: "idle", branch: null });
   const selectedBranch = () => branchDetailState().branch ?? null;
+  const branchIsVerifying = () => branchDetailState().kind === "verifying";
+  const branchIsReady = () => branchDetailState().kind === "ready";
+  const branchHasDetailIssue = () =>
+    branchDetailState().kind === "missing" ||
+    branchDetailState().kind === "error";
+  const branchVerificationDisabledReason = () => {
+    const state = branchDetailState();
+    if (state.kind === "verifying") {
+      return "Checking whether this branch still exists.";
+    }
+    if (state.kind === "missing") return state.detail;
+    if (state.kind === "error") {
+      return state.message || "Branch verification failed.";
+    }
+    return "";
+  };
   const interactiveBranch = () => {
     const state = branchDetailState();
     return state.kind === "ready" ? state.branch : null;
   };
   const branchSubview = () => props.selectedBranchSubview ?? "status";
+  const statusTabActive = () => branchSubview() === "status";
+  const historyTabActive = () => branchSubview() === "history";
   const activeRepoRootPath = () =>
     String(props.repoRootPath || props.repoSummary?.repoRootPath || "").trim();
   const repoHeadDisplay = () => describeGitHead(props.repoSummary);
@@ -2096,12 +2123,13 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const mergeAvailable = () =>
     Boolean(
       props.onMergeBranch &&
-        (interactiveBranch()?.kind === "local" ||
-          interactiveBranch()?.kind === "remote"),
+        (selectedBranch()?.kind === "local" ||
+          selectedBranch()?.kind === "remote"),
     );
   const mergeDisabled = () =>
     Boolean(
       !mergeAvailable() ||
+        !interactiveBranch() ||
         props.mergeBusy ||
         props.repoSummary?.detached ||
         interactiveBranch()?.current,
@@ -2124,10 +2152,13 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const checkoutLabel = () =>
     props.checkoutBusy ? "Checking Out..." : "Checkout";
   const deleteAvailable = () =>
-    Boolean(props.onDeleteBranch && interactiveBranch()?.kind === "local");
+    Boolean(props.onDeleteBranch && selectedBranch()?.kind === "local");
   const deleteDisabled = () =>
     Boolean(
-      !deleteAvailable() || props.deleteBusy || interactiveBranch()?.current,
+      !deleteAvailable() ||
+        !interactiveBranch() ||
+        props.deleteBusy ||
+        interactiveBranch()?.current,
     );
   const deleteLabel = () => (props.deleteBusy ? "Deleting..." : "Delete");
   const canAskFlowerStatus = () =>
@@ -2178,40 +2209,57 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       visible: text !== EMPTY_BRANCH_CONTEXT_SUMMARY,
     };
   });
+  const branchHeaderPendingLabel = () => {
+    if (branchIsVerifying()) return "Checking";
+    if (props.branchesLoading && selectedBranch()) return "Refreshing";
+    return "";
+  };
   const branchHeaderControls = createMemo<BranchHeaderControlGroups>(() => {
     const primaryActions: BranchPrimaryActionPresentation[] = [];
     const secondaryShortcuts: BranchShortcutPresentation[] = [];
 
-    if (mergeAvailable() && interactiveBranch()) {
-      const branch = interactiveBranch();
+    if (mergeAvailable() && selectedBranch()) {
       primaryActions.push({
         key: "merge",
         label: mergeLabel(),
         emphasis: mergeDisabled() ? "neutral" : "accent",
         disabled: mergeDisabled(),
-        onPress: () => branch && props.onMergeBranch?.(branch),
+        disabledReason: branchVerificationDisabledReason(),
+        busy: branchIsVerifying(),
+        onPress: () => {
+          const branch = interactiveBranch();
+          if (branch) props.onMergeBranch?.(branch);
+        },
       });
     }
 
-    if (props.onCheckoutBranch && interactiveBranch()) {
-      const branch = interactiveBranch();
+    if (props.onCheckoutBranch && selectedBranch()) {
       primaryActions.push({
         key: "checkout",
         label: checkoutLabel(),
         emphasis: "neutral",
         disabled: checkoutDisabled(),
-        onPress: () => branch && props.onCheckoutBranch?.(branch),
+        disabledReason: branchVerificationDisabledReason(),
+        busy: branchIsVerifying(),
+        onPress: () => {
+          const branch = interactiveBranch();
+          if (branch) props.onCheckoutBranch?.(branch);
+        },
       });
     }
 
-    if (deleteAvailable() && interactiveBranch()) {
-      const branch = interactiveBranch();
+    if (deleteAvailable() && selectedBranch()) {
       primaryActions.push({
         key: "delete",
         label: deleteLabel(),
         emphasis: "danger",
         disabled: deleteDisabled(),
-        onPress: () => branch && props.onDeleteBranch?.(branch),
+        disabledReason: branchVerificationDisabledReason(),
+        busy: branchIsVerifying(),
+        onPress: () => {
+          const branch = interactiveBranch();
+          if (branch) props.onDeleteBranch?.(branch);
+        },
       });
     }
 
@@ -2257,6 +2305,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
           label: "Compare",
           emphasis: "neutral",
           disabled: !interactiveBranch(),
+          disabledReason: branchVerificationDisabledReason(),
+          busy: branchIsVerifying(),
           onPress: () => setCompareDialogOpen(true),
         },
       ];
@@ -2267,6 +2317,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
           label: "Stash...",
           emphasis: "neutral",
           disabled: !canOpenStash(),
+          disabledReason: branchWorkspaceDisabledReason(),
+          busy: branchIsVerifying(),
           onPress: () => {
             const repoRoot = statusRepoRootPath();
             if (!repoRoot) return;
@@ -2364,6 +2416,15 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       (action) => !action.disabled,
     );
   });
+  const branchHeaderOverflowCandidateCount = createMemo(() => {
+    if (!branchHeaderUsesOverflow()) return 0;
+    const mainKey = branchHeaderMainAction()?.key ?? "";
+    const controls = branchHeaderControls();
+    return (
+      controls.primaryActions.filter((action) => action.key !== mainKey)
+        .length + controls.secondaryShortcuts.length
+    );
+  });
   const branchHeaderOverflowItems = createMemo<DropdownItem[]>(() =>
     branchHeaderOverflowActions().map((action) => ({
       id: action.key,
@@ -2384,6 +2445,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     if (!action || action.disabled) return;
     action.onPress();
   };
+  const shouldRenderBranchHeaderActions = () =>
+    branchHeaderControls().primaryActions.length > 0 ||
+    branchHeaderControls().secondaryShortcuts.length > 0;
   const branchHeaderSurfaceClass = () =>
     cn(
       "border-b px-3 py-2 sm:px-4",
@@ -2523,13 +2587,37 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       }
       class={branchActionButtonClass(action.emphasis)}
       disabled={action.disabled}
+      aria-busy={action.busy ? "true" : undefined}
+      title={action.disabledReason || undefined}
       onClick={action.onPress}
     >
       {action.label}
     </Button>
   );
   const renderBranchHeaderOverflow = () => (
-    <Show when={branchHeaderOverflowItems().length > 0}>
+    <Show when={branchHeaderOverflowCandidateCount() > 0}>
+      <Show
+        when={branchHeaderOverflowItems().length > 0}
+        fallback={
+          <Button
+            size="sm"
+            variant="outline"
+            class={cn(
+              "rounded-md px-2.5",
+              redevenSurfaceRoleClass("control"),
+            )}
+            disabled
+            aria-busy={branchIsVerifying() ? "true" : undefined}
+            aria-label={i18n.t("git.common.moreActions")}
+            title={
+              branchVerificationDisabledReason() ||
+              i18n.t("git.common.moreActions")
+            }
+          >
+            <MoreHorizontal class="size-3.5" />
+          </Button>
+        }
+      >
       <Dropdown
         trigger={(
           <Button
@@ -2549,6 +2637,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         onSelect={runBranchHeaderOverflowAction}
         align="end"
       />
+      </Show>
     </Show>
   );
   const handleBranchSubviewKeyDown = (
@@ -2567,100 +2656,114 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     queueMicrotask(() => branchSubviewTabRefs.get(nextView)?.focus());
   };
 
-  const renderBranchDetailStatePane = (
-    active: boolean,
-    view: GitBranchSubview,
-  ) => {
+  const branchDetailStateTitle = () => {
     const state = branchDetailState();
-    if (state.kind === "idle" || state.kind === "ready") return null;
-
-    const title =
-      state.kind === "missing"
-        ? state.title
-        : state.kind === "error"
-          ? "Unable to verify branch"
-          : "Checking branch";
-    const detail =
-      state.kind === "missing"
-        ? state.detail
-        : state.kind === "error"
-          ? state.message
-          : "Refreshing branches to confirm that this selection still exists.";
-
+    if (state.kind === "missing") return state.title;
+    if (state.kind === "error") return "Unable to verify branch";
+    return "Checking branch";
+  };
+  const branchDetailStateDetail = () => {
+    const state = branchDetailState();
+    if (state.kind === "missing") return state.detail;
+    if (state.kind === "error") {
+      return state.message || "Branch verification failed.";
+    }
+    return "Refreshing branches to confirm that this selection still exists.";
+  };
+  const branchDetailStateTone = () => {
+    const state = branchDetailState();
+    if (state.kind === "missing") return "warning" as const;
+    if (state.kind === "error") return "danger" as const;
+    return "neutral" as const;
+  };
+  const renderBranchDetailIssueBanner = () => {
+    if (!branchHasDetailIssue()) return null;
+    const state = branchDetailState();
     return (
       <div
-        class={cn(
-          "flex h-full min-h-0 flex-col overflow-hidden",
-          !active && "hidden",
-        )}
-        role="tabpanel"
-        id={gitBranchSubviewPanelId(view)}
-        aria-labelledby={gitBranchSubviewTabId(view)}
-        aria-hidden={!active}
-        hidden={!active}
-        tabIndex={active ? 0 : -1}
+        class="git-branch-detail-banner"
+        data-git-branch-detail-state={state.kind}
       >
-        <div class="flex flex-1 items-center justify-center px-4 py-6">
-          <div class="w-full max-w-xl rounded-md bg-muted/[0.08] px-4 py-4">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <div class="min-w-0 flex-1">
-                <div class="text-sm font-semibold text-foreground">{title}</div>
-                <div class="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-                  {detail}
-                </div>
-              </div>
-              <GitMetaPill
-                tone={
-                  state.kind === "missing"
-                    ? "warning"
-                    : state.kind === "error"
-                      ? "danger"
-                      : "neutral"
-                }
-              >
-                {state.kind === "missing"
-                  ? "Missing"
-                  : state.kind === "error"
-                    ? "Retry needed"
-                    : "Verifying"}
-              </GitMetaPill>
-            </div>
-
-            <div class="mt-3 flex flex-wrap items-center gap-2">
-              <Show
-                when={
-                  state.kind !== "verifying" && props.onRefreshSelectedBranch
-                }
-              >
-                <Button
-                  size="sm"
-                  variant="outline"
-                  class={secondaryActionButtonClass}
-                  onClick={() => props.onRefreshSelectedBranch?.()}
-                >
-                  Refresh branches
-                </Button>
-              </Show>
-              <Show
-                when={
-                  state.kind === "missing" &&
-                  props.onSelectCurrentBranch &&
-                  (props.branches?.local ?? []).some((branch) => branch.current)
-                }
-              >
-                <Button
-                  size="sm"
-                  variant="default"
-                  class={primaryActionButtonClass}
-                  onClick={() => props.onSelectCurrentBranch?.()}
-                >
-                  View current branch
-                </Button>
-              </Show>
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <GitMetaPill tone={branchDetailStateTone()}>
+              {state.kind === "missing" ? "Missing" : "Retry needed"}
+            </GitMetaPill>
+            <div class="text-xs font-semibold text-foreground">
+              {branchDetailStateTitle()}
             </div>
           </div>
+          <div class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            {branchDetailStateDetail()}
+          </div>
+        </div>
+        <div class="flex shrink-0 flex-wrap items-center gap-1.5">
+          <Show when={props.onRefreshSelectedBranch}>
+            <Button
+              size="sm"
+              variant="outline"
+              class={secondaryActionButtonClass}
+              onClick={() => props.onRefreshSelectedBranch?.()}
+            >
+              Refresh branches
+            </Button>
+          </Show>
+          <Show
+            when={
+              state.kind === "missing" &&
+              props.onSelectCurrentBranch &&
+              (props.branches?.local ?? []).some((branch) => branch.current)
+            }
+          >
+            <Button
+              size="sm"
+              variant="default"
+              class={primaryActionButtonClass}
+              onClick={() => props.onSelectCurrentBranch?.()}
+            >
+              View current branch
+            </Button>
+          </Show>
         </div>
       </div>
+    );
+  };
+  const renderBranchStablePlaceholder = (view: GitBranchSubview) => {
+    const checking = branchIsVerifying();
+    return (
+      <GitTableFrame
+        class="git-branch-stable-placeholder flex min-h-0 flex-1 flex-col"
+      >
+        <div
+          class="git-branch-stable-placeholder__body"
+          data-git-branch-stable-placeholder={view}
+        >
+          <Show
+            when={checking}
+            fallback={
+              <GitSubtleNote class="max-w-xl">
+                {view === "status"
+                  ? "Branch status will appear here after this selection is available."
+                  : "Commit history will appear here after this selection is available."}
+              </GitSubtleNote>
+            }
+          >
+            <GitInlineLoadingStatus>
+              Checking branch selection
+            </GitInlineLoadingStatus>
+            <div class="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+              {view === "status"
+                ? "Status will appear here after verification."
+                : "History will appear here after verification."}
+            </div>
+          </Show>
+          <div class="git-branch-stable-placeholder__rows" aria-hidden="true">
+            <div />
+            <div />
+            <div />
+          </div>
+        </div>
+      </GitTableFrame>
     );
   };
 
@@ -2874,45 +2977,162 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     setDiffDialogOpen(false);
   });
 
-  const renderStatus = (active: boolean) => {
+  const renderStatusUnavailableSummary = () => (
+    <div
+      class={cn(
+        "rounded-md px-2.5 py-2",
+        redevenSurfaceRoleClass("inset"),
+      )}
+    >
+      <div class="flex flex-wrap items-start justify-between gap-2">
+        <div class="min-w-0 flex-1">
+          <div class="text-xs font-medium text-foreground">
+            {statusEmptyState().title}
+          </div>
+          <div class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            {statusEmptyState().detail}
+          </div>
+        </div>
+        <GitMetaPill tone={statusEmptyState().tone}>
+          Status unavailable
+        </GitMetaPill>
+      </div>
+      <Show when={statusEmptyState().hint}>
+        <div class="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+          {statusEmptyState().hint}
+        </div>
+      </Show>
+    </div>
+  );
+  const renderBranchStatusStrip = () => {
+    const pending = branchIsVerifying() || visibleStatusLoading();
+    const unavailable = branchHasDetailIssue();
+    if (
+      branchIsReady() &&
+      !pending &&
+      visibleStatusError()
+    ) {
+      return (
+        <GitStatePane
+          tone="error"
+          message={visibleStatusError()}
+          surface
+          class="py-1"
+        />
+      );
+    }
+    if (
+      branchIsReady() &&
+      !pending &&
+      !visibleStatusWorkspace()
+    ) {
+      return renderStatusUnavailableSummary();
+    }
+
+    return (
+      <div>
+        <div
+          class={branchStatusStripClass}
+          data-git-branch-status-summary-state={
+            pending
+              ? "loading"
+              : unavailable
+                ? "unavailable"
+                : "ready"
+          }
+        >
+          <For each={statusSectionCards()}>
+            {(item) => (
+              <button
+                type="button"
+                class={branchStatusSectionCardClass(item.active)}
+                aria-pressed={item.active}
+                aria-label={`${item.label}: ${
+                  pending || unavailable ? "pending" : item.compactCaption
+                }`}
+                title={
+                  pending || unavailable
+                    ? branchDetailStateDetail()
+                    : item.verboseCaption
+                }
+                disabled={pending || unavailable}
+                onClick={() => selectStatusSection(item.section)}
+              >
+                <div class="flex min-h-[1.55rem] items-center justify-between gap-1.5">
+                  <div
+                    class={cn(
+                      "min-w-0 truncate text-[9px] font-semibold uppercase tracking-[0.08em] sm:text-[10px] sm:tracking-[0.14em]",
+                      item.active
+                        ? "text-current opacity-80"
+                        : "text-muted-foreground/80",
+                    )}
+                  >
+                    {branchHeaderLayout() === "compact"
+                      ? item.shortLabel
+                      : item.compactLabel}
+                  </div>
+                  <div
+                    class={cn(
+                      "shrink-0 text-[12px] font-semibold tabular-nums leading-none",
+                      item.active ? "text-current" : "text-foreground",
+                    )}
+                  >
+                    {pending || unavailable ? "–" : item.count}
+                  </div>
+                </div>
+              </button>
+            )}
+          </For>
+        </div>
+        <Show when={pending}>
+          <GitInlineLoadingStatus class="mt-1.5">
+            {branchIsVerifying()
+              ? "Checking branch..."
+              : "Loading branch status..."}
+          </GitInlineLoadingStatus>
+        </Show>
+      </div>
+    );
+  };
+
+  const renderStatus = () => {
+    const active = statusTabActive;
     const branch = selectedBranch();
     if (!branch) {
       return (
         <div
           class={cn(
             "flex-1 px-3 py-4 text-xs text-muted-foreground",
-            !active && "hidden",
+            !active() && "hidden",
           )}
           role="tabpanel"
           id={gitBranchSubviewPanelId("status")}
           aria-labelledby={gitBranchSubviewTabId("status")}
-          aria-hidden={!active}
-          hidden={!active}
-          tabIndex={active ? 0 : -1}
+          aria-hidden={!active()}
+          hidden={!active()}
+          tabIndex={active() ? 0 : -1}
         >
           Choose a branch from the sidebar to inspect its status or history.
         </div>
       );
     }
 
-    const unavailablePane = renderBranchDetailStatePane(active, "status");
-    if (unavailablePane) return unavailablePane;
-
     return (
       <div
         class={cn(
           "flex h-full min-h-0 flex-col overflow-hidden",
-          !active && "hidden",
+          !active() && "hidden",
         )}
         role="tabpanel"
         id={gitBranchSubviewPanelId("status")}
         aria-labelledby={gitBranchSubviewTabId("status")}
-        aria-hidden={!active}
-        hidden={!active}
-        tabIndex={active ? 0 : -1}
+        aria-hidden={!active()}
+        hidden={!active()}
+        tabIndex={active() ? 0 : -1}
       >
         <div class="flex min-h-0 flex-1 flex-col px-3 py-2 sm:px-4">
           <div class="flex min-h-0 flex-1 flex-col gap-2">
+            {renderBranchDetailIssueBanner()}
             <section class={branchStatusToolbarClass}>
               <div
                 class={branchStatusToolbarGridClass()}
@@ -2936,100 +3156,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                   </div>
 
                   <div class="min-w-0">
-                    <Show
-                      when={!visibleStatusLoading()}
-                      fallback={
-                        <GitStatePane
-                          loading
-                          message="Loading branch status..."
-                          surface
-                          class="py-1"
-                        />
-                      }
-                    >
-                      <Show
-                        when={!visibleStatusError()}
-                        fallback={
-                          <GitStatePane
-                            tone="error"
-                            message={visibleStatusError()}
-                            surface
-                            class="py-1"
-                          />
-                        }
-                      >
-                        <Show
-                          when={visibleStatusWorkspace()}
-                          fallback={
-                            <div
-                              class={cn(
-                                "rounded-md px-2.5 py-2",
-                                redevenSurfaceRoleClass("inset"),
-                              )}
-                            >
-                              <div class="flex flex-wrap items-start justify-between gap-2">
-                                <div class="min-w-0 flex-1">
-                                  <div class="text-xs font-medium text-foreground">
-                                    {statusEmptyState().title}
-                                  </div>
-                                  <div class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                                    {statusEmptyState().detail}
-                                  </div>
-                                </div>
-                                <GitMetaPill tone={statusEmptyState().tone}>
-                                  Status unavailable
-                                </GitMetaPill>
-                              </div>
-                              <Show when={statusEmptyState().hint}>
-                                <div class="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                                  {statusEmptyState().hint}
-                                </div>
-                              </Show>
-                            </div>
-                          }
-                        >
-                          <div class={branchStatusStripClass}>
-                            <For each={statusSectionCards()}>
-                              {(item) => (
-                                <button
-                                  type="button"
-                                  class={branchStatusSectionCardClass(item.active)}
-                                  aria-pressed={item.active}
-                                  aria-label={`${item.label}: ${item.compactCaption}`}
-                                  title={item.verboseCaption}
-                                  onClick={() => selectStatusSection(item.section)}
-                                >
-                                  <div class="flex min-h-[1.55rem] items-center justify-between gap-1.5">
-                                    <div
-                                      class={cn(
-                                        "min-w-0 truncate text-[9px] font-semibold uppercase tracking-[0.08em] sm:text-[10px] sm:tracking-[0.14em]",
-                                        item.active
-                                          ? "text-current opacity-80"
-                                          : "text-muted-foreground/80",
-                                      )}
-                                    >
-                                      {branchHeaderLayout() === "compact"
-                                        ? item.shortLabel
-                                        : item.compactLabel}
-                                    </div>
-                                    <div
-                                      class={cn(
-                                        "shrink-0 text-[12px] font-semibold tabular-nums leading-none",
-                                        item.active
-                                          ? "text-current"
-                                          : "text-foreground",
-                                      )}
-                                    >
-                                      {item.count}
-                                    </div>
-                                  </div>
-                                </button>
-                              )}
-                            </For>
-                          </div>
-                        </Show>
-                      </Show>
-                    </Show>
+                    {renderBranchStatusStrip()}
                   </div>
                 </div>
 
@@ -3058,6 +3185,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                         }
                         class={branchActionButtonClass(action.emphasis)}
                         disabled={action.disabled}
+                        aria-busy={action.busy ? "true" : undefined}
+                        title={action.disabledReason || undefined}
                         onClick={action.onPress}
                       >
                         {action.label}
@@ -3077,8 +3206,11 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               </Show>
             </section>
 
-            <Show when={visibleStatusWorkspace()}>
-              <div class="flex min-h-0 flex-1 overflow-hidden">
+            <div class="flex min-h-0 flex-1 overflow-hidden">
+              <Show
+                when={branchIsReady() && visibleStatusWorkspace()}
+                fallback={renderBranchStablePlaceholder("status")}
+              >
                 <BranchStatusTable
                   layout={branchHeaderLayout()}
                   section={selectedStatusSection()}
@@ -3098,18 +3230,90 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     void loadMoreStatusSection(selectedStatusSection());
                   }}
                 />
-              </div>
-            </Show>
+              </Show>
+            </div>
           </div>
         </div>
       </div>
     );
   };
 
+  const renderHistory = () => {
+    const active = historyTabActive;
+    const branch = selectedBranch();
+    if (!branch) {
+      return (
+        <div
+          class={cn(
+            "flex-1 px-3 py-4 text-xs text-muted-foreground",
+            !active() && "hidden",
+          )}
+          role="tabpanel"
+          id={gitBranchSubviewPanelId("history")}
+          aria-labelledby={gitBranchSubviewTabId("history")}
+          aria-hidden={!active()}
+          hidden={!active()}
+          tabIndex={active() ? 0 : -1}
+        >
+          Choose a branch from the sidebar to inspect its status or history.
+        </div>
+      );
+    }
+
+    return (
+      <div
+        role="tabpanel"
+        id={gitBranchSubviewPanelId("history")}
+        aria-labelledby={gitBranchSubviewTabId("history")}
+        aria-hidden={!active()}
+        hidden={!active()}
+        tabIndex={active() ? 0 : -1}
+        class={cn(
+          "flex min-h-0 flex-1 flex-col overflow-hidden",
+          !active() && "hidden",
+        )}
+      >
+        <Show
+          when={branchIsReady()}
+          fallback={
+            <div class="flex min-h-0 flex-1 flex-col gap-2 px-3 py-2 sm:px-4">
+              {renderBranchDetailIssueBanner()}
+              {renderBranchStablePlaceholder("history")}
+            </div>
+          }
+        >
+          <HistoryList
+            active={active()}
+            layout={branchHeaderLayout()}
+            repoRootPath={activeRepoRootPath()}
+            repoSummary={props.repoSummary}
+            selectedBranch={interactiveBranch()}
+            commits={props.commits}
+            listLoading={props.listLoading}
+            listRefreshing={props.listRefreshing}
+            listLoadingMore={props.listLoadingMore}
+            listError={props.listError}
+            hasMore={props.hasMore}
+            selectedCommitHash={props.selectedCommitHash}
+            switchDetachedBusy={props.switchDetachedBusy}
+            onSelectCommit={props.onSelectCommit}
+            onLoadMore={props.onLoadMore}
+            onSwitchDetached={props.onSwitchDetached}
+            onAskFlower={props.onAskFlower}
+          />
+        </Show>
+      </div>
+    );
+  };
+  const branchPanelBlockingLoading = () =>
+    Boolean(props.branchesLoading && !selectedBranch() && !props.branches);
+  const branchPanelBlockingError = () =>
+    Boolean(props.branchesError && !selectedBranch());
+
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
       <Show
-        when={!props.branchesLoading}
+        when={!branchPanelBlockingLoading()}
         fallback={
           <GitStatePane
             loading
@@ -3119,7 +3323,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         }
       >
         <Show
-          when={!props.branchesError}
+          when={!branchPanelBlockingError()}
           fallback={
             <GitStatePane
               tone="error"
@@ -3173,6 +3377,13 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           >
                             {branchDisplayName(selectedBranch())}
                           </GitPrimaryTitle>
+                          <Show when={branchHeaderPendingLabel()}>
+                            {(label) => (
+                              <GitInlineLoadingStatus class="git-branch-header-inline-status">
+                                {label()}
+                              </GitInlineLoadingStatus>
+                            )}
+                          </Show>
                         </div>
                         <Show when={branchSummary().visible}>
                           <div
@@ -3223,10 +3434,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     </div>
 
                     <Show
-                      when={
-                        branchHeaderControls().primaryActions.length > 0 ||
-                        branchHeaderControls().secondaryShortcuts.length > 0
-                      }
+                      when={shouldRenderBranchHeaderActions()}
                     >
                       <div
                         class={branchHeaderCommandRailClass()}
@@ -3340,46 +3548,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                 </div>
               </div>
 
-              {renderStatus(branchSubview() === "status")}
-              <Show
-                when={branchDetailState().kind === "ready"}
-                fallback={renderBranchDetailStatePane(
-                  branchSubview() === "history",
-                  "history",
-                )}
-              >
-                <div
-                  role="tabpanel"
-                  id={gitBranchSubviewPanelId("history")}
-                  aria-labelledby={gitBranchSubviewTabId("history")}
-                  aria-hidden={branchSubview() !== "history"}
-                  hidden={branchSubview() !== "history"}
-                  tabIndex={branchSubview() === "history" ? 0 : -1}
-                  class={cn(
-                    "flex min-h-0 flex-1 flex-col overflow-hidden",
-                    branchSubview() !== "history" && "hidden",
-                  )}
-                >
-                  <HistoryList
-                    layout={branchHeaderLayout()}
-                    repoRootPath={activeRepoRootPath()}
-                    repoSummary={props.repoSummary}
-                    selectedBranch={interactiveBranch()}
-                    commits={props.commits}
-                    listLoading={props.listLoading}
-                    listRefreshing={props.listRefreshing}
-                    listLoadingMore={props.listLoadingMore}
-                    listError={props.listError}
-                    hasMore={props.hasMore}
-                    selectedCommitHash={props.selectedCommitHash}
-                    switchDetachedBusy={props.switchDetachedBusy}
-                    onSelectCommit={props.onSelectCommit}
-                    onLoadMore={props.onLoadMore}
-                    onSwitchDetached={props.onSwitchDetached}
-                    onAskFlower={props.onAskFlower}
-                  />
-                </div>
-              </Show>
+              {renderStatus()}
+              {renderHistory()}
             </div>
           </Show>
         </Show>

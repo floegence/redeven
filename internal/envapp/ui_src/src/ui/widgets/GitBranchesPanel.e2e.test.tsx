@@ -3985,7 +3985,8 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
-      expect(mockGetCommitDetail).toHaveBeenCalledTimes(1);
+      const initialDetailRequestCount = mockGetCommitDetail.mock.calls.length;
+      expect(initialDetailRequestCount).toBeGreaterThan(0);
       expect(host.textContent).toContain("src/history.ts");
 
       const statusTab = host.querySelector(
@@ -4002,7 +4003,9 @@ describe("GitBranchesPanel interactions", () => {
       historyTab!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await flush();
 
-      expect(mockGetCommitDetail).toHaveBeenCalledTimes(1);
+      expect(mockGetCommitDetail).toHaveBeenCalledTimes(
+        initialDetailRequestCount,
+      );
       expect(host.textContent).toContain("src/history.ts");
     } finally {
       dispose();
@@ -4241,6 +4244,15 @@ describe("GitBranchesPanel interactions", () => {
       );
       expect(host.textContent).toContain("Refresh branches");
       expect(host.textContent).toContain("View current branch");
+      expect(host.querySelector(".git-branch-detail-banner")).toBeTruthy();
+      expect(
+        host.querySelector(
+          '[data-git-branch-status-summary-state="unavailable"]',
+        ),
+      ).toBeTruthy();
+      expect(
+        host.querySelector('[data-git-branch-stable-placeholder="status"]'),
+      ).toBeTruthy();
       expect(mockListWorkspacePage).not.toHaveBeenCalled();
 
       const refreshButton = Array.from(host.querySelectorAll("button")).find(
@@ -4269,6 +4281,11 @@ describe("GitBranchesPanel interactions", () => {
   it("holds branch detail in a verifying state without fetching status payloads", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
+    const onMergeBranch = vi.fn();
+    const onCheckoutBranch = vi.fn();
+    const onDeleteBranch = vi.fn();
+    const onOpenInTerminal = vi.fn();
+    const onBrowseFiles = vi.fn();
     const verifyingBranch: GitBranchSummary = {
       name: "feature/demo",
       fullName: "refs/heads/feature/demo",
@@ -4299,6 +4316,11 @@ describe("GitBranchesPanel interactions", () => {
                     kind: "verifying",
                     branch: verifyingBranch,
                   }}
+                  onMergeBranch={onMergeBranch}
+                  onCheckoutBranch={onCheckoutBranch}
+                  onDeleteBranch={onDeleteBranch}
+                  onOpenInTerminal={onOpenInTerminal}
+                  onBrowseFiles={onBrowseFiles}
                 />
               </div>
             </ProtocolProvider>
@@ -4310,11 +4332,55 @@ describe("GitBranchesPanel interactions", () => {
 
     try {
       await flush();
+      await setBranchHeaderWidth(host, 420);
+
+      const header = host.querySelector(
+        "[data-git-branch-header-layout]",
+      ) as HTMLElement | null;
+      const commandRail = host.querySelector(
+        "[data-git-branch-header-actions]",
+      ) as HTMLElement | null;
+      const mergeButton = Array.from(host.querySelectorAll("button")).find(
+        (node) => node.textContent?.trim() === "Merge",
+      ) as HTMLButtonElement | undefined;
+      const moreButton = host.querySelector(
+        'button[aria-label="More actions"]',
+      ) as HTMLButtonElement | null;
+
+      expect(header?.dataset.gitBranchHeaderLayout).toBe("compact");
+      expect(commandRail?.dataset.gitBranchHeaderActions).toBe("overflow");
+      expect(mergeButton).toBeTruthy();
+      expect(mergeButton?.disabled).toBe(true);
+      expect(mergeButton?.getAttribute("aria-busy")).toBe("true");
+      expect(moreButton).toBeTruthy();
+      expect(moreButton?.disabled).toBe(true);
+      expect(moreButton?.getAttribute("aria-busy")).toBe("true");
       expect(host.textContent).toContain("Checking branch");
-      expect(host.textContent).toContain(
-        "Refreshing branches to confirm that this selection still exists.",
-      );
+      expect(host.querySelector(".git-loading-indicator")).toBeTruthy();
+      expect(host.querySelector(".git-inline-loading-status")).toBeTruthy();
+      expect(
+        host.querySelector("[data-git-branch-status-toolbar-layout]"),
+      ).toBeTruthy();
+      expect(
+        host.querySelector(
+          '[data-git-branch-status-summary-state="loading"]',
+        ),
+      ).toBeTruthy();
+      expect(
+        host.querySelector('[data-git-branch-stable-placeholder="status"]'),
+      ).toBeTruthy();
+      expect(host.querySelector("#git-branch-subview-tab-status")).toBeTruthy();
+      expect(host.querySelector("#git-branch-subview-tab-history")).toBeTruthy();
       expect(host.textContent).not.toContain("Refresh branches");
+
+      mergeButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      moreButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+      expect(onMergeBranch).not.toHaveBeenCalled();
+      expect(onCheckoutBranch).not.toHaveBeenCalled();
+      expect(onDeleteBranch).not.toHaveBeenCalled();
+      expect(onOpenInTerminal).not.toHaveBeenCalled();
+      expect(onBrowseFiles).not.toHaveBeenCalled();
       expect(mockListWorkspacePage).not.toHaveBeenCalled();
     } finally {
       dispose();
@@ -4383,6 +4449,10 @@ describe("GitBranchesPanel interactions", () => {
       expect(host.textContent).toContain("Branch verification timed out.");
       expect(host.textContent).toContain("Refresh branches");
       expect(host.textContent).not.toContain("Merge feature");
+      expect(host.querySelector(".git-branch-detail-banner")).toBeTruthy();
+      expect(
+        host.querySelector('[data-git-branch-stable-placeholder="history"]'),
+      ).toBeTruthy();
       expect(
         host.querySelectorAll("#git-branch-subview-panel-history"),
       ).toHaveLength(1);

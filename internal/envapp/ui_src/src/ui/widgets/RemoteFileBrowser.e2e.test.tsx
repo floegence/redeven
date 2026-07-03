@@ -4407,6 +4407,10 @@ describe('RemoteFileBrowser persistence', () => {
       expect(mockRpc.git.listBranches).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo' });
       expect(host.textContent).toContain('selected-branch:refs/heads/feature/demo');
       expect(host.textContent).toContain('branch-detail:missing');
+      expect(gitWorkspaceRenderStore.snapshots.every((item) => (
+        item.branchDetailKind !== 'verifying'
+        || item.shellLoadingMessage === ''
+      ))).toBe(true);
       expect(gitWorkspaceRenderStore.snapshots.some((item) => (
         item.subview === 'branches'
         && item.selectedBranchName === 'refs/heads/feature/demo'
@@ -4471,12 +4475,28 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       mockRpc.git.listBranches.mockReset();
-      mockRpc.git.listBranches.mockResolvedValueOnce(branchesAfterDeletion);
+      let resolveBranchesAfterDeletion:
+        | ((value: typeof branchesAfterDeletion) => void)
+        | undefined;
+      mockRpc.git.listBranches.mockReturnValueOnce(
+        new Promise<typeof branchesAfterDeletion>((resolve) => {
+          resolveBranchesAfterDeletion = resolve;
+        }),
+      );
       gitWorkspaceRenderStore.snapshots = [];
 
       toChangesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
       toBranchesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(gitWorkspaceRenderStore.snapshots.every((item) => (
+        item.branchDetailKind !== 'verifying'
+        || item.shellLoadingMessage === ''
+      ))).toBe(true);
+
+      expect(resolveBranchesAfterDeletion).toBeTruthy();
+      resolveBranchesAfterDeletion!(branchesAfterDeletion);
       await flush();
       await flush();
 
