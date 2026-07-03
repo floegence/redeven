@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage:
-  ./scripts/check_redevplugin_release_artifacts.sh --artifact-dir <dir> [--skip-cosign]
+  ./scripts/check_redevplugin_release_artifacts.sh --artifact-dir <dir> [--skip-cosign] [--write-marker <file>]
   ./scripts/check_redevplugin_release_artifacts.sh --self-test
 
 Verifies downloaded ReDevPlugin release artifacts before Redeven consumes them:
@@ -25,6 +25,7 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
 
 ARTIFACT_DIR=""
+MARKER_PATH=""
 SKIP_COSIGN=0
 SELF_TEST=0
 
@@ -37,6 +38,15 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       ARTIFACT_DIR="$2"
+      shift 2
+      ;;
+    --write-marker)
+      if [[ $# -lt 2 ]]; then
+        echo "--write-marker requires a path" >&2
+        usage >&2
+        exit 2
+      fi
+      MARKER_PATH="$2"
       shift 2
       ;;
     --skip-cosign)
@@ -62,6 +72,10 @@ done
 if [[ "$SELF_TEST" -eq 1 ]]; then
   if [[ -n "$ARTIFACT_DIR" ]]; then
     echo "--self-test cannot be combined with --artifact-dir" >&2
+    exit 2
+  fi
+  if [[ -n "$MARKER_PATH" ]]; then
+    echo "--self-test cannot be combined with --write-marker" >&2
     exit 2
   fi
   tmpdir=$(mktemp -d)
@@ -173,7 +187,12 @@ JSON
       printf 'fixture bundle\n' >"${file}.bundle"
     done
   )
-  "$0" --artifact-dir "$artifact_dir" --skip-cosign
+  marker_path="$artifact_dir/.redevplugin-release-artifacts-verified.json"
+  "$0" --artifact-dir "$artifact_dir" --skip-cosign --write-marker "$marker_path"
+  if [[ ! -s "$marker_path" ]]; then
+    echo "self-test expected verification marker to be written" >&2
+    exit 1
+  fi
   bad_artifact_dir="$tmpdir/bad-artifacts"
   cp -R "$artifact_dir" "$bad_artifact_dir"
   BAD_STRESS_FILE="$bad_artifact_dir/redevplugin-release-stress.json" node <<'NODE'
@@ -212,6 +231,7 @@ fi
 ARTIFACT_DIR=$(cd -- "$ARTIFACT_DIR" >/dev/null 2>&1 && pwd)
 export ARTIFACT_DIR
 export SKIP_COSIGN
+export MARKER_PATH
 export REDEVPLUGIN_COSIGN_CERT_IDENTITY_REGEXP="${REDEVPLUGIN_COSIGN_CERT_IDENTITY_REGEXP:-^https://github.com/floegence/redevplugin/.github/workflows/release.yml@refs/tags/v.*$}"
 export REDEVPLUGIN_COSIGN_OIDC_ISSUER="${REDEVPLUGIN_COSIGN_OIDC_ISSUER:-https://token.actions.githubusercontent.com}"
 
@@ -614,3 +634,38 @@ function fail(message) {
   process.exit(1);
 }
 NODE
+
+if [[ -n "$MARKER_PATH" ]]; then
+  marker_dir=$(dirname -- "$MARKER_PATH")
+  mkdir -p "$marker_dir"
+  node <<'NODE'
+const { createHash } = require("node:crypto");
+const { mkdirSync, readFileSync, readdirSync, writeFileSync } = require("node:fs");
+const { dirname, join } = require("node:path");
+
+const artifactDir = process.env.ARTIFACT_DIR;
+const markerPath = process.env.MARKER_PATH;
+const sumsPath = join(artifactDir, "SHA256SUMS");
+const stressPath = join(artifactDir, "redevplugin-release-stress.json");
+const tarballs = readdirSync(artifactDir)
+  .filter((name) => /^redevplugin-.+\.tar\.gz$/u.test(name))
+  .sort((a, b) => a.localeCompare(b))
+  .map((name) => ({
+    name,
+    sha256: fileHash(join(artifactDir, name)),
+  }));
+
+mkdirSync(dirname(markerPath), { recursive: true });
+writeFileSync(markerPath, `${JSON.stringify({
+  schema_version: "redeven.redevplugin_artifact_verification.v1",
+  sha256sums_sha256: fileHash(sumsPath),
+  stress_summary_sha256: fileHash(stressPath),
+  tarballs,
+}, null, 2)}\n`);
+
+function fileHash(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+NODE
+  echo "ReDevPlugin release artifact verification marker written: $MARKER_PATH"
+fi

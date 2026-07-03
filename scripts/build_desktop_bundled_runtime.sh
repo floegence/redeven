@@ -186,6 +186,8 @@ main() {
     ui_pkg_die "desktop bundled Gateway not found after preparation: $gateway_bundle_path"
   fi
 
+  "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" --scan-root "$bundle_dir"
+
   chmod +x "$bundle_path"
   chmod +x "$gateway_bundle_path"
   ui_pkg_log "Desktop bundled runtime ready: $bundle_path"
