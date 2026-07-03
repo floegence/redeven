@@ -723,9 +723,9 @@ function mergeTerminalSessionWorkStates(
   return hasRunning ? 'running' : 'idle';
 }
 
-const TerminalSidebarStatusBadge = (props: { status: terminal_session_sidebar_status }) => {
-  if (props.status === 'running') {
-    return (
+const TerminalSidebarStatusBadge = (props: { status: terminal_session_sidebar_status }) => (
+  <>
+    <Show when={props.status === 'running'}>
       <span
         class="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full border-2 border-sidebar bg-sidebar text-sidebar-foreground shadow-sm"
         data-terminal-tab-status="running"
@@ -741,21 +741,15 @@ const TerminalSidebarStatusBadge = (props: { status: terminal_session_sidebar_st
           <path d="M20 12a8 8 0 0 0-8-8" class="opacity-100" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
         </svg>
       </span>
-    );
-  }
-
-  if (props.status === 'unread') {
-    return (
+    </Show>
+    <Show when={props.status === 'unread'}>
       <span
         class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar bg-primary/75 shadow-sm"
         data-terminal-tab-status="unread"
         aria-hidden="true"
       />
-    );
-  }
-
-  if (props.status === 'creating') {
-    return (
+    </Show>
+    <Show when={props.status === 'creating'}>
       <span
         class="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full border-2 border-sidebar bg-sidebar text-muted-foreground shadow-sm"
         data-terminal-tab-status="creating"
@@ -771,21 +765,19 @@ const TerminalSidebarStatusBadge = (props: { status: terminal_session_sidebar_st
           <path d="M20 12a8 8 0 0 0-8-8" class="opacity-100" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
         </svg>
       </span>
-    );
-  }
-
-  if (props.status === 'failed') {
-    return (
+    </Show>
+    <Show when={props.status === 'failed'}>
       <span
         class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar bg-error shadow-sm"
         data-terminal-tab-status="failed"
         aria-hidden="true"
       />
-    );
-  }
-
-  return <span class="hidden" data-terminal-tab-status="none" aria-hidden="true" />;
-};
+    </Show>
+    <Show when={props.status === 'none'}>
+      <span class="hidden" data-terminal-tab-status="none" aria-hidden="true" />
+    </Show>
+  </>
+);
 
 const PendingTerminalTabStatusIcon = (props: { status: pending_terminal_session_status }) => {
   if (props.status === 'failed') {
@@ -2179,16 +2171,24 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return true;
   };
 
-  const sessions = createMemo<TerminalSessionInfo[]>(() => {
-    const list = visibleAllSessions();
+  const sessionGroupSessionIds = createMemo<readonly string[] | null>((previous) => {
     const group = sessionGroupState();
     if (!group) {
+      return previous === null ? previous : null;
+    }
+    return previous !== null && sameSessionIdList(previous, group.sessionIds) ? previous : [...group.sessionIds];
+  }, null);
+
+  const sessions = createMemo<TerminalSessionInfo[]>(() => {
+    const list = visibleAllSessions();
+    const groupSessionIds = sessionGroupSessionIds();
+    if (!groupSessionIds) {
       return list;
     }
 
     const sessionsById = new Map(list.map((session) => [session.id, session]));
     const orderedVisibleSessions: TerminalSessionInfo[] = [];
-    for (const sessionId of group.sessionIds) {
+    for (const sessionId of groupSessionIds) {
       const session = sessionsById.get(sessionId);
       if (session) {
         orderedVisibleSessions.push(session);
@@ -3557,6 +3557,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
     return [...sessionItems, ...pendingItems];
   });
+  const sessionListItemById = createMemo(() => new Map(sessionListItems().map((item) => [item.id, item])));
+  const sessionListItemIds = createMemo((previous: readonly string[] = []) => {
+    const next = sessionListItems().map((item) => item.id);
+    return sameSessionIdList(previous, next) ? previous : next;
+  });
 
   let searchInputEl: HTMLInputElement | null = null;
   let rootEl: HTMLDivElement | null = null;
@@ -4462,16 +4467,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                     class="min-h-0 h-full overflow-y-auto overflow-x-hidden pr-0.5 [scrollbar-gutter:stable]"
                   >
                   <For
-                    each={sessionListItems()}
+                    each={sessionListItemIds()}
                     fallback={
                       <div class="rounded-md border border-sidebar-border/70 bg-sidebar-accent/25 px-2.5 py-3 text-xs text-muted-foreground">
                         {emptySessionListLoading() ? i18n.t('terminal.loadingSessions') : i18n.t('terminal.noSessionsTitle')}
                       </div>
                     }
                   >
-                    {(item, index) => {
-                      const sidebarActive = () => sidebarActiveSessionId() === item.id;
-                      const committedActive = () => activeDisplaySessionId() === item.id;
+                    {(sessionId, index) => {
+                      const item = createMemo(() => sessionListItemById().get(sessionId)!);
+                      const sidebarActive = () => sidebarActiveSessionId() === sessionId;
+                      const committedActive = () => activeDisplaySessionId() === sessionId;
                       return (
                         <div
                           class={`group relative rounded-md border px-2.5 py-2 pr-9 text-xs transition-colors duration-75 ${
@@ -4479,24 +4485,24 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               ? 'border-border/20 bg-sidebar-accent text-sidebar-accent-foreground shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
                               : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'
                           }`}
-                          onContextMenu={(event) => openTerminalSidebarMenu(event, item)}
+                          onContextMenu={(event) => openTerminalSidebarMenu(event, item())}
                         >
                           <button
                             type="button"
                             class="absolute inset-0 z-0 w-full cursor-pointer rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
-                            data-terminal-session-id={item.id}
+                            data-terminal-session-id={sessionId}
                             data-terminal-session-active={sidebarActive() ? 'true' : 'false'}
                             data-terminal-session-index={index() + 1}
-                            aria-label={`${item.label}: ${item.title}${item.fullPath ? ` ${item.fullPath}` : ''}`}
+                            aria-label={`${item().label}: ${item().title}${item().fullPath ? ` ${item().fullPath}` : ''}`}
                             aria-current={committedActive() ? 'page' : undefined}
-                            title={item.fullPath || item.title}
-                            onPointerDown={(event) => previewSidebarSessionSelection(event, item.id)}
-                            onClick={() => commitSidebarSessionSelection(item.id)}
-                            onKeyDown={(event) => openTerminalSidebarKeyboardMenu(event, item)}
+                            title={item().fullPath || item().title}
+                            onPointerDown={(event) => previewSidebarSessionSelection(event, sessionId)}
+                            onClick={() => commitSidebarSessionSelection(sessionId)}
+                            onKeyDown={(event) => openTerminalSidebarKeyboardMenu(event, item())}
                           >
-                            <span class="sr-only">{item.label}</span>
-                            <span class="sr-only" data-terminal-tab-status={item.status}>
-                              {item.status}
+                            <span class="sr-only">{item().label}</span>
+                            <span class="sr-only" data-terminal-tab-status={item().status}>
+                              {item().status}
                             </span>
                           </button>
                           <Show when={sidebarActive()}>
@@ -4506,47 +4512,47 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                             <span
                               class="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[13px] font-semibold uppercase leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]"
                               style={{
-                                background: item.avatarTone.background,
-                                'border-color': item.avatarTone.border,
-                                color: item.avatarTone.foreground,
+                                background: item().avatarTone.background,
+                                'border-color': item().avatarTone.border,
+                                color: item().avatarTone.foreground,
                               }}
-                              data-terminal-session-avatar={item.id}
+                              data-terminal-session-avatar={sessionId}
                               aria-hidden="true"
                             >
-                              {item.avatarInitial}
-                              <TerminalSidebarStatusBadge status={item.status} />
+                              {item().avatarInitial}
+                              <TerminalSidebarStatusBadge status={item().status} />
                             </span>
                             <span class="min-w-0 flex-1 text-left">
                               <span class="flex min-w-0 items-center gap-1.5">
-                                <span class="truncate text-sm font-semibold leading-5">{item.title}</span>
+                                <span class="truncate text-sm font-semibold leading-5">{item().title}</span>
                                 <span class="shrink-0 rounded border border-sidebar-border/80 bg-sidebar/35 px-1 py-[1px] text-[9px] leading-none text-muted-foreground/80">{index() + 1}</span>
                               </span>
-                              <Show when={item.fullPath}>
+                              <Show when={item().fullPath}>
                                 <span class="mt-0.5 flex h-6 min-w-0 max-w-full items-center gap-1.5">
                                   <span
                                     class="pointer-events-none min-w-0 flex-1 cursor-pointer truncate text-[11px] leading-6 text-muted-foreground/75"
-                                    title={item.fullPath}
-                                    data-terminal-session-path={item.id}
-                                    data-testid={`terminal-session-path-${item.id}`}
+                                    title={item().fullPath}
+                                    data-terminal-session-path={sessionId}
+                                    data-testid={`terminal-session-path-${sessionId}`}
                                   >
-                                    {item.fullPath}
+                                    {item().fullPath}
                                   </span>
                                   <button
                                     type="button"
                                     class={`pointer-events-auto flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring ${
-                                      copiedSidebarPathSessionId() === item.id
+                                      copiedSidebarPathSessionId() === sessionId
                                         ? 'bg-primary/10 text-primary'
                                         : 'hover:bg-sidebar-accent hover:text-sidebar-foreground'
                                     }`}
-                                    title={copiedSidebarPathSessionId() === item.id ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}
-                                    aria-label={`${copiedSidebarPathSessionId() === item.id ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}: ${item.fullPath}`}
-                                    data-testid={`terminal-session-path-copy-${item.id}`}
+                                    title={copiedSidebarPathSessionId() === sessionId ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}
+                                    aria-label={`${copiedSidebarPathSessionId() === sessionId ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}: ${item().fullPath}`}
+                                    data-testid={`terminal-session-path-copy-${sessionId}`}
                                     onClick={(event) => {
                                       event.stopPropagation();
-                                      copySidebarItemPath(item);
+                                      copySidebarItemPath(item());
                                     }}
                                   >
-                                    <Show when={copiedSidebarPathSessionId() === item.id} fallback={<Copy class="h-3 w-3" />}>
+                                    <Show when={copiedSidebarPathSessionId() === sessionId} fallback={<Copy class="h-3 w-3" />}>
                                       <Check class="h-3 w-3" />
                                     </Show>
                                   </button>
@@ -4555,31 +4561,31 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                             </span>
                           </div>
                           <div class="pointer-events-none absolute right-1.5 top-1.5 z-20 flex w-5 flex-col items-center gap-1 group-hover:pointer-events-auto focus-within:pointer-events-auto">
-                            <Show when={item.closable}>
+                            <Show when={item().closable}>
                               <button
                                 type="button"
                                 class="pointer-events-auto flex h-5 w-5 cursor-pointer items-center justify-center rounded text-[11px] text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-error/10 hover:text-error focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
-                                data-testid={`close-session-${item.id}`}
-                                aria-label={`${i18n.t('terminal.deleteSession')} ${item.title}`}
+                                data-testid={`close-session-${sessionId}`}
+                                aria-label={`${i18n.t('terminal.deleteSession')} ${item().title}`}
                                 title={i18n.t('terminal.deleteSession')}
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  closeSession(item.id);
+                                  closeSession(sessionId);
                                 }}
                               >
                                 <X class="h-3 w-3" />
                               </button>
                             </Show>
-                            <Show when={item.canBrowsePath}>
+                            <Show when={item().canBrowsePath}>
                               <button
                                 type="button"
                                 class="pointer-events-auto flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-sidebar-accent hover:text-sidebar-foreground focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
-                                data-testid={`terminal-session-files-${item.id}`}
-                                aria-label={`${i18n.t('terminal.files')}: ${item.fullPath}`}
-                                title={`${i18n.t('terminal.files')}: ${item.fullPath}`}
+                                data-testid={`terminal-session-files-${sessionId}`}
+                                aria-label={`${i18n.t('terminal.files')}: ${item().fullPath}`}
+                                title={`${i18n.t('terminal.files')}: ${item().fullPath}`}
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  openSidebarItemFiles(item);
+                                  openSidebarItemFiles(item());
                                 }}
                               >
                                 <ExternalLink class="h-3 w-3" />
