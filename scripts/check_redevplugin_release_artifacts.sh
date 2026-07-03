@@ -82,6 +82,8 @@ if [[ "$SELF_TEST" -eq 1 ]]; then
   trap 'rm -rf "$tmpdir"' EXIT
   artifact_dir="$tmpdir/artifacts"
   bundle_dir="$tmpdir/bundle"
+  rooted_bundle_parent="$tmpdir/rooted-bundle"
+  rooted_bundle_name="redevplugin-v0.0.0-test-darwin-amd64"
   mkdir -p "$artifact_dir" "$bundle_dir/bin" "$bundle_dir/contracts/spec/plugin"
   printf 'fake runtime\n' >"$bundle_dir/bin/redevplugin-runtime"
   printf 'fake cli\n' >"$bundle_dir/bin/redevplugin"
@@ -157,6 +159,9 @@ function walk(dir) {
 }
 NODE
   tar -czf "$artifact_dir/redevplugin-v0.0.0-test-linux-amd64.tar.gz" -C "$bundle_dir" .
+  mkdir -p "$rooted_bundle_parent"
+  cp -R "$bundle_dir" "$rooted_bundle_parent/$rooted_bundle_name"
+  tar -czf "$artifact_dir/$rooted_bundle_name.tar.gz" -C "$rooted_bundle_parent" "$rooted_bundle_name"
   cat >"$artifact_dir/redevplugin-release-stress.json" <<'JSON'
 {
   "ok": true,
@@ -178,11 +183,11 @@ JSON
   (
     cd "$artifact_dir"
     if command -v sha256sum >/dev/null 2>&1; then
-      sha256sum redevplugin-v0.0.0-test-linux-amd64.tar.gz redevplugin-release-stress.json >SHA256SUMS
+      sha256sum redevplugin-v0.0.0-test-linux-amd64.tar.gz "$rooted_bundle_name.tar.gz" redevplugin-release-stress.json >SHA256SUMS
     else
-      shasum -a 256 redevplugin-v0.0.0-test-linux-amd64.tar.gz redevplugin-release-stress.json | awk '{ print $1 "  " $2 }' >SHA256SUMS
+      shasum -a 256 redevplugin-v0.0.0-test-linux-amd64.tar.gz "$rooted_bundle_name.tar.gz" redevplugin-release-stress.json | awk '{ print $1 "  " $2 }' >SHA256SUMS
     fi
-    for file in redevplugin-v0.0.0-test-linux-amd64.tar.gz redevplugin-release-stress.json SHA256SUMS; do
+    for file in redevplugin-v0.0.0-test-linux-amd64.tar.gz "$rooted_bundle_name.tar.gz" redevplugin-release-stress.json SHA256SUMS; do
       printf 'fixture signature\n' >"${file}.sig"
       printf 'fixture bundle\n' >"${file}.bundle"
     done
@@ -193,6 +198,28 @@ JSON
     echo "self-test expected verification marker to be written" >&2
     exit 1
   fi
+  MARKER_PATH="$marker_path" node <<'NODE'
+const { readFileSync } = require("node:fs");
+
+const marker = JSON.parse(readFileSync(process.env.MARKER_PATH, "utf8"));
+if (marker.schema_version !== "redeven.redevplugin_artifact_verification.v2") {
+  throw new Error("self-test expected v2 marker schema");
+}
+if (!Array.isArray(marker.runtime_binaries) || marker.runtime_binaries.length !== 2) {
+  throw new Error("self-test expected runtime binary hashes for both tarballs");
+}
+for (const runtime of marker.runtime_binaries) {
+  if (!/^redevplugin-v0\.0\.0-test-.+\.tar\.gz$/u.test(runtime.tarball)) {
+    throw new Error(`unexpected runtime tarball name: ${runtime.tarball}`);
+  }
+  if (runtime.path !== "bin/redevplugin-runtime") {
+    throw new Error(`unexpected runtime path: ${runtime.path}`);
+  }
+  if (!/^[0-9a-f]{64}$/u.test(runtime.sha256)) {
+    throw new Error(`unexpected runtime hash: ${runtime.sha256}`);
+  }
+}
+NODE
   bad_artifact_dir="$tmpdir/bad-artifacts"
   cp -R "$artifact_dir" "$bad_artifact_dir"
   BAD_STRESS_FILE="$bad_artifact_dir/redevplugin-release-stress.json" node <<'NODE'
@@ -206,9 +233,9 @@ NODE
   (
     cd "$bad_artifact_dir"
     if command -v sha256sum >/dev/null 2>&1; then
-      sha256sum redevplugin-v0.0.0-test-linux-amd64.tar.gz redevplugin-release-stress.json >SHA256SUMS
+      sha256sum redevplugin-v0.0.0-test-linux-amd64.tar.gz "$rooted_bundle_name.tar.gz" redevplugin-release-stress.json >SHA256SUMS
     else
-      shasum -a 256 redevplugin-v0.0.0-test-linux-amd64.tar.gz redevplugin-release-stress.json | awk '{ print $1 "  " $2 }' >SHA256SUMS
+      shasum -a 256 redevplugin-v0.0.0-test-linux-amd64.tar.gz "$rooted_bundle_name.tar.gz" redevplugin-release-stress.json | awk '{ print $1 "  " $2 }' >SHA256SUMS
     fi
   )
   if "$0" --artifact-dir "$bad_artifact_dir" --skip-cosign >/dev/null 2>&1; then
@@ -241,17 +268,20 @@ const { execFileSync } = require("node:child_process");
 const {
   existsSync,
   lstatSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
   statSync,
+  writeFileSync,
 } = require("node:fs");
 const { tmpdir } = require("node:os");
-const { basename, join, relative } = require("node:path");
+const { dirname, join, relative } = require("node:path");
 
 const artifactDir = process.env.ARTIFACT_DIR;
 const skipCosign = process.env.SKIP_COSIGN === "1";
+const markerPath = process.env.MARKER_PATH || "";
 const sumsPath = join(artifactDir, "SHA256SUMS");
 const stressPath = join(artifactDir, "redevplugin-release-stress.json");
 
@@ -260,10 +290,17 @@ requireFile(stressPath, "redevplugin-release-stress.json");
 
 const sums = parseSums(sumsPath);
 const coveredPaths = new Set(sums.map((entry) => entry.path));
-const tarballs = readdirSync(artifactDir).filter((name) => name.endsWith(".tar.gz"));
+const tarballs = readdirSync(artifactDir)
+  .filter((name) => name.endsWith(".tar.gz"))
+  .sort((a, b) => a.localeCompare(b));
 
 if (tarballs.length === 0) {
   fail("artifact directory must contain at least one ReDevPlugin tarball");
+}
+for (const tarball of tarballs) {
+  if (!/^redevplugin-.+\.tar\.gz$/u.test(tarball)) {
+    fail(`unexpected tarball name in ReDevPlugin artifact directory: ${tarball}`);
+  }
 }
 if (!coveredPaths.has("redevplugin-release-stress.json")) {
   fail("SHA256SUMS must cover redevplugin-release-stress.json");
@@ -282,8 +319,12 @@ for (const entry of sums) {
 requireSignatureEvidence("SHA256SUMS");
 verifyCosign("SHA256SUMS");
 verifyStressSummary(stressPath);
+const verifiedTarballs = [];
 for (const tarball of tarballs) {
-  verifyTarball(tarball);
+  verifiedTarballs.push(verifyTarball(tarball));
+}
+if (markerPath) {
+  writeMarker(verifiedTarballs);
 }
 
 console.log(`ReDevPlugin release artifacts verified: ${artifactDir}`);
@@ -315,7 +356,8 @@ function verifyTarball(tarballName) {
   const tmp = mkdtempSync(join(tmpdir(), "redeven-redevplugin-artifact-"));
   try {
     execFileSync("tar", ["-xzf", join(artifactDir, tarballName), "-C", tmp], { stdio: "pipe" });
-    const releaseManifest = readJSON(join(tmp, "release-manifest.json"));
+    const bundleRoot = resolveBundleRoot(tmp, tarballName);
+    const releaseManifest = readJSON(join(bundleRoot, "release-manifest.json"));
     assertObject(releaseManifest, `${tarballName}: release-manifest.json`);
     if (releaseManifest.schema_version !== "redevplugin.release_manifest.v1") {
       fail(`${tarballName}: release manifest schema_version mismatch`);
@@ -339,18 +381,49 @@ function verifyTarball(tarballName) {
       }
       return { path: file.path, sha256: file.sha256, size: file.size };
     }).sort(compareManifestFile);
-    const actualFiles = listFiles(tmp).sort(compareManifestFile);
+    const actualFiles = listFiles(bundleRoot).sort(compareManifestFile);
     assertDeepEqual(actualFiles, manifestFiles, `${tarballName}: release manifest file list`);
     const expectedInternalSums = manifestFiles.map((file) => `${file.sha256}  ${file.path}`).join("\n") + "\n";
-    const actualInternalSums = readFileSync(join(tmp, "SHA256SUMS"), "utf8");
+    const actualInternalSums = readFileSync(join(bundleRoot, "SHA256SUMS"), "utf8");
     if (actualInternalSums !== expectedInternalSums) {
       fail(`${tarballName}: internal SHA256SUMS must match release manifest files`);
     }
-    verifyCompatibility(tmp, version, tarballName);
-    requireFile(join(tmp, "bin/redevplugin-runtime"), `${tarballName}: bin/redevplugin-runtime`);
+    verifyCompatibility(bundleRoot, version, tarballName);
+    const runtimeFiles = manifestFiles.filter((file) => /^bin\/redevplugin-runtime(?:\.exe)?$/u.test(file.path));
+    if (runtimeFiles.length !== 1) {
+      fail(`${tarballName}: release manifest must contain exactly one bin/redevplugin-runtime entry`);
+    }
+    requireFile(join(bundleRoot, runtimeFiles[0].path), `${tarballName}: ${runtimeFiles[0].path}`);
+    return {
+      name: tarballName,
+      sha256: fileHash(join(artifactDir, tarballName)),
+      runtime: {
+        path: runtimeFiles[0].path,
+        sha256: runtimeFiles[0].sha256,
+      },
+    };
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+}
+
+function resolveBundleRoot(extractRoot, tarballName) {
+  if (existsSync(join(extractRoot, "release-manifest.json"))) {
+    return extractRoot;
+  }
+  const entries = readdirSync(extractRoot).sort((a, b) => a.localeCompare(b));
+  if (entries.length !== 1) {
+    fail(`${tarballName}: tarball must contain a flat bundle or exactly one top-level bundle directory`);
+  }
+  const root = join(extractRoot, entries[0]);
+  if (lstatSync(root).isSymbolicLink()) {
+    fail(`${tarballName}: top-level bundle directory must not be a symlink`);
+  }
+  if (!statSync(root).isDirectory()) {
+    fail(`${tarballName}: top-level bundle entry must be a directory`);
+  }
+  requireFile(join(root, "release-manifest.json"), `${tarballName}: release-manifest.json`);
+  return root;
 }
 
 function verifyCompatibility(root, version, tarballName) {
@@ -629,6 +702,24 @@ function assertDeepEqual(actual, expected, label) {
   }
 }
 
+function writeMarker(verifiedTarballs) {
+  mkdirSync(dirname(markerPath), { recursive: true });
+  writeFileSync(markerPath, `${JSON.stringify({
+    schema_version: "redeven.redevplugin_artifact_verification.v2",
+    sha256sums_sha256: fileHash(sumsPath),
+    stress_summary_sha256: fileHash(stressPath),
+    tarballs: verifiedTarballs.map((tarball) => ({
+      name: tarball.name,
+      sha256: tarball.sha256,
+    })),
+    runtime_binaries: verifiedTarballs.map((tarball) => ({
+      tarball: tarball.name,
+      path: tarball.runtime.path,
+      sha256: tarball.runtime.sha256,
+    })),
+  }, null, 2)}\n`);
+}
+
 function fail(message) {
   console.error(`[redevplugin-artifacts] ${message}`);
   process.exit(1);
@@ -636,36 +727,5 @@ function fail(message) {
 NODE
 
 if [[ -n "$MARKER_PATH" ]]; then
-  marker_dir=$(dirname -- "$MARKER_PATH")
-  mkdir -p "$marker_dir"
-  node <<'NODE'
-const { createHash } = require("node:crypto");
-const { mkdirSync, readFileSync, readdirSync, writeFileSync } = require("node:fs");
-const { dirname, join } = require("node:path");
-
-const artifactDir = process.env.ARTIFACT_DIR;
-const markerPath = process.env.MARKER_PATH;
-const sumsPath = join(artifactDir, "SHA256SUMS");
-const stressPath = join(artifactDir, "redevplugin-release-stress.json");
-const tarballs = readdirSync(artifactDir)
-  .filter((name) => /^redevplugin-.+\.tar\.gz$/u.test(name))
-  .sort((a, b) => a.localeCompare(b))
-  .map((name) => ({
-    name,
-    sha256: fileHash(join(artifactDir, name)),
-  }));
-
-mkdirSync(dirname(markerPath), { recursive: true });
-writeFileSync(markerPath, `${JSON.stringify({
-  schema_version: "redeven.redevplugin_artifact_verification.v1",
-  sha256sums_sha256: fileHash(sumsPath),
-  stress_summary_sha256: fileHash(stressPath),
-  tarballs,
-}, null, 2)}\n`);
-
-function fileHash(path) {
-  return createHash("sha256").update(readFileSync(path)).digest("hex");
-}
-NODE
   echo "ReDevPlugin release artifact verification marker written: $MARKER_PATH"
 fi

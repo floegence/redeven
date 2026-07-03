@@ -29,11 +29,16 @@ verifier's self-test so the positive fixture passes and a tampered stress
 summary is rejected before a real ReDevPlugin artifact is wired into the release
 pipeline. When the verifier is used with `--write-marker`, it emits a
 machine-readable verification marker that records the checked checksum file,
-stress summary, and runtime tarball hashes. The consumption gate scans release
-staging directories and Desktop bundle directories for ReDevPlugin payloads and
-fails if they appear without that marker; release automation runs it before final
-checksums are generated, and the Desktop bundled-runtime preparation runs it
-before electron-builder can package the bundle resources. Once plugin
+stress summary, runtime tarball hashes, and the runtime binary hashes extracted
+from those verified tarballs. The consumption gate scans release staging
+directories and Desktop bundle directories for ReDevPlugin payloads and fails if
+they appear without that marker. It also binds the marker to the staged payloads:
+direct ReDevPlugin tarballs must match marker tarball checksums, direct runtime
+binaries must match marker runtime hashes, embedded runtime binaries inside
+Redeven tarballs must match marker runtime hashes, and staged stress summaries
+must match the marker stress checksum. Release automation runs the gate before
+final checksums are generated, and the Desktop bundled-runtime preparation runs
+it before electron-builder can package the bundle resources. Once plugin
 integration code exists, the focused gate should cover mounted route matrix,
 released-contract hash verification, session adapter mapping, Env App and
 Workbench surface smoke, Flower-generated minimal fixture flow, and concrete

@@ -45,112 +45,265 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+hash_file() {
+  local path="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$path" | awk '{ print $1 }'
+  else
+    shasum -a 256 "$path" | awk '{ print $1 }'
+  fi
+}
+
 write_self_test_marker() {
   local marker_path="$1"
-  cat >"$marker_path" <<'JSON'
-{
-  "schema_version": "redeven.redevplugin_artifact_verification.v1",
-  "sha256sums_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "stress_summary_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-  "tarballs": [
+  local runtime_path="$2"
+  local tarball_path="$3"
+  local stress_path="${4:-}"
+  local stress_hash="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+  if [[ -n "$stress_path" ]]; then
+    stress_hash="$(hash_file "$stress_path")"
+  fi
+
+  MARKER_PATH="$marker_path" \
+    RUNTIME_HASH="$(hash_file "$runtime_path")" \
+    TARBALL_NAME="$(basename -- "$tarball_path")" \
+    TARBALL_HASH="$(hash_file "$tarball_path")" \
+    STRESS_HASH="$stress_hash" \
+    node <<'NODE'
+const { writeFileSync } = require("node:fs");
+
+writeFileSync(process.env.MARKER_PATH, `${JSON.stringify({
+  schema_version: "redeven.redevplugin_artifact_verification.v2",
+  sha256sums_sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  stress_summary_sha256: process.env.STRESS_HASH,
+  tarballs: [
     {
-      "name": "redevplugin-v0.0.0-test-linux-amd64.tar.gz",
-      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
-    }
-  ]
-}
-JSON
+      name: process.env.TARBALL_NAME,
+      sha256: process.env.TARBALL_HASH,
+    },
+  ],
+  runtime_binaries: [
+    {
+      tarball: process.env.TARBALL_NAME,
+      path: "bin/redevplugin-runtime",
+      sha256: process.env.RUNTIME_HASH,
+    },
+  ],
+}, null, 2)}\n`);
+NODE
 }
 
 assert_scan_root() {
   local root="$1"
   local marker_path="$root/$MARKER_BASENAME"
-  local payload_list
 
-  payload_list=$(find_redevplugin_payloads "$root")
-  if [[ -z "$payload_list" ]]; then
-    echo "[INFO] no ReDevPlugin payloads found in ${root}"
-    return 0
-  fi
+  SCAN_ROOT="$root" MARKER_PATH="$marker_path" MARKER_BASENAME="$MARKER_BASENAME" node <<'NODE'
+const { createHash } = require("node:crypto");
+const { execFileSync } = require("node:child_process");
+const { existsSync, lstatSync, readFileSync, readdirSync, statSync } = require("node:fs");
+const { basename, join, relative } = require("node:path");
 
-  if [[ ! -f "$marker_path" ]]; then
-    printf '%s\n' "$payload_list" >&2
-    echo "[redevplugin-consumption] ReDevPlugin payloads require verifier marker: $marker_path" >&2
-    exit 1
-  fi
-
-  validate_marker "$marker_path"
-  echo "[INFO] ReDevPlugin consumption marker verified for ${root}"
-}
-
-find_redevplugin_payloads() {
-  local root="$1"
-  local file name
-  while IFS= read -r -d '' file; do
-    name=$(basename -- "$file")
-    case "$name" in
-      "$MARKER_BASENAME")
-        continue
-        ;;
-      redevplugin-runtime|redevplugin-runtime.exe|redevplugin-release-stress.json)
-        printf '%s\n' "$file"
-        continue
-        ;;
-    esac
-    if [[ "$name" =~ ^redevplugin-.+\.tar\.gz$ ]]; then
-      printf '%s\n' "$file"
-      continue
-    fi
-    if [[ "$name" == *.tar.gz ]] && tarball_contains_redevplugin_runtime "$file"; then
-      printf '%s: contains redevplugin-runtime\n' "$file"
-    fi
-  done < <(find "$root" -type f -print0)
-}
-
-tarball_contains_redevplugin_runtime() {
-  local tarball="$1"
-  tar -tzf "$tarball" 2>/dev/null | grep -Eq '(^|/)redevplugin-runtime(\.exe)?$'
-}
-
-validate_marker() {
-  local marker_path="$1"
-  MARKER_PATH="$marker_path" node <<'NODE'
-const { readFileSync } = require("node:fs");
-
+const scanRoot = process.env.SCAN_ROOT;
 const markerPath = process.env.MARKER_PATH;
-let marker;
-try {
-  marker = JSON.parse(readFileSync(markerPath, "utf8"));
-} catch (error) {
-  fail(`failed to parse marker JSON: ${error.message}`);
+const markerBasename = process.env.MARKER_BASENAME;
+const payloads = findPayloads(scanRoot);
+
+if (payloads.length === 0) {
+  console.log(`[INFO] no ReDevPlugin payloads found in ${scanRoot}`);
+  process.exit(0);
+}
+if (!existsSync(markerPath)) {
+  for (const payload of payloads) {
+    console.error(payload.description);
+  }
+  fail(`ReDevPlugin payloads require verifier marker: ${markerPath}`);
 }
 
-if (!marker || typeof marker !== "object" || Array.isArray(marker)) {
-  fail("marker must be an object");
-}
-if (marker.schema_version !== "redeven.redevplugin_artifact_verification.v1") {
-  fail("marker schema_version mismatch");
-}
-for (const field of ["sha256sums_sha256", "stress_summary_sha256"]) {
-  assertHash(marker[field], field);
-}
-if (!Array.isArray(marker.tarballs) || marker.tarballs.length === 0) {
-  fail("marker tarballs must be a non-empty array");
-}
+const marker = readMarker(markerPath);
+const tarballHashes = new Map();
 for (const [index, tarball] of marker.tarballs.entries()) {
-  if (!tarball || typeof tarball !== "object" || Array.isArray(tarball)) {
-    fail(`marker tarballs[${index}] must be an object`);
+  if (tarballHashes.has(tarball.name)) {
+    fail(`marker tarballs contains duplicate name ${tarball.name}`);
   }
-  if (typeof tarball.name !== "string" || !/^redevplugin-.+\.tar\.gz$/u.test(tarball.name)) {
-    fail(`marker tarballs[${index}].name must be a ReDevPlugin tarball name`);
+  tarballHashes.set(tarball.name, tarball.sha256);
+}
+const runtimeHashes = new Set();
+for (const [index, runtime] of marker.runtime_binaries.entries()) {
+  if (!tarballHashes.has(runtime.tarball)) {
+    fail(`marker runtime_binaries[${index}].tarball does not reference a marker tarball`);
   }
-  assertHash(tarball.sha256, `tarballs[${index}].sha256`);
+  runtimeHashes.add(runtime.sha256);
 }
 
-function assertHash(value, label) {
+for (const payload of payloads) {
+  switch (payload.kind) {
+    case "runtime":
+      assertRuntimeHash(payload.path, runtimeHashes);
+      break;
+    case "stress":
+      assertHashMatch(fileHash(payload.path), marker.stress_summary_sha256, `${payload.description} stress summary`);
+      break;
+    case "redevplugin_tarball":
+      assertReDevPluginTarball(payload.path, tarballHashes);
+      break;
+    case "embedded_tarball":
+      assertEmbeddedTarballRuntimes(payload.path, runtimeHashes);
+      break;
+    default:
+      fail(`unknown payload kind ${payload.kind}`);
+  }
+}
+
+console.log(`[INFO] ReDevPlugin consumption marker verified for ${scanRoot}`);
+
+function findPayloads(root) {
+  const payloads = [];
+  walk(root);
+  return payloads;
+
+  function walk(dir) {
+    for (const entry of readdirSync(dir)) {
+      const path = join(dir, entry);
+      const rel = relative(scanRoot, path).replaceAll("\\", "/");
+      const linkStat = lstatSync(path);
+      if (linkStat.isSymbolicLink()) {
+        continue;
+      }
+      const stat = statSync(path);
+      if (stat.isDirectory()) {
+        walk(path);
+        continue;
+      }
+      if (!stat.isFile() || entry === markerBasename) {
+        continue;
+      }
+      const description = join(scanRoot, rel);
+      if (/^redevplugin-runtime(?:\.exe)?$/u.test(entry)) {
+        payloads.push({ kind: "runtime", path, description });
+        continue;
+      }
+      if (entry === "redevplugin-release-stress.json") {
+        payloads.push({ kind: "stress", path, description });
+        continue;
+      }
+      if (/^redevplugin-.+\.tar\.gz$/u.test(entry)) {
+        payloads.push({ kind: "redevplugin_tarball", path, description });
+        continue;
+      }
+      if (entry.endsWith(".tar.gz") && tarballRuntimeEntries(path).length > 0) {
+        payloads.push({
+          kind: "embedded_tarball",
+          path,
+          description: `${description}: contains redevplugin-runtime`,
+        });
+      }
+    }
+  }
+}
+
+function readMarker(path) {
+  let marker;
+  try {
+    marker = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    fail(`failed to parse marker JSON: ${error.message}`);
+  }
+  if (!marker || typeof marker !== "object" || Array.isArray(marker)) {
+    fail("marker must be an object");
+  }
+  if (marker.schema_version !== "redeven.redevplugin_artifact_verification.v2") {
+    fail("marker schema_version mismatch");
+  }
+  for (const field of ["sha256sums_sha256", "stress_summary_sha256"]) {
+    assertSha256(marker[field], field);
+  }
+  if (!Array.isArray(marker.tarballs) || marker.tarballs.length === 0) {
+    fail("marker tarballs must be a non-empty array");
+  }
+  for (const [index, tarball] of marker.tarballs.entries()) {
+    if (!tarball || typeof tarball !== "object" || Array.isArray(tarball)) {
+      fail(`marker tarballs[${index}] must be an object`);
+    }
+    if (typeof tarball.name !== "string" || !/^redevplugin-.+\.tar\.gz$/u.test(tarball.name)) {
+      fail(`marker tarballs[${index}].name must be a ReDevPlugin tarball name`);
+    }
+    assertSha256(tarball.sha256, `tarballs[${index}].sha256`);
+  }
+  if (!Array.isArray(marker.runtime_binaries) || marker.runtime_binaries.length === 0) {
+    fail("marker runtime_binaries must be a non-empty array");
+  }
+  for (const [index, runtime] of marker.runtime_binaries.entries()) {
+    if (!runtime || typeof runtime !== "object" || Array.isArray(runtime)) {
+      fail(`marker runtime_binaries[${index}] must be an object`);
+    }
+    if (typeof runtime.tarball !== "string" || !/^redevplugin-.+\.tar\.gz$/u.test(runtime.tarball)) {
+      fail(`marker runtime_binaries[${index}].tarball must be a ReDevPlugin tarball name`);
+    }
+    if (typeof runtime.path !== "string" || !/^bin\/redevplugin-runtime(?:\.exe)?$/u.test(runtime.path)) {
+      fail(`marker runtime_binaries[${index}].path must be a runtime binary path`);
+    }
+    assertSha256(runtime.sha256, `runtime_binaries[${index}].sha256`);
+  }
+  return marker;
+}
+
+function assertRuntimeHash(path, runtimeHashes) {
+  const actual = fileHash(path);
+  if (!runtimeHashes.has(actual)) {
+    fail(`${path} runtime binary hash is not present in verifier marker`);
+  }
+}
+
+function assertReDevPluginTarball(path, tarballHashes) {
+  const name = basename(path);
+  const expected = tarballHashes.get(name);
+  if (!expected) {
+    fail(`${path} is not listed in verifier marker tarballs`);
+  }
+  assertHashMatch(fileHash(path), expected, `${path} tarball`);
+}
+
+function assertEmbeddedTarballRuntimes(path, runtimeHashes) {
+  const entries = tarballRuntimeEntries(path);
+  if (entries.length === 0) {
+    fail(`${path} no longer contains a ReDevPlugin runtime`);
+  }
+  for (const entry of entries) {
+    const runtimeBytes = execFileSync("tar", ["-xOf", path, entry], { stdio: ["ignore", "pipe", "pipe"] });
+    const actual = createHash("sha256").update(runtimeBytes).digest("hex");
+    if (!runtimeHashes.has(actual)) {
+      fail(`${path}:${entry} runtime binary hash is not present in verifier marker`);
+    }
+  }
+}
+
+function tarballRuntimeEntries(path) {
+  let output;
+  try {
+    output = execFileSync("tar", ["-tzf", path], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch {
+    return [];
+  }
+  return output
+    .split(/\r?\n/u)
+    .filter((entry) => /(^|\/)redevplugin-runtime(?:\.exe)?$/u.test(entry));
+}
+
+function assertHashMatch(actual, expected, label) {
+  if (actual !== expected) {
+    fail(`${label} checksum mismatch: got ${actual}, want ${expected}`);
+  }
+}
+
+function assertSha256(value, label) {
   if (typeof value !== "string" || !/^[0-9a-f]{64}$/u.test(value)) {
     fail(`${label} must be lowercase SHA-256 hex`);
   }
+}
+
+function fileHash(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
 function fail(message) {
@@ -172,8 +325,34 @@ if [[ "$self_test" -eq 1 ]]; then
   missing_marker_root="$tmpdir/missing-marker"
   invalid_marker_root="$tmpdir/invalid-marker"
   valid_marker_root="$tmpdir/valid-marker"
+  runtime_mismatch_root="$tmpdir/runtime-mismatch"
+  release_tarball_root="$tmpdir/release-tarball"
+  release_tarball_mismatch_root="$tmpdir/release-tarball-mismatch"
+  stress_mismatch_root="$tmpdir/stress-mismatch"
   tarball_root="$tmpdir/tarball"
-  mkdir -p "$clean_root" "$missing_marker_root/bin" "$invalid_marker_root/bin" "$valid_marker_root/bin" "$tarball_root/payload/bin"
+  embedded_mismatch_root="$tmpdir/embedded-mismatch"
+  trusted_release_parent="$tmpdir/trusted-release"
+  trusted_release_name="redevplugin-v0.0.0-test-linux-amd64"
+  trusted_release_dir="$trusted_release_parent/$trusted_release_name"
+  trusted_tarball_path="$tmpdir/$trusted_release_name.tar.gz"
+  trusted_stress_path="$tmpdir/redevplugin-release-stress.json"
+  mkdir -p \
+    "$clean_root" \
+    "$missing_marker_root/bin" \
+    "$invalid_marker_root/bin" \
+    "$valid_marker_root/bin" \
+    "$runtime_mismatch_root/bin" \
+    "$release_tarball_root" \
+    "$release_tarball_mismatch_root" \
+    "$stress_mismatch_root" \
+    "$tarball_root/payload/bin" \
+    "$embedded_mismatch_root/payload/bin" \
+    "$trusted_release_dir/bin"
+
+  printf 'plugin runtime\n' >"$trusted_release_dir/bin/redevplugin-runtime"
+  trusted_runtime_path="$trusted_release_dir/bin/redevplugin-runtime"
+  tar -czf "$trusted_tarball_path" -C "$trusted_release_parent" "$trusted_release_name"
+  printf '{"ok":true}\n' >"$trusted_stress_path"
 
   printf 'redeven runtime\n' >"$clean_root/redeven"
   "$0" --scan-root "$clean_root"
@@ -191,19 +370,56 @@ if [[ "$self_test" -eq 1 ]]; then
     exit 1
   fi
 
-  printf 'plugin runtime\n' >"$valid_marker_root/bin/redevplugin-runtime"
-  write_self_test_marker "$valid_marker_root/$MARKER_BASENAME"
+  cp "$trusted_runtime_path" "$valid_marker_root/bin/redevplugin-runtime"
+  write_self_test_marker "$valid_marker_root/$MARKER_BASENAME" "$valid_marker_root/bin/redevplugin-runtime" "$trusted_tarball_path" "$trusted_stress_path"
   "$0" --scan-root "$valid_marker_root"
 
-  printf 'plugin runtime\n' >"$tarball_root/payload/bin/redevplugin-runtime"
+  printf 'tampered runtime\n' >"$runtime_mismatch_root/bin/redevplugin-runtime"
+  write_self_test_marker "$runtime_mismatch_root/$MARKER_BASENAME" "$trusted_runtime_path" "$trusted_tarball_path" "$trusted_stress_path"
+  if "$0" --scan-root "$runtime_mismatch_root" >/dev/null 2>&1; then
+    echo "self-test expected direct runtime hash mismatch to fail" >&2
+    exit 1
+  fi
+
+  cp "$trusted_tarball_path" "$release_tarball_root/$(basename -- "$trusted_tarball_path")"
+  cp "$trusted_stress_path" "$release_tarball_root/redevplugin-release-stress.json"
+  write_self_test_marker "$release_tarball_root/$MARKER_BASENAME" "$trusted_runtime_path" "$release_tarball_root/$(basename -- "$trusted_tarball_path")" "$release_tarball_root/redevplugin-release-stress.json"
+  "$0" --scan-root "$release_tarball_root"
+
+  cp "$trusted_tarball_path" "$release_tarball_mismatch_root/$(basename -- "$trusted_tarball_path")"
+  write_self_test_marker "$release_tarball_mismatch_root/$MARKER_BASENAME" "$trusted_runtime_path" "$trusted_tarball_path" "$trusted_stress_path"
+  printf 'tampered\n' >>"$release_tarball_mismatch_root/$(basename -- "$trusted_tarball_path")"
+  if "$0" --scan-root "$release_tarball_mismatch_root" >/dev/null 2>&1; then
+    echo "self-test expected ReDevPlugin tarball hash mismatch to fail" >&2
+    exit 1
+  fi
+
+  cp "$trusted_stress_path" "$stress_mismatch_root/redevplugin-release-stress.json"
+  write_self_test_marker "$stress_mismatch_root/$MARKER_BASENAME" "$trusted_runtime_path" "$trusted_tarball_path" "$trusted_stress_path"
+  printf '{"ok":false}\n' >"$stress_mismatch_root/redevplugin-release-stress.json"
+  if "$0" --scan-root "$stress_mismatch_root" >/dev/null 2>&1; then
+    echo "self-test expected stress summary hash mismatch to fail" >&2
+    exit 1
+  fi
+
+  cp "$trusted_runtime_path" "$tarball_root/payload/bin/redevplugin-runtime"
   tar -czf "$tarball_root/redeven_linux_amd64.tar.gz" -C "$tarball_root/payload" .
   rm -rf "$tarball_root/payload"
   if "$0" --scan-root "$tarball_root" >/dev/null 2>&1; then
     echo "self-test expected tarball with embedded plugin runtime to fail" >&2
     exit 1
   fi
-  write_self_test_marker "$tarball_root/$MARKER_BASENAME"
+  write_self_test_marker "$tarball_root/$MARKER_BASENAME" "$trusted_runtime_path" "$trusted_tarball_path" "$trusted_stress_path"
   "$0" --scan-root "$tarball_root"
+
+  printf 'tampered runtime\n' >"$embedded_mismatch_root/payload/bin/redevplugin-runtime"
+  tar -czf "$embedded_mismatch_root/redeven_linux_amd64.tar.gz" -C "$embedded_mismatch_root/payload" .
+  rm -rf "$embedded_mismatch_root/payload"
+  write_self_test_marker "$embedded_mismatch_root/$MARKER_BASENAME" "$trusted_runtime_path" "$trusted_tarball_path" "$trusted_stress_path"
+  if "$0" --scan-root "$embedded_mismatch_root" >/dev/null 2>&1; then
+    echo "self-test expected embedded runtime hash mismatch to fail" >&2
+    exit 1
+  fi
 
   exit 0
 fi
