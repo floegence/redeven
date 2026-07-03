@@ -1603,6 +1603,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   let terminalSidebarMenuEl: HTMLDivElement | null = null;
   const [copiedSidebarPathSessionId, setCopiedSidebarPathSessionId] = createSignal<string | null>(null);
   let sidebarPathCopyResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  let sidebarVisualActiveResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   const [terminalContextMenuHostEl, setTerminalContextMenuHostEl] = createSignal<HTMLDivElement | null>(null);
 
   let searchLastAppliedKey = '';
@@ -1620,6 +1621,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (sidebarPathCopyResetTimer !== undefined) {
       globalThis.clearTimeout(sidebarPathCopyResetTimer);
       sidebarPathCopyResetTimer = undefined;
+    }
+    if (sidebarVisualActiveResetTimer !== undefined) {
+      globalThis.clearTimeout(sidebarVisualActiveResetTimer);
+      sidebarVisualActiveResetTimer = undefined;
     }
   });
 
@@ -1839,6 +1844,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [localActiveSessionId, setLocalActiveSessionId] = createSignal<string | null>(readActiveSessionId(activeSessionStorageKey));
   const [localActivePendingSessionId, setLocalActivePendingSessionId] = createSignal<string | null>(null);
   const [optimisticActiveDisplaySessionId, setOptimisticActiveDisplaySessionId] = createSignal<string | null>(null);
+  const [sidebarVisualActiveSessionId, setSidebarVisualActiveSessionId] = createSignal<string | null>(null);
   const [mountedSessionIds, setMountedSessionIds] = createSignal<Set<string>>(new Set());
   const [scheduledMountSessionIds, setScheduledMountSessionIds] = createSignal<Set<string>>(new Set());
   const [retainedClosingSessions, setRetainedClosingSessions] = createSignal<Record<string, TerminalSessionInfo>>({});
@@ -2040,6 +2046,51 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   });
 
+  const clearSidebarVisualActiveSession = () => {
+    if (sidebarVisualActiveResetTimer !== undefined) {
+      globalThis.clearTimeout(sidebarVisualActiveResetTimer);
+      sidebarVisualActiveResetTimer = undefined;
+    }
+    setSidebarVisualActiveSessionId(null);
+  };
+
+  const previewSidebarActiveSession = (sessionId: string | null) => {
+    const normalizedSessionId = String(sessionId ?? '').trim() || null;
+    if (!normalizedSessionId || !sessionDisplayIdExists(normalizedSessionId)) {
+      clearSidebarVisualActiveSession();
+      return;
+    }
+
+    if (sidebarVisualActiveResetTimer !== undefined) {
+      globalThis.clearTimeout(sidebarVisualActiveResetTimer);
+    }
+    setSidebarVisualActiveSessionId(normalizedSessionId);
+    sidebarVisualActiveResetTimer = globalThis.setTimeout(() => {
+      sidebarVisualActiveResetTimer = undefined;
+      setSidebarVisualActiveSessionId((current) => (
+        current === normalizedSessionId && activeDisplaySessionId() !== normalizedSessionId
+          ? null
+          : current
+      ));
+    }, 1200);
+  };
+
+  const sidebarActiveSessionId = createMemo<string | null>(() => {
+    const visualActiveId = sidebarVisualActiveSessionId();
+    if (visualActiveId && sessionDisplayIdExists(visualActiveId)) {
+      return visualActiveId;
+    }
+    return activeDisplaySessionId();
+  });
+
+  createEffect(() => {
+    const visualActiveId = sidebarVisualActiveSessionId();
+    if (!visualActiveId) return;
+    if (activeDisplaySessionId() === visualActiveId || !sessionDisplayIdExists(visualActiveId)) {
+      clearSidebarVisualActiveSession();
+    }
+  });
+
   const activeSessionId = createMemo<string | null>(() => {
     const activeId = activeDisplaySessionId();
     return activeId && !visiblePendingTerminalSessionById(activeId) ? activeId : null;
@@ -2215,6 +2266,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const setActiveSessionId = (value: string | null) => {
     const normalizedValue = String(value ?? '').trim() || null;
+    clearSidebarVisualActiveSession();
     selectOptimisticActiveDisplaySessionId(normalizedValue);
     if (normalizedValue && pendingTerminalSessionById(normalizedValue)) {
       const resolved = resolvedPendingTerminalSessionByPendingId(normalizedValue);
@@ -2570,6 +2622,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     requestAnimationFrame(() => {
       getActiveCore()?.focus();
     });
+  };
+
+  const commitSidebarSessionSelection = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    restoreActiveTerminalFocus();
+  };
+
+  const previewSidebarSessionSelection = (event: PointerEvent, sessionId: string) => {
+    if (event.button !== 0) return;
+    previewSidebarActiveSession(sessionId);
   };
 
   const activeTerminalHasSelection = () => {
@@ -4137,7 +4199,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   <Button
                     size="sm"
                     variant="ghost"
-                    class="h-7 w-7 p-0"
+                    class="h-7 w-7 cursor-pointer p-0 disabled:cursor-not-allowed"
                     data-testid="terminal-sidebar-add-session"
                     onClick={createSession}
                     disabled={!connected()}
@@ -4148,7 +4210,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   <Button
                     size="sm"
                     variant="ghost"
-                    class="h-7 w-7 p-0"
+                    class="h-7 w-7 cursor-pointer p-0 disabled:cursor-not-allowed"
                     data-testid="terminal-sidebar-refresh"
                     onClick={handleRefresh}
                     disabled={!connected() || refreshing()}
@@ -4179,11 +4241,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                     }
                   >
                     {(item, index) => {
-                      const active = () => activeDisplaySessionId() === item.id;
+                      const sidebarActive = () => sidebarActiveSessionId() === item.id;
+                      const committedActive = () => activeDisplaySessionId() === item.id;
                       return (
                         <div
                           class={`group relative rounded-md border px-2.5 py-2 pr-9 text-xs transition-colors duration-75 ${
-                            active()
+                            sidebarActive()
                               ? 'border-border/20 bg-sidebar-accent text-sidebar-accent-foreground shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
                               : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'
                           }`}
@@ -4193,14 +4256,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                             type="button"
                             class="absolute inset-0 z-0 w-full cursor-pointer rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
                             data-terminal-session-id={item.id}
-                            data-terminal-session-active={active() ? 'true' : 'false'}
+                            data-terminal-session-active={sidebarActive() ? 'true' : 'false'}
                             data-terminal-session-index={index() + 1}
                             aria-label={`${item.label}: ${item.title}${item.fullPath ? ` ${item.fullPath}` : ''}`}
-                            aria-current={active() ? 'page' : undefined}
-                            onClick={() => {
-                              setActiveSessionId(item.id);
-                              restoreActiveTerminalFocus();
-                            }}
+                            aria-current={committedActive() ? 'page' : undefined}
+                            title={item.fullPath || item.title}
+                            onPointerDown={(event) => previewSidebarSessionSelection(event, item.id)}
+                            onClick={() => commitSidebarSessionSelection(item.id)}
                             onKeyDown={(event) => openTerminalSidebarKeyboardMenu(event, item)}
                           >
                             <span class="sr-only">{item.label}</span>
@@ -4208,7 +4270,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               {item.status}
                             </span>
                           </button>
-                          <Show when={active()}>
+                          <Show when={sidebarActive()}>
                             <span class="absolute left-0 top-2 bottom-2 z-10 w-[2px] rounded-full bg-primary" aria-hidden="true" />
                           </Show>
                           <div class="relative z-10 flex min-w-0 items-start gap-2.5 pointer-events-none">
@@ -4233,17 +4295,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               <Show when={item.fullPath}>
                                 <span class="mt-0.5 flex h-6 min-w-0 max-w-full items-center gap-1.5">
                                   <span
-                                    class="pointer-events-auto min-w-0 flex-1 truncate text-[11px] leading-6 text-muted-foreground/75"
+                                    class="pointer-events-none min-w-0 flex-1 cursor-pointer truncate text-[11px] leading-6 text-muted-foreground/75"
                                     title={item.fullPath}
                                     data-terminal-session-path={item.id}
                                     data-testid={`terminal-session-path-${item.id}`}
-                                    onClick={(event) => event.stopPropagation()}
                                   >
                                     {item.fullPath}
                                   </span>
                                   <button
                                     type="button"
-                                    class={`pointer-events-auto flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring ${
+                                    class={`pointer-events-auto flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring ${
                                       copiedSidebarPathSessionId() === item.id
                                         ? 'bg-primary/10 text-primary'
                                         : 'hover:bg-sidebar-accent hover:text-sidebar-foreground'
@@ -4264,11 +4325,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               </Show>
                             </span>
                           </div>
-                          <div class="absolute right-1.5 top-1.5 z-20 flex w-5 flex-col items-center gap-1">
+                          <div class="pointer-events-none absolute right-1.5 top-1.5 z-20 flex w-5 flex-col items-center gap-1 group-hover:pointer-events-auto focus-within:pointer-events-auto">
                             <Show when={item.closable}>
                               <button
                                 type="button"
-                                class="flex h-5 w-5 items-center justify-center rounded text-[11px] text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-error/10 hover:text-error focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
+                                class="pointer-events-auto flex h-5 w-5 cursor-pointer items-center justify-center rounded text-[11px] text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-error/10 hover:text-error focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
                                 data-testid={`close-session-${item.id}`}
                                 aria-label={`${i18n.t('terminal.deleteSession')} ${item.title}`}
                                 title={i18n.t('terminal.deleteSession')}
@@ -4283,7 +4344,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                             <Show when={item.canBrowsePath}>
                               <button
                                 type="button"
-                                class="flex h-5 w-5 items-center justify-center rounded text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-sidebar-accent hover:text-sidebar-foreground focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
+                                class="pointer-events-auto flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-sidebar-accent hover:text-sidebar-foreground focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
                                 data-testid={`terminal-session-files-${item.id}`}
                                 aria-label={`${i18n.t('terminal.files')}: ${item.fullPath}`}
                                 title={`${i18n.t('terminal.files')}: ${item.fullPath}`}
