@@ -1085,7 +1085,7 @@ func (r *run) persistRunEvent(eventType string, streamKind RealtimeStreamKind, p
 		RunID:       strings.TrimSpace(r.id),
 		StreamKind:  string(streamKind),
 		EventType:   eventType,
-		PayloadJSON: truncateRunes(string(b), 6000),
+		PayloadJSON: strings.TrimSpace(string(b)),
 		AtUnixMs:    time.Now().UnixMilli(),
 	}); err != nil && r.log != nil {
 		r.log.Warn("persist run event failed", "thread_id", strings.TrimSpace(r.threadID), "run_id", strings.TrimSpace(r.id), "event_type", eventType, "stream_kind", streamKind, "error", err)
@@ -2059,7 +2059,7 @@ func isMutatingInvocation(toolName string, args map[string]any) bool {
 	return aitools.IsMutatingForInvocation(toolName, args)
 }
 
-func marshalPersistJSON(v any, maxRunes int) string {
+func marshalPersistJSON(v any) string {
 	b, err := json.Marshal(v)
 	if err != nil || len(b) == 0 {
 		return "{}"
@@ -2067,9 +2067,6 @@ func marshalPersistJSON(v any, maxRunes int) string {
 	out := strings.TrimSpace(string(b))
 	if out == "" {
 		return "{}"
-	}
-	if maxRunes > 0 {
-		out = truncateRunes(out, maxRunes)
 	}
 	return out
 }
@@ -2097,23 +2094,18 @@ func (r *run) persistToolCallSnapshot(toolID string, toolName string, status str
 	if r == nil {
 		return
 	}
-	argsPersistLimit := 4000
-	resultPersistLimit := 4000
 	argsRedacted := any(redactAnyForLog("args", args, 0))
 	if strings.TrimSpace(toolName) == "terminal.exec" {
 		argsRedacted = redactAnyForPersist("args", args, 0)
-		// Terminal output is fetched lazily from persistence; keep complete payload.
-		argsPersistLimit = 0
-		resultPersistLimit = 0
 	}
-	argsPersist := marshalPersistJSON(argsRedacted, argsPersistLimit)
+	argsPersist := marshalPersistJSON(argsRedacted)
 	resultPersist := ""
 	if result != nil {
 		resultRedacted := any(redactAnyForLog("result", result, 0))
 		if strings.TrimSpace(toolName) == "terminal.exec" {
 			resultRedacted = redactAnyForPersist("result", result, 0)
 		}
-		resultPersist = marshalPersistJSON(resultRedacted, resultPersistLimit)
+		resultPersist = marshalPersistJSON(resultRedacted)
 	}
 	errCode := ""
 	errMsg := ""
@@ -2323,7 +2315,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		"tool_name": toolName,
 		"args":      redactAnyForLog("args", args, 0),
 	}
-	toolCallPayloadJSON := marshalPersistJSON(toolCallPayload, 6000)
+	toolCallPayloadJSON := marshalPersistJSON(toolCallPayload)
 	r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
 		SpanID:          toolSpanID,
 		EndpointID:      strings.TrimSpace(r.endpointID),
@@ -2400,7 +2392,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			Kind:            "tool",
 			Name:            toolName,
 			Status:          "failed",
-			PayloadJSON:     marshalPersistJSON(errPayload, 6000),
+			PayloadJSON:     marshalPersistJSON(errPayload),
 			StartedAtUnixMs: toolStartedAt.UnixMilli(),
 			EndedAtUnixMs:   time.Now().UnixMilli(),
 			UpdatedAtUnixMs: time.Now().UnixMilli(),
@@ -2485,7 +2477,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		Kind:            "tool",
 		Name:            toolName,
 		Status:          "success",
-		PayloadJSON:     marshalPersistJSON(successPayload, 6000),
+		PayloadJSON:     marshalPersistJSON(successPayload),
 		StartedAtUnixMs: toolStartedAt.UnixMilli(),
 		EndedAtUnixMs:   time.Now().UnixMilli(),
 		UpdatedAtUnixMs: time.Now().UnixMilli(),
@@ -4422,7 +4414,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 			Kind:            "tool",
 			Name:            "terminal.exec",
 			Status:          "running",
-			PayloadJSON:     marshalPersistJSON(map[string]any{"tool_id": toolID, "tool_name": "terminal.exec", "status": "running", "result": redactAnyForLog("result", result, 0)}, 6000),
+			PayloadJSON:     marshalPersistJSON(map[string]any{"tool_id": toolID, "tool_name": "terminal.exec", "status": "running", "result": redactAnyForLog("result", result, 0)}),
 			StartedAtUnixMs: toolStartedAt.UnixMilli(),
 			UpdatedAtUnixMs: time.Now().UnixMilli(),
 		})
@@ -4465,7 +4457,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		Kind:            "tool",
 		Name:            "terminal.exec",
 		Status:          "success",
-		PayloadJSON:     marshalPersistJSON(map[string]any{"tool_id": toolID, "tool_name": "terminal.exec", "status": "success", "result": redactAnyForLog("result", result, 0)}, 6000),
+		PayloadJSON:     marshalPersistJSON(map[string]any{"tool_id": toolID, "tool_name": "terminal.exec", "status": "success", "result": redactAnyForLog("result", result, 0)}),
 		StartedAtUnixMs: toolStartedAt.UnixMilli(),
 		EndedAtUnixMs:   resultAt.UnixMilli(),
 		UpdatedAtUnixMs: resultAt.UnixMilli(),

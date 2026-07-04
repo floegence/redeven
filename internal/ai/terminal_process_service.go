@@ -171,7 +171,7 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) er
 	argsJSON := marshalPersistJSON(redactToolArgsForPersist("terminal.exec", map[string]any{
 		"command": snapshot.Command,
 		"cwd":     snapshot.Cwd,
-	}), 0)
+	}))
 	errorCode := ""
 	errorMessage := ""
 	retryable := false
@@ -187,7 +187,7 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) er
 		ToolName:        "terminal.exec",
 		Status:          status,
 		ArgsJSON:        argsJSON,
-		ResultJSON:      marshalPersistJSON(redactAnyForPersist("result", resultPayload, 0), 0),
+		ResultJSON:      marshalPersistJSON(redactAnyForPersist("result", resultPayload, 0)),
 		ErrorCode:       errorCode,
 		ErrorMessage:    errorMessage,
 		Retryable:       retryable,
@@ -243,7 +243,7 @@ func (s *Service) appendTerminalProcessRunEvent(snapshot terminalProcessSnapshot
 		RunID:       snapshot.RunID,
 		StreamKind:  string(RealtimeStreamKindTool),
 		EventType:   "tool.result",
-		PayloadJSON: marshalPersistJSON(payload, 6000),
+		PayloadJSON: marshalPersistJSON(payload),
 		AtUnixMs:    time.Now().UnixMilli(),
 	})
 	cancel()

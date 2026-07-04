@@ -142,7 +142,7 @@ func TestSanitizeActivityTimelineMessageJSONFiltersPublicPayloadContract(t *test
 	}
 }
 
-func TestSanitizeActivityTimelineMessageJSONRemovesLegacySubagentActions(t *testing.T) {
+func TestSanitizeActivityTimelineMessageJSONRejectsLegacySubagentActions(t *testing.T) {
 	t.Parallel()
 
 	raw := `{
@@ -157,26 +157,8 @@ func TestSanitizeActivityTimelineMessageJSONRemovesLegacySubagentActions(t *test
 		]
 	}`
 	sanitized, err := SanitizeActivityTimelineMessageJSON(raw)
-	if err != nil {
-		t.Fatalf("SanitizeActivityTimelineMessageJSON: %v", err)
-	}
-	body := string(sanitized)
-	for _, required := range []string{
-		`"thread_id":"child_1"`,
-		`"subagent_id":"child_1"`,
-		`"parent_thread_id":"thread_1"`,
-		`"parent_turn_id":"msg_1"`,
-		`"task_description":"Review the public API boundary."`,
-		`"updated_at_ms":1700000000100`,
-	} {
-		if !strings.Contains(body, required) {
-			t.Fatalf("sanitized message missing %q: %s", required, body)
-		}
-	}
-	for _, forbidden := range []string{`"subagent_actions"`, `"action":"inspect"`, `"delegation_runtime"`, "private_path", "/Users/alice/work", `"can_send_input"`, `"can_close"`, `"last_message"`, `"waiting_prompt"`, `"context_mode"`} {
-		if strings.Contains(body, forbidden) {
-			t.Fatalf("sanitized message contains %q: %s", forbidden, body)
-		}
+	if err == nil || !strings.Contains(err.Error(), "activity_timeline.subagent_actions is not part of the activity timeline contract") {
+		t.Fatalf("SanitizeActivityTimelineMessageJSON error=%v sanitized=%s, want contract error", err, string(sanitized))
 	}
 }
 

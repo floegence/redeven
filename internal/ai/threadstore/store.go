@@ -3399,6 +3399,9 @@ func (s *Store) AppendRunEvent(ctx context.Context, rec RunEventRecord) error {
 	if rec.PayloadJSON == "" {
 		rec.PayloadJSON = "{}"
 	}
+	if !json.Valid([]byte(rec.PayloadJSON)) {
+		return fmt.Errorf("invalid run event payload JSON for %q", rec.EventType)
+	}
 	if rec.AtUnixMs <= 0 {
 		rec.AtUnixMs = time.Now().UnixMilli()
 	}

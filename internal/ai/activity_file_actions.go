@@ -121,7 +121,9 @@ func SanitizeActivityTimelineMessageJSON(raw string) (json.RawMessage, error) {
 		if !ok || strings.TrimSpace(fmt.Sprint(block["type"])) != activityTimelineBlockType {
 			continue
 		}
-		sanitizeActivityTimelineBlockRecord(block)
+		if err := sanitizeActivityTimelineBlockRecord(block); err != nil {
+			return nil, err
+		}
 	}
 	out, err := json.Marshal(message)
 	if err != nil {
@@ -136,7 +138,9 @@ func SanitizeActivityTimelineBlockJSON(raw json.RawMessage) (json.RawMessage, er
 		return nil, fmt.Errorf("parse activity timeline block JSON: %w", err)
 	}
 	if strings.TrimSpace(fmt.Sprint(block["type"])) == activityTimelineBlockType {
-		sanitizeActivityTimelineBlockRecord(block)
+		if err := sanitizeActivityTimelineBlockRecord(block); err != nil {
+			return nil, err
+		}
 	}
 	out, err := json.Marshal(block)
 	if err != nil {
@@ -261,7 +265,10 @@ func activityTimelineItemReferencesAction(items []observation.ActivityItem, item
 	return false
 }
 
-func sanitizeActivityTimelineBlockRecord(block map[string]any) {
+func sanitizeActivityTimelineBlockRecord(block map[string]any) error {
+	if _, ok := block["subagent_actions"]; ok {
+		return fmt.Errorf("activity_timeline.subagent_actions is not part of the activity timeline contract")
+	}
 	items, _ := block["items"].([]any)
 	for _, itemValue := range items {
 		item, ok := itemValue.(map[string]any)
@@ -287,11 +294,10 @@ func sanitizeActivityTimelineBlockRecord(block map[string]any) {
 			delete(item, "payload")
 		}
 	}
-	delete(block, "subagent_actions")
 	actions, ok := block["file_actions"].(map[string]any)
 	if !ok || len(actions) == 0 {
 		delete(block, "file_actions")
-		return
+		return nil
 	}
 	publicActions := make(map[string]any, len(actions))
 	for key, value := range actions {
@@ -313,9 +319,10 @@ func sanitizeActivityTimelineBlockRecord(block map[string]any) {
 	}
 	if len(publicActions) == 0 {
 		delete(block, "file_actions")
-		return
+		return nil
 	}
 	block["file_actions"] = publicActions
+	return nil
 }
 
 func sanitizeActivityTargetRefsValue(value any) []any {
