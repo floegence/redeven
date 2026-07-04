@@ -22,6 +22,7 @@ import {
   mutableSettingsAdapter,
   renderSurfaceWithAdapter,
   settingsSnapshot,
+  subagentSummary,
   thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
@@ -2393,6 +2394,105 @@ describe('FlowerSurface navigation launch/send', () => {
     }));
     expect(runtime.querySelector('.flower-composer-error')).toBeNull();
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('keep this draft after send fails');
+  });
+
+  it('continues a failed thread and shows closed subagents as terminal', async () => {
+    const failedThread = thread({
+      thread_id: 'thread-failed-continue',
+      title: 'Failed continue',
+      status: 'failed',
+      messages: [
+        {
+          id: 'm-failed-parent',
+          role: 'assistant',
+          content: '',
+          status: 'error',
+          created_at_ms: 20,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-failed-parent',
+              turn_id: 'm-failed-parent',
+              status: 'error',
+              severity: 'error',
+              items: [activityItem({
+                item_id: 'tool-subagents-stale-running',
+                tool_id: 'tool-subagents-stale-running',
+                tool_name: 'subagents',
+                renderer: 'structured',
+                label: 'subagents',
+                status: 'running',
+                payload: {
+                  action: 'spawn',
+                  items: [{
+                    thread_id: 'thread-child-closed',
+                    subagent_id: 'thread-child-closed',
+                    task_name: 'Review failed parent',
+                    status: 'running',
+                  }],
+                },
+              })],
+            }),
+          ],
+        },
+      ],
+      subagents: [subagentSummary({
+        parent_thread_id: 'thread-failed-continue',
+        thread_id: 'thread-child-closed',
+        subagent_id: 'thread-child-closed',
+        task_name: 'Review failed parent',
+        status: 'closed',
+        can_close: false,
+        can_interrupt: false,
+        updated_at_ms: 240,
+      })],
+    });
+    const continuedThread = {
+      ...failedThread,
+      status: 'running' as const,
+      messages: [
+        ...failedThread.messages,
+        {
+          id: 'm-failed-continue-user',
+          role: 'user' as const,
+          content: 'continue from failed parent',
+          status: 'sending' as const,
+          created_at_ms: 260,
+        },
+      ],
+    };
+    const launchTurn = vi.fn(async () => liveBootstrap(continuedThread));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [failedThread]),
+      loadThread: vi.fn(async () => liveBootstrap(failedThread)),
+      launchTurn,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-failed-continue"] button')));
+    (runtime.querySelector('[data-thread-id="thread-failed-continue"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-failed-continue'));
+
+    const subagentsButton = runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement;
+    subagentsButton.click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-subagent-dropdown-row')));
+    expect(runtime.querySelector('.flower-subagent-dropdown-row')?.getAttribute('data-flower-subagent-status')).toBe('canceled');
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    expect(textarea.disabled).toBe(false);
+    textarea.value = 'continue from failed parent';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => {
+      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return button?.getAttribute('aria-label') === 'Send' && !button.disabled;
+    });
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+
+    expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
+      thread_id: 'thread-failed-continue',
+      prompt: 'continue from failed parent',
+    }));
+    expect(runtime.querySelector('.flower-composer-error')).toBeNull();
   });
 
   it('keeps waiting_user threads on Continue instead of stop or send', async () => {

@@ -199,6 +199,17 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		Reasoning:         req.Options.ReasoningSelection,
 		ManualCompactions: r,
 	})
+	if reason := r.floretParentTerminalSubagentCloseReason(ctx, result, err); reason != "" {
+		if closeErr := r.closeParentTerminalSubagents(context.Background(), host, reason); closeErr != nil {
+			if r.log != nil {
+				r.log.Warn("ai: close parent terminal subagents failed", "run_id", r.id, "thread_id", r.threadID, "reason", reason, "error", closeErr)
+			}
+			r.persistRunEvent("subagent.parent_terminal_close_failed", RealtimeStreamKindLifecycle, map[string]any{
+				"reason": reason,
+				"error":  closeErr.Error(),
+			})
+		}
+	}
 	cleanupProjection, cleanupChanged, cleanupErr := r.cleanupRunTerminalProcesses(host)
 	if cleanupErr != nil {
 		if r.log != nil {
@@ -275,6 +286,101 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		r.setProviderContinuationCandidate(providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState)))
 	}
 	return r.projectFloretResult(ctx, result, req, sharedState.snapshot(), taskComplexity, permissionTypeString(r.permissionType))
+}
+
+func (r *run) floretParentTerminalSubagentCloseReason(ctx context.Context, result flruntime.TurnResult, runErr error) string {
+	if r == nil || r.subagentDepth > 0 {
+		return ""
+	}
+	cancelReason := strings.TrimSpace(r.getCancelReason())
+	switch {
+	case cancelReason == "timed_out":
+		return "parent_timed_out"
+	case cancelReason == "canceled":
+		return "parent_cancelled"
+	case result.Status == flruntime.TurnStatusCancelled:
+		if ctx != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return "parent_timed_out"
+		}
+		return "parent_cancelled"
+	case result.Status == flruntime.TurnStatusFailed:
+		return "parent_failed"
+	case runErr != nil:
+		if errors.Is(runErr, context.DeadlineExceeded) || (ctx != nil && errors.Is(ctx.Err(), context.DeadlineExceeded)) {
+			return "parent_timed_out"
+		}
+		if errors.Is(runErr, context.Canceled) || (ctx != nil && errors.Is(ctx.Err(), context.Canceled)) {
+			return "parent_cancelled"
+		}
+		return "parent_failed"
+	default:
+		return ""
+	}
+}
+
+func (r *run) closeParentTerminalSubagents(ctx context.Context, host flruntime.Host, reason string) error {
+	if r == nil {
+		return nil
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return nil
+	}
+	threadID := strings.TrimSpace(r.threadID)
+	if threadID == "" {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	timeout := r.persistTimeout()
+	if timeout <= 0 {
+		timeout = defaultPersistOpTimeout
+	}
+	closeCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), timeout)
+	defer cancel()
+
+	var closeHost interface {
+		CloseSubAgents(context.Context, flruntime.CloseSubAgentsRequest) (flruntime.CloseSubAgentsResult, error)
+	}
+	closeHost = host
+	if runtime, ok := r.subagentRuntime.(*floretSubagentRuntime); ok {
+		if subagentHost := runtime.currentHost(); subagentHost != nil {
+			closeHost = subagentHost
+		}
+	}
+	if closeHost == nil && r.service != nil {
+		maintenance, err := r.service.openFloretMaintenanceHost()
+		if err != nil {
+			return err
+		}
+		defer maintenance.Close()
+		closeHost = maintenance
+	}
+	if closeHost == nil {
+		return errors.New("floret host not available")
+	}
+	result, err := closeHost.CloseSubAgents(closeCtx, flruntime.CloseSubAgentsRequest{
+		ParentThreadID: flruntime.ThreadID(threadID),
+		Reason:         reason,
+	})
+	if err != nil {
+		return err
+	}
+	if r.subagentRuntime != nil {
+		if runtime, ok := r.subagentRuntime.(*floretSubagentRuntime); ok {
+			snapshots := make([]subagentSnapshot, 0, len(result.Snapshots))
+			for _, snapshot := range result.Snapshots {
+				snapshots = append(snapshots, subagentSnapshotFromFloret(snapshot))
+			}
+			runtime.refreshSubagentsPatch(closeCtx, snapshots...)
+		}
+	}
+	r.persistRunEvent("subagent.parent_terminal_close", RealtimeStreamKindLifecycle, map[string]any{
+		"reason":       reason,
+		"closed_count": result.Closed,
+	})
+	return nil
 }
 
 func (r *run) projectFloretResult(ctx context.Context, result flruntime.TurnResult, req RunRequest, state runtimeState, complexity string, permissionType string) error {

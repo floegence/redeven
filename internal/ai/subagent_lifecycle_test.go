@@ -180,6 +180,7 @@ type recordingFloretHost struct {
 	readProjectionErr   error
 	readProjectionReqs  []flruntime.ReadTurnProjectionRequest
 	deleteThreadIDs     []flruntime.ThreadID
+	closeSubagentsReqs  []flruntime.CloseSubAgentsRequest
 	pendingApprovals    []flruntime.PendingApproval
 }
 
@@ -395,10 +396,11 @@ func (h *recordingFloretHost) CloseSubAgent(_ context.Context, req flruntime.Clo
 	return flruntime.SubAgentSnapshot{}, nil
 }
 
-func (h *recordingFloretHost) CloseSubAgents(context.Context, flruntime.CloseSubAgentsRequest) (flruntime.CloseSubAgentsResult, error) {
+func (h *recordingFloretHost) CloseSubAgents(_ context.Context, req flruntime.CloseSubAgentsRequest) (flruntime.CloseSubAgentsResult, error) {
 	h.closeSubagentsCount.Add(1)
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.closeSubagentsReqs = append(h.closeSubagentsReqs, req)
 	result := flruntime.CloseSubAgentsResult{Snapshots: make([]flruntime.SubAgentSnapshot, 0, len(h.snapshots))}
 	for index, snapshot := range h.snapshots {
 		if snapshot.Closed || !snapshot.CanClose {
@@ -1009,6 +1011,87 @@ func TestCloseThreadSubagentsUsesFloretBatchClose(t *testing.T) {
 	}
 	if got := host.closeSubagentCount.Load(); got != 0 {
 		t.Fatalf("CloseSubAgent count=%d, want 0", got)
+	}
+}
+
+func TestRunTerminalFailureClosesSubagentsThroughFloretRuntime(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	parentView, err := svc.CreateThread(ctx, meta, "parent failure", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	host := &recordingFloretHost{
+		snapshots: []flruntime.SubAgentSnapshot{{
+			ThreadID:        "child_running",
+			ParentThreadID:  flruntime.ThreadID(parentView.ThreadID),
+			ParentTurnID:    "msg_parent_failed",
+			TaskName:        "running child",
+			TaskDescription: "finish delegated work",
+			HostProfileRef:  subagentAgentTypeWorker,
+			Status:          flruntime.SubAgentStatusRunning,
+			CanClose:        true,
+			CanSendInput:    true,
+			CanInterrupt:    true,
+			CreatedAt:       time.Now(),
+			UpdatedAt:       time.Now(),
+		}},
+	}
+	parent := newRun(runOptions{
+		Log:        slog.Default(),
+		Service:    svc,
+		ThreadID:   parentView.ThreadID,
+		EndpointID: meta.EndpointID,
+		MessageID:  "msg_parent_failed",
+	})
+	runtime := &floretSubagentRuntime{
+		parent:  parent,
+		host:    host,
+		hostKey: "test-generation",
+	}
+	parent.subagentRuntime = runtime
+	svc.mu.Lock()
+	svc.subagentRuntimes[runThreadKey(meta.EndpointID, parentView.ThreadID)] = runtime
+	svc.mu.Unlock()
+
+	if reason := parent.floretParentTerminalSubagentCloseReason(context.Background(), flruntime.TurnResult{Status: flruntime.TurnStatusFailed}, errors.New("provider failed")); reason != "parent_failed" {
+		t.Fatalf("close reason=%q, want parent_failed", reason)
+	}
+	if err := parent.closeParentTerminalSubagents(context.Background(), nil, "parent_failed"); err != nil {
+		t.Fatalf("closeParentTerminalSubagents: %v", err)
+	}
+	if got := host.closeSubagentsCount.Load(); got != 1 {
+		t.Fatalf("CloseSubAgents count=%d, want 1", got)
+	}
+	host.mu.Lock()
+	requests := append([]flruntime.CloseSubAgentsRequest(nil), host.closeSubagentsReqs...)
+	snapshots := append([]flruntime.SubAgentSnapshot(nil), host.snapshots...)
+	host.mu.Unlock()
+	if len(requests) != 1 || requests[0].ParentThreadID != flruntime.ThreadID(parentView.ThreadID) || requests[0].Reason != "parent_failed" {
+		t.Fatalf("CloseSubAgents requests=%#v, want parent_failed for parent thread", requests)
+	}
+	if len(snapshots) != 1 || snapshots[0].Status != flruntime.SubAgentStatusClosed || !snapshots[0].Closed || snapshots[0].CanClose {
+		t.Fatalf("subagent snapshots after close=%#v", snapshots)
+	}
+	resp, err := svc.ListFlowerThreadLiveEvents(context.Background(), meta, parentView.ThreadID, 0, 10)
+	if err != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents: %v", err)
+	}
+	var payload FlowerLiveThreadPatchedPayload
+	for _, event := range resp.Events {
+		if event.Kind != FlowerLiveThreadPatched {
+			continue
+		}
+		if decodeFlowerPayload(event.Payload, &payload) && len(payload.Patch.Subagents) > 0 {
+			break
+		}
+	}
+	if len(payload.Patch.Subagents) != 1 || payload.Patch.Subagents[0].Status != subagentStatusCanceled || payload.Patch.Subagents[0].CanClose {
+		t.Fatalf("live subagents=%#v, want terminal canceled patch", payload.Patch.Subagents)
 	}
 }
 
