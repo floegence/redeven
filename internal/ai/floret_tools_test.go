@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -119,6 +120,40 @@ func TestFloretToolDefinitionStripsRedevenTargetSchema(t *testing.T) {
 	}
 	if permission.Mode != fltools.PermissionAsk {
 		t.Fatalf("permission=%q, want ask for approval_required shell", permission.Mode)
+	}
+}
+
+func TestFloretToolDefinitionPreservesTerminalExecTimeoutAlias(t *testing.T) {
+	t.Parallel()
+
+	var terminalExec ToolDef
+	for _, def := range builtInToolDefinitions() {
+		if def.Name == "terminal.exec" {
+			terminalExec = def
+			break
+		}
+	}
+	if terminalExec.Name == "" {
+		t.Fatal("terminal.exec definition not found")
+	}
+
+	def, err := floretToolDefinition(newRun(runOptions{}), terminalExec)
+	if err != nil {
+		t.Fatalf("floretToolDefinition: %v", err)
+	}
+	properties, ok := def.InputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("properties=%#v, want object", def.InputSchema["properties"])
+	}
+	timeoutSchema, ok := properties["timeout_ms"].(map[string]any)
+	if !ok {
+		t.Fatalf("Floret terminal.exec schema missing timeout_ms alias: %#v", properties)
+	}
+	description := strings.ToLower(fmt.Sprint(timeoutSchema["description"]))
+	for _, want := range []string{"compatibility alias", "yield_ms", "not a hard timeout"} {
+		if !strings.Contains(description, want) {
+			t.Fatalf("timeout_ms description missing %q: %q", want, description)
+		}
 	}
 }
 

@@ -73,6 +73,62 @@ func TestBuiltInToolDefinitions_ApplyPatchContractIsCanonical(t *testing.T) {
 	}
 }
 
+func TestBuiltInToolDefinitions_TerminalExecTimeoutMSIsYieldAlias(t *testing.T) {
+	t.Parallel()
+
+	var terminalExec ToolDef
+	for _, def := range builtInToolDefinitions() {
+		if def.Name == "terminal.exec" {
+			terminalExec = def
+			break
+		}
+	}
+	if terminalExec.Name == "" {
+		t.Fatal("terminal.exec definition not found")
+	}
+	if !strings.Contains(terminalExec.Description, "timeout_ms is only a compatibility alias for yield_ms") {
+		t.Fatalf("description missing timeout_ms alias contract: %q", terminalExec.Description)
+	}
+	if !strings.Contains(terminalExec.Description, "not a hard timeout") {
+		t.Fatalf("description missing non-hard-timeout contract: %q", terminalExec.Description)
+	}
+
+	var schema map[string]any
+	if err := json.Unmarshal(terminalExec.InputSchema, &schema); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+	if ap, ok := schema["additionalProperties"].(bool); !ok || ap {
+		t.Fatalf("terminal.exec must keep a closed schema: %#v", schema["additionalProperties"])
+	}
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema missing properties: %#v", schema)
+	}
+	yieldSchema, ok := props["yield_ms"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema missing yield_ms: %#v", props)
+	}
+	timeoutSchema, ok := props["timeout_ms"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema missing timeout_ms alias: %#v", props)
+	}
+	if fmt.Sprint(yieldSchema["type"]) != "integer" || fmt.Sprint(timeoutSchema["type"]) != "integer" {
+		t.Fatalf("yield_ms/timeout_ms must be integer schemas: yield=%#v timeout=%#v", yieldSchema, timeoutSchema)
+	}
+	if fmt.Sprint(yieldSchema["maximum"]) != "30000" {
+		t.Fatalf("yield_ms maximum=%v, want 30000", yieldSchema["maximum"])
+	}
+	if fmt.Sprint(timeoutSchema["maximum"]) != "1.2e+06" && fmt.Sprint(timeoutSchema["maximum"]) != "1200000" {
+		t.Fatalf("timeout_ms maximum=%v, want 1200000", timeoutSchema["maximum"])
+	}
+	description := strings.ToLower(fmt.Sprint(timeoutSchema["description"]))
+	for _, want := range []string{"compatibility alias", "yield_ms", "not a hard timeout", "terminal.terminate"} {
+		if !strings.Contains(description, want) {
+			t.Fatalf("timeout_ms description missing %q: %q", want, description)
+		}
+	}
+}
+
 func TestBuiltInToolDefinitions_TargetScopedToolsExposeTargetID(t *testing.T) {
 	t.Parallel()
 

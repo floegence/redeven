@@ -729,6 +729,9 @@ func floretToolDefinition(r *run, def ToolDef) (fltools.Definition, error) {
 		},
 		Activity: func(inv fltools.Invocation[any]) (*observation.ActivityPresentation, error) {
 			args, _ := inv.Args.(map[string]any)
+			if toolName == "terminal.exec" {
+				args = normalizeTerminalExecArgs(args)
+			}
 			return floretActivityForToolCall(toolName, args), nil
 		},
 		Annotations: annotations,

@@ -925,6 +925,139 @@ func TestHandleToolCallTerminalExecQuickCompletionPersistsProcessFields(t *testi
 	}
 }
 
+func TestNormalizeTerminalExecArgsTimeoutMSAliasClampsAndDropsAlias(t *testing.T) {
+	normalized := normalizeTerminalExecArgs(map[string]any{
+		"command":    "sleep 1",
+		"timeout_ms": 1_200_000,
+	})
+	if _, ok := normalized["timeout_ms"]; ok {
+		t.Fatalf("timeout_ms alias should be removed: %#v", normalized)
+	}
+	if got := parseIntRaw(normalized["yield_ms"], 0); got != terminalProcessMaxYieldMS {
+		t.Fatalf("yield_ms=%v, want %d; normalized=%#v", normalized["yield_ms"], terminalProcessMaxYieldMS, normalized)
+	}
+
+	precedence := normalizeTerminalExecArgs(map[string]any{
+		"command":    "sleep 1",
+		"yield_ms":   200,
+		"timeout_ms": 1,
+	})
+	if got := parseIntRaw(precedence["yield_ms"], 0); got != 200 {
+		t.Fatalf("yield_ms=%v, want explicit yield_ms to win; normalized=%#v", precedence["yield_ms"], precedence)
+	}
+	if _, ok := precedence["timeout_ms"]; ok {
+		t.Fatalf("timeout_ms alias should be removed when yield_ms wins: %#v", precedence)
+	}
+}
+
+func TestHandleToolCallTerminalExecTimeoutMSAliasReturnsPendingProcess(t *testing.T) {
+	workspace := t.TempDir()
+	store := openTerminalProcessTestStore(t)
+	defer func() { _ = store.Close() }()
+	upsertTerminalProcessTestRun(t, store, "env_1", "thread_1", "run_timeout_alias", "turn_1")
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
+
+	r := newTerminalProcessTestRun(workspace, &Service{terminalProcesses: manager}, store, "env_1", "thread_1", "run_timeout_alias", "turn_1")
+
+	outcome, err := r.handleToolCall(context.Background(), "tool_timeout_alias", "terminal.exec", map[string]any{
+		"command":    "sleep 0.2",
+		"timeout_ms": 1,
+	})
+	if err != nil {
+		t.Fatalf("handleToolCall: %v", err)
+	}
+	if outcome == nil || outcome.Pending == nil {
+		t.Fatalf("outcome=%#v, want pending terminal exec", outcome)
+	}
+	result, ok := outcome.Result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type=%T, want map", outcome.Result)
+	}
+	if got := strings.TrimSpace(anyToString(result["status"])); got != terminalProcessStatusRunning {
+		t.Fatalf("status=%q, want running; result=%#v", got, result)
+	}
+	if _, ok := result["timeout_ms"]; ok {
+		t.Fatalf("timeout_ms should not be present in result payload: %#v", result)
+	}
+	processID := strings.TrimSpace(anyToString(result["process_id"]))
+	if processID == "" {
+		t.Fatalf("missing process_id: %#v", result)
+	}
+
+	rec, err := store.GetToolCall(context.Background(), "env_1", "run_timeout_alias", "tool_timeout_alias")
+	if err != nil {
+		t.Fatalf("GetToolCall: %v", err)
+	}
+	if rec == nil || rec.Status != toolCallStatusRunning {
+		t.Fatalf("tool call record=%#v, want running", rec)
+	}
+	var persistedArgs map[string]any
+	if err := json.Unmarshal([]byte(rec.ArgsJSON), &persistedArgs); err != nil {
+		t.Fatalf("unmarshal args: %v", err)
+	}
+	if _, ok := persistedArgs["timeout_ms"]; ok {
+		t.Fatalf("persisted args must not retain timeout_ms alias: %#v", persistedArgs)
+	}
+	if got := parseIntRaw(persistedArgs["yield_ms"], 0); got != 1 {
+		t.Fatalf("persisted yield_ms=%v, want 1; args=%#v", persistedArgs["yield_ms"], persistedArgs)
+	}
+	if _, err := manager.Terminate(processID); err != nil {
+		t.Fatalf("Terminate: %v", err)
+	}
+}
+
+func TestHandleToolCallTerminalExecYieldMSPrecedesTimeoutMSAlias(t *testing.T) {
+	workspace := t.TempDir()
+	store := openTerminalProcessTestStore(t)
+	defer func() { _ = store.Close() }()
+	upsertTerminalProcessTestRun(t, store, "env_1", "thread_1", "run_timeout_precedence", "turn_1")
+	manager := newTerminalProcessManager(nil)
+	defer manager.Close()
+
+	r := newTerminalProcessTestRun(workspace, &Service{terminalProcesses: manager}, store, "env_1", "thread_1", "run_timeout_precedence", "turn_1")
+
+	outcome, err := r.handleToolCall(context.Background(), "tool_timeout_precedence", "terminal.exec", map[string]any{
+		"command":    "sleep 0.05; printf yield-won",
+		"yield_ms":   1000,
+		"timeout_ms": 1,
+	})
+	if err != nil {
+		t.Fatalf("handleToolCall: %v", err)
+	}
+	if outcome == nil || !outcome.Success || outcome.Pending != nil {
+		t.Fatalf("outcome=%#v, want quick success from yield_ms precedence", outcome)
+	}
+	result, ok := outcome.Result.(map[string]any)
+	if !ok {
+		t.Fatalf("result type=%T, want map", outcome.Result)
+	}
+	if got := strings.TrimSpace(anyToString(result["status"])); got != terminalProcessStatusSuccess {
+		t.Fatalf("status=%q, want success; result=%#v", got, result)
+	}
+	if !strings.Contains(anyToString(result["output"]), "yield-won") {
+		t.Fatalf("output=%q, want yield-won", result["output"])
+	}
+	if _, ok := result["timeout_ms"]; ok {
+		t.Fatalf("timeout_ms should not be present in result payload: %#v", result)
+	}
+
+	rec, err := store.GetToolCall(context.Background(), "env_1", "run_timeout_precedence", "tool_timeout_precedence")
+	if err != nil {
+		t.Fatalf("GetToolCall: %v", err)
+	}
+	var persistedArgs map[string]any
+	if err := json.Unmarshal([]byte(rec.ArgsJSON), &persistedArgs); err != nil {
+		t.Fatalf("unmarshal args: %v", err)
+	}
+	if _, ok := persistedArgs["timeout_ms"]; ok {
+		t.Fatalf("persisted args must not retain timeout_ms alias: %#v", persistedArgs)
+	}
+	if got := parseIntRaw(persistedArgs["yield_ms"], 0); got != 1000 {
+		t.Fatalf("persisted yield_ms=%v, want 1000; args=%#v", persistedArgs["yield_ms"], persistedArgs)
+	}
+}
+
 func TestHandleToolCallTerminalExecCancelTerminatesProcess(t *testing.T) {
 	workspace := t.TempDir()
 	manager := newTerminalProcessManager(nil)
