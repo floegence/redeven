@@ -74,9 +74,13 @@ isolation, and business-capability contract executable in one focused CI step.
 The route matrix also reserves `/_redeven_plugin/*` and requires it to fail
 closed until released ReDevPlugin handlers are actually wired, avoiding
 accidental fallback to Env App, codespace, port-forward, Local UI Env route, or
-local access-gate surfaces. The AppServer and Local UI portions cover the
-namespace root, trailing slash, bootstrap, asset, stream, and CSP report paths
-across missing, Env App, codespace, port-forward, plugin, and unknown origins.
+local access-gate surfaces. AppServer separately reserves
+`/_redeven_proxy/api/plugins` and `/_redeven_proxy/api/plugins/*` as future
+plugin management API paths and requires Env App callers to receive flat JSON
+404 responses until released ReDevPlugin handlers own the API surface. The
+AppServer and Local UI portions cover the namespace root, trailing slash,
+bootstrap, asset, stream, and CSP report paths across missing, Env App,
+codespace, port-forward, plugin, and unknown origins.
 Once released ReDevPlugin integration code exists, the same focused gate must
 expand to cover the mounted route allow matrix, released-contract hash
 verification, session adapter mapping, Env App and Workbench surface smoke,
@@ -122,10 +126,11 @@ ReDevPlugin artifacts only.
 [26] redeven:scripts/check_plugin_integration.sh:44 - The readiness gate starts with the published dependency boundary guard.
 [27] redeven:scripts/check_plugin_integration.sh:47 - The readiness gate runs release artifact verifier, consumption gate, and artifact staging fixtures.
 [28] redeven:scripts/check_plugin_integration.sh:56 - The readiness gate runs the AppServer and Local UI plugin-origin isolation matrix.
-[29] redeven:scripts/check_plugin_integration.sh:64 - The readiness gate runs the Containers capability adapter and fixture contract tests.
-[30] redeven:scripts/stage_redevplugin_release_artifacts.sh:14 - The staging script downloads or copies ReDevPlugin release artifacts, verifies them, writes a marker, and validates consumption.
-[31] redeven:.github/workflows/release.yml:93 - Release tarball builds stage a selected ReDevPlugin runtime only when explicit release inputs are configured.
-[32] redeven:.github/workflows/release.yml:113 - Release tarballs include the staged ReDevPlugin runtime, third-party notices, and verifier marker when present.
-[33] redeven:scripts/build_desktop_bundled_runtime.sh:113 - Desktop bundle preparation has an env-gated ReDevPlugin runtime staging path.
-[34] redeven:.github/workflows/release.yml:241 - Desktop release packaging passes the selected ReDevPlugin version into bundled-runtime preparation.
-[35] redeven:.githooks/pre-commit:8 - The local pre-commit hook runs the ReDevPlugin integration readiness gate before Gateway and heavyweight local checks.
+[29] redeven:internal/codeapp/appserver/server_test.go:691 - Tests bind the reserved plugin management API namespace to AppServer flat JSON 404 responses.
+[30] redeven:scripts/check_plugin_integration.sh:64 - The readiness gate runs the Containers capability adapter and fixture contract tests.
+[31] redeven:scripts/stage_redevplugin_release_artifacts.sh:14 - The staging script downloads or copies ReDevPlugin release artifacts, verifies them, writes a marker, and validates consumption.
+[32] redeven:.github/workflows/release.yml:93 - Release tarball builds stage a selected ReDevPlugin runtime only when explicit release inputs are configured.
+[33] redeven:.github/workflows/release.yml:113 - Release tarballs include the staged ReDevPlugin runtime, third-party notices, and verifier marker when present.
+[34] redeven:scripts/build_desktop_bundled_runtime.sh:113 - Desktop bundle preparation has an env-gated ReDevPlugin runtime staging path.
+[35] redeven:.github/workflows/release.yml:241 - Desktop release packaging passes the selected ReDevPlugin version into bundled-runtime preparation.
+[36] redeven:.githooks/pre-commit:8 - The local pre-commit hook runs the ReDevPlugin integration readiness gate before Gateway and heavyweight local checks.
