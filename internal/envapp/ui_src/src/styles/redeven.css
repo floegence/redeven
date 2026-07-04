@@ -757,9 +757,24 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   padding-right: 0.25rem;
 }
 
+.git-branch-header-verification-slot {
+  inline-size: 7.25rem;
+  min-inline-size: 7.25rem;
+  min-height: 1.625rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex: 0 0 7.25rem;
+}
+
+.git-branch-header-verification-slot[data-git-branch-verification-state='idle'] {
+  pointer-events: none;
+}
+
 .git-branch-header-inline-status {
   min-width: 0;
-  flex: 0 1 auto;
+  width: 100%;
+  flex: 0 0 100%;
   padding: 0.25rem 0.5rem;
 }
 
@@ -784,7 +799,7 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
 }
 
 .git-branch-stable-placeholder {
-  min-height: 10rem;
+  min-height: 11rem;
   background: color-mix(in srgb, var(--muted) 7%, transparent);
 }
 
@@ -792,8 +807,15 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   display: grid;
   min-height: 100%;
   align-content: start;
+  grid-template-rows: minmax(2.5rem, auto) auto;
   gap: 0.75rem;
   padding: 0.875rem;
+}
+
+.git-branch-stable-placeholder__note {
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
 }
 
 .git-branch-stable-placeholder__rows {
@@ -887,6 +909,12 @@ html.dark .git-branch-stable-placeholder__rows > div {
 
   .git-branch-header-inline-status {
     max-width: 9rem;
+  }
+
+  .git-branch-header-verification-slot {
+    inline-size: 6.75rem;
+    min-inline-size: 6.75rem;
+    flex-basis: 6.75rem;
   }
 }
 
