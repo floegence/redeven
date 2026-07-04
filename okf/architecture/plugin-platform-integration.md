@@ -44,6 +44,14 @@ agent after an E2EE handshake; plugin lifecycle, surface bootstrap, asset, and
 RPC routes should fit into that host structure as released ReDevPlugin handlers
 or thin wrappers that preserve the host response envelope.
 
+The current AppServer route gate already treats Env App, codespace,
+port-forward, and plugin sandbox origins as separate roles. Env App origins may
+reach `/_redeven_proxy/api/*` and `/_redeven_proxy/env/*`; codespace origins may
+reach `/_redeven_proxy/inject.js`; plugin sandbox origins with a `plg-*` first
+host label are recognized explicitly and receive 404 for Env App management
+APIs, Env App dist, and codespace injection helpers. Future mounted plugin
+routes must stay outside those Env App and codespace helper surfaces.
+
 Redeven business code starts at adapter registration. Capabilities such as
 containers, files, shell, cloud services, database access, vault access,
 session mapping, and product audit presentation are Redeven implementations
@@ -83,6 +91,11 @@ provider credentials, or Flower grants as ambient authority. Access to Redeven
 business resources must arrive through released ReDevPlugin brokers and a
 Redeven-registered adapter.
 
+Plugin assets and RPC must not be smuggled through `/_redeven_proxy/api/*`,
+`/_redeven_proxy/env/*`, or `/_redeven_proxy/inject.js`. Those paths remain Env
+App management/dist and codespace helper surfaces; plugin sandbox origins are
+not valid callers for them.
+
 Containers are a Redeven business capability when exposed to plugins, not a
 plugin runtime mechanism. Gateway environment profiles and RCPP provider
 environment catalogs are external environment access/control constructs, not
@@ -107,7 +120,12 @@ closed-world container resources capability contract.
 [14] redeven:internal/localui/localui.go:65 - Direct sessions are served by the agent after E2EE handshake.
 [15] redeven:internal/localui/localui.go:146 - Local UI exposes the direct websocket route under `/_redeven_direct/ws`.
 [16] redeven:internal/localui/localui.go:148 - Local UI proxies Env App through `/_redeven_proxy/`.
-[17] redeven:okf/security/plugin-platform-integration-security.md:58 - Plugin surfaces and workers must not receive runtime-control, direct-session, Gateway, or Flower artifacts as ambient authority.
-[18] redeven:okf/ui/plugin-surfaces.md:17 - Front-end plugin platform implementation arrives as released ReDevPlugin npm packages.
-[19] redeven:okf/ai/flower-plugin-generation.md:18 - Flower-generated plugin flow is approved product orchestration over released ReDevPlugin APIs.
-[20] redeven:okf/architecture/container-resources-capability.md:9 - The container resources contract is Redeven-owned business capability surface, not plugin-platform core.
+[17] redeven:internal/codeapp/appserver/server.go:505 - AppServer management APIs are gated to the Env App origin role.
+[18] redeven:internal/codeapp/appserver/server.go:526 - AppServer serves `inject.js` only to codespace origins.
+[19] redeven:internal/codeapp/appserver/server.go:6218 - AppServer derives explicit origin roles from the request origin.
+[20] redeven:internal/codeapp/appserver/server.go:6236 - `plg-*` first labels are classified as plugin sandbox origins.
+[21] redeven:internal/codeapp/appserver/server_test.go:3321 - Tests bind plugin origins away from management, Env dist, and injection helper surfaces.
+[22] redeven:okf/security/plugin-platform-integration-security.md:73 - Plugin surfaces and workers must not receive runtime-control, direct-session, Gateway, or Flower artifacts as ambient authority.
+[23] redeven:okf/ui/plugin-surfaces.md:17 - Front-end plugin platform implementation arrives as released ReDevPlugin npm packages.
+[24] redeven:okf/ai/flower-plugin-generation.md:18 - Flower-generated plugin flow is approved product orchestration over released ReDevPlugin APIs.
+[25] redeven:okf/architecture/container-resources-capability.md:9 - The container resources contract is Redeven-owned business capability surface, not plugin-platform core.

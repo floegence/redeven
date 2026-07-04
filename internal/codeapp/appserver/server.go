@@ -524,8 +524,12 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case p == "/_redeven_proxy/inject.js":
-			// inject.js must be accessible from codespace origins, but allowing it from
-			// other sandbox origins is harmless and can help debugging.
+			// inject.js patches untrusted codespace pages only; plugin and Env origins
+			// must not receive code-server bridge helpers.
+			if originRole != originRoleCodeSpace {
+				http.Error(w, "not found", http.StatusNotFound)
+				return
+			}
 		default:
 			// Unknown dist path: do not serve anything else by default.
 			http.Error(w, "not found", http.StatusNotFound)
@@ -6208,6 +6212,7 @@ const (
 	originRoleEnv
 	originRoleCodeSpace
 	originRolePortForward
+	originRolePlugin
 )
 
 func originRoleFromRequest(r *http.Request) originRole {
@@ -6228,6 +6233,8 @@ func originRoleFromRequest(r *http.Request) originRole {
 		return originRoleCodeSpace
 	case strings.HasPrefix(first, "pf-"):
 		return originRolePortForward
+	case strings.HasPrefix(first, "plg-"):
+		return originRolePlugin
 	default:
 		return originRoleUnknown
 	}

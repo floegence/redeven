@@ -509,17 +509,28 @@ func TestServer_DistRoutes_AreIsolated(t *testing.T) {
 		}
 	}
 
-	// inject.js is accessible from any sandbox origin (and missing Origin).
-	for _, origin := range []string{"https://cs-abc.example.com", "https://env-123.example.com", ""} {
-		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/inject.js", nil)
-		if origin != "" {
-			req.Header.Set("Origin", origin)
-		}
-		rr := httptest.NewRecorder()
-		srv.serveHTTP(rr, req)
-		if rr.Code != http.StatusOK {
-			t.Fatalf("inject.js origin=%q status = %d, want %d", origin, rr.Code, http.StatusOK)
-		}
+	// inject.js is only served to codespace origins.
+	for _, tc := range []struct {
+		name   string
+		origin string
+		want   int
+	}{
+		{name: "codespace", origin: "https://cs-abc.example.com", want: http.StatusOK},
+		{name: "env", origin: "https://env-123.example.com", want: http.StatusNotFound},
+		{name: "plugin", origin: "https://plg-containers.example.com", want: http.StatusNotFound},
+		{name: "missing_origin", origin: "", want: http.StatusNotFound},
+	} {
+		t.Run("inject/"+tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/inject.js", nil)
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
+			}
+			rr := httptest.NewRecorder()
+			srv.serveHTTP(rr, req)
+			if rr.Code != tc.want {
+				t.Fatalf("inject.js origin=%q status = %d, want %d", tc.origin, rr.Code, tc.want)
+			}
+		})
 	}
 
 	// Unknown dist files are never served (even if embedded).
@@ -606,9 +617,9 @@ func TestServer_EnvAppDistCacheHeadersScope(t *testing.T) {
 		srv.serveHTTP(rr, req)
 		return rr
 	}
-	assertCache := func(target string, wantStatus int, wantCache string) {
+	assertCacheForOrigin := func(target string, origin string, wantStatus int, wantCache string) {
 		t.Helper()
-		rr := request(http.MethodGet, target, "https://env-123.example.com")
+		rr := request(http.MethodGet, target, origin)
 		if rr.Code != wantStatus {
 			t.Fatalf("%s status = %d, want %d; body=%q", target, rr.Code, wantStatus, rr.Body.String())
 		}
@@ -616,11 +627,16 @@ func TestServer_EnvAppDistCacheHeadersScope(t *testing.T) {
 			t.Fatalf("%s Cache-Control = %q, want %q", target, got, wantCache)
 		}
 	}
+	assertCache := func(target string, wantStatus int, wantCache string) {
+		t.Helper()
+		assertCacheForOrigin(target, "https://env-123.example.com", wantStatus, wantCache)
+	}
 
 	assertCache("/_redeven_proxy/env/", http.StatusOK, "no-store")
 	assertCache("/_redeven_proxy/env/index.html", http.StatusOK, "no-store")
 	assertCache("/_redeven_proxy/env/workbench", http.StatusOK, "no-store")
-	assertCache("/_redeven_proxy/inject.js", http.StatusOK, "no-store")
+	assertCacheForOrigin("/_redeven_proxy/inject.js", "https://cs-abc.example.com", http.StatusOK, "no-store")
+	assertCacheForOrigin("/_redeven_proxy/inject.js", "https://env-123.example.com", http.StatusNotFound, "no-store")
 	assertCache("/_redeven_proxy/env/favicon.svg", http.StatusOK, "no-store")
 	assertCache("/_redeven_proxy/env/logo.png", http.StatusOK, "no-store")
 	assertCache("/_redeven_proxy/api/spaces", http.StatusBadRequest, "no-store")
@@ -3277,7 +3293,7 @@ func TestServer_DistFS_UsesEmbedLayout(t *testing.T) {
 
 	// Guardrail: the app server expects DistFS to be rooted at "dist/" and serve:
 	// - /_redeven_proxy/env/* -> env/*
-	// - /_redeven_proxy/inject.js -> inject.js
+	// - /_redeven_proxy/inject.js -> inject.js for codespace origins only
 	dist := fstest.MapFS{
 		"env/index.html": {Data: []byte("<html>env</html>")},
 		"inject.js":      {Data: []byte("console.log('inject');")},
@@ -3294,9 +3310,45 @@ func TestServer_DistFS_UsesEmbedLayout(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/inject.js", nil)
+	req.Header.Set("Origin", "https://cs-abc.example.com")
 	rr := httptest.NewRecorder()
 	srv.serveHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("inject.js status = %d, want %d", rr.Code, http.StatusOK)
+	}
+}
+
+func TestServer_PluginOriginCannotAccessManagementSurfaces(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+	srv, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	for _, path := range []string{
+		"/_redeven_proxy/api/settings",
+		"/_redeven_proxy/env/",
+		"/_redeven_proxy/inject.js",
+	} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.Header.Set("Origin", "https://plg-containers.example.com")
+			rr := httptest.NewRecorder()
+			srv.serveHTTP(rr, req)
+			if rr.Code != http.StatusNotFound {
+				t.Fatalf("%s status = %d, want %d", path, rr.Code, http.StatusNotFound)
+			}
+		})
 	}
 }
