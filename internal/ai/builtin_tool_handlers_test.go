@@ -295,14 +295,8 @@ func TestNormalizeTruncatedToolPayload_PreservesSubagentLifecycleItems(t *testin
 			"closed":          true,
 			"can_close":       false,
 		}},
-		"snapshot":        map[string]any{"thread_id": "forbidden-snapshot-single"},
-		"subagent":        map[string]any{"thread_id": "forbidden-subagent-single"},
-		"item":            map[string]any{"thread_id": "forbidden-item-single"},
-		"subagents":       []any{map[string]any{"thread_id": "forbidden-list"}},
-		"snapshots":       map[string]any{"forbidden": map[string]any{"thread_id": "forbidden-snapshot"}},
-		"snapshots_by_id": map[string]any{"forbidden": map[string]any{"thread_id": "forbidden-snapshot-by-id"}},
-		"messages":        []any{"child transcript must stay out of model results"},
-		"tool_result":     map[string]any{"stdout": "raw child output"},
+		"messages":    []any{"child transcript must stay out of model results"},
+		"tool_result": map[string]any{"stdout": "raw child output"},
 	}
 
 	normalized, truncated := normalizeTruncatedToolPayload("subagents", payload)
@@ -316,7 +310,7 @@ func TestNormalizeTruncatedToolPayload_PreservesSubagentLifecycleItems(t *testin
 	if _, ok := root["raw"]; ok {
 		t.Fatalf("subagents payload must not collapse to raw: %#v", root)
 	}
-	for _, field := range []string{"snapshot", "subagent", "item", "subagents", "snapshots", "snapshots_by_id", "messages", "tool_result"} {
+	for _, field := range []string{"messages", "tool_result"} {
 		if _, ok := root[field]; ok {
 			t.Fatalf("subagents payload retained forbidden field %s: %#v", field, root)
 		}

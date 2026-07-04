@@ -529,9 +529,7 @@ function metaForTerminalItem(item: FlowerActivityItem): string {
 }
 
 function isSubagentsActivityItem(item: FlowerActivityItem): boolean {
-  const payload = item.payload ?? {};
-  return trimString(item.tool_name) === 'subagents'
-    || payloadValue(payload, 'operation') === 'subagents';
+  return trimString(item.tool_name) === 'subagents';
 }
 
 function detailLineTone(key: string): FlowerActivityDetailLine['tone'] {

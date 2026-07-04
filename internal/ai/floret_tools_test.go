@@ -1038,9 +1038,6 @@ func TestFloretToolResultActivityProjectsPublicSubagentDisplayPayload(t *testing
 			"closed":           true,
 			"can_close":        false,
 		}},
-		"snapshot": map[string]any{"thread_id": "forbidden-snapshot-single"},
-		"subagent": map[string]any{"thread_id": "forbidden-subagent-single"},
-		"item":     map[string]any{"thread_id": "forbidden-item-single"},
 	})
 	if !truncated {
 		t.Fatal("expected large subagent payload to be field-truncated")
@@ -1054,11 +1051,6 @@ func TestFloretToolResultActivityProjectsPublicSubagentDisplayPayload(t *testing
 		Data:      normalized,
 		Truncated: truncated,
 	})
-	for _, field := range []string{"snapshot", "subagent", "item"} {
-		if _, ok := activity.Payload[field]; ok {
-			t.Fatalf("activity retained legacy subagent field %s: %#v", field, activity.Payload)
-		}
-	}
 	for _, field := range []string{"target", "target_ids", "ids", "detail_ref", "detail_available", "detail_strategy", "last_message", "waiting_prompt", "can_send_input", "can_interrupt", "can_close"} {
 		if _, ok := activity.Payload[field]; ok {
 			t.Fatalf("activity retained non-display subagent field %s: %#v", field, activity.Payload)

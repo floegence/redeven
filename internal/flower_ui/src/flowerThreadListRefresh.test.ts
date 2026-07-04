@@ -4,6 +4,7 @@ import type {
   FlowerApprovalAction,
   FlowerMainToolApprovalAction,
   FlowerInputRequest,
+  FlowerSubagentSummary,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
@@ -57,6 +58,23 @@ function approvalAction(overrides: Partial<FlowerMainToolApprovalAction> = {}): 
     summary: {
       label: 'Run command',
     },
+    ...overrides,
+  };
+}
+
+function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}): FlowerSubagentSummary {
+  return {
+    parent_thread_id: 'thread-selected',
+    subagent_id: 'thread-child-review',
+    thread_id: 'thread-child-review',
+    task_name: 'Review API',
+    task_description: 'Review the public API boundary.',
+    status: 'completed',
+    can_send_input: false,
+    can_interrupt: false,
+    can_close: true,
+    created_at_ms: 10,
+    updated_at_ms: 20,
     ...overrides,
   };
 }
@@ -116,6 +134,66 @@ describe('mergeFlowerThreadListRefresh', () => {
     expect(merged?.messages).toBe(existing.messages);
     expect(merged?.read_status).toBe(summary.read_status);
     expect(merged?.error).toBe(existing.error);
+  });
+
+  it('preserves selected thread subagents when a list summary omits them', () => {
+    const existing = thread({
+      thread_id: 'thread-selected',
+      updated_at_ms: 10,
+      messages: [{
+        id: 'message-1',
+        role: 'assistant',
+        content: 'Loaded transcript detail',
+        status: 'complete',
+        created_at_ms: 10,
+      }],
+      subagents: [
+        subagentSummary({ thread_id: 'thread-child-a', subagent_id: 'thread-child-a', task_name: 'Research A' }),
+        subagentSummary({ thread_id: 'thread-child-b', subagent_id: 'thread-child-b', task_name: 'Research B' }),
+      ],
+    });
+    const summaryWithInheritedSubagents = thread({
+      ...existing,
+      updated_at_ms: 20,
+      messages: [],
+      subagents: undefined,
+    });
+
+    const [merged] = mergeFlowerThreadListRefresh([existing], [summaryWithInheritedSubagents], {
+      selectedThreadID: existing.thread_id,
+      sameThreadSnapshot,
+    });
+
+    expect(merged?.updated_at_ms).toBe(20);
+    expect(merged?.messages).toBe(existing.messages);
+    expect(merged?.subagents).toBe(existing.subagents);
+  });
+
+  it('applies an explicit empty subagents list from a thread-owning refresh', () => {
+    const existing = thread({
+      thread_id: 'thread-selected',
+      messages: [{
+        id: 'message-1',
+        role: 'assistant',
+        content: 'Loaded transcript detail',
+        status: 'complete',
+        created_at_ms: 10,
+      }],
+      subagents: [subagentSummary()],
+    });
+    const refreshed = thread({
+      ...existing,
+      updated_at_ms: 20,
+      messages: [],
+      subagents: [],
+    });
+
+    const [merged] = mergeFlowerThreadListRefresh([existing], [refreshed], {
+      selectedThreadID: existing.thread_id,
+      sameThreadSnapshot,
+    });
+
+    expect(merged?.subagents).toEqual([]);
   });
 
   it('uses refreshed transcript detail when a selected refresh carries messages', () => {
@@ -545,6 +623,21 @@ describe('sameThreadSnapshot', () => {
           updated_at_ms: 22,
         },
       }],
+    })).toBe(false);
+  });
+
+  it('treats subagent summary changes as distinct snapshots', () => {
+    const base = thread({
+      subagents: [subagentSummary({ status: 'running', updated_at_ms: 20 })],
+    });
+
+    expect(sameThreadSnapshot(base, {
+      ...base,
+      subagents: [subagentSummary({ status: 'completed', updated_at_ms: 30 })],
+    })).toBe(false);
+    expect(sameThreadSnapshot(base, {
+      ...base,
+      subagents: [],
     })).toBe(false);
   });
 });

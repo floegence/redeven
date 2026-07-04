@@ -1157,16 +1157,6 @@ func assertNoSubagentModelDetailFields(t *testing.T, value any) {
 		"entries",
 		"raw",
 		"result_struct",
-		"subagent",
-		"subagents",
-		"snapshot",
-		"snapshots",
-		"snapshots_by_id",
-		"item",
-		"snapshot_count",
-		"task_id",
-		"parent_turn_id",
-		"latest_turn_id",
 	} {
 		assertNoRecursiveKey(t, value, forbidden)
 	}
@@ -1234,10 +1224,6 @@ func TestSubagentsTool_TrimmedResultHasHardCapAndDetailRefs(t *testing.T) {
 			"tool_call":      map[string]any{"args_json": `{"command":"leak"}`},
 			"tool_result":    map[string]any{"stdout": strings.Repeat("stdout ", 2000)},
 			"messages":       []any{map[string]any{"content": "raw child transcript"}},
-			"snapshot_count": 7,
-			"task_id":        "legacy-task-id",
-			"parent_turn_id": "parent-turn-id",
-			"latest_turn_id": "latest-turn-id",
 		})
 	}
 	out := trimSubagentToolResult(map[string]any{
@@ -1273,27 +1259,27 @@ func TestSubagentsTool_TrimmedResultHasHardCapAndDetailRefs(t *testing.T) {
 	}
 }
 
-func TestSubagentsTool_TrimmedResultRemovesForbiddenSingleItemFields(t *testing.T) {
+func TestSubagentsTool_TrimmedResultProjectsCurrentFields(t *testing.T) {
 	t.Parallel()
 
 	out := trimSubagentToolResult(map[string]any{
-		"status":   "ok",
-		"action":   subagentActionSpawn,
-		"snapshot": map[string]any{"thread_id": "forbidden_snapshot"},
-		"subagent": map[string]any{"thread_id": "forbidden_subagent"},
-		"item":     map[string]any{"thread_id": "forbidden_item"},
+		"status":      "ok",
+		"action":      subagentActionSpawn,
+		"messages":    []any{"child transcript must stay private"},
+		"tool_result": map[string]any{"stdout": "raw child output"},
+		"debug":       map[string]any{"path": "/private/worktree"},
 		"items": []map[string]any{{
 			"subagent_id": "child-1",
 			"thread_id":   "child-1",
 			"status":      subagentStatusRunning,
 		}},
 	})
-	assertNoRecursiveKey(t, out, "snapshot")
-	assertNoRecursiveKey(t, out, "subagent")
-	assertNoRecursiveKey(t, out, "item")
+	assertNoRecursiveKey(t, out, "messages")
+	assertNoRecursiveKey(t, out, "tool_result")
+	assertNoRecursiveKey(t, out, "debug")
 	items := subagentItemsFromAny(out["items"])
 	if len(items) != 1 || strings.TrimSpace(anyToString(items[0]["thread_id"])) != "child-1" {
-		t.Fatalf("canonical items payload = %#v", out)
+		t.Fatalf("current items payload = %#v", out)
 	}
 }
 

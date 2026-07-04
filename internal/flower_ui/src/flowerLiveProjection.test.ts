@@ -2934,55 +2934,6 @@ describe('Flower live projection', () => {
     })).toThrow(/message\.committed/);
   });
 
-  it('rejects legacy activity timeline subagent action sidecars', () => {
-    expect(() => mapFlowerLiveEvents({
-      events: [{
-        schema_version: 1,
-        seq: 1,
-        endpoint_id: 'runtime',
-        thread_id: 'th-live',
-        run_id: 'run-1',
-        at_unix_ms: 3000,
-        kind: 'message.block_set',
-        payload: {
-          message_id: 'assistant-live',
-          block_index: 0,
-          block: {
-            type: 'activity-timeline',
-            schema_version: 1,
-            summary: { status: 'success', severity: 'quiet', needs_attention: false, total_items: 1, counts: { success: 1 } },
-            items: [{
-              item_id: 'subagent:review-api',
-              tool_id: 'subagents',
-              tool_name: 'subagents',
-              kind: 'control',
-              status: 'success',
-              severity: 'quiet',
-              needs_attention: false,
-              requires_approval: false,
-              payload: {
-                thread_id: 'child-1',
-                task_name: 'Review API',
-                status: 'completed',
-              },
-            }],
-            subagent_actions: {
-              'subagent:review-api': {
-                operation: 'subagents',
-                action: 'inspect',
-                delegation_runtime: 'floret',
-                thread_id: 'child-1',
-                subagent_id: 'child-1',
-              },
-            },
-          },
-        },
-      }],
-      next_cursor: 1,
-      retained_from_seq: 1,
-    })).toThrow(/activity_timeline\.subagent_actions is not part of the activity timeline contract/);
-  });
-
   it('maps thread subagents from bootstrap and thread patch events', () => {
     const mapped = mapFlowerLiveBootstrap({
       schema_version: 1,

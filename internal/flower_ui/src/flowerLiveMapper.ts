@@ -658,9 +658,6 @@ function mapActivityFileActions(raw: unknown): Readonly<Record<string, FlowerAct
 function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | null {
   const record = plainRecordValue(raw);
   if (!record || trim(record.type) !== 'activity-timeline') return null;
-  if (hasOwn(record, 'subagent_actions')) {
-    throw new Error('Flower contract error: activity_timeline.subagent_actions is not part of the activity timeline contract.');
-  }
   const items = Array.isArray(record.items) ? record.items.map(mapActivityItem).filter(isPresent) : [];
   const summary = plainRecordValue(record.summary) ?? {};
   const attention = activityAttentionReasonArray(summary.attention_reasons);

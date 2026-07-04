@@ -266,9 +266,6 @@ func activityTimelineItemReferencesAction(items []observation.ActivityItem, item
 }
 
 func sanitizeActivityTimelineBlockRecord(block map[string]any) error {
-	if _, ok := block["subagent_actions"]; ok {
-		return fmt.Errorf("activity_timeline.subagent_actions is not part of the activity timeline contract")
-	}
 	items, _ := block["items"].([]any)
 	for _, itemValue := range items {
 		item, ok := itemValue.(map[string]any)
@@ -297,6 +294,7 @@ func sanitizeActivityTimelineBlockRecord(block map[string]any) error {
 	actions, ok := block["file_actions"].(map[string]any)
 	if !ok || len(actions) == 0 {
 		delete(block, "file_actions")
+		sanitizeActivityTimelineBlockTopLevel(block)
 		return nil
 	}
 	publicActions := make(map[string]any, len(actions))
@@ -319,10 +317,21 @@ func sanitizeActivityTimelineBlockRecord(block map[string]any) error {
 	}
 	if len(publicActions) == 0 {
 		delete(block, "file_actions")
+		sanitizeActivityTimelineBlockTopLevel(block)
 		return nil
 	}
 	block["file_actions"] = publicActions
+	sanitizeActivityTimelineBlockTopLevel(block)
 	return nil
+}
+
+func sanitizeActivityTimelineBlockTopLevel(block map[string]any) {
+	allowed := activityTimelineBlockAllowedKeys()
+	for key := range block {
+		if _, ok := allowed[key]; !ok {
+			delete(block, key)
+		}
+	}
 }
 
 func sanitizeActivityTargetRefsValue(value any) []any {
@@ -689,6 +698,10 @@ func activitySubagentsPayloadAllowedKeys() map[string]struct{} {
 		"missing_count", "closed_count", "stopped_count", "accepted", "running_only",
 		"total", "timed_out", "truncated", "omitted_count", "error",
 	)
+}
+
+func activityTimelineBlockAllowedKeys() map[string]struct{} {
+	return stringSet("type", "schema_version", "run_id", "thread_id", "turn_id", "trace_id", "summary", "items", "file_actions")
 }
 
 func activitySubagentsItemAllowedKeys() map[string]struct{} {

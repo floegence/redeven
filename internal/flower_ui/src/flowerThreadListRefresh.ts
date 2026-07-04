@@ -4,6 +4,7 @@ import type {
   FlowerModelIOStatus,
   FlowerReasoningCapability,
   FlowerReasoningSelection,
+  FlowerSubagentSummary,
   FlowerThreadActivitySnapshot,
   FlowerThreadSnapshot,
   FlowerTimelineDecoration,
@@ -28,6 +29,7 @@ function visibleApprovalActions(thread: FlowerThreadSnapshot): boolean {
 
 function threadHasLoadedDetail(thread: FlowerThreadSnapshot): boolean {
   return thread.messages.length > 0
+    || thread.subagents !== undefined
     || visibleInputRequest(thread)
     || visibleApprovalActions(thread)
     || thread.error != null;
@@ -78,6 +80,7 @@ export function mergeFlowerThreadListSummary(
     ...(summary.context_usage === undefined && existing.context_usage !== undefined ? { context_usage: existing.context_usage } : {}),
     ...(summary.context_compactions === undefined && existing.context_compactions !== undefined ? { context_compactions: existing.context_compactions } : {}),
     ...(summary.timeline_decorations === undefined && existing.timeline_decorations !== undefined ? { timeline_decorations: existing.timeline_decorations } : {}),
+    ...(summary.subagents === undefined && existing.subagents !== undefined ? { subagents: existing.subagents } : {}),
     ...(summary.status === 'waiting_approval' && summary.approval_actions === undefined && existing.approval_actions !== undefined ? { approval_actions: existing.approval_actions } : {}),
     ...(summaryOwnsExistingInputRequest(summary, existing) ? { input_request: existing.input_request } : {}),
     ...(summary.error === undefined && existing.error != null && summaryCanStillShowExistingError(summary) ? { error: existing.error } : {}),
@@ -212,6 +215,40 @@ function sameTimelineDecorations(
     });
 }
 
+function sameSubagentSummary(left: FlowerSubagentSummary, right: FlowerSubagentSummary): boolean {
+  return sameOptionalString(left.parent_thread_id, right.parent_thread_id)
+    && sameOptionalString(left.subagent_id, right.subagent_id)
+    && sameOptionalString(left.thread_id, right.thread_id)
+    && sameOptionalString(left.task_name, right.task_name)
+    && sameOptionalString(left.task_description, right.task_description)
+    && sameOptionalString(left.title, right.title)
+    && sameOptionalString(left.agent_type, right.agent_type)
+    && sameOptionalString(left.context_mode, right.context_mode)
+    && sameOptionalString(left.status, right.status)
+    && sameOptionalString(left.last_message, right.last_message)
+    && sameOptionalString(left.waiting_prompt, right.waiting_prompt)
+    && sameOptionalNumber(left.queued_inputs, right.queued_inputs)
+    && Boolean(left.can_send_input) === Boolean(right.can_send_input)
+    && Boolean(left.can_interrupt) === Boolean(right.can_interrupt)
+    && Boolean(left.can_close) === Boolean(right.can_close)
+    && sameOptionalNumber(left.created_at_ms, right.created_at_ms)
+    && sameOptionalNumber(left.updated_at_ms, right.updated_at_ms);
+}
+
+function sameSubagentSummaries(
+  left: readonly FlowerSubagentSummary[] | undefined,
+  right: readonly FlowerSubagentSummary[] | undefined,
+): boolean {
+  if (left === right) return true;
+  const leftValues = left ?? [];
+  const rightValues = right ?? [];
+  return leftValues.length === rightValues.length
+    && leftValues.every((value, index) => {
+      const other = rightValues[index];
+      return other != null && sameSubagentSummary(value, other);
+    });
+}
+
 export function sameThreadSnapshot(left: FlowerThreadSnapshot, right: FlowerThreadSnapshot): boolean {
   return left === right
     || (
@@ -234,6 +271,7 @@ export function sameThreadSnapshot(left: FlowerThreadSnapshot, right: FlowerThre
       && sameContextUsage(left.context_usage, right.context_usage)
       && sameContextCompactions(left.context_compactions, right.context_compactions)
       && sameTimelineDecorations(left.timeline_decorations, right.timeline_decorations)
+      && sameSubagentSummaries(left.subagents, right.subagents)
       && sameReferenceOrEmpty(left.approval_actions, right.approval_actions)
       && left.input_request === right.input_request
       && left.error === right.error
