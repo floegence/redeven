@@ -53,6 +53,15 @@ quota, revoke-epoch, and audit construction. Redeven product policy may narrow
 or deny a capability; it must not mint plugin tokens, grant storage/network
 access, or call the business adapter outside ReDevPlugin brokers.
 
+Runtime leases are capability-bearing execution context, not Redeven session
+tokens. A released ReDevPlugin Host must bind worker leases to the active plugin
+package, surface and owner context, runtime instance, runtime generation, IPC
+channel, handshake nonce, method, effect, execution mode, target descriptors,
+quota limits, policy revision, management revision, and revoke epoch before a
+worker is invoked. Redeven may route the resulting audit event into its audit
+sink, but the event must carry traceable lease/token/runtime/revision metadata
+without persisting the cleartext bearer lease token.
+
 The container resources v1 contract follows that boundary. Its start preflight
 plan is a Redeven business DTO that summarizes Docker and Podman runtime state
 without leaking raw environment values, raw label values, raw inspect JSON, or
@@ -130,3 +139,5 @@ or nested Local UI API errors.
 [28] redeven:internal/envapp/ui_src/src/ui/services/localApi.localAccess.e2e.test.ts:193 - Local UI preserves flat appserver `error_code` values on HTTP failures.
 [29] redeven:okf/architecture/container-resources-capability.md:33 - Container start preflight records risk flags and admin hints without owning ReDevPlugin confirmation enforcement.
 [30] redeven:internal/capabilities/containers/preflight_test.go:14 - Tests verify container preflight redacts secret values and sensitive paths.
+[31] redeven:AGENTS.md:446 - Redeven must not bypass runtime lease, quota, or revocation checks.
+[32] redeven:AGENTS.md:478 - Business adapters must pass through ReDevPlugin permission, confirmation, token, lease, audit, and lifecycle contracts.
