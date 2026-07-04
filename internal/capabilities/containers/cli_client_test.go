@@ -206,9 +206,77 @@ func TestCLIClientTailLogsRejectsFollowWithoutStreamAdapter(t *testing.T) {
 	}
 }
 
+func TestCLIClientFollowLogsStreamsTimestampedLines(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCommandRunner{
+		streams: map[string][]string{
+			"docker logs --follow --timestamps --tail 2 --since 2024-01-01T00:00:00Z container_123": {
+				"2024-01-01T00:00:01Z ready",
+				"plain line",
+			},
+		},
+	}
+	client := &CLIClient{Runner: runner}
+	lines := make(chan LogLine, 2)
+
+	err := client.FollowLogs(context.Background(), EngineLogsRequest{
+		Engine:      EngineDocker,
+		ContainerID: "container_123",
+		TailLines:   2,
+		SinceUnixMs: 1704067200000,
+		Follow:      true,
+	}, NewLogLineChannelSink(lines))
+	if err != nil {
+		t.Fatalf("FollowLogs() error = %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("streamed lines = %d", len(lines))
+	}
+	first := <-lines
+	second := <-lines
+	if first.TimestampUnixMs != 1704067201000 || first.Message != "ready" {
+		t.Fatalf("first line = %+v", first)
+	}
+	if second.TimestampUnixMs != 0 || second.Message != "plain line" {
+		t.Fatalf("second line = %+v", second)
+	}
+	wantCalls := []string{"docker logs --follow --timestamps --tail 2 --since 2024-01-01T00:00:00Z container_123"}
+	if !reflect.DeepEqual(runner.calls, wantCalls) {
+		t.Fatalf("calls = %#v, want %#v", runner.calls, wantCalls)
+	}
+}
+
+func TestCLIClientFollowLogsStopsOnSinkBackpressure(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeCommandRunner{
+		streams: map[string][]string{
+			"docker logs --follow --timestamps --tail 100 container_123": {
+				"2024-01-01T00:00:01Z ready",
+				"2024-01-01T00:00:02Z still-running",
+			},
+		},
+	}
+	client := &CLIClient{Runner: runner}
+	err := client.FollowLogs(context.Background(), EngineLogsRequest{
+		Engine:      EngineDocker,
+		ContainerID: "container_123",
+		Follow:      true,
+	}, NewLogLineChannelSink(make(chan LogLine)))
+	if !errors.Is(err, ErrLogStreamBackpressure) {
+		t.Fatalf("FollowLogs() error = %v, want ErrLogStreamBackpressure", err)
+	}
+	if !reflect.DeepEqual(runner.streamed, []string{"2024-01-01T00:00:01Z ready"}) {
+		t.Fatalf("streamed lines before backpressure = %#v", runner.streamed)
+	}
+}
+
 type fakeCommandRunner struct {
-	outputs map[string]string
-	calls   []string
+	outputs  map[string]string
+	streams  map[string][]string
+	calls    []string
+	streamed []string
 }
 
 func (f *fakeCommandRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -219,6 +287,22 @@ func (f *fakeCommandRunner) Run(_ context.Context, name string, args ...string) 
 		return nil, errFakeCommandNotFound(key)
 	}
 	return []byte(out), nil
+}
+
+func (f *fakeCommandRunner) Stream(_ context.Context, name string, args []string, onStdoutLine func([]byte) error) error {
+	key := strings.TrimSpace(name + " " + strings.Join(args, " "))
+	f.calls = append(f.calls, key)
+	lines, ok := f.streams[key]
+	if !ok {
+		return errFakeCommandNotFound(key)
+	}
+	for _, line := range lines {
+		f.streamed = append(f.streamed, line)
+		if err := onStdoutLine([]byte(line)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type errFakeCommandNotFound string
