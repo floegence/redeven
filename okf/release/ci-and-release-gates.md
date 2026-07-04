@@ -68,16 +68,20 @@ The ReDevPlugin integration readiness gate is the current pre-release
 integration entrypoint. It runs the no-local-wiring boundary guard, release
 artifact verifier self-test, consumption gate self-test, artifact staging
 self-test, the existing AppServer and Local UI plugin-origin isolation matrix,
-and the Redeven-owned Containers capability adapter and fixture contract tests. This
-keeps the current host boundary, published-artifact handoff, route isolation, and
-business-capability contract executable in one focused CI step. The route matrix
-also reserves `/_redeven_plugin/*` and requires it to fail closed until released
-ReDevPlugin handlers are actually wired, avoiding accidental fallback to Env App,
-codespace, port-forward, or Local UI Env route surfaces. Once released ReDevPlugin
-integration code exists, the same focused gate must expand to cover the mounted route allow
-matrix, released-contract hash verification, session adapter mapping, Env App and
-Workbench surface smoke, Flower-generated minimal fixture flow, and concrete
-business capability adapters under the real released Host adapters.
+and the Redeven-owned Containers capability adapter and fixture contract tests.
+This keeps the current host boundary, published-artifact handoff, route
+isolation, and business-capability contract executable in one focused CI step.
+The route matrix also reserves `/_redeven_plugin/*` and requires it to fail
+closed until released ReDevPlugin handlers are actually wired, avoiding
+accidental fallback to Env App, codespace, port-forward, Local UI Env route, or
+local access-gate surfaces. The Local UI portion covers the namespace root,
+trailing slash, bootstrap, asset, stream, and CSP report paths across missing,
+Env App, codespace, port-forward, plugin, and unknown origins. Once released
+ReDevPlugin integration code exists, the same focused gate must expand to cover
+the mounted route allow matrix, released-contract hash verification, session
+adapter mapping, Env App and Workbench surface smoke, Flower-generated minimal
+fixture flow, and concrete business capability adapters under the real released
+Host adapters.
 
 # Boundaries
 
