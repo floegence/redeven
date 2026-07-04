@@ -118,6 +118,7 @@ type Service struct {
 
 	mu                      sync.Mutex
 	activeRunByTh           map[string]string // <endpoint_id>:<thread_id> -> run_id
+	stopFinalizingByTh      map[string]string // <endpoint_id>:<thread_id> -> detached run_id still finalizing
 	suppressQueuedDrainByTh map[string]bool
 	idleCompactionByTh      map[string]*idleThreadCompaction
 	runs                    map[string]*run
@@ -314,6 +315,7 @@ func NewService(opts Options) (*Service, error) {
 		targetToolExecutor:           opts.TargetToolExecutor,
 		toolTargetPolicyForRun:       opts.ToolTargetPolicyForRun,
 		activeRunByTh:                make(map[string]string),
+		stopFinalizingByTh:           make(map[string]string),
 		idleCompactionByTh:           make(map[string]*idleThreadCompaction),
 		runs:                         make(map[string]*run),
 		subagentRuntimes:             make(map[string]*floretSubagentRuntime),
@@ -480,6 +482,7 @@ func (s *Service) Close() error {
 	}
 	s.runs = make(map[string]*run)
 	s.activeRunByTh = make(map[string]string)
+	s.stopFinalizingByTh = make(map[string]string)
 	s.subagentRuntimes = make(map[string]*floretSubagentRuntime)
 	s.idleCompactionByTh = make(map[string]*idleThreadCompaction)
 	s.mu.Unlock()
@@ -1004,6 +1007,57 @@ func (s *Service) HasActiveThreadForEndpoint(endpointID string, threadID string)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return strings.TrimSpace(s.activeRunByTh[k]) != ""
+}
+
+func (s *Service) stopFinalizingRunID(endpointID string, threadID string) string {
+	if s == nil {
+		return ""
+	}
+	k := runThreadKey(endpointID, threadID)
+	if k == "" {
+		return ""
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return strings.TrimSpace(s.stopFinalizingByTh[k])
+}
+
+func (s *Service) clearStopFinalizingRun(thKey string, runID string) bool {
+	if s == nil {
+		return false
+	}
+	thKey = strings.TrimSpace(thKey)
+	runID = strings.TrimSpace(runID)
+	if thKey == "" || runID == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if strings.TrimSpace(s.stopFinalizingByTh[thKey]) != runID {
+		return false
+	}
+	delete(s.stopFinalizingByTh, thKey)
+	return true
+}
+
+func (s *Service) waitForStopFinalization(endpointID string, threadID string, runID string, doneCh <-chan struct{}) {
+	if s == nil || doneCh == nil {
+		return
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	runID = strings.TrimSpace(runID)
+	thKey := runThreadKey(endpointID, threadID)
+	if thKey == "" || runID == "" {
+		return
+	}
+	<-doneCh
+	if !s.clearStopFinalizingRun(thKey, runID) {
+		return
+	}
+	if s.threadMgr != nil {
+		s.threadMgr.Wake(endpointID, threadID)
+	}
 }
 
 func (s *Service) ListModels() (*ModelsResponse, error) {
@@ -1655,6 +1709,10 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		return nil, errors.New("invalid request")
 	}
 	if existing := strings.TrimSpace(s.activeRunByTh[thKey]); existing != "" {
+		s.mu.Unlock()
+		return nil, ErrThreadBusy
+	}
+	if existing := strings.TrimSpace(s.stopFinalizingByTh[thKey]); existing != "" {
 		s.mu.Unlock()
 		return nil, ErrThreadBusy
 	}
@@ -2404,6 +2462,8 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 
 	var r *run
 	threadID := ""
+	finalizingThreadID := ""
+	var finalizingDoneCh <-chan struct{}
 
 	s.mu.Lock()
 	r = s.runs[runID]
@@ -2415,6 +2475,8 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 	if r != nil {
 		threadID = strings.TrimSpace(r.threadID)
 		r.markDetached()
+		finalizingThreadID = threadID
+		finalizingDoneCh = r.doneCh
 	}
 	// Detach any stale active mappings so the thread can be managed even if the run is stuck.
 	for k, rid := range s.activeRunByTh {
@@ -2425,11 +2487,24 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 		if threadID == "" && strings.HasPrefix(k, endpointID+":") {
 			threadID = strings.TrimSpace(strings.TrimPrefix(k, endpointID+":"))
 		}
+		if finalizingThreadID == "" && strings.HasPrefix(k, endpointID+":") {
+			finalizingThreadID = strings.TrimSpace(strings.TrimPrefix(k, endpointID+":"))
+		}
+	}
+	finalizingKey := runThreadKey(endpointID, finalizingThreadID)
+	if r != nil && finalizingKey != "" {
+		if s.stopFinalizingByTh == nil {
+			s.stopFinalizingByTh = make(map[string]string)
+		}
+		s.stopFinalizingByTh[finalizingKey] = runID
 	}
 	db := s.threadsDB
 	persistTO := s.persistOpTO
 	s.mu.Unlock()
 
+	if finalizingKey != "" && finalizingDoneCh != nil {
+		go s.waitForStopFinalization(endpointID, finalizingThreadID, runID, finalizingDoneCh)
+	}
 	if r != nil {
 		r.requestCancel("canceled")
 	}

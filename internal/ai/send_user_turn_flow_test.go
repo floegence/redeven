@@ -946,6 +946,214 @@ func TestQueuedDrain_WaitsForIdleCompactionThenStartsQueuedTurn(t *testing.T) {
 	}
 }
 
+func TestSendUserTurn_QueuesWhileStopFinalizationIsPending(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "stop-finalizing-queue", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	thKey := runThreadKey(meta.EndpointID, th.ThreadID)
+	svc.mu.Lock()
+	svc.stopFinalizingByTh[thKey] = "run_stop_finalizing"
+	svc.mu.Unlock()
+
+	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			MessageID: "m_stop_finalizing_followup",
+			Text:      "start after stop finalization",
+		},
+		Options: RunOptions{},
+	})
+	if err != nil {
+		t.Fatalf("SendUserTurn: %v", err)
+	}
+	if resp.Kind != "queued" {
+		t.Fatalf("resp.Kind=%q, want queued", resp.Kind)
+	}
+	if strings.TrimSpace(resp.QueueID) == "" {
+		t.Fatalf("queued response missing queue id")
+	}
+
+	queued, err := svc.threadsDB.ListFollowupsByLane(ctx, meta.EndpointID, th.ThreadID, threadstore.FollowupLaneQueued, 10)
+	if err != nil {
+		t.Fatalf("ListFollowupsByLane: %v", err)
+	}
+	if len(queued) != 1 {
+		t.Fatalf("queued followups len=%d, want 1", len(queued))
+	}
+	if queued[0].MessageID != "m_stop_finalizing_followup" {
+		t.Fatalf("queued message id=%q, want client message id", queued[0].MessageID)
+	}
+}
+
+func TestCancelRunKeepsStopFinalizationGateUntilRunDone(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "stop-finalizing-cancel-run", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_cancel_stop_finalizing"
+	thKey := runThreadKey(meta.EndpointID, th.ThreadID)
+	oldRun := &run{
+		id:         runID,
+		channelID:  meta.ChannelID,
+		endpointID: meta.EndpointID,
+		threadID:   th.ThreadID,
+		doneCh:     make(chan struct{}),
+	}
+	svc.mu.Lock()
+	svc.activeRunByTh[thKey] = runID
+	svc.runs[runID] = oldRun
+	svc.mu.Unlock()
+
+	if err := svc.CancelRun(meta, runID); err != nil {
+		t.Fatalf("CancelRun: %v", err)
+	}
+	if got := svc.stopFinalizingRunID(meta.EndpointID, th.ThreadID); got != runID {
+		t.Fatalf("stopFinalizingRunID=%q, want %q", got, runID)
+	}
+	svc.mu.Lock()
+	activeRunID := strings.TrimSpace(svc.activeRunByTh[thKey])
+	svc.mu.Unlock()
+	if activeRunID != "" {
+		t.Fatalf("activeRunByTh[%q]=%q, want empty", thKey, activeRunID)
+	}
+
+	oldRun.markDone()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if got := svc.stopFinalizingRunID(meta.EndpointID, th.ThreadID); got == "" {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("stop finalization guard did not clear after run done")
+}
+
+func TestThreadActor_MaybeStartQueuedTurn_WaitsForStopFinalization(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "queued-stop-finalizing", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	thKey := runThreadKey(meta.EndpointID, th.ThreadID)
+	svc.mu.Lock()
+	svc.stopFinalizingByTh[thKey] = "run_stop_finalizing_drain"
+	svc.mu.Unlock()
+
+	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			MessageID: "m_wait_for_stop_finalization",
+			Text:      "queued until finalization completes",
+		},
+		Options: RunOptions{},
+	})
+	if err != nil {
+		t.Fatalf("SendUserTurn: %v", err)
+	}
+	if resp.Kind != "queued" {
+		t.Fatalf("resp.Kind=%q, want queued", resp.Kind)
+	}
+
+	actor := svc.threadMgr.Get(meta.EndpointID, th.ThreadID)
+	if actor == nil {
+		t.Fatalf("thread actor missing")
+	}
+	if err := actor.handleMaybeStartQueuedTurn(ctx); err != nil {
+		t.Fatalf("handleMaybeStartQueuedTurn while finalizing: %v", err)
+	}
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	for _, m := range msgs {
+		if m.MessageID == "m_wait_for_stop_finalization" {
+			t.Fatalf("queued message persisted while stop finalization was pending")
+		}
+	}
+
+	if !svc.clearStopFinalizingRun(thKey, "run_stop_finalizing_drain") {
+		t.Fatalf("clearStopFinalizingRun returned false")
+	}
+	if err := actor.handleMaybeStartQueuedTurn(ctx); err != nil {
+		t.Fatalf("handleMaybeStartQueuedTurn after finalization: %v", err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		msgs, _, _, listErr := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+		if listErr != nil {
+			t.Fatalf("ListMessages after finalization: %v", listErr)
+		}
+		for _, m := range msgs {
+			if m.Role == "user" && m.MessageID == "m_wait_for_stop_finalization" {
+				return
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("queued message did not start after stop finalization cleared")
+}
+
+func TestStartRunDetachedRejectedWhileStopFinalizationPending(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "stop-finalizing-start-run-gate", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	thKey := runThreadKey(meta.EndpointID, th.ThreadID)
+	svc.mu.Lock()
+	svc.stopFinalizingByTh[thKey] = "run_stop_finalizing_gate"
+	svc.mu.Unlock()
+
+	err = svc.StartRunDetached(meta, "run_must_not_start_during_stop_finalization", RunStartRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			MessageID: "m_should_not_persist_during_stop_finalization",
+			Text:      "this path must respect the stop finalization gate",
+		},
+		Options: RunOptions{},
+	})
+	if !errors.Is(err, ErrThreadBusy) {
+		t.Fatalf("StartRunDetached err=%v, want %v", err, ErrThreadBusy)
+	}
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Fatalf("messages=%+v, want no transcript message from rejected detached run", msgs)
+	}
+}
+
 func TestStartRunDetachedRejectedWhileIdleCompactionRunning(t *testing.T) {
 	t.Parallel()
 
