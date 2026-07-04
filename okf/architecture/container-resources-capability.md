@@ -63,12 +63,15 @@ reads bounded non-follow log batches through `logs --timestamps`. `FollowLogs`
 is a separate streaming hook that shells out to `logs --follow --timestamps`,
 parses lines incrementally, and appends them to a caller-provided `LogLineSink`.
 The default channel sink is fail-closed: a full sink returns stable
-backpressure instead of buffering unbounded log data. The parser accepts
-Docker's newline-delimited JSON list format and Podman's JSON array list format,
-prefers server/engine version fields when probing status, converts Docker-like
-inspect payloads into the minimal internal `EngineContainer` shape used by the
-adapter, parses pull digests when the engine reports one, and parses timestamped
-log lines into stable millisecond timestamps.
+backpressure instead of buffering unbounded log data. Image pull also runs
+through the same timeout-scoped command boundary, so parent context cancellation
+and command timeout cancellation are propagated to the Docker/Podman helper
+before future ReDevPlugin operation cancel dispatch is wired in. The parser
+accepts Docker's newline-delimited JSON list format and Podman's JSON array list
+format, prefers server/engine version fields when probing status, converts
+Docker-like inspect payloads into the minimal internal `EngineContainer` shape
+used by the adapter, parses pull digests when the engine reports one, and parses
+timestamped log lines into stable millisecond timestamps.
 
 `TestCLIClientRealEngineSmoke` is an opt-in local integration smoke for real
 Docker or Podman engines. It is skipped unless
@@ -127,7 +130,7 @@ into Redeven.
 [8] redeven:internal/capabilities/containers/cli_client.go:32 - `CLIClient` implements the local Docker/Podman command boundary with timeout-scoped command execution.
 [9] redeven:internal/capabilities/containers/cli_client.go:83 - Container actions are mapped to explicit Docker/Podman argv instead of shell strings.
 [10] redeven:internal/capabilities/containers/cli_client.go:107 - `TailLogs` rejects follow streaming and reads bounded timestamped batches.
-[11] redeven:internal/capabilities/containers/cli_client.go:131 - Image pull returns a minimal image result and parses digest evidence when available.
+[11] redeven:internal/capabilities/containers/cli_client.go:171 - Image pull returns a minimal image result and parses digest evidence when available.
 [12] redeven:internal/capabilities/containers/cli_client.go:296 - Docker/Podman inspect payloads are converted into sanitized engine container metadata before public DTO mapping.
 [13] redeven:internal/capabilities/containers/cli_client.go:349 - Container list parsing accepts Docker NDJSON and Podman JSON arrays.
 [14] redeven:spec/capabilities/container-resources-v1.schema.json:1 - The machine contract is a JSON Schema under Redeven `spec/capabilities`.
@@ -135,7 +138,7 @@ into Redeven.
 [16] redeven:internal/capabilities/containers/preflight_test.go:14 - Tests verify start preflight redacts secret values and emits expected risk flags.
 [17] redeven:internal/capabilities/containers/preflight_test.go:181 - Tests bind Go constants, method enums, response DTO fields, logs tail limits, required fields, and closed-world schema objects.
 [18] redeven:internal/capabilities/containers/adapter_test.go:12 - Adapter tests cover engine resolution, unavailable requested engines, DTO mapping, secret redaction, actions, logs, image pull, and preflight use of inspected runtime metadata.
-[19] redeven:internal/capabilities/containers/cli_client_test.go:10 - CLI client tests cover status version preference, Docker NDJSON, Podman arrays, Docker inspect runtime parsing, safe action argv, pull digest parsing, bounded logs tail, follow-stream rejection, streaming argv, timestamp parsing, and sink backpressure.
+[19] redeven:internal/capabilities/containers/cli_client_test.go:10 - CLI client tests cover status version preference, Docker NDJSON, Podman arrays, Docker inspect runtime parsing, safe action argv, pull digest parsing, pull cancellation propagation, bounded logs tail, follow-stream rejection, streaming argv, timestamp parsing, and sink backpressure.
 [20] redeven:internal/capabilities/containers/testdata/generated_plugins/containers_integration/manifest.json:1 - The integration-only official Containers fixture declares the capability binding, product surface, method manifest, confirmation policy, and cancel policy expected for future ReDevPlugin registration.
 [21] redeven:internal/capabilities/containers/manifest_fixture_test.go:114 - Fixture tests bind the manifest to `CapabilityID`, `CapabilityVersion`, `Methods()`, method effects, request fields, confirmation semantics, and cancel policies without importing ReDevPlugin code.
 [22] redeven:internal/capabilities/containers/cli_client_integration_test.go:21 - The opt-in real engine smoke is gated by `REDEVEN_CONTAINERS_ENGINE_SMOKE` and validates Docker/Podman CLI behavior only when an engine is explicitly available.
@@ -146,3 +149,4 @@ into Redeven.
 [27] redeven:internal/capabilities/containers/cli_client.go:138 - `CLIClient.FollowLogs` maps follow requests to explicit Docker/Podman argv and streams parsed log lines into the caller sink.
 [28] redeven:internal/capabilities/containers/cli_client_test.go:209 - Streaming tests bind follow argv, timestamp parsing, and fail-closed sink backpressure.
 [29] redeven:internal/capabilities/containers/cli_client_integration_test.go:157 - Real engine smoke validates `FollowLogs` against the running smoke container and requires cancellation to stop the follow command after the marker is observed.
+[30] redeven:internal/capabilities/containers/cli_client_test.go:163 - Image pull cancellation tests prove parent context cancellation and CLI timeout cancellation reach the command runner.
