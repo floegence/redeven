@@ -65,13 +65,16 @@ parses lines incrementally, and appends them to a caller-provided `LogLineSink`.
 The default channel sink is fail-closed: a full sink returns stable
 backpressure instead of buffering unbounded log data. Image pull also runs
 through the same timeout-scoped command boundary, so parent context cancellation
-and command timeout cancellation are propagated to the Docker/Podman helper
-before future ReDevPlugin operation cancel dispatch is wired in. The parser
-accepts Docker's newline-delimited JSON list format and Podman's JSON array list
-format, prefers server/engine version fields when probing status, converts
-Docker-like inspect payloads into the minimal internal `EngineContainer` shape
-used by the adapter, parses pull digests when the engine reports one, and parses
-timestamped log lines into stable millisecond timestamps.
+and command timeout cancellation are propagated to the Docker/Podman helper.
+The real process runner returns the context error after `exec.CommandContext`
+terminates a command, preserving stable `context.Canceled` /
+`context.DeadlineExceeded` semantics before future ReDevPlugin operation cancel
+dispatch is wired in. The parser accepts Docker's newline-delimited JSON list
+format and Podman's JSON array list format, prefers server/engine version fields
+when probing status, converts Docker-like inspect payloads into the minimal
+internal `EngineContainer` shape used by the adapter, parses pull digests when
+the engine reports one, and parses timestamped log lines into stable millisecond
+timestamps.
 
 `TestCLIClientRealEngineSmoke` is an opt-in local integration smoke for real
 Docker or Podman engines. It is skipped unless
@@ -84,6 +87,16 @@ can read the same marker and stop through context cancellation, restarts/stops
 the container, and removes it with cleanup. This gives release and developer
 machines a true engine smoke without making ordinary CI require a Docker or
 Podman daemon.
+
+`TestCLIClientRealEnginePullCancelSmoke` is a separate opt-in cancellation
+smoke. It is skipped unless `REDEVEN_CONTAINERS_ENGINE_PULL_CANCEL_SMOKE=1` is
+set, uses the same engine selector as the regular smoke, and defaults to a
+non-routable registry reference unless
+`REDEVEN_CONTAINERS_ENGINE_PULL_CANCEL_IMAGE` overrides it. When enabled, it
+runs a real Docker or Podman `pull` through the CLI helper with a short timeout
+and requires the command to stop with `context.DeadlineExceeded`. This proves
+the local engine helper can cancel a live image pull process without depending
+on the unreleased ReDevPlugin `OperationCanceler` route.
 
 The v1 preflight flags cover privileged containers, host network/PID/IPC
 namespaces, host devices, added Linux capabilities, Docker or Podman socket
@@ -131,22 +144,24 @@ into Redeven.
 [9] redeven:internal/capabilities/containers/cli_client.go:83 - Container actions are mapped to explicit Docker/Podman argv instead of shell strings.
 [10] redeven:internal/capabilities/containers/cli_client.go:107 - `TailLogs` rejects follow streaming and reads bounded timestamped batches.
 [11] redeven:internal/capabilities/containers/cli_client.go:171 - Image pull returns a minimal image result and parses digest evidence when available.
-[12] redeven:internal/capabilities/containers/cli_client.go:296 - Docker/Podman inspect payloads are converted into sanitized engine container metadata before public DTO mapping.
-[13] redeven:internal/capabilities/containers/cli_client.go:349 - Container list parsing accepts Docker NDJSON and Podman JSON arrays.
+[12] redeven:internal/capabilities/containers/cli_client.go:299 - Docker/Podman inspect payloads are converted into sanitized engine container metadata before public DTO mapping.
+[13] redeven:internal/capabilities/containers/cli_client.go:352 - Container list parsing accepts Docker NDJSON and Podman JSON arrays.
 [14] redeven:spec/capabilities/container-resources-v1.schema.json:1 - The machine contract is a JSON Schema under Redeven `spec/capabilities`.
 [15] redeven:spec/capabilities/container-resources-v1.schema.json:421 - `start_preflight_plan` is closed-world and binds schema identity, method, request, target, runtime, risk, and admin fields.
 [16] redeven:internal/capabilities/containers/preflight_test.go:14 - Tests verify start preflight redacts secret values and emits expected risk flags.
 [17] redeven:internal/capabilities/containers/preflight_test.go:181 - Tests bind Go constants, method enums, response DTO fields, logs tail limits, required fields, and closed-world schema objects.
 [18] redeven:internal/capabilities/containers/adapter_test.go:12 - Adapter tests cover engine resolution, unavailable requested engines, DTO mapping, secret redaction, actions, logs, image pull, and preflight use of inspected runtime metadata.
-[19] redeven:internal/capabilities/containers/cli_client_test.go:10 - CLI client tests cover status version preference, Docker NDJSON, Podman arrays, Docker inspect runtime parsing, safe action argv, pull digest parsing, pull cancellation propagation, bounded logs tail, follow-stream rejection, streaming argv, timestamp parsing, and sink backpressure.
+[19] redeven:internal/capabilities/containers/cli_client_test.go:10 - CLI client tests cover status version preference, Docker NDJSON, Podman arrays, Docker inspect runtime parsing, safe action argv, pull digest parsing, pull cancellation propagation, exec-runner context error preservation, bounded logs tail, follow-stream rejection, streaming argv, timestamp parsing, and sink backpressure.
 [20] redeven:internal/capabilities/containers/testdata/generated_plugins/containers_integration/manifest.json:1 - The integration-only official Containers fixture declares the capability binding, product surface, method manifest, confirmation policy, and cancel policy expected for future ReDevPlugin registration.
 [21] redeven:internal/capabilities/containers/manifest_fixture_test.go:114 - Fixture tests bind the manifest to `CapabilityID`, `CapabilityVersion`, `Methods()`, method effects, request fields, confirmation semantics, and cancel policies without importing ReDevPlugin code.
-[22] redeven:internal/capabilities/containers/cli_client_integration_test.go:21 - The opt-in real engine smoke is gated by `REDEVEN_CONTAINERS_ENGINE_SMOKE` and validates Docker/Podman CLI behavior only when an engine is explicitly available.
+[22] redeven:internal/capabilities/containers/cli_client_integration_test.go:26 - The opt-in real engine smoke is gated by `REDEVEN_CONTAINERS_ENGINE_SMOKE` and validates Docker/Podman CLI behavior only when an engine is explicitly available.
 [23] redeven:internal/capabilities/containers/method_dispatch.go:15 - `Adapter.CallMethod` maps raw JSON requests for each capability method to the typed adapter methods with schema-version and closed-world request checks.
 [24] redeven:internal/capabilities/containers/adapter_test.go:211 - Dispatcher tests cover every method plus invalid schema versions, unknown fields, unknown methods, and missing request bodies.
 [25] redeven:internal/capabilities/containers/adapter.go:64 - `LogLineSink` and the default channel sink define the bounded streaming handoff and stable backpressure error for follow logs.
 [26] redeven:internal/capabilities/containers/adapter.go:273 - `Adapter.FollowLogs` exposes follow logs only through clients that implement the explicit streaming interface.
 [27] redeven:internal/capabilities/containers/cli_client.go:138 - `CLIClient.FollowLogs` maps follow requests to explicit Docker/Podman argv and streams parsed log lines into the caller sink.
-[28] redeven:internal/capabilities/containers/cli_client_test.go:209 - Streaming tests bind follow argv, timestamp parsing, and fail-closed sink backpressure.
-[29] redeven:internal/capabilities/containers/cli_client_integration_test.go:157 - Real engine smoke validates `FollowLogs` against the running smoke container and requires cancellation to stop the follow command after the marker is observed.
+[28] redeven:internal/capabilities/containers/cli_client_test.go:225 - Streaming tests bind follow argv, timestamp parsing, and fail-closed sink backpressure.
+[29] redeven:internal/capabilities/containers/cli_client_integration_test.go:215 - Real engine smoke validates `FollowLogs` against the running smoke container and requires cancellation to stop the follow command after the marker is observed.
 [30] redeven:internal/capabilities/containers/cli_client_test.go:163 - Image pull cancellation tests prove parent context cancellation and CLI timeout cancellation reach the command runner.
+[31] redeven:internal/capabilities/containers/cli_client.go:275 - `execRunner.Run` returns the context error after a real command is terminated by context cancellation.
+[32] redeven:internal/capabilities/containers/cli_client_integration_test.go:63 - The opt-in real engine pull cancel smoke validates a live Docker/Podman pull process stops through CLI timeout cancellation.
