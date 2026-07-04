@@ -31,7 +31,13 @@ into the release pipeline. When the verifier is used with `--write-marker`, it
 emits a machine-readable verification marker that records the checked checksum
 file, stress summary, runtime tarball hashes, runtime binary hashes, and
 ReDevPlugin third-party notice hashes extracted from those verified tarballs. The
-consumption gate scans release staging directories and Desktop bundle
+compatibility manifest is the release-time source of truth for ReDevPlugin
+contract hashes, including token/ticket and Rust IPC schemas that define runtime
+lease audience, method/effect/execution, descriptor hash, limit, signature, and
+audit-adjacent metadata. Redeven must consume those released hashes as a unit
+with the Go/npm/runtime versions rather than copying draft schemas or accepting a
+runtime artifact whose lease contract does not match the imported Host library.
+The consumption gate scans release staging directories and Desktop bundle
 directories for ReDevPlugin payloads and fails if they appear without that
 marker. It also binds the marker to the staged payloads: direct ReDevPlugin
 tarballs must match marker tarball checksums, direct runtime binaries must match
@@ -143,3 +149,5 @@ ReDevPlugin artifacts only.
 [37] redeven:scripts/build_desktop_bundled_runtime.sh:113 - Desktop bundle preparation has an env-gated ReDevPlugin runtime staging path.
 [38] redeven:.github/workflows/release.yml:241 - Desktop release packaging passes the selected ReDevPlugin version into bundled-runtime preparation.
 [39] redeven:.githooks/pre-commit:8 - The local pre-commit hook builds embedded assets before running the ReDevPlugin integration readiness gate.
+[40] redeven:AGENTS.md:263 - Redeven consumes released OpenAPI, token/ticket, Rust IPC, WASM ABI, and classifier contract hashes.
+[41] redeven:AGENTS.md:503 - ReDevPlugin upgrade review must identify released Go, npm, runtime, schema, and contract hash versions.

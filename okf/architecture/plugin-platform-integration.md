@@ -77,6 +77,16 @@ only after ReDevPlugin has constructed the identity, lifecycle, permission,
 confirmation, token or lease, quota, revocation, and audit context for the
 request.
 
+Runtime worker execution follows the same division. Redeven selects and launches
+the released `redevplugin-runtime` artifact through ReDevPlugin release metadata,
+but runtime lease minting, runtime-generation binding, IPC channel binding,
+connection nonce binding, worker method/effect/execution binding, descriptor
+hash binding, quota-limit binding, signature verification, replay rejection,
+and Host audit construction remain ReDevPlugin contracts. When Redeven later
+mounts released plugin routes, its audit sink may persist the ReDevPlugin audit
+event, but it must not mint alternate runtime leases, rewrite lease audiences,
+or log bearer lease tokens.
+
 Product UI may place ReDevPlugin surfaces in Env App, Activity Bar, Workbench,
 Settings, Desktop, or CLI flows, but the plugin document, iframe bootstrap,
 asset tickets, bridge lifecycle, generated client semantics, settings/intent
@@ -161,3 +171,5 @@ closed-world container resources capability contract.
 [35] redeven:okf/ui/plugin-surfaces.md:17 - Front-end plugin platform implementation arrives as released ReDevPlugin npm packages.
 [36] redeven:okf/ai/flower-plugin-generation.md:18 - Flower-generated plugin flow is approved product orchestration over released ReDevPlugin APIs.
 [37] redeven:okf/architecture/container-resources-capability.md:9 - The container resources contract is Redeven-owned business capability surface, not plugin-platform core.
+[38] redeven:AGENTS.md:446 - Redeven must not bypass runtime lease, quota, or revocation checks.
+[39] redeven:AGENTS.md:458 - ReDevPlugin constructs confirmation, token, runtime lease, and audit context.
