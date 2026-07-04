@@ -366,14 +366,14 @@ export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex cursor-pointer
 
 export function gitChangedFilesRowClass(active: boolean): string {
   return active
-    ? cn('group border-b git-browser-selection-surface last:border-b-0', redevenDividerRoleClass())
-    : cn('group border-b bg-transparent hover:bg-muted/[0.14] last:border-b-0', redevenDividerRoleClass());
+    ? cn('group border-b git-browser-selection-surface transition-all duration-150 ease-out last:border-b-0', redevenDividerRoleClass())
+    : cn('group border-b bg-transparent transition-all duration-150 ease-out hover:bg-muted/[0.14] last:border-b-0', redevenDividerRoleClass());
 }
 
 export function gitChangedFilesStickyCellClass(active: boolean): string {
   return active
-    ? cn('sticky right-0 z-10 border-l px-2.5 py-1 text-right align-top git-browser-selection-surface', redevenDividerRoleClass())
-    : cn('sticky right-0 z-10 border-l px-2.5 py-1 text-right align-top group-hover:bg-muted/[0.14]', redevenDividerRoleClass(), redevenSurfaceRoleClass('panel'));
+    ? cn('sticky right-0 z-10 border-l px-2.5 py-1 text-right align-top git-browser-selection-surface transition-colors duration-150', redevenDividerRoleClass())
+    : cn('sticky right-0 z-10 border-l px-2.5 py-1 text-right align-top transition-colors duration-150 group-hover:bg-muted/[0.14]', redevenDividerRoleClass(), redevenSurfaceRoleClass('panel'));
 }
 
 export interface GitMetaPillProps {

@@ -1,4 +1,5 @@
 import { For } from 'solid-js';
+import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import type { GitWorkbenchSubview, GitWorkbenchSubviewItem } from '../utils/gitWorkbench';
 import { buildTabElementId, buildTabPanelElementId, resolveRovingTabTargetId } from '../utils/tabNavigation';
@@ -59,7 +60,10 @@ export function GitViewNav(props: GitViewNavProps) {
               onClick={() => props.onChange(item.id)}
               onKeyDown={(event) => handleKeyDown(event, item.id)}
             >
-              <span class="min-w-0 flex-1 truncate font-medium">{item.label}</span>
+              <span class="flex min-w-0 flex-1 items-center gap-2 truncate">
+                <Dynamic component={item.icon} class="h-3.5 w-3.5 shrink-0" />
+                <span class="truncate font-medium">{item.label}</span>
+              </span>
               <span
                 class={cn(
                   badgeBaseClass,

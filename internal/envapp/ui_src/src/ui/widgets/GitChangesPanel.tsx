@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { Folder, MoreHorizontal, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Folder, MoreHorizontal, Search, Terminal } from '@floegence/floe-webapp-core/icons';
+import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { Button, ConfirmDialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { GitRepoSummaryResponse } from '../protocol/redeven_v1';
@@ -49,7 +50,7 @@ import {
   type GitAskFlowerRequest,
   type GitDirectoryShortcutRequest,
 } from '../utils/gitBrowserShortcuts';
-import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitVirtualTable } from './GitVirtualTable';
 import { GitChangesBreadcrumb } from './GitChangesBreadcrumb';
 import {
@@ -59,6 +60,7 @@ import {
   type GitChangesHeaderActionId,
 } from './gitChangesHeaderLayout';
 import { useI18n, type I18nHelpers } from '../i18n';
+import { extNoDot } from './FileBrowserShared';
 
 export interface GitChangesPanelProps {
   repoSummary?: GitRepoSummaryResponse | null;
@@ -90,16 +92,25 @@ export interface GitChangesPanelProps {
   onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
 }
 
-function itemPath(item: GitSeededWorkspaceChange): string {
-  return String(item.displayPath || item.path || item.newPath || item.oldPath || '').trim() || '(unknown path)';
-}
-
-function itemPrimaryLabel(item: GitSeededWorkspaceChange): string {
+function workspaceChangeFileName(item: GitSeededWorkspaceChange): string {
   const pathValue = isGitWorkspaceDirectoryEntry(item)
     ? workspaceDirectoryPath(item)
     : itemPath(item);
   const parts = pathValue.split('/').filter(Boolean);
   return parts[parts.length - 1] || pathValue || '(unknown path)';
+}
+
+function buildFileItemForIcon(item: GitSeededWorkspaceChange): { name: string; type: 'file' | 'folder'; extension?: string } {
+  const name = workspaceChangeFileName(item);
+  return {
+    name,
+    type: isGitWorkspaceDirectoryEntry(item) ? 'folder' : 'file',
+    extension: isGitWorkspaceDirectoryEntry(item) ? undefined : extNoDot(name),
+  };
+}
+
+function itemPath(item: GitSeededWorkspaceChange): string {
+  return String(item.displayPath || item.path || item.newPath || item.oldPath || '').trim() || '(unknown path)';
 }
 
 function itemDirectorySummary(item: GitSeededWorkspaceChange, i18n: I18nHelpers): string {
@@ -141,6 +152,8 @@ interface WorkspaceTableProps {
   hasMore?: boolean;
   loadingMore?: boolean;
   selectedKey?: string;
+  filtered?: boolean;
+  filteredCount?: number;
   onSelectItem?: (item: GitSeededWorkspaceChange) => void;
   onOpenDiff?: (item: GitSeededWorkspaceChange) => void;
   onOpenDirectory?: (directoryPath: string) => void;
@@ -199,7 +212,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                   <div class="min-w-0">
                     <button
                       type="button"
-                      class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
+                      class={`inline-flex max-w-full cursor-pointer items-center gap-1.5 text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
                       title={isGitWorkspaceDirectoryEntry(item) ? workspaceDirectoryPath(item) : changeSecondaryPath(item)}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -211,15 +224,8 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                         props.onOpenDiff?.(item);
                       }}
                     >
-                      <Show
-                        when={isGitWorkspaceDirectoryEntry(item)}
-                        fallback={itemPath(item)}
-                      >
-                        <span class="inline-flex items-center gap-1.5">
-                          <Folder class="size-3.5 shrink-0" />
-                          <span class="truncate">{itemPrimaryLabel(item)}</span>
-                        </span>
-                      </Show>
+                      <FileItemIcon item={buildFileItemForIcon(item)} class="h-3.5 w-3.5 shrink-0" />
+                      <span class="truncate">{workspaceChangeFileName(item)}</span>
                     </button>
                     <Show when={isGitWorkspaceDirectoryEntry(item)}>
                       <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={workspaceDirectoryPath(item)}>{workspaceDirectoryPath(item)}</div>
@@ -297,6 +303,22 @@ function WorkspaceTable(props: WorkspaceTableProps) {
             loadingStatus={i18n.t('git.changes.loadingNextPage')}
           />
         </Show>
+        <Show when={props.items.length > 0}>
+          <div class={`flex flex-wrap items-center justify-between gap-2 border-t px-2.5 py-1 text-[10px] text-muted-foreground ${redevenDividerRoleClass()} ${redevenSurfaceRoleClass('inset')}`}>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span>{i18n.tn('git.common.fileCount', props.totalCount)}</span>
+              <Show when={props.filtered}>
+                <span aria-hidden="true">·</span>
+                <span>{i18n.t('git.changes.filterActive')}</span>
+                <span aria-hidden="true">·</span>
+                <span>{i18n.t('git.changes.showingFiltered', { visible: props.filteredCount ?? props.items.length, total: props.totalCount })}</span>
+              </Show>
+            </div>
+            <div class="max-w-full truncate text-right sm:max-w-[45%]">
+              {props.section === 'changes' ? i18n.t('git.common.changes') : props.section === 'staged' ? i18n.t('git.common.staged') : i18n.t('git.common.conflicted')}
+            </div>
+          </div>
+        </Show>
       </Show>
     </GitTableFrame>
   );
@@ -316,6 +338,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const [discardTarget, setDiscardTarget] = createSignal<WorkspaceDiscardTarget>(null);
   const [headerElement, setHeaderElement] = createSignal<HTMLDivElement>();
   const [headerWidth, setHeaderWidth] = createSignal(0);
+  const [filterQuery, setFilterQuery] = createSignal('');
 
   const selectedSection = () => props.selectedSection ?? pickDefaultWorkspaceViewSection(props.workspace);
   const summary = () => props.workspace?.summary ?? props.repoSummary?.workspaceSummary ?? null;
@@ -333,6 +356,17 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
       ? (selectedPageState().items as GitSeededWorkspaceChange[])
       : fallbackItems;
   };
+  const filteredItems = createMemo(() => {
+    const query = filterQuery().toLowerCase().trim();
+    if (!query) return visibleItems();
+    return visibleItems().filter((item) => {
+      const pathValue = itemPath(item).toLowerCase();
+      return pathValue.includes(query);
+    });
+  });
+  const filterActive = () => filterQuery().trim().length > 0;
+  const filteredCount = () => filteredItems().length;
+
   const stagedItems = () => (
     stagedPageState().items.length > 0
       ? (stagedPageState().items as GitSeededWorkspaceChange[])
@@ -749,7 +783,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                         </Show>
                       </div>
                       <Show when={headerPresentation().showSummaryCopy}>
-                        <div class="line-clamp-1 max-w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[32rem]">
+                        <div class="line-clamp-1 max-w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[24rem]">
                           {summaryCopy()}
                         </div>
                       </Show>
@@ -792,6 +826,24 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                     </div>
                   </Show>
 
+                  <Show when={visibleItems().length > 0}>
+                    <div class="border-b border-muted/20 pt-2">
+                      <label
+                        class={`flex h-7 min-w-0 items-center gap-1.5 rounded-md border px-2.5 text-[11px] text-muted-foreground shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring ${redevenSurfaceRoleClass('control')} ${redevenSurfaceRoleClass('controlMuted')}`}
+                      >
+                        <Search class="size-3.5 shrink-0" />
+                        <input
+                          type="text"
+                          value={filterQuery()}
+                          onInput={(event) => setFilterQuery(event.currentTarget.value)}
+                          placeholder={i18n.t('git.changes.filterPlaceholder')}
+                          aria-label={i18n.t('git.changes.filterPlaceholder')}
+                          class="h-full min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground/70"
+                        />
+                      </label>
+                    </div>
+                  </Show>
+
                   <Show when={showBreadcrumbRail()}>
                     <GitChangesBreadcrumb
                       segments={breadcrumbSegments()}
@@ -806,11 +858,13 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
               <div class="min-h-0 flex-1">
                 <WorkspaceTable
                   section={selectedSection()}
-                  items={visibleItems()}
+                  items={filteredItems()}
                   totalCount={visibleItemCount()}
                   hasMore={selectedPageState().hasMore}
                   loadingMore={visibleLoadingMore()}
                   selectedKey={selectedKey()}
+                  filtered={filterActive()}
+                  filteredCount={filteredCount()}
                   onSelectItem={props.onSelectItem}
                   onOpenDiff={(item) => {
                     setDiffDialogItem(item);

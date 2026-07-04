@@ -1,6 +1,8 @@
 import { For, Show, createEffect, onCleanup } from 'solid-js';
+import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
+import { AlertTriangle, CheckCircle, FileText, GitBranch } from '@floegence/floe-webapp-core/icons';
 import type {
   GitBranchSummary,
   GitCommitSummary,
@@ -153,6 +155,18 @@ function selectorLabel(view: GitWorkbenchSubview): string {
     case 'changes':
     default:
       return 'Changes';
+  }
+}
+
+function resolveWorkspaceSectionIcon(section: GitWorkspaceViewSection): import('solid-js').Component<{ class?: string }> {
+  switch (section) {
+    case 'staged':
+      return CheckCircle;
+    case 'conflicted':
+      return AlertTriangle;
+    case 'changes':
+    default:
+      return FileText;
   }
 }
 
@@ -415,10 +429,13 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                     }}
                                   >
                                     <div class="flex items-start justify-between gap-2">
-                                      <div class="min-w-0 flex-1">
+                                      <div class="flex min-w-0 flex-1 items-start gap-2">
+                                        <Dynamic component={resolveWorkspaceSectionIcon(section)} class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                                        <div class="min-w-0 flex-1">
                                         <div class="font-medium text-current">{workspaceViewSectionLabel(section)}</div>
                                         <div class={cn('mt-0.5 text-[10px] leading-relaxed', gitSelectedSecondaryTextClass(active()))}>
                                           {count() === 0 ? 'No files in this section.' : `${count()} file${count() === 1 ? '' : 's'} available.`}
+                                        </div>
                                         </div>
                                       </div>
                                       <span
@@ -466,7 +483,10 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                       }}
                                     >
                                       <div class="grid min-h-5 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-                                        <span class="min-w-0 flex-1 truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</span>
+                                        <span class="flex min-w-0 flex-1 items-center gap-1.5 truncate">
+                                          <GitBranch class="h-3.5 w-3.5 shrink-0" />
+                                          <span class="truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</span>
+                                        </span>
                                         <Show when={branch.current}>
                                           <span class={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', active() ? gitSelectedChipClass(true) : 'bg-primary/[0.12] text-primary')}>Current</span>
                                         </Show>
@@ -498,7 +518,10 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                         closeAfterPick();
                                       }}
                                     >
-                                      <div class="truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</div>
+                                      <div class="flex items-center gap-1.5 truncate">
+                                        <GitBranch class="h-3.5 w-3.5 shrink-0" />
+                                        <span class="truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</span>
+                                      </div>
                                       <div class={cn('mt-0.5 truncate text-[10px]', gitSelectedSecondaryTextClass(active()))}>{branch.subject || branchStatusSummary(branch)}</div>
                                     </button>
                                   );
