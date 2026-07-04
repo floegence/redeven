@@ -103,6 +103,9 @@ jobs:
       - name: Runtime compatibility contract check
         run: ./scripts/check_runtime_compatibility_contract.sh --source-only
 
+      - name: Build embedded assets
+        run: ./scripts/build_assets.sh
+
       - name: ReDevPlugin integration readiness gate
         run: ./scripts/check_plugin_integration.sh --ci
 
@@ -120,9 +123,6 @@ jobs:
 
       - name: Desktop lightweight checks
         run: ./scripts/check_desktop.sh --ci
-
-      - name: Build embedded assets
-        run: ./scripts/build_assets.sh
 
       - name: go test
         run: go test ./...
