@@ -2295,6 +2295,9 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	if args == nil {
 		args = map[string]any{}
 	}
+	if toolName == "terminal.exec" {
+		args = normalizeTerminalExecArgs(args)
+	}
 	r.recordRuntimeToolCall()
 
 	argsForPersist := args
@@ -4301,7 +4304,32 @@ type terminalExecProcessArgs struct {
 	Cwd         string `json:"cwd"`
 	Workdir     string `json:"workdir"`
 	YieldMS     int64  `json:"yield_ms"`
+	TimeoutMS   int64  `json:"timeout_ms"`
 	Description string `json:"description"`
+}
+
+func normalizeTerminalExecArgs(args map[string]any) map[string]any {
+	out := cloneAnyMap(args)
+	yieldMS := parseIntRaw(out["yield_ms"], 0)
+	timeoutMS := parseIntRaw(out["timeout_ms"], 0)
+	delete(out, "timeout_ms")
+	switch {
+	case yieldMS > 0:
+		out["yield_ms"] = clampTerminalExecYieldMS(yieldMS)
+	case timeoutMS > 0:
+		out["yield_ms"] = clampTerminalExecYieldMS(timeoutMS)
+	}
+	return out
+}
+
+func clampTerminalExecYieldMS(value int) int64 {
+	if value <= 0 {
+		return 0
+	}
+	if value > terminalProcessMaxYieldMS {
+		return terminalProcessMaxYieldMS
+	}
+	return int64(value)
 }
 
 func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.Meta, toolID string, args map[string]any, argsForPersist map[string]any, toolStartedAt time.Time, toolSpanID string, activityUpdater toolActivityUpdater) (*toolCallOutcome, *aitools.ToolError) {
