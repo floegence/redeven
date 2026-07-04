@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Plugin platform integration
 description: Redeven integrates released ReDevPlugin artifacts through Local UI, AppServer, product adapters, and Flower orchestration without owning plugin-platform core.
 tags: [architecture, plugins, local-ui, redevplugin]
-timestamp: 2026-07-02T00:00:00Z
+timestamp: 2026-07-05T00:00:00Z
 ---
 
 Redeven plugin-platform integration is host-product glue over released
@@ -16,9 +16,13 @@ At the current source baseline, Redeven consumes the released
 HTTP adapter through a narrow `internal/redevpluginintegration` package. That
 package configures ReDevPlugin Host stores, policy/session/security adapters,
 runtime artifact resolution, observability fanout, and Redeven-owned business
-capabilities without copying platform source. Redeven has not added
-ReDevPlugin npm packages or new Env App, Activity Bar, Workbench, Settings, or
-Flower product entrypoints in this integration slice.
+capabilities without copying platform source. Env App now adds product
+entrypoints for official plugin discovery and management: an Activity Bar
+Plugins panel and a Settings Plugin Center section. Those entrypoints project
+official catalog metadata and only the installed ReDevPlugin records whose
+`plugin_id` appears in that official catalog; they do not implement a second
+registry, package downloader, manifest parser, trust verifier, bridge, or
+runtime.
 
 The same baseline does include a Redeven-owned container resources business
 capability contract under `spec/capabilities/container-resources-v1.schema.json`
@@ -65,6 +69,15 @@ the handler is absent, Env App callers still receive the AppServer's flat JSON
 is absent; once the handler is enabled, plugin management requests use the
 normal local access gate before forwarding to AppServer.
 
+Env-trusted plugin management delegation binds the current Redeven session
+before the request reaches the released handler. AppServer attaches the
+authoritative channel id from the Env App origin label, or `local-ui` in Local
+UI mode, and the ReDevPlugin integration wrapper resolves that channel into a
+host-derived session context. It then overwrites the ReDevPlugin owner-session
+hash and CSRF headers from that context, so lifecycle POSTs are validated by
+the released ReDevPlugin web-security guard without requiring Env App UI code
+to know or reproduce the CSRF hash derivation.
+
 `/_redeven_plugin` and `/_redeven_plugin/*` are accepted only from plugin
 sandbox origins when the handler is present. AppServer rewrites those requests
 to `/_redevplugin*`, marks them with the internal `plugin_sandbox` route role,
@@ -99,6 +112,36 @@ Floret may orchestrate plugin generation, validation, packaging, installation,
 enablement, opening, diagnostics, update, export/import, and uninstall through
 released ReDevPlugin APIs; they must not become a second registry, builder,
 token issuer, runtime, or broker.
+
+Redeven's first official catalog seed is embedded in Env App UI as product
+metadata for `com.redeven.official.containers`. The source of the official plugin
+itself lives in the separate `redeven-official-plugins` repository, whose first
+feature initializes `plugins/containers`, catalog seed/schema, and package
+scripts. Redeven may display that official seed and merge it with matching
+installed ReDevPlugin records by `plugin_id`; user-local install and enable
+state remains the ReDevPlugin Host registry under `StateDir/apps/redevplugin`.
+Installed records outside the official catalog are not shown in this official
+Plugin Center. Matching installed records are still constrained by their
+ReDevPlugin `trust_state`: only `bundled`, `verified`, and `unsigned_local`
+records are projected as runnable. Official records with `needs_review`,
+`untrusted`, `blocked_security`, or any other non-runnable trust state are shown
+as attention-needed and do not receive open or enable launch targets.
+
+The current ReDevPlugin v0.1.1 management API exposes `catalog`, install by
+`package_base64`, enable, disable, uninstall, update, and surface open. It does
+not expose a host-owned official distribution install API that accepts an
+official catalog item, downloads the package, verifies checksum/signature, and
+commits through lifecycle. Redeven's Plugin Center therefore treats official
+distribution install as unavailable when the catalog item marks
+`requiresHostDistributionInstallAPI=true`. This keeps browser UI from becoming
+the package downloader or trust verifier and preserves the upstream boundary for
+future official install support.
+
+The reusable surface host is also an upstream ReDevPlugin artifact. Redeven does
+not currently consume a released `@floegence/redevplugin-ui` npm package, so the
+official plugin entry slice does not render sandbox iframes locally. It keeps
+surface opening disabled in product UI rather than copying iframe bootstrap or
+bridge-host behavior into Redeven.
 
 # Boundaries
 
@@ -180,3 +223,7 @@ closed-world container resources capability contract.
 [40] redeven:internal/redevpluginintegration/integration.go:52 - The integration package configures the released ReDevPlugin Host and durable stores.
 [41] redeven:internal/redevpluginintegration/adapters.go:85 - The session resolver projects Redeven session metadata into ReDevPlugin session context.
 [42] redeven:internal/redevpluginintegration/adapters.go:218 - Runtime artifact resolution searches published bundle/executable locations and fails closed.
+[43] redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts:3 - Env App embeds the first Redeven official catalog seed item.
+[44] redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:12 - Plugin inventory projection merges official catalog and installed ReDevPlugin records by plugin id.
+[45] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:9 - Env App plugin management wrappers call only the Redeven proxy plugin namespace.
+[46] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterSection.tsx:148 - Official installs that require host distribution install API are disabled in Plugin Center.

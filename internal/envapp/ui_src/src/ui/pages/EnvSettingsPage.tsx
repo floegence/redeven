@@ -20,6 +20,7 @@ import { FlowerSection } from './settings/sections/FlowerSection';
 import { SkillsSection } from './settings/sections/SkillsSection';
 import { CodexSection } from './settings/sections/CodexSection';
 import { DebugConsoleSection } from './settings/sections/DebugConsoleSection';
+import { PluginCenterSection } from '../plugins/PluginCenterSection';
 
 const NAV_SEARCH_KEYWORDS: Record<EnvSettingsSection, string[]> = {
   config: ['path', 'config file', 'configuration', 'json', 'config_path', 'toml'],
@@ -31,6 +32,7 @@ const NAV_SEARCH_KEYWORDS: Record<EnvSettingsSection, string[]> = {
   permission_policy: ['permission', 'policy', 'security', 'read', 'write', 'execute', 'by_user', 'by_app', 'local_max', 'schema'],
   ai: ['api key', 'model', 'provider', 'openai', 'anthropic', 'flower', 'llm', 'gpt', 'claude', 'deepseek', 'execution policy', 'approval', 'dangerous'],
   skills: ['skill', 'catalog', 'github', 'install', 'extension', 'plugin', 'agent skill', 'tool'],
+  plugins: ['plugin center', 'official plugin', 'containers', 'extension', 'install', 'uninstall', 'update'],
   codex: ['codex', 'host', 'binary', 'diagnostics', 'bridge'],
   debug_console: ['debug', 'console', 'floating', 'overlay', 'frontend', 'performance', 'request'],
 };
@@ -65,6 +67,8 @@ function navLabel(section: EnvSettingsSection, fallback: string, t: ReturnType<t
       return t('settings.nav.flower');
     case 'skills':
       return t('settings.nav.skills');
+    case 'plugins':
+      return fallback;
     case 'codex':
       return t('settings.nav.codex');
     case 'debug_console':
@@ -103,9 +107,15 @@ const sectionComponents: Record<EnvSettingsSection, () => JSX.Element> = {
   permission_policy: PermissionPolicySection,
   ai: FlowerSection,
   skills: SkillsSection,
+  plugins: PluginCenterSettingsSection,
   codex: CodexSection,
   debug_console: DebugConsoleSection,
 };
+
+function PluginCenterSettingsSection() {
+  const ctx = useEnvSettingsPage();
+  return <PluginCenterSection canManagePlugins={ctx.canInteract() && ctx.canAdmin()} />;
+}
 
 function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue } = {}) {
   const ctx = props.context ?? useEnvSettingsPage();

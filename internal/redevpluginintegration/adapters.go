@@ -58,8 +58,11 @@ func (h pluginHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if sessionCtx, err := h.resolver.ResolveRequest(r.Context(), r); err == nil {
 			next := r.Clone(r.Context())
 			next.Header = r.Header.Clone()
-			if strings.TrimSpace(next.Header.Get(httpadapter.OwnerSessionHashHeader)) == "" {
-				next.Header.Set(httpadapter.OwnerSessionHashHeader, sessionCtx.SessionChannelIDHash)
+			if ownerHash := strings.TrimSpace(sessionCtx.SessionChannelIDHash); ownerHash != "" {
+				next.Header.Set(httpadapter.OwnerSessionHashHeader, ownerHash)
+			}
+			if csrf := strings.TrimSpace(sessionCtx.CSRFGeneration); csrf != "" {
+				next.Header.Set(csrfHeader, csrf)
 			}
 			r = next
 		}

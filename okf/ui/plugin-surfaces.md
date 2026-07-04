@@ -3,7 +3,7 @@ type: UI Contract
 title: Plugin surfaces
 description: Redeven places released ReDevPlugin sandbox surfaces into product chrome without owning the plugin iframe lifecycle.
 tags: [ui, plugins, workbench, settings]
-timestamp: 2026-07-02T00:00:00Z
+timestamp: 2026-07-05T00:00:00Z
 ---
 
 Plugin surfaces are ReDevPlugin sandbox documents placed inside Redeven product
@@ -30,13 +30,29 @@ rather than loosening canvas routing. If a native Redeven component does not
 exercise the ReDevPlugin sandbox bootstrap and bridge lifecycle, it is a
 Redeven feature, not an official plugin surface.
 
-Settings placement follows the existing grouped Settings model. The current
-Settings navigation already groups Flower, Skills, and Codex under
-`AI & Extensions`; a future Plugins section belongs in that product area unless
-the product creates a more specific extension-management group. Plugin settings
-UI may project host policy, installed plugin state, and adapter diagnostics, but
-the settings/intent SDK and plugin-owned UI lifecycle remain ReDevPlugin
-artifacts.
+Env App now exposes a two-level official plugin entry. The Activity Bar has a
+`Plugins` trigger that opens a lightweight app-grid panel without changing the
+current Activity or Workbench surface. The first panel tile is always
+`Plugin Center`. Unavailable, disabled, attention-needed, and currently
+surface-host-unavailable plugins route the user to Plugin Center instead of
+pretending a sandbox surface opened. The panel is Redeven chrome only: it does
+not parse manifests, install packages, mint tickets, or load plugin assets.
+
+Plugin Center is a Settings section in the existing `AI & Extensions` group
+next to Flower, Skills, and Codex. It projects the Redeven official catalog seed
+and matching installed ReDevPlugin records into Installed, Discover, and Updates
+views. First-release discovery is official-only and includes the Containers
+plugin entry; installed records outside the official catalog are excluded from
+this official management surface. The UI deliberately omits third-party
+marketplace, developer mode, URL install, file install, and unsigned local
+package entries. Plugin settings UI may project host policy, official installed
+plugin state, lifecycle command status, and adapter diagnostics, but the
+settings/intent SDK and plugin-owned UI lifecycle remain ReDevPlugin artifacts.
+Official catalog membership is not enough to make an installed record runnable:
+Plugin Center treats ReDevPlugin trust states other than `bundled`, `verified`,
+and `unsigned_local` as attention-needed, with no Open or Enable action. Enabled
+plugins with older official versions show Update without a misleading Enable
+action.
 
 # Boundaries
 
@@ -52,6 +68,27 @@ diagnostics, export/import, and data-retention actions must call released
 ReDevPlugin lifecycle APIs or generated clients. User-facing controls remain
 Redeven product UX, so interactive controls must expose pointer affordance while
 enabled and disabled controls must not pretend to be clickable.
+Lifecycle command calls are sent only through the Redeven plugin proxy
+namespace. The UI does not compute ReDevPlugin CSRF tokens; AppServer and the
+ReDevPlugin integration wrapper bind the authoritative session headers before
+delegating management requests to the released handler.
+
+The current released ReDevPlugin HTTP API consumed by Redeven exposes installed
+plugin catalog, enable, disable, uninstall, update, and surface-open routes under
+`/_redevplugin/api/plugins*`, which Redeven reaches through
+`/_redeven_proxy/api/plugins*`. It does not yet expose a host-owned official
+distribution install endpoint that downloads a package URL, verifies checksum
+and signature, and installs through lifecycle. Therefore the current Plugin
+Center disables official package installation when the catalog item requires
+that host distribution install API; the UI must not compensate by downloading
+or validating packages in the browser.
+
+The current public npm registry does not expose a released
+`@floegence/redevplugin-ui` surface-host package for Redeven to consume. Until
+that package is released and consumed through `package.json`, Plugin Center keeps
+surface Open disabled and the Activity Bar panel routes plugin tiles to Plugin
+Center. Redeven must not hand-write the iframe bootstrap or bridge host as a
+local substitute for the missing released package.
 
 # Citations
 
@@ -63,5 +100,9 @@ enabled and disabled controls must not pretend to be clickable.
 [6] redeven:AGENTS.md:641 - Workbench wheel ownership is canvas-first and selected-widget guarded.
 [7] redeven:AGENTS.md:653 - Workbench text selection and copy are first-class interaction contracts.
 [8] redeven:internal/envapp/ui_src/src/ui/pages/settings/settingsStructure.ts:45 - Settings sections are declared in a single grouped navigation structure.
-[9] redeven:internal/envapp/ui_src/src/ui/pages/settings/settingsStructure.ts:71 - Flower, Skills, and Codex currently live under `AI & Extensions`.
+[9] redeven:internal/envapp/ui_src/src/ui/pages/settings/settingsStructure.ts:71 - Flower, Skills, Plugin Center, and Codex live under `AI & Extensions`.
 [10] redeven:okf/ui/workbench-interaction-contracts.md:11 - Workbench input ownership uses explicit marker contracts.
+[11] redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx:12 - The plugin panel is a controlled Redeven UI component over projected plugin inventory.
+[12] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterSection.tsx:24 - Plugin Center renders official plugin management views from inventory projection.
+[13] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:9 - Env App plugin lifecycle calls use the Redeven proxy plugin namespace.
+[14] redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts:3 - Redeven bundles the first official catalog seed entry for Containers.

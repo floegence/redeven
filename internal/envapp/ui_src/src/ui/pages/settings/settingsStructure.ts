@@ -4,6 +4,7 @@ import {
   Database,
   FileCode,
   Globe,
+  Grid3x3,
   Layers,
   RefreshIcon,
   Shield,
@@ -52,6 +53,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = Object.freeze([
   { id: 'permission_policy', navLabel: 'Permission Policy', icon: Shield, group: 'security' },
   { id: 'ai', navLabel: 'Flower', icon: FlowerIcon, group: 'ai_extensions' },
   { id: 'skills', navLabel: 'Skills', icon: Layers, group: 'ai_extensions' },
+  { id: 'plugins', navLabel: 'Plugin Center', icon: Grid3x3, group: 'ai_extensions' },
   { id: 'codex', navLabel: 'Codex', icon: CodexNavigationIcon, group: 'ai_extensions' },
   { id: 'debug_console', navLabel: 'Debug Console', icon: RefreshIcon, group: 'diagnostics' },
 ]);
@@ -68,7 +70,7 @@ export const SETTINGS_GROUPS: readonly SettingsGroupMeta[] = Object.freeze([
   { id: 'runtime_configuration', title: 'Runtime Configuration', sections: ['runtime', 'logging'] },
   { id: 'codespaces_tooling', title: 'Codespaces & Tooling', sections: ['codespaces'] },
   { id: 'security', title: 'Security', sections: ['permission_policy'] },
-  { id: 'ai_extensions', title: 'AI & Extensions', sections: ['ai', 'skills', 'codex'] },
+  { id: 'ai_extensions', title: 'AI & Extensions', sections: ['ai', 'skills', 'plugins', 'codex'] },
   { id: 'diagnostics', title: 'Diagnostics', sections: ['debug_console'] },
 ]);
 

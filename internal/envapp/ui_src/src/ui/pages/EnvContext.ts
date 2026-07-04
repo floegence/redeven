@@ -24,6 +24,7 @@ export type EnvSettingsSection =
   | 'codespaces'
   | 'permission_policy'
   | 'skills'
+  | 'plugins'
   | 'ai'
   | 'codex';
 

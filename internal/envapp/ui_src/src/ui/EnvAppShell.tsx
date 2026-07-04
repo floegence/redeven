@@ -75,6 +75,10 @@ import { CodexProvider } from './codex/CodexProvider';
 import { CodexSidebar } from './codex/CodexSidebar';
 import { AIChatContext, createAIChatContextValue } from './pages/AIChatContext';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
+import { PluginPanel } from './plugins/PluginPanel';
+import { loadPluginInventoryProjection } from './plugins/pluginApi';
+import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
+import type { PluginSurfaceLaunchTarget } from './plugins/pluginTypes';
 import { hasRWXPermissions } from './pages/aiPermissions';
 import { useRedevenRpc } from './protocol/redeven_v1';
 import { createEnvLocalFlowerSurfaceAdapter } from './flower/envLocalFlowerSurfaceAdapter';
@@ -686,6 +690,7 @@ export function EnvAppShell() {
   const [settingsFocusSeq, setSettingsFocusSeq] = createSignal(0);
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
   const [settingsOrigin, setSettingsOrigin] = createSignal<EnvSettingsOrigin>(null);
+  const [pluginsPanelOpen, setPluginsPanelOpen] = createSignal(false);
   const [languageMenuOpenSeq, setLanguageMenuOpenSeq] = createSignal(0);
   const [aiThreadFocusRequest, setAIThreadFocusRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
   let aiThreadFocusRequestSequence = 0;
@@ -748,6 +753,7 @@ export function EnvAppShell() {
   });
 
   const openSettings = (section?: EnvSettingsSection, options?: { origin?: EnvSettingsOrigin }) => {
+    setPluginsPanelOpen(false);
     setSettingsFocusSection(section ?? 'config');
     setSettingsFocusSeq((n) => n + 1);
     setViewMode('activity');
@@ -765,6 +771,21 @@ export function EnvAppShell() {
 
   const openDebugConsole = () => {
     debugConsole.show();
+  };
+
+  const [pluginInventoryProjection, { refetch: refetchPluginInventory }] = createResource(
+    pluginsPanelOpen,
+    (open) => (open ? loadPluginInventoryProjection() : Promise.resolve({ items: [] })),
+  );
+
+  const pluginPanelModel = createMemo(() => buildPluginPanelModel(
+    pluginInventoryProjection() ?? { items: [] },
+    pluginInventoryProjection.error ? getErrorMessage(pluginInventoryProjection.error) : undefined,
+  ));
+
+  const openPluginSurface = (target: PluginSurfaceLaunchTarget) => {
+    notify.info('Plugin surface unavailable', `Plugin Center can manage ${target.pluginInstanceID}, but this build does not include the released ReDevPlugin surface host.`);
+    openSettings('plugins');
   };
 
   const setDebugConsoleEnabled = (enabled: boolean) => {
@@ -2253,6 +2274,16 @@ export function EnvAppShell() {
         : { id: 'files', icon: ActivityBarFolderIcon, label: i18n.t('shell.nav.fileBrowser'), collapseBehavior: 'preserve' },
       { id: 'codespaces', icon: ActivityBarCodespacesIcon, label: i18n.t('shell.nav.codespaces'), collapseBehavior: 'preserve' },
       { id: 'ports', icon: ActivityBarPortsIcon, label: i18n.t('shell.nav.webServices'), collapseBehavior: 'preserve' },
+      {
+        id: 'plugins',
+        icon: Grid3x3,
+        label: 'Plugins',
+        collapseBehavior: 'preserve',
+        onClick: () => {
+          setPluginsPanelOpen((open) => !open);
+          void refetchPluginInventory();
+        },
+      },
     );
     if (canUseFlower()) {
       items.push({
@@ -3046,6 +3077,14 @@ export function EnvAppShell() {
 
       <AuditLogDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
       <FileBrowserSurfaceHost />
+      <PluginPanel
+        open={pluginsPanelOpen()}
+        model={pluginPanelModel()}
+        onClose={() => setPluginsPanelOpen(false)}
+        onOpenCenter={() => openSettings('plugins')}
+        onOpenPluginDetails={() => openSettings('plugins')}
+        onOpenPluginSurface={(target) => void openPluginSurface(target)}
+      />
       <DebugConsoleWindow controller={debugConsole} />
     </Shell>
   );

@@ -3,7 +3,7 @@ type: Release Contract
 title: CI and release gates
 description: Redeven release confidence comes from shell checks, OKF validation, UI checks, Runtime Service compatibility, assets, Go tests, and lint.
 tags: [release, ci, quality, okf]
-timestamp: 2026-06-18T00:00:00Z
+timestamp: 2026-07-05T00:00:00Z
 ---
 
 Redeven keeps CI and local release checks aligned around source validation and generated asset determinism. OKF is part of that gate, not an optional documentation artifact.
@@ -83,6 +83,20 @@ Code App embedded asset directories already exist; CI and the local pre-commit
 hook build those assets first so fresh checkouts do not fail with low-level
 `go:embed` path errors.
 
+Env App plugin entry changes are covered by focused Vitest tests before the
+general UI gates. The plugin projection tests bind official catalog plus
+matching installed registry merging, exclusion of non-official installed
+records, panel tile ordering, lifecycle action selection, revoked/disabled
+catalog behavior, and update bucketing. The plugin API tests bind the UI wrapper
+to `/_redeven_proxy/api/plugins*` and snake_case lifecycle bodies without URL,
+file, unsigned local, or developer install helpers. Plugin Panel and Plugin
+Center component tests bind the app-grid entry, pointer cursor affordance,
+outside-click ordering, official-only management copy, disabled management
+actions for users without management authority, and disabled official install
+state when host distribution install API is required. They also bind surface
+Open as disabled until Redeven consumes a released ReDevPlugin surface host.
+Settings structure tests bind Plugin Center to the `AI & Extensions` group.
+
 The route matrix covers both disabled-handler reservations and enabled-handler
 delegation. Without a plugin platform handler, `/_redeven_plugin/*` remains
 404-only and cannot fall through to Env App, codespace, port-forward, Local UI
@@ -153,3 +167,8 @@ ReDevPlugin artifacts only.
 [41] redeven:AGENTS.md:503 - ReDevPlugin upgrade review must identify released Go, npm, runtime, schema, and contract hash versions.
 [42] redeven:scripts/check_plugin_integration.sh:85 - The integration gate runs ReDevPlugin session, security, runtime, and route adapter tests.
 [43] redeven:internal/redevpluginintegration/adapters_test.go:17 - Adapter tests bind session projection, policy decisions, CSRF validation, trust downgrade, runtime fail-closed behavior, and durable state.
+[44] redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.test.ts:1 - Plugin projection tests cover official catalog merging and panel/center bucketing.
+[45] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.test.ts:1 - Plugin API tests cover Redeven proxy paths and snake_case lifecycle request bodies.
+[46] redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.test.tsx:1 - Plugin Panel tests cover first-tile Plugin Center behavior and interactive cursor affordance.
+[47] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterSection.test.tsx:1 - Plugin Center tests cover official-only rendering and disabled host distribution install state.
+[48] redeven:internal/envapp/ui_src/src/ui/pages/settings/settingsStructure.plugins.test.ts:1 - Settings structure tests bind Plugin Center to AI & Extensions.
