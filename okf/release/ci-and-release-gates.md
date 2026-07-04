@@ -122,4 +122,4 @@ ReDevPlugin artifacts only.
 [32] redeven:.github/workflows/release.yml:113 - Release tarballs include the staged ReDevPlugin runtime, third-party notices, and verifier marker when present.
 [33] redeven:scripts/build_desktop_bundled_runtime.sh:113 - Desktop bundle preparation has an env-gated ReDevPlugin runtime staging path.
 [34] redeven:.github/workflows/release.yml:241 - Desktop release packaging passes the selected ReDevPlugin version into bundled-runtime preparation.
-[35] redeven:.githooks/pre-commit:7 - The local pre-commit hook runs the ReDevPlugin dependency boundary guard before Gateway and heavyweight local checks.
+[35] redeven:.githooks/pre-commit:8 - The local pre-commit hook runs the ReDevPlugin integration readiness gate before Gateway and heavyweight local checks.
