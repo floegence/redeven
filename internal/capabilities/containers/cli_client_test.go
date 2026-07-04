@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCLIClientStatusParsesNestedEngineVersion(t *testing.T) {
@@ -159,6 +160,42 @@ func TestCLIClientPullImageParsesDigest(t *testing.T) {
 	}
 }
 
+func TestCLIClientPullImagePropagatesContextCancellation(t *testing.T) {
+	t.Parallel()
+
+	runner := &contextCancelRunner{}
+	client := &CLIClient{Runner: runner}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := client.PullImage(ctx, EngineDocker, "ghcr.io/acme/api:latest")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("PullImage() error = %v, want context.Canceled", err)
+	}
+	if runner.call != "docker pull ghcr.io/acme/api:latest" {
+		t.Fatalf("runner call = %q", runner.call)
+	}
+}
+
+func TestCLIClientPullImageTimeoutCancelsRunner(t *testing.T) {
+	t.Parallel()
+
+	runner := &contextCancelRunner{}
+	client := &CLIClient{Runner: runner, Timeout: 5 * time.Millisecond}
+
+	started := time.Now()
+	_, err := client.PullImage(context.Background(), EngineDocker, "ghcr.io/acme/api:latest")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("PullImage() error = %v, want context.DeadlineExceeded", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("PullImage() timeout took %s", elapsed)
+	}
+	if runner.call != "docker pull ghcr.io/acme/api:latest" {
+		t.Fatalf("runner call = %q", runner.call)
+	}
+}
+
 func TestCLIClientTailLogsParsesBoundedBatch(t *testing.T) {
 	t.Parallel()
 
@@ -309,6 +346,16 @@ type errFakeCommandNotFound string
 
 func (e errFakeCommandNotFound) Error() string {
 	return "unexpected command: " + string(e)
+}
+
+type contextCancelRunner struct {
+	call string
+}
+
+func (r *contextCancelRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	r.call = strings.TrimSpace(name + " " + strings.Join(args, " "))
+	<-ctx.Done()
+	return nil, ctx.Err()
 }
 
 const dockerInspectFixture = `[
