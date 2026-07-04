@@ -100,6 +100,13 @@ type PortForwardBackend interface {
 	TouchLastOpened(ctx context.Context, forwardID string) (*pfregistry.Forward, error)
 }
 
+type workbenchTerminalSessionManager interface {
+	CreateSession(name string, workingDir string) (*terminal.SessionInfo, error)
+	DeleteSession(sessionID string) error
+	DeleteSessionForWidget(sessionID string, widgetID string) error
+	AddSessionLifecycleHook(hook terminal.SessionLifecycleHook) func()
+}
+
 type CodexBackend interface {
 	Status(ctx context.Context) codexbridge.Status
 	ReadCapabilities(ctx context.Context, cwd string) (*codexbridge.Capabilities, error)
@@ -206,7 +213,7 @@ type Server struct {
 	ai      *ai.Service
 	notes   *notes.Service
 	layouts *workbenchlayout.Service
-	term    *terminal.Manager
+	term    workbenchTerminalSessionManager
 	codex   CodexBackend
 	audit   *auditlog.Store
 	diag    *diagnostics.Store

@@ -1134,6 +1134,28 @@ func TestServiceTerminalSessionStateHelpers(t *testing.T) {
 	if missing.Revision != removed.Revision || !reflect.DeepEqual(missing.State.SessionIDs, removed.State.SessionIDs) {
 		t.Fatalf("missing removal state = %#v, want unchanged %#v", missing, removed)
 	}
+
+	cleared, clearedSessionIDs, err := svc.ClearTerminalSessions(ctx, "widget-terminal-1")
+	if err != nil {
+		t.Fatalf("ClearTerminalSessions() error = %v", err)
+	}
+	if cleared.Revision != removed.Revision+1 || len(cleared.State.SessionIDs) != 0 {
+		t.Fatalf("cleared state = %#v, want empty sessions revision %d", cleared, removed.Revision+1)
+	}
+	if !reflect.DeepEqual(clearedSessionIDs, []string{"session-2"}) {
+		t.Fatalf("cleared session ids = %#v, want session-2", clearedSessionIDs)
+	}
+	if cleared.State.FontSize == nil || *cleared.State.FontSize != 14 || cleared.State.FontFamilyID != "jetbrains" {
+		t.Fatalf("cleared geometry = %#v, want preserved geometry", cleared.State)
+	}
+
+	clearedAgain, clearedAgainSessionIDs, err := svc.ClearTerminalSessions(ctx, "widget-terminal-1")
+	if err != nil {
+		t.Fatalf("ClearTerminalSessions(empty) error = %v", err)
+	}
+	if clearedAgain.Revision != cleared.Revision || len(clearedAgain.State.SessionIDs) != 0 || len(clearedAgainSessionIDs) != 0 {
+		t.Fatalf("second clear = (%#v, %#v), want unchanged empty state", clearedAgain, clearedAgainSessionIDs)
+	}
 }
 
 func TestServicePruneTerminalSessions(t *testing.T) {

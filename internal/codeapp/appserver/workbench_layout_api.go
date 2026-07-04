@@ -26,6 +26,17 @@ type workbenchTerminalSessionCreateRequest struct {
 	WorkingDir string `json:"working_dir,omitempty"`
 }
 
+type workbenchTerminalSessionCloseFailure struct {
+	SessionID string `json:"session_id"`
+	Error     string `json:"error"`
+}
+
+type workbenchTerminalWidgetSessionsCloseResponse struct {
+	WidgetState        workbenchlayout.WidgetState            `json:"widget_state"`
+	AcceptedSessionIDs []string                               `json:"accepted_session_ids"`
+	FailedSessions     []workbenchTerminalSessionCloseFailure `json:"failed_sessions"`
+}
+
 func (g *Server) handleWorkbenchLayoutAPI(w http.ResponseWriter, r *http.Request) bool {
 	if r == nil || !strings.HasPrefix(strings.TrimSpace(r.URL.Path), "/_redeven_proxy/api/workbench/") {
 		return false
@@ -150,6 +161,42 @@ func (g *Server) handleWorkbenchWidgetStateAPI(w http.ResponseWriter, r *http.Re
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{
 			"session":      session,
 			"widget_state": state,
+		}})
+		return true
+
+	case r.Method == http.MethodDelete && tail == "terminal/sessions":
+		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
+			return true
+		}
+		if g.term == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "terminal service not ready"})
+			return true
+		}
+		state, sessionIDs, err := g.layouts.ClearTerminalSessions(r.Context(), widgetID)
+		if err != nil {
+			writeWorkbenchLayoutError(w, err)
+			return true
+		}
+		accepted := make([]string, 0, len(sessionIDs))
+		failed := make([]workbenchTerminalSessionCloseFailure, 0)
+		for _, sessionID := range sessionIDs {
+			if err := g.term.DeleteSessionForWidget(sessionID, widgetID); err != nil {
+				if errors.Is(err, terminal.ErrSessionNotFound) {
+					accepted = append(accepted, sessionID)
+					continue
+				}
+				failed = append(failed, workbenchTerminalSessionCloseFailure{
+					SessionID: sessionID,
+					Error:     err.Error(),
+				})
+				continue
+			}
+			accepted = append(accepted, sessionID)
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: workbenchTerminalWidgetSessionsCloseResponse{
+			WidgetState:        state,
+			AcceptedSessionIDs: accepted,
+			FailedSessions:     failed,
 		}})
 		return true
 

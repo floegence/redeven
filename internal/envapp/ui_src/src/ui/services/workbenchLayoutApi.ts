@@ -3,6 +3,7 @@ import {
   normalizeRuntimeWorkbenchLayoutEvent,
   normalizeRuntimeWorkbenchOpenPreviewResponse,
   normalizeRuntimeWorkbenchLayoutSnapshot,
+  normalizeRuntimeWorkbenchTerminalWidgetSessionsCloseResponse,
   normalizeRuntimeWorkbenchWidgetState,
   type RuntimeWorkbenchLayoutEvent,
   type RuntimeWorkbenchOpenPreviewRequest,
@@ -11,6 +12,7 @@ import {
   type RuntimeWorkbenchLayoutSnapshot,
   type RuntimeWorkbenchTerminalCreateSessionRequest,
   type RuntimeWorkbenchTerminalCreateSessionResponse,
+  type RuntimeWorkbenchTerminalWidgetSessionsCloseResponse,
   type RuntimeWorkbenchWidgetState,
   type RuntimeWorkbenchWidgetStatePutRequest,
 } from '../workbench/runtimeWorkbenchLayout';
@@ -173,6 +175,21 @@ export async function deleteWorkbenchTerminalSession(
     throw new Error('Invalid workbench widget state response');
   }
   return state;
+}
+
+export async function closeWorkbenchTerminalWidgetSessions(
+  widgetId: string,
+): Promise<RuntimeWorkbenchTerminalWidgetSessionsCloseResponse> {
+  const response = normalizeRuntimeWorkbenchTerminalWidgetSessionsCloseResponse(
+    await fetchWorkbenchLayoutJSON(
+      `/_redeven_proxy/api/workbench/widgets/${encodeURIComponent(String(widgetId ?? '').trim())}/terminal/sessions`,
+      { method: 'DELETE' },
+    ),
+  );
+  if (!response) {
+    throw new Error('Invalid workbench terminal widget session close response');
+  }
+  return response;
 }
 
 export async function connectWorkbenchLayoutEventStream(args: {
