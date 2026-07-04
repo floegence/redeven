@@ -13,6 +13,7 @@ import (
 
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
+	"github.com/floegence/redeven/internal/capabilities/containers"
 	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/codeapp/registry"
@@ -25,6 +26,7 @@ import (
 	"github.com/floegence/redeven/internal/notes"
 	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
+	"github.com/floegence/redeven/internal/redevpluginintegration"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/settings"
 	"github.com/floegence/redeven/internal/terminal"
@@ -91,6 +93,8 @@ type Service struct {
 	codex   *codexbridge.Manager
 	reads   *threadreadstate.Store
 	appSrv  *appserver.Server
+
+	pluginIntegration *redevpluginintegration.Integration
 
 	terminalLayoutCleanup func()
 }
@@ -287,6 +291,28 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 	terminalLayoutCleanup := registerWorkbenchTerminalSessionCleanup(logger, workbenchLayoutSvc, opts.Terminal)
 
+	pluginIntegration, err := redevpluginintegration.New(ctx, redevpluginintegration.Options{
+		Logger:             logger,
+		StateDir:           stateAbs,
+		StateRoot:          stateRootAbs,
+		ConfigPath:         strings.TrimSpace(opts.ConfigPath),
+		ResolveSessionMeta: opts.ResolveSessionMeta,
+		Audit:              opts.Audit,
+		Diagnostics:        opts.Diagnostics,
+		Containers:         containers.NewAdapter(containers.NewCLIClient()),
+	})
+	if err != nil {
+		terminalLayoutCleanup()
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		_ = notesSvc.Close()
+		_ = workbenchLayoutSvc.Close()
+		_ = aiSvc.Close()
+		_ = codexSvc.Close()
+		_ = threadReadStateStore.Close()
+		return nil, err
+	}
+
 	appSrv, err := appserver.New(appserver.Options{
 		Logger:                  logger,
 		DistFS:                  mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
@@ -304,11 +330,13 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ConfigPath:              strings.TrimSpace(opts.ConfigPath),
 		SecretsStore:            secrets,
 		ThreadReadStateStore:    threadReadStateStore,
+		PluginPlatform:          pluginIntegration.Handler(),
 		AgentHomeDir:            agentHomeDir,
 		FilesystemScope:         scope,
 		ListenAddr:              "127.0.0.1:0",
 	})
 	if err != nil {
+		_ = pluginIntegration.Close()
 		terminalLayoutCleanup()
 		_ = reg.Close()
 		_ = pfSvc.Close()
@@ -320,6 +348,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 	if err := appSrv.Start(ctx); err != nil {
+		_ = pluginIntegration.Close()
 		terminalLayoutCleanup()
 		_ = reg.Close()
 		_ = pfSvc.Close()
@@ -336,6 +365,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	svc.ai = aiSvc
 	svc.codex = codexSvc
 	svc.reads = threadReadStateStore
+	svc.pluginIntegration = pluginIntegration
 	svc.terminalLayoutCleanup = terminalLayoutCleanup
 
 	return svc, nil
@@ -371,6 +401,9 @@ func (s *Service) Close() error {
 	}
 	if s.reads != nil {
 		_ = s.reads.Close()
+	}
+	if s.pluginIntegration != nil {
+		_ = s.pluginIntegration.Close()
 	}
 	if s.codex != nil {
 		_ = s.codex.Close()

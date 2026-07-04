@@ -20,30 +20,43 @@ channel or the local direct-session path. Browser-provided permission or app
 claims are not trusted input to plugin adapters. The current session metadata
 surface contains `can_read`, `can_write`, `can_execute`, and a separate
 `can_admin` management bit; `can_admin` is not part of the local RWX permission
-clamp. A plugin integration must map those host facts into released ReDevPlugin
-policy hooks instead of inventing Redeven-only plugin permission bits.
+clamp. The ReDevPlugin integration maps those host facts into released
+ReDevPlugin session and policy hooks: it derives owner/session hashes from
+`session.Meta`, applies Redeven's local permission cap, caches the resolved
+session by hash, and evaluates method effects against the cached host-derived
+permission set instead of trusting browser-supplied claims.
 
 Route ownership is split by entrypoint. Local UI mounts the Env App appserver
 under `/_redeven_proxy/*`, while direct sessions use the agent after the E2EE
-handshake. Future plugin management, surface bootstrap, asset, and RPC routes
-must be mounted through released ReDevPlugin handlers or thin Redeven wrappers
-that preserve the appserver response shape. Redeven may preserve flat
-`error_code` values from plugin-platform failures for product UI, but the error
-catalog and platform semantics must remain released ReDevPlugin contracts. The
-reserved `/_redeven_proxy/api/plugins` management prefix therefore returns the
-AppServer's ordinary flat JSON 404, without a plugin-owned `error_code`, until a
-released ReDevPlugin handler owns that API surface. Local UI must preserve that
-same flat fail-closed response before local access is unlocked; the reserved
-namespace must not be exposed as a Local UI access-gate or nested API envelope.
+handshake. Plugin management, surface bootstrap, asset, stream, CSP report, and
+RPC routes are mounted through the released ReDevPlugin handler behind Redeven
+origin-role gates. Redeven may preserve flat `error_code` values from
+plugin-platform failures for product UI, but the error catalog and platform
+semantics remain released ReDevPlugin contracts. When the platform handler is
+disabled, `/_redeven_proxy/api/plugins` still returns AppServer flat JSON 404
+without a plugin-owned `error_code`. When the handler is enabled, Local UI uses
+the normal access gate before forwarding plugin management requests to
+AppServer.
 
-The current AppServer route gate fail-closes sandbox origins by role. Env App
-origins may reach local management APIs and Env App dist under
-`/_redeven_proxy/*`; codespace origins may reach only `/_redeven_proxy/inject.js`
-for code-server bridge helpers; plugin sandbox origins with a `plg-*` first host
-label are recognized explicitly and receive 404 for management APIs, Env App
-dist, and injection helpers. Tests cover Env App, codespace, port-forward,
-plugin, unknown, and missing-origin callers across management API, reserved
-plugin management API, Env App dist, and injection helper paths.
+The current AppServer route gate fail-closes by role. Env App origins may reach
+local management APIs and Env App dist under `/_redeven_proxy/*`; codespace
+origins may reach only `/_redeven_proxy/inject.js` for code-server bridge
+helpers; plugin sandbox origins with a `plg-*` first host label are recognized
+explicitly and remain denied for management APIs, Env App dist, and injection
+helpers. `/_redeven_proxy/api/plugins*` is delegated to
+`/_redevplugin/api/plugins*` only for Env App origins, and `/_redeven_plugin*`
+is delegated to `/_redevplugin*` only for plugin sandbox origins. AppServer
+attaches internal route roles before calling the ReDevPlugin handler, and the
+ReDevPlugin web security adapter allows only the matching route family for each
+role.
+
+Unsafe plugin management requests must carry a CSRF header that matches the
+host-derived ReDevPlugin session context. Redeven accepts
+`X-ReDevPlugin-CSRF` and the legacy `X-CSRF-Token` spelling, but missing,
+unknown-session, or mismatched values fail closed. The session hash for Env App
+plugin management requests is derived from the real Redeven channel id and
+injected as the ReDevPlugin owner-session hash header when absent, so browsers
+cannot select a more privileged session by self-reporting a permission claim.
 
 Business capability adapters such as containers, files, shell, cloud services,
 databases, vault access, or local product APIs begin after ReDevPlugin has
@@ -61,6 +74,11 @@ quota limits, policy revision, management revision, and revoke epoch before a
 worker is invoked. Redeven may route the resulting audit event into its audit
 sink, but the event must carry traceable lease/token/runtime/revision metadata
 without persisting the cleartext bearer lease token.
+
+Runtime artifact lookup is also fail-closed. Redeven's adapter searches only
+published bundle/executable locations for the matching `redevplugin-runtime`
+target and returns an error when the artifact is absent; it does not fall back
+to `../redevplugin`, local path overrides, or copied runtime binaries.
 
 The container resources v1 contract follows that boundary. Its start preflight
 plan is a Redeven business DTO that summarizes Docker and Podman runtime state
@@ -93,19 +111,17 @@ must always arrive through a released ReDevPlugin request context and a
 Redeven-registered adapter.
 
 Plugin sandbox origins must not be granted access to `/_redeven_proxy/api/*`,
-`/_redeven_proxy/env/*`, or `/_redeven_proxy/inject.js`; future plugin routes
+`/_redeven_proxy/env/*`, or `/_redeven_proxy/inject.js`; plugin routes
 must use released ReDevPlugin handlers or thin wrappers instead of reusing Env
-App or codespace helper paths. Until that integration exists,
-`/_redeven_proxy/api/plugins` and `/_redeven_proxy/api/plugins/*` are reserved
-for future plugin management APIs and must return flat JSON 404 for Env App
-callers and locked Local UI proxy callers. `/_redeven_plugin/*` is reserved and
-must return 404 for Env App, codespace, port-forward, plugin, unknown,
-missing-origin, and Local UI callers. Local UI must forward that namespace with
-plugin route context instead of Env App route context, and the AppServer plus
-Local UI route matrices must cover root, bootstrap, asset, stream, and CSP
-report paths so reserved plugin requests cannot inherit Env App management
-authority, codespace helpers, port-forward proxying, local access-gate behavior,
-or nested Local UI API errors.
+App or codespace helper paths. `/_redeven_proxy/api/plugins` and
+`/_redeven_proxy/api/plugins/*` are Env App management routes only after the
+Env App origin role and Local UI access gate have been satisfied.
+`/_redeven_plugin/*` is a plugin-sandbox route family only after the plugin
+sandbox origin role has been satisfied. The AppServer plus Local UI route
+matrices must cover root, bootstrap, asset, stream, and CSP report paths so
+plugin requests cannot inherit Env App management authority, codespace helpers,
+port-forward proxying, local access-gate behavior, or nested Local UI API
+errors.
 
 # Citations
 
@@ -121,23 +137,27 @@ or nested Local UI API errors.
 [10] redeven:internal/localui/localui.go:65 - Direct sessions are served by the agent after E2EE handshake.
 [11] redeven:internal/codeapp/appserver/server_test.go:1215 - Management API tests forbid admin actions when `can_admin=false`.
 [12] redeven:internal/localui/localui.go:147 - Local UI mounts the reserved plugin namespace separately from the Env App proxy.
-[13] redeven:internal/localui/localui.go:693 - Local UI keeps the reserved plugin management API namespace fail-closed before local access gating.
+[13] redeven:internal/localui/localui.go:693 - Local UI keeps plugin management fail-closed before local access gating only when the platform handler is disabled.
 [14] redeven:internal/localui/localui.go:709 - Local UI recognizes the reserved plugin management API root and child paths.
 [15] redeven:internal/localui/localui.go:717 - Local UI forwards reserved plugin namespace requests with plugin route context.
 [16] redeven:internal/codeapp/appserver/server.go:279 - AppServer has a distinct Local UI plugin route context.
-[17] redeven:internal/codeapp/appserver/server.go:512 - AppServer reserves `/_redeven_plugin/*` for released ReDevPlugin handlers and fails closed until integration is wired.
-[18] redeven:internal/codeapp/appserver/server.go:520 - AppServer management APIs are gated to the Env App origin role.
-[19] redeven:internal/codeapp/appserver/server.go:2138 - AppServer reserves the future plugin management API namespace before other local API handlers run.
+[17] redeven:internal/codeapp/appserver/server.go:529 - AppServer delegates `/_redeven_plugin/*` to ReDevPlugin only for plugin sandbox origins.
+[18] redeven:internal/codeapp/appserver/server.go:537 - AppServer gates `/_redeven_proxy/api/plugins*` to the Env App origin role before delegating.
+[19] redeven:internal/codeapp/appserver/server.go:626 - AppServer rewrites Redeven plugin routes to ReDevPlugin handler paths with internal route roles.
 [20] redeven:internal/codeapp/appserver/server.go:5384 - The reserved plugin management API matcher covers the root and child paths.
 [21] redeven:internal/codeapp/appserver/server.go:541 - AppServer serves `inject.js` only to codespace origins.
 [22] redeven:internal/codeapp/appserver/server.go:6263 - `plg-*` first labels are classified as plugin sandbox origins.
 [23] redeven:internal/codeapp/appserver/server_test.go:548 - Tests bind the proxy route matrix across Env App, codespace, port-forward, plugin, unknown, and missing-origin callers.
-[24] redeven:internal/codeapp/appserver/server_test.go:691 - Tests bind the reserved plugin management API namespace to AppServer flat JSON 404 responses.
-[25] redeven:internal/codeapp/appserver/server_test.go:733 - Tests bind the AppServer reserved plugin namespace route matrix to 404 without Env App, inject-script, or proxy fallback.
-[26] redeven:internal/localui/localui_test.go:285 - Tests bind the Local UI reserved plugin management API namespace to flat JSON 404 without access-gate interception.
-[27] redeven:internal/localui/localui_test.go:333 - Tests bind the Local UI reserved plugin namespace route matrix to 404 without access-gate or Env App shell interception.
+[24] redeven:internal/codeapp/appserver/server_test.go:691 - Tests bind the no-handler plugin management namespace to AppServer flat JSON 404 responses.
+[25] redeven:internal/codeapp/appserver/server_test.go:733 - Tests bind Env App management delegation to the mounted plugin platform handler.
+[26] redeven:internal/codeapp/appserver/server_test.go:833 - Tests bind plugin-origin sandbox namespace delegation to the mounted plugin platform handler.
+[27] redeven:internal/localui/localui_test.go:348 - Tests bind enabled plugin management requests to the normal Local UI access gate.
 [28] redeven:internal/envapp/ui_src/src/ui/services/localApi.localAccess.e2e.test.ts:193 - Local UI preserves flat appserver `error_code` values on HTTP failures.
 [29] redeven:okf/architecture/container-resources-capability.md:33 - Container start preflight records risk flags and admin hints without owning ReDevPlugin confirmation enforcement.
 [30] redeven:internal/capabilities/containers/preflight_test.go:14 - Tests verify container preflight redacts secret values and sensitive paths.
 [31] redeven:AGENTS.md:446 - Redeven must not bypass runtime lease, quota, or revocation checks.
 [32] redeven:AGENTS.md:478 - Business adapters must pass through ReDevPlugin permission, confirmation, token, lease, audit, and lifecycle contracts.
+[33] redeven:internal/redevpluginintegration/adapters.go:85 - The session resolver projects Redeven session metadata into ReDevPlugin session context.
+[34] redeven:internal/redevpluginintegration/adapters.go:146 - Local policy decisions use the cached host-derived ReDevPlugin session permissions.
+[35] redeven:internal/redevpluginintegration/adapters.go:272 - CSRF validation requires the token to match the resolved ReDevPlugin session context.
+[36] redeven:internal/redevpluginintegration/adapters.go:218 - Runtime artifact resolution searches published bundle/executable locations and fails closed.

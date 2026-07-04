@@ -249,18 +249,6 @@ func (r *run) normalizeActivityTimeline(timeline observation.ActivityTimeline) o
 	return timeline
 }
 
-func (r *run) activityRunMeta() observation.ActivityRunMeta {
-	if r == nil {
-		return observation.ActivityRunMeta{}
-	}
-	return observation.ActivityRunMeta{
-		RunID:    strings.TrimSpace(r.id),
-		ThreadID: strings.TrimSpace(r.threadID),
-		TurnID:   strings.TrimSpace(r.messageID),
-		TraceID:  strings.TrimSpace(r.id),
-	}
-}
-
 func isActivityObservationEvent(eventType string) bool {
 	switch strings.TrimSpace(eventType) {
 	case observation.EventTypeToolCall,
