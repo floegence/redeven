@@ -1313,7 +1313,7 @@ func boundedSubagentItem(item map[string]any) map[string]any {
 }
 
 func trimSubagentToolResult(out map[string]any) map[string]any {
-	out = scrubSubagentForbiddenFields(cloneAnyMap(out))
+	out = projectSubagentToolResult(out)
 	out["detail_omitted"] = true
 	if strings.TrimSpace(anyToString(out["detail_strategy"])) == "" {
 		out["detail_strategy"] = "ui_detail_api"
@@ -1326,7 +1326,6 @@ func trimSubagentToolResult(out map[string]any) map[string]any {
 	}
 	if items != nil {
 		out["items"] = items
-		delete(out, "item")
 	}
 	body, err := json.Marshal(out)
 	if err != nil || len(body) <= subagentToolResultHardBytes {
@@ -1336,7 +1335,6 @@ func trimSubagentToolResult(out map[string]any) map[string]any {
 	for _, limit := range []int{480, 240, 120, 60} {
 		shrinkSubagentToolItems(items, limit)
 		out["items"] = items
-		delete(out, "item")
 		body, err = json.Marshal(out)
 		if err != nil || len(body) <= subagentToolResultHardBytes {
 			return out
@@ -1348,7 +1346,6 @@ func trimSubagentToolResult(out map[string]any) map[string]any {
 		out["items"] = items
 		out["agent_count"] = len(items)
 		out["omitted_count"] = parseIntRaw(out["omitted_count"], 0) + omitted
-		delete(out, "item")
 		body, err = json.Marshal(out)
 		if err != nil || len(body) <= subagentToolResultHardBytes {
 			return out
@@ -1360,10 +1357,35 @@ func trimSubagentToolResult(out map[string]any) map[string]any {
 		return out
 	}
 	delete(out, "items")
-	delete(out, "item")
 	out["agent_count"] = 0
 	out["items_omitted"] = true
 	return out
+}
+
+func projectSubagentToolResult(in map[string]any) map[string]any {
+	allowed := subagentToolResultAllowedKeys()
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		if _, ok := allowed[key]; ok {
+			out[key] = value
+		}
+	}
+	return out
+}
+
+func subagentToolResultAllowedKeys() map[string]struct{} {
+	return stringSet(
+		"status", "action", "accepted", "subagent_id", "thread_id", "agent_type",
+		"context_mode", "task_name", "task_description", "title", "items",
+		"agent_count", "counts", "detail_omitted", "detail_strategy",
+		"ids", "target_ids", "requested_ids", "requested_count",
+		"requested_timeout_ms", "effective_timeout_ms", "timeout_ms",
+		"timeout_source", "timed_out", "progress_summary",
+		"final_handoff_report", "found_count", "missing_count", "missing_ids",
+		"target", "closed", "stopped", "closed_count", "stopped_count",
+		"affected_ids", "scope", "total", "running_only", "updated_at_unix_ms",
+		"omitted_count", "truncated", "items_omitted", "error",
+	)
 }
 
 func normalizeSubagentContextMode(raw string) string {
@@ -1675,41 +1697,6 @@ func minimalSubagentToolResult(out map[string]any, items []map[string]any) map[s
 		}
 	}
 	return minimal
-}
-
-func scrubSubagentForbiddenFields(in map[string]any) map[string]any {
-	for _, key := range []string{
-		"tool_call", "tool_calls", "tool_result", "tool_results", "stdout", "stderr",
-		"command", "args", "args_json", "history", "transcript", "timeline",
-		"messages", "entries", "raw", "result_struct",
-		"subagent", "subagents", "snapshot", "snapshots", "snapshots_by_id", "item", "snapshot_count", "task_id",
-		"parent_turn_id", "latest_turn_id",
-	} {
-		delete(in, key)
-	}
-	for key, value := range in {
-		switch typed := value.(type) {
-		case map[string]any:
-			in[key] = scrubSubagentForbiddenFields(typed)
-		case []map[string]any:
-			next := make([]map[string]any, 0, len(typed))
-			for _, item := range typed {
-				next = append(next, scrubSubagentForbiddenFields(item))
-			}
-			in[key] = next
-		case []any:
-			next := make([]any, 0, len(typed))
-			for _, item := range typed {
-				if rec, ok := item.(map[string]any); ok {
-					next = append(next, scrubSubagentForbiddenFields(rec))
-				} else {
-					next = append(next, item)
-				}
-			}
-			in[key] = next
-		}
-	}
-	return in
 }
 
 func subagentModelStatusCounts(items []map[string]any) map[string]int {

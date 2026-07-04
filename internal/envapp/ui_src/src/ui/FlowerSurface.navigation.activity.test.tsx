@@ -359,6 +359,77 @@ describe('FlowerSurface navigation activity', () => {
     expect(subagentDetailSurface(runtime)).toBeNull();
   });
 
+  it('keeps bootstrap subagents and an open detail across list refresh summaries', async () => {
+    const parentSummary = thread({
+      thread_id: 'thread-parent-subagents',
+      title: 'Parent with subagents',
+      messages: [],
+    });
+    const parentThread = parentThreadWithRunningSubagent('completed');
+    const loadedParent = {
+      ...parentThread,
+      subagents: [
+        subagentSummary({
+          status: 'completed',
+          can_interrupt: false,
+        }),
+        subagentSummary({
+          subagent_id: 'thread-child-implementation',
+          thread_id: 'thread-child-implementation',
+          task_name: 'Review implementation',
+          title: 'Review implementation',
+          status: 'completed',
+          can_interrupt: false,
+        }),
+        subagentSummary({
+          subagent_id: 'thread-child-tests',
+          thread_id: 'thread-child-tests',
+          task_name: 'Review tests',
+          title: 'Review tests',
+          status: 'completed',
+          can_interrupt: false,
+        }),
+        subagentSummary({
+          subagent_id: 'thread-child-docs',
+          thread_id: 'thread-child-docs',
+          task_name: 'Review docs',
+          title: 'Review docs',
+          status: 'completed',
+          can_interrupt: false,
+        }),
+      ],
+    };
+    const listThreads = vi.fn(async () => [parentSummary]);
+    const loadSubagentDetail = vi.fn(async () => subagentDetail());
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads,
+      loadThread: vi.fn(async () => liveBootstrap(loadedParent)),
+      loadSubagentDetail,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-parent-subagents"] button')));
+    (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
+    await waitFor(() => {
+      const badge = runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"] .flower-header-icon-badge');
+      return badge?.textContent === '4';
+    });
+
+    (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('.flower-subagent-dropdown-row').length === 4);
+    subagentDropdownRow(runtime)?.click();
+    await waitFor(() => Boolean(subagentDetailSurface(runtime)));
+
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => listThreads.mock.calls.length >= 2);
+    await flushMicrotasks();
+
+    const trigger = runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement;
+    expect(trigger.querySelector('.flower-header-icon-badge')?.textContent).toBe('4');
+    expect(subagentDetailSurface(runtime)).toBeTruthy();
+    expect(loadSubagentDetail).toHaveBeenCalledWith('thread-parent-subagents', 'thread-child-review', 0, 200);
+  });
+
   it('tails an open running subagent detail without overlapping requests', async () => {
     const parentThread = parentThreadWithRunningSubagent();
     const tailPage = deferred<ReturnType<typeof subagentDetail>>();
@@ -689,8 +760,8 @@ describe('FlowerSurface navigation activity', () => {
                   status: 'ok',
                   task_name: 'Review API contract',
                   task_description: 'Review the API boundary.',
-	                  agent_type: 'reviewer',
-	                  items: [{
+                  agent_type: 'reviewer',
+                  items: [{
                     thread_id: 'thread-child-review',
                     subagent_id: 'thread-child-review',
                     task_name: 'Review API contract',
@@ -1589,7 +1660,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(row.textContent).not.toContain('item-failed-todos');
   });
 
-  it('renders subagent details without legacy ids or debug fields', async () => {
+  it('renders subagent details without internal ids or debug fields', async () => {
     const subagentsThread = thread({
       thread_id: 'thread-subagent-details',
       title: 'Subagent details',
@@ -1640,7 +1711,6 @@ describe('FlowerSurface navigation activity', () => {
                         handoff: 'API boundary is consistent.',
                       }],
                     },
-                    snapshot: { thread_id: 'legacy-hidden', task_name: 'Legacy snapshot' },
                   },
                 }),
               ],
@@ -1683,8 +1753,6 @@ describe('FlowerSurface navigation activity', () => {
     expect(row.textContent).not.toContain('Hidden handoff preview');
     expect(row.textContent).not.toContain('Hidden waiting prompt');
     expect(row.textContent).not.toContain('can_close');
-    expect(row.textContent).not.toContain('legacy-hidden');
-    expect(row.textContent).not.toContain('Legacy snapshot');
 
     const openButton = row.querySelector('.flower-activity-subagents-open') as HTMLButtonElement;
     expect(openButton.getAttribute('aria-label')).toBe('Open subagent messages for Review API contract');

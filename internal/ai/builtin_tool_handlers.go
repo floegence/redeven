@@ -304,7 +304,7 @@ func normalizeSubagentsPayload(payload any) (any, bool) {
 	if !ok || record == nil {
 		return normalized, false
 	}
-	record = scrubSubagentForbiddenFields(record)
+	record = projectSubagentToolResult(record)
 	truncated := truncateSubagentsPayloadRecord(record)
 	if truncated {
 		record["truncated"] = true

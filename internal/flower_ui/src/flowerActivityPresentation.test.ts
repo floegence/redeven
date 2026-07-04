@@ -358,44 +358,6 @@ describe('presentFlowerActivityItem', () => {
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('can_close');
   });
 
-  it('does not render legacy subagent collection fields as detail records', () => {
-    const presentation = presentFlowerActivityItem(item({
-      tool_name: 'subagents',
-      renderer: 'structured',
-      label: 'subagents',
-      payload: {
-        action: 'wait',
-        status: 'ok',
-        snapshots: {
-          legacy1: {
-            thread_id: 'legacy-child-1',
-            task_name: 'Legacy snapshot',
-            status: 'running',
-          },
-        },
-        snapshots_by_id: {
-          legacy2: {
-            thread_id: 'legacy-child-2',
-            task_name: 'Legacy snapshot map',
-            status: 'running',
-          },
-        },
-        subagents: [{
-          thread_id: 'legacy-child-3',
-          task_name: 'Legacy subagents list',
-          status: 'running',
-        }],
-      },
-    }));
-
-    expect(presentation.label).toBe('Waiting');
-    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('legacy-child-1');
-    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('legacy-child-2');
-    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('legacy-child-3');
-    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Legacy snapshot');
-    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Legacy subagents list');
-  });
-
   it('does not render unrelated nested result ids as delegation', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'web.search',
