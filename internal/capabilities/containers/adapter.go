@@ -5,14 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 var (
-	ErrEngineUnavailable     = errors.New("container engine is unavailable")
-	ErrInvalidEngine         = errors.New("container engine is invalid")
-	ErrInvalidMethod         = errors.New("container method is invalid")
-	ErrLogStreamBackpressure = errors.New("logs stream sink backpressure")
-	ErrLogsFollowUnsupported = errors.New("logs follow requires a streaming adapter")
+	ErrEngineUnavailable           = errors.New("container engine is unavailable")
+	ErrInvalidEngine               = errors.New("container engine is invalid")
+	ErrInvalidMethod               = errors.New("container method is invalid")
+	ErrLogStreamBackpressure       = errors.New("logs stream sink backpressure")
+	ErrLogsFollowUnsupported       = errors.New("logs follow requires a streaming adapter")
+	ErrContainerOperationIDMissing = errors.New("container operation_id is required")
+	ErrContainerOperationActive    = errors.New("container operation is already active")
+	ErrContainerOperationNotFound  = errors.New("container operation is not active")
+	ErrContainerOperationMismatch  = errors.New("container operation method mismatch")
 )
 
 type EngineStatus struct {
@@ -99,6 +104,17 @@ type EngineImageResult struct {
 	Completed bool
 }
 
+type ContainerOperationCancelRequest struct {
+	OperationID string `json:"operation_id"`
+	Method      Method `json:"method,omitempty"`
+}
+
+type ContainerOperationCancelResult struct {
+	OperationID     string `json:"operation_id"`
+	Method          Method `json:"method"`
+	CancelRequested bool   `json:"cancel_requested"`
+}
+
 type EngineClient interface {
 	Status(ctx context.Context, engine Engine) (EngineStatus, error)
 	List(ctx context.Context, engine Engine, all bool) ([]EngineContainer, error)
@@ -115,6 +131,14 @@ type EngineLogFollower interface {
 type Adapter struct {
 	client      EngineClient
 	engineOrder []Engine
+
+	operationsMu sync.Mutex
+	operations   map[string]containerOperationCancel
+}
+
+type containerOperationCancel struct {
+	method Method
+	cancel context.CancelFunc
 }
 
 func NewAdapter(client EngineClient) *Adapter {
@@ -295,14 +319,54 @@ func (a *Adapter) FollowLogs(ctx context.Context, req LogsTailRequest, sink LogL
 }
 
 func (a *Adapter) PullImage(ctx context.Context, req ImagePullRequest) (ImagePullResponse, error) {
-	if err := validateEngine(req.Engine); err != nil {
+	engine, imageRef, err := validateImagePull(req)
+	if err != nil {
 		return ImagePullResponse{}, err
 	}
-	imageRef := strings.TrimSpace(req.ImageRef)
-	if imageRef == "" {
-		return ImagePullResponse{}, errors.New("image_ref is required")
+	return a.pullImage(ctx, engine, imageRef)
+}
+
+func (a *Adapter) PullImageWithOperation(ctx context.Context, operationID string, req ImagePullRequest) (ImagePullResponse, error) {
+	engine, imageRef, err := validateImagePull(req)
+	if err != nil {
+		return ImagePullResponse{}, err
 	}
-	result, err := a.client.PullImage(ctx, req.Engine, imageRef)
+	operationID = strings.TrimSpace(operationID)
+	if operationID == "" {
+		return ImagePullResponse{}, ErrContainerOperationIDMissing
+	}
+	operationCtx, cancel := context.WithCancel(ctx)
+	if err := a.registerOperationCancel(operationID, MethodImagesPull, cancel); err != nil {
+		cancel()
+		return ImagePullResponse{}, err
+	}
+	defer a.unregisterOperationCancel(operationID)
+
+	return a.pullImage(operationCtx, engine, imageRef)
+}
+
+func (a *Adapter) CancelOperation(_ context.Context, req ContainerOperationCancelRequest) (ContainerOperationCancelResult, error) {
+	operationID := strings.TrimSpace(req.OperationID)
+	if operationID == "" {
+		return ContainerOperationCancelResult{}, ErrContainerOperationIDMissing
+	}
+	cancel, method, err := a.lookupOperationCancel(operationID)
+	if err != nil {
+		return ContainerOperationCancelResult{}, err
+	}
+	if req.Method != "" && req.Method != method {
+		return ContainerOperationCancelResult{}, fmt.Errorf("%w: %s cannot cancel %s", ErrContainerOperationMismatch, req.Method, method)
+	}
+	cancel()
+	return ContainerOperationCancelResult{
+		OperationID:     operationID,
+		Method:          method,
+		CancelRequested: true,
+	}, nil
+}
+
+func (a *Adapter) pullImage(ctx context.Context, engine Engine, imageRef string) (ImagePullResponse, error) {
+	result, err := a.client.PullImage(ctx, engine, imageRef)
 	if err != nil {
 		return ImagePullResponse{}, err
 	}
@@ -314,6 +378,52 @@ func (a *Adapter) PullImage(ctx context.Context, req ImagePullRequest) (ImagePul
 		Image:             imageSummary(result.Image),
 		Completed:         result.Completed,
 	}, nil
+}
+
+func validateImagePull(req ImagePullRequest) (Engine, string, error) {
+	if err := validateEngine(req.Engine); err != nil {
+		return "", "", err
+	}
+	imageRef := strings.TrimSpace(req.ImageRef)
+	if imageRef == "" {
+		return "", "", errors.New("image_ref is required")
+	}
+	return req.Engine, imageRef, nil
+}
+
+func (a *Adapter) registerOperationCancel(operationID string, method Method, cancel context.CancelFunc) error {
+	a.operationsMu.Lock()
+	defer a.operationsMu.Unlock()
+
+	if a.operations == nil {
+		a.operations = make(map[string]containerOperationCancel)
+	}
+	if _, ok := a.operations[operationID]; ok {
+		return fmt.Errorf("%w: %s", ErrContainerOperationActive, operationID)
+	}
+	a.operations[operationID] = containerOperationCancel{
+		method: method,
+		cancel: cancel,
+	}
+	return nil
+}
+
+func (a *Adapter) unregisterOperationCancel(operationID string) {
+	a.operationsMu.Lock()
+	defer a.operationsMu.Unlock()
+
+	delete(a.operations, operationID)
+}
+
+func (a *Adapter) lookupOperationCancel(operationID string) (context.CancelFunc, Method, error) {
+	a.operationsMu.Lock()
+	defer a.operationsMu.Unlock()
+
+	operation, ok := a.operations[operationID]
+	if !ok {
+		return nil, "", fmt.Errorf("%w: %s", ErrContainerOperationNotFound, operationID)
+	}
+	return operation.cancel, operation.method, nil
 }
 
 func (a *Adapter) runAction(ctx context.Context, req EngineActionRequest) (ContainerActionResponse, error) {

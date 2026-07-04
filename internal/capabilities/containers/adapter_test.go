@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestAdapterStatusResolvesFirstAvailableEngine(t *testing.T) {
@@ -451,6 +452,201 @@ func TestAdapterFollowLogsRequiresFollowerClient(t *testing.T) {
 	}
 }
 
+func TestAdapterPullImageWithOperationCanBeCanceled(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	client := &fakeEngineClient{
+		pullFunc: func(ctx context.Context, _ Engine, _ string) (EngineImageResult, error) {
+			close(started)
+			<-ctx.Done()
+			return EngineImageResult{}, ctx.Err()
+		},
+	}
+	adapter := NewAdapter(client)
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := adapter.PullImageWithOperation(context.Background(), "op_pull_cancel_1", ImagePullRequest{
+			SchemaVersion: SchemaVersion,
+			Engine:        EngineDocker,
+			ImageRef:      " ghcr.io/acme/api:latest ",
+		})
+		errCh <- err
+	}()
+	waitForTestSignal(t, started, "pull start")
+
+	canceled, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
+		OperationID: " op_pull_cancel_1 ",
+		Method:      MethodImagesPull,
+	})
+	if err != nil {
+		t.Fatalf("CancelOperation() error = %v", err)
+	}
+	if canceled.OperationID != "op_pull_cancel_1" || canceled.Method != MethodImagesPull || !canceled.CancelRequested {
+		t.Fatalf("cancel result = %+v", canceled)
+	}
+	if err := waitForTestError(t, errCh, "pull cancel"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("PullImageWithOperation() error = %v, want context.Canceled", err)
+	}
+	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
+		OperationID: "op_pull_cancel_1",
+		Method:      MethodImagesPull,
+	}); !errors.Is(err, ErrContainerOperationNotFound) {
+		t.Fatalf("CancelOperation(after completion) error = %v, want ErrContainerOperationNotFound", err)
+	}
+}
+
+func TestAdapterPullImageWithOperationRejectsDuplicateOperationID(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	client := &fakeEngineClient{
+		pullFunc: func(ctx context.Context, _ Engine, _ string) (EngineImageResult, error) {
+			close(started)
+			<-ctx.Done()
+			return EngineImageResult{}, ctx.Err()
+		},
+	}
+	adapter := NewAdapter(client)
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := adapter.PullImageWithOperation(context.Background(), "op_pull_duplicate_1", ImagePullRequest{
+			SchemaVersion: SchemaVersion,
+			Engine:        EngineDocker,
+			ImageRef:      "ghcr.io/acme/api:latest",
+		})
+		errCh <- err
+	}()
+	waitForTestSignal(t, started, "first pull start")
+
+	_, err := adapter.PullImageWithOperation(context.Background(), "op_pull_duplicate_1", ImagePullRequest{
+		SchemaVersion: SchemaVersion,
+		Engine:        EngineDocker,
+		ImageRef:      "ghcr.io/acme/api:latest",
+	})
+	if !errors.Is(err, ErrContainerOperationActive) {
+		t.Fatalf("PullImageWithOperation(duplicate) error = %v, want ErrContainerOperationActive", err)
+	}
+	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
+		OperationID: "op_pull_duplicate_1",
+	}); err != nil {
+		t.Fatalf("CancelOperation(cleanup) error = %v", err)
+	}
+	if err := waitForTestError(t, errCh, "duplicate cleanup"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("first PullImageWithOperation() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestAdapterPullImageWithOperationUnregistersOnCompletionAndParentCancel(t *testing.T) {
+	t.Parallel()
+
+	completedAdapter := NewAdapter(&fakeEngineClient{
+		pullFunc: func(_ context.Context, engine Engine, imageRef string) (EngineImageResult, error) {
+			return EngineImageResult{
+				Engine:    engine,
+				Image:     ImageInput{Reference: imageRef, Digest: "sha256:feedface"},
+				Completed: true,
+			}, nil
+		},
+	})
+	resp, err := completedAdapter.PullImageWithOperation(context.Background(), "op_pull_done_1", ImagePullRequest{
+		SchemaVersion: SchemaVersion,
+		Engine:        EngineDocker,
+		ImageRef:      "ghcr.io/acme/api:latest",
+	})
+	if err != nil {
+		t.Fatalf("PullImageWithOperation(completed) error = %v", err)
+	}
+	if !resp.Completed || resp.Image.Digest != "sha256:feedface" {
+		t.Fatalf("completed pull response = %+v", resp)
+	}
+	if _, err := completedAdapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
+		OperationID: "op_pull_done_1",
+	}); !errors.Is(err, ErrContainerOperationNotFound) {
+		t.Fatalf("CancelOperation(after success) error = %v, want ErrContainerOperationNotFound", err)
+	}
+
+	started := make(chan struct{})
+	parentAdapter := NewAdapter(&fakeEngineClient{
+		pullFunc: func(ctx context.Context, _ Engine, _ string) (EngineImageResult, error) {
+			close(started)
+			<-ctx.Done()
+			return EngineImageResult{}, ctx.Err()
+		},
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := parentAdapter.PullImageWithOperation(ctx, "op_pull_parent_cancel_1", ImagePullRequest{
+			SchemaVersion: SchemaVersion,
+			Engine:        EngineDocker,
+			ImageRef:      "ghcr.io/acme/api:latest",
+		})
+		errCh <- err
+	}()
+	waitForTestSignal(t, started, "parent-cancel pull start")
+	cancel()
+	if err := waitForTestError(t, errCh, "parent cancel"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("PullImageWithOperation(parent cancel) error = %v, want context.Canceled", err)
+	}
+	if _, err := parentAdapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
+		OperationID: "op_pull_parent_cancel_1",
+	}); !errors.Is(err, ErrContainerOperationNotFound) {
+		t.Fatalf("CancelOperation(after parent cancel) error = %v, want ErrContainerOperationNotFound", err)
+	}
+}
+
+func TestAdapterCancelOperationRejectsInvalidRequests(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	client := &fakeEngineClient{
+		pullFunc: func(ctx context.Context, _ Engine, _ string) (EngineImageResult, error) {
+			close(started)
+			<-ctx.Done()
+			return EngineImageResult{}, ctx.Err()
+		},
+	}
+	adapter := NewAdapter(client)
+	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{}); !errors.Is(err, ErrContainerOperationIDMissing) {
+		t.Fatalf("CancelOperation(empty) error = %v, want ErrContainerOperationIDMissing", err)
+	}
+	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
+		OperationID: "missing",
+	}); !errors.Is(err, ErrContainerOperationNotFound) {
+		t.Fatalf("CancelOperation(missing) error = %v, want ErrContainerOperationNotFound", err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := adapter.PullImageWithOperation(context.Background(), "op_pull_mismatch_1", ImagePullRequest{
+			SchemaVersion: SchemaVersion,
+			Engine:        EngineDocker,
+			ImageRef:      "ghcr.io/acme/api:latest",
+		})
+		errCh <- err
+	}()
+	waitForTestSignal(t, started, "mismatch pull start")
+
+	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
+		OperationID: "op_pull_mismatch_1",
+		Method:      MethodStart,
+	}); !errors.Is(err, ErrContainerOperationMismatch) {
+		t.Fatalf("CancelOperation(method mismatch) error = %v, want ErrContainerOperationMismatch", err)
+	}
+	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
+		OperationID: "op_pull_mismatch_1",
+		Method:      MethodImagesPull,
+	}); err != nil {
+		t.Fatalf("CancelOperation(cleanup) error = %v", err)
+	}
+	if err := waitForTestError(t, errCh, "mismatch cleanup"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("PullImageWithOperation(cleanup) error = %v, want context.Canceled", err)
+	}
+}
+
 type fakeEngineClient struct {
 	status  map[Engine]EngineStatus
 	list    map[Engine][]EngineContainer
@@ -458,6 +654,8 @@ type fakeEngineClient struct {
 	actions map[string]EngineActionResult
 	logs    map[string]EngineLogsResult
 	pulls   map[string]EngineImageResult
+
+	pullFunc func(ctx context.Context, engine Engine, imageRef string) (EngineImageResult, error)
 }
 
 func (f *fakeEngineClient) Status(_ context.Context, engine Engine) (EngineStatus, error) {
@@ -495,7 +693,10 @@ func (f *fakeEngineClient) TailLogs(_ context.Context, req EngineLogsRequest) (E
 	return result, nil
 }
 
-func (f *fakeEngineClient) PullImage(_ context.Context, engine Engine, imageRef string) (EngineImageResult, error) {
+func (f *fakeEngineClient) PullImage(ctx context.Context, engine Engine, imageRef string) (EngineImageResult, error) {
+	if f.pullFunc != nil {
+		return f.pullFunc(ctx, engine, imageRef)
+	}
 	result, ok := f.pulls[string(engine)+":"+imageRef]
 	if !ok {
 		return EngineImageResult{}, errors.New("not found")
@@ -536,6 +737,26 @@ func mustRequestJSON(t *testing.T, request map[string]any) json.RawMessage {
 		t.Fatalf("marshal request: %v", err)
 	}
 	return raw
+}
+
+func waitForTestSignal(t *testing.T, ch <-chan struct{}, label string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for %s", label)
+	}
+}
+
+func waitForTestError(t *testing.T, ch <-chan error, label string) error {
+	t.Helper()
+	select {
+	case err := <-ch:
+		return err
+	case <-time.After(2 * time.Second):
+		t.Fatalf("timed out waiting for %s", label)
+		return nil
+	}
 }
 
 func testEngineContainer() EngineContainer {
