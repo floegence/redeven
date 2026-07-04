@@ -248,6 +248,7 @@ const (
 	localUIRouteEnv
 	localUIRouteCodeSpace
 	localUIRoutePortForward
+	localUIRoutePlugin
 )
 
 type localUIRoute struct {
@@ -274,6 +275,10 @@ func WithLocalUIPortForwardRoute(r *http.Request, forwardID string) *http.Reques
 		kind:      localUIRoutePortForward,
 		forwardID: strings.TrimSpace(forwardID),
 	})
+}
+
+func WithLocalUIPluginRoute(r *http.Request) *http.Request {
+	return withLocalUIRoute(r, localUIRoute{kind: localUIRoutePlugin})
 }
 
 func withLocalUIRoute(r *http.Request, route localUIRoute) *http.Request {
@@ -494,6 +499,8 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			originRole = originRoleCodeSpace
 		case localUIRoutePortForward:
 			originRole = originRolePortForward
+		case localUIRoutePlugin:
+			originRole = originRolePlugin
 		default:
 			originRole = originRoleUnknown
 		}

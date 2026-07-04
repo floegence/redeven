@@ -67,14 +67,14 @@ published version, both paths remain no-op and do not consume local source.
 The ReDevPlugin integration readiness gate is the current pre-release
 integration entrypoint. It runs the no-local-wiring boundary guard, release
 artifact verifier self-test, consumption gate self-test, artifact staging
-self-test, the existing AppServer plugin-origin isolation matrix, and the
-Redeven-owned Containers capability adapter and fixture contract tests. This
+self-test, the existing AppServer and Local UI plugin-origin isolation matrix,
+and the Redeven-owned Containers capability adapter and fixture contract tests. This
 keeps the current host boundary, published-artifact handoff, route isolation, and
 business-capability contract executable in one focused CI step. The route matrix
 also reserves `/_redeven_plugin/*` and requires it to fail closed until released
 ReDevPlugin handlers are actually wired, avoiding accidental fallback to Env App,
-codespace, or port-forward surfaces. Once released ReDevPlugin integration code
-exists, the same focused gate must expand to cover the mounted route allow
+codespace, port-forward, or Local UI Env route surfaces. Once released ReDevPlugin
+integration code exists, the same focused gate must expand to cover the mounted route allow
 matrix, released-contract hash verification, session adapter mapping, Env App and
 Workbench surface smoke, Flower-generated minimal fixture flow, and concrete
 business capability adapters under the real released Host adapters.
@@ -117,8 +117,8 @@ ReDevPlugin artifacts only.
 [25] redeven:.github/workflows/ci-check.yml:106 - CI runs the ReDevPlugin integration readiness gate before protocol and UI checks.
 [26] redeven:scripts/check_plugin_integration.sh:44 - The readiness gate starts with the published dependency boundary guard.
 [27] redeven:scripts/check_plugin_integration.sh:47 - The readiness gate runs release artifact verifier, consumption gate, and artifact staging fixtures.
-[28] redeven:scripts/check_plugin_integration.sh:56 - The readiness gate runs the AppServer plugin-origin isolation matrix.
-[29] redeven:scripts/check_plugin_integration.sh:61 - The readiness gate runs the Containers capability adapter and fixture contract tests.
+[28] redeven:scripts/check_plugin_integration.sh:56 - The readiness gate runs the AppServer and Local UI plugin-origin isolation matrix.
+[29] redeven:scripts/check_plugin_integration.sh:64 - The readiness gate runs the Containers capability adapter and fixture contract tests.
 [30] redeven:scripts/stage_redevplugin_release_artifacts.sh:14 - The staging script downloads or copies ReDevPlugin release artifacts, verifies them, writes a marker, and validates consumption.
 [31] redeven:.github/workflows/release.yml:93 - Release tarball builds stage a selected ReDevPlugin runtime only when explicit release inputs are configured.
 [32] redeven:.github/workflows/release.yml:113 - Release tarballs include the staged ReDevPlugin runtime, third-party notices, and verifier marker when present.

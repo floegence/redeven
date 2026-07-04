@@ -681,6 +681,19 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 	}
 }
 
+func TestWithLocalUIPluginRoute_SetsPluginRouteKind(t *testing.T) {
+	t.Parallel()
+
+	req := WithLocalUIPluginRoute(httptest.NewRequest(http.MethodGet, "/_redeven_plugin/bootstrap", nil))
+	route, ok := localUIRouteFromRequest(req)
+	if !ok {
+		t.Fatal("local UI plugin route context missing")
+	}
+	if route.kind != localUIRoutePlugin {
+		t.Fatalf("route kind = %v, want %v", route.kind, localUIRoutePlugin)
+	}
+}
+
 func TestServer_DistRoutes_DoNotExposeEnvAppDirectoryListings(t *testing.T) {
 	t.Parallel()
 

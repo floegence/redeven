@@ -144,6 +144,8 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("/api/local/environment", s.handleEnvironment)
 	mux.HandleFunc("/api/local/agent/version/latest", s.handleLatestVersion)
 	mux.HandleFunc("/_redeven_direct/ws", s.handleDirectWS)
+	mux.HandleFunc("/_redeven_plugin", s.handlePluginNamespace)
+	mux.HandleFunc("/_redeven_plugin/", s.handlePluginNamespace)
 	// Reuse the existing app server for Env App UI and management APIs.
 	mux.HandleFunc("/_redeven_proxy/", s.handleEnvAppProxy)
 	var handler http.Handler = mux
@@ -695,6 +697,17 @@ func (s *Server) handleEnvAppProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.appServer.ServeHTTP(w, appserver.WithLocalUIEnvRoute(r))
+}
+
+func (s *Server) handlePluginNamespace(w http.ResponseWriter, r *http.Request) {
+	if s == nil || w == nil || r == nil {
+		return
+	}
+	if s.appServer == nil {
+		http.NotFound(w, r)
+		return
+	}
+	s.appServer.ServeHTTP(w, appserver.WithLocalUIPluginRoute(r))
 }
 
 func (s *Server) handleCodeSpace(w http.ResponseWriter, r *http.Request) {
