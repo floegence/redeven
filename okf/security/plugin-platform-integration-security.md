@@ -36,7 +36,9 @@ origins may reach local management APIs and Env App dist under
 `/_redeven_proxy/*`; codespace origins may reach only `/_redeven_proxy/inject.js`
 for code-server bridge helpers; plugin sandbox origins with a `plg-*` first host
 label are recognized explicitly and receive 404 for management APIs, Env App
-dist, and injection helpers.
+dist, and injection helpers. Tests cover Env App, codespace, port-forward,
+plugin, unknown, and missing-origin callers across management API, Env App dist,
+and injection helper paths.
 
 Business capability adapters such as containers, files, shell, cloud services,
 databases, vault access, or local product APIs begin after ReDevPlugin has
@@ -93,11 +95,11 @@ App or codespace helper paths.
 [8] redeven:internal/session/types.go:22 - `can_admin` gates management actions and is not part of the RWX clamp.
 [9] redeven:internal/localui/localui.go:62 - The Env App appserver is mounted under `/_redeven_proxy/*`.
 [10] redeven:internal/localui/localui.go:65 - Direct sessions are served by the agent after E2EE handshake.
-[11] redeven:internal/codeapp/appserver/server_test.go:1070 - Management API tests forbid admin actions when `can_admin=false`.
+[11] redeven:internal/codeapp/appserver/server_test.go:1215 - Management API tests forbid admin actions when `can_admin=false`.
 [12] redeven:internal/codeapp/appserver/server.go:505 - AppServer management APIs are gated to the Env App origin role.
 [13] redeven:internal/codeapp/appserver/server.go:526 - AppServer serves `inject.js` only to codespace origins.
 [14] redeven:internal/codeapp/appserver/server.go:6236 - `plg-*` first labels are classified as plugin sandbox origins.
-[15] redeven:internal/codeapp/appserver/server_test.go:3321 - Tests bind plugin origins away from management, Env dist, and injection helper surfaces.
+[15] redeven:internal/codeapp/appserver/server_test.go:548 - Tests bind the existing proxy route matrix across Env App, codespace, port-forward, plugin, unknown, and missing-origin callers.
 [16] redeven:internal/envapp/ui_src/src/ui/services/localApi.localAccess.e2e.test.ts:193 - Local UI preserves flat appserver `error_code` values on HTTP failures.
 [17] redeven:okf/architecture/container-resources-capability.md:33 - Container start preflight records risk flags and admin hints without owning ReDevPlugin confirmation enforcement.
 [18] redeven:internal/capabilities/containers/preflight_test.go:14 - Tests verify container preflight redacts secret values and sensitive paths.
