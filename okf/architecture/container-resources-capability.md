@@ -1,7 +1,7 @@
 ---
 type: Architecture Contract
 title: Container resources capability
-description: Redeven-owned Docker and Podman business capability contract for future ReDevPlugin adapter registration.
+description: Redeven-owned Docker and Podman business capability contract for ReDevPlugin adapter registration.
 tags: [architecture, plugins, containers, capability]
 timestamp: 2026-07-04T00:00:00Z
 ---
@@ -46,17 +46,17 @@ selected engine and target container id, normalizes capability lists and
 mount/device summaries, computes a stable `target_hash`, and returns image,
 runtime, risk level, risk flags, `requires_admin`, and a short summary.
 
-`Adapter.CallMethod` is the Redeven-side method dispatcher for future
-ReDevPlugin capability route registration. It accepts a declared `Method` plus
+`Adapter.CallMethod` is the Redeven-side method dispatcher used by the
+registered ReDevPlugin capability adapter. It accepts a declared `Method` plus
 raw JSON, requires `schema_version` to match the active capability contract,
 decodes requests with unknown fields rejected, routes to the existing typed
 adapter methods, and returns the same typed DTOs. This keeps JSON boundary
 validation and method-to-DTO mapping in the business capability package rather
-than duplicating it in future product route glue. It is not a manifest parser,
+than duplicating it in product route glue. It is not a manifest parser,
 package validator, token issuer, or alternate ReDevPlugin method router.
 
-`Adapter.CallOperationMethod` is the Redeven-side operation dispatcher for
-future ReDevPlugin capability route registration. It accepts a Host-owned
+`Adapter.CallOperationMethod` is the Redeven-side operation dispatcher used by
+the registered ReDevPlugin capability adapter. It accepts a Host-owned
 `operation_id`, a declared operation method, and raw JSON, then routes
 `containers.start`, `containers.stop`, `containers.restart`,
 `containers.remove`, and `images.pull` through the matching operation-scoped
@@ -81,8 +81,8 @@ through the same timeout-scoped command boundary, so parent context cancellation
 and command timeout cancellation are propagated to the Docker/Podman helper.
 The real process runner returns the context error after `exec.CommandContext`
 terminates a command, preserving stable `context.Canceled` /
-`context.DeadlineExceeded` semantics before future ReDevPlugin operation cancel
-dispatch is wired in. The parser accepts Docker's newline-delimited JSON list
+`context.DeadlineExceeded` semantics for ReDevPlugin operation cancel dispatch.
+The parser accepts Docker's newline-delimited JSON list
 format and Podman's JSON array list format, prefers server/engine version fields
 when probing status, converts Docker-like inspect payloads into the minimal
 internal `EngineContainer` shape used by the adapter, parses pull digests when
@@ -108,16 +108,17 @@ non-routable registry reference unless
 `REDEVEN_CONTAINERS_ENGINE_PULL_CANCEL_IMAGE` overrides it. When enabled, it
 runs a real Docker or Podman `pull` through the CLI helper with a short timeout
 and requires the command to stop with `context.DeadlineExceeded`. This proves
-the local engine helper can cancel a live image pull process without depending
-on the unreleased ReDevPlugin `OperationCanceler` route.
+the local engine helper can cancel a live image pull process when the mounted
+ReDevPlugin operation cancel adapter dispatches to the Redeven business
+adapter.
 
 The v1 preflight flags cover privileged containers, host network/PID/IPC
 namespaces, host devices, added Linux capabilities, Docker or Podman socket
 mounts, bind mounts, sensitive mount paths, secret-like environment variables,
 secret-like labels, persistent restart policies, and image references that are
 not digest-pinned. Critical and host-control risks require admin approval in
-the plan, leaving ReDevPlugin confirmation and token enforcement to the
-released platform contract when integration lands.
+the plan, while ReDevPlugin confirmation and token enforcement remain released
+platform contracts before the business adapter executes.
 
 # Boundaries
 
@@ -168,7 +169,7 @@ behavior is added upstream first instead of copied into Redeven.
 [17] redeven:internal/capabilities/containers/preflight_test.go:181 - Tests bind Go constants, method enums, response DTO fields, logs tail limits, required fields, and closed-world schema objects.
 [18] redeven:internal/capabilities/containers/adapter_test.go:12 - Adapter tests cover engine resolution, unavailable requested engines, DTO mapping, secret redaction, actions, logs, image pull, operation-method dispatch, operation-id cancellation, and preflight use of inspected runtime metadata.
 [19] redeven:internal/capabilities/containers/cli_client_test.go:10 - CLI client tests cover status version preference, Docker NDJSON, Podman arrays, Docker inspect runtime parsing, safe action argv, pull digest parsing, pull cancellation propagation, exec-runner context error preservation, bounded logs tail, follow-stream rejection, streaming argv, timestamp parsing, and sink backpressure.
-[20] redeven:internal/capabilities/containers/testdata/generated_plugins/containers_integration/manifest.json:1 - The integration-only official Containers fixture declares the capability binding, product surface, method manifest, confirmation policy, and cancel policy expected for future ReDevPlugin registration.
+[20] redeven:internal/capabilities/containers/testdata/generated_plugins/containers_integration/manifest.json:1 - The integration-only official Containers fixture declares the capability binding, product surface, method manifest, confirmation policy, and cancel policy used for ReDevPlugin registration review.
 [21] redeven:internal/capabilities/containers/manifest_fixture_test.go:114 - Fixture tests bind the manifest to `CapabilityID`, `CapabilityVersion`, `Methods()`, method effects, request fields, confirmation semantics, and cancel policies without importing ReDevPlugin code.
 [22] redeven:internal/capabilities/containers/cli_client_integration_test.go:26 - The opt-in real engine smoke is gated by `REDEVEN_CONTAINERS_ENGINE_SMOKE` and validates Docker/Podman CLI behavior only when an engine is explicitly available.
 [23] redeven:internal/capabilities/containers/method_dispatch.go:15 - `Adapter.CallMethod` maps raw JSON requests for each capability method to the typed adapter methods with schema-version and closed-world request checks.
@@ -188,3 +189,6 @@ behavior is added upstream first instead of copied into Redeven.
 [37] redeven:internal/capabilities/containers/adapter.go:424 - `operationContext` centralizes operation id validation, duplicate active id rejection, scoped context creation, and cleanup.
 [38] redeven:internal/capabilities/containers/adapter_test.go:407 - Operation method dispatcher tests cover mutable actions, image pull, non-operation rejection, missing operation ids, and closed-world request decoding.
 [39] redeven:internal/capabilities/containers/adapter_test.go:606 - Operation cancellation tests cover action and image-pull cancel propagation, duplicate active id rejection, automatic unregister on completion or parent cancel, unknown ids, and method mismatch.
+[40] redeven:internal/redevpluginintegration/integration.go:181 - The ReDevPlugin Host integration registers the Redeven Containers capability adapter when it is configured.
+[41] redeven:internal/redevpluginintegration/adapters.go:381 - The Containers capability adapter dispatches ReDevPlugin capability calls into the Redeven business adapter.
+[42] redeven:internal/redevpluginintegration/adapters.go:519 - The operation cancel adapter dispatches ReDevPlugin operation cancel requests into the Redeven Containers business adapter.

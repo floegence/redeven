@@ -106,7 +106,7 @@ jobs:
       - name: Build embedded assets
         run: ./scripts/build_assets.sh
 
-      - name: ReDevPlugin integration readiness gate
+      - name: ReDevPlugin integration gate
         run: ./scripts/check_plugin_integration.sh --ci
 
       - name: Gateway protocol contract guard

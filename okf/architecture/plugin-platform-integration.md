@@ -11,11 +11,14 @@ ReDevPlugin artifacts. ReDevPlugin owns reusable plugin platform mechanics;
 Redeven owns session mapping, route placement, product policy, local UX, and
 business capability adapters.
 
-At the current source baseline, Redeven has not yet added a released
-ReDevPlugin Go module requirement, ReDevPlugin npm packages, mounted plugin
-routes, or bundled `redevplugin-runtime` artifacts. This OKF entry records the
-required integration shape and boundary for the future implementation, not an
-already-shipped local plugin platform.
+At the current source baseline, Redeven consumes the released
+`github.com/floegence/redevplugin v0.1.1` Go module and mounts the released
+HTTP adapter through a narrow `internal/redevpluginintegration` package. That
+package configures ReDevPlugin Host stores, policy/session/security adapters,
+runtime artifact resolution, observability fanout, and Redeven-owned business
+capabilities without copying platform source. Redeven has not added
+ReDevPlugin npm packages or new Env App, Activity Bar, Workbench, Settings, or
+Flower product entrypoints in this integration slice.
 
 The same baseline does include a Redeven-owned container resources business
 capability contract under `spec/capabilities/container-resources-v1.schema.json`
@@ -26,49 +29,50 @@ selected.
 
 # Mechanism
 
-The intended dependency shape is library and artifact consumption. Redeven
-imports released ReDevPlugin Go packages for Host construction, lifecycle DTOs,
+The dependency shape is library and artifact consumption. Redeven imports
+released ReDevPlugin Go packages for Host construction, lifecycle DTOs,
 mountable handlers, policy hooks, broker contracts, operation envelopes, and
-stable platform errors. Redeven imports released ReDevPlugin npm packages for
-surface hosting, bridge SDKs, generated clients, settings/intent helpers, and
-sandbox-safe UI utilities. Redeven bundles the released signed
-`redevplugin-runtime` through ReDevPlugin release metadata and the released
-runtime manager.
+stable platform errors. Future Redeven UI surfaces must import released
+ReDevPlugin npm packages for surface hosting, bridge SDKs, generated clients,
+settings/intent helpers, and sandbox-safe UI utilities. Runtime execution uses
+the released signed `redevplugin-runtime` selected by release metadata; the
+current runtime artifact resolver searches only published bundle/executable
+locations and fails closed when the matching artifact is absent.
 
-The Redeven integration layer configures those artifacts. It chooses state
-roots, backup/export locations, audit and diagnostics sinks, secret-vault
-adapters, local permission caps, session mapping, route mounting, Desktop and
-installer bundling, and product UI placement. Local UI already separates the
-Env App appserver under `/_redeven_proxy/*` from direct sessions served by the
-agent after an E2EE handshake; plugin lifecycle, surface bootstrap, asset, and
-RPC routes should fit into that host structure as released ReDevPlugin handlers
-or thin wrappers that preserve the host response envelope.
+The Redeven integration layer configures those artifacts. It chooses the
+plugin state root under `StateDir/apps/redevplugin`, creates durable
+ReDevPlugin SQLite stores, registers audit and diagnostics fanout, maps local
+permission caps, resolves Redeven sessions, mounts routes, and registers
+business adapters. Local UI still separates the Env App appserver under
+`/_redeven_proxy/*` from direct sessions served by the agent after an E2EE
+handshake; plugin lifecycle, surface bootstrap, asset, stream, CSP report, and
+RPC routes fit into that host structure as released ReDevPlugin handlers
+behind Redeven route gates.
 
-The current AppServer route gate already treats Env App, codespace,
-port-forward, and plugin sandbox origins as separate roles. Env App origins may
-reach `/_redeven_proxy/api/*` and `/_redeven_proxy/env/*`; codespace origins may
-reach `/_redeven_proxy/inject.js`; plugin sandbox origins with a `plg-*` first
-host label are recognized explicitly and receive 404 for Env App management
-APIs, Env App dist, and codespace injection helpers. Future mounted plugin
-routes must stay outside those Env App and codespace helper surfaces.
-`/_redeven_plugin/*` is explicitly reserved for released ReDevPlugin handlers
-and currently fails closed instead of falling through to Env App, codespace, or
-port-forward proxying. Local UI also mounts that reserved namespace separately
-from `/_redeven_proxy/*` and forwards it with a plugin route context, not the Env
-App route override. The future plugin management API namespace under
-`/_redeven_proxy/api/plugins` and `/_redeven_proxy/api/plugins/*` is also
-reserved: even Env App callers receive the AppServer's flat JSON 404 response
-until released ReDevPlugin management handlers are mounted, and no
-plugin-platform `error_code` is synthesized before that integration exists.
-Local UI preserves the same fail-closed response while local access is locked,
-instead of exposing the reserved namespace as an access-gate surface. The
-current route matrix tests bind Env App, codespace, port-forward, plugin,
-unknown, missing-origin, and Local UI callers across the management API,
-reserved plugin management API, Env App dist, codespace injection helper, and
-reserved plugin namespace paths; the AppServer and Local UI matrices cover the
-exact namespace root, trailing slash, bootstrap, asset, stream, and CSP report
-paths so they cannot inherit the Env App shell, codespace injection helper,
-port-forward proxying, local access gate, or nested Local UI API envelope.
+The current AppServer route gate treats Env App, codespace, port-forward, and
+plugin sandbox origins as separate roles. Env App origins may reach
+`/_redeven_proxy/api/*` and `/_redeven_proxy/env/*`; codespace origins may reach
+`/_redeven_proxy/inject.js`; plugin sandbox origins with a `plg-*` first host
+label are recognized explicitly and remain denied for Env App management APIs,
+Env App dist, and codespace injection helpers. When the plugin platform handler
+is present, `/_redeven_proxy/api/plugins` and
+`/_redeven_proxy/api/plugins/*` are accepted only from the Env App origin role,
+rewritten to `/_redevplugin/api/plugins*`, marked with the internal
+`env_trusted` route role, and delegated to the released ReDevPlugin handler. If
+the handler is absent, Env App callers still receive the AppServer's flat JSON
+404 response without a plugin-owned `error_code`, and non-Env callers receive
+404. Local UI preserves that pre-access flat 404 only when the platform handler
+is absent; once the handler is enabled, plugin management requests use the
+normal local access gate before forwarding to AppServer.
+
+`/_redeven_plugin` and `/_redeven_plugin/*` are accepted only from plugin
+sandbox origins when the handler is present. AppServer rewrites those requests
+to `/_redevplugin*`, marks them with the internal `plugin_sandbox` route role,
+and delegates to ReDevPlugin. Env App, codespace, port-forward, unknown, and
+missing-origin callers continue to receive 404, and the namespace does not fall
+through to Env App shell assets, codespace injection, port-forward proxying, or
+Local UI nested API envelopes. The route matrix tests cover both the
+fail-closed no-handler reservation and the enabled-handler delegation paths.
 
 Redeven business code starts at adapter registration. Capabilities such as
 containers, files, shell, cloud services, database access, vault access,
@@ -77,15 +81,15 @@ only after ReDevPlugin has constructed the identity, lifecycle, permission,
 confirmation, token or lease, quota, revocation, and audit context for the
 request.
 
-Runtime worker execution follows the same division. Redeven selects and launches
-the released `redevplugin-runtime` artifact through ReDevPlugin release metadata,
-but runtime lease minting, runtime-generation binding, IPC channel binding,
-connection nonce binding, worker method/effect/execution binding, descriptor
-hash binding, quota-limit binding, signature verification, replay rejection,
-and Host audit construction remain ReDevPlugin contracts. When Redeven later
-mounts released plugin routes, its audit sink may persist the ReDevPlugin audit
-event, but it must not mint alternate runtime leases, rewrite lease audiences,
-or log bearer lease tokens.
+Runtime worker execution follows the same division. Redeven resolves the
+released `redevplugin-runtime` artifact from approved bundle/executable
+locations, while runtime lease minting, runtime-generation binding, IPC channel
+binding, connection nonce binding, worker method/effect/execution binding,
+descriptor hash binding, quota-limit binding, signature verification, replay
+rejection, and Host audit construction remain ReDevPlugin contracts. Redeven's
+observability adapter may persist ReDevPlugin audit and diagnostic events, but
+it must not mint alternate runtime leases, rewrite lease audiences, or log
+bearer lease tokens.
 
 Product UI may place ReDevPlugin surfaces in Env App, Activity Bar, Workbench,
 Settings, Desktop, or CLI flows, but the plugin document, iframe bootstrap,
@@ -123,8 +127,8 @@ Plugin assets and RPC must not be smuggled through `/_redeven_proxy/api/*`,
 `/_redeven_proxy/env/*`, or `/_redeven_proxy/inject.js`. Those paths remain Env
 App management/dist and codespace helper surfaces; plugin sandbox origins are
 not valid callers for them. The only plugin-shaped Env App management prefix is
-the reserved `/_redeven_proxy/api/plugins` namespace, which must remain
-fail-closed until a released ReDevPlugin handler owns the API contract.
+`/_redeven_proxy/api/plugins`, and it is owned by the mounted released
+ReDevPlugin handler only after AppServer has verified the Env App origin role.
 
 Containers are a Redeven business capability when exposed to plugins, not a
 plugin runtime mechanism. Gateway environment profiles and RCPP provider
@@ -145,27 +149,27 @@ closed-world container resources capability contract.
 [9] redeven:AGENTS.md:331 - Local sibling checkout wiring and copied ReDevPlugin artifacts are forbidden.
 [10] redeven:AGENTS.md:495 - ReDevPlugin upgrades in Redeven are published dependency changes, not source syncs.
 [11] redeven:AGENTS.md:517 - Redeven-side plugin code layout must make the adapter boundary visible.
-[12] redeven:go.mod:5 - Redeven's current Go dependency list does not yet include ReDevPlugin.
+[12] redeven:go.mod:11 - Redeven consumes `github.com/floegence/redevplugin v0.1.1`.
 [13] redeven:internal/localui/localui.go:62 - Local UI mounts the Env App appserver under `/_redeven_proxy/*`.
 [14] redeven:internal/localui/localui.go:65 - Direct sessions are served by the agent after E2EE handshake.
 [15] redeven:internal/localui/localui.go:146 - Local UI exposes the direct websocket route under `/_redeven_direct/ws`.
 [16] redeven:internal/localui/localui.go:150 - Local UI proxies Env App through `/_redeven_proxy/`.
 [17] redeven:internal/localui/localui.go:147 - Local UI mounts the reserved plugin namespace separately from the Env App proxy.
-[18] redeven:internal/localui/localui.go:693 - Local UI keeps the reserved plugin management API namespace fail-closed before local access gating.
+[18] redeven:internal/localui/localui.go:693 - Local UI keeps plugin management fail-closed before local access gating only when the platform handler is disabled.
 [19] redeven:internal/localui/localui.go:709 - Local UI recognizes the reserved plugin management API root and child paths.
 [20] redeven:internal/localui/localui.go:717 - Local UI forwards reserved plugin namespace requests with plugin route context.
 [21] redeven:internal/codeapp/appserver/server.go:279 - AppServer has a distinct Local UI plugin route context.
-[22] redeven:internal/codeapp/appserver/server.go:512 - AppServer reserves `/_redeven_plugin/*` for released ReDevPlugin handlers and fails closed until integration is wired.
-[23] redeven:internal/codeapp/appserver/server.go:520 - AppServer management APIs are gated to the Env App origin role.
-[24] redeven:internal/codeapp/appserver/server.go:2138 - AppServer reserves the future plugin management API namespace before other local API handlers run.
+[22] redeven:internal/codeapp/appserver/server.go:529 - AppServer delegates `/_redeven_plugin/*` to ReDevPlugin only for plugin sandbox origins.
+[23] redeven:internal/codeapp/appserver/server.go:537 - AppServer gates `/_redeven_proxy/api/plugins*` to the Env App origin role before delegating.
+[24] redeven:internal/codeapp/appserver/server.go:626 - AppServer rewrites Redeven plugin routes to ReDevPlugin handler paths with internal route roles.
 [25] redeven:internal/codeapp/appserver/server.go:5384 - The reserved plugin management API matcher covers the root and child paths.
 [26] redeven:internal/codeapp/appserver/server.go:541 - AppServer serves `inject.js` only to codespace origins.
 [27] redeven:internal/codeapp/appserver/server.go:6245 - AppServer derives explicit origin roles from the request origin.
 [28] redeven:internal/codeapp/appserver/server.go:6263 - `plg-*` first labels are classified as plugin sandbox origins.
 [29] redeven:internal/codeapp/appserver/server_test.go:548 - Tests bind the proxy route matrix across Env App, codespace, port-forward, plugin, unknown, and missing-origin callers.
-[30] redeven:internal/codeapp/appserver/server_test.go:691 - Tests bind the reserved plugin management API namespace to AppServer flat JSON 404 responses.
-[31] redeven:internal/codeapp/appserver/server_test.go:733 - Tests bind the AppServer reserved plugin namespace route matrix to 404 without Env App, inject-script, or proxy fallback.
-[32] redeven:internal/localui/localui_test.go:285 - Tests bind the Local UI reserved plugin management API namespace to flat JSON 404 without access-gate interception.
+[30] redeven:internal/codeapp/appserver/server_test.go:691 - Tests bind the no-handler plugin management namespace to AppServer flat JSON 404 responses.
+[31] redeven:internal/codeapp/appserver/server_test.go:733 - Tests bind Env App management delegation to the mounted plugin platform handler.
+[32] redeven:internal/codeapp/appserver/server_test.go:833 - Tests bind plugin-origin sandbox namespace delegation to the mounted plugin platform handler.
 [33] redeven:internal/localui/localui_test.go:333 - Tests bind the Local UI reserved plugin namespace route matrix to 404 without access-gate or Env App shell interception.
 [34] redeven:okf/security/plugin-platform-integration-security.md:75 - Plugin surfaces and workers must not receive runtime-control, direct-session, Gateway, or Flower artifacts as ambient authority.
 [35] redeven:okf/ui/plugin-surfaces.md:17 - Front-end plugin platform implementation arrives as released ReDevPlugin npm packages.
@@ -173,3 +177,6 @@ closed-world container resources capability contract.
 [37] redeven:okf/architecture/container-resources-capability.md:9 - The container resources contract is Redeven-owned business capability surface, not plugin-platform core.
 [38] redeven:AGENTS.md:446 - Redeven must not bypass runtime lease, quota, or revocation checks.
 [39] redeven:AGENTS.md:458 - ReDevPlugin constructs confirmation, token, runtime lease, and audit context.
+[40] redeven:internal/redevpluginintegration/integration.go:52 - The integration package configures the released ReDevPlugin Host and durable stores.
+[41] redeven:internal/redevpluginintegration/adapters.go:85 - The session resolver projects Redeven session metadata into ReDevPlugin session context.
+[42] redeven:internal/redevpluginintegration/adapters.go:218 - Runtime artifact resolution searches published bundle/executable locations and fails closed.

@@ -730,6 +730,46 @@ func TestServer_PluginManagementAPINamespaceReserved(t *testing.T) {
 	}
 }
 
+func TestServer_PluginManagementAPIDelegatesToPluginPlatform(t *testing.T) {
+	t.Parallel()
+
+	srv := newDistRouteTestServer(t, fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}, nil)
+	var called int
+	var gotPath string
+	var gotQuery string
+	srv.pluginPlatform = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called++
+		gotPath = r.URL.Path
+		gotQuery = r.URL.RawQuery
+		writeJSON(w, 218, apiResp{OK: true, Data: map[string]any{"delegated": true}})
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/plugins/catalog?filter=enabled", nil)
+	req.Header.Set("Origin", "https://env-local.example.com")
+	rr := httptest.NewRecorder()
+	srv.serveHTTP(rr, req)
+	if rr.Code != 218 {
+		t.Fatalf("status = %d, want delegated 218; body=%q", rr.Code, rr.Body.String())
+	}
+	if called != 1 || gotPath != "/_redevplugin/api/plugins/catalog" || gotQuery != "filter=enabled" {
+		t.Fatalf("delegated call = %d path=%q query=%q", called, gotPath, gotQuery)
+	}
+
+	blockedReq := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/plugins/catalog", nil)
+	blockedReq.Header.Set("Origin", "https://plg-containers.example.com")
+	blockedRes := httptest.NewRecorder()
+	srv.serveHTTP(blockedRes, blockedReq)
+	if blockedRes.Code != http.StatusNotFound {
+		t.Fatalf("plugin-origin management status = %d, want 404", blockedRes.Code)
+	}
+	if called != 1 {
+		t.Fatalf("plugin-origin management request delegated unexpectedly")
+	}
+}
+
 func TestServer_PluginNamespaceRouteMatrix(t *testing.T) {
 	t.Parallel()
 
@@ -787,6 +827,45 @@ func TestServer_PluginNamespaceRouteMatrix(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestServer_PluginNamespaceDelegatesToPluginPlatformForPluginOrigin(t *testing.T) {
+	t.Parallel()
+
+	srv := newDistRouteTestServer(t, fstest.MapFS{
+		"env/index.html":      {Data: []byte("<html>env</html>")},
+		"env/assets/index.js": {Data: []byte("console.log('env');")},
+		"inject.js":           {Data: []byte("console.log('inject');")},
+	}, nil)
+	var called int
+	var gotPath string
+	srv.pluginPlatform = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called++
+		gotPath = r.URL.Path
+		writeJSON(w, 219, apiResp{OK: true, Data: map[string]any{"delegated": true}})
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/_redeven_plugin/bootstrap", nil)
+	req.Header.Set("Origin", "https://plg-containers.example.com")
+	rr := httptest.NewRecorder()
+	srv.serveHTTP(rr, req)
+	if rr.Code != 219 {
+		t.Fatalf("status = %d, want delegated 219; body=%q", rr.Code, rr.Body.String())
+	}
+	if called != 1 || gotPath != "/_redevplugin/bootstrap" {
+		t.Fatalf("delegated call = %d path=%q", called, gotPath)
+	}
+
+	blockedReq := httptest.NewRequest(http.MethodPost, "/_redeven_plugin/bootstrap", nil)
+	blockedReq.Header.Set("Origin", "https://env-local.example.com")
+	blockedRes := httptest.NewRecorder()
+	srv.serveHTTP(blockedRes, blockedReq)
+	if blockedRes.Code != http.StatusNotFound {
+		t.Fatalf("env-origin plugin namespace status = %d, want 404", blockedRes.Code)
+	}
+	if called != 1 {
+		t.Fatalf("env-origin plugin namespace request delegated unexpectedly")
 	}
 }
 

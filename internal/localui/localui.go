@@ -690,10 +690,8 @@ func (s *Server) handleEnvAppProxy(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if isReservedPluginManagementProxyPath(r) {
-		// Keep the future plugin management namespace fail-closed even before
-		// local access is unlocked. Real management handlers must replace this
-		// reservation with the normal access-gated appserver path.
+	if isReservedPluginManagementProxyPath(r) && !s.appServer.PluginPlatformEnabled() {
+		// Keep plugin management fail-closed before the released platform handler is enabled.
 		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not found"})
 		return
 	}

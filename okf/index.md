@@ -15,8 +15,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.
 - [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.
 - [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Published plugin-platform dependency and Redeven adapter ownership.
-- [Plugin platform integration](architecture/plugin-platform-integration.md) - Local UI, AppServer, product adapter, and Flower orchestration shape for future ReDevPlugin integration.
-- [Container resources capability](architecture/container-resources-capability.md) - Redeven-owned Docker and Podman business capability contract for future plugin adapter registration.
+- [Plugin platform integration](architecture/plugin-platform-integration.md) - Local UI, AppServer, released ReDevPlugin Host mounting, product adapters, and Flower orchestration boundaries.
+- [Container resources capability](architecture/container-resources-capability.md) - Redeven-owned Docker and Podman business capability contract for plugin adapter registration.
 
 ## Security
 

@@ -38,6 +38,7 @@ import (
 	"github.com/floegence/redeven/internal/pathutil"
 	"github.com/floegence/redeven/internal/portforward"
 	pfregistry "github.com/floegence/redeven/internal/portforward/registry"
+	"github.com/floegence/redeven/internal/redevpluginintegration"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redeven/internal/settings"
@@ -69,6 +70,8 @@ type Options struct {
 	SecretsStore *settings.SecretsStore
 	// ThreadReadStateStore persists scoped per-surface thread read watermarks.
 	ThreadReadStateStore *threadreadstate.Store
+	// PluginPlatform is the released ReDevPlugin HTTP handler mounted behind Redeven routes.
+	PluginPlatform http.Handler
 	// AgentHomeDir is the canonical absolute path to the default home directory.
 	AgentHomeDir    string
 	FilesystemScope *filesystemscope.Registry
@@ -228,6 +231,7 @@ type Server struct {
 	configMu              sync.Mutex
 	secrets               *settings.SecretsStore
 	threadReadState       *threadreadstate.Store
+	pluginPlatform        http.Handler
 
 	agentHomeDir string
 	scope        *filesystemscope.Registry
@@ -366,6 +370,7 @@ func New(opts Options) (*Server, error) {
 		localPermissionPolicy:   localPermissionPolicy,
 		secrets:                 secrets,
 		threadReadState:         opts.ThreadReadStateStore,
+		pluginPlatform:          opts.PluginPlatform,
 		distFS:                  opts.DistFS,
 		addr:                    addr,
 	}, nil
@@ -475,6 +480,10 @@ func (g *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	g.serveHTTP(w, r)
 }
 
+func (g *Server) PluginPlatformEnabled() bool {
+	return g != nil && g.pluginPlatform != nil
+}
+
 // EnvAppShellReadinessError validates that the embedded Env App shell can be
 // opened by Desktop before the runtime advertises open-readiness.
 func (g *Server) EnvAppShellReadinessError() error {
@@ -517,10 +526,24 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 
 	if p == "/_redeven_plugin" || strings.HasPrefix(p, "/_redeven_plugin/") {
-		// Reserve plugin-mounted routes for released ReDevPlugin handlers. Until the
-		// adapter is wired, every origin must fail closed instead of falling through
-		// to codespace or port-forward proxying.
+		if g.PluginPlatformEnabled() && originRole == originRolePlugin {
+			g.servePluginPlatform(w, r, redevpluginintegration.RouteRolePluginSandbox, "/_redeven_plugin", "/_redevplugin")
+			return
+		}
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
+	if isReservedPluginManagementAPIPath(r) {
+		if originRole != originRoleEnv {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		if g.PluginPlatformEnabled() {
+			g.servePluginPlatform(w, r, redevpluginintegration.RouteRoleEnvTrusted, "/_redeven_proxy/api/plugins", "/_redevplugin/api/plugins")
+			return
+		}
+		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 		return
 	}
 
@@ -598,6 +621,37 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+}
+
+func (g *Server) servePluginPlatform(w http.ResponseWriter, r *http.Request, role redevpluginintegration.RouteRole, fromPrefix string, toPrefix string) {
+	if g == nil || g.pluginPlatform == nil || r == nil || r.URL == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	next := r.Clone(r.Context())
+	next.URL = cloneURL(r.URL)
+	next.URL.Path = rewritePluginPlatformPath(next.URL.Path, fromPrefix, toPrefix)
+	next.URL.RawPath = ""
+	next = redevpluginintegration.WithRouteRole(next, role)
+	g.pluginPlatform.ServeHTTP(w, next)
+}
+
+func rewritePluginPlatformPath(requestPath string, fromPrefix string, toPrefix string) string {
+	if requestPath == fromPrefix {
+		return toPrefix
+	}
+	if strings.HasPrefix(requestPath, fromPrefix+"/") {
+		return toPrefix + strings.TrimPrefix(requestPath, fromPrefix)
+	}
+	return requestPath
+}
+
+func cloneURL(u *url.URL) *url.URL {
+	if u == nil {
+		return &url.URL{}
+	}
+	next := *u
+	return &next
 }
 
 func (g *Server) serveEnvAppDist(w http.ResponseWriter, r *http.Request) {

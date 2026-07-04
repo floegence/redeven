@@ -151,6 +151,21 @@ func newTestAppServerWithBackendAndDist(t *testing.T, cfgPath string, backend ap
 	return appSrv
 }
 
+func newTestAppServerWithPluginPlatform(t *testing.T, cfgPath string, pluginPlatform http.Handler) *appserverpkg.Server {
+	t.Helper()
+	appSrv, err := appserverpkg.New(appserverpkg.Options{
+		Backend:            localUITestBackend{},
+		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
+		ConfigPath:         cfgPath,
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+		PluginPlatform:     pluginPlatform,
+	})
+	if err != nil {
+		t.Fatalf("appserver.New() error = %v", err)
+	}
+	return appSrv
+}
+
 func newTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 	t.Helper()
 	cfgPath := writeTestConfig(t)
@@ -327,6 +342,36 @@ func TestServer_PluginManagementAPINamespaceReserved(t *testing.T) {
 				t.Fatalf("plugin management API was served as Env App shell: %q", res.Body.String())
 			}
 		})
+	}
+}
+
+func TestServer_PluginManagementAPIUsesAccessGateWhenPlatformEnabled(t *testing.T) {
+	gate := accessgate.New(accessgate.Options{Password: "secret"})
+	cfgPath := writeTestConfig(t)
+	appSrv := newTestAppServerWithPluginPlatform(t, cfgPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(218)
+		_, _ = w.Write([]byte(r.URL.Path))
+	}))
+	s := newTestServerWithAppServer(t, gate, appSrv, cfgPath)
+
+	lockedReq := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/api/plugins/catalog", nil)
+	lockedReq.Header.Set("Origin", "https://env-local.example.com")
+	lockedRes := httptest.NewRecorder()
+	s.handler().ServeHTTP(lockedRes, lockedReq)
+	if lockedRes.Result().StatusCode != http.StatusLocked {
+		t.Fatalf("locked plugin management status = %d, want 423; body=%q", lockedRes.Result().StatusCode, lockedRes.Body.String())
+	}
+
+	open := newTestServerWithAppServer(t, nil, appSrv, cfgPath)
+	openReq := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/api/plugins/catalog", nil)
+	openReq.Header.Set("Origin", "https://env-local.example.com")
+	openRes := httptest.NewRecorder()
+	open.handler().ServeHTTP(openRes, openReq)
+	if openRes.Result().StatusCode != 218 {
+		t.Fatalf("open plugin management status = %d, want delegated 218; body=%q", openRes.Result().StatusCode, openRes.Body.String())
+	}
+	if strings.TrimSpace(openRes.Body.String()) != "/_redevplugin/api/plugins/catalog" {
+		t.Fatalf("delegated path = %q", openRes.Body.String())
 	}
 }
 

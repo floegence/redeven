@@ -6,14 +6,13 @@ usage() {
 Usage:
   ./scripts/check_plugin_integration.sh [--ci]
 
-Runs the current Redeven-side ReDevPlugin integration readiness gate. This gate
-checks the published-dependency boundary, release artifact consumer guards,
-existing AppServer origin isolation, and Redeven-owned Containers capability
-adapter contracts.
+Runs the current Redeven-side ReDevPlugin integration gate. This gate checks the
+published-dependency boundary, release artifact consumer guards, AppServer and
+Local UI origin isolation, mounted released-handler delegation, session/security
+adapters, and Redeven-owned Containers capability adapter contracts.
 
-It is intentionally a pre-release integration gate: it must not mount or consume
-unreleased ReDevPlugin routes, local sibling checkouts, copied contracts, or
-runtime binaries.
+It must not consume unreleased ReDevPlugin routes, local sibling checkouts,
+copied contracts, or local runtime binaries.
 USAGE
 }
 
@@ -71,16 +70,19 @@ log "checking ReDevPlugin consumption gate fixture"
 log "checking ReDevPlugin artifact staging fixture"
 ./scripts/stage_redevplugin_release_artifacts.sh --self-test
 
-log "checking AppServer and Local UI plugin origin isolation matrix"
+log "checking AppServer and Local UI plugin route isolation and delegation"
 require_embedded_assets
 go test ./internal/codeapp/appserver \
-	-run 'TestServer_(ProxyOriginRouteMatrix|PluginManagementAPINamespaceReserved|PluginNamespaceRouteMatrix|PluginOriginCannotAccessManagementSurfaces)$' \
+	-run 'TestServer_(ProxyOriginRouteMatrix|PluginManagementAPINamespaceReserved|PluginManagementAPIDelegatesToPluginPlatform|PluginNamespaceRouteMatrix|PluginNamespaceDelegatesToPluginPlatformForPluginOrigin|PluginOriginCannotAccessManagementSurfaces)$' \
 	-count=1
 go test ./internal/localui \
-	-run 'TestServer_(PluginManagementAPINamespaceReserved|PluginNamespaceRouteMatrix|handlePluginNamespace_ForwardsWithoutEnvRouteOverride)$' \
+	-run 'TestServer_(PluginManagementAPINamespaceReserved|PluginManagementAPIUsesAccessGateWhenPlatformEnabled|PluginNamespaceRouteMatrix|handlePluginNamespace_ForwardsWithoutEnvRouteOverride)$' \
 	-count=1
+
+log "checking ReDevPlugin session, security, runtime, and route adapters"
+go test ./internal/redevpluginintegration -count=1
 
 log "checking Containers capability adapter and fixture contracts"
 go test ./internal/capabilities/containers -count=1
 
-log "ReDevPlugin integration readiness gate passed"
+log "ReDevPlugin integration gate passed"
