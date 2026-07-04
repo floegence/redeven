@@ -68,6 +68,7 @@ jobs:
           bash -n scripts/check_redevplugin_release_artifacts.sh
           bash -n scripts/check_redevplugin_consumption_gate.sh
           bash -n scripts/stage_redevplugin_release_artifacts.sh
+          bash -n scripts/check_plugin_integration.sh
           bash -n scripts/check_flower_live_protocol.sh
           bash -n scripts/ui_package_common.sh
           bash -n scripts/open_source_hygiene_check.sh
@@ -102,17 +103,8 @@ jobs:
       - name: Runtime compatibility contract check
         run: ./scripts/check_runtime_compatibility_contract.sh --source-only
 
-      - name: ReDevPlugin dependency boundary guard
-        run: ./scripts/check_redevplugin_dependency_boundary.sh --ci
-
-      - name: ReDevPlugin release artifact verifier self-test
-        run: ./scripts/check_redevplugin_release_artifacts.sh --self-test
-
-      - name: ReDevPlugin consumption gate self-test
-        run: ./scripts/check_redevplugin_consumption_gate.sh --self-test
-
-      - name: ReDevPlugin release artifact staging self-test
-        run: ./scripts/stage_redevplugin_release_artifacts.sh --self-test
+      - name: ReDevPlugin integration readiness gate
+        run: ./scripts/check_plugin_integration.sh --ci
 
       - name: Gateway protocol contract guard
         run: ./scripts/check_gateway_protocol_contract.sh
