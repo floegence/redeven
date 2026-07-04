@@ -149,6 +149,18 @@ func (s *Service) RemoveTerminalSession(ctx context.Context, widgetID string, se
 	return state, nil
 }
 
+func (s *Service) ClearTerminalSessions(ctx context.Context, widgetID string) (WidgetState, []string, error) {
+	if s == nil || s.store == nil {
+		return WidgetState{}, nil, errors.New("workbench layout service not initialized")
+	}
+	state, sessionIDs, event, err := s.store.clearTerminalSessions(ctx, widgetID)
+	if err != nil {
+		return WidgetState{}, nil, err
+	}
+	s.broadcast(event)
+	return state, sessionIDs, nil
+}
+
 func (s *Service) PruneTerminalSessions(ctx context.Context, liveSessionIDs []string) ([]WidgetState, error) {
 	if s == nil || s.store == nil {
 		return nil, errors.New("workbench layout service not initialized")
@@ -710,6 +722,81 @@ func (s *Store) removeTerminalSession(ctx context.Context, widgetID string, sess
 		return WidgetState{}, Event{}, err
 	}
 	return nextState, event, nil
+}
+
+func (s *Store) clearTerminalSessions(ctx context.Context, widgetID string) (WidgetState, []string, Event, error) {
+	nowUnixMs := time.Now().UnixMilli()
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return WidgetState{}, nil, Event{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	actualWidgetType, err := loadWidgetTypeByIDTx(ctx, tx, widgetID)
+	if err != nil {
+		return WidgetState{}, nil, Event{}, err
+	}
+	if actualWidgetType != WidgetTypeTerminal {
+		return WidgetState{}, nil, Event{}, &WidgetTypeMismatchError{
+			WidgetID:     widgetID,
+			ExpectedType: WidgetTypeTerminal,
+			ActualType:   actualWidgetType,
+		}
+	}
+
+	current, err := loadWidgetStateByIDTx(ctx, tx, widgetID)
+	if err != nil {
+		return WidgetState{}, nil, Event{}, err
+	}
+	if current == nil {
+		nextState := WidgetState{
+			WidgetID:        widgetID,
+			WidgetType:      WidgetTypeTerminal,
+			Revision:        1,
+			UpdatedAtUnixMs: nowUnixMs,
+			State:           terminalStateData(nil, nil),
+		}
+		event, err := upsertWidgetStateTx(ctx, tx, nextState)
+		if err != nil {
+			return WidgetState{}, nil, Event{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return WidgetState{}, nil, Event{}, err
+		}
+		return nextState, nil, event, nil
+	}
+	if current.State.Kind != WidgetStateKindTerminal {
+		return WidgetState{}, nil, Event{}, &WidgetTypeMismatchError{
+			WidgetID:     widgetID,
+			ExpectedType: WidgetTypeTerminal,
+			ActualType:   current.WidgetType,
+		}
+	}
+
+	sessionIDs := normalizeSessionIDs(current.State.SessionIDs)
+	if len(sessionIDs) == 0 {
+		if err := tx.Commit(); err != nil {
+			return WidgetState{}, nil, Event{}, err
+		}
+		return *current, nil, Event{}, nil
+	}
+
+	nextState := WidgetState{
+		WidgetID:        widgetID,
+		WidgetType:      WidgetTypeTerminal,
+		Revision:        current.Revision + 1,
+		UpdatedAtUnixMs: nowUnixMs,
+		State:           terminalStateData(nil, &current.State),
+	}
+	event, err := upsertWidgetStateTx(ctx, tx, nextState)
+	if err != nil {
+		return WidgetState{}, nil, Event{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return WidgetState{}, nil, Event{}, err
+	}
+	return nextState, sessionIDs, event, nil
 }
 
 func (s *Store) pruneTerminalSessions(ctx context.Context, liveSessionIDs []string) ([]WidgetState, []Event, error) {

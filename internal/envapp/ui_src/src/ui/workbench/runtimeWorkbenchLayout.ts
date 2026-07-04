@@ -155,6 +155,17 @@ export type RuntimeWorkbenchTerminalCreateSessionResponse = Readonly<{
   widget_state: RuntimeWorkbenchWidgetState;
 }>;
 
+export type RuntimeWorkbenchTerminalWidgetSessionCloseFailure = Readonly<{
+  session_id: string;
+  error: string;
+}>;
+
+export type RuntimeWorkbenchTerminalWidgetSessionsCloseResponse = Readonly<{
+  widget_state: RuntimeWorkbenchWidgetState;
+  accepted_session_ids: string[];
+  failed_sessions: RuntimeWorkbenchTerminalWidgetSessionCloseFailure[];
+}>;
+
 export type PersistedWorkbenchLocalState = Readonly<{
   version: 4;
   locked: boolean;
@@ -619,6 +630,35 @@ export function normalizeRuntimeWorkbenchOpenPreviewResponse(value: unknown): Ru
     created: Boolean(value.created),
     snapshot,
     widget_state: widgetState,
+  };
+}
+
+export function normalizeRuntimeWorkbenchTerminalWidgetSessionsCloseResponse(
+  value: unknown,
+): RuntimeWorkbenchTerminalWidgetSessionsCloseResponse | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const widgetState = normalizeRuntimeWorkbenchWidgetState(value.widget_state);
+  if (!widgetState || widgetState.widget_type !== 'redeven.terminal' || widgetState.state.kind !== 'terminal') {
+    return null;
+  }
+  const acceptedSessionIDs = Array.isArray(value.accepted_session_ids)
+    ? Array.from(new Set(value.accepted_session_ids.map((entry) => compact(entry)).filter(Boolean)))
+    : [];
+  const failedSessions = Array.isArray(value.failed_sessions)
+    ? value.failed_sessions
+      .filter((entry): entry is Record<string, unknown> => isRecord(entry))
+      .map((entry) => ({
+        session_id: compact(entry.session_id),
+        error: compact(entry.error),
+      }))
+      .filter((entry) => entry.session_id && entry.error)
+    : [];
+  return {
+    widget_state: widgetState,
+    accepted_session_ids: acceptedSessionIDs,
+    failed_sessions: failedSessions,
   };
 }
 

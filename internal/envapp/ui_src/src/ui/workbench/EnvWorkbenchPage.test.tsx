@@ -134,6 +134,20 @@ const layoutApiMocks = vi.hoisted(() => ({
       session_ids: [],
     },
   })),
+  closeWorkbenchTerminalWidgetSessions: vi.fn(async (widgetId: string): Promise<any> => ({
+    widget_state: {
+      widget_id: widgetId,
+      widget_type: 'redeven.terminal',
+      revision: 3,
+      updated_at_unix_ms: 303,
+      state: {
+        kind: 'terminal',
+        session_ids: [],
+      },
+    },
+    accepted_session_ids: ['session-1'],
+    failed_sessions: [],
+  })),
   connectWorkbenchLayoutEventStream: vi.fn(async (args: any) => {
     layoutApiMocks.lastStreamArgs = args;
     await new Promise<void>((resolve) => {
@@ -406,6 +420,19 @@ function runtimePreviewState(widget_id: string, path: string, name: string, revi
   };
 }
 
+function runtimeTerminalState(widget_id: string, session_ids: string[] = ['session-1'], revision = 1, updated_at_unix_ms = 120) {
+  return {
+    widget_id,
+    widget_type: 'redeven.terminal',
+    revision,
+    updated_at_unix_ms,
+    state: {
+      kind: 'terminal',
+      session_ids,
+    },
+  };
+}
+
 function openPreviewResponse(args: {
   requestId: string;
   widgetId: string;
@@ -512,6 +539,7 @@ vi.mock('../services/workbenchLayoutApi', () => ({
   openWorkbenchPreview: layoutApiMocks.openWorkbenchPreview,
   createWorkbenchTerminalSession: layoutApiMocks.createWorkbenchTerminalSession,
   deleteWorkbenchTerminalSession: layoutApiMocks.deleteWorkbenchTerminalSession,
+  closeWorkbenchTerminalWidgetSessions: layoutApiMocks.closeWorkbenchTerminalWidgetSessions,
   connectWorkbenchLayoutEventStream: layoutApiMocks.connectWorkbenchLayoutEventStream,
   WorkbenchLayoutConflictError: layoutApiMocks.WorkbenchLayoutConflictError,
   WorkbenchWidgetStateConflictError: layoutApiMocks.WorkbenchWidgetStateConflictError,
@@ -792,8 +820,53 @@ describe('EnvWorkbenchPage', () => {
         },
       };
     });
-    layoutApiMocks.createWorkbenchTerminalSession.mockClear();
-    layoutApiMocks.deleteWorkbenchTerminalSession.mockClear();
+    layoutApiMocks.createWorkbenchTerminalSession.mockReset();
+    layoutApiMocks.createWorkbenchTerminalSession.mockImplementation(async (widgetId: string): Promise<any> => ({
+      session: {
+        id: 'session-created',
+        name: 'repo',
+        working_dir: '/workspace',
+        created_at_ms: 1,
+        last_active_at_ms: 1,
+        is_active: false,
+      },
+      widget_state: {
+        widget_id: widgetId,
+        widget_type: 'redeven.terminal',
+        revision: 2,
+        updated_at_unix_ms: 301,
+        state: {
+          kind: 'terminal',
+          session_ids: ['session-1', 'session-created'],
+        },
+      },
+    }));
+    layoutApiMocks.deleteWorkbenchTerminalSession.mockReset();
+    layoutApiMocks.deleteWorkbenchTerminalSession.mockImplementation(async (widgetId: string): Promise<any> => ({
+      widget_id: widgetId,
+      widget_type: 'redeven.terminal',
+      revision: 2,
+      updated_at_unix_ms: 302,
+      state: {
+        kind: 'terminal',
+        session_ids: [],
+      },
+    }));
+    layoutApiMocks.closeWorkbenchTerminalWidgetSessions.mockReset();
+    layoutApiMocks.closeWorkbenchTerminalWidgetSessions.mockImplementation(async (widgetId: string) => ({
+      widget_state: {
+        widget_id: widgetId,
+        widget_type: 'redeven.terminal',
+        revision: 3,
+        updated_at_unix_ms: 303,
+        state: {
+          kind: 'terminal',
+          session_ids: [],
+        },
+      },
+      accepted_session_ids: ['session-1'],
+      failed_sessions: [],
+    }));
     layoutApiMocks.connectWorkbenchLayoutEventStream.mockReset();
     layoutApiMocks.connectWorkbenchLayoutEventStream.mockImplementation(async (args: any) => {
       layoutApiMocks.lastStreamArgs = args;
@@ -3302,6 +3375,176 @@ describe('EnvWorkbenchPage', () => {
     }));
     expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(latestWidget, { centerViewport: false });
     expect(surfaceApiMocks.updateWidgetTitle).toHaveBeenCalledWith(latestWidget.id, 'Preview · other.txt');
+  });
+
+  it('starts terminal widget session cleanup without blocking widget removal', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const terminalWidget = persistedWidget('widget-terminal-1', 'redeven.terminal', 'Terminal', 1, 100);
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 120,
+      widgets: [
+        runtimeWidget('widget-terminal-1', 'redeven.terminal', 1, 100),
+      ],
+      widget_states: [
+        runtimeTerminalState('widget-terminal-1', ['session-1']),
+      ],
+    });
+    layoutApiMocks.closeWorkbenchTerminalWidgetSessions.mockImplementation(() => new Promise(() => {}));
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSurfaceProps.onRequestDelete(terminalWidget.id);
+    await flushMicrotasks();
+
+    const widgetElement = host.querySelector('[data-testid="widget-body-widget-terminal-1"]') as HTMLElement | null;
+    expect(widgetElement?.dataset.redevenWorkbenchWidgetClosing).toBe('true');
+    expect(widgetElement?.style.pointerEvents).toBe('none');
+
+    await advanceTimersByTimeAndFlush(16);
+    expect(layoutApiMocks.closeWorkbenchTerminalWidgetSessions).toHaveBeenCalledWith('widget-terminal-1');
+
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement | null;
+    expect(surface?.dataset.widgetIds).toBe(terminalWidget.id);
+
+    await advanceTimersByTimeAndFlush(32);
+    expect(surface?.dataset.widgetIds).toBe('');
+  });
+
+  it('does not start terminal widget cleanup when removal is guarded', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const terminalWidget = persistedWidget('widget-terminal-1', 'redeven.terminal', 'Terminal', 1, 100);
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 120,
+      widgets: [
+        runtimeWidget('widget-terminal-1', 'redeven.terminal', 1, 100),
+      ],
+      widget_states: [
+        runtimeTerminalState('widget-terminal-1', ['session-1']),
+      ],
+    });
+    widgetBodyMocks.renderTerminalBody = (bodyProps: any) => {
+      const workbench = useEnvWorkbenchInstancesContext();
+      createEffect(() => {
+        workbench.registerWidgetRemoveGuard(bodyProps.widgetId, () => false);
+      });
+      return null;
+    };
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSurfaceProps.onRequestDelete(terminalWidget.id);
+    await advanceTimersByTimeAndFlush(64);
+
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement | null;
+    expect(layoutApiMocks.closeWorkbenchTerminalWidgetSessions).not.toHaveBeenCalled();
+    expect(surface?.dataset.widgetIds).toBe(terminalWidget.id);
+  });
+
+  it('does not start terminal widget cleanup when a non-terminal widget closes', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const filesWidget = persistedWidget('widget-files-1', 'redeven.files', 'Files', 1, 100);
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 120,
+      widgets: [
+        runtimeWidget('widget-files-1', 'redeven.files', 1, 100),
+      ],
+      widget_states: [],
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    surfaceApiMocks.lastSurfaceProps.onRequestDelete(filesWidget.id);
+    await advanceTimersByTimeAndFlush(64);
+
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement | null;
+    expect(layoutApiMocks.closeWorkbenchTerminalWidgetSessions).not.toHaveBeenCalled();
+    expect(surface?.dataset.widgetIds).toBe('');
+  });
+
+  it('does not revive a terminal widget when an in-flight create returns after close', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const terminalWidget = persistedWidget('widget-terminal-1', 'redeven.terminal', 'Terminal', 1, 100);
+    const createDeferred = deferred<any>();
+    const terminalCreateResults: Array<any> = [];
+    let createStarted = false;
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 120,
+      widgets: [
+        runtimeWidget('widget-terminal-1', 'redeven.terminal', 1, 100),
+      ],
+      widget_states: [
+        runtimeTerminalState('widget-terminal-1', ['session-1']),
+      ],
+    });
+    layoutApiMocks.createWorkbenchTerminalSession.mockImplementation(() => createDeferred.promise);
+    widgetBodyMocks.renderTerminalBody = (bodyProps: any) => {
+      const workbench = useEnvWorkbenchInstancesContext();
+      createEffect(() => {
+        if (createStarted) {
+          return;
+        }
+        createStarted = true;
+        void workbench.createTerminalSession(bodyProps.widgetId, 'repo', '/workspace').then((session) => {
+          terminalCreateResults.push(session);
+        });
+      });
+      return null;
+    };
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    expect(layoutApiMocks.createWorkbenchTerminalSession).toHaveBeenCalledWith('widget-terminal-1', {
+      name: 'repo',
+      working_dir: '/workspace',
+    });
+
+    surfaceApiMocks.lastSurfaceProps.onRequestDelete(terminalWidget.id);
+    await flushMicrotasks();
+    await advanceTimersByTimeAndFlush(16);
+    expect(layoutApiMocks.closeWorkbenchTerminalWidgetSessions).toHaveBeenCalledTimes(1);
+
+    await advanceTimersByTimeAndFlush(32);
+    let surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement | null;
+    expect(surface?.dataset.widgetIds).toBe('');
+
+    createDeferred.resolve({
+      session: {
+        id: 'session-created-after-close',
+        name: 'repo',
+        working_dir: '/workspace',
+        created_at_ms: 1,
+        last_active_at_ms: 1,
+        is_active: false,
+      },
+      widget_state: runtimeTerminalState(
+        'widget-terminal-1',
+        ['session-1', 'session-created-after-close'],
+        2,
+        301,
+      ),
+    });
+    await flushMicrotasks();
+    await advanceTimersByTimeAndFlush(16);
+
+    surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement | null;
+    expect(surface?.dataset.widgetIds).toBe('');
+    expect(terminalCreateResults).toEqual([null]);
+    expect(layoutApiMocks.closeWorkbenchTerminalWidgetSessions).toHaveBeenCalledTimes(2);
   });
 
   it('falls back to the previous focused widget when the selected widget is closed', async () => {

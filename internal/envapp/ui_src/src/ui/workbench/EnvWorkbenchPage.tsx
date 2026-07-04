@@ -26,6 +26,7 @@ import {
   normalizeTerminalFontSize,
 } from '../services/terminalGeometry';
 import {
+  closeWorkbenchTerminalWidgetSessions,
   connectWorkbenchLayoutEventStream,
   createWorkbenchTerminalSession,
   deleteWorkbenchTerminalSession,
@@ -706,6 +707,7 @@ export function EnvWorkbenchPage() {
   const [terminalOpenRequests, setTerminalOpenRequests] = createSignal<Record<string, WorkbenchOpenTerminalRequest>>({});
   const [pendingTerminalOpenRequests, setPendingTerminalOpenRequests] = createSignal<Record<string, WorkbenchOpenTerminalRequest>>({});
   const [confirmedRuntimeTerminalWidgetIds, setConfirmedRuntimeTerminalWidgetIds] = createSignal<ReadonlySet<string>>(new Set());
+  const [closingTerminalWidgetIds, setClosingTerminalWidgetIds] = createSignal<ReadonlySet<string>>(new Set());
   const [fileBrowserOpenRequests, setFileBrowserOpenRequests] = createSignal<Record<string, WorkbenchOpenFileBrowserRequest>>({});
   const [previewOpenRequests, setPreviewOpenRequests] = createSignal<Record<string, WorkbenchOpenFilePreviewRequest>>({});
   const [focusHistory, setFocusHistory] = createSignal<string[]>([]);
@@ -791,6 +793,11 @@ export function EnvWorkbenchPage() {
     ));
   };
 
+  const terminalWidgetClosing = (widgetId: string): boolean => {
+    const normalizedWidgetId = compact(widgetId);
+    return Boolean(normalizedWidgetId && closingTerminalWidgetIds().has(normalizedWidgetId));
+  };
+
   const confirmRuntimeTerminalWidgets = (snapshot: RuntimeWorkbenchLayoutSnapshot) => {
     const terminalWidgetIds = snapshot.widgets
       .filter((widget) => widget.widget_type === 'redeven.terminal')
@@ -816,6 +823,7 @@ export function EnvWorkbenchPage() {
     const normalizedWidgetId = compact(widgetId);
     return Boolean(
       normalizedWidgetId
+      && !terminalWidgetClosing(normalizedWidgetId)
       && (
         runtimeWidgetExists(normalizedWidgetId, 'redeven.terminal')
         || confirmedRuntimeTerminalWidgetIds().has(normalizedWidgetId)
@@ -826,7 +834,7 @@ export function EnvWorkbenchPage() {
   const queueTerminalOpenRequest = (request: WorkbenchOpenTerminalRequest) => {
     const normalizedWidgetId = compact(request.widgetId);
     const workingDir = normalizeAbsolutePath(request.workingDir);
-    if (!normalizedWidgetId || !workingDir) {
+    if (!normalizedWidgetId || !workingDir || terminalWidgetClosing(normalizedWidgetId)) {
       return;
     }
     const normalizedRequest: WorkbenchOpenTerminalRequest = {
@@ -1402,6 +1410,7 @@ export function EnvWorkbenchPage() {
     setTerminalOpenRequests({});
     setPendingTerminalOpenRequests({});
     setConfirmedRuntimeTerminalWidgetIds(new Set<string>());
+    setClosingTerminalWidgetIds(new Set<string>());
     setFileBrowserOpenRequests({});
     setPreviewOpenRequests({});
     setFocusHistory([]);
@@ -2089,6 +2098,52 @@ export function EnvWorkbenchPage() {
     }
   };
 
+  const markTerminalWidgetClosing = (widgetId: string) => {
+    const normalizedWidgetId = compact(widgetId);
+    if (!normalizedWidgetId) {
+      return;
+    }
+    setClosingTerminalWidgetIds((previous) => {
+      if (previous.has(normalizedWidgetId)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.add(normalizedWidgetId);
+      return next;
+    });
+  };
+
+  const scheduleWorkbenchTerminalWidgetSessionClose = (widgetId: string) => {
+    const normalizedWidgetId = compact(widgetId);
+    if (!normalizedWidgetId) {
+      return;
+    }
+    markTerminalWidgetClosing(normalizedWidgetId);
+    requestPostInteractionFrame(() => {
+      void closeWorkbenchTerminalWidgetSessions(normalizedWidgetId)
+        .then((response) => {
+          const responseState = response.widget_state;
+          if (
+            responseState.widget_id === normalizedWidgetId
+            && responseState.widget_type === 'redeven.terminal'
+            && responseState.state.kind === 'terminal'
+            && (
+              runtimeWidgetExists(normalizedWidgetId, 'redeven.terminal')
+              || workbenchState().widgets.some((widget) => widget.id === normalizedWidgetId && widget.type === 'redeven.terminal')
+            )
+          ) {
+            applyRuntimeWidgetState(responseState);
+          }
+          if (response.failed_sessions.length > 0) {
+            console.warn('Workbench terminal widget session cleanup was partially accepted:', response.failed_sessions);
+          }
+        })
+        .catch((error) => {
+          console.warn('Failed to start workbench terminal widget session cleanup:', error);
+        });
+    });
+  };
+
   const requestWidgetRemoval = (widgetId: string) => {
     const normalizedWidgetId = compact(widgetId);
     if (!normalizedWidgetId) {
@@ -2100,6 +2155,10 @@ export function EnvWorkbenchPage() {
     const guard = widgetRemoveGuards()[normalizedWidgetId];
     if (guard && !guard()) {
       return;
+    }
+    const widget = workbenchState().widgets.find((entry) => entry.id === normalizedWidgetId);
+    if (widget?.type === 'redeven.terminal') {
+      scheduleWorkbenchTerminalWidgetSessionClose(normalizedWidgetId);
     }
     const host = surfaceHost();
     const widgetElement = host?.querySelector(
@@ -2292,6 +2351,13 @@ export function EnvWorkbenchPage() {
           name: compact(name) || undefined,
           working_dir: normalizeAbsolutePath(workingDir) || undefined,
         });
+        if (
+          terminalWidgetClosing(normalizedWidgetId)
+          || !workbenchState().widgets.some((widget) => widget.id === normalizedWidgetId && widget.type === 'redeven.terminal')
+        ) {
+          scheduleWorkbenchTerminalWidgetSessionClose(normalizedWidgetId);
+          return null;
+        }
         applyRuntimeWidgetState(result.widget_state);
         const sessionId = compact(result.session.id);
         const nextSessionIds = result.widget_state.state.kind === 'terminal'
@@ -2302,6 +2368,10 @@ export function EnvWorkbenchPage() {
         }
         return normalizeRuntimeTerminalSessionInfo(result.session);
       } catch (error) {
+        if (terminalWidgetClosing(normalizedWidgetId)) {
+          scheduleWorkbenchTerminalWidgetSessionClose(normalizedWidgetId);
+          return null;
+        }
         console.warn('Failed to create workbench terminal session:', error);
         throw error;
       }

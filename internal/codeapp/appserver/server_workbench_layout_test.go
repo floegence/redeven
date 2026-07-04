@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -51,6 +52,29 @@ func newWorkbenchLayoutServerWithTerminalForTest(t *testing.T, svc *workbenchlay
 		term:               manager,
 		localPermissionCap: &cap,
 	}
+}
+
+type fakeWorkbenchTerminalSessionManager struct {
+	deleteSessionForWidget func(sessionID string, widgetID string) error
+}
+
+func (m fakeWorkbenchTerminalSessionManager) CreateSession(string, string) (*terminal.SessionInfo, error) {
+	return nil, errors.New("create session not implemented")
+}
+
+func (m fakeWorkbenchTerminalSessionManager) DeleteSession(string) error {
+	return nil
+}
+
+func (m fakeWorkbenchTerminalSessionManager) DeleteSessionForWidget(sessionID string, widgetID string) error {
+	if m.deleteSessionForWidget == nil {
+		return nil
+	}
+	return m.deleteSessionForWidget(sessionID, widgetID)
+}
+
+func (m fakeWorkbenchTerminalSessionManager) AddSessionLifecycleHook(terminal.SessionLifecycleHook) func() {
+	return func() {}
 }
 
 func performWorkbenchLayoutRequest(t *testing.T, srv *Server, method string, path string, body string) *httptest.ResponseRecorder {
@@ -630,5 +654,205 @@ func TestServerWorkbenchTerminalSessionAPIs(t *testing.T) {
 	}
 	if deletedLastState.State.FontSize == nil || *deletedLastState.State.FontSize != 14 || deletedLastState.State.FontFamilyID != "jetbrains" {
 		t.Fatalf("deleted last geometry = %#v, want preserved terminal geometry", deletedLastState.State)
+	}
+}
+
+func TestServerWorkbenchTerminalWidgetSessionCloseAPI(t *testing.T) {
+	t.Parallel()
+
+	svc := openServerWorkbenchLayoutService(t)
+	srv := newWorkbenchLayoutServerWithTerminalForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+
+	putLayoutResp := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/layout", sampleWorkbenchTerminalLayoutRequestJSON())
+	if putLayoutResp.Code != http.StatusOK {
+		t.Fatalf("layout put status = %d, body = %s", putLayoutResp.Code, putLayoutResp.Body.String())
+	}
+
+	createResp := performWorkbenchLayoutRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions", `{
+  "name": "repo",
+  "working_dir": ""
+}`)
+	if createResp.Code != http.StatusOK {
+		t.Fatalf("create status = %d, body = %s", createResp.Code, createResp.Body.String())
+	}
+	createData := decodeWorkbenchLayoutResponse[struct {
+		Session     terminal.SessionInfo        `json:"session"`
+		WidgetState workbenchlayout.WidgetState `json:"widget_state"`
+	}](t, createResp)
+
+	geometryBody, err := json.Marshal(map[string]any{
+		"base_revision": createData.WidgetState.Revision,
+		"widget_type":   workbenchlayout.WidgetTypeTerminal,
+		"state": map[string]any{
+			"kind":           workbenchlayout.WidgetStateKindTerminal,
+			"session_ids":    createData.WidgetState.State.SessionIDs,
+			"font_size":      14,
+			"font_family_id": "jetbrains",
+		},
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal(geometryBody) error = %v", err)
+	}
+	geometryResp := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-terminal-1/state", string(geometryBody))
+	if geometryResp.Code != http.StatusOK {
+		t.Fatalf("geometry put status = %d, body = %s", geometryResp.Code, geometryResp.Body.String())
+	}
+
+	createSecondResp := performWorkbenchLayoutRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions", `{
+  "name": "server",
+  "working_dir": ""
+}`)
+	if createSecondResp.Code != http.StatusOK {
+		t.Fatalf("second create status = %d, body = %s", createSecondResp.Code, createSecondResp.Body.String())
+	}
+	createSecondData := decodeWorkbenchLayoutResponse[struct {
+		Session     terminal.SessionInfo        `json:"session"`
+		WidgetState workbenchlayout.WidgetState `json:"widget_state"`
+	}](t, createSecondResp)
+
+	events := make(chan terminal.SessionLifecycleEvent, 8)
+	removeHook := srv.term.AddSessionLifecycleHook(func(event terminal.SessionLifecycleEvent) {
+		events <- event
+	})
+	defer removeHook()
+
+	closeResp := performWorkbenchLayoutRequest(
+		t,
+		srv,
+		http.MethodDelete,
+		"/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions",
+		"",
+	)
+	if closeResp.Code != http.StatusOK {
+		t.Fatalf("close widget sessions status = %d, body = %s", closeResp.Code, closeResp.Body.String())
+	}
+	closeData := decodeWorkbenchLayoutResponse[workbenchTerminalWidgetSessionsCloseResponse](t, closeResp)
+	if got := closeData.AcceptedSessionIDs; len(got) != 2 || got[0] != createData.Session.ID || got[1] != createSecondData.Session.ID {
+		t.Fatalf("accepted session ids = %#v, want both created sessions", got)
+	}
+	if len(closeData.FailedSessions) != 0 {
+		t.Fatalf("failed sessions = %#v, want none", closeData.FailedSessions)
+	}
+	if closeData.WidgetState.State.Kind != workbenchlayout.WidgetStateKindTerminal || len(closeData.WidgetState.State.SessionIDs) != 0 {
+		t.Fatalf("closed widget state = %#v, want empty terminal sessions", closeData.WidgetState)
+	}
+	if closeData.WidgetState.State.FontSize == nil || *closeData.WidgetState.State.FontSize != 14 || closeData.WidgetState.State.FontFamilyID != "jetbrains" {
+		t.Fatalf("closed widget geometry = %#v, want preserved terminal geometry", closeData.WidgetState.State)
+	}
+
+	wantClosing := map[string]bool{
+		createData.Session.ID:       false,
+		createSecondData.Session.ID: false,
+	}
+	deadline := time.After(2 * time.Second)
+	for {
+		done := true
+		for _, seen := range wantClosing {
+			if !seen {
+				done = false
+				break
+			}
+		}
+		if done {
+			break
+		}
+
+		select {
+		case event := <-events:
+			if _, ok := wantClosing[event.SessionID]; ok && event.Lifecycle == terminal.SessionLifecycleClosing {
+				if event.OwnerWidgetID != "widget-terminal-1" {
+					t.Fatalf("closing event owner = %q, want widget-terminal-1", event.OwnerWidgetID)
+				}
+				wantClosing[event.SessionID] = true
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for closing lifecycle events, seen=%#v", wantClosing)
+		}
+	}
+}
+
+func TestServerWorkbenchTerminalWidgetSessionCloseAPIAcceptsMissingSessions(t *testing.T) {
+	t.Parallel()
+
+	svc := openServerWorkbenchLayoutService(t)
+	srv := newWorkbenchLayoutServerWithTerminalForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+
+	putLayoutResp := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/layout", sampleWorkbenchTerminalLayoutRequestJSON())
+	if putLayoutResp.Code != http.StatusOK {
+		t.Fatalf("layout put status = %d, body = %s", putLayoutResp.Code, putLayoutResp.Body.String())
+	}
+	if _, err := svc.AppendTerminalSession(context.Background(), "widget-terminal-1", "missing-session"); err != nil {
+		t.Fatalf("AppendTerminalSession(missing-session) error = %v", err)
+	}
+
+	closeResp := performWorkbenchLayoutRequest(
+		t,
+		srv,
+		http.MethodDelete,
+		"/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions",
+		"",
+	)
+	if closeResp.Code != http.StatusOK {
+		t.Fatalf("close widget sessions status = %d, body = %s", closeResp.Code, closeResp.Body.String())
+	}
+	closeData := decodeWorkbenchLayoutResponse[workbenchTerminalWidgetSessionsCloseResponse](t, closeResp)
+	if got := closeData.AcceptedSessionIDs; len(got) != 1 || got[0] != "missing-session" {
+		t.Fatalf("accepted session ids = %#v, want missing-session", got)
+	}
+	if len(closeData.FailedSessions) != 0 {
+		t.Fatalf("failed sessions = %#v, want none", closeData.FailedSessions)
+	}
+	if len(closeData.WidgetState.State.SessionIDs) != 0 {
+		t.Fatalf("closed widget state = %#v, want empty sessions", closeData.WidgetState)
+	}
+}
+
+func TestServerWorkbenchTerminalWidgetSessionCloseAPIPartialFailure(t *testing.T) {
+	t.Parallel()
+
+	svc := openServerWorkbenchLayoutService(t)
+	srv := newWorkbenchLayoutServerForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+	srv.term = fakeWorkbenchTerminalSessionManager{
+		deleteSessionForWidget: func(sessionID string, widgetID string) error {
+			if widgetID != "widget-terminal-1" {
+				t.Fatalf("owner widget id = %q, want widget-terminal-1", widgetID)
+			}
+			if sessionID == "session-fail" {
+				return errors.New("delete request rejected")
+			}
+			return nil
+		},
+	}
+
+	putLayoutResp := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/layout", sampleWorkbenchTerminalLayoutRequestJSON())
+	if putLayoutResp.Code != http.StatusOK {
+		t.Fatalf("layout put status = %d, body = %s", putLayoutResp.Code, putLayoutResp.Body.String())
+	}
+	if _, err := svc.AppendTerminalSession(context.Background(), "widget-terminal-1", "session-ok"); err != nil {
+		t.Fatalf("AppendTerminalSession(session-ok) error = %v", err)
+	}
+	if _, err := svc.AppendTerminalSession(context.Background(), "widget-terminal-1", "session-fail"); err != nil {
+		t.Fatalf("AppendTerminalSession(session-fail) error = %v", err)
+	}
+
+	closeResp := performWorkbenchLayoutRequest(
+		t,
+		srv,
+		http.MethodDelete,
+		"/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions",
+		"",
+	)
+	if closeResp.Code != http.StatusOK {
+		t.Fatalf("close widget sessions status = %d, body = %s", closeResp.Code, closeResp.Body.String())
+	}
+	closeData := decodeWorkbenchLayoutResponse[workbenchTerminalWidgetSessionsCloseResponse](t, closeResp)
+	if got := closeData.AcceptedSessionIDs; len(got) != 1 || got[0] != "session-ok" {
+		t.Fatalf("accepted session ids = %#v, want session-ok", got)
+	}
+	if got := closeData.FailedSessions; len(got) != 1 || got[0].SessionID != "session-fail" || got[0].Error == "" {
+		t.Fatalf("failed sessions = %#v, want session-fail failure", got)
+	}
+	if len(closeData.WidgetState.State.SessionIDs) != 0 {
+		t.Fatalf("closed widget state = %#v, want empty sessions despite partial terminal failure", closeData.WidgetState)
 	}
 }
