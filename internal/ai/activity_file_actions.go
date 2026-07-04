@@ -287,7 +287,7 @@ func sanitizeActivityTimelineBlockRecord(block map[string]any) {
 			delete(item, "payload")
 		}
 	}
-	sanitizeActivitySubagentActionsRecord(block)
+	delete(block, "subagent_actions")
 	actions, ok := block["file_actions"].(map[string]any)
 	if !ok || len(actions) == 0 {
 		delete(block, "file_actions")
@@ -316,117 +316,6 @@ func sanitizeActivityTimelineBlockRecord(block map[string]any) {
 		return
 	}
 	block["file_actions"] = publicActions
-}
-
-func sanitizeActivitySubagentActionsRecord(block map[string]any) {
-	actions, ok := block["subagent_actions"].(map[string]any)
-	if !ok || len(actions) == 0 {
-		delete(block, "subagent_actions")
-		return
-	}
-	allowed := activitySubagentActionAllowedKeys()
-	publicActions := make(map[string]any, len(actions))
-	for key, value := range actions {
-		actionKey := strings.TrimSpace(key)
-		record, ok := value.(map[string]any)
-		if actionKey == "" || !ok {
-			continue
-		}
-		publicRecord := make(map[string]any, len(record))
-		for field, fieldValue := range record {
-			field = strings.TrimSpace(field)
-			if _, ok := allowed[field]; !ok {
-				continue
-			}
-			if field == "items" {
-				if items := sanitizeActivitySubagentActionItems(fieldValue); len(items) > 0 {
-					publicRecord[field] = items
-				}
-				continue
-			}
-			switch v := fieldValue.(type) {
-			case string:
-				if trimmed := strings.TrimSpace(v); trimmed != "" {
-					publicRecord[field] = trimmed
-				}
-			case bool:
-				if v {
-					publicRecord[field] = v
-				}
-			case float64:
-				if v > 0 {
-					publicRecord[field] = v
-				}
-			case int:
-				if v > 0 {
-					publicRecord[field] = v
-				}
-			case int64:
-				if v > 0 {
-					publicRecord[field] = v
-				}
-			}
-		}
-		if len(publicRecord) > 0 {
-			publicActions[actionKey] = publicRecord
-		}
-	}
-	if len(publicActions) == 0 {
-		delete(block, "subagent_actions")
-		return
-	}
-	block["subagent_actions"] = publicActions
-}
-
-func sanitizeActivitySubagentActionItems(value any) []any {
-	items, ok := value.([]any)
-	if !ok || len(items) == 0 {
-		return nil
-	}
-	allowed := activitySubagentActionItemAllowedKeys()
-	out := make([]any, 0, len(items))
-	for _, item := range items {
-		record, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		publicRecord := make(map[string]any, len(record))
-		for field, fieldValue := range record {
-			field = strings.TrimSpace(field)
-			if _, ok := allowed[field]; !ok {
-				continue
-			}
-			switch v := fieldValue.(type) {
-			case string:
-				if trimmed := strings.TrimSpace(v); trimmed != "" {
-					publicRecord[field] = trimmed
-				}
-			case bool:
-				if v {
-					publicRecord[field] = v
-				}
-			case float64:
-				if v > 0 {
-					publicRecord[field] = v
-				}
-			case int:
-				if v > 0 {
-					publicRecord[field] = v
-				}
-			case int64:
-				if v > 0 {
-					publicRecord[field] = v
-				}
-			}
-		}
-		if len(publicRecord) > 0 {
-			out = append(out, publicRecord)
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
 
 func sanitizeActivityTargetRefsValue(value any) []any {
@@ -582,14 +471,6 @@ func sanitizeSubagentsActivityPayloadValue(payload map[string]any) (map[string]a
 			if counts := sanitizeSubagentsActivityCounts(value); len(counts) > 0 {
 				out[key] = counts
 			}
-		case "final_handoff_report":
-			if report := sanitizeSubagentsHandoffReport(value); len(report) > 0 {
-				out[key] = report
-			}
-		case "progress_summary":
-			if summary := sanitizeSubagentsProgressSummary(value); len(summary) > 0 {
-				out[key] = summary
-			}
 		default:
 			out[key] = sanitizeActivityPublicValue(value)
 		}
@@ -636,86 +517,6 @@ func sanitizeSubagentsActivityCounts(value any) map[string]any {
 			continue
 		}
 		out[key] = sanitizeActivityPublicValue(value)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func sanitizeSubagentsHandoffReport(value any) map[string]any {
-	report, _ := value.(map[string]any)
-	if len(report) == 0 {
-		return nil
-	}
-	allowed := activitySubagentsHandoffAllowedKeys()
-	out := sanitizeSubagentsRecordWithAllowedKeys(report, allowed)
-	if out == nil {
-		out = map[string]any{}
-	}
-	if reports, ok := report["reports"].([]any); ok {
-		items := make([]any, 0, len(reports))
-		reportAllowed := activitySubagentsHandoffItemAllowedKeys()
-		for _, item := range reports {
-			record, ok := item.(map[string]any)
-			if !ok {
-				continue
-			}
-			next := sanitizeSubagentsRecordWithAllowedKeys(record, reportAllowed)
-			if len(next) > 0 {
-				items = append(items, next)
-			}
-		}
-		if len(items) > 0 {
-			out["reports"] = items
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func sanitizeSubagentsProgressSummary(value any) map[string]any {
-	summary, _ := value.(map[string]any)
-	if len(summary) == 0 {
-		return nil
-	}
-	allowed := activitySubagentsProgressAllowedKeys()
-	out := sanitizeSubagentsRecordWithAllowedKeys(summary, allowed)
-	if out == nil {
-		out = map[string]any{}
-	}
-	if items, ok := summary["items"].([]any); ok {
-		outItems := sanitizeSubagentsProgressItems(items)
-		if len(outItems) > 0 {
-			out["items"] = outItems
-		}
-	}
-	if progress, ok := summary["progress"].([]any); ok {
-		outItems := sanitizeSubagentsProgressItems(progress)
-		if len(outItems) > 0 {
-			out["progress"] = outItems
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func sanitizeSubagentsProgressItems(items []any) []any {
-	allowed := activitySubagentsProgressItemAllowedKeys()
-	out := make([]any, 0, len(items))
-	for _, item := range items {
-		record, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		next := sanitizeSubagentsRecordWithAllowedKeys(record, allowed)
-		if len(next) > 0 {
-			out = append(out, next)
-		}
 	}
 	if len(out) == 0 {
 		return nil
@@ -849,7 +650,24 @@ func activityPayloadAllowedKeys(renderer observation.ActivityRenderer) map[strin
 	case observation.ActivityRendererCompletion:
 		return stringSet("result", "evidence_refs", "remaining_risks", "next_actions", "truncated", "summary", "details", "status", "error", "content_ref")
 	case observation.ActivityRendererStructured:
-		return stringSet("operation", "query", "count", "provider", "name", "action", "limit", "data", "result", "content", "content_ref", "activation_id", "already_active", "permission_hints", "dependencies", "dependency_degraded", "reason", "id", "status", "message", "timed_out", "targets", "stats", "output", "structured", "key_files", "rows", "cards", "items", "subagent_id", "thread_id", "task_name", "title", "agent_type", "context_mode", "okf_version", "total_sections", "sections", "filters", "total_concepts", "total_matches", "match_count", "max_results", "has_more", "matches", "concept_title", "concept", "body_offset", "body_length", "returned_body_length", "link_count", "backlink_count", "links", "backlinks", "final_handoff_report", "progress_summary", "last_message", "updated_at_ms", "created_at_ms", "can_open", "can_send_input", "can_interrupt", "can_close", "delegation_runtime", "agent_count", "target", "target_ids", "requested_ids", "requested_count", "found_count", "missing_count", "missing_ids", "closed", "closed_count", "affected_ids", "accepted", "running_only", "total", "scope", "reports", "progress", "handoff", "state", "blockers", "changed_files", "verification", "open_risks", "suggested_parent_actions", "next_expected_step", "evidence_refs", "remaining_risks", "next_actions", "truncated", "omitted_count", "summary", "details", "error")
+		return stringSet(
+			"operation", "query", "count", "provider", "name", "action", "limit",
+			"data", "result", "content", "content_ref", "activation_id", "already_active",
+			"permission_hints", "dependencies", "dependency_degraded", "reason", "id",
+			"status", "message", "timed_out", "targets", "stats", "output", "structured",
+			"key_files", "rows", "cards", "items", "subagent_id", "thread_id",
+			"parent_thread_id", "parent_turn_id", "task_name", "task_description",
+			"title", "agent_type", "context_mode", "okf_version", "total_sections",
+			"sections", "filters", "total_concepts", "total_matches", "match_count",
+			"max_results", "has_more", "matches", "concept_title", "concept",
+			"body_offset", "body_length", "returned_body_length", "link_count",
+			"backlink_count", "links", "backlinks", "queued_inputs", "started_at_ms",
+			"updated_at_ms", "created_at_ms", "closed", "can_open", "agent_count",
+			"target", "target_ids", "requested_ids", "requested_count", "found_count",
+			"missing_count", "missing_ids", "closed_count", "affected_ids", "accepted",
+			"running_only", "total", "scope", "evidence_refs", "remaining_risks",
+			"next_actions", "truncated", "omitted_count", "summary", "details", "error",
+		)
 	default:
 		return nil
 	}
@@ -857,45 +675,25 @@ func activityPayloadAllowedKeys(renderer observation.ActivityRenderer) map[strin
 
 func activitySubagentsPayloadAllowedKeys() map[string]struct{} {
 	return stringSet(
-		"action", "status", "task_name", "task_description", "title", "agent_type", "items",
-		"timed_out", "truncated", "error",
+		"action", "status", "thread_id", "subagent_id", "parent_thread_id", "parent_turn_id",
+		"task_name", "task_description", "title", "agent_type", "items", "counts",
+		"started_at_ms", "created_at_ms", "updated_at_ms", "closed",
+		"agent_count", "requested_count", "found_count",
+		"missing_count", "closed_count", "stopped_count", "accepted", "running_only",
+		"total", "timed_out", "truncated", "omitted_count", "error",
 	)
 }
 
 func activitySubagentsItemAllowedKeys() map[string]struct{} {
-	return stringSet("task_name", "task_description", "title", "agent_type", "status", "started_at_ms", "created_at_ms", "updated_at_ms")
+	return stringSet("thread_id", "subagent_id", "parent_thread_id", "parent_turn_id", "task_name", "task_description", "title", "agent_type", "status", "started_at_ms", "created_at_ms", "updated_at_ms", "closed")
 }
 
 func activitySubagentsCountAllowedKeys() map[string]struct{} {
 	return stringSet("queued", "running", "waiting_input", "waiting", "completed", "failed", "canceled", "cancelled", "timed_out", "total")
 }
 
-func activitySubagentsHandoffAllowedKeys() map[string]struct{} {
-	return stringSet("summary", "evidence", "changed_files", "verification", "open_risks", "suggested_parent_actions", "truncated", "omitted_count", "omitted_reports")
-}
-
-func activitySubagentsHandoffItemAllowedKeys() map[string]struct{} {
-	return stringSet("task_name", "agent_type", "status", "handoff", "changed_files", "verification", "open_risks", "suggested_parent_actions")
-}
-
-func activitySubagentsProgressAllowedKeys() map[string]struct{} {
-	return stringSet("summary", "current_state", "blockers", "next_expected_step", "suggested_parent_actions", "truncated", "omitted_count", "omitted_items")
-}
-
-func activitySubagentsProgressItemAllowedKeys() map[string]struct{} {
-	return stringSet("task_name", "agent_type", "status", "current_signal", "state", "blockers", "next_expected_step")
-}
-
 func activityFileMutationAllowedKeys() map[string]struct{} {
 	return stringSet("display_name", "file_action_id", "change_type", "additions", "deletions", "unified_diff", "diff_unavailable_reason", "truncated")
-}
-
-func activitySubagentActionAllowedKeys() map[string]struct{} {
-	return stringSet("operation", "action", "delegation_runtime", "thread_id", "subagent_id", "parent_thread_id", "items")
-}
-
-func activitySubagentActionItemAllowedKeys() map[string]struct{} {
-	return stringSet("thread_id", "subagent_id")
 }
 
 func stringSet(values ...string) map[string]struct{} {

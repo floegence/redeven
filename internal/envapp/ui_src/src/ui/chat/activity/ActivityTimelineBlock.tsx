@@ -14,7 +14,7 @@ import {
   type FlowerActivityTodoStatus,
 } from '../../../../../../flower_ui/src/flowerActivityPresentation';
 import { createFlowerActivityDisclosurePresence } from '../../../../../../flower_ui/src/activityDisclosure';
-import type { FlowerActivityItem, FlowerActivityRenderer, FlowerActivitySubagentAction } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerActivityItem, FlowerActivityRenderer } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { formatGitPatchLineNumber, getGitPatchRenderSnapshot, type GitPatchRenderedLine } from '../../../../../../flower_ui/src/gitPatch';
 import type { TerminalVisibleOutputStore } from '../../../../../../flower_ui/src/flowerTerminalOutput';
 import { normalizeAskUserQuestions, type AskUserQuestion } from '../askUserContract';
@@ -78,7 +78,7 @@ function hasTextSelection(): boolean {
 function summaryLabel(block: ActivityTimelineBlockType): string {
   const items = Array.isArray(block.items) ? block.items : [];
   if (items.length === 1) {
-    return presentFlowerActivityItem(flowerItem(items[0]), block.file_actions as FlowerActivityFileActions | undefined, undefined, { subagentAction: subagentActionForItem(block, items[0]) }).label;
+    return presentFlowerActivityItem(flowerItem(items[0]), block.file_actions as FlowerActivityFileActions | undefined).label;
   }
   const total = block.summary?.total_items || items.length;
   return total === 1 ? '1 activity' : `${total} activities`;
@@ -106,10 +106,6 @@ function flowerRenderer(value: unknown): FlowerActivityRenderer | undefined {
     default:
       return undefined;
   }
-}
-
-function subagentActionForItem(block: ActivityTimelineBlockType, item: ActivityItem): FlowerActivitySubagentAction | undefined {
-  return block.subagent_actions?.[String(item.item_id ?? '').trim()] as FlowerActivitySubagentAction | undefined;
 }
 
 function flowerItem(item: ActivityItem): FlowerActivityItem {
@@ -799,7 +795,7 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                     {(record) => {
                       const item = createMemo(() => record().item);
                       const id = createMemo(() => itemKey(item(), record().index));
-                      const presentation = createMemo(() => presentFlowerActivityItem(flowerItem(item()), fileActions(), undefined, { subagentAction: subagentActionForItem(props.block, item()) }));
+                      const presentation = createMemo(() => presentFlowerActivityItem(flowerItem(item()), fileActions()));
                       const isOpen = createMemo(() => itemOpen(item(), id()));
                 const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
                 const itemMeta = createMemo(() => [presentation().meta, subagentElapsedText(presentation(), clockNow())].filter(Boolean).join(' · '));

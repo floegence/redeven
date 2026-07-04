@@ -644,6 +644,8 @@ describe('ActivityTimelineBlock', () => {
           status: 'ok',
           summary: 'tool execution completed',
           items: [{
+            thread_id: 'child_frontend_review',
+            subagent_id: 'child_frontend_review',
             title: 'Frontend polish review',
             task_name: 'Frontend polish review',
             task_description: 'Review Flower tool detail UI and propose concise fixes.',
@@ -653,17 +655,6 @@ describe('ActivityTimelineBlock', () => {
           }],
         },
       })],
-      subagent_actions: {
-        'tool:call_subagents_wait': {
-          operation: 'subagents',
-          action: 'wait',
-          delegation_runtime: 'floret',
-          items: [{
-            thread_id: 'child_frontend_review',
-            subagent_id: 'child_frontend_review',
-          }],
-        },
-      },
     });
     const host = renderActivityWithSubagentMessages(block, openMessages);
 

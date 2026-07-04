@@ -165,7 +165,6 @@ type run struct {
 	assistantBlocks          []any
 	assistantAnswer          assistantAnswerState
 	activityFileActions      map[string]FlowerActivityFileAction
-	activitySubagentActions  map[string]FlowerActivitySubagentAction
 	activityFileActionSeq    int64
 	waitingPrompt            *RequestUserInputPrompt
 	providerContinuation     threadstore.ThreadProviderContinuation
@@ -303,7 +302,6 @@ func newRun(opts runOptions) *run {
 		subagentRuntime:           opts.SubagentRuntime,
 		currentThinkingBlockIndex: -1,
 		activityFileActions:       make(map[string]FlowerActivityFileAction),
-		activitySubagentActions:   make(map[string]FlowerActivitySubagentAction),
 		contextCompactionAnchors:  make(map[string]FlowerTimelineAnchor),
 		subagentDepth:             opts.SubagentDepth,
 		toolTargetPolicy:          normalizeToolTargetPolicy(opts.ToolTargetPolicy),

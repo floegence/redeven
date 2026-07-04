@@ -122,6 +122,8 @@ type FlowerLiveThreadPatch struct {
 	ReasoningSelectionSet  bool                          `json:"-"`
 	ReasoningCapabilitySet bool                          `json:"-"`
 	ReadStatus             *FlowerThreadReadView         `json:"read_status,omitempty"`
+	Subagents              []FlowerSubagentSummary       `json:"subagents,omitempty"`
+	SubagentsSet           bool                          `json:"-"`
 }
 
 func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
@@ -146,6 +148,7 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 		ReasoningSelection  *config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
 		ReasoningCapability *config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
 		ReadStatus          *FlowerThreadReadView         `json:"read_status,omitempty"`
+		Subagents           []FlowerSubagentSummary       `json:"subagents,omitempty"`
 	}
 	out := patchJSON{
 		ThreadID:            p.ThreadID,
@@ -168,38 +171,47 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 		ReasoningSelection:  p.ReasoningSelection,
 		ReasoningCapability: p.ReasoningCapability,
 		ReadStatus:          p.ReadStatus,
+		Subagents:           cloneFlowerSubagentSummaries(p.Subagents),
+	}
+	needsRecordPatch := (p.ReasoningSelectionSet && p.ReasoningSelection == nil) ||
+		(p.ReasoningCapabilitySet && p.ReasoningCapability == nil) ||
+		p.SubagentsSet
+	if !needsRecordPatch {
+		return json.Marshal(out)
+	}
+	data, err := json.Marshal(out)
+	if err != nil {
+		return nil, err
+	}
+	var record map[string]json.RawMessage
+	if err := json.Unmarshal(data, &record); err != nil {
+		return nil, err
 	}
 	if p.ReasoningSelectionSet && p.ReasoningSelection == nil {
-		data, err := json.Marshal(out)
-		if err != nil {
-			return nil, err
-		}
-		var record map[string]json.RawMessage
-		if err := json.Unmarshal(data, &record); err != nil {
-			return nil, err
-		}
 		record["reasoning_selection"] = json.RawMessage("null")
-		if p.ReasoningCapabilitySet && p.ReasoningCapability == nil {
-			record["reasoning_capability"] = json.RawMessage("null")
-		}
-		return json.Marshal(record)
 	}
 	if p.ReasoningCapabilitySet && p.ReasoningCapability == nil {
-		data, err := json.Marshal(out)
+		record["reasoning_capability"] = json.RawMessage("null")
+	}
+	if p.SubagentsSet {
+		subagents := cloneFlowerSubagentSummaries(p.Subagents)
+		if subagents == nil {
+			subagents = []FlowerSubagentSummary{}
+		}
+		subagentsData, err := json.Marshal(subagents)
 		if err != nil {
 			return nil, err
 		}
-		var record map[string]json.RawMessage
-		if err := json.Unmarshal(data, &record); err != nil {
-			return nil, err
-		}
-		record["reasoning_capability"] = json.RawMessage("null")
-		return json.Marshal(record)
+		record["subagents"] = subagentsData
 	}
-	return json.Marshal(out)
+	return json.Marshal(record)
 }
 
 func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
 	var raw struct {
 		ThreadID            string                  `json:"thread_id,omitempty"`
 		Title               string                  `json:"title,omitempty"`
@@ -221,6 +233,7 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 		ReasoningSelection  json.RawMessage         `json:"reasoning_selection"`
 		ReasoningCapability json.RawMessage         `json:"reasoning_capability"`
 		ReadStatus          *FlowerThreadReadView   `json:"read_status,omitempty"`
+		Subagents           []FlowerSubagentSummary `json:"subagents,omitempty"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -244,6 +257,13 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 		LastMessageAtUnixMs: raw.LastMessageAtUnixMs,
 		LastMessagePreview:  raw.LastMessagePreview,
 		ReadStatus:          raw.ReadStatus,
+		Subagents:           cloneFlowerSubagentSummaries(raw.Subagents),
+	}
+	if _, ok := fields["subagents"]; ok {
+		p.SubagentsSet = true
+		if p.Subagents == nil {
+			p.Subagents = []FlowerSubagentSummary{}
+		}
 	}
 	if raw.ReasoningSelection != nil {
 		p.ReasoningSelectionSet = true

@@ -874,7 +874,7 @@ func TestReleasedSubagentRuntimeDropsQueuedTimelineRefresh(t *testing.T) {
 		hostKey: "test-generation",
 	}
 
-	runtime.scheduleParentSubagentTimelineRefresh("child")
+	runtime.scheduleParentSubagentsPatch("child")
 	runtime.release()
 	time.Sleep(250 * time.Millisecond)
 
@@ -885,7 +885,7 @@ func TestReleasedSubagentRuntimeDropsQueuedTimelineRefresh(t *testing.T) {
 		t.Fatalf("host closeCount=%d, want 1", got)
 	}
 	runtime.mu.Lock()
-	queued := len(runtime.timelineQueued)
+	queued := len(runtime.subagentsPatchQueued)
 	runtime.mu.Unlock()
 	if queued != 0 {
 		t.Fatalf("timeline queue length=%d, want 0", queued)
@@ -1621,8 +1621,16 @@ func TestServiceGetFlowerSubagentDetailRejectsWrongParentBeforeRuntime(t *testin
 	}
 }
 
-func TestSubagentChildEventRefreshesParentTimeline(t *testing.T) {
+func TestSubagentChildEventPublishesParentSubagentsPatch(t *testing.T) {
 	t.Parallel()
+
+	ctx := context.Background()
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	parentView, err := svc.CreateThread(ctx, meta, "parent", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread parent: %v", err)
+	}
 
 	now := time.Now()
 	childID := "child_completed"
@@ -1631,7 +1639,7 @@ func TestSubagentChildEventRefreshesParentTimeline(t *testing.T) {
 			ThreadID:        flruntime.ThreadID(childID),
 			TaskName:        "review ui",
 			TaskDescription: "Review the Flower tool detail UI and report concise fixes.",
-			ParentThreadID:  flruntime.ThreadID("parent-thread"),
+			ParentThreadID:  flruntime.ThreadID(parentView.ThreadID),
 			ParentTurnID:    flruntime.TurnID("parent-turn"),
 			LatestTurnID:    flruntime.TurnID("child-turn"),
 			HostProfileRef:  subagentAgentTypeReviewer,
@@ -1642,36 +1650,22 @@ func TestSubagentChildEventRefreshesParentTimeline(t *testing.T) {
 			Closed:          true,
 		}},
 	}
-	var (
-		eventsMu sync.Mutex
-		events   []any
-	)
 	parent := newRun(runOptions{
 		Log:          slog.Default(),
-		ThreadID:     "parent-thread",
+		ThreadID:     parentView.ThreadID,
 		RunID:        "parent-run",
 		MessageID:    "parent-turn",
-		EndpointID:   "env",
+		EndpointID:   meta.EndpointID,
 		AgentHomeDir: t.TempDir(),
+		Service:      svc,
 	})
-	parent.onStreamEvent = func(ev any) {
-		eventsMu.Lock()
-		events = append(events, ev)
-		eventsMu.Unlock()
-	}
-	initialTimeline, err := host.ListSubAgentActivityTimeline(context.Background(), flruntime.ListSubAgentActivityTimelineRequest{
-		ParentThreadID: "parent-thread",
-		Meta:           parent.activityRunMeta(),
-	})
-	if err != nil {
-		t.Fatalf("initial subagent timeline: %v", err)
-	}
-	parent.assistantBlocks = []any{newActivityTimelineBlock(initialTimeline.Timeline, nil)}
-	parent.nextBlockIndex = len(parent.assistantBlocks)
 	runtime := &floretSubagentRuntime{
 		parent: parent,
 		host:   host,
 	}
+	svc.mu.Lock()
+	svc.subagentRuntimes[runThreadKey(meta.EndpointID, parentView.ThreadID)] = runtime
+	svc.mu.Unlock()
 
 	floretSubagentEventSink{runtime: runtime}.EmitEvent(flruntime.Event{
 		Type:     "run_end",
@@ -1680,47 +1674,48 @@ func TestSubagentChildEventRefreshesParentTimeline(t *testing.T) {
 	})
 
 	deadline := time.Now().Add(2 * time.Second)
-	var block ActivityTimelineBlock
+	var payload FlowerLiveThreadPatchedPayload
 	for time.Now().Before(deadline) {
-		eventsMu.Lock()
-		for _, ev := range events {
-			set, ok := ev.(streamEventBlockSet)
-			if !ok {
+		resp, err := svc.ListFlowerThreadLiveEvents(ctx, meta, parentView.ThreadID, 0, 50)
+		if err != nil {
+			t.Fatalf("ListFlowerThreadLiveEvents: %v", err)
+		}
+		for i := range resp.Events {
+			if resp.Events[i].Kind != FlowerLiveThreadPatched {
 				continue
 			}
-			if candidate, ok := set.Block.(ActivityTimelineBlock); ok {
-				block = candidate
+			var candidate FlowerLiveThreadPatchedPayload
+			if !decodeFlowerPayload(resp.Events[i].Payload, &candidate) || len(candidate.Patch.Subagents) == 0 {
+				continue
 			}
+			payload = candidate
+			break
 		}
-		eventsMu.Unlock()
-		if len(block.Items) > 0 {
+		if len(payload.Patch.Subagents) > 0 {
 			break
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	if len(block.Items) == 0 {
-		t.Fatalf("parent subagent timeline was not refreshed; events=%#v", events)
+	if len(payload.Patch.Subagents) != 1 {
+		t.Fatalf("parent subagents patch=%#v, want one child", payload.Patch.Subagents)
 	}
-	if got := strings.TrimSpace(block.Items[0].ToolName); got != "subagents" {
-		t.Fatalf("timeline tool name=%q, want subagents", got)
+	if got := strings.TrimSpace(payload.Patch.ThreadID); got != parentView.ThreadID {
+		t.Fatalf("thread patch id=%q, want %q", got, parentView.ThreadID)
 	}
-	payload := block.Items[0].Payload
-	if got := strings.TrimSpace(anyToString(payload["status"])); got != subagentStatusCompleted {
-		t.Fatalf("payload status=%q, want %q; payload=%#v", got, subagentStatusCompleted, payload)
+	item := payload.Patch.Subagents[0]
+	if item.ThreadID != childID || item.SubagentID != childID {
+		t.Fatalf("subagent identity=%#v, want child %q", item, childID)
 	}
-	for _, key := range []string{"thread_id", "subagent_id", "last_message", "waiting_prompt", "can_send_input", "can_interrupt", "can_close", "operation", "action", "delegation_runtime"} {
-		if _, ok := payload[key]; ok {
-			t.Fatalf("payload %q should stay out of Floret activity payload; payload=%#v", key, payload)
-		}
+	if item.ParentThreadID != parentView.ThreadID {
+		t.Fatalf("parent_thread_id=%q, want %q", item.ParentThreadID, parentView.ThreadID)
 	}
-	action, ok := block.SubagentActions[strings.TrimSpace(block.Items[0].ItemID)]
-	if !ok {
-		t.Fatalf("missing subagent action sidecar for item %q: %#v", block.Items[0].ItemID, block.SubagentActions)
+	if item.TaskName != "review ui" || item.TaskDescription == "" {
+		t.Fatalf("subagent task fields=%#v", item)
 	}
-	if action.Action != subagentActionInspect || action.DelegationRuntime != "floret" {
-		t.Fatalf("subagent action sidecar=%#v, want inspect/floret", action)
+	if item.Status != subagentStatusCompleted {
+		t.Fatalf("subagent status=%q, want %q", item.Status, subagentStatusCompleted)
 	}
-	if action.ThreadID != childID || action.SubagentID != childID {
-		t.Fatalf("subagent action sidecar did not preserve child route target: %#v", action)
+	if item.CreatedAtUnixMs <= 0 || item.UpdatedAtUnixMs <= 0 {
+		t.Fatalf("subagent timestamps missing: %#v", item)
 	}
 }

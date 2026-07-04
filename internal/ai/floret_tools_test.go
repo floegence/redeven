@@ -1059,7 +1059,7 @@ func TestFloretToolResultActivityProjectsPublicSubagentDisplayPayload(t *testing
 			t.Fatalf("activity retained legacy subagent field %s: %#v", field, activity.Payload)
 		}
 	}
-	for _, field := range []string{"thread_id", "subagent_id", "target", "target_ids", "ids", "detail_ref", "detail_available", "detail_strategy", "last_message", "waiting_prompt", "can_send_input", "can_interrupt", "can_close"} {
+	for _, field := range []string{"target", "target_ids", "ids", "detail_ref", "detail_available", "detail_strategy", "last_message", "waiting_prompt", "can_send_input", "can_interrupt", "can_close"} {
 		if _, ok := activity.Payload[field]; ok {
 			t.Fatalf("activity retained non-display subagent field %s: %#v", field, activity.Payload)
 		}
@@ -1078,7 +1078,7 @@ func TestFloretToolResultActivityProjectsPublicSubagentDisplayPayload(t *testing
 	if anyToString(item["task_name"]) != "Review prompt contract" || anyToString(item["task_description"]) == "" || anyToString(item["agent_type"]) != "reviewer" {
 		t.Fatalf("activity lost subagent display fields: %#v", item)
 	}
-	for _, field := range []string{"thread_id", "subagent_id", "context_mode", "last_message", "result_digest", "waiting_prompt", "queued_inputs", "can_send_input", "can_interrupt", "can_close", "detail_ref"} {
+	for _, field := range []string{"context_mode", "last_message", "result_digest", "waiting_prompt", "queued_inputs", "can_send_input", "can_interrupt", "can_close", "detail_ref"} {
 		if _, ok := item[field]; ok {
 			t.Fatalf("activity item retained non-display field %s: %#v", field, item)
 		}

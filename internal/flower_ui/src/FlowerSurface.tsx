@@ -4603,13 +4603,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setOpenActivityRuns((current) => ({ ...current, [key]: !activityItemOpen(timeline, item, blockKey, index) }));
   };
 
-  const activitySubagentAction = (timeline: FlowerActivityTimelineBlock, item: FlowerActivityItem) => (
-    timeline.subagent_actions?.[trimString(item.item_id)]
-  );
-
   const activityItemAriaLabel = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock): string => (
     [
-      presentFlowerActivityItem(item, timeline.file_actions, { subagents: subagentsCopy() }, { subagentAction: activitySubagentAction(timeline, item) }).label,
+      presentFlowerActivityItem(item, timeline.file_actions, { subagents: subagentsCopy() }).label,
       copy().chat.toolStatuses[item.status],
       item.requires_approval ? copy().chat.toolApprovalState(approvalStateLabel(item.approval_state, copy())) : '',
     ].filter(Boolean).join('. ')
@@ -5293,7 +5289,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     index: Accessor<number>,
   ) => {
     const open = createMemo(() => activityItemOpen(timeline(), item(), blockKey(), index()));
-    const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, { subagents: subagentsCopy() }, { subagentAction: activitySubagentAction(timeline(), item()) }));
+    const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, { subagents: subagentsCopy() }));
     const subagentsDetail = createMemo(() => subagentsDetailForPresentation(presentation()));
     const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
     const expandable = createMemo(() => hasDetails() && !activityItemAwaitingApproval(item()));
