@@ -3,7 +3,7 @@ type: Security Contract
 title: Plugin platform integration security
 description: Redeven maps sessions, route ownership, permission caps, and business capabilities onto released ReDevPlugin security contracts.
 tags: [security, plugins, permissions, local-ui]
-timestamp: 2026-07-02T00:00:00Z
+timestamp: 2026-07-05T00:00:00Z
 ---
 
 Redeven plugin security is host integration over released ReDevPlugin
@@ -50,13 +50,17 @@ attaches internal route roles before calling the ReDevPlugin handler, and the
 ReDevPlugin web security adapter allows only the matching route family for each
 role.
 
-Unsafe plugin management requests must carry a CSRF header that matches the
-host-derived ReDevPlugin session context. Redeven accepts
-`X-ReDevPlugin-CSRF` and the legacy `X-CSRF-Token` spelling, but missing,
-unknown-session, or mismatched values fail closed. The session hash for Env App
-plugin management requests is derived from the real Redeven channel id and
-injected as the ReDevPlugin owner-session hash header when absent, so browsers
-cannot select a more privileged session by self-reporting a permission claim.
+Unsafe plugin management requests must reach the released ReDevPlugin handler
+with a CSRF header that matches the host-derived ReDevPlugin session context.
+Redeven's Env-trusted proxy derives the authoritative channel id from the Env
+App origin label, or from the fixed Local UI session in Local UI mode, then the
+ReDevPlugin integration wrapper resolves that channel and overwrites both
+`X-ReDevPlugin-Owner-Session-Hash` and `X-ReDevPlugin-CSRF` from the resolved
+session context before delegation. The released guard still validates
+`X-ReDevPlugin-CSRF` and the legacy `X-CSRF-Token` spelling and fails closed for
+unknown or mismatched sessions, but Env App UI code does not compute or own the
+token. Browser-provided permission claims or plugin session-binding headers are
+not trusted as authority.
 
 Business capability adapters such as containers, files, shell, cloud services,
 databases, vault access, or local product APIs begin after ReDevPlugin has
@@ -123,6 +127,18 @@ plugin requests cannot inherit Env App management authority, codespace helpers,
 port-forward proxying, local access-gate behavior, or nested Local UI API
 errors.
 
+Official catalog discovery is not a trust bypass. Redeven's UI may show the
+bundled official catalog seed, but package download, checksum verification,
+signature verification, trust-state assignment, registry writes, and retained
+data behavior must remain ReDevPlugin Host lifecycle responsibilities. Until a
+released host distribution install API exists, Plugin Center disables install
+for official catalog entries that require that API instead of fetching package
+URLs in the browser. This prevents browser-readable package transport from
+becoming an alternate trust path. Matching installed official records are also
+bounded by ReDevPlugin trust state: only runnable trust states can be projected
+as openable or enableable, while non-runnable trust states stay in a
+needs-attention state even when the plugin id appears in the official catalog.
+
 # Citations
 
 [1] redeven:AGENTS.md:256 - Redeven consumes ReDevPlugin through published artifacts only.
@@ -161,3 +177,6 @@ errors.
 [34] redeven:internal/redevpluginintegration/adapters.go:146 - Local policy decisions use the cached host-derived ReDevPlugin session permissions.
 [35] redeven:internal/redevpluginintegration/adapters.go:272 - CSRF validation requires the token to match the resolved ReDevPlugin session context.
 [36] redeven:internal/redevpluginintegration/adapters.go:218 - Runtime artifact resolution searches published bundle/executable locations and fails closed.
+[37] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:9 - Plugin management API calls use `/_redeven_proxy/api/plugins*`.
+[38] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterSection.tsx:148 - Official catalog install is disabled when host distribution install API is required.
+[39] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:60 - The current install command rejects official catalog install without a host distribution install API.

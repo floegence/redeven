@@ -115,12 +115,16 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   FileCode: icon('FileCode'),
   FileText: icon('FileText'),
   Globe: icon('Globe'),
+  Grid3x3: icon('Grid3x3'),
   Key: icon('Key'),
   Layers: icon('Layers'),
   Link: icon('Link'),
+  CheckCircle: icon('CheckCircle'),
+  Download: icon('Download'),
   Pencil: icon('Pencil'),
   Plus: icon('Plus'),
   RefreshIcon: icon('RefreshIcon'),
+  Settings: icon('Settings'),
   Search: icon('Search'),
   Shield: icon('Shield'),
   Terminal: icon('Terminal'),
@@ -443,6 +447,7 @@ describe('EnvSettingsPage', () => {
       'Permission Policy',
       'Flower',
       'Skills',
+      'Plugin Center',
       'Codex',
       'Debug Console',
     ]);
@@ -468,7 +473,7 @@ describe('EnvSettingsPage', () => {
 
     const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');
     const aiGroupSections = Array.from(aiGroup?.querySelectorAll('[data-settings-nav-item]') ?? []).map((node) => node.getAttribute('data-settings-nav-item'));
-    expect(aiGroupSections).toEqual(['ai', 'skills', 'codex']);
+    expect(aiGroupSections).toEqual(['ai', 'skills', 'plugins', 'codex']);
 
     await openSettingsSection(host, 'debug_console');
     expect(host.querySelector('[data-settings-card="Debug Console"]')).toBeTruthy();

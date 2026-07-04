@@ -11,7 +11,9 @@ import (
 	"testing"
 
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redevplugin/pkg/host"
+	"github.com/floegence/redevplugin/pkg/httpadapter"
 	"github.com/floegence/redevplugin/pkg/manifest"
 	"github.com/floegence/redevplugin/pkg/registry"
 	"github.com/floegence/redevplugin/pkg/sessionctx"
@@ -89,6 +91,60 @@ func TestWebSecurityGuardUsesInternalRouteRolesAndStrictCSRF(t *testing.T) {
 	unsafeReq.Header.Set(csrfHeader, "csrf_token")
 	if err := guard.ValidateCSRF(unsafeReq, "session_hash"); err != nil {
 		t.Fatalf("valid csrf error = %v", err)
+	}
+}
+
+func TestPluginHTTPHandlerInjectsEnvSessionHeaders(t *testing.T) {
+	cache := newSessionPermissionCache()
+	resolver := &sessionResolver{
+		resolve: func(channelID string) (*session.Meta, bool) {
+			if channelID != "ch_123" {
+				return nil, false
+			}
+			return &session.Meta{
+				ChannelID:    "ch_123",
+				EndpointID:   "env_123",
+				UserPublicID: "user_123",
+				CanRead:      true,
+				CanWrite:     true,
+				CanExecute:   true,
+				CanAdmin:     true,
+			}, true
+		},
+		cache: cache,
+	}
+	var captured *http.Request
+	handler := pluginHTTPHandler{
+		resolver: resolver,
+		next: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			captured = r
+			w.WriteHeader(http.StatusNoContent)
+		}),
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/_redevplugin/api/plugins/enable", strings.NewReader(`{}`))
+	req.Header.Set(sessionhop.HeaderChannelID, "ch_123")
+	req.Header.Set(httpadapter.OwnerSessionHashHeader, "client_supplied_owner")
+	req.Header.Set(csrfHeader, "client_supplied_csrf")
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, WithRouteRole(req, RouteRoleEnvTrusted))
+
+	if res.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusNoContent)
+	}
+	if captured == nil {
+		t.Fatalf("handler did not receive request")
+	}
+	ownerHash := strings.TrimSpace(captured.Header.Get(httpadapter.OwnerSessionHashHeader))
+	if ownerHash == "" || ownerHash == "client_supplied_owner" {
+		t.Fatalf("owner session hash header = %q, want server-derived value", ownerHash)
+	}
+	csrfToken := strings.TrimSpace(captured.Header.Get(csrfHeader))
+	if csrfToken == "" || csrfToken == "client_supplied_csrf" {
+		t.Fatalf("csrf header = %q, want server-derived value", csrfToken)
+	}
+	if err := (webSecurityGuard{sessions: cache}).ValidateCSRF(captured, ownerHash); err != nil {
+		t.Fatalf("injected csrf token failed validation: %v", err)
 	}
 }
 

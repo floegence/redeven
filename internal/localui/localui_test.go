@@ -23,6 +23,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionhop"
 )
 
 func writeTestConfig(t *testing.T) string {
@@ -372,6 +373,28 @@ func TestServer_PluginManagementAPIUsesAccessGateWhenPlatformEnabled(t *testing.
 	}
 	if strings.TrimSpace(openRes.Body.String()) != "/_redevplugin/api/plugins/catalog" {
 		t.Fatalf("delegated path = %q", openRes.Body.String())
+	}
+}
+
+func TestServer_PluginManagementAPILocalUIProvidesSessionChannel(t *testing.T) {
+	cfgPath := writeTestConfig(t)
+	var gotChannelID string
+	appSrv := newTestAppServerWithPluginPlatform(t, cfgPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotChannelID = strings.TrimSpace(r.Header.Get(sessionhop.HeaderChannelID))
+		w.WriteHeader(218)
+	}))
+	s := newTestServerWithAppServer(t, nil, appSrv, cfgPath)
+
+	req := httptest.NewRequest(http.MethodPost, "http://localhost:23998/_redeven_proxy/api/plugins/enable", strings.NewReader(`{}`))
+	req.Header.Set("Origin", "http://localhost:23998")
+	res := httptest.NewRecorder()
+	s.handler().ServeHTTP(res, req)
+
+	if res.Result().StatusCode != 218 {
+		t.Fatalf("plugin management status = %d, want delegated 218; body=%q", res.Result().StatusCode, res.Body.String())
+	}
+	if gotChannelID != "local-ui" {
+		t.Fatalf("delegated channel header = %q, want local-ui", gotChannelID)
 	}
 }
 

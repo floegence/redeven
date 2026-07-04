@@ -632,8 +632,32 @@ func (g *Server) servePluginPlatform(w http.ResponseWriter, r *http.Request, rol
 	next.URL = cloneURL(r.URL)
 	next.URL.Path = rewritePluginPlatformPath(next.URL.Path, fromPrefix, toPrefix)
 	next.URL.RawPath = ""
+	next.Header = r.Header.Clone()
+	if role == redevpluginintegration.RouteRoleEnvTrusted {
+		if channelID, ok := g.pluginManagementChannelID(r); ok {
+			next.Header.Set(sessionhop.HeaderChannelID, channelID)
+		} else {
+			next.Header.Del(sessionhop.HeaderChannelID)
+		}
+	}
 	next = redevpluginintegration.WithRouteRole(next, role)
 	g.pluginPlatform.ServeHTTP(w, next)
+}
+
+func (g *Server) pluginManagementChannelID(r *http.Request) (string, bool) {
+	if route, ok := localUIRouteFromRequest(r); ok {
+		meta := g.localSessionMeta(route)
+		if meta == nil {
+			return "", false
+		}
+		channelID := strings.TrimSpace(meta.ChannelID)
+		return channelID, channelID != ""
+	}
+	channelID, err := channelIDFromEnvOriginRequest(r)
+	if err != nil {
+		return "", false
+	}
+	return channelID, true
 }
 
 func rewritePluginPlatformPath(requestPath string, fromPrefix string, toPrefix string) string {
@@ -6211,12 +6235,18 @@ func channelIDFromRequest(r *http.Request) (string, error) {
 			return channelID, nil
 		}
 	}
+	return channelIDFromEnvOriginRequest(r)
+}
 
+func channelIDFromEnvOriginRequest(r *http.Request) (string, error) {
 	_, host, err := externalOriginFromRequest(r)
 	if err != nil {
 		return "", err
 	}
+	return channelIDFromEnvOriginHost(host)
+}
 
+func channelIDFromEnvOriginHost(host string) (string, error) {
 	hostNoPort := strings.TrimSpace(host)
 	if i := strings.IndexByte(hostNoPort, ':'); i >= 0 {
 		hostNoPort = hostNoPort[:i]
