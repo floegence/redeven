@@ -2136,6 +2136,10 @@ func isRenderableMime(ct string) bool {
 }
 
 func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
+	if isReservedPluginManagementAPIPath(r) {
+		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+		return
+	}
 	if g.handleWorkbenchLayoutAPI(w, r) {
 		return
 	}
@@ -5375,6 +5379,14 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 		return
 	}
+}
+
+func isReservedPluginManagementAPIPath(r *http.Request) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	p := strings.TrimSpace(r.URL.Path)
+	return p == "/_redeven_proxy/api/plugins" || strings.HasPrefix(p, "/_redeven_proxy/api/plugins/")
 }
 
 func (g *Server) handleCodeServerProxy(w http.ResponseWriter, r *http.Request) {

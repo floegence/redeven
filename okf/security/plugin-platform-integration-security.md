@@ -29,7 +29,10 @@ handshake. Future plugin management, surface bootstrap, asset, and RPC routes
 must be mounted through released ReDevPlugin handlers or thin Redeven wrappers
 that preserve the appserver response shape. Redeven may preserve flat
 `error_code` values from plugin-platform failures for product UI, but the error
-catalog and platform semantics must remain released ReDevPlugin contracts.
+catalog and platform semantics must remain released ReDevPlugin contracts. The
+reserved `/_redeven_proxy/api/plugins` management prefix therefore returns the
+AppServer's ordinary flat JSON 404, without a plugin-owned `error_code`, until a
+released ReDevPlugin handler owns that API surface.
 
 The current AppServer route gate fail-closes sandbox origins by role. Env App
 origins may reach local management APIs and Env App dist under
@@ -37,8 +40,8 @@ origins may reach local management APIs and Env App dist under
 for code-server bridge helpers; plugin sandbox origins with a `plg-*` first host
 label are recognized explicitly and receive 404 for management APIs, Env App
 dist, and injection helpers. Tests cover Env App, codespace, port-forward,
-plugin, unknown, and missing-origin callers across management API, Env App dist,
-and injection helper paths.
+plugin, unknown, and missing-origin callers across management API, reserved
+plugin management API, Env App dist, and injection helper paths.
 
 Business capability adapters such as containers, files, shell, cloud services,
 databases, vault access, or local product APIs begin after ReDevPlugin has
@@ -82,11 +85,13 @@ Plugin sandbox origins must not be granted access to `/_redeven_proxy/api/*`,
 `/_redeven_proxy/env/*`, or `/_redeven_proxy/inject.js`; future plugin routes
 must use released ReDevPlugin handlers or thin wrappers instead of reusing Env
 App or codespace helper paths. Until that integration exists,
-`/_redeven_plugin/*` is reserved and must return 404 for Env App, codespace,
-port-forward, plugin, unknown, missing-origin, and Local UI callers. Local UI
-must forward that namespace with plugin route context instead of Env App route
-context, and the AppServer plus Local UI route matrices must cover root,
-bootstrap, asset, stream, and CSP report paths so reserved plugin requests
+`/_redeven_proxy/api/plugins` and `/_redeven_proxy/api/plugins/*` are reserved
+for future plugin management APIs and must return flat JSON 404 for Env App
+callers. `/_redeven_plugin/*` is reserved and must return 404 for Env App,
+codespace, port-forward, plugin, unknown, missing-origin, and Local UI callers.
+Local UI must forward that namespace with plugin route context instead of Env
+App route context, and the AppServer plus Local UI route matrices must cover
+root, bootstrap, asset, stream, and CSP report paths so reserved plugin requests
 cannot inherit Env App management authority, codespace helpers, port-forward
 proxying, or local access-gate behavior.
 
@@ -108,11 +113,14 @@ proxying, or local access-gate behavior.
 [14] redeven:internal/codeapp/appserver/server.go:279 - AppServer has a distinct Local UI plugin route context.
 [15] redeven:internal/codeapp/appserver/server.go:512 - AppServer reserves `/_redeven_plugin/*` for released ReDevPlugin handlers and fails closed until integration is wired.
 [16] redeven:internal/codeapp/appserver/server.go:520 - AppServer management APIs are gated to the Env App origin role.
-[17] redeven:internal/codeapp/appserver/server.go:541 - AppServer serves `inject.js` only to codespace origins.
-[18] redeven:internal/codeapp/appserver/server.go:6252 - `plg-*` first labels are classified as plugin sandbox origins.
-[19] redeven:internal/codeapp/appserver/server_test.go:548 - Tests bind the proxy route matrix across Env App, codespace, port-forward, plugin, unknown, and missing-origin callers.
-[20] redeven:internal/codeapp/appserver/server_test.go:684 - Tests bind the AppServer reserved plugin namespace route matrix to 404 without Env App, inject-script, or proxy fallback.
-[21] redeven:internal/localui/localui_test.go:285 - Tests bind the Local UI reserved plugin namespace route matrix to 404 without access-gate or Env App shell interception.
-[22] redeven:internal/envapp/ui_src/src/ui/services/localApi.localAccess.e2e.test.ts:193 - Local UI preserves flat appserver `error_code` values on HTTP failures.
-[23] redeven:okf/architecture/container-resources-capability.md:33 - Container start preflight records risk flags and admin hints without owning ReDevPlugin confirmation enforcement.
-[24] redeven:internal/capabilities/containers/preflight_test.go:14 - Tests verify container preflight redacts secret values and sensitive paths.
+[17] redeven:internal/codeapp/appserver/server.go:2138 - AppServer reserves the future plugin management API namespace before other local API handlers run.
+[18] redeven:internal/codeapp/appserver/server.go:5384 - The reserved plugin management API matcher covers the root and child paths.
+[19] redeven:internal/codeapp/appserver/server.go:541 - AppServer serves `inject.js` only to codespace origins.
+[20] redeven:internal/codeapp/appserver/server.go:6263 - `plg-*` first labels are classified as plugin sandbox origins.
+[21] redeven:internal/codeapp/appserver/server_test.go:548 - Tests bind the proxy route matrix across Env App, codespace, port-forward, plugin, unknown, and missing-origin callers.
+[22] redeven:internal/codeapp/appserver/server_test.go:691 - Tests bind the reserved plugin management API namespace to AppServer flat JSON 404 responses.
+[23] redeven:internal/codeapp/appserver/server_test.go:733 - Tests bind the AppServer reserved plugin namespace route matrix to 404 without Env App, inject-script, or proxy fallback.
+[24] redeven:internal/localui/localui_test.go:285 - Tests bind the Local UI reserved plugin namespace route matrix to 404 without access-gate or Env App shell interception.
+[25] redeven:internal/envapp/ui_src/src/ui/services/localApi.localAccess.e2e.test.ts:193 - Local UI preserves flat appserver `error_code` values on HTTP failures.
+[26] redeven:okf/architecture/container-resources-capability.md:33 - Container start preflight records risk flags and admin hints without owning ReDevPlugin confirmation enforcement.
+[27] redeven:internal/capabilities/containers/preflight_test.go:14 - Tests verify container preflight redacts secret values and sensitive paths.

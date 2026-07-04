@@ -575,6 +575,7 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 	}
 	routes := []routeCase{
 		{name: "api", path: "/_redeven_proxy/api/spaces"},
+		{name: "plugin_api", path: "/_redeven_proxy/api/plugins/catalog"},
 		{name: "env", path: "/_redeven_proxy/env/"},
 		{name: "inject", path: "/_redeven_proxy/inject.js"},
 		{name: "plugin_namespace", path: "/_redeven_plugin/surfaces/containers/index.html"},
@@ -589,6 +590,7 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 			origin: envOrigin,
 			wantStatus: map[string]int{
 				"api":              http.StatusOK,
+				"plugin_api":       http.StatusNotFound,
 				"env":              http.StatusOK,
 				"inject":           http.StatusNotFound,
 				"plugin_namespace": http.StatusNotFound,
@@ -599,6 +601,7 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 			origin: "https://cs-abc.example.com",
 			wantStatus: map[string]int{
 				"api":              http.StatusNotFound,
+				"plugin_api":       http.StatusNotFound,
 				"env":              http.StatusNotFound,
 				"inject":           http.StatusOK,
 				"plugin_namespace": http.StatusNotFound,
@@ -609,6 +612,7 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 			origin: "https://pf-abc.example.com",
 			wantStatus: map[string]int{
 				"api":              http.StatusNotFound,
+				"plugin_api":       http.StatusNotFound,
 				"env":              http.StatusNotFound,
 				"inject":           http.StatusNotFound,
 				"plugin_namespace": http.StatusNotFound,
@@ -619,6 +623,7 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 			origin: "https://plg-containers.example.com",
 			wantStatus: map[string]int{
 				"api":              http.StatusNotFound,
+				"plugin_api":       http.StatusNotFound,
 				"env":              http.StatusNotFound,
 				"inject":           http.StatusNotFound,
 				"plugin_namespace": http.StatusNotFound,
@@ -629,6 +634,7 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 			origin: "https://unknown.example.com",
 			wantStatus: map[string]int{
 				"api":              http.StatusNotFound,
+				"plugin_api":       http.StatusNotFound,
 				"env":              http.StatusNotFound,
 				"inject":           http.StatusNotFound,
 				"plugin_namespace": http.StatusNotFound,
@@ -639,6 +645,7 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 			origin: "",
 			wantStatus: map[string]int{
 				"api":              http.StatusNotFound,
+				"plugin_api":       http.StatusNotFound,
 				"env":              http.StatusNotFound,
 				"inject":           http.StatusNotFound,
 				"plugin_namespace": http.StatusNotFound,
@@ -678,6 +685,48 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestServer_PluginManagementAPINamespaceReserved(t *testing.T) {
+	t.Parallel()
+
+	srv := newDistRouteTestServer(t, fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}, nil)
+
+	routes := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{name: "root", method: http.MethodGet, path: "/_redeven_proxy/api/plugins"},
+		{name: "catalog", method: http.MethodGet, path: "/_redeven_proxy/api/plugins/catalog"},
+		{name: "validate", method: http.MethodPost, path: "/_redeven_proxy/api/plugins/packages/validate"},
+		{name: "staged_delete", method: http.MethodDelete, path: "/_redeven_proxy/api/plugins/staged/pkg_123"},
+	}
+
+	for _, route := range routes {
+		t.Run(route.name, func(t *testing.T) {
+			req := httptest.NewRequest(route.method, route.path, nil)
+			req.Header.Set("Origin", "https://env-local.example.com")
+			rr := httptest.NewRecorder()
+			srv.serveHTTP(rr, req)
+			if rr.Code != http.StatusNotFound {
+				t.Fatalf("%s status = %d, want %d; body=%q", route.path, rr.Code, http.StatusNotFound, rr.Body.String())
+			}
+			if got := rr.Header().Get("Content-Type"); !strings.Contains(got, "application/json") {
+				t.Fatalf("%s content-type = %q, want application/json", route.path, got)
+			}
+			var body apiResp
+			if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+				t.Fatalf("%s response is not flat apiResp json: %v; body=%q", route.path, err, rr.Body.String())
+			}
+			if body.OK || body.Error != "not found" || body.ErrorCode != "" {
+				t.Fatalf("%s response = %+v, want ok=false error=not found without plugin-owned error_code", route.path, body)
+			}
+		})
 	}
 }
 
