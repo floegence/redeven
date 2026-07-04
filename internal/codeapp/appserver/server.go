@@ -502,6 +502,14 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	// No caching: UI + inject are agent-versioned and delivered over E2EE.
 	w.Header().Set("Cache-Control", "no-store")
 
+	if p == "/_redeven_plugin" || strings.HasPrefix(p, "/_redeven_plugin/") {
+		// Reserve plugin-mounted routes for released ReDevPlugin handlers. Until the
+		// adapter is wired, every origin must fail closed instead of falling through
+		// to codespace or port-forward proxying.
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+
 	if strings.HasPrefix(p, "/_redeven_proxy/api/") {
 		// Hardening: only allow management APIs from the Env App trusted launcher origin
 		// (env-<env_id>.<region>.<base-sandbox-domain>).

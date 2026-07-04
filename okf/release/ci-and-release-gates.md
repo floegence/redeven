@@ -70,10 +70,12 @@ artifact verifier self-test, consumption gate self-test, artifact staging
 self-test, the existing AppServer plugin-origin isolation matrix, and the
 Redeven-owned Containers capability adapter and fixture contract tests. This
 keeps the current host boundary, published-artifact handoff, route isolation, and
-business-capability contract executable in one focused CI step without mounting
-or consuming unreleased ReDevPlugin routes. Once released ReDevPlugin integration
-code exists, the same focused gate must expand to cover mounted route matrix,
-released-contract hash verification, session adapter mapping, Env App and
+business-capability contract executable in one focused CI step. The route matrix
+also reserves `/_redeven_plugin/*` and requires it to fail closed until released
+ReDevPlugin handlers are actually wired, avoiding accidental fallback to Env App,
+codespace, or port-forward surfaces. Once released ReDevPlugin integration code
+exists, the same focused gate must expand to cover the mounted route allow
+matrix, released-contract hash verification, session adapter mapping, Env App and
 Workbench surface smoke, Flower-generated minimal fixture flow, and concrete
 business capability adapters under the real released Host adapters.
 

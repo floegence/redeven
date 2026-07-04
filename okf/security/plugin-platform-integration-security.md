@@ -81,7 +81,9 @@ Redeven-registered adapter.
 Plugin sandbox origins must not be granted access to `/_redeven_proxy/api/*`,
 `/_redeven_proxy/env/*`, or `/_redeven_proxy/inject.js`; future plugin routes
 must use released ReDevPlugin handlers or thin wrappers instead of reusing Env
-App or codespace helper paths.
+App or codespace helper paths. Until that integration exists,
+`/_redeven_plugin/*` is reserved and must return 404 for Env App, codespace,
+port-forward, plugin, unknown, and missing-origin callers.
 
 # Citations
 
@@ -96,10 +98,11 @@ App or codespace helper paths.
 [9] redeven:internal/localui/localui.go:62 - The Env App appserver is mounted under `/_redeven_proxy/*`.
 [10] redeven:internal/localui/localui.go:65 - Direct sessions are served by the agent after E2EE handshake.
 [11] redeven:internal/codeapp/appserver/server_test.go:1215 - Management API tests forbid admin actions when `can_admin=false`.
-[12] redeven:internal/codeapp/appserver/server.go:505 - AppServer management APIs are gated to the Env App origin role.
-[13] redeven:internal/codeapp/appserver/server.go:526 - AppServer serves `inject.js` only to codespace origins.
-[14] redeven:internal/codeapp/appserver/server.go:6236 - `plg-*` first labels are classified as plugin sandbox origins.
-[15] redeven:internal/codeapp/appserver/server_test.go:548 - Tests bind the existing proxy route matrix across Env App, codespace, port-forward, plugin, unknown, and missing-origin callers.
-[16] redeven:internal/envapp/ui_src/src/ui/services/localApi.localAccess.e2e.test.ts:193 - Local UI preserves flat appserver `error_code` values on HTTP failures.
-[17] redeven:okf/architecture/container-resources-capability.md:33 - Container start preflight records risk flags and admin hints without owning ReDevPlugin confirmation enforcement.
-[18] redeven:internal/capabilities/containers/preflight_test.go:14 - Tests verify container preflight redacts secret values and sensitive paths.
+[12] redeven:internal/codeapp/appserver/server.go:505 - AppServer reserves `/_redeven_plugin/*` for released ReDevPlugin handlers and fails closed until integration is wired.
+[13] redeven:internal/codeapp/appserver/server.go:513 - AppServer management APIs are gated to the Env App origin role.
+[14] redeven:internal/codeapp/appserver/server.go:534 - AppServer serves `inject.js` only to codespace origins.
+[15] redeven:internal/codeapp/appserver/server.go:6244 - `plg-*` first labels are classified as plugin sandbox origins.
+[16] redeven:internal/codeapp/appserver/server_test.go:548 - Tests bind the route matrix across Env App, codespace, port-forward, plugin, unknown, and missing-origin callers.
+[17] redeven:internal/envapp/ui_src/src/ui/services/localApi.localAccess.e2e.test.ts:193 - Local UI preserves flat appserver `error_code` values on HTTP failures.
+[18] redeven:okf/architecture/container-resources-capability.md:33 - Container start preflight records risk flags and admin hints without owning ReDevPlugin confirmation enforcement.
+[19] redeven:internal/capabilities/containers/preflight_test.go:14 - Tests verify container preflight redacts secret values and sensitive paths.
