@@ -1770,6 +1770,48 @@ func TestSendUserTurn_IdleStartPersistsCanonicalTurnBeforeExecution(t *testing.T
 	}
 }
 
+func TestSendUserTurn_FailedThreadStartsNewRun(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	th, err := svc.CreateThread(ctx, meta, "failed-thread-continue", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if err := svc.threadsDB.UpdateThreadRunState(ctx, meta.EndpointID, th.ThreadID, string(RunStateFailed), runErrorCodeFloretEngineFailed, "floret engine failed", "", meta.UserPublicID, meta.UserEmail); err != nil {
+		t.Fatalf("UpdateThreadRunState failed: %v", err)
+	}
+
+	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			MessageID: "m_failed_continue_user",
+			Text:      "continue",
+		},
+		Options: RunOptions{},
+	})
+	if err != nil {
+		t.Fatalf("SendUserTurn: %v", err)
+	}
+	if resp.Kind != "start" || strings.TrimSpace(resp.RunID) == "" {
+		t.Fatalf("SendUserTurn response=%+v, want started run", resp)
+	}
+	if strings.TrimSpace(resp.QueueID) != "" || resp.QueuePosition != 0 {
+		t.Fatalf("SendUserTurn response=%+v, want direct start without queue", resp)
+	}
+	turns, err := svc.threadsDB.ListConversationTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListConversationTurns: %v", err)
+	}
+	if len(turns) != 1 || turns[0].RunID != resp.RunID || turns[0].UserMessageID != "m_failed_continue_user" {
+		t.Fatalf("turns=%+v, want direct new run turn after failed thread", turns)
+	}
+}
+
 func TestContextRepo_ListRecentDialogueTurns_ExcludesPendingTranscriptUser(t *testing.T) {
 	t.Parallel()
 
