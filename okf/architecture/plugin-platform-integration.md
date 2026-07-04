@@ -59,14 +59,16 @@ App route override. The future plugin management API namespace under
 `/_redeven_proxy/api/plugins` and `/_redeven_proxy/api/plugins/*` is also
 reserved: even Env App callers receive the AppServer's flat JSON 404 response
 until released ReDevPlugin management handlers are mounted, and no
-plugin-platform `error_code` is synthesized before that integration exists. The
+plugin-platform `error_code` is synthesized before that integration exists.
+Local UI preserves the same fail-closed response while local access is locked,
+instead of exposing the reserved namespace as an access-gate surface. The
 current route matrix tests bind Env App, codespace, port-forward, plugin,
 unknown, missing-origin, and Local UI callers across the management API,
 reserved plugin management API, Env App dist, codespace injection helper, and
 reserved plugin namespace paths; the AppServer and Local UI matrices cover the
 exact namespace root, trailing slash, bootstrap, asset, stream, and CSP report
 paths so they cannot inherit the Env App shell, codespace injection helper,
-port-forward proxying, or local access gate.
+port-forward proxying, local access gate, or nested Local UI API envelope.
 
 Redeven business code starts at adapter registration. Capabilities such as
 containers, files, shell, cloud services, database access, vault access,
@@ -139,20 +141,23 @@ closed-world container resources capability contract.
 [15] redeven:internal/localui/localui.go:146 - Local UI exposes the direct websocket route under `/_redeven_direct/ws`.
 [16] redeven:internal/localui/localui.go:150 - Local UI proxies Env App through `/_redeven_proxy/`.
 [17] redeven:internal/localui/localui.go:147 - Local UI mounts the reserved plugin namespace separately from the Env App proxy.
-[18] redeven:internal/localui/localui.go:710 - Local UI forwards reserved plugin namespace requests with plugin route context.
-[19] redeven:internal/codeapp/appserver/server.go:279 - AppServer has a distinct Local UI plugin route context.
-[20] redeven:internal/codeapp/appserver/server.go:512 - AppServer reserves `/_redeven_plugin/*` for released ReDevPlugin handlers and fails closed until integration is wired.
-[21] redeven:internal/codeapp/appserver/server.go:520 - AppServer management APIs are gated to the Env App origin role.
-[22] redeven:internal/codeapp/appserver/server.go:2138 - AppServer reserves the future plugin management API namespace before other local API handlers run.
-[23] redeven:internal/codeapp/appserver/server.go:5384 - The reserved plugin management API matcher covers the root and child paths.
-[24] redeven:internal/codeapp/appserver/server.go:541 - AppServer serves `inject.js` only to codespace origins.
-[25] redeven:internal/codeapp/appserver/server.go:6245 - AppServer derives explicit origin roles from the request origin.
-[26] redeven:internal/codeapp/appserver/server.go:6263 - `plg-*` first labels are classified as plugin sandbox origins.
-[27] redeven:internal/codeapp/appserver/server_test.go:548 - Tests bind the proxy route matrix across Env App, codespace, port-forward, plugin, unknown, and missing-origin callers.
-[28] redeven:internal/codeapp/appserver/server_test.go:691 - Tests bind the reserved plugin management API namespace to AppServer flat JSON 404 responses.
-[29] redeven:internal/codeapp/appserver/server_test.go:733 - Tests bind the AppServer reserved plugin namespace route matrix to 404 without Env App, inject-script, or proxy fallback.
-[30] redeven:internal/localui/localui_test.go:285 - Tests bind the Local UI reserved plugin namespace route matrix to 404 without access-gate or Env App shell interception.
-[31] redeven:okf/security/plugin-platform-integration-security.md:75 - Plugin surfaces and workers must not receive runtime-control, direct-session, Gateway, or Flower artifacts as ambient authority.
-[32] redeven:okf/ui/plugin-surfaces.md:17 - Front-end plugin platform implementation arrives as released ReDevPlugin npm packages.
-[33] redeven:okf/ai/flower-plugin-generation.md:18 - Flower-generated plugin flow is approved product orchestration over released ReDevPlugin APIs.
-[34] redeven:okf/architecture/container-resources-capability.md:9 - The container resources contract is Redeven-owned business capability surface, not plugin-platform core.
+[18] redeven:internal/localui/localui.go:693 - Local UI keeps the reserved plugin management API namespace fail-closed before local access gating.
+[19] redeven:internal/localui/localui.go:709 - Local UI recognizes the reserved plugin management API root and child paths.
+[20] redeven:internal/localui/localui.go:717 - Local UI forwards reserved plugin namespace requests with plugin route context.
+[21] redeven:internal/codeapp/appserver/server.go:279 - AppServer has a distinct Local UI plugin route context.
+[22] redeven:internal/codeapp/appserver/server.go:512 - AppServer reserves `/_redeven_plugin/*` for released ReDevPlugin handlers and fails closed until integration is wired.
+[23] redeven:internal/codeapp/appserver/server.go:520 - AppServer management APIs are gated to the Env App origin role.
+[24] redeven:internal/codeapp/appserver/server.go:2138 - AppServer reserves the future plugin management API namespace before other local API handlers run.
+[25] redeven:internal/codeapp/appserver/server.go:5384 - The reserved plugin management API matcher covers the root and child paths.
+[26] redeven:internal/codeapp/appserver/server.go:541 - AppServer serves `inject.js` only to codespace origins.
+[27] redeven:internal/codeapp/appserver/server.go:6245 - AppServer derives explicit origin roles from the request origin.
+[28] redeven:internal/codeapp/appserver/server.go:6263 - `plg-*` first labels are classified as plugin sandbox origins.
+[29] redeven:internal/codeapp/appserver/server_test.go:548 - Tests bind the proxy route matrix across Env App, codespace, port-forward, plugin, unknown, and missing-origin callers.
+[30] redeven:internal/codeapp/appserver/server_test.go:691 - Tests bind the reserved plugin management API namespace to AppServer flat JSON 404 responses.
+[31] redeven:internal/codeapp/appserver/server_test.go:733 - Tests bind the AppServer reserved plugin namespace route matrix to 404 without Env App, inject-script, or proxy fallback.
+[32] redeven:internal/localui/localui_test.go:285 - Tests bind the Local UI reserved plugin management API namespace to flat JSON 404 without access-gate interception.
+[33] redeven:internal/localui/localui_test.go:333 - Tests bind the Local UI reserved plugin namespace route matrix to 404 without access-gate or Env App shell interception.
+[34] redeven:okf/security/plugin-platform-integration-security.md:75 - Plugin surfaces and workers must not receive runtime-control, direct-session, Gateway, or Flower artifacts as ambient authority.
+[35] redeven:okf/ui/plugin-surfaces.md:17 - Front-end plugin platform implementation arrives as released ReDevPlugin npm packages.
+[36] redeven:okf/ai/flower-plugin-generation.md:18 - Flower-generated plugin flow is approved product orchestration over released ReDevPlugin APIs.
+[37] redeven:okf/architecture/container-resources-capability.md:9 - The container resources contract is Redeven-owned business capability surface, not plugin-platform core.
