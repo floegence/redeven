@@ -53,10 +53,13 @@ log "checking ReDevPlugin consumption gate fixture"
 log "checking ReDevPlugin artifact staging fixture"
 ./scripts/stage_redevplugin_release_artifacts.sh --self-test
 
-log "checking AppServer plugin origin isolation matrix"
+log "checking AppServer and Local UI plugin origin isolation matrix"
 go test ./internal/codeapp/appserver \
-  -run 'TestServer_(ProxyOriginRouteMatrix|PluginOriginCannotAccessManagementSurfaces)$' \
-  -count=1
+	-run 'TestServer_(ProxyOriginRouteMatrix|PluginOriginCannotAccessManagementSurfaces)$' \
+	-count=1
+go test ./internal/localui \
+	-run 'TestServer_handlePluginNamespace_ForwardsWithoutEnvRouteOverride$' \
+	-count=1
 
 log "checking Containers capability adapter and fixture contracts"
 go test ./internal/capabilities/containers -count=1

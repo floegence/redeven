@@ -282,6 +282,32 @@ func TestServer_handleEnvAppProxy_rejectsEnvAppDirectoryListingWhenLocked(t *tes
 	}
 }
 
+func TestServer_handlePluginNamespace_ForwardsWithoutEnvRouteOverride(t *testing.T) {
+	gate := accessgate.New(accessgate.Options{Password: "secret"})
+	s := newTestServer(t, gate)
+
+	for _, target := range []string{
+		"http://localhost:23998/_redeven_plugin",
+		"http://localhost:23998/_redeven_plugin/surfaces/containers/index.html",
+	} {
+		t.Run(target, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, target, nil)
+			req.Header.Set("Origin", "https://plg-containers.example.com")
+			res := httptest.NewRecorder()
+			s.handler().ServeHTTP(res, req)
+			if res.Result().StatusCode != http.StatusNotFound {
+				t.Fatalf("plugin namespace status = %d, want %d; body=%q", res.Result().StatusCode, http.StatusNotFound, res.Body.String())
+			}
+			if strings.Contains(res.Body.String(), "access password required") {
+				t.Fatalf("plugin namespace was intercepted by local access gate: %q", res.Body.String())
+			}
+			if strings.Contains(res.Body.String(), "<html>env</html>") {
+				t.Fatalf("plugin namespace was served as Env App shell: %q", res.Body.String())
+			}
+		})
+	}
+}
+
 func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)
