@@ -277,6 +277,10 @@ func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 		return nil, err
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
+	configureCommandProcessGroup(cmd)
+	cmd.Cancel = func() error {
+		return terminateCommandProcessTree(cmd)
+	}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -301,6 +305,10 @@ func (execRunner) Stream(ctx context.Context, name string, args []string, onStdo
 		return errors.New("stdout line handler is required")
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
+	configureCommandProcessGroup(cmd)
+	cmd.Cancel = func() error {
+		return terminateCommandProcessTree(cmd)
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
@@ -318,14 +326,14 @@ func (execRunner) Stream(ctx context.Context, name string, args []string, onStdo
 		if err := onStdoutLine(line); err != nil {
 			callbackErr = err
 			if cmd.Process != nil {
-				_ = cmd.Process.Kill()
+				_ = terminateCommandProcessTree(cmd)
 			}
 			break
 		}
 	}
 	scanErr := scanner.Err()
 	if scanErr != nil && cmd.Process != nil {
-		_ = cmd.Process.Kill()
+		_ = terminateCommandProcessTree(cmd)
 	}
 	waitErr := cmd.Wait()
 	if callbackErr != nil {
