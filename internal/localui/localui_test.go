@@ -282,6 +282,60 @@ func TestServer_handleEnvAppProxy_rejectsEnvAppDirectoryListingWhenLocked(t *tes
 	}
 }
 
+func TestServer_PluginNamespaceRouteMatrix(t *testing.T) {
+	gate := accessgate.New(accessgate.Options{Password: "secret"})
+	s := newTestServer(t, gate)
+
+	routes := []struct {
+		name   string
+		method string
+		target string
+	}{
+		{name: "root", method: http.MethodGet, target: "http://localhost:23998/_redeven_plugin"},
+		{name: "root_slash", method: http.MethodGet, target: "http://localhost:23998/_redeven_plugin/"},
+		{name: "bootstrap", method: http.MethodGet, target: "http://localhost:23998/_redeven_plugin/bootstrap"},
+		{name: "asset", method: http.MethodGet, target: "http://localhost:23998/_redeven_plugin/assets/index.js"},
+		{name: "stream", method: http.MethodGet, target: "http://localhost:23998/_redeven_plugin/stream/logs?ticket=fixture"},
+		{name: "csp_report", method: http.MethodPost, target: "http://localhost:23998/_redeven_plugin/csp-report"},
+	}
+	origins := []struct {
+		name   string
+		origin string
+	}{
+		{name: "missing_origin"},
+		{name: "env", origin: "https://env-local.example.com"},
+		{name: "codespace", origin: "https://cs-abc.example.com"},
+		{name: "port_forward", origin: "https://pf-3000.example.com"},
+		{name: "plugin", origin: "https://plg-containers.example.com"},
+		{name: "unknown", origin: "https://unknown.example.com"},
+	}
+
+	for _, origin := range origins {
+		for _, route := range routes {
+			t.Run(origin.name+"/"+route.name, func(t *testing.T) {
+				req := httptest.NewRequest(route.method, route.target, nil)
+				if origin.origin != "" {
+					req.Header.Set("Origin", origin.origin)
+				}
+				res := httptest.NewRecorder()
+				s.handler().ServeHTTP(res, req)
+				if res.Result().StatusCode != http.StatusNotFound {
+					t.Fatalf("plugin namespace status = %d, want %d; body=%q", res.Result().StatusCode, http.StatusNotFound, res.Body.String())
+				}
+				if strings.Contains(res.Body.String(), "access password required") {
+					t.Fatalf("plugin namespace was intercepted by local access gate: %q", res.Body.String())
+				}
+				if strings.Contains(res.Body.String(), "<html>env</html>") {
+					t.Fatalf("plugin namespace was served as Env App shell: %q", res.Body.String())
+				}
+				if strings.Contains(res.Body.String(), "console.log('env');") {
+					t.Fatalf("plugin namespace was served as Env App asset: %q", res.Body.String())
+				}
+			})
+		}
+	}
+}
+
 func TestServer_handlePluginNamespace_ForwardsWithoutEnvRouteOverride(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)
