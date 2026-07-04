@@ -55,15 +55,18 @@ validation and method-to-DTO mapping in the business capability package rather
 than duplicating it in future product route glue. It is not a manifest parser,
 package validator, token issuer, or alternate ReDevPlugin method router.
 
-`Adapter.PullImageWithOperation` is the Redeven-side image-pull cancellation
-hook for future ReDevPlugin `OperationCanceler` dispatch. The caller supplies a
-Host-owned `operation_id`; the adapter validates the normal image pull request,
-binds that id to a scoped context cancel function, rejects duplicate active ids,
-and unregisters the id when the pull returns or the parent context is canceled.
-`Adapter.CancelOperation` looks up the active id, optionally checks the method
-against `images.pull`, and calls the stored cancel function. This table is
-limited to in-flight container adapter work and does not create a ReDevPlugin
-operation store, route, ticket, audit path, or platform operation manager.
+`Adapter.CallOperationMethod` is the Redeven-side operation dispatcher for
+future ReDevPlugin capability route registration. It accepts a Host-owned
+`operation_id`, a declared operation method, and raw JSON, then routes
+`containers.start`, `containers.stop`, `containers.restart`,
+`containers.remove`, and `images.pull` through the matching operation-scoped
+typed adapter method. The adapter validates the normal method request, binds
+the Host-owned id to a scoped context cancel function, rejects duplicate active
+ids, and unregisters the id when the operation returns or the parent context is
+canceled. `Adapter.CancelOperation` looks up the active id, optionally checks
+the method, and calls the stored cancel function. This table is limited to
+in-flight container adapter work and does not create a ReDevPlugin operation
+store, route, ticket, audit path, or platform operation manager.
 
 `CLIClient` is the concrete local engine client. It shells out to Docker or
 Podman with a bounded timeout, probes `version --format "{{json .}}"`, lists
@@ -137,9 +140,9 @@ schema. Redeven may evolve the concrete Docker/Podman adapter and local CLI
 client here, but plugin identity, lifecycle, permission, confirmation, token,
 lease/quota, audit, and revocation checks must still be performed by released
 ReDevPlugin artifacts before any container adapter method is called. The local
-image-pull operation id table is only a business-adapter cancel target for a
-Host-owned id; official operation records, cancel-request persistence, mounted
-HTTP routes, stream tickets, audit events, disable/uninstall policy, and final
+operation id table is only a business-adapter cancel target for a Host-owned
+id; official operation records, cancel-request persistence, mounted HTTP
+routes, stream tickets, audit events, disable/uninstall policy, and final
 operation lifecycle remain ReDevPlugin-owned. If integration needs a reusable
 platform behavior not represented by a released ReDevPlugin contract, that
 behavior is added upstream first instead of copied into Redeven.
@@ -163,7 +166,7 @@ behavior is added upstream first instead of copied into Redeven.
 [15] redeven:spec/capabilities/container-resources-v1.schema.json:421 - `start_preflight_plan` is closed-world and binds schema identity, method, request, target, runtime, risk, and admin fields.
 [16] redeven:internal/capabilities/containers/preflight_test.go:14 - Tests verify start preflight redacts secret values and emits expected risk flags.
 [17] redeven:internal/capabilities/containers/preflight_test.go:181 - Tests bind Go constants, method enums, response DTO fields, logs tail limits, required fields, and closed-world schema objects.
-[18] redeven:internal/capabilities/containers/adapter_test.go:12 - Adapter tests cover engine resolution, unavailable requested engines, DTO mapping, secret redaction, actions, logs, image pull, operation-id cancellation, and preflight use of inspected runtime metadata.
+[18] redeven:internal/capabilities/containers/adapter_test.go:12 - Adapter tests cover engine resolution, unavailable requested engines, DTO mapping, secret redaction, actions, logs, image pull, operation-method dispatch, operation-id cancellation, and preflight use of inspected runtime metadata.
 [19] redeven:internal/capabilities/containers/cli_client_test.go:10 - CLI client tests cover status version preference, Docker NDJSON, Podman arrays, Docker inspect runtime parsing, safe action argv, pull digest parsing, pull cancellation propagation, exec-runner context error preservation, bounded logs tail, follow-stream rejection, streaming argv, timestamp parsing, and sink backpressure.
 [20] redeven:internal/capabilities/containers/testdata/generated_plugins/containers_integration/manifest.json:1 - The integration-only official Containers fixture declares the capability binding, product surface, method manifest, confirmation policy, and cancel policy expected for future ReDevPlugin registration.
 [21] redeven:internal/capabilities/containers/manifest_fixture_test.go:114 - Fixture tests bind the manifest to `CapabilityID`, `CapabilityVersion`, `Methods()`, method effects, request fields, confirmation semantics, and cancel policies without importing ReDevPlugin code.
@@ -171,13 +174,17 @@ behavior is added upstream first instead of copied into Redeven.
 [23] redeven:internal/capabilities/containers/method_dispatch.go:15 - `Adapter.CallMethod` maps raw JSON requests for each capability method to the typed adapter methods with schema-version and closed-world request checks.
 [24] redeven:internal/capabilities/containers/adapter_test.go:211 - Dispatcher tests cover every method plus invalid schema versions, unknown fields, unknown methods, and missing request bodies.
 [25] redeven:internal/capabilities/containers/adapter.go:69 - `LogLineSink` and the default channel sink define the bounded streaming handoff and stable backpressure error for follow logs.
-[26] redeven:internal/capabilities/containers/adapter.go:302 - `Adapter.FollowLogs` exposes follow logs only through clients that implement the explicit streaming interface.
+[26] redeven:internal/capabilities/containers/adapter.go:332 - `Adapter.FollowLogs` exposes follow logs only through clients that implement the explicit streaming interface.
 [27] redeven:internal/capabilities/containers/cli_client.go:138 - `CLIClient.FollowLogs` maps follow requests to explicit Docker/Podman argv and streams parsed log lines into the caller sink.
 [28] redeven:internal/capabilities/containers/cli_client_test.go:225 - Streaming tests bind follow argv, timestamp parsing, and fail-closed sink backpressure.
 [29] redeven:internal/capabilities/containers/cli_client_integration_test.go:215 - Real engine smoke validates `FollowLogs` against the running smoke container and requires cancellation to stop the follow command after the marker is observed.
 [30] redeven:internal/capabilities/containers/cli_client_test.go:163 - Image pull cancellation tests prove parent context cancellation and CLI timeout cancellation reach the command runner.
 [31] redeven:internal/capabilities/containers/cli_client.go:275 - `execRunner.Run` returns the context error after a real command is terminated by context cancellation.
 [32] redeven:internal/capabilities/containers/cli_client_integration_test.go:63 - The opt-in real engine pull cancel smoke validates a live Docker/Podman pull process stops through CLI timeout cancellation.
-[33] redeven:internal/capabilities/containers/adapter.go:329 - `PullImageWithOperation` binds a Host-owned operation id to a scoped image-pull cancel function and unregisters it when the pull ends.
-[34] redeven:internal/capabilities/containers/adapter.go:348 - `CancelOperation` looks up an active container operation id, validates the optional method, and requests cancellation through the stored context cancel function.
-[35] redeven:internal/capabilities/containers/adapter_test.go:455 - Operation cancellation tests cover cancel propagation, duplicate active id rejection, automatic unregister on completion or parent cancel, unknown ids, and method mismatch.
+[33] redeven:internal/capabilities/containers/method_dispatch.go:82 - `CallOperationMethod` maps raw JSON operation requests plus a Host-owned operation id to operation-scoped typed adapter methods.
+[34] redeven:internal/capabilities/containers/adapter.go:242 - `StartWithOperation`, `StopWithOperation`, `RestartWithOperation`, and `RemoveWithOperation` bind mutable container actions to operation-scoped cancellation.
+[35] redeven:internal/capabilities/containers/adapter.go:364 - `PullImageWithOperation` binds a Host-owned operation id to a scoped image-pull cancel function and unregisters it when the pull ends.
+[36] redeven:internal/capabilities/containers/adapter.go:378 - `CancelOperation` looks up an active container operation id, validates the optional method, and requests cancellation through the stored context cancel function.
+[37] redeven:internal/capabilities/containers/adapter.go:424 - `operationContext` centralizes operation id validation, duplicate active id rejection, scoped context creation, and cleanup.
+[38] redeven:internal/capabilities/containers/adapter_test.go:407 - Operation method dispatcher tests cover mutable actions, image pull, non-operation rejection, missing operation ids, and closed-world request decoding.
+[39] redeven:internal/capabilities/containers/adapter_test.go:606 - Operation cancellation tests cover action and image-pull cancel propagation, duplicate active id rejection, automatic unregister on completion or parent cancel, unknown ids, and method mismatch.

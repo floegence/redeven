@@ -239,8 +239,25 @@ func (a *Adapter) Start(ctx context.Context, req ContainerStartRequest) (Contain
 	})
 }
 
+func (a *Adapter) StartWithOperation(ctx context.Context, operationID string, req ContainerStartRequest) (ContainerActionResponse, error) {
+	return a.runActionWithOperation(ctx, operationID, EngineActionRequest{
+		Engine:      req.Engine,
+		Method:      MethodStart,
+		ContainerID: req.ContainerID,
+	})
+}
+
 func (a *Adapter) Stop(ctx context.Context, req ContainerActionRequest) (ContainerActionResponse, error) {
 	return a.runAction(ctx, EngineActionRequest{
+		Engine:      req.Engine,
+		Method:      MethodStop,
+		ContainerID: req.ContainerID,
+		TimeoutSec:  req.TimeoutSec,
+	})
+}
+
+func (a *Adapter) StopWithOperation(ctx context.Context, operationID string, req ContainerActionRequest) (ContainerActionResponse, error) {
+	return a.runActionWithOperation(ctx, operationID, EngineActionRequest{
 		Engine:      req.Engine,
 		Method:      MethodStop,
 		ContainerID: req.ContainerID,
@@ -257,8 +274,26 @@ func (a *Adapter) Restart(ctx context.Context, req ContainerActionRequest) (Cont
 	})
 }
 
+func (a *Adapter) RestartWithOperation(ctx context.Context, operationID string, req ContainerActionRequest) (ContainerActionResponse, error) {
+	return a.runActionWithOperation(ctx, operationID, EngineActionRequest{
+		Engine:      req.Engine,
+		Method:      MethodRestart,
+		ContainerID: req.ContainerID,
+		TimeoutSec:  req.TimeoutSec,
+	})
+}
+
 func (a *Adapter) Remove(ctx context.Context, req ContainerActionRequest) (ContainerActionResponse, error) {
 	return a.runAction(ctx, EngineActionRequest{
+		Engine:      req.Engine,
+		Method:      MethodRemove,
+		ContainerID: req.ContainerID,
+		Force:       req.Force,
+	})
+}
+
+func (a *Adapter) RemoveWithOperation(ctx context.Context, operationID string, req ContainerActionRequest) (ContainerActionResponse, error) {
+	return a.runActionWithOperation(ctx, operationID, EngineActionRequest{
 		Engine:      req.Engine,
 		Method:      MethodRemove,
 		ContainerID: req.ContainerID,
@@ -331,16 +366,11 @@ func (a *Adapter) PullImageWithOperation(ctx context.Context, operationID string
 	if err != nil {
 		return ImagePullResponse{}, err
 	}
-	operationID = strings.TrimSpace(operationID)
-	if operationID == "" {
-		return ImagePullResponse{}, ErrContainerOperationIDMissing
-	}
-	operationCtx, cancel := context.WithCancel(ctx)
-	if err := a.registerOperationCancel(operationID, MethodImagesPull, cancel); err != nil {
-		cancel()
+	operationCtx, cleanup, err := a.operationContext(ctx, operationID, MethodImagesPull)
+	if err != nil {
 		return ImagePullResponse{}, err
 	}
-	defer a.unregisterOperationCancel(operationID)
+	defer cleanup()
 
 	return a.pullImage(operationCtx, engine, imageRef)
 }
@@ -391,6 +421,23 @@ func validateImagePull(req ImagePullRequest) (Engine, string, error) {
 	return req.Engine, imageRef, nil
 }
 
+func (a *Adapter) operationContext(ctx context.Context, operationID string, method Method) (context.Context, func(), error) {
+	operationID = strings.TrimSpace(operationID)
+	if operationID == "" {
+		return nil, nil, ErrContainerOperationIDMissing
+	}
+	operationCtx, cancel := context.WithCancel(ctx)
+	if err := a.registerOperationCancel(operationID, method, cancel); err != nil {
+		cancel()
+		return nil, nil, err
+	}
+	cleanup := func() {
+		a.unregisterOperationCancel(operationID)
+		cancel()
+	}
+	return operationCtx, cleanup, nil
+}
+
 func (a *Adapter) registerOperationCancel(operationID string, method Method, cancel context.CancelFunc) error {
 	a.operationsMu.Lock()
 	defer a.operationsMu.Unlock()
@@ -430,6 +477,23 @@ func (a *Adapter) runAction(ctx context.Context, req EngineActionRequest) (Conta
 	if err := validateAction(req); err != nil {
 		return ContainerActionResponse{}, err
 	}
+	return a.action(ctx, req)
+}
+
+func (a *Adapter) runActionWithOperation(ctx context.Context, operationID string, req EngineActionRequest) (ContainerActionResponse, error) {
+	if err := validateAction(req); err != nil {
+		return ContainerActionResponse{}, err
+	}
+	operationCtx, cleanup, err := a.operationContext(ctx, operationID, req.Method)
+	if err != nil {
+		return ContainerActionResponse{}, err
+	}
+	defer cleanup()
+
+	return a.action(operationCtx, req)
+}
+
+func (a *Adapter) action(ctx context.Context, req EngineActionRequest) (ContainerActionResponse, error) {
 	result, err := a.client.Action(ctx, req)
 	if err != nil {
 		return ContainerActionResponse{}, err
