@@ -681,6 +681,66 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 	}
 }
 
+func TestServer_PluginNamespaceRouteMatrix(t *testing.T) {
+	t.Parallel()
+
+	srv := newDistRouteTestServer(t, fstest.MapFS{
+		"env/index.html":           {Data: []byte("<html>env</html>")},
+		"env/assets/index.js":      {Data: []byte("console.log('env');")},
+		"inject.js":                {Data: []byte("console.log('inject');")},
+		"surfaces/plugin/app.html": {Data: []byte("<html>plugin</html>")},
+	}, nil)
+
+	routes := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{name: "root", method: http.MethodGet, path: "/_redeven_plugin"},
+		{name: "root_slash", method: http.MethodGet, path: "/_redeven_plugin/"},
+		{name: "bootstrap", method: http.MethodGet, path: "/_redeven_plugin/bootstrap"},
+		{name: "asset", method: http.MethodGet, path: "/_redeven_plugin/assets/index.js"},
+		{name: "stream", method: http.MethodGet, path: "/_redeven_plugin/stream/logs?ticket=fixture"},
+		{name: "csp_report", method: http.MethodPost, path: "/_redeven_plugin/csp-report"},
+	}
+	origins := []struct {
+		name   string
+		origin string
+	}{
+		{name: "missing_origin"},
+		{name: "env", origin: "https://env-local.example.com"},
+		{name: "codespace", origin: "https://cs-abc.example.com"},
+		{name: "port_forward", origin: "https://pf-3000.example.com"},
+		{name: "plugin", origin: "https://plg-containers.example.com"},
+		{name: "unknown", origin: "https://unknown.example.com"},
+	}
+
+	for _, origin := range origins {
+		for _, route := range routes {
+			t.Run(origin.name+"/"+route.name, func(t *testing.T) {
+				req := httptest.NewRequest(route.method, route.path, nil)
+				if origin.origin != "" {
+					req.Header.Set("Origin", origin.origin)
+				}
+				rr := httptest.NewRecorder()
+				srv.serveHTTP(rr, req)
+				if rr.Code != http.StatusNotFound {
+					t.Fatalf("%s from %s status = %d, want %d; body=%q", route.path, origin.name, rr.Code, http.StatusNotFound, rr.Body.String())
+				}
+				if strings.Contains(rr.Body.String(), "<html>env</html>") {
+					t.Fatalf("plugin namespace fell through to Env App shell: %q", rr.Body.String())
+				}
+				if strings.Contains(rr.Body.String(), "console.log('env');") {
+					t.Fatalf("plugin namespace fell through to Env App asset: %q", rr.Body.String())
+				}
+				if strings.Contains(rr.Body.String(), "console.log('inject');") {
+					t.Fatalf("plugin namespace fell through to codespace inject script: %q", rr.Body.String())
+				}
+			})
+		}
+	}
+}
+
 func TestWithLocalUIPluginRoute_SetsPluginRouteKind(t *testing.T) {
 	t.Parallel()
 

@@ -55,7 +55,7 @@ log "checking ReDevPlugin artifact staging fixture"
 
 log "checking AppServer and Local UI plugin origin isolation matrix"
 go test ./internal/codeapp/appserver \
-	-run 'TestServer_(ProxyOriginRouteMatrix|PluginOriginCannotAccessManagementSurfaces)$' \
+	-run 'TestServer_(ProxyOriginRouteMatrix|PluginNamespaceRouteMatrix|PluginOriginCannotAccessManagementSurfaces)$' \
 	-count=1
 go test ./internal/localui \
 	-run 'TestServer_(PluginNamespaceRouteMatrix|handlePluginNamespace_ForwardsWithoutEnvRouteOverride)$' \
