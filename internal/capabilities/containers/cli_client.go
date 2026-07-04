@@ -1,6 +1,7 @@
 package containers
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -16,11 +17,16 @@ import (
 const (
 	defaultCommandTimeout = 10 * time.Second
 	defaultLogTailLines   = 100
+	maxLogLineBytes       = 1024 * 1024
 	maxLogTailLines       = 1000
 )
 
 type CommandRunner interface {
 	Run(ctx context.Context, name string, args ...string) ([]byte, error)
+}
+
+type CommandStreamer interface {
+	Stream(ctx context.Context, name string, args []string, onStdoutLine func([]byte) error) error
 }
 
 type CommandRunnerFunc func(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -30,8 +36,9 @@ func (f CommandRunnerFunc) Run(ctx context.Context, name string, args ...string)
 }
 
 type CLIClient struct {
-	Runner  CommandRunner
-	Timeout time.Duration
+	Runner        CommandRunner
+	Timeout       time.Duration
+	StreamTimeout time.Duration
 }
 
 func NewCLIClient() *CLIClient {
@@ -128,6 +135,39 @@ func (c *CLIClient) TailLogs(ctx context.Context, req EngineLogsRequest) (Engine
 	}, nil
 }
 
+func (c *CLIClient) FollowLogs(ctx context.Context, req EngineLogsRequest, sink LogLineSink) error {
+	if err := validateEngine(req.Engine); err != nil {
+		return err
+	}
+	containerID := strings.TrimSpace(req.ContainerID)
+	if containerID == "" {
+		return errors.New("container_id is required")
+	}
+	if sink == nil {
+		return errors.New("logs stream sink is required")
+	}
+	if !req.Follow {
+		return errors.New("follow is required for logs stream")
+	}
+	tailLines, err := normalizeTailLines(req.TailLines)
+	if err != nil {
+		return err
+	}
+	args := []string{"logs", "--follow", "--timestamps", "--tail", strconv.Itoa(tailLines)}
+	if req.SinceUnixMs > 0 {
+		args = append(args, "--since", time.UnixMilli(req.SinceUnixMs).UTC().Format(time.RFC3339Nano))
+	}
+	args = append(args, containerID)
+	return c.stream(ctx, req.Engine, args, func(streamCtx context.Context, raw []byte) error {
+		for _, line := range parseLogLines(raw) {
+			if err := sink.AppendLogLine(streamCtx, line); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (c *CLIClient) PullImage(ctx context.Context, engine Engine, imageRef string) (EngineImageResult, error) {
 	if err := validateEngine(engine); err != nil {
 		return EngineImageResult{}, err
@@ -166,6 +206,28 @@ func (c *CLIClient) run(ctx context.Context, engine Engine, args ...string) ([]b
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	return runner.Run(runCtx, string(engine), args...)
+}
+
+func (c *CLIClient) stream(ctx context.Context, engine Engine, args []string, onStdoutLine func(context.Context, []byte) error) error {
+	var streamer CommandStreamer
+	if c.Runner == nil {
+		streamer = execRunner{}
+	} else {
+		var ok bool
+		streamer, ok = c.Runner.(CommandStreamer)
+		if !ok || streamer == nil {
+			return ErrLogsFollowUnsupported
+		}
+	}
+	streamCtx := ctx
+	var cancel context.CancelFunc
+	if c.StreamTimeout > 0 {
+		streamCtx, cancel = context.WithTimeout(ctx, c.StreamTimeout)
+		defer cancel()
+	}
+	return streamer.Stream(streamCtx, string(engine), args, func(line []byte) error {
+		return onStdoutLine(streamCtx, line)
+	})
 }
 
 func actionArgs(method Method, containerID string, force bool, timeoutSec int) []string {
@@ -226,6 +288,60 @@ func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 		return nil, fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
 	}
 	return out, nil
+}
+
+func (execRunner) Stream(ctx context.Context, name string, args []string, onStdoutLine func([]byte) error) error {
+	if _, err := exec.LookPath(name); err != nil {
+		return err
+	}
+	if onStdoutLine == nil {
+		return errors.New("stdout line handler is required")
+	}
+	cmd := exec.CommandContext(ctx, name, args...)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLogLineBytes)
+	var callbackErr error
+	for scanner.Scan() {
+		line := append([]byte(nil), scanner.Bytes()...)
+		if err := onStdoutLine(line); err != nil {
+			callbackErr = err
+			if cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+			break
+		}
+	}
+	scanErr := scanner.Err()
+	if scanErr != nil && cmd.Process != nil {
+		_ = cmd.Process.Kill()
+	}
+	waitErr := cmd.Wait()
+	if callbackErr != nil {
+		return callbackErr
+	}
+	if scanErr != nil {
+		return fmt.Errorf("%s %s: read stdout: %w", name, strings.Join(args, " "), scanErr)
+	}
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	if waitErr != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if detail != "" {
+			return fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), waitErr, detail)
+		}
+		return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), waitErr)
+	}
+	return nil
 }
 
 type inspectDocument struct {

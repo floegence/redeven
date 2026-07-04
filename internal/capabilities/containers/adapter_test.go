@@ -403,6 +403,54 @@ func TestAdapterCallMethodRejectsInvalidRequestBoundary(t *testing.T) {
 	}
 }
 
+func TestAdapterFollowLogsStreamsThroughFollowerClient(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeStreamingEngineClient{
+		fakeEngineClient: &fakeEngineClient{},
+		lines: []LogLine{
+			{TimestampUnixMs: 1704067201000, Message: "ready"},
+		},
+	}
+	adapter := NewAdapter(client)
+	var got []LogLine
+	err := adapter.FollowLogs(context.Background(), LogsTailRequest{
+		SchemaVersion: SchemaVersion,
+		Engine:        EngineDocker,
+		ContainerID:   " container_123 ",
+		TailLines:     10,
+		SinceUnixMs:   1704067200000,
+	}, LogLineSinkFunc(func(_ context.Context, line LogLine) error {
+		got = append(got, line)
+		return nil
+	}))
+	if err != nil {
+		t.Fatalf("FollowLogs() error = %v", err)
+	}
+	if len(got) != 1 || got[0].Message != "ready" {
+		t.Fatalf("streamed lines = %+v", got)
+	}
+	if client.req.Engine != EngineDocker || client.req.ContainerID != "container_123" || client.req.TailLines != 10 || !client.req.Follow {
+		t.Fatalf("stream request = %+v", client.req)
+	}
+}
+
+func TestAdapterFollowLogsRequiresFollowerClient(t *testing.T) {
+	t.Parallel()
+
+	adapter := NewAdapter(&fakeEngineClient{})
+	err := adapter.FollowLogs(context.Background(), LogsTailRequest{
+		SchemaVersion: SchemaVersion,
+		Engine:        EngineDocker,
+		ContainerID:   "container_123",
+	}, LogLineSinkFunc(func(_ context.Context, _ LogLine) error {
+		return nil
+	}))
+	if !errors.Is(err, ErrLogsFollowUnsupported) {
+		t.Fatalf("FollowLogs() error = %v, want ErrLogsFollowUnsupported", err)
+	}
+}
+
 type fakeEngineClient struct {
 	status  map[Engine]EngineStatus
 	list    map[Engine][]EngineContainer
@@ -453,6 +501,22 @@ func (f *fakeEngineClient) PullImage(_ context.Context, engine Engine, imageRef 
 		return EngineImageResult{}, errors.New("not found")
 	}
 	return result, nil
+}
+
+type fakeStreamingEngineClient struct {
+	*fakeEngineClient
+	req   EngineLogsRequest
+	lines []LogLine
+}
+
+func (f *fakeStreamingEngineClient) FollowLogs(ctx context.Context, req EngineLogsRequest, sink LogLineSink) error {
+	f.req = req
+	for _, line := range f.lines {
+		if err := sink.AppendLogLine(ctx, line); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func assertActionMethod(method Method) func(t *testing.T, got any) {

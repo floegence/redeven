@@ -11,6 +11,7 @@ var (
 	ErrEngineUnavailable     = errors.New("container engine is unavailable")
 	ErrInvalidEngine         = errors.New("container engine is invalid")
 	ErrInvalidMethod         = errors.New("container method is invalid")
+	ErrLogStreamBackpressure = errors.New("logs stream sink backpressure")
 	ErrLogsFollowUnsupported = errors.New("logs follow requires a streaming adapter")
 )
 
@@ -60,6 +61,38 @@ type EngineLogsResult struct {
 	Lines       []LogLine
 }
 
+type LogLineSink interface {
+	AppendLogLine(ctx context.Context, line LogLine) error
+}
+
+type LogLineSinkFunc func(ctx context.Context, line LogLine) error
+
+func (f LogLineSinkFunc) AppendLogLine(ctx context.Context, line LogLine) error {
+	return f(ctx, line)
+}
+
+type LogLineChannelSink struct {
+	Lines chan<- LogLine
+}
+
+func NewLogLineChannelSink(lines chan<- LogLine) LogLineChannelSink {
+	return LogLineChannelSink{Lines: lines}
+}
+
+func (s LogLineChannelSink) AppendLogLine(ctx context.Context, line LogLine) error {
+	if s.Lines == nil {
+		return errors.New("logs stream sink channel is required")
+	}
+	select {
+	case s.Lines <- line:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return ErrLogStreamBackpressure
+	}
+}
+
 type EngineImageResult struct {
 	Engine    Engine
 	Image     ImageInput
@@ -73,6 +106,10 @@ type EngineClient interface {
 	Action(ctx context.Context, req EngineActionRequest) (EngineActionResult, error)
 	TailLogs(ctx context.Context, req EngineLogsRequest) (EngineLogsResult, error)
 	PullImage(ctx context.Context, engine Engine, imageRef string) (EngineImageResult, error)
+}
+
+type EngineLogFollower interface {
+	FollowLogs(ctx context.Context, req EngineLogsRequest, sink LogLineSink) error
 }
 
 type Adapter struct {
@@ -231,6 +268,30 @@ func (a *Adapter) TailLogs(ctx context.Context, req LogsTailRequest) (LogsTailRe
 		ContainerID:       strings.TrimSpace(result.ContainerID),
 		Lines:             append([]LogLine(nil), result.Lines...),
 	}, nil
+}
+
+func (a *Adapter) FollowLogs(ctx context.Context, req LogsTailRequest, sink LogLineSink) error {
+	if err := validateEngine(req.Engine); err != nil {
+		return err
+	}
+	containerID := strings.TrimSpace(req.ContainerID)
+	if containerID == "" {
+		return errors.New("container_id is required")
+	}
+	if sink == nil {
+		return errors.New("logs stream sink is required")
+	}
+	follower, ok := a.client.(EngineLogFollower)
+	if !ok {
+		return ErrLogsFollowUnsupported
+	}
+	return follower.FollowLogs(ctx, EngineLogsRequest{
+		Engine:      req.Engine,
+		ContainerID: containerID,
+		TailLines:   req.TailLines,
+		SinceUnixMs: req.SinceUnixMs,
+		Follow:      true,
+	}, sink)
 }
 
 func (a *Adapter) PullImage(ctx context.Context, req ImagePullRequest) (ImagePullResponse, error) {
