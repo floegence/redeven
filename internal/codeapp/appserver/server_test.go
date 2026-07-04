@@ -545,6 +545,135 @@ func TestServer_DistRoutes_AreIsolated(t *testing.T) {
 	}
 }
 
+func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+	channelID := "ch_route_matrix"
+	envOrigin := envOriginWithChannel(channelID)
+	srv, err := New(Options{
+		Backend: &stubBackend{
+			listSpaces: func(ctx context.Context) ([]SpaceStatus, error) {
+				return []SpaceStatus{{CodeSpaceID: "abc"}}, nil
+			},
+		},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true}),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	type routeCase struct {
+		name string
+		path string
+	}
+	routes := []routeCase{
+		{name: "api", path: "/_redeven_proxy/api/spaces"},
+		{name: "env", path: "/_redeven_proxy/env/"},
+		{name: "inject", path: "/_redeven_proxy/inject.js"},
+	}
+	origins := []struct {
+		name       string
+		origin     string
+		wantStatus map[string]int
+	}{
+		{
+			name:   "env",
+			origin: envOrigin,
+			wantStatus: map[string]int{
+				"api":    http.StatusOK,
+				"env":    http.StatusOK,
+				"inject": http.StatusNotFound,
+			},
+		},
+		{
+			name:   "codespace",
+			origin: "https://cs-abc.example.com",
+			wantStatus: map[string]int{
+				"api":    http.StatusNotFound,
+				"env":    http.StatusNotFound,
+				"inject": http.StatusOK,
+			},
+		},
+		{
+			name:   "port_forward",
+			origin: "https://pf-abc.example.com",
+			wantStatus: map[string]int{
+				"api":    http.StatusNotFound,
+				"env":    http.StatusNotFound,
+				"inject": http.StatusNotFound,
+			},
+		},
+		{
+			name:   "plugin",
+			origin: "https://plg-containers.example.com",
+			wantStatus: map[string]int{
+				"api":    http.StatusNotFound,
+				"env":    http.StatusNotFound,
+				"inject": http.StatusNotFound,
+			},
+		},
+		{
+			name:   "unknown",
+			origin: "https://unknown.example.com",
+			wantStatus: map[string]int{
+				"api":    http.StatusNotFound,
+				"env":    http.StatusNotFound,
+				"inject": http.StatusNotFound,
+			},
+		},
+		{
+			name:   "missing_origin",
+			origin: "",
+			wantStatus: map[string]int{
+				"api":    http.StatusNotFound,
+				"env":    http.StatusNotFound,
+				"inject": http.StatusNotFound,
+			},
+		},
+	}
+
+	for _, origin := range origins {
+		for _, route := range routes {
+			t.Run(origin.name+"/"+route.name, func(t *testing.T) {
+				req := httptest.NewRequest(http.MethodGet, route.path, nil)
+				if origin.origin != "" {
+					req.Header.Set("Origin", origin.origin)
+				}
+				rr := httptest.NewRecorder()
+				srv.serveHTTP(rr, req)
+				want := origin.wantStatus[route.name]
+				if rr.Code != want {
+					t.Fatalf("%s from %s status = %d, want %d; body=%q", route.path, origin.name, rr.Code, want, rr.Body.String())
+				}
+				if want != http.StatusOK {
+					return
+				}
+				switch route.name {
+				case "api":
+					if !bytes.Contains(rr.Body.Bytes(), []byte(`"ok":true`)) {
+						t.Fatalf("api response missing ok=true: %s", rr.Body.String())
+					}
+				case "env":
+					if !strings.Contains(rr.Body.String(), "env") {
+						t.Fatalf("env response body mismatch: %q", rr.Body.String())
+					}
+				case "inject":
+					if !strings.Contains(rr.Body.String(), "inject") {
+						t.Fatalf("inject response body mismatch: %q", rr.Body.String())
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestServer_DistRoutes_DoNotExposeEnvAppDirectoryListings(t *testing.T) {
 	t.Parallel()
 
