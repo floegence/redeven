@@ -41,6 +41,24 @@ log() {
   echo "[INFO] $*"
 }
 
+require_embedded_assets() {
+  local missing=()
+  for dir in internal/envapp/ui/dist internal/codeapp/ui/dist; do
+    if [ ! -d "$dir" ]; then
+      missing+=("$dir")
+    fi
+  done
+
+  if [ "${#missing[@]}" -eq 0 ]; then
+    return 0
+  fi
+
+  echo "missing embedded UI assets required by Go embed tests:" >&2
+  printf '  %s\n' "${missing[@]}" >&2
+  echo "Run ./scripts/build_assets.sh before ./scripts/check_plugin_integration.sh --ci." >&2
+  exit 1
+}
+
 log "checking ReDevPlugin published dependency boundary"
 ./scripts/check_redevplugin_dependency_boundary.sh --ci
 
@@ -54,6 +72,7 @@ log "checking ReDevPlugin artifact staging fixture"
 ./scripts/stage_redevplugin_release_artifacts.sh --self-test
 
 log "checking AppServer and Local UI plugin origin isolation matrix"
+require_embedded_assets
 go test ./internal/codeapp/appserver \
 	-run 'TestServer_(ProxyOriginRouteMatrix|PluginManagementAPINamespaceReserved|PluginNamespaceRouteMatrix|PluginOriginCannotAccessManagementSurfaces)$' \
 	-count=1

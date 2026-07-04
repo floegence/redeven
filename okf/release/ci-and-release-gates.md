@@ -10,7 +10,7 @@ Redeven keeps CI and local release checks aligned around source validation and g
 
 # Mechanism
 
-CI has a dedicated OKF bundle check that validates source integrity and verifies checked-in dist files. The main check installs Go, Node, corepack, golangci-lint, gitleaks, and ripgrep, then runs shell syntax checks, third-party notice validation, open-source hygiene, release note generator tests, Runtime Service compatibility checks, the ReDevPlugin integration readiness gate, Gateway protocol contract checks, Flower protocol checks, Flower UI behavior contracts, UI lint, Desktop checks, embedded asset builds, Go tests, and golangci-lint. Release tags run the compatibility contract check and Gateway protocol contract check before building assets and packaging binaries.
+CI has a dedicated OKF bundle check that validates source integrity and verifies checked-in dist files. The main check installs Go, Node, corepack, golangci-lint, gitleaks, and ripgrep, then runs shell syntax checks, third-party notice validation, open-source hygiene, release note generator tests, Runtime Service compatibility checks, embedded asset builds, the ReDevPlugin integration readiness gate, Gateway protocol contract checks, Flower protocol checks, Flower UI behavior contracts, UI lint, Desktop checks, Go tests, and golangci-lint. Embedded asset builds intentionally precede focused Go gates that import Env App or Code App embed packages, because fresh checkouts do not contain ignored UI `dist/` directories. Release tags run the compatibility contract check and Gateway protocol contract check before building assets and packaging binaries.
 
 ReDevPlugin consumption is a published dependency upgrade gate, not a source
 sync. A Redeven change that integrates or upgrades ReDevPlugin must update the
@@ -71,6 +71,10 @@ self-test, the existing AppServer and Local UI plugin-origin isolation matrix,
 and the Redeven-owned Containers capability adapter and fixture contract tests.
 This keeps the current host boundary, published-artifact handoff, route
 isolation, and business-capability contract executable in one focused CI step.
+Before the route-isolation matrix runs, the gate verifies that ignored Env App
+and Code App embedded asset directories already exist; CI and the local
+pre-commit hook build those assets first so fresh checkouts do not fail with
+low-level `go:embed` path errors.
 The route matrix also reserves `/_redeven_plugin/*` and requires it to fail
 closed until released ReDevPlugin handlers are actually wired, avoiding
 accidental fallback to Env App, codespace, port-forward, Local UI Env route, or
@@ -105,35 +109,37 @@ ReDevPlugin artifacts only.
 [3] redeven:.github/workflows/ci-check.yml:29 - OKF dist verification is checked in CI.
 [4] redeven:.github/workflows/ci-check.yml:55 - CI runs shell script syntax checks across release and validation scripts.
 [5] redeven:.github/workflows/ci-check.yml:92 - Open-source hygiene runs with `--all`.
-[6] redeven:.github/workflows/ci-check.yml:98 - Runtime compatibility contract source checks run in CI.
-[7] redeven:.github/workflows/ci-check.yml:105 - CI runs the Gateway protocol contract guard.
-[8] redeven:.github/workflows/ci-check.yml:111 - CI runs the Flower UI behavior contract script.
-[9] redeven:scripts/check_flower_ui.sh:16 - The local Flower UI gate runs stop/send interaction, shared timeline projection, and markdown readability tests.
-[10] redeven:.github/workflows/ci-check.yml:120 - Embedded assets are built before Go tests and lint.
-[11] redeven:.github/workflows/release.yml:48 - Release tags validate the runtime compatibility contract for the tag.
-[12] redeven:.github/workflows/release.yml:51 - Release tags validate the Gateway protocol contract before packaging.
-[13] redeven:.github/workflows/release.yml:54 - Release tags build embedded assets before packaging.
-[14] redeven:AGENTS.md:689 - Repository local quality gates include OKF integrity, dist verification, assets, Go tests, and golangci-lint.
-[15] redeven:scripts/check_gateway_protocol_contract.sh:9 - The local script executes the focused Gateway OpenAPI and naming-boundary tests.
-[16] redeven:AGENTS.md:495 - ReDevPlugin upgrades are dependency changes that update released artifacts together.
-[17] redeven:AGENTS.md:501 - ReDevPlugin upgrade review must identify released versions, adapters, surfaces, capabilities, and local checks.
-[18] redeven:AGENTS.md:513 - Redeven local checks must prove integration does not depend on local ReDevPlugin wiring or copied artifacts.
-[19] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The local boundary script rejects Go workspaces, local ReDevPlugin wiring, and copied platform-core paths.
-[20] redeven:scripts/check_redevplugin_release_artifacts.sh:6 - The release artifact verifier supports real artifact directories, marker output, and a CI self-test mode.
-[21] redeven:scripts/check_redevplugin_release_artifacts.sh:10 - The verifier checks outer checksums, signatures, release stress counters, tarball manifests, compatibility metadata, third-party notices, and runtime binary presence.
-[22] redeven:scripts/check_redevplugin_consumption_gate.sh:6 - The consumption gate scans release staging and Desktop bundle roots for ReDevPlugin payloads without verifier markers.
-[23] redeven:.github/workflows/release.yml:293 - Release automation validates the ReDevPlugin consumption gate before generating final checksums.
-[24] redeven:scripts/build_desktop_bundled_runtime.sh:188 - Desktop bundled-runtime preparation runs the ReDevPlugin consumption gate before packaging.
-[25] redeven:.github/workflows/ci-check.yml:106 - CI runs the ReDevPlugin integration readiness gate before protocol and UI checks.
-[26] redeven:scripts/check_plugin_integration.sh:44 - The readiness gate starts with the published dependency boundary guard.
-[27] redeven:scripts/check_plugin_integration.sh:47 - The readiness gate runs release artifact verifier, consumption gate, and artifact staging fixtures.
-[28] redeven:scripts/check_plugin_integration.sh:56 - The readiness gate runs the AppServer and Local UI plugin-origin isolation matrix.
-[29] redeven:internal/codeapp/appserver/server_test.go:691 - Tests bind the reserved plugin management API namespace to AppServer flat JSON 404 responses.
-[30] redeven:internal/localui/localui_test.go:285 - Tests bind the reserved plugin management API namespace to Local UI flat JSON 404 responses without access-gate interception.
-[31] redeven:scripts/check_plugin_integration.sh:64 - The readiness gate runs the Containers capability adapter and fixture contract tests.
-[32] redeven:scripts/stage_redevplugin_release_artifacts.sh:14 - The staging script downloads or copies ReDevPlugin release artifacts, verifies them, writes a marker, and validates consumption.
-[33] redeven:.github/workflows/release.yml:93 - Release tarball builds stage a selected ReDevPlugin runtime only when explicit release inputs are configured.
-[34] redeven:.github/workflows/release.yml:113 - Release tarballs include the staged ReDevPlugin runtime, third-party notices, and verifier marker when present.
-[35] redeven:scripts/build_desktop_bundled_runtime.sh:113 - Desktop bundle preparation has an env-gated ReDevPlugin runtime staging path.
-[36] redeven:.github/workflows/release.yml:241 - Desktop release packaging passes the selected ReDevPlugin version into bundled-runtime preparation.
-[37] redeven:.githooks/pre-commit:8 - The local pre-commit hook runs the ReDevPlugin integration readiness gate before Gateway and heavyweight local checks.
+[6] redeven:.github/workflows/ci-check.yml:103 - Runtime compatibility contract source checks run in CI.
+[7] redeven:.github/workflows/ci-check.yml:106 - Embedded assets are built before focused Go gates that import UI embed packages.
+[8] redeven:.github/workflows/ci-check.yml:112 - CI runs the Gateway protocol contract guard.
+[9] redeven:.github/workflows/ci-check.yml:118 - CI runs the Flower UI behavior contract script.
+[10] redeven:scripts/check_flower_ui.sh:16 - The local Flower UI gate runs stop/send interaction, shared timeline projection, and markdown readability tests.
+[11] redeven:.github/workflows/ci-check.yml:127 - Go tests run after embedded assets exist in the checkout.
+[12] redeven:.github/workflows/release.yml:48 - Release tags validate the runtime compatibility contract for the tag.
+[13] redeven:.github/workflows/release.yml:51 - Release tags validate the Gateway protocol contract before packaging.
+[14] redeven:.github/workflows/release.yml:54 - Release tags build embedded assets before packaging.
+[15] redeven:AGENTS.md:689 - Repository local quality gates include OKF integrity, dist verification, assets, Go tests, and golangci-lint.
+[16] redeven:scripts/check_gateway_protocol_contract.sh:9 - The local script executes the focused Gateway OpenAPI and naming-boundary tests.
+[17] redeven:AGENTS.md:495 - ReDevPlugin upgrades are dependency changes that update released artifacts together.
+[18] redeven:AGENTS.md:501 - ReDevPlugin upgrade review must identify released versions, adapters, surfaces, capabilities, and local checks.
+[19] redeven:AGENTS.md:513 - Redeven local checks must prove integration does not depend on local ReDevPlugin wiring or copied artifacts.
+[20] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The local boundary script rejects Go workspaces, local ReDevPlugin wiring, and copied platform-core paths.
+[21] redeven:scripts/check_redevplugin_release_artifacts.sh:6 - The release artifact verifier supports real artifact directories, marker output, and a CI self-test mode.
+[22] redeven:scripts/check_redevplugin_release_artifacts.sh:10 - The verifier checks outer checksums, signatures, release stress counters, tarball manifests, compatibility metadata, third-party notices, and runtime binary presence.
+[23] redeven:scripts/check_redevplugin_consumption_gate.sh:6 - The consumption gate scans release staging and Desktop bundle roots for ReDevPlugin payloads without verifier markers.
+[24] redeven:.github/workflows/release.yml:293 - Release automation validates the ReDevPlugin consumption gate before generating final checksums.
+[25] redeven:scripts/build_desktop_bundled_runtime.sh:188 - Desktop bundled-runtime preparation runs the ReDevPlugin consumption gate before packaging.
+[26] redeven:.github/workflows/ci-check.yml:109 - CI runs the ReDevPlugin integration readiness gate after embedded assets are generated.
+[27] redeven:scripts/check_plugin_integration.sh:62 - The readiness gate starts with the published dependency boundary guard.
+[28] redeven:scripts/check_plugin_integration.sh:65 - The readiness gate runs release artifact verifier, consumption gate, and artifact staging fixtures.
+[29] redeven:scripts/check_plugin_integration.sh:44 - The readiness gate explicitly checks for embedded UI asset directories before running Go embed tests.
+[30] redeven:scripts/check_plugin_integration.sh:74 - The readiness gate runs the AppServer and Local UI plugin-origin isolation matrix.
+[31] redeven:internal/codeapp/appserver/server_test.go:691 - Tests bind the reserved plugin management API namespace to AppServer flat JSON 404 responses.
+[32] redeven:internal/localui/localui_test.go:285 - Tests bind the reserved plugin management API namespace to Local UI flat JSON 404 responses without access-gate interception.
+[33] redeven:scripts/check_plugin_integration.sh:83 - The readiness gate runs the Containers capability adapter and fixture contract tests.
+[34] redeven:scripts/stage_redevplugin_release_artifacts.sh:14 - The staging script downloads or copies ReDevPlugin release artifacts, verifies them, writes a marker, and validates consumption.
+[35] redeven:.github/workflows/release.yml:93 - Release tarball builds stage a selected ReDevPlugin runtime only when explicit release inputs are configured.
+[36] redeven:.github/workflows/release.yml:113 - Release tarballs include the staged ReDevPlugin runtime, third-party notices, and verifier marker when present.
+[37] redeven:scripts/build_desktop_bundled_runtime.sh:113 - Desktop bundle preparation has an env-gated ReDevPlugin runtime staging path.
+[38] redeven:.github/workflows/release.yml:241 - Desktop release packaging passes the selected ReDevPlugin version into bundled-runtime preparation.
+[39] redeven:.githooks/pre-commit:8 - The local pre-commit hook builds embedded assets before running the ReDevPlugin integration readiness gate.
