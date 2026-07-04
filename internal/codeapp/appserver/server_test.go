@@ -577,6 +577,7 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 		{name: "api", path: "/_redeven_proxy/api/spaces"},
 		{name: "env", path: "/_redeven_proxy/env/"},
 		{name: "inject", path: "/_redeven_proxy/inject.js"},
+		{name: "plugin_namespace", path: "/_redeven_plugin/surfaces/containers/index.html"},
 	}
 	origins := []struct {
 		name       string
@@ -587,54 +588,60 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 			name:   "env",
 			origin: envOrigin,
 			wantStatus: map[string]int{
-				"api":    http.StatusOK,
-				"env":    http.StatusOK,
-				"inject": http.StatusNotFound,
+				"api":              http.StatusOK,
+				"env":              http.StatusOK,
+				"inject":           http.StatusNotFound,
+				"plugin_namespace": http.StatusNotFound,
 			},
 		},
 		{
 			name:   "codespace",
 			origin: "https://cs-abc.example.com",
 			wantStatus: map[string]int{
-				"api":    http.StatusNotFound,
-				"env":    http.StatusNotFound,
-				"inject": http.StatusOK,
+				"api":              http.StatusNotFound,
+				"env":              http.StatusNotFound,
+				"inject":           http.StatusOK,
+				"plugin_namespace": http.StatusNotFound,
 			},
 		},
 		{
 			name:   "port_forward",
 			origin: "https://pf-abc.example.com",
 			wantStatus: map[string]int{
-				"api":    http.StatusNotFound,
-				"env":    http.StatusNotFound,
-				"inject": http.StatusNotFound,
+				"api":              http.StatusNotFound,
+				"env":              http.StatusNotFound,
+				"inject":           http.StatusNotFound,
+				"plugin_namespace": http.StatusNotFound,
 			},
 		},
 		{
 			name:   "plugin",
 			origin: "https://plg-containers.example.com",
 			wantStatus: map[string]int{
-				"api":    http.StatusNotFound,
-				"env":    http.StatusNotFound,
-				"inject": http.StatusNotFound,
+				"api":              http.StatusNotFound,
+				"env":              http.StatusNotFound,
+				"inject":           http.StatusNotFound,
+				"plugin_namespace": http.StatusNotFound,
 			},
 		},
 		{
 			name:   "unknown",
 			origin: "https://unknown.example.com",
 			wantStatus: map[string]int{
-				"api":    http.StatusNotFound,
-				"env":    http.StatusNotFound,
-				"inject": http.StatusNotFound,
+				"api":              http.StatusNotFound,
+				"env":              http.StatusNotFound,
+				"inject":           http.StatusNotFound,
+				"plugin_namespace": http.StatusNotFound,
 			},
 		},
 		{
 			name:   "missing_origin",
 			origin: "",
 			wantStatus: map[string]int{
-				"api":    http.StatusNotFound,
-				"env":    http.StatusNotFound,
-				"inject": http.StatusNotFound,
+				"api":              http.StatusNotFound,
+				"env":              http.StatusNotFound,
+				"inject":           http.StatusNotFound,
+				"plugin_namespace": http.StatusNotFound,
 			},
 		},
 	}
