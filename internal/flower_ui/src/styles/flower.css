@@ -5151,8 +5151,6 @@ html.dark .flower-component-shell {
 }
 
 .flower-thread-context-menu {
-  position: fixed;
-  z-index: 80;
   width: 13.25rem;
   padding: 0.25rem;
   border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);

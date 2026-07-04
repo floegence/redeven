@@ -243,6 +243,12 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 				r.applyFloretThreadProjection(result.Projection)
 			}
 		}
+		if r.isDetached() {
+			return nil
+		}
+		if cancelReason := strings.TrimSpace(r.getCancelReason()); cancelReason == "canceled" || cancelReason == "timed_out" {
+			return r.projectFloretCancelledResult(ctx, int(result.Metrics.Steps))
+		}
 		return r.failRunWithCode(classifyRunFailureCode(err, runErrorCodeFloretEngineFailed), "", err)
 	}
 	if result.Status == flruntime.TurnStatusCompleted || result.Status == flruntime.TurnStatusWaiting {

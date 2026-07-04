@@ -456,6 +456,9 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 	if activeRunID, _ := a.lookupActiveRun(endpointID, threadID); activeRunID != "" {
 		return nil
 	}
+	if a.mgr.svc.stopFinalizingRunID(endpointID, threadID) != "" {
+		return nil
+	}
 	if a.mgr.svc.idleThreadCompactionOperation(endpointID, threadID) != "" {
 		return nil
 	}
@@ -564,6 +567,13 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	if activeRunID != "" && expected != "" && expected != activeRunID {
 		return SendUserTurnResponse{}, ErrRunChanged
 	}
+	finalizingRunID := ""
+	if activeRunID == "" {
+		finalizingRunID = a.mgr.svc.stopFinalizingRunID(endpointID, threadID)
+		if finalizingRunID != "" && expected != "" && expected != finalizingRunID {
+			return SendUserTurnResponse{}, ErrRunChanged
+		}
+	}
 
 	appliedPermissionType := ""
 	a.mgr.svc.mu.Lock()
@@ -646,7 +656,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	}
 	appliedPermissionType = permissionTypeString(resolvedPermissionType)
 
-	if activeRunID != "" {
+	if activeRunID != "" || finalizingRunID != "" {
 		queued, position, err := a.mgr.svc.enqueueQueuedTurn(ctx, meta, req)
 		if err != nil {
 			return SendUserTurnResponse{}, err

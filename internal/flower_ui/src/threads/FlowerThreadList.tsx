@@ -2,7 +2,7 @@ import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Copy, Folder, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, X } from '@floegence/floe-webapp-core/icons';
-import { Input } from '@floegence/floe-webapp-core/ui';
+import { Input, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerThreadListCopy, FlowerThreadTimeGroup } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
@@ -13,6 +13,8 @@ import { canForkThreadItem, canPinThreadItem, canRenameThreadItem } from './thre
 type TimeGroup = FlowerThreadTimeGroup;
 export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'pin' | 'rename';
 export type { FlowerThreadGroup };
+
+const THREAD_CONTEXT_MENU_ESTIMATED_SIZE = { width: 212, height: 232 } as const;
 
 type FlowerThreadRenderGroup = Readonly<{
   key: string;
@@ -186,8 +188,6 @@ type FlowerThreadContextMenuProps = Readonly<{
 
 const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props) => {
   let menuRef: HTMLDivElement | undefined;
-  const left = () => `${Math.min(Math.max(props.x, 8), Math.max(8, window.innerWidth - 224))}px`;
-  const top = () => `${Math.min(Math.max(props.y, 8), Math.max(8, window.innerHeight - 232))}px`;
   const focusableItems = () => Array.from(menuRef?.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)') ?? []);
   const focusItem = (delta: number) => {
     const items = focusableItems();
@@ -284,21 +284,26 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
     </button>
   );
   return (
-    <div
-      ref={menuRef}
-      role="menu"
-      tabIndex={-1}
-      class="flower-thread-context-menu"
-      style={{ left: left(), top: top() }}
-      aria-label={props.copy.contextMenuLabel(props.item.title || props.copy.untitled)}
+    <SurfaceFloatingLayer
+      position={{ x: props.x, y: props.y }}
+      estimatedSize={THREAD_CONTEXT_MENU_ESTIMATED_SIZE}
+      class="flower-thread-context-menu-layer"
     >
-      {itemButton('copy_thread_id', props.copy.copyThreadID, <Copy class="h-3.5 w-3.5" />)}
-      {itemButton('fork', props.copy.fork, <GitBranch class="h-3.5 w-3.5" />, !props.canFork || !canForkThreadItem(props.item))}
-      {itemButton('copy_workdir', props.copy.copyWorkingDirectory, <Folder class="h-3.5 w-3.5" />, workdir() === '')}
-      <div class="flower-thread-menu-separator" />
-      {itemButton('pin', props.item.pinned ? props.copy.unpin : props.copy.pin, <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />, !props.canPin || !canPinThreadItem(props.item))}
-      {itemButton('rename', props.copy.rename, <Pencil class="h-3.5 w-3.5" />, !props.canRename || !canRenameThreadItem(props.item))}
-    </div>
+      <div
+        ref={menuRef}
+        role="menu"
+        tabIndex={-1}
+        class="flower-thread-context-menu"
+        aria-label={props.copy.contextMenuLabel(props.item.title || props.copy.untitled)}
+      >
+        {itemButton('copy_thread_id', props.copy.copyThreadID, <Copy class="h-3.5 w-3.5" />)}
+        {itemButton('fork', props.copy.fork, <GitBranch class="h-3.5 w-3.5" />, !props.canFork || !canForkThreadItem(props.item))}
+        {itemButton('copy_workdir', props.copy.copyWorkingDirectory, <Folder class="h-3.5 w-3.5" />, workdir() === '')}
+        <div class="flower-thread-menu-separator" />
+        {itemButton('pin', props.item.pinned ? props.copy.unpin : props.copy.pin, <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />, !props.canPin || !canPinThreadItem(props.item))}
+        {itemButton('rename', props.copy.rename, <Pencil class="h-3.5 w-3.5" />, !props.canRename || !canRenameThreadItem(props.item))}
+      </div>
+    </SurfaceFloatingLayer>
   );
 };
 

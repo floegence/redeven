@@ -1727,6 +1727,30 @@ describe('FlowerSurface navigation threads', () => {
     expect(document.activeElement).toBe(rowButton);
   });
 
+  it('renders the thread context menu through the Workbench-safe floating layer', async () => {
+    const runtime = renderSurfaceWithAdapter(adapter(true));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-1"]')));
+
+    const card = runtime.querySelector('[data-thread-id="thread-1"]') as HTMLElement;
+    card.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 321,
+      clientY: 222,
+    }));
+    await flush();
+
+    const menu = runtime.querySelector('[role="menu"]') as HTMLElement | null;
+    expect(menu).toBeTruthy();
+    const layer = menu?.closest('.flower-thread-context-menu-layer') as HTMLElement | null;
+    expect(layer).toBeTruthy();
+    expect(layer?.getAttribute('data-floe-local-interaction-surface')).toBe('true');
+    expect(layer?.style.left).toBe('321px');
+    expect(layer?.style.top).toBe('222px');
+    expect(menu?.style.left).toBe('');
+    expect(menu?.style.top).toBe('');
+  });
+
   it('disables fork for threads that are still running or waiting', async () => {
     const forkThread = vi.fn(async () => liveBootstrap(thread({ thread_id: 'thread-fork' })));
     const runningThread = thread({

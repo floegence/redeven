@@ -894,6 +894,7 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	thKey := runThreadKey(endpointID, threadID)
 	s.mu.Lock()
 	runID := strings.TrimSpace(s.activeRunByTh[thKey])
+	finalizingRunID := strings.TrimSpace(s.stopFinalizingByTh[thKey])
 	r := s.runs[runID]
 	idleCompaction := s.idleCompactionByTh[thKey]
 	if idleCompaction != nil && idleCompaction.isCancelled() {
@@ -936,6 +937,17 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		s.mu.Lock()
 		if strings.TrimSpace(s.activeRunByTh[thKey]) == runID {
 			delete(s.activeRunByTh, thKey)
+		}
+		delete(s.stopFinalizingByTh, thKey)
+		s.mu.Unlock()
+	}
+	if runID == "" && finalizingRunID != "" {
+		if !force {
+			return ErrThreadBusy
+		}
+		s.mu.Lock()
+		if strings.TrimSpace(s.stopFinalizingByTh[thKey]) == finalizingRunID {
+			delete(s.stopFinalizingByTh, thKey)
 		}
 		s.mu.Unlock()
 	}
