@@ -79,6 +79,43 @@ func (a *Adapter) CallMethod(ctx context.Context, method Method, request json.Ra
 	}
 }
 
+func (a *Adapter) CallOperationMethod(ctx context.Context, operationID string, method Method, request json.RawMessage) (any, error) {
+	switch method {
+	case MethodStart:
+		var req ContainerStartRequest
+		if err := decodeMethodRequest(request, &req); err != nil {
+			return nil, err
+		}
+		return a.StartWithOperation(ctx, operationID, req)
+	case MethodStop:
+		var req ContainerActionRequest
+		if err := decodeMethodRequest(request, &req); err != nil {
+			return nil, err
+		}
+		return a.StopWithOperation(ctx, operationID, req)
+	case MethodRestart:
+		var req ContainerActionRequest
+		if err := decodeMethodRequest(request, &req); err != nil {
+			return nil, err
+		}
+		return a.RestartWithOperation(ctx, operationID, req)
+	case MethodRemove:
+		var req ContainerActionRequest
+		if err := decodeMethodRequest(request, &req); err != nil {
+			return nil, err
+		}
+		return a.RemoveWithOperation(ctx, operationID, req)
+	case MethodImagesPull:
+		var req ImagePullRequest
+		if err := decodeMethodRequest(request, &req); err != nil {
+			return nil, err
+		}
+		return a.PullImageWithOperation(ctx, operationID, req)
+	default:
+		return nil, fmt.Errorf("%w: %q is not an operation method", ErrInvalidMethod, method)
+	}
+}
+
 func decodeMethodRequest(raw json.RawMessage, dst any) error {
 	raw = bytes.TrimSpace(raw)
 	if len(raw) == 0 {
