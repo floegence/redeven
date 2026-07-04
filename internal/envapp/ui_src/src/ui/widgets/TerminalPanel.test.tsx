@@ -3071,6 +3071,66 @@ describe('TerminalPanel', () => {
     expect(inactiveCore?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['one two three']);
   });
 
+  it('accepts input after inactive history catchup completes without live output', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    const inactiveCore = terminalCoreInstances[1];
+    transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
+      chunks: [
+        { sequence: 1, timestampMs: 10, data: textEncoder.encode('one ') },
+        { sequence: 2, timestampMs: 20, data: textEncoder.encode('two ') },
+        { sequence: 3, timestampMs: 30, data: textEncoder.encode('three') },
+      ],
+      firstSequence: 1,
+      lastSequence: 3,
+      coveredBytes: 13,
+      totalBytes: 13,
+    }));
+
+    emitTerminalData('session-2', 'one ', 1);
+    emitTerminalData('session-2', 'three', 3);
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledWith('session-2', 0, -1);
+      expect(inactiveCore?.write).toHaveBeenCalled();
+    });
+
+    transportMocks.sendInput.mockClear();
+    inactiveCore?.handlers?.onData?.('x');
+
+    expect(transportMocks.sendInput).toHaveBeenCalledWith('session-2', 'x', 'conn-1');
+  });
+
   it('clears and replays available history when inactive catchup falls behind retained history', async () => {
     terminalSessionsState.sessions = [
       {
