@@ -1147,6 +1147,18 @@ function TerminalSessionView(props: terminal_session_view_props) {
     flushScheduled = false;
   };
 
+  const releaseFocusAfterCatchupIfSettled = () => {
+    if (!focusAfterCatchup) return;
+    if (catchupInProgress || needsHistoryCatchup) return;
+    if (deferredLive.length > 0 || queued.length > 0) return;
+    if (flushScheduled || flushTimer || flushRaf !== null) return;
+
+    focusAfterCatchup = false;
+    if (liveRenderActive()) {
+      scheduleTerminalActivationRefresh();
+    }
+  };
+
   const requestFlushFrame = () => {
     if (flushScheduled) return;
     flushScheduled = true;
@@ -1172,10 +1184,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
         scheduleFlush();
         return;
       }
-      if (focusAfterCatchup) {
-        focusAfterCatchup = false;
-        scheduleTerminalActivationRefresh();
-      }
+      releaseFocusAfterCatchupIfSettled();
     });
   };
 
@@ -1385,11 +1394,10 @@ function TerminalSessionView(props: terminal_session_view_props) {
         .finally(() => {
           if (seq !== catchupRunSeq) return;
           catchupInProgress = false;
-          if (liveRenderActive()) {
-            scheduleTerminalActivationRefresh();
-          }
           if (deferredLive.length > 0 || needsHistoryCatchup) {
             flushDeferredOrCatchup();
+          } else {
+            releaseFocusAfterCatchupIfSettled();
           }
         });
       return;
