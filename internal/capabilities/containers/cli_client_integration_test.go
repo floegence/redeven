@@ -3,6 +3,7 @@ package containers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -105,6 +106,7 @@ func runRealEngineSmoke(t *testing.T, client *CLIClient, engine Engine, imageRef
 		t.Fatalf("%s start smoke container: %v", engine, err)
 	}
 	waitForSmokeLog(t, ctx, client, engine, name)
+	waitForFollowSmokeLog(t, ctx, client, engine, name)
 
 	if _, err := client.Action(ctx, EngineActionRequest{
 		Engine:      engine,
@@ -152,6 +154,61 @@ func waitForSmokeLog(t *testing.T, ctx context.Context, client *CLIClient, engin
 			t.Fatalf("%s logs for %s did not contain smoke marker before deadline; last error=%v", engine, containerID, err)
 		}
 		time.Sleep(250 * time.Millisecond)
+	}
+}
+
+func waitForFollowSmokeLog(t *testing.T, ctx context.Context, client *CLIClient, engine Engine, containerID string) {
+	t.Helper()
+
+	streamCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	lines := make(chan LogLine, 8)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- client.FollowLogs(streamCtx, EngineLogsRequest{
+			Engine:      engine,
+			ContainerID: containerID,
+			TailLines:   20,
+			Follow:      true,
+		}, NewLogLineChannelSink(lines))
+	}()
+
+	for {
+		select {
+		case line := <-lines:
+			if !strings.Contains(line.Message, "redeven-smoke-ready") {
+				continue
+			}
+			cancel()
+			if err := waitForFollowLogsExit(errCh); err != nil {
+				t.Fatalf("%s follow logs for %s did not stop cleanly after marker: %v", engine, containerID, err)
+			}
+			return
+		case err := <-errCh:
+			if err == nil {
+				t.Fatalf("%s follow logs for %s ended before smoke marker", engine, containerID)
+			}
+			t.Fatalf("%s follow logs for %s error before smoke marker: %v", engine, containerID, err)
+		case <-streamCtx.Done():
+			cancel()
+			err := waitForFollowLogsExit(errCh)
+			if err == nil {
+				err = streamCtx.Err()
+			}
+			t.Fatalf("%s follow logs for %s did not contain smoke marker before deadline; last error=%v", engine, containerID, err)
+		}
+	}
+}
+
+func waitForFollowLogsExit(errCh <-chan error) error {
+	select {
+	case err := <-errCh:
+		if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil
+		}
+		return err
+	case <-time.After(5 * time.Second):
+		return errors.New("follow logs did not exit after cancel")
 	}
 }
 

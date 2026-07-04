@@ -76,9 +76,11 @@ Docker or Podman engines. It is skipped unless
 `REDEVEN_CONTAINERS_ENGINE_SMOKE_ENGINES`, and defaults to a BusyBox image
 unless `REDEVEN_CONTAINERS_ENGINE_SMOKE_IMAGE` overrides it. When enabled, it
 pulls the image, creates a disposable container, verifies inspect/list/start,
-observes a bounded log marker, restarts/stops the container, and removes it
-with cleanup. This gives release and developer machines a true engine smoke
-without making ordinary CI require a Docker or Podman daemon.
+observes a bounded log marker, verifies the real `FollowLogs` streaming path
+can read the same marker and stop through context cancellation, restarts/stops
+the container, and removes it with cleanup. This gives release and developer
+machines a true engine smoke without making ordinary CI require a Docker or
+Podman daemon.
 
 The v1 preflight flags cover privileged containers, host network/PID/IPC
 namespaces, host devices, added Linux capabilities, Docker or Podman socket
@@ -143,3 +145,4 @@ into Redeven.
 [26] redeven:internal/capabilities/containers/adapter.go:273 - `Adapter.FollowLogs` exposes follow logs only through clients that implement the explicit streaming interface.
 [27] redeven:internal/capabilities/containers/cli_client.go:138 - `CLIClient.FollowLogs` maps follow requests to explicit Docker/Podman argv and streams parsed log lines into the caller sink.
 [28] redeven:internal/capabilities/containers/cli_client_test.go:209 - Streaming tests bind follow argv, timestamp parsing, and fail-closed sink backpressure.
+[29] redeven:internal/capabilities/containers/cli_client_integration_test.go:157 - Real engine smoke validates `FollowLogs` against the running smoke container and requires cancellation to stop the follow command after the marker is observed.
