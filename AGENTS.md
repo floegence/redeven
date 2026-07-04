@@ -648,6 +648,16 @@ tests, and published Floret release notes.
 - If a selected widget looks scrollable but does not actually scroll, fix the layout, height chain, and `overflow` viewport structure instead of weakening wheel-routing rules for unselected widgets.
 - Production Workbench scroll viewports must use the exported wheel contract props from `workbenchWheelInteractive.ts`; do not hand-write raw wheel data attributes or bypass the static `check:workbench-wheel` gate.
 
+## Workbench Floating UI And Coordinates
+
+- Treat Workbench as a projected coordinate space, not as an ordinary document flow page. Widget surfaces can be translated, scaled, clipped, and hosted inside a local interaction surface, so browser viewport coordinates and surface-local coordinates must not be mixed casually.
+- Floating UI inside Workbench, including context menus, dropdowns, popovers, hover cards, tooltips, autocomplete panels, command palettes, color pickers, and date pickers, must use the shared Workbench-safe floating layer contract such as `SurfaceFloatingLayer` or an equivalent existing wrapper. The shared layer owns surface-local projection, clamping, z-index, and local interaction markers.
+- Floating panels may own role, focus, keyboard navigation, item layout, and visual styling, but must not own viewport positioning with `position: fixed`, inline `left` / `top`, or `window.innerWidth` / `window.innerHeight` clamping when rendered inside a projected Workbench surface.
+- Do not hand-roll viewport-to-surface coordinate conversion in product components by subtracting bounding rects, dividing by scale, adding scroll offsets, or special-casing Workbench transforms. If an existing shared floating layer cannot express the placement, improve that layer or add a small shared wrapper instead of copying coordinate math into each component.
+- Do not portal Workbench floating UI directly to `document.body` unless the shared Workbench floating-layer contract explicitly owns that portal path. Body-level portals can bypass surface hosts, local interaction markers, outside-click routing, focus restoration, clipping, and z-index policy.
+- Right-click, menu-button, and keyboard-triggered menus must preserve the same interaction contract: open near the pointer or anchor, clamp inside the appropriate surface, support outside click, Escape/Tab close, focus restoration, and keyboard navigation.
+- Tests for Workbench-capable floating UI must cover projected or transformed surface placement, not only ordinary page rendering. At minimum, assert that the overlay is hosted by the shared local interaction floating layer and that the panel itself does not receive fixed viewport coordinates.
+
 ## Workbench Text Selection Ownership
 
 - Text selection and copy inside Workbench are a first-class interaction contract alongside wheel, typing, and activation. Do not rely on shell activation, transient focus, global shortcut hacks, or accidental browser defaults as the long-term mechanism.
