@@ -127,7 +127,7 @@ export function gitToneSelectableCardClass(_tone: GitChromeTone | undefined, act
 
   return cn(
     interactiveBase,
-    'bg-transparent text-foreground hover:bg-muted/[0.18] hover:text-foreground',
+    'bg-transparent text-foreground hover:bg-muted/[0.18] hover:text-foreground hover:shadow-sm',
   );
 }
 

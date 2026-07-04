@@ -299,6 +299,9 @@ export const enUSWidgetChrome = defineDictionary({
       discardAllDescription: 'Discard all {unit} in Changes? Tracked files will be restored to their last Git state, and untracked files will be deleted from the working tree.',
       discardUntrackedFileDescription: 'Delete the untracked file "{path}" from the working tree? Git cannot restore untracked files after they are discarded.',
       discardFileDescription: 'Restore "{path}" to the last Git state and drop its unstaged edits? Any staged snapshot for this file will stay intact.',
+      filterPlaceholder: 'Filter files...',
+      filterActive: 'Filtered',
+      showingFiltered: 'Showing {visible} of {total} files',
     },
     commitDialog: {
       title: 'Commit staged changes',
@@ -805,6 +808,9 @@ export const zhCNWidgetChrome = {
       discardFolderConfirm: '放弃文件夹',
       discardAllConfirm: '全部放弃',
       discardConfirm: '放弃',
+      filterPlaceholder: '筛选文件...',
+      filterActive: '已筛选',
+      showingFiltered: '显示 {visible} / {total} 个文件',
     },
     commitDialog: {
       ...enUSWidgetChrome.git.commitDialog,

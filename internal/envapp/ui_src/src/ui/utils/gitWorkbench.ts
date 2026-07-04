@@ -175,6 +175,7 @@ export type GitWorkbenchSubviewItem = {
   id: GitWorkbenchSubview;
   label: string;
   count?: number;
+  icon: import('solid-js').Component<{ class?: string }>;
 };
 
 export const WORKSPACE_SECTIONS: GitWorkspaceSection[] = [
@@ -242,6 +243,8 @@ export function summarizePendingWorkspaceCount(
   );
 }
 
+import { FileText, GitBranch, History } from '@floegence/floe-webapp-core/icons';
+
 export function buildGitWorkbenchSubviewItems(params: {
   repoSummary?: GitRepoSummaryResponse | null;
   workspace?: GitListWorkspaceChangesResponse | null;
@@ -254,13 +257,15 @@ export function buildGitWorkbenchSubviewItems(params: {
       id: "changes",
       label: "Changes",
       count: summarizeWorkspaceCount(summary) || undefined,
+      icon: FileText,
     },
     {
       id: "branches",
       label: "Branches",
       count: params.branchesCount || undefined,
+      icon: GitBranch,
     },
-    { id: "history", label: "Graph" },
+    { id: "history", label: "Graph", icon: History },
   ];
 }
 
