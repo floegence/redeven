@@ -527,7 +527,8 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('GitStatePane');
     expect(branchesSrc).toContain('Loading commit history...');
     expect(branchesSrc).toContain('Loading branch compare...');
-    expect(branchesSrc).toContain('Loading branch status...');
+    expect(branchesSrc).toContain('data-git-branch-status-summary-state');
+    expect(branchesSrc).toContain('data-git-branch-status-content-frame="true"');
     expect(branchesSrc).not.toContain("import { SnakeLoader } from '@floegence/floe-webapp-core/loading';");
 
     expect(historySrc).toContain('GitStatePane');
@@ -550,9 +551,13 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('if (props.onCheckoutBranch && selectedBranch())');
     expect(branchesSrc).toContain('if (deleteAvailable() && selectedBranch())');
     expect(branchesSrc).toContain('const shouldRenderBranchHeaderActions = () =>');
+    expect(branchesSrc).toContain('git-branch-header-verification-slot');
     expect(branchesSrc).toContain('GitInlineLoadingStatus class="git-branch-header-inline-status"');
     expect(branchesSrc).toContain('data-git-branch-status-summary-state');
+    expect(branchesSrc).toContain('data-git-branch-status-content-frame="true"');
     expect(branchesSrc).toContain('data-git-branch-stable-placeholder={view}');
+    expect(branchesSrc).toContain('data-git-branch-stable-placeholder-state');
+    expect(branchesSrc).not.toContain('Checking branch selection');
     expect(branchesSrc).toContain('const statusTabActive = () => branchSubview() === "status";');
     expect(branchesSrc).toContain('const historyTabActive = () => branchSubview() === "history";');
     expect(branchesSrc).toContain('const renderHistory = () =>');

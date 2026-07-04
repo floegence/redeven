@@ -2214,6 +2214,24 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     if (props.branchesLoading && selectedBranch()) return "Refreshing";
     return "";
   };
+  const renderBranchHeaderVerificationSlot = () => {
+    const label = branchHeaderPendingLabel();
+    return (
+      <div
+        class="git-branch-header-verification-slot"
+        data-git-branch-verification-state={label ? "active" : "idle"}
+        aria-hidden={label ? undefined : "true"}
+      >
+        <Show when={label}>
+          {(value) => (
+            <GitInlineLoadingStatus class="git-branch-header-inline-status">
+              {value()}
+            </GitInlineLoadingStatus>
+          )}
+        </Show>
+      </div>
+    );
+  };
   const branchHeaderControls = createMemo<BranchHeaderControlGroups>(() => {
     const primaryActions: BranchPrimaryActionPresentation[] = [];
     const secondaryShortcuts: BranchShortcutPresentation[] = [];
@@ -2737,26 +2755,26 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         <div
           class="git-branch-stable-placeholder__body"
           data-git-branch-stable-placeholder={view}
+          data-git-branch-stable-placeholder-state={
+            checking ? "verifying" : "waiting"
+          }
         >
-          <Show
-            when={checking}
-            fallback={
-              <GitSubtleNote class="max-w-xl">
-                {view === "status"
-                  ? "Branch status will appear here after this selection is available."
-                  : "Commit history will appear here after this selection is available."}
-              </GitSubtleNote>
-            }
-          >
-            <GitInlineLoadingStatus>
-              Checking branch selection
-            </GitInlineLoadingStatus>
-            <div class="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+          <GitSubtleNote class="git-branch-stable-placeholder__note max-w-xl">
+            <Show
+              when={checking}
+              fallback={
+                <>
+                  {view === "status"
+                    ? "Branch status will appear here after this selection is available."
+                    : "Commit history will appear here after this selection is available."}
+                </>
+              }
+            >
               {view === "status"
                 ? "Status will appear here after verification."
                 : "History will appear here after verification."}
-            </div>
-          </Show>
+            </Show>
+          </GitSubtleNote>
           <div class="git-branch-stable-placeholder__rows" aria-hidden="true">
             <div />
             <div />
@@ -3084,13 +3102,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             )}
           </For>
         </div>
-        <Show when={pending}>
-          <GitInlineLoadingStatus class="mt-1.5">
-            {branchIsVerifying()
-              ? "Checking branch..."
-              : "Loading branch status..."}
-          </GitInlineLoadingStatus>
-        </Show>
       </div>
     );
   };
@@ -3206,7 +3217,10 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               </Show>
             </section>
 
-            <div class="flex min-h-0 flex-1 overflow-hidden">
+            <div
+              class="flex min-h-0 flex-1 overflow-hidden"
+              data-git-branch-status-content-frame="true"
+            >
               <Show
                 when={branchIsReady() && visibleStatusWorkspace()}
                 fallback={renderBranchStablePlaceholder("status")}
@@ -3377,13 +3391,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           >
                             {branchDisplayName(selectedBranch())}
                           </GitPrimaryTitle>
-                          <Show when={branchHeaderPendingLabel()}>
-                            {(label) => (
-                              <GitInlineLoadingStatus class="git-branch-header-inline-status">
-                                {label()}
-                              </GitInlineLoadingStatus>
-                            )}
-                          </Show>
+                          {renderBranchHeaderVerificationSlot()}
                         </div>
                         <Show when={branchSummary().visible}>
                           <div

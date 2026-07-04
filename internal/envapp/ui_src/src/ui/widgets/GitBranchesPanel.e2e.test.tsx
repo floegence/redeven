@@ -4346,6 +4346,12 @@ describe("GitBranchesPanel interactions", () => {
       const moreButton = host.querySelector(
         'button[aria-label="More actions"]',
       ) as HTMLButtonElement | null;
+      const inlineStatuses = Array.from(
+        host.querySelectorAll(".git-inline-loading-status"),
+      );
+      const verificationSlot = host.querySelector(
+        '[data-git-branch-verification-state="active"]',
+      ) as HTMLElement | null;
 
       expect(header?.dataset.gitBranchHeaderLayout).toBe("compact");
       expect(commandRail?.dataset.gitBranchHeaderActions).toBe("overflow");
@@ -4355,9 +4361,12 @@ describe("GitBranchesPanel interactions", () => {
       expect(moreButton).toBeTruthy();
       expect(moreButton?.disabled).toBe(true);
       expect(moreButton?.getAttribute("aria-busy")).toBe("true");
-      expect(host.textContent).toContain("Checking branch");
+      expect(verificationSlot).toBeTruthy();
+      expect(inlineStatuses).toHaveLength(1);
+      expect(inlineStatuses[0]?.textContent).toContain("Checking");
+      expect(host.textContent).not.toContain("Checking branch...");
+      expect(host.textContent).not.toContain("Checking branch selection");
       expect(host.querySelector(".git-loading-indicator")).toBeTruthy();
-      expect(host.querySelector(".git-inline-loading-status")).toBeTruthy();
       expect(
         host.querySelector("[data-git-branch-status-toolbar-layout]"),
       ).toBeTruthy();
@@ -4367,7 +4376,9 @@ describe("GitBranchesPanel interactions", () => {
         ),
       ).toBeTruthy();
       expect(
-        host.querySelector('[data-git-branch-stable-placeholder="status"]'),
+        host.querySelector(
+          '[data-git-branch-stable-placeholder="status"][data-git-branch-stable-placeholder-state="verifying"]',
+        ),
       ).toBeTruthy();
       expect(host.querySelector("#git-branch-subview-tab-status")).toBeTruthy();
       expect(host.querySelector("#git-branch-subview-tab-history")).toBeTruthy();
