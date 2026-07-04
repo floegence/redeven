@@ -58,7 +58,7 @@ go test ./internal/codeapp/appserver \
 	-run 'TestServer_(ProxyOriginRouteMatrix|PluginManagementAPINamespaceReserved|PluginNamespaceRouteMatrix|PluginOriginCannotAccessManagementSurfaces)$' \
 	-count=1
 go test ./internal/localui \
-	-run 'TestServer_(PluginNamespaceRouteMatrix|handlePluginNamespace_ForwardsWithoutEnvRouteOverride)$' \
+	-run 'TestServer_(PluginManagementAPINamespaceReserved|PluginNamespaceRouteMatrix|handlePluginNamespace_ForwardsWithoutEnvRouteOverride)$' \
 	-count=1
 
 log "checking Containers capability adapter and fixture contracts"

@@ -690,6 +690,13 @@ func (s *Server) handleEnvAppProxy(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	if isReservedPluginManagementProxyPath(r) {
+		// Keep the future plugin management namespace fail-closed even before
+		// local access is unlocked. Real management handlers must replace this
+		// reservation with the normal access-gated appserver path.
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not found"})
+		return
+	}
 	if s.accessEnabled() && !s.isPublicEnvAppRequest(r) {
 		if !s.ensureLocalAccessHTTPResponse(w, r) {
 			http.Error(w, "access password required", http.StatusLocked)
@@ -697,6 +704,14 @@ func (s *Server) handleEnvAppProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.appServer.ServeHTTP(w, appserver.WithLocalUIEnvRoute(r))
+}
+
+func isReservedPluginManagementProxyPath(r *http.Request) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	p := strings.TrimSpace(r.URL.Path)
+	return p == "/_redeven_proxy/api/plugins" || strings.HasPrefix(p, "/_redeven_proxy/api/plugins/")
 }
 
 func (s *Server) handlePluginNamespace(w http.ResponseWriter, r *http.Request) {

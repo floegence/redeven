@@ -282,6 +282,54 @@ func TestServer_handleEnvAppProxy_rejectsEnvAppDirectoryListingWhenLocked(t *tes
 	}
 }
 
+func TestServer_PluginManagementAPINamespaceReserved(t *testing.T) {
+	gate := accessgate.New(accessgate.Options{Password: "secret"})
+	s := newTestServer(t, gate)
+
+	routes := []struct {
+		name   string
+		method string
+		target string
+	}{
+		{name: "root", method: http.MethodGet, target: "http://localhost:23998/_redeven_proxy/api/plugins"},
+		{name: "catalog", method: http.MethodGet, target: "http://localhost:23998/_redeven_proxy/api/plugins/catalog"},
+		{name: "validate", method: http.MethodPost, target: "http://localhost:23998/_redeven_proxy/api/plugins/packages/validate"},
+		{name: "staged_delete", method: http.MethodDelete, target: "http://localhost:23998/_redeven_proxy/api/plugins/staged/pkg_123"},
+	}
+
+	for _, route := range routes {
+		t.Run(route.name, func(t *testing.T) {
+			req := httptest.NewRequest(route.method, route.target, nil)
+			req.Header.Set("Origin", "https://env-local.example.com")
+			res := httptest.NewRecorder()
+			s.handler().ServeHTTP(res, req)
+			if res.Result().StatusCode != http.StatusNotFound {
+				t.Fatalf("plugin management API status = %d, want %d; body=%q", res.Result().StatusCode, http.StatusNotFound, res.Body.String())
+			}
+			if got := res.Result().Header.Get("Content-Type"); !strings.Contains(got, "application/json") {
+				t.Fatalf("plugin management API content-type = %q, want application/json", got)
+			}
+			var body struct {
+				OK        bool   `json:"ok"`
+				Error     string `json:"error"`
+				ErrorCode string `json:"error_code"`
+			}
+			if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
+				t.Fatalf("plugin management API response is not flat appserver json: %v; body=%q", err, res.Body.String())
+			}
+			if body.OK || body.Error != "not found" || body.ErrorCode != "" {
+				t.Fatalf("plugin management API response = %+v, want ok=false error=not found without plugin-owned error_code", body)
+			}
+			if strings.Contains(res.Body.String(), "access password required") {
+				t.Fatalf("plugin management API was intercepted by local access gate: %q", res.Body.String())
+			}
+			if strings.Contains(res.Body.String(), "<html>env</html>") {
+				t.Fatalf("plugin management API was served as Env App shell: %q", res.Body.String())
+			}
+		})
+	}
+}
+
 func TestServer_PluginNamespaceRouteMatrix(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)
