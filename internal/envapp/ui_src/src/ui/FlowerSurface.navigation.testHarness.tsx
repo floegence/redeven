@@ -19,6 +19,7 @@ import type {
   FlowerContextCompaction,
   FlowerTimelineDecoration,
   FlowerSubagentDetail,
+  FlowerSubagentSummary,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -368,7 +369,6 @@ export function activityTimeline(args: {
   needs_attention?: boolean;
   items: readonly FlowerActivityItem[];
   file_actions?: FlowerActivityTimelineBlock['file_actions'];
-  subagent_actions?: FlowerActivityTimelineBlock['subagent_actions'];
 }): FlowerActivityTimelineBlock {
   const status = args.status ?? 'success';
   const severity = args.severity ?? (status === 'success' ? 'quiet' : status === 'error' ? 'error' : 'normal');
@@ -404,7 +404,25 @@ export function activityTimeline(args: {
     },
     items: args.items,
     ...(args.file_actions ? { file_actions: args.file_actions } : {}),
-    ...(args.subagent_actions ? { subagent_actions: args.subagent_actions } : {}),
+  };
+}
+
+export function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}): FlowerSubagentSummary {
+  return {
+    parent_thread_id: 'thread-parent-subagents',
+    subagent_id: 'thread-child-review',
+    thread_id: 'thread-child-review',
+    task_name: 'Review API contract',
+    task_description: 'Review the API boundary.',
+    title: 'Review API contract',
+    agent_type: 'reviewer',
+    status: 'running',
+    can_send_input: false,
+    can_interrupt: true,
+    can_close: true,
+    created_at_ms: 100,
+    updated_at_ms: 160,
+    ...overrides,
   };
 }
 

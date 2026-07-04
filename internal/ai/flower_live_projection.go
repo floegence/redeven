@@ -63,6 +63,11 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 	if thread == nil {
 		return nil, sql.ErrNoRows
 	}
+	subagents, err := s.listFlowerSubagentsForEndpoint(ctx, strings.TrimSpace(meta.EndpointID), threadID)
+	if err != nil {
+		return nil, err
+	}
+	thread.Subagents = subagents
 
 	s.mu.Lock()
 	db := s.threadsDB
@@ -1809,6 +1814,10 @@ func mergeFlowerLiveThreadPatch(current FlowerLiveThreadPatch, patch FlowerLiveT
 	if strings.TrimSpace(patch.LastMessagePreview) != "" {
 		current.LastMessagePreview = strings.TrimSpace(patch.LastMessagePreview)
 	}
+	if patch.SubagentsSet {
+		current.SubagentsSet = true
+		current.Subagents = cloneFlowerSubagentSummaries(patch.Subagents)
+	}
 	if patch.ReasoningSelectionSet {
 		current.ReasoningSelectionSet = true
 		if patch.ReasoningSelection == nil {
@@ -2162,6 +2171,8 @@ func cloneFlowerLiveMaterializedState(in FlowerLiveMaterializedState) FlowerLive
 
 func cloneFlowerLiveThreadPatch(in FlowerLiveThreadPatch) FlowerLiveThreadPatch {
 	out := in
+	out.Subagents = cloneFlowerSubagentSummaries(in.Subagents)
+	out.SubagentsSet = in.SubagentsSet
 	if in.ReasoningSelection != nil {
 		value := config.NormalizeAIReasoningSelection(*in.ReasoningSelection)
 		out.ReasoningSelection = &value

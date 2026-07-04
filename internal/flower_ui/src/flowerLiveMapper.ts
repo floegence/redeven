@@ -9,7 +9,6 @@ import type {
   FlowerActivityRenderer,
   FlowerActivitySeverity,
   FlowerActivityStatus,
-  FlowerActivitySubagentAction,
   FlowerActivityTargetRef,
   FlowerActivityTimelineBlock,
   FlowerChatMessage,
@@ -47,6 +46,7 @@ import type {
   FlowerThreadSnapshot,
   FlowerThreadStatus,
   FlowerPermissionType,
+  FlowerSubagentSummary,
 } from './contracts/flowerSurfaceContracts';
 import {
   normalizeFlowerReasoningCapability,
@@ -655,86 +655,16 @@ function mapActivityFileActions(raw: unknown): Readonly<Record<string, FlowerAct
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-type FlowerActivitySubagentActionItem = NonNullable<FlowerActivitySubagentAction['items']>[number];
-
-function mapActivitySubagentActionItem(raw: unknown, actionKey: string, itemIndex: number): FlowerActivitySubagentActionItem | null {
-  const record = plainRecordValue(raw);
-  if (!record) return null;
-  const allowed = new Set([
-    'thread_id',
-    'subagent_id',
-  ]);
-  for (const key of Object.keys(record)) {
-    if (!allowed.has(key)) {
-      throw new Error(`Flower contract error: activity_timeline.subagent_actions.${actionKey}.items.${itemIndex}.${key} is not part of the subagent action item contract.`);
-    }
-  }
-  const out = {
-    ...(trim(record.thread_id) ? { thread_id: trim(record.thread_id) } : {}),
-    ...(trim(record.subagent_id) ? { subagent_id: trim(record.subagent_id) } : {}),
-  };
-  return Object.keys(out).length > 0 ? out : null;
-}
-
-function mapActivitySubagentActionItems(raw: unknown, actionKey: string): FlowerActivitySubagentAction['items'] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const out = raw
-    .map((value, index) => mapActivitySubagentActionItem(value, actionKey, index))
-    .filter((value): value is NonNullable<ReturnType<typeof mapActivitySubagentActionItem>> => value !== null);
-  return out.length > 0 ? out : undefined;
-}
-
-function mapActivitySubagentAction(raw: unknown, actionKey: string): FlowerActivitySubagentAction | null {
-  const record = plainRecordValue(raw);
-  if (!record) return null;
-  const allowed = new Set([
-    'operation',
-    'action',
-    'delegation_runtime',
-    'thread_id',
-    'subagent_id',
-    'parent_thread_id',
-    'items',
-  ]);
-  for (const key of Object.keys(record)) {
-    if (!allowed.has(key)) {
-      throw new Error(`Flower contract error: activity_timeline.subagent_actions.${actionKey}.${key} is not part of the subagent action contract.`);
-    }
-  }
-  const items = mapActivitySubagentActionItems(record.items, actionKey);
-  const out = {
-    ...(trim(record.operation) ? { operation: trim(record.operation) } : {}),
-    ...(trim(record.action) ? { action: trim(record.action) } : {}),
-    ...(trim(record.delegation_runtime) ? { delegation_runtime: trim(record.delegation_runtime) } : {}),
-    ...(trim(record.thread_id) ? { thread_id: trim(record.thread_id) } : {}),
-    ...(trim(record.subagent_id) ? { subagent_id: trim(record.subagent_id) } : {}),
-    ...(trim(record.parent_thread_id) ? { parent_thread_id: trim(record.parent_thread_id) } : {}),
-    ...(items ? { items } : {}),
-  };
-  return Object.keys(out).length > 0 ? out : null;
-}
-
-function mapActivitySubagentActions(raw: unknown): FlowerActivityTimelineBlock['subagent_actions'] | undefined {
-  const record = plainRecordValue(raw);
-  if (!record) return undefined;
-  const out: Record<string, FlowerActivitySubagentAction> = {};
-  for (const [key, value] of Object.entries(record)) {
-    const actionKey = trim(key);
-    if (!actionKey) continue;
-    const action = mapActivitySubagentAction(value, actionKey);
-    if (action) out[actionKey] = action;
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
-}
-
 function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | null {
   const record = plainRecordValue(raw);
   if (!record || trim(record.type) !== 'activity-timeline') return null;
+  if (hasOwn(record, 'subagent_actions')) {
+    throw new Error('Flower contract error: activity_timeline.subagent_actions is not part of the activity timeline contract.');
+  }
   const items = Array.isArray(record.items) ? record.items.map(mapActivityItem).filter(isPresent) : [];
   const summary = plainRecordValue(record.summary) ?? {};
   const attention = activityAttentionReasonArray(summary.attention_reasons);
   const fileActions = mapActivityFileActions(record.file_actions);
-  const subagentActions = mapActivitySubagentActions(record.subagent_actions);
   return {
     type: 'activity-timeline',
     schema_version: positiveInteger(record.schema_version) ?? 1,
@@ -753,7 +683,6 @@ function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | n
     },
     items,
     ...(fileActions ? { file_actions: fileActions } : {}),
-    ...(subagentActions ? { subagent_actions: subagentActions } : {}),
   };
 }
 
@@ -785,6 +714,46 @@ export function mapFlowerReadStatus(raw: unknown): FlowerThreadReadStatus {
       ...(trim(readState.last_seen_waiting_prompt_id) ? { last_seen_waiting_prompt_id: trim(readState.last_seen_waiting_prompt_id) } : {}),
     },
   };
+}
+
+function mapFlowerSubagentSummary(raw: unknown): FlowerSubagentSummary | null {
+  const record = plainRecordValue(raw);
+  if (!record) return null;
+  const threadID = trim(record.thread_id) || trim(record.subagent_id);
+  if (!threadID) return null;
+  const subagentID = trim(record.subagent_id) || threadID;
+  const createdAtMs = integerOrZero(record.created_at_ms ?? record.created_at_unix_ms);
+  const updatedAtMs = integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms);
+  const queuedInputs = integerOrZero(record.queued_inputs);
+  return {
+    parent_thread_id: trim(record.parent_thread_id),
+    subagent_id: subagentID,
+    thread_id: threadID,
+    ...(trim(record.task_name) ? { task_name: trim(record.task_name) } : {}),
+    ...(trim(record.task_description) ? { task_description: trim(record.task_description) } : {}),
+    ...(trim(record.title) ? { title: trim(record.title) } : {}),
+    ...(trim(record.agent_type) ? { agent_type: trim(record.agent_type) } : {}),
+    ...(trim(record.context_mode) ? { context_mode: trim(record.context_mode) } : {}),
+    status: trim(record.status) || 'unknown',
+    ...(trim(record.last_message) ? { last_message: trim(record.last_message) } : {}),
+    ...(trim(record.waiting_prompt) ? { waiting_prompt: trim(record.waiting_prompt) } : {}),
+    ...(queuedInputs > 0 ? { queued_inputs: queuedInputs } : {}),
+    can_send_input: Boolean(record.can_send_input),
+    can_interrupt: Boolean(record.can_interrupt),
+    can_close: Boolean(record.can_close),
+    ...(createdAtMs > 0 ? { created_at_ms: createdAtMs } : {}),
+    ...(updatedAtMs > 0 ? { updated_at_ms: updatedAtMs } : {}),
+  };
+}
+
+function mapFlowerSubagents(raw: unknown, field: string): readonly FlowerSubagentSummary[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) {
+    throw new Error(`Flower contract error: ${field} must be an array.`);
+  }
+  return raw
+    .map((value) => mapFlowerSubagentSummary(value))
+    .filter((value): value is FlowerSubagentSummary => value !== null);
 }
 
 function mapInputRequest(prompt: unknown): FlowerInputRequest | null {
@@ -1014,6 +983,7 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
   const readStatus = patch.read_status === undefined ? null : mapFlowerReadStatus(patch.read_status);
   const reasoningSelection = hasOwn(patch, 'reasoning_selection') ? normalizeFlowerReasoningSelection(patch.reasoning_selection) ?? null : undefined;
   const reasoningCapability = hasOwn(patch, 'reasoning_capability') ? normalizeFlowerReasoningCapability(patch.reasoning_capability) ?? null : undefined;
+  const subagents = mapFlowerSubagents(patch.subagents, 'thread.patch.subagents');
   return {
     ...(trim(patch.thread_id) ? { thread_id: trim(patch.thread_id) } : {}),
     ...(trim(patch.title) ? { title: trim(patch.title) } : {}),
@@ -1038,6 +1008,7 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
     ...(trim(patch.owner_kind) ? { owner_kind: trim(patch.owner_kind).toLowerCase() } : {}),
     ...(trim(patch.owner_id) ? { owner_id: trim(patch.owner_id) } : {}),
     ...(trim(patch.parent_thread_id) ? { parent_thread_id: trim(patch.parent_thread_id) } : {}),
+    ...(subagents !== undefined ? { subagents } : {}),
     ...(readStatus ? { read_status: readStatus } : {}),
   };
 }
@@ -1103,6 +1074,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   const contextUsage = mapContextUsage(record.context_usage);
   const contextCompactions = mapContextCompactions(record.context_compactions);
   const timelineDecorations = mapTimelineDecorations(record.timeline_decorations);
+  const subagents = mapFlowerSubagents(record.subagents, 'thread.subagents');
   return {
     thread_id: threadID,
     title: trim(record.title) || trim(record.last_message_preview) || 'Ask Flower',
@@ -1130,6 +1102,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     ...(contextUsage ? { context_usage: contextUsage } : {}),
     ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
     ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
+    ...(subagents !== undefined ? { subagents } : {}),
     ...(inputRequest ? { input_request: inputRequest } : {}),
     ...(errorMessage ? { error: { message: errorMessage, ...(errorCode ? { code: errorCode } : {}) } } : {}),
     read_status: mapFlowerReadStatus(readStatusRaw ?? record.read_status),

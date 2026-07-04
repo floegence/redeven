@@ -779,7 +779,7 @@ func TestFloretSubagents_ActivityRefreshDoesNotMutateProductThread(t *testing.T)
 	r.currentModelID = "openai/gpt-5-mini"
 	runtime := newFloretSubagentRuntime(r)
 
-	runtime.refreshSubagentTimeline(context.Background(), subagentSnapshot{
+	runtime.refreshSubagentsPatch(context.Background(), subagentSnapshot{
 		ThreadID:       "th_existing_product",
 		TaskName:       "collision",
 		ParentThreadID: parentThreadID,

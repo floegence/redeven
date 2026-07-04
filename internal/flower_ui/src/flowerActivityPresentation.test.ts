@@ -202,6 +202,7 @@ describe('presentFlowerActivityItem', () => {
         context_mode: 'mission_only',
         items: [{
           thread_id: 'child-thread-1',
+          subagent_id: 'child-thread-1',
           task_name: 'Review API boundary',
           task_description: 'Review the API boundary and identify contract risks.',
           agent_type: 'reviewer',
@@ -227,15 +228,18 @@ describe('presentFlowerActivityItem', () => {
           agent_type: 'reviewer',
           raw_status: 'running',
           show_status: false,
+          open_messages: {
+            thread_id: 'child-thread-1',
+            subagent_id: 'child-thread-1',
+          },
         }],
       },
     });
-    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('open_messages');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Mission only');
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('Reading contracts');
   });
 
-  it('renders subagent timeline activity from visible payload joined with routing sidecar', () => {
+  it('renders subagent timeline activity from visible payload routing ids', () => {
     const presentation = presentFlowerActivityItem(item({
       item_id: 'subagent:review-api',
       tool_name: 'subagents',
@@ -243,21 +247,14 @@ describe('presentFlowerActivityItem', () => {
       label: 'Review API boundary',
       payload: {
         thread_id: 'child-thread-1',
+        subagent_id: 'child-thread-1',
         task_name: 'Review API boundary',
         task_description: 'Review the API boundary and identify contract risks.',
         agent_type: 'reviewer',
         fork_mode: 'none',
         status: 'completed',
       },
-    }), undefined, undefined, {
-      subagentAction: {
-        operation: 'subagents',
-        action: 'inspect',
-        delegation_runtime: 'floret',
-        thread_id: 'child-thread-1',
-        subagent_id: 'child-thread-1',
-      },
-    });
+    }));
 
     expect(presentation.label).toBe('Subagents');
     expect(presentation.meta).toBe('Review API boundary · Review the API boundary and identify contract risks.');
@@ -272,6 +269,7 @@ describe('presentFlowerActivityItem', () => {
           show_status: false,
           open_messages: {
             thread_id: 'child-thread-1',
+            subagent_id: 'child-thread-1',
           },
         }],
       },
@@ -348,7 +346,6 @@ describe('presentFlowerActivityItem', () => {
           status: 'paused_elsewhere',
           accepted: true,
           can_close: false,
-          delegation_runtime: 'floret',
         }],
       },
     }));

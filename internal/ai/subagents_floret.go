@@ -134,11 +134,11 @@ type floretSubagentRuntime struct {
 	muParent sync.Mutex
 	parent   *run
 
-	mu             sync.Mutex
-	host           flruntime.Host
-	hostKey        string
-	closed         bool
-	timelineQueued map[string]struct{}
+	mu                   sync.Mutex
+	host                 flruntime.Host
+	hostKey              string
+	closed               bool
+	subagentsPatchQueued map[string]struct{}
 }
 
 type resolvedSubagentRunModel struct {
@@ -230,9 +230,6 @@ func (s *floretSubagentRuntime) manage(ctx context.Context, toolCallID string, a
 	if err != nil {
 		return nil, err
 	}
-	if actions := flowerToolSubagentActivityActions(toolCallID, action, out); len(actions) > 0 {
-		parent.upsertActivityTimelineSubagentActions(actions)
-	}
 	parent.persistRunEvent("delegation.manage.end", RealtimeStreamKindLifecycle, map[string]any{
 		"action":       action,
 		"tool_call_id": toolCallID,
@@ -322,7 +319,7 @@ func (s *floretSubagentRuntime) currentHost() flruntime.Host {
 	return s.host
 }
 
-func (s *floretSubagentRuntime) scheduleParentSubagentTimelineRefresh(threadID string) {
+func (s *floretSubagentRuntime) scheduleParentSubagentsPatch(threadID string) {
 	if s == nil {
 		return
 	}
@@ -335,14 +332,14 @@ func (s *floretSubagentRuntime) scheduleParentSubagentTimelineRefresh(threadID s
 		s.mu.Unlock()
 		return
 	}
-	if s.timelineQueued == nil {
-		s.timelineQueued = map[string]struct{}{}
+	if s.subagentsPatchQueued == nil {
+		s.subagentsPatchQueued = map[string]struct{}{}
 	}
-	if _, exists := s.timelineQueued[threadID]; exists {
+	if _, exists := s.subagentsPatchQueued[threadID]; exists {
 		s.mu.Unlock()
 		return
 	}
-	s.timelineQueued[threadID] = struct{}{}
+	s.subagentsPatchQueued[threadID] = struct{}{}
 	s.mu.Unlock()
 
 	go func() {
@@ -351,7 +348,7 @@ func (s *floretSubagentRuntime) scheduleParentSubagentTimelineRefresh(threadID s
 		<-timer.C
 		defer func() {
 			s.mu.Lock()
-			delete(s.timelineQueued, threadID)
+			delete(s.subagentsPatchQueued, threadID)
 			s.mu.Unlock()
 		}()
 		s.mu.Lock()
@@ -366,7 +363,7 @@ func (s *floretSubagentRuntime) scheduleParentSubagentTimelineRefresh(threadID s
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), parent.persistTimeout())
 		defer cancel()
-		s.publishParentSubagentTimeline(ctx)
+		s.publishParentSubagentsPatch(ctx)
 	}()
 }
 
@@ -967,7 +964,7 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 		return nil, fmt.Errorf("finalize child permission snapshot: %w", err)
 	}
 	localSnapshot := subagentSnapshotFromFloret(snapshot)
-	s.refreshSubagentTimeline(ctx, localSnapshot)
+	s.refreshSubagentsPatch(ctx, localSnapshot)
 	item := subagentSnapshotPayload(localSnapshot)
 	parent.persistRunEvent("delegation.spawn", RealtimeStreamKindLifecycle, map[string]any{
 		"subagent_id":      item["subagent_id"],
@@ -1010,7 +1007,7 @@ func (s *floretSubagentRuntime) wait(ctx context.Context, toolCallID string, arg
 			childIDs = append(childIDs, flruntime.ThreadID(id))
 		}
 	}
-	s.upsertRunningWaitToolSidecar(ctx, toolCallID, host, parent, childIDs)
+	s.publishParentSubagentsPatch(ctx)
 	result, err := host.WaitSubAgents(ctx, flruntime.WaitSubAgentsRequest{
 		ParentThreadID: flruntime.ThreadID(strings.TrimSpace(parent.threadID)),
 		ChildThreadIDs: childIDs,
@@ -1024,7 +1021,7 @@ func (s *floretSubagentRuntime) wait(ctx context.Context, toolCallID string, arg
 		local := subagentSnapshotFromFloret(snapshot)
 		snapshots = append(snapshots, local)
 	}
-	s.refreshSubagentTimeline(ctx, snapshots...)
+	s.refreshSubagentsPatch(ctx, snapshots...)
 	if err := s.cleanupTerminalProcessesForSnapshots(ctx, snapshots); err != nil {
 		return nil, fmt.Errorf("cleanup subagent terminal processes: %w", err)
 	}
@@ -1235,22 +1232,21 @@ func boundedSubagentStatusItem(item map[string]any) map[string]any {
 	taskDescription := truncateRunes(strings.TrimSpace(anyToString(item["task_description"])), 500)
 	title := truncateRunes(firstNonEmptyString(taskName, strings.TrimSpace(anyToString(item["title"])), threadID), 180)
 	return map[string]any{
-		"subagent_id":        threadID,
-		"thread_id":          threadID,
-		"agent_type":         strings.TrimSpace(anyToString(item["agent_type"])),
-		"context_mode":       normalizeSubagentContextMode(anyToString(item["context_mode"])),
-		"title":              title,
-		"task_name":          taskName,
-		"task_description":   taskDescription,
-		"status":             strings.TrimSpace(anyToString(item["status"])),
-		"parent_thread_id":   strings.TrimSpace(anyToString(item["parent_thread_id"])),
-		"started_at_ms":      nonNegativeInt64Local(parseInt64Raw(item["started_at_ms"], 0)),
-		"created_at_ms":      nonNegativeInt64Local(parseInt64Raw(item["created_at_ms"], 0)),
-		"updated_at_ms":      nonNegativeInt64Local(parseInt64Raw(item["updated_at_ms"], 0)),
-		"detail_available":   threadID != "",
-		"detail_ref":         subagentDetailRef(threadID),
-		"detail_omitted":     true,
-		"delegation_runtime": "floret",
+		"subagent_id":      threadID,
+		"thread_id":        threadID,
+		"agent_type":       strings.TrimSpace(anyToString(item["agent_type"])),
+		"context_mode":     normalizeSubagentContextMode(anyToString(item["context_mode"])),
+		"title":            title,
+		"task_name":        taskName,
+		"task_description": taskDescription,
+		"status":           strings.TrimSpace(anyToString(item["status"])),
+		"parent_thread_id": strings.TrimSpace(anyToString(item["parent_thread_id"])),
+		"started_at_ms":    nonNegativeInt64Local(parseInt64Raw(item["started_at_ms"], 0)),
+		"created_at_ms":    nonNegativeInt64Local(parseInt64Raw(item["created_at_ms"], 0)),
+		"updated_at_ms":    nonNegativeInt64Local(parseInt64Raw(item["updated_at_ms"], 0)),
+		"detail_available": threadID != "",
+		"detail_ref":       subagentDetailRef(threadID),
+		"detail_omitted":   true,
 	}
 }
 
@@ -1264,29 +1260,28 @@ func boundedSubagentItem(item map[string]any) map[string]any {
 	title := truncateRunes(firstNonEmptyString(taskName, strings.TrimSpace(anyToString(item["title"])), threadID), 180)
 	lastMessage := truncateRunes(strings.TrimSpace(anyToString(item["last_message"])), 900)
 	out := map[string]any{
-		"subagent_id":        threadID,
-		"thread_id":          threadID,
-		"agent_type":         strings.TrimSpace(anyToString(item["agent_type"])),
-		"context_mode":       normalizeSubagentContextMode(anyToString(item["context_mode"])),
-		"title":              title,
-		"task_name":          taskName,
-		"task_description":   taskDescription,
-		"status":             strings.TrimSpace(anyToString(item["status"])),
-		"last_message":       lastMessage,
-		"result_digest":      lastMessage,
-		"waiting_prompt":     truncateRunes(strings.TrimSpace(anyToString(item["waiting_prompt"])), 700),
-		"queued_inputs":      nonNegativeInt(parseIntRaw(item["queued_inputs"], 0)),
-		"parent_thread_id":   strings.TrimSpace(anyToString(item["parent_thread_id"])),
-		"created_at_ms":      nonNegativeInt64Local(parseInt64Raw(item["created_at_ms"], 0)),
-		"updated_at_ms":      nonNegativeInt64Local(parseInt64Raw(item["updated_at_ms"], 0)),
-		"closed":             anyToBool(item["closed"]),
-		"can_send_input":     anyToBool(item["can_send_input"]),
-		"can_interrupt":      anyToBool(item["can_interrupt"]),
-		"can_close":          anyToBool(item["can_close"]),
-		"detail_available":   threadID != "",
-		"detail_ref":         subagentDetailRef(threadID),
-		"detail_omitted":     true,
-		"delegation_runtime": "floret",
+		"subagent_id":      threadID,
+		"thread_id":        threadID,
+		"agent_type":       strings.TrimSpace(anyToString(item["agent_type"])),
+		"context_mode":     normalizeSubagentContextMode(anyToString(item["context_mode"])),
+		"title":            title,
+		"task_name":        taskName,
+		"task_description": taskDescription,
+		"status":           strings.TrimSpace(anyToString(item["status"])),
+		"last_message":     lastMessage,
+		"result_digest":    lastMessage,
+		"waiting_prompt":   truncateRunes(strings.TrimSpace(anyToString(item["waiting_prompt"])), 700),
+		"queued_inputs":    nonNegativeInt(parseIntRaw(item["queued_inputs"], 0)),
+		"parent_thread_id": strings.TrimSpace(anyToString(item["parent_thread_id"])),
+		"created_at_ms":    nonNegativeInt64Local(parseInt64Raw(item["created_at_ms"], 0)),
+		"updated_at_ms":    nonNegativeInt64Local(parseInt64Raw(item["updated_at_ms"], 0)),
+		"closed":           anyToBool(item["closed"]),
+		"can_send_input":   anyToBool(item["can_send_input"]),
+		"can_interrupt":    anyToBool(item["can_interrupt"]),
+		"can_close":        anyToBool(item["can_close"]),
+		"detail_available": threadID != "",
+		"detail_ref":       subagentDetailRef(threadID),
+		"detail_omitted":   true,
 	}
 	if status := strings.TrimSpace(anyToString(out["status"])); status == subagentStatusCompleted {
 		resultDigest := strings.TrimSpace(anyToString(item["result_digest"]))
@@ -1792,7 +1787,7 @@ func (s *floretSubagentRuntime) sendInput(ctx context.Context, _ string, args ma
 		return nil, err
 	}
 	localSnapshot := subagentSnapshotFromFloret(snapshot)
-	s.refreshSubagentTimeline(ctx, localSnapshot)
+	s.refreshSubagentsPatch(ctx, localSnapshot)
 	item := subagentSnapshotPayload(localSnapshot)
 	bounded := boundedSubagentItem(item)
 	return trimSubagentToolResult(map[string]any{
@@ -1897,7 +1892,7 @@ func (s *floretSubagentRuntime) closeSubagentWithHost(ctx context.Context, host 
 		return subagentSnapshot{}, err
 	}
 	localSnapshot := subagentSnapshotFromFloret(snapshot)
-	s.refreshSubagentTimeline(ctx, localSnapshot)
+	s.refreshSubagentsPatch(ctx, localSnapshot)
 	return localSnapshot, nil
 }
 
@@ -1927,7 +1922,7 @@ func (s *floretSubagentRuntime) closeAllAction(ctx context.Context, _ string, ar
 		}
 		snapshots = append(snapshots, subagentSnapshotFromFloret(snapshot))
 	}
-	s.refreshSubagentTimeline(closeCtx, snapshots...)
+	s.refreshSubagentsPatch(closeCtx, snapshots...)
 	items := make([]map[string]any, 0, len(snapshots))
 	for _, snapshot := range snapshots {
 		items = append(items, subagentSnapshotPayload(snapshot))
@@ -2063,7 +2058,7 @@ func (s *floretSubagentRuntime) release() {
 	s.mu.Lock()
 	host := s.host
 	s.host = nil
-	s.timelineQueued = nil
+	s.subagentsPatchQueued = nil
 	s.closed = true
 	s.mu.Unlock()
 	if host != nil {
@@ -2089,8 +2084,115 @@ func (s *floretSubagentRuntime) snapshots(ctx context.Context) ([]subagentSnapsh
 		local := subagentSnapshotFromFloret(snapshot)
 		out = append(out, local)
 	}
-	s.refreshSubagentTimeline(ctx, out...)
+	s.refreshSubagentsPatch(ctx, out...)
 	return out, nil
+}
+
+type flowerSubagentListHost interface {
+	ListSubAgents(context.Context, flruntime.ThreadID) ([]flruntime.SubAgentSnapshot, error)
+	Close() error
+}
+
+func (s *Service) ListFlowerSubagents(ctx context.Context, meta *session.Meta, parentThreadID string) ([]FlowerSubagentSummary, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	if err := requireRWX(meta); err != nil {
+		return nil, err
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if endpointID == "" {
+		return nil, errors.New("missing endpoint_id")
+	}
+	return s.listFlowerSubagentsForEndpoint(ctx, endpointID, parentThreadID)
+}
+
+func (s *Service) listFlowerSubagentsForEndpoint(ctx context.Context, endpointID string, parentThreadID string) ([]FlowerSubagentSummary, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	parentThreadID = strings.TrimSpace(parentThreadID)
+	endpointID = strings.TrimSpace(endpointID)
+	if endpointID == "" || parentThreadID == "" {
+		return nil, errors.New("invalid request")
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	runtime := s.subagentRuntimes[runThreadKey(endpointID, parentThreadID)]
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+	parent, err := db.GetThread(ctxOrBackground(ctx), endpointID, parentThreadID)
+	if err != nil {
+		return nil, err
+	}
+	if parent == nil {
+		return nil, sql.ErrNoRows
+	}
+
+	var host flowerSubagentListHost
+	if runtime != nil {
+		host = runtime.currentHost()
+	}
+	if host == nil {
+		maintenanceHost, err := s.openFloretMaintenanceHost()
+		if err != nil {
+			return nil, err
+		}
+		host = maintenanceHost
+		defer host.Close()
+	}
+	snapshots, err := host.ListSubAgents(ctxOrBackground(ctx), flruntime.ThreadID(parentThreadID))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FlowerSubagentSummary, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		summary := flowerSubagentSummary(snapshot)
+		if strings.TrimSpace(summary.ParentThreadID) != parentThreadID || strings.TrimSpace(summary.ThreadID) == "" {
+			continue
+		}
+		out = append(out, summary)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].UpdatedAtUnixMs == out[j].UpdatedAtUnixMs {
+			return out[i].CreatedAtUnixMs > out[j].CreatedAtUnixMs
+		}
+		return out[i].UpdatedAtUnixMs > out[j].UpdatedAtUnixMs
+	})
+	return out, nil
+}
+
+func (s *Service) publishFlowerSubagentsPatch(ctx context.Context, endpointID string, parentThreadID string) {
+	if s == nil {
+		return
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	parentThreadID = strings.TrimSpace(parentThreadID)
+	if endpointID == "" || parentThreadID == "" {
+		return
+	}
+	subagents, err := s.listFlowerSubagentsForEndpoint(ctxOrBackground(ctx), endpointID, parentThreadID)
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("ai: failed to publish flower subagents patch", "endpoint_id", endpointID, "thread_id", parentThreadID, "error", err)
+		}
+		return
+	}
+	s.appendFlowerLiveEvent(FlowerLiveEvent{
+		EndpointID: endpointID,
+		ThreadID:   parentThreadID,
+		AtUnixMs:   time.Now().UnixMilli(),
+		Kind:       FlowerLiveThreadPatched,
+		Payload: mustFlowerPayload(FlowerLiveThreadPatchedPayload{
+			Patch: FlowerLiveThreadPatch{
+				ThreadID:     parentThreadID,
+				Subagents:    subagents,
+				SubagentsSet: true,
+			},
+		}),
+	})
 }
 
 func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Meta, parentThreadID string, childThreadID string, afterOrdinal int64, limit int) (*FlowerSubagentDetailResponse, error) {
@@ -2411,6 +2513,40 @@ func flowerSubagentSummary(snapshot flruntime.SubAgentSnapshot) FlowerSubagentSu
 	}
 }
 
+func cloneFlowerSubagentSummaries(in []FlowerSubagentSummary) []FlowerSubagentSummary {
+	if in == nil {
+		return nil
+	}
+	out := make([]FlowerSubagentSummary, 0, len(in))
+	for _, item := range in {
+		item.ParentThreadID = strings.TrimSpace(item.ParentThreadID)
+		item.SubagentID = strings.TrimSpace(item.SubagentID)
+		item.ThreadID = strings.TrimSpace(item.ThreadID)
+		item.TaskName = strings.TrimSpace(item.TaskName)
+		item.TaskDescription = strings.TrimSpace(item.TaskDescription)
+		item.Title = strings.TrimSpace(item.Title)
+		item.AgentType = strings.TrimSpace(item.AgentType)
+		item.ContextMode = normalizeSubagentContextMode(item.ContextMode)
+		item.Status = strings.TrimSpace(item.Status)
+		item.LastMessage = strings.TrimSpace(item.LastMessage)
+		item.WaitingPrompt = strings.TrimSpace(item.WaitingPrompt)
+		if item.ThreadID == "" {
+			item.ThreadID = item.SubagentID
+		}
+		if item.SubagentID == "" {
+			item.SubagentID = item.ThreadID
+		}
+		if item.ThreadID == "" {
+			continue
+		}
+		out = append(out, item)
+	}
+	if len(out) == 0 {
+		return []FlowerSubagentSummary{}
+	}
+	return out
+}
+
 func flowerSubagentTimelineRows(events []flruntime.SubAgentDetailEvent) []FlowerSubagentTimelineRow {
 	out := make([]FlowerSubagentTimelineRow, 0, len(events))
 	for _, event := range events {
@@ -2545,248 +2681,18 @@ func flowerSubagentGenericView(event flruntime.SubAgentDetailEvent) *FlowerSubag
 	}
 }
 
-func (s *floretSubagentRuntime) refreshSubagentTimeline(ctx context.Context, snapshots ...subagentSnapshot) {
+func (s *floretSubagentRuntime) refreshSubagentsPatch(ctx context.Context, snapshots ...subagentSnapshot) {
 	_ = snapshots
-	s.publishParentSubagentTimeline(ctx)
+	s.publishParentSubagentsPatch(ctx)
 }
 
-func (s *floretSubagentRuntime) upsertRunningWaitToolSidecar(ctx context.Context, toolCallID string, host flruntime.Host, parent *run, childIDs []flruntime.ThreadID) {
-	if s == nil || host == nil || parent == nil {
-		return
-	}
-	toolItemID := flowerToolActivityItemID(toolCallID)
-	if toolItemID == "" || !parent.acceptsPresentationUpdates() {
-		return
-	}
-	parentThreadID := strings.TrimSpace(parent.threadID)
-	if parentThreadID == "" {
-		return
-	}
-	result, err := host.ListSubAgentActivityTimeline(ctxOrBackground(ctx), flruntime.ListSubAgentActivityTimelineRequest{
-		ParentThreadID: flruntime.ThreadID(parentThreadID),
-		Meta:           parent.activityRunMeta(),
-	})
-	if err != nil {
-		parent.persistRunEvent("delegation.timeline.wait_sidecar_error", RealtimeStreamKindLifecycle, map[string]any{
-			"error": sanitizeLogText(err.Error(), 240),
-		})
-		return
-	}
-	parent.refreshActivityTimelineSidecars(result.Timeline, s.flowerParentSubagentActivityActions(result.Timeline))
-	items := flowerSubagentActionItemsFromTimeline(result.Timeline, childIDs)
-	if len(items) == 0 {
-		return
-	}
-	parent.upsertActivityTimelineSubagentActions(map[string]FlowerActivitySubagentAction{
-		toolItemID: flowerSubagentActivityActionFromItems(subagentActionWait, parentThreadID, items),
-	})
-}
-
-func (s *floretSubagentRuntime) publishParentSubagentTimeline(ctx context.Context) {
+func (s *floretSubagentRuntime) publishParentSubagentsPatch(ctx context.Context) {
 	parent := s.parentRun()
-	if parent == nil || !parent.acceptsPresentationUpdates() {
-		return
-	}
-	host := s.currentHost()
-	if host == nil {
+	if parent == nil || parent.service == nil {
 		return
 	}
 	parentThreadID := strings.TrimSpace(parent.threadID)
-	if parentThreadID == "" {
-		return
-	}
-	result, err := host.ListSubAgentActivityTimeline(ctxOrBackground(ctx), flruntime.ListSubAgentActivityTimelineRequest{
-		ParentThreadID: flruntime.ThreadID(parentThreadID),
-		Meta:           parent.activityRunMeta(),
-	})
-	if err != nil {
-		parent.persistRunEvent("delegation.timeline.refresh_error", RealtimeStreamKindLifecycle, map[string]any{
-			"error": sanitizeLogText(err.Error(), 240),
-		})
-		return
-	}
-	if len(result.Timeline.Items) == 0 {
-		return
-	}
-	parent.refreshActivityTimelineSidecars(result.Timeline, s.flowerParentSubagentActivityActions(result.Timeline))
-}
-
-func (s *floretSubagentRuntime) flowerParentSubagentActivityActions(timeline observation.ActivityTimeline) map[string]FlowerActivitySubagentAction {
-	out := map[string]FlowerActivitySubagentAction{}
-	for _, item := range timeline.Items {
-		itemID := strings.TrimSpace(item.ItemID)
-		if itemID == "" {
-			continue
-		}
-		action, ok := flowerSubagentActivityActionFromPayload(subagentActionInspect, item.Payload)
-		if !ok {
-			continue
-		}
-		out[itemID] = action
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func flowerToolSubagentActivityActions(toolCallID string, action string, payload map[string]any) map[string]FlowerActivitySubagentAction {
-	itemID := flowerToolActivityItemID(toolCallID)
-	if itemID == "" {
-		return nil
-	}
-	subagentAction, ok := flowerSubagentActivityActionFromPayload(action, payload)
-	if !ok {
-		return nil
-	}
-	return map[string]FlowerActivitySubagentAction{itemID: subagentAction}
-}
-
-func flowerToolActivityItemID(toolCallID string) string {
-	toolCallID = strings.TrimSpace(toolCallID)
-	if toolCallID == "" {
-		return ""
-	}
-	if strings.HasPrefix(toolCallID, "tool:") {
-		return toolCallID
-	}
-	return "tool:" + toolCallID
-}
-
-func flowerSubagentActivityActionFromPayload(defaultAction string, payload map[string]any) (FlowerActivitySubagentAction, bool) {
-	if len(payload) == 0 {
-		return FlowerActivitySubagentAction{}, false
-	}
-	action := strings.TrimSpace(anyToString(payload["action"]))
-	if action == "" {
-		action = strings.TrimSpace(defaultAction)
-	}
-	if action == "" {
-		action = subagentActionInspect
-	}
-	items := flowerSubagentActionItemsFromPayload(payload)
-	threadID := strings.TrimSpace(anyToString(payload["thread_id"]))
-	if threadID == "" {
-		threadID = strings.TrimSpace(anyToString(payload["subagent_id"]))
-	}
-	if threadID == "" && len(items) == 1 {
-		threadID = strings.TrimSpace(firstNonEmptyString(items[0].ThreadID, items[0].SubagentID))
-	}
-	if threadID == "" && len(items) == 0 {
-		return FlowerActivitySubagentAction{}, false
-	}
-	return FlowerActivitySubagentAction{
-		Operation:         "subagents",
-		Action:            action,
-		DelegationRuntime: "floret",
-		ThreadID:          threadID,
-		SubagentID:        threadID,
-		ParentThreadID:    strings.TrimSpace(anyToString(payload["parent_thread_id"])),
-		Items:             items,
-	}, true
-}
-
-func flowerSubagentActivityActionFromItems(action string, parentThreadID string, items []FlowerActivitySubagentActionItem) FlowerActivitySubagentAction {
-	out := FlowerActivitySubagentAction{
-		Operation:         "subagents",
-		Action:            strings.TrimSpace(action),
-		DelegationRuntime: "floret",
-		ParentThreadID:    strings.TrimSpace(parentThreadID),
-		Items:             cloneFlowerActivitySubagentActionItems(items),
-	}
-	if out.Action == "" {
-		out.Action = subagentActionInspect
-	}
-	if len(out.Items) == 1 {
-		item := out.Items[0]
-		out.ThreadID = strings.TrimSpace(firstNonEmptyString(item.ThreadID, item.SubagentID))
-		out.SubagentID = out.ThreadID
-	}
-	return out
-}
-
-func flowerSubagentActionItemsFromTimeline(timeline observation.ActivityTimeline, childIDs []flruntime.ThreadID) []FlowerActivitySubagentActionItem {
-	if len(timeline.Items) == 0 {
-		return nil
-	}
-	targets := subagentThreadIDSet(childIDs)
-	out := make([]FlowerActivitySubagentActionItem, 0, len(timeline.Items))
-	for _, item := range timeline.Items {
-		action, ok := flowerSubagentActivityActionFromPayload(subagentActionInspect, item.Payload)
-		if !ok {
-			continue
-		}
-		next, ok := flowerSubagentActionItemFromAction(action)
-		if !ok {
-			continue
-		}
-		if len(targets) > 0 {
-			threadID := strings.TrimSpace(firstNonEmptyString(next.ThreadID, next.SubagentID))
-			if _, ok := targets[threadID]; !ok {
-				continue
-			}
-		}
-		out = append(out, next)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func subagentThreadIDSet(childIDs []flruntime.ThreadID) map[string]struct{} {
-	if len(childIDs) == 0 {
-		return nil
-	}
-	out := map[string]struct{}{}
-	for _, id := range childIDs {
-		if value := strings.TrimSpace(string(id)); value != "" {
-			out[value] = struct{}{}
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func flowerSubagentActionItemFromAction(action FlowerActivitySubagentAction) (FlowerActivitySubagentActionItem, bool) {
-	threadID := strings.TrimSpace(firstNonEmptyString(action.ThreadID, action.SubagentID))
-	if threadID == "" && len(action.Items) == 1 {
-		return action.Items[0], true
-	}
-	if threadID == "" {
-		return FlowerActivitySubagentActionItem{}, false
-	}
-	return FlowerActivitySubagentActionItem{
-		ThreadID:   threadID,
-		SubagentID: threadID,
-	}, true
-}
-
-func flowerSubagentActionItemsFromPayload(payload map[string]any) []FlowerActivitySubagentActionItem {
-	items := subagentItemsFromAny(payload["items"])
-	if len(items) == 0 {
-		return nil
-	}
-	out := make([]FlowerActivitySubagentActionItem, 0, len(items))
-	for _, item := range items {
-		threadID := strings.TrimSpace(anyToString(item["thread_id"]))
-		if threadID == "" {
-			threadID = strings.TrimSpace(anyToString(item["subagent_id"]))
-		}
-		if threadID == "" {
-			continue
-		}
-		out = append(out, FlowerActivitySubagentActionItem{
-			ThreadID:   threadID,
-			SubagentID: threadID,
-		})
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
+	parent.service.publishFlowerSubagentsPatch(ctxOrBackground(ctx), parent.endpointID, parentThreadID)
 }
 
 func aggregateSubagentContextMode(snapshots []subagentSnapshot) string {
@@ -2923,29 +2829,28 @@ func subagentSnapshotPayload(snapshot subagentSnapshot) map[string]any {
 	}
 	lastMessage := strings.TrimSpace(snapshot.LastMessage)
 	return map[string]any{
-		"id":                 snapshot.ThreadID,
-		"subagent_id":        snapshot.ThreadID,
-		"thread_id":          snapshot.ThreadID,
-		"agent_type":         snapshot.AgentType,
-		"context_mode":       normalizeSubagentContextMode(snapshot.ContextMode),
-		"title":              title,
-		"task_name":          snapshot.TaskName,
-		"task_description":   snapshot.TaskDescription,
-		"status":             snapshot.Status,
-		"last_message":       lastMessage,
-		"waiting_prompt":     snapshot.WaitingPrompt,
-		"queued_inputs":      snapshot.QueuedInputs,
-		"parent_thread_id":   snapshot.ParentThreadID,
-		"parent_turn_id":     snapshot.ParentTurnID,
-		"latest_turn_id":     snapshot.LatestTurnID,
-		"started_at_ms":      snapshot.CreatedAtMS,
-		"created_at_ms":      snapshot.CreatedAtMS,
-		"updated_at_ms":      snapshot.UpdatedAtMS,
-		"closed":             snapshot.Closed,
-		"can_send_input":     snapshot.CanSendInput,
-		"can_interrupt":      snapshot.CanInterrupt,
-		"can_close":          snapshot.CanClose,
-		"delegation_runtime": "floret",
+		"id":               snapshot.ThreadID,
+		"subagent_id":      snapshot.ThreadID,
+		"thread_id":        snapshot.ThreadID,
+		"agent_type":       snapshot.AgentType,
+		"context_mode":     normalizeSubagentContextMode(snapshot.ContextMode),
+		"title":            title,
+		"task_name":        snapshot.TaskName,
+		"task_description": snapshot.TaskDescription,
+		"status":           snapshot.Status,
+		"last_message":     lastMessage,
+		"waiting_prompt":   snapshot.WaitingPrompt,
+		"queued_inputs":    snapshot.QueuedInputs,
+		"parent_thread_id": snapshot.ParentThreadID,
+		"parent_turn_id":   snapshot.ParentTurnID,
+		"latest_turn_id":   snapshot.LatestTurnID,
+		"started_at_ms":    snapshot.CreatedAtMS,
+		"created_at_ms":    snapshot.CreatedAtMS,
+		"updated_at_ms":    snapshot.UpdatedAtMS,
+		"closed":           snapshot.Closed,
+		"can_send_input":   snapshot.CanSendInput,
+		"can_interrupt":    snapshot.CanInterrupt,
+		"can_close":        snapshot.CanClose,
 	}
 }
 
@@ -2959,20 +2864,19 @@ func parentNamespacePublicID(r *run) string {
 func subagentListPayload(snapshot subagentSnapshot) map[string]any {
 	payload := subagentSnapshotPayload(snapshot)
 	return map[string]any{
-		"subagent_id":        payload["subagent_id"],
-		"thread_id":          payload["thread_id"],
-		"title":              payload["title"],
-		"task_name":          payload["task_name"],
-		"task_description":   payload["task_description"],
-		"agent_type":         payload["agent_type"],
-		"context_mode":       payload["context_mode"],
-		"status":             payload["status"],
-		"updated_at_ms":      payload["updated_at_ms"],
-		"last_message":       payload["last_message"],
-		"can_send_input":     payload["can_send_input"],
-		"can_interrupt":      payload["can_interrupt"],
-		"can_close":          payload["can_close"],
-		"delegation_runtime": "floret",
+		"subagent_id":      payload["subagent_id"],
+		"thread_id":        payload["thread_id"],
+		"title":            payload["title"],
+		"task_name":        payload["task_name"],
+		"task_description": payload["task_description"],
+		"agent_type":       payload["agent_type"],
+		"context_mode":     payload["context_mode"],
+		"status":           payload["status"],
+		"updated_at_ms":    payload["updated_at_ms"],
+		"last_message":     payload["last_message"],
+		"can_send_input":   payload["can_send_input"],
+		"can_interrupt":    payload["can_interrupt"],
+		"can_close":        payload["can_close"],
 	}
 }
 
@@ -3138,7 +3042,7 @@ func (s floretSubagentEventSink) EmitEvent(ev flruntime.Event) {
 		return
 	}
 	if s.runtime != nil {
-		s.runtime.scheduleParentSubagentTimelineRefresh(eventThreadID)
+		s.runtime.scheduleParentSubagentsPatch(eventThreadID)
 	}
 	parent.persistRunEvent("delegation.child.event", RealtimeStreamKindLifecycle, map[string]any{
 		"event_type": strings.TrimSpace(ev.Type),

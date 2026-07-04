@@ -265,21 +265,6 @@ export type FlowerActivityFileAction = Readonly<{
   can_browse_directory: boolean;
 }>;
 
-export type FlowerActivitySubagentActionItem = Readonly<{
-  thread_id?: string;
-  subagent_id?: string;
-}>;
-
-export type FlowerActivitySubagentAction = Readonly<{
-  operation?: string;
-  action?: string;
-  delegation_runtime?: string;
-  thread_id?: string;
-  subagent_id?: string;
-  parent_thread_id?: string;
-  items?: readonly FlowerActivitySubagentActionItem[];
-}>;
-
 export type FlowerActivityTimelineBlock = Readonly<{
   type: 'activity-timeline';
   schema_version: number;
@@ -306,7 +291,6 @@ export type FlowerActivityTimelineBlock = Readonly<{
   }>;
   items: readonly FlowerActivityItem[];
   file_actions?: Readonly<Record<string, FlowerActivityFileAction>>;
-  subagent_actions?: Readonly<Record<string, FlowerActivitySubagentAction>>;
 }>;
 
 export type FlowerChatMessageBlock =
@@ -415,6 +399,7 @@ export type FlowerThreadSnapshot = Readonly<{
   context_usage?: FlowerContextUsage | null;
   context_compactions?: readonly FlowerContextCompaction[];
   timeline_decorations?: readonly FlowerTimelineDecoration[];
+  subagents?: readonly FlowerSubagentSummary[];
   approval_actions?: readonly FlowerApprovalAction[];
   input_request?: FlowerInputRequest | null;
   error?: FlowerThreadError | null;
@@ -657,6 +642,7 @@ export type FlowerLiveThreadPatch = Readonly<{
   owner_kind?: string;
   owner_id?: string;
   parent_thread_id?: string;
+  subagents?: readonly FlowerSubagentSummary[];
   read_status?: FlowerThreadReadStatus;
 }>;
 

@@ -24,6 +24,7 @@ import {
   modelIOStatus,
   renderSurfaceWithAdapter,
   subagentDetail,
+  subagentSummary,
   thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
@@ -89,6 +90,8 @@ function parentThreadWithRunningSubagent(childStatus = 'running'): FlowerThreadS
                 task_description: 'Review the API boundary.',
                 agent_type: 'reviewer',
                 items: [{
+                  thread_id: 'thread-child-review',
+                  subagent_id: 'thread-child-review',
                   task_name: 'Review API contract',
                   task_description: 'Review the API boundary.',
                   agent_type: 'reviewer',
@@ -96,19 +99,11 @@ function parentThreadWithRunningSubagent(childStatus = 'running'): FlowerThreadS
                 }],
               },
             })],
-            subagent_actions: {
-              'tool-subagents-spawn': {
-                operation: 'subagents',
-                action: 'spawn',
-                delegation_runtime: 'floret',
-                thread_id: 'thread-child-review',
-                subagent_id: 'thread-child-review',
-              },
-            },
           }),
         ],
       },
     ],
+    subagents: [subagentSummary({ status: childStatus })],
   });
 }
 
@@ -694,8 +689,10 @@ describe('FlowerSurface navigation activity', () => {
                   status: 'ok',
                   task_name: 'Review API contract',
                   task_description: 'Review the API boundary.',
-                  agent_type: 'reviewer',
-                  items: [{
+	                  agent_type: 'reviewer',
+	                  items: [{
+                    thread_id: 'thread-child-review',
+                    subagent_id: 'thread-child-review',
                     task_name: 'Review API contract',
                     task_description: 'Review the API boundary.',
                     agent_type: 'reviewer',
@@ -703,19 +700,11 @@ describe('FlowerSurface navigation activity', () => {
                   }],
                 },
               })],
-              subagent_actions: {
-                'tool-subagents-spawn': {
-                  operation: 'subagents',
-                  action: 'spawn',
-                  delegation_runtime: 'floret',
-                  thread_id: 'thread-child-review',
-                  subagent_id: 'thread-child-review',
-                },
-              },
-          }),
+            }),
           ],
         },
       ],
+      subagents: [subagentSummary()],
     });
     const parentWithoutSubagents = thread({
       thread_id: 'thread-parent-subagents',
@@ -1497,17 +1486,6 @@ describe('FlowerSurface navigation activity', () => {
                   },
                 }),
               ],
-              subagent_actions: {
-                'item-subagents': {
-                  operation: 'subagents',
-                  action: 'wait',
-                  delegation_runtime: 'floret',
-                  items: [{
-                    thread_id: 'thread-child-hidden',
-                    subagent_id: 'thread-child-hidden',
-                  }],
-                },
-              },
             }),
           ],
         },
@@ -1642,6 +1620,8 @@ describe('FlowerSurface navigation activity', () => {
                     status: 'ok',
                     agent_count: 1,
                     items: [{
+                      thread_id: 'thread-child-hidden',
+                      subagent_id: 'thread-child-hidden',
                       task_name: 'Review API contract',
                       task_description: 'Review the public API boundary.',
                       agent_type: 'reviewer',
@@ -1664,23 +1644,18 @@ describe('FlowerSurface navigation activity', () => {
                   },
                 }),
               ],
-              subagent_actions: {
-                'item-subagents': {
-                  operation: 'subagents',
-                  action: 'wait',
-                  delegation_runtime: 'floret',
-                  thread_id: 'thread-child-hidden',
-                  subagent_id: 'thread-child-hidden',
-                  items: [{
-                    thread_id: 'thread-child-hidden',
-                    subagent_id: 'thread-child-hidden',
-                  }],
-                },
-              },
             }),
           ],
         },
       ],
+      subagents: [subagentSummary({
+        parent_thread_id: 'thread-subagent-details',
+        subagent_id: 'thread-child-hidden',
+        thread_id: 'thread-child-hidden',
+        status: 'completed',
+        task_description: 'Review the public API boundary.',
+        updated_at_ms: 6_780,
+      })],
     });
     const loadSubagentDetail = vi.fn(async () => subagentDetail());
     const runtime = renderSurfaceWithAdapter({

@@ -137,21 +137,6 @@ export interface ActivityFileAction {
   can_browse_directory: boolean;
 }
 
-export interface ActivitySubagentAction {
-  operation?: string;
-  action?: string;
-  delegation_runtime?: string;
-  thread_id?: string;
-  subagent_id?: string;
-  parent_thread_id?: string;
-  items?: ActivitySubagentActionItem[];
-}
-
-export interface ActivitySubagentActionItem {
-  thread_id?: string;
-  subagent_id?: string;
-}
-
 export interface ActivityTimelineBlock {
   type: 'activity-timeline';
   schema_version: number;
@@ -178,7 +163,6 @@ export interface ActivityTimelineBlock {
   };
   items: ActivityItem[];
   file_actions?: Record<string, ActivityFileAction>;
-  subagent_actions?: Record<string, ActivitySubagentAction>;
 }
 
 export interface ActivityFileActionOpenRequest {

@@ -114,6 +114,32 @@ func TestFlowerLiveMaterializedStateApprovalActionsWireSampling(t *testing.T) {
 	}
 }
 
+func TestFlowerLiveThreadPatchSerializesExplicitEmptySubagents(t *testing.T) {
+	t.Parallel()
+
+	raw, err := json.Marshal(FlowerLiveThreadPatch{
+		ThreadID:     "thread-parent",
+		SubagentsSet: true,
+	})
+	if err != nil {
+		t.Fatalf("marshal thread patch: %v", err)
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		t.Fatalf("decode thread patch object: %v", err)
+	}
+	if got := string(object["subagents"]); got != "[]" {
+		t.Fatalf("subagents=%s, want [] in %s", got, string(raw))
+	}
+	var decoded FlowerLiveThreadPatch
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("unmarshal thread patch: %v", err)
+	}
+	if !decoded.SubagentsSet || len(decoded.Subagents) != 0 {
+		t.Fatalf("decoded subagents set=%v len=%d, want explicit empty", decoded.SubagentsSet, len(decoded.Subagents))
+	}
+}
+
 func TestBuildFlowerTimelineMessagesUsesCanonicalTurnOrder(t *testing.T) {
 	ctx := context.Background()
 	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))

@@ -2,7 +2,6 @@ package ai
 
 import (
 	"encoding/json"
-	"reflect"
 	"strings"
 
 	"github.com/floegence/floret/observation"
@@ -13,9 +12,8 @@ import (
 const activityTimelineBlockType = "activity-timeline"
 
 type ActivityTimelineBlock struct {
-	Type            string                                  `json:"type"`
-	FileActions     map[string]FlowerActivityFileAction     `json:"file_actions,omitempty"`
-	SubagentActions map[string]FlowerActivitySubagentAction `json:"subagent_actions,omitempty"`
+	Type        string                              `json:"type"`
+	FileActions map[string]FlowerActivityFileAction `json:"file_actions,omitempty"`
 	observation.ActivityTimeline
 }
 
@@ -27,14 +25,10 @@ type activityTimelinePublicIdentity struct {
 }
 
 func newActivityTimelineBlock(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction) ActivityTimelineBlock {
-	return newActivityTimelineBlockWithSidecars(timeline, fileActions, nil)
+	return newActivityTimelineBlockWithPublicIdentity(timeline, fileActions, activityTimelinePublicIdentity{})
 }
 
-func newActivityTimelineBlockWithSidecars(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction, subagentActions map[string]FlowerActivitySubagentAction) ActivityTimelineBlock {
-	return newActivityTimelineBlockWithPublicIdentity(timeline, fileActions, subagentActions, activityTimelinePublicIdentity{})
-}
-
-func newActivityTimelineBlockWithPublicIdentity(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction, subagentActions map[string]FlowerActivitySubagentAction, publicIdentity activityTimelinePublicIdentity) ActivityTimelineBlock {
+func newActivityTimelineBlockWithPublicIdentity(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction, publicIdentity activityTimelinePublicIdentity) ActivityTimelineBlock {
 	if timeline.SchemaVersion <= 0 {
 		timeline.SchemaVersion = observation.ActivityTimelineSchemaVersion
 	}
@@ -42,12 +36,11 @@ func newActivityTimelineBlockWithPublicIdentity(timeline observation.ActivityTim
 	return ActivityTimelineBlock{
 		Type:             activityTimelineBlockType,
 		FileActions:      cloneFlowerActivityFileActions(fileActions),
-		SubagentActions:  cloneFlowerActivitySubagentActions(subagentActions),
 		ActivityTimeline: timeline,
 	}
 }
 
-func (r *run) newActivityTimelineBlockWithSidecars(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction, subagentActions map[string]FlowerActivitySubagentAction) ActivityTimelineBlock {
+func (r *run) newActivityTimelineBlock(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction) ActivityTimelineBlock {
 	publicIdentity := activityTimelinePublicIdentity{}
 	if r != nil {
 		publicIdentity = activityTimelinePublicIdentity{
@@ -57,7 +50,7 @@ func (r *run) newActivityTimelineBlockWithSidecars(timeline observation.Activity
 			TraceID:  strings.TrimSpace(r.id),
 		}
 	}
-	return newActivityTimelineBlockWithPublicIdentity(timeline, fileActions, subagentActions, publicIdentity)
+	return newActivityTimelineBlockWithPublicIdentity(timeline, fileActions, publicIdentity)
 }
 
 func publicActivityTimelineForBlock(timeline observation.ActivityTimeline, publicIdentity activityTimelinePublicIdentity) observation.ActivityTimeline {
@@ -99,68 +92,6 @@ func cloneFlowerActivityFileActions(in map[string]FlowerActivityFileAction) map[
 			continue
 		}
 		out[key] = value
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-type FlowerActivitySubagentAction struct {
-	Operation         string                             `json:"operation,omitempty"`
-	Action            string                             `json:"action,omitempty"`
-	DelegationRuntime string                             `json:"delegation_runtime,omitempty"`
-	ThreadID          string                             `json:"thread_id,omitempty"`
-	SubagentID        string                             `json:"subagent_id,omitempty"`
-	ParentThreadID    string                             `json:"parent_thread_id,omitempty"`
-	Items             []FlowerActivitySubagentActionItem `json:"items,omitempty"`
-}
-
-type FlowerActivitySubagentActionItem struct {
-	ThreadID   string `json:"thread_id,omitempty"`
-	SubagentID string `json:"subagent_id,omitempty"`
-}
-
-func cloneFlowerActivitySubagentActions(in map[string]FlowerActivitySubagentAction) map[string]FlowerActivitySubagentAction {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]FlowerActivitySubagentAction, len(in))
-	for key, value := range in {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		value.Operation = strings.TrimSpace(value.Operation)
-		value.Action = strings.TrimSpace(value.Action)
-		value.DelegationRuntime = strings.TrimSpace(value.DelegationRuntime)
-		value.ThreadID = strings.TrimSpace(value.ThreadID)
-		value.SubagentID = strings.TrimSpace(value.SubagentID)
-		value.ParentThreadID = strings.TrimSpace(value.ParentThreadID)
-		value.Items = cloneFlowerActivitySubagentActionItems(value.Items)
-		if value.Operation == "" && value.Action == "" && value.ThreadID == "" && value.SubagentID == "" {
-			continue
-		}
-		out[key] = value
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func cloneFlowerActivitySubagentActionItems(in []FlowerActivitySubagentActionItem) []FlowerActivitySubagentActionItem {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]FlowerActivitySubagentActionItem, 0, len(in))
-	for _, value := range in {
-		value.ThreadID = strings.TrimSpace(value.ThreadID)
-		value.SubagentID = strings.TrimSpace(value.SubagentID)
-		if value.ThreadID == "" && value.SubagentID == "" {
-			continue
-		}
-		out = append(out, value)
 	}
 	if len(out) == 0 {
 		return nil
@@ -221,15 +152,6 @@ func (r *run) activityTimelineFileActions(timeline observation.ActivityTimeline)
 	return cloneFlowerActivityFileActions(out)
 }
 
-func (r *run) activityTimelineSubagentActions(timeline observation.ActivityTimeline) map[string]FlowerActivitySubagentAction {
-	if r == nil || len(timeline.Items) == 0 {
-		return nil
-	}
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	return filterSubagentActionsForTimeline(timeline, r.activitySubagentActions)
-}
-
 func (r *run) recordFloretActivityEvent(ev flruntime.Event) {
 	if r == nil || !isActivityObservationEvent(ev.Type) {
 		return
@@ -282,86 +204,6 @@ func modelIOEndsBeforeActivity(eventType string) bool {
 	}
 }
 
-func (r *run) refreshActivityTimelineSidecars(timeline observation.ActivityTimeline, subagentActions map[string]FlowerActivitySubagentAction) bool {
-	if r == nil {
-		return false
-	}
-	if !r.acceptsPresentationUpdates() {
-		return false
-	}
-	timeline = r.normalizeActivityTimeline(timeline)
-	if len(timeline.Items) == 0 {
-		return false
-	}
-	if !r.validateActivityTimelineForProjection(timeline, "sidecar_refresh") {
-		return false
-	}
-	return r.upsertActivityTimelineSubagentActions(subagentActions)
-}
-
-func (r *run) upsertActivityTimelineSubagentActions(subagentActions map[string]FlowerActivitySubagentAction) bool {
-	if r == nil {
-		return false
-	}
-	if !r.acceptsPresentationUpdates() {
-		return false
-	}
-	upsertedActions := cloneFlowerActivitySubagentActions(subagentActions)
-	if len(upsertedActions) == 0 {
-		return false
-	}
-
-	type update struct {
-		index int
-		block ActivityTimelineBlock
-	}
-	updates := make([]update, 0, 2)
-
-	r.muAssistant.Lock()
-	if r.activitySubagentActions == nil {
-		r.activitySubagentActions = map[string]FlowerActivitySubagentAction{}
-	}
-	for itemID, action := range upsertedActions {
-		r.activitySubagentActions[itemID] = action
-	}
-	for idx, raw := range r.assistantBlocks {
-		block, ok := activityTimelineBlockFromValue(raw)
-		if !ok {
-			continue
-		}
-		actions := filterSubagentActionsForTimeline(block.ActivityTimeline, r.activitySubagentActions)
-		if subagentActionMapsEqual(block.SubagentActions, actions) {
-			continue
-		}
-		block.SubagentActions = actions
-		r.assistantBlocks[idx] = block
-		updates = append(updates, update{index: idx, block: block})
-	}
-	r.muAssistant.Unlock()
-
-	for _, update := range updates {
-		r.sendStreamEvent(streamEventBlockSet{
-			Type:       "block-set",
-			MessageID:  r.messageID,
-			BlockIndex: update.index,
-			Block:      update.block,
-		})
-	}
-	return len(updates) > 0
-}
-
-func subagentActionMapsEqual(a map[string]FlowerActivitySubagentAction, b map[string]FlowerActivitySubagentAction) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for key, value := range a {
-		if !reflect.DeepEqual(b[key], value) {
-			return false
-		}
-	}
-	return true
-}
-
 func activityTimelineBlockFromValue(value any) (ActivityTimelineBlock, bool) {
 	switch block := value.(type) {
 	case ActivityTimelineBlock:
@@ -372,25 +214,6 @@ func activityTimelineBlockFromValue(value any) (ActivityTimelineBlock, bool) {
 		}
 	}
 	return ActivityTimelineBlock{}, false
-}
-
-func filterSubagentActionsForTimeline(timeline observation.ActivityTimeline, actions map[string]FlowerActivitySubagentAction) map[string]FlowerActivitySubagentAction {
-	if len(timeline.Items) == 0 || len(actions) == 0 {
-		return nil
-	}
-	out := map[string]FlowerActivitySubagentAction{}
-	for _, item := range timeline.Items {
-		itemID := strings.TrimSpace(item.ItemID)
-		if itemID == "" {
-			continue
-		}
-		action, ok := actions[itemID]
-		if !ok {
-			continue
-		}
-		out[itemID] = action
-	}
-	return cloneFlowerActivitySubagentActions(out)
 }
 
 func (r *run) validateActivityTimelineForProjection(timeline observation.ActivityTimeline, source string) bool {
