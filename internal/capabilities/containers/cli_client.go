@@ -281,6 +281,9 @@ func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
 		detail := strings.TrimSpace(stderr.String())
 		if detail != "" {
 			return nil, fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, detail)

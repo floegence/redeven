@@ -13,10 +13,14 @@ import (
 )
 
 const (
-	containersEngineSmokeEnv     = "REDEVEN_CONTAINERS_ENGINE_SMOKE"
-	containersEngineSmokeEngines = "REDEVEN_CONTAINERS_ENGINE_SMOKE_ENGINES"
-	containersEngineSmokeImage   = "REDEVEN_CONTAINERS_ENGINE_SMOKE_IMAGE"
-	defaultEngineSmokeImage      = "docker.io/library/busybox:1.36.1"
+	containersEngineSmokeEnv             = "REDEVEN_CONTAINERS_ENGINE_SMOKE"
+	containersEngineSmokeEngines         = "REDEVEN_CONTAINERS_ENGINE_SMOKE_ENGINES"
+	containersEngineSmokeImage           = "REDEVEN_CONTAINERS_ENGINE_SMOKE_IMAGE"
+	containersEnginePullCancelSmokeEnv   = "REDEVEN_CONTAINERS_ENGINE_PULL_CANCEL_SMOKE"
+	containersEnginePullCancelSmokeImage = "REDEVEN_CONTAINERS_ENGINE_PULL_CANCEL_IMAGE"
+	defaultEngineSmokeImage              = "docker.io/library/busybox:1.36.1"
+	defaultEnginePullCancelSmokeImage    = "192.0.2.1:5000/redeven/cancel-smoke:latest"
+	defaultPullCancelSmokeTimeout        = 750 * time.Millisecond
 )
 
 func TestCLIClientRealEngineSmoke(t *testing.T) {
@@ -53,6 +57,42 @@ func TestCLIClientRealEngineSmoke(t *testing.T) {
 	}
 	if !ran {
 		t.Fatalf("%s=1 but no selected container engine was available", containersEngineSmokeEnv)
+	}
+}
+
+func TestCLIClientRealEnginePullCancelSmoke(t *testing.T) {
+	if os.Getenv(containersEnginePullCancelSmokeEnv) != "1" {
+		t.Skipf("set %s=1 to run real Docker/Podman image pull cancellation smoke", containersEnginePullCancelSmokeEnv)
+	}
+
+	engines := smokeEnginesFromEnv()
+	if len(engines) == 0 {
+		t.Fatalf("%s did not select any valid engines", containersEngineSmokeEngines)
+	}
+	imageRef := strings.TrimSpace(os.Getenv(containersEnginePullCancelSmokeImage))
+	if imageRef == "" {
+		imageRef = defaultEnginePullCancelSmokeImage
+	}
+
+	client := NewCLIClient()
+	ran := false
+	for _, engine := range engines {
+		if _, err := exec.LookPath(string(engine)); err != nil {
+			t.Logf("skipping %s pull cancel smoke: CLI not found", engine)
+			continue
+		}
+		status, err := client.Status(context.Background(), engine)
+		if err != nil || !status.Available {
+			t.Logf("skipping %s pull cancel smoke: engine unavailable status=%+v err=%v", engine, status, err)
+			continue
+		}
+		ran = true
+		t.Run(string(engine), func(t *testing.T) {
+			runRealEnginePullCancelSmoke(t, client, engine, imageRef)
+		})
+	}
+	if !ran {
+		t.Fatalf("%s=1 but no selected container engine was available", containersEnginePullCancelSmokeEnv)
 	}
 }
 
@@ -131,6 +171,21 @@ func runRealEngineSmoke(t *testing.T, client *CLIClient, engine Engine, imageRef
 		Force:       true,
 	}); err != nil {
 		t.Fatalf("%s remove smoke container: %v", engine, err)
+	}
+}
+
+func runRealEnginePullCancelSmoke(t *testing.T, client *CLIClient, engine Engine, imageRef string) {
+	t.Helper()
+
+	cancelClient := *client
+	cancelClient.Timeout = defaultPullCancelSmokeTimeout
+	started := time.Now()
+	_, err := cancelClient.PullImage(context.Background(), engine, imageRef)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("%s PullImage(%q) error = %v, want context.DeadlineExceeded", engine, imageRef, err)
+	}
+	if elapsed := time.Since(started); elapsed > 10*time.Second {
+		t.Fatalf("%s PullImage(%q) cancellation took %s", engine, imageRef, elapsed)
 	}
 }
 

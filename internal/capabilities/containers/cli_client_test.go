@@ -196,6 +196,22 @@ func TestCLIClientPullImageTimeoutCancelsRunner(t *testing.T) {
 	}
 }
 
+func TestExecRunnerReturnsContextErrorAfterCommandCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+
+	started := time.Now()
+	_, err := execRunner{}.Run(ctx, "sh", "-c", "sleep 5")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Run() error = %v, want context.DeadlineExceeded", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Fatalf("Run() cancellation took %s", elapsed)
+	}
+}
+
 func TestCLIClientTailLogsParsesBoundedBatch(t *testing.T) {
 	t.Parallel()
 
