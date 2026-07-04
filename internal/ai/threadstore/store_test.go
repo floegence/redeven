@@ -663,6 +663,53 @@ func TestStore_AppendRunEvent_ContextEventsUpdateLastContextRunID(t *testing.T) 
 	}
 }
 
+func TestStore_AppendRunEvent_RejectsInvalidPayloadJSON(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	err = s.AppendRunEvent(ctx, RunEventRecord{
+		EndpointID:  "env_1",
+		ThreadID:    "th_1",
+		RunID:       "run_1",
+		StreamKind:  "tool",
+		EventType:   "stream_event",
+		PayloadJSON: `{"stream_event":`,
+		AtUnixMs:    1000,
+	})
+	if err == nil || !strings.Contains(err.Error(), "invalid run event payload JSON") {
+		t.Fatalf("AppendRunEvent invalid payload error=%v, want invalid JSON error", err)
+	}
+
+	if err := s.AppendRunEvent(ctx, RunEventRecord{
+		EndpointID: "env_1",
+		ThreadID:   "th_1",
+		RunID:      "run_1",
+		StreamKind: "tool",
+		EventType:  "stream_event",
+		AtUnixMs:   time.Now().UnixMilli(),
+	}); err != nil {
+		t.Fatalf("AppendRunEvent empty payload: %v", err)
+	}
+	page, _, _, err := s.ListRunEventsPage(ctx, "env_1", "run_1", RunEventsQuery{Limit: 10})
+	if err != nil {
+		t.Fatalf("ListRunEventsPage: %v", err)
+	}
+	if len(page) != 1 || page[0].PayloadJSON != "{}" {
+		t.Fatalf("run events = %#v, want one normalized empty payload", page)
+	}
+}
+
 func TestStore_AppendRunEvent_ContextCompactionDoesNotPolluteTranscript(t *testing.T) {
 	t.Parallel()
 

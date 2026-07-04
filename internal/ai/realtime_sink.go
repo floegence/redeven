@@ -224,7 +224,7 @@ func (s *Service) persistRealtimeEvent(ev RealtimeEvent) {
 		RunID:       ev.RunID,
 		StreamKind:  string(ev.StreamKind),
 		EventType:   string(ev.EventType),
-		PayloadJSON: truncateRunes(string(b), 6000),
+		PayloadJSON: strings.TrimSpace(string(b)),
 		AtUnixMs:    ev.AtUnixMs,
 	}); err != nil && s.log != nil {
 		s.log.Warn("persist realtime run event failed", "thread_id", ev.ThreadID, "run_id", ev.RunID, "event_type", ev.EventType, "stream_kind", ev.StreamKind, "error", err)

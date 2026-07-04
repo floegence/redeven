@@ -58,7 +58,7 @@ func TestMarshalPersistJSON_TerminalExecArgs_JSONIsValid(t *testing.T) {
 		"command": "line1\nline2",
 		"stdin":   "secret\nvalue",
 	}
-	argsJSON := marshalPersistJSON(redactAnyForPersist("args", args, 0), 4000)
+	argsJSON := marshalPersistJSON(redactAnyForPersist("args", args, 0))
 	if !json.Valid([]byte(argsJSON)) {
 		t.Fatalf("argsJSON must be valid JSON, got: %q", argsJSON)
 	}
@@ -76,6 +76,30 @@ func TestMarshalPersistJSON_TerminalExecArgs_JSONIsValid(t *testing.T) {
 	}
 	if _, ok := stdinAny.(map[string]any); !ok {
 		t.Fatalf("parsed.stdin type=%T, want map[string]any", stdinAny)
+	}
+}
+
+func TestMarshalPersistJSON_LongPayloadPreservesValidJSON(t *testing.T) {
+	t.Parallel()
+
+	body := strings.Repeat("x", 7000)
+	payloadJSON := marshalPersistJSON(map[string]any{"stream_event": map[string]any{"body": body}})
+	if !json.Valid([]byte(payloadJSON)) {
+		t.Fatalf("payload JSON must be valid, got suffix %q", payloadJSON[len(payloadJSON)-80:])
+	}
+	if len(payloadJSON) <= 7000 {
+		t.Fatalf("payload JSON length=%d, want long payload preserved", len(payloadJSON))
+	}
+	var parsed struct {
+		StreamEvent struct {
+			Body string `json:"body"`
+		} `json:"stream_event"`
+	}
+	if err := json.Unmarshal([]byte(payloadJSON), &parsed); err != nil {
+		t.Fatalf("unmarshal payloadJSON: %v", err)
+	}
+	if parsed.StreamEvent.Body != body {
+		t.Fatalf("body length=%d, want %d", len(parsed.StreamEvent.Body), len(body))
 	}
 }
 

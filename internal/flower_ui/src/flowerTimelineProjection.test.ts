@@ -154,6 +154,53 @@ describe('buildFlowerTimelineEntries', () => {
     ]);
   });
 
+  it('keeps adjacent todo and subagent activity segments separate', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        {
+          id: 'assistant-adjacent-activity',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 2,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-todos',
+              items: [activityItem({
+                item_id: 'tool:todos',
+                tool_id: 'todos',
+                tool_name: 'write_todos',
+                renderer: 'todos',
+                label: 'Update plan',
+                payload: { todos: [{ content: 'Inspect projection', status: 'completed' }] },
+              })],
+            }),
+            activityTimeline({
+              run_id: 'run-subagents',
+              items: [activityItem({
+                item_id: 'tool:subagents',
+                tool_id: 'subagents',
+                tool_name: 'subagents',
+                renderer: 'structured',
+                label: 'Research sources',
+                payload: { task_name: 'Research sources', status: 'completed' },
+              })],
+            }),
+          ],
+        },
+      ],
+    }));
+
+    const first = entries[0];
+    expect(first?.type).toBe('message');
+    if (first?.type !== 'message') throw new Error('expected message entry');
+    expect(first.blocks.map((block) => block.type)).toEqual(['activity', 'activity']);
+    expect(first.blocks.map((block) => (block.type === 'activity' ? block.block.items[0]?.tool_name : ''))).toEqual([
+      'write_todos',
+      'subagents',
+    ]);
+  });
+
   it('keeps activity-only assistant messages visible', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [
