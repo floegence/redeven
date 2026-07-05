@@ -165,7 +165,7 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
         </div>
       )}
       class={cn(
-        'flex max-w-none flex-col overflow-hidden rounded-md p-0',
+        'flex max-w-none flex-col overflow-hidden rounded-md border border-border/60 p-0 shadow-xl',
         '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
         '[&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:!overflow-hidden [&>div:last-child]:!p-0',
         layout.isMobile() ? 'w-[calc(100vw-0.5rem)] max-w-none' : props.dialogDesktopWidthClass,
