@@ -40,8 +40,11 @@ not parse manifests, install packages, mint tickets, or load plugin assets.
 
 Plugin Center is a dedicated Env App management view, not a Runtime Settings
 section. It opens from the first `Plugin Center` tile in the app-grid panel or
-from plugin detail fallbacks, and it does not persistently switch the current
-Activity or Workbench surface. The view owns product chrome for search,
+from plugin detail fallbacks as a transient Activity main-surface component,
+not as a floating overlay, modal, or Workbench widget. Opening it switches the
+current Activity tab to an internal `plugin-center` id while preserving the last
+normal Env surface for return; closing it returns to that surface instead of
+opening Runtime Settings or leaving an empty shell. The view owns product chrome for search,
 Discover, Installed, Updates, list selection, and a details inspector while
 projecting the Redeven official catalog seed and matching installed ReDevPlugin
 records. First-release discovery is official-only and includes the Containers
@@ -102,8 +105,8 @@ local substitute for the missing released package.
 [5] redeven:AGENTS.md:623 - Interactive UI controls must expose pointer cursor affordance while enabled.
 [6] redeven:AGENTS.md:641 - Workbench wheel ownership is canvas-first and selected-widget guarded.
 [7] redeven:AGENTS.md:653 - Workbench text selection and copy are first-class interaction contracts.
-[8] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2300 - The Activity Bar defines Plugins as a trigger with a custom click handler.
-[9] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3111 - EnvAppShell renders PluginCenterView as a dedicated overlay rather than Settings content.
+[8] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2311 - The Activity Bar defines Plugins as a trigger with a custom click handler.
+[9] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2081 - EnvAppShell registers Plugin Center as an internal Activity main-surface component.
 [10] redeven:internal/envapp/ui_src/src/ui/pages/settings/settingsStructure.ts:45 - Runtime Settings sections are declared without a plugins section.
 [11] redeven:okf/ui/workbench-interaction-contracts.md:11 - Workbench input ownership uses explicit marker contracts.
 [12] redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx:12 - The plugin panel is a controlled Redeven UI component over projected plugin inventory.

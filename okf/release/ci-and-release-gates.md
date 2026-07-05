@@ -98,11 +98,12 @@ distribution install API is required. They also bind surface Open as disabled
 until Redeven consumes a released ReDevPlugin surface host. Projection and
 component tests bind attention-needed plugin state to details routing, while
 Shell integration tests bind the panel `Plugin Center` tile to the dedicated
-center view without entering Runtime Settings, disabled plugin tiles to matching
-Plugin Center details, and surface-host-not-ready enabled tiles to the Plugin
-Center details view with Open still disabled instead of opening a fake sandbox
-iframe. Settings structure tests bind Plugin Center's absence from Runtime
-Settings navigation.
+Activity main-surface view without entering Runtime Settings or rendering a
+floating overlay, disabled plugin tiles to matching Plugin Center details, and
+surface-host-not-ready enabled tiles to the Plugin Center details view with Open
+still disabled instead of opening a fake sandbox iframe. They also bind closing
+Plugin Center back to the last normal Activity surface. Settings structure tests
+bind Plugin Center's absence from Runtime Settings navigation.
 
 The route matrix covers both disabled-handler reservations and enabled-handler
 delegation. Without a plugin platform handler, `/_redeven_plugin/*` remains
@@ -179,4 +180,4 @@ ReDevPlugin artifacts only.
 [46] redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.test.tsx:1 - Plugin Panel tests cover first-tile Plugin Center behavior and interactive cursor affordance.
 [47] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.test.tsx:88 - Plugin Center tests cover the dedicated shell, official-only rendering, and disabled host distribution install state.
 [48] redeven:internal/envapp/ui_src/src/ui/pages/settings/settingsStructure.plugins.test.ts:8 - Settings structure tests bind Plugin Center's absence from Runtime Settings.
-[49] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:761 - EnvAppShell tests bind the Plugins panel to the dedicated Plugin Center view.
+[49] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:807 - EnvAppShell tests bind the Plugins panel to the dedicated Plugin Center Activity view.

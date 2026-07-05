@@ -185,6 +185,9 @@ const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
 const ACCESS_RESUME_TIMEOUT_MS = 15_000;
 const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
+const PLUGIN_CENTER_ACTIVITY_ID = 'plugin-center';
+
+type EnvActivitySurfaceId = EnvSurfaceId | 'settings' | typeof PLUGIN_CENTER_ACTIVITY_ID;
 
 type EnvSessionSource =
   | 'local_runtime'
@@ -692,7 +695,6 @@ export function EnvAppShell() {
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
   const [settingsOrigin, setSettingsOrigin] = createSignal<EnvSettingsOrigin>(null);
   const [pluginsPanelOpen, setPluginsPanelOpen] = createSignal(false);
-  const [pluginCenterOpen, setPluginCenterOpen] = createSignal(false);
   const [pluginCenterSelectedPluginID, setPluginCenterSelectedPluginID] = createSignal<string | undefined>();
   const [languageMenuOpenSeq, setLanguageMenuOpenSeq] = createSignal(0);
   const [aiThreadFocusRequest, setAIThreadFocusRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
@@ -757,7 +759,7 @@ export function EnvAppShell() {
 
   const openSettings = (section?: EnvSettingsSection, options?: { origin?: EnvSettingsOrigin }) => {
     setPluginsPanelOpen(false);
-    setPluginCenterOpen(false);
+    setPluginCenterSelectedPluginID(undefined);
     setSettingsFocusSection(section ?? 'config');
     setSettingsFocusSeq((n) => n + 1);
     setViewMode('activity');
@@ -790,19 +792,14 @@ export function EnvAppShell() {
   const openPluginCenter = (selectedPluginID?: string) => {
     setPluginsPanelOpen(false);
     setPluginCenterSelectedPluginID(selectedPluginID);
-    setPluginCenterOpen(true);
+    setViewMode('activity', { surfaceId: activeSurface() });
+    activateActivitySurface(PLUGIN_CENTER_ACTIVITY_ID, { persist: false });
   };
 
-  createEffect(() => {
-    if (!pluginCenterOpen()) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setPluginCenterOpen(false);
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    onCleanup(() => document.removeEventListener('keydown', onKeyDown));
-  });
+  const closePluginCenter = () => {
+    setPluginCenterSelectedPluginID(undefined);
+    activateActivitySurface(lastActivitySurface(), { persist: false });
+  };
 
   const openPluginSurface = (target: PluginSurfaceLaunchTarget) => {
     notify.info('Plugin surface unavailable', `Plugin Center can manage ${target.pluginInstanceID}, but this build does not include the released ReDevPlugin surface host.`);
@@ -2081,6 +2078,20 @@ export function EnvAppShell() {
     ];
     list.push({ id: 'ai', name: i18n.t('shell.nav.flower'), icon: FlowerNavigationIcon, component: EnvAIPage, sidebar: { order: 6, fullScreen: false, renderIn: 'main' } });
     list.push({ id: 'codex', name: i18n.t('shell.nav.codex'), icon: CodexNavigationIcon, component: CodexPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
+    list.push({
+      id: PLUGIN_CENTER_ACTIVITY_ID,
+      name: 'Plugin Center',
+      icon: Grid3x3,
+      component: () => (
+        <PluginCenterView
+          selectedPluginID={pluginCenterSelectedPluginID()}
+          canManagePlugins={protocol.status() === 'connected' && canAdmin()}
+          canOpenPluginSurfaces={false}
+          onClose={closePluginCenter}
+        />
+      ),
+      sidebar: { order: 98, fullScreen: true },
+    });
     list.push({ id: 'settings', name: i18n.t('shell.nav.runtimeSettings'), icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
     return list;
   });
@@ -2105,8 +2116,8 @@ export function EnvAppShell() {
     });
   };
 
-  const activateActivitySurface = (surface: EnvSurfaceId | 'settings', opts?: { persist?: boolean }) => {
-    if (surface !== 'settings') {
+  const activateActivitySurface = (surface: EnvActivitySurfaceId, opts?: { persist?: boolean }) => {
+    if (surface !== 'settings' && surface !== PLUGIN_CENTER_ACTIVITY_ID) {
       setSettingsOrigin(null);
       setLastActivitySurface(surface);
       setLastRequestedSurface(surface);
@@ -2302,7 +2313,6 @@ export function EnvAppShell() {
         label: 'Plugins',
         collapseBehavior: 'preserve',
         onClick: () => {
-          setPluginCenterOpen(false);
           setPluginsPanelOpen((open) => !open);
           void refetchPluginInventory();
         },
@@ -3108,16 +3118,6 @@ export function EnvAppShell() {
         onOpenPluginDetails={(pluginID) => openPluginCenter(pluginID)}
         onOpenPluginSurface={(target) => void openPluginSurface(target)}
       />
-      <Show when={pluginCenterOpen()}>
-        <div class="fixed inset-x-2 bottom-2 top-2 z-40 overflow-hidden rounded-lg border bg-background shadow-2xl md:left-[4.25rem] md:right-4 md:bottom-4 md:top-4">
-          <PluginCenterView
-            selectedPluginID={pluginCenterSelectedPluginID()}
-            canManagePlugins={protocol.status() === 'connected' && canAdmin()}
-            canOpenPluginSurfaces={false}
-            onClose={() => setPluginCenterOpen(false)}
-          />
-        </div>
-      </Show>
       <DebugConsoleWindow controller={debugConsole} />
     </Shell>
   );

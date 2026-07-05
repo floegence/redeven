@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createContext, createEffect, useContext } from 'solid-js';
+import { createContext, createEffect, createMemo, createSignal, useContext, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,6 +33,9 @@ const settingsPageState = vi.hoisted(() => ({
   focusSeq: 0,
   focusSection: null as string | null,
 }));
+const registeredComponentsState = vi.hoisted(() => ({
+  components: [] as Array<{ id: string; component: () => JSX.Element }>,
+}));
 const pluginApiMocks = vi.hoisted(() => ({
   executePluginLifecycleCommand: vi.fn(async () => ({})),
   loadPluginInventoryProjection: vi.fn(),
@@ -64,11 +67,13 @@ let resumeCalls: string[] = [];
 let layoutIsMobile = false;
 let sidebarActiveTabValue = 'terminal';
 let sidebarVisibilityMotionValue: 'animated' | 'instant' = 'animated';
+let setSidebarActiveTabSignal: ((value: string) => void) | null = null;
 const setSidebarActiveTabMock = vi.fn((tab: string, opts?: {
   openSidebar?: boolean;
   visibilityMotion?: 'animated' | 'instant';
 }) => {
   sidebarActiveTabValue = tab;
+  setSidebarActiveTabSignal?.(tab);
   sidebarVisibilityMotionValue = opts?.visibilityMotion ?? 'animated';
 });
 const setSidebarCollapsedMock = vi.fn();
@@ -105,13 +110,17 @@ vi.mock('@floegence/floe-webapp-core', () => ({
       };
     },
   }),
-  useLayout: () => ({
-    isMobile: () => layoutIsMobile,
-    sidebarActiveTab: () => sidebarActiveTabValue,
-    sidebarVisibilityMotion: () => sidebarVisibilityMotionValue,
-    setSidebarActiveTab: setSidebarActiveTabMock,
-    setSidebarCollapsed: setSidebarCollapsedMock,
-  }),
+  useLayout: () => {
+    const [activeTab, setActiveTab] = createSignal(sidebarActiveTabValue);
+    setSidebarActiveTabSignal = setActiveTab;
+    return {
+      isMobile: () => layoutIsMobile,
+      sidebarActiveTab: activeTab,
+      sidebarVisibilityMotion: () => sidebarVisibilityMotionValue,
+      setSidebarActiveTab: setSidebarActiveTabMock,
+      setSidebarCollapsed: setSidebarCollapsedMock,
+    };
+  },
   useNotification: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),
   useTheme: () => ({
     resolvedTheme: () => 'dark',
@@ -123,8 +132,29 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/app', () => ({
-  ActivityAppsMain: () => <div>activity main</div>,
-  FloeRegistryRuntime: (props: any) => <>{props.children}</>,
+  ActivityAppsMain: (props: any) => {
+    const activeComponent = createMemo(() => {
+      const activeId = typeof props.activeId === 'function' ? props.activeId() : props.activeId;
+      return registeredComponentsState.components.find((component) => component.id === activeId);
+    });
+    const renderedComponent = createMemo(() => {
+      const match = activeComponent();
+      if (!match) {
+        return <div>activity main</div>;
+      }
+      const Component = match.component;
+      return <Component />;
+    });
+    return (
+      <div data-testid="activity-main" data-active-id={typeof props.activeId === 'function' ? props.activeId() : props.activeId}>
+        {renderedComponent()}
+      </div>
+    );
+  },
+  FloeRegistryRuntime: (props: any) => {
+    registeredComponentsState.components = Array.isArray(props.components) ? props.components : [];
+    return <>{props.children}</>;
+  },
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
@@ -382,11 +412,11 @@ vi.mock('./accessResume', () => ({
 vi.mock('./icons/FlowerIcon', () => ({ FlowerIcon: () => <span /> }));
 vi.mock('./icons/CodexIcon', () => ({ CodexIcon: () => <span />, CodexNavigationIcon: () => <span /> }));
 vi.mock('./workbench/EnvWorkbenchPage', () => ({ EnvWorkbenchPage: () => <MockDisplayModeSurface testId="workbench-page" /> }));
-vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div /> }));
-vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
-vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div /> }));
-vi.mock('./pages/EnvCodespacesPage', () => ({ EnvCodespacesPage: () => <div /> }));
-vi.mock('./pages/EnvPortForwardsPage', () => ({ EnvPortForwardsPage: () => <div /> }));
+vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div>activity main</div> }));
+vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div>activity main</div> }));
+vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div>activity main</div> }));
+vi.mock('./pages/EnvCodespacesPage', () => ({ EnvCodespacesPage: () => <div>activity main</div> }));
+vi.mock('./pages/EnvPortForwardsPage', () => ({ EnvPortForwardsPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvAIPage', () => ({
   EnvAIPage: () => {
     const env = useContext(EnvContextMock as any) as {
@@ -511,6 +541,20 @@ function findButtonByText(root: ParentNode, text: string): HTMLButtonElement | u
   return Array.from(root.querySelectorAll('button')).find((node) => node.textContent?.trim().includes(text)) as HTMLButtonElement | undefined;
 }
 
+function expectPluginCenterMountedInActivityMain(host: ParentNode): void {
+  const view = host.querySelector('[data-plugin-center-view]');
+  const main = host.querySelector('[data-floe-shell-slot="main"]');
+  expect(view).toBeTruthy();
+  expect(main?.contains(view)).toBe(true);
+
+  let node = view?.parentElement ?? null;
+  while (node && node !== document.body) {
+    const className = node.getAttribute('class') ?? '';
+    expect(className.split(/\s+/u)).not.toEqual(expect.arrayContaining(['fixed', 'z-40', 'shadow-2xl']));
+    node = node.parentElement;
+  }
+}
+
 function createStorageMock(): Storage {
   const store = new Map<string, string>();
   return {
@@ -569,12 +613,14 @@ beforeEach(() => {
   notesOverlayState.lastProps = null;
   settingsPageState.focusSeq = 0;
   settingsPageState.focusSection = null;
+  registeredComponentsState.components = [];
   protocolStatus = 'disconnected';
   protocolClient = null;
   protocolError = null;
   resumeCalls = [];
   layoutIsMobile = false;
   sidebarActiveTabValue = 'terminal';
+  setSidebarActiveTabSignal = null;
   delete window.redevenDesktopShell;
   delete window.redevenDesktopSessionContext;
   setSidebarActiveTabMock.mockClear();
@@ -780,9 +826,46 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-view]')));
 
       expect(host.querySelector('[data-plugin-center-shell]')).toBeTruthy();
+      expectPluginCenterMountedInActivityMain(host);
       expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
       expect(settingsPageState.focusSection).not.toBe('plugins');
-      expect(sidebarActiveTabValue).not.toBe('settings');
+      expect(sidebarActiveTabValue).toBe('plugin-center');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('closes Plugin Center back to the last normal activity surface', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      (host.querySelector('[data-activity-id="monitor"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => sidebarActiveTabValue === 'monitor');
+
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')));
+
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-view]')));
+      expectPluginCenterMountedInActivityMain(host);
+      expect(sidebarActiveTabValue).toBe('plugin-center');
+
+      (host.querySelector('button[aria-label="Close Plugin Center"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => sidebarActiveTabValue === 'monitor');
+
+      expect(host.querySelector('[data-plugin-center-view]')).toBeNull();
+      expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
     } finally {
       dispose();
     }
@@ -848,9 +931,10 @@ describe('EnvAppShell environment entry affordances', () => {
 
       expect(host.querySelector('[data-plugin-center-item="com.redeven.official.containers"]')).toBeTruthy();
       expect(host.querySelector('[data-plugin-center-details]')?.textContent).toContain('Disabled');
+      expectPluginCenterMountedInActivityMain(host);
       expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
       expect(settingsPageState.focusSection).not.toBe('plugins');
-      expect(sidebarActiveTabValue).not.toBe('settings');
+      expect(sidebarActiveTabValue).toBe('plugin-center');
     } finally {
       dispose();
     }
@@ -920,9 +1004,10 @@ describe('EnvAppShell environment entry affordances', () => {
 
       expect(host.querySelector('[data-plugin-center-item="com.redeven.official.containers"]')).toBeTruthy();
       expect((host.querySelector('[data-plugin-action="open"]') as HTMLButtonElement | null)?.disabled).toBe(true);
+      expectPluginCenterMountedInActivityMain(host);
       expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
       expect(settingsPageState.focusSection).not.toBe('plugins');
-      expect(sidebarActiveTabValue).not.toBe('settings');
+      expect(sidebarActiveTabValue).toBe('plugin-center');
     } finally {
       dispose();
     }
