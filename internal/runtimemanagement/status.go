@@ -120,16 +120,17 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc(StatusPath, s.handleStatus)
-	s.httpServer = &http.Server{
+	srv := &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+	s.httpServer = srv
 	s.listener = ln
 	go func() {
 		<-ctx.Done()
 		_ = s.Close()
 	}()
-	go func() { _ = s.httpServer.Serve(ln) }()
+	go func() { _ = srv.Serve(ln) }()
 	return nil
 }
 
