@@ -685,9 +685,16 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
 
   return (
     <div class="flex h-full min-h-0 flex-col">
-      <Show when={!visibleLoading()} fallback={<GitStatePane loading message={i18n.t('git.changes.loadingWorkspaceChanges')} />}>
-        <Show when={!visibleError()} fallback={<GitStatePane tone="error" message={visibleError()} />}>
-          {/* Toolbar — exactly matches FileWorkspaceHeader pattern */}
+      <Show when={!visibleError()} fallback={<GitStatePane tone="error" message={visibleError()} />}>
+        {(() => {
+          return (
+            <>
+              <Show when={visibleLoading()}>
+                <div class="mx-2.5 mt-1.5">
+                  <div class="h-0.5 w-full animate-pulse rounded-full bg-primary/40" />
+                </div>
+              </Show>
+              {/* Toolbar — exactly matches FileWorkspaceHeader pattern */}
           <div class={`shrink-0 border-b px-2.5 py-1.5 ${redevenDividerRoleClass()} ${redevenSurfaceRoleClass('inset')}`}>
             <div ref={setHeaderElement} data-git-changes-header-density={headerPresentation().density}>
               {/* Row 1: SegmentedControl + Filter — like Files toolbar grid */}
@@ -792,8 +799,10 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
               sectionActionKey={sectionActionKey()}
             />
           </div>
+          </>
+        );
+      })()}
         </Show>
-      </Show>
 
       <GitCommitDialog
         open={commitDialogOpen()}
