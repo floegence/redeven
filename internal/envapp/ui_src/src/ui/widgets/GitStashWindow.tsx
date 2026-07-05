@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, createSignal, on, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import {
   AlertTriangle,
@@ -309,6 +309,42 @@ export function GitStashWindow(props: GitStashWindowProps) {
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitSeededCommitFileSummary | null>(null);
   const [diffDialogStashId, setDiffDialogStashId] = createSignal('');
   const [floatingSurfaceEl, setFloatingSurfaceEl] = createSignal<HTMLElement | null>(null);
+  const [leftPanelWidth, setLeftPanelWidth] = createSignal(304); // px, default ~19rem
+
+  // -- resize handle --
+  let resizing = false;
+  let resizeStartX = 0;
+  let resizeStartWidth = 0;
+
+  const onResizeMouseDown = (e: MouseEvent) => {
+    e.preventDefault();
+    resizing = true;
+    resizeStartX = e.clientX;
+    resizeStartWidth = leftPanelWidth();
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  const onResizeMouseMove = (e: MouseEvent) => {
+    if (!resizing) return;
+    const delta = e.clientX - resizeStartX;
+    const next = Math.max(180, Math.min(500, resizeStartWidth + delta));
+    setLeftPanelWidth(next);
+  };
+
+  const onResizeMouseUp = () => {
+    if (!resizing) return;
+    resizing = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  };
+
+  document.addEventListener('mousemove', onResizeMouseMove);
+  document.addEventListener('mouseup', onResizeMouseUp);
+  onCleanup(() => {
+    document.removeEventListener('mousemove', onResizeMouseMove);
+    document.removeEventListener('mouseup', onResizeMouseUp);
+  });
 
   const repoPath = () => String(props.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim();
   const repoName = () => repoDisplayName(repoPath());
@@ -441,7 +477,8 @@ export function GitStashWindow(props: GitStashWindowProps) {
               fallback={(
                 <div class="flex h-full min-h-0 flex-col overflow-hidden xl:flex-row">
                   {/* Left: stash list */}
-                  <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 flex-1 overflow-auto xl:w-[19rem] xl:shrink-0 xl:border-r">
+                  <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 overflow-auto xl:shrink-0 xl:border-r" style={{ width: `${leftPanelWidth()}px` }}>
+
                     <Show when={!props.stashesLoading} fallback={<GitStatePane loading message="Loading..." surface class="h-full" />}>
                       <Show when={!props.stashesError} fallback={<GitStatePane tone="error" message={props.stashesError ?? 'Failed to load stashes.'} surface class="h-full" />}>
                         <Show
@@ -467,6 +504,13 @@ export function GitStashWindow(props: GitStashWindowProps) {
                       </Show>
                     </Show>
                   </div>
+
+                      {/* Resize handle — xl only */}
+                      <div
+                        aria-hidden="true"
+                        class="hidden xl:block w-1 shrink-0 cursor-col-resize transition-colors hover:bg-primary/40 active:bg-primary/60"
+                        onMouseDown={onResizeMouseDown}
+                      />
 
                         {/* Right: context-aware panel */}
                         <Show when={props.stashDetail || props.stashDetailLoading || props.stashDetailError}>
