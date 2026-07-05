@@ -33,6 +33,10 @@ const settingsPageState = vi.hoisted(() => ({
   focusSeq: 0,
   focusSection: null as string | null,
 }));
+const pluginApiMocks = vi.hoisted(() => ({
+  executePluginLifecycleCommand: vi.fn(async () => ({})),
+  loadPluginInventoryProjection: vi.fn(),
+}));
 
 const connectMock = vi.fn(async (_config: Record<string, unknown>) => {
   protocolStatus = 'connected';
@@ -319,10 +323,15 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     MoreVertical: Icon,
     Moon: Icon,
     Refresh: Icon,
+    RefreshIcon: Icon,
     Search: Icon,
     Settings: Icon,
     Sun: Icon,
     Terminal: Icon,
+    CheckCircle: Icon,
+    Plus: Icon,
+    Trash: Icon,
+    X: Icon,
   };
 });
 
@@ -452,6 +461,10 @@ vi.mock('./services/localApi', () => ({
   uploadLocalApiFile: vi.fn(),
   unlockEnvAppAccess: unlockEnvAppAccessMock,
 }));
+vi.mock('./plugins/pluginApi', () => ({
+  executePluginLifecycleCommand: pluginApiMocks.executePluginLifecycleCommand,
+  loadPluginInventoryProjection: pluginApiMocks.loadPluginInventoryProjection,
+}));
 vi.mock('./services/sandboxWindowRegistry', () => ({ getSandboxWindowInfo: () => null }));
 vi.mock('./pages/EnvContext', () => ({
   EnvContext: EnvContextMock,
@@ -573,6 +586,41 @@ beforeEach(() => {
   accessResumeMock.mockReset();
   accessResumeMock.mockImplementation(async ({ token }: { token: string }) => {
     resumeCalls.push(token);
+  });
+  pluginApiMocks.executePluginLifecycleCommand.mockClear();
+  pluginApiMocks.loadPluginInventoryProjection.mockReset();
+  pluginApiMocks.loadPluginInventoryProjection.mockResolvedValue({
+    items: [
+      {
+        pluginID: 'com.redeven.official.containers',
+        displayName: 'Containers',
+        description: 'Inspect Docker and Podman resources.',
+        iconFallback: 'containers',
+        publisher: 'Redeven',
+        lifecycleState: 'not_installed',
+        trustBadge: 'official',
+        pinned: false,
+        officialCatalog: {
+          pluginID: 'com.redeven.official.containers',
+          displayName: 'Containers',
+          description: 'Inspect Docker and Podman resources.',
+          publisher: 'Redeven',
+          latestVersion: '1.0.0',
+          stableVersion: '1.0.0',
+          minRedevenVersion: '0.1.0',
+          minReDevPluginVersion: '0.1.1',
+          rolloutState: 'stable',
+          defaultSurfaceID: 'containers.activity',
+          iconFallback: 'containers',
+          distribution: {
+            releaseChannel: 'github_release_and_redeven_cdn',
+            artifactName: 'containers-1.0.0.redevplugin',
+            officialArtifactPath: 'official/containers/1.0.0/containers-1.0.0.redevplugin',
+            requiresHostDistributionInstallAPI: true,
+          },
+        },
+      },
+    ],
   });
   getLocalRuntimeMock.mockResolvedValue({ mode: 'local', env_public_id: 'env_local', direct_ws_url: 'ws://localhost/_redeven_direct/ws' });
   refreshLocalRuntimeMock.mockResolvedValue({ mode: 'local', env_public_id: 'env_local', direct_ws_url: 'ws://localhost/_redeven_direct/ws' });
@@ -705,6 +753,176 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
 
       expect(settingsPageState.focusSection).toBe('config');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('opens the dedicated Plugin Center from the Plugins panel without entering Runtime Settings', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')));
+
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-view]')));
+
+      expect(host.querySelector('[data-plugin-center-shell]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
+      expect(settingsPageState.focusSection).not.toBe('plugins');
+      expect(sidebarActiveTabValue).not.toBe('settings');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('routes disabled plugin panel tiles to the dedicated Plugin Center details', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginApiMocks.loadPluginInventoryProjection.mockResolvedValue({
+      items: [
+        {
+          pluginID: 'com.redeven.official.containers',
+          pluginInstanceID: 'plugininst_containers',
+          displayName: 'Containers',
+          description: 'Inspect Docker and Podman resources.',
+          iconFallback: 'containers',
+          publisher: 'Redeven',
+          version: '1.0.0',
+          lifecycleState: 'disabled',
+          trustBadge: 'official',
+          pinned: false,
+          attentionReason: 'disabled',
+          officialCatalog: {
+            pluginID: 'com.redeven.official.containers',
+            displayName: 'Containers',
+            description: 'Inspect Docker and Podman resources.',
+            publisher: 'Redeven',
+            latestVersion: '1.0.0',
+            stableVersion: '1.0.0',
+            minRedevenVersion: '0.1.0',
+            minReDevPluginVersion: '0.1.1',
+            rolloutState: 'stable',
+            defaultSurfaceID: 'containers.activity',
+            iconFallback: 'containers',
+            distribution: {
+              releaseChannel: 'github_release_and_redeven_cdn',
+              artifactName: 'containers-1.0.0.redevplugin',
+              officialArtifactPath: 'official/containers/1.0.0/containers-1.0.0.redevplugin',
+              requiresHostDistributionInstallAPI: true,
+            },
+          },
+        },
+      ],
+    });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]')));
+
+      (host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-view]')));
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-item="com.redeven.official.containers"]')));
+
+      expect(host.querySelector('[data-plugin-center-item="com.redeven.official.containers"]')).toBeTruthy();
+      expect(host.querySelector('[data-plugin-center-details]')?.textContent).toContain('Disabled');
+      expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
+      expect(settingsPageState.focusSection).not.toBe('plugins');
+      expect(sidebarActiveTabValue).not.toBe('settings');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('keeps enabled plugin tiles in the dedicated Plugin Center until the surface host is released', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginApiMocks.loadPluginInventoryProjection.mockResolvedValue({
+      items: [
+        {
+          pluginID: 'com.redeven.official.containers',
+          pluginInstanceID: 'plugininst_containers',
+          displayName: 'Containers',
+          description: 'Inspect Docker and Podman resources.',
+          iconFallback: 'containers',
+          publisher: 'Redeven',
+          version: '1.0.0',
+          lifecycleState: 'enabled',
+          trustBadge: 'official',
+          pinned: false,
+          defaultLaunchTarget: {
+            pluginInstanceID: 'plugininst_containers',
+            surfaceID: 'containers.activity',
+            preferredPlacement: 'activity',
+          },
+          officialCatalog: {
+            pluginID: 'com.redeven.official.containers',
+            displayName: 'Containers',
+            description: 'Inspect Docker and Podman resources.',
+            publisher: 'Redeven',
+            latestVersion: '1.0.0',
+            stableVersion: '1.0.0',
+            minRedevenVersion: '0.1.0',
+            minReDevPluginVersion: '0.1.1',
+            rolloutState: 'stable',
+            defaultSurfaceID: 'containers.activity',
+            iconFallback: 'containers',
+            distribution: {
+              releaseChannel: 'github_release_and_redeven_cdn',
+              artifactName: 'containers-1.0.0.redevplugin',
+              officialArtifactPath: 'official/containers/1.0.0/containers-1.0.0.redevplugin',
+              requiresHostDistributionInstallAPI: true,
+            },
+          },
+        },
+      ],
+    });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]')));
+
+      (host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-view]')));
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-action="open"]')));
+
+      expect(host.querySelector('[data-plugin-center-item="com.redeven.official.containers"]')).toBeTruthy();
+      expect((host.querySelector('[data-plugin-action="open"]') as HTMLButtonElement | null)?.disabled).toBe(true);
+      expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
+      expect(settingsPageState.focusSection).not.toBe('plugins');
+      expect(sidebarActiveTabValue).not.toBe('settings');
     } finally {
       dispose();
     }

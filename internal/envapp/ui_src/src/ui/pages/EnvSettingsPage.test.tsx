@@ -447,7 +447,6 @@ describe('EnvSettingsPage', () => {
       'Permission Policy',
       'Flower',
       'Skills',
-      'Plugin Center',
       'Codex',
       'Debug Console',
     ]);
@@ -473,7 +472,8 @@ describe('EnvSettingsPage', () => {
 
     const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');
     const aiGroupSections = Array.from(aiGroup?.querySelectorAll('[data-settings-nav-item]') ?? []).map((node) => node.getAttribute('data-settings-nav-item'));
-    expect(aiGroupSections).toEqual(['ai', 'skills', 'plugins', 'codex']);
+    expect(aiGroupSections).toEqual(['ai', 'skills', 'codex']);
+    expect(host.querySelector('[data-settings-nav-item="plugins"]')).toBeNull();
 
     await openSettingsSection(host, 'debug_console');
     expect(host.querySelector('[data-settings-card="Debug Console"]')).toBeTruthy();

@@ -178,5 +178,5 @@ needs-attention state even when the plugin id appears in the official catalog.
 [35] redeven:internal/redevpluginintegration/adapters.go:272 - CSRF validation requires the token to match the resolved ReDevPlugin session context.
 [36] redeven:internal/redevpluginintegration/adapters.go:218 - Runtime artifact resolution searches published bundle/executable locations and fails closed.
 [37] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:9 - Plugin management API calls use `/_redeven_proxy/api/plugins*`.
-[38] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterSection.tsx:148 - Official catalog install is disabled when host distribution install API is required.
+[38] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:363 - Official catalog install is disabled when host distribution install API is required.
 [39] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:60 - The current install command rejects official catalog install without a host distribution install API.

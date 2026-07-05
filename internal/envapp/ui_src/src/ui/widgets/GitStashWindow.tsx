@@ -37,7 +37,7 @@ import { stashReviewMatchesTarget, type GitStashReviewState } from '../utils/git
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
-import { gitChangePathClass, gitToneActionButtonClass } from './GitChrome';
+import { gitChangePathClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import { GitStashDeleteConfirmDialog } from './GitStashDeleteConfirmDialog';
 import { GitVirtualTable } from './GitVirtualTable';
@@ -668,7 +668,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
               <div class="flex h-full min-h-0 flex-col overflow-hidden px-2.5 py-2">
                 <Show when={!props.contextLoading} fallback={<GitStatePane loading message="Loading stash save context..." class="h-full" />}>
                   <Show when={!props.contextError} fallback={<GitStatePane tone="error" message={props.contextError ?? 'Failed to load stash context.'} class="h-full" />}>
-                    <div class="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-2">
+                    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-2">
                       <div class="w-full max-w-lg space-y-5">
                         {/* Heading */}
                         <div class="text-center">

@@ -18,7 +18,7 @@ package configures ReDevPlugin Host stores, policy/session/security adapters,
 runtime artifact resolution, observability fanout, and Redeven-owned business
 capabilities without copying platform source. Env App now adds product
 entrypoints for official plugin discovery and management: an Activity Bar
-Plugins panel and a Settings Plugin Center section. Those entrypoints project
+Plugins panel and a dedicated Plugin Center view. Those entrypoints project
 official catalog metadata and only the installed ReDevPlugin records whose
 `plugin_id` appears in that official catalog; they do not implement a second
 registry, package downloader, manifest parser, trust verifier, bridge, or
@@ -226,4 +226,4 @@ closed-world container resources capability contract.
 [43] redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts:3 - Env App embeds the first Redeven official catalog seed item.
 [44] redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:12 - Plugin inventory projection merges official catalog and installed ReDevPlugin records by plugin id.
 [45] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:9 - Env App plugin management wrappers call only the Redeven proxy plugin namespace.
-[46] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterSection.tsx:148 - Official installs that require host distribution install API are disabled in Plugin Center.
+[46] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:363 - Official installs that require host distribution install API are disabled in Plugin Center.
