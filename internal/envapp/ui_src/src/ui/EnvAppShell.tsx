@@ -76,6 +76,7 @@ import { CodexSidebar } from './codex/CodexSidebar';
 import { AIChatContext, createAIChatContextValue } from './pages/AIChatContext';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
 import { PluginPanel } from './plugins/PluginPanel';
+import { PluginCenterView } from './plugins/PluginCenterView';
 import { loadPluginInventoryProjection } from './plugins/pluginApi';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
 import type { PluginSurfaceLaunchTarget } from './plugins/pluginTypes';
@@ -691,6 +692,8 @@ export function EnvAppShell() {
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
   const [settingsOrigin, setSettingsOrigin] = createSignal<EnvSettingsOrigin>(null);
   const [pluginsPanelOpen, setPluginsPanelOpen] = createSignal(false);
+  const [pluginCenterOpen, setPluginCenterOpen] = createSignal(false);
+  const [pluginCenterSelectedPluginID, setPluginCenterSelectedPluginID] = createSignal<string | undefined>();
   const [languageMenuOpenSeq, setLanguageMenuOpenSeq] = createSignal(0);
   const [aiThreadFocusRequest, setAIThreadFocusRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
   let aiThreadFocusRequestSequence = 0;
@@ -754,6 +757,7 @@ export function EnvAppShell() {
 
   const openSettings = (section?: EnvSettingsSection, options?: { origin?: EnvSettingsOrigin }) => {
     setPluginsPanelOpen(false);
+    setPluginCenterOpen(false);
     setSettingsFocusSection(section ?? 'config');
     setSettingsFocusSeq((n) => n + 1);
     setViewMode('activity');
@@ -783,9 +787,27 @@ export function EnvAppShell() {
     pluginInventoryProjection.error ? getErrorMessage(pluginInventoryProjection.error) : undefined,
   ));
 
+  const openPluginCenter = (selectedPluginID?: string) => {
+    setPluginsPanelOpen(false);
+    setPluginCenterSelectedPluginID(selectedPluginID);
+    setPluginCenterOpen(true);
+  };
+
+  createEffect(() => {
+    if (!pluginCenterOpen()) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setPluginCenterOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    onCleanup(() => document.removeEventListener('keydown', onKeyDown));
+  });
+
   const openPluginSurface = (target: PluginSurfaceLaunchTarget) => {
     notify.info('Plugin surface unavailable', `Plugin Center can manage ${target.pluginInstanceID}, but this build does not include the released ReDevPlugin surface host.`);
-    openSettings('plugins');
+    const pluginID = pluginInventoryProjection()?.items.find((item) => item.defaultLaunchTarget?.pluginInstanceID === target.pluginInstanceID)?.pluginID;
+    openPluginCenter(pluginID);
   };
 
   const setDebugConsoleEnabled = (enabled: boolean) => {
@@ -2280,6 +2302,7 @@ export function EnvAppShell() {
         label: 'Plugins',
         collapseBehavior: 'preserve',
         onClick: () => {
+          setPluginCenterOpen(false);
           setPluginsPanelOpen((open) => !open);
           void refetchPluginInventory();
         },
@@ -3081,10 +3104,20 @@ export function EnvAppShell() {
         open={pluginsPanelOpen()}
         model={pluginPanelModel()}
         onClose={() => setPluginsPanelOpen(false)}
-        onOpenCenter={() => openSettings('plugins')}
-        onOpenPluginDetails={() => openSettings('plugins')}
+        onOpenCenter={() => openPluginCenter()}
+        onOpenPluginDetails={(pluginID) => openPluginCenter(pluginID)}
         onOpenPluginSurface={(target) => void openPluginSurface(target)}
       />
+      <Show when={pluginCenterOpen()}>
+        <div class="fixed inset-x-2 bottom-2 top-2 z-40 overflow-hidden rounded-lg border bg-background shadow-2xl md:left-[4.25rem] md:right-4 md:bottom-4 md:top-4">
+          <PluginCenterView
+            selectedPluginID={pluginCenterSelectedPluginID()}
+            canManagePlugins={protocol.status() === 'connected' && canAdmin()}
+            canOpenPluginSurfaces={false}
+            onClose={() => setPluginCenterOpen(false)}
+          />
+        </div>
+      </Show>
       <DebugConsoleWindow controller={debugConsole} />
     </Shell>
   );

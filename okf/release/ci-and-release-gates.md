@@ -91,11 +91,14 @@ catalog behavior, and update bucketing. The plugin API tests bind the UI wrapper
 to `/_redeven_proxy/api/plugins*` and snake_case lifecycle bodies without URL,
 file, unsigned local, or developer install helpers. Plugin Panel and Plugin
 Center component tests bind the app-grid entry, pointer cursor affordance,
-outside-click ordering, official-only management copy, disabled management
-actions for users without management authority, and disabled official install
-state when host distribution install API is required. They also bind surface
-Open as disabled until Redeven consumes a released ReDevPlugin surface host.
-Settings structure tests bind Plugin Center to the `AI & Extensions` group.
+outside-click ordering, dedicated management shell, local search, details
+selection, official-only management copy, disabled management actions for users
+without management authority, and disabled official install state when host
+distribution install API is required. They also bind surface Open as disabled
+until Redeven consumes a released ReDevPlugin surface host. Shell integration
+tests bind the panel `Plugin Center` tile to the dedicated center view without
+entering Runtime Settings, and Settings structure tests bind Plugin Center's
+absence from Runtime Settings navigation.
 
 The route matrix covers both disabled-handler reservations and enabled-handler
 delegation. Without a plugin platform handler, `/_redeven_plugin/*` remains
@@ -170,5 +173,6 @@ ReDevPlugin artifacts only.
 [44] redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.test.ts:1 - Plugin projection tests cover official catalog merging and panel/center bucketing.
 [45] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.test.ts:1 - Plugin API tests cover Redeven proxy paths and snake_case lifecycle request bodies.
 [46] redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.test.tsx:1 - Plugin Panel tests cover first-tile Plugin Center behavior and interactive cursor affordance.
-[47] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterSection.test.tsx:1 - Plugin Center tests cover official-only rendering and disabled host distribution install state.
-[48] redeven:internal/envapp/ui_src/src/ui/pages/settings/settingsStructure.plugins.test.ts:1 - Settings structure tests bind Plugin Center to AI & Extensions.
+[47] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.test.tsx:88 - Plugin Center tests cover the dedicated shell, official-only rendering, and disabled host distribution install state.
+[48] redeven:internal/envapp/ui_src/src/ui/pages/settings/settingsStructure.plugins.test.ts:8 - Settings structure tests bind Plugin Center's absence from Runtime Settings.
+[49] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:761 - EnvAppShell tests bind the Plugins panel to the dedicated Plugin Center view.

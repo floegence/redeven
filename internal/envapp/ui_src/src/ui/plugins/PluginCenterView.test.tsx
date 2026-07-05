@@ -3,7 +3,7 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { PluginCenterSection } from './PluginCenterSection';
+import { PluginCenterView } from './PluginCenterView';
 import type { PluginInventoryProjection } from './pluginTypes';
 
 const pluginApiMocks = vi.hoisted(() => ({
@@ -30,47 +30,68 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-const projection: PluginInventoryProjection = {
-  items: [
-    {
-      pluginID: 'com.redeven.official.containers',
-      displayName: 'Containers',
-      description: 'Inspect Docker and Podman resources.',
-      iconFallback: 'containers',
-      publisher: 'Redeven',
-      lifecycleState: 'not_installed',
-      trustBadge: 'official',
-      pinned: false,
-      officialCatalog: {
-        pluginID: 'com.redeven.official.containers',
-        displayName: 'Containers',
-        description: 'Inspect Docker and Podman resources.',
-        publisher: 'Redeven',
-        latestVersion: '1.0.0',
-        stableVersion: '1.0.0',
-        minRedevenVersion: '0.1.0',
-        minReDevPluginVersion: '0.1.1',
-        rolloutState: 'stable',
-        defaultSurfaceID: 'containers.activity',
-        iconFallback: 'containers',
-        distribution: {
-          releaseChannel: 'github_release_and_redeven_cdn',
-          artifactName: 'containers-1.0.0.redevplugin',
-          officialArtifactPath: 'official/containers/1.0.0/containers-1.0.0.redevplugin',
-          requiresHostDistributionInstallAPI: true,
-        },
-      },
+const containersPlugin = {
+  pluginID: 'com.redeven.official.containers',
+  displayName: 'Containers',
+  description: 'Inspect Docker and Podman resources.',
+  iconFallback: 'containers',
+  publisher: 'Redeven',
+  lifecycleState: 'not_installed',
+  trustBadge: 'official',
+  pinned: false,
+  officialCatalog: {
+    pluginID: 'com.redeven.official.containers',
+    displayName: 'Containers',
+    description: 'Inspect Docker and Podman resources.',
+    publisher: 'Redeven',
+    latestVersion: '1.0.0',
+    stableVersion: '1.0.0',
+    minRedevenVersion: '0.1.0',
+    minReDevPluginVersion: '0.1.1',
+    rolloutState: 'stable',
+    defaultSurfaceID: 'containers.activity',
+    iconFallback: 'containers',
+    distribution: {
+      releaseChannel: 'github_release_and_redeven_cdn',
+      artifactName: 'containers-1.0.0.redevplugin',
+      officialArtifactPath: 'official/containers/1.0.0/containers-1.0.0.redevplugin',
+      requiresHostDistributionInstallAPI: true,
     },
-  ],
+  },
+} satisfies PluginInventoryProjection['items'][number];
+
+const databasePlugin = {
+  ...containersPlugin,
+  pluginID: 'com.redeven.official.database',
+  displayName: 'Database Tools',
+  description: 'Inspect local database connections.',
+  iconFallback: 'database',
+  officialCatalog: {
+    ...containersPlugin.officialCatalog,
+    pluginID: 'com.redeven.official.database',
+    displayName: 'Database Tools',
+    description: 'Inspect local database connections.',
+    defaultSurfaceID: 'database.activity',
+    iconFallback: 'database',
+    distribution: {
+      ...containersPlugin.officialCatalog.distribution,
+      artifactName: 'database-1.0.0.redevplugin',
+      officialArtifactPath: 'official/database/1.0.0/database-1.0.0.redevplugin',
+    },
+  },
+} satisfies PluginInventoryProjection['items'][number];
+
+const projection: PluginInventoryProjection = {
+  items: [containersPlugin, databasePlugin],
 };
 
-describe('PluginCenterSection', () => {
-  it('renders Installed, Discover, and Updates without developer install entry points', () => {
+describe('PluginCenterView', () => {
+  it('renders a dedicated management shell outside Settings with local search', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
 
     dispose = render(() => (
-      <PluginCenterSection
+      <PluginCenterView
         projection={projection}
         loading={false}
         error={null}
@@ -79,11 +100,53 @@ describe('PluginCenterSection', () => {
       />
     ), mount);
 
+    expect(mount.querySelector('[data-plugin-center-view]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-center-shell]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-center-list]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-center-details]')).not.toBeNull();
+    expect(mount.querySelector('[data-settings-nav-item="plugins"]')).toBeNull();
     expect(mount.textContent).toContain('Installed');
     expect(mount.textContent).toContain('Discover');
     expect(mount.textContent).toContain('Updates');
     expect(mount.textContent).toContain('Containers');
     expect(mount.textContent).not.toMatch(/Developer|Install from URL|Install from file|unsigned|marketplace/i);
+
+    const search = mount.querySelector('[data-plugin-center-search]') as HTMLInputElement;
+    search.value = 'database';
+    search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+
+    expect(mount.querySelector('[data-plugin-center-item="com.redeven.official.database"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-center-item="com.redeven.official.containers"]')).toBeNull();
+  });
+
+  it('selects a plugin details inspector from an explicit shell request', () => {
+    const installedProjection: PluginInventoryProjection = {
+      items: [
+        {
+          ...containersPlugin,
+          pluginInstanceID: 'plugininst_containers',
+          version: '1.0.0',
+          lifecycleState: 'disabled',
+          attentionReason: 'disabled',
+        },
+      ],
+    };
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={installedProjection}
+        loading={false}
+        error={null}
+        selectedPluginID="com.redeven.official.containers"
+        onCommand={vi.fn()}
+        canManagePlugins
+      />
+    ), mount);
+
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Containers');
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Disabled');
   });
 
   it('keeps official install unavailable until the host distribution install API exists', () => {
@@ -92,7 +155,7 @@ describe('PluginCenterSection', () => {
     document.body.append(mount);
 
     dispose = render(() => (
-      <PluginCenterSection
+      <PluginCenterView
         projection={projection}
         loading={false}
         error={null}
@@ -114,7 +177,7 @@ describe('PluginCenterSection', () => {
     const installedProjection: PluginInventoryProjection = {
       items: [
         {
-          ...projection.items[0],
+          ...containersPlugin,
           pluginInstanceID: 'plugininst_containers',
           version: '1.0.0',
           lifecycleState: 'enabled',
@@ -130,7 +193,7 @@ describe('PluginCenterSection', () => {
     document.body.append(mount);
 
     dispose = render(() => (
-      <PluginCenterSection
+      <PluginCenterView
         projection={installedProjection}
         loading={false}
         error={null}
@@ -150,7 +213,7 @@ describe('PluginCenterSection', () => {
     const installedProjection: PluginInventoryProjection = {
       items: [
         {
-          ...projection.items[0],
+          ...containersPlugin,
           pluginInstanceID: 'plugininst_containers',
           version: '1.0.0',
           lifecycleState: 'enabled',
@@ -166,7 +229,7 @@ describe('PluginCenterSection', () => {
     document.body.append(mount);
 
     dispose = render(() => (
-      <PluginCenterSection
+      <PluginCenterView
         projection={installedProjection}
         loading={false}
         error={null}
@@ -185,7 +248,7 @@ describe('PluginCenterSection', () => {
     const needsAttentionProjection: PluginInventoryProjection = {
       items: [
         {
-          ...projection.items[0],
+          ...containersPlugin,
           pluginInstanceID: 'plugininst_containers',
           version: '1.0.0',
           lifecycleState: 'needs_attention',
@@ -197,7 +260,7 @@ describe('PluginCenterSection', () => {
     const updatesProjection: PluginInventoryProjection = {
       items: [
         {
-          ...projection.items[0],
+          ...containersPlugin,
           pluginInstanceID: 'plugininst_containers',
           version: '0.9.0',
           lifecycleState: 'update_available',
@@ -208,7 +271,7 @@ describe('PluginCenterSection', () => {
     document.body.append(mount);
 
     dispose = render(() => (
-      <PluginCenterSection
+      <PluginCenterView
         projection={needsAttentionProjection}
         loading={false}
         error={null}
@@ -224,7 +287,7 @@ describe('PluginCenterSection', () => {
     dispose();
     mount.innerHTML = '';
     dispose = render(() => (
-      <PluginCenterSection
+      <PluginCenterView
         projection={updatesProjection}
         loading={false}
         error={null}
@@ -241,7 +304,7 @@ describe('PluginCenterSection', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
 
-    dispose = render(() => <PluginCenterSection />, mount);
+    dispose = render(() => <PluginCenterView />, mount);
 
     await Promise.resolve();
     await Promise.resolve();
