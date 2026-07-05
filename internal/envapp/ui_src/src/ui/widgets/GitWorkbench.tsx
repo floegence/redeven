@@ -1,6 +1,6 @@
 import { Show } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { History, Refresh } from '@floegence/floe-webapp-core/icons';
+import { Folder, History, Refresh, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type {
   GitBranchSummary,
@@ -37,8 +37,9 @@ import { GitLabelBlock, GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimi
 import { GitDeleteBranchDialog, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import { GitMergeBranchDialog, type GitMergeBranchDialogConfirmOptions, type GitMergeBranchDialogState } from './GitMergeBranchDialog';
 import { buildTabElementId, buildTabPanelElementId } from '../utils/tabNavigation';
-import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
+import { buildGitDirectoryShortcutRequest, type GitAskFlowerRequest, type GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { Tooltip } from '../primitives/Tooltip';
 
 export interface GitWorkbenchProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -154,6 +155,8 @@ const GIT_WORKBENCH_SUBVIEW_ID_PREFIX = 'git-workbench-subview';
 export function GitWorkbench(props: GitWorkbenchProps) {
   const repoLabel = () => repoDisplayName(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath);
   const repoPath = () => String(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath || '/').trim() || '/';
+  const repoDirRequest = (): GitDirectoryShortcutRequest | null =>
+    buildGitDirectoryShortcutRequest({ rootPath: repoPath() });
   const headRef = () => String(props.repoSummary?.headRef || props.repoInfo?.headRef || '').trim();
   const headDisplay = () => describeGitHead(props.repoSummary, props.repoInfo);
   const reattachBranch = () => reattachBranchFromRepoSummary(props.repoSummary);
@@ -220,7 +223,37 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 <GitMetaPill tone="info">{syncStatusLabel(props.repoSummary?.aheadCount, props.repoSummary?.behindCount)}</GitMetaPill>
               </Show>
             </div>
-            <div class="min-w-0 max-w-full truncate text-[11px] text-muted-foreground">{repoPath()}</div>
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="min-w-0 max-w-full truncate text-[11px] text-muted-foreground">{repoPath()}</span>
+              <Show when={repoDirRequest()}>
+                {(request) => (
+                  <>
+                    <Show when={props.onBrowseFiles}>
+                      <Tooltip content="Browse files" placement="top" delay={0}>
+                        <button
+                          type="button"
+                          class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                          onClick={() => void props.onBrowseFiles?.(request())}
+                        >
+                          <Folder class="size-3" />
+                        </button>
+                      </Tooltip>
+                    </Show>
+                    <Show when={props.onOpenInTerminal}>
+                      <Tooltip content="Open in terminal" placement="top" delay={0}>
+                        <button
+                          type="button"
+                          class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
+                          onClick={() => props.onOpenInTerminal?.(request())}
+                        >
+                          <Terminal class="size-3" />
+                        </button>
+                      </Tooltip>
+                    </Show>
+                  </>
+                )}
+              </Show>
+            </div>
             <Show when={headDisplay().detached}>
               <div class="text-[11px] text-foreground">{detachedHeadSummary()}</div>
               <Show when={reattachBranch()}>

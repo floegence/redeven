@@ -3163,6 +3163,38 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           <span class="truncate max-w-[16rem]" title={selectedBranch()?.worktreePath}>
                             {selectedBranch()?.worktreePath}
                           </span>
+                          <Show when={props.onBrowseFiles && selectedBranch()?.worktreePath}>
+                            <Tooltip content="Browse files" placement="top" delay={0}>
+                              <button
+                                type="button"
+                                class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                                onClick={() => {
+                                  const req = buildGitDirectoryShortcutRequest({
+                                    rootPath: String(selectedBranch()?.worktreePath ?? ''),
+                                  });
+                                  if (req) void props.onBrowseFiles?.(req);
+                                }}
+                              >
+                                <Folder class="size-3" />
+                              </button>
+                            </Tooltip>
+                          </Show>
+                          <Show when={props.onOpenInTerminal && selectedBranch()?.worktreePath}>
+                            <Tooltip content="Open in terminal" placement="top" delay={0}>
+                              <button
+                                type="button"
+                                class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
+                                onClick={() => {
+                                  const req = buildGitDirectoryShortcutRequest({
+                                    rootPath: String(selectedBranch()?.worktreePath ?? ''),
+                                  });
+                                  if (req) props.onOpenInTerminal?.(req);
+                                }}
+                              >
+                                <Terminal class="size-3" />
+                              </button>
+                            </Tooltip>
+                          </Show>
                         </span>
                       </Show>
                     </div>
