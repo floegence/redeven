@@ -31,9 +31,13 @@ describe('main routing', () => {
     expect(mainSrc).toContain('const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();');
     expect(mainSrc).toContain('function sessionWindowStateKey(sessionKey: DesktopSessionKey): string {');
     expect(mainSrc).toContain('function sessionChildWindowStateKey(sessionKey: DesktopSessionKey, childKey: string): string {');
+    expect(mainSrc).toContain('function sessionCodespaceWindowStateKey(sessionKey: DesktopSessionKey, codeSpaceID: string): string {');
     expect(mainSrc).toContain('function openSessionChildWindow(');
+    expect(mainSrc).toContain('function openSessionCodespaceWindow(');
     expect(mainSrc).toContain('if (isAllowedSessionNavigation(sessionKey, nextURL)) {');
+    expect(mainSrc).toContain('if (isAllowedCodespaceWindowNavigation(nextURL, sessionRecord.allowed_base_url, codeSpaceID)) {');
     expect(mainSrc).toContain('child_windows: Map<string, DesktopTrackedWindow>;');
+    expect(mainSrc).toContain('codespace_windows: Map<string, DesktopTrackedWindow>;');
     expect(mainSrc).toContain('sessionKeyByWebContentsID.delete(closedWindow.webContentsID);');
     expect(mainSrc).not.toContain('sessionKeyByWebContentsID.delete(childWindow.webContents.id);');
   });
@@ -53,6 +57,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain("case 'close_launcher_or_quit':");
     expect(mainSrc).toContain("if (normalized.kind === 'connection_center') {");
     expect(mainSrc).toContain('await openAdvancedSettingsWindow();');
+    expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_CODESPACE_WINDOW_CHANNEL');
+    expect(mainSrc).toContain('return openCodespaceWindowFromShell(sessionRecordForWebContentsID(event.sender.id), normalized);');
     expect(mainSrc).toContain("return openUtilityWindow('launcher', {");
     expect(mainSrc).toContain("surface: 'environment_settings',");
     expect(mainSrc).toContain("return focusEnvironmentWindow(request.session_key);");
@@ -70,6 +76,43 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('backgroundThrottling: false,');
+  });
+
+  it('opens codespaces in isolated desktop windows without privileged preload', () => {
+    const mainSrc = readMainSource();
+    const helperStart = mainSrc.indexOf('function openSessionCodespaceWindow(');
+    const helperEnd = mainSrc.indexOf('function openCodespaceWindowFromShell(', helperStart);
+
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helperSrc = mainSrc.slice(helperStart, helperEnd);
+    expect(helperSrc).toContain("role: 'codespace_child'");
+    expect(helperSrc).toContain("chrome: 'native'");
+    expect(helperSrc).toContain("preload: 'none'");
+    expect(helperSrc).toContain('sessionPartition: sessionRecord.session_partition');
+    expect(helperSrc).toContain('sessionRecord.codespace_windows.set(codeSpaceID, codespaceWindow);');
+  });
+
+  it('validates shell codespace-window requests against sender session and codespace URL scope', () => {
+    const mainSrc = readMainSource();
+    const handlerStart = mainSrc.indexOf('ipcMain.handle(DESKTOP_SHELL_OPEN_CODESPACE_WINDOW_CHANNEL');
+    const handlerEnd = mainSrc.indexOf('ipcMain.handle(DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL', handlerStart);
+    const helperStart = mainSrc.indexOf('function openCodespaceWindowFromShell(');
+    const helperEnd = mainSrc.indexOf('function sessionOpenFailureMessage(', helperStart);
+
+    expect(handlerStart).toBeGreaterThanOrEqual(0);
+    expect(handlerEnd).toBeGreaterThan(handlerStart);
+    const handlerSrc = mainSrc.slice(handlerStart, handlerEnd);
+    expect(handlerSrc).toContain('const normalized = normalizeDesktopShellOpenCodespaceWindowRequest(request);');
+    expect(handlerSrc).toContain("message: 'Invalid codespace window request.'");
+    expect(handlerSrc).toContain('sessionRecordForWebContentsID(event.sender.id)');
+
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helperSrc = mainSrc.slice(helperStart, helperEnd);
+    expect(helperSrc).toContain('if (!sessionRecord || sessionRecord.closing) {');
+    expect(helperSrc).toContain('if (!isAllowedCodespaceWindowNavigation(request.url, sessionRecord.allowed_base_url, request.code_space_id)) {');
+    expect(helperSrc).toContain("message: 'Desktop refused to open a codespace window outside this environment session.'");
   });
 
   it('models Refresh Gateway as one visible launcher workflow with internal service, package, pairing, and catalog stages', () => {

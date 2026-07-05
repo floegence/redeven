@@ -35,6 +35,7 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(typeof bridge.toggleMaximizeWindow).toBe('function');
     expect(typeof bridge.toggleFullScreenWindow).toBe('function');
     expect(typeof bridge.openExternalURL).toBe('function');
+    expect(typeof bridge.openCodespaceWindow).toBe('function');
     expect(typeof bridge.openDashboard).toBe('function');
     expect(typeof bridge.getRuntimeMaintenanceContext).toBe('function');
     expect(typeof bridge.performRuntimeMaintenanceAction).toBe('function');
@@ -52,6 +53,7 @@ describe('bootstrapDesktopShellBridge', () => {
     await bridge.toggleMaximizeWindow();
     await bridge.toggleFullScreenWindow();
     await bridge.openExternalURL('http://127.0.0.1:43123/cs/demo/');
+    await bridge.openCodespaceWindow({ url: 'http://127.0.0.1:43123/cs/demo/', code_space_id: 'demo' });
     await bridge.openDashboard();
     await bridge.getRuntimeMaintenanceContext();
     await bridge.performRuntimeMaintenanceAction({ action: 'restart' });
@@ -67,10 +69,39 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(8, 'redeven-desktop:shell-window-command', { command: 'toggle_maximize' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(9, 'redeven-desktop:shell-window-command', { command: 'toggle_full_screen' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(10, 'redeven-desktop:shell-open-external-url', { url: 'http://127.0.0.1:43123/cs/demo/' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(11, 'redeven-desktop:shell-open-dashboard');
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(12, 'redeven-desktop:shell-runtime-maintenance-context');
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(13, 'redeven-desktop:shell-runtime-action', { action: 'restart_runtime' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(14, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
-    expect(ipcRendererInvoke).toHaveBeenCalledTimes(14);
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(11, 'redeven-desktop:shell-open-codespace-window', { url: 'http://127.0.0.1:43123/cs/demo/', code_space_id: 'demo' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(12, 'redeven-desktop:shell-open-dashboard');
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(13, 'redeven-desktop:shell-runtime-maintenance-context');
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(14, 'redeven-desktop:shell-runtime-action', { action: 'restart_runtime' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(15, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
+    expect(ipcRendererInvoke).toHaveBeenCalledTimes(15);
+  });
+
+  it('normalizes codespace window open failures from electron main', async () => {
+    ipcRendererInvoke.mockResolvedValueOnce({
+      ok: false,
+      message: 'Desktop refused this codespace URL.',
+    });
+    const { bootstrapDesktopShellBridge } = await import('./desktopShell');
+
+    bootstrapDesktopShellBridge();
+
+    const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
+    await expect(bridge.openCodespaceWindow({
+      url: 'http://127.0.0.1:43123/cs/demo/',
+      code_space_id: 'demo',
+    })).resolves.toEqual({
+      ok: false,
+      message: 'Desktop refused this codespace URL.',
+    });
+
+    ipcRendererInvoke.mockResolvedValueOnce(null);
+    await expect(bridge.openCodespaceWindow({
+      url: 'http://127.0.0.1:43123/cs/demo/',
+      code_space_id: 'demo',
+    })).resolves.toEqual({
+      ok: false,
+      message: 'Desktop failed to open the codespace window.',
+    });
   });
 });

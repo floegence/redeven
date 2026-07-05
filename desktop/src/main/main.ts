@@ -156,7 +156,7 @@ import {
 } from './runtimeLifecycleExecutionPlan';
 import { LauncherOperationRegistry, launcherOperationProgress, type LauncherOperationAttemptIdentity } from './launcherOperations';
 import { buildLocalUIEnvAppEntryURL } from './localUIURL';
-import { isAllowedAppNavigation } from './navigation';
+import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation } from './navigation';
 import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWelcomeRendererPath } from './paths';
 import { loadExternalLocalUIStartup } from './runtimeState';
 import {
@@ -331,6 +331,12 @@ import {
   normalizeDesktopShellOpenExternalURLRequest,
   type DesktopShellOpenExternalURLResponse,
 } from '../shared/desktopShellExternalURLIPC';
+import {
+  DESKTOP_SHELL_OPEN_CODESPACE_WINDOW_CHANNEL,
+  normalizeDesktopShellOpenCodespaceWindowRequest,
+  type DesktopShellOpenCodespaceWindowRequest,
+  type DesktopShellOpenCodespaceWindowResponse,
+} from '../shared/desktopShellCodespaceWindowIPC';
 import {
   DESKTOP_DOWNLOAD_ABORT_CHANNEL,
   DESKTOP_DOWNLOAD_COMPLETE_CHANNEL,
@@ -530,6 +536,7 @@ type DesktopSessionRecord = {
   allowed_base_url: string;
   root_window: DesktopTrackedWindow;
   child_windows: Map<string, DesktopTrackedWindow>;
+  codespace_windows: Map<string, DesktopTrackedWindow>;
   session_partition: string;
   diagnostics: DesktopDiagnosticsRecorder;
   runtime_handle: DesktopSessionRuntimeHandle | null;
@@ -734,12 +741,14 @@ type PreparedManagedTargetResult = Readonly<
 type CreateBrowserWindowArgs = Readonly<{
   targetURL: string;
   stateKey: string;
-  role: 'launcher' | 'session_root' | 'session_child';
+  role: 'launcher' | 'session_root' | 'session_child' | 'codespace_child';
   parent?: BrowserWindow;
   frameName?: string;
   sessionPartition?: string;
   diagnostics?: DesktopDiagnosticsRecorder | null;
   stealAppFocus?: boolean;
+  chrome?: 'desktop' | 'native';
+  preload?: 'desktop' | 'none';
   onWindowOpen?: (url: string, parent: BrowserWindow, frameName: string) => void;
   onWillNavigate?: (url: string, event: Electron.Event) => void;
   onDidFinishLoad?: (win: BrowserWindow) => void;
@@ -2873,6 +2882,10 @@ function childWindowIdentity(frameName: string, targetURL: string): string {
 
 function sessionChildWindowStateKey(sessionKey: DesktopSessionKey, childKey: string): string {
   return `window:session:${desktopSessionStateKeyFragment(sessionKey)}:child:${encodeURIComponent(childKey)}`;
+}
+
+function sessionCodespaceWindowStateKey(sessionKey: DesktopSessionKey, codeSpaceID: string): string {
+  return `window:session:${desktopSessionStateKeyFragment(sessionKey)}:codespace:${encodeURIComponent(codeSpaceID)}`;
 }
 
 function openSessionSummaries(): readonly DesktopSessionSummary[] {
@@ -6634,9 +6647,12 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
   const attachToParent = Boolean(args.parent) && spec.attachToParent !== false;
   const actualParent = attachToParent ? args.parent : undefined;
   const surface = windowSurfaceForRole(args.role);
-  const preloadPath = surface === 'utility'
-    ? resolveUtilityPreloadPath({ appPath: app.getAppPath() })
-    : resolveSessionPreloadPath({ appPath: app.getAppPath() });
+  const preloadPath = args.preload === 'none'
+    ? ''
+    : surface === 'utility'
+      ? resolveUtilityPreloadPath({ appPath: app.getAppPath() })
+      : resolveSessionPreloadPath({ appPath: app.getAppPath() });
+  const usesDesktopChrome = args.chrome !== 'native';
   const themeSnapshot = desktopThemeState().getSnapshot();
   const restoredState = desktopStateStore().getWindowState(args.stateKey);
   const restoredBounds = restoreBrowserWindowBounds(spec, desktopStateStore(), args.stateKey);
@@ -6651,10 +6667,12 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
     minHeight: spec.minHeight,
     show: false,
     title: spec.title,
-    ...buildDesktopWindowChromeOptions(process.platform, themeSnapshot.window),
+    ...(usesDesktopChrome
+      ? buildDesktopWindowChromeOptions(process.platform, themeSnapshot.window)
+      : { backgroundColor: themeSnapshot.window.backgroundColor }),
     parent: actualParent,
     webPreferences: {
-      preload: preloadPath,
+      ...(preloadPath ? { preload: preloadPath } : {}),
       sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
@@ -6665,13 +6683,17 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
   });
   const trackedWindow = trackBrowserWindow(win);
 
-  desktopThemeState().registerWindow(win);
-  desktopLanguageState().registerWindow(win, {
-    titleForSnapshot: args.role === 'launcher'
-      ? (snapshot) => createDesktopI18n(snapshot.resolved_locale).t('desktop.title')
-      : false,
-  });
-  const disposeWindowChromeBroadcast = attachDesktopWindowChromeBroadcast(win, process.platform);
+  if (usesDesktopChrome) {
+    desktopThemeState().registerWindow(win);
+    desktopLanguageState().registerWindow(win, {
+      titleForSnapshot: args.role === 'launcher'
+        ? (snapshot) => createDesktopI18n(snapshot.resolved_locale).t('desktop.title')
+        : false,
+    });
+  }
+  const disposeWindowChromeBroadcast = usesDesktopChrome
+    ? attachDesktopWindowChromeBroadcast(win, process.platform)
+    : () => {};
   applyRestoredWindowState(win, restoredState);
   registerWindowStatePersistence(win, args.stateKey);
   recordWindowLifecycle(args.diagnostics, 'window_created', 'browser window created', {
@@ -6860,6 +6882,90 @@ function openSessionChildWindow(
   sessionRecord.child_windows.set(childKey, childWindow);
   sessionKeyByWebContentsID.set(childWindow.webContentsID, sessionKey);
   return childWindow.browserWindow;
+}
+
+function openSessionCodespaceWindow(
+  sessionKey: DesktopSessionKey,
+  codeSpaceID: string,
+  targetURL: string,
+): BrowserWindow | null {
+  const sessionRecord = sessionsByKey.get(sessionKey);
+  if (!sessionRecord) {
+    return null;
+  }
+
+  const existing = sessionRecord.codespace_windows.get(codeSpaceID);
+  const existingWindow = liveTrackedBrowserWindow(existing);
+  if (existing && existingWindow) {
+    void existingWindow.loadURL(targetURL);
+    presentAppWindow(existingWindow, { stealAppFocus: true });
+    return existingWindow;
+  }
+  if (existing) {
+    sessionRecord.codespace_windows.delete(codeSpaceID);
+    sessionKeyByWebContentsID.delete(existing.webContentsID);
+  }
+
+  const codespaceWindow = createBrowserWindow({
+    targetURL,
+    stateKey: sessionCodespaceWindowStateKey(sessionKey, codeSpaceID),
+    role: 'codespace_child',
+    sessionPartition: sessionRecord.session_partition,
+    diagnostics: sessionRecord.diagnostics,
+    chrome: 'native',
+    preload: 'none',
+    stealAppFocus: true,
+    onWindowOpen: (nextURL) => {
+      if (isAllowedCodespaceWindowNavigation(nextURL, sessionRecord.allowed_base_url, codeSpaceID)) {
+        openSessionCodespaceWindow(sessionKey, codeSpaceID, nextURL);
+      } else {
+        openExternal(nextURL);
+      }
+    },
+    onWillNavigate: (nextURL, event) => {
+      if (isAllowedCodespaceWindowNavigation(nextURL, sessionRecord.allowed_base_url, codeSpaceID)) {
+        return;
+      }
+      event.preventDefault();
+      openExternal(nextURL);
+    },
+    onClosed: (closedWindow) => {
+      sessionRecord.codespace_windows.delete(codeSpaceID);
+      sessionKeyByWebContentsID.delete(closedWindow.webContentsID);
+    },
+  });
+
+  sessionRecord.codespace_windows.set(codeSpaceID, codespaceWindow);
+  sessionKeyByWebContentsID.set(codespaceWindow.webContentsID, sessionKey);
+  return codespaceWindow.browserWindow;
+}
+
+function openCodespaceWindowFromShell(
+  sessionRecord: DesktopSessionRecord | null,
+  request: DesktopShellOpenCodespaceWindowRequest,
+): DesktopShellOpenCodespaceWindowResponse {
+  if (!sessionRecord || sessionRecord.closing) {
+    return {
+      ok: false,
+      message: DESKTOP_STALE_WINDOW_MESSAGE,
+    };
+  }
+  if (!isAllowedCodespaceWindowNavigation(request.url, sessionRecord.allowed_base_url, request.code_space_id)) {
+    return {
+      ok: false,
+      message: 'Desktop refused to open a codespace window outside this environment session.',
+    };
+  }
+
+  const win = openSessionCodespaceWindow(sessionRecord.session_key, request.code_space_id, request.url);
+  if (!win) {
+    return {
+      ok: false,
+      message: DESKTOP_STALE_WINDOW_MESSAGE,
+    };
+  }
+
+  return { ok: true };
 }
 
 function sessionOpenFailureMessage(targetURL: string, errorDescription: string): string {
@@ -7060,6 +7166,7 @@ async function createSessionRecord(
     allowed_base_url: safeAllowedBaseURL,
     root_window: rootWindow,
     child_windows: new Map(),
+    codespace_windows: new Map(),
     session_partition: sessionPartition,
     diagnostics,
     runtime_handle: options.runtimeHandle ?? null,
@@ -7158,6 +7265,15 @@ async function finalizeSessionClosure(
       }
     }
     sessionRecord.child_windows.clear();
+
+    for (const codespaceWindow of sessionRecord.codespace_windows.values()) {
+      sessionKeyByWebContentsID.delete(codespaceWindow.webContentsID);
+      const browserWindow = liveTrackedBrowserWindow(codespaceWindow);
+      if (options.closeWindows !== false && browserWindow) {
+        browserWindow.destroy();
+      }
+    }
+    sessionRecord.codespace_windows.clear();
 
     const rootWindow = liveTrackedBrowserWindow(sessionRecord.root_window);
     if (options.closeWindows !== false && rootWindow) {
@@ -14719,6 +14835,15 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
   }
   sessionRecord.child_windows.clear();
 
+  for (const codespaceWindow of sessionRecord.codespace_windows.values()) {
+    sessionKeyByWebContentsID.delete(codespaceWindow.webContentsID);
+    const browserWindow = liveTrackedBrowserWindow(codespaceWindow);
+    if (browserWindow) {
+      browserWindow.close();
+    }
+  }
+  sessionRecord.codespace_windows.clear();
+
   try {
     await sessionRecord.diagnostics.recordLifecycle(
       'target_restarting',
@@ -14827,6 +14952,15 @@ async function restartSSHRuntimeFromShell(
     }
   }
   sessionRecord.child_windows.clear();
+
+  for (const codespaceWindow of sessionRecord.codespace_windows.values()) {
+    sessionKeyByWebContentsID.delete(codespaceWindow.webContentsID);
+    const browserWindow = liveTrackedBrowserWindow(codespaceWindow);
+    if (browserWindow) {
+      browserWindow.close();
+    }
+  }
+  sessionRecord.codespace_windows.clear();
 
   try {
     await sessionRecord.diagnostics.recordLifecycle(
@@ -16413,6 +16547,17 @@ if (!app.requestSingleInstanceLock()) {
         message: error instanceof Error ? error.message : String(error),
       };
     }
+  });
+  ipcMain.handle(DESKTOP_SHELL_OPEN_CODESPACE_WINDOW_CHANNEL, async (event, request): Promise<DesktopShellOpenCodespaceWindowResponse> => {
+    const normalized = normalizeDesktopShellOpenCodespaceWindowRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        message: 'Invalid codespace window request.',
+      };
+    }
+
+    return openCodespaceWindowFromShell(sessionRecordForWebContentsID(event.sender.id), normalized);
   });
   ipcMain.handle(DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL, async (): Promise<DesktopShellOpenExternalURLResponse> => {
     try {

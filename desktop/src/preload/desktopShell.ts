@@ -23,6 +23,10 @@ import {
   DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL,
   normalizeDesktopShellOpenExternalURLResponse,
 } from '../shared/desktopShellExternalURLIPC';
+import {
+  DESKTOP_SHELL_OPEN_CODESPACE_WINDOW_CHANNEL,
+  normalizeDesktopShellOpenCodespaceWindowResponse,
+} from '../shared/desktopShellCodespaceWindowIPC';
 
 export function bootstrapDesktopShellBridge(): void {
   contextBridge.exposeInMainWorld('redevenDesktopShell', {
@@ -62,6 +66,9 @@ export function bootstrapDesktopShellBridge(): void {
     ),
     openExternalURL: async (url: string) => normalizeDesktopShellOpenExternalURLResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_EXTERNAL_URL_CHANNEL, { url }),
+    ),
+    openCodespaceWindow: async (request: unknown) => normalizeDesktopShellOpenCodespaceWindowResponse(
+      await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_CODESPACE_WINDOW_CHANNEL, request),
     ),
     openDashboard: async () => normalizeDesktopShellOpenExternalURLResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_DASHBOARD_CHANNEL),
