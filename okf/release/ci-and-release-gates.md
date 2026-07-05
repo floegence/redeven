@@ -95,10 +95,14 @@ outside-click ordering, dedicated management shell, local search, details
 selection, official-only management copy, disabled management actions for users
 without management authority, and disabled official install state when host
 distribution install API is required. They also bind surface Open as disabled
-until Redeven consumes a released ReDevPlugin surface host. Shell integration
-tests bind the panel `Plugin Center` tile to the dedicated center view without
-entering Runtime Settings, and Settings structure tests bind Plugin Center's
-absence from Runtime Settings navigation.
+until Redeven consumes a released ReDevPlugin surface host. Projection and
+component tests bind attention-needed plugin state to details routing, while
+Shell integration tests bind the panel `Plugin Center` tile to the dedicated
+center view without entering Runtime Settings, disabled plugin tiles to matching
+Plugin Center details, and surface-host-not-ready enabled tiles to the Plugin
+Center details view with Open still disabled instead of opening a fake sandbox
+iframe. Settings structure tests bind Plugin Center's absence from Runtime
+Settings navigation.
 
 The route matrix covers both disabled-handler reservations and enabled-handler
 delegation. Without a plugin platform handler, `/_redeven_plugin/*` remains
