@@ -358,9 +358,9 @@ export function GitStatePane(props: GitStatePaneProps) {
 export const GIT_CHANGED_FILES_TABLE_CLASS = 'w-full text-[11px] leading-4';
 export const GIT_CHANGED_FILES_HEAD_CLASS = cn('sticky top-0 z-10', redevenSurfaceRoleClass('panel'));
 export const GIT_CHANGED_FILES_HEADER_ROW_CLASS = cn('border-b text-left text-[10px] uppercase tracking-[0.14em] text-muted-foreground', redevenDividerRoleClass());
-export const GIT_CHANGED_FILES_HEADER_CELL_CLASS = 'px-2.5 py-1 font-medium';
-export const GIT_CHANGED_FILES_CELL_CLASS = 'px-2.5 py-1 align-top';
-export const GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS = cn('sticky right-0 z-20 border-l px-2.5 py-1 text-right font-medium', redevenDividerRoleClass(), redevenSurfaceRoleClass('panel'));
+export const GIT_CHANGED_FILES_HEADER_CELL_CLASS = 'px-3 py-1.5 font-medium';
+export const GIT_CHANGED_FILES_CELL_CLASS = 'px-3 py-2.5 align-top';
+export const GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS = cn('sticky right-0 z-20 border-l px-3 py-1.5 text-right font-medium', redevenDividerRoleClass(), redevenSurfaceRoleClass('panel'));
 export const GIT_CHANGED_FILES_SECONDARY_PATH_CLASS = 'mt-px truncate text-[10px] leading-3.5 text-muted-foreground';
 export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex cursor-pointer items-center whitespace-nowrap text-[11px] font-medium text-primary underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-45';
 
@@ -372,8 +372,8 @@ export function gitChangedFilesRowClass(active: boolean): string {
 
 export function gitChangedFilesStickyCellClass(active: boolean): string {
   return active
-    ? cn('sticky right-0 z-10 border-l px-2.5 py-1 text-right align-top git-browser-selection-surface transition-colors duration-150', redevenDividerRoleClass())
-    : cn('sticky right-0 z-10 border-l px-2.5 py-1 text-right align-top transition-colors duration-150 group-hover:bg-muted/[0.14]', redevenDividerRoleClass(), redevenSurfaceRoleClass('panel'));
+    ? cn('sticky right-0 z-10 border-l px-3 py-2 text-right align-middle git-browser-selection-surface transition-colors duration-150', redevenDividerRoleClass())
+    : cn('sticky right-0 z-10 border-l px-3 py-2 text-right align-middle transition-colors duration-150 group-hover:bg-muted/[0.14]', redevenDividerRoleClass(), redevenSurfaceRoleClass('panel'));
 }
 
 export interface GitMetaPillProps {

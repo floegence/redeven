@@ -24,7 +24,7 @@ import { stashReviewMatchesTarget, type GitStashReviewState } from '../utils/git
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
-import { gitChangePathClass, gitSelectedChipClass, gitSelectedSecondaryTextClass, gitToneActionButtonClass, gitToneSelectableCardClass, workspaceSectionTone } from './GitChrome';
+import { gitChangePathClass, gitSelectedChipClass, gitSelectedSecondaryTextClass, gitToneActionButtonClass, gitToneSelectableCardClass } from './GitChrome';
 import { GitDiffDialog } from './GitDiffDialog';
 import { GitStashDeleteConfirmDialog } from './GitStashDeleteConfirmDialog';
 import { GitVirtualTable } from './GitVirtualTable';
@@ -39,13 +39,9 @@ import {
   GitChangedFilesActionButton,
   GitChangeMetrics,
   GitChangeStatusPill,
-  GitLabelBlock,
   GitMetaPill,
-  GitPrimaryTitle,
-  GitSection,
   GitStatePane,
   GitSubtleNote,
-  GitTableFrame,
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
@@ -110,13 +106,6 @@ export interface GitStashWindowProps {
 function formatStashTime(value?: number): string {
   if (!value || !Number.isFinite(value)) return 'Unknown time';
   return new Date(value).toLocaleString();
-}
-
-function contextTone(summary?: GitWorkspaceSummary | null): ReturnType<typeof workspaceSectionTone> {
-  if ((summary?.conflictedCount ?? 0) > 0) return 'danger';
-  if ((summary?.stagedCount ?? 0) > 0) return 'success';
-  if (summarizeWorkspaceCount(summary) > 0) return 'warning';
-  return 'neutral';
 }
 
 function sourceLabel(source?: GitStashWindowSource): string {
@@ -281,40 +270,29 @@ export function GitStashWindow(props: GitStashWindowProps) {
         surfaceRef={setFloatingSurfaceEl}
       >
         <div class="flex h-full min-h-0 flex-col overflow-hidden bg-background">
-        <div class={cn('shrink-0 border-b px-4 pt-3 pb-3', redevenDividerRoleClass('strong'))}>
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <GitLabelBlock
-              class="min-w-0 flex-1"
-              label="Git Stash"
-              tone="violet"
-              meta={<GitMetaPill tone="neutral">{sourceLabel(props.source)}</GitMetaPill>}
-            >
-              <div class="flex flex-wrap items-center gap-2">
-                <GitPrimaryTitle>{repoName()}</GitPrimaryTitle>
-                <GitMetaPill tone="violet">{props.stashes.length} stash{props.stashes.length === 1 ? '' : 'es'}</GitMetaPill>
-              </div>
-              <div class="min-w-0 truncate text-[11px] text-muted-foreground">{repoPath() || 'Repository path unavailable'}</div>
-            </GitLabelBlock>
-
+        <div class={cn('shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <span class="text-[13px] font-bold leading-5 tracking-tight text-foreground">{repoName()}</span>
+              <span class="ml-2 text-[11px] text-muted-foreground">{props.stashes.length} stash{props.stashes.length === 1 ? '' : 'es'} · {sourceLabel(props.source)}</span>
+            </div>
             <SegmentedControl
               value={props.tab}
               onChange={handleTabChange}
-              size="md"
+              size="sm"
               aria-label="Stash tabs"
-              class={cn(
-                'grid w-full grid-cols-2 rounded-md sm:w-[16rem] [&_button]:w-full',
-                redevenSurfaceRoleClass('segmented'),
-              )}
+              class="h-7 shrink-0 [&_button]:h-6 [&_button]:px-2 [&_button]:py-0"
               options={stashTabOptions()}
             />
           </div>
+          <div class="mt-1 text-[11px] text-muted-foreground truncate">{repoPath() || 'Repository path unavailable'}</div>
         </div>
 
         <div class="min-h-0 flex-1 overflow-hidden">
           <Show
             when={props.tab === 'save'}
             fallback={(
-              <div class="flex h-full min-h-0 flex-col overflow-hidden px-4 py-4">
+              <div class="flex h-full min-h-0 flex-col overflow-hidden px-2.5 py-2">
                 <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <GitSubtleNote class="flex-1">
                     Review the shared stash stack, inspect file patches, then apply or remove entries safely.
@@ -330,7 +308,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                       {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
                       class="flex h-full min-h-0 flex-col gap-3 overflow-auto xl:grid xl:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)] xl:overflow-hidden"
                     >
-                      <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 overflow-auto rounded-md bg-muted/[0.08] p-2">
+                      <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 overflow-auto p-0">
                         <Show
                           when={props.stashes.length > 0}
                           fallback={<GitStatePane message="No stashes yet. Save a snapshot from the other tab to see it here." class="h-full" surface />}
@@ -378,34 +356,34 @@ export function GitStashWindow(props: GitStashWindowProps) {
                               fallback={<GitStatePane message="Select a stash to inspect its files and actions." surface class="h-full" />}
                             >
                               <div class="flex flex-col gap-3">
-                                <GitSection
-                                  label="Selected Stash"
-                                  tone="violet"
-                                  aside={<GitMetaPill tone="violet">{props.stashDetail?.ref || shortGitHash(props.stashDetail?.id)}</GitMetaPill>}
-                                >
-                                  <div class="space-y-2">
-                                    <div class="text-sm font-semibold text-foreground">{props.stashDetail?.message || 'Unnamed stash'}</div>
-                                    <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-                                      <Show when={props.stashDetail?.branchName}>
-                                        <GitMetaPill tone="neutral">{props.stashDetail?.branchName}</GitMetaPill>
-                                      </Show>
-                                      <Show when={props.stashDetail?.headCommit}>
-                                        <GitMetaPill tone="neutral">{shortGitHash(props.stashDetail?.headCommit)}</GitMetaPill>
-                                      </Show>
-                                      <Show when={props.stashDetail?.hasUntracked}>
-                                        <GitMetaPill tone="warning">Includes untracked</GitMetaPill>
-                                      </Show>
-                                    </div>
-                                    <div class="text-[11px] text-muted-foreground">{formatStashTime(props.stashDetail?.createdAtUnixMs)}</div>
+                                {/* Stash detail header */}
+                                <div class="space-y-2">
+                                  <div class="flex flex-wrap items-center gap-2">
+                                    <span class="text-sm font-semibold text-foreground">{props.stashDetail?.message || 'Unnamed stash'}</span>
+                                    <GitMetaPill tone="violet">{props.stashDetail?.ref || shortGitHash(props.stashDetail?.id)}</GitMetaPill>
                                   </div>
-                                </GitSection>
+                                  <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                                    <Show when={props.stashDetail?.branchName}>
+                                      <GitMetaPill tone="neutral">{props.stashDetail?.branchName}</GitMetaPill>
+                                    </Show>
+                                    <Show when={props.stashDetail?.headCommit}>
+                                      <GitMetaPill tone="neutral">{shortGitHash(props.stashDetail?.headCommit)}</GitMetaPill>
+                                    </Show>
+                                    <Show when={props.stashDetail?.hasUntracked}>
+                                      <GitMetaPill tone="warning">Includes untracked</GitMetaPill>
+                                    </Show>
+                                    <span>{formatStashTime(props.stashDetail?.createdAtUnixMs)}</span>
+                                  </div>
+                                </div>
 
-                                <section class="rounded-md bg-muted/[0.08] px-3 py-2.5">
-                                  <GitLabelBlock class="min-w-0" label="Changed Files" tone="info" meta={<GitMetaPill tone="neutral">{String(detailFiles().length)}</GitMetaPill>}>
-                                    <div class="text-xs leading-relaxed text-muted-foreground">Click a file to inspect its diff in a dialog.</div>
-                                  </GitLabelBlock>
-                                  <Show when={detailFiles().length > 0} fallback={<GitSubtleNote class="mt-2.5">No changed files are available for this stash.</GitSubtleNote>}>
-                                    <GitTableFrame class="mt-2.5">
+                                {/* Changed files */}
+                                <div>
+                                  <div class="flex items-center gap-2 mb-1.5">
+                                    <span class="text-xs font-medium text-foreground">Changed files</span>
+                                    <GitMetaPill tone="neutral">{String(detailFiles().length)}</GitMetaPill>
+                                  </div>
+                                  <Show when={detailFiles().length > 0} fallback={<GitSubtleNote>No changed files are available for this stash.</GitSubtleNote>}>
+                                    <div class="overflow-hidden rounded-md border">
                                       <GitVirtualTable
                                         items={detailFiles()}
                                         tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
@@ -465,9 +443,9 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                           );
                                         }}
                                       />
-                                    </GitTableFrame>
+                                    </div>
                                   </Show>
-                                </section>
+                                </div>
 
                                 <div data-git-stash-actions class="flex flex-wrap items-center gap-2">
                                   <div class="inline-flex flex-wrap items-center gap-2">
@@ -530,85 +508,59 @@ export function GitStashWindow(props: GitStashWindowProps) {
               </div>
             )}
           >
-            <div class="flex h-full min-h-0 flex-col overflow-hidden px-4 py-4">
-              <Show when={!props.contextLoading} fallback={<GitStatePane loading message="Loading stash save context..." surface class="h-full" />}>
-                <Show when={!props.contextError} fallback={<GitStatePane tone="error" message={props.contextError ?? 'Failed to load stash context.'} surface class="h-full" />}>
-                  <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
-                    <GitSection
-                      label="Target Workspace"
-                      tone={contextTone(props.workspaceSummary)}
-                      aside={<GitMetaPill tone="neutral">{sourceLabel(props.source)}</GitMetaPill>}
-                    >
-                      <div class="space-y-2">
-                        <div class="flex flex-wrap items-center gap-2">
-                          <GitPrimaryTitle>{repoName()}</GitPrimaryTitle>
-                          <GitMetaPill tone={contextTone(props.workspaceSummary)}>{workspaceTotal()} file{workspaceTotal() === 1 ? '' : 's'}</GitMetaPill>
-                          <Show when={(props.repoSummary?.stashCount ?? 0) > 0}>
-                            <GitMetaPill tone="violet">{props.repoSummary?.stashCount} stash{props.repoSummary?.stashCount === 1 ? '' : 'es'}</GitMetaPill>
-                          </Show>
+            <div class="flex h-full min-h-0 flex-col overflow-hidden px-2.5 py-2">
+              <Show when={!props.contextLoading} fallback={<GitStatePane loading message="Loading stash save context..." class="h-full" />}>
+                <Show when={!props.contextError} fallback={<GitStatePane tone="error" message={props.contextError ?? 'Failed to load stash context.'} class="h-full" />}>
+                  <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="flex min-h-0 flex-1 flex-col gap-4 overflow-auto">
+                    {/* Workspace summary */}
+                    <div class="text-[11px] text-muted-foreground">
+                      <span class="font-medium text-foreground">{repoName()}</span>
+                      <span> · {repoPath() || 'Repository path unavailable'}</span>
+                      <span> · {workspaceTotal()} file{workspaceTotal() === 1 ? '' : 's'} pending</span>
+                      <Show when={(props.repoSummary?.stashCount ?? 0) > 0}>
+                        <span> · {props.repoSummary?.stashCount} stash{props.repoSummary?.stashCount === 1 ? '' : 'es'} saved</span>
+                      </Show>
+                    </div>
+                    <div class="text-[11px] text-muted-foreground">{workspaceHealthLabel(props.workspaceSummary)}</div>
+
+                    {/* Message input */}
+                    <label class="block space-y-1.5">
+                      <div class="text-xs font-medium text-foreground">Message</div>
+                      <input
+                        type="text"
+                        class={cn('w-full rounded-md bg-background px-3 py-2 text-sm text-foreground outline-none', redevenSurfaceRoleClass('control'))}
+                        value={props.saveMessage ?? ''}
+                        placeholder="Optional stash message"
+                        onInput={(event) => props.onSaveMessageChange?.(event.currentTarget.value)}
+                      />
+                    </label>
+
+                    {/* Checkboxes */}
+                    <div class="grid gap-2 sm:grid-cols-2">
+                      <label class={cn('flex cursor-pointer items-start gap-2 rounded-md px-3 py-2', redevenSurfaceRoleClass('controlMuted'))}>
+                        <input type="checkbox" checked={Boolean(props.includeUntracked)} onChange={(event) => props.onIncludeUntrackedChange?.(event.currentTarget.checked)} />
+                        <div>
+                          <div class="text-[11px] font-medium text-foreground">Include untracked files</div>
+                          <div class="text-[10px] text-muted-foreground">Save new files alongside tracked edits.</div>
                         </div>
-                        <div class="text-[11px] text-muted-foreground">{repoPath() || 'Repository path unavailable'}</div>
-                        <GitSubtleNote>{workspaceHealthLabel(props.workspaceSummary)}</GitSubtleNote>
-                      </div>
-                    </GitSection>
-
-                    <GitSection
-                      label="Save Changes"
-                      tone="warning"
-                      description={<>Create a temporary snapshot so you can continue work without losing the current workspace state.</>}
-                    >
-                      <div class="space-y-3">
-                        <label class="block space-y-1">
-                          <div class="text-[11px] font-medium text-foreground">Message</div>
-                          <input
-                            type="text"
-                            class={cn('w-full rounded-md bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-ring', redevenSurfaceRoleClass('control'))}
-                            value={props.saveMessage ?? ''}
-                            placeholder="Optional stash message"
-                            onInput={(event) => props.onSaveMessageChange?.(event.currentTarget.value)}
-                          />
-                        </label>
-
-                        <div class="grid gap-2 sm:grid-cols-2">
-                          <label class={cn('flex cursor-pointer items-start gap-2 rounded-md px-3 py-2', redevenSurfaceRoleClass('controlMuted'))}>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(props.includeUntracked)}
-                              onChange={(event) => props.onIncludeUntrackedChange?.(event.currentTarget.checked)}
-                            />
-                            <div>
-                              <div class="text-[11px] font-medium text-foreground">Include untracked files</div>
-                              <div class="text-[10px] text-muted-foreground">Save new files alongside tracked edits.</div>
-                            </div>
-                          </label>
-
-                          <label class={cn('flex cursor-pointer items-start gap-2 rounded-md px-3 py-2', redevenSurfaceRoleClass('controlMuted'))}>
-                            <input
-                              type="checkbox"
-                              checked={Boolean(props.keepIndex)}
-                              onChange={(event) => props.onKeepIndexChange?.(event.currentTarget.checked)}
-                            />
-                            <div>
-                              <div class="text-[11px] font-medium text-foreground">Keep staged changes ready to commit</div>
-                              <div class="text-[10px] text-muted-foreground">Leave the index intact after stashing.</div>
-                            </div>
-                          </label>
+                      </label>
+                      <label class={cn('flex cursor-pointer items-start gap-2 rounded-md px-3 py-2', redevenSurfaceRoleClass('controlMuted'))}>
+                        <input type="checkbox" checked={Boolean(props.keepIndex)} onChange={(event) => props.onKeepIndexChange?.(event.currentTarget.checked)} />
+                        <div>
+                          <div class="text-[11px] font-medium text-foreground">Keep staged changes ready to commit</div>
+                          <div class="text-[10px] text-muted-foreground">Leave the index intact after stashing.</div>
                         </div>
+                      </label>
+                    </div>
 
-                        <Show when={workspaceTotal() <= 0}>
-                          <GitSubtleNote>No local changes are available to stash in this worktree.</GitSubtleNote>
-                        </Show>
+                    <Show when={workspaceTotal() <= 0}>
+                      <GitSubtleNote>No local changes are available to stash in this worktree.</GitSubtleNote>
+                    </Show>
 
-                        <div class="flex flex-wrap gap-2">
-                          <Button size="sm" variant="default" class="rounded-md" disabled={!canSave()} loading={Boolean(props.saveBusy)} onClick={() => props.onSave?.()}>
-                            Stash Changes
-                          </Button>
-                          <Button size="sm" variant="outline" class={gitToneActionButtonClass()} onClick={() => props.onTabChange('stashes')}>
-                            View Saved Stashes
-                          </Button>
-                        </div>
-                      </div>
-                    </GitSection>
+                    <div class="flex flex-wrap gap-2">
+                      <Button size="sm" variant="default" class="rounded-md" disabled={!canSave()} loading={Boolean(props.saveBusy)} onClick={() => props.onSave?.()}>Stash Changes</Button>
+                      <Button size="sm" variant="outline" class={gitToneActionButtonClass()} onClick={() => props.onTabChange('stashes')}>View Saved Stashes</Button>
+                    </div>
                   </div>
                 </Show>
               </Show>

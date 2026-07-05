@@ -189,7 +189,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col', redevenSurfaceRoleClass('main'), props.class)}>
-      <div class={cn('shrink-0 border-b px-3 py-2 backdrop-blur-sm', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
+      {/* Simplified header — repo context only, individual panels own their toolbars */}
+      <div class={cn('shrink-0 border-b px-2.5 py-1.5', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
         <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <GitLabelBlock
             class="min-w-0 flex-1"
