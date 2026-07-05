@@ -23,6 +23,20 @@ type ResizeObserverLike = Readonly<{
 
 type CreateResizeObserver = (callback: ResizeObserverCallback) => ResizeObserverLike | null;
 
+type DesktopEmbeddedDragRegionRefreshKind = 'geometry' | 'membership';
+
+type DesktopEmbeddedDragRegionRootMembership = Readonly<{
+  root: HTMLElement;
+  noDragElements: readonly HTMLElement[];
+}>;
+
+type DesktopEmbeddedDragRegionMembership = Readonly<{
+  roots: readonly DesktopEmbeddedDragRegionRootMembership[];
+  globalNoDragBlockers: readonly HTMLElement[];
+  observedElements: readonly HTMLElement[];
+  mutationAnchors: readonly HTMLElement[];
+}>;
+
 declare global {
   interface Window {
     redevenDesktopEmbeddedDragRegions?: DesktopEmbeddedDragRegionsBridge;
@@ -40,7 +54,14 @@ const DESKTOP_EMBEDDED_DRAG_REGION_MUTATION_ATTRIBUTE_FILTER = [
   'data-floe-shell-slot',
   'data-redeven-desktop-titlebar-drag-region',
   'data-redeven-desktop-titlebar-no-drag',
+  'role',
 ] as const;
+const DESKTOP_EMBEDDED_DRAG_REGION_MEMBERSHIP_MUTATION_ATTRIBUTES = new Set<string>([
+  'data-floe-shell-slot',
+  'data-redeven-desktop-titlebar-drag-region',
+  'data-redeven-desktop-titlebar-no-drag',
+  'role',
+]);
 
 function defaultCreateResizeObserver(callback: ResizeObserverCallback): ResizeObserverLike | null {
   if (typeof ResizeObserver === 'undefined') {
@@ -226,46 +247,116 @@ function collectDragRootElements(doc: Document): HTMLElement[] {
   return [...new Set([...topBarRoots, ...explicitDragRoots])];
 }
 
-function collectNoDragRects(root: HTMLElement): DesktopEmbeddedDragRegionRect[] {
-  return Array.from(root.querySelectorAll<HTMLElement>(NO_DRAG_TARGET_SELECTOR))
-    .map((element) => normalizeRect(element.getBoundingClientRect()))
-    .filter((rect): rect is DesktopEmbeddedDragRegionRect => rect !== null);
-}
-
 function collectGlobalNoDragBlockerElements(doc: Document): HTMLElement[] {
   return Array.from(doc.querySelectorAll<HTMLElement>(DESKTOP_WINDOW_CHROME_NO_DRAG_SELECTOR));
 }
 
-function collectGlobalNoDragBlockerRects(
+function collectDragRegionMembership(doc: Document): DesktopEmbeddedDragRegionMembership {
+  const roots = collectDragRootElements(doc);
+  const observedElements = new Set<HTMLElement>(roots);
+  const rootMemberships = roots.map((root): DesktopEmbeddedDragRegionRootMembership => {
+    const noDragElements = Array.from(root.querySelectorAll<HTMLElement>(NO_DRAG_TARGET_SELECTOR));
+    for (const element of noDragElements) {
+      observedElements.add(element);
+    }
+    return { root, noDragElements };
+  });
+  const globalNoDragBlockers = collectGlobalNoDragBlockerElements(doc);
+  for (const element of globalNoDragBlockers) {
+    observedElements.add(element);
+  }
+  return {
+    roots: rootMemberships,
+    globalNoDragBlockers,
+    observedElements: [...observedElements],
+    mutationAnchors: [...new Set([...roots, ...globalNoDragBlockers])],
+  };
+}
+
+function isCurrentDocumentElement(element: HTMLElement, doc: Document): boolean {
+  return element.ownerDocument === doc && element.isConnected;
+}
+
+function rootStillMatchesDragRootSelector(root: HTMLElement): boolean {
+  return DESKTOP_WINDOW_CHROME_DRAG_ROOT_SELECTORS.some((selector) => root.matches(selector));
+}
+
+function cachedMembershipNeedsRefresh(
+  membership: DesktopEmbeddedDragRegionMembership,
   doc: Document,
-  root: HTMLElement,
+): boolean {
+  for (const { root, noDragElements } of membership.roots) {
+    if (!isCurrentDocumentElement(root, doc) || !rootStillMatchesDragRootSelector(root)) {
+      return true;
+    }
+    for (const element of noDragElements) {
+      if (
+        !isCurrentDocumentElement(element, doc)
+        || !root.contains(element)
+        || !element.matches(NO_DRAG_TARGET_SELECTOR)
+      ) {
+        return true;
+      }
+    }
+  }
+  for (const element of membership.globalNoDragBlockers) {
+    if (!isCurrentDocumentElement(element, doc) || !element.matches(DESKTOP_WINDOW_CHROME_NO_DRAG_SELECTOR)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function collectNoDragRectsFromElements(
+  elements: readonly HTMLElement[],
 ): DesktopEmbeddedDragRegionRect[] {
-  return collectGlobalNoDragBlockerElements(doc)
-    .filter((element) => element !== root && !root.contains(element) && !element.contains(root))
+  return elements
     .map((element) => normalizeRect(element.getBoundingClientRect()))
     .filter((rect): rect is DesktopEmbeddedDragRegionRect => rect !== null);
 }
 
-function collectObservedElements(doc: Document): HTMLElement[] {
-  const roots = collectDragRootElements(doc);
-  const observed = new Set<HTMLElement>(roots);
-  for (const root of roots) {
-    for (const element of Array.from(root.querySelectorAll<HTMLElement>(NO_DRAG_TARGET_SELECTOR))) {
-      observed.add(element);
+function buildDesktopEmbeddedDragRegionSnapshotFromMembership(
+  membership: DesktopEmbeddedDragRegionMembership,
+): DesktopEmbeddedDragRegionSnapshot | null {
+  const globalNoDragBlockerRectCache = new Map<HTMLElement, DesktopEmbeddedDragRegionRect | null>();
+  const readGlobalNoDragBlockerRect = (element: HTMLElement): DesktopEmbeddedDragRegionRect | null => {
+    if (!globalNoDragBlockerRectCache.has(element)) {
+      globalNoDragBlockerRectCache.set(element, normalizeRect(element.getBoundingClientRect()));
     }
-  }
-  for (const element of collectGlobalNoDragBlockerElements(doc)) {
-    observed.add(element);
-  }
-  return [...observed];
-}
+    return globalNoDragBlockerRectCache.get(element) ?? null;
+  };
 
-function collectDragRegionMutationAnchors(doc: Document): HTMLElement[] {
-  const anchors = new Set<HTMLElement>(collectDragRootElements(doc));
-  for (const element of collectGlobalNoDragBlockerElements(doc)) {
-    anchors.add(element);
+  const dragRects = membership.roots.flatMap(({ root, noDragElements }) => {
+    const rootRect = normalizeRect(root.getBoundingClientRect());
+    if (!rootRect) {
+      return [];
+    }
+    let currentRects = [rootRect];
+    const globalNoDragBlockerRects = membership.globalNoDragBlockers
+      .filter((element) => element !== root && !root.contains(element) && !element.contains(root))
+      .map(readGlobalNoDragBlockerRect)
+      .filter((rect): rect is DesktopEmbeddedDragRegionRect => rect !== null);
+    const exclusions = [
+      ...collectNoDragRectsFromElements(noDragElements),
+      ...globalNoDragBlockerRects,
+    ];
+    for (const exclusion of exclusions) {
+      currentRects = currentRects.flatMap((rect) => subtractDesktopEmbeddedDragRegionRect(rect, exclusion));
+      if (currentRects.length === 0) {
+        return [];
+      }
+    }
+    return coalesceDesktopEmbeddedDragRegionRects(currentRects);
+  });
+
+  if (dragRects.length === 0) {
+    return null;
   }
-  return [...anchors];
+
+  return {
+    version: 1,
+    regions: dragRects,
+  };
 }
 
 function nodeTouchesDragRegionAnchor(
@@ -310,6 +401,30 @@ function mutationTouchesDragRegion(
   return false;
 }
 
+function mutationDragRegionRefreshKind(
+  record: MutationRecord,
+  anchors: readonly HTMLElement[],
+): DesktopEmbeddedDragRegionRefreshKind | null {
+  if (record.type === 'attributes') {
+    if (!nodeTouchesDragRegionAnchor(record.target, anchors)) {
+      return null;
+    }
+    if (
+      record.attributeName
+      && DESKTOP_EMBEDDED_DRAG_REGION_MEMBERSHIP_MUTATION_ATTRIBUTES.has(record.attributeName)
+    ) {
+      return 'membership';
+    }
+    return record.attributeName === 'style' ? 'geometry' : null;
+  }
+
+  if (record.type === 'childList' && mutationTouchesDragRegion(record, anchors)) {
+    return 'membership';
+  }
+
+  return null;
+}
+
 export function buildDesktopEmbeddedDragRegionSnapshot(
   doc: Document = document,
 ): DesktopEmbeddedDragRegionSnapshot | null {
@@ -317,33 +432,7 @@ export function buildDesktopEmbeddedDragRegionSnapshot(
     return null;
   }
 
-  const dragRects = collectDragRootElements(doc).flatMap((root) => {
-    const rootRect = normalizeRect(root.getBoundingClientRect());
-    if (!rootRect) {
-      return [];
-    }
-    let currentRects = [rootRect];
-    const exclusions = [
-      ...collectNoDragRects(root),
-      ...collectGlobalNoDragBlockerRects(doc, root),
-    ];
-    for (const exclusion of exclusions) {
-      currentRects = currentRects.flatMap((rect) => subtractDesktopEmbeddedDragRegionRect(rect, exclusion));
-      if (currentRects.length === 0) {
-        return [];
-      }
-    }
-    return coalesceDesktopEmbeddedDragRegionRects(currentRects);
-  });
-
-  if (dragRects.length === 0) {
-    return null;
-  }
-
-  return {
-    version: 1,
-    regions: dragRects,
-  };
+  return buildDesktopEmbeddedDragRegionSnapshotFromMembership(collectDragRegionMembership(doc));
 }
 
 export function installDesktopEmbeddedDragRegionSync(args: Readonly<{
@@ -361,28 +450,46 @@ export function installDesktopEmbeddedDragRegionSync(args: Readonly<{
   const createResizeObserver = args.createResizeObserver ?? defaultCreateResizeObserver;
   let disposed = false;
   let rafID = 0;
+  let scheduledRefreshKind: DesktopEmbeddedDragRegionRefreshKind | null = null;
+  let membership: DesktopEmbeddedDragRegionMembership | null = null;
   let resizeObserver: ResizeObserverLike | null = null;
   let observedElements = new Set<HTMLElement>();
-  let dragRegionMutationAnchors = new Set<HTMLElement>(collectDragRegionMutationAnchors(doc));
+  let dragRegionMutationAnchors = new Set<HTMLElement>();
   let lastPublishedSnapshot: DesktopEmbeddedDragRegionSnapshot | null = null;
 
-  const scheduleRefresh = () => {
-    if (disposed || rafID !== 0) {
+  const scheduleRefresh = (kind: DesktopEmbeddedDragRegionRefreshKind) => {
+    if (disposed) {
+      return;
+    }
+    if (scheduledRefreshKind !== 'membership') {
+      scheduledRefreshKind = kind;
+    }
+    if (rafID !== 0) {
       return;
     }
     const requestFrame = currentWindow.requestAnimationFrame?.bind(currentWindow)
       ?? ((callback: FrameRequestCallback) => currentWindow.setTimeout(() => callback(Date.now()), 0));
     rafID = requestFrame(() => {
+      const refreshKind = scheduledRefreshKind ?? 'membership';
+      scheduledRefreshKind = null;
       rafID = 0;
-      refresh();
+      refreshScheduled(refreshKind);
     });
   };
 
-  const syncObservedElements = () => {
-    const nextElements = new Set(collectObservedElements(doc));
+  const scheduleGeometryRefresh = () => {
+    scheduleRefresh('geometry');
+  };
+
+  const scheduleMembershipRefresh = () => {
+    scheduleRefresh('membership');
+  };
+
+  const syncObservedElements = (nextObservedElements: readonly HTMLElement[]) => {
+    const nextElements = new Set(nextObservedElements);
     if (!resizeObserver) {
       resizeObserver = createResizeObserver(() => {
-        scheduleRefresh();
+        scheduleGeometryRefresh();
       });
     }
     if (!resizeObserver) {
@@ -406,7 +513,7 @@ export function installDesktopEmbeddedDragRegionSync(args: Readonly<{
     if (needsFullReconnect) {
       resizeObserver.disconnect();
       resizeObserver = createResizeObserver(() => {
-        scheduleRefresh();
+        scheduleGeometryRefresh();
       });
       observedElements = new Set<HTMLElement>();
       if (!resizeObserver) {
@@ -436,30 +543,49 @@ export function installDesktopEmbeddedDragRegionSync(args: Readonly<{
     lastPublishedSnapshot = cloneDesktopEmbeddedDragRegionSnapshot(snapshot);
   };
 
-  const refresh = (): DesktopEmbeddedDragRegionSnapshot | null => {
+  const refreshMembership = (): DesktopEmbeddedDragRegionSnapshot | null => {
     if (disposed) {
       return null;
     }
-    const snapshot = buildDesktopEmbeddedDragRegionSnapshot(doc);
-    if (!snapshot) {
-      publishSnapshot(null);
-      syncObservedElements();
-      dragRegionMutationAnchors = new Set(collectDragRegionMutationAnchors(doc));
+    membership = collectDragRegionMembership(doc);
+    const snapshot = buildDesktopEmbeddedDragRegionSnapshotFromMembership(membership);
+    publishSnapshot(snapshot);
+    syncObservedElements(membership.observedElements);
+    dragRegionMutationAnchors = new Set(membership.mutationAnchors);
+    return snapshot;
+  };
+
+  const refreshScheduled = (kind: DesktopEmbeddedDragRegionRefreshKind): DesktopEmbeddedDragRegionSnapshot | null => {
+    if (disposed) {
       return null;
     }
+    if (kind === 'membership' || !membership || cachedMembershipNeedsRefresh(membership, doc)) {
+      return refreshMembership();
+    }
+    const snapshot = buildDesktopEmbeddedDragRegionSnapshotFromMembership(membership);
     publishSnapshot(snapshot);
-    syncObservedElements();
-    dragRegionMutationAnchors = new Set(collectDragRegionMutationAnchors(doc));
     return snapshot;
   };
 
   const mutationObserver = typeof MutationObserver === 'undefined'
     ? null
     : new MutationObserver((records) => {
-      if (!records.some((record) => mutationTouchesDragRegion(record, [...dragRegionMutationAnchors]))) {
+      let nextRefreshKind: DesktopEmbeddedDragRegionRefreshKind | null = null;
+      const anchors = [...dragRegionMutationAnchors];
+      for (const record of records) {
+        const refreshKind = mutationDragRegionRefreshKind(record, anchors);
+        if (refreshKind === 'membership') {
+          nextRefreshKind = 'membership';
+          break;
+        }
+        if (refreshKind === 'geometry') {
+          nextRefreshKind = 'geometry';
+        }
+      }
+      if (!nextRefreshKind) {
         return;
       }
-      scheduleRefresh();
+      scheduleRefresh(nextRefreshKind);
     });
 
   const mutationObserverTarget = doc.body ?? doc.documentElement;
@@ -470,14 +596,14 @@ export function installDesktopEmbeddedDragRegionSync(args: Readonly<{
     subtree: true,
   });
 
-  currentWindow.addEventListener('resize', scheduleRefresh);
-  doc.addEventListener('readystatechange', scheduleRefresh);
-  currentWindow.addEventListener('load', scheduleRefresh);
+  currentWindow.addEventListener('resize', scheduleGeometryRefresh);
+  doc.addEventListener('readystatechange', scheduleMembershipRefresh);
+  currentWindow.addEventListener('load', scheduleMembershipRefresh);
 
-  scheduleRefresh();
+  scheduleMembershipRefresh();
 
   return {
-    refresh,
+    refresh: refreshMembership,
     dispose: () => {
       if (disposed) {
         return;
@@ -489,12 +615,15 @@ export function installDesktopEmbeddedDragRegionSync(args: Readonly<{
         cancelFrame(rafID);
         rafID = 0;
       }
+      scheduledRefreshKind = null;
       mutationObserver?.disconnect();
       resizeObserver?.disconnect();
+      membership = null;
       observedElements = new Set<HTMLElement>();
-      currentWindow.removeEventListener('resize', scheduleRefresh);
-      doc.removeEventListener('readystatechange', scheduleRefresh);
-      currentWindow.removeEventListener('load', scheduleRefresh);
+      dragRegionMutationAnchors = new Set<HTMLElement>();
+      currentWindow.removeEventListener('resize', scheduleGeometryRefresh);
+      doc.removeEventListener('readystatechange', scheduleMembershipRefresh);
+      currentWindow.removeEventListener('load', scheduleMembershipRefresh);
       publishSnapshot(null);
     },
   };

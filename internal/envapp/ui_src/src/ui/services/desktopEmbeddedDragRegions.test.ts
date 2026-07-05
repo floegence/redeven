@@ -99,6 +99,31 @@ async function flushMutationObserver(): Promise<void> {
   await Promise.resolve();
 }
 
+function spyOnMembershipQueries() {
+  return {
+    documentQuerySelectorAll: vi.spyOn(document, 'querySelectorAll'),
+    elementQuerySelectorAll: vi.spyOn(Element.prototype, 'querySelectorAll'),
+  };
+}
+
+function dispatchFakeWindowEvent(currentWindow: FakeSyncWindow, eventName: string): void {
+  const addEventListener = currentWindow.addEventListener as unknown as {
+    mock: {
+      calls: Array<[string, EventListenerOrEventListenerObject]>;
+    };
+  };
+  const listener = addEventListener.mock.calls.find(([registeredEventName]) => registeredEventName === eventName)?.[1];
+  if (!listener) {
+    throw new Error(`Expected a ${eventName} listener`);
+  }
+  const event = new Event(eventName);
+  if (typeof listener === 'function') {
+    listener.call(currentWindow, event);
+    return;
+  }
+  listener.handleEvent(event);
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
   Object.defineProperty(window, 'parent', {
@@ -109,6 +134,7 @@ afterEach(() => {
     configurable: true,
     value: originalTop,
   });
+  vi.restoreAllMocks();
 });
 
 describe('desktopEmbeddedDragRegions', () => {
@@ -236,6 +262,47 @@ describe('desktopEmbeddedDragRegions', () => {
     });
   });
 
+  it('reads each global no-drag blocker rect once per snapshot across multiple drag roots', () => {
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar" id="top-bar"></div>
+      <div data-redeven-desktop-titlebar-drag-region="true" id="secondary-drag"></div>
+      <div id="floating-window" data-redeven-desktop-titlebar-no-drag="true"></div>
+    `;
+
+    const topBar = document.getElementById('top-bar') as HTMLElement;
+    const secondaryDrag = document.getElementById('secondary-drag') as HTMLElement;
+    const floatingWindow = document.getElementById('floating-window') as HTMLElement;
+
+    stubRect(topBar, { x: 0, y: 0, width: 320, height: 40 });
+    stubRect(secondaryDrag, { x: 0, y: 48, width: 320, height: 40 });
+    const blockerRect = vi.fn(() => ({
+      x: 120,
+      y: 0,
+      width: 80,
+      height: 88,
+      top: 0,
+      left: 120,
+      right: 200,
+      bottom: 88,
+      toJSON: () => ({ x: 120, y: 0, width: 80, height: 88 }),
+    }));
+    Object.defineProperty(floatingWindow, 'getBoundingClientRect', {
+      configurable: true,
+      value: blockerRect,
+    });
+
+    expect(buildDesktopEmbeddedDragRegionSnapshot()).toEqual({
+      version: 1,
+      regions: [
+        { x: 0, y: 0, width: 120, height: 40 },
+        { x: 200, y: 0, width: 120, height: 40 },
+        { x: 0, y: 48, width: 120, height: 40 },
+        { x: 200, y: 48, width: 120, height: 40 },
+      ],
+    });
+    expect(blockerRect).toHaveBeenCalledTimes(1);
+  });
+
   it('publishes and clears drag snapshots through a same-origin parent bridge', () => {
     document.body.innerHTML = `
       <div data-floe-shell-slot="top-bar">
@@ -275,6 +342,120 @@ describe('desktopEmbeddedDragRegions', () => {
 
     sync?.dispose();
     expect(clear).toHaveBeenCalled();
+  });
+
+  it('updates geometry from ResizeObserver notifications without requerying membership', () => {
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar">
+        <button id="left-action">Left</button>
+      </div>
+    `;
+
+    const topBar = document.querySelector('[data-floe-shell-slot="top-bar"]') as HTMLElement;
+    const leftAction = document.getElementById('left-action') as HTMLButtonElement;
+    stubRect(topBar, { x: 0, y: 0, width: 240, height: 40 });
+    stubRect(leftAction, { x: 0, y: 0, width: 64, height: 40 });
+
+    const setSnapshot = vi.fn();
+    const clear = vi.fn();
+    const { currentWindow, frameCallbacks } = createFakeSyncWindow();
+    currentWindow.redevenDesktopEmbeddedDragRegions = { setSnapshot, clear };
+
+    let resizeCallback: ResizeObserverCallback = () => undefined;
+    const observe = vi.fn();
+    const unobserve = vi.fn();
+    const disconnect = vi.fn();
+    const sync = installDesktopEmbeddedDragRegionSync({
+      currentWindow,
+      createResizeObserver: (callback) => {
+        resizeCallback = callback;
+        return { observe, unobserve, disconnect };
+      },
+    });
+    expect(sync).toBeTruthy();
+
+    flushNextFrame(frameCallbacks);
+    expect(setSnapshot).toHaveBeenCalledTimes(1);
+    expect(observe).toHaveBeenCalledTimes(2);
+
+    const { documentQuerySelectorAll, elementQuerySelectorAll } = spyOnMembershipQueries();
+    setSnapshot.mockClear();
+    observe.mockClear();
+    unobserve.mockClear();
+    disconnect.mockClear();
+    stubRect(topBar, { x: 0, y: 0, width: 300, height: 40 });
+
+    resizeCallback([] as ResizeObserverEntry[], {} as ResizeObserver);
+    flushNextFrame(frameCallbacks);
+
+    expect(setSnapshot).toHaveBeenCalledWith({
+      version: 1,
+      regions: [
+        { x: 64, y: 0, width: 236, height: 40 },
+      ],
+    });
+    expect(documentQuerySelectorAll).not.toHaveBeenCalled();
+    expect(elementQuerySelectorAll).not.toHaveBeenCalled();
+    expect(observe).not.toHaveBeenCalled();
+    expect(unobserve).not.toHaveBeenCalled();
+    expect(disconnect).not.toHaveBeenCalled();
+
+    sync?.dispose();
+  });
+
+  it('coalesces window resize notifications into one geometry-only refresh', () => {
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar">
+        <button id="left-action">Left</button>
+      </div>
+    `;
+
+    const topBar = document.querySelector('[data-floe-shell-slot="top-bar"]') as HTMLElement;
+    const leftAction = document.getElementById('left-action') as HTMLButtonElement;
+    stubRect(topBar, { x: 0, y: 0, width: 240, height: 40 });
+    stubRect(leftAction, { x: 0, y: 0, width: 64, height: 40 });
+
+    const setSnapshot = vi.fn();
+    const clear = vi.fn();
+    const { currentWindow, frameCallbacks } = createFakeSyncWindow();
+    currentWindow.redevenDesktopEmbeddedDragRegions = { setSnapshot, clear };
+
+    const observe = vi.fn();
+    const unobserve = vi.fn();
+    const disconnect = vi.fn();
+    const sync = installDesktopEmbeddedDragRegionSync({
+      currentWindow,
+      createResizeObserver: () => ({ observe, unobserve, disconnect }),
+    });
+    expect(sync).toBeTruthy();
+
+    flushNextFrame(frameCallbacks);
+    const { documentQuerySelectorAll, elementQuerySelectorAll } = spyOnMembershipQueries();
+    setSnapshot.mockClear();
+    observe.mockClear();
+    unobserve.mockClear();
+    disconnect.mockClear();
+    stubRect(topBar, { x: 0, y: 0, width: 280, height: 40 });
+
+    dispatchFakeWindowEvent(currentWindow, 'resize');
+    dispatchFakeWindowEvent(currentWindow, 'resize');
+
+    expect(frameCallbacks).toHaveLength(1);
+    flushNextFrame(frameCallbacks);
+
+    expect(setSnapshot).toHaveBeenCalledWith({
+      version: 1,
+      regions: [
+        { x: 64, y: 0, width: 216, height: 40 },
+      ],
+    });
+    expect(documentQuerySelectorAll).not.toHaveBeenCalled();
+    expect(elementQuerySelectorAll).not.toHaveBeenCalled();
+    expect(observe).not.toHaveBeenCalled();
+    expect(unobserve).not.toHaveBeenCalled();
+    expect(disconnect).not.toHaveBeenCalled();
+
+    sync?.dispose();
   });
 
   it('does not reconnect resize observers or republish identical snapshots during resize notifications', () => {
@@ -319,6 +500,171 @@ describe('desktopEmbeddedDragRegions', () => {
     expect(observe).toHaveBeenCalledTimes(2);
     expect(unobserve).not.toHaveBeenCalled();
     expect(disconnect).not.toHaveBeenCalled();
+
+    sync?.dispose();
+  });
+
+  it('keeps public refresh as a full membership refresh after synchronous DOM changes', () => {
+    const setSnapshot = vi.fn();
+    const clear = vi.fn();
+    const { currentWindow, frameCallbacks } = createFakeSyncWindow();
+    currentWindow.redevenDesktopEmbeddedDragRegions = { setSnapshot, clear };
+
+    const observe = vi.fn();
+    const sync = installDesktopEmbeddedDragRegionSync({
+      currentWindow,
+      createResizeObserver: () => ({ observe, disconnect: vi.fn() }),
+    });
+    expect(sync).toBeTruthy();
+    flushNextFrame(frameCallbacks);
+    expect(setSnapshot).not.toHaveBeenCalled();
+
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar">
+        <button id="left-action">Left</button>
+      </div>
+      <div id="floating-window" data-redeven-desktop-titlebar-no-drag="true"></div>
+    `;
+    const topBar = document.querySelector('[data-floe-shell-slot="top-bar"]') as HTMLElement;
+    const leftAction = document.getElementById('left-action') as HTMLButtonElement;
+    const floatingWindow = document.getElementById('floating-window') as HTMLElement;
+    stubRect(topBar, { x: 0, y: 0, width: 320, height: 40 });
+    stubRect(leftAction, { x: 0, y: 0, width: 64, height: 40 });
+    stubRect(floatingWindow, { x: 240, y: 0, width: 120, height: 80 });
+
+    expect(sync?.refresh()).toEqual({
+      version: 1,
+      regions: [
+        { x: 64, y: 0, width: 176, height: 40 },
+      ],
+    });
+    expect(observe).toHaveBeenCalledWith(topBar);
+    expect(observe).toHaveBeenCalledWith(leftAction);
+    expect(observe).toHaveBeenCalledWith(floatingWindow);
+
+    sync?.dispose();
+  });
+
+  it('upgrades a queued geometry refresh when a same-frame child mutation changes membership', async () => {
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar" id="top-bar"></div>
+    `;
+
+    const topBar = document.getElementById('top-bar') as HTMLElement;
+    stubRect(topBar, { x: 0, y: 0, width: 240, height: 40 });
+
+    const setSnapshot = vi.fn();
+    const clear = vi.fn();
+    const { currentWindow, frameCallbacks } = createFakeSyncWindow();
+    currentWindow.redevenDesktopEmbeddedDragRegions = { setSnapshot, clear };
+
+    const sync = installDesktopEmbeddedDragRegionSync({
+      currentWindow,
+      createResizeObserver: () => null,
+    });
+    expect(sync).toBeTruthy();
+
+    flushNextFrame(frameCallbacks);
+    expect(setSnapshot).toHaveBeenLastCalledWith({
+      version: 1,
+      regions: [
+        { x: 0, y: 0, width: 240, height: 40 },
+      ],
+    });
+
+    const { documentQuerySelectorAll, elementQuerySelectorAll } = spyOnMembershipQueries();
+    setSnapshot.mockClear();
+    dispatchFakeWindowEvent(currentWindow, 'resize');
+
+    const leftAction = document.createElement('button');
+    leftAction.id = 'left-action';
+    leftAction.textContent = 'Left';
+    stubRect(leftAction, { x: 0, y: 0, width: 64, height: 40 });
+    topBar.append(leftAction);
+    await flushMutationObserver();
+
+    expect(frameCallbacks).toHaveLength(1);
+    flushNextFrame(frameCallbacks);
+
+    expect(documentQuerySelectorAll).toHaveBeenCalled();
+    expect(elementQuerySelectorAll).toHaveBeenCalled();
+    expect(setSnapshot).toHaveBeenCalledWith({
+      version: 1,
+      regions: [
+        { x: 64, y: 0, width: 176, height: 40 },
+      ],
+    });
+
+    sync?.dispose();
+  });
+
+  it('refreshes membership when role and no-drag attributes change', async () => {
+    document.body.innerHTML = `
+      <div data-floe-shell-slot="top-bar">
+        <div id="role-target">Role target</div>
+      </div>
+      <div id="floating-window"></div>
+    `;
+
+    const topBar = document.querySelector('[data-floe-shell-slot="top-bar"]') as HTMLElement;
+    const roleTarget = document.getElementById('role-target') as HTMLElement;
+    const floatingWindow = document.getElementById('floating-window') as HTMLElement;
+    stubRect(topBar, { x: 0, y: 0, width: 320, height: 40 });
+    stubRect(roleTarget, { x: 0, y: 0, width: 64, height: 40 });
+    stubRect(floatingWindow, { x: 240, y: 0, width: 120, height: 80 });
+
+    const setSnapshot = vi.fn();
+    const clear = vi.fn();
+    const { currentWindow, frameCallbacks } = createFakeSyncWindow();
+    currentWindow.redevenDesktopEmbeddedDragRegions = { setSnapshot, clear };
+
+    const sync = installDesktopEmbeddedDragRegionSync({
+      currentWindow,
+      createResizeObserver: () => null,
+    });
+    expect(sync).toBeTruthy();
+
+    flushNextFrame(frameCallbacks);
+    expect(setSnapshot).toHaveBeenLastCalledWith({
+      version: 1,
+      regions: [
+        { x: 0, y: 0, width: 320, height: 40 },
+      ],
+    });
+
+    setSnapshot.mockClear();
+    roleTarget.setAttribute('role', 'button');
+    await flushMutationObserver();
+    flushNextFrame(frameCallbacks);
+    expect(setSnapshot).toHaveBeenLastCalledWith({
+      version: 1,
+      regions: [
+        { x: 64, y: 0, width: 256, height: 40 },
+      ],
+    });
+
+    setSnapshot.mockClear();
+    floatingWindow.setAttribute('data-redeven-desktop-titlebar-no-drag', 'true');
+    await flushMutationObserver();
+    flushNextFrame(frameCallbacks);
+    expect(setSnapshot).toHaveBeenLastCalledWith({
+      version: 1,
+      regions: [
+        { x: 64, y: 0, width: 176, height: 40 },
+      ],
+    });
+
+    setSnapshot.mockClear();
+    roleTarget.removeAttribute('role');
+    floatingWindow.removeAttribute('data-redeven-desktop-titlebar-no-drag');
+    await flushMutationObserver();
+    flushNextFrame(frameCallbacks);
+    expect(setSnapshot).toHaveBeenLastCalledWith({
+      version: 1,
+      regions: [
+        { x: 0, y: 0, width: 320, height: 40 },
+      ],
+    });
 
     sync?.dispose();
   });
