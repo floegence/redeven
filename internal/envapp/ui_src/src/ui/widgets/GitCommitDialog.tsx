@@ -54,6 +54,7 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
         if (!open) props.onClose();
       }}
       title={i18n.t('git.commitDialog.title')}
+      class="border border-border/60 shadow-xl"
       footer={(
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" class={outlineControlClass} onClick={props.onClose} disabled={props.loading}>

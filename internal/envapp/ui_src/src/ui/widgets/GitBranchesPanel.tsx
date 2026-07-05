@@ -16,6 +16,7 @@ import {
   ArrowRightLeft,
   ArrowUp,
   CheckCircle,
+  ChevronDown,
   ChevronRight,
   FileText,
   Folder,
@@ -1466,6 +1467,48 @@ function HistoryList(
   );
 }
 
+function BranchSelect(props: {
+  value: string;
+  branches: GitBranchSummary[];
+  onChange: (name: string) => void;
+  class?: string;
+}) {
+  const selected = () =>
+    props.branches.find((b) => String(b.name ?? "").trim() === props.value);
+  const items = (): DropdownItem[] =>
+    props.branches.map((b) => ({
+      id: String(b.name ?? "").trim(),
+      label: compareOptionLabel(b),
+      icon: () => <GitBranch class="h-3.5 w-3.5" />,
+    }));
+
+  return (
+    <Dropdown
+      trigger={
+        <button
+          type="button"
+          class={cn(
+            "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground transition-colors",
+            "hover:bg-muted/[0.08] focus:outline-none focus:ring-2 focus:ring-ring/70",
+            redevenSurfaceRoleClass("control"),
+            props.class,
+          )}
+        >
+          <GitBranch class="h-4 w-4 shrink-0 text-violet-500" />
+          <span class="min-w-0 flex-1 truncate text-left">
+            {selected() ? compareOptionLabel(selected()!) : "Select branch"}
+          </span>
+          <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        </button>
+      }
+      items={items()}
+      value={props.value}
+      onSelect={props.onChange}
+      align="start"
+    />
+  );
+}
+
 interface BranchCompareDialogProps {
   open: boolean;
   repoRootPath?: string;
@@ -1568,7 +1611,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
         title="Compare branches"
         description="Pick the source and target branches, then review the changed files."
         class={cn(
-          "flex max-w-none flex-col overflow-hidden rounded-md p-0",
+          "flex max-w-none flex-col overflow-hidden rounded-md border border-border/60 p-0 shadow-xl",
           "[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2",
           "[&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:!overflow-hidden [&>div:last-child]:!p-0",
           layout.isMobile()
@@ -1581,43 +1624,21 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
             <div class="grid gap-3 md:grid-cols-2">
               <label class="block">
                 <GitLabelBlock class="min-w-0" label="Source" tone="violet">
-                  <select
-                    class={cn(
-                      "w-full rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/70",
-                      redevenSurfaceRoleClass("control"),
-                    )}
+                  <BranchSelect
                     value={sourceRef()}
-                    onInput={(event) => setSourceRef(event.currentTarget.value)}
-                  >
-                    <For each={branchOptions()}>
-                      {(branch) => (
-                        <option value={String(branch.name ?? "").trim()}>
-                          {compareOptionLabel(branch)}
-                        </option>
-                      )}
-                    </For>
-                  </select>
+                    branches={branchOptions()}
+                    onChange={setSourceRef}
+                  />
                 </GitLabelBlock>
               </label>
 
               <label class="block">
                 <GitLabelBlock class="min-w-0" label="Target" tone="violet">
-                  <select
-                    class={cn(
-                      "w-full rounded-md bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/70",
-                      redevenSurfaceRoleClass("control"),
-                    )}
+                  <BranchSelect
                     value={targetRef()}
-                    onInput={(event) => setTargetRef(event.currentTarget.value)}
-                  >
-                    <For each={branchOptions()}>
-                      {(branch) => (
-                        <option value={String(branch.name ?? "").trim()}>
-                          {compareOptionLabel(branch)}
-                        </option>
-                      )}
-                    </For>
-                  </select>
+                    branches={branchOptions()}
+                    onChange={setTargetRef}
+                  />
                 </GitLabelBlock>
               </label>
             </div>
