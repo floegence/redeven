@@ -217,14 +217,14 @@ function StashListItemCard(props: StashListItemCardProps) {
         'flex w-full cursor-pointer items-center gap-2.5 rounded-md px-3 py-2.5 text-left',
         'transition-all duration-150 border-l-[3px]',
         props.active
-          ? 'border-l-violet-500/60 bg-violet-500/[0.06] shadow-sm'
+          ? 'border-l-sky-500/60 bg-sky-500/[0.06] shadow-sm'
           : 'border-l-transparent hover:bg-muted/[0.06]',
       )}
       onClick={props.onClick}
     >
       <span class={cn(
         'shrink-0 text-[11px] font-mono font-semibold tabular-nums tracking-tight',
-        props.active ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground/60',
+        props.active ? 'text-sky-700 dark:text-sky-300' : 'text-muted-foreground/60',
       )}>
         {stashDisplayIndex(props.stash.id, props.stashes)}
       </span>
@@ -523,141 +523,158 @@ export function GitStashWindow(props: GitStashWindowProps) {
 
                         {/* Right: context-aware panel */}
                         <Show when={props.stashDetail || props.stashDetailLoading || props.stashDetailError}>
-                          <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 flex-1 overflow-auto p-3">
-                            <Show
-                              when={!props.stashDetailLoading}
-                              fallback={<GitStatePane loading message="Loading stash detail..." surface class="h-full" />}
-                            >
+                          <div class="flex min-h-0 flex-1 flex-col">
+                            <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 flex-1 overflow-auto p-3">
                               <Show when={!props.stashDetailError} fallback={<GitStatePane tone="error" message={props.stashDetailError ?? 'Failed to load stash detail.'} surface class="h-full" />}>
-                                <Show when={props.stashDetail}>
-                                  <div class="flex flex-col gap-4">
-                                    <StashDetailHeader stash={props.stashDetail!} stashes={props.stashes} />
-                                    {/* Changed files */}
-                                    <div>
-                                      <div class="flex items-center gap-2 mb-1.5">
-                                        <FileText class="h-3.5 w-3.5 text-muted-foreground/70" aria-hidden="true" />
-                                        <span class="text-xs font-medium text-foreground">Changed files</span>
-                                        <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-px text-[10px] font-medium tabular-nums text-muted-foreground">{String(detailFiles().length)}</span>
-                                      </div>
-                                      <Show when={detailFiles().length > 0} fallback={<GitSubtleNote>No changed files are available for this stash.</GitSubtleNote>}>
-                                        <div class="overflow-hidden rounded-md border">
-                                          <GitVirtualTable
-                                            items={detailFiles()}
-                                            tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
-                                            header={(
-                                              <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-                                                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-                                                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-                                                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
-                                                <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
-                                              </tr>
-                                            )}
-                                            renderRow={(file) => {
-                                              const active = () => (
-                                                diffDialogOpen()
-                                                && diffDialogStashId() === String(selectedStash()?.id ?? '').trim()
-                                                && gitDiffEntryIdentity(diffDialogItem()) === gitDiffEntryIdentity(file)
-                                              );
-                                              const primaryPath = changeDisplayPath(file);
-                                              const secondaryPath = changeSecondaryPath(file);
-                                              return (
-                                                <tr
-                                                  aria-selected={active()}
-                                                  class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
-                                                  onClick={() => openDiffDialog(file)}
-                                                >
-                                                  <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                                                    <div class="min-w-0">
-                                                      <button
-                                                        type="button"
-                                                        class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(file.changeType)}`}
-                                                        title={secondaryPath}
-                                                        onClick={(event) => {
-                                                          event.stopPropagation();
-                                                          openDiffDialog(file);
-                                                        }}
-                                                      >
-                                                        {primaryPath}
-                                                      </button>
-                                                      <Show when={secondaryPath !== primaryPath}>
-                                                        <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={secondaryPath}>{secondaryPath}</div>
-                                                      </Show>
-                                                    </div>
-                                                  </td>
-                                                  <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeStatusPill change={file.changeType} /></td>
-                                                  <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={file.additions} deletions={file.deletions} /></td>
-                                                  <td class={gitChangedFilesStickyCellClass(active())}>
-                                                    <GitChangedFilesActionButton
-                                                      onClick={(event) => {
-                                                        event.stopPropagation();
-                                                        openDiffDialog(file);
-                                                      }}
-                                                    >
-                                                      View Diff
-                                                    </GitChangedFilesActionButton>
-                                                  </td>
-                                                </tr>
-                                              );
-                                            }}
-                                          />
+                                {(() => {
+                                  if (!props.stashDetail && props.stashDetailLoading) {
+                                    return <GitStatePane loading message="Loading stash detail..." surface class="h-full" />;
+                                  }
+                                  const detail = props.stashDetail;
+                                  if (!detail) return null;
+                                  return (
+                                    <>
+                                      <Show when={props.stashDetailLoading}>
+                                        <div class="mb-3 -mt-1">
+                                          <div class="h-0.5 w-full animate-pulse rounded-full bg-primary/40" />
                                         </div>
                                       </Show>
-                                    </div>
-
-                                    {/* Actions */}
-                                    <div data-git-stash-actions class="flex flex-wrap items-center gap-2">
-                                      <div class="inline-flex flex-wrap items-center gap-2">
-                                        <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.apply} disabled={actionsDisabled()}>
-                                          <Button size="sm" variant="default" class="rounded-md" icon={CheckCircle} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(false)}>
-                                            {props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? 'Applying...' : 'Apply'}
-                                          </Button>
-                                        </StashActionButton>
-                                        <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.applyRemove} disabled={actionsDisabled()}>
-                                          <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(true)}>
-                                            {props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? 'Applying...' : 'Apply & Remove'}
-                                          </Button>
-                                        </StashActionButton>
-                                      </div>
-
-                                      <div
-                                        data-git-stash-actions-divider
-                                        aria-hidden="true"
-                                        class={cn('hidden h-5 w-px shrink-0 sm:block', redevenDividerRoleClass())}
-                                      />
-
-                                      <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.delete} disabled={actionsDisabled()}>
-                                        <Button size="sm" variant="ghost" class="rounded-md text-destructive hover:text-destructive" icon={Trash} disabled={actionsDisabled()} onClick={() => props.onRequestDrop?.()}>
-                                          {props.dropBusy ? 'Deleting...' : 'Delete'}
-                                        </Button>
-                                      </StashActionButton>
-                                    </div>
-
-                                    <Show when={applyReview()}>
-                                      <GitChecklistItem
-                                        title={applyReview()?.removeAfterApply ? 'Apply and remove this stash' : 'Apply this stash'}
-                                        detail={reviewBlockingReason()
-                                          ? reviewBlockingReason()
-                                          : 'Confirm the reviewed apply plan before mutating the current worktree.'}
-                                        tone={reviewBlockingReason() ? 'warning' : 'violet'}
-                                        complete={!reviewBlockingReason()}
-                                        required
-                                      >
-                                        <Show when={props.reviewError}>
-                                          <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{props.reviewError}</GitSubtleNote>
-                                        </Show>
-                                        <div class="flex flex-wrap gap-2">
-                                          <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} onClick={() => props.onCancelReview?.()}>
-                                            Cancel
-                                          </Button>
-                                          <Button size="sm" variant="default" class="rounded-md" icon={Check} disabled={!canConfirmReview()} loading={Boolean(props.reviewLoading || props.applyBusy || props.dropBusy)} onClick={() => props.onConfirmReview?.()}>
-                                            {applyReview()?.removeAfterApply ? 'Confirm Apply & Remove' : 'Confirm Apply'}
-                                          </Button>
+                                      <div class="flex flex-col gap-4">
+                                        <StashDetailHeader stash={detail} stashes={props.stashes} />
+                                        {/* Changed files */}
+                                        <div>
+                                          <div class="flex items-center gap-2 mb-1.5">
+                                            <FileText class="h-3.5 w-3.5 text-muted-foreground/70" aria-hidden="true" />
+                                            <span class="text-xs font-medium text-foreground">Changed files</span>
+                                            <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-px text-[10px] font-medium tabular-nums text-muted-foreground">{String(detailFiles().length)}</span>
+                                          </div>
+                                          <Show when={detailFiles().length > 0} fallback={<GitSubtleNote>No changed files are available for this stash.</GitSubtleNote>}>
+                                            <div class="overflow-hidden rounded-md border">
+                                              <GitVirtualTable
+                                                items={detailFiles()}
+                                                tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
+                                                header={(
+                                                  <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
+                                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
+                                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
+                                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
+                                                    <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
+                                                  </tr>
+                                                )}
+                                                renderRow={(file) => {
+                                                  const active = () => (
+                                                    diffDialogOpen()
+                                                    && diffDialogStashId() === String(selectedStash()?.id ?? '').trim()
+                                                    && gitDiffEntryIdentity(diffDialogItem()) === gitDiffEntryIdentity(file)
+                                                  );
+                                                  const primaryPath = changeDisplayPath(file);
+                                                  const secondaryPath = changeSecondaryPath(file);
+                                                  return (
+                                                    <tr
+                                                      aria-selected={active()}
+                                                      class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
+                                                      onClick={() => openDiffDialog(file)}
+                                                    >
+                                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}>
+                                                        <div class="min-w-0">
+                                                          <button
+                                                            type="button"
+                                                            class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(file.changeType)}`}
+                                                            title={secondaryPath}
+                                                            onClick={(event) => {
+                                                              event.stopPropagation();
+                                                              openDiffDialog(file);
+                                                            }}
+                                                          >
+                                                            {primaryPath}
+                                                          </button>
+                                                          <Show when={secondaryPath !== primaryPath}>
+                                                            <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={secondaryPath}>{secondaryPath}</div>
+                                                          </Show>
+                                                        </div>
+                                                      </td>
+                                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeStatusPill change={file.changeType} /></td>
+                                                      <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={file.additions} deletions={file.deletions} /></td>
+                                                      <td class={gitChangedFilesStickyCellClass(active())}>
+                                                        <GitChangedFilesActionButton
+                                                          onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            openDiffDialog(file);
+                                                          }}
+                                                        >
+                                                          View Diff
+                                                        </GitChangedFilesActionButton>
+                                                      </td>
+                                                    </tr>
+                                                  );
+                                                }}
+                                              />
+                                            </div>
+                                          </Show>
                                         </div>
-                                      </GitChecklistItem>
-                                    </Show>
+                                      </div>
+                                    </>
+                                  );
+                                })()}
+                              </Show>
+                            </div>
+
+                            {/* Fixed footer with actions */}
+                            <Show when={props.stashDetail}>
+                              <div class="shrink-0 border-t px-3 py-2">
+                                <div data-git-stash-actions class="flex flex-wrap items-center gap-2">
+                                  <div class="inline-flex flex-wrap items-center gap-2">
+                                    <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.apply} disabled={actionsDisabled()}>
+                                      <Button size="sm" variant="default" class="rounded-md" icon={CheckCircle} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(false)}>
+                                        {props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? 'Applying...' : 'Apply'}
+                                      </Button>
+                                    </StashActionButton>
+                                    <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.applyRemove} disabled={actionsDisabled()}>
+                                      <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(true)}>
+                                        {props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? 'Applying...' : 'Apply & Remove'}
+                                      </Button>
+                                    </StashActionButton>
+                                  </div>
+
+                                  <div
+                                    data-git-stash-actions-divider
+                                    aria-hidden="true"
+                                    class={cn('hidden h-5 w-px shrink-0 sm:block', redevenDividerRoleClass())}
+                                  />
+
+                                  <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.delete} disabled={actionsDisabled()}>
+                                    <Button size="sm" variant="ghost" class="rounded-md text-destructive hover:text-destructive" icon={Trash} disabled={actionsDisabled()} onClick={() => props.onRequestDrop?.()}>
+                                      {props.dropBusy ? 'Deleting...' : 'Delete'}
+                                    </Button>
+                                  </StashActionButton>
+                                </div>
+
+                                <Show when={applyReview()}>
+                                  <div class="mt-3">
+                                    <GitChecklistItem
+                                      title={applyReview()?.removeAfterApply ? 'Apply and remove this stash' : 'Apply this stash'}
+                                      detail={reviewBlockingReason()
+                                        ? reviewBlockingReason()
+                                        : 'Confirm the reviewed apply plan before mutating the current worktree.'}
+                                      tone={reviewBlockingReason() ? 'warning' : 'info'}
+                                      complete={!reviewBlockingReason()}
+                                      required
+                                    >
+                                      <Show when={props.reviewError}>
+                                        <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">{props.reviewError}</GitSubtleNote>
+                                      </Show>
+                                      <div class="flex flex-wrap gap-2">
+                                        <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} onClick={() => props.onCancelReview?.()}>
+                                          Cancel
+                                        </Button>
+                                        <Button size="sm" variant="default" class="rounded-md" icon={Check} disabled={!canConfirmReview()} loading={Boolean(props.reviewLoading || props.applyBusy || props.dropBusy)} onClick={() => props.onConfirmReview?.()}>
+                                          {applyReview()?.removeAfterApply ? 'Confirm Apply & Remove' : 'Confirm Apply'}
+                                        </Button>
+                                      </div>
+                                    </GitChecklistItem>
                                   </div>
                                 </Show>
-                              </Show>
+                              </div>
                             </Show>
                           </div>
                         </Show>
