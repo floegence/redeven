@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { Folder, MoreHorizontal, Search, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Folder, MoreHorizontal, Plus, Search, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
-import { Button, ConfirmDialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, Dropdown, SegmentedControl, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { GitRepoSummaryResponse } from '../protocol/redeven_v1';
 import {
@@ -20,23 +20,18 @@ import {
   type GitStashWindowRequest,
   type GitWorkspaceViewSection,
 } from '../utils/gitWorkbench';
-import { gitChangePathClass, gitToneDotClass, workspaceSectionTone } from './GitChrome';
+import { gitChangePathClass } from './GitChrome';
 import { GitCommitDialog } from './GitCommitDialog';
 import { GitDiffDialog } from './GitDiffDialog';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
-  GIT_CHANGED_FILES_HEADER_CELL_CLASS,
-  GIT_CHANGED_FILES_HEADER_ROW_CLASS,
   GIT_CHANGED_FILES_SECONDARY_PATH_CLASS,
-  GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS,
   GIT_CHANGED_FILES_TABLE_CLASS,
   GitChangedFilesActionButton,
   GitChangeMetrics,
   GitChangeStatusPill,
   GitMetaPill,
-  GitPanelFrame,
   GitPagedTableFooter,
-  GitPrimaryTitle,
   GitShortcutOrbButton,
   GitShortcutOrbDock,
   GitStatePane,
@@ -118,11 +113,6 @@ function itemDirectorySummary(item: GitSeededWorkspaceChange, i18n: I18nHelpers)
   return i18n.tn('git.common.fileCount', count);
 }
 
-function listItemActionLabel(item: GitSeededWorkspaceChange, i18n: I18nHelpers): string {
-  if (isGitWorkspaceDirectoryEntry(item)) return i18n.t('git.changes.stage');
-  return item.section === 'staged' ? i18n.t('git.changes.unstage') : i18n.t('git.changes.stageWithPlus');
-}
-
 function isDiscardableWorkspaceItem(item: GitSeededWorkspaceChange | null | undefined): boolean {
   if (isGitWorkspaceDirectoryEntry(item)) return true;
   return item?.section === 'unstaged' || item?.section === 'untracked';
@@ -169,7 +159,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
   const i18n = useI18n();
   const summaryUnit = () => props.section === 'changes' ? i18n.tn('git.common.itemCount', props.totalCount) : i18n.tn('git.common.fileCount', props.totalCount);
   return (
-    <GitTableFrame class="flex h-full min-h-0 flex-col">
+    <GitTableFrame class="flex h-full min-h-0 flex-col rounded-none border-0">
       <Show
         when={props.items.length > 0}
         fallback={(
@@ -182,11 +172,11 @@ function WorkspaceTable(props: WorkspaceTableProps) {
           items={props.items}
           tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
           header={(
-            <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.path')}</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.status')}</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.changes')}</th>
-              <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>{i18n.t('git.common.action')}</th>
+            <tr class="hidden">
+              <th />
+              <th />
+              <th />
+              <th />
             </tr>
           )}
           renderRow={(item) => {
@@ -269,7 +259,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                       busy={busy(action())}
                       disabled={actionsDisabled()}
                     >
-                      {listItemActionLabel(item, i18n)}
+                      <Plus class="size-3.5" />
                     </GitChangedFilesActionButton>
                     <Show when={isDiscardableWorkspaceItem(item)}>
                       <GitChangedFilesActionButton
@@ -281,7 +271,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                         busy={busy('discard')}
                         disabled={actionsDisabled()}
                       >
-                        {i18n.t('git.changes.discard')}
+                        <Trash class="size-3.5" />
                       </GitChangedFilesActionButton>
                     </Show>
                   </div>
@@ -391,7 +381,6 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const visibleError = () => String(props.error ?? '').trim() || (!selectedPageState().initialized ? selectedPageState().error : '');
   const visibleLoadingMore = () => Boolean(selectedPageState().loading && selectedPageState().initialized);
   const stagedLoadingItems = () => Boolean(stagedPageState().loading && !props.commitBusy);
-  const selectedTone = () => workspaceSectionTone(selectedSection());
   const activeDirectoryPath = () => selectedSection() === 'changes' ? String(selectedPageState().directoryPath ?? '').trim() : '';
   const activeBreadcrumbs = () => selectedSection() === 'changes' ? selectedPageState().breadcrumbs ?? [] : [];
   const repoRootPath = () => String(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim();
@@ -422,17 +411,6 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && repoShortcutRequest());
   const canBrowseFiles = () => Boolean(props.onBrowseFiles && repoShortcutRequest());
   const canOpenStash = () => Boolean(props.onOpenStash && repoRootPath());
-  const sectionTitle = () => (
-    headerPresentation().isCleanState
-      ? i18n.t('git.common.clean')
-      : selectedSection() === 'changes'
-        ? i18n.t('git.common.changes')
-        : selectedSection() === 'staged'
-          ? i18n.t('git.common.staged')
-          : selectedSection() === 'conflicted'
-            ? i18n.t('git.common.conflicted')
-            : headerPresentation().title
-  );
   const countBadgeLabel = () => (
     headerPresentation().isCleanState
       ? i18n.t('git.changes.noPendingChanges')
@@ -460,7 +438,6 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
     canBrowseFiles: canBrowseFiles(),
     canAskFlower: canAskFlower(),
   }));
-  const headerTone = () => headerPresentation().isCleanState ? 'success' : selectedTone();
   const breadcrumbSegments = createMemo<GitChangesBreadcrumbSegment[]>(() => activeBreadcrumbs().map((crumb) => ({
     label: String(crumb.label ?? '').trim() || i18n.t('git.common.folder'),
     path: String(crumb.path ?? '').trim(),
@@ -483,37 +460,6 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
     && Boolean(activeDirectoryPath())
     && breadcrumbSegments().length > 0
   );
-  const useInlineQuietHeaderActions = () => (
-    headerDensity() !== 'collapsed'
-  );
-  const showSeparateActionRow = () => showActionRow() && !useInlineQuietHeaderActions();
-  const headerContainerClass = () => (
-    useInlineQuietHeaderActions()
-      ? 'flex flex-col gap-2'
-      : 'flex flex-col gap-2'
-  );
-  const headerTopRowClass = () => (
-    useInlineQuietHeaderActions()
-      ? 'grid gap-2.5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center'
-      : headerDensity() === 'comfortable'
-      ? 'grid gap-2.5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center'
-      : 'grid grid-cols-1 gap-2'
-  );
-  const headerActionRowClass = () => {
-    if (headerDensity() === 'comfortable') return 'flex flex-wrap items-center justify-end gap-1.5';
-    return 'grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2';
-  };
-  const headerPrimaryActionRailClass = () => (
-    headerDensity() === 'collapsed'
-      ? 'flex min-w-0 flex-wrap items-center gap-1.5'
-      : 'flex min-w-0 flex-wrap items-center gap-1.5'
-  );
-  const headerSecondaryActionRailClass = () => (
-    headerDensity() === 'collapsed'
-      ? 'flex items-center justify-end gap-1.5'
-      : 'flex min-w-0 items-center justify-end gap-1.5'
-  );
-
   createEffect(() => {
     const element = headerElement();
     if (!element) {
@@ -731,24 +677,6 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
       />
     </Show>
   );
-  const renderInlineHeaderActions = () => (
-    <div
-      data-git-changes-header-actions="inline"
-      class="flex min-w-0 flex-wrap items-center justify-start gap-1.5 md:justify-end"
-    >
-      <Show when={headerUtilityActions().length > 0}>
-        <GitShortcutOrbDock class="justify-end">
-          <For each={headerUtilityActions()}>
-            {(actionId) => renderUtilityAction(actionId)}
-          </For>
-        </GitShortcutOrbDock>
-      </Show>
-      <For each={headerPrimaryActions()}>
-        {(actionId) => renderPrimaryAction(actionId)}
-      </For>
-      {renderOverflowAction()}
-    </div>
-  );
   const browseFilesForBreadcrumb = (segment: GitChangesBreadcrumbSegment) => {
     const request = repoShortcutRequest(segment.path);
     if (!request) return;
@@ -756,137 +684,116 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   };
 
   return (
-    <div class="flex h-full min-h-0 flex-col overflow-hidden">
-      <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
-        <Show when={!visibleLoading()} fallback={<GitStatePane loading message={i18n.t('git.changes.loadingWorkspaceChanges')} />}>
-          <Show when={!visibleError()} fallback={<GitStatePane tone="error" message={visibleError()} />}>
-            <div class="flex min-h-0 flex-1 flex-col gap-3">
-              <GitPanelFrame class="shrink-0">
-                <div
-                  ref={setHeaderElement}
-                  data-git-changes-header-density={headerPresentation().density}
-                  class={headerContainerClass()}
-                >
-                  <div class={headerTopRowClass()}>
-                    <div class="min-w-0 space-y-1">
-                      <div class="flex min-w-0 flex-wrap items-center gap-2">
-                        <span class={`h-2 w-2 shrink-0 rounded-full ring-1 ring-current/20 ${gitToneDotClass(headerTone())}`} aria-hidden="true" />
-                        <div class="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground/75">
-                          {i18n.t('git.changes.workspace')}
-                        </div>
-                        <GitPrimaryTitle>{sectionTitle()}</GitPrimaryTitle>
-                        <GitMetaPill tone={headerPresentation().isCleanState ? 'success' : headerTone()}>
-                          {countBadgeLabel()}
-                        </GitMetaPill>
-                        <Show when={stagedCount() > 0}>
-                          <GitMetaPill tone="success">{stagedBadgeLabel()}</GitMetaPill>
-                        </Show>
-                      </div>
-                      <Show when={headerPresentation().showSummaryCopy}>
-                        <div class="line-clamp-1 max-w-full text-[11px] leading-relaxed text-muted-foreground sm:max-w-[24rem]">
-                          {summaryCopy()}
-                        </div>
-                      </Show>
-                    </div>
-
-                    <Show when={useInlineQuietHeaderActions()} fallback={(
-                      <Show when={headerPresentation().density === 'comfortable' && headerUtilityActions().length > 0}>
-                        <GitShortcutOrbDock class="justify-end">
-                          <For each={headerUtilityActions()}>
-                            {(actionId) => renderUtilityAction(actionId)}
-                          </For>
-                        </GitShortcutOrbDock>
-                      </Show>
-                    )}>
-                      {renderInlineHeaderActions()}
-                    </Show>
-                  </div>
-
-                  <Show when={showSeparateActionRow()}>
-                    <div
-                      data-git-changes-header-actions="separate"
-                      class={headerActionRowClass()}
-                    >
-                      <div class={headerPrimaryActionRailClass()}>
-                        <For each={headerPrimaryActions()}>
-                          {(actionId) => renderPrimaryAction(actionId)}
-                        </For>
-                      </div>
-
-                      <div class={headerSecondaryActionRailClass()}>
-                        <Show when={headerPresentation().density !== 'comfortable' && headerUtilityActions().length > 0}>
-                          <GitShortcutOrbDock class="justify-end">
-                            <For each={headerUtilityActions()}>
-                              {(actionId) => renderUtilityAction(actionId)}
-                            </For>
-                          </GitShortcutOrbDock>
-                        </Show>
-                        {renderOverflowAction()}
-                      </div>
-                    </div>
-                  </Show>
-
-                  <Show when={visibleItems().length > 0}>
-                    <div class="border-b border-muted/20 pt-2">
-                      <label
-                        class={`flex h-7 min-w-0 items-center gap-1.5 rounded-md border px-2.5 text-[11px] text-muted-foreground shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring ${redevenSurfaceRoleClass('control')} ${redevenSurfaceRoleClass('controlMuted')}`}
-                      >
-                        <Search class="size-3.5 shrink-0" />
-                        <input
-                          type="text"
-                          value={filterQuery()}
-                          onInput={(event) => setFilterQuery(event.currentTarget.value)}
-                          placeholder={i18n.t('git.changes.filterPlaceholder')}
-                          aria-label={i18n.t('git.changes.filterPlaceholder')}
-                          class="h-full min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground/70"
-                        />
-                      </label>
-                    </div>
-                  </Show>
-
-                  <Show when={showBreadcrumbRail()}>
-                    <GitChangesBreadcrumb
-                      segments={breadcrumbSegments()}
-                      onSelect={props.onNavigateDirectory ? (segment) => props.onNavigateDirectory?.(segment.path) : undefined}
-                      onBrowseFiles={props.onBrowseFiles ? browseFilesForBreadcrumb : undefined}
-                      class="pt-0.5"
+    <div class="flex h-full min-h-0 flex-col">
+      <Show when={!visibleLoading()} fallback={<GitStatePane loading message={i18n.t('git.changes.loadingWorkspaceChanges')} />}>
+        <Show when={!visibleError()} fallback={<GitStatePane tone="error" message={visibleError()} />}>
+          {/* Toolbar — exactly matches FileWorkspaceHeader pattern */}
+          <div class={`shrink-0 border-b px-2.5 py-1.5 ${redevenDividerRoleClass()} ${redevenSurfaceRoleClass('inset')}`}>
+            <div ref={setHeaderElement} data-git-changes-header-density={headerPresentation().density}>
+              {/* Row 1: SegmentedControl + Filter — like Files toolbar grid */}
+              <div class="grid items-center gap-2 grid-cols-[auto_minmax(0,1fr)_auto]">
+                <SegmentedControl
+                  size="sm"
+                  value={selectedSection()}
+                  onChange={(value) => props.onSelectSection?.(value as GitWorkspaceViewSection)}
+                  options={[
+                    { value: 'changes', label: i18n.t('git.common.changes') },
+                    { value: 'staged', label: i18n.t('git.common.staged') },
+                    { value: 'conflicted', label: i18n.t('git.common.conflicted') },
+                  ]}
+                  class="h-7 shrink-0 [&_button]:h-6 [&_button]:px-2 [&_button]:py-0"
+                />
+                <Show when={visibleItems().length > 0}>
+                  <label
+                    class={`flex h-7 min-w-0 items-center gap-1.5 rounded-md border px-2.5 text-[11px] text-muted-foreground shadow-sm focus-within:border-ring focus-within:ring-1 focus-within:ring-ring ${redevenSurfaceRoleClass('control')} ${redevenSurfaceRoleClass('controlMuted')}`}
+                  >
+                    <Search class="size-3.5 shrink-0" />
+                    <input
+                      type="text"
+                      value={filterQuery()}
+                      onInput={(event) => setFilterQuery(event.currentTarget.value)}
+                      placeholder={i18n.t('git.changes.filterPlaceholder')}
+                      aria-label={i18n.t('git.changes.filterPlaceholder')}
+                      class="h-full min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground/70"
                     />
+                  </label>
+                </Show>
+              </div>
+
+              {/* Row 2: Status info + action buttons — like Files status info bar */}
+              <div class="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <span>{countBadgeLabel()}</span>
+                  <Show when={stagedCount() > 0}>
+                    <span aria-hidden="true">·</span>
+                    <span>{stagedBadgeLabel()}</span>
+                  </Show>
+                  <Show when={headerPresentation().showSummaryCopy}>
+                    <span aria-hidden="true">·</span>
+                    <span class="line-clamp-1">{summaryCopy()}</span>
                   </Show>
                 </div>
-              </GitPanelFrame>
-
-              <div class="min-h-0 flex-1">
-                <WorkspaceTable
-                  section={selectedSection()}
-                  items={filteredItems()}
-                  totalCount={visibleItemCount()}
-                  hasMore={selectedPageState().hasMore}
-                  loadingMore={visibleLoadingMore()}
-                  selectedKey={selectedKey()}
-                  filtered={filterActive()}
-                  filteredCount={filteredCount()}
-                  onSelectItem={props.onSelectItem}
-                  onOpenDiff={(item) => {
-                    setDiffDialogItem(item);
-                    props.onSelectItem?.(item);
-                    setDiffDialogOpen(true);
-                  }}
-                  onOpenDirectory={(directoryPath) => props.onNavigateDirectory?.(directoryPath)}
-                  onAction={(item) => {
-                    if (item.section === 'staged') props.onUnstageSelected?.(item);
-                    else props.onStageSelected?.(item);
-                  }}
-                  onDiscard={(item) => setDiscardTarget({ kind: 'item', item })}
-                  onLoadMore={() => props.onLoadMoreWorkspaceSection?.(selectedSection())}
-                  busyWorkspaceKey={props.busyWorkspaceKey}
-                  busyWorkspaceAction={props.busyWorkspaceAction}
-                  sectionActionKey={sectionActionKey()}
-                />
+                <Show when={showActionRow()}>
+                  <div class="flex items-center gap-1.5">
+                    <For each={headerPrimaryActions()}>
+                      {(actionId) => renderPrimaryAction(actionId)}
+                    </For>
+                    <Show when={headerUtilityActions().length > 0}>
+                      <GitShortcutOrbDock>
+                        <For each={headerUtilityActions()}>
+                          {(actionId) => renderUtilityAction(actionId)}
+                        </For>
+                      </GitShortcutOrbDock>
+                    </Show>
+                    {renderOverflowAction()}
+                  </div>
+                </Show>
               </div>
+
+              {/* Row 3: Breadcrumb */}
+              <Show when={showBreadcrumbRail()}>
+                <div class="mt-1">
+                  <GitChangesBreadcrumb
+                    segments={breadcrumbSegments()}
+                    onSelect={props.onNavigateDirectory ? (segment) => props.onNavigateDirectory?.(segment.path) : undefined}
+                    onBrowseFiles={props.onBrowseFiles ? browseFilesForBreadcrumb : undefined}
+                  />
+                </div>
+              </Show>
             </div>
-          </Show>
+          </div>
+
+          {/* Content area — table fills edge-to-edge, no card wrapping */}
+          <div class="min-h-0 flex-1">
+            <WorkspaceTable
+              section={selectedSection()}
+              items={filteredItems()}
+              totalCount={visibleItemCount()}
+              hasMore={selectedPageState().hasMore}
+              loadingMore={visibleLoadingMore()}
+              selectedKey={selectedKey()}
+              filtered={filterActive()}
+              filteredCount={filteredCount()}
+              onSelectItem={props.onSelectItem}
+              onOpenDiff={(item) => {
+                setDiffDialogItem(item);
+                props.onSelectItem?.(item);
+                setDiffDialogOpen(true);
+              }}
+              onOpenDirectory={(directoryPath) => props.onNavigateDirectory?.(directoryPath)}
+              onAction={(item) => {
+                if (item.section === 'staged') props.onUnstageSelected?.(item);
+                else props.onStageSelected?.(item);
+              }}
+              onDiscard={(item) => setDiscardTarget({ kind: 'item', item })}
+              onLoadMore={() => props.onLoadMoreWorkspaceSection?.(selectedSection())}
+              busyWorkspaceKey={props.busyWorkspaceKey}
+              busyWorkspaceAction={props.busyWorkspaceAction}
+              sectionActionKey={sectionActionKey()}
+            />
+          </div>
         </Show>
-      </div>
+      </Show>
 
       <GitCommitDialog
         open={commitDialogOpen()}
