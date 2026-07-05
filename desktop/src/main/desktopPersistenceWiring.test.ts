@@ -86,14 +86,15 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain("app.commandLine.appendSwitch('force-gpu-mem-available-mb', String(DESKTOP_GPU_TILE_MEMORY_BUDGET_MB));");
     expect(mainSrc).toContain("function windowSurfaceForRole(role: CreateBrowserWindowArgs['role']): DesktopWindowSurface {");
     expect(mainSrc).toContain("return role === 'launcher' ? 'utility' : 'session';");
-    expect(mainSrc).toContain("const preloadPath = surface === 'utility'");
+    expect(mainSrc).toContain("const preloadPath = args.preload === 'none'");
     expect(mainSrc).toContain("resolveUtilityPreloadPath({ appPath: app.getAppPath() })");
     expect(mainSrc).toContain("resolveSessionPreloadPath({ appPath: app.getAppPath() })");
-    expect(mainSrc).toContain('preload: preloadPath,');
+    expect(mainSrc).toContain('...(preloadPath ? { preload: preloadPath } : {}),');
     expect(mainSrc).toContain("stateKey: utilityWindowStateKey()");
     expect(mainSrc).toContain("stateKey: sessionWindowStateKey(sessionKey)");
     expect(mainSrc).toContain('sessionChildWindowStateKey(sessionKey, childKey)');
     expect(mainSrc).toContain('child_windows: Map<string, DesktopTrackedWindow>;');
+    expect(mainSrc).toContain('codespace_windows: Map<string, DesktopTrackedWindow>;');
     expect(mainSrc).toContain("setLauncherViewState({");
     expect(mainSrc).toContain("surface: 'connect_environment',");
     expect(mainSrc).not.toContain('handoffAskFlowerToOwningSession');

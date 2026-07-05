@@ -7,7 +7,7 @@ import {
   onCleanup,
 } from "solid-js";
 import { cn } from "@floegence/floe-webapp-core";
-import { Calendar, FileText, GitBranch, Hash, User } from "@floegence/floe-webapp-core/icons";
+import { Calendar, FileText, Hash, User } from "@floegence/floe-webapp-core/icons";
 import { Button } from "@floegence/floe-webapp-core/ui";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
 import {

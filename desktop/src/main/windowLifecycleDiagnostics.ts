@@ -28,7 +28,7 @@ type DiagnosticConsoleMessageLike = Readonly<{
 type WindowLifecycleContextInput = Readonly<{
   currentURL?: string;
   preloadPath: string;
-  role: 'launcher' | 'session_root' | 'session_child';
+  role: 'launcher' | 'session_root' | 'session_child' | 'codespace_child';
   stateKey: string;
   surface: 'utility' | 'session';
   targetURL: string;

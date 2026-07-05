@@ -4,12 +4,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   closeDesktopWindow,
+  desktopShellCodespaceWindowOpenAvailable,
   desktopShellExternalURLOpenAvailable,
   desktopShellBridgeAvailable,
   getRuntimeMaintenanceContextFromDesktopShell,
   minimizeDesktopWindow,
   openAdvancedSettings,
   openConnectionCenter,
+  openCodespaceWindowInDesktopShell,
   openDashboardInDesktopShell,
   openExternalURLInDesktopShell,
   performRuntimeMaintenanceActionInDesktopShell,
@@ -236,6 +238,29 @@ describe('desktopShellBridge', () => {
       message: 'Opened in the system browser.',
     });
     expect(openExternalURLBridge).toHaveBeenCalledWith('http://127.0.0.1:43123/cs/demo/');
+  });
+
+  it('forwards codespace window requests when the desktop bridge exposes them', async () => {
+    const openCodespaceWindowBridge = vi.fn().mockResolvedValue({
+      ok: true,
+      message: 'Opened in a desktop window.',
+    });
+    window.redevenDesktopShell = {
+      openCodespaceWindow: openCodespaceWindowBridge,
+    };
+
+    expect(desktopShellCodespaceWindowOpenAvailable()).toBe(true);
+    await expect(openCodespaceWindowInDesktopShell({
+      url: 'http://127.0.0.1:43123/cs/demo/',
+      code_space_id: 'demo',
+    })).resolves.toEqual({
+      ok: true,
+      message: 'Opened in a desktop window.',
+    });
+    expect(openCodespaceWindowBridge).toHaveBeenCalledWith({
+      url: 'http://127.0.0.1:43123/cs/demo/',
+      code_space_id: 'demo',
+    });
   });
 
   it('forwards dashboard requests through the semantic desktop bridge method', async () => {

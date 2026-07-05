@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createResource, createSignal, onCleanup } from "solid-js";
 import { cn, useNotification } from "@floegence/floe-webapp-core";
-import { AlertTriangle, RefreshIcon, Terminal } from "@floegence/floe-webapp-core/icons";
+import { AlertTriangle, ChevronDown, ExternalLink, Maximize, Play, RefreshIcon, Stop, Terminal, Trash } from "@floegence/floe-webapp-core/icons";
 import type { FileItem } from "@floegence/floe-webapp-core/file-browser";
 import { Panel, PanelContent } from "@floegence/floe-webapp-core/layout";
 import { SnakeLoader } from "@floegence/floe-webapp-core/loading";
@@ -14,8 +14,10 @@ import {
   CardTitle,
   Dialog,
   DirectoryInput,
+  Dropdown,
   Input,
   Tag,
+  type DropdownItem,
 } from "@floegence/floe-webapp-core/ui";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
 import { useEnvContext } from "./EnvContext";
@@ -44,7 +46,12 @@ import {
 import { appendLocalAccessResumeQuery } from "../services/localAccessAuth";
 import { trustedLauncherOriginFromSandboxLocation } from "../services/sandboxOrigins";
 import { registerSandboxWindow } from "../services/sandboxWindowRegistry";
-import { desktopShellExternalURLOpenAvailable, openExternalURLInDesktopShell } from "../services/desktopShellBridge";
+import {
+  desktopShellCodespaceWindowOpenAvailable,
+  desktopShellExternalURLOpenAvailable,
+  openCodespaceWindowInDesktopShell,
+  openExternalURLInDesktopShell,
+} from "../services/desktopShellBridge";
 import { desktopCodeWorkspacePrepareAvailable, prepareWorkspaceEngineWithDesktop } from "../services/desktopCodeWorkspaceBridge";
 import { readDesktopSessionContextSnapshot } from "../services/desktopSessionContext";
 import { RedevenLoadingCurtain } from "../primitives/RedevenLoadingCurtain";
@@ -69,6 +76,7 @@ type SpaceStatus = Readonly<{
 }>;
 
 type CodespaceBusyAction = "open" | "start" | "stop";
+type CodespaceOpenTarget = "desktop_window" | "system_browser";
 
 type CodespaceContextMenuState = Readonly<{
   x: number;
@@ -80,9 +88,11 @@ type PendingCodespaceIntent = Readonly<{
   kind: "open" | "start";
   code_space_id: string;
   name: string;
+  open_target?: CodespaceOpenTarget;
 }> | null;
 
 type CodespaceOpenStrategy =
+  | Readonly<{ kind: "desktop_codespace_window" }>
   | Readonly<{ kind: "desktop_external_browser" }>
   | Readonly<{ kind: "browser_popup"; win: Window }>;
 
@@ -145,7 +155,14 @@ function validateMeta(name: string, description: string, i18n: Pick<I18nHelpers,
   return null;
 }
 
-function resolveCodespaceOpenStrategy(codeSpaceID: string, popupBlockedMessage: string): CodespaceOpenStrategy {
+function resolveCodespaceOpenStrategy(target: CodespaceOpenTarget, codeSpaceID: string, desktopWindowOpenFailedMessage: string, popupBlockedMessage: string): CodespaceOpenStrategy {
+  if (target === "desktop_window") {
+    if (!desktopShellCodespaceWindowOpenAvailable()) {
+      throw new Error(desktopWindowOpenFailedMessage);
+    }
+    return { kind: "desktop_codespace_window" };
+  }
+
   if (desktopShellExternalURLOpenAvailable()) {
     return { kind: "desktop_external_browser" };
   }
@@ -169,9 +186,19 @@ function closeCodespaceOpenStrategyOnError(strategy: CodespaceOpenStrategy): voi
 async function commitCodespaceOpenStrategy(args: Readonly<{
   strategy: CodespaceOpenStrategy;
   url: string;
+  codeSpaceID: string;
   sandbox?: CodespaceTrustedLauncherTarget["sandbox"];
   desktopOpenFailedMessage: string;
+  desktopWindowOpenFailedMessage: string;
 }>): Promise<void> {
+  if (args.strategy.kind === "desktop_codespace_window") {
+    const out = await openCodespaceWindowInDesktopShell({ url: args.url, code_space_id: args.codeSpaceID });
+    if (!out?.ok) {
+      throw new Error(out?.message || args.desktopWindowOpenFailedMessage);
+    }
+    return;
+  }
+
   if (args.strategy.kind === "desktop_external_browser") {
     const out = await openExternalURLInDesktopShell(args.url);
     if (!out?.ok) {
@@ -226,6 +253,7 @@ function buildTrustedLauncherCodespaceTarget(args: Readonly<{
 
 type OpenCodespaceCopy = Readonly<{
   desktopOpenFailed: string;
+  desktopWindowOpenFailed: string;
   invalidUrl: string;
   missingEnvContext: string;
   opening: string;
@@ -234,11 +262,11 @@ type OpenCodespaceCopy = Readonly<{
   starting: string;
 }>;
 
-async function openCodespace(codeSpaceID: string, setStatus: (s: string) => void, copy: OpenCodespaceCopy): Promise<void> {
+async function openCodespace(codeSpaceID: string, openTarget: CodespaceOpenTarget, setStatus: (s: string) => void, copy: OpenCodespaceCopy): Promise<void> {
   const envPublicID = getEnvPublicIDFromSession();
   if (!envPublicID) throw new Error(copy.missingEnvContext);
 
-  const strategy = resolveCodespaceOpenStrategy(codeSpaceID, copy.popupBlocked);
+  const strategy = resolveCodespaceOpenStrategy(openTarget, codeSpaceID, copy.desktopWindowOpenFailed, copy.popupBlocked);
 
   try {
     const local = await getLocalRuntime();
@@ -249,13 +277,19 @@ async function openCodespace(codeSpaceID: string, setStatus: (s: string) => void
     if (local) {
       const url = buildLocalCodespaceURL(codeSpaceID, folder, copy.invalidUrl);
       setStatus(copy.opening);
-      await commitCodespaceOpenStrategy({ strategy, url, desktopOpenFailedMessage: copy.desktopOpenFailed });
+      await commitCodespaceOpenStrategy({
+        strategy,
+        url,
+        codeSpaceID,
+        desktopOpenFailedMessage: copy.desktopOpenFailed,
+        desktopWindowOpenFailedMessage: copy.desktopWindowOpenFailed,
+      });
       return;
     }
 
     setStatus(copy.requestingEntryTicket);
     const entryTicket = await mintEnvEntryTicketForApp({ envId: envPublicID, floeApp: FLOE_APP_CODE, codeSpaceId: codeSpaceID });
-    const target = buildTrustedLauncherCodespaceTarget({
+    const launcherTarget = buildTrustedLauncherCodespaceTarget({
       envPublicID,
       codeSpaceID,
       workspacePath: folder,
@@ -265,9 +299,11 @@ async function openCodespace(codeSpaceID: string, setStatus: (s: string) => void
     setStatus(copy.opening);
     await commitCodespaceOpenStrategy({
       strategy,
-      url: target.url,
-      sandbox: target.sandbox,
+      url: launcherTarget.url,
+      codeSpaceID,
+      sandbox: launcherTarget.sandbox,
       desktopOpenFailedMessage: copy.desktopOpenFailed,
+      desktopWindowOpenFailedMessage: copy.desktopWindowOpenFailed,
     });
   } catch (e) {
     closeCodespaceOpenStrategyOnError(strategy);
@@ -338,7 +374,8 @@ function CodespaceCard(props: {
   space: SpaceStatus;
   busyAction?: CodespaceBusyAction;
   busyLabel?: string;
-  onOpen: () => void;
+  desktopOpenAvailable: boolean;
+  onOpen: (target: CodespaceOpenTarget) => void;
   onStart: () => void;
   onStop: () => void;
   onDelete: () => void;
@@ -348,6 +385,35 @@ function CodespaceCard(props: {
   const isRunning = () => props.space.running;
   const isBusy = () => !!props.busyAction;
   const i18n = useI18n();
+  const primaryOpenTarget = (): CodespaceOpenTarget => props.desktopOpenAvailable ? "desktop_window" : "system_browser";
+  const primaryOpenLabel = () => props.desktopOpenAvailable ? i18n.t("codespaces.actions.openInDesktop") : i18n.t("codespaces.actions.open");
+  const openDropdownItems = (): DropdownItem[] => (
+    isRunning()
+      ? [
+          {
+            id: "system_browser",
+            label: i18n.t("codespaces.actions.openInBrowser"),
+            icon: ExternalLink,
+          },
+        ]
+      : [
+          {
+            id: "desktop_window",
+            label: i18n.t("codespaces.actions.openInDesktop"),
+            icon: Maximize,
+          },
+          {
+            id: "system_browser",
+            label: i18n.t("codespaces.actions.openInBrowser"),
+            icon: ExternalLink,
+          },
+        ]
+  );
+  const handleOpenMenuSelect = (id: string) => {
+    if (id === "desktop_window" || id === "system_browser") {
+      props.onOpen(id);
+    }
+  };
 
   return (
     <Card
@@ -393,81 +459,85 @@ function CodespaceCard(props: {
         <Show
           when={isRunning()}
           fallback={
-            // Stopped: Start is primary action
             <div class="flex items-center gap-2 flex-1">
               <Button size="sm" variant="default" disabled={isBusy()} onClick={props.onStart} class="flex-1">
                 <Show
                   when={props.busyAction === "start"}
-                  fallback={
-                    <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"
-                      />
-                    </svg>
-                  }
+                  fallback={<Play class="w-3.5 h-3.5 mr-1" />}
                 >
                   <InlineButtonSnakeLoading class="mr-1" />
                 </Show>
                 {props.busyAction === "start" && props.busyLabel ? props.busyLabel : i18n.t("codespaces.actions.start")}
               </Button>
-              <Tooltip content={i18n.t("codespaces.actions.openWillAutoStart")} placement="top">
-                <Button size="sm" variant="ghost" disabled={isBusy()} onClick={props.onOpen} class="px-2 text-muted-foreground">
-                  <Show
-                    when={props.busyAction === "open"}
-                    fallback={
-                      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-                        />
-                      </svg>
-                    }
-                  >
-                    <InlineButtonSnakeLoading />
-                  </Show>
-                </Button>
-              </Tooltip>
+              <Show
+                when={props.desktopOpenAvailable}
+                fallback={
+                  <Tooltip content={i18n.t("codespaces.actions.openWillAutoStart")} placement="top">
+                    <Button size="sm" variant="ghost" disabled={isBusy()} onClick={() => props.onOpen("system_browser")} class="px-2 text-muted-foreground">
+                      <Show when={props.busyAction === "open"} fallback={<ExternalLink class="w-4 h-4" />}>
+                        <InlineButtonSnakeLoading />
+                      </Show>
+                    </Button>
+                  </Tooltip>
+                }
+              >
+                <Dropdown
+                  align="end"
+                  disabled={isBusy()}
+                  triggerAriaLabel={i18n.t("codespaces.actions.open")}
+                  items={openDropdownItems()}
+                  onSelect={handleOpenMenuSelect}
+                  trigger={
+                    <Button size="sm" variant="outline" disabled={isBusy()} class={cn("gap-1 px-2", redevenSurfaceRoleClass("control"))}>
+                      <Show when={props.busyAction === "open"} fallback={<ExternalLink class="w-3.5 h-3.5" />}>
+                        <InlineButtonSnakeLoading />
+                      </Show>
+                      <span class="hidden sm:inline">{i18n.t("codespaces.actions.open")}</span>
+                      <ChevronDown class="w-3 h-3 text-muted-foreground" />
+                    </Button>
+                  }
+                />
+              </Show>
             </div>
           }
         >
-          {/* Running: Open is primary action */}
-          <Button size="sm" variant="default" disabled={isBusy()} onClick={props.onOpen} class="flex-1">
-            <Show
-              when={props.busyAction === "open"}
-              fallback={
-                <svg class="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"
-                  />
-                </svg>
-              }
+          <div class="flex flex-1 min-w-0">
+            <Button
+              size="sm"
+              variant="default"
+              disabled={isBusy()}
+              onClick={() => props.onOpen(primaryOpenTarget())}
+              class={cn("flex-1 min-w-0", props.desktopOpenAvailable ? "rounded-r-none" : undefined)}
             >
-              <InlineButtonSnakeLoading class="mr-1" />
+              <Show
+                when={props.busyAction === "open"}
+                fallback={props.desktopOpenAvailable ? <Maximize class="w-3.5 h-3.5 mr-1" /> : <ExternalLink class="w-3.5 h-3.5 mr-1" />}
+              >
+                <InlineButtonSnakeLoading class="mr-1" />
+              </Show>
+              <span class="truncate">{props.busyAction === "open" && props.busyLabel ? props.busyLabel : primaryOpenLabel()}</span>
+            </Button>
+            <Show when={props.desktopOpenAvailable}>
+              <Dropdown
+                align="end"
+                disabled={isBusy()}
+                triggerAriaLabel={i18n.t("codespaces.actions.openInBrowser")}
+                items={openDropdownItems()}
+                onSelect={handleOpenMenuSelect}
+                trigger={
+                  <Button size="sm" variant="default" disabled={isBusy()} class="rounded-l-none border-l border-primary-foreground/20 px-2">
+                    <ChevronDown class="w-3.5 h-3.5" />
+                  </Button>
+                }
+              />
             </Show>
-            {props.busyAction === "open" && props.busyLabel ? props.busyLabel : i18n.t("codespaces.actions.open")}
-          </Button>
+          </div>
         </Show>
         <div class="flex items-center gap-1">
           <Show when={isRunning()}>
             <Tooltip content={i18n.t("codespaces.actions.stopTooltip")} placement="top">
               <Button size="sm" variant="outline" disabled={isBusy()} onClick={props.onStop} class={cn("px-2", redevenSurfaceRoleClass("control"))}>
-                <Show
-                  when={props.busyAction === "stop"}
-                  fallback={
-                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        d="M5.25 7.5A2.25 2.25 0 0 1 7.5 5.25h9a2.25 2.25 0 0 1 2.25 2.25v9a2.25 2.25 0 0 1-2.25 2.25h-9a2.25 2.25 0 0 1-2.25-2.25v-9Z"
-                      />
-                    </svg>
-                  }
-                >
+                <Show when={props.busyAction === "stop"} fallback={<Stop class="w-4 h-4" />}>
                   <InlineButtonSnakeLoading />
                 </Show>
               </Button>
@@ -481,13 +551,7 @@ function CodespaceCard(props: {
               onClick={props.onDelete}
               class="px-2 text-muted-foreground hover:text-destructive"
             >
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
-                />
-              </svg>
+              <Trash class="w-4 h-4" />
             </Button>
           </Tooltip>
         </div>
@@ -948,7 +1012,7 @@ export function EnvCodespacesPage() {
     }
   };
 
-  const ensureCodeRuntimeAvailable = async (kind: "open" | "start", space: SpaceStatus): Promise<boolean> => {
+  const ensureCodeRuntimeAvailable = async (kind: "open" | "start", space: SpaceStatus, openTarget?: CodespaceOpenTarget): Promise<boolean> => {
     const current = runtimeStatus();
     if (codeRuntimeReady(current)) return true;
     try {
@@ -962,6 +1026,7 @@ export function EnvCodespacesPage() {
       kind,
       code_space_id: space.code_space_id,
       name: space.name || space.code_space_id,
+      ...(kind === "open" && openTarget ? { open_target: openTarget } : {}),
     });
     void startWorkspacePrepareFlow(kind);
     return false;
@@ -1035,13 +1100,14 @@ export function EnvCodespacesPage() {
     }
   };
 
-  const handleOpen = async (space: SpaceStatus) => {
+  const handleOpen = async (space: SpaceStatus, openTarget: CodespaceOpenTarget) => {
     if (busyActionOf(space.code_space_id)) return;
-    if (!(await ensureCodeRuntimeAvailable("open", space))) return;
+    if (!(await ensureCodeRuntimeAvailable("open", space, openTarget))) return;
     setBusyAction(space.code_space_id, "open");
     try {
-      await openCodespace(space.code_space_id, () => {}, {
+      await openCodespace(space.code_space_id, openTarget, () => {}, {
         desktopOpenFailed: i18n.t("codespaces.errors.desktopOpenFailed"),
+        desktopWindowOpenFailed: i18n.t("codespaces.errors.desktopWindowOpenFailed"),
         invalidUrl: i18n.t("codespaces.errors.invalidUrl"),
         missingEnvContext: i18n.t("codespaces.errors.missingEnvContext"),
         opening: i18n.t("codespaces.status.opening"),
@@ -1073,7 +1139,7 @@ export function EnvCodespacesPage() {
       await handleStart(space);
       return;
     }
-    await handleOpen(space);
+    await handleOpen(space, intent.open_target ?? (desktopShellCodespaceWindowOpenAvailable() ? "desktop_window" : "system_browser"));
   };
 
   const openDeleteDialog = (space: SpaceStatus) => {
@@ -1289,7 +1355,8 @@ export function EnvCodespacesPage() {
                         space={space}
                         busyAction={busyActionOf(space.code_space_id)}
                         busyLabel={busyLabelOf(space.code_space_id)}
-                        onOpen={() => void handleOpen(space)}
+                        desktopOpenAvailable={desktopShellCodespaceWindowOpenAvailable()}
+                        onOpen={(target) => void handleOpen(space, target)}
                         onStart={() => void handleStart(space)}
                         onStop={() => void handleStop(space)}
                         onDelete={() => openDeleteDialog(space)}
