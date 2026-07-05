@@ -7,6 +7,7 @@ import {
   onCleanup,
 } from "solid-js";
 import { cn } from "@floegence/floe-webapp-core";
+import { Calendar, FileText, GitBranch, Hash, User } from "@floegence/floe-webapp-core/icons";
 import { Button } from "@floegence/floe-webapp-core/ui";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
 import {
@@ -43,9 +44,7 @@ import {
   GitLabelBlock,
   GitMetaPill,
   GitPanelFrame,
-  GitPrimaryTitle,
   GitShortcutOrbButton,
-  GitShortcutOrbDock,
   GitStatePane,
   GitSubtleNote,
   GitTableFrame,
@@ -221,22 +220,6 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const commitOverviewLayout = createMemo<GitBranchHeaderLayout>(() =>
     resolveGitBranchHeaderLayout(commitOverviewWidth()),
   );
-  const commitOverviewGridClass = () =>
-    cn(
-      "grid gap-3",
-      commitOverviewLayout() === "inline"
-        ? "grid-cols-[minmax(0,1fr)_auto] items-start"
-        : "grid-cols-1",
-    );
-  const commitOverviewActionsClass = () =>
-    cn(
-      "flex min-w-0 flex-wrap items-center gap-2",
-      commitOverviewLayout() === "inline"
-        ? "w-auto justify-end"
-        : "w-full justify-start",
-    );
-  const commitOverviewActionButtonClass = () =>
-    "rounded-md";
   const commitBodyGroupClass = () =>
     cn(
       "max-w-3xl space-y-1.5 pt-0.5",
@@ -394,90 +377,80 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                   const switchDetachedLabel = () => {
                     if (props.switchDetachedBusy) return "Switching...";
                     if (alreadyDetachedHere()) return "Already detached here";
-                    return "Switch --detach here";
+                    return "Detach here";
                   };
                   return (
                     <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
                       <div class="space-y-3">
-                        <GitPanelFrame as="section">
-                          <div class="space-y-2">
+                        <GitPanelFrame as="section" class="!px-4 !py-3">
+                          <div class="space-y-3">
                             <div
                               ref={setCommitOverviewElement}
-                              class={commitOverviewGridClass()}
                               data-git-commit-overview-layout={commitOverviewLayout()}
+                              class="space-y-3"
                             >
-                            <GitLabelBlock
-                              class="min-w-0 flex-1"
-                              bodyClass="!pl-0"
-                              label="Commit Overview"
-                              tone="brand"
-                              meta={
-                                <GitMetaPill tone="neutral">
-                                  {detail.shortHash}
-                                </GitMetaPill>
-                              }
-                            >
-                              <GitPrimaryTitle class="max-w-3xl">
+                              <div class="text-[15px] font-bold leading-6 tracking-tight text-foreground max-w-3xl break-words">
                                 {detail.subject || "(no subject)"}
-                              </GitPrimaryTitle>
-                              <div class="flex flex-wrap items-center gap-1 pt-0.5">
-                                <GitMetaPill tone="info">
-                                  {detail.authorName || "Unknown author"}
-                                </GitMetaPill>
-                                <GitMetaPill tone="neutral">
-                                  {formatDetailTime(detail.authorTimeMs)}
-                                </GitMetaPill>
-                                <GitMetaPill tone="neutral">
-                                  {commitFiles().length} file
-                                  {commitFiles().length === 1 ? "" : "s"}
-                                </GitMetaPill>
-                                <GitMetaPill tone="neutral">
-                                  {detail.parents.length > 0
-                                    ? `${detail.parents.length} parent${detail.parents.length === 1 ? "" : "s"}`
-                                    : "Root commit"}
-                                </GitMetaPill>
+                              </div>
+                              <div class="flex flex-wrap items-center text-[11px] leading-4 text-muted-foreground">
+                                <span class="inline-flex items-center gap-1 whitespace-nowrap">
+                                  <Hash class="h-3 w-3 shrink-0 text-muted-foreground/45" />
+                                  <span>{detail.shortHash}</span>
+                                </span>
+                                <span aria-hidden="true" class="mx-1.5 text-muted-foreground/25 select-none">—</span>
+                                <span class="inline-flex items-center gap-1 whitespace-nowrap">
+                                  <User class="h-3 w-3 shrink-0 text-muted-foreground/45" />
+                                  <span>{detail.authorName || "Unknown author"}</span>
+                                </span>
+                                <span aria-hidden="true" class="mx-1.5 text-muted-foreground/25 select-none">—</span>
+                                <span class="inline-flex items-center gap-1 whitespace-nowrap">
+                                  <Calendar class="h-3 w-3 shrink-0 text-muted-foreground/45" />
+                                  <span>{formatDetailTime(detail.authorTimeMs)}</span>
+                                </span>
+                                <span aria-hidden="true" class="mx-1.5 text-muted-foreground/25 select-none">—</span>
+                                <span class="inline-flex items-center gap-1 whitespace-nowrap">
+                                  <FileText class="h-3 w-3 shrink-0 text-muted-foreground/45" />
+                                  <span>
+                                    {commitFiles().length} file
+                                    {commitFiles().length === 1 ? "" : "s"}
+                                  </span>
+                                </span>
                                 <Show when={commitPresentationBadge()}>
-                                  <GitMetaPill tone="violet">
+                                  <span aria-hidden="true" class="mx-1.5 text-muted-foreground/25 select-none">—</span>
+                                  <span class="inline-flex items-center gap-1 whitespace-nowrap text-violet-700 dark:text-violet-300 font-medium">
                                     {commitPresentationBadge()}
-                                  </GitMetaPill>
+                                  </span>
                                 </Show>
                               </div>
-                            </GitLabelBlock>
-                            <div
-                              class={commitOverviewActionsClass()}
-                              data-git-commit-overview-actions={commitOverviewLayout()}
-                            >
-                              <Show when={props.onSwitchDetached}>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  class={cn(
-                                    commitOverviewActionButtonClass(),
-                                    outlineControlClass,
-                                  )}
-                                  disabled={
-                                    Boolean(props.switchDetachedBusy) ||
-                                    alreadyDetachedHere()
-                                  }
-                                  onClick={() =>
-                                    props.onSwitchDetached?.({
-                                      commitHash: detail.hash,
-                                      shortHash:
-                                        detail.shortHash ||
-                                        shortGitHash(detail.hash),
-                                      source: "graph",
-                                    })
-                                  }
-                                >
-                                  {switchDetachedLabel()}
-                                </Button>
-                              </Show>
-                              <Show when={props.onAskFlower}>
-                                <GitShortcutOrbDock class="justify-start">
+                              <div class="flex items-center gap-2 pt-1">
+                                <Show when={props.onSwitchDetached}>
+                                  <Button
+                                    size="xs"
+                                    variant="outline"
+                                    class={cn("rounded-md", outlineControlClass)}
+                                    disabled={
+                                      Boolean(props.switchDetachedBusy) ||
+                                      alreadyDetachedHere()
+                                    }
+                                    onClick={() =>
+                                      props.onSwitchDetached?.({
+                                        commitHash: detail.hash,
+                                        shortHash:
+                                          detail.shortHash ||
+                                          shortGitHash(detail.hash),
+                                        source: "graph",
+                                      })
+                                    }
+                                  >
+                                    {switchDetachedLabel()}
+                                  </Button>
+                                </Show>
+                                <Show when={props.onAskFlower}>
                                   <GitShortcutOrbButton
                                     label="Ask Flower"
                                     tone="flower"
                                     icon={FlowerIcon}
+                                    size="sm"
                                     onClick={() =>
                                       props.onAskFlower?.({
                                         kind: "commit",
@@ -490,8 +463,8 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                       })
                                     }
                                   />
-                                </GitShortcutOrbDock>
-                              </Show>
+                                </Show>
+                              </div>
                             </div>
                             </div>
                             <Show when={commitBodyText()}>
@@ -540,7 +513,6 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 </Show>
                               </div>
                             </Show>
-                          </div>
                           <Show
                             when={
                               props.onSwitchDetached && alreadyDetachedHere()
