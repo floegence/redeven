@@ -486,13 +486,13 @@ export function GitStashWindow(props: GitStashWindowProps) {
               fallback={(
                 <div class="@container flex h-full min-h-0 flex-col overflow-hidden @[640px]:flex-row">
                   {/* Left: stash list */}
-                  <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 h-full overflow-auto flex flex-col w-full @[640px]:shrink-0 @[640px]:border-r @[640px]:w-[var(--stash-left-panel-width)]" style={{ "--stash-left-panel-width": `${leftPanelWidth()}px` } as JSX.CSSProperties}>
+                  <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 overflow-auto w-full @[640px]:shrink-0 @[640px]:border-r @[640px]:w-[var(--stash-left-panel-width)]" style={{ "--stash-left-panel-width": `${leftPanelWidth()}px` } as JSX.CSSProperties}>
 
-                    <Show when={!props.stashesLoading} fallback={<GitStatePane loading message="Loading..." surface class="h-full" />}>
-                      <Show when={!props.stashesError} fallback={<GitStatePane tone="error" message={props.stashesError ?? 'Failed to load stashes.'} surface class="h-full" />}>
+                    <Show when={!props.stashesLoading} fallback={<GitStatePane loading message="Loading..." surface class="min-h-[12rem]" />}>
+                      <Show when={!props.stashesError} fallback={<GitStatePane tone="error" message={props.stashesError ?? 'Failed to load stashes.'} surface class="min-h-[12rem]" />}>
                         <Show
                           when={props.stashes.length > 0}
-                          fallback={<GitStatePane message="No stashes yet" detail="Save a snapshot from the Save Changes tab." surface class="h-full" />}
+                          fallback={<GitStatePane message="No stashes yet" detail="Save a snapshot from the Save Changes tab." surface class="min-h-[12rem]" />}
                         >
                           <div class="space-y-px p-1.5">
                             <For each={props.stashes}>
