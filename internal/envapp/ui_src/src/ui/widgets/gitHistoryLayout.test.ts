@@ -286,8 +286,6 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('<section class={branchStatusToolbarClass}>');
     expect(branchesSrc).toContain('data-git-branch-status-toolbar-layout={branchHeaderLayout()}');
     expect(branchesSrc).toContain('data-git-branch-status-summary-layout={branchHeaderLayout()}');
-    expect(branchesSrc).toContain('data-git-branch-status-list-layout="compact"');
-    expect(branchesSrc).toContain('data-git-branch-commit-files-list-layout="compact"');
     expect(branchesSrc).toContain('"grid-cols-[minmax(0,1fr)_auto] items-center"');
     expect(branchesSrc).toContain('"grid-cols-[auto_minmax(0,1fr)] items-center"');
     expect(branchesSrc).toContain('"flex min-w-0 flex-wrap items-center justify-start gap-1.5"');

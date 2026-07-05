@@ -946,7 +946,7 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
-  it("renders branch-status rows as a compact list at narrow measured widths", async () => {
+  it("renders branch-status rows as a table at narrow measured widths", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
 
@@ -1024,17 +1024,13 @@ describe("GitBranchesPanel interactions", () => {
       const header = await setBranchHeaderWidth(host, 420);
 
       expect(header.dataset.gitBranchHeaderLayout).toBe("compact");
-      expect(
-        host.querySelector('[data-git-branch-status-list-layout="compact"]'),
-      ).toBeTruthy();
-      expect(host.querySelectorAll("tbody tr")).toHaveLength(0);
+      expect(host.querySelectorAll("tbody tr").length).toBeGreaterThan(0);
       expect(host.textContent).toContain("internal");
       expect(host.textContent).toContain("Folder");
       expect(host.textContent).toContain("Unstaged");
       expect(host.textContent).toContain("Untracked");
       expect(host.textContent).toContain("8 files");
-      expect(host.textContent).toContain("Open");
-      expect(host.textContent).not.toContain("Open Folder");
+      expect(host.textContent).toContain("Open Folder");
     } finally {
       dispose();
     }
