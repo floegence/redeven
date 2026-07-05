@@ -214,11 +214,11 @@ function StashListItemCard(props: StashListItemCardProps) {
     <button
       type="button"
       class={cn(
-        'flex w-full cursor-pointer items-center gap-2.5 rounded-md px-3 py-2 text-left',
-        'transition-all duration-150',
+        'flex w-full cursor-pointer items-center gap-2.5 rounded-md px-3 py-2.5 text-left',
+        'transition-all duration-150 border-l-[3px]',
         props.active
-          ? 'bg-muted/[0.10]'
-          : 'hover:bg-muted/[0.06]',
+          ? 'border-l-violet-500/60 bg-violet-500/[0.06] shadow-sm'
+          : 'border-l-transparent hover:bg-muted/[0.06]',
       )}
       onClick={props.onClick}
     >
@@ -229,10 +229,16 @@ function StashListItemCard(props: StashListItemCardProps) {
         {stashDisplayIndex(props.stash.id, props.stashes)}
       </span>
       <div class="min-w-0 flex-1">
-        <div class="truncate text-xs font-medium text-foreground">
+        <div class={cn(
+          'truncate text-xs font-medium',
+          props.active ? 'text-foreground' : 'text-foreground',
+        )}>
           {props.stash.message || props.stash.ref || 'Unnamed stash'}
         </div>
-        <div class="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
+        <div class={cn(
+          'mt-0.5 flex items-center gap-1.5 text-[10px]',
+          props.active ? 'text-muted-foreground/90' : 'text-muted-foreground/70',
+        )}>
           <GitBranch class="h-3 w-3 shrink-0" aria-hidden="true" />
           <span class="truncate">{props.stash.branchName || 'unknown'}</span>
           <span aria-hidden="true">·</span>
@@ -241,7 +247,10 @@ function StashListItemCard(props: StashListItemCardProps) {
         </div>
       </div>
       <Show when={props.stash.hasUntracked}>
-        <AlertTriangle class="h-3.5 w-3.5 shrink-0 text-warning/60" aria-label="Includes untracked files" />
+        <AlertTriangle class={cn(
+          'h-3.5 w-3.5 shrink-0',
+          props.active ? 'text-warning' : 'text-warning/60',
+        )} aria-label="Includes untracked files" />
       </Show>
     </button>
   );
