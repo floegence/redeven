@@ -342,46 +342,52 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
           }
         >
           <Show
-            when={!detailLoading()}
+            when={!detailError()}
             fallback={
               <GitStatePane
-                loading
-                message="Loading commit details..."
-                class="px-4"
+                tone="error"
+                message={detailError()}
+                class="px-3 py-4"
               />
             }
           >
-            <Show
-              when={!detailError()}
-              fallback={
-                <GitStatePane
-                  tone="error"
-                  message={detailError()}
-                  class="px-3 py-4"
-                />
+            {(() => {
+              const detail = commitDetail();
+              if (!detail) {
+                return (
+                  <Show
+                    when={detailLoading()}
+                    fallback={
+                      <div class="flex-1 px-3 py-4 text-xs text-muted-foreground">
+                        Commit details are unavailable.
+                      </div>
+                    }
+                  >
+                    <GitStatePane
+                      loading
+                      message="Loading commit details..."
+                      class="px-4"
+                    />
+                  </Show>
+                );
               }
-            >
-              <Show
-                when={commitDetail()}
-                fallback={
-                  <div class="flex-1 px-3 py-4 text-xs text-muted-foreground">
-                    Commit details are unavailable.
-                  </div>
-                }
-              >
-                {(detailAccessor) => {
-                  const detail = detailAccessor();
-                  const alreadyDetachedHere = () =>
-                    headDisplay().detached &&
-                    currentHeadCommit() === detail.hash;
-                  const switchDetachedLabel = () => {
-                    if (props.switchDetachedBusy) return "Switching...";
-                    if (alreadyDetachedHere()) return "Already detached here";
-                    return "Detach here";
-                  };
-                  return (
-                    <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
-                      <div class="space-y-3">
+              const alreadyDetachedHere = () =>
+                headDisplay().detached &&
+                currentHeadCommit() === detail.hash;
+              const switchDetachedLabel = () => {
+                if (props.switchDetachedBusy) return "Switching...";
+                if (alreadyDetachedHere()) return "Already detached here";
+                return "Detach here";
+              };
+              return (
+                <div class="relative flex-1 min-h-0">
+                  <Show when={detailLoading()}>
+                    <div class="absolute inset-x-0 top-0 z-10 mx-3 sm:mx-4">
+                      <div class="h-0.5 w-full animate-pulse rounded-full bg-primary/40" />
+                    </div>
+                  </Show>
+                  <div {...GIT_WORKBENCH_SCROLL_REGION_PROPS} class="flex-1 min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
+                    <div class="space-y-3">
                         <GitPanelFrame as="section" class="!px-4 !py-3">
                           <div class="space-y-3">
                             <div
@@ -673,12 +679,11 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                         </GitPanelFrame>
                       </div>
                     </div>
+                    </div>
                   );
-                }}
+                })()}
               </Show>
             </Show>
-          </Show>
-        </Show>
       </Show>
 
       <GitDiffDialog
