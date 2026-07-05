@@ -363,6 +363,19 @@ export const GIT_CHANGED_FILES_CELL_CLASS = 'px-3 py-2.5 align-top';
 export const GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS = cn('sticky right-0 z-20 border-l px-3 py-1.5 text-right font-medium', redevenDividerRoleClass(), redevenSurfaceRoleClass('panel'));
 export const GIT_CHANGED_FILES_SECONDARY_PATH_CLASS = 'mt-px truncate text-[10px] leading-3.5 text-muted-foreground';
 export const GIT_CHANGED_FILES_ACTION_BUTTON_CLASS = 'inline-flex cursor-pointer items-center whitespace-nowrap text-[11px] font-medium text-primary underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:cursor-not-allowed disabled:opacity-45';
+export const GIT_CHANGED_FILES_CELL_MIDDLE_CLASS = 'px-3 py-2.5 align-middle';
+
+export function GitTableBadge(props: { tone?: GitChromeTone; children: JSX.Element; class?: string }) {
+  return (
+    <span class={cn(
+      gitToneBadgeClass(props.tone),
+      'inline-flex items-center whitespace-nowrap rounded-[3px] px-1.5 py-px text-[10px] font-semibold leading-none',
+      props.class,
+    )}>
+      {props.children}
+    </span>
+  );
+}
 
 export function gitChangedFilesRowClass(active: boolean): string {
   return active
