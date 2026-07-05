@@ -480,11 +480,11 @@ export function GitStashWindow(props: GitStashWindowProps) {
             </div>
           </div>
 
-          <div class="min-h-0 flex-1 overflow-hidden">
+          <div class="@container min-h-0 flex-1 overflow-hidden">
             <Show
               when={props.tab === 'save'}
               fallback={(
-                <div class="@container flex h-full min-h-0 flex-col overflow-hidden @[640px]:flex-row">
+                <div class="flex h-full min-h-0 flex-col overflow-hidden @[640px]:flex-row">
                   {/* Left: stash list */}
                   <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 overflow-auto w-full @[640px]:shrink-0 @[640px]:border-r @[640px]:w-[var(--stash-left-panel-width)]" style={{ "--stash-left-panel-width": `${leftPanelWidth()}px` } as JSX.CSSProperties}>
 
