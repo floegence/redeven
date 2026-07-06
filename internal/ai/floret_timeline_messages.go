@@ -251,7 +251,13 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 			return nil, err
 		}
 		if !ok {
-			return nil, fmt.Errorf("missing Floret projection for terminal turn %q", candidate.rawID)
+			raw, createdAt, ok, err = missingTerminalProjectionMessageJSON(candidate.turn, candidate.run)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				return nil, fmt.Errorf("missing Floret projection for terminal turn %q", candidate.rawID)
+			}
 		}
 		items = append(items, threadTimelineMessage{
 			RowID:       floretSyntheticRowIDBase + candidate.turn.ID,
@@ -385,7 +391,7 @@ func (s *Service) floretProjectionMessageJSON(ctx context.Context, host flruntim
 	if at > 0 {
 		createdAt = at
 	}
-	sanitized, err := SanitizeActivityTimelineMessageJSON(raw)
+	sanitized, err := SanitizeActivityTimelineMessageJSON(string(raw))
 	if err != nil {
 		return nil, 0, false, err
 	}
@@ -393,6 +399,77 @@ func (s *Service) floretProjectionMessageJSON(ctx context.Context, host flruntim
 		return nil, 0, false, nil
 	}
 	return sanitized, createdAt, true, nil
+}
+
+func missingTerminalProjectionMessageJSON(turn threadstore.ConversationTurn, runRecord *threadstore.RunRecord) (json.RawMessage, int64, bool, error) {
+	if runRecord == nil {
+		return nil, 0, false, nil
+	}
+	turnID := strings.TrimSpace(turn.TurnID)
+	if turnID == "" {
+		return nil, 0, false, nil
+	}
+	status := snapshotStatusForRunState(runRecord)
+	switch NormalizeRunState(runRecord.State) {
+	case RunStateFailed, RunStateCanceled, RunStateTimedOut:
+	default:
+		return nil, 0, false, nil
+	}
+	createdAt := turn.CreatedAtUnixMs
+	if createdAt <= 0 {
+		createdAt = runRecord.EndedAtUnixMs
+	}
+	if createdAt <= 0 {
+		createdAt = runRecord.StartedAtUnixMs
+	}
+	if createdAt <= 0 {
+		createdAt = time.Now().UnixMilli()
+	}
+	text := terminalProjectionDiagnosticText(runRecord)
+	raw, err := json.Marshal(persistedMessage{
+		ID:        turnID,
+		Role:      "assistant",
+		Status:    status,
+		Timestamp: createdAt,
+		Error:     text,
+		Blocks: []any{&persistedMarkdownBlock{
+			Type:    "markdown",
+			Content: text,
+		}},
+	})
+	if err != nil {
+		return nil, 0, false, err
+	}
+	sanitized, err := SanitizeActivityTimelineMessageJSON(string(raw))
+	if err != nil {
+		return nil, 0, false, err
+	}
+	if len(sanitized) == 0 {
+		return nil, 0, false, nil
+	}
+	return sanitized, createdAt, true, nil
+}
+
+func terminalProjectionDiagnosticText(runRecord *threadstore.RunRecord) string {
+	if runRecord == nil {
+		return "Flower could not finish this reply."
+	}
+	code := strings.TrimSpace(runRecord.ErrorCode)
+	fallback := strings.TrimSpace(runRecord.ErrorMessage)
+	if code != "" || fallback != "" {
+		message := userFacingRunError(code, fallback)
+		if strings.TrimSpace(message) != "" {
+			return strings.TrimSpace(message)
+		}
+	}
+	switch NormalizeRunState(runRecord.State) {
+	case RunStateCanceled:
+		return "Flower stopped before this reply finished."
+	case RunStateTimedOut:
+		return "Flower timed out before this reply finished."
+	default:
+		return "Flower could not finish this reply."
+	}
 }
 
 func snapshotStatusForRunState(run *threadstore.RunRecord) string {
