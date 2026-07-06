@@ -50,7 +50,10 @@ to `/_redevplugin/api/plugins*`, tagged with the internal Env-trusted plugin
 route role, and delegated to the mounted ReDevPlugin handler. Env-trusted
 delegation binds the current Redeven channel id or the fixed Local UI session
 to a host-derived ReDevPlugin session and overwrites the owner-session hash and
-CSRF headers before the released guard validates the request.
+CSRF headers before the released guard validates the request. Code App wires a
+plugin-platform session resolver that keeps remote control-plane channels
+authoritative and, only when Local UI is enabled, resolves `local-ui` to the
+synthetic Env App session used by Local UI routes.
 
 Plugin sandbox requests under `/_redeven_plugin*` are accepted only for the
 plugin sandbox host role whose first label is `plg-*`. AppServer rewrites those
@@ -136,11 +139,13 @@ closed-world container resources capability contract.
 [9] redeven:internal/codeapp/appserver/server.go:626 - AppServer rewrites Redeven plugin routes to ReDevPlugin handler paths.
 [10] redeven:internal/codeapp/appserver/server_test.go:733 - Tests bind Env App management delegation to the mounted plugin platform handler.
 [11] redeven:internal/codeapp/appserver/server_test.go:833 - Tests bind plugin-origin sandbox namespace delegation to the mounted plugin platform handler.
-[12] redeven:internal/redevpluginintegration/integration.go:52 - The integration package configures the released ReDevPlugin Host.
-[13] redeven:internal/redevpluginintegration/adapters.go:381 - The Containers capability adapter dispatches ReDevPlugin calls into Redeven business logic.
-[14] redeven:internal/redevpluginintegration/adapters.go:1 - The adapter package owns session, policy, trust, runtime, capability, and operation-cancel integration glue.
-[15] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1 - Env App plugin management calls use the Redeven proxy plugin namespace.
-[16] redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1 - Redeven embeds the bundled official Containers package.
-[17] redeven:internal/envapp/ui_src/package.json:25 - Env App consumes the published ReDevPlugin UI package for PluginSurfaceHost.
-[18] redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.tsx:1 - Env App wraps PluginSurfaceHost with product placement and Redeven route adaptation.
-[19] redeven:okf/architecture/container-resources-capability.md:9 - The container resources contract is a Redeven-owned business capability surface.
+[12] redeven:internal/codeapp/codeapp.go:1 - Code App wires the plugin-platform session resolver used by the ReDevPlugin integration.
+[13] redeven:internal/codeapp/plugin_local_session_test.go:1 - Tests bind the Local UI `local-ui` resolver fallback for plugin management.
+[14] redeven:internal/redevpluginintegration/integration.go:52 - The integration package configures the released ReDevPlugin Host.
+[15] redeven:internal/redevpluginintegration/adapters.go:381 - The Containers capability adapter dispatches ReDevPlugin calls into Redeven business logic.
+[16] redeven:internal/redevpluginintegration/adapters.go:1 - The adapter package owns session, policy, trust, runtime, capability, and operation-cancel integration glue.
+[17] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1 - Env App plugin management calls use the Redeven proxy plugin namespace.
+[18] redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1 - Redeven embeds the bundled official Containers package.
+[19] redeven:internal/envapp/ui_src/package.json:25 - Env App consumes the published ReDevPlugin UI package for PluginSurfaceHost.
+[20] redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.tsx:1 - Env App wraps PluginSurfaceHost with product placement and Redeven route adaptation.
+[21] redeven:okf/architecture/container-resources-capability.md:9 - The container resources contract is a Redeven-owned business capability surface.

@@ -1989,6 +1989,8 @@ func (g *Server) requireLocalAppPermission(w http.ResponseWriter, r *http.Reques
 }
 
 const (
+	// LocalUIChannelID is the synthetic session channel used by Local UI Env App requests.
+	LocalUIChannelID        = "local-ui"
 	localEnvPublicID        = "env_local"
 	localNamespacePublicID  = "ns_local"
 	localUserPublicID       = "user_local"
@@ -1998,7 +2000,26 @@ const (
 	localFloeAppPortForward = "com.floegence.redeven.portforward"
 )
 
+// LocalEnvSessionMeta returns the synthetic Env App session used by Local UI routes.
+func LocalEnvSessionMeta(configPath string) *session.Meta {
+	cap := config.ResolvePermissionCapFromConfigPath(strings.TrimSpace(configPath), localUserPublicID, localFloeAppAgent, config.PermissionSet{Read: true, Write: false, Execute: true})
+	return localSessionMetaForRoute(localUIRoute{kind: localUIRouteEnv}, cap)
+}
+
 func (g *Server) localSessionMeta(route localUIRoute) *session.Meta {
+	floeApp := localFloeAppAgent
+	switch route.kind {
+	case localUIRouteCodeSpace:
+		floeApp = localFloeAppCode
+	case localUIRoutePortForward:
+		floeApp = localFloeAppPortForward
+	}
+
+	cap := g.localPermissionCapForApp(floeApp)
+	return localSessionMetaForRoute(route, cap)
+}
+
+func localSessionMetaForRoute(route localUIRoute, cap config.PermissionSet) *session.Meta {
 	floeApp := localFloeAppAgent
 	codeSpaceID := "env-ui"
 	sessionKind := "envapp_rpc"
@@ -2013,10 +2034,8 @@ func (g *Server) localSessionMeta(route localUIRoute) *session.Meta {
 		sessionKind = "portforward"
 	}
 
-	cap := g.localPermissionCapForApp(floeApp)
-
 	return &session.Meta{
-		ChannelID:         "local-ui",
+		ChannelID:         LocalUIChannelID,
 		EndpointID:        localEnvPublicID,
 		FloeApp:           floeApp,
 		CodeSpaceID:       codeSpaceID,

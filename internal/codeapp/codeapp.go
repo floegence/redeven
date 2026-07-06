@@ -296,7 +296,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		StateDir:           stateAbs,
 		StateRoot:          stateRootAbs,
 		ConfigPath:         strings.TrimSpace(opts.ConfigPath),
-		ResolveSessionMeta: opts.ResolveSessionMeta,
+		ResolveSessionMeta: resolvePluginPlatformSessionMeta(opts),
 		Audit:              opts.Audit,
 		Diagnostics:        opts.Diagnostics,
 		Containers:         containers.NewAdapter(containers.NewCLIClient()),
@@ -409,6 +409,22 @@ func (s *Service) Close() error {
 		_ = s.codex.Close()
 	}
 	return nil
+}
+
+func resolvePluginPlatformSessionMeta(opts Options) func(channelID string) (*session.Meta, bool) {
+	base := opts.ResolveSessionMeta
+	return func(channelID string) (*session.Meta, bool) {
+		channelID = strings.TrimSpace(channelID)
+		if base != nil {
+			if meta, ok := base(channelID); ok && meta != nil {
+				return meta, true
+			}
+		}
+		if opts.LocalUIEnabled && channelID == appserver.LocalUIChannelID {
+			return appserver.LocalEnvSessionMeta(strings.TrimSpace(opts.ConfigPath)), true
+		}
+		return nil, false
+	}
 }
 
 func (s *Service) AppServerURL() string {
