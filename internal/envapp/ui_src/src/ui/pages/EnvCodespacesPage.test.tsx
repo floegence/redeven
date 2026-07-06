@@ -85,7 +85,15 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
-    <button type="button" class={props.class} onClick={props.onClick} disabled={props.disabled} aria-label={props['aria-label']} title={props.title}>
+    <button
+      type="button"
+      class={props.class}
+      onClick={props.onClick}
+      disabled={props.disabled}
+      aria-label={props['aria-label']}
+      aria-busy={props['aria-busy']}
+      title={props.title}
+    >
       {props.children}
     </button>
   ),
@@ -727,6 +735,69 @@ describe('EnvCodespacesPage', () => {
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
   });
 
+  it('shows a shimmer busy state while starting a stopped codespace', async () => {
+    let resolveStart!: (value: any) => void;
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string) => {
+      if (url === '/_redeven_proxy/api/code-runtime/status') {
+        return Promise.resolve(runtimeStatusResponse);
+      }
+      if (url === '/_redeven_proxy/api/spaces') {
+        return Promise.resolve({
+          spaces: [
+            {
+              code_space_id: 'space-1',
+              name: 'Demo Space',
+              description: 'Workspace demo',
+              workspace_path: '/workspace/demo',
+              code_port: 13337,
+              created_at_unix_ms: 1,
+              updated_at_unix_ms: 1,
+              last_opened_at_unix_ms: 1,
+              running: false,
+              pid: 0,
+            },
+          ],
+        });
+      }
+      if (url === '/_redeven_proxy/api/spaces/space-1/start') {
+        return new Promise((resolve) => {
+          resolveStart = resolve;
+        });
+      }
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const startButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Start') as HTMLButtonElement | undefined;
+    expect(startButton).toBeTruthy();
+
+    startButton?.click();
+    await flushPage();
+
+    const busyStartButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Starting...')) as HTMLButtonElement | undefined;
+    expect(busyStartButton).toBeTruthy();
+    expect(busyStartButton?.getAttribute('aria-busy')).toBe('true');
+    expect(busyStartButton?.querySelector('.redeven-loading-shimmer-overlay')).toBeTruthy();
+
+    resolveStart({
+      code_space_id: 'space-1',
+      name: 'Demo Space',
+      description: 'Workspace demo',
+      workspace_path: '/workspace/demo',
+      code_port: 13337,
+      created_at_unix_ms: 1,
+      updated_at_unix_ms: 1,
+      last_opened_at_unix_ms: 1,
+      running: true,
+      pid: 4242,
+    });
+    await flushPage();
+
+    expect(host.querySelector('.redeven-loading-shimmer-overlay')).toBeNull();
+  });
+
   it('opens a local-runtime codespace in a desktop window from the primary action', async () => {
     controlplaneMocks.getLocalRuntime.mockResolvedValue({
       mode: 'local',
@@ -754,11 +825,17 @@ describe('EnvCodespacesPage', () => {
 
     expect(windowOpenSpy).not.toHaveBeenCalled();
     expect(openExternalURLBridge).not.toHaveBeenCalled();
-    expect(openCodespaceWindowBridge).toHaveBeenCalledTimes(1);
+    expect(openCodespaceWindowBridge).toHaveBeenCalledTimes(2);
     expect(openCodespaceWindowBridge.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+      mode: 'loading',
+      code_space_id: 'space-1',
+      title: 'Opening Codespace',
+    }));
+    expect(openCodespaceWindowBridge.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+      mode: 'navigate',
       code_space_id: 'space-1',
     }));
-    expect(String(openCodespaceWindowBridge.mock.calls[0]?.[0]?.url ?? '')).toContain('/cs/space-1/?folder=%2Fworkspace%2Fdemo');
+    expect(String(openCodespaceWindowBridge.mock.calls[1]?.[0]?.url ?? '')).toContain('/cs/space-1/?folder=%2Fworkspace%2Fdemo');
     expect(controlplaneMocks.mintEnvEntryTicketForApp).not.toHaveBeenCalled();
 
     windowOpenSpy.mockRestore();
@@ -861,6 +938,91 @@ describe('EnvCodespacesPage', () => {
     expect(openExternalURLBridge.mock.calls[0]?.[0]).toContain('/cs/space-1/?folder=%2Fworkspace%2Fdemo');
   });
 
+  it('opens a loading desktop window before auto-starting a stopped codespace', async () => {
+    controlplaneMocks.getLocalRuntime.mockResolvedValue({
+      mode: 'local',
+      env_public_id: 'env_local',
+    });
+    let resolveStart!: (value: any) => void;
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string) => {
+      if (url === '/_redeven_proxy/api/code-runtime/status') {
+        return Promise.resolve(runtimeStatusResponse);
+      }
+      if (url === '/_redeven_proxy/api/spaces') {
+        return Promise.resolve({
+          spaces: [
+            {
+              code_space_id: 'space-1',
+              name: 'Demo Space',
+              description: 'Workspace demo',
+              workspace_path: '/workspace/demo',
+              code_port: 13337,
+              created_at_unix_ms: 1,
+              updated_at_unix_ms: 1,
+              last_opened_at_unix_ms: 1,
+              running: false,
+              pid: 0,
+            },
+          ],
+        });
+      }
+      if (url === '/_redeven_proxy/api/spaces/space-1/start') {
+        return new Promise((resolve) => {
+          resolveStart = resolve;
+        });
+      }
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    const openCodespaceWindowBridge = vi.fn().mockResolvedValue({ ok: true });
+    const openExternalURLBridge = vi.fn().mockResolvedValue({ ok: true });
+    window.redevenDesktopShell = {
+      openCodespaceWindow: openCodespaceWindowBridge,
+      openExternalURL: openExternalURLBridge,
+    };
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const desktopButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Open in Desktop');
+    expect(desktopButton).toBeTruthy();
+
+    desktopButton?.click();
+    await flushPage();
+
+    expect(openExternalURLBridge).not.toHaveBeenCalled();
+    expect(openCodespaceWindowBridge).toHaveBeenCalledTimes(1);
+    expect(openCodespaceWindowBridge.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+      mode: 'loading',
+      code_space_id: 'space-1',
+      title: 'Opening Codespace',
+    }));
+    const busyOpenButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Opening...')) as HTMLButtonElement | undefined;
+    expect(busyOpenButton).toBeTruthy();
+    expect(busyOpenButton?.getAttribute('aria-busy')).toBe('true');
+    expect(busyOpenButton?.querySelector('.redeven-loading-shimmer-overlay')).toBeTruthy();
+
+    resolveStart({
+      code_space_id: 'space-1',
+      name: 'Demo Space',
+      description: 'Workspace demo',
+      workspace_path: '/workspace/demo',
+      code_port: 13337,
+      created_at_unix_ms: 1,
+      updated_at_unix_ms: 1,
+      last_opened_at_unix_ms: 1,
+      running: true,
+      pid: 4242,
+    });
+    await flushPage();
+
+    expect(openCodespaceWindowBridge).toHaveBeenCalledTimes(2);
+    expect(openCodespaceWindowBridge.mock.calls[1]?.[0]).toEqual(expect.objectContaining({
+      mode: 'navigate',
+      code_space_id: 'space-1',
+    }));
+    expect(String(openCodespaceWindowBridge.mock.calls[1]?.[0]?.url ?? '')).toContain('/cs/space-1/?folder=%2Fworkspace%2Fdemo');
+  });
+
   it('opens a trusted-launcher codespace in a desktop window from the primary action', async () => {
     const openCodespaceWindowBridge = vi.fn().mockResolvedValue({ ok: true });
     const openExternalURLBridge = vi.fn().mockResolvedValue({ ok: true });
@@ -889,9 +1051,15 @@ describe('EnvCodespacesPage', () => {
       codeSpaceId: 'space-1',
     });
     expect(openExternalURLBridge).not.toHaveBeenCalled();
-    expect(openCodespaceWindowBridge).toHaveBeenCalledTimes(1);
-    const targetURL = String(openCodespaceWindowBridge.mock.calls[0]?.[0]?.url ?? '');
-    expect(openCodespaceWindowBridge.mock.calls[0]?.[0]?.code_space_id).toBe('space-1');
+    expect(openCodespaceWindowBridge).toHaveBeenCalledTimes(2);
+    expect(openCodespaceWindowBridge.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+      mode: 'loading',
+      code_space_id: 'space-1',
+      title: 'Opening Codespace',
+    }));
+    const targetURL = String(openCodespaceWindowBridge.mock.calls[1]?.[0]?.url ?? '');
+    expect(openCodespaceWindowBridge.mock.calls[1]?.[0]?.mode).toBe('navigate');
+    expect(openCodespaceWindowBridge.mock.calls[1]?.[0]?.code_space_id).toBe('space-1');
     expect(targetURL).toContain('https://codespace.test/_redeven_boot/?env=env_local#redeven=');
 
     windowOpenSpy.mockRestore();

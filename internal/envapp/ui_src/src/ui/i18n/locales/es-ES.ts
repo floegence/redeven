@@ -1161,7 +1161,9 @@ export const esES = {
       cancel: "Cancelar",
       delete: "Eliminar",
       start: "Iniciar",
+      starting: "Iniciando...",
       open: "Abrir",
+      opening: "Abriendo...",
       openInDesktop: "Abrir en Desktop",
       openInBrowser: "Abrir en navegador",
       openWillAutoStart: "Abrir (se iniciará automáticamente)",
@@ -1169,6 +1171,12 @@ export const esES = {
       deleteTooltip: "Eliminar codespace",
       askFlower: "Ask Flower",
       openInTerminal: "Abrir en Terminal",
+    },
+    desktopWindow: {
+      loadingTitle: "Abriendo Codespace",
+      loadingDetail: "Redeven está preparando esta ventana de codespace. El editor aparecerá aquí cuando esté listo.",
+      failedTitle: "No se pudo abrir Codespace",
+      failedDetail: "Vuelve a Redeven e inténtalo de nuevo. {message}",
     },
     fields: {
       id: "ID",

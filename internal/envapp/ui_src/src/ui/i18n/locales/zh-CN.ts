@@ -1463,7 +1463,9 @@ export const zhCN = {
       cancel: "取消",
       delete: "删除",
       start: "启动",
+      starting: "正在启动...",
       open: "打开",
+      opening: "正在打开...",
       openInDesktop: "在 Desktop 中打开",
       openInBrowser: "在浏览器中打开",
       openWillAutoStart: "打开（会自动启动）",
@@ -1471,6 +1473,12 @@ export const zhCN = {
       deleteTooltip: "删除 codespace",
       askFlower: "Ask Flower",
       openInTerminal: "在终端中打开",
+    },
+    desktopWindow: {
+      loadingTitle: "正在打开 Codespace",
+      loadingDetail: "Redeven 正在准备这个 codespace 窗口。编辑器准备好后会显示在这里。",
+      failedTitle: "无法打开 Codespace",
+      failedDetail: "请返回 Redeven 后重试。{message}",
     },
     fields: {
       id: "ID",

@@ -183,6 +183,52 @@ function closeCodespaceOpenStrategyOnError(strategy: CodespaceOpenStrategy): voi
   }
 }
 
+function messageFromUnknown(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+type DesktopCodespaceLoadingWindowCopy = Readonly<{
+  loadingTitle: string;
+  loadingDetail: string;
+  failedTitle: string;
+  failedDetail: (message: string) => string;
+  desktopWindowOpenFailed: string;
+}>;
+
+async function openDesktopCodespaceLoadingWindow(
+  codeSpaceID: string,
+  copy: DesktopCodespaceLoadingWindowCopy,
+): Promise<void> {
+  const out = await openCodespaceWindowInDesktopShell({
+    mode: "loading",
+    code_space_id: codeSpaceID,
+    title: copy.loadingTitle,
+    detail: copy.loadingDetail,
+  });
+  if (!out?.ok) {
+    throw new Error(out?.message || copy.desktopWindowOpenFailed);
+  }
+}
+
+async function showDesktopCodespaceOpenFailure(
+  codeSpaceID: string,
+  copy: DesktopCodespaceLoadingWindowCopy,
+  error: unknown,
+): Promise<void> {
+  const message = messageFromUnknown(error);
+  try {
+    await openCodespaceWindowInDesktopShell({
+      mode: "loading",
+      state: "error",
+      code_space_id: codeSpaceID,
+      title: copy.failedTitle,
+      detail: copy.failedDetail(message),
+    });
+  } catch {
+    // The Env App notification remains the source of truth if the shell window is gone.
+  }
+}
+
 async function commitCodespaceOpenStrategy(args: Readonly<{
   strategy: CodespaceOpenStrategy;
   url: string;
@@ -192,7 +238,7 @@ async function commitCodespaceOpenStrategy(args: Readonly<{
   desktopWindowOpenFailedMessage: string;
 }>): Promise<void> {
   if (args.strategy.kind === "desktop_codespace_window") {
-    const out = await openCodespaceWindowInDesktopShell({ url: args.url, code_space_id: args.codeSpaceID });
+    const out = await openCodespaceWindowInDesktopShell({ mode: "navigate", url: args.url, code_space_id: args.codeSpaceID });
     if (!out?.ok) {
       throw new Error(out?.message || args.desktopWindowOpenFailedMessage);
     }
@@ -253,6 +299,7 @@ function buildTrustedLauncherCodespaceTarget(args: Readonly<{
 
 type OpenCodespaceCopy = Readonly<{
   desktopOpenFailed: string;
+  desktopWindowLoading: DesktopCodespaceLoadingWindowCopy;
   desktopWindowOpenFailed: string;
   invalidUrl: string;
   missingEnvContext: string;
@@ -262,13 +309,25 @@ type OpenCodespaceCopy = Readonly<{
   starting: string;
 }>;
 
-async function openCodespace(codeSpaceID: string, openTarget: CodespaceOpenTarget, setStatus: (s: string) => void, copy: OpenCodespaceCopy): Promise<void> {
+async function openCodespace(
+  codeSpaceID: string,
+  openTarget: CodespaceOpenTarget,
+  setStatus: (s: string) => void,
+  copy: OpenCodespaceCopy,
+  options: Readonly<{ desktopLoadingWindowOpened?: boolean }> = {},
+): Promise<void> {
   const envPublicID = getEnvPublicIDFromSession();
   if (!envPublicID) throw new Error(copy.missingEnvContext);
 
   const strategy = resolveCodespaceOpenStrategy(openTarget, codeSpaceID, copy.desktopWindowOpenFailed, copy.popupBlocked);
+  let desktopLoadingWindowOpened = options.desktopLoadingWindowOpened === true;
 
   try {
+    if (strategy.kind === "desktop_codespace_window" && !desktopLoadingWindowOpened) {
+      await openDesktopCodespaceLoadingWindow(codeSpaceID, copy.desktopWindowLoading);
+      desktopLoadingWindowOpened = true;
+    }
+
     const local = await getLocalRuntime();
     setStatus(copy.starting);
     const sp = await fetchLocalApiJSON<SpaceStatus>(`/_redeven_proxy/api/spaces/${encodeURIComponent(codeSpaceID)}/start`, { method: "POST" });
@@ -307,6 +366,9 @@ async function openCodespace(codeSpaceID: string, openTarget: CodespaceOpenTarge
     });
   } catch (e) {
     closeCodespaceOpenStrategyOnError(strategy);
+    if (strategy.kind === "desktop_codespace_window" && desktopLoadingWindowOpened) {
+      await showDesktopCodespaceOpenFailure(codeSpaceID, copy.desktopWindowLoading, e);
+    }
     throw e;
   }
 }
@@ -340,6 +402,14 @@ function InlineButtonSnakeLoading(props: { class?: string }) {
         <SnakeLoader size="sm" />
       </span>
     </span>
+  );
+}
+
+function CodespaceActionButtonShimmer(props: { active: boolean }) {
+  return (
+    <Show when={props.active}>
+      <span class="redeven-loading-shimmer-overlay" aria-hidden="true" />
+    </Show>
   );
 }
 
@@ -387,6 +457,12 @@ function CodespaceCard(props: {
   const i18n = useI18n();
   const primaryOpenTarget = (): CodespaceOpenTarget => props.desktopOpenAvailable ? "desktop_window" : "system_browser";
   const primaryOpenLabel = () => props.desktopOpenAvailable ? i18n.t("codespaces.actions.openInDesktop") : i18n.t("codespaces.actions.open");
+  const busyActionLabel = () => {
+    if (props.busyLabel) return props.busyLabel;
+    if (props.busyAction === "start") return i18n.t("codespaces.actions.starting");
+    if (props.busyAction === "open") return i18n.t("codespaces.actions.opening");
+    return undefined;
+  };
   const openDropdownItems = (): DropdownItem[] => (
     isRunning()
       ? [
@@ -460,20 +536,34 @@ function CodespaceCard(props: {
           when={isRunning()}
           fallback={
             <div class="flex items-center gap-2 flex-1">
-              <Button size="sm" variant="default" disabled={isBusy()} onClick={props.onStart} class="flex-1">
+              <Button
+                size="sm"
+                variant="default"
+                disabled={isBusy()}
+                onClick={props.onStart}
+                class="relative flex-1 overflow-hidden"
+                aria-busy={props.busyAction === "start" ? "true" : undefined}
+              >
                 <Show
                   when={props.busyAction === "start"}
                   fallback={<Play class="w-3.5 h-3.5 mr-1" />}
                 >
                   <InlineButtonSnakeLoading class="mr-1" />
                 </Show>
-                {props.busyAction === "start" && props.busyLabel ? props.busyLabel : i18n.t("codespaces.actions.start")}
+                {props.busyAction === "start" ? busyActionLabel() : i18n.t("codespaces.actions.start")}
+                <CodespaceActionButtonShimmer active={props.busyAction === "start"} />
               </Button>
               <Show
                 when={props.desktopOpenAvailable}
                 fallback={
                   <Tooltip content={i18n.t("codespaces.actions.openWillAutoStart")} placement="top">
-                    <Button size="sm" variant="ghost" disabled={isBusy()} onClick={() => props.onOpen("system_browser")} class="px-2 text-muted-foreground">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={isBusy()}
+                      onClick={() => props.onOpen("system_browser")}
+                      class="px-2 text-muted-foreground"
+                    >
                       <Show when={props.busyAction === "open"} fallback={<ExternalLink class="w-4 h-4" />}>
                         <InlineButtonSnakeLoading />
                       </Show>
@@ -488,12 +578,19 @@ function CodespaceCard(props: {
                   items={openDropdownItems()}
                   onSelect={handleOpenMenuSelect}
                   trigger={
-                    <Button size="sm" variant="outline" disabled={isBusy()} class={cn("gap-1 px-2", redevenSurfaceRoleClass("control"))}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isBusy()}
+                      class={cn("relative gap-1 overflow-hidden px-2", redevenSurfaceRoleClass("control"))}
+                      aria-busy={props.busyAction === "open" ? "true" : undefined}
+                    >
                       <Show when={props.busyAction === "open"} fallback={<ExternalLink class="w-3.5 h-3.5" />}>
                         <InlineButtonSnakeLoading />
                       </Show>
-                      <span class="hidden sm:inline">{i18n.t("codespaces.actions.open")}</span>
+                      <span class="hidden sm:inline">{props.busyAction === "open" ? busyActionLabel() : i18n.t("codespaces.actions.open")}</span>
                       <ChevronDown class="w-3 h-3 text-muted-foreground" />
+                      <CodespaceActionButtonShimmer active={props.busyAction === "open"} />
                     </Button>
                   }
                 />
@@ -507,7 +604,8 @@ function CodespaceCard(props: {
               variant="default"
               disabled={isBusy()}
               onClick={() => props.onOpen(primaryOpenTarget())}
-              class={cn("flex-1 min-w-0", props.desktopOpenAvailable ? "rounded-r-none" : undefined)}
+              class={cn("relative flex-1 min-w-0 overflow-hidden", props.desktopOpenAvailable ? "rounded-r-none" : undefined)}
+              aria-busy={props.busyAction === "open" ? "true" : undefined}
             >
               <Show
                 when={props.busyAction === "open"}
@@ -515,7 +613,8 @@ function CodespaceCard(props: {
               >
                 <InlineButtonSnakeLoading class="mr-1" />
               </Show>
-              <span class="truncate">{props.busyAction === "open" && props.busyLabel ? props.busyLabel : primaryOpenLabel()}</span>
+              <span class="truncate">{props.busyAction === "open" ? busyActionLabel() : primaryOpenLabel()}</span>
+              <CodespaceActionButtonShimmer active={props.busyAction === "open"} />
             </Button>
             <Show when={props.desktopOpenAvailable}>
               <Dropdown
@@ -1003,8 +1102,18 @@ export function EnvCodespacesPage() {
       await continuePendingIntent();
     } catch (e) {
       const failure = browserEditorLocalFailureFromError(e);
+      const intent = pendingIntent();
       setRuntimePrepareLocalFailure(failure);
       notification.error(i18n.t("codespaces.notifications.browserEditorSetupFailedTitle"), failure.message);
+      if (intent?.kind === "open" && intent.open_target === "desktop_window") {
+        await showDesktopCodespaceOpenFailure(intent.code_space_id, {
+          loadingTitle: i18n.t("codespaces.desktopWindow.loadingTitle"),
+          loadingDetail: i18n.t("codespaces.desktopWindow.loadingDetail"),
+          failedTitle: i18n.t("codespaces.desktopWindow.failedTitle"),
+          failedDetail: (message) => i18n.t("codespaces.desktopWindow.failedDetail", { message }),
+          desktopWindowOpenFailed: i18n.t("codespaces.errors.desktopWindowOpenFailed"),
+        }, failure);
+      }
       await refetchRuntimeStatus();
     } finally {
       setRuntimePrepareSubmitting(false);
@@ -1046,8 +1155,11 @@ export function EnvCodespacesPage() {
 
   const handleStart = async (space: SpaceStatus) => {
     if (busyActionOf(space.code_space_id)) return;
-    if (!(await ensureCodeRuntimeAvailable("start", space))) return;
     setBusyAction(space.code_space_id, "start");
+    if (!(await ensureCodeRuntimeAvailable("start", space))) {
+      clearBusyAction(space.code_space_id);
+      return;
+    }
     try {
       await fetchLocalApiJSON<SpaceStatus>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/start`, { method: "POST" });
       await refetch();
@@ -1102,11 +1214,24 @@ export function EnvCodespacesPage() {
 
   const handleOpen = async (space: SpaceStatus, openTarget: CodespaceOpenTarget) => {
     if (busyActionOf(space.code_space_id)) return;
-    if (!(await ensureCodeRuntimeAvailable("open", space, openTarget))) return;
     setBusyAction(space.code_space_id, "open");
+    const desktopWindowLoading = {
+      loadingTitle: i18n.t("codespaces.desktopWindow.loadingTitle"),
+      loadingDetail: i18n.t("codespaces.desktopWindow.loadingDetail"),
+      failedTitle: i18n.t("codespaces.desktopWindow.failedTitle"),
+      failedDetail: (message: string) => i18n.t("codespaces.desktopWindow.failedDetail", { message }),
+      desktopWindowOpenFailed: i18n.t("codespaces.errors.desktopWindowOpenFailed"),
+    };
+    let desktopLoadingWindowOpened = false;
     try {
+      if (openTarget === "desktop_window") {
+        await openDesktopCodespaceLoadingWindow(space.code_space_id, desktopWindowLoading);
+        desktopLoadingWindowOpened = true;
+      }
+      if (!(await ensureCodeRuntimeAvailable("open", space, openTarget))) return;
       await openCodespace(space.code_space_id, openTarget, () => {}, {
         desktopOpenFailed: i18n.t("codespaces.errors.desktopOpenFailed"),
+        desktopWindowLoading,
         desktopWindowOpenFailed: i18n.t("codespaces.errors.desktopWindowOpenFailed"),
         invalidUrl: i18n.t("codespaces.errors.invalidUrl"),
         missingEnvContext: i18n.t("codespaces.errors.missingEnvContext"),
@@ -1114,7 +1239,7 @@ export function EnvCodespacesPage() {
         popupBlocked: i18n.t("codespaces.errors.popupBlocked"),
         requestingEntryTicket: i18n.t("codespaces.status.requestingEntryTicket"),
         starting: i18n.t("codespaces.status.starting"),
-      });
+      }, { desktopLoadingWindowOpened });
       await refetch();
     } catch (e) {
       notification.error(i18n.t("codespaces.notifications.failedToOpenTitle"), e instanceof Error ? e.message : String(e));

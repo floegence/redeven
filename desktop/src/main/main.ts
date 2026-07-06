@@ -6884,7 +6884,159 @@ function openSessionChildWindow(
   return childWindow.browserWindow;
 }
 
-function openSessionCodespaceWindow(
+type CodespaceLoadingWindowCopy = Readonly<{
+  state?: 'loading' | 'error';
+  title?: string;
+  detail?: string;
+}>;
+
+function htmlEscape(value: string): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildCodespaceLoadingDocumentURL(codeSpaceID: string, copy: CodespaceLoadingWindowCopy = {}): string {
+  const state = copy.state === 'error' ? 'error' : 'loading';
+  const title = htmlEscape(compact(copy.title) || 'Opening Codespace');
+  const detail = htmlEscape(compact(copy.detail) || 'Redeven is preparing the browser editor.');
+  const codeSpaceLabel = htmlEscape(compact(codeSpaceID) || 'codespace');
+  const statusLabel = state === 'error' ? 'Attention required' : 'Preparing editor';
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; script-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
+  <title>${title}</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --text: #15181d;
+      --muted: #667085;
+      --border: #d8dee8;
+      --accent: #2563eb;
+      --accent-soft: rgba(37, 99, 235, 0.16);
+      --error: #b42318;
+      --error-soft: rgba(180, 35, 24, 0.12);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #101318;
+        --panel: #171b22;
+        --text: #f1f4f8;
+        --muted: #a1a8b3;
+        --border: #303846;
+        --accent: #66a3ff;
+        --accent-soft: rgba(102, 163, 255, 0.18);
+        --error: #ffb4a8;
+        --error-soft: rgba(255, 180, 168, 0.16);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 32px;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+    main {
+      width: min(520px, 100%);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+      padding: 24px;
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.16);
+    }
+    .eyebrow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .status {
+      border-radius: 999px;
+      padding: 4px 9px;
+      background: ${state === 'error' ? 'var(--error-soft)' : 'var(--accent-soft)'};
+      color: ${state === 'error' ? 'var(--error)' : 'var(--accent)'};
+      text-transform: none;
+    }
+    h1 {
+      margin: 18px 0 8px;
+      font-size: 22px;
+      line-height: 1.2;
+      font-weight: 720;
+      letter-spacing: 0;
+    }
+    .code {
+      margin: 0 0 20px;
+      color: var(--muted);
+      font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+    .detail {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .meter {
+      position: relative;
+      overflow: hidden;
+      height: 6px;
+      margin-top: 24px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--border) 72%, transparent);
+    }
+    .meter::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(105deg, transparent 0%, transparent 24%, var(--accent-soft) 40%, var(--accent) 50%, var(--accent-soft) 60%, transparent 76%, transparent 100%);
+      background-size: 200% 100%;
+      animation: ${state === 'error' ? 'none' : 'redeven-codespace-loading 2.4s linear infinite'};
+      opacity: ${state === 'error' ? '0.45' : '1'};
+    }
+    @keyframes redeven-codespace-loading {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .meter::after { animation-duration: 1ms; }
+    }
+  </style>
+</head>
+<body>
+  <main aria-live="polite">
+    <div class="eyebrow">
+      <span>Redeven</span>
+      <span class="status">${statusLabel}</span>
+    </div>
+    <h1>${title}</h1>
+    <p class="code">${codeSpaceLabel}</p>
+    <p class="detail">${detail}</p>
+    <div class="meter" aria-hidden="true"></div>
+  </main>
+</body>
+</html>`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+}
+
+function openOrReuseSessionCodespaceWindow(
   sessionKey: DesktopSessionKey,
   codeSpaceID: string,
   targetURL: string,
@@ -6940,6 +7092,22 @@ function openSessionCodespaceWindow(
   return codespaceWindow.browserWindow;
 }
 
+function openSessionCodespaceLoadingWindow(
+  sessionKey: DesktopSessionKey,
+  codeSpaceID: string,
+  copy: CodespaceLoadingWindowCopy = {},
+): BrowserWindow | null {
+  return openOrReuseSessionCodespaceWindow(sessionKey, codeSpaceID, buildCodespaceLoadingDocumentURL(codeSpaceID, copy));
+}
+
+function openSessionCodespaceWindow(
+  sessionKey: DesktopSessionKey,
+  codeSpaceID: string,
+  targetURL: string,
+): BrowserWindow | null {
+  return openOrReuseSessionCodespaceWindow(sessionKey, codeSpaceID, targetURL);
+}
+
 function openCodespaceWindowFromShell(
   sessionRecord: DesktopSessionRecord | null,
   request: DesktopShellOpenCodespaceWindowRequest,
@@ -6950,6 +7118,21 @@ function openCodespaceWindowFromShell(
       message: DESKTOP_STALE_WINDOW_MESSAGE,
     };
   }
+  if (request.mode === 'loading') {
+    const win = openSessionCodespaceLoadingWindow(sessionRecord.session_key, request.code_space_id, {
+      ...(request.state ? { state: request.state } : {}),
+      ...(request.title ? { title: request.title } : {}),
+      ...(request.detail ? { detail: request.detail } : {}),
+    });
+    if (!win) {
+      return {
+        ok: false,
+        message: DESKTOP_STALE_WINDOW_MESSAGE,
+      };
+    }
+    return { ok: true };
+  }
+
   if (!isAllowedCodespaceWindowNavigation(request.url, sessionRecord.allowed_base_url, request.code_space_id)) {
     return {
       ok: false,

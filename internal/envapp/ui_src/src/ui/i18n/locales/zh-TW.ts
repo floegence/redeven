@@ -1161,7 +1161,9 @@ export const zhTW = {
       cancel: "取消",
       delete: "刪除",
       start: "啟動",
+      starting: "正在啟動...",
       open: "開啟",
+      opening: "正在開啟...",
       openInDesktop: "在 Desktop 中開啟",
       openInBrowser: "在瀏覽器中開啟",
       openWillAutoStart: "開啟（會自動啟動）",
@@ -1169,6 +1171,12 @@ export const zhTW = {
       deleteTooltip: "刪除 codespace",
       askFlower: "Ask Flower",
       openInTerminal: "在終端中開啟",
+    },
+    desktopWindow: {
+      loadingTitle: "正在開啟 Codespace",
+      loadingDetail: "Redeven 正在準備這個 codespace 視窗。編輯器準備好後會顯示在這裡。",
+      failedTitle: "無法開啟 Codespace",
+      failedDetail: "請返回 Redeven 後重試。{message}",
     },
     fields: {
       id: "ID",

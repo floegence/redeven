@@ -1,9 +1,22 @@
 export const DESKTOP_SHELL_OPEN_CODESPACE_WINDOW_CHANNEL = 'redeven-desktop:shell-open-codespace-window';
 
-export type DesktopShellOpenCodespaceWindowRequest = Readonly<{
+export type DesktopShellOpenCodespaceWindowLoadingRequest = Readonly<{
+  mode: 'loading';
+  code_space_id: string;
+  state?: 'loading' | 'error';
+  title?: string;
+  detail?: string;
+}>;
+
+export type DesktopShellOpenCodespaceWindowNavigateRequest = Readonly<{
+  mode: 'navigate';
   url: string;
   code_space_id: string;
 }>;
+
+export type DesktopShellOpenCodespaceWindowRequest =
+  | DesktopShellOpenCodespaceWindowLoadingRequest
+  | DesktopShellOpenCodespaceWindowNavigateRequest;
 
 export type DesktopShellOpenCodespaceWindowResponse = Readonly<{
   ok: boolean;
@@ -36,17 +49,39 @@ export function normalizeDesktopShellOpenCodespaceWindowRequest(value: unknown):
     return null;
   }
 
-  const candidate = value as Partial<DesktopShellOpenCodespaceWindowRequest>;
-  const url = normalizeAbsoluteHTTPURL(candidate.url);
+  const candidate = value as Record<string, unknown>;
   const codeSpaceID = compact(candidate.code_space_id);
-  if (!url || !codeSpaceID) {
+  const mode = compact(candidate.mode) || (compact(candidate.url) ? 'navigate' : '');
+  if (!codeSpaceID) {
     return null;
   }
 
-  return {
-    url,
-    code_space_id: codeSpaceID,
-  };
+  if (mode === 'loading') {
+    const state = compact(candidate.state);
+    const title = compact(candidate.title);
+    const detail = compact(candidate.detail);
+    return {
+      mode: 'loading',
+      code_space_id: codeSpaceID,
+      ...(state === 'error' ? { state } : {}),
+      ...(title ? { title } : {}),
+      ...(detail ? { detail } : {}),
+    };
+  }
+
+  if (mode === 'navigate') {
+    const url = normalizeAbsoluteHTTPURL(candidate.url);
+    if (!url) {
+      return null;
+    }
+    return {
+      mode: 'navigate',
+      url,
+      code_space_id: codeSpaceID,
+    };
+  }
+
+  return null;
 }
 
 export function normalizeDesktopShellOpenCodespaceWindowResponse(value: unknown): DesktopShellOpenCodespaceWindowResponse {

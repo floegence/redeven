@@ -80,17 +80,39 @@ describe('main routing', () => {
 
   it('opens codespaces in isolated desktop windows without privileged preload', () => {
     const mainSrc = readMainSource();
-    const helperStart = mainSrc.indexOf('function openSessionCodespaceWindow(');
+    const helperStart = mainSrc.indexOf('function openOrReuseSessionCodespaceWindow(');
     const helperEnd = mainSrc.indexOf('function openCodespaceWindowFromShell(', helperStart);
 
     expect(helperStart).toBeGreaterThanOrEqual(0);
     expect(helperEnd).toBeGreaterThan(helperStart);
     const helperSrc = mainSrc.slice(helperStart, helperEnd);
+    expect(helperSrc).toContain('function openSessionCodespaceLoadingWindow(');
+    expect(helperSrc).toContain('return openOrReuseSessionCodespaceWindow(sessionKey, codeSpaceID, buildCodespaceLoadingDocumentURL(codeSpaceID, copy));');
+    expect(helperSrc).toContain('function openSessionCodespaceWindow(');
+    expect(helperSrc).toContain('return openOrReuseSessionCodespaceWindow(sessionKey, codeSpaceID, targetURL);');
     expect(helperSrc).toContain("role: 'codespace_child'");
     expect(helperSrc).toContain("chrome: 'native'");
     expect(helperSrc).toContain("preload: 'none'");
     expect(helperSrc).toContain('sessionPartition: sessionRecord.session_partition');
     expect(helperSrc).toContain('sessionRecord.codespace_windows.set(codeSpaceID, codespaceWindow);');
+  });
+
+  it('keeps the codespace loading document local, scriptless, and bridge-free', () => {
+    const mainSrc = readMainSource();
+    const helperStart = mainSrc.indexOf('function buildCodespaceLoadingDocumentURL(');
+    const helperEnd = mainSrc.indexOf('function openOrReuseSessionCodespaceWindow(', helperStart);
+
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helperSrc = mainSrc.slice(helperStart, helperEnd);
+    expect(helperSrc).toContain('data:text/html;charset=utf-8');
+    expect(helperSrc).toContain('Content-Security-Policy');
+    expect(helperSrc).toContain("default-src 'none'");
+    expect(helperSrc).toContain("script-src 'none'");
+    expect(helperSrc).toContain('Redeven');
+    expect(helperSrc).not.toContain('<script');
+    expect(helperSrc).not.toContain('redevenDesktopShell');
+    expect(helperSrc).not.toContain('preload');
   });
 
   it('validates shell codespace-window requests against sender session and codespace URL scope', () => {
@@ -111,7 +133,10 @@ describe('main routing', () => {
     expect(helperEnd).toBeGreaterThan(helperStart);
     const helperSrc = mainSrc.slice(helperStart, helperEnd);
     expect(helperSrc).toContain('if (!sessionRecord || sessionRecord.closing) {');
+    expect(helperSrc).toContain("if (request.mode === 'loading') {");
+    expect(helperSrc).toContain('openSessionCodespaceLoadingWindow(sessionRecord.session_key, request.code_space_id');
     expect(helperSrc).toContain('if (!isAllowedCodespaceWindowNavigation(request.url, sessionRecord.allowed_base_url, request.code_space_id)) {');
+    expect(helperSrc).toContain('const win = openSessionCodespaceWindow(sessionRecord.session_key, request.code_space_id, request.url);');
     expect(helperSrc).toContain("message: 'Desktop refused to open a codespace window outside this environment session.'");
   });
 

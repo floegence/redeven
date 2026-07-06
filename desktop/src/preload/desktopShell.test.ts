@@ -53,7 +53,8 @@ describe('bootstrapDesktopShellBridge', () => {
     await bridge.toggleMaximizeWindow();
     await bridge.toggleFullScreenWindow();
     await bridge.openExternalURL('http://127.0.0.1:43123/cs/demo/');
-    await bridge.openCodespaceWindow({ url: 'http://127.0.0.1:43123/cs/demo/', code_space_id: 'demo' });
+    await bridge.openCodespaceWindow({ mode: 'loading', code_space_id: 'demo', title: 'Opening Codespace', detail: 'Preparing editor.' });
+    await bridge.openCodespaceWindow({ mode: 'navigate', url: 'http://127.0.0.1:43123/cs/demo/', code_space_id: 'demo' });
     await bridge.openDashboard();
     await bridge.getRuntimeMaintenanceContext();
     await bridge.performRuntimeMaintenanceAction({ action: 'restart' });
@@ -69,12 +70,13 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(8, 'redeven-desktop:shell-window-command', { command: 'toggle_maximize' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(9, 'redeven-desktop:shell-window-command', { command: 'toggle_full_screen' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(10, 'redeven-desktop:shell-open-external-url', { url: 'http://127.0.0.1:43123/cs/demo/' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(11, 'redeven-desktop:shell-open-codespace-window', { url: 'http://127.0.0.1:43123/cs/demo/', code_space_id: 'demo' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(12, 'redeven-desktop:shell-open-dashboard');
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(13, 'redeven-desktop:shell-runtime-maintenance-context');
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(14, 'redeven-desktop:shell-runtime-action', { action: 'restart_runtime' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(15, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
-    expect(ipcRendererInvoke).toHaveBeenCalledTimes(15);
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(11, 'redeven-desktop:shell-open-codespace-window', { mode: 'loading', code_space_id: 'demo', title: 'Opening Codespace', detail: 'Preparing editor.' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(12, 'redeven-desktop:shell-open-codespace-window', { mode: 'navigate', url: 'http://127.0.0.1:43123/cs/demo/', code_space_id: 'demo' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(13, 'redeven-desktop:shell-open-dashboard');
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(14, 'redeven-desktop:shell-runtime-maintenance-context');
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(15, 'redeven-desktop:shell-runtime-action', { action: 'restart_runtime' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(16, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
+    expect(ipcRendererInvoke).toHaveBeenCalledTimes(16);
   });
 
   it('normalizes codespace window open failures from electron main', async () => {
@@ -88,8 +90,9 @@ describe('bootstrapDesktopShellBridge', () => {
 
     const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
     await expect(bridge.openCodespaceWindow({
-      url: 'http://127.0.0.1:43123/cs/demo/',
+      mode: 'loading',
       code_space_id: 'demo',
+      title: 'Opening Codespace',
     })).resolves.toEqual({
       ok: false,
       message: 'Desktop refused this codespace URL.',
@@ -97,11 +100,63 @@ describe('bootstrapDesktopShellBridge', () => {
 
     ipcRendererInvoke.mockResolvedValueOnce(null);
     await expect(bridge.openCodespaceWindow({
+      mode: 'navigate',
       url: 'http://127.0.0.1:43123/cs/demo/',
       code_space_id: 'demo',
     })).resolves.toEqual({
       ok: false,
       message: 'Desktop failed to open the codespace window.',
     });
+  });
+
+  it('normalizes codespace window loading and navigate requests', async () => {
+    const { normalizeDesktopShellOpenCodespaceWindowRequest } = await import('../shared/desktopShellCodespaceWindowIPC');
+
+    expect(normalizeDesktopShellOpenCodespaceWindowRequest({
+      mode: 'loading',
+      code_space_id: ' demo ',
+      state: 'error',
+      title: ' Opening Codespace ',
+      detail: ' Try again. ',
+    })).toEqual({
+      mode: 'loading',
+      code_space_id: 'demo',
+      state: 'error',
+      title: 'Opening Codespace',
+      detail: 'Try again.',
+    });
+
+    expect(normalizeDesktopShellOpenCodespaceWindowRequest({
+      mode: 'navigate',
+      code_space_id: 'demo',
+      url: 'http://127.0.0.1:43123/cs/demo/',
+    })).toEqual({
+      mode: 'navigate',
+      code_space_id: 'demo',
+      url: 'http://127.0.0.1:43123/cs/demo/',
+    });
+
+    expect(normalizeDesktopShellOpenCodespaceWindowRequest({
+      code_space_id: 'demo',
+      url: 'http://127.0.0.1:43123/cs/demo/',
+    })).toEqual({
+      mode: 'navigate',
+      code_space_id: 'demo',
+      url: 'http://127.0.0.1:43123/cs/demo/',
+    });
+
+    expect(normalizeDesktopShellOpenCodespaceWindowRequest({
+      mode: 'loading',
+      code_space_id: '',
+    })).toBeNull();
+    expect(normalizeDesktopShellOpenCodespaceWindowRequest({
+      mode: 'navigate',
+      code_space_id: 'demo',
+      url: 'data:text/html,blocked',
+    })).toBeNull();
+    expect(normalizeDesktopShellOpenCodespaceWindowRequest({
+      mode: 'other',
+      code_space_id: 'demo',
+    })).toBeNull();
   });
 });

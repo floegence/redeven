@@ -1161,7 +1161,9 @@ export const ptBR = {
       cancel: "Cancelar",
       delete: "Excluir",
       start: "Iniciar",
+      starting: "Iniciando...",
       open: "Abrir",
+      opening: "Abrindo...",
       openInDesktop: "Abrir no Desktop",
       openInBrowser: "Abrir no navegador",
       openWillAutoStart: "Abrir (inicia automaticamente)",
@@ -1169,6 +1171,12 @@ export const ptBR = {
       deleteTooltip: "Excluir codespace",
       askFlower: "Ask Flower",
       openInTerminal: "Abrir no Terminal",
+    },
+    desktopWindow: {
+      loadingTitle: "Abrindo Codespace",
+      loadingDetail: "Redeven está preparando esta janela de codespace. O editor aparecerá aqui assim que estiver pronto.",
+      failedTitle: "Não foi possível abrir Codespace",
+      failedDetail: "Volte ao Redeven e tente novamente. {message}",
     },
     fields: {
       id: "ID",

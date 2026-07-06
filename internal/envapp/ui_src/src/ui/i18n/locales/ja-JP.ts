@@ -1161,7 +1161,9 @@ export const jaJP = {
       cancel: "キャンセル",
       delete: "削除",
       start: "起動",
+      starting: "起動中...",
       open: "開く",
+      opening: "オープン中...",
       openInDesktop: "Desktop で開く",
       openInBrowser: "ブラウザーで開く",
       openWillAutoStart: "開く（自動起動します）",
@@ -1169,6 +1171,12 @@ export const jaJP = {
       deleteTooltip: "codespace を削除",
       askFlower: "Ask Flower",
       openInTerminal: "ターミナルで開く",
+    },
+    desktopWindow: {
+      loadingTitle: "Codespace を開いています",
+      loadingDetail: "Redeven がこの codespace ウィンドウを準備しています。エディターの準備ができるとここに表示されます。",
+      failedTitle: "Codespace を開けませんでした",
+      failedDetail: "Redeven に戻って再試行してください。{message}",
     },
     fields: {
       id: "ID",

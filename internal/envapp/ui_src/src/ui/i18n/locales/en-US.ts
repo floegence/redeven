@@ -1732,7 +1732,9 @@ export const enUS = defineDictionary({
       cancel: 'Cancel',
       delete: 'Delete',
       start: 'Start',
+      starting: 'Starting...',
       open: 'Open',
+      opening: 'Opening...',
       openInDesktop: 'Open in Desktop',
       openInBrowser: 'Open in Browser',
       openWillAutoStart: 'Open (will auto-start)',
@@ -1740,6 +1742,12 @@ export const enUS = defineDictionary({
       deleteTooltip: 'Delete codespace',
       askFlower: 'Ask Flower',
       openInTerminal: 'Open in Terminal',
+    },
+    desktopWindow: {
+      loadingTitle: 'Opening Codespace',
+      loadingDetail: 'Redeven is preparing this codespace window. The editor will appear here as soon as it is ready.',
+      failedTitle: 'Codespace could not open',
+      failedDetail: 'Return to Redeven and try again. {message}',
     },
     fields: {
       id: 'ID',
