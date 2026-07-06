@@ -24,14 +24,19 @@ describe('browser workspace layout wiring', () => {
   it('routes files mode and git mode through dedicated unified workspace shells', () => {
     const src = read('./RemoteFileBrowser.tsx');
 
-    expect(src).toContain("import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';");
     expect(src).toContain("import { FileBrowserWorkspace, type FileBrowserPathSubmitResult } from './FileBrowserWorkspace';");
     expect(src).toContain("import { GitWorkspace } from './GitWorkspace';");
-    expect(src).toContain('<KeepAliveStack');
+    expect(src).toContain('function BrowserModeTransitionStack');
+    expect(src).toContain('<BrowserModeTransitionStack');
     expect(src).toContain('activeId={pageMode()}');
-    expect(src).toContain('keepMounted');
+    expect(src).toContain('data-browser-mode-panel="files"');
+    expect(src).toContain('data-browser-mode-panel="git"');
+    expect(src).toContain("data-state={isActive('files') ? 'active' : 'inactive'}");
+    expect(src).toContain("data-state={isActive('git') ? 'active' : 'inactive'}");
+    expect(src).toContain("notifyOnError: false");
     expect(src).toContain('<FileBrowserWorkspace');
     expect(src).toContain('<GitWorkspace');
+    expect(src).not.toContain('KeepAliveStack');
     expect(src).not.toContain('sidebarHeaderActions={');
   });
 
@@ -104,8 +109,11 @@ describe('browser workspace layout wiring', () => {
     expect(modeSrc).toContain('role="radiogroup"');
     expect(modeSrc).toContain('aria-label="Browser mode"');
     expect(modeSrc).toContain("import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';");
-    expect(modeSrc).toContain("class={cn('inline-flex w-full items-center gap-0.5 rounded-md border bg-muted/40 p-0.5 shadow-[0_1px_0_rgba(0,0,0,0.03)_inset]', redevenSurfaceRoleClass('segmented'), props.class)}");
-    expect(modeSrc).toContain("redevenSegmentedItemClass(true)");
+    expect(modeSrc).toContain('data-browser-mode-switch=""');
+    expect(modeSrc).toContain('data-mode={props.mode}');
+    expect(modeSrc).toContain('<span class="browser-mode-switch__thumb" aria-hidden="true" />');
+    expect(modeSrc).toContain("onPointerEnter={previewGitMode}");
+    expect(modeSrc).toContain("onFocus={previewGitMode}");
     expect(modeSrc).toContain("redevenSegmentedItemClass(false)");
     expect(modeSrc).not.toContain('>Browse<');
     expect(modeSrc).not.toContain('>Inspect<');
@@ -499,7 +507,7 @@ describe('browser workspace layout wiring', () => {
     expect(src).not.toContain('GitSubviewSwitch');
   });
 
-  it('routes git browser loading states through one centered shared pane', () => {
+  it('keeps git browser shell loading states inline inside the stable shell', () => {
     const primitivesSrc = read('./GitWorkbenchPrimitives.tsx');
     const workspaceSrc = read('./GitWorkspace.tsx');
     const changesSrc = read('./GitChangesPanel.tsx');
@@ -517,7 +525,10 @@ describe('browser workspace layout wiring', () => {
     expect(primitivesSrc).not.toContain('<SnakeLoader');
     expect(workspaceSrc).toContain('shellLoadingMessage?: string;');
     expect(workspaceSrc).toContain("i18n.t('git.workspace.preparingActiveView')");
-    expect(workspaceSrc).toContain('<GitStatePane loading message={shellLoadingMessage()}');
+    expect(workspaceSrc).toContain('<GitInlineLoadingStatus class="shadow-sm">{shellLoadingMessage()}</GitInlineLoadingStatus>');
+    expect(workspaceSrc).toContain('<GitWorkbenchSidebar');
+    expect(workspaceSrc).toContain('<GitWorkbench');
+    expect(workspaceSrc).not.toContain('<GitStatePane loading message={shellLoadingMessage()}');
 
     expect(changesSrc).toContain('GitStatePane');
     expect(changesSrc).toContain("i18n.t('git.changes.loadingWorkspaceChanges')");

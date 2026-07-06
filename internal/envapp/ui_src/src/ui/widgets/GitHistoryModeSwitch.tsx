@@ -10,6 +10,7 @@ export type GitHistoryMode = 'files' | 'git';
 export interface GitHistoryModeSwitchProps {
   mode: GitHistoryMode;
   onChange: (mode: GitHistoryMode) => void;
+  onPreviewGitMode?: () => void;
   gitHistoryDisabled?: boolean;
   gitHistoryDisabledReason?: string;
   class?: string;
@@ -17,8 +18,12 @@ export interface GitHistoryModeSwitchProps {
 
 export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
   const buttonBaseClass =
-    'cursor-pointer rounded border px-2 py-2 text-xs font-medium transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-55 sm:py-1';
+    'relative z-10 flex h-7 min-w-0 w-full flex-1 cursor-pointer items-center justify-center gap-1.5 rounded border border-transparent px-2 text-center text-xs font-medium transition-[color,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-55';
   const gitDisabledReason = () => String(props.gitHistoryDisabledReason ?? '').trim();
+  const previewGitMode = () => {
+    if (props.gitHistoryDisabled) return;
+    props.onPreviewGitMode?.();
+  };
   const renderGitButton = () => (
     <button
       type="button"
@@ -28,11 +33,12 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
       disabled={props.gitHistoryDisabled}
       class={cn(
         buttonBaseClass,
-        'flex min-w-0 w-full flex-1 items-center justify-center gap-1.5 text-center',
         props.mode === 'git'
-          ? `${redevenSegmentedItemClass(true)} text-foreground shadow-sm`
-          : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:bg-muted/50 hover:text-foreground`,
+          ? 'text-foreground'
+          : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:text-foreground`,
       )}
+      onPointerEnter={previewGitMode}
+      onFocus={previewGitMode}
       onClick={() => props.onChange('git')}
     >
       <History class="size-3.5 shrink-0" />
@@ -44,8 +50,11 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
     <div
       role="radiogroup"
       aria-label="Browser mode"
-      class={cn('inline-flex w-full items-center gap-0.5 rounded-md border bg-muted/40 p-0.5 shadow-[0_1px_0_rgba(0,0,0,0.03)_inset]', redevenSurfaceRoleClass('segmented'), props.class)}
+      data-browser-mode-switch=""
+      data-mode={props.mode}
+      class={cn('browser-mode-switch inline-grid w-full grid-cols-2 items-center rounded-md border p-0.5 shadow-[0_1px_0_rgba(0,0,0,0.03)_inset]', redevenSurfaceRoleClass('segmented'), props.class)}
     >
+      <span class="browser-mode-switch__thumb" aria-hidden="true" />
       <button
         type="button"
         role="radio"
@@ -53,10 +62,9 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
         aria-checked={props.mode === 'files'}
         class={cn(
           buttonBaseClass,
-          'flex min-w-0 w-full flex-1 items-center justify-center gap-1.5 text-center',
           props.mode === 'files'
-            ? `${redevenSegmentedItemClass(true)} text-foreground shadow-sm`
-            : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:bg-muted/50 hover:text-foreground`,
+            ? 'text-foreground'
+            : `${redevenSegmentedItemClass(false)} text-muted-foreground hover:text-foreground`,
         )}
         onClick={() => props.onChange('files')}
       >

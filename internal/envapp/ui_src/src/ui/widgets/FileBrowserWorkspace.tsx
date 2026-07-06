@@ -55,6 +55,7 @@ export type FileBrowserPathSubmitResult =
 export interface FileBrowserWorkspaceProps {
   mode: GitHistoryMode;
   onModeChange: (mode: GitHistoryMode) => void;
+  onPreviewGitMode?: () => void;
   gitHistoryDisabled?: boolean;
   gitHistoryDisabledReason?: string;
   captureTypingFromPage?: boolean;
@@ -447,6 +448,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
         <GitHistoryModeSwitch
           mode={props.mode}
           onChange={props.onModeChange}
+          onPreviewGitMode={props.onPreviewGitMode}
           gitHistoryDisabled={props.gitHistoryDisabled}
           gitHistoryDisabledReason={props.gitHistoryDisabledReason}
           class="w-full"
@@ -587,6 +589,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
         <FileBrowserWorkspaceInner
           mode={props.mode}
           onModeChange={props.onModeChange}
+          onPreviewGitMode={props.onPreviewGitMode}
           gitHistoryDisabled={props.gitHistoryDisabled}
           gitHistoryDisabledReason={props.gitHistoryDisabledReason}
           captureTypingFromPage={props.captureTypingFromPage}
