@@ -37,6 +37,9 @@ loopback versus regional `plg-*` sandbox origin selection, asset-session iframe
 URL construction, and a narrow fetch adapter that rewrites SDK
 `/_redevplugin/api/plugins*` calls to Redeven's
 `/_redeven_proxy/api/plugins*` route while preserving Local UI access headers.
+Loopback Env App hosts are resolved to `plg-<surface>.localhost` before any
+regional sandbox-domain derivation so `127.0.0.1` Local UI sessions do not
+produce invalid dotted-decimal-derived plugin origins.
 The published `PluginSurfaceHost` owns exact-origin bridge filtering, bridge
 handshake validation, bridge-token requests, RPC forwarding, confirmation
 request handling, and lifecycle disposal. Redeven must not turn the frame into

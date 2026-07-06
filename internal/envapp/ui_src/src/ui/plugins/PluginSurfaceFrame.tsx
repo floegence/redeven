@@ -152,17 +152,18 @@ export function pluginSandboxID(surface: Pick<PluginOpenSurfaceResult, 'plugin_i
 }
 
 export function pluginSandboxOriginFromEnvLocation(loc: OriginLocationLike, sandboxID: string): string {
-  try {
-    return trustedLauncherOriginFromSandboxLocation(loc, 'plg', sandboxID);
-  } catch {
-    const hostname = normalizeHostname(loc.hostname);
-    if (!isLoopbackHost(hostname)) {
-      throw new Error('Plugin sandbox origin is unavailable for the current Env App host.');
-    }
+  const hostname = normalizeHostname(loc.hostname);
+  if (isLoopbackHost(hostname)) {
     const protocol = String(loc.protocol ?? '').trim();
     if (!protocol) throw new Error('Plugin sandbox origin is unavailable for the current Env App host.');
     const port = String(loc.port ?? '').trim();
     return `${protocol}//plg-${sandboxID}.localhost${port ? `:${port}` : ''}`;
+  }
+
+  try {
+    return trustedLauncherOriginFromSandboxLocation(loc, 'plg', sandboxID);
+  } catch {
+    throw new Error('Plugin sandbox origin is unavailable for the current Env App host.');
   }
 }
 

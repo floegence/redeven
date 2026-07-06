@@ -106,6 +106,13 @@ describe('PluginSurfaceFrame', () => {
         port: '8096',
       }, 'containers'),
     ).toBe('http://plg-containers.localhost:8096');
+    const loopbackPluginOrigin = pluginSandboxOriginFromEnvLocation({
+      protocol: 'http:',
+      hostname: '127.0.0.1',
+      port: '8096',
+    }, 'containers');
+    expect(loopbackPluginOrigin).toBe('http://plg-containers.localhost:8096');
+    expect(() => new URL('/_redeven_plugin/bootstrap', loopbackPluginOrigin)).not.toThrow();
   });
 
   it('bootstraps plugin assets without putting asset tickets in the iframe URL', async () => {
