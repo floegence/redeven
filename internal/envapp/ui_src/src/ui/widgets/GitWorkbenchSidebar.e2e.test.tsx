@@ -183,6 +183,64 @@ describe('GitWorkbenchSidebar interactions', () => {
     }
   });
 
+  it('keeps changes section rows mounted while the active section is loading', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="relative h-[520px]">
+          <GitWorkbenchSidebar
+            subview="changes"
+            repoAvailable
+            repoSummary={{
+              repoRootPath: '/workspace/repo',
+              headRef: 'main',
+              headCommit: 'abc1234',
+              workspaceSummary: { stagedCount: 2, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+            }}
+            workspace={{
+              repoRootPath: '/workspace/repo',
+              summary: { stagedCount: 2, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+              staged: [],
+              unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/next.ts', displayPath: 'src/next.ts', additions: 4, deletions: 2 }],
+              untracked: [],
+              conflicted: [],
+            }}
+            workspacePages={{
+              staged: {
+                items: [],
+                totalCount: 2,
+                nextOffset: 0,
+                hasMore: false,
+                loading: true,
+                loadingMode: 'initial',
+                error: '',
+                initialized: false,
+              },
+            }}
+            workspaceLoading
+            selectedWorkspaceSection="staged"
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const stagedButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Staged')) as HTMLButtonElement | undefined;
+      expect(stagedButton).toBeTruthy();
+      expect(stagedButton?.getAttribute('aria-busy')).toBe('true');
+      expect(stagedButton?.getAttribute('data-git-workspace-section-loading')).toBe('true');
+      expect(host.textContent).toContain('Changes');
+      expect(host.textContent).toContain('Conflicted');
+      expect(host.textContent).toContain('Staged');
+      expect(host.textContent).toContain('Loading files...');
+      expect(host.textContent).not.toContain('Loading workspace changes...');
+    } finally {
+      dispose();
+    }
+  });
+
   it('renders the commit graph rail inside the history sidebar', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

@@ -725,6 +725,7 @@ vi.mock('./GitWorkspace', () => ({
     shellLoadingMessage?: string;
     onModeChange?: (mode: string) => void;
     onSubviewChange?: (view: 'changes' | 'branches' | 'history' | 'overview') => void;
+    onSelectWorkspaceSection?: (section: 'changes' | 'staged' | 'conflicted') => void;
     onResize?: (delta: number) => void;
     repoInfoLoading?: boolean;
     repoSummaryLoading?: boolean;
@@ -819,6 +820,8 @@ vi.mock('./GitWorkspace', () => ({
         <button type="button" onClick={() => props.onSubviewChange?.('changes')}>mock-to-changes</button>
         <button type="button" onClick={() => props.onSubviewChange?.('branches')}>mock-to-branches</button>
         <button type="button" onClick={() => props.onSubviewChange?.('history')}>mock-to-history</button>
+        <button type="button" onClick={() => props.onSelectWorkspaceSection?.('staged')}>mock-select-staged</button>
+        <button type="button" onClick={() => props.onSelectWorkspaceSection?.('conflicted')}>mock-select-conflicted</button>
         <button type="button" onClick={() => props.onResize?.(24)}>mock-resize-sidebar</button>
         <button type="button" onClick={() => props.onRefresh?.()}>mock-refresh</button>
         <button type="button" onClick={() => props.onDiscardWorkspaceSection?.('changes')}>mock-discard-changes</button>
@@ -4022,6 +4025,146 @@ describe('RemoteFileBrowser persistence', () => {
       expect(gitWorkspaceRenderStore.snapshots.some((item) => item.subview === 'changes' && item.workspaceLoading)).toBe(false);
 
       resolveRefreshWorkspacePage(refreshedWorkspacePage);
+      await flush();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('initializes a summary-empty workspace section without requesting a page', async () => {
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const initialWorkspacePage = {
+      repoRootPath: '/workspace/repo',
+      section: 'changes',
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [{ section: 'unstaged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts' }],
+    };
+
+    mockRpc.git.getRepoSummary.mockResolvedValue({
+      repoRootPath: '/workspace/repo',
+      headRef: 'main',
+      headCommit: 'abc1234',
+      workspaceSummary: initialWorkspacePage.summary,
+    });
+    mockRpc.git.listWorkspacePage.mockReset();
+    mockRpc.git.listWorkspacePage.mockResolvedValueOnce(initialWorkspacePage);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledTimes(1);
+      gitWorkspaceRenderStore.snapshots = [];
+
+      const selectStagedButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-select-staged') as HTMLButtonElement | undefined;
+      expect(selectStagedButton).toBeTruthy();
+      selectStagedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledTimes(1);
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => item.selectedWorkspaceSection === 'staged')).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.every((item) => !item.workspaceLoading)).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('requests a non-empty uninitialized section without turning it into a blocking shell load', async () => {
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const initialWorkspacePage = {
+      repoRootPath: '/workspace/repo',
+      section: 'changes',
+      summary: { stagedCount: 2, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [{ section: 'unstaged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts' }],
+    };
+    const stagedWorkspacePage = {
+      repoRootPath: '/workspace/repo',
+      section: 'staged',
+      summary: { stagedCount: 2, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      totalCount: 2,
+      offset: 0,
+      nextOffset: 2,
+      hasMore: false,
+      items: [
+        { section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts' },
+        { section: 'staged', changeType: 'added', path: 'notes.txt', displayPath: 'notes.txt' },
+      ],
+    };
+
+    let resolveStagedWorkspacePage!: (value: typeof stagedWorkspacePage) => void;
+    const stagedWorkspacePagePromise = new Promise<typeof stagedWorkspacePage>((resolve) => {
+      resolveStagedWorkspacePage = resolve;
+    });
+
+    mockRpc.git.getRepoSummary.mockResolvedValue({
+      repoRootPath: '/workspace/repo',
+      headRef: 'main',
+      headCommit: 'abc1234',
+      workspaceSummary: initialWorkspacePage.summary,
+    });
+    mockRpc.git.listWorkspacePage.mockReset();
+    mockRpc.git.listWorkspacePage
+      .mockResolvedValueOnce(initialWorkspacePage)
+      .mockImplementationOnce(() => stagedWorkspacePagePromise);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      gitWorkspaceRenderStore.snapshots = [];
+
+      const selectStagedButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-select-staged') as HTMLButtonElement | undefined;
+      expect(selectStagedButton).toBeTruthy();
+      selectStagedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledTimes(2);
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenLastCalledWith({
+        repoRootPath: '/workspace/repo',
+        section: 'staged',
+        offset: 0,
+        limit: 200,
+      });
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => item.selectedWorkspaceSection === 'staged')).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.some((item) => item.workspaceLoading)).toBe(false);
+
+      resolveStagedWorkspacePage(stagedWorkspacePage);
       await flush();
     } finally {
       dispose();

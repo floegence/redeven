@@ -172,6 +172,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               repoUnavailableReason={props.repoUnavailableReason}
               repoSummary={props.repoSummary}
               workspace={props.workspace}
+              workspacePages={props.workspacePages}
               workspaceLoading={props.workspaceLoading}
               workspaceError={props.workspaceError}
               selectedWorkspaceSection={props.selectedWorkspaceSection}

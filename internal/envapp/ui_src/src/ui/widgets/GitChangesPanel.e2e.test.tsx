@@ -562,6 +562,105 @@ describe('GitChangesPanel interactions', () => {
     }
   });
 
+  it('keeps the changes table shell stable while an uninitialized section loads', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 3, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [],
+                  unstaged: [],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                workspacePages={{
+                  staged: {
+                    items: [],
+                    totalCount: 3,
+                    nextOffset: 0,
+                    hasMore: false,
+                    loading: true,
+                    loadingMode: 'initial',
+                    error: '',
+                    initialized: false,
+                  },
+                }}
+                selectedSection="staged"
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.querySelector('.git-changes-filter-slot')).toBeTruthy();
+      expect(host.querySelector('.git-changes-toolbar-loading-slot')?.getAttribute('data-visible')).toBe('true');
+      expect(host.querySelector('.git-changes-breadcrumb-slot')).toBeTruthy();
+      expect(host.querySelector('.git-changes-table-pending')).toBeTruthy();
+      expect(host.querySelectorAll('.git-changes-table-skeleton__row')).toHaveLength(3);
+      expect(host.textContent).toContain('Loading workspace changes...');
+      expect(host.textContent).not.toContain('No staged files yet.');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps existing rows mounted during an initialized workspace refresh', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitChangesPanel
+                workspace={{
+                  repoRootPath: '/workspace/repo',
+                  summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+                  staged: [{ section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 4, deletions: 2 }],
+                  unstaged: [],
+                  untracked: [],
+                  conflicted: [],
+                }}
+                workspacePages={{
+                  staged: {
+                    items: [{ section: 'staged', changeType: 'modified', path: 'src/app.ts', displayPath: 'src/app.ts', additions: 4, deletions: 2 }],
+                    totalCount: 1,
+                    nextOffset: 1,
+                    hasMore: false,
+                    loading: true,
+                    loadingMode: 'refresh',
+                    error: '',
+                    initialized: true,
+                  },
+                }}
+                selectedSection="staged"
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.textContent).toContain('src/app.ts');
+      expect(host.querySelector('.git-changes-table-refresh-row')).toBeTruthy();
+      expect(host.querySelector('.git-changes-table-pending')).toBeNull();
+      expect(host.textContent).not.toContain('No staged files yet.');
+    } finally {
+      dispose();
+    }
+  });
+
   it('shows the section-specific bulk action button and emits the selected section', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -822,6 +921,7 @@ describe('GitChangesPanel interactions', () => {
     try {
       expect(host.textContent).toContain('No staged files yet. Stage files from the pending sections, then open the commit dialog.');
       expect(host.textContent).not.toContain('Choose a file from the staged or pending lists to inspect its patch.');
+      expect(host.querySelector('.git-changes-table-pending')).toBeNull();
     } finally {
       dispose();
     }
