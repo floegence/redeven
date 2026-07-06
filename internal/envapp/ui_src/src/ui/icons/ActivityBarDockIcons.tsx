@@ -102,10 +102,25 @@ export function ActivityBarSwitchIcon(props: { class?: string }) {
 export function ActivityBarSettingsIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-opacity=".5" stroke-width="3" stroke-dasharray="3.3 3.3" />
-      <circle cx="12" cy="12" r="5.5" fill="currentColor" fill-opacity=".06" stroke="currentColor" stroke-opacity=".2" stroke-width=".8" />
-      <circle cx="12" cy="12" r="2.5" fill="currentColor" fill-opacity=".14" />
-      <circle cx="12" cy="12" r="1.2" fill="currentColor" fill-opacity=".45" />
+      <polygon
+        points="8.05,5.16 15.95,5.16 19.9,12 15.95,18.84 8.05,18.84 4.1,12"
+        fill="currentColor"
+        fill-opacity=".06"
+        stroke="currentColor"
+        stroke-opacity=".78"
+        stroke-width="1.9"
+        stroke-linejoin="round"
+      />
+      <circle
+        cx="12"
+        cy="12"
+        r="3.05"
+        fill="currentColor"
+        fill-opacity=".05"
+        stroke="currentColor"
+        stroke-opacity=".55"
+        stroke-width="1.45"
+      />
     </svg>
   );
 }
