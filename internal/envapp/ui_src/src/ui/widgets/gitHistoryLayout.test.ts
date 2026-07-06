@@ -578,8 +578,12 @@ describe('browser workspace layout wiring', () => {
     expect(branchesSrc).toContain('GitInlineLoadingStatus class="git-branch-header-inline-status"');
     expect(branchesSrc).toContain('data-git-branch-status-summary-state');
     expect(branchesSrc).toContain('data-git-branch-status-content-frame="true"');
+    expect(branchesSrc).toContain('data-git-branch-detached-context="true"');
+    expect(branchesSrc).toContain('data-git-branch-status-unavailable="true"');
+    expect(branchesSrc).toContain('const renderBranchStatusContentFallback = () =>');
     expect(branchesSrc).toContain('data-git-branch-stable-placeholder={view}');
     expect(branchesSrc).toContain('data-git-branch-stable-placeholder-state');
+    expect(branchesSrc).not.toContain('Checkout a local branch to reattach HEAD before pull');
     expect(branchesSrc).not.toContain('Checking branch selection');
     expect(branchesSrc).toContain('const statusTabActive = () => branchSubview() === "status";');
     expect(branchesSrc).toContain('const historyTabActive = () => branchSubview() === "history";');
@@ -648,7 +652,8 @@ describe('browser workspace layout wiring', () => {
 
     expect(branchesSrc).toContain('Choose a branch from the sidebar to inspect its status or history.');
     expect(branchesSrc).toContain('Choose two branches to inspect file changes.');
-    expect(branchesSrc).toContain('Remote branch is not checked out');
+    expect(branchesSrc).toContain('Remote branches are not checked out in the active worktree.');
+    expect(branchesSrc).toContain('This branch is not checked out in the active worktree.');
     expect(branchesSrc).toContain('Status unavailable');
 
     expect(historySrc).toContain('Choose a commit from the left rail to load its details.');

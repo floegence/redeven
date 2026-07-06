@@ -888,6 +888,106 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   background: color-mix(in srgb, var(--error) 6%, transparent);
 }
 
+.git-branch-detached-context {
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-left: 1px solid color-mix(in srgb, var(--warning) 38%, var(--border));
+  border-radius: 0.375rem;
+  padding: 0.45rem 0.625rem 0.45rem 0.75rem;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--warning) 7%, transparent),
+      color-mix(in srgb, var(--muted) 4%, transparent)
+    );
+}
+
+.git-branch-detached-context__body {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.git-branch-detached-context__icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--warning) 78%, var(--foreground) 10%);
+}
+
+.git-branch-detached-context__copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.125rem;
+}
+
+.git-branch-detached-context__heading,
+.git-branch-detached-context__summary {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.git-branch-detached-context__title {
+  color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground) 12%);
+  font-size: 0.75rem;
+  font-weight: 640;
+  line-height: 1.25;
+}
+
+.git-branch-detached-context__summary {
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
+  font-size: 0.6875rem;
+  font-weight: 450;
+  line-height: 1.35;
+}
+
+.git-branch-detached-context__separator {
+  width: 0.1875rem;
+  height: 0.1875rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-foreground) 54%, transparent);
+}
+
+.git-branch-detached-context__action {
+  height: 1.75rem;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.git-branch-status-unavailable-summary {
+  min-height: 2.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
+  border-radius: 0.375rem;
+  padding: 0.45rem 0.625rem;
+  background: color-mix(in srgb, var(--muted) 4%, transparent);
+}
+
+.git-branch-status-unavailable-summary__title {
+  color: color-mix(in srgb, var(--foreground) 86%, var(--muted-foreground) 14%);
+  font-size: 0.75rem;
+  font-weight: 620;
+  line-height: 1.25;
+}
+
+.git-branch-status-unavailable-summary__detail {
+  margin-top: 0.0625rem;
+  color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 16%);
+  font-size: 0.6875rem;
+  font-weight: 450;
+  line-height: 1.35;
+}
+
 .git-branch-stable-placeholder {
   min-height: clamp(8.5rem, 18vh, 11rem);
   max-height: 12rem;
@@ -1047,6 +1147,10 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   padding: clamp(1.75rem, 6vh, 3.25rem) clamp(1rem, 3vw, 2rem) 2rem;
 }
 
+.git-branch-status-unavailable .git-branch-status-empty-table__body {
+  align-items: center;
+}
+
 .git-branch-status-empty-state {
   width: min(25rem, 100%);
   display: grid;
@@ -1100,6 +1204,65 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   font-weight: 450;
   line-height: 1.5;
   text-wrap: balance;
+}
+
+.git-branch-status-unavailable__state {
+  width: min(28rem, 100%);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.875rem;
+  text-align: left;
+}
+
+.git-branch-status-unavailable__mark {
+  width: 2.125rem;
+  height: 2.125rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--warning) 24%, var(--border));
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--warning) 8%, var(--background)),
+      color-mix(in srgb, var(--warning) 4%, var(--muted))
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--background) 86%, white 14%),
+    0 12px 24px -22px color-mix(in srgb, var(--warning) 45%, transparent);
+  color: color-mix(in srgb, var(--warning) 74%, var(--foreground) 10%);
+}
+
+.git-branch-status-unavailable__icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+}
+
+.git-branch-status-unavailable__copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.git-branch-status-unavailable__title {
+  color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground) 12%);
+  font-size: 0.8125rem;
+  font-weight: 620;
+  line-height: 1.35;
+}
+
+.git-branch-status-unavailable__detail,
+.git-branch-status-unavailable__hint {
+  color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 16%);
+  font-size: 0.75rem;
+  font-weight: 450;
+  line-height: 1.5;
+}
+
+.git-branch-status-unavailable__hint {
+  color: color-mix(in srgb, var(--muted-foreground) 76%, var(--foreground) 24%);
 }
 
 .git-branch-status-empty-state[data-git-branch-status-empty-section='changes'] .git-branch-status-empty-state__mark {
@@ -1160,6 +1323,30 @@ html.dark .git-branch-detail-banner {
 html.dark .git-branch-detail-banner[data-git-branch-detail-state='error'] {
   border-left-color: color-mix(in srgb, var(--error) 30%, var(--border));
   background: color-mix(in srgb, var(--error) 5%, transparent);
+}
+
+html.dark .git-branch-detached-context {
+  border-left-color: color-mix(in srgb, var(--warning) 30%, var(--border));
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--warning) 6%, transparent),
+      color-mix(in srgb, var(--muted) 5%, transparent)
+    );
+}
+
+html.dark .git-branch-status-unavailable-summary {
+  background: color-mix(in srgb, var(--muted) 5%, transparent);
+}
+
+html.dark .git-branch-status-unavailable__mark {
+  border-color: color-mix(in srgb, var(--warning) 20%, var(--border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--warning) 7%, var(--background)),
+      color-mix(in srgb, var(--warning) 3%, var(--muted))
+    );
 }
 
 html.dark .git-branch-stable-placeholder {
@@ -1439,6 +1626,22 @@ html.dark .git-changes-table-skeleton__row > span {
 
   .git-branch-detail-banner {
     flex-direction: column;
+  }
+
+  .git-branch-detached-context,
+  .git-branch-status-unavailable-summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .git-branch-detached-context__action {
+    width: 100%;
+  }
+
+  .git-branch-status-unavailable__state {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
   }
 
   .git-branch-header-inline-status {

@@ -720,8 +720,20 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
       await setBranchHeaderWidth(host, 1040);
 
-      expect(host.textContent).toContain("Remote branch is not checked out");
+      expect(host.textContent).toContain("Status unavailable");
       expect(host.textContent).toContain(
+        "Remote branches are not checked out in the active worktree.",
+      );
+      expect(host.textContent).toContain(
+        "Check out this branch locally to review workspace changes.",
+      );
+      expect(
+        host.querySelector('[data-git-branch-status-unavailable="true"]'),
+      ).toBeTruthy();
+      expect(
+        host.querySelector('[data-git-branch-stable-placeholder="status"]'),
+      ).toBeFalsy();
+      expect(host.textContent).not.toContain(
         "Status is only available for checked-out local worktrees.",
       );
       expect(mockListWorkspacePage).not.toHaveBeenCalled();
@@ -2182,13 +2194,89 @@ describe("GitBranchesPanel interactions", () => {
     );
 
     try {
-      expect(host.textContent).toContain("Branch is not checked out");
+      await flush();
+
+      expect(host.textContent).toContain("Status unavailable");
       expect(host.textContent).toContain(
-        "Status is only available for checked-out local worktrees.",
+        "This branch is not checked out in the active worktree.",
       );
       expect(host.textContent).toContain(
-        "Use Compare to inspect file diffs, or open this branch in a worktree to review workspace changes.",
+        "Use History or Compare to inspect commits and diffs.",
       );
+      expect(
+        host.querySelector('[data-git-branch-status-unavailable="true"]'),
+      ).toBeTruthy();
+      expect(
+        host.querySelector('[data-git-branch-stable-placeholder="status"]'),
+      ).toBeFalsy();
+      expect(host.textContent).not.toContain("Branch is not checked out");
+      expect(mockListWorkspacePage).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it("shows a determinate unavailable status for a remote branch", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  selectedBranch={{
+                    name: "origin/feature/demo",
+                    fullName: "refs/remotes/origin/feature/demo",
+                    kind: "remote",
+                  }}
+                  branches={{
+                    repoRootPath: "/workspace/repo",
+                    currentRef: "main",
+                    local: [
+                      {
+                        name: "main",
+                        fullName: "refs/heads/main",
+                        kind: "local",
+                        current: true,
+                      },
+                    ],
+                    remote: [
+                      {
+                        name: "origin/feature/demo",
+                        fullName: "refs/remotes/origin/feature/demo",
+                        kind: "remote",
+                      },
+                    ],
+                  }}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+
+      expect(host.textContent).toContain("Status unavailable");
+      expect(host.textContent).toContain(
+        "Remote branches are not checked out in the active worktree.",
+      );
+      expect(host.textContent).toContain(
+        "Check out this branch locally to review workspace changes.",
+      );
+      expect(
+        host.querySelector('[data-git-branch-status-unavailable="true"]'),
+      ).toBeTruthy();
+      expect(
+        host.querySelector('[data-git-branch-stable-placeholder="status"]'),
+      ).toBeFalsy();
       expect(mockListWorkspacePage).not.toHaveBeenCalled();
     } finally {
       dispose();
@@ -4247,11 +4335,25 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
       expect(host.textContent).toContain("Detached HEAD");
-      expect(host.textContent).toContain("Viewing 11111111 without a branch.");
+      expect(host.textContent).toContain("Viewing 11111111 without a branch");
+      expect(host.textContent).toContain("Last attached: main");
+      expect(host.textContent).toContain("Status unavailable");
       expect(host.textContent).toContain(
+        "This branch is not checked out in the active worktree.",
+      );
+      expect(
+        host.querySelector('[data-git-branch-detached-context="true"]'),
+      ).toBeTruthy();
+      expect(
+        host.querySelector('[data-git-branch-status-unavailable="true"]'),
+      ).toBeTruthy();
+      expect(
+        host.querySelector('[data-git-branch-stable-placeholder="status"]'),
+      ).toBeFalsy();
+      expect(host.textContent).not.toContain(
         "Checkout a local branch to reattach HEAD before pull, push, or merge.",
       );
-      expect(host.textContent).toContain("Last attached branch: main.");
+      expect(host.textContent).not.toContain("Last attached branch: main.");
       const checkoutButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.includes("Checkout main"),
       ) as HTMLButtonElement | undefined;
