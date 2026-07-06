@@ -1667,6 +1667,57 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it('keeps hidden Git shell mounted while repository context is still resolving', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    const repoContext = deferred<{
+      available: boolean;
+      repoRootPath: string;
+      headRef: string;
+      headCommit: string;
+    }>();
+    mockRpc.git.resolveRepo.mockReturnValue(repoContext.promise);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+
+      const stack = host.querySelector('[data-browser-mode-stack]') as HTMLDivElement | null;
+      const filesWorkspace = host.querySelector('[data-testid="files-workspace"]') as HTMLDivElement | null;
+      const gitWorkspace = host.querySelector('[data-testid="git-workspace"]') as HTMLDivElement | null;
+      const gitPanel = gitWorkspace?.closest('[data-browser-mode-panel="git"]') as HTMLDivElement | null;
+
+      expect(stack?.getAttribute('data-active-mode')).toBe('files');
+      expect(filesWorkspace).toBeTruthy();
+      expect(gitWorkspace?.textContent).toContain('git:files:changes:/workspace/repo/src:312');
+      expect(gitPanel?.getAttribute('data-state')).toBe('inactive');
+      expect(gitPanel?.getAttribute('aria-hidden')).toBe('true');
+      expect(workspaceLifecycleStore.gitMounts).toBe(1);
+      expect(workspaceLifecycleStore.gitUnmounts).toBe(0);
+      expect(mockRpc.git.getRepoSummary).not.toHaveBeenCalled();
+      expect(mockRpc.git.listWorkspacePage).not.toHaveBeenCalled();
+      expect(mockRpc.git.listBranches).not.toHaveBeenCalled();
+      expect(mockRpc.git.listCommits).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
   it('uses the Desktop session storage scope id instead of the runtime env id for persisted paths', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -2746,7 +2797,11 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(host.querySelector('[data-browser-mode-stack]')?.getAttribute('data-active-mode')).toBe('files');
-      expect(host.querySelector('[data-testid="git-workspace"]')).toBeNull();
+      const gitWorkspace = host.querySelector('[data-testid="git-workspace"]') as HTMLDivElement | null;
+      const gitPanel = gitWorkspace?.closest('[data-browser-mode-panel="git"]') as HTMLDivElement | null;
+      expect(gitWorkspace?.textContent).toContain('git:files:changes:/workspace/repo/src:312');
+      expect(gitPanel?.getAttribute('data-state')).toBe('inactive');
+      expect(gitPanel?.getAttribute('aria-hidden')).toBe('true');
       expect(mockRpc.git.getRepoSummary).not.toHaveBeenCalled();
       expect(mockRpc.git.listWorkspacePage).not.toHaveBeenCalled();
       expect(notificationStore.warning).toEqual([]);

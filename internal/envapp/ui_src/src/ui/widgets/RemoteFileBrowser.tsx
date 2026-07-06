@@ -274,7 +274,6 @@ type GitCommitListCacheEntry = {
 
 function BrowserModeTransitionStack(props: {
   activeId: BrowserPageMode;
-  gitMounted: boolean;
   files: () => JSX.Element;
   git: () => JSX.Element;
   class?: string;
@@ -295,16 +294,14 @@ function BrowserModeTransitionStack(props: {
       >
         {props.files()}
       </div>
-      <Show when={props.gitMounted}>
-        <div
-          data-browser-mode-panel="git"
-          data-state={isActive('git') ? 'active' : 'inactive'}
-          aria-hidden={isActive('git') ? undefined : 'true'}
-          class="browser-mode-transition-panel h-full"
-        >
-          {props.git()}
-        </div>
-      </Show>
+      <div
+        data-browser-mode-panel="git"
+        data-state={isActive('git') ? 'active' : 'inactive'}
+        aria-hidden={isActive('git') ? undefined : 'true'}
+        class="browser-mode-transition-panel h-full"
+      >
+        {props.git()}
+      </div>
     </div>
   );
 }
@@ -655,7 +652,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const rootPermissionsSignature = createMemo(() => filesystemRoots().map((root) => `${root.id}:${root.permissions.write ? 'rw' : 'ro'}`).join('|'));
   const [showHidden, setShowHidden] = createSignal(false);
   const [pageMode, setPageMode] = createSignal<BrowserPageMode>('files');
-  const [gitModeShellMounted, setGitModeShellMounted] = createSignal(false);
   const [pathEditorRequestKey, setPathEditorRequestKey] = createSignal(0);
   const [repoInfo, setRepoInfo] = createSignal<GitResolveRepoResponse | null>(null);
   const [repoInfoLoading, setRepoInfoLoading] = createSignal(false);
@@ -3164,17 +3160,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const togglePageSidebar = () => setMobileSidebarOpen(!mobileSidebarOpen());
   const pageSidebarOpen = () => !layout.isMobile() || mobileSidebarOpen();
 
-  const ensureGitModeShellMounted = () => {
-    if (!gitModeShellMounted()) {
-      setGitModeShellMounted(true);
-    }
-  };
-
   const setBrowserPageMode = (mode: BrowserPageMode) => {
     const next = normalizeBrowserPageMode(mode);
-    if (next === 'git') {
-      ensureGitModeShellMounted();
-    }
     setPageMode(next);
     const id = envId();
     if (id) {
@@ -3187,7 +3174,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const info = repoInfo();
     const repoRootPath = String(info?.repoRootPath ?? '').trim();
     if (!info?.available || !repoRootPath) return;
-    ensureGitModeShellMounted();
 
     const refreshes: Array<Promise<unknown>> = [];
     if (!gitRepoSummary() && !gitRepoSummaryLoading()) {
@@ -3240,9 +3226,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const handlePageModeChange = (mode: BrowserPageMode) => {
     if (mode === 'git' && !canEnterGitHistory()) {
       return;
-    }
-    if (mode === 'git') {
-      ensureGitModeShellMounted();
     }
     setBrowserPageMode(mode);
   };
@@ -3365,7 +3348,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     setAgentHomePathAbs('');
     setShowHidden(restored.nextShowHidden);
     setGitSubview(restored.nextSubview);
-    setGitModeShellMounted(restored.nextMode === 'git');
     setPageMode(restored.nextMode);
     closePageSidebar();
     setRepoInfo(null);
@@ -4157,14 +4139,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   createEffect(() => {
-    const info = repoInfo();
-    const repoRootPath = String(info?.repoRootPath ?? '').trim();
-    if (gitModeShellMounted()) return;
-    if (!repoInfoResolved() || repoInfoLoading() || !info?.available || !repoRootPath || !canEnterGitHistory()) return;
-    ensureGitModeShellMounted();
-  });
-
-  createEffect(() => {
     const mode = pageMode();
     const info = repoInfo();
     const repoKey = info?.available ? `${info.repoRootPath ?? ''}|${info.headCommit ?? ''}` : '';
@@ -4737,7 +4711,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
             <BrowserModeTransitionStack
               class="h-full"
               activeId={pageMode()}
-              gitMounted={gitModeShellMounted() || pageMode() === 'git'}
               files={() => (
                     <FileBrowserWorkspace
                       class="h-full"
