@@ -41,6 +41,7 @@ export interface FileBrowserSidebarTreeProps {
   enableDragDrop?: boolean;
   sidebarOpen?: boolean;
   scrollContainer?: () => HTMLElement | null;
+  pendingNavigationPath?: string;
   roots?: NormalizedFilesystemRoot[];
   currentPath?: string;
   onRootSelect?: (path: string) => void;
@@ -54,6 +55,7 @@ interface FileBrowserSidebarTreeRowProps {
   instanceId: string;
   enableDragDrop: boolean;
   registerRow: (path: string, el: HTMLButtonElement | null) => void;
+  onNavigateClickAnchor: (path: string, row: HTMLButtonElement, event: MouseEvent) => void;
 }
 
 function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
@@ -89,7 +91,11 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
     browser.toggleFolder(props.item.path);
   };
 
-  const handleNavigate = () => {
+  const handleNavigate = (event: MouseEvent) => {
+    const row = event.currentTarget;
+    if (row instanceof HTMLButtonElement) {
+      props.onNavigateClickAnchor(props.item.path, row, event);
+    }
     browser.navigateTo(props.item);
   };
 
@@ -192,6 +198,7 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
                 instanceId={props.instanceId}
                 enableDragDrop={props.enableDragDrop}
                 registerRow={props.registerRow}
+                onNavigateClickAnchor={props.onNavigateClickAnchor}
               />
             )}
           </For>
@@ -211,6 +218,13 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
   const [permissionSavingRootID, setPermissionSavingRootID] = createSignal('');
   const rowRefs = new Map<string, HTMLButtonElement>();
   let scrollNonce = 0;
+  let pendingClickAnchor: {
+    targetPath: string;
+    rowTopInContainer: number;
+    pointerYInContainer: number;
+    pointerOffsetY: number;
+    seenPendingNavigation: boolean;
+  } | null = null;
 
   const registerRow = (path: string, el: HTMLButtonElement | null) => {
     if (el) {
@@ -218,6 +232,52 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
       return;
     }
     rowRefs.delete(path);
+  };
+
+  const pendingNavigationPath = () => String(props.pendingNavigationPath ?? '').trim();
+  const hasPendingNavigationTracking = () => props.pendingNavigationPath !== undefined;
+
+  const recordNavigateClickAnchor = (path: string, row: HTMLButtonElement, event: MouseEvent) => {
+    if (browser.currentPath() === path) return;
+    if (event.detail <= 0 || !Number.isFinite(event.clientY)) return;
+
+    const container = props.scrollContainer?.();
+    if (!container) return;
+
+    const rowRect = row.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const rowTopInContainer = rowRect.top - containerRect.top;
+    const pointerYInContainer = event.clientY - containerRect.top;
+    const pointerOffsetY = event.clientY - rowRect.top;
+
+    if (!Number.isFinite(rowTopInContainer) || !Number.isFinite(pointerYInContainer) || !Number.isFinite(pointerOffsetY)) return;
+
+    pendingClickAnchor = {
+      targetPath: path,
+      rowTopInContainer,
+      pointerYInContainer,
+      pointerOffsetY,
+      seenPendingNavigation: false,
+    };
+  };
+
+  const clampScrollTop = (container: HTMLElement, nextScrollTop: number): number => {
+    const maxScrollTop = Math.max(0, (container.scrollHeight || 0) - (container.clientHeight || 0));
+    const nonNegative = Math.max(0, nextScrollTop);
+    return maxScrollTop > 0 ? Math.min(maxScrollTop, nonNegative) : nonNegative;
+  };
+
+  const preserveClickAnchor = (container: HTMLElement, row: HTMLButtonElement, anchor: NonNullable<typeof pendingClickAnchor>) => {
+    const rowRect = row.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const actualTopInContainer = rowRect.top - containerRect.top;
+    if (!Number.isFinite(actualTopInContainer)) return;
+
+    const desiredTopInContainer = anchor.pointerYInContainer - anchor.pointerOffsetY;
+    container.scrollTop = clampScrollTop(
+      container,
+      container.scrollTop + actualTopInContainer - (Number.isFinite(desiredTopInContainer) ? desiredTopInContainer : anchor.rowTopInContainer),
+    );
   };
 
   createEffect(() => {
@@ -236,6 +296,8 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
   createEffect(() => {
     const currentPath = browser.currentPath();
     const sidebarOpen = props.sidebarOpen ?? true;
+    const pendingPath = pendingNavigationPath();
+    folderIndex();
     props.scrollContainer?.();
     scrollNonce += 1;
     const nonce = scrollNonce;
@@ -244,6 +306,35 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
       if (nonce !== scrollNonce || !sidebarOpen) return;
       const container = props.scrollContainer?.();
       if (!container) return;
+
+      const clickAnchor = pendingClickAnchor;
+      if (clickAnchor) {
+        if (pendingPath === clickAnchor.targetPath) {
+          clickAnchor.seenPendingNavigation = true;
+        }
+
+        if (currentPath === clickAnchor.targetPath) {
+          if (!hasPendingNavigationTracking() || clickAnchor.seenPendingNavigation) {
+            const row = rowRefs.get(clickAnchor.targetPath);
+            if (row) {
+              preserveClickAnchor(container, row, clickAnchor);
+              pendingClickAnchor = null;
+              return;
+            }
+          }
+          return;
+        }
+
+        if (
+          hasPendingNavigationTracking()
+          && (!clickAnchor.seenPendingNavigation || pendingPath === clickAnchor.targetPath)
+        ) {
+          return;
+        }
+
+        pendingClickAnchor = null;
+      }
+
       if (currentPath === '/') {
         container.scrollTop = 0;
         return;
@@ -408,6 +499,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                   instanceId={props.instanceId}
                   enableDragDrop={Boolean(props.enableDragDrop)}
                   registerRow={registerRow}
+                  onNavigateClickAnchor={recordNavigateClickAnchor}
                 />
               )}
             </For>
