@@ -42,7 +42,10 @@ Redeven's Env-trusted proxy derives the authoritative channel id from the Env
 App origin label, or from the fixed Local UI session in Local UI mode. The
 ReDevPlugin integration wrapper resolves that channel and overwrites both
 `X-ReDevPlugin-Owner-Session-Hash` and `X-ReDevPlugin-CSRF` before delegation.
-Env App UI code does not compute or own the token.
+For Local UI, Code App resolves `local-ui` to the same synthetic Env App
+session shape used by AppServer Local UI routes before ReDevPlugin derives the
+session hash and CSRF generation. Env App UI code does not compute or own the
+token.
 
 Plugin sandbox assets use the plugin namespace, not Env App management routes.
 When the handler is mounted, AppServer rewrites plugin asset cookie paths and
@@ -118,9 +121,11 @@ request context and a Redeven-registered adapter.
 [10] redeven:internal/codeapp/appserver/server.go:6263 - `plg-*` first labels are classified as plugin sandbox origins.
 [11] redeven:internal/codeapp/appserver/server_test.go:548 - Tests bind the proxy route matrix across caller roles.
 [12] redeven:internal/codeapp/appserver/server_test.go:833 - Tests bind plugin-origin sandbox namespace delegation.
-[13] redeven:internal/redevpluginintegration/adapters.go:85 - The session resolver projects Redeven session metadata into ReDevPlugin session context.
-[14] redeven:internal/redevpluginintegration/adapters.go:272 - CSRF validation requires the resolved ReDevPlugin session context.
-[15] redeven:internal/redevpluginintegration/adapters.go:1 - ReDevPlugin integration adapters own host policy and trust glue.
-[16] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1 - Plugin management API calls use `/_redeven_proxy/api/plugins*`.
-[17] redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1 - The bundled official Containers package is embedded with expected hashes.
-[18] redeven:okf/architecture/container-resources-capability.md:1 - Container resources are a Redeven-owned Docker/Podman business capability.
+[13] redeven:internal/codeapp/codeapp.go:1 - Code App supplies the plugin-platform resolver that includes the Local UI session fallback.
+[14] redeven:internal/codeapp/plugin_local_session_test.go:1 - Tests prove `local-ui` resolves only when Local UI is enabled.
+[15] redeven:internal/redevpluginintegration/adapters.go:85 - The session resolver projects Redeven session metadata into ReDevPlugin session context.
+[16] redeven:internal/redevpluginintegration/adapters.go:272 - CSRF validation requires the resolved ReDevPlugin session context.
+[17] redeven:internal/redevpluginintegration/adapters.go:1 - ReDevPlugin integration adapters own host policy and trust glue.
+[18] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1 - Plugin management API calls use `/_redeven_proxy/api/plugins*`.
+[19] redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1 - The bundled official Containers package is embedded with expected hashes.
+[20] redeven:okf/architecture/container-resources-capability.md:1 - Container resources are a Redeven-owned Docker/Podman business capability.
