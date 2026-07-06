@@ -47,8 +47,8 @@ function lightSnapshot() {
     source: 'light',
     resolvedTheme: 'light',
     window: {
-      backgroundColor: '#f0eeea',
-      symbolColor: '#141f2e',
+      backgroundColor: '#f4f1ed',
+      symbolColor: '#202a37',
     },
   };
 }
@@ -144,8 +144,8 @@ describe('bootstrapDesktopThemeBridge', () => {
 
     expect(document.documentElement.classList.contains('light')).toBe(true);
     expect(document.documentElement.style.colorScheme).toBe('light');
-    expect(document.documentElement.style.getPropertyValue('--redeven-desktop-native-window-background')).toBe('#f0eeea');
-    expect(document.body.style.getPropertyValue('background-color')).toBe('var(--background, #f0eeea)');
+    expect(document.documentElement.style.getPropertyValue('--redeven-desktop-native-window-background')).toBe('#f4f1ed');
+    expect(document.body.style.getPropertyValue('background-color')).toBe('var(--background, #f4f1ed)');
     expect(listener).toHaveBeenLastCalledWith(lightSnapshot());
 
     updatedListener?.({}, lightSnapshot());
@@ -192,7 +192,7 @@ describe('bootstrapDesktopThemeBridge', () => {
     expect(ipcRendererSendSync).toHaveBeenCalledWith('redeven-desktop:theme-set-source', 'light');
     expect(snapshot).toEqual(lightSnapshot());
     expect(document.documentElement.classList.contains('light')).toBe(true);
-    expect(document.documentElement.style.getPropertyValue('--redeven-desktop-native-window-background')).toBe('#f0eeea');
+    expect(document.documentElement.style.getPropertyValue('--redeven-desktop-native-window-background')).toBe('#f4f1ed');
   });
 
   it('updates the current document when the main process broadcasts a new window chrome snapshot', async () => {

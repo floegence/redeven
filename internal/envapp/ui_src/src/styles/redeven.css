@@ -272,15 +272,35 @@
   }
 }
 
-:root {
-  /* Keep the Env App panel surface contract at root scope so body portals inherit it too. */
-  --redeven-surface-panel: rgb(240, 238, 234);
-  --redeven-surface-main: color-mix(in srgb, var(--redeven-surface-panel) 72%, white 28%);
-  --redeven-surface-panel-soft: #fafbfc;
-  --redeven-surface-panel-elevated: #ffffff;
+:root:not(.dark),
+.light {
+  /* Keep the Env App light surface contract on the document scope so body portals inherit it too. */
+  --background: #f4f1ed;
+  --foreground: #202a37;
+  --primary: #202a37;
+  --ring: #202a37;
+  --primary-foreground: #fffdfa;
+  --secondary: #f1efec;
+  --muted: #f1efec;
+  --muted-foreground: #5a687c;
+  --accent: #e4e1dd;
+  --sidebar-accent: #e4e1dd;
+  --border: #d8d3cc;
+  --input: #ccc5ba;
+  --sidebar: #eeece9;
+  --activity-bar: #eeece9;
+  --activity-bar-foreground: #5a687c;
+  --chrome-border: #dad6d1;
+  --sidebar-border: #dad6d1;
+  --info: #3b82f6;
+  --warning: #f59e0b;
+  --redeven-surface-main: #f4f1ed;
+  --redeven-surface-panel: #f7f4f1;
+  --redeven-surface-panel-soft: #f1efec;
+  --redeven-surface-panel-elevated: #fffdfa;
   --redeven-surface-overlay: var(--redeven-surface-panel-elevated);
-  --redeven-surface-control: color-mix(in srgb, var(--background) 86%, var(--redeven-surface-panel-elevated) 14%);
-  --redeven-surface-control-muted: color-mix(in srgb, var(--muted) 46%, var(--background));
+  --redeven-surface-control: color-mix(in srgb, var(--redeven-surface-panel) 58%, var(--redeven-surface-panel-elevated) 42%);
+  --redeven-surface-control-muted: #f1efec;
   --redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, white 18%);
   --redeven-stroke-panel: var(--redeven-surface-panel-border);
   --redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 72%, var(--foreground) 28%);
@@ -296,8 +316,8 @@
   --redeven-link-code-border: color-mix(in srgb, var(--redeven-link-fg) 22%, transparent);
   --redeven-link-on-primary-fg: var(--color-blue-100);
   --redeven-link-on-primary-hover-fg: var(--color-sky-100);
-  --card: var(--redeven-surface-panel);
-  --popover: var(--redeven-surface-panel);
+  --card: #fffdfa;
+  --popover: #fffdfa;
   --git-title-dot-neutral: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
   --git-title-dot-info: color-mix(in srgb, var(--info) 75%, transparent);
   --git-title-dot-brand: color-mix(in srgb, var(--color-blue-600) 80%, transparent);
@@ -314,6 +334,9 @@
   --git-browser-selection-chip-border: color-mix(in srgb, var(--primary) 18%, transparent);
   --git-browser-selection-chip-fg: color-mix(in srgb, var(--primary) 78%, var(--foreground) 22%);
   --git-browser-selection-shadow: none;
+}
+
+:root {
   --redeven-notes-overlay-viewport-top: 0px;
   --redeven-notes-overlay-viewport-left: 0px;
   --redeven-notes-overlay-viewport-right: 0px;

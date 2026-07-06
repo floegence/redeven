@@ -28,16 +28,36 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain("html[data-redeven-theme-switching='true'] .workbench");
   });
 
-  it('defines the root panel surface family, paired stroke tokens, and aliases shared card/popover tokens to it', () => {
+  it('defines the light demo palette, root surface family, and paired stroke tokens', () => {
     const src = readRedevenCss();
 
-    expect(src).toContain('--redeven-surface-panel: rgb(240, 238, 234);');
-    expect(src).toContain('--redeven-surface-main: color-mix(in srgb, var(--redeven-surface-panel) 72%, white 28%);');
-    expect(src).toContain('--redeven-surface-panel-soft: #fafbfc;');
-    expect(src).toContain('--redeven-surface-panel-elevated: #ffffff;');
+    expect(src).toContain(':root:not(.dark),\n.light {');
+    expect(src).toContain('--background: #f4f1ed;');
+    expect(src).toContain('--foreground: #202a37;');
+    expect(src).toContain('--primary: #202a37;');
+    expect(src).toContain('--ring: #202a37;');
+    expect(src).toContain('--primary-foreground: #fffdfa;');
+    expect(src).toContain('--secondary: #f1efec;');
+    expect(src).toContain('--muted: #f1efec;');
+    expect(src).toContain('--muted-foreground: #5a687c;');
+    expect(src).toContain('--accent: #e4e1dd;');
+    expect(src).toContain('--sidebar-accent: #e4e1dd;');
+    expect(src).toContain('--border: #d8d3cc;');
+    expect(src).toContain('--input: #ccc5ba;');
+    expect(src).toContain('--sidebar: #eeece9;');
+    expect(src).toContain('--activity-bar: #eeece9;');
+    expect(src).toContain('--activity-bar-foreground: #5a687c;');
+    expect(src).toContain('--chrome-border: #dad6d1;');
+    expect(src).toContain('--sidebar-border: #dad6d1;');
+    expect(src).toContain('--info: #3b82f6;');
+    expect(src).toContain('--warning: #f59e0b;');
+    expect(src).toContain('--redeven-surface-main: #f4f1ed;');
+    expect(src).toContain('--redeven-surface-panel: #f7f4f1;');
+    expect(src).toContain('--redeven-surface-panel-soft: #f1efec;');
+    expect(src).toContain('--redeven-surface-panel-elevated: #fffdfa;');
     expect(src).toContain('--redeven-surface-overlay: var(--redeven-surface-panel-elevated);');
-    expect(src).toContain('--redeven-surface-control: color-mix(in srgb, var(--background) 86%, var(--redeven-surface-panel-elevated) 14%);');
-    expect(src).toContain('--redeven-surface-control-muted: color-mix(in srgb, var(--muted) 46%, var(--background));');
+    expect(src).toContain('--redeven-surface-control: color-mix(in srgb, var(--redeven-surface-panel) 58%, var(--redeven-surface-panel-elevated) 42%);');
+    expect(src).toContain('--redeven-surface-control-muted: #f1efec;');
     expect(src).toContain('--redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, white 18%);');
     expect(src).toContain('--redeven-stroke-panel: var(--redeven-surface-panel-border);');
     expect(src).toContain('--redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 72%, var(--foreground) 28%);');
@@ -48,14 +68,15 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-link-fg: var(--color-blue-600);');
     expect(src).toContain('--redeven-link-hover-fg: var(--color-blue-700);');
     expect(src).toContain('--redeven-link-code-bg: color-mix(in srgb, var(--redeven-link-fg) 9%, var(--background));');
-    expect(src).toContain('--card: var(--redeven-surface-panel);');
-    expect(src).toContain('--popover: var(--redeven-surface-panel);');
+    expect(src).toContain('--card: #fffdfa;');
+    expect(src).toContain('--popover: #fffdfa;');
     expect(src).toContain('--git-browser-selection-bg: color-mix(in srgb, var(--primary) 8%, var(--background));');
     expect(src).toContain('--git-browser-selection-secondary-fg: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);');
     expect(src).toContain('--git-browser-selection-chip-bg: color-mix(in srgb, var(--primary) 9%, transparent);');
     expect(src).toContain('--git-browser-selection-chip-border: color-mix(in srgb, var(--primary) 18%, transparent);');
     expect(src).toContain('--git-browser-selection-chip-fg: color-mix(in srgb, var(--primary) 78%, var(--foreground) 22%);');
     expect(src).toContain('--git-browser-selection-shadow: none;');
+    expect(src).not.toContain(':root {\n  /* Keep the Env App light surface contract on the document scope so body portals inherit it too. */\n  --background:');
 
     expect(src).toContain('--redeven-surface-panel: rgb(41, 44, 51);');
     expect(src).toContain('--redeven-surface-main: var(--redeven-surface-panel);');
@@ -93,8 +114,8 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain('--border: color-mix(in srgb, var(--redeven-surface-panel)');
     expect(src).not.toContain('--sidebar: color-mix(in srgb, var(--redeven-surface-panel)');
     expect(src).not.toContain('--activity-bar: color-mix(in srgb, var(--redeven-surface-panel)');
-    expect(src).toContain('--card: var(--redeven-surface-panel);');
-    expect(src).toContain('--popover: var(--redeven-surface-panel);');
+    expect(src).toContain('--card: #fffdfa;');
+    expect(src).toContain('--popover: #fffdfa;');
   });
 
   it('keeps Flower on the shared main content surface family instead of private raw color literals', () => {
@@ -104,9 +125,9 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--flower-chat-surface-soft: var(--redeven-surface-panel-soft);');
     expect(src).toContain('--flower-chat-surface-elevated: var(--redeven-surface-panel-elevated);');
     expect(src).toContain('--flower-chat-surface-border: var(--redeven-surface-panel-border);');
-    expect(src).not.toContain('--flower-chat-surface: rgb(240, 238, 234);');
+    expect(src).not.toContain('--flower-chat-surface: #f7f4f1;');
     expect(src).not.toContain('--flower-chat-surface: rgb(41, 44, 51);');
-    expect(src.match(/rgb\(240, 238, 234\)/g)?.length ?? 0).toBe(1);
+    expect(src.match(/--redeven-surface-panel: #f7f4f1;/g)?.length ?? 0).toBe(1);
     expect(src.match(/rgb\(41, 44, 51\)/g)?.length ?? 0).toBe(1);
   });
 
@@ -220,8 +241,10 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain(".git-branch-detail-banner[data-git-branch-detail-state='error'] {");
     expect(src).toContain('.git-branch-stable-placeholder {');
     expect(src).toContain('.git-branch-stable-placeholder__body {');
-    expect(src).toContain('.git-branch-stable-placeholder__note {');
-    expect(src).toContain('.git-branch-stable-placeholder__rows {');
+    expect(src).toContain('.git-branch-stable-placeholder__table {');
+    expect(src).toContain('.git-branch-stable-placeholder__header,');
+    expect(src).toContain('.git-branch-stable-placeholder__row {');
+    expect(src).toContain('.git-branch-stable-placeholder__cell {');
     expect(src).toContain('html.dark .git-branch-history-details-row {');
     expect(src).toContain('html.dark .git-branch-detail-banner {');
     expect(src).toContain('html.dark .git-branch-stable-placeholder {');

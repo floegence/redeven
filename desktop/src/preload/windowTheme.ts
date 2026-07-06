@@ -56,8 +56,8 @@ function fallbackDesktopThemeSnapshot(): DesktopThemeSnapshot {
     source: 'system',
     resolvedTheme: 'light',
     window: {
-      backgroundColor: '#f0eeea',
-      symbolColor: '#141f2e',
+      backgroundColor: '#f4f1ed',
+      symbolColor: '#202a37',
     },
   };
 }
