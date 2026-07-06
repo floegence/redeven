@@ -151,6 +151,13 @@ import {
 import { useI18n } from "../i18n";
 
 const BRANCH_STATUS_PAGE_SIZE = 200;
+const BRANCH_STATUS_TABLE_COLUMNS = [
+  "Path",
+  "Section",
+  "Status",
+  "Changes",
+  "Action",
+] as const;
 
 export interface GitBranchesPanelProps {
   repoRootPath?: string;
@@ -252,21 +259,59 @@ function branchStatusDirectorySummary(item: GitWorkspaceChange): string {
   return count === 1 ? "1 file" : `${count} files`;
 }
 
-function branchStatusEmptyMessage(
+function branchStatusEmptyPresentation(
   section: GitWorkspaceViewSection,
   directoryPath = "",
-): string {
-  if (section === "changes" && directoryPath) {
-    return "No pending files are available in this folder.";
+): {
+  title: string;
+  detail: string;
+} {
+  const scopedToDirectory = Boolean(directoryPath.trim());
+  if (section === "changes") {
+    return scopedToDirectory
+      ? {
+          title: "No pending files",
+          detail: "This folder is clean.",
+        }
+      : {
+          title: "No pending files",
+          detail: "This worktree is clean.",
+        };
   }
   switch (section) {
     case "staged":
-      return "No staged files are available in this worktree.";
+      return {
+        title: "Nothing staged",
+        detail: scopedToDirectory
+          ? "This folder has no staged files."
+          : "No files are staged for commit in this worktree.",
+      };
     case "conflicted":
-      return "No conflicted files are available in this worktree.";
+      return {
+        title: "No conflicts",
+        detail: scopedToDirectory
+          ? "This folder has no conflicted files."
+          : "This worktree has no conflicted files.",
+      };
+    default:
+      return {
+        title: "No files",
+        detail: scopedToDirectory
+          ? "This folder has no files in the selected section."
+          : "This worktree has no files in the selected section.",
+      };
+  }
+}
+
+function branchStatusEmptyIcon(section: GitWorkspaceViewSection): Component<{ class?: string }> {
+  switch (section) {
+    case "conflicted":
+      return AlertTriangle;
+    case "staged":
+      return CheckCircle;
     case "changes":
     default:
-      return "No pending files are available in this worktree.";
+      return FileText;
   }
 }
 
@@ -524,6 +569,68 @@ interface BranchStatusTableProps {
   onLoadMore?: () => void;
 }
 
+function BranchStatusEmptyState(props: {
+  section: GitWorkspaceViewSection;
+  directoryPath?: string;
+}) {
+  const presentation = () =>
+    branchStatusEmptyPresentation(
+      props.section,
+      String(props.directoryPath ?? "").trim(),
+    );
+  const Icon = () => branchStatusEmptyIcon(props.section);
+  return (
+    <div
+      class="git-branch-status-empty-state"
+      data-git-branch-status-empty-section={props.section}
+      role="status"
+      aria-live="polite"
+    >
+      <div class="git-branch-status-empty-state__mark" aria-hidden="true">
+        <Dynamic
+          component={Icon()}
+          class="git-branch-status-empty-state__icon"
+        />
+      </div>
+      <div class="git-branch-status-empty-state__copy">
+        <div class="git-branch-status-empty-state__title">
+          {presentation().title}
+        </div>
+        <div class="git-branch-status-empty-state__detail">
+          {presentation().detail}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BranchStatusEmptyTable(props: {
+  section: GitWorkspaceViewSection;
+  directoryPath?: string;
+}) {
+  return (
+    <div
+      class="git-branch-status-empty-table"
+      data-git-branch-status-empty-table="true"
+      data-git-branch-status-empty-section={props.section}
+    >
+      <div class="git-branch-status-empty-table__content">
+        <div class="git-branch-status-empty-table__header" aria-hidden="true">
+          <For each={BRANCH_STATUS_TABLE_COLUMNS}>
+            {(label) => <span>{label}</span>}
+          </For>
+        </div>
+        <div class="git-branch-status-empty-table__body">
+          <BranchStatusEmptyState
+            section={props.section}
+            directoryPath={props.directoryPath}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BranchStatusTable(props: BranchStatusTableProps) {
   const footerSummary = () => {
     const totalRows = Math.max(0, Number(props.totalCount ?? 0));
@@ -570,14 +677,10 @@ function BranchStatusTable(props: BranchStatusTableProps) {
       <Show
         when={props.items.length > 0}
         fallback={
-          <div class="px-4 py-8">
-            <GitSubtleNote>
-              {branchStatusEmptyMessage(
-                props.section,
-                String(props.directoryPath ?? "").trim(),
-              )}
-            </GitSubtleNote>
-          </div>
+          <BranchStatusEmptyTable
+            section={props.section}
+            directoryPath={props.directoryPath}
+          />
         }
       >
         <GitVirtualTable
@@ -585,11 +688,19 @@ function BranchStatusTable(props: BranchStatusTableProps) {
           tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[36rem] sm:min-w-[52rem] md:min-w-0`}
           header={
             <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Section</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
-              <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
+              <For each={BRANCH_STATUS_TABLE_COLUMNS}>
+                {(label) => (
+                  <th
+                    class={
+                      label === "Action"
+                        ? GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS
+                        : GIT_CHANGED_FILES_HEADER_CELL_CLASS
+                    }
+                  >
+                    {label}
+                  </th>
+                )}
+              </For>
             </tr>
           }
           renderRow={(item) => {
