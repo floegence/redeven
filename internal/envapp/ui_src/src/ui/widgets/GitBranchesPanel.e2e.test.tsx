@@ -4246,9 +4246,21 @@ describe("GitBranchesPanel interactions", () => {
           '[data-git-branch-status-summary-state="unavailable"]',
         ),
       ).toBeTruthy();
+      const placeholder = host.querySelector(
+        '[data-git-branch-stable-placeholder="status"]',
+      );
+      expect(placeholder).toBeTruthy();
       expect(
-        host.querySelector('[data-git-branch-stable-placeholder="status"]'),
+        placeholder?.querySelector(
+          '[data-git-branch-stable-placeholder-layout="status"]',
+        ),
       ).toBeTruthy();
+      expect(
+        placeholder?.querySelectorAll(".git-branch-stable-placeholder__row"),
+      ).toHaveLength(3);
+      expect(host.textContent).not.toContain(
+        "Branch status will appear here after this selection is available.",
+      );
       expect(mockListWorkspacePage).not.toHaveBeenCalled();
 
       const refreshButton = Array.from(host.querySelectorAll("button")).find(
@@ -4371,11 +4383,18 @@ describe("GitBranchesPanel interactions", () => {
           '[data-git-branch-status-summary-state="loading"]',
         ),
       ).toBeTruthy();
+      const verifyingPlaceholder = host.querySelector(
+        '[data-git-branch-stable-placeholder="status"][data-git-branch-stable-placeholder-state="verifying"]',
+      );
+      expect(verifyingPlaceholder).toBeTruthy();
       expect(
-        host.querySelector(
-          '[data-git-branch-stable-placeholder="status"][data-git-branch-stable-placeholder-state="verifying"]',
+        verifyingPlaceholder?.querySelectorAll(
+          ".git-branch-stable-placeholder__row",
         ),
-      ).toBeTruthy();
+      ).toHaveLength(3);
+      expect(host.textContent).not.toContain(
+        "Status will appear here after verification.",
+      );
       expect(host.querySelector("#git-branch-subview-tab-status")).toBeTruthy();
       expect(host.querySelector("#git-branch-subview-tab-history")).toBeTruthy();
       expect(host.textContent).not.toContain("Refresh branches");
@@ -4388,6 +4407,67 @@ describe("GitBranchesPanel interactions", () => {
       expect(onDeleteBranch).not.toHaveBeenCalled();
       expect(onOpenInTerminal).not.toHaveBeenCalled();
       expect(onBrowseFiles).not.toHaveBeenCalled();
+      expect(mockListWorkspacePage).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it("renders a compact status-table skeleton while branch verification is pending", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const verifyingBranch: GitBranchSummary = {
+      name: "feature/demo",
+      fullName: "refs/heads/feature/demo",
+      kind: "local",
+      current: true,
+    };
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  selectedBranch={verifyingBranch}
+                  branchDetailState={{
+                    kind: "verifying",
+                    branch: verifyingBranch,
+                  }}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+      const placeholder = host.querySelector(
+        '[data-git-branch-stable-placeholder="status"][data-git-branch-stable-placeholder-state="verifying"]',
+      );
+      const frame = placeholder?.closest(".git-branch-stable-placeholder");
+      expect(placeholder).toBeTruthy();
+      expect(frame?.className).not.toContain("flex-1");
+      expect(
+        placeholder?.querySelector(
+          '[data-git-branch-stable-placeholder-layout="status"]',
+        ),
+      ).toBeTruthy();
+      expect(
+        placeholder?.querySelector(".git-branch-stable-placeholder__header")
+          ?.textContent,
+      ).toContain("Path");
+      expect(
+        placeholder?.querySelectorAll(".git-branch-stable-placeholder__row"),
+      ).toHaveLength(3);
+      expect(host.textContent).not.toContain(
+        "Status will appear here after verification.",
+      );
       expect(mockListWorkspacePage).not.toHaveBeenCalled();
     } finally {
       dispose();
@@ -4457,9 +4537,23 @@ describe("GitBranchesPanel interactions", () => {
       expect(host.textContent).toContain("Refresh branches");
       expect(host.textContent).not.toContain("Merge feature");
       expect(host.querySelector(".git-branch-detail-banner")).toBeTruthy();
+      const historyPlaceholder = host.querySelector(
+        '[data-git-branch-stable-placeholder="history"]',
+      );
+      expect(historyPlaceholder).toBeTruthy();
       expect(
-        host.querySelector('[data-git-branch-stable-placeholder="history"]'),
+        historyPlaceholder?.querySelector(
+          '[data-git-branch-stable-placeholder-layout="history"]',
+        ),
       ).toBeTruthy();
+      expect(
+        historyPlaceholder?.querySelectorAll(
+          ".git-branch-stable-placeholder__row",
+        ),
+      ).toHaveLength(3);
+      expect(host.textContent).not.toContain(
+        "Commit history will appear here after this selection is available.",
+      );
       expect(
         host.querySelectorAll("#git-branch-subview-panel-history"),
       ).toHaveLength(1);
