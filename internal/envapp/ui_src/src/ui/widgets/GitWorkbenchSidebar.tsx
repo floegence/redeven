@@ -21,6 +21,7 @@ import {
   workspaceHealthLabel,
   workspaceViewSectionCount,
   workspaceViewSectionLabel,
+  type GitWorkspaceViewPageState,
   type GitWorkspaceViewSection,
   type GitWorkbenchSubview,
 } from '../utils/gitWorkbench';
@@ -46,6 +47,7 @@ export interface GitWorkbenchSidebarProps {
   repoUnavailableReason?: string;
   repoSummary?: GitRepoSummaryResponse | null;
   workspace?: GitListWorkspaceChangesResponse | null;
+  workspacePages?: Partial<Record<GitWorkspaceViewSection, GitWorkspaceViewPageState>>;
   workspaceLoading?: boolean;
   workspaceError?: string;
   selectedWorkspaceSection?: GitWorkspaceViewSection;
@@ -186,7 +188,10 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
   const closeAfterPick = () => props.onClose?.();
   const activeSubview = () => normalizeSubview(props.subview);
   const headDisplay = () => describeGitHead(props.repoSummary);
-  const workspaceCount = () => summarizeWorkspaceCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary);
+  const workspaceSummary = () => props.workspace?.summary ?? props.repoSummary?.workspaceSummary ?? null;
+  const workspaceCount = () => summarizeWorkspaceCount(workspaceSummary());
+  const workspaceBlockingLoading = () => Boolean(props.workspaceLoading && !workspaceSummary());
+  const workspaceBlockingError = () => Boolean(props.workspaceError && !workspaceSummary());
   const localBranchCount = () => props.branches?.local.length ?? 0;
   const remoteBranchCount = () => props.branches?.remote.length ?? 0;
   const branchButtonRefs = new Map<string, HTMLButtonElement>();
@@ -388,10 +393,10 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
 
                   <Show when={activeSubview() === 'changes'}>
                     <Show
-                      when={!props.workspaceLoading}
+                      when={!workspaceBlockingLoading()}
                       fallback={<GitStatePane loading message="Loading workspace changes..." class="min-h-[4.5rem] py-3" />}
                     >
-                      <Show when={!props.workspaceError} fallback={<div class="py-3 text-xs break-words text-error">{props.workspaceError}</div>}>
+                      <Show when={!workspaceBlockingError()} fallback={<div class="py-3 text-xs break-words text-error">{props.workspaceError}</div>}>
                         <div class="rounded-md bg-muted/[0.08] px-2.5 py-2.5">
                           <div class="flex items-start justify-between gap-2">
                             <div class="min-w-0 flex-1">
@@ -402,7 +407,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                 </Show>
                               </div>
                               <div class="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                                {workspaceHealthLabel(props.workspace?.summary ?? props.repoSummary?.workspaceSummary)}
+                                {workspaceHealthLabel(workspaceSummary())}
                               </div>
                               <Show when={headDisplay().detached}>
                                 <div class="mt-0.5 text-[10px] leading-relaxed text-warning">Detached HEAD keeps history browsing read-only for pull and push.</div>
@@ -416,12 +421,16 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                           <div class="mt-2 grid grid-cols-1 gap-0.5">
                             <For each={WORKSPACE_VIEW_SECTIONS}>
                               {(section) => {
-                                const count = () => workspaceViewSectionCount(props.workspace?.summary ?? props.repoSummary?.workspaceSummary, section);
+                                const count = () => workspaceViewSectionCount(workspaceSummary(), section);
+                                const pageState = () => props.workspacePages?.[section];
+                                const sectionLoading = () => Boolean(pageState()?.loading && !pageState()?.initialized);
                                 const tone = () => workspaceSectionTone(section);
                                 const active = () => props.selectedWorkspaceSection === section;
                                 return (
                                   <button
                                     type="button"
+                                    aria-busy={sectionLoading() ? 'true' : undefined}
+                                    data-git-workspace-section-loading={sectionLoading() ? 'true' : 'false'}
                                     class={cn('w-full rounded-md px-2.5 py-2 text-left text-xs', gitToneSelectableCardClass(tone(), active()))}
                                     onClick={() => {
                                       props.onSelectWorkspaceSection?.(section);
@@ -434,7 +443,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                         <div class="min-w-0 flex-1">
                                         <div class="font-medium text-current">{workspaceViewSectionLabel(section)}</div>
                                         <div class={cn('mt-0.5 text-[10px] leading-relaxed', gitSelectedSecondaryTextClass(active()))}>
-                                          {count() === 0 ? 'No files in this section.' : `${count()} file${count() === 1 ? '' : 's'} available.`}
+                                          {sectionLoading() ? 'Loading files...' : count() === 0 ? 'No files in this section.' : `${count()} file${count() === 1 ? '' : 's'} available.`}
                                         </div>
                                         </div>
                                       </div>
@@ -444,7 +453,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                           active() ? gitSelectedChipClass(true) : gitToneBadgeClass(tone())
                                         )}
                                       >
-                                        {count()}
+                                        {workspaceSummary() ? count() : '–'}
                                       </span>
                                     </div>
                                   </button>

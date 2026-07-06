@@ -76,6 +76,7 @@ import {
   findWorkspaceChangeByKeyInItems,
   isGitWorkspaceDirectoryEntry,
   isGitWorkspaceSection,
+  isWorkspaceViewSectionKnownEmpty,
   shortGitHash,
   summarizeWorkspaceCount,
   type GitBranchDetailPresentationState,
@@ -1179,10 +1180,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const gitWorkspacePageState = (section: GitWorkspaceViewSection) => gitWorkspacePages()[section];
   const selectedGitWorkspacePageState = createMemo(() => gitWorkspacePageState(selectedGitWorkspaceSection()));
-  // Keep blocking `Changes` loading derived from the selected page state so late requests cannot strand a global flag.
+  const currentGitWorkspaceSummary = () => gitWorkspace()?.summary ?? gitRepoSummary()?.workspaceSummary ?? null;
+  // Keep blocking `Changes` loading for the cold path only; section-level pending state is carried by workspacePages.
   const gitWorkspaceLoading = createMemo(() => {
     const state = selectedGitWorkspacePageState();
-    return state.loading && !state.initialized;
+    return state.loading && !state.initialized && !currentGitWorkspaceSummary();
   });
 
   const gitWorkspaceVisibleItems = (
@@ -1190,6 +1192,28 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     workspace = gitWorkspace(),
     state = gitWorkspacePageState(section),
   ) => workspacePageItems(workspace, section, state);
+
+  const initializeKnownEmptyGitWorkspaceSection = (section: GitWorkspaceViewSection): boolean => {
+    const state = gitWorkspacePageState(section);
+    if (state.initialized || state.loading) return false;
+    if (!isWorkspaceViewSectionKnownEmpty(currentGitWorkspaceSummary(), section)) return false;
+
+    updateGitWorkspacePageState(section, (prev) => ({
+      ...prev,
+      items: [],
+      totalCount: 0,
+      scopeFileCount: 0,
+      nextOffset: 0,
+      hasMore: false,
+      loading: false,
+      loadingMode: undefined,
+      error: '',
+      initialized: true,
+      directoryPath: section === 'changes' ? String(prev.directoryPath ?? '').trim() : '',
+      breadcrumbs: section === 'changes' && Array.isArray(prev.breadcrumbs) ? [...prev.breadcrumbs] : [],
+    }));
+    return true;
+  };
 
   const syncGitWorkspaceSelection = (nextWorkspace: GitListWorkspaceChangesResponse | null | undefined) => {
     if (!nextWorkspace) {
@@ -1230,6 +1254,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       nextOffset: Number(page.nextOffset ?? 0),
       hasMore: Boolean(page.hasMore),
       loading: false,
+      loadingMode: undefined,
       error: '',
       initialized: true,
       directoryPath: String(page.directoryPath ?? '').trim(),
@@ -1333,9 +1358,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const selectGitWorkspaceSection = (section: GitWorkspaceViewSection) => {
-    setSelectedGitWorkspaceSection(section);
-    const firstItem = gitWorkspaceVisibleItems(section)[0] ?? null;
-    setSelectedGitWorkspaceKey(workspaceEntryKey(firstItem));
+    batch(() => {
+      setSelectedGitWorkspaceSection(section);
+      initializeKnownEmptyGitWorkspaceSection(section);
+      const firstItem = gitWorkspaceVisibleItems(section)[0] ?? null;
+      setSelectedGitWorkspaceKey(workspaceEntryKey(firstItem));
+    });
     if (layout.isMobile()) {
       closePageSidebar();
     }
@@ -2724,6 +2752,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       ? Math.max(0, options.offset)
       : (append ? currentState.nextOffset : 0);
 
+    if (!append && !options.force && !directoryPath && initializeKnownEmptyGitWorkspaceSection(section)) {
+      return;
+    }
+
     if (!options.force) {
       if (append) {
         if (!currentState.initialized || currentState.loading || !currentState.hasMore) {
@@ -2740,6 +2772,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     updateGitWorkspacePageState(section, (state) => ({
       ...state,
       loading: true,
+      loadingMode: append ? 'append' : state.initialized ? 'refresh' : 'initial',
       error: options.silent ? state.error : '',
     }));
     if (!options.silent && selectedGitWorkspaceSection() === section && !append) {
@@ -2763,6 +2796,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       updateGitWorkspacePageState(section, (state) => ({
         ...state,
         loading: false,
+        loadingMode: undefined,
         error: message,
       }));
       if (!options.silent && selectedGitWorkspaceSection() === section && !append) {
@@ -2779,6 +2813,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         updateGitWorkspacePageState(section, (state) => ({
           ...state,
           loading: false,
+          loadingMode: undefined,
         }));
       }
     }
@@ -4061,6 +4096,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const section = selectedGitWorkspaceSection();
       const sectionState = gitWorkspacePageState(section);
       if (!sectionState.initialized && !sectionState.loading) {
+        if (initializeKnownEmptyGitWorkspaceSection(section)) return;
         void loadGitWorkspaceSection(section);
       }
     }

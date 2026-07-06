@@ -96,6 +96,7 @@ export type GitWorkspaceViewPageState = {
   nextOffset: number;
   hasMore: boolean;
   loading: boolean;
+  loadingMode?: "initial" | "refresh" | "append";
   error: string;
   initialized: boolean;
   directoryPath?: string;
@@ -670,6 +671,14 @@ export function pickDefaultWorkspaceViewSectionFromSummary(
     if (workspaceViewSectionCount(summary, section) > 0) return section;
   }
   return "changes";
+}
+
+export function isWorkspaceViewSectionKnownEmpty(
+  summary: GitWorkspaceSummary | null | undefined,
+  section: GitWorkspaceViewSection,
+): boolean {
+  if (!summary) return false;
+  return workspaceViewSectionCount(summary, section) <= 0;
 }
 
 export function findWorkspaceChangeByKey(

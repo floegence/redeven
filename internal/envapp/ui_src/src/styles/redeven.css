@@ -884,6 +884,167 @@ html.dark .git-branch-stable-placeholder__rows > div {
     );
 }
 
+.git-changes-filter-slot[data-git-changes-filter-state='pending'] {
+  opacity: 0.72;
+}
+
+.git-changes-toolbar-status-row {
+  min-height: 1.875rem;
+}
+
+.git-changes-toolbar-loading-slot {
+  min-width: 9.5rem;
+  min-height: 1.625rem;
+  display: inline-flex;
+  align-items: center;
+  transition: opacity 140ms ease;
+}
+
+.git-changes-toolbar-loading-slot[data-visible='false'] {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.git-changes-breadcrumb-slot {
+  min-height: 1.875rem;
+  display: flex;
+  align-items: center;
+  transition: opacity 140ms ease;
+}
+
+.git-changes-breadcrumb-slot[data-visible='false'] {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.git-changes-table-pending {
+  min-height: 11rem;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--muted) 5%, transparent);
+}
+
+.git-changes-table-empty {
+  min-height: 9rem;
+}
+
+.git-changes-table-status-slot {
+  min-height: 1.875rem;
+  display: flex;
+  align-items: center;
+}
+
+.git-changes-table-status-slot[data-visible='false'] {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.git-changes-table-skeleton {
+  display: grid;
+  min-width: 34rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 48%, transparent);
+}
+
+.git-changes-table-skeleton__row {
+  min-height: 2.625rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 6rem 6rem 4rem;
+  align-items: center;
+  gap: 1.5rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 48%, transparent);
+}
+
+.git-changes-table-skeleton__row > span {
+  display: block;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--foreground) 8%, transparent),
+      color-mix(in srgb, var(--foreground) 3%, transparent)
+    );
+}
+
+.git-changes-table-skeleton__path {
+  width: min(72%, 28rem);
+  height: 0.625rem;
+}
+
+.git-changes-table-skeleton__path[data-skeleton-index='1'],
+.git-changes-table-skeleton__path[data-skeleton-index='4'] {
+  width: min(58%, 22rem);
+}
+
+.git-changes-table-skeleton__path[data-skeleton-index='2'],
+.git-changes-table-skeleton__path[data-skeleton-index='5'] {
+  width: min(84%, 32rem);
+}
+
+.git-changes-table-skeleton__pill,
+.git-changes-table-skeleton__metrics,
+.git-changes-table-skeleton__actions {
+  height: 0.5rem;
+}
+
+.git-changes-table-skeleton__pill {
+  width: 4rem;
+}
+
+.git-changes-table-skeleton__metrics {
+  width: 3.5rem;
+}
+
+.git-changes-table-skeleton__actions {
+  width: 2.75rem;
+  justify-self: end;
+}
+
+.git-changes-table-refresh-row {
+  min-height: 2.125rem;
+  display: flex;
+  align-items: center;
+}
+
+button[data-git-workspace-section-loading='true'] {
+  position: relative;
+}
+
+button[data-git-workspace-section-loading='true']::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0.625rem;
+  inset-block-end: 0.25rem;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--primary) 34%, transparent) 45%,
+      transparent 100%
+    );
+  animation: redeven-loading-curtain-sweep 1.35s cubic-bezier(0.42, 0, 0.2, 1) infinite;
+}
+
+html.dark .git-changes-table-pending {
+  background: color-mix(in srgb, var(--muted) 6%, transparent);
+}
+
+html.dark .git-changes-table-skeleton__row > span {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--foreground) 10%, transparent),
+      color-mix(in srgb, var(--foreground) 4%, transparent)
+    );
+}
+
 @media (max-width: 640px) {
   .git-branch-history-details {
     margin-left: 2.125rem;
@@ -3645,6 +3806,11 @@ html.dark .redeven-workbench-progress-curtain {
     transform: none;
     width: 100%;
     background: color-mix(in srgb, var(--foreground) 18%, transparent);
+  }
+
+  button[data-git-workspace-section-loading='true']::after {
+    animation: none;
+    background: color-mix(in srgb, var(--foreground) 16%, transparent);
   }
 
   .git-branch-history-row,
