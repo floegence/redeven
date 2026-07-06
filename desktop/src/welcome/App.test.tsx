@@ -2092,8 +2092,8 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).toContain('data-floe-dialog-panel');
     expect(dialogSrc).toContain('"flex flex-col", e.class');
     expect(dialogSrc).toContain('return r() ? void 0 : "true";');
-    expect(dialogSrc).toContain('return n(ve, {');
-    expect(dialogSrc).toContain('ke as ConfirmDialog');
+    expect(dialogSrc).toContain('return e.children ??');
+    expect(dialogSrc).toContain('as ConfirmDialog');
     expect(chromeSrc).toContain("'--redeven-desktop-titlebar-height': `${snapshot.titleBarHeight}px`");
     expect(chromeSrc).toContain("[data-floe-shell-slot='top-bar']");
     expect(chromeSrc).toContain('app-region: drag;');

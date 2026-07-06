@@ -1,6 +1,7 @@
 import { Show, createEffect, createSignal, onCleanup, createMemo, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
+import { createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 import { resolveAnchoredOverlayPosition, type AnchoredOverlayPlacement, type AnchoredOverlayPosition } from './anchoredOverlay';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
@@ -38,6 +39,10 @@ function tooltipArrowStyle(position: AnchoredOverlayPosition): JSX.CSSProperties
  */
 export function Tooltip(props: TooltipProps) {
   const [visible, setVisible] = createSignal(false);
+  const tooltipPresence = createFloatingPresence({
+    open: visible,
+    exitDurationMs: 80,
+  });
   const [position, setPosition] = createSignal<AnchoredOverlayPosition | null>(null);
   const resolvedPlacement = createMemo(() => position()?.placement ?? (props.placement ?? 'top'));
 
@@ -112,7 +117,6 @@ export function Tooltip(props: TooltipProps) {
   createEffect(() => {
     if (!visible()) {
       clearFrameHandle();
-      setPosition(null);
       return;
     }
 
@@ -144,6 +148,12 @@ export function Tooltip(props: TooltipProps) {
     });
   });
 
+  createEffect(() => {
+    if (!tooltipPresence.mounted()) {
+      setPosition(null);
+    }
+  });
+
   onCleanup(() => {
     clearTimeoutHandle();
     clearFrameHandle();
@@ -164,17 +174,19 @@ export function Tooltip(props: TooltipProps) {
     >
       {props.children}
 
-      <Show when={visible()}>
+      <Show when={tooltipPresence.mounted()}>
         <Portal>
           <div
             ref={tooltipRef}
             role="tooltip"
             data-placement={resolvedPlacement()}
+            data-floating-presence={tooltipPresence.state()}
+            aria-hidden={tooltipPresence.exiting() ? 'true' : undefined}
             class={cn(
               'pointer-events-none fixed z-[200] max-w-[min(24rem,calc(100vw-1rem))] rounded border px-2 py-1 text-xs leading-snug text-popover-foreground shadow-md',
               redevenSurfaceRoleClass('overlay'),
               'whitespace-normal break-words',
-              'animate-in fade-in zoom-in-95',
+              'floe-floating-presence floe-floating-tooltip',
               props.class,
             )}
             style={{

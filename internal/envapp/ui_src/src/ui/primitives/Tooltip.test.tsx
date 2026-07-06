@@ -106,4 +106,46 @@ describe('Tooltip', () => {
       dispose();
     }
   });
+
+  it('keeps the tooltip mounted in an exiting state before unmounting', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <Tooltip content="Copy path" delay={0}>
+        <button type="button">Copy</button>
+      </Tooltip>
+    ), host);
+
+    try {
+      const anchor = host.querySelector('[data-redeven-tooltip-anchor]') as HTMLElement | null;
+      expect(anchor).toBeTruthy();
+
+      anchor!.dispatchEvent(new MouseEvent('mouseenter'));
+      await flushPositioning();
+
+      const tooltip = document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
+      expect(tooltip).toBeTruthy();
+      expect(tooltip?.style.visibility).toBe('visible');
+
+      anchor!.dispatchEvent(new MouseEvent('mouseleave'));
+      await Promise.resolve();
+
+      const exitingTooltip = document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
+      expect(exitingTooltip).toBe(tooltip);
+      expect(exitingTooltip?.getAttribute('data-floating-presence')).toBe('exiting');
+      expect(exitingTooltip?.getAttribute('aria-hidden')).toBe('true');
+      expect(exitingTooltip?.style.visibility).toBe('visible');
+
+      vi.advanceTimersByTime(79);
+      await Promise.resolve();
+      expect(document.body.querySelector('[role="tooltip"]')).toBeTruthy();
+
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+      expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
 });

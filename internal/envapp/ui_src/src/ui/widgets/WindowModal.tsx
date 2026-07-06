@@ -1,6 +1,7 @@
 import { Show, createEffect, createMemo, createUniqueId, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
+import { createFloatingPresence } from '@floegence/floe-webapp-core/ui';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 
 const WINDOW_MODAL_FOCUSABLE_SELECTOR = [
@@ -44,6 +45,11 @@ export function WindowModal(props: WindowModalProps) {
   const titleId = createUniqueId();
   const descriptionId = createUniqueId();
   const resolvedHost = createMemo(() => props.host ?? null);
+  const modalOpen = () => props.open && Boolean(resolvedHost());
+  const modalPresence = createFloatingPresence({
+    open: modalOpen,
+    exitDurationMs: 120,
+  });
   const requestClose = () => props.onOpenChange?.(false);
 
   let dialogRef: HTMLDivElement | undefined;
@@ -115,15 +121,22 @@ export function WindowModal(props: WindowModalProps) {
   };
 
   return (
-    <Show when={props.open && resolvedHost()}>
+    <Show when={modalPresence.mounted() && resolvedHost()}>
       <Portal mount={resolvedHost()!}>
         <div
           data-testid="window-modal-overlay"
-          class={cn('absolute inset-0 z-[20] flex items-center justify-center p-4', props.overlayClass)}
+          data-floating-presence={modalPresence.state()}
+          aria-hidden={modalPresence.exiting() ? 'true' : undefined}
+          class={cn(
+            'absolute inset-0 z-[20] flex items-center justify-center p-4',
+            modalPresence.exiting() && 'pointer-events-none',
+            props.overlayClass,
+          )}
         >
           <div
             data-testid="window-modal-backdrop"
-            class="absolute inset-0 cursor-pointer bg-background/56 backdrop-blur-[1.5px]"
+            data-floating-presence={modalPresence.state()}
+            class="absolute inset-0 cursor-pointer bg-background/56 backdrop-blur-[1.5px] floe-floating-presence floe-floating-backdrop"
             onMouseDown={() => requestClose()}
             onClick={() => requestClose()}
           />
@@ -133,9 +146,12 @@ export function WindowModal(props: WindowModalProps) {
             aria-modal="true"
             aria-labelledby={titleId}
             aria-describedby={props.description ? descriptionId : undefined}
+            aria-hidden={modalPresence.exiting() ? 'true' : undefined}
             tabIndex={-1}
+            data-floating-presence={modalPresence.state()}
             class={cn(
               'relative z-[1] flex max-h-full w-[min(32rem,calc(100%-1rem))] max-w-full flex-col overflow-hidden rounded-md border border-border/80 bg-background shadow-[0_28px_72px_-44px_rgba(15,23,42,0.58)] outline-none',
+              'floe-floating-presence floe-floating-dialog-panel',
               props.class,
             )}
             onMouseDown={(event) => event.stopPropagation()}
