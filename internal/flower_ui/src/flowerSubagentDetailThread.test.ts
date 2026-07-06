@@ -84,6 +84,47 @@ describe('projectSubagentDetailThread', () => {
     });
   });
 
+  it('renders full subagent message text instead of the bounded preview', () => {
+    const fullText = `Complete report ${'evidence section '.repeat(80)}http://arxiv.org/abs/2607.02514v1`;
+    const preview = 'Complete report http://arxiv.org/abs/2607.02...';
+    const detail: FlowerSubagentDetail = {
+      summary: {
+        parent_thread_id: 'parent-1',
+        subagent_id: 'child-1',
+        thread_id: 'child-1',
+        task_name: 'Research papers',
+        title: 'Research papers',
+        agent_type: 'researcher',
+        status: 'completed',
+        last_message: 'summary-only fallback should not render',
+        can_send_input: false,
+        can_interrupt: false,
+        can_close: true,
+        created_at_ms: 100,
+        updated_at_ms: 300,
+      },
+      timeline: [{
+        ordinal: 1,
+        kind: 'assistant_message',
+        created_at_ms: 200,
+        message: {
+          role: 'assistant',
+          text: fullText,
+          preview,
+        },
+      }],
+      generated_at_ms: 300,
+    };
+
+    const thread = projectSubagentDetailThread(detail, '', '');
+
+    expect(thread?.messages).toHaveLength(1);
+    expect(thread?.messages[0].content).toBe(fullText);
+    expect(thread?.messages[0].content).toContain('http://arxiv.org/abs/2607.02514v1');
+    expect(thread?.messages[0].content).not.toBe(preview);
+    expect(thread?.messages[0].content).not.toBe(detail.summary.last_message);
+  });
+
   it('uses timeline ordinal to place canonical activity when rows share a timestamp', () => {
     const detail: FlowerSubagentDetail = {
       summary: {
