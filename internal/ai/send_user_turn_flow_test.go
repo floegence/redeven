@@ -1781,7 +1781,7 @@ func TestSendUserTurn_FailedThreadStartsNewRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if err := svc.threadsDB.UpdateThreadRunState(ctx, meta.EndpointID, th.ThreadID, string(RunStateFailed), runErrorCodeFloretEngineFailed, "floret engine failed", "", meta.UserPublicID, meta.UserEmail); err != nil {
+	if err := svc.threadsDB.UpdateThreadRunState(ctx, meta.EndpointID, th.ThreadID, string(RunStateFailed), threadstore.RuntimeRestartedRunErrorCode, "runtime restarted before Floret could finish the turn", "", meta.UserPublicID, meta.UserEmail); err != nil {
 		t.Fatalf("UpdateThreadRunState failed: %v", err)
 	}
 
@@ -1809,6 +1809,13 @@ func TestSendUserTurn_FailedThreadStartsNewRun(t *testing.T) {
 	}
 	if len(turns) != 1 || turns[0].RunID != resp.RunID || turns[0].UserMessageID != "m_failed_continue_user" {
 		t.Fatalf("turns=%+v, want direct new run turn after failed thread", turns)
+	}
+	queued, err := svc.threadsDB.ListQueuedTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListQueuedTurns: %v", err)
+	}
+	if len(queued) != 0 {
+		t.Fatalf("queued=%+v, want failed runtime-restarted thread to start directly", queued)
 	}
 }
 
