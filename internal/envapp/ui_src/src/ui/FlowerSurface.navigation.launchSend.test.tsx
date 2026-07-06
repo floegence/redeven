@@ -2396,6 +2396,32 @@ describe('FlowerSurface navigation launch/send', () => {
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('keep this draft after send fails');
   });
 
+  it('presents provider stream interruptions without blaming Flower orchestration', async () => {
+    const interruptedThread = thread({
+      thread_id: 'thread-provider-stream-interrupted',
+      title: 'Provider stream interruption',
+      status: 'failed',
+      error: {
+        code: 'provider_stream_interrupted',
+        message: 'unexpected EOF',
+      },
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [interruptedThread]),
+      loadThread: vi.fn(async () => liveBootstrap(interruptedThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-provider-stream-interrupted"] button')));
+    (runtime.querySelector('[data-thread-id="thread-provider-stream-interrupted"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('.flower-error-card').length > 0);
+
+    const cardText = runtime.querySelector('.flower-error-card')?.textContent ?? '';
+    expect(cardText).toContain('The selected AI provider ended the response stream unexpectedly.');
+    expect(cardText).not.toContain('orchestration engine');
+    expect(runtime.querySelector('.flower-error-actions button')?.textContent).toContain('Open settings');
+  });
+
   it('continues a failed thread and shows closed subagents as terminal', async () => {
     const failedThread = thread({
       thread_id: 'thread-failed-continue',

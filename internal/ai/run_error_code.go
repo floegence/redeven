@@ -12,12 +12,13 @@ import (
 )
 
 const (
-	runErrorCodeProviderAuthFailed       = "provider_auth_failed"
-	runErrorCodeProviderMissingKey       = "provider_missing_key"
-	runErrorCodeProviderRateLimited      = "provider_rate_limited"
-	runErrorCodeProviderUnreachable      = "provider_unreachable"
-	runErrorCodeProviderModelUnavailable = "provider_model_unavailable"
-	runErrorCodeFloretEngineFailed       = "floret_engine_failed"
+	runErrorCodeProviderAuthFailed        = "provider_auth_failed"
+	runErrorCodeProviderMissingKey        = "provider_missing_key"
+	runErrorCodeProviderRateLimited       = "provider_rate_limited"
+	runErrorCodeProviderUnreachable       = "provider_unreachable"
+	runErrorCodeProviderStreamInterrupted = "provider_stream_interrupted"
+	runErrorCodeProviderModelUnavailable  = "provider_model_unavailable"
+	runErrorCodeFloretEngineFailed        = "floret_engine_failed"
 )
 
 func userFacingRunError(code string, fallback string) string {
@@ -31,6 +32,8 @@ func userFacingRunError(code string, fallback string) string {
 		return "The selected AI provider is rate limiting this request. Try again after the provider limit resets."
 	case runErrorCodeProviderUnreachable:
 		return "The selected AI provider could not be reached. Check the provider endpoint and network connection."
+	case runErrorCodeProviderStreamInterrupted:
+		return "The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening."
 	case runErrorCodeProviderModelUnavailable:
 		return "The selected model is not available from this provider. Choose another model in the Local AI Profile."
 	case runErrorCodeFloretEngineFailed:
@@ -89,6 +92,8 @@ func classifyRunFailureCode(err error, fallback string) string {
 		return runErrorCodeProviderModelUnavailable
 	case strings.Contains(text, "connection refused") || strings.Contains(text, "no such host") || strings.Contains(text, "timeout") || strings.Contains(text, "deadline exceeded") || strings.Contains(text, "runtime-control returned http 5"):
 		return runErrorCodeProviderUnreachable
+	case strings.Contains(text, "unexpected eof") || strings.Contains(text, "stream closed") || strings.Contains(text, "response stream"):
+		return runErrorCodeProviderStreamInterrupted
 	default:
 		return strings.TrimSpace(fallback)
 	}

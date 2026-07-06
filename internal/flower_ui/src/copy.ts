@@ -273,6 +273,7 @@ export type FlowerSurfaceCopy = Readonly<{
       providerMissingKey: string;
       providerRateLimited: string;
       providerUnreachable: string;
+      providerStreamInterrupted: string;
       providerModelUnavailable: string;
       floretEngineFailed: string;
       runtimeRestarted: string;
@@ -434,6 +435,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       providerMissingKey: 'The selected AI provider is missing an API key. Open Settings and complete the Local AI Profile.',
       providerRateLimited: 'The selected AI provider is rate limiting this request. Try again after the provider limit resets.',
       providerUnreachable: 'The selected AI provider could not be reached. Check the provider endpoint and network connection.',
+      providerStreamInterrupted: 'The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening.',
       providerModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',
       floretEngineFailed: 'Flower could not finish this turn because the orchestration engine failed.',
       runtimeRestarted: 'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',

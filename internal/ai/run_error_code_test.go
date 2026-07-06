@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 	"testing"
 
 	openai "github.com/openai/openai-go"
@@ -34,6 +35,7 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 		{name: "missing key", err: errors.New("missing api key for provider"), want: runErrorCodeProviderMissingKey},
 		{name: "network timeout", err: timeoutNetError{}, want: runErrorCodeProviderUnreachable},
 		{name: "context timeout", err: context.DeadlineExceeded, want: runErrorCodeProviderUnreachable},
+		{name: "provider stream eof", err: errors.New("unexpected EOF"), want: runErrorCodeProviderStreamInterrupted},
 		{name: "unknown preserves fallback", err: errors.New("other failure"), want: runErrorCodeFloretEngineFailed},
 	}
 
@@ -55,5 +57,21 @@ func TestUserFacingRunErrorHidesFloretWrapperWhenProviderCodeExists(t *testing.T
 	}
 	if msg == "Floret hosted turn failed" {
 		t.Fatalf("userFacingRunError exposed internal Floret wrapper")
+	}
+}
+
+func TestUserFacingRunErrorPresentsProviderStreamInterruption(t *testing.T) {
+	t.Parallel()
+
+	msg := userFacingRunError(runErrorCodeProviderStreamInterrupted, "unexpected EOF")
+	if msg == "" {
+		t.Fatalf("userFacingRunError returned empty message")
+	}
+	lower := strings.ToLower(msg)
+	if strings.Contains(lower, "floret") || strings.Contains(lower, "orchestration") {
+		t.Fatalf("msg=%q should not blame Floret orchestration", msg)
+	}
+	if !strings.Contains(lower, "provider") || !strings.Contains(lower, "stream") {
+		t.Fatalf("msg=%q, want provider stream-oriented presentation", msg)
 	}
 }

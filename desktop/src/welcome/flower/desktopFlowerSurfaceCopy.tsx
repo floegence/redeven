@@ -62,6 +62,7 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
         providerMissingKey: t(i18n, k('chat.runErrorProviderMissingKey')),
         providerRateLimited: t(i18n, k('chat.runErrorProviderRateLimited')),
         providerUnreachable: t(i18n, k('chat.runErrorProviderUnreachable')),
+        providerStreamInterrupted: t(i18n, k('chat.runErrorProviderStreamInterrupted')),
         providerModelUnavailable: t(i18n, k('chat.runErrorProviderModelUnavailable')),
         floretEngineFailed: t(i18n, k('chat.runErrorFloretEngineFailed')),
         runtimeRestarted: t(i18n, k('chat.runErrorRuntimeRestarted')),

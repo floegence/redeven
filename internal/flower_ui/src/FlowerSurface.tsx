@@ -1590,6 +1590,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.runErrors.providerRateLimited;
       case 'provider_unreachable':
         return copy().chat.runErrors.providerUnreachable;
+      case 'provider_stream_interrupted':
+        return copy().chat.runErrors.providerStreamInterrupted;
       case 'provider_model_unavailable':
         return copy().chat.runErrors.providerModelUnavailable;
       case 'floret_engine_failed':
@@ -3785,7 +3787,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const actionable = code === 'provider_auth_failed'
       || code === 'provider_missing_key'
       || code === 'provider_model_unavailable'
-      || code === 'provider_unreachable';
+      || code === 'provider_unreachable'
+      || code === 'provider_stream_interrupted';
     return errorNotice(
       copy().chat.runErrorTitle,
       presentRunError(error),
