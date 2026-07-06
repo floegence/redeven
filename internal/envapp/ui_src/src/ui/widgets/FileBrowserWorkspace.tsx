@@ -61,6 +61,7 @@ export interface FileBrowserWorkspaceProps {
   captureTypingFromPage?: boolean;
   files: FileItem[];
   currentPath: string;
+  pendingNavigationPath?: string;
   initialPath: string;
   homePath?: string;
   roots?: NormalizedFilesystemRoot[];
@@ -486,6 +487,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
               enableDragDrop={dragEnabled()}
               sidebarOpen={props.open}
               scrollContainer={() => treeScrollEl}
+              pendingNavigationPath={props.pendingNavigationPath}
               roots={props.roots}
               currentPath={props.currentPath}
               onRootSelect={props.onRootSelect}
@@ -554,6 +556,11 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
   const i18n = useI18n();
   const displayFiles = createMemo(() => mapFileItemsToDisplayPath(props.files, props.homePath));
   const displayCurrentPath = createMemo(() => toFileBrowserDisplayPath(props.currentPath, props.homePath));
+  const displayPendingNavigationPath = createMemo(() => (
+    props.pendingNavigationPath === undefined
+      ? undefined
+      : toFileBrowserDisplayPath(props.pendingNavigationPath, props.homePath)
+  ));
   const displayInitialPath = createMemo(() => toFileBrowserDisplayPath(props.initialPath, props.homePath));
   const displayContextMenuCallbacks = createMemo(() => mapContextMenuCallbacksToAbsolute(props.contextMenuCallbacks, props.homePath));
   const displayOverrideContextMenuItems = createMemo(() => mapContextMenuItemsToAbsolute(props.overrideContextMenuItems, props.homePath));
@@ -594,6 +601,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
           gitHistoryDisabledReason={props.gitHistoryDisabledReason}
           captureTypingFromPage={props.captureTypingFromPage}
           currentPath={props.currentPath}
+          pendingNavigationPath={displayPendingNavigationPath()}
           homePath={props.homePath}
           roots={props.roots}
           width={props.width}

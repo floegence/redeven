@@ -4741,6 +4741,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       captureTypingFromPage={!hasEmbeddedWidget()}
                       files={files()}
                       currentPath={currentBrowserPath()}
+                      pendingNavigationPath={pendingBrowserPath()}
                       initialPath={readPersistedLastPath(id)}
                       homePath={agentHomePathAbs() || undefined}
                       roots={filesystemRoots()}

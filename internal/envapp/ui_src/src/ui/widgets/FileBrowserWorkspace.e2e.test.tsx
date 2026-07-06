@@ -227,6 +227,38 @@ function mockElementRect(element: Element, rect: {
   });
 }
 
+function mockScrollGeometry(element: HTMLElement, input: {
+  top: number;
+  clientHeight: number;
+  scrollHeight: number;
+  scrollTop: number;
+}) {
+  let scrollTop = input.scrollTop;
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    get: () => input.clientHeight,
+  });
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    get: () => input.scrollHeight,
+  });
+  Object.defineProperty(element, 'scrollTop', {
+    configurable: true,
+    get: () => scrollTop,
+    set: (value: number) => {
+      scrollTop = value;
+    },
+  });
+  mockElementRect(element, {
+    left: 0,
+    top: input.top,
+    right: 260,
+    bottom: input.top + input.clientHeight,
+    width: 260,
+    height: input.clientHeight,
+  });
+}
+
 function triggerResizeObservers() {
   for (const observer of resizeObserverState.observers) {
     observer.callback(
@@ -1758,6 +1790,538 @@ describe('FileBrowserWorkspace interactions', () => {
       expect(scrollRegion?.className).toContain('[touch-action:pan-y_pinch-zoom]');
       expect(scrollRegion?.textContent).toContain('folder-0');
       expect(scrollRegion?.textContent).toContain('folder-23');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps a clicked tree row near the pointer when navigation prunes expanded branches above it', async () => {
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const expandedTree: FileItem[] = [
+      {
+        id: '/workspace',
+        name: 'workspace',
+        type: 'folder',
+        path: '/workspace',
+        children: [
+          {
+            id: '/workspace/alpha',
+            name: 'alpha',
+            type: 'folder',
+            path: '/workspace/alpha',
+            children: [
+              { id: '/workspace/alpha/one', name: 'one', type: 'folder', path: '/workspace/alpha/one', children: [] },
+              { id: '/workspace/alpha/two', name: 'two', type: 'folder', path: '/workspace/alpha/two', children: [] },
+              { id: '/workspace/alpha/three', name: 'three', type: 'folder', path: '/workspace/alpha/three', children: [] },
+            ],
+          },
+          { id: '/workspace/beta', name: 'beta', type: 'folder', path: '/workspace/beta', children: [] },
+        ],
+      },
+    ];
+
+    const prunedTree: FileItem[] = [
+      {
+        id: '/workspace',
+        name: 'workspace',
+        type: 'folder',
+        path: '/workspace',
+        children: [
+          { id: '/workspace/alpha', name: 'alpha', type: 'folder', path: '/workspace/alpha' },
+          {
+            id: '/workspace/beta',
+            name: 'beta',
+            type: 'folder',
+            path: '/workspace/beta',
+            children: [
+              { id: '/workspace/beta/child', name: 'child', type: 'folder', path: '/workspace/beta/child', children: [] },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const dispose = render(() => {
+      const [tree, setTree] = createSignal(expandedTree);
+      const [currentPath, setCurrentPath] = createSignal('/workspace/alpha/one');
+      const [pendingPath, setPendingPath] = createSignal('');
+
+      return (
+        <LayoutProvider>
+          <div class="h-[560px]">
+            <FileBrowserWorkspace
+              mode="files"
+              onModeChange={() => {}}
+              files={tree()}
+              currentPath={currentPath()}
+              pendingNavigationPath={pendingPath()}
+              initialPath="/workspace/alpha/one"
+              persistenceKey="test-files-workspace-click-anchor"
+              instanceId="test-files-workspace-click-anchor"
+              resetKey={0}
+              width={260}
+              open
+              onNavigate={(path) => {
+                setPendingPath(path);
+                window.setTimeout(() => {
+                  setTree(prunedTree);
+                  setCurrentPath(path);
+                  const nextBetaRow = host.querySelector('[data-tree-row-path="/workspace/beta"]') as HTMLElement | null;
+                  if (nextBetaRow) {
+                    mockElementRect(nextBetaRow, {
+                      left: 0,
+                      top: 170,
+                      right: 240,
+                      bottom: 190,
+                      width: 240,
+                      height: 20,
+                    });
+                  }
+                  setPendingPath('');
+                }, 0);
+              }}
+            />
+          </div>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+
+      const scrollRegion = host.querySelector('[data-testid="file-tree-scroll-region"]') as HTMLElement | null;
+      expect(scrollRegion).toBeTruthy();
+      mockScrollGeometry(scrollRegion!, {
+        top: 100,
+        clientHeight: 300,
+        scrollHeight: 900,
+        scrollTop: 200,
+      });
+
+      const betaRow = host.querySelector('[data-tree-row-path="/workspace/beta"]') as HTMLElement | null;
+      expect(betaRow).toBeTruthy();
+      mockElementRect(betaRow!, {
+        left: 0,
+        top: 240,
+        right: 240,
+        bottom: 260,
+        width: 240,
+        height: 20,
+      });
+
+      scrollIntoView.mockClear();
+      betaRow!.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        clientY: 250,
+        detail: 1,
+      }));
+
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(scrollIntoView).not.toHaveBeenCalled();
+
+      await flush();
+      await flush();
+
+      expect(scrollRegion!.scrollTop).toBe(130);
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('lets scroll bounds clamp click-anchor preservation at the top of the file tree', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const treeBefore: FileItem[] = [
+      {
+        id: '/workspace',
+        name: 'workspace',
+        type: 'folder',
+        path: '/workspace',
+        children: [
+          {
+            id: '/workspace/alpha',
+            name: 'alpha',
+            type: 'folder',
+            path: '/workspace/alpha',
+            children: [
+              { id: '/workspace/alpha/one', name: 'one', type: 'folder', path: '/workspace/alpha/one', children: [] },
+              { id: '/workspace/alpha/two', name: 'two', type: 'folder', path: '/workspace/alpha/two', children: [] },
+            ],
+          },
+          { id: '/workspace/beta', name: 'beta', type: 'folder', path: '/workspace/beta', children: [] },
+        ],
+      },
+    ];
+    const treeAfter: FileItem[] = [
+      {
+        id: '/workspace',
+        name: 'workspace',
+        type: 'folder',
+        path: '/workspace',
+        children: [
+          { id: '/workspace/alpha', name: 'alpha', type: 'folder', path: '/workspace/alpha' },
+          { id: '/workspace/beta', name: 'beta', type: 'folder', path: '/workspace/beta', children: [] },
+        ],
+      },
+    ];
+
+    const dispose = render(() => {
+      const [tree, setTree] = createSignal(treeBefore);
+      const [currentPath, setCurrentPath] = createSignal('/workspace/alpha/one');
+      const [pendingPath, setPendingPath] = createSignal('');
+
+      return (
+        <LayoutProvider>
+          <div class="h-[560px]">
+            <FileBrowserWorkspace
+              mode="files"
+              onModeChange={() => {}}
+              files={tree()}
+              currentPath={currentPath()}
+              pendingNavigationPath={pendingPath()}
+              initialPath="/workspace/alpha/one"
+              persistenceKey="test-files-workspace-click-anchor-top"
+              instanceId="test-files-workspace-click-anchor-top"
+              resetKey={0}
+              width={260}
+              open
+              onNavigate={(path) => {
+                setPendingPath(path);
+                window.setTimeout(() => {
+                  setTree(treeAfter);
+                  setCurrentPath(path);
+                  const nextBetaRow = host.querySelector('[data-tree-row-path="/workspace/beta"]') as HTMLElement | null;
+                  if (nextBetaRow) {
+                    mockElementRect(nextBetaRow, {
+                      left: 0,
+                      top: 90,
+                      right: 240,
+                      bottom: 110,
+                      width: 240,
+                      height: 20,
+                    });
+                  }
+                  setPendingPath('');
+                }, 0);
+              }}
+            />
+          </div>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+
+      const scrollRegion = host.querySelector('[data-testid="file-tree-scroll-region"]') as HTMLElement | null;
+      expect(scrollRegion).toBeTruthy();
+      mockScrollGeometry(scrollRegion!, {
+        top: 100,
+        clientHeight: 300,
+        scrollHeight: 900,
+        scrollTop: 20,
+      });
+
+      const betaRow = host.querySelector('[data-tree-row-path="/workspace/beta"]') as HTMLElement | null;
+      expect(betaRow).toBeTruthy();
+      mockElementRect(betaRow!, {
+        left: 0,
+        top: 240,
+        right: 240,
+        bottom: 260,
+        width: 240,
+        height: 20,
+      });
+
+      betaRow!.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        clientY: 250,
+        detail: 1,
+      }));
+
+      await flush();
+      await flush();
+
+      expect(scrollRegion!.scrollTop).toBe(0);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('does not scroll back to the old tree row while a clicked navigation is pending', async () => {
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const tree: FileItem[] = [
+      {
+        id: '/workspace',
+        name: 'workspace',
+        type: 'folder',
+        path: '/workspace',
+        children: [
+          {
+            id: '/workspace/alpha',
+            name: 'alpha',
+            type: 'folder',
+            path: '/workspace/alpha',
+            children: [
+              { id: '/workspace/alpha/one', name: 'one', type: 'folder', path: '/workspace/alpha/one', children: [] },
+            ],
+          },
+          { id: '/workspace/beta', name: 'beta', type: 'folder', path: '/workspace/beta', children: [] },
+        ],
+      },
+    ];
+
+    const dispose = render(() => {
+      const [currentPath, setCurrentPath] = createSignal('/workspace/alpha/one');
+      const [pendingPath, setPendingPath] = createSignal('');
+
+      return (
+        <LayoutProvider>
+          <div class="h-[560px]">
+            <FileBrowserWorkspace
+              mode="files"
+              onModeChange={() => {}}
+              files={tree}
+              currentPath={currentPath()}
+              pendingNavigationPath={pendingPath()}
+              initialPath="/workspace/alpha/one"
+              persistenceKey="test-files-workspace-click-anchor-old-path"
+              instanceId="test-files-workspace-click-anchor-old-path"
+              resetKey={0}
+              width={260}
+              open
+              onNavigate={(path) => {
+                setPendingPath(path);
+                queueMicrotask(() => setCurrentPath('/workspace/alpha/one'));
+              }}
+            />
+          </div>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+
+      const scrollRegion = host.querySelector('[data-testid="file-tree-scroll-region"]') as HTMLElement | null;
+      expect(scrollRegion).toBeTruthy();
+      mockScrollGeometry(scrollRegion!, {
+        top: 100,
+        clientHeight: 300,
+        scrollHeight: 900,
+        scrollTop: 200,
+      });
+
+      const betaRow = host.querySelector('[data-tree-row-path="/workspace/beta"]') as HTMLElement | null;
+      expect(betaRow).toBeTruthy();
+      mockElementRect(betaRow!, {
+        left: 0,
+        top: 240,
+        right: 240,
+        bottom: 260,
+        width: 240,
+        height: 20,
+      });
+
+      scrollIntoView.mockClear();
+      betaRow!.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        clientY: 250,
+        detail: 1,
+      }));
+
+      await flush();
+      await flush();
+
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('still scrolls programmatic tree path changes into view when there is no click anchor', async () => {
+    const scrollIntoView = vi.spyOn(HTMLElement.prototype, 'scrollIntoView');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let setCurrentPath!: (path: string) => void;
+
+    const tree: FileItem[] = [
+      {
+        id: '/workspace',
+        name: 'workspace',
+        type: 'folder',
+        path: '/workspace',
+        children: [
+          { id: '/workspace/alpha', name: 'alpha', type: 'folder', path: '/workspace/alpha', children: [] },
+          { id: '/workspace/beta', name: 'beta', type: 'folder', path: '/workspace/beta', children: [] },
+        ],
+      },
+    ];
+
+    const dispose = render(() => {
+      const [currentPath, updateCurrentPath] = createSignal('/workspace/alpha');
+      setCurrentPath = updateCurrentPath;
+
+      return (
+        <LayoutProvider>
+          <div class="h-[560px]">
+            <FileBrowserWorkspace
+              mode="files"
+              onModeChange={() => {}}
+              files={tree}
+              currentPath={currentPath()}
+              pendingNavigationPath=""
+              initialPath="/workspace/alpha"
+              persistenceKey="test-files-workspace-programmatic-tree-scroll"
+              instanceId="test-files-workspace-programmatic-tree-scroll"
+              resetKey={0}
+              width={260}
+              open
+            />
+          </div>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+      scrollIntoView.mockClear();
+
+      setCurrentPath('/workspace/beta');
+      await flush();
+      await flush();
+
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('lets scroll bounds clamp click-anchor preservation at the bottom of the file tree', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const treeBefore: FileItem[] = [
+      {
+        id: '/workspace',
+        name: 'workspace',
+        type: 'folder',
+        path: '/workspace',
+        children: [
+          {
+            id: '/workspace/alpha',
+            name: 'alpha',
+            type: 'folder',
+            path: '/workspace/alpha',
+            children: [
+              { id: '/workspace/alpha/one', name: 'one', type: 'folder', path: '/workspace/alpha/one', children: [] },
+              { id: '/workspace/alpha/two', name: 'two', type: 'folder', path: '/workspace/alpha/two', children: [] },
+            ],
+          },
+          { id: '/workspace/beta', name: 'beta', type: 'folder', path: '/workspace/beta', children: [] },
+        ],
+      },
+    ];
+    const treeAfter: FileItem[] = [
+      {
+        id: '/workspace',
+        name: 'workspace',
+        type: 'folder',
+        path: '/workspace',
+        children: [
+          { id: '/workspace/alpha', name: 'alpha', type: 'folder', path: '/workspace/alpha' },
+          { id: '/workspace/beta', name: 'beta', type: 'folder', path: '/workspace/beta', children: [] },
+        ],
+      },
+    ];
+
+    const dispose = render(() => {
+      const [tree, setTree] = createSignal(treeBefore);
+      const [currentPath, setCurrentPath] = createSignal('/workspace/alpha/one');
+      const [pendingPath, setPendingPath] = createSignal('');
+
+      return (
+        <LayoutProvider>
+          <div class="h-[560px]">
+            <FileBrowserWorkspace
+              mode="files"
+              onModeChange={() => {}}
+              files={tree()}
+              currentPath={currentPath()}
+              pendingNavigationPath={pendingPath()}
+              initialPath="/workspace/alpha/one"
+              persistenceKey="test-files-workspace-click-anchor-bottom"
+              instanceId="test-files-workspace-click-anchor-bottom"
+              resetKey={0}
+              width={260}
+              open
+              onNavigate={(path) => {
+                setPendingPath(path);
+                window.setTimeout(() => {
+                  setTree(treeAfter);
+                  setCurrentPath(path);
+                  const nextBetaRow = host.querySelector('[data-tree-row-path="/workspace/beta"]') as HTMLElement | null;
+                  if (nextBetaRow) {
+                    mockElementRect(nextBetaRow, {
+                      left: 0,
+                      top: 300,
+                      right: 240,
+                      bottom: 320,
+                      width: 240,
+                      height: 20,
+                    });
+                  }
+                  setPendingPath('');
+                }, 0);
+              }}
+            />
+          </div>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      await flush();
+
+      const scrollRegion = host.querySelector('[data-testid="file-tree-scroll-region"]') as HTMLElement | null;
+      expect(scrollRegion).toBeTruthy();
+      mockScrollGeometry(scrollRegion!, {
+        top: 100,
+        clientHeight: 300,
+        scrollHeight: 900,
+        scrollTop: 580,
+      });
+
+      const betaRow = host.querySelector('[data-tree-row-path="/workspace/beta"]') as HTMLElement | null;
+      expect(betaRow).toBeTruthy();
+      mockElementRect(betaRow!, {
+        left: 0,
+        top: 240,
+        right: 240,
+        bottom: 260,
+        width: 240,
+        height: 20,
+      });
+
+      betaRow!.dispatchEvent(new MouseEvent('click', {
+        bubbles: true,
+        clientY: 250,
+        detail: 1,
+      }));
+
+      await flush();
+      await flush();
+
+      expect(scrollRegion!.scrollTop).toBe(600);
     } finally {
       dispose();
     }
