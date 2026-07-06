@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../primitives/Tooltip', () => ({
@@ -22,11 +23,13 @@ describe('GitHistoryModeSwitch', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const disabledReason = 'Git is not installed or not available in PATH on this runtime host.';
+    const preview = vi.fn();
 
     const dispose = render(() => (
       <GitHistoryModeSwitch
         mode="files"
         onChange={() => {}}
+        onPreviewGitMode={preview}
         gitHistoryDisabled
         gitHistoryDisabledReason={disabledReason}
       />
@@ -37,6 +40,40 @@ describe('GitHistoryModeSwitch', () => {
       expect(gitButton).toBeTruthy();
       expect((gitButton as HTMLButtonElement | undefined)?.disabled).toBe(true);
       expect(gitButton?.closest('[data-testid="tooltip"]')?.getAttribute('data-content')).toBe(disabledReason);
+      gitButton?.dispatchEvent(new FocusEvent('focus'));
+      expect(preview).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('renders a stable sliding thumb and previews Git mode on focus', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const preview = vi.fn();
+    const [mode, setMode] = createSignal<'files' | 'git'>('files');
+
+    const dispose = render(() => (
+      <GitHistoryModeSwitch
+        mode={mode()}
+        onChange={setMode}
+        onPreviewGitMode={preview}
+      />
+    ), host);
+
+    try {
+      const group = host.querySelector('[data-browser-mode-switch]') as HTMLElement | null;
+      const thumb = host.querySelector('.browser-mode-switch__thumb');
+      const gitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Git')) as HTMLButtonElement | undefined;
+      expect(group).toBeTruthy();
+      expect(thumb).toBeTruthy();
+      expect(group?.getAttribute('data-mode')).toBe('files');
+
+      gitButton?.dispatchEvent(new FocusEvent('focus'));
+      expect(preview).toHaveBeenCalledTimes(1);
+
+      gitButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(group?.getAttribute('data-mode')).toBe('git');
     } finally {
       dispose();
     }

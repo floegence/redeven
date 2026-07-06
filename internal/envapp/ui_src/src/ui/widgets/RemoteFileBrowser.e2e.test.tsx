@@ -405,6 +405,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
     captureTypingFromPage?: boolean;
     toolbarEndActions?: JSX.Element;
     onModeChange?: (mode: string) => void;
+    onPreviewGitMode?: () => void;
     onResize?: (delta: number) => void;
     onNavigate?: (path: string) => void;
     onDragMove?: (items: FileItem[], targetPath: string) => void;
@@ -543,6 +544,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <div data-testid="mock-reveal-parent-path">{props.revealRequest?.parentPath ?? ''}</div>
         <div data-testid="mock-reveal-target-path">{props.revealRequest?.targetPath ?? ''}</div>
         <button type="button" onClick={() => setLocalCount((count) => count + 1)}>mock-files-bump</button>
+        <button type="button" onFocus={() => props.onPreviewGitMode?.()}>mock-preview-git</button>
         <button
           type="button"
           onClick={() => props.onDragMove?.([copyNameTarget], props.currentPath)}
@@ -1648,11 +1650,16 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
       const gitWorkspace = host.querySelector('[data-testid="git-workspace"]') as HTMLDivElement | null;
       const filesWorkspace = host.querySelector('[data-testid="files-workspace"]') as HTMLDivElement | null;
+      const gitPanel = gitWorkspace?.closest('[data-browser-mode-panel="git"]') as HTMLDivElement | null;
+      const filesPanel = filesWorkspace?.closest('[data-browser-mode-panel="files"]') as HTMLDivElement | null;
 
       expect(gitWorkspace?.textContent).toContain('git:git:history:/workspace/repo/src:312');
-      expect(gitWorkspace?.parentElement?.style.display).toBe('block');
+      expect(gitPanel?.getAttribute('data-state')).toBe('active');
+      expect(gitPanel?.style.display).toBe('');
       expect(filesWorkspace).toBeTruthy();
-      expect(filesWorkspace?.parentElement?.style.display).toBe('none');
+      expect(filesPanel?.getAttribute('data-state')).toBe('inactive');
+      expect(filesPanel?.getAttribute('aria-hidden')).toBe('true');
+      expect(filesPanel?.style.display).toBe('');
       expect(mockRpc.fs.list).not.toHaveBeenCalled();
       expect(mockRpc.git.resolveRepo).toHaveBeenCalledWith({ path: '/workspace/repo/src' });
     } finally {
@@ -2579,10 +2586,14 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       const filesWorkspace = host.querySelector('[data-testid="files-workspace"]') as HTMLDivElement | null;
+      const stack = host.querySelector('[data-browser-mode-stack]') as HTMLDivElement | null;
+      const filesPanel = filesWorkspace?.closest('[data-browser-mode-panel="files"]') as HTMLDivElement | null;
       expect(filesWorkspace).toBeTruthy();
+      expect(stack?.getAttribute('data-active-mode')).toBe('files');
+      expect(filesPanel?.getAttribute('data-state')).toBe('active');
+      expect(filesPanel?.style.display).toBe('');
       expect(workspaceLifecycleStore.filesMounts).toBe(1);
       expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
-      expect(filesWorkspace?.parentElement?.style.display).toBe('block');
 
       const bumpButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-files-bump') as HTMLButtonElement | undefined;
       const toGitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-to-git') as HTMLButtonElement | undefined;
@@ -2594,11 +2605,16 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       const gitWorkspace = host.querySelector('[data-testid="git-workspace"]') as HTMLDivElement | null;
+      const gitPanel = gitWorkspace?.closest('[data-browser-mode-panel="git"]') as HTMLDivElement | null;
       expect(gitWorkspace).toBeTruthy();
       expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
       expect(workspaceLifecycleStore.gitMounts).toBe(1);
-      expect(filesWorkspace?.parentElement?.style.display).toBe('none');
-      expect(gitWorkspace?.parentElement?.style.display).toBe('block');
+      expect(stack?.getAttribute('data-active-mode')).toBe('git');
+      expect(filesPanel?.getAttribute('data-state')).toBe('inactive');
+      expect(filesPanel?.getAttribute('aria-hidden')).toBe('true');
+      expect(filesPanel?.style.display).toBe('');
+      expect(gitPanel?.getAttribute('data-state')).toBe('active');
+      expect(gitPanel?.style.display).toBe('');
       expect(gitWorkspace?.textContent).toContain('git:git:changes:/workspace/repo/src:312');
 
       const toFilesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-to-files') as HTMLButtonElement | undefined;
@@ -2608,8 +2624,102 @@ describe('RemoteFileBrowser persistence', () => {
 
       expect(workspaceLifecycleStore.filesMounts).toBe(1);
       expect(workspaceLifecycleStore.filesUnmounts).toBe(0);
-      expect(filesWorkspace?.parentElement?.style.display).toBe('block');
+      expect(stack?.getAttribute('data-active-mode')).toBe('files');
+      expect(filesPanel?.getAttribute('data-state')).toBe('active');
+      expect(filesPanel?.style.display).toBe('');
       expect(filesWorkspace?.textContent).toContain('files:files:/workspace/repo/src:312:1');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('silently prewarms the current Git view when the Git mode control is previewed', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.git.getRepoSummary.mockClear();
+      mockRpc.git.listWorkspacePage.mockClear();
+      notificationStore.warning = [];
+
+      const previewButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-preview-git') as HTMLButtonElement | undefined;
+      expect(previewButton).toBeTruthy();
+      previewButton!.dispatchEvent(new FocusEvent('focus'));
+      await flush();
+
+      expect(host.querySelector('[data-browser-mode-stack]')?.getAttribute('data-active-mode')).toBe('files');
+      expect(host.querySelector('[data-testid="git-workspace"]')).toBeNull();
+      expect(mockRpc.git.getRepoSummary).toHaveBeenCalledTimes(1);
+      expect(mockRpc.git.getRepoSummary).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo' });
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledTimes(1);
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo',
+        section: 'changes',
+        directoryPath: undefined,
+        offset: 0,
+        limit: 200,
+      });
+      expect(notificationStore.warning).toEqual([]);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('does not prewarm Git data or warn when Git mode is unavailable', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.git.resolveRepo.mockResolvedValueOnce({
+      available: false,
+      gitAvailable: true,
+      unavailableReason: 'Current path is not inside a Git repository.',
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      mockRpc.git.getRepoSummary.mockClear();
+      mockRpc.git.listWorkspacePage.mockClear();
+      notificationStore.warning = [];
+
+      const previewButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-preview-git') as HTMLButtonElement | undefined;
+      expect(previewButton).toBeTruthy();
+      previewButton!.dispatchEvent(new FocusEvent('focus'));
+      await flush();
+
+      expect(host.querySelector('[data-browser-mode-stack]')?.getAttribute('data-active-mode')).toBe('files');
+      expect(mockRpc.git.getRepoSummary).not.toHaveBeenCalled();
+      expect(mockRpc.git.listWorkspacePage).not.toHaveBeenCalled();
+      expect(notificationStore.warning).toEqual([]);
     } finally {
       dispose();
     }

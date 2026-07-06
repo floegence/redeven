@@ -1,6 +1,5 @@
-import { Show, batch, createEffect, createMemo, createSignal, untrack } from 'solid-js';
-import { useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
-import { KeepAliveStack } from '@floegence/floe-webapp-core/layout';
+import { Show, batch, createEffect, createMemo, createSignal, untrack, type JSX } from 'solid-js';
+import { cn, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { Copy, Download, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import {
   type ContextMenuCallbacks,
@@ -235,6 +234,7 @@ type GitStashWindowContext = {
 type GitLoadOptions = {
   silent?: boolean;
   repoRootPath?: string;
+  notifyOnError?: boolean;
 };
 
 type GitBranchSelectionMode = 'preserve' | 'default_if_empty' | 'default_if_missing';
@@ -271,6 +271,58 @@ type GitCommitListCacheEntry = {
   resolved: boolean;
   selectedCommitHash: string;
 };
+
+function BrowserModeTransitionStack(props: {
+  activeId: BrowserPageMode;
+  files: () => JSX.Element;
+  git: () => JSX.Element;
+  class?: string;
+}) {
+  const [mountedViews, setMountedViews] = createSignal<Partial<Record<BrowserPageMode, true>>>({
+    files: true,
+    [props.activeId]: true,
+  });
+  const isActive = (id: BrowserPageMode) => props.activeId === id;
+
+  createEffect(() => {
+    const activeId = props.activeId;
+    setMountedViews((prev) => (
+      prev[activeId]
+        ? prev
+        : {
+            ...prev,
+            [activeId]: true,
+          }
+    ));
+  });
+
+  return (
+    <div
+      data-browser-mode-stack=""
+      data-active-mode={props.activeId}
+      class={cn('browser-mode-transition-stack relative h-full min-h-0 overflow-hidden', props.class)}
+    >
+      <div
+        data-browser-mode-panel="files"
+        data-state={isActive('files') ? 'active' : 'inactive'}
+        aria-hidden={isActive('files') ? undefined : 'true'}
+        class="browser-mode-transition-panel h-full"
+      >
+        {props.files()}
+      </div>
+      <Show when={mountedViews().git}>
+        <div
+          data-browser-mode-panel="git"
+          data-state={isActive('git') ? 'active' : 'inactive'}
+          aria-hidden={isActive('git') ? undefined : 'true'}
+          class="browser-mode-transition-panel h-full"
+        >
+          {props.git()}
+        </div>
+      </Show>
+    </div>
+  );
+}
 
 type GitBranchDetailState =
   | { kind: 'idle' }
@@ -1059,7 +1111,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     return candidate;
   };
 
-  const resolveRepoInfo = async (path: string = currentBrowserPath(), options: { silent?: boolean } = {}): Promise<GitResolveRepoResponse | null> => {
+  const shouldNotifyGitLoadError = (options: { notifyOnError?: boolean }): boolean => options.notifyOnError !== false;
+
+  const resolveRepoInfo = async (path: string = currentBrowserPath(), options: { silent?: boolean; notifyOnError?: boolean } = {}): Promise<GitResolveRepoResponse | null> => {
     const client = protocol.client();
     if (!client) {
       repoReqSeq += 1;
@@ -1110,7 +1164,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           setRepoInfo(null);
           setRepoInfoError(result.message ?? i18n.t('git.notifications.failedToInspectGitRepository'));
         }
-      } else {
+      } else if (shouldNotifyGitLoadError(options)) {
         notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), result.message ?? i18n.t('git.notifications.failedToInspectUpdatedRepository'));
       }
       return null;
@@ -2728,7 +2782,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (!options.silent) {
         setGitRepoSummary(null);
         setGitRepoSummaryError(message);
-      } else {
+      } else if (shouldNotifyGitLoadError(options)) {
         notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
     } finally {
@@ -2805,7 +2859,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           setSelectedGitWorkspaceKey('');
         }
         setGitWorkspaceError(message);
-      } else if (options.silent) {
+      } else if (options.silent && shouldNotifyGitLoadError(options)) {
         notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
     } finally {
@@ -2947,7 +3001,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (!options.silent) {
         setGitBranches(null);
         setGitBranchesError(message);
-      } else {
+      } else if (shouldNotifyGitLoadError(options)) {
         notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
     } finally {
@@ -3097,7 +3151,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
       if (!options.silent && !backgroundRefresh) {
         setGitListError(message);
-      } else if (!backgroundRefresh) {
+      } else if (!backgroundRefresh && shouldNotifyGitLoadError(options)) {
         notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
     } finally {
@@ -3130,6 +3184,60 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const id = envId();
     if (id) {
       writePersistedPageMode(id, next);
+    }
+  };
+
+  const prepareGitMode = async () => {
+    if (pageMode() === 'git' || !canEnterGitHistory()) return;
+    const info = repoInfo();
+    const repoRootPath = String(info?.repoRootPath ?? '').trim();
+    if (!info?.available || !repoRootPath) return;
+
+    const refreshes: Array<Promise<unknown>> = [];
+    if (!gitRepoSummary() && !gitRepoSummaryLoading()) {
+      refreshes.push(loadGitRepoSummary({
+        silent: true,
+        repoRootPath,
+        notifyOnError: false,
+      }));
+    }
+
+    if (gitSubview() === 'changes') {
+      const section = selectedGitWorkspaceSection();
+      const sectionState = gitWorkspacePageState(section);
+      if (!sectionState.initialized && !sectionState.loading && !initializeKnownEmptyGitWorkspaceSection(section)) {
+        refreshes.push(loadGitWorkspaceSection(section, {
+          silent: true,
+          repoRootPath,
+          notifyOnError: false,
+        }));
+      }
+    }
+
+    if (gitSubview() === 'branches' && !gitBranches() && !gitBranchesLoading()) {
+      refreshes.push(loadGitBranches({
+        silent: true,
+        repoRootPath,
+        selectionMode: 'default_if_empty',
+        notifyOnError: false,
+      }));
+    }
+
+    if (gitSubview() === 'history' && !gitListLoading() && !gitListRefreshing()) {
+      const context = currentGitCommitContext();
+      if (context && !readGitCommitCacheEntry(context.key)?.resolved) {
+        refreshes.push(loadGitCommits(true, context.ref, {
+          context,
+          mode: 'blocking',
+          silent: true,
+          repoRootPath,
+          notifyOnError: false,
+        }));
+      }
+    }
+
+    if (refreshes.length > 0) {
+      await Promise.all(refreshes);
     }
   };
 
@@ -4618,20 +4726,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       >
         {(id) => (
           <div class="h-full min-h-0">
-            <KeepAliveStack
+            <BrowserModeTransitionStack
               class="h-full"
               activeId={pageMode()}
-              lazyMount
-              keepMounted
-              views={[
-                {
-                  id: 'files',
-                  class: 'h-full',
-                  render: () => (
+              files={() => (
                     <FileBrowserWorkspace
                       class="h-full"
                       mode={pageMode()}
                       onModeChange={handlePageModeChange}
+                      onPreviewGitMode={() => { void prepareGitMode(); }}
                       gitHistoryDisabled={!canEnterGitHistory()}
                       gitHistoryDisabledReason={gitModeDisabledReason() || undefined}
                       captureTypingFromPage={!hasEmbeddedWidget()}
@@ -4699,16 +4802,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       contextMenuCallbacks={ctxMenu}
                       resolveOverrideContextMenuItems={resolveOverrideContextMenuItems}
                     />
-                  ),
-                },
-                {
-                  id: 'git',
-                  class: 'h-full',
-                  render: () => (
+              )}
+              git={() => (
                     <GitWorkspace
                       class="h-full"
                       mode={pageMode()}
                       onModeChange={handlePageModeChange}
+                      onPreviewGitMode={() => { void prepareGitMode(); }}
                       gitHistoryDisabled={!canEnterGitHistory()}
                       gitHistoryDisabledReason={gitModeDisabledReason() || undefined}
                       subview={gitSubview()}
@@ -4811,9 +4911,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onRefresh={() => { void refreshGitWorkbench(); }}
                       shellLoadingMessage={gitShellLoadingMessage()}
                     />
-                  ),
-                },
-              ]}
+              )}
             />
           </div>
         )}
