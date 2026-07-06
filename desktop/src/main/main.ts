@@ -6904,7 +6904,7 @@ function buildCodespaceLoadingDocumentURL(codeSpaceID: string, copy: CodespaceLo
   const title = htmlEscape(compact(copy.title) || 'Opening Codespace');
   const detail = htmlEscape(compact(copy.detail) || 'Redeven is preparing the browser editor.');
   const codeSpaceLabel = htmlEscape(compact(codeSpaceID) || 'codespace');
-  const statusLabel = state === 'error' ? 'Attention required' : 'Preparing editor';
+  const eyebrow = state === 'error' ? 'Needs attention' : 'Codespaces';
   const html = `<!doctype html>
 <html lang="en">
 <head>
@@ -6915,121 +6915,125 @@ function buildCodespaceLoadingDocumentURL(codeSpaceID: string, copy: CodespaceLo
   <style>
     :root {
       color-scheme: light dark;
-      --bg: #f6f7f9;
-      --panel: #ffffff;
-      --text: #15181d;
-      --muted: #667085;
-      --border: #d8dee8;
-      --accent: #2563eb;
-      --accent-soft: rgba(37, 99, 235, 0.16);
-      --error: #b42318;
-      --error-soft: rgba(180, 35, 24, 0.12);
+      --background: #f7f6f2;
+      --foreground: #191b1f;
+      --muted: rgba(25, 27, 31, 0.55);
+      --quiet: rgba(25, 27, 31, 0.38);
+      --track: rgba(25, 27, 31, 0.13);
+      --primary: #5a6472;
+      --primary-soft: rgba(90, 100, 114, 0.28);
+      --error: #a33a32;
+      --error-soft: rgba(163, 58, 50, 0.18);
     }
     @media (prefers-color-scheme: dark) {
       :root {
-        --bg: #101318;
-        --panel: #171b22;
-        --text: #f1f4f8;
-        --muted: #a1a8b3;
-        --border: #303846;
-        --accent: #66a3ff;
-        --accent-soft: rgba(102, 163, 255, 0.18);
-        --error: #ffb4a8;
-        --error-soft: rgba(255, 180, 168, 0.16);
+        --background: #111317;
+        --foreground: #f1f1ee;
+        --muted: rgba(241, 241, 238, 0.58);
+        --quiet: rgba(241, 241, 238, 0.38);
+        --track: rgba(241, 241, 238, 0.13);
+        --primary: #d5d0c7;
+        --primary-soft: rgba(213, 208, 199, 0.26);
+        --error: #f0aaa2;
+        --error-soft: rgba(240, 170, 162, 0.2);
       }
     }
     * { box-sizing: border-box; }
+    html {
+      min-height: 100%;
+      background: var(--background);
+    }
     body {
       margin: 0;
       min-height: 100vh;
       display: grid;
       place-items: center;
-      padding: 32px;
-      background: var(--bg);
-      color: var(--text);
+      padding: clamp(24px, 6vw, 56px);
+      background:
+        radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.44), transparent 34rem),
+        var(--background);
+      color: var(--foreground);
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       letter-spacing: 0;
     }
-    main {
-      width: min(520px, 100%);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      background: var(--panel);
-      padding: 24px;
-      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.16);
+    .redeven-loading-curtain__panel {
+      width: min(24rem, 100%);
+      display: grid;
+      justify-items: center;
+      gap: 1rem;
+      text-align: center;
     }
-    .eyebrow {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      color: var(--muted);
-      font-size: 12px;
+    .redeven-loading-curtain__eyebrow {
+      color: ${state === 'error' ? 'var(--error)' : 'var(--quiet)'};
+      font-size: 0.6875rem;
       font-weight: 700;
+      line-height: 1;
+      letter-spacing: 0;
       text-transform: uppercase;
     }
-    .status {
+    .redeven-loading-curtain__indicator {
+      width: 10.5rem;
+      height: 3px;
       border-radius: 999px;
-      padding: 4px 9px;
-      background: ${state === 'error' ? 'var(--error-soft)' : 'var(--accent-soft)'};
-      color: ${state === 'error' ? 'var(--error)' : 'var(--accent)'};
-      text-transform: none;
+      background: ${state === 'error' ? 'var(--error-soft)' : 'var(--track)'};
+      overflow: hidden;
     }
-    h1 {
-      margin: 18px 0 8px;
-      font-size: 22px;
-      line-height: 1.2;
-      font-weight: 720;
-      letter-spacing: 0;
+    .redeven-loading-curtain__indicator::after {
+      content: "";
+      display: block;
+      width: ${state === 'error' ? '100%' : '42%'};
+      height: 100%;
+      border-radius: inherit;
+      background: ${state === 'error'
+    ? 'var(--error)'
+    : 'linear-gradient(90deg, transparent 0%, var(--primary-soft) 42%, var(--primary) 55%, transparent 100%)'};
+      box-shadow: ${state === 'error' ? 'none' : '0 0 10px var(--primary-soft)'};
+      animation: ${state === 'error' ? 'none' : 'redeven-loading-curtain-sweep 1.35s cubic-bezier(0.42, 0, 0.2, 1) infinite'};
+      will-change: transform;
     }
-    .code {
-      margin: 0 0 20px;
-      color: var(--muted);
-      font: 12px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      overflow-wrap: anywhere;
+    .redeven-loading-curtain__message {
+      max-width: 22rem;
+      margin: 0;
+      color: ${state === 'error' ? 'var(--foreground)' : 'var(--muted)'};
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      font-weight: 480;
     }
     .detail {
-      margin: 0;
+      max-width: 24rem;
+      margin: -0.35rem 0 0;
       color: var(--muted);
-      font-size: 14px;
-      line-height: 1.55;
+      font-size: 0.75rem;
+      line-height: 1.5;
+      font-weight: 440;
     }
-    .meter {
-      position: relative;
-      overflow: hidden;
-      height: 6px;
-      margin-top: 24px;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--border) 72%, transparent);
-    }
-    .meter::after {
-      content: "";
+    .sr-only {
       position: absolute;
-      inset: 0;
-      background: linear-gradient(105deg, transparent 0%, transparent 24%, var(--accent-soft) 40%, var(--accent) 50%, var(--accent-soft) 60%, transparent 76%, transparent 100%);
-      background-size: 200% 100%;
-      animation: ${state === 'error' ? 'none' : 'redeven-codespace-loading 2.4s linear infinite'};
-      opacity: ${state === 'error' ? '0.45' : '1'};
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
     }
-    @keyframes redeven-codespace-loading {
-      0% { background-position: 100% 0; }
-      100% { background-position: -100% 0; }
+    @keyframes redeven-loading-curtain-sweep {
+      from { transform: translateX(-120%); }
+      to { transform: translateX(260%); }
     }
     @media (prefers-reduced-motion: reduce) {
-      .meter::after { animation-duration: 1ms; }
+      .redeven-loading-curtain__indicator::after { animation-duration: 1ms; }
     }
   </style>
 </head>
 <body>
-  <main aria-live="polite">
-    <div class="eyebrow">
-      <span>Redeven</span>
-      <span class="status">${statusLabel}</span>
-    </div>
-    <h1>${title}</h1>
-    <p class="code">${codeSpaceLabel}</p>
-    <p class="detail">${detail}</p>
-    <div class="meter" aria-hidden="true"></div>
+  <main class="redeven-loading-curtain__panel" role="status" aria-live="polite" aria-busy="${state === 'error' ? 'false' : 'true'}" aria-label="${title}">
+    <div class="redeven-loading-curtain__eyebrow">${eyebrow}</div>
+    <div class="redeven-loading-curtain__indicator" role="progressbar" aria-label="${title}"></div>
+    <p class="redeven-loading-curtain__message">${title}</p>
+    ${state === 'error' ? `<p class="detail">${detail}</p>` : ''}
+    <p class="sr-only">${codeSpaceLabel}</p>
   </main>
 </body>
 </html>`;

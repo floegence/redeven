@@ -109,7 +109,11 @@ describe('main routing', () => {
     expect(helperSrc).toContain('Content-Security-Policy');
     expect(helperSrc).toContain("default-src 'none'");
     expect(helperSrc).toContain("script-src 'none'");
+    expect(helperSrc).toContain('redeven-loading-curtain__panel');
+    expect(helperSrc).toContain('redeven-loading-curtain__indicator');
+    expect(helperSrc).toContain('redeven-loading-curtain__message');
     expect(helperSrc).toContain('Redeven');
+    expect(helperSrc).not.toContain('Attention required');
     expect(helperSrc).not.toContain('<script');
     expect(helperSrc).not.toContain('redevenDesktopShell');
     expect(helperSrc).not.toContain('preload');
