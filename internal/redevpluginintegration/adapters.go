@@ -196,7 +196,22 @@ type strictPackageTrustVerifier struct{}
 
 func (strictPackageTrustVerifier) VerifyPackageTrust(_ context.Context, req host.PackageTrustVerificationRequest) (host.PackageTrustVerificationResult, error) {
 	switch req.RequestedTrustState {
-	case registry.TrustBundled, registry.TrustVerified:
+	case registry.TrustBundled:
+		if isOfficialBundledPackage(req) {
+			return host.PackageTrustVerificationResult{
+				TrustState: registry.TrustBundled,
+				Metadata: map[string]string{
+					"redeven.trust.source": "official_bundled_package",
+				},
+			}, nil
+		}
+		return host.PackageTrustVerificationResult{
+			TrustState: registry.TrustNeedsReview,
+			Metadata: map[string]string{
+				"redeven.trust.reason": "bundled_package_not_allowlisted",
+			},
+		}, nil
+	case registry.TrustVerified:
 		return host.PackageTrustVerificationResult{
 			TrustState: registry.TrustNeedsReview,
 			Metadata: map[string]string{
@@ -210,6 +225,25 @@ func (strictPackageTrustVerifier) VerifyPackageTrust(_ context.Context, req host
 	default:
 		return host.PackageTrustVerificationResult{}, fmt.Errorf("unsupported trust_state: %q", req.RequestedTrustState)
 	}
+}
+
+const (
+	officialPublisherID            = "com.redeven.official"
+	officialContainersPluginID     = "com.redeven.official.containers"
+	officialContainersVersion      = "1.0.0"
+	officialContainersPackageHash  = "sha256:f31db92160e538e4b89731c9e8b44c9d27f8ca3ec81e1b8db8f0b55cea80b8e9"
+	officialContainersManifestHash = "sha256:43fd446fe57468603fa18da0112636cdad438fdfeed02a78e997b78c959d1b70"
+	officialContainersEntriesHash  = "sha256:250be6b113f42ae31ca67080e1f647af469d10a3fca15c4448e8704a1308db7d"
+)
+
+func isOfficialBundledPackage(req host.PackageTrustVerificationRequest) bool {
+	pkg := req.Package
+	return strings.TrimSpace(pkg.Manifest.Publisher.PublisherID) == officialPublisherID &&
+		strings.TrimSpace(pkg.Manifest.Plugin.PluginID) == officialContainersPluginID &&
+		strings.TrimSpace(pkg.Manifest.Plugin.Version) == officialContainersVersion &&
+		strings.TrimSpace(pkg.PackageHash) == officialContainersPackageHash &&
+		strings.TrimSpace(pkg.ManifestHash) == officialContainersManifestHash &&
+		strings.TrimSpace(pkg.EntriesHash) == officialContainersEntriesHash
 }
 
 type runtimeArtifactResolver struct {

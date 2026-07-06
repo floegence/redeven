@@ -124,7 +124,6 @@ function isRunnableInstalledTrust(trustState: string): boolean {
   switch (normalizeTrustState(trustState)) {
     case 'bundled':
     case 'verified':
-    case 'unsigned_local':
       return true;
     default:
       return false;

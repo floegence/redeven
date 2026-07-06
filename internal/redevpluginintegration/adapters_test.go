@@ -15,6 +15,7 @@ import (
 	"github.com/floegence/redevplugin/pkg/host"
 	"github.com/floegence/redevplugin/pkg/httpadapter"
 	"github.com/floegence/redevplugin/pkg/manifest"
+	"github.com/floegence/redevplugin/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/pkg/registry"
 	"github.com/floegence/redevplugin/pkg/sessionctx"
 	"github.com/floegence/redevplugin/pkg/websecurity"
@@ -164,6 +165,51 @@ func TestPackageTrustVerifierDoesNotPromotePublishedTrustWithoutVerifier(t *test
 	}
 	if result.TrustState != registry.TrustNeedsReview || !strings.Contains(result.Metadata["redeven.trust.reason"], "not_configured") {
 		t.Fatalf("trust result = %+v, want needs_review with reason", result)
+	}
+}
+
+func TestPackageTrustVerifierAllowsOfficialBundledContainersPackage(t *testing.T) {
+	result, err := strictPackageTrustVerifier{}.VerifyPackageTrust(context.Background(), host.PackageTrustVerificationRequest{
+		RequestedTrustState: registry.TrustBundled,
+		Package:             officialContainersPackageFixture(),
+	})
+	if err != nil {
+		t.Fatalf("VerifyPackageTrust() error = %v", err)
+	}
+	if result.TrustState != registry.TrustBundled || result.Metadata["redeven.trust.source"] != "official_bundled_package" {
+		t.Fatalf("trust result = %+v, want official bundled trust", result)
+	}
+}
+
+func TestPackageTrustVerifierRejectsUnexpectedBundledPackageHash(t *testing.T) {
+	pkg := officialContainersPackageFixture()
+	pkg.PackageHash = "sha256:unexpected"
+	result, err := strictPackageTrustVerifier{}.VerifyPackageTrust(context.Background(), host.PackageTrustVerificationRequest{
+		RequestedTrustState: registry.TrustBundled,
+		Package:             pkg,
+	})
+	if err != nil {
+		t.Fatalf("VerifyPackageTrust() error = %v", err)
+	}
+	if result.TrustState != registry.TrustNeedsReview || !strings.Contains(result.Metadata["redeven.trust.reason"], "not_allowlisted") {
+		t.Fatalf("trust result = %+v, want needs_review for unexpected bundled package", result)
+	}
+}
+
+func officialContainersPackageFixture() pluginpkg.Package {
+	return pluginpkg.Package{
+		Manifest: manifest.Manifest{
+			Publisher: manifest.Publisher{
+				PublisherID: officialPublisherID,
+			},
+			Plugin: manifest.Plugin{
+				PluginID: officialContainersPluginID,
+				Version:  officialContainersVersion,
+			},
+		},
+		PackageHash:  officialContainersPackageHash,
+		ManifestHash: officialContainersManifestHash,
+		EntriesHash:  officialContainersEntriesHash,
 	}
 }
 

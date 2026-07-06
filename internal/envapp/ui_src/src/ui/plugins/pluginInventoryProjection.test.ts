@@ -10,7 +10,7 @@ import type { OfficialPluginCatalogItem, ReDevPluginRecord } from './pluginTypes
 const officialContainers: OfficialPluginCatalogItem = {
   pluginID: 'com.redeven.official.containers',
   displayName: 'Containers',
-  description: 'Inspect Docker and Podman resources.',
+  description: 'Manage Docker and Podman resources.',
   publisher: 'Redeven',
   latestVersion: '1.0.0',
   stableVersion: '1.0.0',
@@ -23,7 +23,6 @@ const officialContainers: OfficialPluginCatalogItem = {
     releaseChannel: 'github_release_and_redeven_cdn',
     artifactName: 'containers-1.0.0.redevplugin',
     officialArtifactPath: 'official/containers/1.0.0/containers-1.0.0.redevplugin',
-    requiresHostDistributionInstallAPI: true,
   },
 };
 
@@ -111,7 +110,7 @@ describe('plugin inventory projection', () => {
     expect(projection.items.some((item) => item.pluginID === 'com.example.local.plugin')).toBe(false);
   });
 
-  it('routes enabled plugins to details until the released surface host is wired', () => {
+  it('routes enabled plugins to surface launch targets when the shell can host surfaces', () => {
     const enabledProjection = projectPluginInventory({
       officialCatalog: [officialContainers],
       installedPlugins: [installedRecord()],
@@ -170,6 +169,24 @@ describe('plugin inventory projection', () => {
       action: 'open_details',
     });
     expect(buildPluginCenterModel(projection).updates).toHaveLength(0);
+  });
+
+  it('does not treat unsigned local installs as official runnable plugins', () => {
+    const projection = projectPluginInventory({
+      officialCatalog: [officialContainers],
+      installedPlugins: [installedRecord({ trust_state: 'unsigned_local' })],
+    });
+
+    expect(projection.items[0]).toMatchObject({
+      lifecycleState: 'needs_attention',
+      trustBadge: 'unavailable',
+      attentionReason: 'trust_unavailable',
+      defaultLaunchTarget: undefined,
+    });
+    expect(buildPluginPanelModel(projection, undefined, { canOpenSurfaces: true }).tiles[1]).toMatchObject({
+      kind: 'plugin',
+      action: 'open_details',
+    });
   });
 
   it('sorts pinned and recently opened plugins deterministically after the center tile', () => {

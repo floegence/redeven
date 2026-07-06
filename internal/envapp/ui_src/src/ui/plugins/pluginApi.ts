@@ -1,4 +1,5 @@
 import { fetchLocalApiJSON } from '../services/localApi';
+import { officialPluginPackage } from './officialPluginPackages';
 import { projectPluginInventory } from './pluginInventoryProjection';
 import type {
   PluginInventoryProjection,
@@ -39,10 +40,25 @@ export const pluginLifecycleApi = {
       body: JSON.stringify({ plugin_instance_id: pluginInstanceID, delete_data: dataRetention === 'delete_data' }),
     });
   },
-  update(pluginInstanceID: string): Promise<ReDevPluginRecord> {
+  installOfficial(pluginID: string): Promise<ReDevPluginRecord> {
+    const pkg = requireOfficialPackage(pluginID);
+    return fetchLocalApiJSON<ReDevPluginRecord>(`${pluginAPIBase}/install`, {
+      method: 'POST',
+      body: JSON.stringify({
+        package_base64: pkg.packageBase64,
+        trust_state: 'bundled',
+      }),
+    });
+  },
+  updateOfficial(pluginID: string, pluginInstanceID: string): Promise<ReDevPluginRecord> {
+    const pkg = requireOfficialPackage(pluginID);
     return fetchLocalApiJSON<ReDevPluginRecord>(`${pluginAPIBase}/update`, {
       method: 'POST',
-      body: JSON.stringify({ plugin_instance_id: pluginInstanceID }),
+      body: JSON.stringify({
+        plugin_instance_id: pluginInstanceID,
+        package_base64: pkg.packageBase64,
+        trust_state: 'bundled',
+      }),
     });
   },
   openSurface(target: PluginSurfaceLaunchTarget): Promise<PluginOpenSurfaceResult> {
@@ -62,7 +78,7 @@ export async function executePluginLifecycleCommand(command: PluginLifecycleComm
     case 'uninstall':
       return pluginLifecycleApi.uninstall(command.pluginInstanceID, command.dataRetention);
     case 'update':
-      return pluginLifecycleApi.update(command.pluginInstanceID);
+      return pluginLifecycleApi.updateOfficial(command.pluginID, command.pluginInstanceID);
     case 'open_surface':
       return pluginLifecycleApi.openSurface({
         pluginInstanceID: command.pluginInstanceID,
@@ -70,10 +86,18 @@ export async function executePluginLifecycleCommand(command: PluginLifecycleComm
         preferredPlacement: command.placement,
       });
     case 'install':
-      throw new Error('Host distribution install API required for official catalog installation.');
+      return pluginLifecycleApi.installOfficial(command.pluginID);
     default:
       return assertNever(command);
   }
+}
+
+function requireOfficialPackage(pluginID: string) {
+  const pkg = officialPluginPackage(pluginID);
+  if (!pkg) {
+    throw new Error(`Official bundled package is unavailable for ${pluginID}`);
+  }
+  return pkg;
 }
 
 function assertNever(value: never): never {

@@ -77,9 +77,10 @@ import { AIChatContext, createAIChatContextValue } from './pages/AIChatContext';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
 import { PluginPanel } from './plugins/PluginPanel';
 import { PluginCenterView } from './plugins/PluginCenterView';
-import { loadPluginInventoryProjection } from './plugins/pluginApi';
+import { PluginSurfaceFrame } from './plugins/PluginSurfaceFrame';
+import { executePluginLifecycleCommand, loadPluginInventoryProjection } from './plugins/pluginApi';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
-import type { PluginSurfaceLaunchTarget } from './plugins/pluginTypes';
+import type { PluginLifecycleCommand, PluginOpenSurfaceResult, PluginSurfaceLaunchTarget } from './plugins/pluginTypes';
 import { hasRWXPermissions } from './pages/aiPermissions';
 import { useRedevenRpc } from './protocol/redeven_v1';
 import { createEnvLocalFlowerSurfaceAdapter } from './flower/envLocalFlowerSurfaceAdapter';
@@ -186,8 +187,9 @@ const ACCESS_RESUME_TIMEOUT_MS = 15_000;
 const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
 const PLUGIN_CENTER_ACTIVITY_ID = 'plugin-center';
+const PLUGIN_SURFACE_ACTIVITY_ID = 'plugin-surface';
 
-type EnvActivitySurfaceId = EnvSurfaceId | 'settings' | typeof PLUGIN_CENTER_ACTIVITY_ID;
+type EnvActivitySurfaceId = EnvSurfaceId | 'settings' | typeof PLUGIN_CENTER_ACTIVITY_ID | typeof PLUGIN_SURFACE_ACTIVITY_ID;
 
 type EnvSessionSource =
   | 'local_runtime'
@@ -231,6 +233,29 @@ function getErrorMessage(error: unknown): string {
     return String(error.message || '').trim();
   }
   return String(error ?? '').trim();
+}
+
+function requirePluginOpenSurfaceResult(value: unknown): PluginOpenSurfaceResult {
+  if (!value || typeof value !== 'object') {
+    throw new Error('Plugin surface open response is invalid.');
+  }
+  const record = value as Partial<Record<keyof PluginOpenSurfaceResult, unknown>>;
+  const requiredFields: Array<keyof PluginOpenSurfaceResult> = [
+    'plugin_id',
+    'plugin_instance_id',
+    'surface_id',
+    'surface_instance_id',
+    'active_fingerprint',
+    'asset_ticket',
+    'asset_ticket_id',
+    'bridge_nonce',
+  ];
+  for (const field of requiredFields) {
+    if (!String(record[field] ?? '').trim()) {
+      throw new Error(`Plugin surface open response is missing ${field}.`);
+    }
+  }
+  return value as PluginOpenSurfaceResult;
 }
 
 function localizedAccessUnlockErrorMessage(error: unknown, i18n: ReturnType<typeof useI18n>): string {
@@ -696,6 +721,7 @@ export function EnvAppShell() {
   const [settingsOrigin, setSettingsOrigin] = createSignal<EnvSettingsOrigin>(null);
   const [pluginsPanelOpen, setPluginsPanelOpen] = createSignal(false);
   const [pluginCenterSelectedPluginID, setPluginCenterSelectedPluginID] = createSignal<string | undefined>();
+  const [activePluginSurface, setActivePluginSurface] = createSignal<PluginOpenSurfaceResult | null>(null);
   const [languageMenuOpenSeq, setLanguageMenuOpenSeq] = createSignal(0);
   const [aiThreadFocusRequest, setAIThreadFocusRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
   let aiThreadFocusRequestSequence = 0;
@@ -787,10 +813,12 @@ export function EnvAppShell() {
   const pluginPanelModel = createMemo(() => buildPluginPanelModel(
     pluginInventoryProjection() ?? { items: [] },
     pluginInventoryProjection.error ? getErrorMessage(pluginInventoryProjection.error) : undefined,
+    { canOpenSurfaces: protocol.status() === 'connected' && canAdmin() },
   ));
 
   const openPluginCenter = (selectedPluginID?: string) => {
     setPluginsPanelOpen(false);
+    setActivePluginSurface(null);
     setPluginCenterSelectedPluginID(selectedPluginID);
     setViewMode('activity', { surfaceId: activeSurface() });
     activateActivitySurface(PLUGIN_CENTER_ACTIVITY_ID, { persist: false });
@@ -801,10 +829,42 @@ export function EnvAppShell() {
     activateActivitySurface(lastActivitySurface(), { persist: false });
   };
 
-  const openPluginSurface = (target: PluginSurfaceLaunchTarget) => {
-    notify.info('Plugin surface unavailable', `Plugin Center can manage ${target.pluginInstanceID}, but this build does not include the released ReDevPlugin surface host.`);
-    const pluginID = pluginInventoryProjection()?.items.find((item) => item.defaultLaunchTarget?.pluginInstanceID === target.pluginInstanceID)?.pluginID;
-    openPluginCenter(pluginID);
+  const closePluginSurface = () => {
+    setActivePluginSurface(null);
+    activateActivitySurface(lastActivitySurface(), { persist: false });
+  };
+
+  const openPluginSurface = async (target: PluginSurfaceLaunchTarget) => {
+    setPluginsPanelOpen(false);
+    setPluginCenterSelectedPluginID(undefined);
+    try {
+      const result = await executePluginLifecycleCommand({
+        type: 'open_surface',
+        pluginInstanceID: target.pluginInstanceID,
+        surfaceID: target.surfaceID,
+        placement: target.preferredPlacement,
+      });
+      setActivePluginSurface(requirePluginOpenSurfaceResult(result));
+      setViewMode('activity', { surfaceId: lastActivitySurface() });
+      activateActivitySurface(PLUGIN_SURFACE_ACTIVITY_ID, { persist: false });
+    } catch (error) {
+      notify.error('Plugin surface unavailable', getErrorMessage(error));
+      const pluginID = pluginInventoryProjection()?.items.find((item) => item.defaultLaunchTarget?.pluginInstanceID === target.pluginInstanceID)?.pluginID;
+      openPluginCenter(pluginID);
+    }
+  };
+
+  const handlePluginCenterCommand = async (command: PluginLifecycleCommand) => {
+    if (command.type === 'open_surface') {
+      await openPluginSurface({
+        pluginInstanceID: command.pluginInstanceID,
+        surfaceID: command.surfaceID,
+        preferredPlacement: command.placement,
+      });
+      return;
+    }
+    await executePluginLifecycleCommand(command);
+    await refetchPluginInventory();
   };
 
   const setDebugConsoleEnabled = (enabled: boolean) => {
@@ -2086,13 +2146,30 @@ export function EnvAppShell() {
         <PluginCenterView
           selectedPluginID={pluginCenterSelectedPluginID()}
           canManagePlugins={protocol.status() === 'connected' && canAdmin()}
-          canOpenPluginSurfaces={false}
+          canOpenPluginSurfaces={protocol.status() === 'connected' && canAdmin()}
+          onCommand={handlePluginCenterCommand}
           onClose={closePluginCenter}
         />
       ),
       sidebar: { order: 98, fullScreen: true },
     });
-    list.push({ id: 'settings', name: i18n.t('shell.nav.runtimeSettings'), icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
+    list.push({
+      id: PLUGIN_SURFACE_ACTIVITY_ID,
+      name: 'Plugin Surface',
+      icon: Grid3x3,
+      component: () => {
+        const surface = activePluginSurface();
+        return surface ? (
+          <PluginSurfaceFrame surface={surface} onClose={closePluginSurface} />
+        ) : (
+          <div data-plugin-surface-empty class="flex h-full items-center justify-center text-sm text-muted-foreground">
+            No plugin surface is open.
+          </div>
+        );
+      },
+      sidebar: { order: 99, fullScreen: true },
+    });
+    list.push({ id: 'settings', name: i18n.t('shell.nav.runtimeSettings'), icon: Settings, component: EnvSettingsPage, sidebar: { order: 100, fullScreen: true } });
     return list;
   });
 
@@ -2117,7 +2194,7 @@ export function EnvAppShell() {
   };
 
   const activateActivitySurface = (surface: EnvActivitySurfaceId, opts?: { persist?: boolean }) => {
-    if (surface !== 'settings' && surface !== PLUGIN_CENTER_ACTIVITY_ID) {
+    if (surface !== 'settings' && surface !== PLUGIN_CENTER_ACTIVITY_ID && surface !== PLUGIN_SURFACE_ACTIVITY_ID) {
       setSettingsOrigin(null);
       setLastActivitySurface(surface);
       setLastRequestedSurface(surface);

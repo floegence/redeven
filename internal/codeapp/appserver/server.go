@@ -526,7 +526,11 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 
 	if p == "/_redeven_plugin" || strings.HasPrefix(p, "/_redeven_plugin/") {
-		if g.PluginPlatformEnabled() && originRole == originRolePlugin {
+		pluginRouteRole := originRole
+		if !localUI {
+			pluginRouteRole = targetHostRoleFromRequest(r)
+		}
+		if g.PluginPlatformEnabled() && pluginRouteRole == originRolePlugin {
 			g.servePluginPlatform(w, r, redevpluginintegration.RouteRolePluginSandbox, "/_redeven_plugin", "/_redevplugin")
 			return
 		}
@@ -641,6 +645,13 @@ func (g *Server) servePluginPlatform(w http.ResponseWriter, r *http.Request, rol
 		}
 	}
 	next = redevpluginintegration.WithRouteRole(next, role)
+	if role == redevpluginintegration.RouteRolePluginSandbox {
+		w = &pluginSandboxRewriteResponseWriter{
+			ResponseWriter: w,
+			fromPrefix:     toPrefix,
+			toPrefix:       fromPrefix,
+		}
+	}
 	g.pluginPlatform.ServeHTTP(w, next)
 }
 
@@ -668,6 +679,72 @@ func rewritePluginPlatformPath(requestPath string, fromPrefix string, toPrefix s
 		return toPrefix + strings.TrimPrefix(requestPath, fromPrefix)
 	}
 	return requestPath
+}
+
+type pluginSandboxRewriteResponseWriter struct {
+	http.ResponseWriter
+	fromPrefix string
+	toPrefix   string
+	wrote      bool
+}
+
+func (w *pluginSandboxRewriteResponseWriter) WriteHeader(statusCode int) {
+	w.rewriteHeaders()
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *pluginSandboxRewriteResponseWriter) Write(data []byte) (int, error) {
+	w.rewriteHeaders()
+	return w.ResponseWriter.Write(data)
+}
+
+func (w *pluginSandboxRewriteResponseWriter) Flush() {
+	w.rewriteHeaders()
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
+func (w *pluginSandboxRewriteResponseWriter) rewriteHeaders() {
+	if w == nil || w.wrote {
+		return
+	}
+	w.wrote = true
+	rewritePluginSandboxHeaderPrefix(w.Header(), w.fromPrefix, w.toPrefix)
+}
+
+func rewritePluginSandboxHeaderPrefix(header http.Header, fromPrefix string, toPrefix string) {
+	from := strings.TrimRight(strings.TrimSpace(fromPrefix), "/")
+	to := strings.TrimRight(strings.TrimSpace(toPrefix), "/")
+	if from == "" || to == "" || from == to {
+		return
+	}
+	if cookies := header.Values("Set-Cookie"); len(cookies) > 0 {
+		header.Del("Set-Cookie")
+		for _, cookie := range cookies {
+			header.Add("Set-Cookie", rewriteCookiePathPrefix(cookie, from, to))
+		}
+	}
+	if value := strings.TrimSpace(header.Get("Service-Worker-Allowed")); strings.HasPrefix(value, from) {
+		header.Set("Service-Worker-Allowed", to+strings.TrimPrefix(value, from))
+	}
+}
+
+func rewriteCookiePathPrefix(cookie string, fromPrefix string, toPrefix string) string {
+	parts := strings.Split(cookie, ";")
+	for index, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		lower := strings.ToLower(trimmed)
+		if !strings.HasPrefix(lower, "path=") {
+			continue
+		}
+		pathValue := strings.TrimSpace(trimmed[len("path="):])
+		if !strings.HasPrefix(pathValue, fromPrefix) {
+			continue
+		}
+		parts[index] = " Path=" + toPrefix + strings.TrimPrefix(pathValue, fromPrefix)
+	}
+	return strings.Join(parts, ";")
 }
 
 func cloneURL(u *url.URL) *url.URL {
@@ -6338,7 +6415,21 @@ func originRoleFromRequest(r *http.Request) originRole {
 	if err != nil {
 		return originRoleUnknown
 	}
+	return originRoleFromHost(host)
+}
 
+func targetHostRoleFromRequest(r *http.Request) originRole {
+	if r == nil {
+		return originRoleUnknown
+	}
+	host := strings.TrimSpace(r.Host)
+	if host == "" {
+		host = strings.TrimSpace(r.Header.Get("Host"))
+	}
+	return originRoleFromHost(host)
+}
+
+func originRoleFromHost(host string) originRole {
 	hostNoPort := strings.TrimSpace(host)
 	if i := strings.IndexByte(hostNoPort, ':'); i >= 0 {
 		hostNoPort = hostNoPort[:i]
