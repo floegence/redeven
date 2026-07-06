@@ -119,6 +119,44 @@ describe('GitWorkspace interactions', () => {
     }
   });
 
+  it('renders git view navigation while the prewarmed shell is still behind files mode', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[620px]">
+              <GitWorkspace
+                mode="files"
+                onModeChange={() => {}}
+                subview="branches"
+                onSubviewChange={() => {}}
+                width={280}
+                open
+                currentPath="/workspace/repo/src"
+                repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      expect(host.textContent).toContain('View');
+      expect(host.querySelectorAll('[role="tablist"][aria-label="Git views"]').length).toBe(1);
+      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Changes'))).toBe(true);
+      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Branches'))).toBe(true);
+      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Graph'))).toBe(true);
+      expect(host.querySelector('#git-workbench-subview-tab-branches')?.getAttribute('aria-selected')).toBe('true');
+      expect(host.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toContain('Files');
+    } finally {
+      dispose();
+    }
+  });
+
   it('does not render a mobile sidebar button unless requested explicitly', () => {
     mockMatchMedia(true);
     const host = document.createElement('div');

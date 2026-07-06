@@ -4157,6 +4157,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   });
 
   createEffect(() => {
+    const info = repoInfo();
+    const repoRootPath = String(info?.repoRootPath ?? '').trim();
+    if (gitModeShellMounted()) return;
+    if (!repoInfoResolved() || repoInfoLoading() || !info?.available || !repoRootPath || !canEnterGitHistory()) return;
+    ensureGitModeShellMounted();
+  });
+
+  createEffect(() => {
     const mode = pageMode();
     const info = repoInfo();
     const repoKey = info?.available ? `${info.repoRootPath ?? ''}|${info.headCommit ?? ''}` : '';

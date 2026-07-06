@@ -2633,7 +2633,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('silently prewarms the current Git view when the Git mode control is previewed', async () => {
+  it('keeps the Git shell mounted before previewing data for the Git mode control', async () => {
     widgetStateStore.values['widget-1'] = {
       browserSidebarWidth: 312,
       lastPathByEnv: { 'env-1': '/workspace/repo/src' },
@@ -2660,7 +2660,16 @@ describe('RemoteFileBrowser persistence', () => {
 
       const previewButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-preview-git') as HTMLButtonElement | undefined;
       expect(previewButton).toBeTruthy();
-      expect(host.querySelector('[data-testid="git-workspace"]')).toBeNull();
+      const prewarmedGitWorkspace = host.querySelector('[data-testid="git-workspace"]') as HTMLDivElement | null;
+      const prewarmedGitPanel = prewarmedGitWorkspace?.closest('[data-browser-mode-panel="git"]') as HTMLDivElement | null;
+      expect(prewarmedGitWorkspace?.textContent).toContain('git:files:changes:/workspace/repo/src:312');
+      expect(prewarmedGitPanel?.getAttribute('data-state')).toBe('inactive');
+      expect(prewarmedGitPanel?.getAttribute('aria-hidden')).toBe('true');
+      expect(workspaceLifecycleStore.gitMounts).toBe(1);
+      expect(workspaceLifecycleStore.gitUnmounts).toBe(0);
+      expect(mockRpc.git.getRepoSummary).not.toHaveBeenCalled();
+      expect(mockRpc.git.listWorkspacePage).not.toHaveBeenCalled();
+
       previewButton!.dispatchEvent(new FocusEvent('focus'));
       await flush();
 
