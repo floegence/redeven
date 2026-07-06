@@ -912,6 +912,139 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   width: min(44%, 15rem);
 }
 
+.git-branch-status-empty-table {
+  --git-branch-status-empty-template: minmax(12rem, 1fr) 6rem 6rem 5rem 4.5rem;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: clamp(12rem, 32vh, 20rem);
+  overflow: auto hidden;
+  scrollbar-gutter: stable;
+  background: color-mix(in srgb, var(--muted) 3%, transparent);
+}
+
+.git-branch-status-empty-table__content {
+  min-width: 36rem;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.git-branch-status-empty-table__header {
+  min-height: 2.125rem;
+  display: grid;
+  grid-template-columns: var(--git-branch-status-empty-template);
+  align-items: center;
+  gap: 1rem;
+  padding-inline: 0.875rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 48%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 72%, var(--foreground) 10%);
+  font-size: 0.625rem;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.git-branch-status-empty-table__header > span:last-child {
+  justify-self: end;
+}
+
+.git-branch-status-empty-table__body {
+  flex: 1 1 auto;
+  min-height: clamp(9rem, 24vh, 15rem);
+  display: grid;
+  align-items: start;
+  justify-items: center;
+  padding: clamp(1.75rem, 6vh, 3.25rem) clamp(1rem, 3vw, 2rem) 2rem;
+}
+
+.git-branch-status-empty-state {
+  width: min(25rem, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.git-branch-status-empty-state__mark {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--background) 92%, var(--muted) 8%),
+      color-mix(in srgb, var(--muted) 16%, var(--background) 84%)
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--background) 86%, white 14%),
+    0 12px 26px -22px color-mix(in srgb, var(--foreground) 30%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%);
+}
+
+.git-branch-status-empty-state__icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.git-branch-status-empty-state__copy {
+  display: grid;
+  justify-items: center;
+  gap: 0.25rem;
+}
+
+.git-branch-status-empty-state__title {
+  color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground) 12%);
+  font-size: 0.8125rem;
+  font-weight: 580;
+  line-height: 1.35;
+}
+
+.git-branch-status-empty-state__detail {
+  max-width: min(100%, 24rem);
+  color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 16%);
+  font-size: 0.75rem;
+  font-weight: 450;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
+.git-branch-status-empty-state[data-git-branch-status-empty-section='changes'] .git-branch-status-empty-state__mark {
+  border-color: color-mix(in srgb, var(--warning) 22%, var(--border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--warning) 7%, var(--background)),
+      color-mix(in srgb, var(--warning) 4%, transparent)
+    );
+  color: color-mix(in srgb, var(--warning) 64%, var(--foreground) 18%);
+}
+
+.git-branch-status-empty-state[data-git-branch-status-empty-section='conflicted'] .git-branch-status-empty-state__mark {
+  border-color: color-mix(in srgb, var(--error) 22%, var(--border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--error) 7%, var(--background)),
+      color-mix(in srgb, var(--error) 4%, transparent)
+    );
+  color: color-mix(in srgb, var(--error) 62%, var(--foreground) 20%);
+}
+
+.git-branch-status-empty-state[data-git-branch-status-empty-section='staged'] .git-branch-status-empty-state__mark {
+  border-color: color-mix(in srgb, var(--success) 22%, var(--border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--success) 7%, var(--background)),
+      color-mix(in srgb, var(--success) 4%, transparent)
+    );
+  color: color-mix(in srgb, var(--success) 60%, var(--foreground) 22%);
+}
+
 html.dark .git-branch-history-row--expanded {
   background: color-mix(in srgb, var(--muted) 15%, transparent);
 }

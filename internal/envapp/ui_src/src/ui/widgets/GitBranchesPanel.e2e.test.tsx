@@ -946,6 +946,106 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
+  it("renders a polished branch-status empty table when the worktree has no pending files", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    mockListWorkspacePage.mockResolvedValueOnce({
+      repoRootPath: "/workspace/repo-linked",
+      section: "changes",
+      directoryPath: "",
+      breadcrumbs: [{ label: "repo-linked", path: "" }],
+      summary: {
+        stagedCount: 0,
+        unstagedCount: 0,
+        untrackedCount: 0,
+        conflictedCount: 0,
+      },
+      scopeFileCount: 0,
+      totalCount: 0,
+      offset: 0,
+      nextOffset: 0,
+      hasMore: false,
+      items: [],
+    });
+
+    const branch = {
+      name: "feature/clean-worktree",
+      fullName: "refs/heads/feature/clean-worktree",
+      kind: "local" as const,
+      worktreePath: "/workspace/repo-linked",
+    };
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  selectedBranch={branch}
+                  branches={{
+                    repoRootPath: "/workspace/repo",
+                    currentRef: "main",
+                    local: [
+                      {
+                        name: "main",
+                        fullName: "refs/heads/main",
+                        kind: "local",
+                        current: true,
+                      },
+                      branch,
+                    ],
+                    remote: [],
+                  }}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+
+      const contentFrame = host.querySelector(
+        '[data-git-branch-status-content-frame="true"]',
+      );
+      const emptyTable = contentFrame?.querySelector(
+        '[data-git-branch-status-empty-table="true"]',
+      );
+      const emptyState = emptyTable?.querySelector(
+        '.git-branch-status-empty-state[data-git-branch-status-empty-section="changes"]',
+      );
+      const emptyHeader = emptyTable?.querySelector(
+        ".git-branch-status-empty-table__header",
+      );
+
+      expect(contentFrame).toBeTruthy();
+      expect(emptyTable).toBeTruthy();
+      expect(emptyState).toBeTruthy();
+      expect(emptyHeader?.textContent).toContain("Path");
+      expect(emptyHeader?.textContent).toContain("Section");
+      expect(emptyHeader?.textContent).toContain("Status");
+      expect(emptyHeader?.textContent).toContain("Changes");
+      expect(emptyHeader?.textContent).toContain("Action");
+      expect(emptyState?.textContent).toContain("No pending files");
+      expect(emptyState?.textContent).toContain("This worktree is clean.");
+      expect(
+        emptyState?.querySelector(".git-branch-status-empty-state__mark svg"),
+      ).toBeTruthy();
+      expect(host.querySelectorAll("tbody tr")).toHaveLength(0);
+      expect(host.textContent).not.toContain(
+        "No pending files are available in this worktree.",
+      );
+    } finally {
+      dispose();
+    }
+  });
+
   it("renders branch-status rows as a table at narrow measured widths", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
