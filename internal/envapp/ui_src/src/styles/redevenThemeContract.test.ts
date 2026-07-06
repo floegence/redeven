@@ -239,6 +239,10 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.git-branch-header-inline-status {');
     expect(src).toContain('.git-branch-detail-banner {');
     expect(src).toContain(".git-branch-detail-banner[data-git-branch-detail-state='error'] {");
+    expect(src).toContain('.git-branch-detached-context {');
+    expect(src).toContain('.git-branch-detached-context__summary {');
+    expect(src).toContain('.git-branch-status-unavailable-summary {');
+    expect(src).toContain('.git-branch-status-unavailable__state {');
     expect(src).toContain('.git-branch-stable-placeholder {');
     expect(src).toContain('.git-branch-stable-placeholder__body {');
     expect(src).toContain('.git-branch-stable-placeholder__table {');
@@ -247,6 +251,8 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.git-branch-stable-placeholder__cell {');
     expect(src).toContain('html.dark .git-branch-history-details-row {');
     expect(src).toContain('html.dark .git-branch-detail-banner {');
+    expect(src).toContain('html.dark .git-branch-detached-context {');
+    expect(src).toContain('html.dark .git-branch-status-unavailable-summary {');
     expect(src).toContain('html.dark .git-branch-stable-placeholder {');
     expect(src).toContain('@media (prefers-reduced-motion: reduce) {');
     expect(src).toContain('.git-branch-history-reveal[data-state=\'closing\']');

@@ -401,6 +401,13 @@ type BranchStatusSectionPresentation = {
   verboseCaption: string;
 };
 
+type BranchStatusUnavailablePresentation = {
+  title: string;
+  detail: string;
+  hint?: string;
+  tone: "neutral" | "info" | "violet";
+};
+
 function gitBranchSubviewTabId(view: GitBranchSubview): string {
   return `git-branch-subview-tab-${view}`;
 }
@@ -412,12 +419,7 @@ function gitBranchSubviewPanelId(view: GitBranchSubview): string {
 function branchStatusEmptyState(
   branch: GitBranchSummary | null | undefined,
   statusRepoRootPath: string,
-): {
-  title: string;
-  detail: string;
-  hint?: string;
-  tone: "neutral" | "info" | "violet";
-} {
+): BranchStatusUnavailablePresentation {
   if (!branch) {
     return {
       title: "No branch selected",
@@ -428,15 +430,15 @@ function branchStatusEmptyState(
   }
   if (branch.kind === "remote") {
     return {
-      title: "Remote branch is not checked out",
-      detail: "Status is only available for checked-out local worktrees.",
-      hint: "Use Compare to inspect file diffs, or check out this branch locally to review workspace changes.",
+      title: "Status unavailable",
+      detail: "Remote branches are not checked out in the active worktree.",
+      hint: "Check out this branch locally to review workspace changes.",
       tone: "violet",
     };
   }
   if (statusRepoRootPath) {
     return {
-      title: "Branch status is unavailable",
+      title: "Status unavailable",
       detail:
         "The checked-out workspace for this branch could not be resolved right now.",
       hint: "Refresh the repository view or reopen the worktree to load the latest workspace status.",
@@ -444,11 +446,16 @@ function branchStatusEmptyState(
     };
   }
   return {
-    title: "Branch is not checked out",
-    detail: "Status is only available for checked-out local worktrees.",
-    hint: "Use Compare to inspect file diffs, or open this branch in a worktree to review workspace changes.",
+    title: "Status unavailable",
+    detail: "This branch is not checked out in the active worktree.",
+    hint: "Use History or Compare to inspect commits and diffs.",
     tone: "info",
   };
+}
+
+function trimTerminalSentencePeriod(value: string): string {
+  const text = value.trim();
+  return text.endsWith(".") ? text.slice(0, -1) : text;
 }
 
 interface BranchCompareFilesTableProps {
@@ -625,6 +632,50 @@ function BranchStatusEmptyTable(props: {
             section={props.section}
             directoryPath={props.directoryPath}
           />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BranchStatusUnavailableTable(props: {
+  state: BranchStatusUnavailablePresentation;
+}) {
+  return (
+    <div
+      class="git-branch-status-empty-table git-branch-status-unavailable"
+      data-git-branch-status-empty-table="true"
+      data-git-branch-status-unavailable="true"
+    >
+      <div class="git-branch-status-empty-table__content">
+        <div class="git-branch-status-empty-table__header" aria-hidden="true">
+          <For each={BRANCH_STATUS_TABLE_COLUMNS}>
+            {(label) => <span>{label}</span>}
+          </For>
+        </div>
+        <div class="git-branch-status-empty-table__body">
+          <div
+            class="git-branch-status-unavailable__state"
+            role="status"
+            aria-live="polite"
+          >
+            <div class="git-branch-status-unavailable__mark" aria-hidden="true">
+              <AlertTriangle class="git-branch-status-unavailable__icon" />
+            </div>
+            <div class="git-branch-status-unavailable__copy">
+              <div class="git-branch-status-unavailable__title">
+                {props.state.title}
+              </div>
+              <div class="git-branch-status-unavailable__detail">
+                {props.state.detail}
+              </div>
+              <Show when={props.state.hint}>
+                <div class="git-branch-status-unavailable__hint">
+                  {props.state.hint}
+                </div>
+              </Show>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -2876,31 +2927,28 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
 
   const renderStatusUnavailableSummary = () => (
     <div
-      class={cn(
-        "rounded-md px-2.5 py-2",
-        redevenSurfaceRoleClass("inset"),
-      )}
+      class="git-branch-status-unavailable-summary"
+      data-git-branch-status-unavailable-summary="true"
     >
-      <div class="flex flex-wrap items-start justify-between gap-2">
-        <div class="min-w-0 flex-1">
-          <div class="text-xs font-medium text-foreground">
-            {statusEmptyState().title}
-          </div>
-          <div class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-            {statusEmptyState().detail}
-          </div>
+      <div class="min-w-0">
+        <div class="git-branch-status-unavailable-summary__title">
+          No checked-out worktree
         </div>
-        <GitMetaPill tone={statusEmptyState().tone}>
-          Status unavailable
-        </GitMetaPill>
+        <div class="git-branch-status-unavailable-summary__detail">
+          History and Compare remain available.
+        </div>
       </div>
-      <Show when={statusEmptyState().hint}>
-        <div class="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-          {statusEmptyState().hint}
-        </div>
-      </Show>
+      <GitMetaPill tone={statusEmptyState().tone}>
+        Status unavailable
+      </GitMetaPill>
     </div>
   );
+  const renderBranchStatusContentFallback = () => {
+    if (branchIsReady() && !visibleStatusWorkspace()) {
+      return <BranchStatusUnavailableTable state={statusEmptyState()} />;
+    }
+    return renderBranchStablePlaceholder("status");
+  };
   const renderBranchStatusStrip = () => {
     const pending = branchIsVerifying() || visibleStatusLoading();
     const unavailable = branchHasDetailIssue();
@@ -3108,7 +3156,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             >
               <Show
                 when={branchIsReady() && visibleStatusWorkspace()}
-                fallback={renderBranchStablePlaceholder("status")}
+                fallback={renderBranchStatusContentFallback()}
               >
                 <BranchStatusTable
                   section={selectedStatusSection()}
@@ -3383,55 +3431,72 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                   </For>
                 </div>
 
-                {/* Detached HEAD banner */}
+                {/* Detached HEAD context */}
                 <Show when={repoHeadDisplay().detached}>
-                  <div class="rounded-md border border-warning/30 bg-warning/[0.06] px-3 py-2.5">
-                    <div class="flex items-start gap-3">
-                      <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                      <div class="min-w-0 flex-1 space-y-1">
-                        <div class="flex flex-wrap items-center gap-2">
-                          <span class="text-xs font-semibold text-foreground">Detached HEAD</span>
+                  <div
+                    class="git-branch-detached-context"
+                    data-git-branch-detached-context="true"
+                  >
+                    <div class="git-branch-detached-context__body">
+                      <AlertTriangle class="git-branch-detached-context__icon" />
+                      <div class="git-branch-detached-context__copy">
+                        <div class="git-branch-detached-context__heading">
+                          <span class="git-branch-detached-context__title">
+                            Detached HEAD
+                          </span>
                           <Show when={repoHeadDisplay().detail}>
                             <GitMetaPill tone="neutral">
                               {repoHeadDisplay().detail}
                             </GitMetaPill>
                           </Show>
                         </div>
-                        <div class="text-[11px] leading-relaxed text-muted-foreground">
-                          {detachedHeadViewingSummary(
-                            props.repoSummary?.headCommit,
-                          )}
+                        <div class="git-branch-detached-context__summary">
+                          <span>
+                            {trimTerminalSentencePeriod(
+                              detachedHeadViewingSummary(
+                                props.repoSummary?.headCommit,
+                              ),
+                            )}
+                          </span>
+                          <Show
+                            when={detachedHeadReattachSummary(
+                              reattachBranch(),
+                              { compact: true },
+                            )}
+                          >
+                            {(summary) => (
+                              <>
+                                <span
+                                  class="git-branch-detached-context__separator"
+                                  aria-hidden="true"
+                                />
+                                <span>{summary()}</span>
+                              </>
+                            )}
+                          </Show>
                         </div>
-                        <div class="text-[11px] leading-relaxed text-muted-foreground">
-                          Checkout a local branch to reattach HEAD before pull,
-                          push, or merge.
-                        </div>
-                        <Show when={reattachBranch()}>
-                          <div class="text-[11px] leading-relaxed text-muted-foreground">
-                            {detachedHeadReattachSummary(reattachBranch())}
-                          </div>
-                        </Show>
-                        <Show when={reattachBranch() && props.onCheckoutBranch}>
-                          <div class="pt-1">
-                            <Button
-                              size="sm"
-                              variant="default"
-                              class={primaryActionButtonClass}
-                              disabled={Boolean(props.checkoutBusy)}
-                              onClick={() => {
-                                const branch = reattachBranch();
-                                if (branch) props.onCheckoutBranch?.(branch);
-                              }}
-                            >
-                              {detachedHeadCheckoutActionLabel(
-                                reattachBranch(),
-                                props.checkoutBusy,
-                              )}
-                            </Button>
-                          </div>
-                        </Show>
                       </div>
                     </div>
+                    <Show when={reattachBranch() && props.onCheckoutBranch}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        class={cn(
+                          "git-branch-detached-context__action",
+                          secondaryActionButtonClass,
+                        )}
+                        disabled={Boolean(props.checkoutBusy)}
+                        onClick={() => {
+                          const branch = reattachBranch();
+                          if (branch) props.onCheckoutBranch?.(branch);
+                        }}
+                      >
+                        {detachedHeadCheckoutActionLabel(
+                          reattachBranch(),
+                          props.checkoutBusy,
+                        )}
+                      </Button>
+                    </Show>
                   </div>
                 </Show>
               </div>
