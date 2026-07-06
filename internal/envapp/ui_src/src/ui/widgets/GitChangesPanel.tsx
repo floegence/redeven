@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { Folder, MoreHorizontal, Plus, Search, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, CheckCircle, FileText, Folder, MoreHorizontal, Plus, Search, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { Button, ConfirmDialog, Dropdown, SegmentedControl, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -36,7 +36,6 @@ import {
   GitShortcutOrbButton,
   GitShortcutOrbDock,
   GitStatePane,
-  GitSubtleNote,
   GitTableFrame,
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
@@ -136,6 +135,30 @@ function emptySectionMessage(section: GitWorkspaceViewSection, i18n: I18nHelpers
   }
 }
 
+function emptySectionIcon(section: GitWorkspaceViewSection) {
+  switch (section) {
+    case 'conflicted':
+      return AlertTriangle;
+    case 'staged':
+      return CheckCircle;
+    case 'changes':
+    default:
+      return FileText;
+  }
+}
+
+function GitChangesEmptyState(props: { section: GitWorkspaceViewSection; message: string }) {
+  const Icon = emptySectionIcon(props.section);
+  return (
+    <div class="git-changes-empty-state" data-git-changes-empty-section={props.section}>
+      <div class="git-changes-empty-state__mark" aria-hidden="true">
+        <Icon class="git-changes-empty-state__icon" />
+      </div>
+      <div class="git-changes-empty-state__title">{props.message}</div>
+    </div>
+  );
+}
+
 interface WorkspaceTableProps {
   section: GitWorkspaceViewSection;
   items: GitSeededWorkspaceChange[];
@@ -200,13 +223,16 @@ function WorkspaceTable(props: WorkspaceTableProps) {
       <Show
         when={props.items.length > 0}
         fallback={(
-          <div class="git-changes-table-empty px-4 py-8">
+          <div class="git-changes-table-empty">
             <div class="git-changes-table-status-slot" data-visible={refreshing() ? 'true' : 'false'}>
               <Show when={refreshing()}>
                 <GitInlineLoadingStatus>{loadingLabel()}</GitInlineLoadingStatus>
               </Show>
             </div>
-            <GitSubtleNote>{emptySectionMessage(props.section, i18n)}</GitSubtleNote>
+            <GitChangesEmptyState
+              section={props.section}
+              message={emptySectionMessage(props.section, i18n)}
+            />
           </div>
         )}
       >

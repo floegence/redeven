@@ -919,8 +919,11 @@ describe('GitChangesPanel interactions', () => {
     ), host);
 
     try {
+      const emptyState = host.querySelector('[data-git-changes-empty-section="staged"]');
       expect(host.textContent).toContain('No staged files yet. Stage files from the pending sections, then open the commit dialog.');
       expect(host.textContent).not.toContain('Choose a file from the staged or pending lists to inspect its patch.');
+      expect(emptyState).toBeTruthy();
+      expect(emptyState?.querySelector('.git-changes-empty-state__mark')).toBeTruthy();
       expect(host.querySelector('.git-changes-table-pending')).toBeNull();
     } finally {
       dispose();

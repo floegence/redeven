@@ -920,7 +920,7 @@ html.dark .git-branch-stable-placeholder__rows > div {
 }
 
 .git-changes-table-pending {
-  min-height: 11rem;
+  min-height: clamp(16rem, 42vh, 28rem);
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
@@ -929,7 +929,11 @@ html.dark .git-branch-stable-placeholder__rows > div {
 }
 
 .git-changes-table-empty {
-  min-height: 9rem;
+  min-height: clamp(16rem, 42vh, 28rem);
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-rows: 1.875rem minmax(0, 1fr);
+  padding: 0.75rem clamp(1rem, 3vw, 2rem) clamp(2rem, 5vh, 4rem);
 }
 
 .git-changes-table-status-slot {
@@ -942,6 +946,73 @@ html.dark .git-branch-stable-placeholder__rows > div {
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
+}
+
+.git-changes-empty-state {
+  width: min(28rem, 100%);
+  align-self: start;
+  justify-self: center;
+  display: grid;
+  justify-items: center;
+  gap: 0.625rem;
+  margin-top: clamp(2.75rem, 9vh, 5.5rem);
+  text-align: center;
+}
+
+.git-changes-empty-state__mark {
+  width: 2.375rem;
+  height: 2.375rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--background) 92%, var(--muted) 8%),
+      color-mix(in srgb, var(--muted) 18%, var(--background) 82%)
+    );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--background) 86%, white 14%),
+    0 10px 24px -20px color-mix(in srgb, var(--foreground) 28%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%);
+}
+
+.git-changes-empty-state__icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.git-changes-empty-state__title {
+  max-width: min(100%, 26rem);
+  color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 16%);
+  font-size: 0.8125rem;
+  font-weight: 520;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+
+.git-changes-empty-state[data-git-changes-empty-section='conflicted'] .git-changes-empty-state__mark {
+  border-color: color-mix(in srgb, var(--warning) 24%, var(--border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--warning) 8%, var(--background)),
+      color-mix(in srgb, var(--warning) 5%, transparent)
+    );
+  color: color-mix(in srgb, var(--warning) 64%, var(--foreground) 20%);
+}
+
+.git-changes-empty-state[data-git-changes-empty-section='staged'] .git-changes-empty-state__mark {
+  border-color: color-mix(in srgb, var(--success) 22%, var(--border));
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--success) 8%, var(--background)),
+      color-mix(in srgb, var(--success) 5%, transparent)
+    );
+  color: color-mix(in srgb, var(--success) 60%, var(--foreground) 22%);
 }
 
 .git-changes-table-skeleton {
