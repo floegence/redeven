@@ -655,9 +655,6 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition:
-    opacity 140ms ease,
-    visibility 0s linear 140ms;
 }
 
 .browser-mode-transition-panel[data-state='active'] {
@@ -665,9 +662,6 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transition:
-    opacity 140ms ease,
-    visibility 0s;
 }
 
 .git-branch-history-row {
@@ -4391,8 +4385,7 @@ html.dark .redeven-workbench-progress-curtain {
 
   .git-branch-history-row,
   .git-branch-history-reveal,
-  .browser-mode-switch__thumb,
-  .browser-mode-transition-panel {
+  .browser-mode-switch__thumb {
     transition: none !important;
   }
 
