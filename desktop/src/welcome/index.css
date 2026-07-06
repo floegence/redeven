@@ -22,6 +22,27 @@
   --redeven-control-plane-grid-column-size: 35rem;
   --redeven-control-plane-card-max-width: 44rem;
   --redeven-provider-shelf-metric-min-size: 10.75rem;
+  --redeven-welcome-window-bg: #f7f4f1;
+  --redeven-welcome-page-bg: #f4f1ed;
+  --redeven-welcome-panel-bg: #f1efec;
+  --redeven-welcome-rail-bg: #eeece9;
+  --redeven-welcome-rail-border: #dad6d1;
+  --redeven-welcome-rail-selected: #e4e1dd;
+  --redeven-welcome-text: #202a37;
+  --redeven-welcome-muted: #6b788a;
+  --redeven-welcome-icon: #7f8fa5;
+  --redeven-welcome-icon-strong: #2f3d4f;
+  --redeven-welcome-accent: #3b82f6;
+  --redeven-welcome-amber: #f59e0b;
+  --redeven-welcome-card: #fffdfa;
+  --redeven-welcome-card-border: #d8d3cc;
+  --redeven-welcome-tile: color-mix(in srgb, var(--redeven-welcome-panel-bg) 76%, var(--redeven-welcome-card) 24%);
+  --redeven-welcome-card-shadow:
+    0 1px 2px rgba(31, 41, 55, 0.05),
+    0 18px 45px rgba(31, 41, 55, 0.10);
+  --redeven-welcome-soft-shadow:
+    0 1px 2px rgba(31, 41, 55, 0.04),
+    0 12px 30px rgba(31, 41, 55, 0.07);
 }
 
 html,
@@ -45,6 +66,11 @@ body {
     radial-gradient(ellipse at top right, color-mix(in srgb, var(--primary) 6%, transparent), transparent 50%),
     radial-gradient(ellipse at bottom left, color-mix(in srgb, var(--info) 4%, transparent), transparent 50%),
     var(--background);
+}
+
+html:not(.dark) .redeven-welcome-surface {
+  --redeven-tile: var(--redeven-welcome-tile);
+  background: var(--redeven-welcome-page-bg);
 }
 
 .redeven-welcome-shell {
@@ -289,6 +315,15 @@ body {
     box-shadow 250ms ease;
 }
 
+html:not(.dark) .redeven-environment-card {
+  border-color: color-mix(in srgb, var(--redeven-welcome-card-border) 88%, white 12%);
+  border-radius: 0.5rem;
+  background: var(--redeven-welcome-card);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent),
+    0 14px 34px -30px color-mix(in srgb, var(--foreground) 42%, transparent);
+}
+
 /*
  * floe-webapp Card wraps children in a <div class="relative z-10"> container.
  * That wrapper must participate in the flex layout so CardFooter's mt-auto can
@@ -310,12 +345,29 @@ body {
     0 18px 36px -12px color-mix(in srgb, var(--foreground) 6%, transparent);
 }
 
+html:not(.dark) .redeven-environment-card:hover {
+  border-color: color-mix(in srgb, var(--redeven-welcome-card-border) 42%, var(--primary) 58%);
+  background: color-mix(in srgb, var(--redeven-welcome-card) 96%, var(--primary) 4%);
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--primary) 14%, transparent),
+    0 8px 20px -14px color-mix(in srgb, var(--foreground) 24%, transparent),
+    0 18px 42px -24px color-mix(in srgb, var(--foreground) 20%, transparent);
+}
+
 .redeven-environment-card--featured {
   border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--primary) 5%, var(--card)), var(--card));
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+html:not(.dark) .redeven-environment-card--featured {
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--redeven-welcome-card-border));
+  background: color-mix(in srgb, var(--primary) 5%, var(--redeven-welcome-card));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 58%, transparent),
+    0 12px 30px -26px color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
 .redeven-environment-card--open {
@@ -325,6 +377,14 @@ body {
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--success) 8%, transparent),
     0 1px 4px color-mix(in srgb, var(--success) 4%, transparent);
+}
+
+html:not(.dark) .redeven-environment-card--open {
+  border-color: color-mix(in srgb, var(--success) 34%, var(--redeven-welcome-card-border));
+  background: color-mix(in srgb, var(--success) 6%, var(--redeven-welcome-card));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 50%, transparent),
+    0 1px 4px color-mix(in srgb, var(--success) 8%, transparent);
 }
 
 .redeven-environment-card--failure-error {
@@ -482,6 +542,14 @@ body {
   box-shadow:
     0 6px 16px -4px color-mix(in srgb, var(--primary) 10%, transparent),
     0 16px 32px -8px color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+html:not(.dark) .redeven-new-environment-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--redeven-welcome-card-border));
+  background: color-mix(in srgb, var(--redeven-welcome-card) 96%, var(--primary) 4%);
+  box-shadow:
+    0 6px 16px -12px color-mix(in srgb, var(--primary) 28%, transparent),
+    0 16px 36px -22px color-mix(in srgb, var(--primary) 24%, transparent);
 }
 
 /* ── Card body: flat fact rows ── */
@@ -747,6 +815,10 @@ body {
   padding: 0.5rem 0.55rem;
 }
 
+html:not(.dark) .redeven-endpoints-section {
+  border-color: color-mix(in srgb, var(--redeven-welcome-rail-border) 74%, transparent);
+}
+
 .redeven-endpoints-title {
   font-size: 0.58rem;
   font-weight: 700;
@@ -870,6 +942,11 @@ body {
   border-radius: 0.375rem;
   background: color-mix(in srgb, var(--card) 82%, var(--muted) 18%);
   padding: 0.55rem;
+}
+
+html:not(.dark) .redeven-endpoint-qr-panel {
+  border-color: color-mix(in srgb, var(--redeven-welcome-rail-border) 74%, transparent);
+  background: color-mix(in srgb, var(--redeven-welcome-card) 72%, var(--redeven-welcome-panel-bg) 28%);
 }
 
 .redeven-endpoint-qr-card {
@@ -1051,6 +1128,10 @@ body {
 .redeven-header-separator {
   border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   padding-bottom: 1rem;
+}
+
+html:not(.dark) .redeven-header-separator {
+  border-bottom-color: color-mix(in srgb, var(--redeven-welcome-rail-border) 82%, transparent);
 }
 
 /* ── Provider filter pill ── */
@@ -2508,8 +2589,26 @@ body {
   overflow: hidden;
 }
 
+html:not(.dark) .redeven-launcher-head,
+html:not(.dark) .redeven-toolbar-strip,
+html:not(.dark) .redeven-settings-hero {
+  border: 1px solid color-mix(in srgb, var(--redeven-welcome-card-border) 86%, white 14%);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--redeven-welcome-window-bg) 82%, var(--redeven-welcome-card) 18%);
+  box-shadow: var(--redeven-welcome-soft-shadow);
+}
+
 .redeven-provider-shelf {
   box-shadow: 0 1px 3px color-mix(in srgb, var(--foreground) 4%, transparent);
+}
+
+html:not(.dark) .redeven-provider-shelf {
+  border-color: color-mix(in srgb, var(--redeven-welcome-card-border) 88%, white 12%);
+  border-radius: 0.5rem;
+  background: var(--redeven-welcome-card);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent),
+    0 14px 34px -30px color-mix(in srgb, var(--foreground) 42%, transparent);
 }
 
 .redeven-control-plane-grid {
@@ -2533,6 +2632,11 @@ body {
   gap: 0.5rem;
 }
 
+html:not(.dark) .redeven-provider-shelf__actions {
+  border-top-color: color-mix(in srgb, var(--redeven-welcome-rail-border) 78%, transparent);
+  background: color-mix(in srgb, var(--redeven-welcome-window-bg) 46%, transparent);
+}
+
 .redeven-provider-shelf__metrics {
   display: grid;
   gap: 0.75rem;
@@ -2542,6 +2646,11 @@ body {
 
 .redeven-provider-shelf__metric {
   min-width: 0;
+}
+
+html:not(.dark) .redeven-provider-shelf__metric {
+  border-color: color-mix(in srgb, var(--redeven-welcome-rail-border) 78%, transparent);
+  background: var(--redeven-tile, var(--card));
 }
 
 .redeven-provider-shelf__metric-header {
@@ -2595,6 +2704,12 @@ body {
   pointer-events: none;
 }
 
+html:not(.dark) .redeven-launcher-head::after,
+html:not(.dark) .redeven-settings-hero::after,
+html:not(.dark) .redeven-toolbar-strip::after {
+  display: none;
+}
+
 .redeven-launcher-head::before,
 .redeven-toolbar-strip::before,
 .redeven-settings-hero::before {
@@ -2605,6 +2720,12 @@ body {
     linear-gradient(135deg, color-mix(in srgb, var(--foreground) 3%, transparent), transparent 36%),
     linear-gradient(180deg, color-mix(in srgb, var(--background) 10%, transparent), transparent 55%);
   pointer-events: none;
+}
+
+html:not(.dark) .redeven-launcher-head::before,
+html:not(.dark) .redeven-toolbar-strip::before,
+html:not(.dark) .redeven-settings-hero::before {
+  background: color-mix(in srgb, var(--redeven-welcome-card) 10%, transparent);
 }
 
 /* ── Console badge (small metadata label) ── */
@@ -2651,11 +2772,25 @@ body {
   color: var(--muted-foreground);
 }
 
+html:not(.dark) .redeven-status-detail {
+  border-color: color-mix(in srgb, var(--redeven-welcome-rail-border) 76%, transparent);
+}
+
 /* ── Empty state ── */
 
 .redeven-console-empty {
   border: 1px dashed color-mix(in srgb, var(--foreground) 10%, transparent);
   background: color-mix(in srgb, var(--foreground) 1.5%, transparent);
+}
+
+html:not(.dark) .redeven-console-empty {
+  border-color: color-mix(in srgb, var(--redeven-welcome-rail-border) 88%, var(--foreground) 12%);
+  background: color-mix(in srgb, var(--redeven-welcome-window-bg) 58%, transparent);
+}
+
+html:not(.dark) .redeven-empty-panel {
+  border-color: color-mix(in srgb, var(--redeven-welcome-rail-border) 84%, transparent);
+  background: color-mix(in srgb, var(--redeven-welcome-card) 72%, transparent);
 }
 
 /* ── Metadata rows ── */
@@ -2698,6 +2833,10 @@ body {
 
 .redeven-tile {
   background-color: var(--redeven-tile, var(--card));
+}
+
+html:not(.dark) .redeven-tile {
+  border-color: color-mix(in srgb, var(--redeven-welcome-rail-border) 78%, transparent);
 }
 
 /* ── Override floe-webapp Tag component radius to match angular design ── */
