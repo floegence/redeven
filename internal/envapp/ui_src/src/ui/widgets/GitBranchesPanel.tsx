@@ -2494,37 +2494,59 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   };
   const renderBranchStablePlaceholder = (view: GitBranchSubview) => {
     const checking = branchIsVerifying();
+    const placeholderState = checking
+      ? "verifying"
+      : branchHasDetailIssue()
+        ? "unavailable"
+        : "waiting";
+    const accessibilityLabel = view === "status"
+      ? checking
+        ? "Preparing branch status."
+        : "Branch status is not available yet."
+      : checking
+        ? "Preparing commit history."
+        : "Commit history is not available yet.";
+    const columnLabels = view === "status"
+      ? ["Path", "Section", "Status", "Changes", "Action"]
+      : ["Commit", "Author", "Time"];
     return (
       <GitTableFrame
-        class="git-branch-stable-placeholder flex min-h-0 flex-1 flex-col"
+        class="git-branch-stable-placeholder flex min-h-0 w-full flex-col"
       >
         <div
           class="git-branch-stable-placeholder__body"
           data-git-branch-stable-placeholder={view}
-          data-git-branch-stable-placeholder-state={
-            checking ? "verifying" : "waiting"
-          }
+          data-git-branch-stable-placeholder-state={placeholderState}
+          role="status"
+          aria-live="polite"
+          aria-busy={checking ? "true" : undefined}
         >
-          <GitSubtleNote class="git-branch-stable-placeholder__note max-w-xl">
-            <Show
-              when={checking}
-              fallback={
-                <>
-                  {view === "status"
-                    ? "Branch status will appear here after this selection is available."
-                    : "Commit history will appear here after this selection is available."}
-                </>
-              }
-            >
-              {view === "status"
-                ? "Status will appear here after verification."
-                : "History will appear here after verification."}
-            </Show>
-          </GitSubtleNote>
-          <div class="git-branch-stable-placeholder__rows" aria-hidden="true">
-            <div />
-            <div />
-            <div />
+          <span class="sr-only">{accessibilityLabel}</span>
+          <div
+            class="git-branch-stable-placeholder__table"
+            data-git-branch-stable-placeholder-layout={view}
+            aria-hidden="true"
+          >
+            <div class="git-branch-stable-placeholder__header">
+              <For each={columnLabels}>
+                {(label) => <span>{label}</span>}
+              </For>
+            </div>
+            <For each={[0, 1, 2]}>
+              {(_, rowIndex) => (
+                <div class="git-branch-stable-placeholder__row">
+                  <For each={columnLabels}>
+                    {(_, columnIndex) => (
+                      <span
+                        class="git-branch-stable-placeholder__cell"
+                        data-skeleton-column={columnIndex()}
+                        data-skeleton-row={rowIndex()}
+                      />
+                    )}
+                  </For>
+                </div>
+              )}
+            </For>
           </div>
         </div>
       </GitTableFrame>
