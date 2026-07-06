@@ -21,6 +21,8 @@ import (
 	"testing/fstest"
 	"time"
 
+	flconfig "github.com/floegence/floret/config"
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/codexbridge"
@@ -2818,8 +2820,9 @@ func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 		CanWrite:     true,
 		CanExecute:   true,
 	}
+	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
-		StateDir:     t.TempDir(),
+		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
 		Shell:        "/bin/sh",
 	})
@@ -2836,6 +2839,7 @@ func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 	if err := aiSvc.AppendThreadMessage(context.Background(), &meta, thread.ThreadID, "user", "Fork me", "markdown"); err != nil {
 		t.Fatalf("AppendThreadMessage: %v", err)
 	}
+	seedFloretForkSourceThread(t, stateDir, thread.ThreadID)
 	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
@@ -2881,6 +2885,44 @@ func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 	}
 	if !resp.OK || strings.TrimSpace(resp.Data.Thread.ThreadID) == "" || resp.Data.Thread.ThreadID == thread.ThreadID || resp.Data.Thread.Title != "Server fork" {
 		t.Fatalf("fork response=%+v, want titled fork", resp)
+	}
+}
+
+func seedFloretForkSourceThread(t *testing.T, stateDir string, threadID string) {
+	t.Helper()
+
+	store, err := flruntime.OpenSQLiteStore(filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	host, err := flruntime.NewHost(flruntime.HostOptions{
+		Config: flconfig.Config{
+			Provider:     flconfig.ProviderFake,
+			Model:        "fake-model",
+			FakeResponse: "fork source projection",
+			SystemPrompt: "test",
+		},
+		Store: store,
+	})
+	if err != nil {
+		_ = store.Close()
+		t.Fatalf("flruntime.NewHost: %v", err)
+	}
+	defer func() {
+		_ = host.Close()
+	}()
+
+	ctx := context.Background()
+	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: flruntime.ThreadID(threadID)}); err != nil {
+		t.Fatalf("StartThread: %v", err)
+	}
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
+		ThreadID: flruntime.ThreadID(threadID),
+		TurnID:   flruntime.TurnID("turn_appserver_fork_source"),
+		RunID:    flruntime.RunID("run_appserver_fork_source"),
+		Input:    "Fork me",
+	}); err != nil {
+		t.Fatalf("RunTurn: %v", err)
 	}
 }
 
