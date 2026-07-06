@@ -223,6 +223,15 @@ Rules:
 ## Published Dependency Policy
 
 - `redeven` is a downstream consumer of `floeterm`, `floe-webapp`, `flowersec`, and `redevplugin`.
+- **General capability upstream-first is a hard requirement.** When Redeven needs
+  a capability that is reusable, host-neutral, or likely useful across more than
+  one product or workflow, implement and release it in the appropriate upstream
+  source repository first. Redeven should keep only thin product adapters,
+  business orchestration, placement, policy mapping, and UI integration.
+- This applies to shared capabilities owned by `floeterm`, `floe-webapp`,
+  `flowersec`, and `redevplugin`. Do not turn a general-purpose dependency gap
+  into Redeven-local helper code, copied contracts, hidden compatibility shims,
+  local package wiring, or one-off product-specific platform logic.
 - Never reference local sibling checkouts through package manifests, lockfiles, build aliases, source imports, or Go workspace wiring.
 - Forbidden local wiring includes `file:`, `link:`, `workspace:`, `portal:`, relative paths, absolute paths, and equivalent local indirection.
 - For ReDevPlugin specifically, a usable dependency update means the matching
@@ -230,11 +239,13 @@ Rules:
   compatibility manifest, and contract hashes have all been released together.
   A local `../redevplugin` worktree, branch, copied schema, or draft package is
   not a valid Redeven integration source.
-- Required flow:
+- Required flow for reusable upstream capability work:
   - implement upstream first in the source repository;
+  - run that repository's required quality gates;
   - release it;
   - confirm the release artifacts are available;
-  - then upgrade `redeven` to the published version.
+  - then upgrade `redeven` to the published version;
+  - keep Redeven changes limited to product integration and business behavior.
 
 ## ReDevPlugin Boundary
 
