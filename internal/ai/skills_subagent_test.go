@@ -1531,6 +1531,10 @@ func (h *fakeCloseAllFloretHost) EnsureThread(_ context.Context, req flruntime.E
 	}, nil
 }
 
+func (h *fakeCloseAllFloretHost) ForkThread(context.Context, flruntime.ForkThreadRequest) (flruntime.ForkThreadResult, error) {
+	return flruntime.ForkThreadResult{}, nil
+}
+
 func (h *fakeCloseAllFloretHost) ReadThread(context.Context, flruntime.ThreadID) (flruntime.ThreadSnapshot, error) {
 	return flruntime.ThreadSnapshot{}, nil
 }

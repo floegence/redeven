@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -223,6 +224,145 @@ func TestListThreadMessagesAllowsRunningFloretTurnWithoutProjection(t *testing.T
 	}
 }
 
+func TestForkThreadReadsForkedFloretProjectionWithoutShadowTranscript(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+	meta := timelineReadPathMeta("env_fork_floret_projection")
+	source, err := svc.CreateThread(ctx, meta, "source projection", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	const (
+		sourceTurnID = "turn_source_projection"
+		sourceRunID  = "run_source_projection"
+		fullAnswer   = "Forked Floret projection body with a final sentence that must render from the destination thread."
+	)
+	storePath, err := floretThreadStorePath(svc.stateDir)
+	if err != nil {
+		t.Fatalf("floretThreadStorePath: %v", err)
+	}
+	host := openTestFloretHost(t, storePath, fullAnswer)
+	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: flruntime.ThreadID(source.ThreadID)}); err != nil {
+		_ = host.Close()
+		t.Fatalf("StartThread: %v", err)
+	}
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
+		ThreadID: flruntime.ThreadID(source.ThreadID),
+		TurnID:   flruntime.TurnID(sourceTurnID),
+		RunID:    flruntime.RunID(sourceRunID),
+		Input:    "write the projection-only answer",
+	}); err != nil {
+		_ = host.Close()
+		t.Fatalf("RunTurn: %v", err)
+	}
+	if err := host.Close(); err != nil {
+		t.Fatalf("Close seed Floret host: %v", err)
+	}
+
+	appendTimelineReadPathUserMessage(t, ctx, svc.threadsDB, meta.EndpointID, source.ThreadID, "msg_user_source", "hello", 1000)
+	if _, err := svc.threadsDB.AppendConversationTurn(ctx, threadstore.ConversationTurn{
+		TurnID:             sourceTurnID,
+		EndpointID:         meta.EndpointID,
+		ThreadID:           source.ThreadID,
+		RunID:              sourceRunID,
+		UserMessageID:      "msg_user_source",
+		AssistantMessageID: sourceTurnID,
+		CreatedAtUnixMs:    1100,
+	}); err != nil {
+		t.Fatalf("AppendConversationTurn source: %v", err)
+	}
+
+	forked, err := svc.ForkThread(ctx, meta, source.ThreadID, "Projection fork")
+	if err != nil {
+		t.Fatalf("ForkThread: %v", err)
+	}
+	if forked.ThreadID == "" || forked.ThreadID == source.ThreadID {
+		t.Fatalf("forked thread id=%q source=%q", forked.ThreadID, source.ThreadID)
+	}
+
+	transcriptRows, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, forked.ThreadID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListMessages fork: %v", err)
+	}
+	if len(transcriptRows) != 1 || transcriptRows[0].Role != "user" {
+		t.Fatalf("fork transcript rows=%+v, want only user transcript", transcriptRows)
+	}
+
+	turns, err := svc.threadsDB.ListConversationTurns(ctx, meta.EndpointID, forked.ThreadID, 10)
+	if err != nil {
+		t.Fatalf("ListConversationTurns fork: %v", err)
+	}
+	if len(turns) != 1 {
+		t.Fatalf("fork turns=%d, want 1", len(turns))
+	}
+	if turns[0].TurnID == sourceTurnID || turns[0].RunID == sourceRunID {
+		t.Fatalf("fork turn leaked source Floret identity: %+v", turns[0])
+	}
+	if turns[0].TurnID == "" || turns[0].RunID == "" || turns[0].AssistantMessageID != turns[0].TurnID || turns[0].UserMessageID != transcriptRows[0].MessageID {
+		t.Fatalf("fork turn identity mismatch: %+v transcript=%+v", turns[0], transcriptRows)
+	}
+
+	maintenance, err := svc.openFloretMaintenanceHost()
+	if err != nil {
+		t.Fatalf("openFloretMaintenanceHost: %v", err)
+	}
+	projection, err := maintenance.ReadTurnProjection(ctx, flruntime.ReadTurnProjectionRequest{
+		ThreadID: flruntime.ThreadID(forked.ThreadID),
+		TurnID:   flruntime.TurnID(turns[0].TurnID),
+		RunID:    flruntime.RunID(turns[0].RunID),
+	})
+	if closeErr := maintenance.Close(); closeErr != nil {
+		t.Fatalf("Close maintenance host: %v", closeErr)
+	}
+	if err != nil {
+		t.Fatalf("ReadTurnProjection fork: %v turn=%+v", err, turns[0])
+	}
+	if got := floretProjectionAssistantTextForTest(projection); got != fullAnswer {
+		t.Fatalf("direct fork projection text=%q, want %q; projection=%#v", got, fullAnswer, projection)
+	}
+
+	listed, err := svc.ListThreadMessages(ctx, meta, forked.ThreadID, 20, 0)
+	if err != nil {
+		t.Fatalf("ListThreadMessages fork: %v", err)
+	}
+	if len(listed.Messages) != 2 {
+		t.Fatalf("fork timeline messages=%d, want user plus Floret projection", len(listed.Messages))
+	}
+	rawAssistant := threadMessageRawForTest(t, listed.Messages[1])
+	var assistant struct {
+		ID     string `json:"id"`
+		Role   string `json:"role"`
+		Status string `json:"status"`
+		Blocks []struct {
+			Type    string `json:"type"`
+			Content string `json:"content"`
+		} `json:"blocks"`
+	}
+	if err := json.Unmarshal(rawAssistant, &assistant); err != nil {
+		t.Fatalf("decode fork assistant %s: %v", string(rawAssistant), err)
+	}
+	if assistant.ID != turns[0].TurnID || assistant.Role != "assistant" || assistant.Status != "complete" {
+		t.Fatalf("fork assistant identity/status=%+v turn=%+v", assistant, turns[0])
+	}
+	if len(assistant.Blocks) != 1 || assistant.Blocks[0].Type != "markdown" || assistant.Blocks[0].Content != fullAnswer {
+		t.Fatalf("fork assistant blocks=%+v, want full Floret projection body", assistant.Blocks)
+	}
+
+	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, meta, forked.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadLiveBootstrap fork: %v", err)
+	}
+	if len(bootstrap.TimelineMessages) != 2 {
+		t.Fatalf("bootstrap timeline messages=%d, want 2", len(bootstrap.TimelineMessages))
+	}
+	if got := bootstrap.TimelineMessages[1]; got.MessageID != turns[0].TurnID || got.Status != "complete" || got.Content != fullAnswer {
+		t.Fatalf("bootstrap assistant=%+v turn=%+v", got, turns[0])
+	}
+}
+
 func TestListThreadMessagesPaginatesBeyondFiveHundredMessages(t *testing.T) {
 	t.Parallel()
 
@@ -263,6 +403,19 @@ func TestListThreadMessagesPaginatesBeyondFiveHundredMessages(t *testing.T) {
 	if len(finalPageIDs) != 5 || finalPageIDs[0] != "msg_000" || finalPageIDs[len(finalPageIDs)-1] != "msg_004" {
 		t.Fatalf("final page ids=%v, want msg_000..msg_004", finalPageIDs)
 	}
+}
+
+func floretProjectionAssistantTextForTest(projection flruntime.ThreadTurnProjection) string {
+	var parts []string
+	for _, segment := range projection.Segments {
+		if segment.Kind != flruntime.ThreadTurnProjectionSegmentAssistantText {
+			continue
+		}
+		if text := strings.TrimSpace(segment.Text); text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func timelineReadPathMeta(endpointID string) *session.Meta {
