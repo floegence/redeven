@@ -1161,7 +1161,9 @@ export const koKR = {
       cancel: "취소",
       delete: "삭제",
       start: "시작",
+      starting: "시작 중...",
       open: "열기",
+      opening: "여는 중...",
       openInDesktop: "Desktop에서 열기",
       openInBrowser: "브라우저에서 열기",
       openWillAutoStart: "열기(자동 시작)",
@@ -1169,6 +1171,12 @@ export const koKR = {
       deleteTooltip: "codespace 삭제",
       askFlower: "Ask Flower",
       openInTerminal: "터미널에서 열기",
+    },
+    desktopWindow: {
+      loadingTitle: "Codespace 여는 중",
+      loadingDetail: "Redeven이 이 codespace 창을 준비하고 있습니다. 에디터가 준비되면 여기에 표시됩니다.",
+      failedTitle: "Codespace를 열 수 없습니다",
+      failedDetail: "Redeven으로 돌아가 다시 시도하세요. {message}",
     },
     fields: {
       id: "ID",

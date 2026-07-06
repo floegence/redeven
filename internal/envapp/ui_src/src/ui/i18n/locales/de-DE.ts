@@ -1161,7 +1161,9 @@ export const deDE = {
       cancel: "Abbrechen",
       delete: "Löschen",
       start: "Starten",
+      starting: "Wird gestartet...",
       open: "Öffnen",
+      opening: "Wird geöffnet...",
       openInDesktop: "In Desktop öffnen",
       openInBrowser: "Im Browser öffnen",
       openWillAutoStart: "Öffnen (startet automatisch)",
@@ -1169,6 +1171,12 @@ export const deDE = {
       deleteTooltip: "Codespace löschen",
       askFlower: "Ask Flower",
       openInTerminal: "In Terminal öffnen",
+    },
+    desktopWindow: {
+      loadingTitle: "Codespace wird geöffnet",
+      loadingDetail: "Redeven bereitet dieses Codespace-Fenster vor. Der Editor erscheint hier, sobald er bereit ist.",
+      failedTitle: "Codespace konnte nicht geöffnet werden",
+      failedDetail: "Kehre zu Redeven zurück und versuche es erneut. {message}",
     },
     fields: {
       id: "ID",

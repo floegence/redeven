@@ -251,13 +251,30 @@ describe('desktopShellBridge', () => {
 
     expect(desktopShellCodespaceWindowOpenAvailable()).toBe(true);
     await expect(openCodespaceWindowInDesktopShell({
+      mode: 'loading',
+      code_space_id: 'demo',
+      title: 'Opening Codespace',
+      detail: 'Preparing editor.',
+    })).resolves.toEqual({
+      ok: true,
+      message: 'Opened in a desktop window.',
+    });
+    await expect(openCodespaceWindowInDesktopShell({
+      mode: 'navigate',
       url: 'http://127.0.0.1:43123/cs/demo/',
       code_space_id: 'demo',
     })).resolves.toEqual({
       ok: true,
       message: 'Opened in a desktop window.',
     });
-    expect(openCodespaceWindowBridge).toHaveBeenCalledWith({
+    expect(openCodespaceWindowBridge).toHaveBeenNthCalledWith(1, {
+      mode: 'loading',
+      code_space_id: 'demo',
+      title: 'Opening Codespace',
+      detail: 'Preparing editor.',
+    });
+    expect(openCodespaceWindowBridge).toHaveBeenNthCalledWith(2, {
+      mode: 'navigate',
       url: 'http://127.0.0.1:43123/cs/demo/',
       code_space_id: 'demo',
     });

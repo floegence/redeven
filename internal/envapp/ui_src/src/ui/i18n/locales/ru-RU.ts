@@ -1177,7 +1177,9 @@ export const ruRU = {
       cancel: "Отмена",
       delete: "Удалить",
       start: "Запустить",
+      starting: "Запуск...",
       open: "Открыть",
+      opening: "Открытие...",
       openInDesktop: "Открыть в Desktop",
       openInBrowser: "Открыть в браузере",
       openWillAutoStart: "Открыть (запустится автоматически)",
@@ -1185,6 +1187,12 @@ export const ruRU = {
       deleteTooltip: "Удалить codespace",
       askFlower: "Ask Flower",
       openInTerminal: "Открыть в терминале",
+    },
+    desktopWindow: {
+      loadingTitle: "Открытие Codespace",
+      loadingDetail: "Redeven подготавливает это окно codespace. Редактор появится здесь, когда будет готов.",
+      failedTitle: "Не удалось открыть Codespace",
+      failedDetail: "Вернитесь в Redeven и попробуйте снова. {message}",
     },
     fields: {
       id: "ID",

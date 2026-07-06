@@ -3,6 +3,9 @@ import {
   type DesktopShellWindowCommandResponse,
 } from '../../../../../../desktop/src/shared/desktopShellWindowCommandIPC';
 import {
+  type DesktopShellOpenCodespaceWindowRequest,
+} from '../../../../../../desktop/src/shared/desktopShellCodespaceWindowIPC';
+import {
   desktopShellRuntimeMaintenanceMethodUsesDesktop,
   normalizeDesktopShellRuntimeActionResponse,
   normalizeDesktopShellRuntimeMaintenanceContext,
@@ -16,10 +19,7 @@ export type DesktopShellExternalURLOpenResult = Readonly<{
   message?: string;
 }>;
 
-export type DesktopShellCodespaceWindowOpenRequest = Readonly<{
-  url: string;
-  code_space_id: string;
-}>;
+export type DesktopShellCodespaceWindowOpenRequest = DesktopShellOpenCodespaceWindowRequest;
 
 export type DesktopShellCodespaceWindowOpenResult = Readonly<{
   ok: boolean;

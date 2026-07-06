@@ -3992,7 +3992,47 @@ html.dark .redeven-workbench-progress-curtain {
   overflow-wrap: anywhere;
 }
 
+/* ── Loading shimmer overlay ── */
+
+.redeven-loading-shimmer-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.redeven-loading-shimmer-overlay::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: overlay;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    transparent 25%,
+    rgba(255, 255, 255, 0.04) 34%,
+    rgba(255, 255, 255, 0.35) 50%,
+    rgba(255, 255, 255, 0.04) 66%,
+    transparent 75%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: redeven-loading-shimmer 3s linear infinite;
+}
+
 /* ── Step animations ── */
+
+@keyframes redeven-loading-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
+  }
+}
 
 @keyframes redeven-step-pulse {
   0%,
@@ -4012,5 +4052,11 @@ html.dark .redeven-workbench-progress-curtain {
 
   100% {
     background-position: -80% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-loading-shimmer-overlay::after {
+    animation-duration: 1ms;
   }
 }
