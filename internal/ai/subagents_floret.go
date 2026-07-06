@@ -2241,7 +2241,7 @@ func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Met
 		ChildThreadID:  flruntime.ThreadID(childThreadID),
 		AfterOrdinal:   afterOrdinal,
 		Limit:          limit,
-		IncludeRaw:     false,
+		IncludeRaw:     true,
 	})
 	if err != nil {
 		if isFloretSubagentNotFoundError(err) {
@@ -2572,9 +2572,13 @@ func flowerSubagentDetailMessage(in *flruntime.SubAgentDetailMessage) *FlowerSub
 	if in == nil {
 		return nil
 	}
+	text := strings.TrimSpace(in.Content)
+	if text == "" {
+		text = strings.TrimSpace(in.Preview)
+	}
 	return &FlowerSubagentDetailMessage{
 		Role:    strings.TrimSpace(in.Role),
-		Text:    strings.TrimSpace(in.Preview),
+		Text:    text,
 		Preview: strings.TrimSpace(in.Preview),
 	}
 }

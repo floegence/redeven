@@ -1163,7 +1163,7 @@ func TestCancelThreadClosesFloretSubagentsWithoutCachedRuntime(t *testing.T) {
 	}
 }
 
-func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *testing.T) {
+func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -1174,6 +1174,8 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 		t.Fatalf("CreateThread parent: %v", err)
 	}
 	now := time.Now()
+	finalPreview := "complete report http://arxiv.org/abs/2607.02..."
+	finalContent := "complete report " + strings.Repeat("evidence section ", 80) + "http://arxiv.org/abs/2607.02514v1"
 	host := &recordingFloretHost{
 		detail: flruntime.SubAgentDetail{
 			Snapshot: flruntime.SubAgentSnapshot{
@@ -1344,6 +1346,19 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 					CreatedAt: now.Add(-10 * time.Second),
 					Error:     "tool blocked",
 				},
+				{
+					ID:        "event-final-assistant",
+					Ordinal:   7,
+					ThreadID:  flruntime.ThreadID("child-detail"),
+					TurnID:    flruntime.TurnID("child-turn"),
+					Kind:      flruntime.SubAgentDetailEventAssistantMessage,
+					CreatedAt: now.Add(-5 * time.Second),
+					Message: &flruntime.SubAgentDetailMessage{
+						Role:    "assistant",
+						Preview: finalPreview,
+						Content: finalContent,
+					},
+				},
 			},
 			ActivityTimeline: observation.ActivityTimeline{
 				SchemaVersion: 1,
@@ -1376,7 +1391,7 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 					},
 				}},
 			},
-			NextOrdinal:  6,
+			NextOrdinal:  7,
 			HasMore:      true,
 			RetainedFrom: 1,
 			GeneratedAt:  now,
@@ -1425,14 +1440,14 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 	if req.AfterOrdinal != 7 || req.Limit != 333 {
 		t.Fatalf("unexpected detail pagination: %#v", req)
 	}
-	if req.IncludeRaw {
-		t.Fatalf("Flower UI detail must not request raw child transcript/tool payloads by default")
+	if !req.IncludeRaw {
+		t.Fatalf("Flower UI detail must request raw child transcript messages for full display output")
 	}
 	if detail == nil || detail.Summary.ThreadID != "child-detail" || detail.Summary.ParentThreadID != parent.ThreadID {
 		t.Fatalf("unexpected detail summary: %#v", detail)
 	}
-	if len(detail.Timeline) != 6 {
-		t.Fatalf("timeline rows=%d, want 6: %#v", len(detail.Timeline), detail.Timeline)
+	if len(detail.Timeline) != 7 {
+		t.Fatalf("timeline rows=%d, want 7: %#v", len(detail.Timeline), detail.Timeline)
 	}
 	for _, index := range []int{1, 2, 3, 4} {
 		rowJSON, err := json.Marshal(detail.Timeline[index])
@@ -1475,7 +1490,16 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedRuntimeWithoutRaw(t *test
 	if detail.Timeline[5].Error != "tool blocked" {
 		t.Fatalf("error row not projected: %#v", detail.Timeline[5])
 	}
-	if !detail.HasMore || detail.NextOrdinal != 6 || detail.RetainedFrom != 1 {
+	if detail.Timeline[6].Message == nil || detail.Timeline[6].Message.Text != finalContent || detail.Timeline[6].Message.Preview != finalPreview {
+		t.Fatalf("assistant detail should use raw content for text and bounded preview for preview: %#v", detail.Timeline[6])
+	}
+	if strings.Contains(detail.Timeline[6].Message.Preview, "2607.02514v1") {
+		t.Fatalf("assistant preview should remain bounded: %#v", detail.Timeline[6].Message)
+	}
+	if detail.Timeline[6].Message.Text == detail.Summary.LastMessage {
+		t.Fatalf("assistant detail text should come from Floret message content, not summary last_message: %#v", detail.Timeline[6].Message)
+	}
+	if !detail.HasMore || detail.NextOrdinal != 7 || detail.RetainedFrom != 1 {
 		t.Fatalf("pagination metadata not projected: %#v", detail)
 	}
 }
