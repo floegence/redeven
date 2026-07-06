@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -547,6 +548,10 @@ func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThre
 		return nil, err
 	}
 	title = normalizeForkThreadTitle(title, source.Title, source.LastMessagePreview)
+	floretFork, err := s.forkFloretThread(ctx, sourceThreadID, destinationID)
+	if err != nil {
+		return nil, err
+	}
 	forked, err := db.ForkThread(ctx, threadstore.ForkThreadRequest{
 		EndpointID:            endpointID,
 		SourceThreadID:        sourceThreadID,
@@ -555,13 +560,77 @@ func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThre
 		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),
 		CreatedByUserEmail:    strings.TrimSpace(meta.UserEmail),
 		CreatedAtUnixMs:       time.Now().UnixMilli(),
+		FloretTurnRefs:        threadstoreForkTurnRefs(floretFork.Turns),
 	})
 	if err != nil {
+		s.deleteFloretForkThread(context.Background(), destinationID)
 		return nil, err
 	}
 	s.broadcastThreadSummary(endpointID, sourceThreadID)
 	s.broadcastThreadSummary(endpointID, destinationID)
 	return s.GetThread(ctx, meta, forked.ThreadID)
+}
+
+func (s *Service) forkFloretThread(ctx context.Context, sourceThreadID string, destinationThreadID string) (flruntime.ForkThreadResult, error) {
+	if s == nil {
+		return flruntime.ForkThreadResult{}, errors.New("nil service")
+	}
+	host, err := s.openFloretMaintenanceHost()
+	if err != nil {
+		return flruntime.ForkThreadResult{}, err
+	}
+	defer host.Close()
+	return host.ForkThread(ctx, flruntime.ForkThreadRequest{
+		SourceThreadID:      flruntime.ThreadID(strings.TrimSpace(sourceThreadID)),
+		DestinationThreadID: flruntime.ThreadID(strings.TrimSpace(destinationThreadID)),
+	})
+}
+
+func (s *Service) deleteFloretForkThread(ctx context.Context, destinationThreadID string) {
+	if s == nil {
+		return
+	}
+	destinationThreadID = strings.TrimSpace(destinationThreadID)
+	if destinationThreadID == "" {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	cleanupCtx, cancel := context.WithTimeout(ctx, defaultPersistOpTimeout)
+	defer cancel()
+	host, err := s.openFloretMaintenanceHost()
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("ai: open Floret maintenance host for fork cleanup failed", "thread_id", destinationThreadID, "error", err)
+		}
+		return
+	}
+	defer host.Close()
+	if err := host.DeleteThread(cleanupCtx, flruntime.ThreadID(destinationThreadID)); err != nil && s.log != nil {
+		s.log.Warn("ai: cleanup Floret fork thread failed", "thread_id", destinationThreadID, "error", err)
+	}
+}
+
+func threadstoreForkTurnRefs(refs []flruntime.ForkedTurnRef) []threadstore.ForkTurnRef {
+	if len(refs) == 0 {
+		return nil
+	}
+	out := make([]threadstore.ForkTurnRef, 0, len(refs))
+	for _, ref := range refs {
+		var createdAtUnixMs int64
+		if !ref.CreatedAt.IsZero() {
+			createdAtUnixMs = ref.CreatedAt.UnixMilli()
+		}
+		out = append(out, threadstore.ForkTurnRef{
+			SourceTurnID:      string(ref.SourceTurnID),
+			SourceRunID:       string(ref.SourceRunID),
+			DestinationTurnID: string(ref.DestinationTurnID),
+			DestinationRunID:  string(ref.DestinationRunID),
+			CreatedAtUnixMs:   createdAtUnixMs,
+		})
+	}
+	return out
 }
 
 func threadForkBlockedByRunState(th *threadstore.Thread) bool {

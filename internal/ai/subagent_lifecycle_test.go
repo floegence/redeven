@@ -198,6 +198,10 @@ func (h *recordingFloretHost) EnsureThread(_ context.Context, req flruntime.Ensu
 	}, nil
 }
 
+func (h *recordingFloretHost) ForkThread(context.Context, flruntime.ForkThreadRequest) (flruntime.ForkThreadResult, error) {
+	return flruntime.ForkThreadResult{}, nil
+}
+
 func (h *recordingFloretHost) ReadThread(_ context.Context, id flruntime.ThreadID) (flruntime.ThreadSnapshot, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

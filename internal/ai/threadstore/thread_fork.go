@@ -18,6 +18,15 @@ type ForkThreadRequest struct {
 	CreatedByUserPublicID string
 	CreatedByUserEmail    string
 	CreatedAtUnixMs       int64
+	FloretTurnRefs        []ForkTurnRef
+}
+
+type ForkTurnRef struct {
+	SourceTurnID      string
+	SourceRunID       string
+	DestinationTurnID string
+	DestinationRunID  string
+	CreatedAtUnixMs   int64
 }
 
 func (s *Store) ForkThread(ctx context.Context, req ForkThreadRequest) (*Thread, error) {
@@ -261,7 +270,7 @@ INSERT INTO transcript_messages(
 
 func copyForkConversationTurnsTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest, messageIDMap map[string]string) (map[int64]int64, error) {
 	rows, err := tx.QueryContext(ctx, `
-SELECT id, user_message_id, assistant_message_id, created_at_unix_ms
+SELECT id, turn_id, run_id, user_message_id, assistant_message_id, created_at_unix_ms
 FROM conversation_turns
 WHERE endpoint_id = ? AND thread_id = ?
 ORDER BY id ASC
@@ -273,19 +282,39 @@ ORDER BY id ASC
 
 	index := 0
 	turnRowIDMap := map[int64]int64{}
+	floretRefs := forkTurnRefsBySource(req.FloretTurnRefs)
 	for rows.Next() {
 		var id int64
+		var turnID string
+		var runID string
 		var userMessageID string
 		var assistantMessageID string
 		var createdAt int64
-		if err := rows.Scan(&id, &userMessageID, &assistantMessageID, &createdAt); err != nil {
+		if err := rows.Scan(&id, &turnID, &runID, &userMessageID, &assistantMessageID, &createdAt); err != nil {
 			return nil, err
 		}
 		index++
+		nextTurnID := forkScopedID("turn", req.DestinationThreadID, index)
+		nextRunID := ""
+		nextAssistantID := mappedForkID(assistantMessageID, messageIDMap)
+		if nextAssistantID == strings.TrimSpace(assistantMessageID) && strings.TrimSpace(assistantMessageID) != "" {
+			nextAssistantID = forkScopedID("assistant", req.DestinationThreadID, index)
+		}
+		if ref, ok := forkTurnRefFor(floretRefs, turnID, runID); ok {
+			nextTurnID = strings.TrimSpace(ref.DestinationTurnID)
+			nextRunID = strings.TrimSpace(ref.DestinationRunID)
+			nextAssistantID = nextTurnID
+			if createdAt <= 0 && ref.CreatedAtUnixMs > 0 {
+				createdAt = ref.CreatedAtUnixMs
+			}
+			if nextTurnID == "" || nextRunID == "" {
+				return nil, fmt.Errorf("invalid Floret fork turn ref for %q", strings.TrimSpace(turnID))
+			}
+		}
 		res, err := tx.ExecContext(ctx, `
 INSERT INTO conversation_turns(turn_id, endpoint_id, thread_id, run_id, user_message_id, assistant_message_id, created_at_unix_ms)
-VALUES(?, ?, ?, '', ?, ?, ?)
-`, forkScopedID("turn", req.DestinationThreadID, index), req.EndpointID, req.DestinationThreadID, mappedForkID(userMessageID, messageIDMap), mappedForkID(assistantMessageID, messageIDMap), createdAt)
+VALUES(?, ?, ?, ?, ?, ?, ?)
+`, nextTurnID, req.EndpointID, req.DestinationThreadID, nextRunID, mappedForkID(userMessageID, messageIDMap), nextAssistantID, createdAt)
 		if err != nil {
 			return nil, err
 		}
@@ -299,6 +328,41 @@ VALUES(?, ?, ?, '', ?, ?, ?)
 		return nil, err
 	}
 	return turnRowIDMap, nil
+}
+
+func forkTurnRefsBySource(refs []ForkTurnRef) map[string]ForkTurnRef {
+	out := make(map[string]ForkTurnRef, len(refs)*2)
+	for _, ref := range refs {
+		sourceTurnID := strings.TrimSpace(ref.SourceTurnID)
+		if sourceTurnID == "" {
+			continue
+		}
+		sourceRunID := strings.TrimSpace(ref.SourceRunID)
+		out[forkTurnRefKey(sourceTurnID, sourceRunID)] = ref
+		if _, exists := out[forkTurnRefKey(sourceTurnID, "")]; !exists {
+			out[forkTurnRefKey(sourceTurnID, "")] = ref
+		}
+	}
+	return out
+}
+
+func forkTurnRefFor(refs map[string]ForkTurnRef, turnID string, runID string) (ForkTurnRef, bool) {
+	if len(refs) == 0 {
+		return ForkTurnRef{}, false
+	}
+	turnID = strings.TrimSpace(turnID)
+	if turnID == "" {
+		return ForkTurnRef{}, false
+	}
+	if ref, ok := refs[forkTurnRefKey(turnID, strings.TrimSpace(runID))]; ok {
+		return ref, true
+	}
+	ref, ok := refs[forkTurnRefKey(turnID, "")]
+	return ref, ok
+}
+
+func forkTurnRefKey(turnID string, runID string) string {
+	return strings.TrimSpace(turnID) + "\x00" + strings.TrimSpace(runID)
 }
 
 func copyForkStructuredInputsTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest, messageIDMap map[string]string) error {

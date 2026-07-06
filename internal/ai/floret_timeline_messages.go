@@ -228,10 +228,7 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 		if err != nil {
 			return nil, err
 		}
-		if run == nil {
-			return nil, fmt.Errorf("missing run record for Floret turn %q", turnID)
-		}
-		if runStateCanLackFloretProjection(run.State) {
+		if run != nil && runStateCanLackFloretProjection(run.State) {
 			continue
 		}
 		projectionTurns = append(projectionTurns, projectionTurn{turn: turn, run: run, rawID: turnID})
@@ -370,7 +367,7 @@ func (s *Service) floretProjectionMessageJSON(ctx context.Context, host flruntim
 	if createdAt <= 0 {
 		createdAt = time.Now().UnixMilli()
 	}
-	status := snapshotStatusForRunState(runRecord)
+	status := snapshotStatusForFloretProjection(projection, runRecord)
 	projectionRun := &run{
 		id:                       runID,
 		endpointID:               strings.TrimSpace(endpointID),
@@ -485,6 +482,21 @@ func snapshotStatusForRunState(run *threadstore.RunRecord) string {
 		return "streaming"
 	default:
 		return "complete"
+	}
+}
+
+func snapshotStatusForFloretProjection(projection flruntime.ThreadTurnProjection, run *threadstore.RunRecord) string {
+	switch projection.Status {
+	case flruntime.TurnStatusCancelled:
+		return "canceled"
+	case flruntime.TurnStatusFailed:
+		return "error"
+	case flruntime.TurnStatusWaiting:
+		return "streaming"
+	case flruntime.TurnStatusCompleted:
+		return "complete"
+	default:
+		return snapshotStatusForRunState(run)
 	}
 }
 

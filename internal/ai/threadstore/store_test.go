@@ -3246,6 +3246,96 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 	}
 }
 
+func TestStore_ForkThreadUsesFloretTurnRefsWithoutShadowTranscript(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{
+		ThreadID:        "th_src",
+		EndpointID:      "env_1",
+		ModelID:         "openai/gpt-5",
+		PermissionType:  "readonly",
+		Title:           "Source",
+		RunStatus:       "success",
+		CreatedAtUnixMs: 100,
+		UpdatedAtUnixMs: 200,
+	}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if _, err := s.AppendMessage(ctx, "env_1", "th_src", Message{
+		MessageID:       "msg_user",
+		Role:            "user",
+		Status:          "complete",
+		CreatedAtUnixMs: 110,
+		UpdatedAtUnixMs: 110,
+		TextContent:     "hello",
+		MessageJSON:     `{"id":"msg_user","role":"user","blocks":[{"type":"text","content":"hello"}]}`,
+	}, "u1", "u1@example.com"); err != nil {
+		t.Fatalf("AppendMessage user: %v", err)
+	}
+	if _, err := s.AppendConversationTurn(ctx, ConversationTurn{
+		TurnID:             "turn_src",
+		EndpointID:         "env_1",
+		ThreadID:           "th_src",
+		RunID:              "run_src",
+		UserMessageID:      "msg_user",
+		AssistantMessageID: "turn_src",
+		CreatedAtUnixMs:    120,
+	}); err != nil {
+		t.Fatalf("AppendConversationTurn: %v", err)
+	}
+
+	if _, err := s.ForkThread(ctx, ForkThreadRequest{
+		EndpointID:            "env_1",
+		SourceThreadID:        "th_src",
+		DestinationThreadID:   "th_fork",
+		Title:                 "Fork",
+		CreatedByUserPublicID: "u2",
+		CreatedByUserEmail:    "u2@example.com",
+		CreatedAtUnixMs:       300,
+		FloretTurnRefs: []ForkTurnRef{{
+			SourceTurnID:      "turn_src",
+			SourceRunID:       "run_src",
+			DestinationTurnID: "turn_dest",
+			DestinationRunID:  "run_dest",
+			CreatedAtUnixMs:   120,
+		}},
+	}); err != nil {
+		t.Fatalf("ForkThread: %v", err)
+	}
+
+	msgs, _, _, err := s.ListMessages(ctx, "env_1", "th_fork", 10, 0)
+	if err != nil {
+		t.Fatalf("ListMessages fork: %v", err)
+	}
+	if len(msgs) != 1 || msgs[0].MessageID == "msg_user" {
+		t.Fatalf("fork transcript messages = %+v, want only fork-scoped user", msgs)
+	}
+	if assistants := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ? AND role = 'assistant'`, "env_1", "th_fork"); assistants != 0 {
+		t.Fatalf("fork assistant transcript rows=%d, want 0", assistants)
+	}
+	turns, err := s.ListConversationTurns(ctx, "env_1", "th_fork", 10)
+	if err != nil {
+		t.Fatalf("ListConversationTurns fork: %v", err)
+	}
+	if len(turns) != 1 {
+		t.Fatalf("fork turns=%d, want 1", len(turns))
+	}
+	if turns[0].TurnID != "turn_dest" || turns[0].RunID != "run_dest" || turns[0].AssistantMessageID != "turn_dest" || turns[0].UserMessageID != msgs[0].MessageID {
+		t.Fatalf("fork turn mismatch: %+v messages=%+v", turns[0], msgs)
+	}
+	if turns[0].AssistantMessageID == "turn_src" {
+		t.Fatalf("fork leaked source assistant id: %+v", turns[0])
+	}
+}
+
 func TestStore_ReplaceThreadTodosSnapshot(t *testing.T) {
 	t.Parallel()
 
