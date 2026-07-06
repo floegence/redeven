@@ -97,6 +97,11 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  createFloatingPresence: (options: { open: () => boolean }) => ({
+    mounted: () => Boolean(options.open()),
+    exiting: () => false,
+    state: () => (options.open() ? 'entered' : 'exited'),
+  }),
   Dropdown: (props: any) => <>{props.trigger}</>,
   SegmentedControl: (props: any) => (
     <div>

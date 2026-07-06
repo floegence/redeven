@@ -46,6 +46,11 @@ vi.mock('@floegence/floe-webapp-core', async () => {
 });
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  createFloatingPresence: (options: { open: () => boolean }) => ({
+    mounted: () => Boolean(options.open()),
+    exiting: () => false,
+    state: () => (options.open() ? 'entered' : 'exited'),
+  }),
   CommandPalette: () => <div data-testid="command-palette" />,
 }));
 

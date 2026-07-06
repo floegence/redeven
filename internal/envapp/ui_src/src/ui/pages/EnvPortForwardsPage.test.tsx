@@ -63,6 +63,11 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  createFloatingPresence: (options: { open: () => boolean }) => ({
+    mounted: () => Boolean(options.open()),
+    exiting: () => false,
+    state: () => (options.open() ? 'entered' : 'exited'),
+  }),
   Button: (props: any) => (
     <button type="button" class={props.class} onClick={props.onClick} disabled={props.disabled} aria-label={props['aria-label']} title={props.title}>
       {props.children}

@@ -59,6 +59,11 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  createFloatingPresence: (options: { open: () => boolean }) => ({
+    mounted: () => Boolean(options.open()),
+    exiting: () => false,
+    state: () => (options.open() ? 'entered' : 'exited'),
+  }),
   MonitoringChart: () => <div data-testid="chart" />,
   SurfaceFloatingLayer: (props: any) => {
     const { children, layerRef, position, class: className, style, ...rest } = props;

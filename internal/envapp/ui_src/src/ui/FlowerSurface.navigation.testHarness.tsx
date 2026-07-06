@@ -64,6 +64,11 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
 });
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  createFloatingPresence: (options: { open: () => boolean }) => ({
+    mounted: () => Boolean(options.open()),
+    exiting: () => false,
+    state: () => (options.open() ? 'entered' : 'exited'),
+  }),
   Button: (props: any) => {
     return (
       <button

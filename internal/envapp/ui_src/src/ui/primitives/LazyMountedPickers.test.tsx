@@ -12,6 +12,11 @@ const renderCounts = {
 };
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  createFloatingPresence: (options: { open: () => boolean }) => ({
+    mounted: () => Boolean(options.open()),
+    exiting: () => false,
+    state: () => (options.open() ? 'entered' : 'exited'),
+  }),
   DirectoryPicker: (props: any) => {
     renderCounts.directory += 1;
     return (
