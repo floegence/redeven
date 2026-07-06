@@ -17,11 +17,17 @@ ReDevPlugin-owned `spec/plugin` paths.
 
 The contract covers Docker and Podman engines, container status/list/inspect,
 start preflight/start, stop/restart/remove, logs tail, and image pull method
-names. The JSON schema is closed-world and defines request/response DTOs,
-minimal container summaries, inspect summaries, action results, bounded log
-batches, image pull results, runtime summaries, target summaries, risk flags,
-and the start preflight plan. The Go DTO constants and schema enum are bound by
-tests so method names, schema identity, and object closure cannot drift
+names. Docker and Podman are distinct engine identities, not display labels.
+Every container-targeting request carries `engine` and `container_id`, and the
+target identity is the tuple `(engine, container_id)`. UI rows, plugin
+manifest schemas, dangerous confirmation hash fields, and adapter dispatch must
+not collapse identity to a bare container id or container name because Docker
+and Podman can expose overlapping ids or names on the same host. The JSON
+schema is closed-world and defines request/response DTOs, minimal container
+summaries, inspect summaries, action results, bounded log batches, image pull
+results, runtime summaries, target summaries, risk flags, and the start
+preflight plan. The Go DTO constants and schema enum are bound by tests so
+method names, schema identity, object closure, and engine fields cannot drift
 silently.
 
 Redeven also carries an integration-only generated plugin fixture for the
@@ -38,13 +44,15 @@ ReDevPlugin platform parser, package schema, runtime bridge, or substitute for
 consuming released ReDevPlugin artifacts.
 
 `Adapter` is the Redeven-owned business adapter for this capability. It wraps
-an `EngineClient`, resolves the first available local engine when the request
-does not pin one, maps status/list/inspect/action/log/image results into the
-public DTOs, and feeds observed inspect metadata into `BuildStartPreflightPlan`
-for `containers.start` confirmation. `BuildStartPreflightPlan` validates the
-selected engine and target container id, normalizes capability lists and
-mount/device summaries, computes a stable `target_hash`, and returns image,
-runtime, risk level, risk flags, `requires_admin`, and a short summary.
+an `EngineClient`, resolves the first available local engine only for requests
+that are explicitly engine-optional, maps status/list/inspect/action/log/image
+results into the public DTOs, and feeds observed inspect metadata into
+`BuildStartPreflightPlan` for `containers.start` confirmation. Container
+actions, inspect, logs, and preflight requests bind the selected engine and
+target container id together. `BuildStartPreflightPlan` validates the selected
+engine and target container id, normalizes capability lists and mount/device
+summaries, computes a stable `target_hash`, and returns image, runtime, risk
+level, risk flags, `requires_admin`, and a short summary.
 
 `Adapter.CallMethod` is the Redeven-side method dispatcher used by the
 registered ReDevPlugin capability adapter. It accepts a declared `Method` plus
@@ -140,7 +148,9 @@ This contract is a Redeven-owned capability schema, not a ReDevPlugin platform
 schema. Redeven may evolve the concrete Docker/Podman adapter and local CLI
 client here, but plugin identity, lifecycle, permission, confirmation, token,
 lease/quota, audit, and revocation checks must still be performed by released
-ReDevPlugin artifacts before any container adapter method is called. The local
+ReDevPlugin artifacts before any container adapter method is called. The
+official Containers plugin must expose canonical `container_id` fields in list
+and inspect responses and must pass `engine` back on every action. The local
 operation id table is only a business-adapter cancel target for a Host-owned
 id; official operation records, cancel-request persistence, mounted HTTP
 routes, stream tickets, audit events, disable/uninstall policy, and final

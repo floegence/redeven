@@ -96,6 +96,9 @@ export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element
     try {
       if (props.onCommand) {
         await props.onCommand(command);
+        if (command.type !== 'open_surface') {
+          await refetch();
+        }
       } else {
         await executePluginLifecycleCommand(command);
         await refetch();
@@ -271,12 +274,6 @@ export function PluginCenterDetails(props: {
               </div>
             </div>
 
-            <Show when={installRequiresHostAPI(item())}>
-              <div class="rounded-md border border-amber-400/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
-                Host distribution install API required.
-              </div>
-            </Show>
-
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <DetailStat label="Publisher" value={item().publisher} />
               <DetailStat label="Installed version" value={item().version ?? 'Not installed'} />
@@ -360,7 +357,7 @@ function PluginActions(props: {
           type="button"
           data-plugin-action="install"
           class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={disabledManagement() || installRequiresHostAPI(item())}
+          disabled={disabledManagement()}
           onClick={() => props.onCommand({ type: 'install', pluginID: item().pluginID, source: 'official_catalog' })}
         >
           <Download class="h-3.5 w-3.5" />
@@ -417,7 +414,12 @@ function PluginActions(props: {
           data-plugin-action="update"
           class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
           disabled={disabledManagement()}
-          onClick={() => props.onCommand({ type: 'update', pluginInstanceID: item().pluginInstanceID!, targetVersion: item().officialCatalog?.stableVersion ?? '' })}
+          onClick={() => props.onCommand({
+            type: 'update',
+            pluginID: item().pluginID,
+            pluginInstanceID: item().pluginInstanceID!,
+            targetVersion: item().officialCatalog?.stableVersion ?? '',
+          })}
         >
           <RefreshIcon class="h-3.5 w-3.5" />
           Update
@@ -494,10 +496,6 @@ function tabForItem(item: PluginInventoryItem): PluginCenterTab {
 
 function canEnablePlugin(item: PluginInventoryItem): boolean {
   return Boolean(item.pluginInstanceID) && (item.lifecycleState === 'disabled' || item.lifecycleState === 'installed');
-}
-
-function installRequiresHostAPI(item: PluginInventoryItem): boolean {
-  return Boolean(item.officialCatalog?.distribution.requiresHostDistributionInstallAPI);
 }
 
 function statusLabel(item: PluginInventoryItem): string {

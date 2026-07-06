@@ -19,7 +19,7 @@ function pluginItem(overrides: Partial<PluginInventoryItem> = {}): PluginInvento
     pluginID: 'com.redeven.official.containers',
     pluginInstanceID: 'plugininst_containers',
     displayName: 'Containers',
-    description: 'Inspect Docker and Podman resources.',
+    description: 'Manage Docker and Podman resources.',
     iconFallback: 'containers',
     publisher: 'Redeven',
     version: '1.0.0',

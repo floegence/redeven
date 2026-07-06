@@ -27,7 +27,6 @@ export type OfficialPluginDistribution = {
   releaseChannel: 'github_release_and_redeven_cdn';
   artifactName: string;
   officialArtifactPath: string;
-  requiresHostDistributionInstallAPI: boolean;
 };
 
 export type OfficialPluginCatalogItem = {
@@ -106,7 +105,7 @@ export type PluginLifecycleCommand =
   | { type: 'enable'; pluginInstanceID: string }
   | { type: 'disable'; pluginInstanceID: string }
   | { type: 'uninstall'; pluginInstanceID: string; dataRetention: 'keep_data' | 'delete_data' }
-  | { type: 'update'; pluginInstanceID: string; targetVersion: string }
+  | { type: 'update'; pluginID: string; pluginInstanceID: string; targetVersion: string }
   | { type: 'open_surface'; pluginInstanceID: string; surfaceID: string; placement: 'activity' | 'workbench' };
 
 export type ReDevPluginRecord = {
@@ -146,6 +145,13 @@ export type PluginOpenSurfaceResult = {
   plugin_instance_id: string;
   surface_id: string;
   surface_instance_id: string;
-  asset_ticket?: string;
-  bridge_nonce?: string;
+  active_fingerprint: string;
+  owner_session_hash?: string;
+  owner_user_hash?: string;
+  session_channel_id_hash?: string;
+  asset_ticket: string;
+  asset_ticket_id: string;
+  bridge_nonce: string;
+  issued_at?: string;
+  expires_at?: string;
 };

@@ -187,7 +187,7 @@ func containersManifestExpectations() map[Method]containersMethodExpectation {
 		MethodStatus: {
 			effect:           "read",
 			execution:        "sync",
-			requestRequired:  []string{"schema_version"},
+			requestRequired:  []string{"engine", "schema_version"},
 			requestFields:    []string{"engine", "schema_version"},
 			responseRequired: []string{"available", "capability_id", "capability_version", "engine", "schema_version"},
 			responseFields:   []string{"available", "capability_id", "capability_version", "engine", "engine_version", "schema_version"},
@@ -195,7 +195,7 @@ func containersManifestExpectations() map[Method]containersMethodExpectation {
 		MethodList: {
 			effect:           "read",
 			execution:        "sync",
-			requestRequired:  []string{"schema_version"},
+			requestRequired:  []string{"engine", "schema_version"},
 			requestFields:    []string{"all", "engine", "schema_version"},
 			responseRequired: []string{"capability_id", "containers", "engine", "schema_version"},
 			responseFields:   []string{"capability_id", "containers", "engine", "schema_version"},
@@ -297,8 +297,8 @@ func containersManifestExpectations() map[Method]containersMethodExpectation {
 			execution:        "subscription",
 			requestRequired:  []string{"container_id", "engine", "schema_version"},
 			requestFields:    []string{"container_id", "engine", "follow", "schema_version", "since_unix_ms", "tail_lines"},
-			responseRequired: []string{"capability_id", "capability_version", "container_id", "engine", "lines", "schema_version"},
-			responseFields:   []string{"capability_id", "capability_version", "container_id", "engine", "lines", "schema_version"},
+			responseRequired: []string{"capability_id", "capability_version", "container_id", "engine", "schema_version", "stream_id", "stream_ticket"},
+			responseFields:   []string{"capability_id", "capability_version", "container_id", "engine", "schema_version", "stream_id", "stream_ticket"},
 			cancelPolicy: &containersCancelPolicyExpectation{
 				disableBehavior:   "orphan",
 				uninstallBehavior: "force_cleanup_allowed",
@@ -413,6 +413,16 @@ func assertContainersResponseSchema(t *testing.T, method Method, schema map[stri
 			wantMethod = expectation.responseMethod
 		}
 		assertSchemaConst(t, methodProp, string(wantMethod))
+	}
+	switch method {
+	case MethodList:
+		containersItems := schemaMap(t, schemaMap(t, props, "containers"), "items")
+		assertSortedStrings(t, string(method)+" response container required", stringSlice(t, containersItems["required"]), []string{"container_id"})
+		assertContainersCommonSchemaFields(t, method, schemaMap(t, containersItems, "properties"))
+	case MethodInspect:
+		container := schemaMap(t, props, "container")
+		assertSortedStrings(t, string(method)+" response container required", stringSlice(t, container["required"]), []string{"container_id"})
+		assertContainersCommonSchemaFields(t, method, schemaMap(t, container, "properties"))
 	}
 }
 

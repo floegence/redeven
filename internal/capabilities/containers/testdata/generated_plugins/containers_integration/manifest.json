@@ -20,8 +20,8 @@
       "entry": "ui/index.html",
       "method": "containers.list",
       "default_size": {
-        "width": 960,
-        "height": 720
+        "width": 1080,
+        "height": 760
       }
     }
   ],
@@ -47,7 +47,7 @@
       "request_schema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["schema_version"],
+        "required": ["schema_version", "engine"],
         "properties": {
           "schema_version": { "const": "redeven.capability.container_resources.v1" },
           "engine": { "enum": ["docker", "podman"] }
@@ -80,7 +80,7 @@
       "request_schema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["schema_version"],
+        "required": ["schema_version", "engine"],
         "properties": {
           "schema_version": { "const": "redeven.capability.container_resources.v1" },
           "engine": { "enum": ["docker", "podman"] },
@@ -95,7 +95,16 @@
           "schema_version": { "const": "redeven.capability.container_resources.v1" },
           "capability_id": { "const": "redeven.capability.container_resources" },
           "engine": { "enum": ["docker", "podman"] },
-          "containers": { "type": "array" }
+          "containers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["container_id"],
+              "properties": {
+                "container_id": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
         }
       }
     },
@@ -127,7 +136,13 @@
           "schema_version": { "const": "redeven.capability.container_resources.v1" },
           "capability_id": { "const": "redeven.capability.container_resources" },
           "engine": { "enum": ["docker", "podman"] },
-          "container": { "type": "object" }
+          "container": {
+            "type": "object",
+            "required": ["container_id"],
+            "properties": {
+              "container_id": { "type": "string", "minLength": 1 }
+            }
+          }
         }
       }
     },
@@ -442,7 +457,8 @@
           "capability_version",
           "engine",
           "container_id",
-          "lines"
+          "stream_id",
+          "stream_ticket"
         ],
         "properties": {
           "schema_version": { "const": "redeven.capability.container_resources.v1" },
@@ -450,7 +466,8 @@
           "capability_version": { "const": "1.0.0" },
           "engine": { "enum": ["docker", "podman"] },
           "container_id": { "type": "string", "minLength": 1 },
-          "lines": { "type": "array" }
+          "stream_id": { "type": "string", "minLength": 1 },
+          "stream_ticket": { "type": "string", "minLength": 1 }
         }
       }
     },
@@ -510,7 +527,12 @@
       "payload_schema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["schema_version", "engine", "container_id"]
+        "required": ["schema_version", "engine", "container_id"],
+        "properties": {
+          "schema_version": { "const": "redeven.capability.container_resources.v1" },
+          "engine": { "enum": ["docker", "podman"] },
+          "container_id": { "type": "string", "minLength": 1 }
+        }
       }
     },
     {
@@ -519,7 +541,12 @@
       "payload_schema": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["schema_version", "engine", "image_ref"]
+        "required": ["schema_version", "engine", "image_ref"],
+        "properties": {
+          "schema_version": { "const": "redeven.capability.container_resources.v1" },
+          "engine": { "enum": ["docker", "podman"] },
+          "image_ref": { "type": "string", "minLength": 1 }
+        }
       }
     }
   ]

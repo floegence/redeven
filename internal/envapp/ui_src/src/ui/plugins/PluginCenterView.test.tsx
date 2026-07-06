@@ -33,7 +33,7 @@ afterEach(() => {
 const containersPlugin = {
   pluginID: 'com.redeven.official.containers',
   displayName: 'Containers',
-  description: 'Inspect Docker and Podman resources.',
+  description: 'Manage Docker and Podman resources.',
   iconFallback: 'containers',
   publisher: 'Redeven',
   lifecycleState: 'not_installed',
@@ -42,7 +42,7 @@ const containersPlugin = {
   officialCatalog: {
     pluginID: 'com.redeven.official.containers',
     displayName: 'Containers',
-    description: 'Inspect Docker and Podman resources.',
+    description: 'Manage Docker and Podman resources.',
     publisher: 'Redeven',
     latestVersion: '1.0.0',
     stableVersion: '1.0.0',
@@ -55,7 +55,6 @@ const containersPlugin = {
       releaseChannel: 'github_release_and_redeven_cdn',
       artifactName: 'containers-1.0.0.redevplugin',
       officialArtifactPath: 'official/containers/1.0.0/containers-1.0.0.redevplugin',
-      requiresHostDistributionInstallAPI: true,
     },
   },
 } satisfies PluginInventoryProjection['items'][number];
@@ -149,7 +148,7 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Disabled');
   });
 
-  it('keeps official install unavailable until the host distribution install API exists', () => {
+  it('allows official catalog installation through the bundled lifecycle API', () => {
     const onCommand = vi.fn();
     const mount = document.createElement('div');
     document.body.append(mount);
@@ -166,11 +165,14 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const install = mount.querySelector('[data-plugin-action="install"]') as HTMLButtonElement;
-    expect(install.disabled).toBe(true);
+    expect(install.disabled).toBe(false);
     expect(install.textContent).toContain('Install');
-    expect(mount.textContent).toContain('Host distribution install API required');
     install.click();
-    expect(onCommand).not.toHaveBeenCalled();
+    expect(onCommand).toHaveBeenCalledWith({
+      type: 'install',
+      pluginID: 'com.redeven.official.containers',
+      source: 'official_catalog',
+    });
   });
 
   it('disables management actions when the runtime user cannot manage plugins', () => {
@@ -208,7 +210,7 @@ describe('PluginCenterView', () => {
     expect((mount.querySelector('[data-plugin-action="uninstall"]') as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('does not allow surface open until the released surface host is wired', () => {
+  it('allows enabled official plugin surfaces to open through the sandbox host', () => {
     const onCommand = vi.fn();
     const installedProjection: PluginInventoryProjection = {
       items: [
@@ -235,13 +237,55 @@ describe('PluginCenterView', () => {
         error={null}
         onCommand={onCommand}
         canManagePlugins
+        canOpenPluginSurfaces
       />
     ), mount);
 
     const open = mount.querySelector('[data-plugin-action="open"]') as HTMLButtonElement;
-    expect(open.disabled).toBe(true);
+    expect(open.disabled).toBe(false);
     open.click();
-    expect(onCommand).not.toHaveBeenCalled();
+    expect(onCommand).toHaveBeenCalledWith({
+      type: 'open_surface',
+      pluginInstanceID: 'plugininst_containers',
+      surfaceID: 'containers.activity',
+      placement: 'activity',
+    });
+  });
+
+  it('updates official catalog packages through the bundled lifecycle API', () => {
+    const onCommand = vi.fn();
+    const updatesProjection: PluginInventoryProjection = {
+      items: [
+        {
+          ...containersPlugin,
+          pluginInstanceID: 'plugininst_containers',
+          version: '0.9.0',
+          lifecycleState: 'update_available',
+        },
+      ],
+    };
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={updatesProjection}
+        loading={false}
+        error={null}
+        onCommand={onCommand}
+        canManagePlugins
+      />
+    ), mount);
+
+    const update = mount.querySelector('[data-plugin-action="update"]') as HTMLButtonElement;
+    expect(update.disabled).toBe(false);
+    update.click();
+    expect(onCommand).toHaveBeenCalledWith({
+      type: 'update',
+      pluginID: 'com.redeven.official.containers',
+      pluginInstanceID: 'plugininst_containers',
+      targetVersion: '1.0.0',
+    });
   });
 
   it('does not offer enable for plugins that need trust attention or updates', () => {

@@ -13,6 +13,7 @@ const npmLicenseOverrides = new Map([
   ['@floegence/floe-webapp-boot', { license: 'MIT', note: 'License inherited from floegence/floe-webapp root LICENSE.' }],
   ['@floegence/floe-webapp-core', { license: 'MIT', note: 'License inherited from floegence/floe-webapp root LICENSE.' }],
   ['@floegence/floe-webapp-protocol', { license: 'MIT', note: 'License inherited from floegence/floe-webapp root LICENSE.' }],
+  ['@floegence/redevplugin-ui', { license: 'MIT', note: 'License inherited from floegence/redevplugin root LICENSE.' }],
   ['khroma', { license: 'MIT', note: 'The published README declares MIT copyright for the package authors.' }],
 ]);
 

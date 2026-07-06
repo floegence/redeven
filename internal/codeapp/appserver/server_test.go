@@ -849,6 +849,7 @@ func TestServer_PluginNamespaceDelegatesToPluginPlatformForPluginOrigin(t *testi
 	})
 
 	req := httptest.NewRequest(http.MethodPost, "/_redeven_plugin/bootstrap", nil)
+	req.Host = "plg-containers.example.com"
 	req.Header.Set("Origin", "https://plg-containers.example.com")
 	rr := httptest.NewRecorder()
 	srv.serveHTTP(rr, req)
@@ -868,6 +869,82 @@ func TestServer_PluginNamespaceDelegatesToPluginPlatformForPluginOrigin(t *testi
 	}
 	if called != 1 {
 		t.Fatalf("env-origin plugin namespace request delegated unexpectedly")
+	}
+}
+
+func TestServer_PluginNamespaceDelegatesByPluginHostForCrossOriginBootstrap(t *testing.T) {
+	t.Parallel()
+
+	srv := newDistRouteTestServer(t, fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}, nil)
+	var called int
+	var gotPath string
+	srv.pluginPlatform = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called++
+		gotPath = r.URL.Path
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"asset_session_id": "asset_session"}})
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/_redeven_plugin/bootstrap", nil)
+	req.Host = "plg-containers.example.com"
+	req.Header.Set("Origin", "https://env-local.example.com")
+	rr := httptest.NewRecorder()
+	srv.serveHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want delegated 200; body=%q", rr.Code, rr.Body.String())
+	}
+	if called != 1 || gotPath != "/_redevplugin/bootstrap" {
+		t.Fatalf("delegated call = %d path=%q", called, gotPath)
+	}
+
+	blockedReq := httptest.NewRequest(http.MethodPost, "/_redeven_plugin/bootstrap", nil)
+	blockedReq.Host = "env-local.example.com"
+	blockedReq.Header.Set("Origin", "https://env-local.example.com")
+	blockedRes := httptest.NewRecorder()
+	srv.serveHTTP(blockedRes, blockedReq)
+	if blockedRes.Code != http.StatusNotFound {
+		t.Fatalf("env-host plugin namespace status = %d, want 404", blockedRes.Code)
+	}
+	if called != 1 {
+		t.Fatalf("env-host plugin namespace request delegated unexpectedly")
+	}
+}
+
+func TestServer_PluginNamespaceRewritesSandboxCookiePath(t *testing.T) {
+	t.Parallel()
+
+	srv := newDistRouteTestServer(t, fstest.MapFS{}, nil)
+	srv.pluginPlatform = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "__Secure-redevplugin-asset-session",
+			Value:    "asset_session",
+			Path:     "/_redevplugin/assets/as_123/",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+		})
+		w.Header().Set("Service-Worker-Allowed", "/_redevplugin/assets/as_123/")
+		writeJSON(w, http.StatusOK, apiResp{OK: true})
+	})
+
+	req := WithLocalUIPluginRoute(httptest.NewRequest(http.MethodPost, "/_redeven_plugin/bootstrap", nil))
+	rr := httptest.NewRecorder()
+	srv.serveHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%q", rr.Code, rr.Body.String())
+	}
+	cookies := rr.Result().Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("cookies = %#v, want one asset session cookie", cookies)
+	}
+	if cookies[0].Path != "/_redeven_plugin/assets/as_123/" {
+		t.Fatalf("cookie path = %q, want redeven plugin namespace", cookies[0].Path)
+	}
+	if got := rr.Result().Header.Get("Service-Worker-Allowed"); got != "/_redeven_plugin/assets/as_123/" {
+		t.Fatalf("Service-Worker-Allowed = %q, want redeven plugin namespace", got)
 	}
 }
 

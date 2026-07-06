@@ -4,7 +4,7 @@ export interface OriginLocationLike {
   port?: string;
 }
 
-export type TrustedLauncherApp = 'env' | 'cs' | 'pf';
+export type TrustedLauncherApp = 'env' | 'cs' | 'pf' | 'plg';
 
 function splitHostname(hostname: string): string[] {
   return String(hostname ?? '')
