@@ -306,7 +306,7 @@ describe('GitWorkspace interactions', () => {
     }
   });
 
-  it('routes initial git bootstrap through one shell-owned loading pane', () => {
+  it('keeps git chrome visible while the active git view is preparing', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -333,11 +333,18 @@ describe('GitWorkspace interactions', () => {
     ), host);
 
     try {
+      expect(host.textContent).toContain('Mode');
+      expect(host.textContent).toContain('View');
+      expect(host.querySelectorAll('[role="radiogroup"][aria-label="Browser mode"]').length).toBe(1);
+      expect(host.querySelectorAll('[role="tablist"][aria-label="Git views"]').length).toBe(1);
+      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Changes'))).toBe(true);
+      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Branches'))).toBe(true);
+      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Graph'))).toBe(true);
       expect(host.textContent).toContain('Preparing the active Git view...');
       expect(host.textContent).toContain('Loading branches...');
       expect(host.querySelector('.git-loading-indicator')).toBeTruthy();
       expect(host.querySelector('.floe-grid-cell')).toBeNull();
-      expect(host.querySelector('[data-testid="git-sidebar-scroll-region"]')).toBeNull();
+      expect(host.querySelector('[data-testid="git-sidebar-scroll-region"]')).toBeTruthy();
       expect(host.textContent).not.toContain('Current path is not inside a Git repository.');
     } finally {
       dispose();

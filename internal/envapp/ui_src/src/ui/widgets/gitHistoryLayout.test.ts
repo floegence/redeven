@@ -23,12 +23,18 @@ describe('browser workspace layout wiring', () => {
 
   it('routes files mode and git mode through dedicated unified workspace shells', () => {
     const src = read('./RemoteFileBrowser.tsx');
+    const cssSrc = read('../../styles/redeven.css');
 
     expect(src).toContain("import { FileBrowserWorkspace, type FileBrowserPathSubmitResult } from './FileBrowserWorkspace';");
     expect(src).toContain("import { GitWorkspace } from './GitWorkspace';");
     expect(src).toContain('function BrowserModeTransitionStack');
+    expect(src).toContain('gitMounted: boolean;');
+    expect(src).toContain('<Show when={props.gitMounted}>');
+    expect(src).toContain('const [gitModeShellMounted, setGitModeShellMounted] = createSignal(false);');
+    expect(src).toContain('const ensureGitModeShellMounted = () =>');
     expect(src).toContain('<BrowserModeTransitionStack');
     expect(src).toContain('activeId={pageMode()}');
+    expect(src).toContain("gitMounted={gitModeShellMounted() || pageMode() === 'git'}");
     expect(src).toContain('data-browser-mode-panel="files"');
     expect(src).toContain('data-browser-mode-panel="git"');
     expect(src).toContain("data-state={isActive('files') ? 'active' : 'inactive'}");
@@ -36,8 +42,16 @@ describe('browser workspace layout wiring', () => {
     expect(src).toContain("notifyOnError: false");
     expect(src).toContain('<FileBrowserWorkspace');
     expect(src).toContain('<GitWorkspace');
+    expect(src).not.toContain('const [mountedViews');
     expect(src).not.toContain('KeepAliveStack');
     expect(src).not.toContain('sidebarHeaderActions={');
+
+    expect(cssSrc).toContain('.browser-mode-transition-panel');
+    expect(cssSrc).toContain('.browser-mode-switch__thumb');
+    expect(cssSrc).toContain('transform: translateX(100%);');
+    expect(cssSrc).not.toContain('transform: translateX(4px);');
+    expect(cssSrc).not.toContain('transform: translateX(-4px);');
+    expect(cssSrc).not.toContain(".browser-mode-transition-panel[data-browser-mode-panel='files'][data-state='inactive']");
   });
 
   it('keeps mode and git subview navigation out of selector-only sidebar content', () => {
