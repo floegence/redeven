@@ -626,31 +626,25 @@ body[data-redeven-notes-overlay-viewport='active'] .notes-flyout--paste {
 .browser-mode-transition-panel {
   position: absolute;
   inset: 0;
+  z-index: 0;
   min-width: 0;
   min-height: 0;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transform: translateX(4px);
   transition:
-    opacity 180ms ease,
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    visibility 0s linear 180ms;
+    opacity 140ms ease,
+    visibility 0s linear 140ms;
 }
 
 .browser-mode-transition-panel[data-state='active'] {
+  z-index: 1;
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
-  transform: translateX(0);
   transition:
-    opacity 180ms ease,
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 140ms ease,
     visibility 0s;
-}
-
-.browser-mode-transition-panel[data-browser-mode-panel='files'][data-state='inactive'] {
-  transform: translateX(-4px);
 }
 
 .git-branch-history-row {
@@ -4178,10 +4172,7 @@ html.dark .redeven-workbench-progress-curtain {
 
   .git-branch-history-reveal,
   .git-branch-history-reveal[data-state='open'],
-  .git-branch-history-reveal[data-state='closing'],
-  .browser-mode-transition-panel,
-  .browser-mode-transition-panel[data-state='active'],
-  .browser-mode-transition-panel[data-browser-mode-panel='files'][data-state='inactive'] {
+  .git-branch-history-reveal[data-state='closing'] {
     transform: none;
   }
 

@@ -2660,11 +2660,19 @@ describe('RemoteFileBrowser persistence', () => {
 
       const previewButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-preview-git') as HTMLButtonElement | undefined;
       expect(previewButton).toBeTruthy();
+      expect(host.querySelector('[data-testid="git-workspace"]')).toBeNull();
       previewButton!.dispatchEvent(new FocusEvent('focus'));
       await flush();
 
       expect(host.querySelector('[data-browser-mode-stack]')?.getAttribute('data-active-mode')).toBe('files');
-      expect(host.querySelector('[data-testid="git-workspace"]')).toBeNull();
+      const gitWorkspace = host.querySelector('[data-testid="git-workspace"]') as HTMLDivElement | null;
+      const gitPanel = gitWorkspace?.closest('[data-browser-mode-panel="git"]') as HTMLDivElement | null;
+      expect(gitWorkspace?.textContent).toContain('git:files:changes:/workspace/repo/src:312');
+      expect(gitPanel?.getAttribute('data-state')).toBe('inactive');
+      expect(gitPanel?.getAttribute('aria-hidden')).toBe('true');
+      expect(gitPanel?.style.display).toBe('');
+      expect(workspaceLifecycleStore.gitMounts).toBe(1);
+      expect(workspaceLifecycleStore.gitUnmounts).toBe(0);
       expect(mockRpc.git.getRepoSummary).toHaveBeenCalledTimes(1);
       expect(mockRpc.git.getRepoSummary).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo' });
       expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledTimes(1);
@@ -2676,6 +2684,18 @@ describe('RemoteFileBrowser persistence', () => {
         limit: 200,
       });
       expect(notificationStore.warning).toEqual([]);
+
+      const toGitButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-to-git') as HTMLButtonElement | undefined;
+      expect(toGitButton).toBeTruthy();
+      toGitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(host.querySelector('[data-browser-mode-stack]')?.getAttribute('data-active-mode')).toBe('git');
+      expect(gitPanel?.getAttribute('data-state')).toBe('active');
+      expect(gitPanel?.getAttribute('aria-hidden')).toBeNull();
+      expect(workspaceLifecycleStore.gitMounts).toBe(1);
+      expect(workspaceLifecycleStore.gitUnmounts).toBe(0);
+      expect(gitWorkspace?.textContent).toContain('git:git:changes:/workspace/repo/src:312');
     } finally {
       dispose();
     }
@@ -2717,6 +2737,7 @@ describe('RemoteFileBrowser persistence', () => {
       await flush();
 
       expect(host.querySelector('[data-browser-mode-stack]')?.getAttribute('data-active-mode')).toBe('files');
+      expect(host.querySelector('[data-testid="git-workspace"]')).toBeNull();
       expect(mockRpc.git.getRepoSummary).not.toHaveBeenCalled();
       expect(mockRpc.git.listWorkspacePage).not.toHaveBeenCalled();
       expect(notificationStore.warning).toEqual([]);
