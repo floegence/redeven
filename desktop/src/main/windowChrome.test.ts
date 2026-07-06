@@ -64,11 +64,11 @@ describe('windowChrome', () => {
     };
 
     applyDesktopWindowTheme(win, {
-      backgroundColor: '#f0eeea',
-      symbolColor: '#141f2e',
+      backgroundColor: '#f4f1ed',
+      symbolColor: '#202a37',
     }, 'darwin');
 
-    expect(win.setBackgroundColor).toHaveBeenCalledWith('#f0eeea');
+    expect(win.setBackgroundColor).toHaveBeenCalledWith('#f4f1ed');
     expect(win.setTitleBarOverlay).not.toHaveBeenCalled();
   });
 
