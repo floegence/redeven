@@ -13,6 +13,11 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  createFloatingPresence: (options: { open: () => boolean }) => ({
+    mounted: () => Boolean(options.open()),
+    exiting: () => false,
+    state: () => (options.open() ? 'entered' : 'exited'),
+  }),
   LOCAL_INTERACTION_SURFACE_ATTR: 'data-floe-local-interaction-surface',
   FloatingWindow: (props: any) => (
     props.open ? (

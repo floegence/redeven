@@ -6,6 +6,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EnvDebugConsoleSettingsPanel } from './EnvDebugConsoleSettingsPanel';
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  createFloatingPresence: (options: { open: () => boolean }) => ({
+    mounted: () => Boolean(options.open()),
+    exiting: () => false,
+    state: () => (options.open() ? 'entered' : 'exited'),
+  }),
   Button: (props: any) => (
     <button type="button" disabled={props.disabled} onClick={props.onClick}>
       {props.children}

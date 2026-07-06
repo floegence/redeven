@@ -152,6 +152,11 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  createFloatingPresence: (options: { open: () => boolean }) => ({
+    mounted: () => Boolean(options.open()),
+    exiting: () => false,
+    state: () => (options.open() ? 'entered' : 'exited'),
+  }),
   LOCAL_INTERACTION_SURFACE_ATTR: 'data-floe-local-interaction-surface',
   WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR: 'data-floe-workbench-widget-activation-surface',
   Button: (props: any) => (
