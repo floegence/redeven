@@ -1,3 +1,5 @@
+import { CodespacesGlyph } from './CodespacesIcon';
+
 export function ActivityBarTerminalIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
@@ -56,11 +58,7 @@ export function ActivityBarMonitorIcon(props: { class?: string }) {
 export function ActivityBarCodespacesIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <rect x="5.1" y="4.75" width="13.2" height="10.15" rx="2.05" fill="currentColor" fill-opacity=".07" stroke="currentColor" stroke-opacity=".82" stroke-width="1.55" />
-      <line x1="8.25" y1="8.35" x2="10.35" y2="8.35" stroke="currentColor" stroke-opacity=".88" stroke-width="1.7" stroke-linecap="round" />
-      <line x1="8.25" y1="11.7" x2="14.85" y2="11.7" stroke="currentColor" stroke-opacity=".88" stroke-width="1.7" stroke-linecap="round" />
-      <rect x="5.35" y="17.05" width="10.35" height="2.85" rx=".85" fill="currentColor" fill-opacity=".1" stroke="currentColor" stroke-opacity=".78" stroke-width="1.5" />
-      <circle cx="19.1" cy="18.48" r="2.15" fill="currentColor" fill-opacity=".86" />
+      <CodespacesGlyph transform="translate(0.15 0.48) scale(.9)" />
     </svg>
   );
 }
