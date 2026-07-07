@@ -1,5 +1,5 @@
 import { For, Show, createSignal, createEffect, onCleanup } from 'solid-js';
-import { Terminal, Plus, Trash } from '@floegence/floe-webapp-core/icons';
+import { Terminal, Plus, Trash, Home, FolderOpen } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, AutoSaveIndicator, DotIndicator, SettingRow } from '../SettingsPrimitives';
@@ -112,6 +112,7 @@ export function RuntimeConfigSection() {
         {/* Shell environment card */}
         <div class="space-y-3">
           <SettingRow
+            icon={Home}
             title="agent_home_dir"
             description="Runtime home directory used for local state and shell defaults."
             control={
@@ -120,6 +121,7 @@ export function RuntimeConfigSection() {
             }
           />
           <SettingRow
+            icon={Terminal}
             title="shell"
             description="Default shell executable used for new runtime terminal sessions."
             control={
@@ -140,17 +142,22 @@ export function RuntimeConfigSection() {
               {(root, index) => (
                 <div class="rounded-lg border border-[color-mix(in_srgb,var(--redeven-stroke-panel)_76%,transparent)] bg-[var(--redeven-settings-row-bg)] px-4 py-3">
                   <div class="flex items-start justify-between gap-3">
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center gap-2 mb-1">
-                        <code class="text-sm font-mono font-semibold text-foreground">{root.path}</code>
-                        <span class="text-[10px] text-muted-foreground">{root.label || root.id}</span>
-                      </div>
-                      <div class="flex items-center gap-2 mt-2">
-                        <span class={root.system ? 'text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground' : 'text-[10px] bg-success/10 px-1.5 py-0.5 rounded text-success'}>
-                          {root.system ? i18n.t('runtimeConfig.systemRoot') : i18n.t('runtimeConfig.customRoot')}
-                        </span>
-                        <DotIndicator active={Boolean(root.permissions?.read)} label="读" />
-                        <DotIndicator active={Boolean(root.permissions?.write)} label="写" onClick={root.system ? undefined : () => requestWriteChange(index(), root, !root.permissions?.write)} />
+                    <div class="flex min-w-0 flex-1 items-start gap-3">
+                      <span class="redeven-setting-row__icon mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md">
+                        {root.kind === 'home' ? <Home class="h-3.5 w-3.5" /> : <FolderOpen class="h-3.5 w-3.5" />}
+                      </span>
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                          <code class="text-sm font-mono font-semibold text-foreground">{root.path}</code>
+                          <span class="text-[10px] text-muted-foreground">{root.label || root.id}</span>
+                        </div>
+                        <div class="flex items-center gap-2 mt-2">
+                          <span class={root.system ? 'text-[10px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground' : 'text-[10px] bg-success/10 px-1.5 py-0.5 rounded text-success'}>
+                            {root.system ? i18n.t('runtimeConfig.systemRoot') : i18n.t('runtimeConfig.customRoot')}
+                          </span>
+                          <DotIndicator active={Boolean(root.permissions?.read)} label="读" />
+                          <DotIndicator active={Boolean(root.permissions?.write)} label="写" onClick={root.system ? undefined : () => requestWriteChange(index(), root, !root.permissions?.write)} />
+                        </div>
                       </div>
                     </div>
                     <Show when={!root.system}>

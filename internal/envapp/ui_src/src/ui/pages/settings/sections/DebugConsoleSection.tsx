@@ -1,5 +1,5 @@
 import { createMemo } from 'solid-js';
-import { RefreshIcon } from '@floegence/floe-webapp-core/icons';
+import { BugIcon } from '@floegence/floe-webapp-core/icons';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, SettingsPill } from '../SettingsPrimitives';
 import { EnvDebugConsoleSettingsPanel } from '../../EnvDebugConsoleSettingsPanel';
@@ -13,7 +13,7 @@ export function DebugConsoleSection() {
 
   return (
     <SettingsSection
-      icon={RefreshIcon}
+      icon={BugIcon}
       title={i18n.t('debugConsoleSettings.title')}
       description={i18n.t('debugConsoleSettings.description')}
       actions={<SettingsPill tone="success">{i18n.t('debugConsoleSettings.localUIState')}</SettingsPill>}

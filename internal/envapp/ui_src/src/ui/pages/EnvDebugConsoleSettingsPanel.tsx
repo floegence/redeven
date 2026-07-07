@@ -1,3 +1,4 @@
+import { BugIcon } from '@floegence/floe-webapp-core/icons';
 import { SettingsPill, SettingRow } from './settings/SettingsPrimitives';
 import { useI18n } from '../i18n';
 
@@ -29,6 +30,7 @@ export function EnvDebugConsoleSettingsPanel(props: EnvDebugConsoleSettingsPanel
   const i18n = useI18n();
   return (
     <SettingRow
+      icon={BugIcon}
       title={props.enabled ? i18n.t('debugConsoleSettings.enabled') : i18n.t('debugConsoleSettings.disabled')}
       description={i18n.t('debugConsoleSettings.localOnlyDescription')}
       tone={props.enabled ? 'success' : 'default'}

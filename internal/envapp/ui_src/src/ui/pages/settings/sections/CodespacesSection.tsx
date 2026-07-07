@@ -1,5 +1,5 @@
 import { Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
-import { Code } from '@floegence/floe-webapp-core/icons';
+import { Code, Hash } from '@floegence/floe-webapp-core/icons';
 import { Input, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, AutoSaveIndicator, SettingRow } from '../SettingsPrimitives';
@@ -96,6 +96,7 @@ export function CodespacesSection() {
       >
         {/* Port range card */}
         <SettingRow
+          icon={Hash}
           title={i18n.t('codespacesSettings.portRange')}
           description={`${i18n.t('codespacesSettings.effectiveRange')}: ${effective().effective_min} - ${effective().effective_max}`}
           control={

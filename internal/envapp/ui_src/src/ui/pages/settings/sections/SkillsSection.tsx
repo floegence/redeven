@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal } from 'solid-js';
-import { Layers } from '@floegence/floe-webapp-core/icons';
+import { Download, Layers, Plus, RefreshIcon, Search } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Select, Dialog, ConfirmDialog, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, FieldLabel } from '../SettingsPrimitives';
@@ -97,9 +97,9 @@ export function SkillsSection() {
         error={skillsError()}
         actions={
           <>
-            <Button size="sm" variant="outline" onClick={() => void refreshSkillsCatalog(true)} loading={skillsReloading()} disabled={!ctx.canInteract()}>{i18n.t('skillsSettings.reload')}</Button>
-            <Button size="sm" variant="default" onClick={openInstallDialog} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.installFromGitHub')}</Button>
-            <Button size="sm" variant="default" onClick={() => setSkillCreateOpen(true)} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.createSkill')}</Button>
+            <Button size="sm" variant="outline" icon={RefreshIcon} onClick={() => void refreshSkillsCatalog(true)} loading={skillsReloading()} disabled={!ctx.canInteract()}>{i18n.t('skillsSettings.reload')}</Button>
+            <Button size="sm" variant="default" icon={Download} onClick={openInstallDialog} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.installFromGitHub')}</Button>
+            <Button size="sm" variant="default" icon={Plus} onClick={() => setSkillCreateOpen(true)} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.createSkill')}</Button>
           </>
         }
       >
@@ -107,8 +107,11 @@ export function SkillsSection() {
           <div class="flex items-end gap-3">
             <div class="flex-1 min-w-0">
               <FieldLabel>{i18n.t('skillsSettings.searchLabel')}</FieldLabel>
-              <Input value={skillQuery()} onInput={(e) => setSkillQuery(e.currentTarget.value)}
-                placeholder={i18n.t('skillsSettings.searchPlaceholder')} size="sm" class="w-full" disabled={!ctx.canInteract()} />
+              <div class="relative">
+                <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input value={skillQuery()} onInput={(e) => setSkillQuery(e.currentTarget.value)}
+                  placeholder={i18n.t('skillsSettings.searchPlaceholder')} size="sm" class="w-full pl-8" disabled={!ctx.canInteract()} />
+              </div>
             </div>
             <div class="w-40 flex-shrink-0">
               <FieldLabel>{i18n.t('skillsSettings.scopeLabel')}</FieldLabel>

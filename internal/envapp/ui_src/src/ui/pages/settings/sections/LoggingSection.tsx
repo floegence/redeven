@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onCleanup } from 'solid-js';
-import { Database } from '@floegence/floe-webapp-core/icons';
+import { Database, FileText, Filter } from '@floegence/floe-webapp-core/icons';
 import { Select } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, AutoSaveIndicator, SettingRow } from '../SettingsPrimitives';
@@ -61,6 +61,7 @@ export function LoggingSection() {
     >
       <div class="space-y-3">
         <SettingRow
+          icon={FileText}
           title={i18n.t('loggingSettings.formatLabel')}
           description={i18n.t('loggingSettings.defaultJson')}
           control={
@@ -72,6 +73,7 @@ export function LoggingSection() {
           }
         />
         <SettingRow
+          icon={Filter}
           title={i18n.t('loggingSettings.levelLabel')}
           description={i18n.t('loggingSettings.defaultInfo')}
           control={

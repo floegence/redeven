@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
-import { Bot, Pencil, Shield, Trash, Zap } from '@floegence/floe-webapp-core/icons';
+import { Bot, Eye, Globe, Image, Key, Pencil, Plus, ShieldCheck, Sparkles, Trash, Zap } from '@floegence/floe-webapp-core/icons';
 import { Button, Select } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
@@ -58,6 +58,11 @@ function permissionTypeCopy(i18n: I18nHelpers, kind: AIPermissionType): Readonly
         description: i18n.t('flowerSettings.permissionApprovalRequiredDescription'),
       };
   }
+}
+
+function PermissionTypeIcon(props: Readonly<{ kind: AIPermissionType; class?: string }>) {
+  const Icon = props.kind === 'readonly' ? Eye : props.kind === 'full_access' ? Zap : ShieldCheck;
+  return <Icon class={props.class} />;
 }
 
 function newProviderID(): string {
@@ -315,7 +320,7 @@ export function FlowerSection() {
       </Show>
       <Show when={!usesRemoteDesktopModelSource()}>
       <SettingsSection
-        icon={Zap} title={i18n.t('aiChrome.flowerTitle')} description={i18n.t('flowerSettings.description')}
+        icon={Bot} title={i18n.t('aiChrome.flowerTitle')} description={i18n.t('flowerSettings.description')}
         badge={i18n.t('flowerSettings.activeBadge')}
         badgeVariant="success" error={error()}
         actions={<>
@@ -361,7 +366,9 @@ export function FlowerSection() {
                     onClick={() => choosePermissionType(kind)} disabled={!ctx.canInteract()}>
                     <div class="flex items-center justify-between gap-3">
                       <div class="flex items-center gap-2.5">
-                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10"><Shield class="h-4 w-4 text-blue-500" /></div>
+                        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
+                          <PermissionTypeIcon kind={kind} class="h-4 w-4 text-blue-500" />
+                        </div>
                         <span class="text-sm font-semibold text-foreground">{copy().title}</span>
                       </div>
                       <span class={cn('text-[11px] font-medium', permissionType() === kind ? 'text-success' : 'text-muted-foreground')}>
@@ -379,7 +386,7 @@ export function FlowerSection() {
         {/* Providers gallery */}
         <div class="mt-5">
           <SubSectionHeader title={i18n.t('flowerSettings.providersTitle')} description={i18n.t('flowerSettings.providersDescription')}
-            actions={<Button size="sm" variant="default" onClick={addAIProviderAndOpenDialog} disabled={!ctx.canInteract()}>{i18n.t('flowerSettings.addProvider')}</Button>} />
+            actions={<Button size="sm" variant="default" icon={Plus} onClick={addAIProviderAndOpenDialog} disabled={!ctx.canInteract()}>{i18n.t('flowerSettings.addProvider')}</Button>} />
           <div class="mt-3 grid grid-cols-1 gap-3 xl:grid-cols-2">
             <For each={providers()}>{(provider, index) => {
               const pid = () => String(provider.id ?? '').trim(); const dn = () => localizedProviderDisplayName(provider, i18n.locale(), i18n.t('flowerSettings.providerFallbackName', { count: index() + 1 }));
@@ -405,11 +412,17 @@ export function FlowerSection() {
                       </div>
                       <div class="mt-2 space-y-1.5">
                         <div class="flex items-center gap-2 text-xs">
-                          <span class="text-muted-foreground w-16 flex-shrink-0">{i18n.t('flowerProviderDialog.apiKey')}</span>
+                          <span class="flex w-20 flex-shrink-0 items-center gap-1.5 text-muted-foreground">
+                            <Key class="h-3.5 w-3.5" />
+                            <span>{i18n.t('flowerProviderDialog.apiKey')}</span>
+                          </span>
                           <DotIndicator active={Boolean(keyOk())} label={keyOk() ? i18n.t('flowerSettings.keyVerified') : i18n.t('flowerSettings.needsKey')} />
                         </div>
                         <div class="flex items-start gap-2 text-xs">
-                          <span class="text-muted-foreground w-16 flex-shrink-0 pt-0.5">{i18n.t('flowerChat.model.label')}</span>
+                          <span class="flex w-20 flex-shrink-0 items-center gap-1.5 pt-0.5 text-muted-foreground">
+                            <Sparkles class="h-3.5 w-3.5" />
+                            <span>{i18n.t('flowerChat.model.label')}</span>
+                          </span>
                           <div class="flex flex-wrap gap-1">
                             <For each={mns().slice(0, 3)}>{(name) => (
                               <code class={cn('rounded px-1.5 py-0.5 text-[11px] font-mono', isDef() && currentModelID() === `${pid()}/${name}` ? 'bg-primary/10 text-primary font-semibold' : 'bg-muted text-muted-foreground')}>{name}</code>
@@ -419,13 +432,19 @@ export function FlowerSection() {
                         </div>
                         <Show when={wss().supported}>
                           <div class="flex items-center gap-2 text-xs">
-                            <span class="text-muted-foreground w-16 flex-shrink-0">{i18n.t('flowerProviderDialog.webSearch')}</span>
+                            <span class="flex w-20 flex-shrink-0 items-center gap-1.5 text-muted-foreground">
+                              <Globe class="h-3.5 w-3.5" />
+                              <span>{i18n.t('flowerProviderDialog.webSearch')}</span>
+                            </span>
                             <DotIndicator active={wss().enabled} label={wss().label} />
                           </div>
                         </Show>
                         <Show when={hasImg()}>
                           <div class="flex items-center gap-2 text-xs">
-                            <span class="text-muted-foreground w-16 flex-shrink-0">{i18n.t('flowerSettings.imageInput')}</span>
+                            <span class="flex w-20 flex-shrink-0 items-center gap-1.5 text-muted-foreground">
+                              <Image class="h-3.5 w-3.5" />
+                              <span>{i18n.t('flowerSettings.imageInput')}</span>
+                            </span>
                             <DotIndicator active label={i18n.t('flowerSettings.imageInput')} />
                           </div>
                         </Show>
