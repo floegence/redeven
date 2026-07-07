@@ -139,7 +139,7 @@ export const deDE = {
     },
     groups: {
       overview: "Übersicht",
-      runtimeConfiguration: "Runtime Konfiguration",
+      runtimeConfiguration: "Runtime-Umgebung",
       codespacesTooling: "Codespaces & Werkzeuge",
       security: "Sicherheit",
       aiExtensions: "AI & Erweiterungen",

@@ -139,7 +139,7 @@ export const ruRU = {
     },
     groups: {
       overview: "Обзор",
-      runtimeConfiguration: "Конфигурация Runtime",
+      runtimeConfiguration: "Среда Runtime",
       codespacesTooling: "Codespaces и инструменты",
       security: "Безопасность",
       aiExtensions: "AI и расширения",

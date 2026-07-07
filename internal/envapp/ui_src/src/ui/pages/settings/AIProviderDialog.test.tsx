@@ -134,6 +134,18 @@ function clickButton(host: HTMLElement, label: string) {
   button.click();
 }
 
+function clickStep(host: HTMLElement, step: string) {
+  const button = host.querySelector(`[data-provider-dialog-step="${step}"]`) as HTMLButtonElement | null;
+  if (!button) throw new Error(`Step not found: ${step}`);
+  button.click();
+}
+
+function clickProviderType(host: HTMLElement, type: string) {
+  const button = host.querySelector(`[data-provider-type="${type}"]`) as HTMLButtonElement | null;
+  if (!button) throw new Error(`Provider type not found: ${type}`);
+  button.click();
+}
+
 function setInputValue(host: HTMLElement, placeholder: string, value: string) {
   const input = Array.from(host.querySelectorAll('input')).find((candidate) => candidate.getAttribute('placeholder') === placeholder) as HTMLInputElement | undefined;
   if (!input) throw new Error(`Input not found: ${placeholder}`);
@@ -160,7 +172,7 @@ describe('AIProviderDialog', () => {
     expect(host.querySelector('[data-provider-brand="openai"]')).not.toBeNull();
   });
 
-  it('expands a provider type inline and keeps the current type open on repeat click', () => {
+  it('uses fixed provider steps and keeps choosing the current type idempotent', () => {
     const onChangeType = vi.fn();
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -189,12 +201,13 @@ describe('AIProviderDialog', () => {
       host,
     );
 
-    clickButton(host, 'DeepSeek');
+    clickProviderType(host, 'deepseek');
     expect(host.textContent).toContain('Connection');
-    expect(host.textContent).toContain('Recommended Models');
+    expect(host.textContent).toContain('API Key');
 
-    clickButton(host, 'DeepSeek');
-    expect(host.textContent).not.toContain('Base URL');
+    clickStep(host, 'type');
+    clickProviderType(host, 'deepseek');
+    expect(host.textContent).toContain('Connection');
 
     expect(onChangeType).not.toHaveBeenCalled();
   });
@@ -248,7 +261,7 @@ describe('AIProviderDialog', () => {
       host,
     );
 
-    clickButton(host, 'OpenAI-compatible');
+    clickStep(host, 'models');
     clickButton(host, 'Remove');
     expect(onRemoveRecommendedPreset).toHaveBeenCalledWith('custom-model');
 
@@ -283,7 +296,7 @@ describe('AIProviderDialog', () => {
       host,
     );
 
-    clickButton(host, 'OpenAI-compatible');
+    clickStep(host, 'connection');
     expect(host.textContent).toContain('Web Search');
     expect(host.textContent).toContain('Brave API Key');
   });

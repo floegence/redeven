@@ -139,7 +139,7 @@ export const koKR = {
     },
     groups: {
       overview: "개요",
-      runtimeConfiguration: "Runtime 구성",
+      runtimeConfiguration: "Runtime 환경",
       codespacesTooling: "Codespaces 및 도구",
       security: "보안",
       aiExtensions: "AI 및 확장",

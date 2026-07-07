@@ -2,7 +2,7 @@ import { For, Show, createSignal, createEffect, onCleanup } from 'solid-js';
 import { Shield, Trash } from '@floegence/floe-webapp-core/icons';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, AutoSaveIndicator, SubSectionHeader, PermissionDot } from '../SettingsPrimitives';
+import { SettingsSection, AutoSaveIndicator, SubSectionHeader, PermissionDot, SettingRow } from '../SettingsPrimitives';
 import { buildPermissionPolicyValue } from '../permissionPolicy';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
@@ -97,17 +97,19 @@ export function PermissionPolicySection() {
       }
     >
       {/* local_max matrix card */}
-      <div class="rounded-xl border border-border/50 bg-muted/20 px-5 py-4">
-        <div class="text-[11px] text-muted-foreground mb-3 text-center">{i18n.t('permissionPolicy.localMaxDescription')}</div>
-        <div class="flex items-center justify-center gap-6">
+      <SettingRow
+        title="local_max"
+        description={i18n.t('permissionPolicy.localMaxDescription')}
+        tone="warning"
+        control={
           <PermissionDot
             read={localRead()} write={localWrite()} execute={localExecute()}
             onReadChange={ctx.canInteract() ? (v) => { setLocalRead(v); setDirty(true); } : undefined}
             onWriteChange={ctx.canInteract() ? (v) => { setLocalWrite(v); setDirty(true); } : undefined}
             onExecuteChange={ctx.canInteract() ? (v) => { setLocalExecute(v); setDirty(true); } : undefined}
           />
-        </div>
-      </div>
+        }
+      />
 
       {/* by_user rules */}
       <div class="mt-5">
@@ -117,7 +119,7 @@ export function PermissionPolicySection() {
           <Show when={byUser().length > 0} fallback={<p class="text-[11px] text-muted-foreground py-2">{i18n.t('permissionPolicy.noUserOverrides')}</p>}>
             <For each={byUser()}>
               {(row, index) => (
-                <div class="flex items-center gap-3 rounded-lg border border-border/50 px-3 py-2">
+                <div class="flex flex-col gap-3 rounded-lg border border-[color-mix(in_srgb,var(--redeven-stroke-panel)_76%,transparent)] bg-[var(--redeven-settings-row-bg)] px-3 py-2 sm:flex-row sm:items-center">
                   <Input value={row.key} onInput={(e) => { setByUser((prev) => prev.map((it, i) => i === index() ? { ...it, key: e.currentTarget.value } : it)); setDirty(true); }}
                     placeholder="user_public_id" size="sm" class="min-w-0 flex-1 font-mono text-xs" disabled={!ctx.canInteract()} />
                   <PermissionDot read={row.read} write={row.write} execute={row.execute}
@@ -141,7 +143,7 @@ export function PermissionPolicySection() {
           <Show when={byApp().length > 0} fallback={<p class="text-[11px] text-muted-foreground py-2">{i18n.t('permissionPolicy.noAppOverrides')}</p>}>
             <For each={byApp()}>
               {(row, index) => (
-                <div class="flex items-center gap-3 rounded-lg border border-border/50 px-3 py-2">
+                <div class="flex flex-col gap-3 rounded-lg border border-[color-mix(in_srgb,var(--redeven-stroke-panel)_76%,transparent)] bg-[var(--redeven-settings-row-bg)] px-3 py-2 sm:flex-row sm:items-center">
                   <Input value={row.key} onInput={(e) => { setByApp((prev) => prev.map((it, i) => i === index() ? { ...it, key: e.currentTarget.value } : it)); setDirty(true); }}
                     placeholder="floe_app identifier" size="sm" class="min-w-0 flex-1 font-mono text-xs" disabled={!ctx.canInteract()} />
                   <PermissionDot read={row.read} write={row.write} execute={row.execute}

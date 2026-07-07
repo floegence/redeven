@@ -18,7 +18,6 @@ import type { EnvSettingsSection } from '../EnvContext';
 export type SettingsGroupID =
   | 'overview'
   | 'runtime_configuration'
-  | 'codespaces_tooling'
   | 'security'
   | 'ai_extensions'
   | 'diagnostics';
@@ -47,8 +46,8 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = Object.freeze([
   { id: 'connection', navLabel: 'Connection', icon: Globe, group: 'overview' },
   { id: 'agent', navLabel: 'Runtime Status', icon: Zap, group: 'overview' },
   { id: 'runtime', navLabel: 'Shell & Workspace', icon: Terminal, group: 'runtime_configuration' },
+  { id: 'codespaces', navLabel: 'Codespaces & Tooling', icon: Code, group: 'runtime_configuration' },
   { id: 'logging', navLabel: 'Logging', icon: Database, group: 'runtime_configuration' },
-  { id: 'codespaces', navLabel: 'Codespaces & Tooling', icon: Code, group: 'codespaces_tooling' },
   { id: 'permission_policy', navLabel: 'Permission Policy', icon: Shield, group: 'security' },
   { id: 'ai', navLabel: 'Flower', icon: FlowerIcon, group: 'ai_extensions' },
   { id: 'skills', navLabel: 'Skills', icon: Layers, group: 'ai_extensions' },
@@ -65,8 +64,7 @@ export const SETTINGS_SECTION_META: Readonly<Record<EnvSettingsSection, Settings
 
 export const SETTINGS_GROUPS: readonly SettingsGroupMeta[] = Object.freeze([
   { id: 'overview', title: 'Overview', sections: ['config', 'connection', 'agent'] },
-  { id: 'runtime_configuration', title: 'Runtime Configuration', sections: ['runtime', 'logging'] },
-  { id: 'codespaces_tooling', title: 'Codespaces & Tooling', sections: ['codespaces'] },
+  { id: 'runtime_configuration', title: 'Runtime Environment', sections: ['runtime', 'codespaces', 'logging'] },
   { id: 'security', title: 'Security', sections: ['permission_policy'] },
   { id: 'ai_extensions', title: 'AI & Extensions', sections: ['ai', 'skills', 'codex'] },
   { id: 'diagnostics', title: 'Diagnostics', sections: ['debug_console'] },

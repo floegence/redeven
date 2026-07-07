@@ -1,4 +1,4 @@
-import { SettingsPill } from './settings/SettingsPrimitives';
+import { SettingsPill, SettingRow } from './settings/SettingsPrimitives';
 import { useI18n } from '../i18n';
 
 export type EnvDebugConsoleSettingsPanelProps = Readonly<{
@@ -28,27 +28,20 @@ function DebugConsoleSwitch(props: Readonly<{ checked: boolean; disabled?: boole
 export function EnvDebugConsoleSettingsPanel(props: EnvDebugConsoleSettingsPanelProps) {
   const i18n = useI18n();
   return (
-    <div class="space-y-2">
-      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex items-center gap-3">
+    <SettingRow
+      title={props.enabled ? i18n.t('debugConsoleSettings.enabled') : i18n.t('debugConsoleSettings.disabled')}
+      description={i18n.t('debugConsoleSettings.localOnlyDescription')}
+      tone={props.enabled ? 'success' : 'default'}
+      control={
+        <>
           <DebugConsoleSwitch
             checked={Boolean(props.enabled)}
             onChange={(value) => props.onEnabledChange?.(value)}
             disabled={!props.canInteract}
           />
-          <div>
-            <div class="text-sm font-medium text-foreground">
-              {props.enabled ? i18n.t('debugConsoleSettings.enabled') : i18n.t('debugConsoleSettings.disabled')}
-            </div>
-            <p class="text-xs text-muted-foreground">
-              {i18n.t('debugConsoleSettings.localOnlyDescription')}
-            </p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
           <SettingsPill tone="success">{i18n.t('debugConsoleSettings.frontendOnly')}</SettingsPill>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }

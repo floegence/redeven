@@ -137,7 +137,7 @@ export const enUS = defineDictionary({
     },
     groups: {
       overview: 'Overview',
-      runtimeConfiguration: 'Runtime Configuration',
+      runtimeConfiguration: 'Runtime Environment',
       codespacesTooling: 'Codespaces & Tooling',
       security: 'Security',
       aiExtensions: 'AI & Extensions',

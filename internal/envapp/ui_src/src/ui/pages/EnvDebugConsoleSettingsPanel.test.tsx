@@ -19,6 +19,14 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 }));
 
 vi.mock('./settings/SettingsPrimitives', () => ({
+  SettingRow: (props: any) => (
+    <div>
+      <div>{props.title}</div>
+      <div>{props.description}</div>
+      <div>{props.control}</div>
+      <div>{props.children}</div>
+    </div>
+  ),
   SettingsPill: (props: any) => <span>{props.children}</span>,
   SettingsTable: (props: any) => <table>{props.children}</table>,
   SettingsTableBody: (props: any) => <tbody>{props.children}</tbody>,

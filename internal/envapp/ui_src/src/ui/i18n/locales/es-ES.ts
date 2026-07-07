@@ -139,7 +139,7 @@ export const esES = {
     },
     groups: {
       overview: "Resumen",
-      runtimeConfiguration: "Configuración de Runtime",
+      runtimeConfiguration: "Entorno de Runtime",
       codespacesTooling: "Codespaces y herramientas",
       security: "Seguridad",
       aiExtensions: "AI y extensiones",

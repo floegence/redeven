@@ -80,8 +80,6 @@ function groupTitle(groupID: SettingsGroupID, fallback: string, t: ReturnType<ty
       return t('settings.groups.overview');
     case 'runtime_configuration':
       return t('settings.groups.runtimeConfiguration');
-    case 'codespaces_tooling':
-      return t('settings.groups.codespacesTooling');
     case 'security':
       return t('settings.groups.security');
     case 'ai_extensions':
@@ -122,8 +120,8 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
   const returnToFlower = createMemo(() => ctx.env.settingsOrigin()?.kind === 'flower');
 
   return (
-    <div class={cn('relative h-full min-h-0 flex flex-col', redevenSurfaceRoleClass('main'))}>
-      <div class={cn('flex items-center justify-between gap-3 border-b px-4 py-2.5 shrink-0', redevenSurfaceRoleClass('panelStrong'))}>
+    <div class={cn('redeven-settings-shell relative h-full min-h-0 flex flex-col', redevenSurfaceRoleClass('main'))}>
+      <div class="redeven-settings-header flex items-center justify-between gap-3 border-b px-4 py-2.5 shrink-0">
         <div class="flex items-center gap-3 min-w-0">
           <Show when={returnToFlower()}>
             <button
@@ -145,8 +143,8 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
       </div>
 
       <div class="flex-1 min-h-0 flex">
-        <div class={cn('hidden md:flex flex-col border-r w-56 shrink-0 h-full overflow-hidden', redevenSurfaceRoleClass('panel'))}>
-          <div class="p-3 border-b">
+        <div class="redeven-settings-sidebar hidden md:flex flex-col border-r w-[260px] shrink-0 h-full overflow-hidden">
+          <div class="p-3 border-b border-[color-mix(in_srgb,var(--redeven-settings-sidebar-border)_72%,transparent)]">
             <div class="relative">
               <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
               <input
@@ -154,7 +152,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                 value={ctx.searchQuery()}
                 onInput={(e) => ctx.setSearchQuery(e.currentTarget.value)}
                 placeholder={i18n.t('settings.searchPlaceholder')}
-                class="w-full rounded-md border bg-background py-1.5 pl-8 pr-7 text-xs placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                class="redeven-settings-search w-full rounded-md border py-1.5 pl-8 pr-7 text-xs placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />
               <Show when={ctx.searchQuery()}>
                 <button
@@ -193,7 +191,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                             <button
                               type="button"
                               class={cn(
-                                'w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-xs transition-colors cursor-pointer',
+                                'redeven-settings-nav-item w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-xs transition-colors cursor-pointer',
                                 isActive()
                                   ? 'bg-primary/10 text-primary font-medium border-r-2 border-primary'
                                   : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-r-2 border-transparent',
@@ -215,7 +213,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
           </div>
         </div>
 
-        <div class={cn('md:hidden border-b px-3 py-2 shrink-0', redevenSurfaceRoleClass('panel'))}>
+        <div class="redeven-settings-mobile-switch md:hidden border-b px-3 py-2 shrink-0">
           <Select
             value={ctx.activeSection()}
             onChange={(v) => v && ctx.setActiveSection(v as EnvSettingsSection)}
@@ -224,8 +222,8 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
           />
         </div>
 
-        <div class="flex-1 min-w-0 overflow-auto">
-          <div class="max-w-4xl mx-auto p-4 sm:p-6 pb-16">
+        <div class="redeven-settings-content flex-1 min-w-0 overflow-auto">
+          <div class="max-w-[1120px] mx-auto p-4 sm:p-8 pb-16">
             <Show when={ctx.settings.error}>
               <div class="flex items-start gap-2.5 p-4 rounded-lg bg-destructive/10 border border-destructive/20 mb-6">
                 <div class="w-1 h-full min-h-4 rounded-full bg-destructive/60 flex-shrink-0" />
