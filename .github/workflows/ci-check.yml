@@ -64,6 +64,7 @@ jobs:
           bash -n scripts/check_desktop.sh
           bash -n scripts/check_docker_runtime_e2e.sh
           bash -n scripts/check_gateway_protocol_contract.sh
+          bash -n scripts/check_floret_dependency_boundary.sh
           bash -n scripts/check_redevplugin_dependency_boundary.sh
           bash -n scripts/check_redevplugin_release_artifacts.sh
           bash -n scripts/check_redevplugin_consumption_gate.sh
@@ -111,6 +112,9 @@ jobs:
 
       - name: Gateway protocol contract guard
         run: ./scripts/check_gateway_protocol_contract.sh
+
+      - name: Floret dependency boundary guard
+        run: ./scripts/check_floret_dependency_boundary.sh
 
       - name: Flower live protocol guard
         run: ./scripts/check_flower_live_protocol.sh

@@ -3,7 +3,7 @@ type: Release Contract
 title: CI and release gates
 description: Redeven release confidence comes from shell checks, OKF validation, UI checks, ReDevPlugin integration gates, assets, Go tests, and lint.
 tags: [release, ci, quality, okf]
-timestamp: 2026-07-06T00:00:00Z
+timestamp: 2026-07-07T00:00:00Z
 ---
 
 Redeven keeps CI and local release checks aligned around source validation,
@@ -18,17 +18,25 @@ checked-in dist files. The main check installs Go, Node, corepack,
 golangci-lint, gitleaks, and ripgrep, then runs shell syntax checks,
 third-party notice validation, open-source hygiene, release note generator
 tests, Runtime Service compatibility checks, embedded asset builds, the
-ReDevPlugin integration gate, Gateway protocol contract checks, Flower protocol
-checks, Flower UI behavior contracts, UI lint, Desktop checks, Go tests, and
-golangci-lint. Embedded asset builds intentionally precede focused Go gates
-that import Env App or Code App embed packages because fresh checkouts do not
-contain ignored UI `dist/` directories.
+ReDevPlugin integration gate, Gateway protocol contract checks, the Floret
+dependency boundary guard, Flower protocol checks, Flower UI behavior
+contracts, UI lint, Desktop checks, Go tests, and golangci-lint. Embedded asset
+builds intentionally precede focused Go gates that import Env App or Code App
+embed packages because fresh checkouts do not contain ignored UI `dist/`
+directories.
 
 ReDevPlugin consumption is a published dependency gate, not a source sync. The
 dependency boundary script rejects `../redevplugin`, `go.work`, Go `replace`,
 local npm links, copied contracts, and copied runtime binaries. The release
 artifact verifier and consumption gate remain the path for staging published
 ReDevPlugin runtime payloads into Redeven release and Desktop packages.
+
+Floret consumption follows the same published-dependency discipline for Flower
+runtime integration. The Floret boundary guard rejects `../floret`, `go.work`,
+Go `replace`, imports of Floret internal packages, and direct references to
+Floret-owned storage schema tables or columns. Redeven may choose the Floret
+store file path and pass it to `runtime.OpenSQLiteStore`, but it must not query,
+patch, or shadow Floret's durable ledger.
 
 The ReDevPlugin integration gate runs the no-local-wiring boundary guard,
 release artifact verifier self-test, consumption gate self-test, artifact
@@ -103,6 +111,10 @@ Redeven product placement and route adaptation around the published
 `@floegence/redevplugin-ui` surface host, not a second reusable plugin UI
 platform.
 
+Unreleased Floret behavior is likewise not a valid Redeven integration target.
+Flower lifecycle fixes that belong to Floret must ship as a published
+`github.com/floegence/floret` release before Redeven consumes them.
+
 # Citations
 
 [1] redeven:.github/workflows/ci-check.yml:14 - CI defines a dedicated OKF bundle check job.
@@ -110,17 +122,19 @@ platform.
 [3] redeven:.github/workflows/ci-check.yml:29 - OKF dist verification is checked in CI.
 [4] redeven:.github/workflows/ci-check.yml:106 - Embedded assets are built before focused Go gates that import UI embed packages.
 [5] redeven:.github/workflows/ci-check.yml:109 - CI runs the ReDevPlugin integration gate after embedded assets are generated.
-[6] redeven:AGENTS.md:689 - Repository local quality gates include OKF integrity, dist verification, assets, Go tests, and golangci-lint.
-[7] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The local boundary script rejects local ReDevPlugin wiring and copied platform-core paths.
-[8] redeven:scripts/check_plugin_integration.sh:44 - The integration gate requires embedded UI asset directories before Go embed tests.
-[9] redeven:scripts/check_plugin_integration.sh:62 - The integration gate starts with the published dependency boundary guard.
-[10] redeven:scripts/check_plugin_integration.sh:74 - The integration gate runs AppServer and Local UI plugin route tests.
-[11] redeven:scripts/check_plugin_integration.sh:85 - The integration gate runs ReDevPlugin session, security, runtime, and route adapter tests.
-[12] redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.test.ts:1 - Projection tests cover official catalog merging and tile action decisions.
-[13] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.test.ts:1 - Plugin API tests cover proxy paths and bundled official install/update bodies.
-[14] redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.test.tsx:1 - Plugin Panel tests cover app-grid entry behavior and pointer affordance.
-[15] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.test.tsx:1 - Plugin Center tests cover the dedicated shell and lifecycle controls.
-[16] redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx:1 - Plugin surface frame tests cover bootstrap, bridge, RPC, and confirmation behavior.
-[17] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:807 - EnvAppShell tests bind plugin center and plugin surface Activity placement.
-[18] redeven:internal/codeapp/appserver/server_test.go:733 - AppServer tests bind Env App management delegation to the plugin handler.
-[19] redeven:internal/codeapp/appserver/server_test.go:833 - AppServer tests bind plugin sandbox route delegation to the plugin handler.
+[6] redeven:.github/workflows/ci-check.yml:116 - CI runs the Floret dependency boundary guard before Flower protocol and UI checks.
+[7] redeven:AGENTS.md:689 - Repository local quality gates include OKF integrity, dist verification, assets, Go tests, and golangci-lint.
+[8] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The local boundary script rejects local ReDevPlugin wiring and copied platform-core paths.
+[9] redeven:scripts/check_floret_dependency_boundary.sh:1 - The Floret boundary script rejects local Floret wiring, internal imports, and direct schema access.
+[10] redeven:scripts/check_plugin_integration.sh:44 - The integration gate requires embedded UI asset directories before Go embed tests.
+[11] redeven:scripts/check_plugin_integration.sh:62 - The integration gate starts with the published dependency boundary guard.
+[12] redeven:scripts/check_plugin_integration.sh:74 - The integration gate runs AppServer and Local UI plugin route tests.
+[13] redeven:scripts/check_plugin_integration.sh:85 - The integration gate runs ReDevPlugin session, security, runtime, and route adapter tests.
+[14] redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.test.ts:1 - Projection tests cover official catalog merging and tile action decisions.
+[15] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.test.ts:1 - Plugin API tests cover proxy paths and bundled official install/update bodies.
+[16] redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.test.tsx:1 - Plugin Panel tests cover app-grid entry behavior and pointer affordance.
+[17] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.test.tsx:1 - Plugin Center tests cover the dedicated shell and lifecycle controls.
+[18] redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx:1 - Plugin surface frame tests cover bootstrap, bridge, RPC, and confirmation behavior.
+[19] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:807 - EnvAppShell tests bind plugin center and plugin surface Activity placement.
+[20] redeven:internal/codeapp/appserver/server_test.go:733 - AppServer tests bind Env App management delegation to the plugin handler.
+[21] redeven:internal/codeapp/appserver/server_test.go:833 - AppServer tests bind plugin sandbox route delegation to the plugin handler.

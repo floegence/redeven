@@ -36,6 +36,7 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 		{name: "network timeout", err: timeoutNetError{}, want: runErrorCodeProviderUnreachable},
 		{name: "context timeout", err: context.DeadlineExceeded, want: runErrorCodeProviderUnreachable},
 		{name: "provider stream eof", err: errors.New("unexpected EOF"), want: runErrorCodeProviderStreamInterrupted},
+		{name: "floret active turn admission", err: errors.New("thread already has an active turn"), want: runErrorCodeFloretAdmissionBlocked},
 		{name: "unknown preserves fallback", err: errors.New("other failure"), want: runErrorCodeFloretEngineFailed},
 	}
 
@@ -73,5 +74,18 @@ func TestUserFacingRunErrorPresentsProviderStreamInterruption(t *testing.T) {
 	}
 	if !strings.Contains(lower, "provider") || !strings.Contains(lower, "stream") {
 		t.Fatalf("msg=%q, want provider stream-oriented presentation", msg)
+	}
+}
+
+func TestUserFacingRunErrorPresentsFloretAdmissionBlocked(t *testing.T) {
+	t.Parallel()
+
+	msg := userFacingRunError(runErrorCodeFloretAdmissionBlocked, "thread already has an active turn")
+	if msg == "" {
+		t.Fatalf("userFacingRunError returned empty message")
+	}
+	lower := strings.ToLower(msg)
+	if !strings.Contains(lower, "active turn") || !strings.Contains(lower, "recovery") {
+		t.Fatalf("msg=%q, want active turn recovery presentation", msg)
 	}
 }
