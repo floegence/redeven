@@ -53,13 +53,13 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedPackages := map[string][]string{
 		"desktop/package.json": {
-			"\"@floegence/floe-webapp-core\": \"^0.36.72\"",
+			"\"@floegence/floe-webapp-core\": \"^0.36.73\"",
 		},
 		"desktop/package-lock.json": {
-			"floe-webapp-core-0.36.72.tgz",
+			"floe-webapp-core-0.36.73.tgz",
 		},
 		"desktop/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-core@0.36.72",
+			"@floegence/floe-webapp-core@0.36.73",
 		},
 		"internal/envapp/ui_src/package.json": {
 			"\"@floegence/floe-webapp-boot\": \"^0.36.72\"",
@@ -88,6 +88,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"THIRD_PARTY_NOTICES.md": {
 			"@floegence/floe-webapp-boot | 0.36.72",
 			"@floegence/floe-webapp-core | 0.36.72",
+			"@floegence/floe-webapp-core | 0.36.73",
 			"@floegence/floe-webapp-protocol | 0.36.72",
 			"@floegence/flowersec-core | 0.19.10",
 		},
