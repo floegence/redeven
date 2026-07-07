@@ -429,7 +429,7 @@ Use this responsibility matrix as the default decision rule:
 | --- | --- | --- |
 | Package and trust | Package layout, canonical hashes, signing rules, manifest validation, trust state contracts, compatibility manifests | Which registries or local sources Redeven allows, local policy caps, review UX, and product audit presentation |
 | Lifecycle | Install, enable, open, disable, uninstall, update, downgrade, export/import, diagnostics, and data-retention APIs | Env App placement, Desktop commands, Activity Bar/Workbench/Settings entry points, and who may invoke the actions |
-| UI runtime | Sandboxed iframe bootstrap, asset ticket/session protocol, bridge SDK, exact-origin messaging, settings and intent contracts | Native shell chrome, Workbench layout, Settings placement, startup diagnostics, route mounting, and Redeven product copy |
+| UI runtime | Sandboxed iframe bootstrap, asset ticket/session protocol, bridge SDK, opaque-origin-safe source/port-bound MessageChannel messaging, settings and intent contracts | Native shell chrome, Workbench layout, Settings placement, startup diagnostics, route mounting, and Redeven product copy |
 | Backend runtime | Rust `redevplugin-runtime`, runtime manager/supervisor, WASM actor/job model, IPC, leases, quotas, revocation, hostcall contracts, stream envelopes | Selecting and packaging the released runtime artifact, wiring lifecycle hooks into Redeven startup/shutdown, and surfacing diagnostics |
 | Storage, network, and secrets | Host-neutral broker contracts, request contexts, target classifiers, quotas, secret reference contracts, and stable errors | State-root selection, vault integration, environment/network policy, proxy settings, and user-facing grant UX |
 | Business capabilities | Generic capability adapter interface, permission hooks, operation/stream envelope, and audit DTOs | Docker/Podman, files, shells, cloud services, database access, local product APIs, and other Redeven domain adapters |
@@ -462,8 +462,12 @@ Redeven's integration layer must keep the ReDevPlugin platform state opaque:
   bypass runtime lease/quota/revocation checks.
 - Redeven UI may frame host chrome around plugin surfaces and decide where a
   surface appears, but the plugin document itself must be loaded through
-  ReDevPlugin sandbox bootstrap, asset-ticket/session validation, bridge
-  handshake, and exact-origin messaging.
+  ReDevPlugin sandbox bootstrap, asset-ticket/session validation, and
+  opaque-origin-safe source/port-bound MessageChannel bridge handshake. For
+  opaque sandbox iframes, `event.origin` is diagnostic context only and is not
+  an authorization input; authorization must bind the window source, transferred
+  `MessagePort`, asset session, surface instance, bridge nonce, active
+  fingerprint, session hash, state version, and revoke epoch.
 - Redeven business adapters may call local product services only after
   ReDevPlugin has resolved the plugin identity, session, permission,
   confirmation, token, runtime lease, and audit context for the request.
