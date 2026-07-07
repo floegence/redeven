@@ -139,7 +139,7 @@ export const jaJP = {
     },
     groups: {
       overview: "概要",
-      runtimeConfiguration: "Runtime 構成",
+      runtimeConfiguration: "Runtime 環境",
       codespacesTooling: "Codespaces とツール",
       security: "セキュリティ",
       aiExtensions: "AI と拡張",

@@ -362,6 +362,14 @@ vi.mock('./settings/SettingsPrimitives', () => ({
     </div>
   ),
   SettingsPill: (props: any) => <span>{props.children}</span>,
+  SettingRow: (props: any) => (
+    <div>
+      <div>{props.title}</div>
+      <div>{props.description}</div>
+      <div>{props.control}</div>
+      <div>{props.children}</div>
+    </div>
+  ),
   SettingsTable: (props: any) => <table>{props.children}</table>,
   SettingsTableBody: (props: any) => <tbody>{props.children}</tbody>,
   SettingsTableCell: (props: any) => <td>{props.children}</td>,
@@ -434,8 +442,7 @@ describe('EnvSettingsPage', () => {
     const groupTitles = SETTINGS_GROUPS.map((group) => group.title);
     expect(groupTitles).toEqual([
       'Overview',
-      'Runtime Configuration',
-      'Codespaces & Tooling',
+      'Runtime Environment',
       'Security',
       'AI & Extensions',
       'Diagnostics',
@@ -447,8 +454,8 @@ describe('EnvSettingsPage', () => {
       'Connection',
       'Runtime Status',
       'Shell & Workspace',
-      'Logging',
       'Codespaces & Tooling',
+      'Logging',
       'Permission Policy',
       'Flower',
       'Skills',
@@ -468,12 +475,11 @@ describe('EnvSettingsPage', () => {
     const diagnosticsGroup = host.querySelector('[data-settings-group="diagnostics"]');
     expect(diagnosticsGroup?.querySelector('[data-settings-nav-item="debug_console"]')).not.toBeNull();
 
-    const codespacesGroup = host.querySelector('[data-settings-group="codespaces_tooling"]');
-    expect(codespacesGroup?.querySelector('[data-settings-nav-item="codespaces"]')).not.toBeNull();
-
     const runtimeGroup = host.querySelector('[data-settings-group="runtime_configuration"]');
     expect(runtimeGroup?.querySelector('[data-settings-nav-item="debug_console"]')).toBeNull();
-    expect(runtimeGroup?.querySelector('[data-settings-nav-item="codespaces"]')).toBeNull();
+    expect(runtimeGroup?.querySelector('[data-settings-nav-item="runtime"]')).not.toBeNull();
+    expect(runtimeGroup?.querySelector('[data-settings-nav-item="codespaces"]')).not.toBeNull();
+    expect(runtimeGroup?.querySelector('[data-settings-nav-item="logging"]')).not.toBeNull();
 
     const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');
     const aiGroupSections = Array.from(aiGroup?.querySelectorAll('[data-settings-nav-item]') ?? []).map((node) => node.getAttribute('data-settings-nav-item'));

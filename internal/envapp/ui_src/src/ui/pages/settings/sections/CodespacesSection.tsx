@@ -2,7 +2,7 @@ import { Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-j
 import { Code } from '@floegence/floe-webapp-core/icons';
 import { Input, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, AutoSaveIndicator } from '../SettingsPrimitives';
+import { SettingsSection, AutoSaveIndicator, SettingRow } from '../SettingsPrimitives';
 import { CodeRuntimeSettingsCard } from '../CodeRuntimeSettingsCard';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
@@ -95,16 +95,19 @@ export function CodespacesSection() {
         actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />}
       >
         {/* Port range card */}
-        <div class="rounded-xl border border-border/50 bg-background p-4">
-          <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">{i18n.t('codespacesSettings.portRange')}</div>
-          <label class={`flex items-center gap-2 mb-3 ${ctx.canInteract() ? 'cursor-pointer' : ''}`}>
-            <Checkbox checked={useDefaults()} onChange={(v) => { setUseDefaults(Boolean(v)); setDirty(true); }} disabled={!ctx.canInteract()} />
-            <span class="text-sm text-foreground">{i18n.t('codespacesSettings.useDefaultRange')}</span>
-          </label>
-          <div class="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
-            <span>{i18n.t('codespacesSettings.effectiveRange')}:</span>
-            <code class="font-mono text-foreground">{effective().effective_min} – {effective().effective_max}</code>
-          </div>
+        <SettingRow
+          title={i18n.t('codespacesSettings.portRange')}
+          description={`${i18n.t('codespacesSettings.effectiveRange')}: ${effective().effective_min} - ${effective().effective_max}`}
+          control={
+            <label class={`flex items-center gap-2 ${ctx.canInteract() ? 'cursor-pointer' : ''}`}>
+              <Checkbox checked={useDefaults()} onChange={(v) => { setUseDefaults(Boolean(v)); setDirty(true); }} disabled={!ctx.canInteract()} />
+              <span class="text-sm text-foreground">{i18n.t('codespacesSettings.useDefaultRange')}</span>
+            </label>
+          }
+        >
+          <code class="inline-flex rounded-md border border-[color-mix(in_srgb,var(--redeven-stroke-control)_74%,transparent)] bg-[var(--redeven-settings-card-bg)] px-2 py-1 font-mono text-xs text-foreground">
+            {effective().effective_min} - {effective().effective_max}
+          </code>
           <Show when={!useDefaults()}>
             <div class="flex items-center gap-4 pt-3 border-t border-border/30">
               <div class="flex items-center gap-2">
@@ -121,7 +124,7 @@ export function CodespacesSection() {
               </div>
             </div>
           </Show>
-        </div>
+        </SettingRow>
       </SettingsSection>
     </div>
   );

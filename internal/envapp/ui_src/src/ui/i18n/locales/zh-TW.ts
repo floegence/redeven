@@ -139,7 +139,7 @@ export const zhTW = {
     },
     groups: {
       overview: "概覽",
-      runtimeConfiguration: "Runtime 設定",
+      runtimeConfiguration: "Runtime 運行環境",
       codespacesTooling: "Codespaces 與工具",
       security: "安全",
       aiExtensions: "AI 與擴充",

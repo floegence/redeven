@@ -139,7 +139,7 @@ export const ptBR = {
     },
     groups: {
       overview: "Visão geral",
-      runtimeConfiguration: "Configuração de Runtime",
+      runtimeConfiguration: "Ambiente de Runtime",
       codespacesTooling: "Codespaces e ferramentas",
       security: "Segurança",
       aiExtensions: "AI e extensões",

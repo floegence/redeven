@@ -138,7 +138,7 @@ export const zhCN = {
     },
     groups: {
       overview: "概览",
-      runtimeConfiguration: "Runtime 配置",
+      runtimeConfiguration: "Runtime 运行环境",
       codespacesTooling: "Codespaces 与工具",
       security: "安全",
       aiExtensions: "AI 与扩展",

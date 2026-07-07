@@ -2,7 +2,7 @@ import { For, Show, createSignal, createEffect, onCleanup } from 'solid-js';
 import { Terminal, Plus, Trash } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, AutoSaveIndicator, DotIndicator } from '../SettingsPrimitives';
+import { SettingsSection, AutoSaveIndicator, DotIndicator, SettingRow } from '../SettingsPrimitives';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
 import type { FilesystemRootPolicy, FilesystemScope } from '../types';
@@ -110,20 +110,23 @@ export function RuntimeConfigSection() {
         }
       >
         {/* Shell environment card */}
-        <div class="rounded-xl border border-border/50 bg-background p-4">
-          <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">Shell 环境</div>
-          <div class="space-y-3">
-            <div class="flex items-center gap-4">
-              <label class="w-40 flex-shrink-0 text-xs text-muted-foreground">agent_home_dir</label>
+        <div class="space-y-3">
+          <SettingRow
+            title="agent_home_dir"
+            description="Runtime home directory used for local state and shell defaults."
+            control={
               <Input value={agentHomeDir()} onInput={(e) => { setAgentHomeDir(e.currentTarget.value); setDirty(true); }}
-                placeholder="/home/user" size="sm" class="flex-1 font-mono text-xs" disabled={!ctx.canInteract()} />
-            </div>
-            <div class="flex items-center gap-4">
-              <label class="w-40 flex-shrink-0 text-xs text-muted-foreground">shell</label>
+                placeholder="/home/user" size="sm" class="w-full min-w-[16rem] font-mono text-xs sm:w-[28rem]" disabled={!ctx.canInteract()} />
+            }
+          />
+          <SettingRow
+            title="shell"
+            description="Default shell executable used for new runtime terminal sessions."
+            control={
               <Input value={shell()} onInput={(e) => { setShell(e.currentTarget.value); setDirty(true); }}
-                placeholder="/bin/bash" size="sm" class="flex-1 font-mono text-xs" disabled={!ctx.canInteract()} />
-            </div>
-          </div>
+                placeholder="/bin/bash" size="sm" class="w-full min-w-[16rem] font-mono text-xs sm:w-[28rem]" disabled={!ctx.canInteract()} />
+            }
+          />
         </div>
 
         {/* Filesystem roots */}
@@ -135,7 +138,7 @@ export function RuntimeConfigSection() {
           <div class="space-y-2">
             <For each={roots()}>
               {(root, index) => (
-                <div class="rounded-lg border border-border/50 bg-background px-4 py-3">
+                <div class="rounded-lg border border-[color-mix(in_srgb,var(--redeven-stroke-panel)_76%,transparent)] bg-[var(--redeven-settings-row-bg)] px-4 py-3">
                   <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0 flex-1">
                       <div class="flex items-center gap-2 mb-1">

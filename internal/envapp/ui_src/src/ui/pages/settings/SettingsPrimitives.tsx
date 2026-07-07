@@ -95,10 +95,12 @@ export interface SettingsCardProps {
 
 export function SettingsSection(props: SettingsCardProps) {
   return (
-    <div class="border-t border-border/30 pt-6 mt-8 first:border-t-0 first:mt-0 first:pt-0">
+    <section class="redeven-settings-section rounded-lg border p-5 shadow-sm" data-settings-card={props.title}>
       <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div class="flex min-w-0 items-start gap-3">
-          <props.icon class="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+          <span class="redeven-settings-section__icon mt-0.5 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md">
+            <props.icon class="h-4 w-4" />
+          </span>
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
               <h3 class="text-sm font-semibold tracking-tight text-foreground">{props.title}</h3>
@@ -118,14 +120,14 @@ export function SettingsSection(props: SettingsCardProps) {
 
       <div class="mt-4 space-y-4">
         <Show when={props.error}>
-          <div class="flex items-start gap-2.5 rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+          <div class="redeven-settings-alert redeven-settings-alert--danger flex items-start gap-2.5 rounded-lg border p-3">
             <div class="min-h-4 h-full w-1 flex-shrink-0 rounded-full bg-destructive/60" />
             <div class="break-words text-xs text-destructive">{props.error}</div>
           </div>
         </Show>
         {props.children}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -199,6 +201,56 @@ export function SettingsPill(props: { tone?: 'default' | 'success' | 'warning' |
   );
 }
 
+export function SettingRow(props: {
+  icon?: (props: { class?: string }) => JSX.Element;
+  title: string;
+  description?: string;
+  control?: JSX.Element;
+  children?: JSX.Element;
+  tone?: 'default' | 'info' | 'success' | 'warning' | 'danger';
+}) {
+  const toneClass = () => {
+    switch (props.tone) {
+      case 'info': return 'redeven-setting-row--info';
+      case 'success': return 'redeven-setting-row--success';
+      case 'warning': return 'redeven-setting-row--warning';
+      case 'danger': return 'redeven-setting-row--danger';
+      default: return '';
+    }
+  };
+
+  return (
+    <div class={cn('redeven-setting-row rounded-lg border px-4 py-3', toneClass())}>
+      <div class="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex min-w-0 items-start gap-3">
+          <Show when={props.icon}>
+            {(Icon) => {
+              const RowIcon = Icon();
+              return (
+                <span class="redeven-setting-row__icon mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md">
+                  <RowIcon class="h-3.5 w-3.5" />
+                </span>
+              );
+            }}
+          </Show>
+          <div class="min-w-0">
+            <div class="text-sm font-semibold tracking-tight text-foreground">{props.title}</div>
+            <Show when={props.description}>
+              <p class="mt-0.5 text-xs leading-relaxed text-muted-foreground">{props.description}</p>
+            </Show>
+          </div>
+        </div>
+        <Show when={props.control}>
+          <div class="flex min-w-0 flex-shrink-0 items-center justify-end gap-2">{props.control}</div>
+        </Show>
+      </div>
+      <Show when={props.children}>
+        <div class="mt-3 min-w-0">{props.children}</div>
+      </Show>
+    </div>
+  );
+}
+
 export function CapabilityTag(props: { active?: boolean; children: JSX.Element }) {
   return (
     <Tag variant={props.active ? 'success' : 'neutral'} tone="soft" size="sm" class="whitespace-nowrap">
@@ -242,7 +294,7 @@ export const AdvancedCollapse = SectionCollapse;
 
 export function SettingsTable(props: { children: JSX.Element; minWidthClass?: string; class?: string; stickyHeader?: boolean }) {
   return (
-    <div class={cn('overflow-auto rounded-lg border bg-background', redevenSurfaceRoleClass('panel'), props.class)}>
+    <div class={cn('overflow-auto rounded-lg border', redevenSurfaceRoleClass('panel'), props.class)}>
       <table class={`w-full text-xs align-top ${props.minWidthClass ?? ''}`}>
         {props.children}
       </table>
@@ -251,7 +303,7 @@ export function SettingsTable(props: { children: JSX.Element; minWidthClass?: st
 }
 
 export function SettingsTableHead(props: { children: JSX.Element; sticky?: boolean }) {
-  return <thead class={`${props.sticky ? 'sticky top-0 z-10 bg-background/95 backdrop-blur-sm' : 'bg-background'} text-muted-foreground`}>{props.children}</thead>;
+  return <thead class={`${props.sticky ? 'sticky top-0 z-10 bg-[color-mix(in_srgb,var(--redeven-settings-row-bg)_94%,transparent)] backdrop-blur-sm' : ''} text-muted-foreground`}>{props.children}</thead>;
 }
 
 export function SettingsTableHeaderRow(props: { children: JSX.Element }) {
@@ -544,10 +596,37 @@ export function PermissionDot(props: {
   const i18n = useI18n();
 
   return (
-    <div class="flex items-center gap-4">
-      <DotIndicator active={props.read} label={i18n.t('permissionPolicy.permission.read')} onClick={props.readonly ? undefined : () => props.onReadChange?.(!props.read)} />
-      <DotIndicator active={props.write} label={i18n.t('permissionPolicy.permission.write')} onClick={props.readonly ? undefined : () => props.onWriteChange?.(!props.write)} />
-      <DotIndicator active={props.execute} label={i18n.t('permissionPolicy.permission.execute')} onClick={props.readonly ? undefined : () => props.onExecuteChange?.(!props.execute)} />
+    <div class="redeven-permission-segmented inline-flex flex-wrap items-center gap-1">
+      <button
+        type="button"
+        class={cn('redeven-permission-segment', props.read && 'redeven-permission-segment--active')}
+        onClick={props.readonly ? undefined : () => props.onReadChange?.(!props.read)}
+        disabled={props.readonly || !props.onReadChange}
+        aria-pressed={props.read}
+      >
+        <span>{i18n.t('permissionPolicy.permission.read')}</span>
+        <span>{props.read ? i18n.t('permissionPolicy.allowed') : i18n.t('permissionPolicy.denied')}</span>
+      </button>
+      <button
+        type="button"
+        class={cn('redeven-permission-segment', props.write && 'redeven-permission-segment--active')}
+        onClick={props.readonly ? undefined : () => props.onWriteChange?.(!props.write)}
+        disabled={props.readonly || !props.onWriteChange}
+        aria-pressed={props.write}
+      >
+        <span>{i18n.t('permissionPolicy.permission.write')}</span>
+        <span>{props.write ? i18n.t('permissionPolicy.allowed') : i18n.t('permissionPolicy.denied')}</span>
+      </button>
+      <button
+        type="button"
+        class={cn('redeven-permission-segment', props.execute && 'redeven-permission-segment--active')}
+        onClick={props.readonly ? undefined : () => props.onExecuteChange?.(!props.execute)}
+        disabled={props.readonly || !props.onExecuteChange}
+        aria-pressed={props.execute}
+      >
+        <span>{i18n.t('permissionPolicy.permission.execute')}</span>
+        <span>{props.execute ? i18n.t('permissionPolicy.allowed') : i18n.t('permissionPolicy.denied')}</span>
+      </button>
     </div>
   );
 }

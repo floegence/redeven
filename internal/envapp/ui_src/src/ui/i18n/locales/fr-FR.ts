@@ -139,7 +139,7 @@ export const frFR = {
     },
     groups: {
       overview: "Vue d’ensemble",
-      runtimeConfiguration: "Configuration Runtime",
+      runtimeConfiguration: "Environnement Runtime",
       codespacesTooling: "Codespaces et outils",
       security: "Sécurité",
       aiExtensions: "AI et extensions",

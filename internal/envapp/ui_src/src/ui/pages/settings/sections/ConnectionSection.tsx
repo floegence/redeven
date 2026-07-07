@@ -1,7 +1,7 @@
 import { Show, createSignal } from 'solid-js';
 import { Globe, ChevronDown } from '@floegence/floe-webapp-core/icons';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, CopyButton, DotIndicator } from '../SettingsPrimitives';
+import { SettingsSection, CopyButton, DotIndicator, SettingRow } from '../SettingsPrimitives';
 import { useI18n } from '../../../i18n';
 
 export function ConnectionSection() {
@@ -21,27 +21,30 @@ export function ConnectionSection() {
     >
       {/* Two hero cards: URL + Security */}
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div class="rounded-xl border border-border/50 bg-background p-4">
-          <div class="text-[11px] text-muted-foreground mb-2">{i18n.t('settings.connection.controlPlane')}</div>
-          <div class="flex items-start justify-between gap-3">
-            <code class="text-sm font-mono text-foreground break-all leading-relaxed">
-              {String(conn()?.controlplane_base_url ?? '')}
-            </code>
-            <CopyButton value={String(conn()?.controlplane_base_url ?? '')} />
-          </div>
-        </div>
-        <div class="rounded-xl border border-border/50 bg-background p-4">
-          <div class="text-[11px] text-muted-foreground mb-2">{i18n.t('settings.connection.e2eePsk')}</div>
+        <SettingRow
+          title={i18n.t('settings.connection.controlPlane')}
+          control={<CopyButton value={String(conn()?.controlplane_base_url ?? '')} />}
+          tone="info"
+        >
+          <code class="block break-all font-mono text-sm leading-relaxed text-foreground">
+            {String(conn()?.controlplane_base_url ?? '')}
+          </code>
+        </SettingRow>
+        <SettingRow
+          title={i18n.t('settings.connection.e2eePsk')}
+          tone={direct()?.e2ee_psk_set ? 'success' : 'default'}
+          control={
           <DotIndicator
             active={Boolean(direct()?.e2ee_psk_set)}
             label={direct()?.e2ee_psk_set ? i18n.t('settings.connection.configured') : i18n.t('settings.connection.notSet')}
           />
-        </div>
+          }
+        />
       </div>
 
       {/* Identity group */}
-      <div class="mt-4 rounded-xl border border-border/50 bg-background p-4">
-        <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">身份标识</div>
+      <div class="mt-4 rounded-lg border border-[color-mix(in_srgb,var(--redeven-stroke-panel)_76%,transparent)] bg-[var(--redeven-settings-row-bg)] p-4">
+        <div class="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Identity</div>
         <div class="space-y-3">
           <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">

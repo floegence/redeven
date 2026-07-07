@@ -2,7 +2,7 @@ import { createSignal, createEffect, onCleanup } from 'solid-js';
 import { Database } from '@floegence/floe-webapp-core/icons';
 import { Select } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, AutoSaveIndicator } from '../SettingsPrimitives';
+import { SettingsSection, AutoSaveIndicator, SettingRow } from '../SettingsPrimitives';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
 
@@ -53,31 +53,35 @@ export function LoggingSection() {
     <SettingsSection
       icon={Database}
       title={i18n.t('loggingSettings.title')}
-      description={`${i18n.t('loggingSettings.description')} ${i18n.t('loggingSettings.restartRequired')}`}
+      description={i18n.t('loggingSettings.description')}
       error={error()}
+      badge={i18n.t('loggingSettings.restartRequired')}
+      badgeVariant="warning"
+      actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />}
     >
-      <div class="space-y-2">
-        <div class="flex items-center gap-4 py-2">
-          <label class="w-24 flex-shrink-0 text-xs font-medium text-foreground">{i18n.t('loggingSettings.formatLabel')}</label>
+      <div class="space-y-3">
+        <SettingRow
+          title={i18n.t('loggingSettings.formatLabel')}
+          description={i18n.t('loggingSettings.defaultJson')}
+          control={
           <Select
             value={logFormat()} onChange={(v) => { setLogFormat(v); setDirty(true); }} disabled={!ctx.canInteract()}
             options={[{ value: '', label: i18n.t('loggingSettings.defaultJson') }, { value: 'json', label: 'json' }, { value: 'text', label: 'text' }]}
-            class="w-36"
+            class="w-44"
           />
-          <span class="text-[11px] text-muted-foreground">{i18n.t('loggingSettings.defaultJson')}</span>
-        </div>
-        <div class="flex items-center gap-4 py-2">
-          <label class="w-24 flex-shrink-0 text-xs font-medium text-foreground">{i18n.t('loggingSettings.levelLabel')}</label>
+          }
+        />
+        <SettingRow
+          title={i18n.t('loggingSettings.levelLabel')}
+          description={i18n.t('loggingSettings.defaultInfo')}
+          control={
           <Select
             value={logLevel()} onChange={(v) => { setLogLevel(v); setDirty(true); }} disabled={!ctx.canInteract()}
             options={[{ value: '', label: i18n.t('loggingSettings.defaultInfo') }, { value: 'debug', label: 'debug' }, { value: 'info', label: 'info' }, { value: 'warn', label: 'warn' }, { value: 'error', label: 'error' }]}
-            class="w-36"
+            class="w-44"
           />
-          <span class="text-[11px] text-muted-foreground">{i18n.t('loggingSettings.defaultInfo')}</span>
-        </div>
-      </div>
-      <div class="mt-3">
-        <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />
+          }
+        />
       </div>
     </SettingsSection>
   );
