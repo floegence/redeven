@@ -7,6 +7,7 @@ import { DockCpu, DockFolder, DockTerminal, Search } from '@floegence/floe-webap
 import { Show, type JSX } from 'solid-js';
 
 import { CodexWorkbenchIcon } from '../icons/CodexIcon';
+import { CodespacesGlyph } from '../icons/CodespacesIcon';
 import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
@@ -238,23 +239,7 @@ function CodespacesDockIcon(props: { class?: string }) {
       </defs>
       <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#cs-bg)" />
       <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#cs-rim)" />
-      <rect x="9.5" y="9.5" width="12.6" height="12.6" rx="3" fill="var(--foreground)" fill-opacity=".12" stroke="var(--foreground)" stroke-opacity=".42" stroke-width="1.15" />
-      <rect x="25.9" y="9.5" width="12.6" height="12.6" rx="3" fill="var(--foreground)" fill-opacity=".08" stroke="var(--foreground)" stroke-opacity=".32" stroke-width="1.15" />
-      <rect x="9.5" y="25.9" width="12.6" height="12.6" rx="3" fill="var(--foreground)" fill-opacity=".08" stroke="var(--foreground)" stroke-opacity=".32" stroke-width="1.15" />
-      <rect x="25.9" y="25.9" width="12.6" height="12.6" rx="3" fill="var(--foreground)" fill-opacity=".12" stroke="var(--foreground)" stroke-opacity=".42" stroke-width="1.15" />
-      <text
-        x="24"
-        y="32.7"
-        text-anchor="middle"
-        font-family="'Inter','SF Pro Display',-apple-system,sans-serif"
-        font-size="24.8"
-        font-weight="800"
-        letter-spacing="0"
-        fill="var(--foreground)"
-        fill-opacity=".9"
-      >
-        C
-      </text>
+      <CodespacesGlyph transform="translate(3.6 4.15) scale(1.55)" foreground="var(--foreground)" />
     </svg>
   );
 }
