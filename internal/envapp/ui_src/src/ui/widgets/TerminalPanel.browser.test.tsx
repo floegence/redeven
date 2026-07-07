@@ -288,8 +288,107 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     }));
   }
 
+  const createMockOutputPipeline = (options: any) => {
+    let pending: any[] = [];
+    let inactive: any[] = [];
+    let frame: number | null = null;
+    let disposed = false;
+    const bytes = (chunks: any[]) => chunks.reduce((sum, chunk) => sum + (chunk.data?.byteLength ?? 0), 0);
+    const merge = (chunks: any[]) => {
+      const total = bytes(chunks);
+      const merged = new Uint8Array(total);
+      let offset = 0;
+      for (const chunk of chunks) {
+        merged.set(chunk.data, offset);
+        offset += chunk.data.byteLength;
+      }
+      return merged;
+    };
+    const isInteractive = () => options.isInteractive?.() ?? true;
+    const clearFrame = () => {
+      if (frame === null) return;
+      cancelAnimationFrame(frame);
+      frame = null;
+    };
+    const flushFrame = () => {
+      frame = null;
+      if (disposed) return;
+      if (!isInteractive()) {
+        inactive.push(...pending);
+        pending = [];
+        return;
+      }
+      if (inactive.length > 0) {
+        pending.push(...inactive);
+        inactive = [];
+      }
+      const batch = pending;
+      pending = [];
+      const payload = merge(batch);
+      if (payload.byteLength > 0) {
+        options.write(payload, batch);
+      }
+      if (pending.length === 0 && inactive.length === 0) {
+        options.onDrain?.();
+      }
+    };
+    const schedule = () => {
+      if (frame !== null || disposed) return;
+      frame = requestAnimationFrame(flushFrame);
+    };
+    return {
+      enqueue: (chunk: any) => {
+        if (disposed) return;
+        if (!isInteractive()) {
+          inactive.push(chunk);
+          return;
+        }
+        pending.push(chunk);
+        schedule();
+      },
+      flush: () => {
+        if (disposed) return;
+        if (!isInteractive()) {
+          inactive.push(...pending);
+          pending = [];
+          clearFrame();
+          return;
+        }
+        if (inactive.length > 0) {
+          pending.push(...inactive);
+          inactive = [];
+        }
+        if (pending.length > 0) {
+          schedule();
+        } else {
+          options.onDrain?.();
+        }
+      },
+      reset: () => {
+        clearFrame();
+        pending = [];
+        inactive = [];
+      },
+      dispose: () => {
+        disposed = true;
+        clearFrame();
+        pending = [];
+        inactive = [];
+      },
+      getStats: () => ({
+        pendingChunks: pending.length,
+        pendingBytes: bytes(pending),
+        inactiveChunks: inactive.length,
+        inactiveBytes: bytes(inactive),
+        catchUpPending: false,
+        disposed,
+      }),
+    };
+  };
+
   return {
     TerminalCore: MockTerminalCore,
+    createTerminalOutputPipeline: vi.fn(createMockOutputPipeline),
     getDefaultTerminalConfig: vi.fn((_theme: string, overrides?: any) => overrides ?? {}),
     getThemeColors: vi.fn(() => ({ background: '#111111', foreground: '#eeeeee' })),
   };
