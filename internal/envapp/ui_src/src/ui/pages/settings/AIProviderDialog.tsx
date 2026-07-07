@@ -1,5 +1,6 @@
-import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { Bot, Key, Settings, Sparkles } from '@floegence/floe-webapp-core/icons';
 import { Button, Checkbox, Dialog, Input, Select } from '@floegence/floe-webapp-core/ui';
 import { localizedFlowerProviderModelNote } from '../../../../../../flower_ui/src/settings/providerModelNotes';
 import {
@@ -59,6 +60,7 @@ export type AIProviderDialogProps = {
 };
 
 type ProviderDialogStep = 'type' | 'connection' | 'models' | 'advanced';
+type StepIconComponent = (props?: { class?: string }) => JSX.Element;
 
 function normalizeModelName(value: unknown): string {
   return String(value ?? '').trim();
@@ -139,11 +141,12 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
           const recommendedModelSelected = (modelName: string) => selectedModelNames().has(normalizeModelName(modelName));
           const supportedCustomModelNames = () => providerSupportsCustomModelNames(provider().type);
           const hasSelectedModels = () => models().length > 0;
-          const stepItems = createMemo<ReadonlyArray<{ id: ProviderDialogStep; label: string; description: string }>>(() => [
+          const stepItems = createMemo<ReadonlyArray<{ id: ProviderDialogStep; label: string; description: string; icon: StepIconComponent }>>(() => [
             {
               id: 'type',
               label: i18n.t('flowerProviderDialog.providerTypeTitle'),
               description: providerTypeDisplayLabel(provider().type),
+              icon: Bot,
             },
             {
               id: 'connection',
@@ -151,6 +154,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
               description: props.keySet || String(props.keyDraft ?? '').trim()
                 ? i18n.t('flowerProviderDialog.keyReady')
                 : i18n.t('flowerSettings.needsKey'),
+              icon: Key,
             },
             {
               id: 'models',
@@ -158,11 +162,13 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
               description: hasSelectedModels()
                 ? i18n.t('flowerProviderDialog.selectedModelsTitle')
                 : i18n.t('flowerProviderDialog.noSelectedModels'),
+              icon: Sparkles,
             },
             {
               id: 'advanced',
               label: i18n.t('flowerProviderDialog.advancedTitle'),
               description: modelID(providerID(), normalizeModelName(models()[0]?.model_name)) || i18n.t('flowerProviderDialog.providerIdPending'),
+              icon: Settings,
             },
           ]);
 
@@ -190,8 +196,9 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                 </div>
                 <nav class="space-y-1" aria-label={props.title}>
                   <For each={stepItems()}>
-                    {(step, index) => {
+                    {(step) => {
                       const active = () => activeStep() === step.id;
+                      const StepIcon = step.icon;
                       return (
                         <button
                           type="button"
@@ -205,8 +212,8 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                           disabled={!props.canInteract && step.id !== activeStep()}
                           data-provider-dialog-step={step.id}
                         >
-                          <span class={cn('mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-semibold', active() ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>
-                            {index() + 1}
+                          <span class={cn('mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md', active() ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>
+                            <StepIcon class="h-3.5 w-3.5" />
                           </span>
                           <span class="min-w-0">
                             <span class="block text-xs font-semibold">{step.label}</span>

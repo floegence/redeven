@@ -1,5 +1,5 @@
 import { For, Show, createSignal, createEffect, onCleanup } from 'solid-js';
-import { Shield, Trash } from '@floegence/floe-webapp-core/icons';
+import { Shield, Trash, Package, ShieldCheck, User } from '@floegence/floe-webapp-core/icons';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, AutoSaveIndicator, SubSectionHeader, PermissionDot, SettingRow } from '../SettingsPrimitives';
@@ -98,6 +98,7 @@ export function PermissionPolicySection() {
     >
       {/* local_max matrix card */}
       <SettingRow
+        icon={ShieldCheck}
         title="local_max"
         description={i18n.t('permissionPolicy.localMaxDescription')}
         tone="warning"
@@ -120,8 +121,13 @@ export function PermissionPolicySection() {
             <For each={byUser()}>
               {(row, index) => (
                 <div class="flex flex-col gap-3 rounded-lg border border-[color-mix(in_srgb,var(--redeven-stroke-panel)_76%,transparent)] bg-[var(--redeven-settings-row-bg)] px-3 py-2 sm:flex-row sm:items-center">
-                  <Input value={row.key} onInput={(e) => { setByUser((prev) => prev.map((it, i) => i === index() ? { ...it, key: e.currentTarget.value } : it)); setDirty(true); }}
-                    placeholder="user_public_id" size="sm" class="min-w-0 flex-1 font-mono text-xs" disabled={!ctx.canInteract()} />
+                  <div class="flex min-w-0 flex-1 items-center gap-2">
+                    <span class="redeven-setting-row__icon inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md">
+                      <User class="h-3.5 w-3.5" />
+                    </span>
+                    <Input value={row.key} onInput={(e) => { setByUser((prev) => prev.map((it, i) => i === index() ? { ...it, key: e.currentTarget.value } : it)); setDirty(true); }}
+                      placeholder="user_public_id" size="sm" class="min-w-0 flex-1 font-mono text-xs" disabled={!ctx.canInteract()} />
+                  </div>
                   <PermissionDot read={row.read} write={row.write} execute={row.execute}
                     readonly={!ctx.canInteract()}
                     onReadChange={localRead() && ctx.canInteract() ? (v) => { setByUser((prev) => prev.map((it, i) => i === index() ? { ...it, read: v } : it)); setDirty(true); } : undefined}
@@ -144,8 +150,13 @@ export function PermissionPolicySection() {
             <For each={byApp()}>
               {(row, index) => (
                 <div class="flex flex-col gap-3 rounded-lg border border-[color-mix(in_srgb,var(--redeven-stroke-panel)_76%,transparent)] bg-[var(--redeven-settings-row-bg)] px-3 py-2 sm:flex-row sm:items-center">
-                  <Input value={row.key} onInput={(e) => { setByApp((prev) => prev.map((it, i) => i === index() ? { ...it, key: e.currentTarget.value } : it)); setDirty(true); }}
-                    placeholder="floe_app identifier" size="sm" class="min-w-0 flex-1 font-mono text-xs" disabled={!ctx.canInteract()} />
+                  <div class="flex min-w-0 flex-1 items-center gap-2">
+                    <span class="redeven-setting-row__icon inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md">
+                      <Package class="h-3.5 w-3.5" />
+                    </span>
+                    <Input value={row.key} onInput={(e) => { setByApp((prev) => prev.map((it, i) => i === index() ? { ...it, key: e.currentTarget.value } : it)); setDirty(true); }}
+                      placeholder="floe_app identifier" size="sm" class="min-w-0 flex-1 font-mono text-xs" disabled={!ctx.canInteract()} />
+                  </div>
                   <PermissionDot read={row.read} write={row.write} execute={row.execute}
                     readonly={!ctx.canInteract()}
                     onReadChange={localRead() && ctx.canInteract() ? (v) => { setByApp((prev) => prev.map((it, i) => i === index() ? { ...it, read: v } : it)); setDirty(true); } : undefined}

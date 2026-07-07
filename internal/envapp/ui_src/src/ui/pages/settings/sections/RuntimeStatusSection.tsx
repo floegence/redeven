@@ -1,5 +1,5 @@
 import { Show } from 'solid-js';
-import { Zap, RefreshIcon } from '@floegence/floe-webapp-core/icons';
+import { Activity, Cpu, RefreshIcon, ShieldCheck } from '@floegence/floe-webapp-core/icons';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
@@ -90,7 +90,7 @@ export function RuntimeStatusSection() {
 
   return (
     <SettingsSection
-      icon={Zap}
+      icon={Activity}
       title={i18n.t('runtimeStatus.title')}
       description={i18n.t('runtimeStatus.description')}
       badge={statusLabel()}
@@ -115,18 +115,27 @@ export function RuntimeStatusSection() {
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div class={cn('rounded-xl border p-4', statusOnline() ? 'border-success/30 bg-success/5' : 'border-border/50 bg-background')}>
           <div class="flex items-center gap-2.5 mb-1">
-            <div class={cn('h-2 w-2 rounded-full', statusOnline() ? 'bg-success' : 'bg-muted-foreground/30')} />
+            <span class={cn('flex h-8 w-8 items-center justify-center rounded-lg', statusOnline() ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground')}>
+              <Activity class="h-4 w-4" />
+            </span>
             <span class="text-sm font-semibold text-foreground">{statusLabel()}</span>
           </div>
           <div class="text-[11px] text-muted-foreground">运行状态</div>
         </div>
         <div class="rounded-xl border border-border/50 bg-background p-4">
-          <div class="text-sm font-semibold font-mono text-foreground mb-1">{version()}</div>
+          <div class="mb-1 flex items-center gap-2.5">
+            <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+              <Cpu class="h-4 w-4" />
+            </span>
+            <div class="text-sm font-semibold font-mono text-foreground">{version()}</div>
+          </div>
           <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.currentVersion')}</div>
         </div>
         <div class={cn('rounded-xl border p-4', compatOk() ? 'border-success/30 bg-success/5' : 'border-border/50 bg-background')}>
           <div class="flex items-center gap-2.5 mb-1">
-            <div class={cn('h-2 w-2 rounded-full', compatOk() ? 'bg-success' : 'bg-warning')} />
+            <span class={cn('flex h-8 w-8 items-center justify-center rounded-lg', compatOk() ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning')}>
+              <ShieldCheck class="h-4 w-4" />
+            </span>
             <span class="text-sm font-semibold text-foreground">{compatLabel()}</span>
           </div>
           <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.compatibilityLabel')}</div>
@@ -136,7 +145,10 @@ export function RuntimeStatusSection() {
       {/* Detail groups */}
       <div class="mt-5 space-y-4">
         <div class="rounded-xl border border-border/50 bg-background px-4 py-3">
-          <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">{i18n.t('runtimeStatus.currentVersion')}</div>
+          <div class="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <Cpu class="h-3.5 w-3.5" />
+            <span>{i18n.t('runtimeStatus.currentVersion')}</span>
+          </div>
           <div class="space-y-2.5">
             <div class="flex items-center justify-between text-xs">
               <span class="text-muted-foreground">{i18n.t('runtimeStatus.currentVersion')}</span>
@@ -154,7 +166,10 @@ export function RuntimeStatusSection() {
         </div>
 
         <div class="rounded-xl border border-border/50 bg-background px-4 py-3">
-          <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">负载与兼容性</div>
+          <div class="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <Activity class="h-3.5 w-3.5" />
+            <span>负载与兼容性</span>
+          </div>
           <div class="space-y-2.5">
             <div class="flex items-center justify-between text-xs">
               <span class="text-muted-foreground">{i18n.t('runtimeStatus.activeWork')}</span>

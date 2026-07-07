@@ -1,5 +1,5 @@
 import { Show, createSignal } from 'solid-js';
-import { RefreshIcon, Code, ChevronDown } from '@floegence/floe-webapp-core/icons';
+import { BugIcon, Code, ChevronDown, Home, Link, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
@@ -19,7 +19,7 @@ export function CodexSection() {
 
   return (
     <SettingsSection
-      icon={RefreshIcon}
+      icon={Code}
       title={i18n.t('codexSettings.title')}
       description={i18n.t('codexSettings.description')}
       badge={hostOk() ? i18n.t('codexSettings.hostDetected') : i18n.t('codexSettings.needsHostInstall')}
@@ -50,7 +50,7 @@ export function CodexSection() {
           <div class={cn('rounded-xl border p-4', bridgeOk() ? 'border-success/30 bg-success/5' : 'border-border/50 bg-background')}>
             <div class="flex items-center gap-3">
               <div class={cn('flex h-10 w-10 items-center justify-center rounded-full', bridgeOk() ? 'bg-success/15' : 'bg-muted')}>
-                <div class={cn('h-2.5 w-2.5 rounded-full', bridgeOk() ? 'bg-success' : 'bg-muted-foreground/30')} />
+                <Link class={cn('h-5 w-5', bridgeOk() ? 'text-success' : 'text-muted-foreground')} />
               </div>
               <div>
                 <div class="text-sm font-semibold text-foreground">
@@ -81,17 +81,26 @@ export function CodexSection() {
         </button>
         <Show when={showDetails()}>
           <div class="mt-2 rounded-lg border border-border/40 bg-muted/20 px-4 py-3 space-y-2.5">
-            <div>
-              <div class="text-[11px] text-muted-foreground">{i18n.t('codexSettings.rows.binaryPath')}</div>
-              <code class="text-[11px] font-mono text-foreground">{codexStatus()?.binary_path || '—'}</code>
+            <div class="flex min-w-0 items-start gap-2">
+              <Code class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+              <div class="min-w-0">
+                <div class="text-[11px] text-muted-foreground">{i18n.t('codexSettings.rows.binaryPath')}</div>
+                <code class="text-[11px] font-mono text-foreground">{codexStatus()?.binary_path || '—'}</code>
+              </div>
             </div>
-            <div>
-              <div class="text-[11px] text-muted-foreground">{i18n.t('codexSettings.rows.agentHomeDir')}</div>
-              <code class="text-[11px] font-mono text-foreground">{codexStatus()?.agent_home_dir || '—'}</code>
+            <div class="flex min-w-0 items-start gap-2">
+              <Home class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+              <div class="min-w-0">
+                <div class="text-[11px] text-muted-foreground">{i18n.t('codexSettings.rows.agentHomeDir')}</div>
+                <code class="text-[11px] font-mono text-foreground">{codexStatus()?.agent_home_dir || '—'}</code>
+              </div>
             </div>
-            <div>
-              <div class="text-[11px] text-muted-foreground">错误信息</div>
-              <code class="text-[11px] font-mono text-foreground">{codexStatus()?.error || '—'}</code>
+            <div class="flex min-w-0 items-start gap-2">
+              <BugIcon class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+              <div class="min-w-0">
+                <div class="text-[11px] text-muted-foreground">错误信息</div>
+                <code class="text-[11px] font-mono text-foreground">{codexStatus()?.error || '—'}</code>
+              </div>
             </div>
           </div>
         </Show>
