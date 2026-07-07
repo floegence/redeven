@@ -16,11 +16,14 @@ import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import {
   TerminalCore,
+  createTerminalOutputPipeline,
   getDefaultTerminalConfig,
   getThemeColors,
   type Logger,
   type TerminalAppearance,
   type TerminalEventSource,
+  type TerminalOutputPipelineCatchUpRequest,
+  type TerminalOutputPipelineHandle,
   type TerminalResponsiveConfig,
   type TerminalSessionInfo,
   type TerminalThemeName,
@@ -1050,10 +1053,12 @@ function TerminalSessionView(props: terminal_session_view_props) {
   let lastObservedSeq = 0;
   let lastRenderedSeq = 0;
   let focusAfterCatchup = false;
+  let outputPipeline: TerminalOutputPipelineHandle | null = null;
   const appliedSequences = new Set<number>();
   const observedUnrenderedSequences = new Set<number>();
 
   const liveRenderActive = () => props.viewActive() && props.active();
+  const activityOutputPipelineEnabled = () => props.variant !== 'workbench';
 
   const normalizeLiveSequence = (sequence: number | undefined): number | undefined => (
     typeof sequence === 'number' && Number.isFinite(sequence) && sequence > 0
@@ -1071,6 +1076,25 @@ function TerminalSessionView(props: terminal_session_view_props) {
       observedUnrenderedSequences.delete(nextSeq);
       lastRenderedSeq = nextSeq;
     }
+  };
+
+  const nextLiveStartSequence = () => (lastRenderedSeq > 0 ? lastRenderedSeq + 1 : 1);
+
+  const resetOutputPipeline = (opts?: { resetStats?: boolean }) => {
+    outputPipeline?.reset({
+      startSequence: nextLiveStartSequence(),
+      resetStats: opts?.resetStats,
+    });
+  };
+
+  const outputPipelineBusy = () => {
+    const stats = outputPipeline?.getStats();
+    return Boolean(stats && (stats.pendingChunks > 0 || stats.inactiveChunks > 0 || stats.catchUpPending));
+  };
+
+  const outputPipelineInputBlocked = () => {
+    const stats = outputPipeline?.getStats();
+    return Boolean(stats && (stats.inactiveChunks > 0 || stats.catchUpPending));
   };
 
   const markChunksApplied = (chunks: readonly terminal_display_chunk[] | readonly terminal_history_chunk[]) => {
@@ -1098,14 +1122,18 @@ function TerminalSessionView(props: terminal_session_view_props) {
     historyMaxSeq = 0;
     appliedSequences.clear();
     observedUnrenderedSequences.clear();
+    resetOutputPipeline({ resetStats: true });
     if (opts?.resetParser) {
       shellIntegrationParser.reset();
     }
   };
 
-  const markHistoryCatchupNeeded = () => {
+  const markHistoryCatchupNeeded = (startSequence?: number) => {
     needsHistoryCatchup = true;
     clearDeferredLive();
+    if (typeof startSequence === 'number' && Number.isFinite(startSequence) && startSequence > 0) {
+      firstDeferredSeq = Math.floor(startSequence);
+    }
   };
 
   const enqueueDeferredLive = (chunk: terminal_display_chunk) => {
@@ -1150,6 +1178,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
   const releaseFocusAfterCatchupIfSettled = () => {
     if (!focusAfterCatchup) return;
     if (catchupInProgress || needsHistoryCatchup) return;
+    if (outputPipelineBusy()) return;
     if (deferredLive.length > 0 || queued.length > 0) return;
     if (flushScheduled || flushTimer || flushRaf !== null) return;
 
@@ -1213,6 +1242,13 @@ function TerminalSessionView(props: terminal_session_view_props) {
     unsubData = null;
     unsubNameUpdate?.();
     unsubNameUpdate = null;
+  };
+
+  const handleOutputPipelineCatchUp = (request: TerminalOutputPipelineCatchUpRequest) => {
+    markHistoryCatchupNeeded(request.startSequence);
+    if (liveRenderActive()) {
+      flushDeferredOrCatchup();
+    }
   };
 
   const writeHistoryChunks = async (
@@ -1394,6 +1430,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
         .finally(() => {
           if (seq !== catchupRunSeq) return;
           catchupInProgress = false;
+          resetOutputPipeline();
           if (deferredLive.length > 0 || needsHistoryCatchup) {
             flushDeferredOrCatchup();
           } else {
@@ -1409,9 +1446,33 @@ function TerminalSessionView(props: terminal_session_view_props) {
       focusAfterCatchup = true;
       scheduleFlush();
     }
+
+    if (outputPipeline && !needsHistoryCatchup && !catchupInProgress) {
+      outputPipeline.flush();
+    }
   };
 
   const handleLiveTerminalData = (data: Uint8Array, sequence: number | undefined) => {
+    if (outputPipeline) {
+      const seq = normalizeLiveSequence(sequence);
+      if (seq) {
+        if (seq <= lastRenderedSeq || appliedSequences.has(seq) || observedUnrenderedSequences.has(seq)) {
+          return;
+        }
+        observedUnrenderedSequences.add(seq);
+      }
+
+      const displayData = consumeTerminalChunk(data, 'live');
+      outputPipeline.enqueue({ sequence: seq, data: displayData });
+      if (displayData.byteLength === 0 && !outputPipeline.getStats().catchUpPending) {
+        markSequenceApplied(seq);
+      }
+      if (outputPipeline.getStats().catchUpPending) {
+        flushDeferredOrCatchup();
+      }
+      return;
+    }
+
     const seq = normalizeLiveSequence(sequence);
     if (seq) {
       if (seq <= lastRenderedSeq || appliedSequences.has(seq) || observedUnrenderedSequences.has(seq)) {
@@ -1451,6 +1512,8 @@ function TerminalSessionView(props: terminal_session_view_props) {
     clearOutputSubscription();
     cancelPendingAppearanceApply();
     cancelPendingActivationRefresh();
+    outputPipeline?.dispose();
+    outputPipeline = null;
     term?.dispose();
     term = null;
     queued = [];
@@ -1571,7 +1634,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       {
         onData: (data: string) => {
           if (!props.viewActive() || !props.active()) return;
-          if (catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup) return;
+          if (catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup || outputPipelineInputBlocked()) return;
           void props.transport.sendInput(id, data, props.connId);
         },
         onResize: (size: { cols: number; rows: number }) => {
@@ -1602,6 +1665,25 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
     term = core;
     props.registerCore(id, core);
+    outputPipeline?.dispose();
+    outputPipeline = activityOutputPipelineEnabled()
+      ? createTerminalOutputPipeline({
+        isInteractive: liveRenderActive,
+        policy: {
+          maxLiveBatchChunks: TERMINAL_LIVE_FLUSH_MAX_CHUNKS,
+          maxLiveBatchBytes: TERMINAL_LIVE_FLUSH_MAX_BYTES,
+          maxInactiveChunks: TERMINAL_DEFERRED_LIVE_MAX_CHUNKS,
+          maxInactiveBytes: TERMINAL_DEFERRED_LIVE_MAX_BYTES,
+        },
+        requestCatchUp: handleOutputPipelineCatchUp,
+        onDrain: releaseFocusAfterCatchupIfSettled,
+        startSequence: nextLiveStartSequence(),
+        write: (payload, chunks) => {
+          term?.write(payload);
+          markChunksApplied(chunks);
+        },
+      })
+      : null;
 
     try {
       await core.initialize();
@@ -1641,6 +1723,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       if (seq !== initSeq) return;
 
       replaying = false;
+      resetOutputPipeline({ resetStats: true });
       const liveSorted = [...bufferedLive]
         .filter((c) => typeof c.sequence !== 'number' || c.sequence <= 0 || c.sequence > historyMaxSeq)
         .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
@@ -1649,6 +1732,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
         handleLiveTerminalData(c.data, c.sequence);
       }
       if (queued.length > 0) scheduleFlush();
+      outputPipeline?.flush();
       flushDeferredOrCatchup();
 
       await confirmAttachedViewportSize(core, id, seq);
@@ -1672,6 +1756,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       queued = [];
       clearDeferredLive();
       cancelPendingLiveFlush();
+      resetOutputPipeline({ resetStats: true });
       setLoading('idle');
       setError(e instanceof Error ? e.message : String(e));
       const el = container;
@@ -1702,7 +1787,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
   createEffect(() => {
     if (!props.viewActive() || !props.active()) return;
     if (!term) return;
-    if (catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup) return;
+    if (catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup || outputPipelineBusy()) return;
     scheduleTerminalActivationRefresh();
   });
 

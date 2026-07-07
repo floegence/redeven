@@ -28,18 +28,18 @@ Selected widget boundaries guard canvas zoom. A surface that supports text selec
 [6] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.test.ts:51 - Tests enforce that text-selection props do not grant wheel ownership by themselves.
 [7] redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.interaction.test.tsx:864 - Interaction tests cover selected text-selection surfaces versus widget-body activation.
 [8] redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewContent.tsx:211 - File preview content uses the combined text-selection scroll viewport props.
-[9] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:97 - Terminal shortcut bounds are local to the first nine visible sessions.
-[10] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:387 - Terminal panel UI work can be deferred until after paint.
-[11] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:90 - Inactive live catchup is bounded by chunk and byte budgets.
+[9] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:100 - Terminal shortcut bounds are local to the first nine visible sessions.
+[10] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:390 - Terminal panel UI work can be deferred until after paint.
+[11] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:93 - Inactive live catchup is bounded by chunk and byte budgets.
 [12] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:1047 - Mounted terminal sessions track queued, deferred, observed, and rendered live output sequences.
-[13] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:1373 - Active mounted sessions drain deferred output or use sequence-aware history catchup without a full reload.
-[14] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:2074 - Terminal active display state can use panel-local optimistic selection before canonical state catches up.
-[15] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:2388 - First activation of an unmounted terminal session schedules mount after paint and validates the latest selection before mounting.
-[16] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:3283 - Terminal clear resets local catchup state after the backend history is cleared.
-[17] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:4326 - Terminal root key handling applies panel-scoped primary-mod search and session shortcuts.
-[18] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:4460 - Terminal sessions render in a Floe Sidebar rather than the top tab strip.
-[19] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:4488 - Terminal sidebar items expose active state immediately through panel-local display state.
-[20] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:4738 - Unmounted active terminal sessions show a panel-local loading surface before core mount.
+[13] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:1410 - Active mounted sessions drain deferred output or use sequence-aware history catchup without a full reload.
+[14] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:2353 - Terminal active display state can use panel-local optimistic selection before canonical state catches up.
+[15] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:2481 - First activation of an unmounted terminal session schedules mount after paint and validates the latest selection before mounting.
+[16] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:3384 - Terminal clear resets local catchup state after the backend history is cleared.
+[17] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:4424 - Terminal root key handling applies panel-scoped primary-mod search and session shortcuts.
+[18] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:4511 - Terminal sessions render in a Floe Sidebar rather than the top tab strip.
+[19] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:4573 - Terminal sidebar items expose active state immediately through panel-local display state.
+[20] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:4837 - Unmounted active terminal sessions show a panel-local loading surface before core mount.
 [21] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2110 - Env App activation requests preserve explicit centerViewport instead of deriving it from ensureVisible.
 [22] redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.tsx:156 - Workbench activation resolves viewport policy from creation, anchor, visibility, and explicit request fields.
 [23] redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.tsx:1870 - Existing Workbench surfaces focus with the resolved viewport policy rather than unconditional centering.
