@@ -19,6 +19,7 @@ const (
 	runErrorCodeProviderStreamInterrupted = "provider_stream_interrupted"
 	runErrorCodeProviderModelUnavailable  = "provider_model_unavailable"
 	runErrorCodeFloretEngineFailed        = "floret_engine_failed"
+	runErrorCodeFloretAdmissionBlocked    = "floret_thread_admission_blocked"
 )
 
 func userFacingRunError(code string, fallback string) string {
@@ -38,6 +39,8 @@ func userFacingRunError(code string, fallback string) string {
 		return "The selected model is not available from this provider. Choose another model in the Local AI Profile."
 	case runErrorCodeFloretEngineFailed:
 		return "Flower could not finish this turn because the orchestration engine failed."
+	case runErrorCodeFloretAdmissionBlocked:
+		return "Flower could not start the next turn because the runtime still reports an active turn. Restart recovery did not complete, so the turn was not admitted."
 	default:
 		if fallback != "" {
 			return fallback
@@ -94,6 +97,8 @@ func classifyRunFailureCode(err error, fallback string) string {
 		return runErrorCodeProviderUnreachable
 	case strings.Contains(text, "unexpected eof") || strings.Contains(text, "stream closed") || strings.Contains(text, "response stream"):
 		return runErrorCodeProviderStreamInterrupted
+	case strings.Contains(text, "thread already has an active turn"):
+		return runErrorCodeFloretAdmissionBlocked
 	default:
 		return strings.TrimSpace(fallback)
 	}
