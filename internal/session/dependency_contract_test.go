@@ -62,21 +62,21 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"@floegence/floe-webapp-core@0.36.73",
 		},
 		"internal/envapp/ui_src/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"^0.36.72\"",
-			"\"@floegence/floe-webapp-core\": \"^0.36.72\"",
-			"\"@floegence/floe-webapp-protocol\": \"^0.36.72\"",
+			"\"@floegence/floe-webapp-boot\": \"^0.36.73\"",
+			"\"@floegence/floe-webapp-core\": \"^0.36.73\"",
+			"\"@floegence/floe-webapp-protocol\": \"^0.36.73\"",
 			"\"@floegence/flowersec-core\": \"^0.19.10\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
-			"floe-webapp-boot-0.36.72.tgz",
-			"floe-webapp-core-0.36.72.tgz",
-			"floe-webapp-protocol-0.36.72.tgz",
+			"floe-webapp-boot-0.36.73.tgz",
+			"floe-webapp-core-0.36.73.tgz",
+			"floe-webapp-protocol-0.36.73.tgz",
 			"flowersec-core-0.19.10.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.36.72",
-			"@floegence/floe-webapp-core@0.36.72",
-			"@floegence/floe-webapp-protocol@0.36.72",
+			"@floegence/floe-webapp-boot@0.36.73",
+			"@floegence/floe-webapp-core@0.36.73",
+			"@floegence/floe-webapp-protocol@0.36.73",
 			"@floegence/flowersec-core@0.19.10",
 		},
 		"internal/codeapp/ui_src/package.json": {
@@ -86,10 +86,9 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"flowersec-core-0.19.10.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
-			"@floegence/floe-webapp-boot | 0.36.72",
-			"@floegence/floe-webapp-core | 0.36.72",
+			"@floegence/floe-webapp-boot | 0.36.73",
 			"@floegence/floe-webapp-core | 0.36.73",
-			"@floegence/floe-webapp-protocol | 0.36.72",
+			"@floegence/floe-webapp-protocol | 0.36.73",
 			"@floegence/flowersec-core | 0.19.10",
 		},
 	}

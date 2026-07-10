@@ -229,6 +229,7 @@ const mockRpc = vi.hoisted(() => ({
     resolveRepo: vi.fn(),
     getRepoSummary: vi.fn(),
     listWorkspacePage: vi.fn(),
+    listWorkspaceChanges: vi.fn(),
     listBranches: vi.fn(),
     getBranchCompare: vi.fn(),
     listCommits: vi.fn(),
@@ -508,6 +509,16 @@ vi.mock('./FileBrowserWorkspace', () => ({
       item.path,
       ...(item.children ? flattenTreePaths(item.children) : []),
     ]);
+    const flattenTreeDecorations = (items: FileItem[]): string[] => items.flatMap((item) => {
+      const badge = item.decoration?.badge;
+      const current = badge?.label
+        ? [`${item.path}:${badge.label}:${badge.tone ?? ''}:${item.decoration?.nameTone ?? ''}`]
+        : [];
+      return [
+        ...current,
+        ...(item.children ? flattenTreeDecorations(item.children) : []),
+      ];
+    });
     const findMenuItem = (items: ContextMenuItem[], id: string): ContextMenuItem | undefined => {
       for (const item of items) {
         if (item.id === id) return item;
@@ -538,6 +549,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <div data-testid="mock-folder-new-has-icon">{findMenuItem(folderItems, 'new')?.icon ? 'yes' : 'no'}</div>
         <div data-testid="mock-background-new-has-icon">{findMenuItem(backgroundItems(), 'new')?.icon ? 'yes' : 'no'}</div>
         <div data-testid="mock-files-tree">{flattenTreePaths(props.files).join(',')}</div>
+        <div data-testid="mock-files-decorations">{flattenTreeDecorations(props.files).join(',')}</div>
         <div data-testid="mock-current-path">{props.currentPath}</div>
         <div data-testid="mock-reveal-request">{describeRevealRequest(props.revealRequest)}</div>
         <div data-testid="mock-reveal-request-id">{props.revealRequest?.requestId ?? ''}</div>
@@ -1240,6 +1252,14 @@ beforeEach(() => {
     hasMore: false,
     items: [],
   });
+  mockRpc.git.listWorkspaceChanges.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    summary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+    staged: [],
+    unstaged: [],
+    untracked: [],
+    conflicted: [],
+  });
   mockRpc.git.listBranches.mockResolvedValue({
     repoRootPath: '/workspace/repo',
     currentRef: 'main',
@@ -1431,6 +1451,121 @@ describe('RemoteFileBrowser persistence', () => {
       expect(mockRpc.fs.list).toHaveBeenCalledWith({ path: '/', showHidden: false });
       expect(host.querySelector('[data-testid="mock-current-path"]')?.textContent).toBe('/');
       expect(host.querySelector('[data-testid="mock-files-tree"]')?.textContent).toContain('/');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('passes git status decorations to Files mode for changed files and aggregate directories', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      if (path === '/workspace') {
+        return {
+          entries: [
+            { name: 'repo', path: '/workspace/repo', isDirectory: true, modifiedAt: 1 },
+          ],
+        };
+      }
+      if (path === '/workspace/repo') {
+        return {
+          entries: [
+            { name: 'app', path: '/workspace/repo/app', isDirectory: true, modifiedAt: 1 },
+            { name: 'terminal-web', path: '/workspace/repo/terminal-web', isDirectory: true, modifiedAt: 1 },
+            { name: 'Makefile', path: '/workspace/repo/Makefile', isDirectory: false, modifiedAt: 1 },
+          ],
+        };
+      }
+      return { entries: [] };
+    });
+    mockRpc.git.listWorkspaceChanges.mockResolvedValue({
+      repoRootPath: '/workspace/repo',
+      summary: { stagedCount: 0, unstagedCount: 2, untrackedCount: 1, conflictedCount: 0 },
+      staged: [],
+      unstaged: [
+        { section: 'unstaged', changeType: 'modified', path: 'Makefile' },
+        { section: 'unstaged', changeType: 'modified', path: 'app/web/src/App.tsx' },
+      ],
+      untracked: [
+        { section: 'untracked', changeType: 'added', path: 'terminal-web/src/fabric/index.ts' },
+      ],
+      conflicted: [],
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      await flush();
+      const decorations = host.querySelector('[data-testid="mock-files-decorations"]')?.textContent ?? '';
+      expect(mockRpc.git.listWorkspaceChanges).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo' });
+      expect(decorations).toContain('/workspace/repo/Makefile:M:info:info');
+      expect(decorations).toContain('/workspace/repo/app:M:info:info');
+      expect(decorations).toContain('/workspace/repo/terminal-web:A:success:success');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps Files mode usable when the git decoration snapshot fails', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.fs.list.mockImplementation(async ({ path }) => {
+      if (path === '/workspace') {
+        return {
+          entries: [
+            { name: 'repo', path: '/workspace/repo', isDirectory: true, modifiedAt: 1 },
+          ],
+        };
+      }
+      if (path === '/workspace/repo') {
+        return {
+          entries: [
+            { name: 'Makefile', path: '/workspace/repo/Makefile', isDirectory: false, modifiedAt: 1 },
+          ],
+        };
+      }
+      return { entries: [] };
+    });
+    mockRpc.git.listWorkspaceChanges.mockRejectedValueOnce(new Error('git status failed'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      await flush();
+      expect(host.querySelector('[data-testid="mock-files-tree"]')?.textContent).toContain('/workspace/repo/Makefile');
+      expect(host.querySelector('[data-testid="mock-files-decorations"]')?.textContent).toBe('');
+      expect(notificationStore.error).toEqual([]);
+      expect(notificationStore.warning).toEqual([]);
     } finally {
       dispose();
     }
@@ -4443,6 +4578,7 @@ describe('RemoteFileBrowser persistence', () => {
         directoryPath: 'desktop/diagnostics',
         paths: undefined,
       });
+      expect(mockRpc.git.listWorkspaceChanges).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo' });
       expect(notificationStore.warning).toContainEqual({
         title: 'Nothing discarded',
         message: 'No current files matched the selected folder.',
