@@ -322,7 +322,6 @@ type terminal_session_view_props = {
 
 const HISTORY_STATS_POLL_MS = 10_000;
 const MAX_INLINE_TERMINAL_SELECTION_CHARS = 10_000;
-const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 
 const TERMINAL_SELECTION_BACKGROUND = 'rgba(255, 234, 0, 0.72)';
 const TERMINAL_SELECTION_FOREGROUND = '#000000';
@@ -4120,20 +4119,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     const selection = context.selection.selectionText;
     const trimmedSelection = selection.trim();
-    const pendingAttachments: File[] = [];
     const notes: string[] = [];
     let contextItems: EnvFlowerTurnLauncherContextItem[] = [];
 
     if (trimmedSelection) {
       if (trimmedSelection.length > MAX_INLINE_TERMINAL_SELECTION_CHARS) {
-        const attachmentName = `terminal-selection-${Date.now()}.txt`;
-        const attachmentBlob = new Blob([trimmedSelection], { type: 'text/plain' });
-        if (attachmentBlob.size > ASK_FLOWER_ATTACHMENT_MAX_BYTES) {
-          notes.push(i18n.t('terminal.largeSelectionSkipped'));
-        } else {
-          pendingAttachments.push(new File([attachmentBlob], attachmentName, { type: 'text/plain' }));
-          notes.push(i18n.t('terminal.largeSelectionAttached', { name: attachmentName }));
-        }
+        notes.push(i18n.t('terminal.largeSelectionMetadataOnly'));
         contextItems = [
           {
             kind: 'terminal_selection',
@@ -4169,7 +4160,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       source_surface: 'terminal',
       suggested_working_dir: workingDir,
       context_items: contextItems,
-      pending_attachments: pendingAttachments,
+      pending_attachments: [],
       notes,
     }), { x: context.x, y: context.y });
   };

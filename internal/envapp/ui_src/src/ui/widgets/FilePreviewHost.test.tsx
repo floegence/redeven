@@ -119,12 +119,12 @@ describe('FilePreviewHost', () => {
       suggested_working_dir: '/workspace',
       context_items: [
         {
-          kind: 'file_selection',
+          kind: 'file_path',
           path: '/workspace/demo.txt',
-          selection: 'selected line',
-          selection_chars: 'selected line'.length,
+          is_directory: false,
         },
       ],
+      pending_attachments: [],
     }));
     expect(notificationErrorMock).not.toHaveBeenCalled();
   });
