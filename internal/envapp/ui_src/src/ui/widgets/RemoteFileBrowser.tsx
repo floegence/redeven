@@ -111,6 +111,11 @@ import {
 } from '../utils/gitActivationRefresh';
 import { buildGitMutationRefreshPlan, type GitMutationRefreshKind } from '../utils/gitMutationRefresh';
 import {
+  applyFileBrowserGitDecorations,
+  buildFileBrowserGitDecorationIndex,
+  type FileBrowserGitDecorationIndex,
+} from './fileBrowserGitDecorations';
+import {
   buildChildPath,
   canInsertIntoTree,
   extNoDot,
@@ -611,6 +616,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   }
 
   const [files, setFiles] = createSignal<FileItem[]>([]);
+  const [filesGitDecorationIndex, setFilesGitDecorationIndex] = createSignal<FileBrowserGitDecorationIndex | null>(null);
+  const decoratedFiles = createMemo(() => applyFileBrowserGitDecorations(files(), filesGitDecorationIndex()));
   const [loading, setLoading] = createSignal(false);
   const [pathLoadInFlight, setPathLoadInFlight] = createSignal('');
   const [pendingBrowserPath, setPendingBrowserPath] = createSignal('');
@@ -731,6 +738,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   let dirReqSeq = 0;
   let repoReqSeq = 0;
+  let filesGitDecorationReqSeq = 0;
   let gitListReqSeq = 0;
   let gitRepoSummaryReqSeq = 0;
   let gitWorkspaceReqSeqBySection: Record<GitWorkspaceViewSection, number> = { changes: 0, conflicted: 0, staged: 0 };
@@ -744,6 +752,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let stashReviewReqSeq = 0;
   let lastGitCommitContextKey = '';
   let lastGitRepoKey = '';
+  let lastFilesGitDecorationRepoKey = '';
   let lastGitSubviewActivationKey = '';
   let lastGitBranchStatusActivationKey = '';
 
@@ -845,6 +854,30 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const cloneDirCache = (source: DirCache): DirCache => new Map(source);
+
+  const clearFilesGitDecorationIndex = () => {
+    filesGitDecorationReqSeq += 1;
+    lastFilesGitDecorationRepoKey = '';
+    setFilesGitDecorationIndex(null);
+  };
+
+  const loadFilesGitDecorationIndex = async (repoRootPath: string): Promise<void> => {
+    const rawRepoRootPath = String(repoRootPath ?? '').trim();
+    if (!rawRepoRootPath || !protocol.client()) {
+      clearFilesGitDecorationIndex();
+      return;
+    }
+    const normalizedRepoRootPath = normalizePath(rawRepoRootPath);
+    const seq = ++filesGitDecorationReqSeq;
+    try {
+      const resp = await rpc.git.listWorkspaceChanges({ repoRootPath: normalizedRepoRootPath });
+      if (seq !== filesGitDecorationReqSeq) return;
+      setFilesGitDecorationIndex(buildFileBrowserGitDecorationIndex(normalizedRepoRootPath, resp));
+    } catch {
+      if (seq !== filesGitDecorationReqSeq) return;
+      setFilesGitDecorationIndex(null);
+    }
+  };
 
   const applyPreparedDirectoryState = (state: PreparedDirectoryState, options: { persistEnvId?: string } = {}) => {
     const previousPath = normalizeAbsolutePath(untrack(() => currentBrowserPath()));
@@ -1630,14 +1663,19 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const refreshGitWorkspaceSectionsAfterMutation = async (repoRootPath: string, sections: GitWorkspaceViewSection[]) => {
     const wanted = Array.from(new Set(sections));
+    const decorationRefresh = loadFilesGitDecorationIndex(repoRootPath);
     await loadGitRepoSummary({ silent: true, repoRootPath });
     const activeSection = selectedGitWorkspaceSection();
     if (gitSubview() === 'changes' && wanted.includes(activeSection)) {
       invalidateInactiveGitWorkspaceSections(wanted, activeSection);
-      await loadGitWorkspaceSection(activeSection, { silent: true, repoRootPath, force: true });
+      await Promise.all([
+        loadGitWorkspaceSection(activeSection, { silent: true, repoRootPath, force: true }),
+        decorationRefresh,
+      ]);
       return;
     }
     invalidateGitWorkspaceSections(wanted);
+    await decorationRefresh;
   };
 
   const runGitMutation = async <T,>(
@@ -1987,6 +2025,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (plan.refreshBranches) {
       refreshes.push(loadGitBranches({ silent: true, repoRootPath }));
     }
+    refreshes.push(loadFilesGitDecorationIndex(repoRootPath));
     await Promise.all(refreshes);
 
     if (plan.refreshCommits) {
@@ -3020,6 +3059,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         showVerifying: true,
       }));
     }
+    refreshes.push(loadFilesGitDecorationIndex(repoRootPath));
     await Promise.all(refreshes);
 
     if (plan.refreshBranchStatus) {
@@ -3636,6 +3676,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!id || !path) return;
     const normalizedPath = normalizePath(path);
     if (pathLoadInFlight() === normalizedPath) return;
+    const repoRootPath = repoInfo()?.available ? String(repoInfo()?.repoRootPath ?? '').trim() : '';
+    if (repoRootPath) {
+      void loadFilesGitDecorationIndex(repoRootPath);
+    }
 
     await requestDirectoryNavigation(path, {
       fallbackPath: lastLoadedBrowserPath() || defaultRootPath(),
@@ -4127,6 +4171,23 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
     void resolveRepoInfo(path);
+  });
+
+  createEffect(() => {
+    const client = protocol.client();
+    const mode = pageMode();
+    const info = repoInfo();
+    const repoRootPath = String(info?.repoRootPath ?? '').trim();
+    const repoKey = client && mode === 'files' && info?.available && repoRootPath
+      ? `${normalizePath(repoRootPath)}|${String(info.headCommit ?? '').trim()}|${info.dirty ? 'dirty' : 'clean'}`
+      : '';
+    if (!repoKey) {
+      clearFilesGitDecorationIndex();
+      return;
+    }
+    if (repoKey === lastFilesGitDecorationRepoKey) return;
+    lastFilesGitDecorationRepoKey = repoKey;
+    void loadFilesGitDecorationIndex(repoRootPath);
   });
 
   createEffect(() => {
@@ -4720,7 +4781,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       gitHistoryDisabled={!canEnterGitHistory()}
                       gitHistoryDisabledReason={gitModeDisabledReason() || undefined}
                       captureTypingFromPage={!hasEmbeddedWidget()}
-                      files={files()}
+                      files={decoratedFiles()}
                       currentPath={currentBrowserPath()}
                       pendingNavigationPath={pendingBrowserPath()}
                       initialPath={readPersistedLastPath(id)}
