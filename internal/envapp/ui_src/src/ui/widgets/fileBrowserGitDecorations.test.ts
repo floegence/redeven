@@ -140,6 +140,20 @@ describe('fileBrowserGitDecorations', () => {
 
     expect(badgeLabel(decorated[0])).toBe('M');
     expect(badgeLabel(decorated[0]?.children?.[0])).toBe('');
+    expect(index?.fileChanges.get('/repo/src/removed.ts')?.[0]?.changeType).toBe('deleted');
+    expect(index?.directoryChanges.get('/repo/src')?.[0]?.changeType).toBe('deleted');
+  });
+
+  it('indexes exact file changes and keeps duplicate workspace sections selectable', () => {
+    const index = buildFileBrowserGitDecorationIndex('/repo', workspace({
+      staged: [{ section: 'staged', changeType: 'modified', path: 'src/app.ts' }],
+      unstaged: [{ section: 'unstaged', changeType: 'modified', path: 'src/app.ts' }],
+    }));
+
+    const changes = index?.fileChanges.get('/repo/src/app.ts') ?? [];
+
+    expect(changes.map((change) => change.section)).toEqual(['staged', 'unstaged']);
+    expect(index?.directoryChanges.get('/repo/src')?.map((change) => change.section)).toEqual(['staged', 'unstaged']);
   });
 
   it('ignores paths outside the resolved repository', () => {

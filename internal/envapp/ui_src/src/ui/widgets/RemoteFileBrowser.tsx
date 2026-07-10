@@ -1,6 +1,6 @@
 import { Show, batch, createEffect, createMemo, createSignal, untrack, type JSX } from 'solid-js';
 import { cn, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
-import { Copy, Download, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { Copy, Download, FileText, Folder, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import {
   type ContextMenuCallbacks,
   type ContextMenuEvent,
@@ -59,6 +59,7 @@ import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
 import { FileBrowserWorkspace, type FileBrowserPathSubmitResult } from './FileBrowserWorkspace';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
+import { GitDiffDialog } from './GitDiffDialog';
 import { GitStashWindow } from './GitStashWindow';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { GitWorkspace } from './GitWorkspace';
@@ -73,6 +74,7 @@ import {
   findGitBranchByKey,
   findWorkspaceChangeByKey,
   findWorkspaceChangeByKeyInItems,
+  changeSecondaryPath,
   isGitWorkspaceDirectoryEntry,
   isGitWorkspaceSection,
   isWorkspaceViewSectionKnownEmpty,
@@ -195,6 +197,7 @@ let createdEntryRevealSeq = 0;
 
 const GIT_COMMIT_PAGE_SIZE = 50;
 const GIT_WORKSPACE_PAGE_SIZE = 200;
+const FILES_GIT_WORKSPACE_SECTION_ORDER: GitWorkspaceSection[] = ['unstaged', 'untracked', 'staged', 'conflicted'];
 const PAGE_SIDEBAR_DEFAULT_WIDTH = 240;
 const PAGE_SIDEBAR_MIN_WIDTH = 180;
 const PAGE_SIDEBAR_MAX_WIDTH = 520;
@@ -254,6 +257,10 @@ type GitWorkspaceLoadOptions = GitLoadOptions & {
   force?: boolean;
   directoryPath?: string;
 };
+
+type FilesGitDirectoryActionTarget =
+  | { kind: 'changes'; directoryPath: string }
+  | { kind: 'section'; section: GitWorkspaceViewSection; item: GitWorkspaceChange | null };
 
 type GitCommitContextScope = 'repo' | 'branch';
 
@@ -618,6 +625,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const [files, setFiles] = createSignal<FileItem[]>([]);
   const [filesGitDecorationIndex, setFilesGitDecorationIndex] = createSignal<FileBrowserGitDecorationIndex | null>(null);
   const decoratedFiles = createMemo(() => applyFileBrowserGitDecorations(files(), filesGitDecorationIndex()));
+  const [filesGitDiffDialogOpen, setFilesGitDiffDialogOpen] = createSignal(false);
+  const [filesGitDiffDialogItem, setFilesGitDiffDialogItem] = createSignal<GitWorkspaceChange | null>(null);
   const [loading, setLoading] = createSignal(false);
   const [pathLoadInFlight, setPathLoadInFlight] = createSignal('');
   const [pendingBrowserPath, setPendingBrowserPath] = createSignal('');
@@ -1402,6 +1411,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       ? findWorkspaceChangeByKeyInItems(gitWorkspaceVisibleItems('changes'), selectedGitWorkspaceKey())
       : findWorkspaceChangeByKey(gitWorkspace(), selectedGitWorkspaceKey())
   );
+  const filesGitDiffDialogSource = createMemo(() => {
+    const item = filesGitDiffDialogItem();
+    const repoRootPath = String(filesGitDecorationIndex()?.repoRootPath ?? repoInfo()?.repoRootPath ?? '').trim();
+    if (!item || !repoRootPath || !isGitWorkspaceSection(item.section)) return null;
+    return {
+      kind: 'workspace' as const,
+      repoRootPath,
+      workspaceSection: item.section,
+    };
+  });
   const activeStashRepoRootPath = () => String(stashWindowContext()?.repoRootPath ?? '').trim();
   const activeStashSource = () => stashWindowContext()?.source ?? 'header';
   const selectedStashSummary = createMemo<GitStashSummary | GitStashDetail | null>(() => {
@@ -4451,6 +4470,145 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
+  const filesGitRepoRelativePath = (absolutePath: string): string => {
+    const index = filesGitDecorationIndex();
+    const repoRootPath = normalizePath(index?.repoRootPath ?? '');
+    const normalizedPath = normalizePath(absolutePath);
+    if (!repoRootPath || !normalizedPath) return '';
+    if (normalizedPath === repoRootPath) return '';
+    const prefix = repoRootPath === '/' ? '/' : `${repoRootPath}/`;
+    return normalizedPath.startsWith(prefix) ? normalizedPath.slice(prefix.length) : '';
+  };
+
+  const filesGitWorkspaceSectionRank = (change: GitWorkspaceChange): number => {
+    const section = String(change.section ?? '').trim();
+    const index = FILES_GIT_WORKSPACE_SECTION_ORDER.indexOf(section as GitWorkspaceSection);
+    return index >= 0 ? index : FILES_GIT_WORKSPACE_SECTION_ORDER.length;
+  };
+
+  const sortFilesGitChanges = (changes: GitWorkspaceChange[]): GitWorkspaceChange[] => (
+    [...changes].sort((left, right) => filesGitWorkspaceSectionRank(left) - filesGitWorkspaceSectionRank(right))
+  );
+
+  const isFilesGitDiffableChange = (change: GitWorkspaceChange): boolean => {
+    if (isGitWorkspaceDirectoryEntry(change)) return false;
+    if (!isGitWorkspaceSection(change.section)) return false;
+    return String(change.changeType ?? '').trim() !== 'deleted';
+  };
+
+  const filesGitDiffableChangesForItem = (item: FileItem | null | undefined): GitWorkspaceChange[] => {
+    if (!item || item.type !== 'file' || !canEnterGitHistory()) return [];
+    const changes = filesGitDecorationIndex()?.fileChanges.get(normalizePath(item.path)) ?? [];
+    return sortFilesGitChanges(changes.filter(isFilesGitDiffableChange));
+  };
+
+  const filesGitDirectoryChangesForItem = (item: FileItem | null | undefined): GitWorkspaceChange[] => {
+    if (!item || item.type !== 'folder' || !canEnterGitHistory()) return [];
+    const changes = filesGitDecorationIndex()?.directoryChanges.get(normalizePath(item.path)) ?? [];
+    return sortFilesGitChanges(changes);
+  };
+
+  const filesGitDiffMenuLabel = (change: GitWorkspaceChange): string => {
+    switch (change.section) {
+      case 'staged':
+        return i18n.t('files.menuViewStagedDiff');
+      case 'unstaged':
+        return i18n.t('files.menuViewUnstagedDiff');
+      case 'untracked':
+        return i18n.t('files.menuViewUntrackedDiff');
+      case 'conflicted':
+        return i18n.t('files.menuViewConflictedDiff');
+      default:
+        return i18n.t('files.menuViewDiff');
+    }
+  };
+
+  const openFilesGitDiff = (change: GitWorkspaceChange | null | undefined) => {
+    if (!change || !isFilesGitDiffableChange(change)) return;
+    setFilesGitDiffDialogItem(change);
+    setFilesGitDiffDialogOpen(true);
+  };
+
+  const resolveFilesGitDirectoryTarget = (
+    item: FileItem,
+    changes: GitWorkspaceChange[],
+  ): FilesGitDirectoryActionTarget | null => {
+    const directoryPath = filesGitRepoRelativePath(item.path);
+    const pendingChange = changes.find((change) => change.section === 'unstaged' || change.section === 'untracked');
+    if (pendingChange) {
+      return { kind: 'changes', directoryPath };
+    }
+    const conflictedChange = changes.find((change) => change.section === 'conflicted') ?? null;
+    if (conflictedChange) {
+      return { kind: 'section', section: 'conflicted', item: conflictedChange };
+    }
+    const stagedChange = changes.find((change) => change.section === 'staged') ?? null;
+    if (stagedChange) {
+      return { kind: 'section', section: 'staged', item: stagedChange };
+    }
+    return null;
+  };
+
+  const openFilesGitDirectoryChanges = (item: FileItem | null | undefined, changes: GitWorkspaceChange[]) => {
+    if (!item || item.type !== 'folder') return;
+    const target = resolveFilesGitDirectoryTarget(item, changes);
+    if (!target) return;
+    handleGitSubviewChange('changes');
+    handlePageModeChange('git');
+    if (target.kind === 'changes') {
+      navigateGitChangesDirectory(target.directoryPath);
+      return;
+    }
+    batch(() => {
+      setSelectedGitWorkspaceSection(target.section);
+      setSelectedGitWorkspaceKey(workspaceEntryKey(target.item));
+    });
+    void loadGitWorkspaceSection(target.section, {
+      force: true,
+      silent: Boolean(gitWorkspace()),
+    });
+  };
+
+  const buildViewDiffMenuItem = (changes: GitWorkspaceChange[]): ContextMenuItem | null => {
+    const diffableChanges = sortFilesGitChanges(changes.filter(isFilesGitDiffableChange));
+    if (diffableChanges.length === 0) return null;
+    if (diffableChanges.length === 1) {
+      const change = diffableChanges[0];
+      return {
+        id: 'view-diff',
+        label: i18n.t('files.menuViewDiff'),
+        type: 'custom',
+        icon: (props) => <FileText class={props.class} />,
+        onAction: () => openFilesGitDiff(change),
+      };
+    }
+    return {
+      id: 'view-diff',
+      label: i18n.t('files.menuViewDiff'),
+      type: 'custom',
+      icon: (props) => <FileText class={props.class} />,
+      children: diffableChanges.map((change, index) => ({
+        id: `view-diff-${String(change.section ?? 'workspace')}-${index}`,
+        label: filesGitDiffMenuLabel(change),
+        type: 'custom',
+        onAction: () => openFilesGitDiff(change),
+      })),
+    };
+  };
+
+  const buildViewFolderChangesMenuItem = (item: FileItem | null | undefined): ContextMenuItem | null => {
+    if (!item || item.type !== 'folder') return null;
+    const changes = filesGitDirectoryChangesForItem(item);
+    if (changes.length === 0) return null;
+    return {
+      id: 'view-folder-changes',
+      label: i18n.t('files.menuViewFolderChanges'),
+      type: 'custom',
+      icon: (props) => <Folder class={props.class} />,
+      onAction: () => openFilesGitDirectoryChanges(item, changes),
+    };
+  };
+
   const canOpenDirectoryContextInTerminal = (event?: ContextMenuEvent | null) => {
     const directory = resolveDirectoryContextTarget(event);
     return Boolean(
@@ -4729,9 +4887,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
     if (scope === 'single-folder') {
       const canMutate = canMutateContext(event);
+      const folderDiffItem = buildViewFolderChangesMenuItem(event.items[0]);
       const folderItems: ContextMenuItem[] = [
         buildAskFlowerMenuItem(),
       ];
+      if (folderDiffItem) {
+        folderItems.push(folderDiffItem);
+      }
       if (canOpenDirectoryContextInTerminal(event)) {
         folderItems.push(buildOpenInTerminalMenuItem());
       }
@@ -4745,8 +4907,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
 
     const canMutate = canMutateContext(event);
+    const viewDiffItem = scope === 'single-file'
+      ? buildViewDiffMenuItem(filesGitDiffableChangesForItem(event.items[0]))
+      : null;
     const primaryFileItems = event.items.length > 0 && event.items.every((item) => item.type === 'file')
-      ? [buildAskFlowerMenuItem(), buildDownloadMenuItem(true)]
+      ? [buildAskFlowerMenuItem(), ...(viewDiffItem ? [viewDiffItem] : []), buildDownloadMenuItem(true)]
       : [buildAskFlowerMenuItem({ separator: true })];
     return [
       ...primaryFileItems,
@@ -4963,6 +5128,19 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
       <RedevenLoadingCurtain visible={pageMode() === 'files' && loading()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.loadingFiles')} />
       <RedevenLoadingCurtain visible={dragMoveLoading()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.moving')} />
+
+      <GitDiffDialog
+        open={filesGitDiffDialogOpen()}
+        onOpenChange={(open) => {
+          setFilesGitDiffDialogOpen(open);
+          if (!open) setFilesGitDiffDialogItem(null);
+        }}
+        item={filesGitDiffDialogItem()}
+        source={filesGitDiffDialogSource()}
+        title={i18n.t('git.changes.workspaceDiffTitle')}
+        description={filesGitDiffDialogItem() ? changeSecondaryPath(filesGitDiffDialogItem()) : i18n.t('git.changes.workspaceDiffDescription')}
+        emptyMessage={i18n.t('git.changes.workspaceDiffEmpty')}
+      />
 
       <GitStashWindow
         open={stashWindowOpen()}
