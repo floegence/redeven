@@ -32,6 +32,11 @@ const (
 	contextActionSurfaceMonitoring = "monitoring"
 	contextActionSurfaceGit        = "git_browser"
 	contextActionSurfaceEditor     = "editor_preview"
+	contextActionKindFilePath      = "file_path"
+	contextActionKindFileSelection = "file_selection"
+	contextActionKindTerminal      = "terminal_selection"
+	contextActionKindProcess       = "process_snapshot"
+	contextActionKindText          = "text_snapshot"
 )
 
 type ContextActionEnvelope struct {
@@ -171,7 +176,115 @@ func normalizeAskFlowerContextActionEnvelope(in *ContextActionEnvelope) (*Contex
 			return nil, ErrInvalidContextAction
 		}
 	}
+	if err := validateAskFlowerContextActionItems(out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+func validateAskFlowerContextActionItems(action *ContextActionEnvelope) error {
+	if action == nil {
+		return nil
+	}
+	surface := strings.TrimSpace(action.Source.Surface)
+	for _, item := range action.Context {
+		if !contextActionSurfaceAllowsKind(surface, item.Kind) {
+			return ErrInvalidContextAction
+		}
+		if !contextActionItemPayloadAllowed(item) {
+			return ErrInvalidContextAction
+		}
+	}
+	return nil
+}
+
+func contextActionSurfaceAllowsKind(surface string, kind string) bool {
+	switch strings.TrimSpace(surface) {
+	case contextActionSurfaceFile:
+		return kind == contextActionKindFilePath
+	case contextActionSurfacePreview, contextActionSurfaceEditor:
+		return kind == contextActionKindFilePath
+	case contextActionSurfaceTerminal:
+		return kind == contextActionKindTerminal
+	case contextActionSurfaceMonitoring:
+		return kind == contextActionKindProcess
+	case contextActionSurfaceGit:
+		return kind == contextActionKindText
+	case contextActionSurfaceWelcomeEnv:
+		return kind == contextActionKindText
+	default:
+		return false
+	}
+}
+
+func contextActionItemPayloadAllowed(item ContextActionContextItem) bool {
+	switch strings.TrimSpace(item.Kind) {
+	case contextActionKindFilePath:
+		return strings.TrimSpace(item.Path) != "" &&
+			strings.TrimSpace(item.Path) == item.Path &&
+			!strings.ContainsAny(item.Path, "\r\n") &&
+			!strings.ContainsAny(item.RootLabel, "\r\n") &&
+			strings.TrimSpace(item.Selection) == "" &&
+			strings.TrimSpace(item.Content) == "" &&
+			strings.TrimSpace(item.Detail) == "" &&
+			strings.TrimSpace(item.Title) == "" &&
+			strings.TrimSpace(item.WorkingDir) == "" &&
+			item.SelectionChars == 0 &&
+			item.PID == 0 &&
+			strings.TrimSpace(item.Name) == "" &&
+			strings.TrimSpace(item.Username) == "" &&
+			item.CPUPercent == 0 &&
+			item.MemoryBytes == 0 &&
+			strings.TrimSpace(item.Platform) == "" &&
+			item.CapturedAtMs == 0
+	case contextActionKindTerminal:
+		return strings.TrimSpace(item.Content) == "" &&
+			strings.TrimSpace(item.Detail) == "" &&
+			strings.TrimSpace(item.Title) == "" &&
+			strings.TrimSpace(item.Path) == "" &&
+			len([]rune(strings.TrimSpace(item.Selection))) <= floretTerminalSelectionInlineChars &&
+			!item.IsDirectory &&
+			strings.TrimSpace(item.RootLabel) == "" &&
+			item.PID == 0 &&
+			strings.TrimSpace(item.Name) == "" &&
+			strings.TrimSpace(item.Username) == "" &&
+			item.CPUPercent == 0 &&
+			item.MemoryBytes == 0 &&
+			strings.TrimSpace(item.Platform) == "" &&
+			item.CapturedAtMs == 0
+	case contextActionKindProcess:
+		return item.PID > 0 &&
+			strings.TrimSpace(item.Name) != "" &&
+			strings.TrimSpace(item.Username) != "" &&
+			strings.TrimSpace(item.Platform) != "" &&
+			item.CapturedAtMs > 0 &&
+			strings.TrimSpace(item.Selection) == "" &&
+			strings.TrimSpace(item.Content) == "" &&
+			strings.TrimSpace(item.Detail) == "" &&
+			strings.TrimSpace(item.Title) == "" &&
+			strings.TrimSpace(item.Path) == "" &&
+			!item.IsDirectory &&
+			strings.TrimSpace(item.RootLabel) == "" &&
+			item.SelectionChars == 0 &&
+			strings.TrimSpace(item.WorkingDir) == ""
+	case contextActionKindText:
+		return strings.TrimSpace(item.Title) != "" &&
+			strings.TrimSpace(item.Selection) == "" &&
+			strings.TrimSpace(item.Path) == "" &&
+			!item.IsDirectory &&
+			strings.TrimSpace(item.RootLabel) == "" &&
+			item.SelectionChars == 0 &&
+			strings.TrimSpace(item.WorkingDir) == "" &&
+			item.PID == 0 &&
+			strings.TrimSpace(item.Name) == "" &&
+			strings.TrimSpace(item.Username) == "" &&
+			item.CPUPercent == 0 &&
+			item.MemoryBytes == 0 &&
+			strings.TrimSpace(item.Platform) == "" &&
+			item.CapturedAtMs == 0
+	default:
+		return false
+	}
 }
 
 func normalizeContextActionItems(items []ContextActionContextItem) []ContextActionContextItem {

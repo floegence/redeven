@@ -181,11 +181,16 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		return r.failRun("Failed to initialize Floret thread", err)
 	}
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
+	supplementalContext := floretSupplementalContextForInput(req.Input)
+	if payload := floretContextActionInjectedEventPayload(req.Input.ContextAction, supplementalContext); payload != nil {
+		r.persistRunEvent("flower.context_action.injected", RealtimeStreamKindLifecycle, payload)
+	}
 	result, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
 		RunID:                 flruntime.RunID(strings.TrimSpace(r.id)),
 		ThreadID:              threadID,
 		TurnID:                flruntime.TurnID(strings.TrimSpace(r.messageID)),
 		Input:                 floretCurrentTurnInput(req.Input),
+		SupplementalContext:   supplementalContext.Items,
 		Labels:                labels,
 		PreviousProviderState: previousState,
 		Completion:            completionPolicy,
@@ -602,7 +607,7 @@ func floretCurrentTurnInput(input RunInput) string {
 	for _, attachment := range input.Attachments {
 		label := strings.TrimSpace(attachment.Name)
 		if label == "" {
-			label = strings.TrimSpace(attachment.URL)
+			label = "attachment"
 		}
 		if label == "" {
 			continue
@@ -610,9 +615,6 @@ func floretCurrentTurnInput(input RunInput) string {
 		line := "Attachment: " + label
 		if mimeType := strings.TrimSpace(attachment.MimeType); mimeType != "" {
 			line += " (" + mimeType + ")"
-		}
-		if uri := strings.TrimSpace(attachment.URL); uri != "" && uri != label {
-			line += "\n" + uri
 		}
 		parts = append(parts, line)
 	}

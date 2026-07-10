@@ -229,6 +229,81 @@ func TestRunFloretHostedTurnEmitsContextUsageFromPublishedHost(t *testing.T) {
 	}
 }
 
+func TestRunFloretHostedTurnInjectsAskFlowerLinkedContext(t *testing.T) {
+	t.Parallel()
+
+	provider := &capturingTurnProvider{}
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "bash",
+		AIConfig:     &config.AIConfig{},
+		SessionMeta: &session.Meta{
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+			CanAdmin:   true,
+		},
+		RunID:     "run_floret_linked_context",
+		ThreadID:  "thread_floret_linked_context",
+		MessageID: "msg_floret_linked_context",
+	})
+
+	err := r.runFloretHostedTurn(t.Context(), RunRequest{
+		Model: "compat/gpt-5-mini",
+		Input: RunInput{
+			Text: "what is this process",
+			Attachments: []RunAttachmentIn{{
+				Name:     "notes.txt",
+				MimeType: "text/plain",
+				URL:      "/_redeven_proxy/api/ai/uploads/upl_notes",
+			}},
+			ContextAction: &ContextActionEnvelope{
+				SchemaVersion: ContextActionSchemaVersion,
+				ActionID:      "assistant.ask.flower",
+				Provider:      "flower",
+				Target:        ContextActionTarget{TargetID: "current", Locality: "auto"},
+				Source:        ContextActionSource{Surface: "monitoring"},
+				Context: []ContextActionContextItem{{
+					Kind:         "process_snapshot",
+					PID:          12264,
+					Name:         "Codex (Service)",
+					Username:     "tangjianyin",
+					CPUPercent:   0.12,
+					MemoryBytes:  575668224,
+					Platform:     "darwin",
+					CapturedAtMs: 1783677600000,
+				}},
+				Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+			},
+		},
+		Options: RunOptions{
+			PermissionType:  config.AIPermissionApprovalRequired,
+			MaxOutputTokens: 500,
+		},
+		ModelCapability: contextmodel.ModelCapability{
+			MaxContextTokens: 128000,
+		},
+	}, config.AIProvider{
+		ID:      "compat",
+		Type:    "openai_compatible",
+		BaseURL: "https://example.test/v1",
+	}, "sk-test", "verify linked context", provider)
+	if err != nil {
+		t.Fatalf("runFloretHostedTurn: %v", err)
+	}
+	requestText := modelGatewayRequestText(provider.firstRequest())
+	for _, want := range []string{"what is this process", "Host-provided supplemental context", "process_snapshot", "pid: 12264", "Codex (Service)", "Attachment: notes.txt (text/plain)", "attachment_metadata"} {
+		if !strings.Contains(requestText, want) {
+			t.Fatalf("provider request missing %q:\n%s", want, requestText)
+		}
+	}
+	if strings.Contains(requestText, "/_redeven_proxy/api/ai/uploads/") {
+		t.Fatalf("provider request leaked upload URL:\n%s", requestText)
+	}
+}
+
 func TestRunFloretHostedTurnRefreshesPermissionBeforeDispatch(t *testing.T) {
 	t.Parallel()
 
@@ -512,6 +587,21 @@ func hasFloretMarkdownContent(events []any, content string) bool {
 		}
 	}
 	return false
+}
+
+func modelGatewayRequestText(req ModelGatewayRequest) string {
+	var b strings.Builder
+	for _, msg := range req.Messages {
+		for _, part := range msg.Content {
+			if text := strings.TrimSpace(part.Text); text != "" {
+				if b.Len() > 0 {
+					b.WriteString("\n\n")
+				}
+				b.WriteString(text)
+			}
+		}
+	}
+	return b.String()
 }
 
 func compactStatusesFromStreamEvents(events []any) []string {

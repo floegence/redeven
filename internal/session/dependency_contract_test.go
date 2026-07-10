@@ -112,8 +112,8 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
-	const floretVersion = "v0.3.88"
-	oldFloretVersions := []string{"v0.3." + "45", "v0.3." + "46", "v0.3." + "47", "v0.3." + "53", "v0.3." + "54", "v0.3." + "55", "v0.3." + "56", "v0.3." + "57", "v0.3." + "58", "v0.3." + "59", "v0.3." + "60", "v0.3." + "61", "v0.3." + "62", "v0.3." + "63", "v0.3." + "64", "v0.3." + "65", "v0.3." + "66", "v0.3." + "67", "v0.3." + "68", "v0.3." + "69", "v0.3." + "70", "v0.3." + "71", "v0.3." + "72", "v0.3." + "73", "v0.3." + "74", "v0.3." + "75", "v0.3." + "76", "v0.3." + "77", "v0.3." + "78", "v0.3." + "79", "v0.3." + "80", "v0.3." + "81", "v0.3." + "82", "v0.3." + "83", "v0.3." + "84", "v0.3." + "85", "v0.3." + "86", "v0.3." + "87"}
+	const floretVersion = "v0.3.89"
+	oldFloretVersions := []string{"v0.3." + "45", "v0.3." + "46", "v0.3." + "47", "v0.3." + "53", "v0.3." + "54", "v0.3." + "55", "v0.3." + "56", "v0.3." + "57", "v0.3." + "58", "v0.3." + "59", "v0.3." + "60", "v0.3." + "61", "v0.3." + "62", "v0.3." + "63", "v0.3." + "64", "v0.3." + "65", "v0.3." + "66", "v0.3." + "67", "v0.3." + "68", "v0.3." + "69", "v0.3." + "70", "v0.3." + "71", "v0.3." + "72", "v0.3." + "73", "v0.3." + "74", "v0.3." + "75", "v0.3." + "76", "v0.3." + "77", "v0.3." + "78", "v0.3." + "79", "v0.3." + "80", "v0.3." + "81", "v0.3." + "82", "v0.3." + "83", "v0.3." + "84", "v0.3." + "85", "v0.3." + "86", "v0.3." + "87", "v0.3." + "88"}
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
 	goSum := readRepoFile(t, root, "go.sum")
@@ -141,6 +141,46 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 			strings.Contains(goSum, "github.com/floegence/floret "+oldFloretVersion) ||
 			strings.Contains(notices, "github.com/floegence/floret@"+oldFloretVersion) {
 			t.Fatalf("repository must not retain old floret %s dependency markers", oldFloretVersion)
+		}
+	}
+}
+
+func TestFlowerLinkedContextDocumentationMatchesFloretSupplementalContextBoundary(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	expectedMarkers := map[string][]string{
+		filepath.Join("okf", "ai", "flower-context-action-records.md"): {
+			"SupplementalContext",
+			"metadata-only",
+			"attachment_metadata",
+			"flower.context_action.injected",
+			"v0.3.89",
+		},
+		filepath.Join("okf", "ui", "flower-turn-launcher.md"): {
+			"file_path",
+			"metadata-only",
+			"pending text attachment",
+		},
+		filepath.Join("okf", "ai", "ai-tool-runtime.md"): {
+			"RunTurnRequest.SupplementalContext",
+			"TurnSupplementalContextItem",
+			"attachment_metadata",
+		},
+		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
+			"flower-linked-context-supplemental-context",
+			"SupplementalContext",
+			"metadata-only",
+			"attachment_metadata",
+			"v0.3.89",
+		},
+	}
+	for rel, markers := range expectedMarkers {
+		content := readRepoFile(t, root, rel)
+		for _, marker := range markers {
+			if !strings.Contains(content, marker) {
+				t.Fatalf("%s must document Flower linked-context Floret boundary marker %q", rel, marker)
+			}
 		}
 	}
 }

@@ -32,7 +32,6 @@ function normalizePathTargets(items: AskFlowerPathContextTarget[]): AskFlowerPat
 export function buildFilePathFlowerTurnLauncherIntent(params: {
   items: AskFlowerPathContextTarget[];
   fallbackWorkingDirAbs?: string;
-  pendingAttachments?: File[];
   notes?: string[];
 }): BuildFilePathFlowerTurnLauncherIntentResult {
   const normalizedItems = normalizePathTargets(params.items);
@@ -55,7 +54,7 @@ export function buildFilePathFlowerTurnLauncherIntent(params: {
       is_directory: item.isDirectory,
       root_label: item.rootLabel,
     })),
-    pending_attachments: [...(params.pendingAttachments ?? [])],
+    pending_attachments: [],
     notes: [...(params.notes ?? [])],
   };
 

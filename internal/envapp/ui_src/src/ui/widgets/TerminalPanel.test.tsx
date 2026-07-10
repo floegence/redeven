@@ -4201,6 +4201,86 @@ describe('TerminalPanel', () => {
     });
   });
 
+  it('opens Ask Flower with short terminal selection text from the terminal context menu', async () => {
+    terminalSelectionState.text = '  npm test\n';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    terminalSurface?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await settleTerminalPanel();
+
+    const askButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Ask Flower')) as HTMLButtonElement | undefined;
+    expect(askButton).toBeTruthy();
+
+    askButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await settleTerminalPanel();
+
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledWith(expect.objectContaining({
+      source_surface: 'terminal',
+      context_items: [
+        {
+          kind: 'terminal_selection',
+          working_dir: '/workspace',
+          selection: 'npm test',
+          selection_chars: 'npm test'.length,
+        },
+      ],
+      pending_attachments: [],
+    }), expect.anything());
+  });
+
+  it('opens Ask Flower with metadata-only context for large terminal selections', async () => {
+    const largeSelection = 'x'.repeat(10_001);
+    terminalSelectionState.text = largeSelection;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    terminalSurface?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await settleTerminalPanel();
+
+    const askButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Ask Flower')) as HTMLButtonElement | undefined;
+    expect(askButton).toBeTruthy();
+
+    askButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await settleTerminalPanel();
+
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledWith(expect.objectContaining({
+      source_surface: 'terminal',
+      context_items: [
+        {
+          kind: 'terminal_selection',
+          working_dir: '/workspace',
+          selection: '',
+          selection_chars: largeSelection.length,
+        },
+      ],
+      pending_attachments: [],
+      notes: ['Large terminal selection was linked by length only.'],
+    }), expect.anything());
+  });
+
   it('uses a fresh Files widget for workbench terminal browse-files handoffs', async () => {
     envContextState.viewMode = 'workbench';
 
