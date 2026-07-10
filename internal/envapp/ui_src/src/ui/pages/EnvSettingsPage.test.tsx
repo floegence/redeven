@@ -518,7 +518,7 @@ describe('EnvSettingsPage', () => {
     expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
   });
 
-  it('explains the current connection as read-only diagnostics instead of a settings form', async () => {
+  it('shows the connection as a concise read-only information panel', async () => {
     protocolMocks.status.mockReturnValue('connected');
     settingsResponse = {
       config_path: '/tmp/config.json',
@@ -550,34 +550,37 @@ describe('EnvSettingsPage', () => {
 
     await openSettingsSection(host, 'connection');
 
-    const connectionCard = host.querySelector('[data-settings-card="Current Connection"]');
+    const connectionCard = host.querySelector('[data-settings-card="Connection"]');
     expect(connectionCard).toBeTruthy();
-    expect(connectionCard?.textContent).toContain('Read-only diagnostics');
-    expect(connectionCard?.textContent).toContain('Generated automatically');
-    expect(connectionCard?.textContent).toContain('For troubleshooting');
-    expect(connectionCard?.textContent).toContain('This is not a connection settings form');
+    expect(connectionCard?.textContent).toContain('Read-only');
+    expect(connectionCard?.textContent).toContain('Connected to Runtime');
+    expect(connectionCard?.textContent).toContain('Provisioned');
+    expect(connectionCard?.textContent).toContain('Core information');
+    expect(connectionCard?.textContent).toContain('Current environment ID');
+    expect(connectionCard?.textContent).toContain('env_current');
     expect(connectionCard?.textContent).toContain('Connection service address');
     expect(connectionCard?.textContent).toContain('Control Plane URL');
     expect(connectionCard?.textContent).toContain('https://console.example.com');
-    expect(connectionCard?.textContent).toContain('Security key status');
-    expect(connectionCard?.textContent).toContain('Provisioned');
-    expect(connectionCard?.textContent).toContain('Current environment ID');
-    expect(connectionCard?.textContent).toContain('env_current');
-    expect(connectionCard?.textContent).toContain('Where this connection comes from');
-    expect(connectionCard?.textContent).toContain('Desktop / Connection Center');
-    expect(connectionCard?.textContent).toContain('Redeven connection service');
-    expect(connectionCard?.textContent).toContain('Current Runtime');
+    expect(connectionCard?.textContent).toContain('Runtime instance');
+    expect(connectionCard?.textContent).toContain('ai_runtime_123');
+    expect(connectionCard?.textContent).toContain('Security key');
+    expect(connectionCard?.textContent).toContain('E2EE PSK');
+    expect(connectionCard?.textContent).toContain('Change connection');
+    expect(connectionCard?.textContent).toContain('Desktop Connection Center');
     expect(connectionCard?.textContent).not.toContain('Connection details managed by the Control Plane');
+    expect(connectionCard?.textContent).not.toContain('This is not a connection settings form');
+    expect(connectionCard?.textContent).not.toContain('Generated automatically');
+    expect(connectionCard?.textContent).not.toContain('Where this connection comes from');
+    expect(connectionCard?.textContent).not.toContain('Redeven connection service');
     expect(connectionCard?.textContent).not.toContain('WebSocket URL');
     expect(connectionCard?.textContent).not.toContain('Direct Suite');
 
     const detailsButton = Array.from(connectionCard?.querySelectorAll('button') ?? [])
-      .find((node) => node.textContent?.includes('Troubleshooting details')) as HTMLButtonElement | undefined;
+      .find((node) => node.textContent?.includes('Technical information')) as HTMLButtonElement | undefined;
     expect(detailsButton).toBeTruthy();
     detailsButton?.click();
     await flushPage();
 
-    expect(connectionCard?.textContent).toContain('Runtime instance ID');
     expect(connectionCard?.textContent).toContain('Channel ID');
     expect(connectionCard?.textContent).toContain('WebSocket URL');
     expect(connectionCard?.textContent).toContain('Direct Suite');
