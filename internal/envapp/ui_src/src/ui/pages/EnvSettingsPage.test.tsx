@@ -108,11 +108,14 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Activity: icon('Activity'),
+  ArrowRight: icon('ArrowRight'),
   AlertTriangle: icon('AlertTriangle'),
   Bot: icon('Bot'),
   BugIcon: icon('BugIcon'),
+  ChevronDown: icon('ChevronDown'),
   ChevronLeft: icon('ChevronLeft'),
   Code: icon('Code'),
+  Copy: icon('Copy'),
   Cpu: icon('Cpu'),
   Database: icon('Database'),
   Eye: icon('Eye'),
@@ -350,6 +353,7 @@ vi.mock('./settings/SettingsPrimitives', () => ({
   SettingsCard: (props: any) => (
     <section data-settings-card={props.title}>
       <h3>{props.title}</h3>
+      <span>{props.badge}</span>
       <p>{props.description}</p>
       {props.actions}
       {props.children}
@@ -358,6 +362,7 @@ vi.mock('./settings/SettingsPrimitives', () => ({
   SettingsSection: (props: any) => (
     <section data-settings-card={props.title}>
       <h3>{props.title}</h3>
+      <span>{props.badge}</span>
       <p>{props.description}</p>
       {props.actions}
       {props.children}
@@ -511,6 +516,74 @@ describe('EnvSettingsPage', () => {
     await flushPage();
 
     expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
+  });
+
+  it('explains the current connection as read-only diagnostics instead of a settings form', async () => {
+    protocolMocks.status.mockReturnValue('connected');
+    settingsResponse = {
+      config_path: '/tmp/config.json',
+      connection: {
+        controlplane_base_url: 'https://console.example.com',
+        environment_id: 'env_current',
+        agent_instance_id: 'ai_runtime_123',
+        direct: {
+          ws_url: 'wss://console.example.com/control/ws',
+          channel_id: 'ch_runtime',
+          channel_init_expire_at_unix_s: 1893456000,
+          default_suite: 1,
+          e2ee_psk_set: true,
+        },
+      },
+      runtime: { agent_home_dir: '/workspace', shell: '/bin/zsh' },
+      logging: { log_format: 'plain', log_level: 'info' },
+      codespaces: { code_server_port_min: 0, code_server_port_max: 0 },
+      permission_policy: null,
+      ai: null,
+    };
+
+    render(() => <EnvSettingsPage />, host);
+    await flushPage();
+
+    const connectionNav = Array.from(host.querySelectorAll('button'))
+      .find((node) => node.textContent?.trim() === 'Connection');
+    expect(connectionNav).toBeTruthy();
+
+    await openSettingsSection(host, 'connection');
+
+    const connectionCard = host.querySelector('[data-settings-card="Current Connection"]');
+    expect(connectionCard).toBeTruthy();
+    expect(connectionCard?.textContent).toContain('Read-only diagnostics');
+    expect(connectionCard?.textContent).toContain('Generated automatically');
+    expect(connectionCard?.textContent).toContain('For troubleshooting');
+    expect(connectionCard?.textContent).toContain('This is not a connection settings form');
+    expect(connectionCard?.textContent).toContain('Connection service address');
+    expect(connectionCard?.textContent).toContain('Control Plane URL');
+    expect(connectionCard?.textContent).toContain('https://console.example.com');
+    expect(connectionCard?.textContent).toContain('Security key status');
+    expect(connectionCard?.textContent).toContain('Provisioned');
+    expect(connectionCard?.textContent).toContain('Current environment ID');
+    expect(connectionCard?.textContent).toContain('env_current');
+    expect(connectionCard?.textContent).toContain('Where this connection comes from');
+    expect(connectionCard?.textContent).toContain('Desktop / Connection Center');
+    expect(connectionCard?.textContent).toContain('Redeven connection service');
+    expect(connectionCard?.textContent).toContain('Current Runtime');
+    expect(connectionCard?.textContent).not.toContain('Connection details managed by the Control Plane');
+    expect(connectionCard?.textContent).not.toContain('WebSocket URL');
+    expect(connectionCard?.textContent).not.toContain('Direct Suite');
+
+    const detailsButton = Array.from(connectionCard?.querySelectorAll('button') ?? [])
+      .find((node) => node.textContent?.includes('Troubleshooting details')) as HTMLButtonElement | undefined;
+    expect(detailsButton).toBeTruthy();
+    detailsButton?.click();
+    await flushPage();
+
+    expect(connectionCard?.textContent).toContain('Runtime instance ID');
+    expect(connectionCard?.textContent).toContain('Channel ID');
+    expect(connectionCard?.textContent).toContain('WebSocket URL');
+    expect(connectionCard?.textContent).toContain('Direct Suite');
+    expect(connectionCard?.textContent).toContain('Key initialization expires at');
+    expect(connectionCard?.textContent).toContain('ch_runtime');
+    expect(connectionCard?.textContent).toContain('wss://console.example.com/control/ws');
   });
 
   it('can render with an existing settings provider context instead of shadowing it', async () => {
