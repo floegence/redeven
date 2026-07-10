@@ -751,6 +751,17 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
         catchUpPending: false,
         disposed,
       }),
+      getDrainState: () => {
+        const livePending = pending.length > 0 || frame !== null;
+        const inactivePending = inactive.length > 0;
+        return {
+          livePending,
+          inactivePending,
+          catchUpPending: false,
+          drainPending: livePending || inactivePending,
+          disposed,
+        };
+      },
     };
   };
 
@@ -1896,6 +1907,31 @@ describe('TerminalPanel', () => {
         maxInactiveBytes: 512 * 1024,
       }),
     }));
+  });
+
+  it('keeps activity input live while the upstream output pipeline has inactive backlog', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const core = terminalCoreInstances[0];
+    expect(core).toBeDefined();
+
+    viewActivationState.active = false;
+    emitTerminalData('session-1', 'background output', 1);
+    await settleTerminalPanel();
+
+    viewActivationState.active = true;
+    transportMocks.sendInput.mockClear();
+    core?.handlers?.onData?.('echo __rdv_after_return__\r');
+
+    expect(transportMocks.sendInput).toHaveBeenCalledWith(
+      'session-1',
+      'echo __rdv_after_return__\r',
+      'conn-1',
+    );
   });
 
   it('removes the terminal scrollbar reserve for workbench projected surfaces', async () => {

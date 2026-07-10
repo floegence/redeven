@@ -1087,15 +1087,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
     });
   };
 
-  const outputPipelineBusy = () => {
-    const stats = outputPipeline?.getStats();
-    return Boolean(stats && (stats.pendingChunks > 0 || stats.inactiveChunks > 0 || stats.catchUpPending));
-  };
-
-  const outputPipelineInputBlocked = () => {
-    const stats = outputPipeline?.getStats();
-    return Boolean(stats && (stats.inactiveChunks > 0 || stats.catchUpPending));
-  };
+  const outputPipelineDrainPending = () => Boolean(outputPipeline?.getDrainState().drainPending);
 
   const markChunksApplied = (chunks: readonly terminal_display_chunk[] | readonly terminal_history_chunk[]) => {
     for (const chunk of chunks) {
@@ -1178,7 +1170,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
   const releaseFocusAfterCatchupIfSettled = () => {
     if (!focusAfterCatchup) return;
     if (catchupInProgress || needsHistoryCatchup) return;
-    if (outputPipelineBusy()) return;
+    if (outputPipelineDrainPending()) return;
     if (deferredLive.length > 0 || queued.length > 0) return;
     if (flushScheduled || flushTimer || flushRaf !== null) return;
 
@@ -1634,7 +1626,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       {
         onData: (data: string) => {
           if (!props.viewActive() || !props.active()) return;
-          if (catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup || outputPipelineInputBlocked()) return;
+          if (catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup) return;
           void props.transport.sendInput(id, data, props.connId);
         },
         onResize: (size: { cols: number; rows: number }) => {
@@ -1787,7 +1779,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
   createEffect(() => {
     if (!props.viewActive() || !props.active()) return;
     if (!term) return;
-    if (catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup || outputPipelineBusy()) return;
+    if (catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup || outputPipelineDrainPending()) return;
     scheduleTerminalActivationRefresh();
   });
 
