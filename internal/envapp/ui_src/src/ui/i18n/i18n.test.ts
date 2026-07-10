@@ -395,6 +395,14 @@ describe('Env App i18n dictionaries', () => {
     expect(zhCN.t('codeRuntime.useThisVersion')).toBe('使用此版本');
     expect(zhCN.t('codeRuntime.notes.codespacesUsesSelectedManagedVersion')).toBe('Codespaces 使用已选择的托管 Browser Editor 版本。');
     expect(zhCN.t('codeRuntime.activity.steps.cache')).toBe('下载到 Desktop');
+    expect(zhCN.t('settings.connection.title')).toBe('当前连接');
+    expect(zhCN.t('settings.connection.explainerTitle')).toBe('这页不是连接设置表单');
+    expect(zhCN.t('settings.connection.generatedAutomatically')).toBe('自动生成');
+    expect(zhCN.t('settings.connection.troubleshootingDetails')).toBe('排障详情');
+
+    const en = createI18nHelpers('en-US');
+    expect(en.t('settings.connection.title')).toBe('Current Connection');
+    expect(en.t('settings.connection.description')).not.toContain('Connection details managed by the Control Plane');
 
     const deDE = createI18nHelpers('de-DE');
     expect(deDE.t('chatActivity.command')).toBe('Befehl');
@@ -411,6 +419,48 @@ describe('Env App i18n dictionaries', () => {
     expect(ruRU.tn('chatActivity.fileCount', 1)).toBe('1 файл');
     expect(ruRU.tn('chatActivity.fileCount', 2)).toBe('2 файла');
     expect(ruRU.tn('chatActivity.fileCount', 5)).toBe('5 файлов');
+
+    const connectionKeys = [
+      'settings.connection.title',
+      'settings.connection.description',
+      'settings.connection.readOnlyDiagnostics',
+      'settings.connection.manageConnection',
+      'settings.connection.manageConnectionFailedTitle',
+      'settings.connection.manageConnectionFailedMessage',
+      'settings.connection.explainerTitle',
+      'settings.connection.explainerBody',
+      'settings.connection.generatedAutomatically',
+      'settings.connection.readOnly',
+      'settings.connection.troubleshootingUse',
+      'settings.connection.connectionServiceAddress',
+      'settings.connection.controlPlaneUrl',
+      'settings.connection.connectionServiceAddressDescription',
+      'settings.connection.securityKeyStatus',
+      'settings.connection.securityKeyStatusDescription',
+      'settings.connection.keyProvisioned',
+      'settings.connection.keyNotProvisioned',
+      'settings.connection.currentEnvironmentId',
+      'settings.connection.currentEnvironmentIdDescription',
+      'settings.connection.sourceFlowTitle',
+      'settings.connection.sourceDesktop',
+      'settings.connection.sourceDesktopDescription',
+      'settings.connection.sourceConnectionService',
+      'settings.connection.sourceConnectionServiceDescription',
+      'settings.connection.sourceRuntime',
+      'settings.connection.sourceRuntimeDescription',
+      'settings.connection.sourceFlowNote',
+      'settings.connection.troubleshootingDetails',
+      'settings.connection.runtimeInstanceId',
+      'settings.connection.channelInitExpiresAt',
+      'settings.connection.notProvided',
+      'settings.connection.emptyValue',
+    ] as const;
+    for (const locale of SUPPORTED_LOCALES) {
+      const helpers = createI18nHelpers(locale);
+      for (const key of connectionKeys) {
+        expect(helpers.t(key)).not.toBe(key);
+      }
+    }
   });
 
   it('keeps product chrome translation separate from user and generated content', () => {
