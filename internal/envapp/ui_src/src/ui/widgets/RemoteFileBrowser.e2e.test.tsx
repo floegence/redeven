@@ -9,7 +9,7 @@ import type {
   FileItem,
 } from '@floegence/floe-webapp-core/file-browser';
 import { RpcError } from '@floegence/floe-webapp-protocol';
-import { createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -180,6 +180,21 @@ const gitStashWindowRenderStore = vi.hoisted(() => ({
   onConfirmReview: undefined as (() => void) | undefined,
 }));
 
+const gitDiffDialogRenderStore = vi.hoisted(() => ({
+  snapshots: [] as Array<{
+    open: boolean;
+    itemPath?: string;
+    itemOldPath?: string;
+    itemNewPath?: string;
+    itemSection?: string;
+    sourceKind?: string;
+    sourceRepoRootPath?: string;
+    sourceWorkspaceSection?: string;
+    title?: string;
+    description?: string;
+  }>,
+}));
+
 const workspaceLifecycleStore = vi.hoisted(() => ({
   filesMounts: 0,
   filesUnmounts: 0,
@@ -235,6 +250,7 @@ const mockRpc = vi.hoisted(() => ({
     listCommits: vi.fn(),
     listStashes: vi.fn(),
     getStashDetail: vi.fn(),
+    getDiffContent: vi.fn(),
     saveStash: vi.fn(),
     previewApplyStash: vi.fn(),
     applyStash: vi.fn(),
@@ -485,11 +501,11 @@ vi.mock('./FileBrowserWorkspace', () => ({
     };
     const resolver = props.resolveOverrideContextMenuItems;
     const resolveItems = (event: ContextMenuEvent) => resolver?.(event) ?? props.overrideContextMenuItems ?? [];
-    const copyNameItems = resolveItems(fileEvent);
-    const folderItems = resolveItems(folderEvent);
-    const fileItems = resolveItems(fileEvent);
-    const multiSelectItems = resolveItems(multiSelectEvent);
-    const multiFileSelectItems = resolveItems(multiFileSelectEvent);
+    const copyNameItems = () => resolveItems(fileEvent);
+    const folderItems = () => resolveItems(folderEvent);
+    const fileItems = () => resolveItems(fileEvent);
+    const multiSelectItems = () => resolveItems(multiSelectEvent);
+    const multiFileSelectItems = () => resolveItems(multiFileSelectEvent);
     const backgroundItems = () => resolveItems({
       ...backgroundEvent,
       directory: {
@@ -541,12 +557,12 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <div>files:{props.mode}:{props.currentPath}:{props.width ?? 0}:{localCount()}:{props.captureTypingFromPage ? 'page' : 'scoped'}</div>
         <div data-testid="mock-path-edit-request-key">{props.pathEditRequestKey ?? 0}</div>
         <div>{props.toolbarEndActions}</div>
-        <div data-testid="mock-folder-menu-order">{describeMenuItems(folderItems)}</div>
+        <div data-testid="mock-folder-menu-order">{describeMenuItems(folderItems())}</div>
         <div data-testid="mock-background-menu-order">{describeMenuItems(backgroundItems())}</div>
-        <div data-testid="mock-file-menu-order">{describeMenuItems(fileItems)}</div>
-        <div data-testid="mock-multi-menu-order">{describeMenuItems(multiSelectItems)}</div>
-        <div data-testid="mock-multi-file-menu-order">{describeMenuItems(multiFileSelectItems)}</div>
-        <div data-testid="mock-folder-new-has-icon">{findMenuItem(folderItems, 'new')?.icon ? 'yes' : 'no'}</div>
+        <div data-testid="mock-file-menu-order">{describeMenuItems(fileItems())}</div>
+        <div data-testid="mock-multi-menu-order">{describeMenuItems(multiSelectItems())}</div>
+        <div data-testid="mock-multi-file-menu-order">{describeMenuItems(multiFileSelectItems())}</div>
+        <div data-testid="mock-folder-new-has-icon">{findMenuItem(folderItems(), 'new')?.icon ? 'yes' : 'no'}</div>
         <div data-testid="mock-background-new-has-icon">{findMenuItem(backgroundItems(), 'new')?.icon ? 'yes' : 'no'}</div>
         <div data-testid="mock-files-tree">{flattenTreePaths(props.files).join(',')}</div>
         <div data-testid="mock-files-decorations">{flattenTreeDecorations(props.files).join(',')}</div>
@@ -590,7 +606,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
             mock-consume-reveal
           </button>
         ) : null}
-        {copyNameItems.some((item) => item.type === 'copy-name') ? (
+        {copyNameItems().some((item) => item.type === 'copy-name') ? (
           <button
             type="button"
             onClick={() => props.contextMenuCallbacks?.onCopyName?.([copyNameTarget])}
@@ -598,50 +614,82 @@ vi.mock('./FileBrowserWorkspace', () => ({
             mock-copy-name
           </button>
         ) : null}
-        {fileItems.some((item) => item.id === 'copy-path') ? (
+        {fileItems().some((item) => item.id === 'copy-path') ? (
           <button
             type="button"
-            onClick={() => fileItems.find((item) => item.id === 'copy-path')?.onAction?.(fileEvent.items, fileEvent)}
+            onClick={() => fileItems().find((item) => item.id === 'copy-path')?.onAction?.(fileEvent.items, fileEvent)}
           >
             mock-copy-path
           </button>
         ) : null}
-        {multiSelectItems.some((item) => item.id === 'copy-path') ? (
+        {multiSelectItems().some((item) => item.id === 'copy-path') ? (
           <button
             type="button"
-            onClick={() => multiSelectItems.find((item) => item.id === 'copy-path')?.onAction?.(multiSelectEvent.items, multiSelectEvent)}
+            onClick={() => multiSelectItems().find((item) => item.id === 'copy-path')?.onAction?.(multiSelectEvent.items, multiSelectEvent)}
           >
             mock-copy-path-multi
           </button>
         ) : null}
-        {multiSelectItems.some((item) => item.id === 'ask-flower') ? (
+        {multiSelectItems().some((item) => item.id === 'ask-flower') ? (
           <button
             type="button"
-            onClick={() => multiSelectItems.find((item) => item.id === 'ask-flower')?.onAction?.(multiSelectEvent.items, multiSelectEvent)}
+            onClick={() => multiSelectItems().find((item) => item.id === 'ask-flower')?.onAction?.(multiSelectEvent.items, multiSelectEvent)}
           >
             mock-ask-flower-multi
           </button>
         ) : null}
-        {fileItems.some((item) => item.id === 'download') ? (
+        {fileItems().some((item) => item.id === 'download') ? (
           <button
             type="button"
-            onClick={() => fileItems.find((item) => item.id === 'download')?.onAction?.(fileEvent.items, fileEvent)}
+            onClick={() => fileItems().find((item) => item.id === 'download')?.onAction?.(fileEvent.items, fileEvent)}
           >
             mock-download-file
           </button>
         ) : null}
-        {multiFileSelectItems.some((item) => item.id === 'download') ? (
+        {multiFileSelectItems().some((item) => item.id === 'download') ? (
           <button
             type="button"
-            onClick={() => multiFileSelectItems.find((item) => item.id === 'download')?.onAction?.(multiFileSelectEvent.items, multiFileSelectEvent)}
+            onClick={() => multiFileSelectItems().find((item) => item.id === 'download')?.onAction?.(multiFileSelectEvent.items, multiFileSelectEvent)}
           >
             mock-download-multi-file
           </button>
         ) : null}
-        {folderItems.some((item) => item.id === 'open-in-terminal') ? (
+        {findMenuItem(fileItems(), 'view-diff') && !findMenuItem(fileItems(), 'view-diff')?.children?.length ? (
           <button
             type="button"
-            onClick={() => folderItems.find((item) => item.id === 'open-in-terminal')?.onAction?.(folderEvent.items, folderEvent)}
+            onClick={() => findMenuItem(fileItems(), 'view-diff')?.onAction?.(fileEvent.items, fileEvent)}
+          >
+            mock-view-diff-file
+          </button>
+        ) : null}
+        {findMenuItem(fileItems(), 'view-diff-staged-1') ? (
+          <button
+            type="button"
+            onClick={() => findMenuItem(fileItems(), 'view-diff-staged-1')?.onAction?.(fileEvent.items, fileEvent)}
+          >
+            mock-view-staged-diff-file
+          </button>
+        ) : null}
+        {findMenuItem(fileItems(), 'view-diff-unstaged-0') ? (
+          <button
+            type="button"
+            onClick={() => findMenuItem(fileItems(), 'view-diff-unstaged-0')?.onAction?.(fileEvent.items, fileEvent)}
+          >
+            mock-view-unstaged-diff-file
+          </button>
+        ) : null}
+        {findMenuItem(folderItems(), 'view-folder-changes') ? (
+          <button
+            type="button"
+            onClick={() => findMenuItem(folderItems(), 'view-folder-changes')?.onAction?.(folderEvent.items, folderEvent)}
+          >
+            mock-view-folder-changes
+          </button>
+        ) : null}
+        {folderItems().some((item) => item.id === 'open-in-terminal') ? (
+          <button
+            type="button"
+            onClick={() => folderItems().find((item) => item.id === 'open-in-terminal')?.onAction?.(folderEvent.items, folderEvent)}
           >
             mock-open-terminal-folder
           </button>
@@ -672,18 +720,18 @@ vi.mock('./FileBrowserWorkspace', () => ({
             mock-ask-flower-background
           </button>
         ) : null}
-        {findMenuItem(folderItems, 'new-file') ? (
+        {findMenuItem(folderItems(), 'new-file') ? (
           <button
             type="button"
-            onClick={() => findMenuItem(folderItems, 'new-file')?.onAction?.(folderEvent.items, folderEvent)}
+            onClick={() => findMenuItem(folderItems(), 'new-file')?.onAction?.(folderEvent.items, folderEvent)}
           >
             mock-create-file-from-folder
           </button>
         ) : null}
-        {findMenuItem(folderItems, 'new-folder') ? (
+        {findMenuItem(folderItems(), 'new-folder') ? (
           <button
             type="button"
-            onClick={() => findMenuItem(folderItems, 'new-folder')?.onAction?.(folderEvent.items, folderEvent)}
+            onClick={() => findMenuItem(folderItems(), 'new-folder')?.onAction?.(folderEvent.items, folderEvent)}
           >
             mock-create-folder-from-folder
           </button>
@@ -714,10 +762,10 @@ vi.mock('./FileBrowserWorkspace', () => ({
             mock-create-folder-from-background
           </button>
         ) : null}
-        {fileItems.some((item) => item.id === 'open-in-terminal') ? (
+        {fileItems().some((item) => item.id === 'open-in-terminal') ? (
           <button type="button">mock-open-terminal-file</button>
         ) : null}
-        {multiSelectItems.some((item) => item.id === 'open-in-terminal') ? (
+        {multiSelectItems().some((item) => item.id === 'open-in-terminal') ? (
           <button type="button">mock-open-terminal-multi</button>
         ) : null}
       </div>
@@ -980,6 +1028,51 @@ vi.mock('./GitWorkspace', () => ({
   },
 }));
 
+vi.mock('./GitDiffDialog', () => ({
+  GitDiffDialog: (props: {
+    open: boolean;
+    item?: {
+      path?: string;
+      oldPath?: string;
+      newPath?: string;
+      section?: string;
+    } | null;
+    source?: {
+      kind?: string;
+      repoRootPath?: string;
+      workspaceSection?: string;
+    } | null;
+    title?: string;
+    description?: string;
+    onOpenChange?: (open: boolean) => void;
+  }) => {
+    createEffect(() => {
+      gitDiffDialogRenderStore.snapshots.push({
+        open: Boolean(props.open),
+        itemPath: props.item?.path,
+        itemOldPath: props.item?.oldPath,
+        itemNewPath: props.item?.newPath,
+        itemSection: props.item?.section,
+        sourceKind: props.source?.kind,
+        sourceRepoRootPath: props.source?.repoRootPath,
+        sourceWorkspaceSection: props.source?.workspaceSection,
+        title: props.title,
+        description: props.description,
+      });
+    });
+
+    return (
+      <Show when={props.open}>
+        <div data-testid="git-diff-dialog">
+          <div>diff-source:{props.source?.kind ?? ''}:{props.source?.workspaceSection ?? ''}</div>
+          <div>diff-path:{props.item?.path ?? ''}</div>
+          <button type="button" onClick={() => props.onOpenChange?.(false)}>mock-close-diff</button>
+        </div>
+      </Show>
+    );
+  },
+}));
+
 vi.mock('./GitStashWindow', () => ({
   GitStashWindow: (props: {
     open?: boolean;
@@ -1156,6 +1249,7 @@ beforeEach(() => {
   gitStashWindowRenderStore.onRefreshStashes = undefined;
   gitStashWindowRenderStore.onRequestDrop = undefined;
   gitStashWindowRenderStore.onConfirmReview = undefined;
+  gitDiffDialogRenderStore.snapshots = [];
   workspaceLifecycleStore.filesMounts = 0;
   workspaceLifecycleStore.filesUnmounts = 0;
   workspaceLifecycleStore.gitMounts = 0;
@@ -1303,6 +1397,12 @@ beforeEach(() => {
         displayPath: 'src/app.ts',
       }],
     },
+  });
+  mockRpc.git.getDiffContent.mockReset();
+  mockRpc.git.getDiffContent.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    mode: 'preview',
+    file: { path: 'src/.env', changeType: 'modified', patchText: 'diff --git a/src/.env b/src/.env' },
   });
   mockRpc.git.saveStash.mockResolvedValue({
     repoRootPath: '/workspace/repo',
@@ -1516,6 +1616,283 @@ describe('RemoteFileBrowser persistence', () => {
       expect(decorations).toContain('/workspace/repo/Makefile:M:info:info');
       expect(decorations).toContain('/workspace/repo/app:M:info:info');
       expect(decorations).toContain('/workspace/repo/terminal-web:A:success:success');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('adds a Files context menu diff action for modified files without preloading diff content', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.fs.list.mockResolvedValue({
+      entries: [
+        { name: '.env', path: '/workspace/repo/src/.env', isDirectory: false, modifiedAt: 1 },
+      ],
+    });
+    mockRpc.git.listWorkspaceChanges.mockResolvedValue({
+      repoRootPath: '/workspace/repo',
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      staged: [],
+      unstaged: [
+        { section: 'unstaged', changeType: 'modified', path: 'src/.env' },
+      ],
+      untracked: [],
+      conflicted: [],
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      await flush();
+
+      expect(host.querySelector('[data-testid="mock-file-menu-order"]')?.textContent).toContain('view-diff');
+      expect(mockRpc.git.getDiffContent).not.toHaveBeenCalled();
+
+      const viewDiffButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-view-diff-file') as HTMLButtonElement | undefined;
+      expect(viewDiffButton).toBeTruthy();
+      viewDiffButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(host.querySelector('[data-testid="git-diff-dialog"]')).toBeTruthy();
+      expect(gitDiffDialogRenderStore.snapshots.at(-1)).toMatchObject({
+        open: true,
+        itemPath: 'src/.env',
+        itemSection: 'unstaged',
+        sourceKind: 'workspace',
+        sourceRepoRootPath: '/workspace/repo',
+        sourceWorkspaceSection: 'unstaged',
+      });
+      expect(mockRpc.git.getDiffContent).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('does not show the Files diff context menu action for clean files or multi-select', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.fs.list.mockResolvedValue({
+      entries: [
+        { name: '.env', path: '/workspace/repo/src/.env', isDirectory: false, modifiedAt: 1 },
+      ],
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      await flush();
+
+      expect(host.querySelector('[data-testid="mock-file-menu-order"]')?.textContent).not.toContain('view-diff');
+      expect(host.querySelector('[data-testid="mock-multi-file-menu-order"]')?.textContent).not.toContain('view-diff');
+      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent === 'mock-view-diff-file')).toBe(false);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('offers explicit staged and unstaged diff choices when a Files item has both states', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.fs.list.mockResolvedValue({
+      entries: [
+        { name: '.env', path: '/workspace/repo/src/.env', isDirectory: false, modifiedAt: 1 },
+      ],
+    });
+    mockRpc.git.listWorkspaceChanges.mockResolvedValue({
+      repoRootPath: '/workspace/repo',
+      summary: { stagedCount: 1, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      staged: [
+        { section: 'staged', changeType: 'modified', path: 'src/.env' },
+      ],
+      unstaged: [
+        { section: 'unstaged', changeType: 'modified', path: 'src/.env' },
+      ],
+      untracked: [],
+      conflicted: [],
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      await flush();
+
+      expect(host.querySelector('[data-testid="mock-file-menu-order"]')?.textContent).toContain('view-diff[view-diff-unstaged-0|view-diff-staged-1]');
+
+      const stagedButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-view-staged-diff-file') as HTMLButtonElement | undefined;
+      expect(stagedButton).toBeTruthy();
+      stagedButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(gitDiffDialogRenderStore.snapshots.at(-1)).toMatchObject({
+        open: true,
+        itemPath: 'src/.env',
+        itemSection: 'staged',
+        sourceWorkspaceSection: 'staged',
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('opens scoped Git Changes from a modified folder in the Files context menu', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.fs.list.mockResolvedValue({
+      entries: [
+        { name: 'src', path: '/workspace/repo/src', isDirectory: true, modifiedAt: 1 },
+      ],
+    });
+    mockRpc.git.listWorkspaceChanges.mockResolvedValue({
+      repoRootPath: '/workspace/repo',
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      staged: [],
+      unstaged: [
+        { section: 'unstaged', changeType: 'modified', path: 'src/app.ts' },
+      ],
+      untracked: [],
+      conflicted: [],
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      await flush();
+
+      expect(host.querySelector('[data-testid="mock-folder-menu-order"]')?.textContent).toContain('view-folder-changes');
+      mockRpc.git.listWorkspacePage.mockClear();
+
+      const viewFolderChangesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-view-folder-changes') as HTMLButtonElement | undefined;
+      expect(viewFolderChangesButton).toBeTruthy();
+      viewFolderChangesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(host.querySelector('[data-browser-mode-stack]')?.getAttribute('data-active-mode')).toBe('git');
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo',
+        section: 'changes',
+        directoryPath: 'src',
+        offset: 0,
+        limit: 200,
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('falls back to the staged Git section for staged-only folders from the Files context menu', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo' },
+      showHiddenByEnv: { 'env-1': false },
+      pageModeByEnv: { 'env-1': 'files' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    mockRpc.fs.list.mockResolvedValue({
+      entries: [
+        { name: 'src', path: '/workspace/repo/src', isDirectory: true, modifiedAt: 1 },
+      ],
+    });
+    mockRpc.git.listWorkspaceChanges.mockResolvedValue({
+      repoRootPath: '/workspace/repo',
+      summary: { stagedCount: 1, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+      staged: [
+        { section: 'staged', changeType: 'modified', path: 'src/app.ts' },
+      ],
+      unstaged: [],
+      untracked: [],
+      conflicted: [],
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      await flush();
+      mockRpc.git.listWorkspacePage.mockClear();
+
+      const viewFolderChangesButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-view-folder-changes') as HTMLButtonElement | undefined;
+      expect(viewFolderChangesButton).toBeTruthy();
+      viewFolderChangesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+
+      expect(host.querySelector('[data-browser-mode-stack]')?.getAttribute('data-active-mode')).toBe('git');
+      expect(gitWorkspaceRenderStore.snapshots.at(-1)?.selectedWorkspaceSection).toBe('staged');
+      expect(mockRpc.git.listWorkspacePage).toHaveBeenCalledWith({
+        repoRootPath: '/workspace/repo',
+        section: 'staged',
+        directoryPath: undefined,
+        offset: 0,
+        limit: 200,
+      });
     } finally {
       dispose();
     }
