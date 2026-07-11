@@ -661,7 +661,15 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     let inactive: any[] = [];
     let frame: number | null = null;
     let disposed = false;
+    let catchUpPending = false;
+    let lastObservedSequence = Math.max(0, Math.floor(Number(options.startSequence ?? 1)) - 1);
+    let lastAppliedSequence = lastObservedSequence;
+    const queuedSequences = new Set<number>();
     const bytes = (chunks: any[]) => chunks.reduce((sum, chunk) => sum + (chunk.data?.byteLength ?? 0), 0);
+    const normalizeSequence = (sequence: unknown): number | undefined => {
+      const value = Math.floor(Number(sequence));
+      return Number.isFinite(value) && value > 0 ? value : undefined;
+    };
     const merge = (chunks: any[]) => {
       const total = bytes(chunks);
       const merged = new Uint8Array(total);
@@ -673,14 +681,56 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
       return merged;
     };
     const isInteractive = () => options.isInteractive?.() ?? true;
+    const clearQueues = () => {
+      pending = [];
+      inactive = [];
+      queuedSequences.clear();
+    };
     const clearFrame = () => {
       if (frame === null) return;
       cancelAnimationFrame(frame);
       frame = null;
     };
+    const requestCatchUpForGap = (sequence: number, expectedSequence: number, byteLength: number) => {
+      const droppedChunks = pending.length + inactive.length + 1;
+      const droppedBytes = bytes(pending) + bytes(inactive) + byteLength;
+      clearFrame();
+      clearQueues();
+      catchUpPending = true;
+      options.requestCatchUp?.({
+        reason: 'sequence-gap',
+        startSequence: lastAppliedSequence > 0 ? lastAppliedSequence + 1 : 0,
+        expectedSequence,
+        observedSequence: sequence,
+        droppedChunks,
+        droppedBytes,
+      });
+    };
+    const acceptSequence = (sequence: number | undefined, byteLength: number) => {
+      if (!sequence) return true;
+      if (sequence <= lastAppliedSequence || queuedSequences.has(sequence)) return false;
+      const expectedSequence = Math.max(lastObservedSequence, lastAppliedSequence) + 1;
+      if (sequence > expectedSequence) {
+        requestCatchUpForGap(sequence, expectedSequence, byteLength);
+        return false;
+      }
+      lastObservedSequence = Math.max(lastObservedSequence, sequence);
+      queuedSequences.add(sequence);
+      return true;
+    };
+    const markApplied = (chunks: any[]) => {
+      for (const chunk of chunks) {
+        const sequence = normalizeSequence(chunk.sequence);
+        if (!sequence) continue;
+        queuedSequences.delete(sequence);
+        if (sequence > lastAppliedSequence) {
+          lastAppliedSequence = sequence;
+        }
+      }
+    };
     const flushFrame = () => {
       frame = null;
-      if (disposed) return;
+      if (disposed || catchUpPending) return;
       if (!isInteractive()) {
         inactive.push(...pending);
         pending = [];
@@ -696,26 +746,30 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
       if (payload.byteLength > 0) {
         options.write(payload, batch);
       }
+      markApplied(batch);
       if (pending.length === 0 && inactive.length === 0) {
         options.onDrain?.();
       }
     };
     const schedule = () => {
-      if (frame !== null || disposed) return;
+      if (frame !== null || disposed || catchUpPending) return;
       frame = requestAnimationFrame(flushFrame);
     };
     return {
       enqueue: (chunk: any) => {
-        if (disposed) return;
+        if (disposed || catchUpPending) return;
+        const sequence = normalizeSequence(chunk.sequence);
+        if (!acceptSequence(sequence, chunk.data?.byteLength ?? 0)) return;
+        const normalizedChunk = sequence ? { ...chunk, sequence } : chunk;
         if (!isInteractive()) {
-          inactive.push(chunk);
+          inactive.push(normalizedChunk);
           return;
         }
-        pending.push(chunk);
+        pending.push(normalizedChunk);
         schedule();
       },
       flush: () => {
-        if (disposed) return;
+        if (disposed || catchUpPending) return;
         if (!isInteractive()) {
           inactive.push(...pending);
           pending = [];
@@ -732,23 +786,25 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
           options.onDrain?.();
         }
       },
-      reset: () => {
+      reset: (resetOptions: { startSequence?: number } = {}) => {
         clearFrame();
-        pending = [];
-        inactive = [];
+        clearQueues();
+        catchUpPending = false;
+        lastObservedSequence = Math.max(0, Math.floor(Number(resetOptions.startSequence ?? options.startSequence ?? 1)) - 1);
+        lastAppliedSequence = lastObservedSequence;
       },
       dispose: () => {
         disposed = true;
         clearFrame();
-        pending = [];
-        inactive = [];
+        clearQueues();
+        catchUpPending = false;
       },
       getStats: () => ({
         pendingChunks: pending.length,
         pendingBytes: bytes(pending),
         inactiveChunks: inactive.length,
         inactiveBytes: bytes(inactive),
-        catchUpPending: false,
+        catchUpPending,
         disposed,
       }),
       getDrainState: () => {
@@ -757,8 +813,8 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
         return {
           livePending,
           inactivePending,
-          catchUpPending: false,
-          drainPending: livePending || inactivePending,
+          catchUpPending,
+          drainPending: livePending || inactivePending || catchUpPending,
           disposed,
         };
       },
@@ -1930,6 +1986,57 @@ describe('TerminalPanel', () => {
     expect(transportMocks.sendInput).toHaveBeenCalledWith(
       'session-1',
       'echo __rdv_after_return__\r',
+      'conn-1',
+    );
+  });
+
+  it('runs buffered activity catchup after loading settles and keeps input live', async () => {
+    let releaseInitialHistoryPage: (page: TestTerminalHistoryPage) => void = () => {};
+    const initialHistoryPage = new Promise<TestTerminalHistoryPage>((resolve) => {
+      releaseInitialHistoryPage = resolve;
+    });
+    transportMocks.historyPage.mockReset();
+    transportMocks.historyPage
+      .mockReturnValueOnce(initialHistoryPage)
+      .mockResolvedValue(makeTerminalHistoryPage({
+        chunks: [
+          { sequence: 1, timestampMs: 10, data: textEncoder.encode('missing ') },
+          { sequence: 2, timestampMs: 20, data: textEncoder.encode('after-gap') },
+        ],
+        firstSequence: 1,
+        lastSequence: 2,
+        coveredBytes: 17,
+        totalBytes: 17,
+      }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
+    });
+
+    const core = terminalCoreInstances[0];
+    expect(core).toBeDefined();
+    emitTerminalData('session-1', 'after-gap', 2);
+    await settleTerminalPanel();
+
+    releaseInitialHistoryPage(makeTerminalHistoryPage());
+
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledTimes(2);
+    });
+    await waitForTerminalPanelCondition(() => {
+      expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toContain('missing after-gap');
+    });
+
+    transportMocks.sendInput.mockClear();
+    core?.handlers?.onData?.('echo __rdv_after_catchup__\r');
+
+    expect(transportMocks.sendInput).toHaveBeenCalledWith(
+      'session-1',
+      'echo __rdv_after_catchup__\r',
       'conn-1',
     );
   });

@@ -1087,6 +1087,11 @@ function TerminalSessionView(props: terminal_session_view_props) {
   };
 
   const outputPipelineDrainPending = () => Boolean(outputPipeline?.getDrainState().drainPending);
+  const terminalInputBlocked = () => {
+    if (loading() !== 'idle' || replaying) return true;
+    if (props.variant !== 'workbench') return false;
+    return catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup;
+  };
 
   const markChunksApplied = (chunks: readonly terminal_display_chunk[] | readonly terminal_history_chunk[]) => {
     for (const chunk of chunks) {
@@ -1625,7 +1630,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       {
         onData: (data: string) => {
           if (!props.viewActive() || !props.active()) return;
-          if (catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup) return;
+          if (terminalInputBlocked()) return;
           void props.transport.sendInput(id, data, props.connId);
         },
         onResize: (size: { cols: number; rows: number }) => {
@@ -1757,6 +1762,13 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
   createEffect(() => {
     if (!liveRenderActive()) return;
+    flushDeferredOrCatchup();
+  });
+
+  createEffect(() => {
+    if (!activityOutputPipelineEnabled()) return;
+    if (!liveRenderActive()) return;
+    if (loading() !== 'idle') return;
     flushDeferredOrCatchup();
   });
 
