@@ -1244,6 +1244,11 @@ function TerminalSessionView(props: terminal_session_view_props) {
     if (deferredLive.length > 0 || queued.length > 0) return;
     if (flushScheduled || flushTimer || flushRaf !== null) return;
 
+    if (activityOutputPipelineEnabled() && activitySequenceCoverage !== null) {
+      for (const sequence of observedUnrenderedSequences) {
+        if (sequence <= activitySequenceCoverage) observedUnrenderedSequences.delete(sequence);
+      }
+    }
     activityCatchupHistorySequences.clear();
     focusAfterCatchup = false;
     if (liveRenderActive()) {
