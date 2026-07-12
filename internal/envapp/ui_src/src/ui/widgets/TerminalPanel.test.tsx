@@ -2320,6 +2320,70 @@ describe('TerminalPanel', () => {
     ]);
   });
 
+  it('does not reuse dropped catchup sequences after the output pipeline drains', async () => {
+    let releaseFirstCatchupPage: (page: TestTerminalHistoryPage) => void = () => {};
+    const firstCatchupPage = new Promise<TestTerminalHistoryPage>((resolve) => {
+      releaseFirstCatchupPage = resolve;
+    });
+    transportMocks.historyPage.mockReset();
+    transportMocks.historyPage
+      .mockResolvedValueOnce(makeTerminalHistoryPage({
+        chunks: [
+          { sequence: 1, timestampMs: 5, data: textEncoder.encode('initial') },
+        ],
+        firstSequence: 1,
+        lastSequence: 1,
+        coveredBytes: 7,
+        totalBytes: 7,
+      }))
+      .mockReturnValueOnce(firstCatchupPage)
+      .mockResolvedValue(makeTerminalHistoryPage({
+        chunks: [
+          { sequence: 265, timestampMs: 265, data: textEncoder.encode('missing-265') },
+          { sequence: 266, timestampMs: 266, data: textEncoder.encode('live-266') },
+        ],
+        firstSequence: 265,
+        lastSequence: 266,
+        coveredBytes: 22,
+        totalBytes: 22,
+      }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
+    });
+
+    emitTerminalData('session-1', 'live-5', 5);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledWith('session-1', 2, -1);
+    });
+    for (let sequence = 6; sequence <= 264; sequence += 1) {
+      emitTerminalData('session-1', `live-${sequence}`, sequence);
+    }
+
+    releaseFirstCatchupPage(makeTerminalHistoryPage({
+      chunks: [
+        { sequence: 2, timestampMs: 2, data: textEncoder.encode('history-2 ') },
+        { sequence: 264, timestampMs: 264, data: textEncoder.encode('history-264') },
+      ],
+      firstSequence: 2,
+      lastSequence: 264,
+      coveredBytes: 24,
+      totalBytes: 24,
+    }));
+    await drainTerminalPanelAsyncWork();
+
+    emitTerminalData('session-1', 'live-266', 266);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledWith('session-1', 265, -1);
+    });
+
+    expect(transportMocks.historyPage.mock.calls).not.toContainEqual(['session-1', 5, -1]);
+  });
+
   it('deduplicates activity live output buffered during sparse history replay', async () => {
     let releaseHistoryPage: (page: TestTerminalHistoryPage) => void = () => {};
     const historyPage = new Promise<TestTerminalHistoryPage>((resolve) => {
