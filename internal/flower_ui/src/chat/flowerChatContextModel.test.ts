@@ -60,6 +60,28 @@ describe('Flower chat linked context parser', () => {
     });
   });
 
+  it('builds indexed host actions for mixed file and directory context', () => {
+    const display = parseChatContextAction({
+      ...baseAction,
+      source: { surface: 'file_browser' },
+      context: [
+        { kind: 'file_path', path: '/workspace/index.ts', is_directory: false },
+        { kind: 'file_path', path: '/workspace/src', is_directory: true },
+      ],
+    });
+
+    expect(display?.chips[0]?.action).toEqual({
+      type: 'open_linked_file_preview',
+      path: '/workspace/index.ts',
+      context_index: 0,
+    });
+    expect(display?.chips[1]?.action).toEqual({
+      type: 'open_linked_directory_browser',
+      path: '/workspace/src',
+      context_index: 1,
+    });
+  });
+
   it('recovers historical empty text content only for display', () => {
     const action = {
       ...baseAction,

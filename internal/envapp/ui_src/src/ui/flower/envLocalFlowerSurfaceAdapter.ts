@@ -31,6 +31,8 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   uploadAttachment?: (file: File) => Promise<string>;
   openFileBrowser?: FlowerSurfaceAdapter['openFileBrowser'];
   openFilePreview?: FlowerSurfaceAdapter['openFilePreview'];
+  openLinkedFilePreview?: FlowerSurfaceAdapter['openLinkedFilePreview'];
+  openLinkedDirectoryBrowser?: FlowerSurfaceAdapter['openLinkedDirectoryBrowser'];
 }>;
 
 export type EnvLocalFlowerSurfaceAdapterCopy = Readonly<{
@@ -511,5 +513,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     failedToCreateThread: copy.failedToCreateChat,
     ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),
     ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
+    ...(options.openLinkedFilePreview ? { openLinkedFilePreview: options.openLinkedFilePreview } : {}),
+    ...(options.openLinkedDirectoryBrowser ? { openLinkedDirectoryBrowser: options.openLinkedDirectoryBrowser } : {}),
   });
 }

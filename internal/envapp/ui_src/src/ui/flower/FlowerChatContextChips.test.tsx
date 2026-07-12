@@ -13,13 +13,13 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-function renderContext(action: unknown): HTMLElement {
+function renderContext(action: unknown, canActivateChip?: Parameters<typeof FlowerChatContextChips>[0]['canActivateChip']): HTMLElement {
   const display = parseChatContextAction(action);
   if (!display) throw new Error('Expected linked context display.');
   const host = document.createElement('div');
   document.body.appendChild(host);
   disposers.push(render(() => (
-    <FlowerChatContextChips contextDisplay={display} onChipClick={vi.fn()} />
+    <FlowerChatContextChips contextDisplay={display} onChipClick={vi.fn()} canActivateChip={canActivateChip} />
   ), host));
   return host;
 }
@@ -63,5 +63,36 @@ describe('Flower linked context chips', () => {
     expect(chip?.textContent).toContain('Unsupported linked context');
     expect(chip?.textContent).toContain('future_context');
     expect(chip?.textContent).not.toContain('hidden');
+  });
+
+  it('renders file and directory capabilities independently', () => {
+    const action = {
+      ...baseAction,
+      source: { surface: 'file_browser' },
+      context: [
+        { kind: 'file_path', path: '/workspace/index.ts', is_directory: false },
+        { kind: 'file_path', path: '/workspace/src', is_directory: true },
+      ],
+    };
+    const host = renderContext(action, (chip) => chip.action?.type === 'open_linked_file_preview');
+    const chips = host.querySelectorAll('[data-flower-chat-context-chip="true"]');
+
+    expect(chips[0]?.tagName).toBe('BUTTON');
+    expect(chips[0]?.getAttribute('data-flower-chat-context-interactive')).toBe('true');
+    expect(chips[0]?.getAttribute('aria-label')).toBe('index.ts, /workspace/index.ts');
+    expect(chips[1]?.tagName).toBe('DIV');
+    expect(chips[1]?.getAttribute('data-flower-chat-context-interactive')).toBe('false');
+    expect(chips[1]?.getAttribute('aria-label')).toBe('src, /workspace/src');
+  });
+
+  it('renders host actions as noninteractive when the host has no capability', () => {
+    const host = renderContext({
+      ...baseAction,
+      source: { surface: 'file_preview' },
+      context: [{ kind: 'file_path', path: '/workspace/index.ts', is_directory: false }],
+    }, () => false);
+
+    expect(host.querySelector('[data-flower-chat-context-chip="true"]')?.tagName).toBe('DIV');
+    expect(host.querySelector('button')).toBeNull();
   });
 });

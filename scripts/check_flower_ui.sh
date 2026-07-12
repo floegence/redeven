@@ -30,6 +30,8 @@ main() {
       src/ui/FlowerSurface.navigation.threads.test.tsx \
       src/ui/FlowerSurface.navigation.structuredInput.test.tsx \
       src/ui/flower/FlowerChatContextChips.test.tsx \
+      src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \
+      src/ui/flower/linkedContextNavigation.test.ts \
       src/ui/chat/blocks/ActivityTimelineBlock.test.tsx \
       src/ui/chat/blocks/ShellBlock.test.tsx
 

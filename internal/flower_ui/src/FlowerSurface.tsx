@@ -17,7 +17,7 @@ import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDi
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import type { FlowerComposerContextUsageFreshness } from './chat/flowerContextPresentation';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
-import type { FlowerChatContextChip } from './contracts/flowerChatContextTypes';
+import type { FlowerChatContextChip, FlowerChatContextSnapshotPreview } from './contracts/flowerChatContextTypes';
 import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
 import type { FlowerSubagentsCopy, FlowerSurfaceCopy } from './copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
@@ -695,7 +695,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadsRefreshing, setThreadsRefreshing] = createSignal(false);
   const [historyFilter, setHistoryFilter] = createSignal('');
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
-  const [previewChip, setPreviewChip] = createSignal<FlowerChatContextChip | null>(null);
+  const [contextSnapshotPreview, setContextSnapshotPreview] = createSignal<FlowerChatContextSnapshotPreview | null>(null);
   const [workingDirectoryPathContext, setWorkingDirectoryPathContext] = createSignal<FlowerWorkingDirectoryPathContext | null>(null);
   const [, setWorkingDirectoryPathContextLoading] = createSignal(false);
   const [workingDirectoryPickerOpen, setWorkingDirectoryPickerOpen] = createSignal(false);
@@ -735,7 +735,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     () => selectedThreadID(),
     (next) => {
       setSidebarActiveThreadID(next);
-      if (next) setPreviewChip(null);
+      setContextSnapshotPreview(null);
       clearWorkingDirectoryCopyConfirmation();
     },
     { defer: false },
@@ -3422,6 +3422,35 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
+  createEffect(() => {
+    const preview = contextSnapshotPreview();
+    if (!preview) return;
+    if (!selectedThreadID() || preview.thread_id !== selectedThreadID()) {
+      setContextSnapshotPreview(null);
+      return;
+    }
+    const sourceEntry = selectedTimelineEntries().find((entry) => (
+      entry.type === 'message' && entry.message.id === preview.message_id
+    ));
+    const pendingSource = pendingTurnsForSelectedThread().find((pending) => (
+      `pending:${pending.message_id}` === preview.message_id
+    ));
+    const sourceContextAction = sourceEntry?.type === 'message'
+      ? sourceEntry.message.context_action
+      : pendingSource?.context_action;
+    if (!sourceContextAction) {
+      setContextSnapshotPreview(null);
+      return;
+    }
+    const display = parseChatContextAction(sourceContextAction);
+    const currentAction = display?.chips.find((chip) => (
+      chip.action?.context_index === preview.action.context_index
+      && chip.action.type === preview.action.type
+    ))?.action;
+    if (!currentAction || JSON.stringify(currentAction) !== JSON.stringify(preview.action)) {
+      setContextSnapshotPreview(null);
+    }
+  });
   const selectedSubagentItems = createMemo(() => buildFlowerSubagentPanelItems(selectedThread()));
   const selectedRunningSubagentCount = createMemo(() => selectedSubagentItems().filter((item) => item.status === 'running').length);
   const selectedActiveSubagentCount = createMemo(() => selectedSubagentItems().filter((item) => (
@@ -5519,10 +5548,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const messageEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'message' }>>) => {
     const message = createMemo(() => entry().message);
     const pendingMessage = createMemo(() => message().id.startsWith('pending:'));
+    const pendingTurn = createMemo(() => {
+      if (!pendingMessage()) return null;
+      return pendingTurnsForSelectedThread().find((item) => `pending:${item.message_id}` === message().id) ?? null;
+    });
     const pendingState = createMemo(() => {
       if (!pendingMessage()) return '';
-      const pendingID = trimString(message().id).replace(/^pending:/, '');
-      const pending = pendingTurnsForSelectedThread().find((item) => item.message_id === pendingID);
+      const pending = pendingTurn();
       return pending ? pending.state : 'sending';
     });
     const pendingStateLabel = createMemo(() => pendingState() === 'queued' ? copy().chat.pendingQueued : copy().chat.pendingSending);
@@ -5562,6 +5594,46 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (msg.role !== 'user') return null;
       return parseChatContextAction(msg.context_action);
     });
+    const canActivateContextChip = (chip: FlowerChatContextChip): boolean => {
+      const action = chip.action;
+      if (!action) return false;
+      if (action.type === 'open_linked_file_preview') return Boolean(props.adapter.openLinkedFilePreview);
+      if (action.type === 'open_linked_directory_browser') return Boolean(props.adapter.openLinkedDirectoryBrowser);
+      return true;
+    };
+    const activateContextChip = async (chip: FlowerChatContextChip): Promise<void> => {
+      const action = chip.action;
+      const display = contextDisplay();
+      if (!action || !display) return;
+      if (action.type === 'open_text_preview' || action.type === 'open_process_preview') {
+        setContextSnapshotPreview({
+          title: chip.label,
+          action,
+          thread_id: selectedThreadID(),
+          message_id: message().id,
+        });
+        return;
+      }
+
+      setContextSnapshotPreview(null);
+      const request = {
+        path: action.path,
+        thread_id: selectedThreadID() || undefined,
+        message_id: pendingTurn()?.message_id ?? message().id,
+        context_index: action.context_index,
+        source_surface: display.surface,
+        target: display.target,
+      };
+      try {
+        if (action.type === 'open_linked_file_preview') {
+          await props.adapter.openLinkedFilePreview?.(request);
+          return;
+        }
+        await props.adapter.openLinkedDirectoryBrowser?.(request);
+      } catch (error) {
+        notifyThreadActionError(getErrorMessage(error));
+      }
+    };
     const isUnifiedUserBubble = createMemo(() => message().role === 'user' && contextDisplay() !== null);
     return (
       <Show when={visible()}>
@@ -5614,7 +5686,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </For>
                 <FlowerChatContextChips
                   contextDisplay={contextDisplay()!}
-                  onChipClick={(chip) => setPreviewChip(chip)}
+                  canActivateChip={canActivateContextChip}
+                  onChipClick={(chip) => { void activateContextChip(chip); }}
                 />
               </div>
               <Show when={copyText() || messageTime()}>
@@ -6334,10 +6407,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </div>
       {subagentDetailDialog()}
       <FlowerChatContextPreview
-        chip={previewChip()}
-        open={previewChip() !== null}
+        preview={contextSnapshotPreview()}
+        open={contextSnapshotPreview() !== null}
         zIndex={FLOWER_SURFACE_LAYER.contextPreview}
-        onClose={() => setPreviewChip(null)}
+        onClose={() => setContextSnapshotPreview(null)}
       />
       <div class="flower-chat-main flower-chat-main">
         <div

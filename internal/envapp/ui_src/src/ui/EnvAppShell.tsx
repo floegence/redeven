@@ -64,6 +64,7 @@ import type {
 } from '../../../../flower_ui/src';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import type { ActivityFileActionOpenRequest } from './chat/types';
+import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
 import type { PluginLifecycleCommand, PluginOpenSurfaceResult, PluginSurfaceLaunchTarget } from './plugins/pluginTypes';
 import { hasRWXPermissions } from './pages/aiPermissions';
@@ -1162,6 +1163,20 @@ export function EnvAppShell() {
     });
   };
 
+  const {
+    openLinkedFilePreview: openFlowerLinkedFilePreview,
+    openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
+  } = createFlowerLinkedContextNavigation({
+    openFilePreview,
+    openFileBrowserAtPath,
+    notifyInvalidFilePath: () => {
+      notify.error(i18n.t('shell.notifications.previewUnavailableTitle'), i18n.t('shell.notifications.invalidFilePath'));
+    },
+    notifyInvalidDirectoryPath: () => {
+      notify.error(i18n.t('shell.notifications.browseFilesUnavailableTitle'), i18n.t('shell.notifications.invalidDirectoryPath'));
+    },
+  });
+
   const closeFlowerTurnLauncher = () => {
     setFlowerTurnLauncherOpen(false);
     setFlowerTurnLauncherIntent(null);
@@ -1246,6 +1261,8 @@ export function EnvAppShell() {
         uploadAttachment: uploadLocalApiFile,
         openFileBrowser: openFlowerFileBrowser,
         openFilePreview: openFlowerFilePreview,
+        openLinkedFilePreview: openFlowerLinkedFilePreview,
+        openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
       });
       const bootstrap = await adapter.launchTurn({
         prompt: trimmedPrompt,
@@ -3318,6 +3335,8 @@ export function EnvAppShell() {
         openFilePreview,
         openFlowerFileBrowser,
         openFlowerFilePreview,
+        openFlowerLinkedFilePreview,
+        openFlowerLinkedDirectoryBrowser,
         consumeOpenTerminalInDirectoryRequest,
         aiThreadFocusRequest,
         focusAIThread,

@@ -651,4 +651,36 @@ describe('Env local Flower surface adapter', () => {
     expect(snapshot.config.current_model_id).toBe('default/gpt-5.4');
     expect(onSettingsChanged).toHaveBeenCalledTimes(1);
   });
+
+  it('exposes linked-context host capabilities without changing activity file actions', async () => {
+    const openFilePreview = vi.fn(async () => undefined);
+    const openFileBrowser = vi.fn(async () => undefined);
+    const openLinkedFilePreview = vi.fn(async () => undefined);
+    const openLinkedDirectoryBrowser = vi.fn(async () => undefined);
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+      openFilePreview,
+      openFileBrowser,
+      openLinkedFilePreview,
+      openLinkedDirectoryBrowser,
+    });
+    const linkedRequest = {
+      path: '/workspace/src/app.ts',
+      thread_id: 'thread_1',
+      message_id: 'message_1',
+      context_index: 0,
+      source_surface: 'file_preview' as const,
+      target: 'current',
+    };
+
+    await adapter.openLinkedFilePreview?.(linkedRequest);
+    await adapter.openLinkedDirectoryBrowser?.({ ...linkedRequest, path: '/workspace/src' });
+
+    expect(openLinkedFilePreview).toHaveBeenCalledWith(linkedRequest);
+    expect(openLinkedDirectoryBrowser).toHaveBeenCalledWith({ ...linkedRequest, path: '/workspace/src' });
+    expect(openFilePreview).not.toHaveBeenCalled();
+    expect(openFileBrowser).not.toHaveBeenCalled();
+  });
 });

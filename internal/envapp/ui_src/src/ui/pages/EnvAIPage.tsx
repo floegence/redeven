@@ -227,6 +227,8 @@ export function EnvAIPage() {
     },
     openFileBrowser: env.openFlowerFileBrowser,
     openFilePreview: env.openFlowerFilePreview,
+    openLinkedFilePreview: env.openFlowerLinkedFilePreview,
+    openLinkedDirectoryBrowser: env.openFlowerLinkedDirectoryBrowser,
   }));
 
   return (

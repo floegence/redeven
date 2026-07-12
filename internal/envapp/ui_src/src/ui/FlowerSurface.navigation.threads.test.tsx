@@ -787,9 +787,17 @@ describe('FlowerSurface navigation threads', () => {
     const container = runtime.querySelector('.flower-chat-context-chips') as HTMLElement;
     expect(container.getAttribute('data-flower-context-surface')).toBe('desktop_welcome_environment_card');
     expect(container.getAttribute('data-flower-context-target')).toBe('local:local');
+
+    chip.click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-chat-context-preview-window')));
+    expect(runtime.querySelector('.flower-chat-context-preview-window')?.textContent).toContain('Environment: Local Environment');
+
+    (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-chat-context-preview-window') === null);
   });
 
   it('restores a historical file reference in a canceled thread when is_directory was omitted', async () => {
+    const openLinkedFilePreview = vi.fn(async () => undefined);
     const contextThread = thread({
       thread_id: 'thread-canceled-file-context',
       title: 'Canceled file review',
@@ -812,6 +820,7 @@ describe('FlowerSurface navigation threads', () => {
       ...adapter(true),
       listThreads: vi.fn(async () => [contextThread]),
       loadThread: vi.fn(async () => liveBootstrap(contextThread)),
+      openLinkedFilePreview,
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-canceled-file-context"] button')));
@@ -819,9 +828,223 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-chat-context-chip="true"]')));
 
     const chip = runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLElement;
+    expect(chip.tagName).toBe('BUTTON');
     expect(chip.textContent).toContain('index.ts');
     expect(chip.textContent).toContain('/workspace/src/index.ts');
     expect(runtime.querySelector('.flower-chat-context-chips')?.getAttribute('data-flower-context-surface')).toBe('file_browser');
+
+    chip.click();
+    await waitFor(() => openLinkedFilePreview.mock.calls.length === 1);
+    expect(openLinkedFilePreview).toHaveBeenCalledWith({
+      path: '/workspace/src/index.ts',
+      thread_id: 'thread-canceled-file-context',
+      message_id: 'message-canceled-file-context',
+      context_index: 0,
+      source_surface: 'file_browser',
+      target: 'current',
+    });
+    expect(runtime.querySelector('.flower-chat-context-preview-window')).toBeNull();
+    expect(runtime.textContent).not.toContain('Open this file in the editor to preview its contents.');
+  });
+
+  it('keeps linked files noninteractive when the host does not expose preview capabilities', async () => {
+    const contextThread = thread({
+      thread_id: 'thread-desktop-file-context',
+      title: 'Desktop file context',
+      messages: [{
+        id: 'message-desktop-file-context',
+        role: 'user',
+        content: 'Inspect this file',
+        status: 'complete',
+        created_at_ms: 1_000,
+        context_action: askFlowerContextAction({
+          target: { target_id: 'current', locality: 'auto' },
+          source: { surface: 'file_preview' },
+          context: [{ kind: 'file_path', path: '/workspace/index.ts', is_directory: false }],
+        }),
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [contextThread]),
+      loadThread: vi.fn(async () => liveBootstrap(contextThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-desktop-file-context"] button')));
+    (runtime.querySelector('[data-thread-id="thread-desktop-file-context"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-chat-context-chip="true"]')));
+
+    const chip = runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLElement;
+    expect(chip.tagName).toBe('DIV');
+    expect(chip.getAttribute('data-flower-chat-context-interactive')).toBe('false');
+    expect(runtime.querySelector('.flower-chat-context-preview-window')).toBeNull();
+  });
+
+  it('routes linked directories to the host browser capability', async () => {
+    const openLinkedDirectoryBrowser = vi.fn(async () => undefined);
+    const contextThread = thread({
+      thread_id: 'thread-directory-context',
+      title: 'Directory context',
+      messages: [{
+        id: 'message-directory-context',
+        role: 'user',
+        content: 'Inspect this directory',
+        status: 'complete',
+        created_at_ms: 1_000,
+        context_action: askFlowerContextAction({
+          target: { target_id: 'current', locality: 'auto' },
+          source: { surface: 'file_browser' },
+          context: [{ kind: 'file_path', path: '/workspace/src', is_directory: true }],
+        }),
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [contextThread]),
+      loadThread: vi.fn(async () => liveBootstrap(contextThread)),
+      openLinkedDirectoryBrowser,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-directory-context"] button')));
+    (runtime.querySelector('[data-thread-id="thread-directory-context"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-chat-context-chip="true"]')));
+    (runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLButtonElement).click();
+    await waitFor(() => openLinkedDirectoryBrowser.mock.calls.length === 1);
+
+    expect(openLinkedDirectoryBrowser).toHaveBeenCalledWith({
+      path: '/workspace/src',
+      thread_id: 'thread-directory-context',
+      message_id: 'message-directory-context',
+      context_index: 0,
+      source_surface: 'file_browser',
+      target: 'current',
+    });
+    expect(runtime.querySelector('.flower-chat-context-preview-window')).toBeNull();
+  });
+
+  it('reports linked file host failures without opening a fallback preview', async () => {
+    const notificationCount = flowerSurfaceNotifications().length;
+    const contextThread = thread({
+      thread_id: 'thread-file-context-error',
+      title: 'File context error',
+      messages: [{
+        id: 'message-file-context-error',
+        role: 'user',
+        content: 'Inspect this file',
+        status: 'complete',
+        created_at_ms: 1_000,
+        context_action: askFlowerContextAction({
+          target: { target_id: 'current', locality: 'auto' },
+          source: { surface: 'file_preview' },
+          context: [{ kind: 'file_path', path: '/workspace/missing.ts', is_directory: false }],
+        }),
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [contextThread]),
+      loadThread: vi.fn(async () => liveBootstrap(contextThread)),
+      openLinkedFilePreview: vi.fn(async () => { throw new Error('Preview failed.'); }),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-file-context-error"] button')));
+    (runtime.querySelector('[data-thread-id="thread-file-context-error"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-chat-context-chip="true"]')));
+    (runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLButtonElement).click();
+    await waitFor(() => flowerSurfaceNotifications().length > notificationCount);
+
+    expect(flowerSurfaceNotifications().at(-1)?.message).toBe('Preview failed.');
+    expect(runtime.querySelector('.flower-chat-context-preview-window')).toBeNull();
+  });
+
+  it('preserves canonical message IDs that use the reserved pending prefix', async () => {
+    const openLinkedFilePreview = vi.fn(async () => undefined);
+    const contextThread = thread({
+      thread_id: 'thread-prefixed-message-context',
+      title: 'Prefixed message context',
+      messages: [{
+        id: 'pending:canonical-message',
+        role: 'user',
+        content: 'Inspect this file',
+        status: 'complete',
+        created_at_ms: 1_000,
+        context_action: askFlowerContextAction({
+          target: { target_id: 'current', locality: 'auto' },
+          source: { surface: 'file_preview' },
+          context: [{ kind: 'file_path', path: '/workspace/index.ts', is_directory: false }],
+        }),
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [contextThread]),
+      loadThread: vi.fn(async () => liveBootstrap(contextThread)),
+      openLinkedFilePreview,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-prefixed-message-context"] button')));
+    (runtime.querySelector('[data-thread-id="thread-prefixed-message-context"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-chat-context-chip="true"]')));
+    (runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLButtonElement).click();
+    await waitFor(() => openLinkedFilePreview.mock.calls.length === 1);
+
+    expect(openLinkedFilePreview).toHaveBeenCalledWith(expect.objectContaining({
+      message_id: 'pending:canonical-message',
+    }));
+  });
+
+  it('closes snapshot preview when timeline replacement removes its source message', async () => {
+    const contextThread = thread({
+      thread_id: 'thread-context-preview-replaced',
+      title: 'Context preview replaced',
+      status: 'running',
+      messages: [{
+        id: 'message-context-preview-old',
+        role: 'user',
+        content: 'Inspect this environment',
+        status: 'complete',
+        created_at_ms: 1_000,
+        context_action: askFlowerContextAction(),
+      }],
+    });
+    let replacementReady = false;
+    const listThreadLiveEvents = vi.fn(async () => {
+      if (!replacementReady) {
+        return { stream_generation: 1, events: [], next_cursor: 1, retained_from_seq: 1 } satisfies FlowerLiveEventsResponse;
+      }
+      return {
+        stream_generation: 1,
+        events: [liveEvent('thread-context-preview-replaced', 2, 'timeline.replaced', {
+          messages: [{
+            id: 'message-context-preview-new',
+            role: 'assistant',
+            content: 'Replacement output',
+            status: 'streaming',
+            created_at_ms: 2_000,
+          }],
+          stream_generation: 1,
+          snapshot_through_seq: 2,
+        })],
+        next_cursor: 2,
+        retained_from_seq: 1,
+      } satisfies FlowerLiveEventsResponse;
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [contextThread]),
+      loadThread: vi.fn(async () => liveBootstrap(contextThread, 1)),
+      listThreadLiveEvents,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-context-preview-replaced"] button')));
+    (runtime.querySelector('[data-thread-id="thread-context-preview-replaced"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-chat-context-chip="true"]')));
+    (runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-chat-context-preview-window')));
+
+    replacementReady = true;
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-context-preview-new"]')), 2500);
+    await waitFor(() => runtime.querySelector('.flower-chat-context-preview-window') === null);
   });
 
   it.each([

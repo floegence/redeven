@@ -373,6 +373,8 @@ function renderSurface(host: HTMLDivElement) {
         openFilePreview: async () => undefined,
         openFlowerFileBrowser: async () => undefined,
         openFlowerFilePreview: async () => undefined,
+        openFlowerLinkedFilePreview: async () => undefined,
+        openFlowerLinkedDirectoryBrowser: async () => undefined,
         consumeOpenTerminalInDirectoryRequest: () => undefined,
         aiThreadFocusRequest: () => null,
         consumeAIThreadFocusRequest: () => undefined,
