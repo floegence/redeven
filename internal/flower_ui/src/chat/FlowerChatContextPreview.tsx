@@ -2,10 +2,10 @@ import type { Component } from 'solid-js';
 import { Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
-import type { FlowerChatContextChip, FlowerChatContextAction } from '../contracts/flowerChatContextTypes';
+import type { FlowerChatContextSnapshotAction, FlowerChatContextSnapshotPreview } from '../contracts/flowerChatContextTypes';
 
 type FlowerChatContextPreviewProps = Readonly<{
-  chip: FlowerChatContextChip | null;
+  preview: FlowerChatContextSnapshotPreview | null;
   open: boolean;
   zIndex?: number;
   onClose: () => void;
@@ -31,7 +31,7 @@ function resolveSizing(viewport: { width: number; height: number }) {
   return { compact, margin, defaultSize: { width: defaultWidth, height: defaultHeight }, minSize: { width: minWidth, height: minHeight } };
 }
 
-const TextPreviewPanel: Component<{ action: Extract<FlowerChatContextAction, { type: 'open_text_preview' }> }> = (props) => {
+const TextPreviewPanel: Component<{ action: Extract<FlowerChatContextSnapshotAction, { type: 'open_text_preview' }> }> = (props) => {
   return (
     <div class="flower-chat-context-preview-body">
       <div class="flower-chat-context-preview-title">{props.action.title}</div>
@@ -43,7 +43,7 @@ const TextPreviewPanel: Component<{ action: Extract<FlowerChatContextAction, { t
   );
 };
 
-const ProcessPreviewPanel: Component<{ action: Extract<FlowerChatContextAction, { type: 'open_process_preview' }> }> = (props) => {
+const ProcessPreviewPanel: Component<{ action: Extract<FlowerChatContextSnapshotAction, { type: 'open_process_preview' }> }> = (props) => {
   return (
     <div class="flower-chat-context-preview-body">
       <div class="flower-chat-context-preview-title">{props.action.title}</div>
@@ -55,45 +55,12 @@ const ProcessPreviewPanel: Component<{ action: Extract<FlowerChatContextAction, 
   );
 };
 
-const FilePreviewPanel: Component<{ action: Extract<FlowerChatContextAction, { type: 'open_file_preview' }> }> = (props) => {
-  return (
-    <div class="flower-chat-context-preview-body">
-      <div class="flower-chat-context-preview-title">File</div>
-      <div class="flower-chat-context-preview-subtitle">{props.action.path}</div>
-      <div class="flower-chat-context-preview-content" style="color: var(--muted-foreground);">
-        Open this file in the editor to preview its contents.
-      </div>
-    </div>
-  );
-};
-
-const DirectoryPreviewPanel: Component<{ action: Extract<FlowerChatContextAction, { type: 'open_directory_browser' }> }> = (props) => {
-  return (
-    <div class="flower-chat-context-preview-body">
-      <div class="flower-chat-context-preview-title">Directory</div>
-      <div class="flower-chat-context-preview-subtitle">{props.action.path}</div>
-      <div class="flower-chat-context-preview-content" style="color: var(--muted-foreground);">
-        Open this directory in the file browser to explore its contents.
-      </div>
-    </div>
-  );
-};
-
-const PreviewPanel: Component<{ chip: FlowerChatContextChip }> = (props) => {
-  const action = props.chip.action;
-  if (!action) return null;
-
-  switch (action.type) {
+const PreviewPanel: Component<{ action: FlowerChatContextSnapshotAction }> = (props) => {
+  switch (props.action.type) {
     case 'open_text_preview':
-      return <TextPreviewPanel action={action} />;
+      return <TextPreviewPanel action={props.action} />;
     case 'open_process_preview':
-      return <ProcessPreviewPanel action={action} />;
-    case 'open_file_preview':
-      return <FilePreviewPanel action={action} />;
-    case 'open_directory_browser':
-      return <DirectoryPreviewPanel action={action} />;
-    default:
-      return null;
+      return <ProcessPreviewPanel action={props.action} />;
   }
 };
 
@@ -101,16 +68,16 @@ export const FlowerChatContextPreview: Component<FlowerChatContextPreviewProps> 
   const viewport = createMemo(() => currentViewportSize());
   const sizing = createMemo(() => resolveSizing(viewport()));
 
-  const chip = () => props.chip;
+  const preview = () => props.preview;
 
   return (
-    <Show when={props.open && chip() != null}>
+    <Show when={props.open && preview() != null}>
       <FloatingWindow
         open
         onOpenChange={(next) => {
           if (!next) props.onClose();
         }}
-        title={chip()!.label}
+        title={preview()!.title}
         class={cn('flower-chat-context-preview-window', 'shadow-[0_28px_72px_-42px_rgba(15,23,42,0.38)]')}
         defaultSize={sizing().defaultSize}
         minSize={sizing().minSize}
@@ -119,7 +86,7 @@ export const FlowerChatContextPreview: Component<FlowerChatContextPreviewProps> 
         zIndex={props.zIndex ?? 162}
       >
         <div class="flower-chat-context-preview-surface">
-          <PreviewPanel chip={chip()!} />
+          <PreviewPanel action={preview()!.action} />
         </div>
       </FloatingWindow>
     </Show>

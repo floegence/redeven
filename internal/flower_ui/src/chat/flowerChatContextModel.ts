@@ -17,8 +17,8 @@ function buildFilePathChip(item: Extract<PersistedContextActionItem, { kind: 'fi
     label,
     detail: item.path,
     action: item.is_directory
-      ? { type: 'open_directory_browser', path: item.path }
-      : { type: 'open_file_preview', path: item.path },
+      ? { type: 'open_linked_directory_browser', path: item.path, context_index: index }
+      : { type: 'open_linked_file_preview', path: item.path, context_index: index },
   };
 }
 
@@ -35,6 +35,7 @@ function buildFileSelectionChip(item: Extract<PersistedContextActionItem, { kind
       title: 'Selected content',
       subtitle: label,
       body: item.selection,
+      context_index: index,
       source_path: item.path,
     },
   };
@@ -58,6 +59,7 @@ function buildTerminalSelectionChip(item: Extract<PersistedContextActionItem, { 
           title: 'Terminal output',
           subtitle: compact(item.working_dir) || 'Terminal',
           body: item.selection,
+          context_index: index,
           source_path: item.working_dir,
         }
       : null,
@@ -89,6 +91,7 @@ function buildProcessSnapshotChip(item: Extract<PersistedContextActionItem, { ki
       subtitle,
       body: processSnapshotText(item),
       pid: Math.trunc(Number(item.pid ?? 0)),
+      context_index: index,
     },
   };
 }
@@ -107,6 +110,7 @@ function buildTextSnapshotChip(item: Extract<PersistedContextActionItem, { kind:
       title: label,
       subtitle: detail,
       body: item.content,
+      context_index: index,
     },
   };
 }

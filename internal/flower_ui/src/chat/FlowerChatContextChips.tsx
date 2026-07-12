@@ -6,6 +6,7 @@ import type { FlowerChatContextChip, FlowerChatContextDisplay } from '../contrac
 type FlowerChatContextChipsProps = Readonly<{
   contextDisplay: FlowerChatContextDisplay;
   onChipClick: (chip: FlowerChatContextChip) => void;
+  canActivateChip?: (chip: FlowerChatContextChip) => boolean;
 }>;
 
 function chipIcon(tone: string): Component<{ class?: string }> {
@@ -31,6 +32,8 @@ export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (p
         <For each={props.contextDisplay.chips}>
           {(chip) => {
             const Icon = chipIcon(chip.tone);
+            const interactive = () => chip.action !== null && (props.canActivateChip?.(chip) ?? true);
+            const accessibleLabel = () => chip.detail ? `${chip.label}, ${chip.detail}` : chip.label;
             const content = (
               <>
                 <span class="flower-chat-context-chip-icon">
@@ -44,7 +47,7 @@ export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (p
             );
             return (
               <Show
-                when={chip.action}
+                when={interactive()}
                 fallback={(
                   <div
                     class="flower-chat-context-chip"
@@ -52,7 +55,7 @@ export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (p
                     data-flower-chat-context-interactive="false"
                     data-tone={chip.tone}
                     role="note"
-                    aria-label={chip.label}
+                    aria-label={accessibleLabel()}
                   >
                     {content}
                   </div>
@@ -64,7 +67,7 @@ export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (p
                   data-flower-chat-context-chip="true"
                   data-flower-chat-context-interactive="true"
                   data-tone={chip.tone}
-                  aria-label={chip.label}
+                  aria-label={accessibleLabel()}
                   onClick={() => props.onChipClick(chip)}
                 >
                   {content}

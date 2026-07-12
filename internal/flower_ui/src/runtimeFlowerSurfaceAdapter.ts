@@ -1,6 +1,7 @@
 import type {
   FlowerCompactThreadContextInput,
   FlowerFileOpenRequest,
+  FlowerLinkedContextPathOpenRequest,
   FlowerPermissionType,
   FlowerReasoningSelection,
   FlowerResolveHandlerInput,
@@ -122,6 +123,8 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
+  openLinkedFilePreview?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
+  openLinkedDirectoryBrowser?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   missingThreadID?: string;
   failedToCreateThread?: string;
 }>;
@@ -313,5 +316,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.listWorkingDirectoryEntries ? { listWorkingDirectoryEntries: options.listWorkingDirectoryEntries } : {}),
     ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),
     ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
+    ...(options.openLinkedFilePreview ? { openLinkedFilePreview: options.openLinkedFilePreview } : {}),
+    ...(options.openLinkedDirectoryBrowser ? { openLinkedDirectoryBrowser: options.openLinkedDirectoryBrowser } : {}),
   };
 }

@@ -134,6 +134,31 @@ function adapterOptions(
 }
 
 describe('runtime Flower surface adapter read state', () => {
+  it('preserves linked-context host capabilities independently from activity file actions', async () => {
+    const openLinkedFilePreview = vi.fn(async () => undefined);
+    const openLinkedDirectoryBrowser = vi.fn(async () => undefined);
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, {
+      openLinkedFilePreview,
+      openLinkedDirectoryBrowser,
+    }));
+    const request = {
+      path: '/workspace/src/app.ts',
+      thread_id: 'thread_1',
+      message_id: 'message_1',
+      context_index: 0,
+      source_surface: 'file_preview' as const,
+      target: 'current',
+    };
+
+    await adapter.openLinkedFilePreview?.(request);
+    await adapter.openLinkedDirectoryBrowser?.({ ...request, path: '/workspace/src' });
+
+    expect(openLinkedFilePreview).toHaveBeenCalledWith(request);
+    expect(openLinkedDirectoryBrowser).toHaveBeenCalledWith({ ...request, path: '/workspace/src' });
+    expect(adapter.openFilePreview).toBeUndefined();
+    expect(adapter.openFileBrowser).toBeUndefined();
+  });
+
   it('delegates current model updates through the host option', async () => {
     const nextSnapshot = {
       ...settingsSnapshot(),

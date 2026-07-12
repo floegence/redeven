@@ -1035,6 +1035,15 @@ export type FlowerFileOpenRequest = Readonly<{
   action_id: string;
 }>;
 
+export type FlowerLinkedContextPathOpenRequest = Readonly<{
+  path: string;
+  thread_id?: string;
+  message_id: string;
+  context_index: number;
+  source_surface: FlowerTurnLauncherSourceSurface;
+  target: string;
+}>;
+
 export type FlowerTerminalProcessReadRequest = Readonly<{
   run_id: string;
   process_id: string;
@@ -1129,4 +1138,6 @@ export type FlowerSurfaceAdapter = Readonly<{
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
+  openLinkedFilePreview?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
+  openLinkedDirectoryBrowser?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
 }>;
