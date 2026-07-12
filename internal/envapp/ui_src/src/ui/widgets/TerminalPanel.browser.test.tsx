@@ -1,6 +1,7 @@
 import { For, Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { page } from 'vitest/browser';
 
 import { TerminalPanel } from './TerminalPanel';
 
@@ -184,6 +185,8 @@ vi.mock('@floegence/floe-webapp-core/ui', async () => {
       <button
         type="button"
         data-testid={props['data-testid']}
+        aria-label={props['aria-label']}
+        class={props.class}
         onClick={props.onClick}
         disabled={props.disabled}
         title={props.title}
@@ -203,7 +206,17 @@ vi.mock('@floegence/floe-webapp-core/ui', async () => {
         </For>
       </div>
     ),
-    Input: (props: any) => <input ref={props.ref} value={props.value} placeholder={props.placeholder} onInput={props.onInput} />,
+    Input: (props: any) => (
+      <input
+        ref={props.ref}
+        value={props.value}
+        placeholder={props.placeholder}
+        aria-label={props['aria-label']}
+        data-testid={props['data-testid']}
+        class={props.class}
+        onInput={props.onInput}
+      />
+    ),
     NumberInput: (props: any) => (
       <input
         value={props.value}
@@ -268,7 +281,7 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     }
 
     initialize = vi.fn().mockResolvedValue(undefined);
-    dispose = vi.fn();
+    dispose = vi.fn(() => this.container.replaceChildren());
     setTheme = vi.fn();
     setAppearance = vi.fn();
     forceResize = vi.fn();
@@ -286,6 +299,23 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     findNext = vi.fn();
     findPrevious = vi.fn();
     clear = vi.fn();
+    captureRestorableSnapshot = vi.fn((options?: { coveredThroughSequence?: number }) => ({
+      version: 1 as const,
+      data: 'browser snapshot',
+      byteLength: 1024,
+      partial: false,
+      coveredThroughSequence: options?.coveredThroughSequence ?? 0,
+      cols: 80,
+      rows: 24,
+      createdAtMs: Date.now(),
+    }));
+    restoreSnapshot = vi.fn().mockResolvedValue(true);
+    getResourceEstimate = vi.fn(() => ({
+      bufferBytes: 256 * 1024,
+      cellCount: 2_000,
+      estimatedBytes: 1024 * 1024,
+      rendererType: 'webgl' as const,
+    }));
     getSelectionText = vi.fn(() => '');
     hasSelection = vi.fn(() => false);
     copySelection = vi.fn(async (source: 'shortcut' | 'command' | 'copy_event' = 'command') => ({
@@ -451,6 +481,7 @@ function findTerminalTabStatus(host: HTMLElement, label: string, status: 'runnin
 }
 
 beforeEach(() => {
+  sessionStorage.clear();
   layoutState.mobile = false;
   terminalPrefsState.userTheme = 'system';
   terminalPrefsState.fontSize = 12;
@@ -839,4 +870,90 @@ describe('TerminalPanel browser activity integration', () => {
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
   });
+
+  it('keeps ten-core warm switching below the 100 ms p95 reference budget', async () => {
+    terminalSessionsState.sessions = Array.from({ length: 10 }, (_, index) => ({
+      id: `session-${index + 1}`,
+      name: `Terminal ${index + 1}`,
+      workingDir: `/workspace/${index + 1}`,
+      createdAtMs: index + 1,
+      isActive: index === 0,
+      lastActiveAtMs: 10 - index,
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    for (let index = 2; index <= 10; index += 1) {
+      findTerminalTab(host, `Terminal ${index}`)?.click();
+      await settleTerminalPanel();
+      await vi.waitFor(() => {
+        expect(terminalCoreState.instances.length).toBeGreaterThanOrEqual(index);
+      });
+    }
+    expect(terminalCoreState.instances).toHaveLength(10);
+    transportMocks.historyPage.mockClear();
+
+    const durations: number[] = [];
+    for (let index = 0; index < 40; index += 1) {
+      const targetIndex = (index % 10) + 1;
+      const start = performance.now();
+      findTerminalTab(host, `Terminal ${targetIndex}`)?.click();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      durations.push(performance.now() - start);
+    }
+
+    const sorted = [...durations].sort((left, right) => left - right);
+    const p95 = sorted[Math.ceil(sorted.length * 0.95) - 1] ?? Number.POSITIVE_INFINITY;
+    expect(p95).toBeLessThan(100);
+    expect(terminalCoreState.instances).toHaveLength(10);
+    expect(transportMocks.historyPage).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it('keeps the mobile drawer and search surface inside 320x568, 390x844, desktop, and transformed hosts', async () => {
+    const renderResponsivePanel = async (width: number, height: number, transformed = false) => {
+      await page.viewport(width, height);
+      layoutState.mobile = width < 640;
+      const host = document.createElement('div');
+      host.style.width = transformed ? '600px' : '100vw';
+      host.style.height = transformed ? '500px' : '100vh';
+      if (transformed) {
+        host.style.transform = 'scale(0.8)';
+        host.style.transformOrigin = 'top left';
+      }
+      document.body.appendChild(host);
+      const dispose = render(() => <TerminalPanel variant="workbench" />, host);
+      await settleTerminalPanel();
+
+      const hostRect = host.getBoundingClientRect();
+      const contentRect = host.querySelector<HTMLElement>('[data-testid="terminal-content"]')?.getBoundingClientRect();
+      expect(contentRect?.width ?? 0).toBeGreaterThan(0);
+      expect((contentRect?.right ?? 0) <= hostRect.right + 1).toBe(true);
+
+      if (layoutState.mobile) {
+        host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-drawer-open"]')?.click();
+        await settleTerminalPanel();
+        const drawer = host.querySelector<HTMLElement>('.redeven-terminal-session-sidebar');
+        const drawerRect = drawer?.getBoundingClientRect();
+        expect(drawerRect?.left ?? -1).toBeGreaterThanOrEqual(hostRect.left - 1);
+        expect((drawerRect?.right ?? Number.POSITIVE_INFINITY) <= hostRect.right + 1).toBe(true);
+        expect((drawerRect?.bottom ?? Number.POSITIVE_INFINITY) <= hostRect.bottom + 1).toBe(true);
+      }
+
+      const screenshot = await page.screenshot({ save: false });
+      expect(screenshot.length).toBeGreaterThan(1_000);
+      dispose();
+      host.remove();
+    };
+
+    try {
+      await renderResponsivePanel(320, 568);
+      await renderResponsivePanel(390, 844);
+      await renderResponsivePanel(1280, 800);
+      await renderResponsivePanel(900, 700, true);
+    } finally {
+      await page.viewport(1280, 720);
+    }
+  }, 15_000);
 });

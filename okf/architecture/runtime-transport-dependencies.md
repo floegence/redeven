@@ -14,7 +14,7 @@ Redeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The
 
 # Boundaries
 
-Compatibility depends on these transport and terminal interfaces staying aligned across released versions. Replacing or bypassing them can break control and data channel behavior, sparse history coverage, command lifecycle events, or terminal session lifecycle. History and session diagnostics are observability signals only: neither Redeven nor Floeterm may use session count to reject creation, automatically close a PTY, or pause an existing session.
+Compatibility depends on these transport and terminal interfaces staying aligned across released versions. Replacing or bypassing them can break control and data channel behavior, sparse history coverage, command lifecycle events, or terminal session lifecycle. History and session diagnostics are observability signals only: neither Redeven nor Floeterm may use session count to reject creation, automatically close a PTY, or pause an existing session. Frontend renderer hibernation is not a runtime lifecycle transition: disposing an inactive `TerminalCore` must leave the terminal-go session and PTY running, and later snapshot or paged-history recovery resumes only the visual consumer.
 
 # Citations
 
