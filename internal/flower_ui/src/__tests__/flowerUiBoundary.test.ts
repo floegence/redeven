@@ -69,10 +69,12 @@ describe('shared Flower UI boundary', () => {
   it('keeps Desktop and Env App on the shared Flower surface styles and source scan', () => {
     const desktopCss = readText(path.join(repoRoot, 'desktop', 'src', 'welcome', 'index.css'));
     const envCss = readText(path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'src', 'index.css'));
+    const envFlowerCss = readText(path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'src', 'ui', 'flower-feature.css'));
 
     expect(desktopCss).toContain("../../../internal/flower_ui/src/styles/flower.css");
     expect(desktopCss).toContain("../../../internal/flower_ui/src/**/*.{ts,tsx,html}");
-    expect(envCss).toContain("../../../flower_ui/src/styles/flower.css");
+    expect(envCss).not.toContain("../../../flower_ui/src/styles/flower.css");
+    expect(envFlowerCss).toContain("../../../../flower_ui/src/styles/flower.css");
     expect(envCss).toContain("../../../flower_ui/src/**/*.{ts,tsx,html}");
   });
 

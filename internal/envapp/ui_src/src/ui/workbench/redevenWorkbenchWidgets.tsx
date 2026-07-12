@@ -4,29 +4,27 @@ import type {
   WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
 import { DockCpu, DockFolder, DockTerminal, Search } from '@floegence/floe-webapp-core/icons';
-import { Show, type JSX } from 'solid-js';
+import { Show, lazy, type JSX } from 'solid-js';
 
 import { CodexWorkbenchIcon } from '../icons/CodexIcon';
 import { CodespacesGlyph } from '../icons/CodespacesIcon';
 import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
-import { EnvAIPage } from '../pages/EnvAIPage';
-import { EnvCodespacesPage } from '../pages/EnvCodespacesPage';
-import { EnvPortForwardsPage } from '../pages/EnvPortForwardsPage';
 import { hasRWXPermissions } from '../pages/aiPermissions';
-import { CodexPage } from '../codex/CodexPage';
-import { CodexSidebarShell } from '../codex/CodexSidebarShell';
-import { RemoteFileBrowser } from '../widgets/RemoteFileBrowser';
-import { RuntimeMonitorPanel } from '../widgets/RuntimeMonitorPanel';
-import { TerminalPanel } from '../widgets/TerminalPanel';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
-import { EnvWorkbenchConversationShell } from './EnvWorkbenchConversationShell';
 import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
 import { REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS } from './surface/workbenchWheelInteractive';
 import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
 
 const FRONTABLE_WORKBENCH_RENDER_MODE = 'projected_surface';
+const EnvAIPage = lazy(() => import('../pages/EnvAIPage').then((module) => ({ default: module.EnvAIPage })));
+const EnvCodespacesPage = lazy(() => import('../pages/EnvCodespacesPage').then((module) => ({ default: module.EnvCodespacesPage })));
+const EnvPortForwardsPage = lazy(() => import('../pages/EnvPortForwardsPage').then((module) => ({ default: module.EnvPortForwardsPage })));
+const RemoteFileBrowser = lazy(() => import('../widgets/RemoteFileBrowser').then((module) => ({ default: module.RemoteFileBrowser })));
+const RuntimeMonitorPanel = lazy(() => import('../widgets/RuntimeMonitorPanel').then((module) => ({ default: module.RuntimeMonitorPanel })));
+const TerminalPanel = lazy(() => import('../widgets/TerminalPanel').then((module) => ({ default: module.TerminalPanel })));
+const CodexWorkbenchSurface = lazy(() => import('./CodexWorkbenchSurface').then((module) => ({ default: module.CodexWorkbenchSurface })));
 
 function WorkbenchBodyNotice(props: {
   title: string;
@@ -185,11 +183,7 @@ function CodexWidget(_props: RedevenWorkbenchWidgetBodyProps) {
         />
       )}
     >
-      <EnvWorkbenchConversationShell
-        railLabel={i18n.t('workbench.notices.codexThreads')}
-        rail={<CodexSidebarShell />}
-        workbench={<CodexPage />}
-      />
+      <CodexWorkbenchSurface />
     </Show>
   );
 }

@@ -57,6 +57,7 @@ export type LocalRuntimeInfo = {
   effective_run_mode?: 'local' | 'hybrid' | 'remote';
   remote_enabled?: boolean;
   runtime_service?: unknown;
+  access_status?: LocalAccessStatus;
 };
 
 export type LocalAccessStatus = {
@@ -346,13 +347,14 @@ async function loadLocalRuntimeInfo(): Promise<LocalRuntimeInfo | null> {
 
   try {
     const out = await fetchLocalJSON<LocalRuntimeInfo>('/api/local/runtime', { method: 'GET' });
-    return normalizeLocalRuntimeInfo(out);
+    return { ...normalizeLocalRuntimeInfo(out), access_status: access };
   } catch (error) {
     if (error instanceof APIError && error.status === 423) {
       return {
         mode: 'local',
         env_public_id: 'env_local',
         direct_ws_url: buildLocalDirectWSURLBestEffort(),
+        access_status: access,
       };
     }
     throw error;

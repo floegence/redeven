@@ -2,6 +2,7 @@ import { For, Index, Show, batch, createEffect, createMemo, createSignal, onClea
 import { deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
 import { Check, Copy, ExternalLink, Folder, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import '@fontsource/iosevka/400.css';
 
 import {
   Button,

@@ -1,0 +1,39 @@
+@import './chat/chat.css';
+@import '../../../../flower_ui/src/styles/flower.css';
+
+.flower-chat-sidebar-new-chat-button {
+  display: inline-flex;
+  width: 100%;
+  min-width: 0;
+  height: 2.75rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--sidebar-border, var(--border)));
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--primary) 7%, var(--sidebar-accent, var(--muted)));
+  color: var(--sidebar-foreground, var(--foreground));
+  padding: 0.25rem 0.75rem 0.25rem 0.375rem;
+  transition: background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease, filter 150ms ease, transform 150ms ease;
+}
+
+.flower-chat-sidebar-new-chat-button:hover,
+.flower-chat-sidebar-new-chat-button:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--sidebar-border, var(--border)));
+  background: color-mix(in srgb, var(--primary) 12%, var(--sidebar-accent, var(--muted)));
+  box-shadow: 0 10px 24px -20px color-mix(in srgb, var(--primary) 55%, transparent);
+  filter: saturate(1.08);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.flower-chat-sidebar-new-chat-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}

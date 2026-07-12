@@ -4,6 +4,7 @@ import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import type { DesktopManagedRuntimePresence } from '../shared/desktopRuntimePresence';
 import {
   DesktopWelcomeRuntimeHealthStore,
+  desktopWelcomeRuntimeHealthIsFresh,
   type DesktopWelcomeRuntimeHealthTarget,
 } from './desktopWelcomeRuntimeHealth';
 
@@ -73,6 +74,15 @@ function presence(
 }
 
 describe('DesktopWelcomeRuntimeHealthStore', () => {
+  it('treats only fresh health inside the TTL as reusable', () => {
+    const checkedAtUnixMS = 10_000;
+    const freshHealth = health({ freshness: 'fresh', checked_at_unix_ms: checkedAtUnixMS });
+
+    expect(desktopWelcomeRuntimeHealthIsFresh(freshHealth, checkedAtUnixMS + 29_999)).toBe(true);
+    expect(desktopWelcomeRuntimeHealthIsFresh(freshHealth, checkedAtUnixMS + 30_000)).toBe(false);
+    expect(desktopWelcomeRuntimeHealthIsFresh({ ...freshHealth, freshness: 'failed' }, checkedAtUnixMS + 1)).toBe(false);
+  });
+
   it('primes missing targets without starting probes or fabricating health', () => {
     let probeCount = 0;
     const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);

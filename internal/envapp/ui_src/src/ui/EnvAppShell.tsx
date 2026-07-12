@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from 'solid-js';
+import { Show, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount } from 'solid-js';
 import { deferAfterPaint, type FloeComponent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
@@ -63,27 +63,11 @@ import type {
   FlowerTurnLauncherSubmitInput,
 } from '../../../../flower_ui/src';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
-import { EnvTerminalPage } from './pages/EnvTerminalPage';
-import { EnvMonitorPage } from './pages/EnvMonitorPage';
-import { EnvFileBrowserPage } from './pages/EnvFileBrowserPage';
-import { EnvCodespacesPage } from './pages/EnvCodespacesPage';
-import { EnvPortForwardsPage } from './pages/EnvPortForwardsPage';
-import { EnvAIPage } from './pages/EnvAIPage';
 import type { ActivityFileActionOpenRequest } from './chat/types';
-import { CodexPage } from './codex/CodexPage';
-import { CodexProvider } from './codex/CodexProvider';
-import { CodexSidebar } from './codex/CodexSidebar';
-import { AIChatContext, createAIChatContextValue } from './pages/AIChatContext';
-import { EnvSettingsPage } from './pages/EnvSettingsPage';
-import { PluginPanel } from './plugins/PluginPanel';
-import { PluginCenterView } from './plugins/PluginCenterView';
-import { PluginSurfaceFrame } from './plugins/PluginSurfaceFrame';
-import { executePluginLifecycleCommand, loadPluginInventoryProjection } from './plugins/pluginApi';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
 import type { PluginLifecycleCommand, PluginOpenSurfaceResult, PluginSurfaceLaunchTarget } from './plugins/pluginTypes';
 import { hasRWXPermissions } from './pages/aiPermissions';
 import { useRedevenRpc } from './protocol/redeven_v1';
-import { createEnvLocalFlowerSurfaceAdapter } from './flower/envLocalFlowerSurfaceAdapter';
 import { RuntimeUpdateContext } from './maintenance/RuntimeUpdateContext';
 import { createAgentMaintenanceController } from './maintenance/createAgentMaintenanceController';
 import { createRuntimeUpdatePromptCoordinator } from './maintenance/createRuntimeUpdatePromptCoordinator';
@@ -101,9 +85,6 @@ import {
   type ReconnectAvailability,
 } from './reconnect/createRuntimeReconnectController';
 import { createDebugConsoleController } from './debugConsole/createDebugConsoleController';
-import { DebugConsoleWindow } from './debugConsole/DebugConsoleWindow';
-import { AuditLogDialog } from './widgets/AuditLogDialog';
-import { FlowerTurnLauncherWindow } from './widgets/FlowerTurnLauncherWindow';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { Tooltip } from './primitives/Tooltip';
 import { NotesOverlay } from './notes/NotesOverlay';
@@ -111,9 +92,7 @@ import { resolveNotesOverlayViewportHosts } from './notes/notesOverlayShellViewp
 import { createFileBrowserSurfaceController } from './widgets/createFileBrowserSurfaceController';
 import { createFilePreviewController } from './widgets/createFilePreviewController';
 import { FileBrowserSurfaceContext } from './widgets/FileBrowserSurfaceContext';
-import { FileBrowserSurfaceHost } from './widgets/FileBrowserSurfaceHost';
 import { FilePreviewContext, type FilePreviewOpenOptions } from './widgets/FilePreviewContext';
-import { FilePreviewHost } from './widgets/FilePreviewHost';
 import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from './utils/askFlowerPath';
 import { createClientId } from './utils/clientId';
@@ -178,7 +157,6 @@ import {
   type EnvViewMode,
   type EnvWorkbenchHandoffAnchor,
 } from './envViewMode';
-import { EnvWorkbenchPage } from './workbench/EnvWorkbenchPage';
 import { LanguagePreferenceMenu, useI18n } from './i18n';
 
 const ACTIVE_SURFACE_STORAGE_KEY = 'redeven_envapp_active_tab';
@@ -188,6 +166,26 @@ const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
 const PLUGIN_CENTER_ACTIVITY_ID = 'plugin-center';
 const PLUGIN_SURFACE_ACTIVITY_ID = 'plugin-surface';
+
+const EnvTerminalPage = lazy(() => import('./pages/EnvTerminalPage').then((module) => ({ default: module.EnvTerminalPage })));
+const EnvMonitorPage = lazy(() => import('./pages/EnvMonitorPage').then((module) => ({ default: module.EnvMonitorPage })));
+const EnvFileBrowserPage = lazy(() => import('./pages/EnvFileBrowserPage').then((module) => ({ default: module.EnvFileBrowserPage })));
+const EnvCodespacesPage = lazy(() => import('./pages/EnvCodespacesPage').then((module) => ({ default: module.EnvCodespacesPage })));
+const EnvPortForwardsPage = lazy(() => import('./pages/EnvPortForwardsPage').then((module) => ({ default: module.EnvPortForwardsPage })));
+const EnvAIPage = lazy(() => import('./pages/EnvAIPage').then((module) => ({ default: module.EnvAIPage })));
+const CodexPage = lazy(() => import('./codex/CodexPage').then((module) => ({ default: module.CodexPage })));
+const CodexSidebar = lazy(() => import('./codex/CodexSidebar').then((module) => ({ default: module.CodexSidebar })));
+const EnvSettingsPage = lazy(() => import('./pages/EnvSettingsPage').then((module) => ({ default: module.EnvSettingsPage })));
+const PluginPanel = lazy(() => import('./plugins/PluginPanel').then((module) => ({ default: module.PluginPanel })));
+const PluginCenterView = lazy(() => import('./plugins/PluginCenterView').then((module) => ({ default: module.PluginCenterView })));
+const PluginSurfaceFrame = lazy(() => import('./plugins/PluginSurfaceFrame').then((module) => ({ default: module.PluginSurfaceFrame })));
+const DebugConsoleWindow = lazy(() => import('./debugConsole/DebugConsoleWindow').then((module) => ({ default: module.DebugConsoleWindow })));
+const AuditLogDialog = lazy(() => import('./widgets/AuditLogDialog').then((module) => ({ default: module.AuditLogDialog })));
+const FlowerTurnLauncherWindow = lazy(() => import('./widgets/FlowerTurnLauncherWindow').then((module) => ({ default: module.FlowerTurnLauncherWindow })));
+const FilePreviewHost = lazy(() => import('./widgets/FilePreviewHost').then((module) => ({ default: module.FilePreviewHost })));
+const FileBrowserSurfaceHost = lazy(() => import('./widgets/FileBrowserSurfaceHost').then((module) => ({ default: module.FileBrowserSurfaceHost })));
+const EnvWorkbenchPage = lazy(() => import('./workbench/EnvWorkbenchPage').then((module) => ({ default: module.EnvWorkbenchPage })));
+const CodexFeatureProvider = lazy(() => import('./codex/CodexFeatureProvider').then((module) => ({ default: module.CodexFeatureProvider })));
 
 type EnvActivitySurfaceId = EnvSurfaceId | 'settings' | typeof PLUGIN_CENTER_ACTIVITY_ID | typeof PLUGIN_SURFACE_ACTIVITY_ID;
 
@@ -288,6 +286,8 @@ function envAppNowMs(): number {
   return Date.now();
 }
 
+const envAppModuleStartedAtMs = envAppNowMs();
+
 function normalizeWorkbenchHandoffAnchor(value: unknown): EnvWorkbenchHandoffAnchor | null {
   const candidate = value as { clientX?: unknown; clientY?: unknown } | null;
   const clientX = Number(candidate?.clientX);
@@ -364,12 +364,6 @@ function persistActiveSurface(surfaceId: EnvSurfaceId): void {
   writeUIStorageItem(ACTIVE_SURFACE_STORAGE_KEY, surfaceId);
 }
 
-// Bridge: provides AIChatContext to Shell and its children (requires EnvContext above).
-function AIChatProviderBridge(props: { children: any }) {
-  const ctx = createAIChatContextValue();
-  return <AIChatContext.Provider value={ctx}>{props.children}</AIChatContext.Provider>;
-}
-
 const ENV_DISPLAY_MODE_SWITCHER_OPTIONS = [
   { id: 'activity', icon: Terminal },
   { id: 'workbench', icon: Grid3x3 },
@@ -413,6 +407,7 @@ function EnvDisplayModeSwitcher(props: {
 }
 
 export function EnvAppShell() {
+  const desktopBootstrapReadyMs = Math.max(0, envAppNowMs() - envAppModuleStartedAtMs);
   const layout = useLayout();
   const theme = useTheme();
   const i18n = useI18n();
@@ -440,7 +435,9 @@ export function EnvAppShell() {
       notify.error(i18n.t('filePreview.saveFailedTitle'), i18n.t('filePreview.saveFailedMessage', { path, message }));
     },
   });
+  const [filePreviewHostRequested, setFilePreviewHostRequested] = createSignal(false);
   const fileBrowserSurfaceController = createFileBrowserSurfaceController();
+  const [fileBrowserSurfaceHostRequested, setFileBrowserSurfaceHostRequested] = createSignal(false);
 
   type ProtocolConnectConfig = Parameters<typeof protocol.connect>[0];
   const topBarTooltip = (label: string): string | false => (layout.isMobile() ? false : label);
@@ -715,6 +712,7 @@ export function EnvAppShell() {
   const debugConsole = createDebugConsoleController({
     protocolStatus: () => protocol.status(),
   });
+  const [debugConsoleMountRequested, setDebugConsoleMountRequested] = createSignal(false);
 
   const [settingsFocusSeq, setSettingsFocusSeq] = createSignal(0);
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
@@ -802,12 +800,15 @@ export function EnvAppShell() {
   };
 
   const openDebugConsole = () => {
+    setDebugConsoleMountRequested(true);
     debugConsole.show();
   };
 
   const [pluginInventoryProjection, { refetch: refetchPluginInventory }] = createResource(
     pluginsPanelOpen,
-    (open) => (open ? loadPluginInventoryProjection() : Promise.resolve({ items: [] })),
+    async (open) => (open
+      ? (await import('./plugins/pluginApi')).loadPluginInventoryProjection()
+      : { items: [] }),
   );
 
   const pluginPanelModel = createMemo(() => buildPluginPanelModel(
@@ -838,7 +839,7 @@ export function EnvAppShell() {
     setPluginsPanelOpen(false);
     setPluginCenterSelectedPluginID(undefined);
     try {
-      const result = await executePluginLifecycleCommand({
+      const result = await (await import('./plugins/pluginApi')).executePluginLifecycleCommand({
         type: 'open_surface',
         pluginInstanceID: target.pluginInstanceID,
         surfaceID: target.surfaceID,
@@ -863,7 +864,7 @@ export function EnvAppShell() {
       });
       return;
     }
-    await executePluginLifecycleCommand(command);
+    await (await import('./plugins/pluginApi')).executePluginLifecycleCommand(command);
     await refetchPluginInventory();
   };
 
@@ -1070,6 +1071,7 @@ export function EnvAppShell() {
       return;
     }
 
+    setFileBrowserSurfaceHostRequested(true);
     await openFileBrowserSurface({
       input: {
         path: normalizedPath,
@@ -1084,6 +1086,7 @@ export function EnvAppShell() {
     item: FileItem,
     options?: FilePreviewOpenOptions,
   ): Promise<void> => {
+    setFilePreviewHostRequested(true);
     const normalizedPath = normalizeAbsolutePath(item?.path ?? '');
     if (!normalizedPath) {
       notify.error(i18n.t('shell.notifications.previewUnavailableTitle'), i18n.t('shell.notifications.invalidFilePath'));
@@ -1225,6 +1228,7 @@ export function EnvAppShell() {
     }
 
     try {
+      const { createEnvLocalFlowerSurfaceAdapter } = await import('./flower/envLocalFlowerSurfaceAdapter');
       const adapter = createEnvLocalFlowerSurfaceAdapter({
         envPublicID: trimString(envId()),
         envLabel: trimString(env()?.name) || trimString(envId()) || 'This environment',
@@ -1495,7 +1499,20 @@ export function EnvAppShell() {
     void refetchRuntimeMaintenanceContext().catch(() => setRuntimeMaintenanceContext(null));
   });
 
+  let desktopAccessReadyMs: number | undefined;
+  let desktopProtocolConnectedMs: number | undefined;
   let lastDesktopReadyState = '';
+  let desktopReadyPaintSequence = 0;
+  createEffect(() => {
+    if (!accessChecked()) return;
+    const phase = accessGatePhase();
+    if (phase === 'checking' || phase === 'resuming') return;
+    desktopAccessReadyMs ??= Math.max(0, envAppNowMs() - envAppModuleStartedAtMs);
+  });
+  createEffect(() => {
+    if (protocol.status() !== 'connected') return;
+    desktopProtocolConnectedMs ??= Math.max(0, envAppNowMs() - envAppModuleStartedAtMs);
+  });
   createEffect(() => {
     const nextReadyState = accessGateVisible()
       ? (
@@ -1508,11 +1525,22 @@ export function EnvAppShell() {
             ? 'runtime_connected'
             : ''
         );
-    if (!nextReadyState || nextReadyState === lastDesktopReadyState) {
+    if (!nextReadyState) {
+      desktopReadyPaintSequence += 1;
       return;
     }
-    lastDesktopReadyState = nextReadyState;
-    notifyDesktopSessionAppReady(nextReadyState);
+    if (nextReadyState === lastDesktopReadyState) return;
+    const sequence = ++desktopReadyPaintSequence;
+    deferAfterPaint(() => {
+      if (sequence !== desktopReadyPaintSequence || nextReadyState === lastDesktopReadyState) return;
+      lastDesktopReadyState = nextReadyState;
+      notifyDesktopSessionAppReady(nextReadyState, {
+        bootstrap_ms: desktopBootstrapReadyMs,
+        ...(desktopAccessReadyMs !== undefined ? { access_ready_ms: desktopAccessReadyMs } : {}),
+        ...(desktopProtocolConnectedMs !== undefined ? { protocol_connected_ms: desktopProtocolConnectedMs } : {}),
+        shell_painted_ms: Math.max(0, envAppNowMs() - envAppModuleStartedAtMs),
+      });
+    });
   });
 
   const startRuntimeRestart = async () => {
@@ -1982,7 +2010,7 @@ export function EnvAppShell() {
         setRemoteAccessChecked(false);
         setRemoteAccessChannelReady(false);
 
-        localStatus = await getLocalAccessStatus();
+        localStatus = rt.access_status ?? await getLocalAccessStatus();
         setLocalAccessStatus(localStatus);
         setLocalAccessChecked(true);
         setLocalAccessChannelReady(localStatus?.password_required !== true);
@@ -3008,6 +3036,7 @@ export function EnvAppShell() {
         });
         return;
       }
+      setFileBrowserSurfaceHostRequested(true);
       await openFileBrowserSurface({
         input: params,
         controller: fileBrowserSurfaceController,
@@ -3185,17 +3214,25 @@ export function EnvAppShell() {
         </div>
       </div>
 
-      <AuditLogDialog open={auditOpen()} envId={envId()} onClose={() => setAuditOpen(false)} />
-      <FileBrowserSurfaceHost />
-      <PluginPanel
-        open={pluginsPanelOpen()}
-        model={pluginPanelModel()}
-        onClose={() => setPluginsPanelOpen(false)}
-        onOpenCenter={() => openPluginCenter()}
-        onOpenPluginDetails={(pluginID) => openPluginCenter(pluginID)}
-        onOpenPluginSurface={(target) => void openPluginSurface(target)}
-      />
-      <DebugConsoleWindow controller={debugConsole} />
+      <Show when={auditOpen()}>
+        <AuditLogDialog open envId={envId()} onClose={() => setAuditOpen(false)} />
+      </Show>
+      <Show when={fileBrowserSurfaceHostRequested()}>
+        <FileBrowserSurfaceHost />
+      </Show>
+      <Show when={pluginsPanelOpen()}>
+        <PluginPanel
+          open
+          model={pluginPanelModel()}
+          onClose={() => setPluginsPanelOpen(false)}
+          onOpenCenter={() => openPluginCenter()}
+          onOpenPluginDetails={(pluginID) => openPluginCenter(pluginID)}
+          onOpenPluginSurface={(target) => void openPluginSurface(target)}
+        />
+      </Show>
+      <Show when={debugConsoleMountRequested()}>
+        <DebugConsoleWindow controller={debugConsole} />
+      </Show>
     </Shell>
   );
 
@@ -3225,6 +3262,13 @@ export function EnvAppShell() {
     }
 
     return renderActivityShell();
+  };
+
+  const renderMainShellWithFeatureProviders = () => {
+    const shell = renderMainShell();
+    return viewMode() === 'activity' && activeSurface() === 'codex'
+      ? <CodexFeatureProvider>{shell}</CodexFeatureProvider>
+      : shell;
   };
 
   return (
@@ -3292,19 +3336,19 @@ export function EnvAppShell() {
               }}
             >
               <FloeRegistryRuntime components={components()}>
-                <AIChatProviderBridge>
-                  <CodexProvider>{renderMainShell()}</CodexProvider>
-                  <Show when={viewMode() !== 'workbench'}>
+                {renderMainShellWithFeatureProviders()}
+                  <Show when={viewMode() !== 'workbench' && filePreviewHostRequested()}>
                     <FilePreviewHost />
                   </Show>
-                  <FlowerTurnLauncherWindow
-                    open={flowerTurnLauncherOpen()}
-                    intent={flowerTurnLauncherIntent()}
-                    anchor={flowerTurnLauncherAnchor()}
-                    onClose={closeFlowerTurnLauncher}
-                    onSubmit={submitFlowerTurnLauncher}
-                  />
-                </AIChatProviderBridge>
+                  <Show when={flowerTurnLauncherOpen()}>
+                    <FlowerTurnLauncherWindow
+                      open
+                      intent={flowerTurnLauncherIntent()}
+                      anchor={flowerTurnLauncherAnchor()}
+                      onClose={closeFlowerTurnLauncher}
+                      onSubmit={submitFlowerTurnLauncher}
+                    />
+                  </Show>
               </FloeRegistryRuntime>
             </RuntimeUpdateContext.Provider>
           </FilePreviewContext.Provider>

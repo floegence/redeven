@@ -174,8 +174,9 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
     vi.clearAllMocks();
   });
 
-  it('always mounts the live workbench terminal panel', () => {
+  it('always mounts the live workbench terminal panel', async () => {
     const { host } = renderTerminalBody();
+    await flushWorkbenchInteraction();
 
     expect(host.querySelector('[data-testid="live-terminal-panel"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="terminal-paused-preview"]')).toBeNull();
@@ -195,12 +196,13 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
     expect(workbenchMocks.updateTerminalGeometryPreferences).toHaveBeenCalledWith('widget-terminal-1', expect.any(Function));
   });
 
-  it('forwards the shared workbench activation sequence into the live terminal panel', () => {
+  it('forwards the shared workbench activation sequence into the live terminal panel', async () => {
     renderTerminalBody({
       activation: {
         seq: 7,
       },
     });
+    await flushWorkbenchInteraction();
 
     expect(terminalPanelMocks.render).toHaveBeenCalledTimes(1);
     expect(terminalPanelMocks.render.mock.calls[0]?.[0]).toMatchObject({
@@ -208,10 +210,11 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
     });
   });
 
-  it('forwards the current workbench selection state into the live terminal panel', () => {
+  it('forwards the current workbench selection state into the live terminal panel', async () => {
     renderTerminalBody({
       selected: false,
     });
+    await flushWorkbenchInteraction();
 
     expect(terminalPanelMocks.render).toHaveBeenCalledTimes(1);
     expect(terminalPanelMocks.render.mock.calls[0]?.[0]).toMatchObject({
@@ -219,7 +222,7 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
     });
   });
 
-  it('keeps high-frequency workbench surface scale out of the live terminal panel', () => {
+  it('keeps high-frequency workbench surface scale out of the live terminal panel', async () => {
     const surfaceMetrics = vi.fn(() => ({
       ready: true,
       rect: {
@@ -239,6 +242,7 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
     renderTerminalBody({
       surfaceMetrics,
     });
+    await flushWorkbenchInteraction();
 
     expect(terminalPanelMocks.render).toHaveBeenCalledTimes(1);
     expect(surfaceMetrics).not.toHaveBeenCalled();
@@ -303,6 +307,7 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
         enableKeyboard={false}
       />
     ), host);
+    await flushWorkbenchInteraction();
 
     const terminalSurface = host.querySelector('[data-testid="terminal-surface"]') as HTMLElement | null;
     const terminalInput = host.querySelector('[data-testid="terminal-input"]') as HTMLTextAreaElement | null;

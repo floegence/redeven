@@ -53,6 +53,15 @@ type RefreshTask = Readonly<{
 
 const DEFAULT_FRESH_HEALTH_TTL_MS = 30_000;
 
+export function desktopWelcomeRuntimeHealthIsFresh(
+  health: DesktopRuntimeHealth | null | undefined,
+  nowUnixMS: number = Date.now(),
+  freshHealthTTLMS: number = DEFAULT_FRESH_HEALTH_TTL_MS,
+): health is DesktopRuntimeHealth {
+  return health?.freshness === 'fresh'
+    && nowUnixMS - health.checked_at_unix_ms < freshHealthTTLMS;
+}
+
 function withFreshness(
   health: DesktopRuntimeHealth,
   freshness: NonNullable<DesktopRuntimeHealth['freshness']>,
@@ -171,8 +180,7 @@ export class DesktopWelcomeRuntimeHealthStore {
     const previous = this.cache.get(target.key);
     if (
       options.force !== true
-      && previous?.health?.freshness === 'fresh'
-      && Date.now() - previous.health.checked_at_unix_ms < this.freshHealthTTLMS
+      && desktopWelcomeRuntimeHealthIsFresh(previous?.health, Date.now(), this.freshHealthTTLMS)
     ) {
       return Promise.resolve();
     }

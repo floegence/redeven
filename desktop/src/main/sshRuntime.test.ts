@@ -247,6 +247,8 @@ describe('sshRuntime', () => {
     expect(source).toContain('Using cached local runtime package');
     expect(source).toContain('package built from this Desktop session');
     expect(source).toContain('async function waitForForwardedLocalUIOpenable(');
+    expect(source).toContain('const startup = await loadExternalLocalUIHealth(');
+    expect(source).toContain('return await validateExternalLocalUIShell(startup, Math.max(1, deadline - Date.now()));');
     expect(source).toContain('managedSSHRuntimeAttachPolicy(');
     expect(source).toContain('DesktopSSHRuntimeMaintenanceRequiredError');
     expect(source).toContain('allowActiveWorkReplacement?: boolean;');

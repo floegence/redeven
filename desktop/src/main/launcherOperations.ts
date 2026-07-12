@@ -6,8 +6,8 @@ import type {
   DesktopLauncherOperationSubjectKind,
 } from '../shared/desktopLauncherIPC';
 import type { DesktopTranslationKey } from '../shared/i18n/desktopI18n';
-import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
-import type { DesktopOpenConnectionProgress } from '../shared/desktopOpenConnectionProgress';
+import { advanceOpenConnectionTiming, openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
+import type { DesktopOpenConnectionProgress, DesktopOpenConnectionTiming } from '../shared/desktopOpenConnectionProgress';
 import type { DesktopRuntimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
 
@@ -32,6 +32,7 @@ type CreateLauncherOperationInput = Readonly<{
   detail_key?: DesktopTranslationKey;
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
+  open_timing?: DesktopOpenConnectionTiming;
   step_progress?: DesktopLauncherOperationSnapshot['step_progress'];
   gateway_diagnosis?: DesktopLauncherOperationSnapshot['gateway_diagnosis'];
   presentation_context?: DesktopLauncherOperationSnapshot['presentation_context'];
@@ -90,6 +91,7 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     detail_key: snapshot.detail_key,
     ...(snapshot.lifecycle_progress ? { lifecycle_progress: snapshot.lifecycle_progress } : {}),
     ...(snapshot.open_progress ? { open_progress: snapshot.open_progress } : {}),
+    ...(snapshot.open_timing ? { open_timing: snapshot.open_timing } : {}),
     ...(snapshot.step_progress ? { step_progress: snapshot.step_progress } : {}),
     ...(snapshot.gateway_diagnosis ? { gateway_diagnosis: snapshot.gateway_diagnosis } : {}),
     ...(snapshot.presentation_context ? { presentation_context: snapshot.presentation_context } : {}),
@@ -308,6 +310,7 @@ export class LauncherOperationRegistry {
       detail_key: input.detail_key ?? openProgressDetailKey(input.open_progress),
       ...(input.lifecycle_progress ? { lifecycle_progress: input.lifecycle_progress } : {}),
       ...(input.open_progress ? { open_progress: input.open_progress } : {}),
+      ...(input.open_timing ? { open_timing: input.open_timing } : {}),
       ...(input.step_progress ? { step_progress: input.step_progress } : {}),
       ...(input.gateway_diagnosis ? { gateway_diagnosis: input.gateway_diagnosis } : {}),
       ...(input.presentation_context ? { presentation_context: input.presentation_context } : {}),
@@ -353,10 +356,21 @@ export class LauncherOperationRegistry {
     if (!current) {
       return null;
     }
+    const now = Date.now();
+    const nextOpenTiming = patch.open_progress
+      ? advanceOpenConnectionTiming(
+          current.open_timing,
+          patch.open_progress.phase,
+          now,
+          current.started_at_unix_ms,
+          current.open_progress?.phase,
+        )
+      : patch.open_timing;
     const next: DesktopLauncherOperationSnapshot = {
       ...current,
       ...patch,
-      updated_at_unix_ms: Date.now(),
+      ...(nextOpenTiming ? { open_timing: nextOpenTiming } : {}),
+      updated_at_unix_ms: now,
     };
     const patchedNext: DesktopLauncherOperationSnapshot = {
       ...next,

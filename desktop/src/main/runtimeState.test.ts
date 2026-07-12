@@ -2,9 +2,40 @@ import http from 'node:http';
 
 import { describe, expect, it } from 'vitest';
 
-import { loadExternalLocalUIStartup } from './runtimeState';
+import {
+  loadExternalLocalUIHealth,
+  loadExternalLocalUIStartup,
+  validateExternalLocalUIShell,
+} from './runtimeState';
 
 const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>';
+
+function openableHealthPayload(startedAtUnixMS: number): string {
+  return JSON.stringify({
+    ok: true,
+    data: {
+      status: 'online',
+      password_required: false,
+      started_at_unix_ms: startedAtUnixMS,
+      runtime_service: {
+        runtime_version: 'v0.0.0-dev',
+        runtime_commit: 'test-commit',
+        runtime_build_time: 'test-build',
+        service_owner: 'desktop',
+        desktop_managed: true,
+        remote_enabled: false,
+        compatibility: 'compatible',
+        open_readiness: { state: 'openable' },
+        active_workload: {
+          terminal_count: 0,
+          session_count: 0,
+          task_count: 0,
+          port_forward_count: 0,
+        },
+      },
+    },
+  });
+}
 
 describe('runtimeState', () => {
   it('loads an external Local UI startup payload from an explicit local IP url', async () => {
@@ -268,6 +299,135 @@ describe('runtimeState', () => {
           }
           resolve();
         });
+      });
+    }
+  });
+
+  it('keeps health probes lightweight and caches concurrent shell asset validation by runtime identity', async () => {
+    let startedAtUnixMS = 100;
+    let shellRequests = 0;
+    let assetRequests = 0;
+    let activeAssetRequests = 0;
+    let maximumActiveAssetRequests = 0;
+    const shellHTML = [
+      '<!doctype html><html><body><div id="root"></div>',
+      '<link rel="stylesheet" href="/_redeven_proxy/env/assets/index.css">',
+      '<script type="module" src="/_redeven_proxy/env/assets/index.js"></script>',
+      '<link rel="modulepreload" href="/_redeven_proxy/env/assets/vendor.js">',
+      '</body></html>',
+    ].join('');
+    const server = http.createServer((request, response) => {
+      if (request.url === '/api/local/runtime/health') {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(openableHealthPayload(startedAtUnixMS));
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/') {
+        shellRequests += 1;
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end(shellHTML);
+        return;
+      }
+      if (request.method === 'HEAD' && request.url?.startsWith('/_redeven_proxy/env/assets/')) {
+        assetRequests += 1;
+        activeAssetRequests += 1;
+        maximumActiveAssetRequests = Math.max(maximumActiveAssetRequests, activeAssetRequests);
+        setTimeout(() => {
+          activeAssetRequests -= 1;
+          response.writeHead(200);
+          response.end();
+        }, 30);
+        return;
+      }
+      response.writeHead(404);
+      response.end('not found');
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.listen(0, '127.0.0.1', resolve);
+      server.once('error', reject);
+    });
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('expected a TCP server address');
+      }
+      const baseURL = `http://127.0.0.1:${address.port}/`;
+      const firstHealth = await loadExternalLocalUIHealth(baseURL);
+      expect(firstHealth).not.toBeNull();
+      expect(shellRequests).toBe(0);
+      expect(assetRequests).toBe(0);
+
+      await expect(validateExternalLocalUIShell(firstHealth!)).resolves.toMatchObject({
+        runtime_service: { open_readiness: { state: 'openable' } },
+      });
+      expect(shellRequests).toBe(1);
+      expect(assetRequests).toBe(3);
+      expect(maximumActiveAssetRequests).toBe(3);
+
+      await validateExternalLocalUIShell(firstHealth!);
+      expect(shellRequests).toBe(1);
+      expect(assetRequests).toBe(3);
+
+      startedAtUnixMS = 200;
+      const restartedHealth = await loadExternalLocalUIHealth(baseURL);
+      await validateExternalLocalUIShell(restartedHealth!);
+      expect(shellRequests).toBe(2);
+      expect(assetRequests).toBe(6);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => error ? reject(error) : resolve());
+      });
+    }
+  });
+
+  it('does not cache failed shell validation', async () => {
+    let assetAvailable = false;
+    let shellRequests = 0;
+    const server = http.createServer((request, response) => {
+      if (request.url === '/api/local/runtime/health') {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(openableHealthPayload(300));
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/') {
+        shellRequests += 1;
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end(validEnvAppShellHTML);
+        return;
+      }
+      if (request.method === 'HEAD' && request.url === '/_redeven_proxy/env/assets/index.js') {
+        response.writeHead(assetAvailable ? 200 : 404);
+        response.end();
+        return;
+      }
+      response.writeHead(404);
+      response.end('not found');
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      server.listen(0, '127.0.0.1', resolve);
+      server.once('error', reject);
+    });
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') {
+        throw new Error('expected a TCP server address');
+      }
+      const startup = await loadExternalLocalUIHealth(`http://127.0.0.1:${address.port}/`);
+      await expect(validateExternalLocalUIShell(startup!)).resolves.toMatchObject({
+        runtime_service: { open_readiness: { state: 'blocked' } },
+      });
+      assetAvailable = true;
+      await expect(validateExternalLocalUIShell(startup!)).resolves.toMatchObject({
+        runtime_service: { open_readiness: { state: 'openable' } },
+      });
+      expect(shellRequests).toBe(2);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => error ? reject(error) : resolve());
       });
     }
   });

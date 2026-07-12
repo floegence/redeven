@@ -83,6 +83,8 @@ describe('controlplaneApi local access flow', () => {
       desktop_managed: true,
       effective_run_mode: 'hybrid',
       remote_enabled: true,
+      runtime_service: undefined,
+      access_status: { password_required: true, unlocked: true },
     });
   });
 

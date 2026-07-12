@@ -40,6 +40,19 @@ export type DesktopOpenConnectionProgress = Readonly<{
   target_detail?: string;
 }>;
 
+export type DesktopOpenConnectionPhaseTiming = Readonly<{
+  phase: DesktopOpenConnectionPhase;
+  started_at_unix_ms: number;
+  duration_ms: number;
+}>;
+
+export type DesktopOpenConnectionTiming = Readonly<{
+  started_at_unix_ms: number;
+  phase_started_at_unix_ms: number;
+  total_duration_ms: number;
+  completed_phases: readonly DesktopOpenConnectionPhaseTiming[];
+}>;
+
 const LOCAL_HOST_OPEN_PHASES: readonly DesktopOpenConnectionPhase[] = [
   'checking_runtime_record',
   'checking_env_app_readiness',
@@ -191,5 +204,50 @@ export function openConnectionProgress(
     ...(targetID ? { target_id: targetID } : {}),
     ...(targetLabel ? { target_label: targetLabel } : {}),
     ...(targetDetail ? { target_detail: targetDetail } : {}),
+  };
+}
+
+export function advanceOpenConnectionTiming(
+  current: DesktopOpenConnectionTiming | null | undefined,
+  phase: DesktopOpenConnectionPhase,
+  nowUnixMS: number,
+  operationStartedAtUnixMS: number,
+  currentPhase?: DesktopOpenConnectionPhase,
+): DesktopOpenConnectionTiming {
+  const now = Math.max(operationStartedAtUnixMS, Math.floor(nowUnixMS));
+  const startedAt = current?.started_at_unix_ms ?? operationStartedAtUnixMS;
+  if (!current) {
+    const phaseChanged = Boolean(currentPhase && currentPhase !== phase);
+    return {
+      started_at_unix_ms: startedAt,
+      phase_started_at_unix_ms: phaseChanged ? now : operationStartedAtUnixMS,
+      total_duration_ms: now - startedAt,
+      completed_phases: phaseChanged && currentPhase
+        ? [{
+            phase: currentPhase,
+            started_at_unix_ms: operationStartedAtUnixMS,
+            duration_ms: Math.max(0, now - operationStartedAtUnixMS),
+          }]
+        : [],
+    };
+  }
+  if (!currentPhase || currentPhase === phase) {
+    return {
+      ...current,
+      total_duration_ms: now - startedAt,
+    };
+  }
+  return {
+    started_at_unix_ms: startedAt,
+    phase_started_at_unix_ms: now,
+    total_duration_ms: now - startedAt,
+    completed_phases: [
+      ...current.completed_phases,
+      {
+        phase: currentPhase,
+        started_at_unix_ms: current.phase_started_at_unix_ms,
+        duration_ms: Math.max(0, now - current.phase_started_at_unix_ms),
+      },
+    ],
   };
 }
