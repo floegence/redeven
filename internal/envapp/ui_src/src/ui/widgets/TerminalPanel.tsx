@@ -1052,6 +1052,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
   let catchupRunSeq = 0;
   let lastObservedSeq = 0;
   let lastRenderedSeq = 0;
+  let activitySequenceCoverage: number | null = null;
   let focusAfterCatchup = false;
   let outputPipeline: TerminalOutputPipelineHandle | null = null;
   const appliedSequences = new Set<number>();
@@ -1066,8 +1067,51 @@ function TerminalSessionView(props: terminal_session_view_props) {
       : undefined
   );
 
+  const advanceActivitySequenceCoverage = (sequence: number | undefined) => {
+    if (!activityOutputPipelineEnabled()) return;
+    const seq = normalizeLiveSequence(sequence);
+    if (!seq || (activitySequenceCoverage !== null && seq <= activitySequenceCoverage)) return;
+    activitySequenceCoverage = seq;
+    for (const applied of appliedSequences) {
+      if (applied <= seq) appliedSequences.delete(applied);
+    }
+    for (const observed of observedUnrenderedSequences) {
+      if (observed <= seq) observedUnrenderedSequences.delete(observed);
+    }
+  };
+
+  const establishActivitySequenceCoverage = (sequence: number) => {
+    if (!activityOutputPipelineEnabled()) return;
+    const seq = Math.max(0, Math.floor(sequence));
+    activitySequenceCoverage = seq;
+    for (const applied of appliedSequences) {
+      if (applied <= seq) appliedSequences.delete(applied);
+    }
+    for (const observed of observedUnrenderedSequences) {
+      if (observed <= seq) observedUnrenderedSequences.delete(observed);
+    }
+  };
+
+  const historyPageCoveredThrough = (page: {
+    lastSequence: number;
+    chunks: readonly { sequence: number }[];
+  }): number | undefined => {
+    let coveredThrough = normalizeLiveSequence(page.lastSequence);
+    for (const chunk of page.chunks) {
+      const seq = normalizeLiveSequence(chunk.sequence);
+      if (seq && (!coveredThrough || seq > coveredThrough)) {
+        coveredThrough = seq;
+      }
+    }
+    return coveredThrough;
+  };
+
   const markSequenceApplied = (sequence: number | undefined) => {
     const seq = normalizeLiveSequence(sequence);
+    if (activityOutputPipelineEnabled()) {
+      advanceActivitySequenceCoverage(seq);
+      return;
+    }
     if (!seq || seq <= lastRenderedSeq) return;
     appliedSequences.add(seq);
     while (appliedSequences.has(lastRenderedSeq + 1)) {
@@ -1078,12 +1122,23 @@ function TerminalSessionView(props: terminal_session_view_props) {
     }
   };
 
-  const nextLiveStartSequence = () => (lastRenderedSeq > 0 ? lastRenderedSeq + 1 : 1);
+  const nextLiveStartSequence = () => {
+    if (activityOutputPipelineEnabled()) {
+      return activitySequenceCoverage !== null ? activitySequenceCoverage + 1 : 1;
+    }
+    return lastRenderedSeq > 0 ? lastRenderedSeq + 1 : 1;
+  };
 
-  const resetOutputPipeline = (opts?: { resetStats?: boolean }) => {
+  const resetOutputPipeline = (opts?: {
+    resetStats?: boolean;
+    resumeCatchUp?: boolean;
+    allowSequenceSkipOnResume?: boolean;
+  }) => {
     outputPipeline?.reset({
       startSequence: nextLiveStartSequence(),
       resetStats: opts?.resetStats,
+      resumeCatchUp: opts?.resumeCatchUp,
+      allowSequenceSkipOnResume: opts?.allowSequenceSkipOnResume,
     });
   };
 
@@ -1116,6 +1171,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
     lastFlushAtMs = 0;
     lastObservedSeq = 0;
     lastRenderedSeq = 0;
+    activitySequenceCoverage = null;
     historyMaxSeq = 0;
     appliedSequences.clear();
     observedUnrenderedSequences.clear();
@@ -1251,7 +1307,10 @@ function TerminalSessionView(props: terminal_session_view_props) {
   const writeHistoryChunks = async (
     chunks: terminal_history_chunk[],
     seq: number,
-    opts?: { publishActivityForObservedLive?: boolean },
+    opts?: {
+      publishActivityForObservedLive?: boolean;
+      isCurrent?: () => boolean;
+    },
   ) => {
     const core = term;
     if (!core) return;
@@ -1260,7 +1319,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
     await new Promise<void>((resolve) => {
       const step = () => {
-        if (seq !== initSeq) {
+        if (seq !== initSeq || opts?.isCurrent?.() === false) {
           resolve();
           return;
         }
@@ -1334,13 +1393,21 @@ function TerminalSessionView(props: terminal_session_view_props) {
           });
         }
 
-        if (page.lastSequence > historyMaxSeq) {
+        const coveredThrough = activityOutputPipelineEnabled()
+          ? historyPageCoveredThrough(page)
+          : undefined;
+        if (activityOutputPipelineEnabled()) {
+          if (coveredThrough && coveredThrough > historyMaxSeq) {
+            historyMaxSeq = coveredThrough;
+          }
+        } else if (page.lastSequence > historyMaxSeq) {
           historyMaxSeq = page.lastSequence;
         }
 
         const sorted = [...page.chunks].sort((a, b) => a.sequence - b.sequence);
         await writeHistoryChunks(sorted, seq);
         if (seq !== initSeq) return;
+        advanceActivitySequenceCoverage(coveredThrough);
 
         if (!page.hasMore) return;
         if (page.nextStartSeq <= cursor) {
@@ -1370,7 +1437,14 @@ function TerminalSessionView(props: terminal_session_view_props) {
         const page = await props.transport.historyPage(id, cursor, -1);
         if (seq !== catchupRunSeq || !catchupInProgress) return;
 
-        if (page.lastSequence > historyMaxSeq) {
+        const coveredThrough = activityOutputPipelineEnabled()
+          ? historyPageCoveredThrough(page)
+          : undefined;
+        if (activityOutputPipelineEnabled()) {
+          if (coveredThrough && coveredThrough > historyMaxSeq) {
+            historyMaxSeq = coveredThrough;
+          }
+        } else if (page.lastSequence > historyMaxSeq) {
           historyMaxSeq = page.lastSequence;
         }
 
@@ -1384,12 +1458,22 @@ function TerminalSessionView(props: terminal_session_view_props) {
           core.clear();
           shellIntegrationParser.reset();
           appliedSequences.clear();
-          lastRenderedSeq = Math.max(0, page.firstSequence - 1);
+          if (activityOutputPipelineEnabled()) {
+            establishActivitySequenceCoverage(page.firstSequence - 1);
+          } else {
+            lastRenderedSeq = Math.max(0, page.firstSequence - 1);
+          }
           resetForCoveredGap = true;
         }
 
-        await writeHistoryChunks(sorted, initSeq, { publishActivityForObservedLive: false });
+        await writeHistoryChunks(sorted, initSeq, {
+          publishActivityForObservedLive: false,
+          isCurrent: activityOutputPipelineEnabled()
+            ? () => seq === catchupRunSeq && catchupInProgress
+            : undefined,
+        });
         if (seq !== catchupRunSeq || !catchupInProgress) return;
+        advanceActivitySequenceCoverage(coveredThrough);
 
         if (!page.hasMore) return;
         if (page.nextStartSeq <= cursor) {
@@ -1412,7 +1496,10 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
     if (needsHistoryCatchup) {
       const id = sessionId();
-      const startSeq = firstDeferredSeq ?? (lastRenderedSeq > 0 ? lastRenderedSeq + 1 : 0);
+      const coveredStartSeq = activityOutputPipelineEnabled()
+        ? (activitySequenceCoverage !== null ? activitySequenceCoverage + 1 : 0)
+        : (lastRenderedSeq > 0 ? lastRenderedSeq + 1 : 0);
+      const startSeq = firstDeferredSeq ?? coveredStartSeq;
       const seq = ++catchupRunSeq;
       catchupInProgress = true;
       needsHistoryCatchup = false;
@@ -1420,14 +1507,21 @@ function TerminalSessionView(props: terminal_session_view_props) {
       clearDeferredLive();
       queued = [];
       cancelPendingLiveFlush();
+      let catchupSucceeded = false;
       void replayHistoryCatchupPages(id, startSeq, seq)
+        .then(() => {
+          catchupSucceeded = true;
+        })
         .catch((e) => {
           setError(e instanceof Error ? e.message : String(e));
         })
         .finally(() => {
           if (seq !== catchupRunSeq) return;
           catchupInProgress = false;
-          resetOutputPipeline();
+          resetOutputPipeline({
+            resumeCatchUp: catchupSucceeded,
+            allowSequenceSkipOnResume: catchupSucceeded,
+          });
           if (deferredLive.length > 0 || needsHistoryCatchup) {
             flushDeferredOrCatchup();
           } else {
@@ -1453,7 +1547,15 @@ function TerminalSessionView(props: terminal_session_view_props) {
     if (outputPipeline) {
       const seq = normalizeLiveSequence(sequence);
       if (seq) {
-        if (seq <= lastRenderedSeq || appliedSequences.has(seq) || observedUnrenderedSequences.has(seq)) {
+        if (activitySequenceCoverage === null) {
+          establishActivitySequenceCoverage(seq - 1);
+          resetOutputPipeline();
+        }
+        if (
+          (activitySequenceCoverage !== null && seq <= activitySequenceCoverage)
+          || appliedSequences.has(seq)
+          || observedUnrenderedSequences.has(seq)
+        ) {
           return;
         }
         observedUnrenderedSequences.add(seq);
