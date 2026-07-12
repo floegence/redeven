@@ -3,9 +3,12 @@ package terminal
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -93,6 +96,45 @@ func TestCreateSessionStartsDormantWithoutColsRows(t *testing.T) {
 	}
 	if got.ToSessionInfo().IsActive {
 		t.Fatalf("expected listed session info to stay inactive before attach")
+	}
+}
+
+func TestCreateOneHundredSessionsHasNoCountLimit(t *testing.T) {
+	root := t.TempDir()
+	m := newQuietTestManager(t, root)
+	t.Cleanup(m.Cleanup)
+
+	const sessionCount = 100
+	for index := range sessionCount {
+		if _, err := m.createSession(fmt.Sprintf("terminal-%d", index+1), ""); err != nil {
+			t.Fatalf("createSession(%d) error = %v", index+1, err)
+		}
+	}
+	if got := len(m.visibleSessionInfos()); got != sessionCount {
+		t.Fatalf("visible sessions = %d, want %d", got, sessionCount)
+	}
+}
+
+func TestConcurrentCreateFiftySessionsHasNoCountLimit(t *testing.T) {
+	root := t.TempDir()
+	m := newQuietTestManager(t, root)
+	t.Cleanup(m.Cleanup)
+
+	const sessionCount = 50
+	results := make(chan error, sessionCount)
+	for index := range sessionCount {
+		go func() {
+			_, err := m.createSession(fmt.Sprintf("terminal-%d", index+1), "")
+			results <- err
+		}()
+	}
+	for range sessionCount {
+		if err := <-results; err != nil {
+			t.Fatalf("concurrent createSession() error = %v", err)
+		}
+	}
+	if got := len(m.visibleSessionInfos()); got != sessionCount {
+		t.Fatalf("visible sessions = %d, want %d", got, sessionCount)
 	}
 }
 
@@ -258,10 +300,11 @@ func TestDeleteSessionHidesImmediatelyWhileCleanupRuns(t *testing.T) {
 		return m.deleteSessionNow(sessionID)
 	}
 
-	if err := m.DeleteSession(sess.ID); err != nil {
-		t.Fatalf("DeleteSession() error = %v", err)
-	}
-	defer close(releaseDelete)
+	deleteResult := make(chan error, 1)
+	go func() {
+		deleteResult <- m.DeleteSession(sess.ID)
+	}()
+	waitForLifecycle(t, m, sess.ID, SessionLifecycleClosing, time.Second)
 
 	if got := m.visibleSessionInfos(); len(got) != 0 {
 		t.Fatalf("visibleSessionInfos() = %#v, want hidden closing session", got)
@@ -275,10 +318,13 @@ func TestDeleteSessionHidesImmediatelyWhileCleanupRuns(t *testing.T) {
 	if err := m.write(sess.ID, "conn-closed", ""); err == nil {
 		t.Fatalf("write() succeeded for hidden closing session")
 	}
-	waitForLifecycle(t, m, sess.ID, SessionLifecycleClosing, time.Second)
+	close(releaseDelete)
+	if err := <-deleteResult; err != nil {
+		t.Fatalf("DeleteSession() error = %v", err)
+	}
 }
 
-func TestDeleteSessionFailureStaysHiddenAndCanRetry(t *testing.T) {
+func TestConcurrentDeleteSessionStartsOneCleanup(t *testing.T) {
 	root := t.TempDir()
 	m := newQuietTestManager(t, root)
 	t.Cleanup(m.Cleanup)
@@ -288,22 +334,77 @@ func TestDeleteSessionFailureStaysHiddenAndCanRetry(t *testing.T) {
 		t.Fatalf("createSession() error = %v", err)
 	}
 
-	m.deleteSessionFunc = func(string) error {
-		return errors.New("delete failed")
-	}
-	if err := m.DeleteSession(sess.ID); err != nil {
-		t.Fatalf("DeleteSession() error = %v", err)
+	var cleanupCalls atomic.Int32
+	cleanupStarted := make(chan struct{}, 1)
+	releaseCleanup := make(chan struct{})
+	m.deleteSessionFunc = func(sessionID string) error {
+		cleanupCalls.Add(1)
+		select {
+		case cleanupStarted <- struct{}{}:
+		default:
+		}
+		<-releaseCleanup
+		return m.deleteSessionNow(sessionID)
 	}
 
-	waitForLifecycle(t, m, sess.ID, SessionLifecycleCloseFailedHidden, time.Second)
-	if got := m.visibleSessionInfos(); len(got) != 0 {
-		t.Fatalf("visibleSessionInfos() = %#v, want failed hidden session omitted", got)
+	const callers = 32
+	var wg sync.WaitGroup
+	errorsByCaller := make(chan error, callers)
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errorsByCaller <- m.DeleteSession(sess.ID)
+		}()
 	}
-	if err := m.attachSession(sess.ID, "conn-hidden", 80, 24, nil); err == nil {
-		t.Fatalf("attachSession() succeeded for failed hidden session")
+	select {
+	case <-cleanupStarted:
+	case <-time.After(time.Second):
+		t.Fatal("timeout waiting for cleanup to start")
 	}
-	if err := m.resize(sess.ID, "conn-hidden", 80, 24); err == nil {
-		t.Fatalf("resize() succeeded for failed hidden session")
+	if got := cleanupCalls.Load(); got != 1 {
+		t.Fatalf("cleanup calls = %d, want 1", got)
+	}
+	waitForDeleteParticipants(t, m, sess.ID, callers, time.Second)
+	close(releaseCleanup)
+	wg.Wait()
+	close(errorsByCaller)
+	for err := range errorsByCaller {
+		if err != nil {
+			t.Fatalf("concurrent DeleteSession() error = %v", err)
+		}
+	}
+	waitForSessionGone(t, m, sess.ID, time.Second)
+	if err := m.DeleteSession(sess.ID); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("DeleteSession(after success) error = %v, want ErrSessionNotFound", err)
+	}
+}
+
+func TestDeleteSessionFailureReturnsSharedErrorAndCanRetry(t *testing.T) {
+	root := t.TempDir()
+	m := newQuietTestManager(t, root)
+	t.Cleanup(m.Cleanup)
+
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	deleteErr := errors.New("delete failed")
+	m.deleteSessionFunc = func(string) error {
+		return deleteErr
+	}
+	if err := m.DeleteSession(sess.ID); !errors.Is(err, deleteErr) {
+		t.Fatalf("DeleteSession() error = %v, want %v", err, deleteErr)
+	}
+
+	waitForLifecycle(t, m, sess.ID, SessionLifecycleOpen, time.Second)
+	if got := m.visibleSessionInfos(); len(got) != 1 || got[0].ID != sess.ID {
+		t.Fatalf("visibleSessionInfos() = %#v, want retryable open session", got)
+	}
+	record, ok := m.lifecycleRecord(sess.ID)
+	if !ok || record.FailureCode != "DELETE_FAILED" || record.FailureMessage != deleteErr.Error() {
+		t.Fatalf("lifecycleRecord() = %+v, %v, want retry diagnostics", record, ok)
 	}
 
 	m.deleteSessionFunc = m.deleteSessionNow
@@ -311,6 +412,46 @@ func TestDeleteSessionFailureStaysHiddenAndCanRetry(t *testing.T) {
 		t.Fatalf("DeleteSession(retry) error = %v", err)
 	}
 	waitForSessionGone(t, m, sess.ID, time.Second)
+}
+
+func TestConcurrentDeleteSessionFailureSharesOneResult(t *testing.T) {
+	root := t.TempDir()
+	m := newQuietTestManager(t, root)
+	t.Cleanup(m.Cleanup)
+
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	deleteErr := errors.New("shared delete failure")
+	releaseDelete := make(chan struct{})
+	var cleanupCalls atomic.Int32
+	m.deleteSessionFunc = func(string) error {
+		cleanupCalls.Add(1)
+		<-releaseDelete
+		return deleteErr
+	}
+
+	const callers = 32
+	results := make(chan error, callers)
+	for range callers {
+		go func() {
+			results <- m.DeleteSession(sess.ID)
+		}()
+	}
+	waitForDeleteParticipants(t, m, sess.ID, callers, time.Second)
+	close(releaseDelete)
+
+	for range callers {
+		if err := <-results; !errors.Is(err, deleteErr) {
+			t.Fatalf("concurrent DeleteSession() error = %v, want %v", err, deleteErr)
+		}
+	}
+	if got := cleanupCalls.Load(); got != 1 {
+		t.Fatalf("cleanup calls = %d, want 1", got)
+	}
+	waitForLifecycle(t, m, sess.ID, SessionLifecycleOpen, time.Second)
 }
 
 func TestSessionLifecycleHookReceivesHiddenDeleteEvent(t *testing.T) {
@@ -334,59 +475,26 @@ func TestSessionLifecycleHookReceivesHiddenDeleteEvent(t *testing.T) {
 		<-releaseDelete
 		return m.deleteSessionNow(sessionID)
 	}
-	defer close(releaseDelete)
-
-	if err := m.DeleteSession(sess.ID); err != nil {
-		t.Fatalf("DeleteSession() error = %v", err)
-	}
+	deleteResult := make(chan error, 1)
+	go func() {
+		deleteResult <- m.DeleteSession(sess.ID)
+	}()
 
 	event := waitForLifecycleEvent(t, events, sess.ID, SessionLifecycleClosing, time.Second)
 	if !event.Hidden {
 		t.Fatalf("hidden=%v, want true for closing event", event.Hidden)
 	}
-}
-
-func TestRedevenShellInitEnvProviderInjectsSentinelWhenPathPrependIsEmpty(t *testing.T) {
-	provider := redevenShellInitEnvProvider{base: termgo.DefaultEnvProvider{}}
-
-	env, pathPrepend, err := provider.BuildEnv("/bin/zsh", "/tmp")
-	if err != nil {
-		t.Fatalf("BuildEnv() error = %v", err)
+	close(releaseDelete)
+	if err := <-deleteResult; err != nil {
+		t.Fatalf("DeleteSession() error = %v", err)
 	}
-	if len(env) == 0 {
-		t.Fatalf("expected environment to be preserved")
-	}
-	if pathPrepend != redevenShellInitPathPrependSentinel {
-		t.Fatalf("pathPrepend = %q, want sentinel %q", pathPrepend, redevenShellInitPathPrependSentinel)
-	}
-}
-
-func TestRedevenShellInitWriterGeneratesLifecycleHooks(t *testing.T) {
-	paths := newRedevenShellInitPaths(t.TempDir())
-	writer := redevenShellInitWriter{BaseDir: paths.BaseDir()}
-
-	if err := writer.EnsureShellInitFiles(""); err != nil {
-		t.Fatalf("EnsureShellInitFiles() error = %v", err)
-	}
-
-	assertFileContains(t, paths.BashRC(), "__redeven_terminal_command_start")
-	assertFileContains(t, paths.BashRC(), "__redeven_terminal_precmd")
-	assertFileContains(t, paths.BashRC(), "P;Cwd=$PWD")
-	assertFileContains(t, paths.ZshRC(), "__redeven_terminal_preexec")
-	assertFileContains(t, paths.ZshRC(), "add-zsh-hook preexec __redeven_terminal_preexec")
-	assertFileContains(t, paths.ZshRC(), "P;Cwd=$PWD")
-	assertFileContains(t, paths.FishConfig(), "function __redeven_terminal_fish_preexec --on-event fish_preexec")
-	assertFileContains(t, paths.FishConfig(), "function fish_prompt")
-	assertFileContains(t, paths.FishConfig(), "P;Cwd=$PWD")
-	assertFileContains(t, paths.PosixRC(), "do not inject command lifecycle markers")
-	assertFileContains(t, paths.BashRC(), redevenShellInitPathPrependSentinel)
 }
 
 func TestNewTerminalGoManagerConfigUsesRedevenShellIntegration(t *testing.T) {
 	cfg := newTerminalGoManagerConfig("/bin/zsh", nil)
 
-	if _, ok := cfg.EnvProvider.(redevenShellInitEnvProvider); !ok {
-		t.Fatalf("EnvProvider = %T, want redevenShellInitEnvProvider", cfg.EnvProvider)
+	if _, ok := cfg.EnvProvider.(termgo.DefaultEnvProvider); !ok {
+		t.Fatalf("EnvProvider = %T, want termgo.DefaultEnvProvider", cfg.EnvProvider)
 	}
 
 	argsProvider, ok := cfg.ShellArgsProvider.(termgo.DefaultShellArgsProvider)
@@ -396,13 +504,22 @@ func TestNewTerminalGoManagerConfigUsesRedevenShellIntegration(t *testing.T) {
 	if strings.TrimSpace(argsProvider.ShellInitBaseDir) == "" {
 		t.Fatalf("expected ShellArgsProvider.ShellInitBaseDir to be set")
 	}
+	if !argsProvider.EnableCommandLifecycle {
+		t.Fatalf("expected command lifecycle integration to be enabled")
+	}
 
-	writer, ok := cfg.ShellInitWriter.(redevenShellInitWriter)
+	writer, ok := cfg.ShellInitWriter.(termgo.DefaultShellInitWriter)
 	if !ok {
-		t.Fatalf("ShellInitWriter = %T, want redevenShellInitWriter", cfg.ShellInitWriter)
+		t.Fatalf("ShellInitWriter = %T, want termgo.DefaultShellInitWriter", cfg.ShellInitWriter)
 	}
 	if writer.BaseDir != argsProvider.ShellInitBaseDir {
 		t.Fatalf("shell init base dir mismatch: writer=%q args=%q", writer.BaseDir, argsProvider.ShellInitBaseDir)
+	}
+	if !writer.EnableCommandLifecycle {
+		t.Fatalf("expected writer command lifecycle integration to be enabled")
+	}
+	if cfg.HistoryBufferMaxBytes != terminalHistoryBufferMaxBytes {
+		t.Fatalf("HistoryBufferMaxBytes = %d, want %d", cfg.HistoryBufferMaxBytes, terminalHistoryBufferMaxBytes)
 	}
 }
 
@@ -465,6 +582,27 @@ func waitForSessionGone(t *testing.T, m *Manager, sessionID string, timeout time
 	t.Fatalf("timeout waiting for session %q to be removed", sessionID)
 }
 
+func waitForDeleteParticipants(t *testing.T, m *Manager, sessionID string, expected int, timeout time.Duration) {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		m.mu.Lock()
+		operation := m.deleteOperations[sessionID]
+		participants := 0
+		if operation != nil {
+			participants = operation.participants
+		}
+		m.mu.Unlock()
+		if participants == expected {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	t.Fatalf("timeout waiting for %d delete participants", expected)
+}
+
 func waitForLifecycleEvent(
 	t *testing.T,
 	events <-chan SessionLifecycleEvent,
@@ -485,17 +623,5 @@ func waitForLifecycleEvent(
 		case <-timer.C:
 			t.Fatalf("timeout waiting for lifecycle event %q for session %q", lifecycle, sessionID)
 		}
-	}
-}
-
-func assertFileContains(t *testing.T, path string, needle string) {
-	t.Helper()
-
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile(%q): %v", path, err)
-	}
-	if !strings.Contains(string(content), needle) {
-		t.Fatalf("expected %q to contain %q", path, needle)
 	}
 }

@@ -10,7 +10,7 @@ Env App is built as a Redeven-specific shell on top of published floe-webapp UI/
 
 # Mechanism
 
-The UI package pins released versions of the upstream packages. `EnvAppShell` imports floe-webapp providers, layout primitives, icons, and protocol hooks; terminal surfaces use Floeterm `TerminalCore` and session coordination; controlplane services call Flowersec controlplane helpers to exchange entry tickets for connect artifacts; and local package-lock files are the audited dependency source for the embedded UI build.
+The UI package pins released versions of the upstream packages. `EnvAppShell` imports floe-webapp providers, layout primitives, icons, and protocol hooks; terminal surfaces use Floeterm `TerminalCore` and `PagedTerminalOutputCoordinator`; controlplane services call Flowersec controlplane helpers to exchange entry tickets for connect artifacts; and local package-lock files are the audited dependency source for the embedded UI build. Activity and Workbench terminals map Redeven history-page RPCs and shell-activity projection into the same upstream output coordinator. Initial replay blocks terminal input, while background gap recovery and automatic retry remain non-blocking. The coordinator owns sparse sequence coverage, retained-live bounds, retry state, truncation rebases, and cancellation; Redeven owns only RPC conversion, terminal visibility, progress/error presentation, and product activity callbacks.
 
 Env App keeps only bootstrap, access, protocol, and shell chrome in the initial module. Activity surfaces, Workbench, Terminal, Monitor, Files, Codespaces, Ports, Flower, Codex, Settings, Plugins, Debug Console, audit, file browser, and file preview hosts are loaded through feature boundaries when activated. Flower and Codex providers are scoped to the surfaces that need them, so a connected shell does not initialize AI settings, model catalogs, or thread lists by default. Feature CSS follows the same boundary: Iosevka loads with Terminal, shared Flower and chat styles load with Flower entry points, and Codex styles load with Codex entry points.
 
@@ -18,7 +18,7 @@ The local bootstrap reuses the access status returned by `getLocalRuntime()` ins
 
 # Boundaries
 
-This concept only holds while Env App continues to consume published upstream packages instead of local sibling checkouts or ad-hoc replacements for protocol, terminal, and controlplane artifact handling. Lazy boundaries change loading time, not product contracts: restored surface state, permission gates, Workbench activation, error recovery, and provider ownership must remain equivalent after a feature chunk resolves. The initial budget is a required build gate and must not be bypassed by renaming or preloading feature assets through a different entry.
+This concept only holds while Env App continues to consume published upstream packages instead of local sibling checkouts or ad-hoc replacements for protocol, terminal, and controlplane artifact handling. Redeven must not recreate Floeterm output recovery, snapshot formats, resource estimation, or shell lifecycle generation in product code. Lazy boundaries change loading time, not product contracts: restored surface state, permission gates, Workbench activation, error recovery, and provider ownership must remain equivalent after a feature chunk resolves. The initial budget is a required build gate and must not be bypassed by renaming or preloading feature assets through a different entry.
 
 # Citations
 
@@ -29,13 +29,14 @@ This concept only holds while Env App continues to consume published upstream pa
 [5] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2 - Env App shell imports floe-webapp runtime and layout primitives.
 [6] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:24 - Env App shell consumes Flowersec observer typing for runtime connections.
 [7] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:25 - Env App shell consumes the floe-webapp protocol hook.
-[8] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:9 - Terminal panel consumes Floeterm TerminalCore and terminal session abstractions.
-[9] redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:2 - Controlplane services request entry connect artifacts through flowersec-core/controlplane.
-[10] redeven:AGENTS.md:173 - Published Dependency Policy forbids local sibling wiring in package manifests and build aliases.
-[11] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:169 - Env App declares activity, Workbench, provider, plugin, and floating-host lazy boundaries.
-[12] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2013 - Local bootstrap reuses the access status returned with runtime discovery.
-[13] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3338 - Feature providers and floating hosts mount only for the active or requested surface.
-[14] redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx:20 - Workbench feature bodies load through independent lazy boundaries.
-[15] redeven:internal/envapp/ui_src/scripts/checkInitialBuildBudget.mjs:9 - Production builds enforce compressed JavaScript, CSS, and total initial-resource budgets.
-[16] redeven:internal/envapp/ui_src/scripts/checkInitialBuildBudget.mjs:14 - Initial HTML is rejected when heavyweight renderer, Flower, or Codex assets are referenced.
-[17] redeven:internal/envapp/ui_src/package.json:9 - The Env App production build always runs the initial-resource budget check.
+[8] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:19 - Terminal panel imports the released Floeterm TerminalCore and paged output coordinator.
+[9] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:1201 - Activity and Workbench terminal views instantiate the same paged output coordinator.
+[10] redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:2 - Controlplane services request entry connect artifacts through flowersec-core/controlplane.
+[11] redeven:AGENTS.md:173 - Published Dependency Policy forbids local sibling wiring in package manifests and build aliases.
+[12] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:169 - Env App declares activity, Workbench, provider, plugin, and floating-host lazy boundaries.
+[13] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2013 - Local bootstrap reuses the access status returned with runtime discovery.
+[14] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3338 - Feature providers and floating hosts mount only for the active or requested surface.
+[15] redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx:20 - Workbench feature bodies load through independent lazy boundaries.
+[16] redeven:internal/envapp/ui_src/scripts/checkInitialBuildBudget.mjs:9 - Production builds enforce compressed JavaScript, CSS, and total initial-resource budgets.
+[17] redeven:internal/envapp/ui_src/scripts/checkInitialBuildBudget.mjs:14 - Initial HTML is rejected when heavyweight renderer, Flower, or Codex assets are referenced.
+[18] redeven:internal/envapp/ui_src/package.json:9 - The Env App production build always runs the initial-resource budget check.

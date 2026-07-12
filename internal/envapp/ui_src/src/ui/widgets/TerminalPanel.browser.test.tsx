@@ -663,7 +663,7 @@ describe('TerminalPanel browser activity integration', () => {
         nextStartSeq: 0,
         hasMore: false,
         firstSequence: 2,
-        lastSequence: 2,
+        lastSequence: 4,
         coveredBytes: 7,
         totalBytes: 7,
       });

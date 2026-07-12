@@ -37,6 +37,12 @@ type SessionLifecycleEvent struct {
 
 type SessionLifecycleHook func(SessionLifecycleEvent)
 
+type sessionDeleteOperation struct {
+	done         chan struct{}
+	err          error
+	participants int
+}
+
 func (r SessionLifecycleRecord) hiddenFromUI() bool {
 	return r.Lifecycle == SessionLifecycleClosing || r.Lifecycle == SessionLifecycleCloseFailedHidden
 }
@@ -191,27 +197,28 @@ func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict
 	}
 
 	nowUnixMs := time.Now().UnixMilli()
+	if m.term == nil {
+		return &rpc.Error{Code: 500, Message: "internal error"}
+	}
+	_, sessionExists := m.term.GetSession(sessionID)
 
 	m.mu.Lock()
-	record, ok := m.sessionLifecycle[sessionID]
-	if ok && record.Lifecycle == SessionLifecycleClosing {
+	if operation := m.deleteOperations[sessionID]; operation != nil {
+		operation.participants++
 		m.mu.Unlock()
-		return nil
+		<-operation.done
+		return operation.err
 	}
-	m.mu.Unlock()
-
-	if _, exists := m.term.GetSession(sessionID); !exists {
+	record := m.sessionLifecycle[sessionID]
+	if !sessionExists {
 		if strict {
+			m.mu.Unlock()
 			return ErrSessionNotFound
 		}
-		m.mu.Lock()
 		delete(m.sessionLifecycle, sessionID)
 		m.mu.Unlock()
 		return nil
 	}
-
-	m.mu.Lock()
-	record = m.sessionLifecycle[sessionID]
 	record.Lifecycle = SessionLifecycleClosing
 	record.OwnerWidgetID = strings.TrimSpace(widgetID)
 	record.CloseRequestedAtMs = nowUnixMs
@@ -219,17 +226,23 @@ func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict
 	record.FailureCode = ""
 	record.FailureMessage = ""
 	m.sessionLifecycle[sessionID] = record
+	operation := &sessionDeleteOperation{done: make(chan struct{}), participants: 1}
+	if m.deleteOperations == nil {
+		m.deleteOperations = make(map[string]*sessionDeleteOperation)
+	}
+	m.deleteOperations[sessionID] = operation
 	m.mu.Unlock()
 
 	payload := buildTerminalSessionsChangedPayload("closing", sessionID, record)
 	m.broadcastSessionsChanged(payload)
 	m.emitSessionLifecycleEvent(sessionLifecycleEventFromPayload(payload))
 
-	go m.runAsyncDeleteSession(sessionID)
-	return nil
+	go m.runAsyncDeleteSession(sessionID, operation)
+	<-operation.done
+	return operation.err
 }
 
-func (m *Manager) runAsyncDeleteSession(sessionID string) {
+func (m *Manager) runAsyncDeleteSession(sessionID string, operation *sessionDeleteOperation) {
 	if m == nil {
 		return
 	}
@@ -244,9 +257,28 @@ func (m *Manager) runAsyncDeleteSession(sessionID string) {
 	if deleteFn == nil {
 		deleteFn = m.deleteSessionNow
 	}
-	if err := deleteFn(sessionID); err != nil {
-		m.markSessionDeleteFailure(sessionID, "DELETE_FAILED", err.Error())
+	err := deleteFn(sessionID)
+	if err != nil {
+		if _, exists := m.term.GetSession(sessionID); !exists {
+			err = nil
+		} else {
+			m.markSessionDeleteFailure(sessionID, "DELETE_FAILED", err.Error())
+		}
 	}
+	m.completeSessionDelete(sessionID, operation, err)
+}
+
+func (m *Manager) completeSessionDelete(sessionID string, operation *sessionDeleteOperation, err error) {
+	if m == nil || operation == nil {
+		return
+	}
+	m.mu.Lock()
+	operation.err = err
+	if m.deleteOperations[sessionID] == operation {
+		delete(m.deleteOperations, sessionID)
+	}
+	close(operation.done)
+	m.mu.Unlock()
 }
 
 func (m *Manager) markSessionDeleteFailure(sessionID string, failureCode string, failureMessage string) {
@@ -265,14 +297,14 @@ func (m *Manager) markSessionDeleteFailure(sessionID string, failureCode string,
 	if !ok {
 		record = SessionLifecycleRecord{}
 	}
-	record.Lifecycle = SessionLifecycleCloseFailedHidden
+	record.Lifecycle = SessionLifecycleOpen
 	record.CloseFinishedAtMs = nowUnixMs
 	record.FailureCode = strings.TrimSpace(failureCode)
 	record.FailureMessage = strings.TrimSpace(failureMessage)
 	m.sessionLifecycle[sessionID] = record
 	m.mu.Unlock()
 
-	payload := buildTerminalSessionsChangedPayload("close_failed_hidden", sessionID, record)
+	payload := buildTerminalSessionsChangedPayload("close_failed", sessionID, record)
 	m.broadcastSessionsChanged(payload)
 	m.emitSessionLifecycleEvent(sessionLifecycleEventFromPayload(payload))
 }

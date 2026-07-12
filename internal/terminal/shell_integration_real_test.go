@@ -209,10 +209,10 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 
 	manager.term = termgo.NewManager(termgo.ManagerConfig{
 		Logger:                        slogTerminalLogger{log: logger},
-		EnvProvider:                   redevenShellInitEnvProvider{base: termgo.DefaultEnvProvider{}},
+		EnvProvider:                   termgo.DefaultEnvProvider{},
 		ShellResolver:                 fixedShellResolver{shell: shellPath},
-		ShellArgsProvider:             termgo.DefaultShellArgsProvider{ShellInitBaseDir: shellInitBaseDir},
-		ShellInitWriter:               redevenShellInitWriter{BaseDir: shellInitBaseDir},
+		ShellArgsProvider:             termgo.DefaultShellArgsProvider{ShellInitBaseDir: shellInitBaseDir, EnableCommandLifecycle: true},
+		ShellInitWriter:               termgo.DefaultShellInitWriter{BaseDir: shellInitBaseDir, EnableCommandLifecycle: true},
 		InitialResizeSuppressDuration: 10 * time.Millisecond,
 		ResizeSuppressDuration:        10 * time.Millisecond,
 	})
