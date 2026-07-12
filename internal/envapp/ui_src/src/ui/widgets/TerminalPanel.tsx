@@ -17,17 +17,18 @@ import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import {
   TerminalCore,
-  createTerminalOutputPipeline,
+  createPagedTerminalOutputCoordinator,
   getDefaultTerminalConfig,
   getThemeColors,
   type Logger,
   type TerminalAppearance,
   type TerminalEventSource,
-  type TerminalOutputPipelineCatchUpRequest,
-  type TerminalOutputPipelineHandle,
+  type PagedTerminalOutputCoordinatorHandle,
+  type PagedTerminalOutputSnapshot,
   type TerminalResponsiveConfig,
   type TerminalSessionInfo,
   type TerminalThemeName,
+  type TerminalTouchScrollRuntime,
 } from '@floegence/floeterm-terminal-web';
 import {
   createRedevenTerminalEventSource,
@@ -88,15 +89,7 @@ type pending_terminal_session_status = 'creating' | 'failed';
 
 export type TerminalPanelVariant = 'panel' | 'workbench';
 
-const TERMINAL_LIVE_FLUSH_MAX_CHUNKS = 64;
-const TERMINAL_LIVE_FLUSH_MAX_BYTES = 256 * 1024;
-const TERMINAL_LIVE_FLUSH_INTERVAL_MS = 100;
-const TERMINAL_DEFERRED_LIVE_MAX_CHUNKS = 256;
-const TERMINAL_DEFERRED_LIVE_MAX_BYTES = 512 * 1024;
-const TERMINAL_HISTORY_REPLAY_MAX_CHUNKS = 64;
-const TERMINAL_HISTORY_REPLAY_MAX_BYTES = 512 * 1024;
 const TERMINAL_HISTORY_REPLAY_MODE_MS = 120_000;
-const TERMINAL_HISTORY_REPLAY_MAX_PAGES = 4096;
 const TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX = 3.5;
 const TERMINAL_TAB_SHORTCUT_MAX_INDEX = 8;
 
@@ -230,69 +223,6 @@ function formatBytes(bytes: number): string {
   return `${rounded} ${units[unitIndex]}`;
 }
 
-function mergeTerminalChunks(chunks: readonly Uint8Array[]): Uint8Array | null {
-  if (chunks.length === 0) return null;
-  if (chunks.length === 1) return chunks[0] ?? null;
-
-  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-  const merged = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return merged;
-}
-
-function takeTerminalChunkBatch(
-  queue: terminal_display_chunk[],
-  maxChunks: number,
-  maxBytes: number,
-): terminal_display_chunk[] {
-  if (queue.length === 0) return [];
-
-  let count = 0;
-  let byteLength = 0;
-  while (count < queue.length && count < maxChunks) {
-    const next = queue[count];
-    if (!next) break;
-    if (count > 0 && byteLength + next.data.byteLength > maxBytes) break;
-    byteLength += next.data.byteLength;
-    count += 1;
-    if (byteLength >= maxBytes) break;
-  }
-
-  return queue.splice(0, Math.max(1, count));
-}
-
-function takeTerminalHistoryChunkBatch(
-  queue: terminal_history_chunk[],
-  maxChunks: number,
-  maxBytes: number,
-): terminal_history_chunk[] {
-  if (queue.length === 0) return [];
-
-  let count = 0;
-  let byteLength = 0;
-  while (count < queue.length && count < maxChunks) {
-    const next = queue[count];
-    if (!next) break;
-    if (count > 0 && byteLength + next.data.byteLength > maxBytes) break;
-    byteLength += next.data.byteLength;
-    count += 1;
-    if (byteLength >= maxBytes) break;
-  }
-
-  return queue.splice(0, Math.max(1, count));
-}
-
-function terminalNowMs(): number {
-  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
-    return performance.now();
-  }
-  return Date.now();
-}
-
 type terminal_session_view_props = {
   session: TerminalSessionInfo;
   variant: TerminalPanelVariant;
@@ -380,26 +310,9 @@ type terminal_panel_created_session = {
   session: TerminalSessionInfo | null;
 };
 
-type terminal_touch_scroll_target = {
-  scrollLines?: (amount: number) => void;
-  getScrollbackLength?: () => number;
-  isAlternateScreen?: () => boolean;
-  input?: (data: string, wasUserInput?: boolean) => void;
-};
-
 function waitForTerminalUiPaint(): Promise<void> {
   return new Promise((resolve) => deferAfterPaint(resolve));
 }
-
-type terminal_history_chunk = {
-  sequence: number;
-  data: Uint8Array;
-};
-
-type terminal_display_chunk = {
-  sequence?: number;
-  data: Uint8Array;
-};
 
 type terminal_session_actions = {
   reload: () => Promise<void>;
@@ -412,10 +325,9 @@ type terminal_selection_snapshot = {
   hasSelection: boolean;
 };
 
-function resolveTerminalTouchScrollTarget(core: TerminalCore | null): terminal_touch_scroll_target | null {
+function resolveTerminalTouchScrollTarget(core: TerminalCore | null): TerminalTouchScrollRuntime | null {
   if (!core) return null;
-  const inner = (core as unknown as { terminal?: terminal_touch_scroll_target | null }).terminal;
-  return inner ?? null;
+  return core.getTouchScrollRuntime();
 }
 
 function readTerminalSelectionText(core: TerminalCore | null): string {
@@ -928,6 +840,8 @@ function TerminalSessionView(props: terminal_session_view_props) {
   const [loading, setLoading] = createSignal<session_loading_state>('initializing');
   const [error, setError] = createSignal<string | null>(null);
   const [readyOnce, setReadyOnce] = createSignal(false);
+  const [outputRecoveryState, setOutputRecoveryState] = createSignal<PagedTerminalOutputSnapshot['state']>('idle');
+  const [outputRecoveryError, setOutputRecoveryError] = createSignal<string | null>(null);
   const [historyReplayProgress, setHistoryReplayProgress] = createSignal<{ loadedBytes: number; totalBytes: number } | null>(null);
 
   const [showLoading, setShowLoading] = createSignal(false);
@@ -947,6 +861,14 @@ function TerminalSessionView(props: terminal_session_view_props) {
       return i18n.t('terminal.loadingHistory');
     }
     return undefined;
+  });
+
+  const outputRecoveryMessage = createMemo(() => {
+    const state = outputRecoveryState();
+    if (state === 'catching-up') return i18n.t('terminal.recoveringOutput');
+    if (state === 'retry-wait') return i18n.t('terminal.retryingOutputRecovery');
+    if (state === 'failed') return outputRecoveryError() ?? i18n.t('terminal.outputRecoveryFailed');
+    return error();
   });
 
   createEffect(() => {
@@ -1034,59 +956,19 @@ function TerminalSessionView(props: terminal_session_view_props) {
     });
   };
 
-  let historyMaxSeq = 0;
   let replaying = false;
-  let bufferedLive: Array<{ sequence?: number; data: Uint8Array }> = [];
   const shellIntegrationParser = new TerminalShellIntegrationParser();
-
-  let queued: terminal_display_chunk[] = [];
-  let flushScheduled = false;
-  let flushRaf: number | null = null;
-  let flushTimer: ReturnType<typeof setTimeout> | null = null;
-  let lastFlushAtMs = 0;
-  let deferredLive: terminal_display_chunk[] = [];
-  let deferredLiveBytes = 0;
-  let firstDeferredSeq: number | null = null;
-  let needsHistoryCatchup = false;
-  let catchupInProgress = false;
-  let catchupRunSeq = 0;
-  let lastObservedSeq = 0;
-  let lastRenderedSeq = 0;
-  let activitySequenceCoverage: number | null = null;
-  let focusAfterCatchup = false;
-  let outputPipeline: TerminalOutputPipelineHandle | null = null;
-  const appliedSequences = new Set<number>();
-  const observedUnrenderedSequences = new Set<number>();
-  const activityInitialHistorySequences = new Set<number>();
-  const activityCatchupHistorySequences = new Set<number>();
+  let outputCoordinator: PagedTerminalOutputCoordinatorHandle | null = null;
+  let outputCoordinatorSnapshot: PagedTerminalOutputSnapshot | null = null;
+  const projectedLiveBySequence = new Map<number, Uint8Array>();
 
   const liveRenderActive = () => props.viewActive() && props.active();
-  const activityOutputPipelineEnabled = () => props.variant !== 'workbench';
 
   const normalizeLiveSequence = (sequence: number | undefined): number | undefined => (
     typeof sequence === 'number' && Number.isFinite(sequence) && sequence > 0
       ? Math.floor(sequence)
       : undefined
   );
-
-  const advanceActivitySequenceCoverage = (sequence: number | undefined) => {
-    if (!activityOutputPipelineEnabled()) return;
-    const seq = normalizeLiveSequence(sequence);
-    if (!seq || (activitySequenceCoverage !== null && seq <= activitySequenceCoverage)) return;
-    activitySequenceCoverage = seq;
-    for (const applied of appliedSequences) {
-      if (applied <= seq) appliedSequences.delete(applied);
-    }
-  };
-
-  const establishActivitySequenceCoverage = (sequence: number) => {
-    if (!activityOutputPipelineEnabled()) return;
-    const seq = Math.max(0, Math.floor(sequence));
-    activitySequenceCoverage = seq;
-    for (const applied of appliedSequences) {
-      if (applied <= seq) appliedSequences.delete(applied);
-    }
-  };
 
   const historyPageCoveredThrough = (page: {
     lastSequence: number;
@@ -1102,207 +984,9 @@ function TerminalSessionView(props: terminal_session_view_props) {
     return coveredThrough;
   };
 
-  const markSequenceApplied = (sequence: number | undefined) => {
-    const seq = normalizeLiveSequence(sequence);
-    if (activityOutputPipelineEnabled()) {
-      if (!seq) return;
-      observedUnrenderedSequences.delete(seq);
-      advanceActivitySequenceCoverage(seq);
-      return;
-    }
-    if (!seq || seq <= lastRenderedSeq) return;
-    appliedSequences.add(seq);
-    while (appliedSequences.has(lastRenderedSeq + 1)) {
-      const nextSeq = lastRenderedSeq + 1;
-      appliedSequences.delete(nextSeq);
-      observedUnrenderedSequences.delete(nextSeq);
-      lastRenderedSeq = nextSeq;
-    }
-  };
-
-  const nextLiveStartSequence = () => {
-    if (activityOutputPipelineEnabled()) {
-      return activitySequenceCoverage !== null ? activitySequenceCoverage + 1 : 1;
-    }
-    return lastRenderedSeq > 0 ? lastRenderedSeq + 1 : 1;
-  };
-
-  const nextCatchupResumeSequence = () => {
-    const coveredStart = nextLiveStartSequence();
-    let firstObserved: number | null = null;
-    for (const sequence of observedUnrenderedSequences) {
-      if (firstObserved === null || sequence < firstObserved) firstObserved = sequence;
-    }
-    return firstObserved === null ? coveredStart : Math.min(coveredStart, firstObserved);
-  };
-
-  const resetOutputPipeline = (opts?: {
-    resetStats?: boolean;
-    resumeCatchUp?: boolean;
-    allowSequenceSkipOnResume?: boolean;
-  }) => {
-    outputPipeline?.reset({
-      startSequence: opts?.resumeCatchUp ? nextCatchupResumeSequence() : nextLiveStartSequence(),
-      resetStats: opts?.resetStats,
-      resumeCatchUp: opts?.resumeCatchUp,
-      allowSequenceSkipOnResume: opts?.allowSequenceSkipOnResume,
-    });
-  };
-
-  const outputPipelineDrainPending = () => Boolean(outputPipeline?.getDrainState().drainPending);
   const terminalInputBlocked = () => {
     if (loading() !== 'idle' || replaying) return true;
-    if (props.variant !== 'workbench') return false;
-    return catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup;
-  };
-
-  const markChunksApplied = (chunks: readonly terminal_display_chunk[] | readonly terminal_history_chunk[]) => {
-    for (const chunk of chunks) {
-      markSequenceApplied(chunk.sequence);
-    }
-  };
-
-  const clearDeferredLive = () => {
-    deferredLive = [];
-    deferredLiveBytes = 0;
-    firstDeferredSeq = null;
-  };
-
-  const resetVisualCatchupState = (opts?: { resetParser?: boolean }) => {
-    queued = [];
-    clearDeferredLive();
-    needsHistoryCatchup = false;
-    catchupInProgress = false;
-    catchupRunSeq += 1;
-    focusAfterCatchup = false;
-    lastFlushAtMs = 0;
-    lastObservedSeq = 0;
-    lastRenderedSeq = 0;
-    activitySequenceCoverage = null;
-    historyMaxSeq = 0;
-    appliedSequences.clear();
-    observedUnrenderedSequences.clear();
-    activityInitialHistorySequences.clear();
-    activityCatchupHistorySequences.clear();
-    resetOutputPipeline({ resetStats: true });
-    if (opts?.resetParser) {
-      shellIntegrationParser.reset();
-    }
-  };
-
-  const markHistoryCatchupNeeded = (startSequence?: number) => {
-    needsHistoryCatchup = true;
-    clearDeferredLive();
-    if (typeof startSequence === 'number' && Number.isFinite(startSequence) && startSequence > 0) {
-      firstDeferredSeq = Math.floor(startSequence);
-    }
-  };
-
-  const enqueueDeferredLive = (chunk: terminal_display_chunk) => {
-    if (needsHistoryCatchup) return;
-    const nextBytes = deferredLiveBytes + chunk.data.byteLength;
-    if (
-      deferredLive.length >= TERMINAL_DEFERRED_LIVE_MAX_CHUNKS
-      || nextBytes > TERMINAL_DEFERRED_LIVE_MAX_BYTES
-    ) {
-      markHistoryCatchupNeeded();
-      return;
-    }
-    if (firstDeferredSeq === null && typeof chunk.sequence === 'number') {
-      firstDeferredSeq = chunk.sequence;
-    }
-    deferredLive.push(chunk);
-    deferredLiveBytes = nextBytes;
-  };
-
-  const deferQueuedLive = () => {
-    if (queued.length === 0) return;
-    const pending = queued;
-    queued = [];
-    for (const chunk of pending) {
-      enqueueDeferredLive(chunk);
-      if (needsHistoryCatchup) break;
-    }
-  };
-
-  const cancelPendingLiveFlush = () => {
-    if (flushTimer) {
-      clearTimeout(flushTimer);
-      flushTimer = null;
-    }
-    if (flushRaf !== null) {
-      cancelAnimationFrame(flushRaf);
-      flushRaf = null;
-    }
-    flushScheduled = false;
-  };
-
-  const releaseFocusAfterCatchupIfSettled = () => {
-    if (!focusAfterCatchup) return;
-    if (catchupInProgress || needsHistoryCatchup) return;
-    if (outputPipelineDrainPending()) return;
-    if (deferredLive.length > 0 || queued.length > 0) return;
-    if (flushScheduled || flushTimer || flushRaf !== null) return;
-
-    if (activityOutputPipelineEnabled() && activitySequenceCoverage !== null) {
-      for (const sequence of observedUnrenderedSequences) {
-        if (sequence <= activitySequenceCoverage) observedUnrenderedSequences.delete(sequence);
-      }
-    }
-    activityCatchupHistorySequences.clear();
-    focusAfterCatchup = false;
-    if (liveRenderActive()) {
-      scheduleTerminalActivationRefresh();
-    }
-  };
-
-  const requestFlushFrame = () => {
-    if (flushScheduled) return;
-    flushScheduled = true;
-    flushRaf = requestAnimationFrame(() => {
-      flushRaf = null;
-      flushScheduled = false;
-      if (!liveRenderActive()) {
-        deferQueuedLive();
-        return;
-      }
-      lastFlushAtMs = terminalNowMs();
-      const batch = takeTerminalChunkBatch(
-        queued,
-        TERMINAL_LIVE_FLUSH_MAX_CHUNKS,
-        TERMINAL_LIVE_FLUSH_MAX_BYTES,
-      );
-      const merged = mergeTerminalChunks(batch.map((chunk) => chunk.data));
-      if (merged) {
-        term?.write(merged);
-        markChunksApplied(batch);
-      }
-      if (queued.length > 0) {
-        scheduleFlush();
-        return;
-      }
-      releaseFocusAfterCatchupIfSettled();
-    });
-  };
-
-  const scheduleFlush = () => {
-    if (flushScheduled || flushTimer) return;
-    if (!liveRenderActive()) {
-      deferQueuedLive();
-      return;
-    }
-
-    const elapsedMs = lastFlushAtMs > 0 ? terminalNowMs() - lastFlushAtMs : TERMINAL_LIVE_FLUSH_INTERVAL_MS;
-    const delayMs = Math.max(0, TERMINAL_LIVE_FLUSH_INTERVAL_MS - elapsedMs);
-    if (delayMs <= 0) {
-      requestFlushFrame();
-      return;
-    }
-
-    flushTimer = setTimeout(() => {
-      flushTimer = null;
-      requestFlushFrame();
-    }, delayMs);
+    return false;
   };
 
   const clearOutputSubscription = () => {
@@ -1310,67 +994,6 @@ function TerminalSessionView(props: terminal_session_view_props) {
     unsubData = null;
     unsubNameUpdate?.();
     unsubNameUpdate = null;
-  };
-
-  const handleOutputPipelineCatchUp = (request: TerminalOutputPipelineCatchUpRequest) => {
-    markHistoryCatchupNeeded(request.startSequence);
-    if (liveRenderActive()) {
-      flushDeferredOrCatchup();
-    }
-  };
-
-  const writeReplayChunks = async (
-    chunks: terminal_history_chunk[],
-    seq: number,
-    opts?: {
-      publishActivityForObservedLive?: boolean;
-      isCurrent?: () => boolean;
-      replayedSequences?: Set<number>;
-      source?: 'history' | 'live';
-    },
-  ) => {
-    const core = term;
-    if (!core) return;
-
-    if (chunks.length === 0) return;
-
-    await new Promise<void>((resolve) => {
-      const step = () => {
-        if (seq !== initSeq || opts?.isCurrent?.() === false) {
-          resolve();
-          return;
-        }
-
-        const batch = takeTerminalHistoryChunkBatch(
-          chunks,
-          TERMINAL_HISTORY_REPLAY_MAX_CHUNKS,
-          TERMINAL_HISTORY_REPLAY_MAX_BYTES,
-        );
-        const displayChunks = batch
-          .map((chunk) => consumeTerminalChunk(chunk.data, opts?.source ?? 'history', {
-            publishActivity: opts?.publishActivityForObservedLive !== false
-              || !observedUnrenderedSequences.has(chunk.sequence),
-          }))
-          .filter((chunk) => chunk.byteLength > 0);
-        const merged = mergeTerminalChunks(displayChunks);
-        if (merged) {
-          core.write(merged);
-        }
-        if (opts?.replayedSequences) {
-          for (const chunk of batch) {
-            const sequence = normalizeLiveSequence(chunk.sequence);
-            if (sequence) opts.replayedSequences.add(sequence);
-          }
-        }
-        markChunksApplied(batch);
-        if (chunks.length > 0) {
-          requestAnimationFrame(step);
-          return;
-        }
-        resolve();
-      };
-      requestAnimationFrame(step);
-    });
   };
 
   const consumeTerminalChunk = (
@@ -1390,257 +1013,30 @@ function TerminalSessionView(props: terminal_session_view_props) {
     return result.displayData;
   };
 
-  const replayHistoryPages = async (id: string, seq: number) => {
-    const core = term;
-    if (!core) return;
-
-    core.clear();
-    setHistoryReplayProgress(null);
-    core.startHistoryReplay(TERMINAL_HISTORY_REPLAY_MODE_MS);
-
-    let cursor = 0;
-    let coveredBytes = 0;
-    let totalBytes = 0;
-
-    try {
-      for (let pageIndex = 0; pageIndex < TERMINAL_HISTORY_REPLAY_MAX_PAGES; pageIndex += 1) {
-        const page = await props.transport.historyPage(id, cursor, -1);
-        if (seq !== initSeq) return;
-
-        totalBytes = page.totalBytes > 0 ? page.totalBytes : totalBytes;
-        coveredBytes += Math.max(0, page.coveredBytes);
-        if (totalBytes > 0) {
-          setHistoryReplayProgress({
-            loadedBytes: Math.min(coveredBytes, totalBytes),
-            totalBytes,
-          });
-        }
-
-        const coveredThrough = activityOutputPipelineEnabled()
-          ? historyPageCoveredThrough(page)
-          : undefined;
-        if (activityOutputPipelineEnabled()) {
-          if (coveredThrough && coveredThrough > historyMaxSeq) {
-            historyMaxSeq = coveredThrough;
-          }
-        } else if (page.lastSequence > historyMaxSeq) {
-          historyMaxSeq = page.lastSequence;
-        }
-
-        const sorted = [...page.chunks].sort((a, b) => a.sequence - b.sequence);
-        await writeReplayChunks(sorted, seq, {
-          replayedSequences: activityOutputPipelineEnabled()
-            ? activityInitialHistorySequences
-            : undefined,
-        });
-        if (seq !== initSeq) return;
-        advanceActivitySequenceCoverage(coveredThrough);
-
-        if (!page.hasMore) return;
-        if (page.nextStartSeq <= cursor) {
-          throw new Error('terminal history pagination did not advance');
-        }
-        cursor = page.nextStartSeq;
-      }
-
-      throw new Error('terminal history pagination did not converge');
-    } finally {
-      core.endHistoryReplay();
-      setHistoryReplayProgress(null);
-    }
-  };
-
-  const replayHistoryCatchupPages = async (id: string, startSeq: number, seq: number) => {
-    const core = term;
-    if (!core) return;
-
-    core.startHistoryReplay(TERMINAL_HISTORY_REPLAY_MODE_MS);
-
-    let cursor = Math.max(0, startSeq);
-    let resetForCoveredGap = false;
-
-    try {
-      for (let pageIndex = 0; pageIndex < TERMINAL_HISTORY_REPLAY_MAX_PAGES; pageIndex += 1) {
-        const page = await props.transport.historyPage(id, cursor, -1);
-        if (seq !== catchupRunSeq || !catchupInProgress) return;
-
-        const coveredThrough = activityOutputPipelineEnabled()
-          ? historyPageCoveredThrough(page)
-          : undefined;
-        if (activityOutputPipelineEnabled()) {
-          if (coveredThrough && coveredThrough > historyMaxSeq) {
-            historyMaxSeq = coveredThrough;
-          }
-        } else if (page.lastSequence > historyMaxSeq) {
-          historyMaxSeq = page.lastSequence;
-        }
-
-        const sorted = [...page.chunks].sort((a, b) => a.sequence - b.sequence);
-        if (
-          !resetForCoveredGap
-          && cursor > 0
-          && page.firstSequence > cursor
-          && sorted.length > 0
-        ) {
-          core.clear();
-          shellIntegrationParser.reset();
-          appliedSequences.clear();
-          if (activityOutputPipelineEnabled()) {
-            establishActivitySequenceCoverage(page.firstSequence - 1);
-          } else {
-            lastRenderedSeq = Math.max(0, page.firstSequence - 1);
-          }
-          resetForCoveredGap = true;
-        }
-
-        await writeReplayChunks(sorted, initSeq, {
-          publishActivityForObservedLive: false,
-          isCurrent: activityOutputPipelineEnabled()
-            ? () => seq === catchupRunSeq && catchupInProgress
-            : undefined,
-          replayedSequences: activityOutputPipelineEnabled()
-            ? activityCatchupHistorySequences
-            : undefined,
-        });
-        if (seq !== catchupRunSeq || !catchupInProgress) return;
-        advanceActivitySequenceCoverage(coveredThrough);
-
-        if (!page.hasMore) return;
-        if (page.nextStartSeq <= cursor) {
-          throw new Error('terminal history pagination did not advance');
-        }
-        cursor = page.nextStartSeq;
-      }
-
-      throw new Error('terminal history pagination did not converge');
-    } finally {
-      core.endHistoryReplay();
-    }
-  };
-
-  const flushDeferredOrCatchup = () => {
-    if (!liveRenderActive()) return;
-    if (!term) return;
-    if (loading() !== 'idle') return;
-    if (catchupInProgress) return;
-
-    if (needsHistoryCatchup) {
-      const id = sessionId();
-      const coveredStartSeq = activityOutputPipelineEnabled()
-        ? (activitySequenceCoverage !== null ? activitySequenceCoverage + 1 : 0)
-        : (lastRenderedSeq > 0 ? lastRenderedSeq + 1 : 0);
-      const startSeq = firstDeferredSeq ?? coveredStartSeq;
-      const seq = ++catchupRunSeq;
-      catchupInProgress = true;
-      needsHistoryCatchup = false;
-      focusAfterCatchup = true;
-      activityCatchupHistorySequences.clear();
-      clearDeferredLive();
-      queued = [];
-      cancelPendingLiveFlush();
-      let catchupSucceeded = false;
-      void replayHistoryCatchupPages(id, startSeq, seq)
-        .then(() => {
-          catchupSucceeded = true;
-        })
-        .catch((e) => {
-          setError(e instanceof Error ? e.message : String(e));
-        })
-        .finally(() => {
-          if (seq !== catchupRunSeq) return;
-          catchupInProgress = false;
-          resetOutputPipeline({
-            resumeCatchUp: catchupSucceeded,
-            allowSequenceSkipOnResume: catchupSucceeded,
-          });
-          if (catchupSucceeded && outputPipeline && activitySequenceCoverage !== null) {
-            outputPipeline.enqueue({
-              sequence: activitySequenceCoverage,
-              data: new Uint8Array(),
-            });
-          }
-          if (deferredLive.length > 0 || needsHistoryCatchup) {
-            flushDeferredOrCatchup();
-          } else {
-            releaseFocusAfterCatchupIfSettled();
-          }
-        });
-      return;
-    }
-
-    if (deferredLive.length > 0) {
-      queued.push(...deferredLive);
-      clearDeferredLive();
-      focusAfterCatchup = true;
-      scheduleFlush();
-    }
-
-    if (outputPipeline && !needsHistoryCatchup && !catchupInProgress) {
-      outputPipeline.flush();
-    }
-  };
-
   const handleLiveTerminalData = (data: Uint8Array, sequence: number | undefined) => {
-    if (outputPipeline) {
-      const seq = normalizeLiveSequence(sequence);
-      if (seq) {
-        if (activitySequenceCoverage === null) {
-          establishActivitySequenceCoverage(seq - 1);
-          resetOutputPipeline();
-        }
-        if (
-          (activitySequenceCoverage !== null && seq <= activitySequenceCoverage)
-          || appliedSequences.has(seq)
-          || observedUnrenderedSequences.has(seq)
-        ) {
-          return;
-        }
-        observedUnrenderedSequences.add(seq);
-      }
+    const coordinator = outputCoordinator;
+    if (!coordinator) return;
 
-      const displayData = consumeTerminalChunk(data, 'live');
-      outputPipeline.enqueue({ sequence: seq, data: displayData });
-      if (displayData.byteLength === 0 && !outputPipeline.getStats().catchUpPending) {
-        markSequenceApplied(seq);
-      }
-      if (outputPipeline.getStats().catchUpPending) {
-        flushDeferredOrCatchup();
-      }
+    const normalizedSequence = normalizeLiveSequence(sequence);
+    if (
+      normalizedSequence
+      && outputCoordinatorSnapshot
+      && normalizedSequence <= outputCoordinatorSnapshot.coveredThroughSequence
+    ) {
       return;
     }
 
-    const seq = normalizeLiveSequence(sequence);
-    if (seq) {
-      if (seq <= lastRenderedSeq || appliedSequences.has(seq) || observedUnrenderedSequences.has(seq)) {
-        return;
-      }
-      const expectedNextSeq = Math.max(lastObservedSeq, lastRenderedSeq) + 1;
-      if (seq > expectedNextSeq) {
-        markHistoryCatchupNeeded();
-      }
-      lastObservedSeq = Math.max(lastObservedSeq, seq);
-      observedUnrenderedSequences.add(seq);
+    const shouldProjectNow = outputCoordinatorSnapshot?.state !== 'initial-replay';
+    const projectedData = shouldProjectNow ? consumeTerminalChunk(data, 'live') : data;
+    if (shouldProjectNow && normalizedSequence) {
+      projectedLiveBySequence.set(normalizedSequence, projectedData);
     }
-
-    const displayData = consumeTerminalChunk(data, 'live');
-    if (displayData.byteLength === 0) {
-      markSequenceApplied(seq);
-      return;
-    }
-
-    const displayChunk: terminal_display_chunk = { sequence: seq, data: displayData };
-    if (!liveRenderActive()) {
-      enqueueDeferredLive(displayChunk);
-      return;
-    }
-
-    if (needsHistoryCatchup) {
-      flushDeferredOrCatchup();
-      return;
-    }
-
-    queued.push(displayChunk);
-    scheduleFlush();
+    coordinator.pushLive({
+      sequence: normalizedSequence,
+      data: projectedData,
+      source: 'live',
+      pretransformed: shouldProjectNow,
+    } as { sequence?: number; data: Uint8Array; source: 'live'; pretransformed: boolean });
   };
 
   let reloadSeq = 0;
@@ -1648,17 +1044,13 @@ function TerminalSessionView(props: terminal_session_view_props) {
     clearOutputSubscription();
     cancelPendingAppearanceApply();
     cancelPendingActivationRefresh();
-    outputPipeline?.dispose();
-    outputPipeline = null;
+    outputCoordinator?.dispose();
+    outputCoordinator = null;
+    outputCoordinatorSnapshot = null;
+    projectedLiveBySequence.clear();
     term?.dispose();
     term = null;
-    queued = [];
-    flushScheduled = false;
-    cancelPendingLiveFlush();
-    lastFlushAtMs = 0;
-    bufferedLive = [];
     replaying = false;
-    resetVisualCatchupState({ resetParser: true });
     shellIntegrationParser.reset();
     setReadyOnce(false);
     props.registerCore(sessionId(), null);
@@ -1725,8 +1117,10 @@ function TerminalSessionView(props: terminal_session_view_props) {
     props.registerActions(id, {
       reload: () => reload(),
       resetAfterClear: () => {
-        cancelPendingLiveFlush();
-        resetVisualCatchupState({ resetParser: true });
+        projectedLiveBySequence.clear();
+        shellIntegrationParser.reset();
+        outputCoordinator?.clear(1);
+        void outputCoordinator?.attach(0);
       },
     });
     onCleanup(() => {
@@ -1801,36 +1195,90 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
     term = core;
     props.registerCore(id, core);
-    outputPipeline?.dispose();
-    outputPipeline = activityOutputPipelineEnabled()
-      ? createTerminalOutputPipeline({
-        isInteractive: liveRenderActive,
-        policy: {
-          maxLiveBatchChunks: TERMINAL_LIVE_FLUSH_MAX_CHUNKS,
-          maxLiveBatchBytes: TERMINAL_LIVE_FLUSH_MAX_BYTES,
-          maxInactiveChunks: TERMINAL_DEFERRED_LIVE_MAX_CHUNKS,
-          maxInactiveBytes: TERMINAL_DEFERRED_LIVE_MAX_BYTES,
-        },
-        requestCatchUp: handleOutputPipelineCatchUp,
-        onDrain: releaseFocusAfterCatchupIfSettled,
-        startSequence: nextLiveStartSequence(),
-        write: (payload, chunks) => {
-          const visibleChunks = activityCatchupHistorySequences.size > 0
-            ? chunks.filter((chunk) => {
-              const sequence = normalizeLiveSequence(chunk.sequence);
-              return !sequence || !activityCatchupHistorySequences.has(sequence);
-            })
-            : chunks;
-          const visiblePayload = visibleChunks.length === chunks.length
-            ? payload
-            : mergeTerminalChunks(visibleChunks.map((chunk) => chunk.data));
-          if (visiblePayload && visiblePayload.byteLength > 0) {
-            term?.write(visiblePayload);
+    outputCoordinator?.dispose();
+    let replayCoveredBytes = 0;
+    let replayTotalBytes = 0;
+    outputCoordinator = createPagedTerminalOutputCoordinator({
+      isInteractive: liveRenderActive,
+      policy: {
+        maxRetainedLiveChunks: 2048,
+        maxRetainedLiveBytes: 8 * 1024 * 1024,
+        retryDelaysMs: [250, 1000, 4000],
+      },
+      fetchPage: async ({ startSequence, cursor }) => {
+        const pageCursor = typeof cursor === 'number' ? cursor : startSequence;
+        const page = await props.transport.historyPage(id, pageCursor, -1);
+        replayCoveredBytes += Math.max(0, page.coveredBytes);
+        replayTotalBytes = page.totalBytes > 0 ? page.totalBytes : replayTotalBytes;
+        if (replayTotalBytes > 0) {
+          setHistoryReplayProgress({
+            loadedBytes: Math.min(replayCoveredBytes, replayTotalBytes),
+            totalBytes: replayTotalBytes,
+          });
+        }
+        const coveredThroughSequence = historyPageCoveredThrough(page) ?? Math.max(0, pageCursor - 1);
+        return {
+          chunks: page.chunks.map((chunk) => {
+            const projected = projectedLiveBySequence.get(chunk.sequence);
+            return {
+              ...chunk,
+              data: projected === undefined
+                ? chunk.data
+                : consumeTerminalChunk(chunk.data, 'history', { publishActivity: false }),
+              source: 'history' as const,
+              pretransformed: projected !== undefined,
+            };
+          }),
+          hasMore: page.hasMore,
+          nextCursor: page.hasMore ? page.nextStartSeq : undefined,
+          firstAvailableSequence: page.firstSequence > 0 ? page.firstSequence : undefined,
+          coveredThroughSequence,
+          coveredBytes: page.coveredBytes,
+          totalBytes: page.totalBytes,
+        };
+      },
+      transformChunk: (chunk) => {
+        const metadata = chunk as {
+          sequence?: number;
+          data: Uint8Array;
+          source?: 'history' | 'live';
+          pretransformed?: boolean;
+        };
+        if (metadata.pretransformed) return chunk.data;
+        const source = metadata.source ?? 'live';
+        return consumeTerminalChunk(chunk.data, source);
+      },
+      write: (payload) => {
+        if (payload.byteLength > 0) core.write(payload);
+      },
+      clear: () => {
+        core.clear();
+        shellIntegrationParser.reset();
+      },
+      onHistoryTruncated: (reason) => {
+        buildLogger().warn('[TerminalPanel] Rebased truncated terminal history', { sessionId: id, reason });
+      },
+      onStateChange: (snapshot) => {
+        outputCoordinatorSnapshot = snapshot;
+        setOutputRecoveryState(snapshot.state);
+        if (snapshot.state === 'failed') {
+          const message = snapshot.lastError instanceof Error
+            ? snapshot.lastError.message
+            : String(snapshot.lastError || 'Terminal output recovery failed');
+          setOutputRecoveryError(message);
+        } else if (snapshot.state !== 'disposed') {
+          setOutputRecoveryError(null);
+        }
+        if (snapshot.state === 'live') {
+          setHistoryReplayProgress(null);
+          for (const sequence of projectedLiveBySequence.keys()) {
+            if (sequence <= snapshot.coveredThroughSequence) {
+              projectedLiveBySequence.delete(sequence);
+            }
           }
-          markChunksApplied(chunks);
-        },
-      })
-      : null;
+        }
+      },
+    });
 
     try {
       await core.initialize();
@@ -1842,16 +1290,8 @@ function TerminalSessionView(props: terminal_session_view_props) {
       applyTerminalAppearance(core, buildTerminalAppearance(), { forceResize: true });
 
       clearOutputSubscription();
-      historyMaxSeq = 0;
       replaying = true;
-      bufferedLive = [];
-      activityInitialHistorySequences.clear();
       unsubData = props.eventSource.onTerminalData(id, (ev) => {
-        if (replaying) {
-          bufferedLive.push({ sequence: ev.sequence, data: ev.data });
-          return;
-        }
-        if (typeof ev.sequence === 'number' && ev.sequence > 0 && ev.sequence <= historyMaxSeq) return;
         handleLiveTerminalData(ev.data, ev.sequence);
       });
 
@@ -1867,57 +1307,30 @@ function TerminalSessionView(props: terminal_session_view_props) {
       if (seq !== initSeq) return;
 
       setLoading('loading_history');
-      await replayHistoryPages(id, seq);
-      if (seq !== initSeq) return;
-
-      replaying = false;
-      const bufferedSequences = new Set<number>();
-      const liveSorted = [...bufferedLive]
-        .filter((c) => {
-          const sequence = normalizeLiveSequence(c.sequence);
-          if (!activityOutputPipelineEnabled()) {
-            return !sequence || sequence > historyMaxSeq;
-          }
-          if (!sequence) return true;
-          if (activityInitialHistorySequences.has(sequence) || bufferedSequences.has(sequence)) return false;
-          bufferedSequences.add(sequence);
-          return true;
-        })
-        .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
-      bufferedLive = [];
-      if (activityOutputPipelineEnabled()) {
-        const coveredBufferedLive = liveSorted.filter((chunk) => {
-          const sequence = normalizeLiveSequence(chunk.sequence);
-          return !sequence || (activitySequenceCoverage !== null && sequence <= activitySequenceCoverage);
-        });
-        const pipelineBufferedLive = liveSorted.filter((chunk) => {
-          const sequence = normalizeLiveSequence(chunk.sequence);
-          return sequence && (activitySequenceCoverage === null || sequence > activitySequenceCoverage);
-        });
-        await writeReplayChunks(
-          coveredBufferedLive.map((chunk) => ({
-            sequence: normalizeLiveSequence(chunk.sequence) ?? 0,
-            timestampMs: 0,
-            data: chunk.data,
-          })),
-          seq,
-          { source: 'live' },
-        );
-        if (seq !== initSeq) return;
-        resetOutputPipeline({ resetStats: true });
-        for (const c of pipelineBufferedLive) {
-          handleLiveTerminalData(c.data, c.sequence);
+      core.clear();
+      shellIntegrationParser.reset();
+      core.startHistoryReplay(TERMINAL_HISTORY_REPLAY_MODE_MS);
+      try {
+        await outputCoordinator?.attach(0);
+        while (
+          seq === initSeq
+          && outputCoordinatorSnapshot
+          && outputCoordinatorSnapshot.state !== 'live'
+          && outputCoordinatorSnapshot.state !== 'failed'
+        ) {
+          await sleep(25);
         }
-      } else {
-        resetOutputPipeline({ resetStats: true });
-        for (const c of liveSorted) {
-          handleLiveTerminalData(c.data, c.sequence);
-        }
+      } finally {
+        core.endHistoryReplay();
+        setHistoryReplayProgress(null);
       }
-      activityInitialHistorySequences.clear();
-      if (queued.length > 0) scheduleFlush();
-      outputPipeline?.flush();
-      flushDeferredOrCatchup();
+      if (seq !== initSeq) return;
+      if (outputCoordinatorSnapshot?.state === 'failed') {
+        throw outputCoordinatorSnapshot.lastError instanceof Error
+          ? outputCoordinatorSnapshot.lastError
+          : new Error(String(outputCoordinatorSnapshot.lastError || 'Terminal output recovery failed'));
+      }
+      replaying = false;
 
       await confirmAttachedViewportSize(core, id, seq);
       if (seq !== initSeq) return;
@@ -1936,28 +1349,18 @@ function TerminalSessionView(props: terminal_session_view_props) {
     } catch (e) {
       if (seq !== initSeq) return;
       replaying = false;
-      bufferedLive = [];
-      queued = [];
-      clearDeferredLive();
-      cancelPendingLiveFlush();
-      resetOutputPipeline({ resetStats: true });
       setLoading('idle');
-      setError(e instanceof Error ? e.message : String(e));
+      if (outputCoordinatorSnapshot?.state !== 'failed') {
+        setError(e instanceof Error ? e.message : String(e));
+      }
       const el = container;
       if (el) el.style.opacity = '1';
     }
   };
 
   createEffect(() => {
-    if (!liveRenderActive()) return;
-    flushDeferredOrCatchup();
-  });
-
-  createEffect(() => {
-    if (!activityOutputPipelineEnabled()) return;
-    if (!liveRenderActive()) return;
-    if (loading() !== 'idle') return;
-    flushDeferredOrCatchup();
+    const active = liveRenderActive();
+    outputCoordinator?.setActive(active);
   });
 
   createEffect(() => {
@@ -1978,7 +1381,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
   createEffect(() => {
     if (!props.viewActive() || !props.active()) return;
     if (!term) return;
-    if (catchupInProgress || needsHistoryCatchup || deferredLive.length > 0 || focusAfterCatchup || outputPipelineDrainPending()) return;
+    if (replaying || loading() !== 'idle') return;
     scheduleTerminalActivationRefresh();
   });
 
@@ -1996,6 +1399,14 @@ function TerminalSessionView(props: terminal_session_view_props) {
     '--redeven-terminal-loading-background': terminalBackground(),
     '--redeven-terminal-loading-foreground': terminalForeground(),
   });
+  const retryOutputRecovery = () => {
+    setOutputRecoveryError(null);
+    if (!readyOnce()) {
+      void reload();
+      return;
+    }
+    outputCoordinator?.retry();
+  };
 
   return (
     <div
@@ -2033,15 +1444,28 @@ function TerminalSessionView(props: terminal_session_view_props) {
         class="redeven-terminal-loading-curtain"
       />
 
-      <Show when={error()}>
+      <Show when={outputRecoveryMessage()}>
         <div
-          class="absolute left-3 right-3 bottom-3 text-[11px] px-2 py-1 rounded border border-border text-error break-words"
+          class="absolute left-3 right-3 bottom-3 flex min-h-8 items-center gap-2 rounded border border-border px-2 py-1 text-[11px] break-words"
+          classList={{
+            'text-error': outputRecoveryState() === 'failed' || Boolean(error()),
+            'text-foreground': outputRecoveryState() !== 'failed' && !error(),
+          }}
           style={{
             'background-color': `color-mix(in srgb, ${terminalBackground()} 80%, transparent)`,
             bottom: 'calc(var(--terminal-bottom-inset) + 0.75rem)',
           }}
         >
-          {error()}
+          <span class="min-w-0 flex-1">{outputRecoveryMessage()}</span>
+          <Show when={outputRecoveryState() === 'failed'}>
+            <button
+              type="button"
+              class="shrink-0 rounded border border-border px-2 py-1 text-foreground hover:bg-muted"
+              onClick={retryOutputRecovery}
+            >
+              {i18n.t('terminal.retry')}
+            </button>
+          </Show>
         </div>
       </Show>
     </div>
@@ -3887,11 +3311,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const sequence = (lineDelta > 0 ? '\x1B[B' : '\x1B[A').repeat(Math.abs(lineDelta));
       if (!sequence) return false;
 
-      if (typeof target.input === 'function') {
-        target.input(sequence, true);
-      } else {
-        void transport.sendInput(sessionId, sequence, connId);
-      }
+      target.sendAlternateScreenInput(sequence);
       return true;
     }
 

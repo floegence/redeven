@@ -41,6 +41,7 @@ const (
 	maxTerminalHistoryPageChunks     = 512
 	defaultTerminalHistoryPageBytes  = 384 * 1024
 	maxTerminalHistoryPageBytes      = 512 * 1024
+	terminalHistoryBufferMaxBytes    = 8 * 1024 * 1024
 )
 
 var ErrSessionNotFound = errors.New("terminal session not found")
@@ -59,6 +60,7 @@ type Manager struct {
 	bySession        map[string]map[*rpc.Server]string // session_id -> server -> conn_id
 	closedSinks      map[*rpc.Server]struct{}          // best-effort marker to avoid repeated work
 	sessionLifecycle map[string]SessionLifecycleRecord
+	deleteOperations map[string]*sessionDeleteOperation
 	lifecycleHooks   map[int]SessionLifecycleHook
 	nextLifecycleID  int
 }
@@ -97,11 +99,18 @@ func (r fixedShellResolver) ResolveShell(logger termgo.Logger) string {
 func newTerminalGoManagerConfig(shell string, log *slog.Logger) termgo.ManagerConfig {
 	shellInitBaseDir := defaultRedevenShellInitBaseDir()
 	return termgo.ManagerConfig{
-		Logger:            slogTerminalLogger{log: log},
-		EnvProvider:       redevenShellInitEnvProvider{base: termgo.DefaultEnvProvider{}},
-		ShellResolver:     fixedShellResolver{shell: shell},
-		ShellArgsProvider: termgo.DefaultShellArgsProvider{ShellInitBaseDir: shellInitBaseDir},
-		ShellInitWriter:   redevenShellInitWriter{BaseDir: shellInitBaseDir},
+		Logger:                slogTerminalLogger{log: log},
+		EnvProvider:           termgo.DefaultEnvProvider{},
+		ShellResolver:         fixedShellResolver{shell: shell},
+		HistoryBufferMaxBytes: terminalHistoryBufferMaxBytes,
+		ShellArgsProvider: termgo.DefaultShellArgsProvider{
+			ShellInitBaseDir:       shellInitBaseDir,
+			EnableCommandLifecycle: true,
+		},
+		ShellInitWriter: termgo.DefaultShellInitWriter{
+			BaseDir:                shellInitBaseDir,
+			EnableCommandLifecycle: true,
+		},
 	}
 }
 
@@ -130,6 +139,7 @@ func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slo
 		bySession:        make(map[string]map[*rpc.Server]string),
 		closedSinks:      make(map[*rpc.Server]struct{}),
 		sessionLifecycle: make(map[string]SessionLifecycleRecord),
+		deleteOperations: make(map[string]*sessionDeleteOperation),
 		lifecycleHooks:   make(map[int]SessionLifecycleHook),
 	}
 
@@ -362,7 +372,10 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, &rpc.Error{Code: 400, Message: "session_id is required"}
 		}
 		if err := m.DeleteSession(sessionID); err != nil {
-			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
+			if errors.Is(err, ErrSessionNotFound) {
+				return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
+			}
+			return nil, &rpc.Error{Code: 500, Message: "failed to close terminal session"}
 		}
 		return &terminalDeleteResp{OK: true}, nil
 	})

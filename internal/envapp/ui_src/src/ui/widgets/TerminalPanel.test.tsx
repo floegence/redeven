@@ -76,6 +76,8 @@ const terminalBufferLinesState = vi.hoisted(() => ({
 
 const terminalCoreInstances = vi.hoisted(() => [] as any[]);
 const createOutputPipelineSpy = vi.hoisted(() => vi.fn());
+const createOutputCoordinatorSpy = vi.hoisted(() => vi.fn());
+const outputCoordinatorRetrySpy = vi.hoisted(() => vi.fn());
 
 const notificationMocks = vi.hoisted(() => ({
   error: vi.fn(),
@@ -633,6 +635,16 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     findNext = vi.fn();
     findPrevious = vi.fn();
     clear = vi.fn();
+    readBufferLine = vi.fn((row: number) => terminalBufferLinesState.lines.get(row) ?? '');
+    getTouchScrollRuntime = vi.fn(() => ({
+      scrollLines: (amount: number) => {
+        scrollLinesSpy(amount);
+        return true;
+      },
+      getScrollbackLength: () => terminalScrollState.scrollbackLength,
+      isAlternateScreen: () => terminalScrollState.alternateScreen,
+      sendAlternateScreenInput: (data: string) => terminalInputSpy(data, true),
+    }));
     getSelectionText = vi.fn(() => terminalSelectionState.text);
     hasSelection = vi.fn(() => terminalSelectionState.text.length > 0);
     copySelection = vi.fn(async (source: 'shortcut' | 'command' | 'copy_event' = 'command') => {
@@ -856,9 +868,181 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     };
   };
 
+  const createMockPagedOutputCoordinator = (options: any) => {
+    createOutputCoordinatorSpy(options);
+    let state = 'idle';
+    let active = true;
+    let coveredThroughSequence = 0;
+    let retained: any[] = [];
+    let disposed = false;
+    let generation = 0;
+    let pipeline: any;
+
+    const snapshot = () => ({
+      state,
+      active,
+      coveredThroughSequence,
+      retainedLiveChunks: retained.length,
+      retainedLiveBytes: retained.reduce((sum, item) => sum + item.data.byteLength, 0),
+      retryAttempt: 0,
+      retryScheduled: false,
+      lastError: null,
+      disposed,
+    });
+    const setState = (next: string) => {
+      state = next;
+      options.onStateChange?.(snapshot());
+    };
+    const writeChunks = (chunks: any[]) => {
+      const accepted = chunks.flatMap((queuedItem) => {
+        const item = queuedItem.coordinatorSequence
+          ? { ...queuedItem, sequence: queuedItem.coordinatorSequence }
+          : queuedItem;
+        const data = options.transformChunk ? options.transformChunk(item) : item.data;
+        return data === null ? [] : [{ ...item, data }];
+      });
+      if (accepted.length > 0) {
+        const total = accepted.reduce((sum, item) => sum + item.data.byteLength, 0);
+        const payload = new Uint8Array(total);
+        let offset = 0;
+        for (const item of accepted) {
+          payload.set(item.data, offset);
+          offset += item.data.byteLength;
+          coveredThroughSequence = Math.max(coveredThroughSequence, item.sequence ?? 0);
+        }
+        options.write(payload, accepted);
+      }
+    };
+    const replay = async (startSequence: number, catchUp: boolean, run: number) => {
+      const coverageAtStart = coveredThroughSequence;
+      setState(catchUp ? 'catching-up' : 'initial-replay');
+      const replayedSequences = new Set<number>();
+      let cursor: number | string | undefined;
+      let nextStart = startSequence;
+      for (let pageIndex = 0; pageIndex < 4096; pageIndex += 1) {
+        const page = await options.fetchPage({
+          startSequence: nextStart,
+          cursor,
+          signal: new AbortController().signal,
+        });
+        if (disposed || run !== generation) return;
+        if (page.firstAvailableSequence && nextStart > 0 && page.firstAvailableSequence > nextStart) {
+          options.clear?.();
+          options.onHistoryTruncated?.('history-evicted');
+          coveredThroughSequence = page.firstAvailableSequence - 1;
+        }
+        const replayChunks = [...page.chunks].filter((item) => !item.sequence || item.sequence > coveredThroughSequence);
+        for (const item of replayChunks) {
+          if (item.sequence) replayedSequences.add(item.sequence);
+        }
+        writeChunks(replayChunks);
+        coveredThroughSequence = Math.max(coveredThroughSequence, page.coveredThroughSequence ?? 0);
+        if (!page.hasMore) break;
+        cursor = page.nextCursor;
+        nextStart = coveredThroughSequence + 1;
+      }
+      pipeline.reset();
+      const pending = retained;
+      retained = [];
+      const firstSequence = pending.find((item) => item.sequence)?.sequence;
+      if (coveredThroughSequence === 0 && firstSequence && replayedSequences.size === 0) {
+        coveredThroughSequence = firstSequence - 1;
+      }
+      if (catchUp && coveredThroughSequence <= coverageAtStart && pending.length > 0) {
+        retained = pending;
+        setState('failed');
+        return;
+      }
+      setState('live');
+      for (let index = 0; index < pending.length; index += 1) {
+        const item = pending[index];
+        if (item.sequence && replayedSequences.has(item.sequence)) continue;
+        if (item.sequence && item.sequence <= coveredThroughSequence) {
+          enqueueRender(item);
+        } else {
+          acceptLive(item);
+          if (state !== 'live') {
+            retained.unshift(...pending.slice(index + 1));
+            return;
+          }
+        }
+      }
+      pipeline.flush();
+    };
+
+    const enqueueRender = (item: any) => {
+      const sequence = item.sequence;
+      pipeline.enqueue({ ...item, sequence: undefined, coordinatorSequence: sequence });
+      if (sequence) coveredThroughSequence = Math.max(coveredThroughSequence, sequence);
+    };
+    const acceptLive = (item: any) => {
+      const sequence = item.sequence;
+      if (sequence && sequence <= coveredThroughSequence) return;
+      if (sequence && coveredThroughSequence > 0 && sequence > coveredThroughSequence + 1) {
+        retained.push(item);
+        const run = ++generation;
+        void replay(coveredThroughSequence + 1, true, run);
+        return;
+      }
+      enqueueRender(item);
+    };
+
+    pipeline = createMockOutputPipeline({
+      isInteractive: () => true,
+      policy: {
+        maxInactiveChunks: options.policy?.maxRetainedLiveChunks,
+        maxInactiveBytes: options.policy?.maxRetainedLiveBytes,
+      },
+      write: (_payload: Uint8Array, chunks: any[]) => writeChunks(chunks),
+    });
+
+    return {
+      attach: async (startSequence = 1) => {
+        const run = ++generation;
+        coveredThroughSequence = Math.max(0, startSequence - 1);
+        pipeline.reset({ startSequence: coveredThroughSequence + 1 });
+        await replay(startSequence, false, run);
+      },
+      pushLive: (item: any) => {
+        if (state !== 'live' || !active || !(options.isInteractive?.() ?? true)) {
+          retained.push(item);
+          return;
+        }
+        acceptLive(item);
+      },
+      setActive: (next: boolean) => {
+        active = next;
+        if (active) {
+          const pending = retained;
+          retained = [];
+          for (const item of pending) acceptLive(item);
+          pipeline.flush();
+        }
+        options.onStateChange?.(snapshot());
+      },
+      clear: (startSequence = 1) => {
+        generation += 1;
+        retained = [];
+        coveredThroughSequence = Math.max(0, startSequence - 1);
+        pipeline.reset({ startSequence: coveredThroughSequence + 1 });
+        options.clear?.();
+        setState('idle');
+      },
+      retry: outputCoordinatorRetrySpy,
+      getSnapshot: snapshot,
+      dispose: () => {
+        disposed = true;
+        generation += 1;
+        pipeline.dispose();
+        setState('disposed');
+      },
+    };
+  };
+
   return {
     TerminalCore: MockTerminalCore,
     createTerminalOutputPipeline: vi.fn(createMockOutputPipeline),
+    createPagedTerminalOutputCoordinator: vi.fn(createMockPagedOutputCoordinator),
     getDefaultTerminalConfig: vi.fn((_theme: string, overrides?: any) => overrides ?? {}),
     getThemeColors: vi.fn(() => ({ background: '#111111', foreground: '#eeeeee' })),
   };
@@ -1246,6 +1430,8 @@ describe('TerminalPanel', () => {
     terminalBufferLinesState.lines = new Map();
     terminalCoreInstances.splice(0, terminalCoreInstances.length);
     createOutputPipelineSpy.mockClear();
+    createOutputCoordinatorSpy.mockClear();
+    outputCoordinatorRetrySpy.mockClear();
     terminalEventSourceState.dataHandlers = new Map();
     terminalEventSourceState.nameHandlers = new Map();
     notificationMocks.error.mockClear();
@@ -1982,22 +2168,64 @@ describe('TerminalPanel', () => {
     expect(terminalConfigState.values[0]?.fit).toBeUndefined();
   });
 
-  it('enables the upstream terminal output pipeline only for activity panels', async () => {
+  it('uses the upstream paged output coordinator for activity panels', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => <TerminalPanel variant="panel" />, host);
     await settleTerminalPanelAfterPaint();
 
-    expect(createOutputPipelineSpy).toHaveBeenCalledTimes(1);
-    expect(createOutputPipelineSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
+    expect(createOutputCoordinatorSpy).toHaveBeenCalledTimes(1);
+    expect(createOutputCoordinatorSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
       policy: expect.objectContaining({
-        maxLiveBatchChunks: 64,
-        maxLiveBatchBytes: 256 * 1024,
-        maxInactiveChunks: 256,
-        maxInactiveBytes: 512 * 1024,
+        maxRetainedLiveChunks: 2048,
+        maxRetainedLiveBytes: 8 * 1024 * 1024,
       }),
     }));
+  });
+
+  it('keeps input available during background recovery and exposes manual retry after failure', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const coordinatorOptions = createOutputCoordinatorSpy.mock.calls[0]?.[0];
+    expect(coordinatorOptions).toBeTruthy();
+    const baseSnapshot = {
+      active: true,
+      coveredThroughSequence: 4,
+      retainedLiveChunks: 1,
+      retainedLiveBytes: 12,
+      retryAttempt: 1,
+      retryScheduled: true,
+      lastError: null,
+      disposed: false,
+    };
+    coordinatorOptions.onStateChange?.({ ...baseSnapshot, state: 'retry-wait' });
+    await settleTerminalPanel();
+
+    expect(host.textContent).toContain('Terminal output recovery paused. Retrying...');
+    transportMocks.sendInput.mockClear();
+    terminalCoreInstances[0]?.handlers?.onData?.('echo still-live\r');
+    expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', 'echo still-live\r', 'conn-1');
+
+    coordinatorOptions.onStateChange?.({
+      ...baseSnapshot,
+      state: 'failed',
+      retryScheduled: false,
+      lastError: new Error('history temporarily unavailable'),
+    });
+    await settleTerminalPanel();
+
+    expect(host.textContent).toContain('history temporarily unavailable');
+    const retryButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => (
+      button.textContent?.trim() === 'Retry'
+    ));
+    expect(retryButton).toBeTruthy();
+    retryButton?.click();
+    expect(outputCoordinatorRetrySpy).toHaveBeenCalledTimes(1);
   });
 
   it('keeps activity input live while the upstream output pipeline has inactive backlog', async () => {
@@ -2232,7 +2460,7 @@ describe('TerminalPanel', () => {
           { sequence: 2, timestampMs: 10, data: textEncoder.encode('missing') },
         ],
         firstSequence: 2,
-        lastSequence: 2,
+        lastSequence: 4,
         coveredBytes: 7,
         totalBytes: 7,
       }));
@@ -2563,7 +2791,7 @@ describe('TerminalPanel', () => {
     expect(terminalConfigState.values[0]?.fit).toEqual({
       scrollbarReservePx: 0,
     });
-    expect(createOutputPipelineSpy).not.toHaveBeenCalled();
+    expect(createOutputCoordinatorSpy).toHaveBeenCalledTimes(1);
   });
 
   it('keeps workbench projected surfaces out of terminal render scale', async () => {
@@ -3841,14 +4069,14 @@ describe('TerminalPanel', () => {
 
     findTerminalTab(host, 'Terminal 2')?.click();
     await waitForTerminalPanelCondition(() => {
-      expect(transportMocks.historyPage).toHaveBeenCalledWith('session-2', 0, -1);
+      expect(transportMocks.historyPage).toHaveBeenCalledWith('session-2', 2, -1);
       expect(inactiveCore?.write).toHaveBeenCalled();
     });
 
     expect(terminalCoreInstances).toHaveLength(2);
     expect(inactiveCore?.dispose).not.toHaveBeenCalled();
     expect(transportMocks.attach).not.toHaveBeenCalled();
-    expect(inactiveCore?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['one two three']);
+    expect(inactiveCore?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0])).join('')).toBe('one two three');
   });
 
   it('accepts input after inactive history catchup completes without live output', async () => {
@@ -3901,7 +4129,7 @@ describe('TerminalPanel', () => {
 
     findTerminalTab(host, 'Terminal 2')?.click();
     await waitForTerminalPanelCondition(() => {
-      expect(transportMocks.historyPage).toHaveBeenCalledWith('session-2', 0, -1);
+      expect(transportMocks.historyPage).toHaveBeenCalledWith('session-2', 2, -1);
       expect(inactiveCore?.write).toHaveBeenCalled();
     });
 
@@ -3956,7 +4184,7 @@ describe('TerminalPanel', () => {
         { sequence: 250, timestampMs: 250, data: textEncoder.encode('retained') },
       ],
       firstSequence: 250,
-      lastSequence: 250,
+      lastSequence: 299,
       coveredBytes: 8,
       totalBytes: 8,
     }));
@@ -3971,7 +4199,10 @@ describe('TerminalPanel', () => {
     });
 
     expect(inactiveCore?.clear).toHaveBeenCalled();
-    expect(inactiveCore?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['retained']);
+    expect(inactiveCore?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual([
+      'retained',
+      'after-gap',
+    ]);
   });
 
   it('does not duplicate shell integration side effects during inactive history catchup', async () => {
@@ -4131,6 +4362,7 @@ describe('TerminalPanel', () => {
     expect(frames.length).toBeGreaterThan(0);
 
     core?.write.mockClear();
+    transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage());
     host.querySelector<HTMLButtonElement>('button[title="Clear"]')?.click();
     await settleTerminalPanelMicrotasks();
     expect(transportMocks.clear).toHaveBeenCalledWith('session-1');
@@ -4285,7 +4517,7 @@ describe('TerminalPanel', () => {
     expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['duplicate', 'fresh']);
   });
 
-  it('keeps the Workbench buffered-live high-water filter unchanged for sparse history pages', async () => {
+  it('preserves Workbench buffered live output omitted from sparse history pages', async () => {
     let releaseHistoryPage: (page: TestTerminalHistoryPage) => void = () => {};
     const historyPage = new Promise<TestTerminalHistoryPage>((resolve) => {
       releaseHistoryPage = resolve;
@@ -4328,10 +4560,9 @@ describe('TerminalPanel', () => {
     });
 
     expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
-    expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual([
-      'history-one',
-      'unsequenced-live',
-    ]);
+    expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0])).join('')).toBe(
+      'history-onecovered-by-high-waterunsequenced-live',
+    );
   });
 
   it('does not recreate a session when the same open-session request id is replayed', async () => {
