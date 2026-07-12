@@ -78,6 +78,14 @@ const terminalCoreInstances = vi.hoisted(() => [] as any[]);
 const createOutputPipelineSpy = vi.hoisted(() => vi.fn());
 const createOutputCoordinatorSpy = vi.hoisted(() => vi.fn());
 const outputCoordinatorRetrySpy = vi.hoisted(() => vi.fn());
+const terminalWorkingSetState = vi.hoisted(() => ({
+  runtimes: new Map<string, any>(),
+  activeSessionId: null as string | null,
+  interactions: new Map<string, Set<string>>(),
+  setPageHidden: vi.fn(),
+  evaluate: vi.fn(),
+  dispose: vi.fn(),
+}));
 
 const notificationMocks = vi.hoisted(() => ({
   error: vi.fn(),
@@ -280,9 +288,13 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
     Check: Icon,
+    ChevronDown: Icon,
+    ChevronUp: Icon,
     Copy: Icon,
     ExternalLink: Icon,
     Folder: Icon,
+    Menu: Icon,
+    Search: Icon,
     Sparkles: Icon,
     Terminal: Icon,
     Trash: Icon,
@@ -395,6 +407,9 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       ref={props.ref}
       value={props.value}
       placeholder={props.placeholder}
+      aria-label={props['aria-label']}
+      data-testid={props['data-testid']}
+      class={props.class}
       onInput={props.onInput}
     />
   ),
@@ -591,7 +606,7 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     }
 
     initialize = vi.fn().mockResolvedValue(undefined);
-    dispose = vi.fn();
+    dispose = vi.fn(() => this.container.replaceChildren());
     setTheme = vi.fn();
     forceResize = forceResizeSpy;
     getDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
@@ -635,6 +650,23 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     findNext = vi.fn();
     findPrevious = vi.fn();
     clear = vi.fn();
+    captureRestorableSnapshot = vi.fn((options?: { coveredThroughSequence?: number }) => ({
+      version: 1 as const,
+      data: 'terminal snapshot',
+      byteLength: 1024,
+      partial: false,
+      coveredThroughSequence: options?.coveredThroughSequence ?? 0,
+      cols: 80,
+      rows: 24,
+      createdAtMs: Date.now(),
+    }));
+    restoreSnapshot = vi.fn().mockResolvedValue(true);
+    getResourceEstimate = vi.fn(() => ({
+      bufferBytes: 256 * 1024,
+      cellCount: 2_000,
+      estimatedBytes: 1024 * 1024,
+      rendererType: 'webgl' as const,
+    }));
     readBufferLine = vi.fn((row: number) => terminalBufferLinesState.lines.get(row) ?? '');
     getTouchScrollRuntime = vi.fn(() => ({
       scrollLines: (amount: number) => {
@@ -1048,6 +1080,41 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
   };
 });
 
+vi.mock('../services/terminalAdaptiveWorkingSet', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/terminalAdaptiveWorkingSet')>();
+  return {
+    ...actual,
+    createTerminalAdaptiveWorkingSetManager: () => ({
+      register: (sessionId: string, runtime: any) => {
+        terminalWorkingSetState.runtimes.set(sessionId, runtime);
+        return () => terminalWorkingSetState.runtimes.delete(sessionId);
+      },
+      setActiveSession: (sessionId: string | null) => {
+        terminalWorkingSetState.activeSessionId = sessionId;
+      },
+      setInteraction: (sessionId: string, interaction: string, active: boolean) => {
+        const current = terminalWorkingSetState.interactions.get(sessionId) ?? new Set<string>();
+        if (active) current.add(interaction);
+        else current.delete(interaction);
+        if (current.size > 0) terminalWorkingSetState.interactions.set(sessionId, current);
+        else terminalWorkingSetState.interactions.delete(sessionId);
+      },
+      setPageHidden: terminalWorkingSetState.setPageHidden,
+      evaluate: terminalWorkingSetState.evaluate,
+      getSnapshot: () => ({
+        warmBudgetBytes: 256 * 1024 * 1024,
+        burstBudgetBytes: 384 * 1024 * 1024,
+        snapshotBudgetBytes: 64 * 1024 * 1024,
+        estimatedWarmBytes: 0,
+        snapshotBytes: 0,
+        pageHidden: false,
+        entries: [],
+      }),
+      dispose: terminalWorkingSetState.dispose,
+    }),
+  };
+});
+
 vi.mock('../services/terminalTransport', () => ({
   createRedevenTerminalTransport: () => transportMocks,
   createRedevenTerminalEventSource: () => ({
@@ -1432,6 +1499,12 @@ describe('TerminalPanel', () => {
     createOutputPipelineSpy.mockClear();
     createOutputCoordinatorSpy.mockClear();
     outputCoordinatorRetrySpy.mockClear();
+    terminalWorkingSetState.runtimes.clear();
+    terminalWorkingSetState.activeSessionId = null;
+    terminalWorkingSetState.interactions.clear();
+    terminalWorkingSetState.setPageHidden.mockClear();
+    terminalWorkingSetState.evaluate.mockClear();
+    terminalWorkingSetState.dispose.mockClear();
     terminalEventSourceState.dataHandlers = new Map();
     terminalEventSourceState.nameHandlers = new Map();
     notificationMocks.error.mockClear();
@@ -3896,6 +3969,155 @@ describe('TerminalPanel', () => {
     expect(activeCore?.write).toHaveBeenCalledTimes(1);
     const firstWrite = activeCore?.write.mock.calls[0]?.[0] as Uint8Array | undefined;
     expect(firstWrite ? new TextDecoder().decode(firstWrite) : '').toBe('alpha beta gamma');
+  });
+
+  it('keeps ten opened terminal cores warm without a fixed core-count limit', async () => {
+    terminalSessionsState.sessions = Array.from({ length: 10 }, (_, index) => ({
+      id: `session-${index + 1}`,
+      name: `Terminal ${index + 1}`,
+      workingDir: `/workspace/${index + 1}`,
+      createdAtMs: index + 1,
+      isActive: index === 0,
+      lastActiveAtMs: 10 - index,
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+    for (let index = 2; index <= 10; index += 1) {
+      findTerminalTab(host, `Terminal ${index}`)?.click();
+      await settleTerminalPanelAfterPaint();
+    }
+
+    expect(terminalCoreInstances).toHaveLength(10);
+    expect(terminalWorkingSetState.runtimes.size).toBe(10);
+    expect(terminalCoreInstances.every((core) => core.dispose.mock.calls.length === 0)).toBe(true);
+  });
+
+  it('filters 200 sessions by title, working directory, and session id without mounting their cores', async () => {
+    terminalSessionsState.sessions = Array.from({ length: 200 }, (_, index) => ({
+      id: `session-${index + 1}`,
+      name: `Build Shell ${index + 1}`,
+      workingDir: `/workspace/team-${index + 1}`,
+      createdAtMs: index + 1,
+      isActive: index === 0,
+      lastActiveAtMs: 200 - index,
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    expect(host.querySelectorAll('[data-terminal-session-id]')).toHaveLength(200);
+    expect(terminalCoreInstances).toHaveLength(1);
+
+    const filter = host.querySelector('[data-testid="terminal-session-filter"]') as HTMLInputElement;
+    filter.value = 'team-157';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await settleTerminalPanel();
+
+    const filteredRows = host.querySelectorAll('[data-terminal-session-id]');
+    expect(filteredRows).toHaveLength(1);
+    expect(filteredRows[0]?.getAttribute('data-terminal-session-id')).toBe('session-157');
+    expect(terminalCoreInstances).toHaveLength(1);
+
+    filter.value = 'session-42';
+    filter.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-terminal-session-id="session-42"]')).not.toBeNull();
+  });
+
+  it('uses a full-width mobile terminal with a dismissible session drawer and restores focus after selection', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'system';
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const sidebar = host.querySelector('[data-testid="mock-sidebar"]') as HTMLElement;
+    expect(sidebar.classList.contains('hidden')).toBe(true);
+    expect(host.querySelector('[data-testid="terminal-session-drawer-open"]')).not.toBeNull();
+
+    (host.querySelector('[data-testid="terminal-session-drawer-open"]') as HTMLButtonElement).click();
+    await settleTerminalPanel();
+    expect(sidebar.classList.contains('hidden')).toBe(false);
+    expect(host.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
+    expect(sidebar.classList.contains('hidden')).toBe(true);
+    expect(findActiveTerminalTab(host)?.getAttribute('data-terminal-session-id')).toBe('session-2');
+    expect(terminalCoreInstances.at(-1)?.focus).toHaveBeenCalled();
+
+    (host.querySelector('[data-testid="terminal-session-drawer-open"]') as HTMLButtonElement).click();
+    await settleTerminalPanel();
+    sidebar.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await settleTerminalPanel();
+    expect(sidebar.classList.contains('hidden')).toBe(true);
+  });
+
+  it('hibernates only the core and keeps background output subscribed', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    const runtime = terminalWorkingSetState.runtimes.get('session-2');
+    const sleepingCore = terminalCoreInstances[1];
+    transportMocks.attach.mockClear();
+    transportMocks.historyPage.mockClear();
+    const snapshot = await runtime.hibernate();
+
+    expect(snapshot).toMatchObject({ version: 1, coveredThroughSequence: 0 });
+    expect(sleepingCore?.dispose).toHaveBeenCalledTimes(1);
+    expect(terminalEventSourceState.dataHandlers.get('session-2')?.size).toBe(1);
+
+    expect(transportMocks.attach).not.toHaveBeenCalled();
+    expect(transportMocks.historyPage).not.toHaveBeenCalled();
   });
 
   it('catches up inactive mounted sessions without reloading the terminal core', async () => {

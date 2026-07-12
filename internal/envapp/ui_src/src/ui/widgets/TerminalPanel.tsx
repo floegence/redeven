@@ -1,7 +1,7 @@
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
-import { Check, Copy, ExternalLink, Folder, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { Check, ChevronDown, ChevronUp, Copy, ExternalLink, Folder, Menu, Search, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import '@fontsource/iosevka/400.css';
 
 import {
@@ -26,6 +26,7 @@ import {
   type PagedTerminalOutputCoordinatorHandle,
   type PagedTerminalOutputSnapshot,
   type TerminalResponsiveConfig,
+  type TerminalRestorableSnapshot,
   type TerminalSessionInfo,
   type TerminalThemeName,
   type TerminalTouchScrollRuntime,
@@ -83,6 +84,12 @@ import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surf
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { useI18n } from '../i18n';
+import {
+  createTerminalAdaptiveWorkingSetManager,
+  restoreTerminalSnapshotOrReplay,
+  type TerminalWorkingSetInteraction,
+  type TerminalWorkingSetRuntime,
+} from '../services/terminalAdaptiveWorkingSet';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
 type pending_terminal_session_status = 'creating' | 'failed';
@@ -243,6 +250,8 @@ type terminal_session_view_props = {
   registerCore: (sessionId: string, core: TerminalCore | null) => void;
   registerSurfaceElement: (sessionId: string, surface: HTMLDivElement | null) => void;
   registerActions: (sessionId: string, actions: terminal_session_actions | null) => void;
+  registerWorkingSetRuntime: (sessionId: string, runtime: TerminalWorkingSetRuntime | null) => void;
+  setWorkingSetInteraction: (sessionId: string, interaction: TerminalWorkingSetInteraction, active: boolean) => void;
   onSurfaceClick?: (event: MouseEvent) => void;
   onBell?: (sessionId: string) => void;
   onShellIntegrationEvent?: (sessionId: string, event: TerminalShellIntegrationEvent, source: 'history' | 'live') => void;
@@ -898,6 +907,8 @@ function TerminalSessionView(props: terminal_session_view_props) {
   let unsubNameUpdate: (() => void) | null = null;
   let appearanceRaf: number | null = null;
   let activationRaf: number | null = null;
+  let inputProtectionTimer: ReturnType<typeof setTimeout> | null = null;
+  let workingSetRegistered = false;
 
   const buildTerminalAppearance = (): TerminalAppearance => ({
     theme: colors(),
@@ -960,9 +971,14 @@ function TerminalSessionView(props: terminal_session_view_props) {
   const shellIntegrationParser = new TerminalShellIntegrationParser();
   let outputCoordinator: PagedTerminalOutputCoordinatorHandle | null = null;
   let outputCoordinatorSnapshot: PagedTerminalOutputSnapshot | null = null;
+  let replayCoveredBytes = 0;
+  let replayTotalBytes = 0;
   const projectedLiveBySequence = new Map<number, Uint8Array>();
 
-  const liveRenderActive = () => props.viewActive() && props.active();
+  const liveRenderActive = () => {
+    const active = props.viewActive() && props.active();
+    return term !== null && active;
+  };
 
   const normalizeLiveSequence = (sequence: number | undefined): number | undefined => (
     typeof sequence === 'number' && Number.isFinite(sequence) && sequence > 0
@@ -1040,20 +1056,34 @@ function TerminalSessionView(props: terminal_session_view_props) {
   };
 
   let reloadSeq = 0;
-  const disposeTerminal = () => {
-    clearOutputSubscription();
+  const disposeCore = () => {
     cancelPendingAppearanceApply();
     cancelPendingActivationRefresh();
+    term?.dispose();
+    term = null;
+    props.registerCore(sessionId(), null);
+  };
+
+  const disposeTerminal = () => {
+    clearOutputSubscription();
+    if (inputProtectionTimer) {
+      clearTimeout(inputProtectionTimer);
+      inputProtectionTimer = null;
+    }
+    props.setWorkingSetInteraction(sessionId(), 'input', false);
+    props.setWorkingSetInteraction(sessionId(), 'composition', false);
     outputCoordinator?.dispose();
     outputCoordinator = null;
     outputCoordinatorSnapshot = null;
     projectedLiveBySequence.clear();
-    term?.dispose();
-    term = null;
+    disposeCore();
     replaying = false;
     shellIntegrationParser.reset();
     setReadyOnce(false);
-    props.registerCore(sessionId(), null);
+    if (workingSetRegistered) {
+      workingSetRegistered = false;
+      props.registerWorkingSetRuntime(sessionId(), null);
+    }
   };
 
   let initSeq = 0;
@@ -1128,15 +1158,16 @@ function TerminalSessionView(props: terminal_session_view_props) {
     });
   });
 
-  const initOnce = async () => {
-    const id = sessionId();
-    const target = container;
-    if (!target) throw new Error('Terminal not mounted');
+  const protectTerminalInput = () => {
+    props.setWorkingSetInteraction(sessionId(), 'input', true);
+    if (inputProtectionTimer) clearTimeout(inputProtectionTimer);
+    inputProtectionTimer = setTimeout(() => {
+      inputProtectionTimer = null;
+      props.setWorkingSetInteraction(sessionId(), 'input', false);
+    }, 750);
+  };
 
-    const seq = ++initSeq;
-    setError(null);
-    setLoading('initializing');
-
+  const createCore = (id: string, target: HTMLDivElement): TerminalCore => {
     const core = new TerminalCore(
       target,
       getDefaultTerminalConfig('dark', {
@@ -1152,9 +1183,6 @@ function TerminalSessionView(props: terminal_session_view_props) {
         clipboard: {
           copyOnSelect: false,
         },
-        // When multiple views/panels show the same terminal session, only the focused terminal should emit remote resize.
-        // Focus also re-fits and re-emits the current size so the active surface can reclaim remote PTY ownership after
-        // another view with a different width was previously attached to the same session/connection.
         responsive: {
           fitOnFocus: true,
           emitResizeOnFocus: true,
@@ -1165,6 +1193,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
         onData: (data: string) => {
           if (!props.viewActive() || !props.active()) return;
           if (terminalInputBlocked()) return;
+          protectTerminalInput();
           void props.transport.sendInput(id, data, props.connId);
         },
         onResize: (size: { cols: number; rows: number }) => {
@@ -1190,14 +1219,18 @@ function TerminalSessionView(props: terminal_session_view_props) {
           || '/',
         agentHomePathAbs: normalizeAskFlowerAbsolutePath(props.agentHomePathAbs()) || undefined,
       }),
-      onActivate: (target) => props.onTerminalFileLinkOpen?.(target),
+      onActivate: (targetLink) => props.onTerminalFileLinkOpen?.(targetLink),
     }));
 
     term = core;
     props.registerCore(id, core);
-    outputCoordinator?.dispose();
-    let replayCoveredBytes = 0;
-    let replayTotalBytes = 0;
+    return core;
+  };
+
+  const ensureOutputCoordinator = (id: string) => {
+    if (outputCoordinator) return outputCoordinator;
+    replayCoveredBytes = 0;
+    replayTotalBytes = 0;
     outputCoordinator = createPagedTerminalOutputCoordinator({
       isInteractive: liveRenderActive,
       policy: {
@@ -1249,14 +1282,15 @@ function TerminalSessionView(props: terminal_session_view_props) {
         return consumeTerminalChunk(chunk.data, source);
       },
       write: (payload) => {
-        if (payload.byteLength > 0) core.write(payload);
+        if (payload.byteLength > 0) term?.write(payload);
       },
       clear: () => {
-        core.clear();
+        term?.clear();
         shellIntegrationParser.reset();
       },
       onHistoryTruncated: (reason) => {
         buildLogger().warn('[TerminalPanel] Rebased truncated terminal history', { sessionId: id, reason });
+        setOutputRecoveryState('catching-up');
       },
       onStateChange: (snapshot) => {
         outputCoordinatorSnapshot = snapshot;
@@ -1279,6 +1313,20 @@ function TerminalSessionView(props: terminal_session_view_props) {
         }
       },
     });
+    return outputCoordinator;
+  };
+
+  const initOnce = async () => {
+    const id = sessionId();
+    const target = container;
+    if (!target) throw new Error('Terminal not mounted');
+
+    const seq = ++initSeq;
+    setError(null);
+    setLoading('initializing');
+
+    const core = createCore(id, target);
+    ensureOutputCoordinator(id);
 
     try {
       await core.initialize();
@@ -1358,6 +1406,126 @@ function TerminalSessionView(props: terminal_session_view_props) {
     }
   };
 
+  const hibernateForWorkingSet = async (): Promise<TerminalRestorableSnapshot | null> => {
+    const core = term;
+    if (!core) return null;
+
+    outputCoordinator?.setActive(false);
+    await nextAnimationFrame();
+    if (term !== core) return null;
+
+    const snapshot = core.captureRestorableSnapshot({
+      coveredThroughSequence: outputCoordinator?.getSnapshot().coveredThroughSequence ?? 0,
+    });
+    disposeCore();
+    return snapshot;
+  };
+
+  const resumeFromWorkingSet = async (snapshot: TerminalRestorableSnapshot | null): Promise<void> => {
+    if (term) {
+      outputCoordinator?.setActive(liveRenderActive());
+      return;
+    }
+    const id = sessionId();
+    const target = container;
+    if (!target || !props.connected()) {
+      throw new Error('Terminal cannot resume while disconnected');
+    }
+
+    const seq = ++initSeq;
+    setError(null);
+    setLoading('initializing');
+    setShowLoading(true);
+    const core = createCore(id, target);
+    const coordinator = ensureOutputCoordinator(id);
+
+    try {
+      await core.initialize();
+      if (seq !== initSeq) return;
+      props.registerCore(id, core);
+      applyTerminalAppearance(core, buildTerminalAppearance(), { forceResize: true });
+
+      const recoverySource = await restoreTerminalSnapshotOrReplay({
+        snapshot,
+        restoreSnapshot: (value) => core.restoreSnapshot(value),
+        replayHistory: async () => {
+          replaying = true;
+          replayCoveredBytes = 0;
+          replayTotalBytes = 0;
+          setLoading('loading_history');
+          core.clear();
+          shellIntegrationParser.reset();
+          core.startHistoryReplay(TERMINAL_HISTORY_REPLAY_MODE_MS);
+          try {
+            await coordinator.attach(0);
+            while (
+              seq === initSeq
+              && outputCoordinatorSnapshot
+              && outputCoordinatorSnapshot.state !== 'live'
+              && outputCoordinatorSnapshot.state !== 'failed'
+            ) {
+              await sleep(25);
+            }
+          } finally {
+            core.endHistoryReplay();
+            setHistoryReplayProgress(null);
+          }
+          if (seq !== initSeq) return;
+          if (outputCoordinatorSnapshot?.state === 'failed') {
+            throw outputCoordinatorSnapshot.lastError instanceof Error
+              ? outputCoordinatorSnapshot.lastError
+              : new Error(String(outputCoordinatorSnapshot.lastError || 'Terminal output recovery failed'));
+          }
+          replaying = false;
+        },
+      });
+      if (seq !== initSeq) return;
+
+      setLoading('idle');
+      setReadyOnce(true);
+      setShowLoading(false);
+      if (recoverySource === 'snapshot' && snapshot) {
+        coordinator.setActive(false);
+        void coordinator.attach(snapshot.coveredThroughSequence + 1).then(() => {
+          if (seq === initSeq && term === core) coordinator.setActive(liveRenderActive());
+        });
+      } else {
+        coordinator.setActive(liveRenderActive());
+      }
+      requestAnimationFrame(() => {
+        if (term !== core) return;
+        core.forceResize();
+        if (props.viewActive() && props.active() && props.autoFocus()) core.focus();
+      });
+      await confirmAttachedViewportSize(core, id, seq);
+    } catch (errorValue) {
+      if (seq !== initSeq) return;
+      replaying = false;
+      setLoading('idle');
+      setShowLoading(false);
+      setError(errorValue instanceof Error ? errorValue.message : String(errorValue));
+      throw errorValue;
+    }
+  };
+
+  const workingSetRuntime: TerminalWorkingSetRuntime = {
+    getResourceEstimate: () => term?.getResourceEstimate() ?? {
+      bufferBytes: 0,
+      cellCount: 0,
+      estimatedBytes: 0,
+      rendererType: 'webgl',
+    },
+    isProtected: () => term?.hasSelection() === true,
+    hibernate: hibernateForWorkingSet,
+    resume: resumeFromWorkingSet,
+  };
+
+  createEffect(() => {
+    if (!readyOnce() || workingSetRegistered) return;
+    workingSetRegistered = true;
+    props.registerWorkingSetRuntime(sessionId(), workingSetRuntime);
+  });
+
   createEffect(() => {
     const active = liveRenderActive();
     outputCoordinator?.setActive(active);
@@ -1411,6 +1579,8 @@ function TerminalSessionView(props: terminal_session_view_props) {
   return (
     <div
       class="h-full min-h-0 relative overflow-hidden"
+      onCompositionStart={() => props.setWorkingSetInteraction(sessionId(), 'composition', true)}
+      onCompositionEnd={() => props.setWorkingSetInteraction(sessionId(), 'composition', false)}
       style={{
         'background-color': terminalBackground(),
         '--terminal-bottom-inset': `${props.bottomInsetPx()}px`,
@@ -1514,6 +1684,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [searchOpen, setSearchOpen] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [searchQuery, setSearchQuery] = createSignal('');
+  const [sessionFilterQuery, setSessionFilterQuery] = createSignal('');
+  const [sessionDrawerOpen, setSessionDrawerOpen] = createSignal(false);
   const [searchResultCount, setSearchResultCount] = createSignal(0);
   const [searchResultIndex, setSearchResultIndex] = createSignal(-1);
   const [panelHasFocus, setPanelHasFocus] = createSignal(false);
@@ -1543,9 +1715,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const transport = createRedevenTerminalTransport(rpc, connId);
   const eventSource = createRedevenTerminalEventSource(rpc);
   const sessionsCoordinator = getRedevenTerminalSessionsCoordinator({ connId, transport, logger: buildLogger() });
+  const terminalWorkingSet = createTerminalAdaptiveWorkingSetManager({
+    deviceMemoryGiB: typeof navigator === 'undefined'
+      ? undefined
+      : (navigator as Navigator & { deviceMemory?: number }).deviceMemory,
+  });
+  const workingSetRuntimeDisposers = new Map<string, () => void>();
   let disposed = false;
   onCleanup(() => {
     disposed = true;
+    terminalWorkingSet.dispose();
+    workingSetRuntimeDisposers.clear();
     if (sidebarPathCopyResetTimer !== undefined) {
       globalThis.clearTimeout(sidebarPathCopyResetTimer);
       sidebarPathCopyResetTimer = undefined;
@@ -2033,6 +2213,33 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
+    terminalWorkingSet.setActiveSession(activeSessionId());
+  });
+
+  createEffect(() => {
+    const id = searchOpen() ? activeSessionId() : null;
+    if (!id) return;
+    terminalWorkingSet.setInteraction(id, 'search', true);
+    onCleanup(() => terminalWorkingSet.setInteraction(id, 'search', false));
+  });
+
+  createEffect(() => {
+    const id = terminalAskMenu()?.selection.sessionId ?? terminalSidebarMenu()?.item.id ?? null;
+    if (!id) return;
+    terminalWorkingSet.setInteraction(id, 'context-menu', true);
+    onCleanup(() => terminalWorkingSet.setInteraction(id, 'context-menu', false));
+  });
+
+  if (typeof document !== 'undefined') {
+    const handleTerminalPageVisibility = () => {
+      terminalWorkingSet.setPageHidden(document.hidden);
+    };
+    handleTerminalPageVisibility();
+    document.addEventListener('visibilitychange', handleTerminalPageVisibility);
+    onCleanup(() => document.removeEventListener('visibilitychange', handleTerminalPageVisibility));
+  }
+
+  createEffect(() => {
     const activeId = activeSessionId();
     for (const scheduledSessionId of [...scheduledMountSelectionEpochs.keys()]) {
       if (scheduledSessionId !== activeId) {
@@ -2221,6 +2428,23 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     tabActivityTracker.dispose();
   });
 
+  const registerWorkingSetRuntime = (id: string, runtime: TerminalWorkingSetRuntime | null) => {
+    const normalizedId = String(id ?? '').trim();
+    if (!normalizedId) return;
+    workingSetRuntimeDisposers.get(normalizedId)?.();
+    workingSetRuntimeDisposers.delete(normalizedId);
+    if (!runtime) return;
+    workingSetRuntimeDisposers.set(normalizedId, terminalWorkingSet.register(normalizedId, runtime));
+  };
+
+  const setWorkingSetInteraction = (
+    id: string,
+    interaction: TerminalWorkingSetInteraction,
+    active: boolean,
+  ) => {
+    terminalWorkingSet.setInteraction(id, interaction, active);
+  };
+
   const registerCore = (id: string, core: TerminalCore | null) => {
     if (!id) return;
     if (core) {
@@ -2405,6 +2629,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       byteLength,
       shouldMarkUnread: shouldMarkSessionUnread(sessionId),
     });
+    if (source === 'live') terminalWorkingSet.evaluate();
   };
 
   const handleSessionBell = (sessionId: string) => {
@@ -2562,6 +2787,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const commitSidebarSessionSelection = (sessionId: string) => {
     setActiveSessionId(sessionId);
+    if (isMobileLayout()) {
+      setSessionDrawerOpen(false);
+      void waitForTerminalUiPaint().then(() => {
+        if (!disposed) restoreActiveTerminalFocus();
+      });
+      return;
+    }
     restoreActiveTerminalFocus();
   };
 
@@ -3267,7 +3499,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
   const sessionListItemById = createMemo(() => new Map(sessionListItems().map((item) => [item.id, item])));
   const sessionListItemIds = createMemo((previous: readonly string[] = []) => {
-    const next = sessionListItems().map((item) => item.id);
+    const query = sessionFilterQuery().trim().toLocaleLowerCase();
+    const next = sessionListItems().filter((item) => {
+      if (!query) return true;
+      return [item.label, item.title, item.fullPath, item.id]
+        .some((value) => value.toLocaleLowerCase().includes(query));
+    }).map((item) => item.id);
     return sameSessionIdList(previous, next) ? previous : next;
   });
 
@@ -4025,6 +4262,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     core.findPrevious(term);
   };
 
+  createEffect(() => {
+    if (!isMobileLayout() || !sessionDrawerOpen()) return;
+    const closeDrawerFromHistory = () => setSessionDrawerOpen(false);
+    window.addEventListener('popstate', closeDrawerFromHistory);
+    onCleanup(() => window.removeEventListener('popstate', closeDrawerFromHistory));
+  });
+
   const handleRootKeyDown: (e: KeyboardEvent) => void = (e) => {
     if (matchesPlainPrimaryModShortcut(e, 'f')) {
       // Common terminal shortcut: intercept browser find.
@@ -4047,6 +4291,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (e.key === 'Escape' && searchOpen()) {
       e.preventDefault();
       closeSearch();
+      return;
+    }
+
+    if (e.key === 'Escape' && sessionDrawerOpen()) {
+      e.preventDefault();
+      setSessionDrawerOpen(false);
+      restoreActiveTerminalFocus();
       return;
     }
 
@@ -4111,11 +4362,33 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       }}
     >
       <Show when={connected()} fallback={<div class="p-4 text-xs text-muted-foreground">{i18n.t('terminal.notConnected')}</div>}>
-        <div class="flex min-h-0 flex-1 overflow-hidden bg-background">
+        <div class="relative flex min-h-0 flex-1 overflow-hidden bg-background">
+          <Show when={isMobileLayout() && sessionDrawerOpen()}>
+            <button
+              type="button"
+              class="absolute inset-0 z-30 cursor-default bg-black/45"
+              aria-label={i18n.t('terminal.closeSessions')}
+              data-testid="terminal-session-drawer-backdrop"
+              onClick={() => {
+                setSessionDrawerOpen(false);
+                restoreActiveTerminalFocus();
+              }}
+            />
+          </Show>
+          <div
+            class="contents"
+            role={isMobileLayout() && sessionDrawerOpen() ? 'dialog' : undefined}
+            aria-modal={isMobileLayout() && sessionDrawerOpen() ? 'true' : undefined}
+            aria-label={isMobileLayout() && sessionDrawerOpen() ? i18n.t('terminal.sessions') : undefined}
+          >
           <Sidebar
             width={terminalSidebarWidth()}
             ariaLabel={i18n.t('terminal.title')}
-            class="redeven-terminal-session-sidebar"
+            class={`redeven-terminal-session-sidebar ${isMobileLayout()
+              ? sessionDrawerOpen()
+                ? 'absolute inset-y-0 left-0 z-40 !w-[min(88vw,320px)] shadow-2xl'
+                : 'hidden'
+              : ''}`}
           >
             <SidebarContent class="flex h-full min-h-0 flex-col overflow-hidden">
               <div class="shrink-0 space-y-2">
@@ -4150,6 +4423,44 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   >
                     <RefreshIcon class="w-3.5 h-3.5" />
                   </Button>
+                  <Show when={isMobileLayout()}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      class="h-7 w-7 cursor-pointer p-0"
+                      data-testid="terminal-session-drawer-close"
+                      onClick={() => {
+                        setSessionDrawerOpen(false);
+                        restoreActiveTerminalFocus();
+                      }}
+                      title={i18n.t('terminal.closeSessions')}
+                    >
+                      <X class="h-3.5 w-3.5" />
+                    </Button>
+                  </Show>
+                </div>
+                <div class="relative">
+                  <Search class="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    size="sm"
+                    value={sessionFilterQuery()}
+                    class="w-full pl-7 pr-7"
+                    placeholder={i18n.t('terminal.searchSessions')}
+                    aria-label={i18n.t('terminal.searchSessions')}
+                    data-testid="terminal-session-filter"
+                    onInput={(event) => setSessionFilterQuery(event.currentTarget.value)}
+                  />
+                  <Show when={sessionFilterQuery().length > 0}>
+                    <button
+                      type="button"
+                      class="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground"
+                      aria-label={i18n.t('terminal.clearSessionSearch')}
+                      title={i18n.t('terminal.clearSessionSearch')}
+                      onClick={() => setSessionFilterQuery('')}
+                    >
+                      <X class="h-3.5 w-3.5" />
+                    </button>
+                  </Show>
                 </div>
               </div>
 
@@ -4167,7 +4478,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                     each={sessionListItemIds()}
                     fallback={
                       <div class="rounded-md border border-sidebar-border/70 bg-sidebar-accent/25 px-2.5 py-3 text-xs text-muted-foreground">
-                        {emptySessionListLoading() ? i18n.t('terminal.loadingSessions') : i18n.t('terminal.noSessionsTitle')}
+                        {emptySessionListLoading()
+                          ? i18n.t('terminal.loadingSessions')
+                          : sessionFilterQuery().trim()
+                            ? i18n.t('terminal.noMatchingSessions')
+                            : i18n.t('terminal.noSessionsTitle')}
                       </div>
                     }
                   >
@@ -4298,9 +4613,22 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               </SidebarSection>
             </SidebarContent>
           </Sidebar>
+          </div>
 
           <div class="min-w-0 min-h-0 flex flex-1 flex-col">
             <div class="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background/90 px-2">
+              <Show when={isMobileLayout()}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  class="h-7 w-7 shrink-0 p-0"
+                  data-testid="terminal-session-drawer-open"
+                  onClick={() => setSessionDrawerOpen(true)}
+                  title={i18n.t('terminal.sessions')}
+                >
+                  <Menu class="h-4 w-4" />
+                </Button>
+              </Show>
               <div class="flex min-w-0 flex-1 items-center gap-2">
                 <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted/40 text-muted-foreground">
                   <Terminal class="h-3.5 w-3.5" />
@@ -4347,13 +4675,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 />
               </Show>
               <Show when={searchOpen()}>
-                <div class="absolute top-2 right-2 z-20 flex items-center gap-1 rounded-md border border-white/15 bg-[#0b0f14]/95 px-2 py-1 shadow-md backdrop-blur">
+                <div class={`absolute top-2 z-20 flex items-center gap-1 rounded-md border border-white/15 bg-[#0b0f14]/95 px-2 py-1 shadow-md backdrop-blur ${isMobileLayout() ? 'left-2 right-2' : 'right-2'}`}>
                   <Input
                     ref={(n) => (searchInputEl = n)}
                     size="sm"
                     value={searchQuery()}
                     placeholder={i18n.t('terminal.searchPlaceholder')}
-                    class="w-[220px] bg-black/20 border-white/20 text-[#e5e7eb] placeholder:text-[#94a3b8] focus:ring-yellow-400 focus:border-yellow-400 shadow-none"
+                    class={`${isMobileLayout() ? 'min-w-0 flex-1' : 'w-[220px]'} bg-black/20 border-white/20 text-[#e5e7eb] placeholder:text-[#94a3b8] focus:ring-yellow-400 focus:border-yellow-400 shadow-none`}
                     onInput={(e) => setSearchQuery(e.currentTarget.value)}
                   />
                   <div class="text-[10px] text-[#94a3b8] tabular-nums min-w-[54px] text-right">
@@ -4362,31 +4690,31 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   <Button
                     size="sm"
                     variant="ghost"
-                    class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
+                    class="h-7 w-7 shrink-0 p-0 text-[#e5e7eb] hover:bg-white/10 hover:text-white"
                     onClick={goPrevMatch}
                     disabled={searchResultCount() <= 0}
                     title={i18n.t('terminal.previous')}
                   >
-                    {i18n.t('terminal.previousShort')}
+                    <ChevronUp class="h-3.5 w-3.5" />
                   </Button>
                   <Button
                     size="sm"
                     variant="ghost"
-                    class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
+                    class="h-7 w-7 shrink-0 p-0 text-[#e5e7eb] hover:bg-white/10 hover:text-white"
                     onClick={goNextMatch}
                     disabled={searchResultCount() <= 0}
                     title={i18n.t('terminal.next')}
                   >
-                    {i18n.t('terminal.next')}
+                    <ChevronDown class="h-3.5 w-3.5" />
                   </Button>
                   <Button
                     size="sm"
                     variant="ghost"
-                    class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
+                    class="h-7 w-7 shrink-0 p-0 text-[#e5e7eb] hover:bg-white/10 hover:text-white"
                     onClick={closeSearch}
                     title={i18n.t('terminal.close')}
                   >
-                    {i18n.t('terminal.close')}
+                    <X class="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </Show>
@@ -4422,6 +4750,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               registerCore={registerCore}
                               registerSurfaceElement={registerSurfaceElement}
                               registerActions={registerActions}
+                              registerWorkingSetRuntime={registerWorkingSetRuntime}
+                              setWorkingSetInteraction={setWorkingSetInteraction}
                               onSurfaceClick={handleWorkbenchTerminalSurfaceClick}
                               onBell={handleSessionBell}
                               onShellIntegrationEvent={handleShellIntegrationEvent}
