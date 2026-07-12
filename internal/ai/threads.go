@@ -241,6 +241,16 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	}
 
 	view := s.threadViewFromRecord(ctx, th, flowerMeta, queuedTurnCount, s.HasActiveThreadForEndpoint(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(th.ThreadID)))
+	if queuedTurnCount > 0 {
+		queued, listErr := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, queuedTurnCount)
+		if listErr != nil {
+			return nil, listErr
+		}
+		view.QueuedTurns = make([]QueuedTurnView, 0, len(queued))
+		for _, record := range queued {
+			view.QueuedTurns = append(view.QueuedTurns, queuedTurnRecordToThreadView(record))
+		}
+	}
 	return &view, nil
 }
 

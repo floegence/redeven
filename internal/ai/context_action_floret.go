@@ -24,18 +24,22 @@ type floretSupplementalContextProjection struct {
 	ContextHash   string
 }
 
-func floretSupplementalContextForInput(input RunInput) floretSupplementalContextProjection {
+func floretSupplementalContextForInput(input RunInput) (floretSupplementalContextProjection, error) {
 	items := make([]flruntime.TurnSupplementalContextItem, 0, len(input.Attachments)+contextActionItemCount(input.ContextAction))
-	items = append(items, floretSupplementalContextActionItems(input.ContextAction)...)
+	contextItems, err := floretSupplementalContextActionItems(input.ContextAction)
+	if err != nil {
+		return floretSupplementalContextProjection{}, err
+	}
+	items = append(items, contextItems...)
 	items = append(items, floretSupplementalAttachmentItems(input.Attachments)...)
 	projection := floretSupplementalContextProjection{Items: items}
 	if len(items) == 0 {
-		return projection
+		return projection, nil
 	}
 	projection.RenderedChars = floretSupplementalRenderedChars(items)
 	projection.Truncated = floretSupplementalHasTruncation(items)
 	projection.ContextHash = floretSupplementalContextHash(items)
-	return projection
+	return projection, nil
 }
 
 func contextActionItemCount(action *ContextActionEnvelope) int {
@@ -45,23 +49,24 @@ func contextActionItemCount(action *ContextActionEnvelope) int {
 	return len(action.Context)
 }
 
-func floretSupplementalContextActionItems(action *ContextActionEnvelope) []flruntime.TurnSupplementalContextItem {
+func floretSupplementalContextActionItems(action *ContextActionEnvelope) ([]flruntime.TurnSupplementalContextItem, error) {
 	action, err := normalizeAskFlowerContextActionEnvelope(action)
-	if err != nil || action == nil {
-		return nil
+	if err != nil {
+		return nil, err
+	}
+	if action == nil {
+		return nil, nil
 	}
 	items := make([]flruntime.TurnSupplementalContextItem, 0, len(action.Context))
 	for _, item := range action.Context {
 		switch strings.TrimSpace(item.Kind) {
 		case contextActionKindFilePath:
-			if path := strings.TrimSpace(item.Path); path != "" {
-				items = append(items, flruntime.TurnSupplementalContextItem{
-					Kind:      contextActionKindFilePath,
-					Title:     nonEmptyString(item.Title, "Linked file path"),
-					Metadata:  contextActionFilePathMetadata(action, item),
-					Sensitive: true,
-				})
-			}
+			items = append(items, flruntime.TurnSupplementalContextItem{
+				Kind:      contextActionKindFilePath,
+				Title:     "Linked file path",
+				Metadata:  contextActionFilePathMetadata(action, item),
+				Sensitive: true,
+			})
 		case contextActionKindTerminal:
 			items = append(items, floretTerminalSelectionSupplementalItem(action, item))
 		case contextActionKindProcess:
@@ -72,12 +77,15 @@ func floretSupplementalContextActionItems(action *ContextActionEnvelope) []flrun
 				Sensitive: true,
 			})
 		case contextActionKindText:
-			if text := strings.TrimSpace(item.Content); text != "" || strings.TrimSpace(item.Detail) != "" {
-				items = append(items, floretTextSnapshotSupplementalItem(action, item))
-			}
+			items = append(items, floretTextSnapshotSupplementalItem(action, item))
+		default:
+			return nil, ErrInvalidContextAction
 		}
 	}
-	return items
+	if len(items) != len(action.Context) {
+		return nil, ErrInvalidContextAction
+	}
+	return items, nil
 }
 
 func floretSupplementalAttachmentItems(attachments []RunAttachmentIn) []flruntime.TurnSupplementalContextItem {
@@ -86,8 +94,8 @@ func floretSupplementalAttachmentItems(attachments []RunAttachmentIn) []flruntim
 	}
 	items := make([]flruntime.TurnSupplementalContextItem, 0, len(attachments))
 	for _, attachment := range attachments {
-		name := strings.TrimSpace(attachment.Name)
-		mimeType := strings.TrimSpace(attachment.MimeType)
+		name := floretSafeSingleLineMetadata(attachment.Name, 512)
+		mimeType := floretSafeSingleLineMetadata(attachment.MimeType, 255)
 		if name == "" && mimeType == "" {
 			continue
 		}
@@ -106,6 +114,18 @@ func floretSupplementalAttachmentItems(attachments []RunAttachmentIn) []flruntim
 		})
 	}
 	return items
+}
+
+func floretSafeSingleLineMetadata(value string, maxRunes int) string {
+	value = strings.TrimSpace(strings.Split(strings.ReplaceAll(value, "\r\n", "\n"), "\n")[0])
+	if maxRunes <= 0 {
+		return value
+	}
+	runes := []rune(value)
+	if len(runes) > maxRunes {
+		value = string(runes[:maxRunes])
+	}
+	return value
 }
 
 func floretTerminalSelectionSupplementalItem(action *ContextActionEnvelope, item ContextActionContextItem) flruntime.TurnSupplementalContextItem {
@@ -183,8 +203,8 @@ func contextActionProcessMetadata(action *ContextActionEnvelope, item ContextAct
 		metadata["username"] = username
 	}
 	metadata["cpu_percent"] = strconv.FormatFloat(item.CPUPercent, 'f', 2, 64)
+	metadata["memory_bytes"] = strconv.FormatInt(item.MemoryBytes, 10)
 	if item.MemoryBytes > 0 {
-		metadata["memory_bytes"] = strconv.FormatInt(item.MemoryBytes, 10)
 		metadata["memory"] = formatContextActionBytes(item.MemoryBytes)
 	}
 	if platform := strings.TrimSpace(item.Platform); platform != "" {

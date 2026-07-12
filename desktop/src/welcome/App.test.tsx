@@ -1165,7 +1165,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('onFocusThreadRequestConsumed={(requestID) => {');
     expect(appSrc).toContain('current?.request_id === requestID ? null : current');
     expect(appSrc).toContain('closeFlowerTurnLauncher();\n      await openFlowerSurface();');
-    expect(appSrc).toContain('context_action: buildEnvironmentFlowerContextAction(environment, contextSummary)');
+    expect(appSrc).toContain('context_action: buildEnvironmentFlowerContextAction(environment, contextSummary, cleanLabel)');
     expect(appSrc).not.toContain('context_action: buildEnvironmentFlowerContextEnvelope(environment).raw');
     expect(appSrc).toContain('async function openFlowerSurface(): Promise<void>');
     expect(appSrc).toContain("kind: 'open_flower'");

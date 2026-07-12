@@ -4131,18 +4131,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     const selection = context.selection.selectionText;
     const trimmedSelection = selection.trim();
+    const selectionChars = Array.from(trimmedSelection).length;
     const notes: string[] = [];
     let contextItems: EnvFlowerTurnLauncherContextItem[] = [];
 
     if (trimmedSelection) {
-      if (trimmedSelection.length > MAX_INLINE_TERMINAL_SELECTION_CHARS) {
+      if (selectionChars > MAX_INLINE_TERMINAL_SELECTION_CHARS) {
         notes.push(i18n.t('terminal.largeSelectionMetadataOnly'));
         contextItems = [
           {
             kind: 'terminal_selection',
             working_dir: workingDir,
             selection: '',
-            selection_chars: trimmedSelection.length,
+            selection_chars: selectionChars,
           },
         ];
       } else {
@@ -4151,7 +4152,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             kind: 'terminal_selection',
             working_dir: workingDir,
             selection: trimmedSelection,
-            selection_chars: trimmedSelection.length,
+            selection_chars: selectionChars,
           },
         ];
       }

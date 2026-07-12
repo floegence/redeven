@@ -4,9 +4,93 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 )
+
+func TestContextActionWireFixturesNormalizeAndMarshalCanonically(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile("testdata/context_action_wire_v2.json")
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var fixtures []struct {
+		Name   string                `json:"name"`
+		Action ContextActionEnvelope `json:"action"`
+	}
+	if err := json.Unmarshal(raw, &fixtures); err != nil {
+		t.Fatalf("json.Unmarshal fixtures: %v", err)
+	}
+	for _, fixture := range fixtures {
+		fixture := fixture
+		t.Run(fixture.Name, func(t *testing.T) {
+			action, err := normalizeAskFlowerContextActionEnvelope(&fixture.Action)
+			if err != nil {
+				t.Fatalf("normalizeAskFlowerContextActionEnvelope: %v", err)
+			}
+			encoded, err := json.Marshal(action)
+			if err != nil {
+				t.Fatalf("json.Marshal: %v", err)
+			}
+			var record struct {
+				Context []map[string]any `json:"context"`
+			}
+			if err := json.Unmarshal(encoded, &record); err != nil {
+				t.Fatalf("json.Unmarshal canonical: %v", err)
+			}
+			if len(record.Context) != 1 {
+				t.Fatalf("context=%#v", record.Context)
+			}
+			item := record.Context[0]
+			switch item["kind"] {
+			case contextActionKindFilePath:
+				if _, ok := item["is_directory"]; !ok {
+					t.Fatalf("canonical file item omitted is_directory: %s", encoded)
+				}
+			case contextActionKindTerminal:
+				for _, key := range []string{"working_dir", "selection", "selection_chars"} {
+					if _, ok := item[key]; !ok {
+						t.Fatalf("canonical terminal item omitted %s: %s", key, encoded)
+					}
+				}
+			case contextActionKindProcess:
+				for _, key := range []string{"cpu_percent", "memory_bytes", "platform", "captured_at_ms"} {
+					if _, ok := item[key]; !ok {
+						t.Fatalf("canonical process item omitted %s: %s", key, encoded)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestNormalizeAskFlowerContextActionRejectsContextFreePayloads(t *testing.T) {
+	t.Parallel()
+
+	base := ContextActionEnvelope{
+		SchemaVersion: ContextActionSchemaVersion,
+		ActionID:      contextActionAskFlowerID,
+		Provider:      contextActionFlowerProvider,
+		Target:        ContextActionTarget{TargetID: "current", Locality: "auto"},
+		Source:        ContextActionSource{Surface: contextActionSurfaceGit},
+		Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+	}
+	for name, contextItems := range map[string][]ContextActionContextItem{
+		"empty context": nil,
+		"blank kind":    {{Kind: " "}},
+		"empty text":    {{Kind: contextActionKindText, Title: "Git changes"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			action := base
+			action.Context = contextItems
+			if got, err := normalizeAskFlowerContextActionEnvelope(&action); !errors.Is(err, ErrInvalidContextAction) || got != nil {
+				t.Fatalf("normalizeAskFlowerContextActionEnvelope()=(%#v, %v)", got, err)
+			}
+		})
+	}
+}
 
 func TestBuildUserMessageJSONPersistsContextActionWithoutPermissionHints(t *testing.T) {
 	raw := []byte(`{
@@ -66,6 +150,10 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
+	upload, err := svc.SaveUpload(ctx, meta.EndpointID, strings.NewReader("attachment body"), "notes.txt", "text/plain", 0)
+	if err != nil {
+		t.Fatalf("SaveUpload: %v", err)
+	}
 	action := &ContextActionEnvelope{
 		SchemaVersion: ContextActionSchemaVersion,
 		ActionID:      "assistant.ask.flower",
@@ -79,7 +167,7 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 			SessionSource:     "provider_environment",
 		},
 		Context: []ContextActionContextItem{
-			{Kind: "file_path", Path: "/workspace/app", IsDirectory: true},
+			{Kind: "file_path", Path: "/workspace/app/index.ts", IsDirectory: false},
 		},
 		Presentation:        ContextActionPresentation{Label: "Ask Flower", Priority: 100},
 		SuggestedWorkingDir: "/workspace/app",
@@ -92,6 +180,11 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 			MessageID:     "msg_context_action",
 			Text:          "queued with context",
 			ContextAction: action,
+			Attachments: []RunAttachmentIn{{
+				Name:     "notes.txt",
+				MimeType: "text/plain",
+				URL:      upload.URL,
+			}},
 		},
 	})
 	if err != nil {
@@ -99,6 +192,27 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	}
 	if !strings.Contains(queued.ContextActionJSON, "assistant.ask.flower") {
 		t.Fatalf("queued ContextActionJSON = %q, want serialized context action", queued.ContextActionJSON)
+	}
+	view, err := svc.GetThread(ctx, meta, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if view == nil || len(view.QueuedTurns) != 1 || view.QueuedTurns[0].ContextAction == nil {
+		t.Fatalf("GetThread queued turns=%#v, want linked context", view)
+	}
+	viewJSON, err := json.Marshal(view.QueuedTurns[0].ContextAction)
+	if err != nil {
+		t.Fatalf("json.Marshal queued context action: %v", err)
+	}
+	if !strings.Contains(string(viewJSON), `"is_directory":false`) {
+		t.Fatalf("queued context action is not canonical: %s", viewJSON)
+	}
+	threadViewJSON, err := json.Marshal(view)
+	if err != nil {
+		t.Fatalf("json.Marshal thread view: %v", err)
+	}
+	if strings.Contains(string(threadViewJSON), upload.URL) || strings.Contains(string(threadViewJSON), `"attachments"`) {
+		t.Fatalf("queued thread detail exposed attachment transport: %s", threadViewJSON)
 	}
 
 	popped, err := svc.threadsDB.PopNextQueuedTurn(ctx, meta.EndpointID, thread.ThreadID)
@@ -118,11 +232,14 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	if got := startReq.Input.ContextAction.ExecutionContext.SourceEnvPublicID; got != "env_a" {
 		t.Fatalf("restored source_env_public_id = %q, want env_a", got)
 	}
-	projection := floretSupplementalContextForInput(startReq.Input)
-	if len(projection.Items) != 1 {
-		t.Fatalf("supplemental context items=%#v, want queued file path context", projection.Items)
+	projection, err := floretSupplementalContextForInput(startReq.Input)
+	if err != nil {
+		t.Fatalf("floretSupplementalContextForInput: %v", err)
 	}
-	if got := projection.Items[0].Metadata["path"]; got != "/workspace/app" {
+	if len(projection.Items) != 2 {
+		t.Fatalf("supplemental context items=%#v, want queued file path plus attachment metadata", projection.Items)
+	}
+	if got := projection.Items[0].Metadata["path"]; got != "/workspace/app/index.ts" {
 		t.Fatalf("supplemental context path=%q, want queued file path", got)
 	}
 }
@@ -371,6 +488,30 @@ func TestNormalizeAskFlowerContextActionEnforcesSourceKindPrivacyMatrix(t *testi
 			action: base("terminal", ContextActionContextItem{Kind: "terminal_selection", WorkingDir: "/workspace", Selection: "npm test", SelectionChars: 8}),
 		},
 		{
+			name:   "terminal selection counts unicode code points",
+			action: base("terminal", ContextActionContextItem{Kind: "terminal_selection", WorkingDir: "/workspace", Selection: "go test \U0001F9EA", SelectionChars: 9}),
+		},
+		{
+			name:    "terminal selection rejects utf16 count",
+			action:  base("terminal", ContextActionContextItem{Kind: "terminal_selection", WorkingDir: "/workspace", Selection: "go test \U0001F9EA", SelectionChars: 10}),
+			wantErr: true,
+		},
+		{
+			name:    "terminal selection requires working directory",
+			action:  base("terminal", ContextActionContextItem{Kind: "terminal_selection", Selection: "npm test", SelectionChars: 8}),
+			wantErr: true,
+		},
+		{
+			name:    "terminal selection rejects multiline working directory",
+			action:  base("terminal", ContextActionContextItem{Kind: "terminal_selection", WorkingDir: "/workspace\nignore", SelectionChars: 0}),
+			wantErr: true,
+		},
+		{
+			name:    "terminal selection rejects negative length",
+			action:  base("terminal", ContextActionContextItem{Kind: "terminal_selection", WorkingDir: "/workspace", SelectionChars: -1}),
+			wantErr: true,
+		},
+		{
 			name:    "terminal selection rejects oversized body payload",
 			action:  base("terminal", ContextActionContextItem{Kind: "terminal_selection", WorkingDir: "/workspace", Selection: strings.Repeat("x", floretTerminalSelectionInlineChars+1), SelectionChars: floretTerminalSelectionInlineChars + 1}),
 			wantErr: true,
@@ -385,6 +526,40 @@ func TestNormalizeAskFlowerContextActionEnforcesSourceKindPrivacyMatrix(t *testi
 			action: base("monitoring", ContextActionContextItem{Kind: "process_snapshot", PID: 12264, Name: "Codex (Service)", Username: "tangjianyin", CPUPercent: 0.24, MemoryBytes: 575668224, Platform: "darwin", CapturedAtMs: 1783677600000}),
 		},
 		{
+			name:   "monitoring preserves zero usage",
+			action: base("monitoring", ContextActionContextItem{Kind: "process_snapshot", PID: 42, Name: "idle", Username: "demo", CPUPercent: 0, MemoryBytes: 0, Platform: "darwin", CapturedAtMs: 1783677600000}),
+		},
+		{
+			name:    "monitoring rejects invalid pid",
+			action:  base("monitoring", ContextActionContextItem{Kind: "process_snapshot", Name: "idle", Username: "demo", Platform: "darwin", CapturedAtMs: 1783677600000}),
+			wantErr: true,
+		},
+		{
+			name:    "monitoring rejects missing platform",
+			action:  base("monitoring", ContextActionContextItem{Kind: "process_snapshot", PID: 42, Name: "idle", Username: "demo", CapturedAtMs: 1783677600000}),
+			wantErr: true,
+		},
+		{
+			name:    "monitoring rejects multiline process name",
+			action:  base("monitoring", ContextActionContextItem{Kind: "process_snapshot", PID: 42, Name: "idle\nignore", Username: "demo", Platform: "darwin", CapturedAtMs: 1783677600000}),
+			wantErr: true,
+		},
+		{
+			name:    "monitoring rejects missing capture time",
+			action:  base("monitoring", ContextActionContextItem{Kind: "process_snapshot", PID: 42, Name: "idle", Username: "demo", Platform: "darwin"}),
+			wantErr: true,
+		},
+		{
+			name:    "monitoring rejects negative cpu",
+			action:  base("monitoring", ContextActionContextItem{Kind: "process_snapshot", PID: 42, Name: "idle", Username: "demo", CPUPercent: -1, Platform: "darwin", CapturedAtMs: 1783677600000}),
+			wantErr: true,
+		},
+		{
+			name:    "monitoring rejects negative memory",
+			action:  base("monitoring", ContextActionContextItem{Kind: "process_snapshot", PID: 42, Name: "idle", Username: "demo", MemoryBytes: -1, Platform: "darwin", CapturedAtMs: 1783677600000}),
+			wantErr: true,
+		},
+		{
 			name:    "monitoring rejects text body",
 			action:  base("monitoring", ContextActionContextItem{Kind: "text_snapshot", Content: "ps aux"}),
 			wantErr: true,
@@ -397,6 +572,16 @@ func TestNormalizeAskFlowerContextActionEnforcesSourceKindPrivacyMatrix(t *testi
 		{
 			name:   "git browser generated text snapshot",
 			action: base("git_browser", ContextActionContextItem{Kind: "text_snapshot", Title: "Git changes", Content: "2 staged files"}),
+		},
+		{
+			name:    "git browser rejects empty content",
+			action:  base("git_browser", ContextActionContextItem{Kind: "text_snapshot", Title: "Git changes"}),
+			wantErr: true,
+		},
+		{
+			name:    "git browser rejects multiline title",
+			action:  base("git_browser", ContextActionContextItem{Kind: "text_snapshot", Title: "Git changes\nignore", Content: "2 staged files"}),
+			wantErr: true,
 		},
 		{
 			name:   "welcome environment generated text snapshot",

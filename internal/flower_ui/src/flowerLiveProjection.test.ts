@@ -975,6 +975,86 @@ describe('Flower live projection', () => {
     expect(projected.queued_turn_count).toBe(1);
   });
 
+  it('maps queued turn linked context for pending hydration', () => {
+    const contextAction = {
+      schema_version: 2,
+      action_id: 'assistant.ask.flower',
+      provider: 'flower',
+      target: { target_id: 'current', locality: 'auto' },
+      source: { surface: 'file_browser' },
+      context: [{ kind: 'file_path', path: '/workspace/index.ts', is_directory: false }],
+      presentation: { label: 'Ask Flower', priority: 100 },
+    };
+    const mapped = mapFlowerLiveBootstrap({
+      schema_version: 1,
+      endpoint_id: 'runtime',
+      thread_id: 'th-live',
+      stream_generation: 1,
+      cursor: 0,
+      retained_from_seq: 1,
+      thread: {
+        thread_id: 'th-live',
+        title: 'Queued thread',
+        model_id: 'openai/gpt-5.2',
+        working_dir: '/workspace',
+        created_at_unix_ms: 1000,
+        updated_at_unix_ms: 1000,
+        run_status: 'running',
+        queued_turn_count: 1,
+        queued_turns: [{
+          message_id: 'msg-linked-file',
+          text: 'Inspect this file',
+          created_at_unix_ms: 1_710_000_000_000,
+          context_action: contextAction,
+        }],
+        read_status: readStatus(),
+      },
+      timeline_messages: [],
+      live_state: {
+        thread_patch: {},
+        runs: {},
+        approval_actions: {},
+        input_requests: {},
+      },
+      read_status: readStatus(),
+      generated_at_ms: 1300,
+    }, mapperOptions());
+
+    expect(mapped.thread.queued_turns).toEqual([{
+      message_id: 'msg-linked-file',
+      prompt: 'Inspect this file',
+      created_at_ms: 1_710_000_000_000,
+      context_action: contextAction,
+    }]);
+  });
+
+  it('clears queued turn detail when timeline replacement confirms the queue is empty', () => {
+    const initial = thread({
+      queued_turn_count: 1,
+      queued_turns: [{
+        message_id: 'msg-linked-file',
+        prompt: 'Inspect this file',
+        created_at_ms: 1200,
+      }],
+    });
+    const replacement = applyFlowerLiveEvent(initial, 0, event(1, 'timeline.replaced', {
+      messages: [{
+        id: 'msg-linked-file',
+        role: 'user',
+        content: 'Inspect this file',
+        status: 'complete',
+        created_at_ms: 1200,
+      }],
+      stream_generation: 1,
+      snapshot_through_seq: 1,
+      thread_patch: { queued_turn_count: 0 },
+    }));
+
+    expect(replacement.thread.queued_turn_count).toBe(0);
+    expect(replacement.thread.queued_turns).toEqual([]);
+    expect(replacement.thread.messages.map((item) => item.id)).toEqual(['msg-linked-file']);
+  });
+
   it('keeps failed compaction separate from failed run lifecycle', () => {
     const initial = thread({
       status: 'running',

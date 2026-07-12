@@ -184,10 +184,28 @@ func TestNewService_RecoversDurableQueuedTurnAfterRestart(t *testing.T) {
 		Input: RunInput{
 			MessageID: "m_restart_queued",
 			Text:      "resume this queued turn",
+			ContextAction: &ContextActionEnvelope{
+				SchemaVersion: ContextActionSchemaVersion,
+				ActionID:      contextActionAskFlowerID,
+				Provider:      contextActionFlowerProvider,
+				Target:        ContextActionTarget{TargetID: "current", Locality: "auto"},
+				Source:        ContextActionSource{Surface: contextActionSurfaceFile},
+				Context: []ContextActionContextItem{
+					{Kind: contextActionKindFilePath, Path: "/workspace/restart.go", IsDirectory: false},
+				},
+				Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+			},
 		},
 		Options: RunOptions{},
 	}); err != nil {
 		t.Fatalf("enqueueQueuedTurn: %v", err)
+	}
+	queuedView, err := svc.GetThread(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread queued before restart: %v", err)
+	}
+	if queuedView == nil || len(queuedView.QueuedTurns) != 1 || queuedView.QueuedTurns[0].ContextAction == nil {
+		t.Fatalf("queued view before restart=%#v, want linked context", queuedView)
 	}
 	if err := svc.Close(); err != nil {
 		t.Fatalf("Close first service: %v", err)
@@ -221,6 +239,9 @@ func TestNewService_RecoversDurableQueuedTurnAfterRestart(t *testing.T) {
 		if len(queued) == 0 && len(msgs) >= 1 {
 			if msgs[0].MessageID != "m_restart_queued" {
 				t.Fatalf("messages=%+v, want restarted queued user message first", msgs)
+			}
+			if !strings.Contains(msgs[0].MessageJSON, `"contextAction"`) || !strings.Contains(msgs[0].MessageJSON, `"is_directory":false`) {
+				t.Fatalf("restarted queued message lost canonical linked context: %s", msgs[0].MessageJSON)
 			}
 			return
 		}

@@ -1,0 +1,114 @@
+[
+  {
+    "name": "canonical_file",
+    "expect_kind": "file_path",
+    "expect_label": "index.ts",
+    "action": {
+      "schema_version": 2,
+      "action_id": "assistant.ask.flower",
+      "provider": "flower",
+      "target": { "target_id": "current", "locality": "auto" },
+      "source": { "surface": "file_browser" },
+      "context": [
+        { "kind": "file_path", "path": "/workspace/src/index.ts", "is_directory": false }
+      ],
+      "presentation": { "label": "Ask Flower", "priority": 100 }
+    }
+  },
+  {
+    "name": "legacy_file_missing_false",
+    "expect_kind": "file_path",
+    "expect_label": "index.ts",
+    "action": {
+      "schema_version": 2,
+      "action_id": "assistant.ask.flower",
+      "provider": "flower",
+      "target": { "target_id": "current", "locality": "auto" },
+      "source": { "surface": "file_preview" },
+      "context": [
+        { "kind": "file_path", "path": "/workspace/src/index.ts" }
+      ],
+      "presentation": { "label": "Ask Flower", "priority": 100 }
+    }
+  },
+  {
+    "name": "canonical_terminal_empty",
+    "expect_kind": "terminal_selection",
+    "expect_label": "Terminal context",
+    "action": {
+      "schema_version": 2,
+      "action_id": "assistant.ask.flower",
+      "provider": "flower",
+      "target": { "target_id": "current", "locality": "auto" },
+      "source": { "surface": "terminal" },
+      "context": [
+        { "kind": "terminal_selection", "working_dir": "/workspace", "selection": "", "selection_chars": 0 }
+      ],
+      "presentation": { "label": "Ask Flower", "priority": 100 }
+    }
+  },
+  {
+    "name": "legacy_terminal_metadata_only",
+    "expect_kind": "terminal_selection",
+    "expect_label": "Terminal context",
+    "action": {
+      "schema_version": 2,
+      "action_id": "assistant.ask.flower",
+      "provider": "flower",
+      "target": { "target_id": "current", "locality": "auto" },
+      "source": { "surface": "terminal" },
+      "context": [
+        { "kind": "terminal_selection", "working_dir": "/workspace", "selection_chars": 12000 }
+      ],
+      "presentation": { "label": "Ask Flower", "priority": 100 }
+    }
+  },
+  {
+    "name": "canonical_process_zero_usage",
+    "expect_kind": "process_snapshot",
+    "expect_label": "idle-worker (PID 42)",
+    "action": {
+      "schema_version": 2,
+      "action_id": "assistant.ask.flower",
+      "provider": "flower",
+      "target": { "target_id": "current", "locality": "auto" },
+      "source": { "surface": "monitoring" },
+      "context": [
+        {
+          "kind": "process_snapshot",
+          "pid": 42,
+          "name": "idle-worker",
+          "username": "demo",
+          "cpu_percent": 0,
+          "memory_bytes": 0,
+          "platform": "darwin",
+          "captured_at_ms": 1783831569000
+        }
+      ],
+      "presentation": { "label": "Ask Flower", "priority": 100 }
+    }
+  },
+  {
+    "name": "legacy_process_missing_zero_usage",
+    "expect_kind": "process_snapshot",
+    "expect_label": "idle-worker (PID 42)",
+    "action": {
+      "schema_version": 2,
+      "action_id": "assistant.ask.flower",
+      "provider": "flower",
+      "target": { "target_id": "current", "locality": "auto" },
+      "source": { "surface": "monitoring" },
+      "context": [
+        {
+          "kind": "process_snapshot",
+          "pid": 42,
+          "name": "idle-worker",
+          "username": "demo",
+          "platform": "darwin",
+          "captured_at_ms": 1783831569000
+        }
+      ],
+      "presentation": { "label": "Ask Flower", "priority": 100 }
+    }
+  }
+]

@@ -43,9 +43,9 @@ export type EnvironmentFlowerContextActionEnvelope = Readonly<{
   suggested_working_dir_abs?: string;
 }>;
 
-function environmentMetadataContent(environment: DesktopEnvironmentEntry): string {
+function environmentMetadataContent(environment: DesktopEnvironmentEntry, label: string): string {
   return [
-    `Environment: ${environment.label}`,
+    `Environment: ${label}`,
     `Kind: ${environment.kind}`,
     `Environment ID: ${environment.id}`,
     trimString(environment.local_ui_url) ? `Local UI URL: ${trimString(environment.local_ui_url)}` : '',
@@ -96,25 +96,27 @@ function environmentExecutionContext(
   };
 }
 
-function environmentContextItem(environment: DesktopEnvironmentEntry, detail: string): EnvironmentFlowerContextItem {
+function environmentContextItem(environment: DesktopEnvironmentEntry, detail: string, fallbackLabel = 'This environment'): EnvironmentFlowerContextItem {
+  const label = trimString(environment.label) || fallbackLabel;
   return {
     kind: 'text_snapshot',
-    title: environment.label,
+    title: label,
     detail,
-    content: environmentMetadataContent(environment),
+    content: environmentMetadataContent(environment, label),
   };
 }
 
 export function buildEnvironmentFlowerContextAction(
   environment: DesktopEnvironmentEntry,
   detail: string,
+  fallbackLabel = 'This environment',
 ): EnvironmentFlowerContextActionEnvelope {
   const targetID = environmentFlowerPrimaryTargetID(environment);
   const target: EnvironmentFlowerContextActionTarget = {
     target_id: targetID,
     locality: 'auto',
   };
-  const contextItems = [environmentContextItem(environment, detail)];
+  const contextItems = [environmentContextItem(environment, detail, fallbackLabel)];
   return {
     schema_version: 2,
     action_id: 'assistant.ask.flower',

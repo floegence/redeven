@@ -545,7 +545,7 @@ function sourcePrompt(
     };
   }
 
-  if (intent.source_surface === 'file_preview' && firstEntryByTone(entries, 'file')) {
+  if ((intent.source_surface === 'file_preview' || intent.source_surface === 'editor_preview') && firstEntryByTone(entries, 'file')) {
     return {
       placeholder: promptCopy.file_placeholder,
       question: promptCopy.focus_question,

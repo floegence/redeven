@@ -1,7 +1,10 @@
 package ai
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"math"
 	"strings"
 )
 
@@ -95,6 +98,52 @@ type ContextActionContextItem struct {
 	Content        string  `json:"content,omitempty"`
 }
 
+func (item ContextActionContextItem) MarshalJSON() ([]byte, error) {
+	switch strings.TrimSpace(item.Kind) {
+	case contextActionKindFilePath:
+		return json.Marshal(struct {
+			Kind        string `json:"kind"`
+			Path        string `json:"path"`
+			IsDirectory bool   `json:"is_directory"`
+			RootLabel   string `json:"root_label,omitempty"`
+		}{contextActionKindFilePath, item.Path, item.IsDirectory, item.RootLabel})
+	case contextActionKindFileSelection:
+		return json.Marshal(struct {
+			Kind           string `json:"kind"`
+			Path           string `json:"path"`
+			Selection      string `json:"selection"`
+			SelectionChars int    `json:"selection_chars"`
+		}{contextActionKindFileSelection, item.Path, item.Selection, item.SelectionChars})
+	case contextActionKindTerminal:
+		return json.Marshal(struct {
+			Kind           string `json:"kind"`
+			WorkingDir     string `json:"working_dir"`
+			Selection      string `json:"selection"`
+			SelectionChars int    `json:"selection_chars"`
+		}{contextActionKindTerminal, item.WorkingDir, item.Selection, item.SelectionChars})
+	case contextActionKindProcess:
+		return json.Marshal(struct {
+			Kind         string  `json:"kind"`
+			PID          int     `json:"pid"`
+			Name         string  `json:"name"`
+			Username     string  `json:"username"`
+			CPUPercent   float64 `json:"cpu_percent"`
+			MemoryBytes  int64   `json:"memory_bytes"`
+			Platform     string  `json:"platform"`
+			CapturedAtMs int64   `json:"captured_at_ms"`
+		}{contextActionKindProcess, item.PID, item.Name, item.Username, item.CPUPercent, item.MemoryBytes, item.Platform, item.CapturedAtMs})
+	case contextActionKindText:
+		return json.Marshal(struct {
+			Kind    string `json:"kind"`
+			Title   string `json:"title"`
+			Detail  string `json:"detail,omitempty"`
+			Content string `json:"content"`
+		}{contextActionKindText, item.Title, item.Detail, item.Content})
+	default:
+		return nil, fmt.Errorf("%w: unsupported context item kind", ErrInvalidContextAction)
+	}
+}
+
 func normalizeContextActionEnvelope(in *ContextActionEnvelope) *ContextActionEnvelope {
 	if in == nil {
 		return nil
@@ -186,6 +235,9 @@ func validateAskFlowerContextActionItems(action *ContextActionEnvelope) error {
 	if action == nil {
 		return nil
 	}
+	if len(action.Context) == 0 {
+		return ErrInvalidContextAction
+	}
 	surface := strings.TrimSpace(action.Source.Surface)
 	for _, item := range action.Context {
 		if !contextActionSurfaceAllowsKind(surface, item.Kind) {
@@ -238,11 +290,17 @@ func contextActionItemPayloadAllowed(item ContextActionContextItem) bool {
 			strings.TrimSpace(item.Platform) == "" &&
 			item.CapturedAtMs == 0
 	case contextActionKindTerminal:
-		return strings.TrimSpace(item.Content) == "" &&
+		selection := strings.TrimSpace(item.Selection)
+		selectionRunes := len([]rune(selection))
+		return strings.TrimSpace(item.WorkingDir) != "" &&
+			!strings.ContainsAny(item.WorkingDir, "\r\n") &&
+			item.SelectionChars >= 0 &&
+			(selection == "" || item.SelectionChars == selectionRunes) &&
+			strings.TrimSpace(item.Content) == "" &&
 			strings.TrimSpace(item.Detail) == "" &&
 			strings.TrimSpace(item.Title) == "" &&
 			strings.TrimSpace(item.Path) == "" &&
-			len([]rune(strings.TrimSpace(item.Selection))) <= floretTerminalSelectionInlineChars &&
+			selectionRunes <= floretTerminalSelectionInlineChars &&
 			!item.IsDirectory &&
 			strings.TrimSpace(item.RootLabel) == "" &&
 			item.PID == 0 &&
@@ -255,9 +313,16 @@ func contextActionItemPayloadAllowed(item ContextActionContextItem) bool {
 	case contextActionKindProcess:
 		return item.PID > 0 &&
 			strings.TrimSpace(item.Name) != "" &&
+			!strings.ContainsAny(item.Name, "\r\n") &&
 			strings.TrimSpace(item.Username) != "" &&
+			!strings.ContainsAny(item.Username, "\r\n") &&
 			strings.TrimSpace(item.Platform) != "" &&
+			!strings.ContainsAny(item.Platform, "\r\n") &&
 			item.CapturedAtMs > 0 &&
+			!math.IsNaN(item.CPUPercent) &&
+			!math.IsInf(item.CPUPercent, 0) &&
+			item.CPUPercent >= 0 &&
+			item.MemoryBytes >= 0 &&
 			strings.TrimSpace(item.Selection) == "" &&
 			strings.TrimSpace(item.Content) == "" &&
 			strings.TrimSpace(item.Detail) == "" &&
@@ -269,6 +334,9 @@ func contextActionItemPayloadAllowed(item ContextActionContextItem) bool {
 			strings.TrimSpace(item.WorkingDir) == ""
 	case contextActionKindText:
 		return strings.TrimSpace(item.Title) != "" &&
+			!strings.ContainsAny(item.Title, "\r\n") &&
+			!strings.ContainsAny(item.Detail, "\r\n") &&
+			strings.TrimSpace(item.Content) != "" &&
 			strings.TrimSpace(item.Selection) == "" &&
 			strings.TrimSpace(item.Path) == "" &&
 			!item.IsDirectory &&
@@ -311,9 +379,6 @@ func normalizeContextActionItems(items []ContextActionContextItem) []ContextActi
 			Title:          strings.TrimSpace(item.Title),
 			Detail:         strings.TrimSpace(item.Detail),
 			Content:        item.Content,
-		}
-		if normalized.Kind == "" {
-			continue
 		}
 		out = append(out, normalized)
 	}

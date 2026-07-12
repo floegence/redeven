@@ -171,6 +171,21 @@ func followupRecordToView(rec threadstore.QueuedTurn, position int) FollowupItem
 	if len(views) > 0 {
 		view.Attachments = views
 	}
+	if contextAction, err := unmarshalQueuedTurnContextAction(rec.ContextActionJSON); err == nil {
+		view.ContextAction = contextAction
+	}
+	return view
+}
+
+func queuedTurnRecordToThreadView(rec threadstore.QueuedTurn) QueuedTurnView {
+	view := QueuedTurnView{
+		MessageID:       strings.TrimSpace(rec.MessageID),
+		Text:            strings.TrimSpace(rec.TextContent),
+		CreatedAtUnixMs: rec.CreatedAtUnixMs,
+	}
+	if contextAction, err := unmarshalQueuedTurnContextAction(rec.ContextActionJSON); err == nil {
+		view.ContextAction = contextAction
+	}
 	return view
 }
 

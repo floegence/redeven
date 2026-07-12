@@ -1,5 +1,5 @@
 import type { Component } from 'solid-js';
-import { For } from 'solid-js';
+import { For, Show } from 'solid-js';
 import { Activity, FileText, Folder, Paperclip, Terminal } from '@floegence/floe-webapp-core/icons';
 import type { FlowerChatContextChip, FlowerChatContextDisplay } from '../contracts/flowerChatContextTypes';
 
@@ -31,15 +31,8 @@ export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (p
         <For each={props.contextDisplay.chips}>
           {(chip) => {
             const Icon = chipIcon(chip.tone);
-            return (
-              <button
-                type="button"
-                class="flower-chat-context-chip"
-                data-flower-chat-context-chip="true"
-                data-tone={chip.tone}
-                aria-label={chip.label}
-                onClick={() => props.onChipClick(chip)}
-              >
+            const content = (
+              <>
                 <span class="flower-chat-context-chip-icon">
                   <Icon />
                 </span>
@@ -47,7 +40,36 @@ export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (p
                   <span class="flower-chat-context-chip-label">{chip.label}</span>
                   <span class="flower-chat-context-chip-detail">{chip.detail}</span>
                 </span>
-              </button>
+              </>
+            );
+            return (
+              <Show
+                when={chip.action}
+                fallback={(
+                  <div
+                    class="flower-chat-context-chip"
+                    data-flower-chat-context-chip="true"
+                    data-flower-chat-context-interactive="false"
+                    data-tone={chip.tone}
+                    role="note"
+                    aria-label={chip.label}
+                  >
+                    {content}
+                  </div>
+                )}
+              >
+                <button
+                  type="button"
+                  class="flower-chat-context-chip"
+                  data-flower-chat-context-chip="true"
+                  data-flower-chat-context-interactive="true"
+                  data-tone={chip.tone}
+                  aria-label={chip.label}
+                  onClick={() => props.onChipClick(chip)}
+                >
+                  {content}
+                </button>
+              </Show>
             );
           }}
         </For>

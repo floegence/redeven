@@ -406,6 +406,9 @@ export async function launchLocalEnvironmentFlowerTurn(
   if (!modelID) throw new Error('Select a Flower model before starting a chat.');
   const permissionType = normalizePermissionType(input.permission_type ?? snapshot.config.permission_type);
   const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
+  if ((input.pending_files ?? []).length > 0) {
+    throw new Error('Attachment upload is unavailable for Desktop Welcome.');
+  }
   let threadID = trim(input.thread_id);
   if (!threadID) {
     const createBody: Record<string, unknown> = {
