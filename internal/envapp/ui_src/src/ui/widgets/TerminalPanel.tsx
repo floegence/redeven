@@ -1,13 +1,11 @@
-import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { Sidebar, SidebarContent, SidebarItemList, SidebarSection } from '@floegence/floe-webapp-core/layout';
-import { Check, ChevronDown, ChevronUp, Copy, ExternalLink, Folder, Menu, Search, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { Copy, Folder, Menu, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import '@fontsource/iosevka/400.css';
 
 import {
   Button,
   Dropdown,
-  Input,
   MobileKeyboard,
   TabPanel,
   type DropdownItem,
@@ -17,16 +15,9 @@ import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import {
   TerminalCore,
-  createPagedTerminalOutputCoordinator,
-  getDefaultTerminalConfig,
   getThemeColors,
   type Logger,
   type TerminalAppearance,
-  type TerminalEventSource,
-  type PagedTerminalOutputCoordinatorHandle,
-  type PagedTerminalOutputSnapshot,
-  type TerminalResponsiveConfig,
-  type TerminalRestorableSnapshot,
   type TerminalSessionInfo,
   type TerminalThemeName,
   type TerminalTouchScrollRuntime,
@@ -35,7 +26,6 @@ import {
   createRedevenTerminalEventSource,
   createRedevenTerminalTransport,
   getOrCreateTerminalConnId,
-  type RedevenTerminalTransport,
 } from '../services/terminalTransport';
 import { disposeRedevenTerminalSessionsCoordinator, getRedevenTerminalSessionsCoordinator } from '../services/terminalSessions';
 import {
@@ -76,27 +66,28 @@ import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardIn
 import { useFilePreviewContext } from './FilePreviewContext';
 import { fileItemFromPath } from '../utils/filePreviewItem';
 import { writeTextToClipboard } from '../utils/clipboard';
-import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
-import { TerminalShellIntegrationParser, type TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
+import type { TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
+import type { TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
 import { createTerminalTabActivityTracker, type TerminalSessionWorkState, type TerminalTabVisualState } from '../services/terminalTabActivity';
-import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
-import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
-import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { useI18n } from '../i18n';
 import {
   createTerminalAdaptiveWorkingSetManager,
-  restoreTerminalSnapshotOrReplay,
   type TerminalWorkingSetInteraction,
   type TerminalWorkingSetRuntime,
 } from '../services/terminalAdaptiveWorkingSet';
+import { TerminalSessionRuntime, type TerminalSessionRuntimeActions } from './TerminalSessionRuntime';
+import {
+  TerminalSessionNavigator,
+  type TerminalSessionNavigationItem,
+  type TerminalSessionNavigationStatus,
+} from './TerminalSessionNavigator';
+import { TerminalSearchOverlay } from './TerminalSearchOverlay';
 
-type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
 type pending_terminal_session_status = 'creating' | 'failed';
 
 export type TerminalPanelVariant = 'panel' | 'workbench';
 
-const TERMINAL_HISTORY_REPLAY_MODE_MS = 120_000;
 const TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX = 3.5;
 const TERMINAL_TAB_SHORTCUT_MAX_INDEX = 8;
 
@@ -230,36 +221,6 @@ function formatBytes(bytes: number): string {
   return `${rounded} ${units[unitIndex]}`;
 }
 
-type terminal_session_view_props = {
-  session: TerminalSessionInfo;
-  variant: TerminalPanelVariant;
-  active: () => boolean;
-  connected: () => boolean;
-  protocolClient: () => unknown;
-  viewActive: () => boolean;
-  autoFocus: () => boolean;
-  themeColors: () => Record<string, string>;
-  fontSize: () => number;
-  fontFamily: () => string;
-  agentHomePathAbs: () => string;
-  canOpenFilePreview: () => boolean;
-  bottomInsetPx: () => number;
-  connId: string;
-  transport: RedevenTerminalTransport;
-  eventSource: TerminalEventSource;
-  registerCore: (sessionId: string, core: TerminalCore | null) => void;
-  registerSurfaceElement: (sessionId: string, surface: HTMLDivElement | null) => void;
-  registerActions: (sessionId: string, actions: terminal_session_actions | null) => void;
-  registerWorkingSetRuntime: (sessionId: string, runtime: TerminalWorkingSetRuntime | null) => void;
-  setWorkingSetInteraction: (sessionId: string, interaction: TerminalWorkingSetInteraction, active: boolean) => void;
-  onSurfaceClick?: (event: MouseEvent) => void;
-  onBell?: (sessionId: string) => void;
-  onShellIntegrationEvent?: (sessionId: string, event: TerminalShellIntegrationEvent, source: 'history' | 'live') => void;
-  onVisibleOutput?: (sessionId: string, source: 'history' | 'live', byteLength: number) => void;
-  onTerminalFileLinkOpen?: (target: TerminalResolvedLinkTarget) => Promise<void> | void;
-  onNameUpdate?: (sessionId: string, newName: string, workingDir: string) => void;
-};
-
 const HISTORY_STATS_POLL_MS = 10_000;
 const MAX_INLINE_TERMINAL_SELECTION_CHARS = 10_000;
 
@@ -286,22 +247,6 @@ type resolved_pending_terminal_session = {
   session: TerminalSessionInfo;
 };
 
-type terminal_session_sidebar_item = Readonly<{
-  id: string;
-  label: string;
-  title: string;
-  avatarInitial: string;
-  avatarTone: terminal_session_avatar_tone;
-  fullPath: string;
-  status: terminal_session_sidebar_status;
-  canBrowsePath: boolean;
-  canClear: boolean;
-  canDuplicate: boolean;
-  closable: boolean;
-}>;
-
-type terminal_session_sidebar_status = 'none' | 'running' | 'unread' | 'creating' | 'failed';
-
 type terminal_session_avatar_tone = Readonly<{
   background: string;
   border: string;
@@ -311,7 +256,7 @@ type terminal_session_avatar_tone = Readonly<{
 type terminal_sidebar_context_menu = Readonly<{
   x: number;
   y: number;
-  item: terminal_session_sidebar_item;
+  item: TerminalSessionNavigationItem;
 }> | null;
 
 type terminal_panel_created_session = {
@@ -322,11 +267,6 @@ type terminal_panel_created_session = {
 function waitForTerminalUiPaint(): Promise<void> {
   return new Promise((resolve) => deferAfterPaint(resolve));
 }
-
-type terminal_session_actions = {
-  reload: () => Promise<void>;
-  resetAfterClear: () => void;
-};
 
 type terminal_selection_snapshot = {
   sessionId: string;
@@ -442,7 +382,7 @@ function buildTerminalSidebarAvatarTone(seed: string): terminal_session_avatar_t
 function resolveTerminalSidebarStatus(
   workState: TerminalSessionWorkState | undefined,
   visualState: TerminalTabVisualState | undefined,
-): terminal_session_sidebar_status {
+): TerminalSessionNavigationStatus {
   if (workState && workState !== 'idle') {
     return 'running';
   }
@@ -647,62 +587,6 @@ function mergeTerminalSessionWorkStates(
   return hasRunning ? 'running' : 'idle';
 }
 
-const TerminalSidebarStatusBadge = (props: { status: terminal_session_sidebar_status }) => (
-  <>
-    <Show when={props.status === 'running'}>
-      <span
-        class="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full border-2 border-sidebar bg-sidebar text-sidebar-foreground shadow-sm"
-        data-terminal-tab-status="running"
-        aria-hidden="true"
-      >
-        <svg
-          class="h-2.5 w-2.5 animate-spin motion-reduce:animate-none"
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="none"
-        >
-          <circle cx="12" cy="12" r="8" class="opacity-20" stroke="currentColor" stroke-width="3" />
-          <path d="M20 12a8 8 0 0 0-8-8" class="opacity-100" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
-        </svg>
-      </span>
-    </Show>
-    <Show when={props.status === 'unread'}>
-      <span
-        class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar bg-primary/75 shadow-sm"
-        data-terminal-tab-status="unread"
-        aria-hidden="true"
-      />
-    </Show>
-    <Show when={props.status === 'creating'}>
-      <span
-        class="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full border-2 border-sidebar bg-sidebar text-muted-foreground shadow-sm"
-        data-terminal-tab-status="creating"
-        aria-hidden="true"
-      >
-        <svg
-          class="h-2.5 w-2.5 animate-spin"
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="none"
-        >
-          <circle cx="12" cy="12" r="8" class="opacity-20" stroke="currentColor" stroke-width="3" />
-          <path d="M20 12a8 8 0 0 0-8-8" class="opacity-100" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
-        </svg>
-      </span>
-    </Show>
-    <Show when={props.status === 'failed'}>
-      <span
-        class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar bg-error shadow-sm"
-        data-terminal-tab-status="failed"
-        aria-hidden="true"
-      />
-    </Show>
-    <Show when={props.status === 'none'}>
-      <span class="hidden" data-terminal-tab-status="none" aria-hidden="true" />
-    </Show>
-  </>
-);
-
 const PendingTerminalTabStatusIcon = (props: { status: pending_terminal_session_status }) => {
   if (props.status === 'failed') {
     return (
@@ -788,40 +672,6 @@ function terminalTabShortcutIndex(event: KeyboardEvent): number | null {
   return index >= 0 && index <= TERMINAL_TAB_SHORTCUT_MAX_INDEX ? index : null;
 }
 
-const PlusIcon = (props: { class?: string }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="2"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    class={props.class}
-  >
-    <path d="M12 5v14" />
-    <path d="M5 12h14" />
-  </svg>
-);
-
-const RefreshIcon = (props: { class?: string }) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="2"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    class={props.class}
-  >
-    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
-    <path d="M21 3v5h-5" />
-    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
-    <path d="M8 16H3v5" />
-  </svg>
-);
-
 const MoreVerticalIcon = (props: { class?: string }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -838,809 +688,6 @@ const MoreVerticalIcon = (props: { class?: string }) => (
     <circle cx="12" cy="19" r="1" />
   </svg>
 );
-
-function TerminalSessionView(props: terminal_session_view_props) {
-  const i18n = useI18n();
-  const stableSessionId = props.session.id;
-  const sessionId = () => stableSessionId;
-  const colors = () => props.themeColors();
-  const fontSize = () => props.fontSize();
-  const fontFamily = () => props.fontFamily();
-  const [loading, setLoading] = createSignal<session_loading_state>('initializing');
-  const [error, setError] = createSignal<string | null>(null);
-  const [readyOnce, setReadyOnce] = createSignal(false);
-  const [outputRecoveryState, setOutputRecoveryState] = createSignal<PagedTerminalOutputSnapshot['state']>('idle');
-  const [outputRecoveryError, setOutputRecoveryError] = createSignal<string | null>(null);
-  const [historyReplayProgress, setHistoryReplayProgress] = createSignal<{ loadedBytes: number; totalBytes: number } | null>(null);
-
-  const [showLoading, setShowLoading] = createSignal(false);
-  let loadingDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const loadingMessage = createMemo(() => {
-    if (loading() === 'initializing') return i18n.t('terminal.initializing');
-    if (loading() === 'attaching') return i18n.t('terminal.attaching');
-    if (loading() === 'loading_history') {
-      const progress = historyReplayProgress();
-      if (progress && progress.totalBytes > 0) {
-        return i18n.t('terminal.loadingHistoryProgress', {
-          loaded: formatBytes(Math.min(progress.loadedBytes, progress.totalBytes)),
-          total: formatBytes(progress.totalBytes),
-        });
-      }
-      return i18n.t('terminal.loadingHistory');
-    }
-    return undefined;
-  });
-
-  const outputRecoveryMessage = createMemo(() => {
-    const state = outputRecoveryState();
-    if (state === 'catching-up') return i18n.t('terminal.recoveringOutput');
-    if (state === 'retry-wait') return i18n.t('terminal.retryingOutputRecovery');
-    if (state === 'failed') return outputRecoveryError() ?? i18n.t('terminal.outputRecoveryFailed');
-    return error();
-  });
-
-  createEffect(() => {
-    const isLoading = loading() !== 'idle';
-    if (loadingDebounceTimer) {
-      clearTimeout(loadingDebounceTimer);
-      loadingDebounceTimer = null;
-    }
-    if (isLoading) {
-      loadingDebounceTimer = setTimeout(() => {
-        setShowLoading(true);
-      }, 150);
-    } else {
-      setShowLoading(false);
-    }
-  });
-
-  onCleanup(() => {
-    if (loadingDebounceTimer) {
-      clearTimeout(loadingDebounceTimer);
-    }
-  });
-
-  let container: HTMLDivElement | null = null;
-  let term: TerminalCore | null = null;
-  let unsubData: (() => void) | null = null;
-  let unsubNameUpdate: (() => void) | null = null;
-  let appearanceRaf: number | null = null;
-  let activationRaf: number | null = null;
-  let inputProtectionTimer: ReturnType<typeof setTimeout> | null = null;
-  let workingSetRegistered = false;
-
-  const buildTerminalAppearance = (): TerminalAppearance => ({
-    theme: colors(),
-    fontSize: fontSize(),
-    fontFamily: fontFamily(),
-  });
-
-  const applyTerminalAppearance = (
-    core: TerminalCore,
-    appearance: TerminalAppearance = buildTerminalAppearance(),
-    opts?: { forceResize?: boolean; focus?: boolean },
-  ) => {
-    core.setAppearance(appearance);
-    if (opts?.forceResize) {
-      core.forceResize();
-    }
-    if (opts?.focus && props.viewActive() && props.active() && props.autoFocus()) {
-      core.focus();
-    }
-  };
-
-  const cancelPendingAppearanceApply = () => {
-    if (appearanceRaf !== null) {
-      cancelAnimationFrame(appearanceRaf);
-      appearanceRaf = null;
-    }
-  };
-
-  const cancelPendingActivationRefresh = () => {
-    if (activationRaf !== null) {
-      cancelAnimationFrame(activationRaf);
-      activationRaf = null;
-    }
-  };
-
-  const scheduleTerminalAppearanceApply = (appearance: TerminalAppearance) => {
-    cancelPendingAppearanceApply();
-    appearanceRaf = requestAnimationFrame(() => {
-      appearanceRaf = null;
-      const core = term;
-      if (!core) return;
-      applyTerminalAppearance(core, appearance);
-    });
-  };
-
-  const scheduleTerminalActivationRefresh = () => {
-    cancelPendingActivationRefresh();
-    activationRaf = requestAnimationFrame(() => {
-      activationRaf = null;
-      const core = term;
-      if (!core) return;
-      applyTerminalAppearance(core, buildTerminalAppearance(), {
-        forceResize: true,
-        focus: true,
-      });
-    });
-  };
-
-  let replaying = false;
-  const shellIntegrationParser = new TerminalShellIntegrationParser();
-  let outputCoordinator: PagedTerminalOutputCoordinatorHandle | null = null;
-  let outputCoordinatorSnapshot: PagedTerminalOutputSnapshot | null = null;
-  let replayCoveredBytes = 0;
-  let replayTotalBytes = 0;
-  const projectedLiveBySequence = new Map<number, Uint8Array>();
-
-  const liveRenderActive = () => {
-    const active = props.viewActive() && props.active();
-    return term !== null && active;
-  };
-
-  const normalizeLiveSequence = (sequence: number | undefined): number | undefined => (
-    typeof sequence === 'number' && Number.isFinite(sequence) && sequence > 0
-      ? Math.floor(sequence)
-      : undefined
-  );
-
-  const historyPageCoveredThrough = (page: {
-    lastSequence: number;
-    chunks: readonly { sequence: number }[];
-  }): number | undefined => {
-    let coveredThrough = normalizeLiveSequence(page.lastSequence);
-    for (const chunk of page.chunks) {
-      const seq = normalizeLiveSequence(chunk.sequence);
-      if (seq && (!coveredThrough || seq > coveredThrough)) {
-        coveredThrough = seq;
-      }
-    }
-    return coveredThrough;
-  };
-
-  const terminalInputBlocked = () => {
-    if (loading() !== 'idle' || replaying) return true;
-    return false;
-  };
-
-  const clearOutputSubscription = () => {
-    unsubData?.();
-    unsubData = null;
-    unsubNameUpdate?.();
-    unsubNameUpdate = null;
-  };
-
-  const consumeTerminalChunk = (
-    data: Uint8Array,
-    source: 'history' | 'live',
-    opts?: { publishActivity?: boolean },
-  ): Uint8Array => {
-    const result = shellIntegrationParser.parse(data);
-    if (opts?.publishActivity !== false) {
-      for (const event of result.events) {
-        props.onShellIntegrationEvent?.(sessionId(), event, source);
-      }
-      if (result.displayData.byteLength > 0) {
-        props.onVisibleOutput?.(sessionId(), source, result.displayData.byteLength);
-      }
-    }
-    return result.displayData;
-  };
-
-  const handleLiveTerminalData = (data: Uint8Array, sequence: number | undefined) => {
-    const coordinator = outputCoordinator;
-    if (!coordinator) return;
-
-    const normalizedSequence = normalizeLiveSequence(sequence);
-    if (
-      normalizedSequence
-      && outputCoordinatorSnapshot
-      && normalizedSequence <= outputCoordinatorSnapshot.coveredThroughSequence
-    ) {
-      return;
-    }
-
-    const shouldProjectNow = outputCoordinatorSnapshot?.state !== 'initial-replay';
-    const projectedData = shouldProjectNow ? consumeTerminalChunk(data, 'live') : data;
-    if (shouldProjectNow && normalizedSequence) {
-      projectedLiveBySequence.set(normalizedSequence, projectedData);
-    }
-    coordinator.pushLive({
-      sequence: normalizedSequence,
-      data: projectedData,
-      source: 'live',
-      pretransformed: shouldProjectNow,
-    } as { sequence?: number; data: Uint8Array; source: 'live'; pretransformed: boolean });
-  };
-
-  let reloadSeq = 0;
-  const disposeCore = () => {
-    cancelPendingAppearanceApply();
-    cancelPendingActivationRefresh();
-    term?.dispose();
-    term = null;
-    props.registerCore(sessionId(), null);
-  };
-
-  const disposeTerminal = () => {
-    clearOutputSubscription();
-    if (inputProtectionTimer) {
-      clearTimeout(inputProtectionTimer);
-      inputProtectionTimer = null;
-    }
-    props.setWorkingSetInteraction(sessionId(), 'input', false);
-    props.setWorkingSetInteraction(sessionId(), 'composition', false);
-    outputCoordinator?.dispose();
-    outputCoordinator = null;
-    outputCoordinatorSnapshot = null;
-    projectedLiveBySequence.clear();
-    disposeCore();
-    replaying = false;
-    shellIntegrationParser.reset();
-    setReadyOnce(false);
-    if (workingSetRegistered) {
-      workingSetRegistered = false;
-      props.registerWorkingSetRuntime(sessionId(), null);
-    }
-  };
-
-  let initSeq = 0;
-  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-  const nextAnimationFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-  const confirmAttachedViewportSize = async (core: TerminalCore, id: string, seq: number) => {
-    await nextAnimationFrame();
-    if (seq !== initSeq) return;
-
-    core.forceResize();
-
-    await nextAnimationFrame();
-    if (seq !== initSeq) return;
-
-    const dims = core.getDimensions();
-    if (dims.cols <= 0 || dims.rows <= 0) return;
-    await props.transport.resize(id, dims.cols, dims.rows);
-  };
-
-  const reload = async (opts?: { fadeOut?: boolean }) => {
-    const id = sessionId();
-    if (!id) return;
-    if (!props.connected()) return;
-    if (!container) return;
-
-    const seq = ++reloadSeq;
-
-    // Keep the surface hidden until the new terminal is attached and history is replayed (same as page open).
-    setError(null);
-    setLoading('initializing');
-
-    if (opts?.fadeOut) {
-      container.style.opacity = '0';
-      await sleep(150);
-      if (seq !== reloadSeq) return;
-    }
-
-    // Cancel any in-flight init and dispose the previous core before rebuilding.
-    initSeq += 1;
-    disposeTerminal();
-
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    if (seq !== reloadSeq) return;
-    if (!props.connected()) return;
-    if (!container) return;
-
-    try {
-      await initOnce();
-    } catch (e) {
-      setLoading('idle');
-      setError(e instanceof Error ? e.message : String(e));
-      const el = container;
-      if (el) el.style.opacity = '1';
-    }
-  };
-
-  createEffect(() => {
-    const id = sessionId();
-    if (!id) return;
-    props.registerActions(id, {
-      reload: () => reload(),
-      resetAfterClear: () => {
-        projectedLiveBySequence.clear();
-        shellIntegrationParser.reset();
-        outputCoordinator?.clear(1);
-        void outputCoordinator?.attach(0);
-      },
-    });
-    onCleanup(() => {
-      props.registerActions(id, null);
-    });
-  });
-
-  const protectTerminalInput = () => {
-    props.setWorkingSetInteraction(sessionId(), 'input', true);
-    if (inputProtectionTimer) clearTimeout(inputProtectionTimer);
-    inputProtectionTimer = setTimeout(() => {
-      inputProtectionTimer = null;
-      props.setWorkingSetInteraction(sessionId(), 'input', false);
-    }, 750);
-  };
-
-  const createCore = (id: string, target: HTMLDivElement): TerminalCore => {
-    const core = new TerminalCore(
-      target,
-      getDefaultTerminalConfig('dark', {
-        cursorBlink: false,
-        rendererType: 'webgl',
-        fontSize: fontSize(),
-        // Workbench zoom is an outer visual transform; terminal geometry stays stable.
-        presentationScale: 1,
-        fit: props.variant === 'workbench' ? { scrollbarReservePx: 0 } : undefined,
-        allowTransparency: false,
-        theme: colors(),
-        fontFamily: fontFamily(),
-        clipboard: {
-          copyOnSelect: false,
-        },
-        responsive: {
-          fitOnFocus: true,
-          emitResizeOnFocus: true,
-          notifyResizeOnlyWhenFocused: true,
-        } satisfies TerminalResponsiveConfig,
-      }),
-      {
-        onData: (data: string) => {
-          if (!props.viewActive() || !props.active()) return;
-          if (terminalInputBlocked()) return;
-          protectTerminalInput();
-          void props.transport.sendInput(id, data, props.connId);
-        },
-        onResize: (size: { cols: number; rows: number }) => {
-          if (!props.viewActive() || !props.active()) return;
-          void props.transport.resize(id, size.cols, size.rows);
-        },
-        onError: (e: Error) => {
-          setError(e.message);
-        },
-        onBell: () => {
-          props.onBell?.(id);
-        },
-      },
-      buildLogger(),
-    );
-
-    core.registerLinkProvider?.(createTerminalFileLinkProvider({
-      core,
-      isEnabled: () => props.canOpenFilePreview(),
-      getContext: () => ({
-        workingDirAbs: normalizeAskFlowerAbsolutePath(props.session.workingDir ?? '')
-          || normalizeAskFlowerAbsolutePath(props.agentHomePathAbs())
-          || '/',
-        agentHomePathAbs: normalizeAskFlowerAbsolutePath(props.agentHomePathAbs()) || undefined,
-      }),
-      onActivate: (targetLink) => props.onTerminalFileLinkOpen?.(targetLink),
-    }));
-
-    term = core;
-    props.registerCore(id, core);
-    return core;
-  };
-
-  const ensureOutputCoordinator = (id: string) => {
-    if (outputCoordinator) return outputCoordinator;
-    replayCoveredBytes = 0;
-    replayTotalBytes = 0;
-    outputCoordinator = createPagedTerminalOutputCoordinator({
-      isInteractive: liveRenderActive,
-      policy: {
-        maxRetainedLiveChunks: 2048,
-        maxRetainedLiveBytes: 8 * 1024 * 1024,
-        retryDelaysMs: [250, 1000, 4000],
-      },
-      fetchPage: async ({ startSequence, cursor }) => {
-        const pageCursor = typeof cursor === 'number' ? cursor : startSequence;
-        const page = await props.transport.historyPage(id, pageCursor, -1);
-        replayCoveredBytes += Math.max(0, page.coveredBytes);
-        replayTotalBytes = page.totalBytes > 0 ? page.totalBytes : replayTotalBytes;
-        if (replayTotalBytes > 0) {
-          setHistoryReplayProgress({
-            loadedBytes: Math.min(replayCoveredBytes, replayTotalBytes),
-            totalBytes: replayTotalBytes,
-          });
-        }
-        const coveredThroughSequence = historyPageCoveredThrough(page) ?? Math.max(0, pageCursor - 1);
-        return {
-          chunks: page.chunks.map((chunk) => {
-            const projected = projectedLiveBySequence.get(chunk.sequence);
-            return {
-              ...chunk,
-              data: projected === undefined
-                ? chunk.data
-                : consumeTerminalChunk(chunk.data, 'history', { publishActivity: false }),
-              source: 'history' as const,
-              pretransformed: projected !== undefined,
-            };
-          }),
-          hasMore: page.hasMore,
-          nextCursor: page.hasMore ? page.nextStartSeq : undefined,
-          firstAvailableSequence: page.firstSequence > 0 ? page.firstSequence : undefined,
-          coveredThroughSequence,
-          coveredBytes: page.coveredBytes,
-          totalBytes: page.totalBytes,
-        };
-      },
-      transformChunk: (chunk) => {
-        const metadata = chunk as {
-          sequence?: number;
-          data: Uint8Array;
-          source?: 'history' | 'live';
-          pretransformed?: boolean;
-        };
-        if (metadata.pretransformed) return chunk.data;
-        const source = metadata.source ?? 'live';
-        return consumeTerminalChunk(chunk.data, source);
-      },
-      write: (payload) => {
-        if (payload.byteLength > 0) term?.write(payload);
-      },
-      clear: () => {
-        term?.clear();
-        shellIntegrationParser.reset();
-      },
-      onHistoryTruncated: (reason) => {
-        buildLogger().warn('[TerminalPanel] Rebased truncated terminal history', { sessionId: id, reason });
-        setOutputRecoveryState('catching-up');
-      },
-      onStateChange: (snapshot) => {
-        outputCoordinatorSnapshot = snapshot;
-        setOutputRecoveryState(snapshot.state);
-        if (snapshot.state === 'failed') {
-          const message = snapshot.lastError instanceof Error
-            ? snapshot.lastError.message
-            : String(snapshot.lastError || 'Terminal output recovery failed');
-          setOutputRecoveryError(message);
-        } else if (snapshot.state !== 'disposed') {
-          setOutputRecoveryError(null);
-        }
-        if (snapshot.state === 'live') {
-          setHistoryReplayProgress(null);
-          for (const sequence of projectedLiveBySequence.keys()) {
-            if (sequence <= snapshot.coveredThroughSequence) {
-              projectedLiveBySequence.delete(sequence);
-            }
-          }
-        }
-      },
-    });
-    return outputCoordinator;
-  };
-
-  const initOnce = async () => {
-    const id = sessionId();
-    const target = container;
-    if (!target) throw new Error('Terminal not mounted');
-
-    const seq = ++initSeq;
-    setError(null);
-    setLoading('initializing');
-
-    const core = createCore(id, target);
-    ensureOutputCoordinator(id);
-
-    try {
-      await core.initialize();
-      if (seq !== initSeq) return;
-
-      // After core.initialize(), the underlying terminal instance is ready: re-register to keep the outer registry consistent.
-      props.registerCore(id, core);
-
-      applyTerminalAppearance(core, buildTerminalAppearance(), { forceResize: true });
-
-      clearOutputSubscription();
-      replaying = true;
-      unsubData = props.eventSource.onTerminalData(id, (ev) => {
-        handleLiveTerminalData(ev.data, ev.sequence);
-      });
-
-      if (props.eventSource.onTerminalNameUpdate) {
-        unsubNameUpdate = props.eventSource.onTerminalNameUpdate(id, (ev) => {
-          props.onNameUpdate?.(ev.sessionId, ev.newName, ev.workingDir);
-        });
-      }
-
-      setLoading('attaching');
-      const dims = core.getDimensions();
-      await props.transport.attach(id, dims.cols, dims.rows);
-      if (seq !== initSeq) return;
-
-      setLoading('loading_history');
-      core.clear();
-      shellIntegrationParser.reset();
-      core.startHistoryReplay(TERMINAL_HISTORY_REPLAY_MODE_MS);
-      try {
-        await outputCoordinator?.attach(0);
-        while (
-          seq === initSeq
-          && outputCoordinatorSnapshot
-          && outputCoordinatorSnapshot.state !== 'live'
-          && outputCoordinatorSnapshot.state !== 'failed'
-        ) {
-          await sleep(25);
-        }
-      } finally {
-        core.endHistoryReplay();
-        setHistoryReplayProgress(null);
-      }
-      if (seq !== initSeq) return;
-      if (outputCoordinatorSnapshot?.state === 'failed') {
-        throw outputCoordinatorSnapshot.lastError instanceof Error
-          ? outputCoordinatorSnapshot.lastError
-          : new Error(String(outputCoordinatorSnapshot.lastError || 'Terminal output recovery failed'));
-      }
-      replaying = false;
-
-      await confirmAttachedViewportSize(core, id, seq);
-      if (seq !== initSeq) return;
-
-      setLoading('idle');
-      setReadyOnce(true);
-
-      requestAnimationFrame(() => {
-        core.forceResize();
-        if (props.viewActive() && props.active() && props.autoFocus()) core.focus();
-        const el = container;
-        if (el && el.style.opacity !== '1') {
-          el.style.opacity = '1';
-        }
-      });
-    } catch (e) {
-      if (seq !== initSeq) return;
-      replaying = false;
-      setLoading('idle');
-      if (outputCoordinatorSnapshot?.state !== 'failed') {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-      const el = container;
-      if (el) el.style.opacity = '1';
-    }
-  };
-
-  const hibernateForWorkingSet = async (): Promise<TerminalRestorableSnapshot | null> => {
-    const core = term;
-    if (!core) return null;
-
-    outputCoordinator?.setActive(false);
-    await nextAnimationFrame();
-    if (term !== core) return null;
-
-    const snapshot = core.captureRestorableSnapshot({
-      coveredThroughSequence: outputCoordinator?.getSnapshot().coveredThroughSequence ?? 0,
-    });
-    disposeCore();
-    return snapshot;
-  };
-
-  const resumeFromWorkingSet = async (snapshot: TerminalRestorableSnapshot | null): Promise<void> => {
-    if (term) {
-      outputCoordinator?.setActive(liveRenderActive());
-      return;
-    }
-    const id = sessionId();
-    const target = container;
-    if (!target || !props.connected()) {
-      throw new Error('Terminal cannot resume while disconnected');
-    }
-
-    const seq = ++initSeq;
-    setError(null);
-    setLoading('initializing');
-    setShowLoading(true);
-    const core = createCore(id, target);
-    const coordinator = ensureOutputCoordinator(id);
-
-    try {
-      await core.initialize();
-      if (seq !== initSeq) return;
-      props.registerCore(id, core);
-      applyTerminalAppearance(core, buildTerminalAppearance(), { forceResize: true });
-
-      const recoverySource = await restoreTerminalSnapshotOrReplay({
-        snapshot,
-        restoreSnapshot: (value) => core.restoreSnapshot(value),
-        replayHistory: async () => {
-          replaying = true;
-          replayCoveredBytes = 0;
-          replayTotalBytes = 0;
-          setLoading('loading_history');
-          core.clear();
-          shellIntegrationParser.reset();
-          core.startHistoryReplay(TERMINAL_HISTORY_REPLAY_MODE_MS);
-          try {
-            await coordinator.attach(0);
-            while (
-              seq === initSeq
-              && outputCoordinatorSnapshot
-              && outputCoordinatorSnapshot.state !== 'live'
-              && outputCoordinatorSnapshot.state !== 'failed'
-            ) {
-              await sleep(25);
-            }
-          } finally {
-            core.endHistoryReplay();
-            setHistoryReplayProgress(null);
-          }
-          if (seq !== initSeq) return;
-          if (outputCoordinatorSnapshot?.state === 'failed') {
-            throw outputCoordinatorSnapshot.lastError instanceof Error
-              ? outputCoordinatorSnapshot.lastError
-              : new Error(String(outputCoordinatorSnapshot.lastError || 'Terminal output recovery failed'));
-          }
-          replaying = false;
-        },
-      });
-      if (seq !== initSeq) return;
-
-      setLoading('idle');
-      setReadyOnce(true);
-      setShowLoading(false);
-      if (recoverySource === 'snapshot' && snapshot) {
-        coordinator.setActive(false);
-        void coordinator.attach(snapshot.coveredThroughSequence + 1).then(() => {
-          if (seq === initSeq && term === core) coordinator.setActive(liveRenderActive());
-        });
-      } else {
-        coordinator.setActive(liveRenderActive());
-      }
-      requestAnimationFrame(() => {
-        if (term !== core) return;
-        core.forceResize();
-        if (props.viewActive() && props.active() && props.autoFocus()) core.focus();
-      });
-      await confirmAttachedViewportSize(core, id, seq);
-    } catch (errorValue) {
-      if (seq !== initSeq) return;
-      replaying = false;
-      setLoading('idle');
-      setShowLoading(false);
-      setError(errorValue instanceof Error ? errorValue.message : String(errorValue));
-      throw errorValue;
-    }
-  };
-
-  const workingSetRuntime: TerminalWorkingSetRuntime = {
-    getResourceEstimate: () => term?.getResourceEstimate() ?? {
-      bufferBytes: 0,
-      cellCount: 0,
-      estimatedBytes: 0,
-      rendererType: 'webgl',
-    },
-    isProtected: () => term?.hasSelection() === true,
-    hibernate: hibernateForWorkingSet,
-    resume: resumeFromWorkingSet,
-  };
-
-  createEffect(() => {
-    if (!readyOnce() || workingSetRegistered) return;
-    workingSetRegistered = true;
-    props.registerWorkingSetRuntime(sessionId(), workingSetRuntime);
-  });
-
-  createEffect(() => {
-    const active = liveRenderActive();
-    outputCoordinator?.setActive(active);
-  });
-
-  createEffect(() => {
-    const client = props.protocolClient();
-    if (!client) return;
-    if (!container) return;
-
-    // Untrack to avoid capturing theme/font reactivity as init dependencies.
-    untrack(() => void reload());
-  });
-
-  createEffect(() => {
-    const appearance = buildTerminalAppearance();
-    if (!term) return;
-    scheduleTerminalAppearanceApply(appearance);
-  });
-
-  createEffect(() => {
-    if (!props.viewActive() || !props.active()) return;
-    if (!term) return;
-    if (replaying || loading() !== 'idle') return;
-    scheduleTerminalActivationRefresh();
-  });
-
-  onCleanup(() => {
-    initSeq += 1;
-    reloadSeq += 1;
-    disposeTerminal();
-    props.registerCore(sessionId(), null);
-    props.registerSurfaceElement(sessionId(), null);
-  });
-
-  const terminalBackground = () => colors().background ?? '#1e1e1e';
-  const terminalForeground = () => colors().foreground ?? '#c9d1d9';
-  const terminalLoadingVars = () => ({
-    '--redeven-terminal-loading-background': terminalBackground(),
-    '--redeven-terminal-loading-foreground': terminalForeground(),
-  });
-  const retryOutputRecovery = () => {
-    setOutputRecoveryError(null);
-    if (!readyOnce()) {
-      void reload();
-      return;
-    }
-    outputCoordinator?.retry();
-  };
-
-  return (
-    <div
-      class="h-full min-h-0 relative overflow-hidden"
-      onCompositionStart={() => props.setWorkingSetInteraction(sessionId(), 'composition', true)}
-      onCompositionEnd={() => props.setWorkingSetInteraction(sessionId(), 'composition', false)}
-      style={{
-        'background-color': terminalBackground(),
-        '--terminal-bottom-inset': `${props.bottomInsetPx()}px`,
-        '--background': terminalBackground(),
-        '--foreground': terminalForeground(),
-        '--primary': terminalForeground(),
-        '--muted': `color-mix(in srgb, ${terminalForeground()} 12%, ${terminalBackground()})`,
-        '--muted-foreground': `color-mix(in srgb, ${terminalForeground()} 70%, transparent)`,
-        ...terminalLoadingVars(),
-      }}
-    >
-      <div
-        ref={(n) => {
-          container = n;
-          props.registerSurfaceElement(sessionId(), n);
-        }}
-        {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
-        class="absolute top-2 left-2 right-0 bottom-0 redeven-terminal-surface"
-        onClick={(event) => props.onSurfaceClick?.(event)}
-        style={{
-          transition: 'opacity 0.15s ease-out',
-          bottom: 'var(--terminal-bottom-inset)',
-          opacity: readyOnce() ? (showLoading() ? '0' : '1') : (loading() === 'idle' ? '1' : '0'),
-        }}
-      />
-
-      <RedevenLoadingCurtain
-        visible={showLoading()}
-        eyebrow={i18n.t('terminal.creatingEyebrow')}
-        message={loadingMessage()}
-        class="redeven-terminal-loading-curtain"
-      />
-
-      <Show when={outputRecoveryMessage()}>
-        <div
-          class="absolute left-3 right-3 bottom-3 flex min-h-8 items-center gap-2 rounded border border-border px-2 py-1 text-[11px] break-words"
-          classList={{
-            'text-error': outputRecoveryState() === 'failed' || Boolean(error()),
-            'text-foreground': outputRecoveryState() !== 'failed' && !error(),
-          }}
-          style={{
-            'background-color': `color-mix(in srgb, ${terminalBackground()} 80%, transparent)`,
-            bottom: 'calc(var(--terminal-bottom-inset) + 0.75rem)',
-          }}
-        >
-          <span class="min-w-0 flex-1">{outputRecoveryMessage()}</span>
-          <Show when={outputRecoveryState() === 'failed'}>
-            <button
-              type="button"
-              class="shrink-0 rounded border border-border px-2 py-1 text-foreground hover:bg-muted"
-              onClick={retryOutputRecovery}
-            >
-              {i18n.t('terminal.retry')}
-            </button>
-          </Show>
-        </div>
-      </Show>
-    </div>
-  );
-}
 
 function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const i18n = useI18n();
@@ -1980,7 +1027,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const coreRegistry = new Map<string, TerminalCore>();
   const surfaceRegistry = new Map<string, HTMLDivElement>();
-  const actionsRegistry = new Map<string, terminal_session_actions>();
+  const actionsRegistry = new Map<string, TerminalSessionRuntimeActions>();
   const mobileKeyboardPathCache = new Map<string, TerminalMobileKeyboardPathEntry[]>();
   const mobileKeyboardPackageScriptsCache = new Map<string, TerminalMobileKeyboardScript[]>();
   const deferredInitialMountSessionIds = new Set<string>();
@@ -2472,7 +1519,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setSurfaceRegistrySeq((v) => v + 1);
   };
 
-  const registerActions = (id: string, actions: terminal_session_actions | null) => {
+  const registerActions = (id: string, actions: TerminalSessionRuntimeActions | null) => {
     if (!id) return;
     if (actions) {
       actionsRegistry.set(id, actions);
@@ -3454,7 +2501,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     writeActiveSessionId(activeSessionStorageKey, id && !pendingTerminalSessionById(id) ? id : null);
   });
 
-  const sessionListItems = createMemo<terminal_session_sidebar_item[]>(() => {
+  const sessionListItems = createMemo<TerminalSessionNavigationItem[]>(() => {
     const list = sessions();
     const tabStates = tabVisualStateBySession();
     const workStates = workStateBySession();
@@ -3906,7 +2953,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   };
 
-  const openSidebarItemFiles = (item: terminal_session_sidebar_item) => {
+  const openSidebarItemFiles = (item: TerminalSessionNavigationItem) => {
     if (!item.canBrowsePath || !item.fullPath) return;
 
     setTerminalSidebarMenu(null);
@@ -3917,7 +2964,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   };
 
-  const copySidebarItemPath = (item: terminal_session_sidebar_item) => {
+  const copySidebarItemPath = (item: TerminalSessionNavigationItem) => {
     const fullPath = normalizeAskFlowerAbsolutePath(item.fullPath);
     if (!fullPath) return;
 
@@ -3935,7 +2982,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       .catch(notifyTerminalCopyFailure);
   };
 
-  const duplicateSidebarItemSession = (item: terminal_session_sidebar_item) => {
+  const duplicateSidebarItemSession = (item: TerminalSessionNavigationItem) => {
     const fullPath = normalizeAskFlowerAbsolutePath(item.fullPath);
     if (!connected() || !item.canDuplicate || !fullPath) return;
     const nextIndex = sessions().length + pendingTerminalSessions().length + 1;
@@ -3943,13 +2990,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     void beginCreateSession(resolveRequestedSessionName(undefined, fullPath, fallbackName), fullPath);
   };
 
-  const clearSidebarItemSession = (item: terminal_session_sidebar_item) => {
+  const clearSidebarItemSession = (item: TerminalSessionNavigationItem) => {
     if (!item.canClear) return;
     setTerminalSidebarMenu(null);
     void clearSession(item.id);
   };
 
-  const askFlowerFromSidebarItem = (item: terminal_session_sidebar_item, anchor: { x: number; y: number }) => {
+  const askFlowerFromSidebarItem = (item: TerminalSessionNavigationItem, anchor: { x: number; y: number }) => {
     const workingDir = normalizeAskFlowerAbsolutePath(item.fullPath) || normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || '';
     if (!workingDir) return;
     setTerminalSidebarMenu(null);
@@ -4128,7 +3175,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     ];
   };
 
-  const openTerminalSidebarMenu = (event: MouseEvent, item: terminal_session_sidebar_item) => {
+  const openTerminalSidebarMenu = (event: MouseEvent, item: TerminalSessionNavigationItem) => {
     event.preventDefault();
     event.stopPropagation();
     setTerminalAskMenu(null);
@@ -4139,7 +3186,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   };
 
-  const openTerminalSidebarKeyboardMenu = (event: KeyboardEvent, item: terminal_session_sidebar_item) => {
+  const openTerminalSidebarKeyboardMenu = (event: KeyboardEvent, item: TerminalSessionNavigationItem) => {
     if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
     event.preventDefault();
     event.stopPropagation();
@@ -4331,7 +3378,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const terminalShortcutModLabel = createMemo(() => (isMacLikePlatform() ? 'Cmd' : 'Ctrl'));
-  const terminalSidebarWidth = createMemo(() => (isMobileLayout() ? 232 : 286));
   const activeSessionListItem = createMemo(() => {
     const activeId = activeDisplaySessionId();
     if (!activeId) return null;
@@ -4363,257 +3409,35 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     >
       <Show when={connected()} fallback={<div class="p-4 text-xs text-muted-foreground">{i18n.t('terminal.notConnected')}</div>}>
         <div class="relative flex min-h-0 flex-1 overflow-hidden bg-background">
-          <Show when={isMobileLayout() && sessionDrawerOpen()}>
-            <button
-              type="button"
-              class="absolute inset-0 z-30 cursor-default bg-black/45"
-              aria-label={i18n.t('terminal.closeSessions')}
-              data-testid="terminal-session-drawer-backdrop"
-              onClick={() => {
-                setSessionDrawerOpen(false);
-                restoreActiveTerminalFocus();
-              }}
-            />
-          </Show>
-          <div
-            class="contents"
-            role={isMobileLayout() && sessionDrawerOpen() ? 'dialog' : undefined}
-            aria-modal={isMobileLayout() && sessionDrawerOpen() ? 'true' : undefined}
-            aria-label={isMobileLayout() && sessionDrawerOpen() ? i18n.t('terminal.sessions') : undefined}
-          >
-          <Sidebar
-            width={terminalSidebarWidth()}
-            ariaLabel={i18n.t('terminal.title')}
-            class={`redeven-terminal-session-sidebar ${isMobileLayout()
-              ? sessionDrawerOpen()
-                ? 'absolute inset-y-0 left-0 z-40 !w-[min(88vw,320px)] shadow-2xl'
-                : 'hidden'
-              : ''}`}
-          >
-            <SidebarContent class="flex h-full min-h-0 flex-col overflow-hidden">
-              <div class="shrink-0 space-y-2">
-                <div class="flex items-center gap-2 px-0.5">
-                  <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-sidebar-accent/55 text-sidebar-accent-foreground">
-                    <Terminal class="h-3.5 w-3.5" />
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/60">{i18n.t('terminal.title')}</div>
-                    <div class="truncate text-xs font-semibold text-sidebar-foreground">{activeToolbarTitle()}</div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    class="h-7 w-7 cursor-pointer p-0 disabled:cursor-not-allowed"
-                    data-testid="terminal-sidebar-add-session"
-                    onClick={createSession}
-                    disabled={!connected()}
-                    title={i18n.t('terminal.newSession')}
-                  >
-                    <PlusIcon class="w-3.5 h-3.5" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    class="h-7 w-7 cursor-pointer p-0 disabled:cursor-not-allowed"
-                    data-testid="terminal-sidebar-refresh"
-                    onClick={handleRefresh}
-                    disabled={!connected() || refreshing()}
-                    loading={refreshing()}
-                    title={i18n.t('terminal.refresh')}
-                  >
-                    <RefreshIcon class="w-3.5 h-3.5" />
-                  </Button>
-                  <Show when={isMobileLayout()}>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      class="h-7 w-7 cursor-pointer p-0"
-                      data-testid="terminal-session-drawer-close"
-                      onClick={() => {
-                        setSessionDrawerOpen(false);
-                        restoreActiveTerminalFocus();
-                      }}
-                      title={i18n.t('terminal.closeSessions')}
-                    >
-                      <X class="h-3.5 w-3.5" />
-                    </Button>
-                  </Show>
-                </div>
-                <div class="relative">
-                  <Search class="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    size="sm"
-                    value={sessionFilterQuery()}
-                    class="w-full pl-7 pr-7"
-                    placeholder={i18n.t('terminal.searchSessions')}
-                    aria-label={i18n.t('terminal.searchSessions')}
-                    data-testid="terminal-session-filter"
-                    onInput={(event) => setSessionFilterQuery(event.currentTarget.value)}
-                  />
-                  <Show when={sessionFilterQuery().length > 0}>
-                    <button
-                      type="button"
-                      class="absolute right-1 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center text-muted-foreground hover:text-foreground"
-                      aria-label={i18n.t('terminal.clearSessionSearch')}
-                      title={i18n.t('terminal.clearSessionSearch')}
-                      onClick={() => setSessionFilterQuery('')}
-                    >
-                      <X class="h-3.5 w-3.5" />
-                    </button>
-                  </Show>
-                </div>
-              </div>
-
-              <SidebarSection
-                title={i18n.t('terminal.title')}
-                actions={<span class="text-[9px] font-medium normal-case tracking-normal text-muted-foreground/60">{terminalShortcutModLabel()}+1-9</span>}
-                class="min-h-0 flex flex-1 flex-col overflow-hidden [&>div:last-child]:min-h-0 [&>div:last-child]:flex [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:overflow-hidden"
-              >
-                <div data-testid="terminal-session-list" class="min-h-0 flex-1 overflow-hidden">
-                  <SidebarItemList
-                    {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
-                    class="min-h-0 h-full overflow-y-auto overflow-x-hidden pr-0.5 [scrollbar-gutter:stable]"
-                  >
-                  <For
-                    each={sessionListItemIds()}
-                    fallback={
-                      <div class="rounded-md border border-sidebar-border/70 bg-sidebar-accent/25 px-2.5 py-3 text-xs text-muted-foreground">
-                        {emptySessionListLoading()
-                          ? i18n.t('terminal.loadingSessions')
-                          : sessionFilterQuery().trim()
-                            ? i18n.t('terminal.noMatchingSessions')
-                            : i18n.t('terminal.noSessionsTitle')}
-                      </div>
-                    }
-                  >
-                    {(sessionId, index) => {
-                      const item = createMemo(() => sessionListItemById().get(sessionId)!);
-                      const sidebarActive = () => sidebarActiveSessionId() === sessionId;
-                      const committedActive = () => activeDisplaySessionId() === sessionId;
-                      return (
-                        <div
-                          class={`group relative rounded-md border px-2.5 py-2 pr-9 text-xs transition-colors duration-75 ${
-                            sidebarActive()
-                              ? 'border-border/20 bg-sidebar-accent text-sidebar-accent-foreground shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
-                              : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'
-                          }`}
-                          onContextMenu={(event) => openTerminalSidebarMenu(event, item())}
-                        >
-                          <button
-                            type="button"
-                            class="absolute inset-0 z-0 w-full cursor-pointer rounded-md focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-sidebar-ring"
-                            data-terminal-session-id={sessionId}
-                            data-terminal-session-active={sidebarActive() ? 'true' : 'false'}
-                            data-terminal-session-index={index() + 1}
-                            aria-label={`${item().label}: ${item().title}${item().fullPath ? ` ${item().fullPath}` : ''}`}
-                            aria-current={committedActive() ? 'page' : undefined}
-                            title={item().fullPath || item().title}
-                            onPointerDown={(event) => previewSidebarSessionSelection(event, sessionId)}
-                            onClick={() => commitSidebarSessionSelection(sessionId)}
-                            onKeyDown={(event) => openTerminalSidebarKeyboardMenu(event, item())}
-                          >
-                            <span class="sr-only">{item().label}</span>
-                            <span class="sr-only" data-terminal-tab-status={item().status}>
-                              {item().status}
-                            </span>
-                          </button>
-                          <Show when={sidebarActive()}>
-                            <span class="absolute left-0 top-2 bottom-2 z-10 w-[2px] rounded-full bg-primary" aria-hidden="true" />
-                          </Show>
-                          <div class="relative z-10 flex min-w-0 items-start gap-2.5 pointer-events-none">
-                            <span
-                              class="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[13px] font-semibold uppercase leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]"
-                              style={{
-                                background: item().avatarTone.background,
-                                'border-color': item().avatarTone.border,
-                                color: item().avatarTone.foreground,
-                              }}
-                              data-terminal-session-avatar={sessionId}
-                              aria-hidden="true"
-                            >
-                              {item().avatarInitial}
-                              <TerminalSidebarStatusBadge status={item().status} />
-                            </span>
-                            <span class="min-w-0 flex-1 text-left">
-                              <span class="flex min-w-0 items-center gap-1.5">
-                                <span class="truncate text-sm font-semibold leading-5">{item().title}</span>
-                                <span class="shrink-0 rounded border border-sidebar-border/80 bg-sidebar/35 px-1 py-[1px] text-[9px] leading-none text-muted-foreground/80">{index() + 1}</span>
-                              </span>
-                              <Show when={item().fullPath}>
-                                <span class="mt-0.5 flex h-6 min-w-0 max-w-full items-center gap-1.5">
-                                  <span
-                                    class="pointer-events-none min-w-0 flex-1 cursor-pointer truncate text-[11px] leading-6 text-muted-foreground/75"
-                                    title={item().fullPath}
-                                    data-terminal-session-path={sessionId}
-                                    data-testid={`terminal-session-path-${sessionId}`}
-                                  >
-                                    {item().fullPath}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    class={`pointer-events-auto flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring ${
-                                      copiedSidebarPathSessionId() === sessionId
-                                        ? 'bg-primary/10 text-primary'
-                                        : 'hover:bg-sidebar-accent hover:text-sidebar-foreground'
-                                    }`}
-                                    title={copiedSidebarPathSessionId() === sessionId ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}
-                                    aria-label={`${copiedSidebarPathSessionId() === sessionId ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}: ${item().fullPath}`}
-                                    data-testid={`terminal-session-path-copy-${sessionId}`}
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      copySidebarItemPath(item());
-                                    }}
-                                  >
-                                    <Show when={copiedSidebarPathSessionId() === sessionId} fallback={<Copy class="h-3 w-3" />}>
-                                      <Check class="h-3 w-3" />
-                                    </Show>
-                                  </button>
-                                </span>
-                              </Show>
-                            </span>
-                          </div>
-                          <div class="pointer-events-none absolute right-1.5 top-1.5 z-20 flex w-5 flex-col items-center gap-1 group-hover:pointer-events-auto focus-within:pointer-events-auto">
-                            <Show when={item().closable}>
-                              <button
-                                type="button"
-                                class="pointer-events-auto flex h-5 w-5 cursor-pointer items-center justify-center rounded text-[11px] text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-error/10 hover:text-error focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
-                                data-testid={`close-session-${sessionId}`}
-                                aria-label={`${i18n.t('terminal.deleteSession')} ${item().title}`}
-                                title={i18n.t('terminal.deleteSession')}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  closeSession(sessionId);
-                                }}
-                              >
-                                <X class="h-3 w-3" />
-                              </button>
-                            </Show>
-                            <Show when={item().canBrowsePath}>
-                              <button
-                                type="button"
-                                class="pointer-events-auto flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-sidebar-accent hover:text-sidebar-foreground focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
-                                data-testid={`terminal-session-files-${sessionId}`}
-                                aria-label={`${i18n.t('terminal.files')}: ${item().fullPath}`}
-                                title={`${i18n.t('terminal.files')}: ${item().fullPath}`}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  openSidebarItemFiles(item());
-                                }}
-                              >
-                                <ExternalLink class="h-3 w-3" />
-                              </button>
-                            </Show>
-                          </div>
-                        </div>
-                      );
-                    }}
-                  </For>
-                  </SidebarItemList>
-                </div>
-              </SidebarSection>
-            </SidebarContent>
-          </Sidebar>
-          </div>
+          <TerminalSessionNavigator
+            mobile={isMobileLayout()}
+            drawerOpen={sessionDrawerOpen()}
+            connected={connected()}
+            refreshing={refreshing()}
+            activeTitle={activeToolbarTitle()}
+            shortcutModLabel={terminalShortcutModLabel()}
+            filterQuery={sessionFilterQuery()}
+            itemIds={sessionListItemIds()}
+            itemById={sessionListItemById()}
+            sidebarActiveSessionId={sidebarActiveSessionId()}
+            activeSessionId={activeDisplaySessionId()}
+            copiedPathSessionId={copiedSidebarPathSessionId()}
+            emptyListLoading={emptySessionListLoading()}
+            onCloseDrawer={() => {
+              setSessionDrawerOpen(false);
+              restoreActiveTerminalFocus();
+            }}
+            onCreateSession={createSession}
+            onRefresh={handleRefresh}
+            onFilterQueryChange={setSessionFilterQuery}
+            onPreviewSession={previewSidebarSessionSelection}
+            onSelectSession={commitSidebarSessionSelection}
+            onOpenKeyboardMenu={openTerminalSidebarKeyboardMenu}
+            onOpenContextMenu={openTerminalSidebarMenu}
+            onCopyPath={copySidebarItemPath}
+            onCloseSession={closeSession}
+            onOpenFiles={openSidebarItemFiles}
+          />
 
           <div class="min-w-0 min-h-0 flex flex-1 flex-col">
             <div class="flex h-10 shrink-0 items-center gap-2 border-b border-border bg-background/90 px-2">
@@ -4675,48 +3499,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 />
               </Show>
               <Show when={searchOpen()}>
-                <div class={`absolute top-2 z-20 flex items-center gap-1 rounded-md border border-white/15 bg-[#0b0f14]/95 px-2 py-1 shadow-md backdrop-blur ${isMobileLayout() ? 'left-2 right-2' : 'right-2'}`}>
-                  <Input
-                    ref={(n) => (searchInputEl = n)}
-                    size="sm"
-                    value={searchQuery()}
-                    placeholder={i18n.t('terminal.searchPlaceholder')}
-                    class={`${isMobileLayout() ? 'min-w-0 flex-1' : 'w-[220px]'} bg-black/20 border-white/20 text-[#e5e7eb] placeholder:text-[#94a3b8] focus:ring-yellow-400 focus:border-yellow-400 shadow-none`}
-                    onInput={(e) => setSearchQuery(e.currentTarget.value)}
-                  />
-                  <div class="text-[10px] text-[#94a3b8] tabular-nums min-w-[54px] text-right">
-                    {searchResultCount() <= 0 || searchResultIndex() < 0 ? '0/0' : `${searchResultIndex() + 1}/${searchResultCount()}`}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    class="h-7 w-7 shrink-0 p-0 text-[#e5e7eb] hover:bg-white/10 hover:text-white"
-                    onClick={goPrevMatch}
-                    disabled={searchResultCount() <= 0}
-                    title={i18n.t('terminal.previous')}
-                  >
-                    <ChevronUp class="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    class="h-7 w-7 shrink-0 p-0 text-[#e5e7eb] hover:bg-white/10 hover:text-white"
-                    onClick={goNextMatch}
-                    disabled={searchResultCount() <= 0}
-                    title={i18n.t('terminal.next')}
-                  >
-                    <ChevronDown class="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    class="h-7 w-7 shrink-0 p-0 text-[#e5e7eb] hover:bg-white/10 hover:text-white"
-                    onClick={closeSearch}
-                    title={i18n.t('terminal.close')}
-                  >
-                    <X class="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                <TerminalSearchOverlay
+                  mobile={isMobileLayout()}
+                  query={searchQuery()}
+                  resultCount={searchResultCount()}
+                  resultIndex={searchResultIndex()}
+                  inputRef={(element) => {
+                    searchInputEl = element;
+                  }}
+                  onQueryChange={setSearchQuery}
+                  onPrevious={goPrevMatch}
+                  onNext={goNextMatch}
+                  onClose={closeSearch}
+                />
               </Show>
               <Show when={sessions().length > 0 || visiblePendingTerminalSessions().length > 0}>
                 <div class="h-full">
@@ -4728,9 +3523,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                       ));
                       return (
                         <Show when={mountedSessionForId()}>
-                          {/* Keep TerminalSessionView identity tied to sessionId; metadata snapshots may replace session objects. */}
+                          {/* Keep runtime identity tied to sessionId; metadata snapshots may replace session objects. */}
                           <TabPanel active={activeDisplaySessionId() === sessionId} keepMounted class="h-full">
-                            <TerminalSessionView
+                            <TerminalSessionRuntime
                               session={mountedSessionForId() as TerminalSessionInfo}
                               variant={variant}
                               active={() => activeDisplaySessionId() === sessionId}
