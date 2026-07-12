@@ -294,6 +294,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     ExternalLink: Icon,
     Folder: Icon,
     Menu: Icon,
+    Plus: Icon,
+    Refresh: Icon,
     Search: Icon,
     Sparkles: Icon,
     Terminal: Icon,
