@@ -142,6 +142,7 @@ type ThreadView struct {
 	PermissionType      string                       `json:"permission_type"`
 	WorkingDir          string                       `json:"working_dir"`
 	QueuedTurnCount     int                          `json:"queued_turn_count"`
+	QueuedTurns         []QueuedTurnView             `json:"queued_turns,omitempty"`
 	RunStatus           string                       `json:"run_status"`
 	ReadOnlyReason      string                       `json:"read_only_reason,omitempty"`
 	OwnerKind           string                       `json:"owner_kind,omitempty"`
@@ -324,6 +325,14 @@ type FollowupItemView struct {
 	Position        int                      `json:"position"`
 	CreatedAtUnixMs int64                    `json:"created_at_unix_ms"`
 	Attachments     []FollowupAttachmentView `json:"attachments,omitempty"`
+	ContextAction   *ContextActionEnvelope   `json:"context_action,omitempty"`
+}
+
+type QueuedTurnView struct {
+	MessageID       string                 `json:"message_id"`
+	Text            string                 `json:"text"`
+	CreatedAtUnixMs int64                  `json:"created_at_unix_ms"`
+	ContextAction   *ContextActionEnvelope `json:"context_action,omitempty"`
 }
 
 type ListFollowupsResponse struct {

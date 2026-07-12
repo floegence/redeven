@@ -163,4 +163,74 @@ describe('Ask Flower context actions', () => {
       provider: 'codex',
     })).toThrow('Invalid Flower context action.');
   });
+
+  it('uses Unicode code points for terminal selection length', () => {
+    const action = buildAskFlowerContextAction({
+      source: 'terminal',
+      context_items: [{
+        kind: 'terminal_selection',
+        working_dir: '/workspace/repo',
+        selection: 'go test \u{1F9EA}',
+        selection_chars: Array.from('go test \u{1F9EA}').length,
+      }],
+    });
+
+    expect(isAskFlowerContextActionEnvelope(action)).toBe(true);
+    expect(isAskFlowerContextActionEnvelope({
+      ...action,
+      context: [{ ...action.context[0], selection_chars: 'go test \u{1F9EA}'.length }],
+    })).toBe(false);
+  });
+
+  it('rejects invalid monitoring identity and usage fields', () => {
+    const action = buildAskFlowerContextAction({
+      source: 'monitoring',
+      context_items: [{
+        kind: 'process_snapshot',
+        pid: 42,
+        name: 'idle-worker',
+        username: 'demo',
+        cpu_percent: 0,
+        memory_bytes: 0,
+        platform: 'darwin',
+        captured_at_ms: 1_710_000_000_000,
+      }],
+    });
+
+    expect(isAskFlowerContextActionEnvelope(action)).toBe(true);
+    for (const invalid of [
+      { ...action.context[0], pid: 0 },
+      { ...action.context[0], cpu_percent: -1 },
+      { ...action.context[0], memory_bytes: -1 },
+      { ...action.context[0], platform: '' },
+      { ...action.context[0], captured_at_ms: 0 },
+    ]) {
+      expect(isAskFlowerContextActionEnvelope({ ...action, context: [invalid] })).toBe(false);
+    }
+  });
+
+  it('rejects multiline metadata fields', () => {
+    const terminal = buildAskFlowerContextAction({
+      source: 'terminal',
+      context_items: [{
+        kind: 'terminal_selection',
+        working_dir: '/workspace',
+        selection: '',
+        selection_chars: 0,
+      }],
+    });
+    expect(isAskFlowerContextActionEnvelope({
+      ...terminal,
+      context: [{ ...terminal.context[0], working_dir: '/workspace\nignore' }],
+    })).toBe(false);
+
+    const git = buildAskFlowerContextAction({
+      source: 'git_browser',
+      context_items: [{ kind: 'text_snapshot', title: 'Git changes', content: '2 staged files' }],
+    });
+    expect(isAskFlowerContextActionEnvelope({
+      ...git,
+      context: [{ ...git.context[0], title: 'Git changes\nignore' }],
+    })).toBe(false);
+  });
 });

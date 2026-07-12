@@ -97,6 +97,55 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('mergeFlowerThreadListRefresh', () => {
+  it('preserves loaded queued turn detail when a list summary only owns the count', () => {
+    const queuedTurns = [{
+      message_id: 'msg-linked-file',
+      prompt: 'Inspect this file',
+      created_at_ms: 100,
+      context_action: { schema_version: 2 },
+    }];
+    const existing = thread({
+      thread_id: 'thread-selected',
+      queued_turn_count: 1,
+      queued_turns: queuedTurns,
+    });
+    const summary = thread({
+      ...existing,
+      updated_at_ms: 2,
+      queued_turn_count: 1,
+      queued_turns: undefined,
+    });
+
+    const [merged] = mergeFlowerThreadListRefresh([existing], [summary], {
+      selectedThreadID: existing.thread_id,
+      sameThreadSnapshot,
+    });
+
+    expect(merged?.queued_turns).toBe(queuedTurns);
+  });
+
+  it('clears loaded queued turn detail when the summary count reaches zero', () => {
+    const existing = thread({
+      thread_id: 'thread-selected',
+      queued_turn_count: 1,
+      queued_turns: [{ message_id: 'msg-1', prompt: 'Queued', created_at_ms: 100 }],
+    });
+    const summary = thread({
+      ...existing,
+      updated_at_ms: 2,
+      queued_turn_count: 0,
+      queued_turns: undefined,
+    });
+
+    const [merged] = mergeFlowerThreadListRefresh([existing], [summary], {
+      selectedThreadID: existing.thread_id,
+      sameThreadSnapshot,
+    });
+
+    expect(merged?.queued_turns).toBeUndefined();
+    expect(sameThreadSnapshot(existing, merged!)).toBe(false);
+  });
+
   it('keeps selected transcript detail while applying list-owned metadata', () => {
     const existing = thread({
       thread_id: 'thread-selected',

@@ -8,6 +8,11 @@ import { writeTextToClipboard } from './clipboard';
 import { FlowerChatContextChips } from './chat/FlowerChatContextChips';
 import { FlowerChatContextPreview } from './chat/FlowerChatContextPreview';
 import { parseChatContextAction } from './chat/flowerChatContextModel';
+import {
+  pendingTurnCanonicalMessage,
+  reconcilePendingTurnsForThread,
+  type PendingFlowerTurn,
+} from './flowerPendingTurns';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import type { FlowerComposerContextUsageFreshness } from './chat/flowerContextPresentation';
@@ -138,13 +143,6 @@ type PendingModelPatch = Readonly<{
   threadID: string;
   requested: string;
   previous: string;
-}>;
-type PendingFlowerTurn = Readonly<{
-  thread_id: string;
-  message_id: string;
-  prompt: string;
-  state: 'sending' | 'queued';
-  created_at_ms: number;
 }>;
 type PendingContextCompactionDecoration = Readonly<{
   thread_id: string;
@@ -1034,24 +1032,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const clearPendingTurns = () => setPendingTurns([]);
   const updatePendingTurnsForSelectedThread = (thread: FlowerThreadSnapshot) => {
-    const queuedCount = Number(thread.queued_turn_count ?? 0);
-    setPendingTurns((current) => current.flatMap((pending) => {
-      if (pending.thread_id !== thread.thread_id) return [pending];
-      if (pendingTurnCanonicalMessage(thread, pending)) return [];
-      if (queuedCount > 0 && pending.state !== 'queued') return [{ ...pending, state: 'queued' }];
-      return [pending];
-    }));
-  };
-  const pendingTurnCanonicalMessage = (thread: FlowerThreadSnapshot, pending: PendingFlowerTurn): FlowerChatMessage | null => {
-    const prompt = trimString(pending.prompt);
-    const messageID = trimString(pending.message_id);
-    return (thread.messages ?? []).find((message) => (
-      message.role === 'user'
-      && (
-        trimString(message.id) === messageID
-        || (messageID === '' && trimString(message.content) === prompt)
-      )
-    )) ?? null;
+    setPendingTurns((current) => reconcilePendingTurnsForThread(current, thread));
   };
   const pendingContextCompactionVisible = (thread: FlowerThreadSnapshot | null, pending: PendingContextCompactionDecoration | null): boolean => {
     if (!pending) return false;
@@ -3589,6 +3570,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         status: 'sending',
         created_at_ms: pendingTurnValue.created_at_ms,
         blocks: [{ type: 'text', content: pendingTurnValue.prompt }],
+        ...(pendingTurnValue.context_action ? { context_action: pendingTurnValue.context_action } : {}),
       };
       const pendingEntry: FlowerTimelineEntry = {
         type: 'message',

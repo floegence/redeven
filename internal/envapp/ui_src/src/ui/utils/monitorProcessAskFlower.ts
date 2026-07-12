@@ -40,8 +40,8 @@ export function buildMonitorProcessSnapshotContextItem(params: {
     username: String(proc?.username ?? '').trim() || 'system',
     cpu_percent: Number(proc?.cpuPercent ?? 0),
     memory_bytes: Math.max(0, Number(proc?.memoryBytes ?? 0)),
-    platform: String(snapshot?.platform ?? '').trim() || undefined,
-    captured_at_ms: Number(snapshot?.timestampMs ?? 0) > 0 ? Number(snapshot?.timestampMs ?? 0) : undefined,
+    platform: String(snapshot?.platform ?? '').trim(),
+    captured_at_ms: Number(snapshot?.timestampMs ?? 0),
   };
 }
 

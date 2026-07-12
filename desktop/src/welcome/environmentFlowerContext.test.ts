@@ -126,6 +126,18 @@ describe('environment Flower context envelope', () => {
     expect(localContextItem.content).toContain('Environment ID: local');
   });
 
+  it('uses the launcher fallback label when an environment label is blank', () => {
+    const environment = {
+      ...snapshotEnvironment((entry) => entry.kind === 'local_environment'),
+      label: '   ',
+    };
+
+    const action = buildEnvironmentFlowerContextAction(environment, 'Local · Ready', 'This environment');
+
+    expect(action.context[0]?.title).toBe('This environment');
+    expect(action.context[0]?.content).toContain('Environment: This environment');
+  });
+
   it('maps gateway environments to runtime_gateway session source', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),

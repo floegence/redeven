@@ -441,7 +441,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         }))
         .filter((attachment) => !!attachment.url);
       for (const file of (input.pending_files ?? [])) {
-        if (!options.uploadAttachment) continue;
+        if (!options.uploadAttachment) throw new Error('Attachment upload is unavailable for this Flower surface.');
         attachments.push({
           name: trim(file.name) || 'attachment',
           mimeType: trim(file.type) || 'application/octet-stream',

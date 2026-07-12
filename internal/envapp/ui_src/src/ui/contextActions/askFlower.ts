@@ -14,7 +14,7 @@ import {
 
 export type EnvFlowerTurnLauncherContextItem = Exclude<
   FlowerTurnLauncherContextItem,
-  Readonly<{ kind: 'environment' }> | Readonly<{ kind: 'attachment' }>
+  Readonly<{ kind: 'environment' }> | Readonly<{ kind: 'attachment' }> | Readonly<{ kind: 'file_selection' }>
 >;
 
 export type EnvFlowerTurnLauncherIntent = Omit<FlowerTurnLauncherIntent, 'context_items' | 'source_surface'> & Readonly<{
@@ -29,14 +29,6 @@ function toContextActionItem(item: EnvFlowerTurnLauncherContextItem): ContextAct
       path: item.path,
       is_directory: item.is_directory,
       root_label: item.root_label,
-    };
-  }
-  if (item.kind === 'file_selection') {
-    return {
-      kind: 'file_selection',
-      path: item.path,
-      selection: item.selection,
-      selection_chars: item.selection_chars,
     };
   }
   if (item.kind === 'terminal_selection') {
@@ -55,8 +47,8 @@ function toContextActionItem(item: EnvFlowerTurnLauncherContextItem): ContextAct
       username: item.username,
       cpu_percent: item.cpu_percent,
       memory_bytes: item.memory_bytes,
-      platform: item.platform,
-      captured_at_ms: item.captured_at_ms,
+      platform: String(item.platform ?? '').trim(),
+      captured_at_ms: Number(item.captured_at_ms ?? 0),
     };
   }
   if (item.kind === 'text_snapshot') {

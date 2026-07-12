@@ -5888,7 +5888,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         target_id: environmentFlowerPrimaryTargetID(environment),
       }],
       notes: [],
-      context_action: buildEnvironmentFlowerContextAction(environment, contextSummary),
+      context_action: buildEnvironmentFlowerContextAction(environment, contextSummary, cleanLabel),
     };
   }
 

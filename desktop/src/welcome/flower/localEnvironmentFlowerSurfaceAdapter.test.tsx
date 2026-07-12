@@ -689,4 +689,25 @@ describe('Local Environment Flower surface adapter', () => {
       '/_redeven_proxy/api/ai/models',
     ]);
   });
+
+  it('blocks pending files because Desktop Welcome has no upload handler', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+
+    await expect(launchLocalEnvironmentFlowerTurn(bridge, {
+      thread_id: 'thread-upload',
+      prompt: 'review notes',
+      pending_files: [{ name: 'notes.txt', type: 'text/plain' } as File],
+    })).rejects.toThrow('Attachment upload is unavailable for Desktop Welcome.');
+
+    expect(calls.map((call) => call.path)).toEqual([
+      '/_redeven_proxy/api/settings',
+      '/_redeven_proxy/api/ai/models',
+    ]);
+  });
 });

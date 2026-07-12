@@ -29,6 +29,7 @@ function visibleApprovalActions(thread: FlowerThreadSnapshot): boolean {
 
 function threadHasLoadedDetail(thread: FlowerThreadSnapshot): boolean {
   return thread.messages.length > 0
+    || thread.queued_turns !== undefined
     || thread.subagents !== undefined
     || visibleInputRequest(thread)
     || visibleApprovalActions(thread)
@@ -81,6 +82,7 @@ export function mergeFlowerThreadListSummary(
     ...(summary.context_compactions === undefined && existing.context_compactions !== undefined ? { context_compactions: existing.context_compactions } : {}),
     ...(summary.timeline_decorations === undefined && existing.timeline_decorations !== undefined ? { timeline_decorations: existing.timeline_decorations } : {}),
     ...(summary.subagents === undefined && existing.subagents !== undefined ? { subagents: existing.subagents } : {}),
+    ...(summary.queued_turns === undefined && Number(summary.queued_turn_count ?? 0) > 0 && existing.queued_turns !== undefined ? { queued_turns: existing.queued_turns } : {}),
     ...(summary.status === 'waiting_approval' && summary.approval_actions === undefined && existing.approval_actions !== undefined ? { approval_actions: existing.approval_actions } : {}),
     ...(summaryOwnsExistingInputRequest(summary, existing) ? { input_request: existing.input_request } : {}),
     ...(summary.error === undefined && existing.error != null && summaryCanStillShowExistingError(summary) ? { error: existing.error } : {}),
@@ -261,6 +263,8 @@ export function sameThreadSnapshot(left: FlowerThreadSnapshot, right: FlowerThre
       && left.updated_at_ms === right.updated_at_ms
       && left.status === right.status
       && sameOptionalString(left.active_run_id, right.active_run_id)
+      && Number(left.queued_turn_count ?? 0) === Number(right.queued_turn_count ?? 0)
+      && sameReferenceOrEmpty(left.queued_turns, right.queued_turns)
       && left.source_label === right.source_label
       && sameStringArray(left.target_labels, right.target_labels)
       && readStateKey(left) === readStateKey(right)

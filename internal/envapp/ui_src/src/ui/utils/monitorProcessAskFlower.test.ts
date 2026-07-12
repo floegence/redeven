@@ -38,6 +38,30 @@ describe('monitorProcessAskFlower', () => {
     });
   });
 
+  it('preserves zero CPU and memory values in monitoring context', () => {
+    const intent = buildMonitorProcessFlowerTurnLauncherIntent({
+      process: {
+        pid: 42,
+        name: 'idle-worker',
+        cpuPercent: 0,
+        memoryBytes: 0,
+        username: 'demo',
+      },
+      snapshot: {
+        platform: 'darwin',
+        timestampMs: 1_710_000_000_000,
+      },
+    });
+
+    expect(intent.context_items[0]).toMatchObject({
+      kind: 'process_snapshot',
+      cpu_percent: 0,
+      memory_bytes: 0,
+      platform: 'darwin',
+      captured_at_ms: 1_710_000_000_000,
+    });
+  });
+
   it('renders a readable process snapshot summary', () => {
     const text = buildMonitorProcessSnapshotText({
       kind: 'process_snapshot',

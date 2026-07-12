@@ -4309,7 +4309,7 @@ describe('TerminalPanel', () => {
   });
 
   it('opens Ask Flower with short terminal selection text from the terminal context menu', async () => {
-    terminalSelectionState.text = '  npm test\n';
+    terminalSelectionState.text = '  go test \u{1F9EA}\n';
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -4339,8 +4339,8 @@ describe('TerminalPanel', () => {
         {
           kind: 'terminal_selection',
           working_dir: '/workspace',
-          selection: 'npm test',
-          selection_chars: 'npm test'.length,
+          selection: 'go test \u{1F9EA}',
+          selection_chars: Array.from('go test \u{1F9EA}').length,
         },
       ],
       pending_attachments: [],

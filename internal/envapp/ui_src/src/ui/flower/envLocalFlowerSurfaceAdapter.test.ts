@@ -270,6 +270,100 @@ describe('Env local Flower surface adapter', () => {
     expect(sendUserTurn).not.toHaveBeenCalled();
   });
 
+  it('uploads pending files explicitly without mixing upload URLs into linked context', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings') {
+        return jsonResponse({
+          ai: { current_model_id: 'default/gpt-4.1', providers: [] },
+          ai_secrets: { provider_api_key_set: {}, web_search_provider_api_key_set: {} },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/threads/thread_upload/live/bootstrap' && init?.method === 'GET') {
+        return jsonResponse(liveBootstrap('thread_upload', 'running'));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const uploadAttachment = vi.fn(async () => '/_redeven_proxy/api/ai/uploads/upl_notes');
+    const sendUserTurn = vi.fn(async (_request: any) => ({ runId: 'run_upload', kind: 'start' }));
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      uploadAttachment,
+      rpc: {
+        ai: {
+          subscribeThread: vi.fn(async () => ({ runId: '' })),
+          sendUserTurn,
+        },
+      } as any,
+    });
+    const contextAction = {
+      schema_version: 2,
+      action_id: 'assistant.ask.flower',
+      provider: 'flower',
+      target: { target_id: 'current', locality: 'auto' },
+      source: { surface: 'file_preview' },
+      context: [{ kind: 'file_path', path: '/workspace/notes.txt', is_directory: false }],
+      presentation: { label: 'Ask Flower', priority: 100 },
+    };
+
+    await adapter.launchTurn({
+      thread_id: 'thread_upload',
+      prompt: 'review notes',
+      pending_files: [{ name: 'notes.txt', type: 'text/plain' } as File],
+      context_action: contextAction,
+    });
+
+    expect(uploadAttachment).toHaveBeenCalledTimes(1);
+    const request = sendUserTurn.mock.calls[0]?.[0];
+    expect(request.input.attachments).toEqual([{
+      name: 'notes.txt',
+      mimeType: 'text/plain',
+      url: '/_redeven_proxy/api/ai/uploads/upl_notes',
+    }]);
+    expect(request.input.contextAction).toEqual(contextAction);
+    expect(JSON.stringify(request.input.contextAction)).not.toContain('/_redeven_proxy/api/ai/uploads');
+  });
+
+  it('blocks pending files when upload support is missing or upload fails', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/settings') {
+        return jsonResponse({
+          ai: { current_model_id: 'default/gpt-4.1', providers: [] },
+          ai_secrets: { provider_api_key_set: {}, web_search_provider_api_key_set: {} },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const pendingFile = { name: 'notes.txt', type: 'text/plain' } as File;
+    const sendWithoutUploader = vi.fn();
+    const withoutUploader = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: { sendUserTurn: sendWithoutUploader } } as any,
+    });
+    await expect(withoutUploader.launchTurn({
+      thread_id: 'thread_upload',
+      prompt: 'review notes',
+      pending_files: [pendingFile],
+    })).rejects.toThrow('Attachment upload is unavailable for this Flower surface.');
+    expect(sendWithoutUploader).not.toHaveBeenCalled();
+
+    const sendAfterFailure = vi.fn();
+    const uploadFailure = new Error('upload failed');
+    const withFailingUploader = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      uploadAttachment: vi.fn(async () => { throw uploadFailure; }),
+      rpc: { ai: { sendUserTurn: sendAfterFailure } } as any,
+    });
+    await expect(withFailingUploader.launchTurn({
+      thread_id: 'thread_upload',
+      prompt: 'review notes',
+      pending_files: [pendingFile],
+    })).rejects.toThrow('upload failed');
+    expect(sendAfterFailure).not.toHaveBeenCalled();
+  });
+
   it('passes reasoning selection through create thread and turn launch', async () => {
     const subscribeThread = vi.fn(async () => ({ runId: '' }));
     const sendUserTurn = vi.fn(async () => ({ runId: 'run_reasoning', kind: 'start' }));

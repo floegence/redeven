@@ -883,6 +883,24 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage | null {
   };
 }
 
+function mapFlowerQueuedTurns(raw: unknown): FlowerThreadSnapshot['queued_turns'] {
+  if (!Array.isArray(raw)) return undefined;
+  const turns = raw.flatMap((value) => {
+    const record = recordValue(value);
+    if (!record) return [];
+    const messageID = trim(record.message_id);
+    if (!messageID) return [];
+    const contextAction = recordValue(record.context_action);
+    return [{
+      message_id: messageID,
+      prompt: trim(record.text),
+      created_at_ms: unixMs(record.created_at_unix_ms, 'queued_turn.created_at_unix_ms'),
+      ...(contextAction ? { context_action: contextAction } : {}),
+    }];
+  });
+  return turns.length > 0 ? turns : undefined;
+}
+
 function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
   const record = recordValue(raw);
   if (!record) return null;
@@ -1072,6 +1090,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   const contextCompactions = mapContextCompactions(record.context_compactions);
   const timelineDecorations = mapTimelineDecorations(record.timeline_decorations);
   const subagents = mapFlowerSubagents(record.subagents, 'thread.subagents');
+  const queuedTurns = mapFlowerQueuedTurns(record.queued_turns);
   return {
     thread_id: threadID,
     title: trim(record.title) || trim(record.last_message_preview) || 'Ask Flower',
@@ -1086,6 +1105,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     status,
     ...(activeRunID ? { active_run_id: activeRunID } : {}),
     queued_turn_count: nonNegativeInteger(record.queued_turn_count ?? 0, 'thread.queued_turn_count'),
+    ...(queuedTurns ? { queued_turns: queuedTurns } : {}),
     ...(normalizePermissionType(record.permission_type) ? { permission_type: normalizePermissionType(record.permission_type) } : {}),
     source_label: options.sourceLabel,
     target_labels: options.targetLabels,

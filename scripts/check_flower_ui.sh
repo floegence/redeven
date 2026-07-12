@@ -29,6 +29,7 @@ main() {
       src/ui/FlowerSurface.navigation.launchSend.test.tsx \
       src/ui/FlowerSurface.navigation.threads.test.tsx \
       src/ui/FlowerSurface.navigation.structuredInput.test.tsx \
+      src/ui/flower/FlowerChatContextChips.test.tsx \
       src/ui/chat/blocks/ActivityTimelineBlock.test.tsx \
       src/ui/chat/blocks/ShellBlock.test.tsx
 
@@ -40,12 +41,14 @@ main() {
       internal/flower_ui/src/flowerSubagentDetailThread.test.ts \
       internal/flower_ui/src/flowerSubagentProjection.test.ts \
       internal/flower_ui/src/flowerThreadListRefresh.test.ts \
+      internal/flower_ui/src/flowerPendingTurns.test.ts \
       internal/flower_ui/src/runtimeFlowerSurfaceAdapter.test.ts \
       internal/flower_ui/src/filePicker/directoryPickerTree.test.ts \
       internal/flower_ui/src/filePicker/createDirectoryPickerDataSource.test.ts \
       internal/flower_ui/src/threads/FlowerThreadList.test.ts \
       internal/flower_ui/src/flowerTimelineProjection.test.ts \
       internal/flower_ui/src/chat/flowerContextPresentation.test.ts \
+      internal/flower_ui/src/chat/flowerChatContextModel.test.ts \
       internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts \
       internal/flower_ui/src/FlowerSurface.activityRunningSheen.test.ts \
       internal/flower_ui/src/FlowerSurface.approvalCommand.test.ts \

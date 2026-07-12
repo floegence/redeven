@@ -181,7 +181,10 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		return r.failRun("Failed to initialize Floret thread", err)
 	}
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
-	supplementalContext := floretSupplementalContextForInput(req.Input)
+	supplementalContext, err := floretSupplementalContextForInput(req.Input)
+	if err != nil {
+		return r.failRun("Failed to prepare linked context", err)
+	}
 	if payload := floretContextActionInjectedEventPayload(req.Input.ContextAction, supplementalContext); payload != nil {
 		r.persistRunEvent("flower.context_action.injected", RealtimeStreamKindLifecycle, payload)
 	}
@@ -605,7 +608,7 @@ func floretCurrentTurnInput(input RunInput) string {
 		parts = append(parts, text)
 	}
 	for _, attachment := range input.Attachments {
-		label := strings.TrimSpace(attachment.Name)
+		label := floretSafeSingleLineMetadata(attachment.Name, 512)
 		if label == "" {
 			label = "attachment"
 		}
@@ -613,7 +616,7 @@ func floretCurrentTurnInput(input RunInput) string {
 			continue
 		}
 		line := "Attachment: " + label
-		if mimeType := strings.TrimSpace(attachment.MimeType); mimeType != "" {
+		if mimeType := floretSafeSingleLineMetadata(attachment.MimeType, 255); mimeType != "" {
 			line += " (" + mimeType + ")"
 		}
 		parts = append(parts, line)

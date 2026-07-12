@@ -371,6 +371,13 @@ export type FlowerThreadReadStatus = Readonly<{
   read_state: FlowerThreadReadState;
 }>;
 
+export type FlowerQueuedTurn = Readonly<{
+  message_id: string;
+  prompt: string;
+  created_at_ms: number;
+  context_action?: unknown;
+}>;
+
 export type FlowerThreadSnapshot = Readonly<{
   thread_id: string;
   title: string;
@@ -385,6 +392,7 @@ export type FlowerThreadSnapshot = Readonly<{
   status: FlowerThreadStatus;
   active_run_id?: string;
   queued_turn_count?: number;
+  queued_turns?: readonly FlowerQueuedTurn[];
   permission_type?: FlowerPermissionType;
   source_label: string;
   target_labels: readonly string[];

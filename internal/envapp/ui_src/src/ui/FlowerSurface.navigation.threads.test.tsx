@@ -789,6 +789,41 @@ describe('FlowerSurface navigation threads', () => {
     expect(container.getAttribute('data-flower-context-target')).toBe('local:local');
   });
 
+  it('restores a historical file reference in a canceled thread when is_directory was omitted', async () => {
+    const contextThread = thread({
+      thread_id: 'thread-canceled-file-context',
+      title: 'Canceled file review',
+      status: 'canceled',
+      messages: [{
+        id: 'message-canceled-file-context',
+        role: 'user',
+        content: 'Inspect this file',
+        status: 'complete',
+        created_at_ms: 1_000,
+        blocks: [{ type: 'text', content: 'Inspect this file' }],
+        context_action: askFlowerContextAction({
+          target: { target_id: 'current', locality: 'auto' },
+          source: { surface: 'file_browser' },
+          context: [{ kind: 'file_path', path: '/workspace/src/index.ts' }],
+        }),
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [contextThread]),
+      loadThread: vi.fn(async () => liveBootstrap(contextThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-canceled-file-context"] button')));
+    (runtime.querySelector('[data-thread-id="thread-canceled-file-context"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-chat-context-chip="true"]')));
+
+    const chip = runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLElement;
+    expect(chip.textContent).toContain('index.ts');
+    expect(chip.textContent).toContain('/workspace/src/index.ts');
+    expect(runtime.querySelector('.flower-chat-context-chips')?.getAttribute('data-flower-context-surface')).toBe('file_browser');
+  });
+
   it.each([
     ['non-Flower action id', askFlowerContextAction({ action_id: 'assistant.ask.other' })],
     ['non-Flower provider', askFlowerContextAction({ provider: 'other' })],
@@ -801,8 +836,6 @@ describe('FlowerSurface navigation threads', () => {
     ['invalid runtime hint type', askFlowerContextAction({ execution_context: { runtime_hint: 1, session_source: 'local_runtime' } })],
     ['invalid session source', askFlowerContextAction({ execution_context: { runtime_hint: 'local_environment', session_source: 'legacy' } })],
     ['invalid context shape', askFlowerContextAction({ context: { kind: 'text_snapshot' } })],
-    ['invalid context item shape', askFlowerContextAction({ context: ['legacy'] })],
-    ['invalid context title type', askFlowerContextAction({ context: [{ kind: 'text_snapshot', title: 1 }] })],
   ])('does not show linked context metadata for malformed context action: %s', async (_caseName, contextAction) => {
     const contextThread = thread({
       thread_id: 'thread-context-malformed',
@@ -829,6 +862,38 @@ describe('FlowerSurface navigation threads', () => {
     await flush();
 
     expect(runtime.querySelector('[data-flower-chat-context-chip="true"]')).toBeNull();
+  });
+
+  it.each([
+    ['invalid context item shape', askFlowerContextAction({ context: ['legacy'] })],
+    ['invalid context title type', askFlowerContextAction({ context: [{ kind: 'text_snapshot', title: 1 }] })],
+  ])('shows a safe unsupported chip for a damaged persisted item: %s', async (_caseName, contextAction) => {
+    const contextThread = thread({
+      thread_id: 'thread-context-unsupported',
+      title: 'Unsupported environment context',
+      messages: [{
+        id: 'message-with-unsupported-context',
+        role: 'user',
+        content: 'Inspect this environment',
+        status: 'complete',
+        created_at_ms: 1_000,
+        context_action: contextAction,
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [contextThread]),
+      loadThread: vi.fn(async () => liveBootstrap(contextThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-context-unsupported"] button')));
+    (runtime.querySelector('[data-thread-id="thread-context-unsupported"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-chat-context-chip="true"]')));
+
+    const chip = runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLElement;
+    expect(chip.tagName).toBe('DIV');
+    expect(chip.textContent).toContain('Unsupported linked context');
+    expect(chip.getAttribute('data-flower-chat-context-interactive')).toBe('false');
   });
 
   it('keeps the left thread list ordered by creation time when a selected thread refreshes', async () => {

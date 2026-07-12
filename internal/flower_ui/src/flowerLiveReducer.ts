@@ -589,6 +589,9 @@ export function applyFlowerLiveEvent(
       if (event.payload.live_state) {
         next = applyLiveMaterializedState(next, event.payload.live_state);
       }
+      if (Number(next.queued_turn_count ?? 0) === 0) {
+        next = { ...next, queued_turns: [] };
+      }
       if (threadStatusHidesModelIO(next.status)) {
         next = withoutModelIO(next);
       }
