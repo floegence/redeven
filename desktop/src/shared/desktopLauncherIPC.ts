@@ -24,6 +24,7 @@ import type {
 } from './desktopRuntimeHealth';
 import type { DesktopRuntimeOperationPlans } from './desktopRuntimeOperations';
 import type { DesktopOpenConnectionProgress } from './desktopOpenConnectionProgress';
+import type { DesktopOpenConnectionTiming } from './desktopOpenConnectionProgress';
 import type { DesktopRuntimeLifecycleProgress } from './desktopRuntimeLifecycleProgress';
 import type { DesktopOperationFailurePresentation } from './desktopOperationFailure';
 import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
@@ -516,6 +517,7 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   detail_key?: DesktopTranslationKey;
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
+  open_timing?: DesktopOpenConnectionTiming;
   step_progress?: DesktopStepProgress;
   gateway_diagnosis?: DesktopGatewayDiagnosis;
   presentation_context?: 'flower_warmup';
@@ -993,6 +995,7 @@ export type DesktopLauncherActionProgress = Readonly<{
   detail_key?: DesktopTranslationKey;
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
+  open_timing?: DesktopOpenConnectionTiming;
   step_progress?: DesktopStepProgress;
   gateway_diagnosis?: DesktopGatewayDiagnosis;
   presentation_context?: 'flower_warmup';

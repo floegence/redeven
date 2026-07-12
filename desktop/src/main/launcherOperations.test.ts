@@ -655,4 +655,89 @@ describe('LauncherOperationRegistry', () => {
       }),
     }));
   });
+
+  it('records launcher Open phase transitions and final elapsed time', () => {
+    vi.spyOn(Date, 'now')
+      .mockReturnValueOnce(1_000)
+      .mockReturnValueOnce(1_060)
+      .mockReturnValueOnce(1_140)
+      .mockReturnValueOnce(1_225);
+    const registry = new LauncherOperationRegistry();
+    const operation = registry.create({
+      operation_key: 'ssh:devbox:open',
+      action: 'open_ssh_environment',
+      subject_kind: 'ssh_environment',
+      subject_id: 'ssh:devbox',
+      environment_id: 'ssh:devbox',
+      environment_label: 'Devbox',
+      phase: 'checking_runtime_record',
+      title: 'Checking runtime',
+      detail: 'Desktop is checking the saved runtime state.',
+      open_progress: openConnectionProgress({
+        location: 'ssh_host',
+        phase: 'checking_runtime_record',
+        environmentID: 'ssh:devbox',
+        environmentLabel: 'Devbox',
+      }),
+      cancelable: true,
+    });
+
+    registry.update(operation.operation_key, {
+      phase: 'opening_ssh_control',
+      title: 'Opening SSH connection',
+      detail: 'Desktop is opening the SSH control connection.',
+      open_progress: openConnectionProgress({
+        location: 'ssh_host',
+        phase: 'opening_ssh_control',
+        environmentID: 'ssh:devbox',
+        environmentLabel: 'Devbox',
+      }),
+    });
+    registry.update(operation.operation_key, {
+      phase: 'opening_window',
+      title: 'Opening environment',
+      detail: 'Desktop is loading the hidden environment window.',
+      open_progress: openConnectionProgress({
+        location: 'ssh_host',
+        phase: 'opening_window',
+        environmentID: 'ssh:devbox',
+        environmentLabel: 'Devbox',
+      }),
+    });
+    const finished = registry.finish(operation.operation_key, 'succeeded', {
+      phase: 'open_ready',
+      title: 'Environment open',
+      detail: 'The environment window is ready.',
+      open_progress: openConnectionProgress({
+        location: 'ssh_host',
+        phase: 'open_ready',
+        environmentID: 'ssh:devbox',
+        environmentLabel: 'Devbox',
+      }),
+    });
+
+    expect(finished?.open_timing).toEqual({
+      started_at_unix_ms: 1_000,
+      phase_started_at_unix_ms: 1_225,
+      total_duration_ms: 225,
+      completed_phases: [
+        {
+          phase: 'checking_runtime_record',
+          started_at_unix_ms: 1_000,
+          duration_ms: 60,
+        },
+        {
+          phase: 'opening_ssh_control',
+          started_at_unix_ms: 1_060,
+          duration_ms: 80,
+        },
+        {
+          phase: 'opening_window',
+          started_at_unix_ms: 1_140,
+          duration_ms: 85,
+        },
+      ],
+    });
+    expect(registry.progressItems()[0]?.open_timing).toEqual(finished?.open_timing);
+  });
 });

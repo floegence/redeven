@@ -17,7 +17,7 @@ import {
   prepareDesktopRuntimeUploadAsset,
   type DesktopRuntimeUploadAsset,
 } from './runtimePackageCache';
-import { loadExternalLocalUIStartup } from './runtimeState';
+import { loadExternalLocalUIHealth, validateExternalLocalUIShell } from './runtimeState';
 import type { DesktopSessionRuntimeHandle, DesktopSessionRuntimeLaunchMode } from './sessionRuntime';
 import type { StartupReport } from './startup';
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
@@ -1403,11 +1403,11 @@ async function waitForForwardedLocalUIOpenable(url: string, timeoutMs: number, s
   let latestStartup: StartupReport | null = null;
   for (;;) {
     throwIfSSHRuntimeCanceled(signal);
-    const startup = await loadExternalLocalUIStartup(url, Math.min(timeoutMs, DEFAULT_SSH_POLL_INTERVAL_MS));
+    const startup = await loadExternalLocalUIHealth(url, Math.min(timeoutMs, DEFAULT_SSH_POLL_INTERVAL_MS));
     if (startup) {
       latestStartup = startup;
       if (runtimeServiceIsOpenable(startup.runtime_service)) {
-        return startup;
+        return await validateExternalLocalUIShell(startup, Math.max(1, deadline - Date.now()));
       }
       if (startup.runtime_service?.open_readiness?.state === 'blocked') {
         return startup;

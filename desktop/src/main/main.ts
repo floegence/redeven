@@ -77,6 +77,7 @@ import {
 } from './desktopLaunch';
 import {
   DesktopWelcomeRuntimeHealthStore,
+  desktopWelcomeRuntimeHealthIsFresh,
   type DesktopWelcomeRuntimeHealthProbeEvent,
   type DesktopWelcomeRuntimeHealthProbeResult,
   type DesktopWelcomeRuntimeHealthTarget,
@@ -140,6 +141,7 @@ import { DesktopWelcomeSnapshotOrder } from './desktopWelcomeSnapshotOrder';
 import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
+  isDesktopOperationFailureError,
   operationFailureFromUnknown,
 } from './desktopOperationFailure';
 import {
@@ -158,7 +160,7 @@ import { LauncherOperationRegistry, launcherOperationProgress, type LauncherOper
 import { buildLocalUIEnvAppEntryURL } from './localUIURL';
 import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation } from './navigation';
 import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWelcomeRendererPath } from './paths';
-import { loadExternalLocalUIStartup } from './runtimeState';
+import { loadExternalLocalUIHealth, loadExternalLocalUIStartup } from './runtimeState';
 import {
   RuntimeControlError,
   getCodeWorkspaceEngineStatus,
@@ -546,6 +548,13 @@ type DesktopSessionRecord = {
   resolve_initial_load: (() => void) | null;
   reject_initial_load: ((error: Error) => void) | null;
   app_ready_state: DesktopSessionAppReadyPayload['state'] | '';
+  app_ready_timings?: DesktopSessionAppReadyPayload['timings'];
+  env_app_ready: boolean;
+  desktop_model_source_settled: boolean;
+  open_started_at_unix_ms: number;
+  window_created_at_unix_ms: number;
+  document_loaded_at_unix_ms?: number;
+  desktop_model_source_settled_at_unix_ms?: number;
   initial_load_failure_message: string;
   closing: boolean;
 };
@@ -990,7 +999,7 @@ async function refreshStartupReportFromLocalUI(
   startup: StartupReport,
   localUIURL: string,
 ): Promise<StartupReport> {
-  const refreshed = await loadExternalLocalUIStartup(localUIURL, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS).catch(() => null);
+  const refreshed = await loadExternalLocalUIHealth(localUIURL, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS).catch(() => null);
   if (!refreshed) {
     return startup;
   }
@@ -1594,7 +1603,7 @@ async function verifyCurrentLocalEnvironmentRuntimeRecord(
     return null;
   }
   try {
-    const startup = await loadExternalLocalUIStartup(currentRecord.startup.local_ui_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
+    const startup = await loadExternalLocalUIHealth(currentRecord.startup.local_ui_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
     if (startup) {
       return updateLocalEnvironmentRuntimeRecordStartup(currentRecord, {
         provider_origin: startup.provider_origin ?? currentRecord.startup.provider_origin,
@@ -1811,7 +1820,7 @@ async function verifyRuntimePlacementBridgeRecord(
     return null;
   }
   try {
-    const startup = await loadExternalLocalUIStartup(bridgeRecord.startup.local_ui_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
+    const startup = await loadExternalLocalUIHealth(bridgeRecord.startup.local_ui_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
     if (startup) {
       const updatedRecord: RuntimePlacementBridgeRecord = {
         ...bridgeRecord,
@@ -1849,7 +1858,7 @@ async function verifySSHEnvironmentRuntimeRecord(
     return null;
   }
   try {
-    const startup = await loadExternalLocalUIStartup(runtimeRecord.local_forward_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
+    const startup = await loadExternalLocalUIHealth(runtimeRecord.local_forward_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
     if (startup) {
       const updatedRecord: SSHEnvironmentRuntimeRecord = {
         ...runtimeRecord,
@@ -3351,10 +3360,13 @@ function scheduleWelcomeRuntimeHealthRefresh(options: Readonly<{
   });
 }
 
-async function refreshWelcomeRuntimeHealthForEnvironment(environmentID: string): Promise<void> {
+async function refreshWelcomeRuntimeHealthForEnvironment(
+  environmentID: string,
+  options: Readonly<{ force?: boolean }> = {},
+): Promise<void> {
   const cleanEnvironmentID = compact(environmentID);
   await refreshWelcomeRuntimeHealth({
-    force: true,
+    force: options.force !== false,
     mode: 'manual',
     targetEnvironmentIDs: cleanEnvironmentID ? [cleanEnvironmentID] : [],
   });
@@ -3376,6 +3388,38 @@ function savedSSHRuntimeHealthForOpenPreflight(
   const snapshot = welcomeRuntimeHealthStore.snapshot();
   return snapshot.savedSSHRuntimeHealth[environmentID]
     ?? snapshot.savedSSHRuntimeHealth[runtimeKey];
+}
+
+function sshReadyRecordMatchesHealth(
+  readyRecord: SSHRuntimeReadyRecord | null | undefined,
+  health: DesktopRuntimeHealth | null | undefined,
+): readyRecord is SSHRuntimeReadyRecord {
+  if (!readyRecord || !health || health.status !== 'online' || !runtimeServiceIsOpenable(health.runtime_service)) {
+    return false;
+  }
+  const healthStartedAt = Number(health.started_at_unix_ms);
+  const readyStartedAt = Number(readyRecord.startup.started_at_unix_ms);
+  if (healthStartedAt > 0 && readyStartedAt > 0 && healthStartedAt !== readyStartedAt) {
+    return false;
+  }
+  const healthService = health.runtime_service;
+  const readyService = readyRecord.startup.runtime_service;
+  return [
+    ['runtime_version', healthService?.runtime_version, readyService?.runtime_version],
+    ['runtime_commit', healthService?.runtime_commit, readyService?.runtime_commit],
+    ['runtime_build_time', healthService?.runtime_build_time, readyService?.runtime_build_time],
+  ].every(([, healthValue, readyValue]) => !healthValue || !readyValue || healthValue === readyValue);
+}
+
+function canReuseFreshSSHOpenPreflight(
+  health: DesktopRuntimeHealth | null | undefined,
+  readyRecord: SSHRuntimeReadyRecord | null | undefined,
+): readyRecord is SSHRuntimeReadyRecord {
+  return desktopWelcomeRuntimeHealthIsFresh(health) && sshReadyRecordMatchesHealth(readyRecord, health);
+}
+
+function cachedSSHOpenFailureAllowsRefreshRetry(error: unknown): boolean {
+  return isDesktopOperationFailureError(error) && error.presentation.code === 'ssh_forward_unavailable';
 }
 
 function launcherActionEnvironmentID(request: DesktopLauncherActionRequest): string {
@@ -7183,6 +7227,22 @@ function resolveSessionInitialLoadSuccess(
   broadcastDesktopWelcomeSnapshots();
 }
 
+function resolveSessionInitialLoadWhenReady(sessionRecord: DesktopSessionRecord): void {
+  if (!sessionRecord.env_app_ready || !sessionRecord.desktop_model_source_settled) {
+    return;
+  }
+  resolveSessionInitialLoadSuccess(sessionRecord, {
+    stealAppFocus: sessionRecord.steal_app_focus_on_ready,
+  });
+}
+
+function normalizeSessionReadyTiming(value: unknown): number | undefined {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue >= 0 && numberValue <= 300_000
+    ? Math.round(numberValue)
+    : undefined;
+}
+
 function normalizeDesktopSessionAppReadyPayload(value: unknown): DesktopSessionAppReadyPayload | null {
   if (!value || typeof value !== 'object') {
     return null;
@@ -7191,7 +7251,20 @@ function normalizeDesktopSessionAppReadyPayload(value: unknown): DesktopSessionA
   if (state !== 'access_gate_interactive' && state !== 'runtime_connected') {
     return null;
   }
-  return { state };
+  const rawTimings = (value as Partial<DesktopSessionAppReadyPayload>).timings;
+  const timings = rawTimings && typeof rawTimings === 'object'
+    ? {
+        bootstrap_ms: normalizeSessionReadyTiming(rawTimings.bootstrap_ms),
+        access_ready_ms: normalizeSessionReadyTiming(rawTimings.access_ready_ms),
+        protocol_connected_ms: normalizeSessionReadyTiming(rawTimings.protocol_connected_ms),
+        shell_painted_ms: normalizeSessionReadyTiming(rawTimings.shell_painted_ms),
+      }
+    : {};
+  const compactTimings = Object.fromEntries(Object.entries(timings).filter(([, timing]) => timing !== undefined));
+  return {
+    state,
+    ...(Object.keys(compactTimings).length > 0 ? { timings: compactTimings } : {}),
+  };
 }
 
 function desktopSessionContextSnapshot(sessionRecord: DesktopSessionRecord | null): DesktopSessionContextSnapshot | null {
@@ -7206,16 +7279,29 @@ function markSessionAppReady(
     return;
   }
   sessionRecord.app_ready_state = payload.state;
+  sessionRecord.app_ready_timings = payload.timings;
+  sessionRecord.env_app_ready = true;
   void sessionRecord.diagnostics.recordLifecycle(
     'session_app_ready',
     payload.state === 'runtime_connected'
       ? 'Env App runtime protocol connected.'
       : 'Env App access gate is interactive.',
-    { state: payload.state },
+    { state: payload.state, ...(payload.timings ?? {}) },
   );
-  resolveSessionInitialLoadSuccess(sessionRecord, {
-    stealAppFocus: sessionRecord.steal_app_focus_on_ready,
-  });
+  resolveSessionInitialLoadWhenReady(sessionRecord);
+}
+
+function markSessionDesktopModelSourceSettled(sessionRecord: DesktopSessionRecord): void {
+  if (sessionRecord.lifecycle !== 'opening' || sessionRecord.desktop_model_source_settled) {
+    return;
+  }
+  sessionRecord.desktop_model_source_settled = true;
+  sessionRecord.desktop_model_source_settled_at_unix_ms = Date.now();
+  void sessionRecord.diagnostics.recordLifecycle(
+    'session_desktop_model_source_settled',
+    'Desktop model source startup settled.',
+  );
+  resolveSessionInitialLoadWhenReady(sessionRecord);
 }
 
 async function failOpeningSession(
@@ -7245,6 +7331,45 @@ async function waitForSessionInitialLoad(
   } finally {
     clearTimeout(timeoutHandle);
   }
+}
+
+function elapsedSince(startedAtUnixMS: number, completedAtUnixMS: number | undefined): number | undefined {
+  return completedAtUnixMS === undefined ? undefined : Math.max(0, completedAtUnixMS - startedAtUnixMS);
+}
+
+function recordEnvironmentOpenTiming(
+  sessionRecord: DesktopSessionRecord,
+  operation: DesktopLauncherOperationSnapshot | null,
+  detail: Readonly<{
+    cache_decision?: string;
+    runtime_probe_duration_ms?: number;
+    ssh_connection_duration_ms?: number;
+    desktop_model_source_duration_ms?: number;
+  }> = {},
+): void {
+  const startedAt = sessionRecord.open_started_at_unix_ms;
+  const rendererTimings = sessionRecord.app_ready_timings ?? {};
+  void sessionRecord.diagnostics.recordLifecycle(
+    'environment_open_timing',
+    'Environment window became fully usable.',
+    {
+      total_duration_ms: Math.max(0, Date.now() - startedAt),
+      ...(detail.cache_decision ? { cache_decision: detail.cache_decision } : {}),
+      ...(detail.runtime_probe_duration_ms !== undefined ? { runtime_probe_duration_ms: detail.runtime_probe_duration_ms } : {}),
+      ...(detail.ssh_connection_duration_ms !== undefined ? { ssh_connection_duration_ms: detail.ssh_connection_duration_ms } : {}),
+      ...(detail.desktop_model_source_duration_ms !== undefined ? { desktop_model_source_duration_ms: detail.desktop_model_source_duration_ms } : {}),
+      window_created_ms: elapsedSince(startedAt, sessionRecord.window_created_at_unix_ms),
+      document_loaded_ms: elapsedSince(startedAt, sessionRecord.document_loaded_at_unix_ms),
+      desktop_model_source_settled_ms: elapsedSince(startedAt, sessionRecord.desktop_model_source_settled_at_unix_ms),
+      app_ready_state: sessionRecord.app_ready_state,
+      ...rendererTimings,
+      launcher_phases: operation?.open_timing?.completed_phases.map((phase) => ({
+        phase: phase.phase,
+        started_ms: Math.max(0, phase.started_at_unix_ms - startedAt),
+        duration_ms: phase.duration_ms,
+      })) ?? [],
+    },
+  );
 }
 
 function createSessionRootWindow(
@@ -7313,6 +7438,8 @@ async function createSessionRecord(
     runtimeHandle?: DesktopSessionRuntimeHandle | null;
     attached?: boolean;
     stealAppFocus?: boolean;
+    desktopModelSourceSettled?: boolean;
+    openStartedAtUnixMS?: number;
   }> = {},
 ): Promise<DesktopSessionRecord> {
   const diagnostics = new DesktopDiagnosticsRecorder();
@@ -7330,6 +7457,7 @@ async function createSessionRecord(
     sessionPartition,
     presentOnReadyToShow: false,
     onDidFinishLoad: () => {
+      sessionRecord.document_loaded_at_unix_ms = Date.now();
       void sessionRecord.diagnostics.recordLifecycle(
         'session_document_loaded',
         'Session document finished loading; waiting for Env App readiness.',
@@ -7363,6 +7491,11 @@ async function createSessionRecord(
     resolve_initial_load: initialLoad.resolve,
     reject_initial_load: initialLoad.reject,
     app_ready_state: '',
+    env_app_ready: false,
+    desktop_model_source_settled: options.desktopModelSourceSettled !== false,
+    open_started_at_unix_ms: options.openStartedAtUnixMS ?? Date.now(),
+    window_created_at_unix_ms: Date.now(),
+    ...(options.desktopModelSourceSettled !== false ? { desktop_model_source_settled_at_unix_ms: Date.now() } : {}),
     initial_load_failure_message: '',
     closing: false,
   };
@@ -11878,6 +12011,7 @@ async function openRemoteEnvironmentFromLauncher(
 async function openSSHEnvironmentFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_ssh_environment' }>>,
 ): Promise<DesktopLauncherActionResult> {
+  const openRequestReceivedAtUnixMS = Date.now();
   const bridgeOpenResult = await openRuntimePlacementBridgeFromLauncher(request);
   if (bridgeOpenResult) {
     return bridgeOpenResult;
@@ -11916,8 +12050,11 @@ async function openSSHEnvironmentFromLauncher(
     });
   }
 
+  let runtimeProbeDurationMS = 0;
+  const existingRuntimeProbeStartedAt = Date.now();
   let readyRecord: SSHRuntimeReadyRecord | null = null;
   let existingRuntimeRecord = await verifySSHEnvironmentRuntimeRecord(optimisticSessionKey);
+  runtimeProbeDurationMS += Date.now() - existingRuntimeProbeStartedAt;
 
   const target = buildSSHDesktopTarget(sshDetails, {
     environmentID: request.environment_id,
@@ -11973,15 +12110,28 @@ async function openSSHEnvironmentFromLauncher(
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
   let runtimeRecord = existingRuntimeRecord;
   let desktopModelSource: ManagedDesktopModelSource | null = null;
+  let desktopModelSourceTask: Promise<void> | null = null;
+  let cacheDecision = existingRuntimeRecord ? 'existing_tunnel' : 'runtime_probe_required';
+  let sshConnectionDurationMS = 0;
+  let desktopModelSourceDurationMS = 0;
   let preferences: DesktopPreferences | null = null;
   try {
     preferences = await loadDesktopPreferencesCached();
     const sshPassword = savedSSHPasswordForDetails(preferences, sshDetails, request.environment_id);
     if (!runtimeRecord) {
-      await refreshWelcomeRuntimeHealthForEnvironment(request.environment_id ?? optimisticSessionKey);
+      const preflightEnvironmentID = request.environment_id ?? optimisticSessionKey;
+      readyRecord = sshRuntimeReadyByKey.get(optimisticSessionKey) ?? null;
+      const cachedHealth = savedSSHRuntimeHealthForOpenPreflight(preflightEnvironmentID, optimisticSessionKey);
+      const reusedFreshPreflight = canReuseFreshSSHOpenPreflight(cachedHealth, readyRecord);
+      cacheDecision = reusedFreshPreflight ? 'fresh_health_reused' : 'health_refreshed';
+      if (!reusedFreshPreflight) {
+        const runtimeProbeStartedAt = Date.now();
+        await refreshWelcomeRuntimeHealthForEnvironment(preflightEnvironmentID);
+        runtimeProbeDurationMS += Date.now() - runtimeProbeStartedAt;
+      }
       readyRecord = sshRuntimeReadyByKey.get(optimisticSessionKey) ?? null;
       if (!readyRecord) {
-        const health = savedSSHRuntimeHealthForOpenPreflight(request.environment_id ?? optimisticSessionKey, optimisticSessionKey);
+        const health = savedSSHRuntimeHealthForOpenPreflight(preflightEnvironmentID, optimisticSessionKey);
         const maintenance = sshRuntimeMaintenanceByKey.get(optimisticSessionKey) ?? health?.runtime_maintenance;
         const result = launcherActionFailureForRuntimeHealthPreflight(health, {
           environmentID: request.environment_id ?? optimisticSessionKey,
@@ -12025,9 +12175,9 @@ async function openSSHEnvironmentFromLauncher(
         title: 'Opening SSH connection',
         detail: 'Desktop is establishing the local SSH connection for this open request.',
       });
-      const managedSSHRuntime = await openManagedSSHRuntimeConnection({
+      const openSSHRuntimeConnection = (ready: SSHRuntimeReadyRecord) => openManagedSSHRuntimeConnection({
         target: sshDetails,
-        ready: readyRecord!,
+        ready,
         sshPassword,
         connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
           ? sshDetails.connect_timeout_seconds
@@ -12061,6 +12211,25 @@ async function openSSHEnvironmentFromLauncher(
           });
         },
       });
+      let managedSSHRuntime: Awaited<ReturnType<typeof openManagedSSHRuntimeConnection>>;
+      const sshConnectionStartedAt = Date.now();
+      try {
+        managedSSHRuntime = await openSSHRuntimeConnection(readyRecord);
+      } catch (error) {
+        if (!reusedFreshPreflight || !cachedSSHOpenFailureAllowsRefreshRetry(error)) {
+          throw error;
+        }
+        cacheDecision = 'fresh_health_retry_refreshed';
+        const retryProbeStartedAt = Date.now();
+        await refreshWelcomeRuntimeHealthForEnvironment(preflightEnvironmentID);
+        runtimeProbeDurationMS += Date.now() - retryProbeStartedAt;
+        readyRecord = sshRuntimeReadyByKey.get(optimisticSessionKey) ?? null;
+        if (!readyRecord) {
+          throw error;
+        }
+        managedSSHRuntime = await openSSHRuntimeConnection(readyRecord);
+      }
+      sshConnectionDurationMS += Date.now() - sshConnectionStartedAt;
       updateOpenConnectionOperation(operationKey, {
         hostAccess: { kind: 'ssh_host', ssh: sshDetails },
         placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
@@ -12072,23 +12241,15 @@ async function openSSHEnvironmentFromLauncher(
         title: 'Connecting Desktop model source',
         detail: 'Desktop is preparing local model access for this SSH runtime.',
       });
-      desktopModelSource = await startDesktopModelSourceForStartup({
-        label: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
-        startup: managedSSHRuntime.startup,
-        signal,
-      });
-      const managedStartup = desktopModelSource
-        ? await refreshStartupReportFromLocalUI(managedSSHRuntime.startup, managedSSHRuntime.local_forward_url)
-        : managedSSHRuntime.startup;
       runtimeRecord = {
         runtime_key: optimisticSessionKey,
         environment_id: request.environment_id ?? optimisticSessionKey,
         label: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
         details: sshDetails,
-        startup: managedStartup,
+        startup: managedSSHRuntime.startup,
         local_forward_url: managedSSHRuntime.local_forward_url,
         runtime_control_forward_url: managedSSHRuntime.runtime_control_forward_url,
-        desktop_model_source: desktopModelSource,
+        desktop_model_source: null,
         runtime_handle: managedSSHRuntime.runtime_handle,
         disconnect: async () => {
           await managedSSHRuntime.disconnect();
@@ -12100,6 +12261,24 @@ async function openSSHEnvironmentFromLauncher(
         },
       };
       sshEnvironmentRuntimeByKey.set(optimisticSessionKey, runtimeRecord);
+      desktopModelSourceTask = (async () => {
+        const desktopModelSourceStartedAt = Date.now();
+        desktopModelSource = await startDesktopModelSourceForStartup({
+          label: request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails),
+          startup: managedSSHRuntime.startup,
+          signal,
+        });
+        const managedStartup = desktopModelSource
+          ? await refreshStartupReportFromLocalUI(managedSSHRuntime.startup, managedSSHRuntime.local_forward_url)
+          : managedSSHRuntime.startup;
+        runtimeRecord = {
+          ...runtimeRecord!,
+          startup: managedStartup,
+          desktop_model_source: desktopModelSource,
+        };
+        sshEnvironmentRuntimeByKey.set(optimisticSessionKey, runtimeRecord);
+        desktopModelSourceDurationMS += Date.now() - desktopModelSourceStartedAt;
+      })();
     }
     if (!runtimeServiceIsOpenable(runtimeRecord.startup.runtime_service)) {
       throw launcherActionFailureForRuntimeNotOpenable(runtimeRecord.startup, {
@@ -12126,10 +12305,18 @@ async function openSSHEnvironmentFromLauncher(
     sessionRecord = await createSessionRecord(openTarget, runtimeRecord.startup, {
       runtimeHandle: runtimeRecord.runtime_handle,
       stealAppFocus: true,
+      desktopModelSourceSettled: desktopModelSourceTask === null,
+      openStartedAtUnixMS: openRequestReceivedAtUnixMS,
     });
+    if (desktopModelSourceTask) {
+      await desktopModelSourceTask;
+      sessionRecord.startup = runtimeRecord.startup;
+      markSessionDesktopModelSourceSettled(sessionRecord);
+    }
     await waitForSessionInitialLoad(sessionRecord);
   } catch (error) {
-    await desktopModelSource?.stop().catch(() => undefined);
+    const activeDesktopModelSource = desktopModelSource as ManagedDesktopModelSource | null;
+    await activeDesktopModelSource?.stop().catch(() => undefined);
     if (!existingRuntimeRecord) {
       await runtimeRecord?.disconnect().catch(() => undefined);
       sshEnvironmentRuntimeByKey.delete(optimisticSessionKey);
@@ -12169,7 +12356,7 @@ async function openSSHEnvironmentFromLauncher(
     ...sshDetails,
     environmentID: sessionRecord.target.environment_id,
   });
-  launcherOperations.finish(operationKey, 'succeeded', {
+  const completedOperation = launcherOperations.finish(operationKey, 'succeeded', {
     phase: 'open_ready',
     title: 'Environment open',
     detail: 'Desktop opened this SSH environment.',
@@ -12182,6 +12369,12 @@ async function openSSHEnvironmentFromLauncher(
       targetID: optimisticSessionKey,
       targetLabel: sessionRecord.target.label,
     }),
+  });
+  recordEnvironmentOpenTiming(sessionRecord, completedOperation, {
+    cache_decision: cacheDecision,
+    runtime_probe_duration_ms: runtimeProbeDurationMS,
+    ssh_connection_duration_ms: sshConnectionDurationMS,
+    desktop_model_source_duration_ms: desktopModelSourceDurationMS,
   });
   scheduleLauncherOperationRemoval(operationKey);
   return launcherActionSuccess('opened_environment_window', {

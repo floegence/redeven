@@ -176,12 +176,15 @@ describe('file preview wiring', () => {
     expect(shellSrc).toContain("import { createFilePreviewController } from './widgets/createFilePreviewController';");
     expect(shellSrc).toContain("import { createFileBrowserSurfaceController } from './widgets/createFileBrowserSurfaceController';");
     expect(shellSrc).toContain("import { FileBrowserSurfaceContext } from './widgets/FileBrowserSurfaceContext';");
-    expect(shellSrc).toContain("import { FileBrowserSurfaceHost } from './widgets/FileBrowserSurfaceHost';");
+    expect(shellSrc).toContain("const FileBrowserSurfaceHost = lazy(() => import('./widgets/FileBrowserSurfaceHost')");
     expect(shellSrc).toContain("import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';");
     expect(shellSrc).toContain('const filePreviewController = createFilePreviewController');
     expect(shellSrc).toContain('const fileBrowserSurfaceController = createFileBrowserSurfaceController();');
     expect(shellSrc).toContain('const openFilePreview = async (');
     expect(shellSrc).toContain("setWorkbenchFilePreviewActivation({");
+    expect(shellSrc).toContain("const FilePreviewHost = lazy(() => import('./widgets/FilePreviewHost')");
+    expect(shellSrc).toContain('viewMode() !== \'workbench\' && filePreviewHostRequested()');
+    expect(shellSrc).toContain('fileBrowserSurfaceHostRequested()');
     expect(shellSrc).toContain('<FilePreviewHost />');
     expect(shellSrc).toContain('<FileBrowserSurfaceHost />');
     expect(shellSrc).toContain('<FileBrowserSurfaceContext.Provider value={fileBrowserSurfaceContextValue}>');

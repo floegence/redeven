@@ -6,7 +6,8 @@
   "packageManager": "pnpm@10.32.1",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.json && vite build",
+    "build": "tsc -p tsconfig.json && vite build && node scripts/checkInitialBuildBudget.mjs",
+    "check:initial-budget": "node scripts/checkInitialBuildBudget.mjs",
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"vite.config.ts\" \"vitest.browser.config.ts\" \"eslint.config.mjs\" --max-warnings=0 && cd ../../flower_ui && NODE_PATH=../envapp/ui_src/node_modules ../envapp/ui_src/node_modules/.bin/eslint -c eslint.config.mjs \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"vite.config.ts\" \"vitest.browser.config.ts\" \"eslint.config.mjs\" --fix && cd ../../flower_ui && NODE_PATH=../envapp/ui_src/node_modules ../envapp/ui_src/node_modules/.bin/eslint -c eslint.config.mjs \"src/**/*.{ts,tsx}\" --fix",
     "check:workbench-wheel": "node scripts/checkWorkbenchWheelContract.mjs",

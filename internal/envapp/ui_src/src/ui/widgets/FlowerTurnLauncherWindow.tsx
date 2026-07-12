@@ -6,6 +6,7 @@ import {
   type FlowerTurnLauncherSubmitInput,
 } from '../../../../../flower_ui/src/FlowerTurnLauncherWindow';
 import type { FlowerTurnLauncherIntent } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import '../flower-feature.css';
 import type {
   FlowerTurnLauncherContextAction,
   FlowerTurnLauncherContextChip,

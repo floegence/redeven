@@ -17,4 +17,10 @@ export type DesktopSessionAppReadyState = 'access_gate_interactive' | 'runtime_c
 
 export type DesktopSessionAppReadyPayload = Readonly<{
   state: DesktopSessionAppReadyState;
+  timings?: Readonly<{
+    bootstrap_ms?: number;
+    access_ready_ms?: number;
+    protocol_connected_ms?: number;
+    shell_painted_ms?: number;
+  }>;
 }>;

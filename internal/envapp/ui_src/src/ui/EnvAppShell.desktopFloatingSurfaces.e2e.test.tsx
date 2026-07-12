@@ -567,12 +567,14 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(host.querySelector('[data-testid="file-preview-host"]')).not.toBeNull();
+      expect(host.querySelector('[data-testid="file-preview-host"]')).toBeNull();
 
       (host.querySelector('[data-testid="open-preview"]') as HTMLButtonElement).click();
       await flushAsync();
+      await flushAsync();
 
       expect(filePreviewOpenPreviewMock).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('[data-testid="file-preview-host"]')).not.toBeNull();
       expect(filePreviewOpenPreviewMock).toHaveBeenCalledWith(expect.objectContaining({
         type: 'file',
         path: '/workspace/demo.txt',
@@ -594,12 +596,14 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(host.querySelector('[data-testid="debug-console-window"]')).not.toBeNull();
+      expect(host.querySelector('[data-testid="debug-console-window"]')).toBeNull();
 
       (host.querySelector('[data-testid="open-debug-console"]') as HTMLButtonElement).click();
       await flushAsync();
+      await flushAsync();
 
       expect(debugConsoleShowMock).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('[data-testid="debug-console-window"]')).not.toBeNull();
       expect(windowOpenMock).not.toHaveBeenCalled();
     } finally {
       dispose();

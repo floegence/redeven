@@ -57,7 +57,21 @@ export function bootstrapDesktopSessionContextBridge(): void {
       if (state !== 'access_gate_interactive' && state !== 'runtime_connected') {
         return;
       }
-      ipcRenderer.send(DESKTOP_SESSION_APP_READY_CHANNEL, { state });
+      const timings = payload?.timings && typeof payload.timings === 'object'
+        ? Object.fromEntries(Object.entries(payload.timings).flatMap(([key, value]) => {
+            const numberValue = Number(value);
+            return ['bootstrap_ms', 'access_ready_ms', 'protocol_connected_ms', 'shell_painted_ms'].includes(key)
+              && Number.isFinite(numberValue)
+              && numberValue >= 0
+              && numberValue <= 300_000
+              ? [[key, Math.round(numberValue)]]
+              : [];
+          }))
+        : {};
+      ipcRenderer.send(DESKTOP_SESSION_APP_READY_CHANNEL, {
+        state,
+        ...(Object.keys(timings).length > 0 ? { timings } : {}),
+      });
     },
   };
 

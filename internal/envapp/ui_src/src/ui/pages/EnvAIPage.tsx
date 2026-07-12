@@ -8,6 +8,7 @@ import { useRedevenRpc } from '../protocol/redeven_v1';
 import { createEnvLocalFlowerSurfaceAdapter } from '../flower/envLocalFlowerSurfaceAdapter';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
+import '../flower-feature.css';
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();

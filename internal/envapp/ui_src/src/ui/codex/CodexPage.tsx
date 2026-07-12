@@ -5,6 +5,7 @@ import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { useI18n } from '../i18n';
 import { useCodexContext } from './CodexProvider';
 import { CodexPageShell } from './CodexPageShell';
+import './codex-feature.css';
 
 function useCodexViewActivation() {
   try {

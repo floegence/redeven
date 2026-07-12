@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  advanceOpenConnectionTiming,
   desktopOpenConnectionLocation,
   openConnectionPhaseSequence,
   openConnectionProgress,
@@ -95,6 +96,24 @@ describe('desktopOpenConnectionProgress', () => {
       target_id: 'ssh:container:devbox:docker:dev',
       target_label: 'Devbox Container',
       target_detail: 'devbox · docker/dev',
+    });
+  });
+
+  it('records completed phase durations and total elapsed time', () => {
+    const startedAt = 1_000;
+    const first = advanceOpenConnectionTiming(undefined, 'checking_runtime_record', 1_040, startedAt);
+    const second = advanceOpenConnectionTiming(first, 'opening_ssh_control', 1_125, startedAt, 'checking_runtime_record');
+    const third = advanceOpenConnectionTiming(second, 'opening_ssh_control', 1_150, startedAt, 'opening_ssh_control');
+
+    expect(third).toEqual({
+      started_at_unix_ms: startedAt,
+      phase_started_at_unix_ms: 1_125,
+      total_duration_ms: 150,
+      completed_phases: [{
+        phase: 'checking_runtime_record',
+        started_at_unix_ms: startedAt,
+        duration_ms: 125,
+      }],
     });
   });
 });

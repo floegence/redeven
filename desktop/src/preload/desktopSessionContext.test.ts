@@ -54,7 +54,15 @@ describe('bootstrapDesktopSessionContextBridge', () => {
     });
 
     bridge.notifyAppReady({ state: 'access_gate_interactive' });
-    bridge.notifyAppReady({ state: 'runtime_connected' });
+    bridge.notifyAppReady({
+      state: 'runtime_connected',
+      timings: {
+        bootstrap_ms: 12.4,
+        access_ready_ms: 35.6,
+        protocol_connected_ms: 98.2,
+        shell_painted_ms: 112.8,
+      },
+    });
     bridge.notifyAppReady({ state: 'invalid' as never });
 
     expect(ipcRendererSend).toHaveBeenNthCalledWith(
@@ -65,7 +73,15 @@ describe('bootstrapDesktopSessionContextBridge', () => {
     expect(ipcRendererSend).toHaveBeenNthCalledWith(
       2,
       'redeven-desktop:session-app-ready',
-      { state: 'runtime_connected' },
+      {
+        state: 'runtime_connected',
+        timings: {
+          bootstrap_ms: 12,
+          access_ready_ms: 36,
+          protocol_connected_ms: 98,
+          shell_painted_ms: 113,
+        },
+      },
     );
     expect(ipcRendererSend).toHaveBeenCalledTimes(2);
   });

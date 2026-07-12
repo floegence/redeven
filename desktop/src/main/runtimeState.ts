@@ -40,8 +40,16 @@ type EnvAppShellValidation = Readonly<{
 
 type EnvAppShellProbeResult = 'ready' | 'invalid' | 'unavailable';
 
+type EnvAppShellProbeOutcome = Readonly<{
+  result: EnvAppShellProbeResult;
+  assetFingerprint?: string;
+}>;
+
 const ENV_APP_ROOT_MOUNT_PATTERN = /<div\b[^>]*\bid\s*=\s*["']root["'][^>]*>/iu;
 const ENV_APP_ASSET_REF_PATTERN = /\b(?:src|href)\s*=\s*["'](\/_redeven_proxy\/env\/assets\/[^"']+)["']/giu;
+const envAppShellFingerprintByRuntimeIdentity = new Map<string, string>();
+const envAppShellSuccessCache = new Map<string, Promise<EnvAppShellProbeResult>>();
+const envAppShellProbeInFlight = new Map<string, Promise<EnvAppShellProbeResult>>();
 
 function request(
   url: URL,
@@ -116,7 +124,7 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
   }
 }
 
-async function probeRedevenLocalUI(baseURL: string, timeoutMs: number): Promise<RuntimeProbeStatus | null> {
+async function probeRedevenLocalUIHealth(baseURL: string, timeoutMs: number): Promise<RuntimeProbeStatus | null> {
   if (!isAllowedAppNavigation(baseURL, baseURL)) {
     return null;
   }
@@ -129,7 +137,7 @@ async function probeRedevenLocalUI(baseURL: string, timeoutMs: number): Promise<
   if (!status) {
     return null;
   }
-  return await applyEnvAppShellReadiness(baseURL, status, timeoutMs);
+  return status;
 }
 
 function validateEnvAppShellHTML(body: string): EnvAppShellValidation {
@@ -180,34 +188,99 @@ function startingEnvAppShellStatus(status: RuntimeProbeStatus): RuntimeProbeStat
   };
 }
 
-async function probeEnvAppShell(baseURL: string, timeoutMs: number): Promise<EnvAppShellProbeResult> {
-  const shellResponse = await request(new URL('/_redeven_proxy/env/', baseURL), timeoutMs, {
+async function probeEnvAppShell(baseURL: string, timeoutMs: number): Promise<EnvAppShellProbeOutcome> {
+  const deadline = Date.now() + timeoutMs;
+  const shellResponse = await request(new URL('/_redeven_proxy/env/', baseURL), Math.max(1, deadline - Date.now()), {
     accept: 'text/html;q=1.0,*/*;q=0.5',
   });
   if (shellResponse.statusCode === null) {
-    return 'unavailable';
+    return { result: 'unavailable' };
   }
   if (shellResponse.statusCode !== 200 || !contentTypeAllowsHTML(shellResponse.headers)) {
-    return 'invalid';
+    return { result: 'invalid' };
   }
   const validation = validateEnvAppShellHTML(shellResponse.body);
   if (!validation.ok) {
-    return 'invalid';
+    return { result: 'invalid' };
   }
-  for (const assetPath of validation.assetPaths) {
+  const assetFingerprint = validation.assetPaths.join('\n');
+  const assetResponses = await Promise.all(validation.assetPaths.map((assetPath) => {
     const assetURL = new URL(assetPath, baseURL);
-    const assetResponse = await request(assetURL, timeoutMs, {
+    return request(assetURL, Math.max(1, deadline - Date.now()), {
       method: 'HEAD',
       accept: '*/*',
     });
-    if (assetResponse.statusCode === null) {
-      return 'unavailable';
-    }
-    if (assetResponse.statusCode !== 200) {
-      return 'invalid';
+  }));
+  if (assetResponses.some((response) => response.statusCode === null)) {
+    return { result: 'unavailable', assetFingerprint };
+  }
+  if (assetResponses.some((response) => response.statusCode !== 200)) {
+    return { result: 'invalid', assetFingerprint };
+  }
+  return { result: 'ready', assetFingerprint };
+}
+
+function envAppShellRuntimeIdentity(baseURL: string, status: RuntimeProbeStatus): string {
+  return [
+    baseURL,
+    status.started_at_unix_ms ?? 0,
+    status.runtime_service?.runtime_version ?? '',
+    status.runtime_service?.runtime_commit ?? '',
+    status.runtime_service?.runtime_build_time ?? '',
+  ].join('|');
+}
+
+function envAppShellProbeCacheKey(runtimeIdentity: string, assetFingerprint: string): string {
+  return `${runtimeIdentity}|${assetFingerprint}`;
+}
+
+function rememberEnvAppShellSuccess(
+  baseURL: string,
+  runtimeIdentity: string,
+  assetFingerprint: string,
+): void {
+  const baseURLPrefix = `${baseURL}|`;
+  for (const [identity, previousFingerprint] of envAppShellFingerprintByRuntimeIdentity) {
+    if (identity !== runtimeIdentity && identity.startsWith(baseURLPrefix)) {
+      envAppShellFingerprintByRuntimeIdentity.delete(identity);
+      envAppShellSuccessCache.delete(envAppShellProbeCacheKey(identity, previousFingerprint));
     }
   }
-  return 'ready';
+  envAppShellFingerprintByRuntimeIdentity.set(runtimeIdentity, assetFingerprint);
+  envAppShellSuccessCache.set(
+    envAppShellProbeCacheKey(runtimeIdentity, assetFingerprint),
+    Promise.resolve('ready'),
+  );
+}
+
+async function probeEnvAppShellCached(
+  baseURL: string,
+  status: RuntimeProbeStatus,
+  timeoutMs: number,
+): Promise<EnvAppShellProbeResult> {
+  const runtimeIdentity = envAppShellRuntimeIdentity(baseURL, status);
+  const cachedFingerprint = envAppShellFingerprintByRuntimeIdentity.get(runtimeIdentity);
+  if (cachedFingerprint) {
+    const cached = envAppShellSuccessCache.get(envAppShellProbeCacheKey(runtimeIdentity, cachedFingerprint));
+    if (cached) {
+      return cached;
+    }
+    envAppShellFingerprintByRuntimeIdentity.delete(runtimeIdentity);
+  }
+  const inFlight = envAppShellProbeInFlight.get(runtimeIdentity);
+  if (inFlight) {
+    return inFlight;
+  }
+  const task = probeEnvAppShell(baseURL, timeoutMs).then((outcome) => {
+    if (outcome.result === 'ready' && outcome.assetFingerprint) {
+      rememberEnvAppShellSuccess(baseURL, runtimeIdentity, outcome.assetFingerprint);
+    }
+    return outcome.result;
+  }).finally(() => {
+    envAppShellProbeInFlight.delete(runtimeIdentity);
+  });
+  envAppShellProbeInFlight.set(runtimeIdentity, task);
+  return task;
 }
 
 async function applyEnvAppShellReadiness(
@@ -218,7 +291,7 @@ async function applyEnvAppShellReadiness(
   if (!runtimeServiceIsOpenable(status.runtime_service)) {
     return status;
   }
-  const shellProbe = await probeEnvAppShell(baseURL, timeoutMs);
+  const shellProbe = await probeEnvAppShellCached(baseURL, status, timeoutMs);
   if (shellProbe === 'ready') {
     return status;
   }
@@ -227,22 +300,61 @@ async function applyEnvAppShellReadiness(
     : startingEnvAppShellStatus(status);
 }
 
-export async function loadExternalLocalUIStartup(
-  baseURL: string,
-  timeoutMs: number = DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
-): Promise<StartupReport | null> {
-  const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL);
-  const status = await probeRedevenLocalUI(normalizedBaseURL, timeoutMs);
-  if (!status) {
-    return null;
-  }
+function startupReportFromProbeStatus(baseURL: string, status: RuntimeProbeStatus): StartupReport {
   return {
-    local_ui_url: normalizedBaseURL,
-    local_ui_urls: [normalizedBaseURL],
+    local_ui_url: baseURL,
+    local_ui_urls: [baseURL],
     password_required: status.password_required,
     ...(typeof status.desktop_managed === 'boolean' ? { desktop_managed: status.desktop_managed } : {}),
     ...(String(status.desktop_owner_id ?? '').trim() !== '' ? { desktop_owner_id: String(status.desktop_owner_id).trim() } : {}),
     ...(status.started_at_unix_ms ? { started_at_unix_ms: status.started_at_unix_ms } : {}),
     ...(status.runtime_service ? { runtime_service: status.runtime_service } : {}),
   };
+}
+
+function probeStatusFromStartup(startup: StartupReport): RuntimeProbeStatus {
+  return {
+    status: 'online',
+    password_required: startup.password_required === true,
+    ...(typeof startup.desktop_managed === 'boolean' ? { desktop_managed: startup.desktop_managed } : {}),
+    ...(String(startup.desktop_owner_id ?? '').trim() !== '' ? { desktop_owner_id: String(startup.desktop_owner_id).trim() } : {}),
+    ...(startup.started_at_unix_ms ? { started_at_unix_ms: startup.started_at_unix_ms } : {}),
+    ...(startup.runtime_service ? { runtime_service: startup.runtime_service } : {}),
+  };
+}
+
+export async function loadExternalLocalUIHealth(
+  baseURL: string,
+  timeoutMs: number = DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
+): Promise<StartupReport | null> {
+  const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL);
+  const status = await probeRedevenLocalUIHealth(normalizedBaseURL, timeoutMs);
+  if (!status) {
+    return null;
+  }
+  return startupReportFromProbeStatus(normalizedBaseURL, status);
+}
+
+export async function validateExternalLocalUIShell(
+  startup: StartupReport,
+  timeoutMs: number = DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
+): Promise<StartupReport> {
+  const normalizedBaseURL = normalizeLocalUIBaseURL(startup.local_ui_url);
+  const status = await applyEnvAppShellReadiness(
+    normalizedBaseURL,
+    probeStatusFromStartup(startup),
+    timeoutMs,
+  );
+  return {
+    ...startup,
+    ...startupReportFromProbeStatus(normalizedBaseURL, status),
+  };
+}
+
+export async function loadExternalLocalUIStartup(
+  baseURL: string,
+  timeoutMs: number = DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
+): Promise<StartupReport | null> {
+  const startup = await loadExternalLocalUIHealth(baseURL, timeoutMs);
+  return startup ? validateExternalLocalUIShell(startup, timeoutMs) : null;
 }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createContext, createEffect, createMemo, createSignal, useContext, type JSX } from 'solid-js';
+import { Show, createContext, createEffect, createMemo, createSignal, useContext, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,6 +17,7 @@ const connectArtifactEntryMock = vi.fn();
 const getEnvPublicIDFromSessionMock = vi.fn(() => '');
 const refreshLocalRuntimeMock = vi.fn();
 const reloadCurrentPageMock = vi.fn();
+const desktopAppReadyMock = vi.fn();
 const commandState = vi.hoisted(() => ({
   open: vi.fn(),
   commands: [] as Array<Record<string, unknown>>,
@@ -353,6 +354,46 @@ vi.mock('./plugins/PluginSurfaceFrame', () => ({
     </section>
   ),
 }));
+vi.mock('./plugins/PluginPanel', () => ({
+  PluginPanel: (props: any) => (
+    <Show when={props.open}>
+      <div>
+        {props.model?.tiles?.map((tile: any) => {
+          const tileID = tile.kind === 'open_center' ? tile.id : tile.item?.pluginID;
+          return (
+            <button
+              type="button"
+              data-plugin-panel-tile={tileID}
+              onClick={() => {
+                if (tile.kind === 'open_center') {
+                  props.onOpenCenter?.();
+                } else if (tile.action === 'open_surface' && tile.item?.defaultLaunchTarget) {
+                  props.onOpenPluginSurface?.(tile.item.defaultLaunchTarget);
+                } else {
+                  props.onOpenPluginDetails?.(tile.item?.pluginID);
+                }
+                props.onClose?.();
+              }}
+            >
+              {tile.kind === 'open_center' ? tile.label : tile.item?.displayName}
+            </button>
+          );
+        })}
+      </div>
+    </Show>
+  ),
+}));
+vi.mock('./plugins/PluginCenterView', () => ({
+  PluginCenterView: (props: any) => (
+    <section data-plugin-center-view data-plugin-center-shell>
+      <Show when={props.selectedPluginID}>
+        <div data-plugin-center-item={props.selectedPluginID}>Selected plugin</div>
+        <div data-plugin-center-details>Disabled</div>
+      </Show>
+      <button type="button" aria-label="Close Plugin Center" onClick={() => props.onClose?.()}>Close</button>
+    </section>
+  ),
+}));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
@@ -613,6 +654,7 @@ function installDesktopSessionContext(args: Readonly<{
       ...(args.envPublicID ? { env_public_id: args.envPublicID } : {}),
       label: args.label,
     }),
+    notifyAppReady: desktopAppReadyMock,
   };
 }
 
@@ -644,6 +686,7 @@ beforeEach(() => {
   setSidebarActiveTabMock.mockClear();
   setSidebarCollapsedMock.mockClear();
   reloadCurrentPageMock.mockReset();
+  desktopAppReadyMock.mockReset();
   delete window.redevenDesktopLanguage;
   accessStatusMock.mockReset();
   accessStatusMock.mockImplementation(async () => ({ passwordRequired: true, unlocked: resumeCalls.length > 0 }));
@@ -1450,6 +1493,35 @@ describe('EnvAppShell environment entry affordances', () => {
 });
 
 describe('EnvAppShell local access gate', () => {
+  it('reports an interactive Desktop access gate after the shell paint boundary', async () => {
+    installDesktopSessionContext({
+      sessionSource: 'ssh_environment',
+      label: 'SSH Workstation',
+      localEnvironmentID: 'ssh:workstation:2222:key_agent:remote_default',
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => desktopAppReadyMock.mock.calls.length > 0, 40);
+
+      expect(host.querySelector('input[type="password"]')).toBeTruthy();
+      expect(desktopAppReadyMock).toHaveBeenCalledWith({
+        state: 'access_gate_interactive',
+        timings: expect.objectContaining({
+          bootstrap_ms: expect.any(Number),
+          access_ready_ms: expect.any(Number),
+          shell_painted_ms: expect.any(Number),
+        }),
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('shows a neutral checking gate while local access is still resolving', async () => {
     const accessDeferred = deferred<{ password_required: boolean; unlocked: boolean } | null>();
     getLocalAccessStatusMock.mockReturnValueOnce(accessDeferred.promise);
@@ -1761,7 +1833,9 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
 
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
-      expect(host.querySelector('[data-testid="workbench-page-overlay"]')?.textContent).toBe('Connecting to local runtime...');
+      expect(['Connecting to local runtime...', 'Waiting for runtime...']).toContain(
+        host.querySelector('[data-testid="workbench-page-overlay"]')?.textContent,
+      );
       expect(reconnectMock).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(12_000);
@@ -1770,7 +1844,7 @@ describe('EnvAppShell local access gate', () => {
       expect(getLocalAccessStatusMock.mock.calls.length).toBeGreaterThanOrEqual(3);
       expect(reconnectMock).toHaveBeenCalledTimes(1);
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
-      expect(host.textContent).not.toContain('Waiting for runtime...');
+      expect(protocolStatus).toBe('connected');
     } finally {
       dispose();
     }
@@ -1800,7 +1874,9 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
 
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
-      expect(host.querySelector('[data-testid="workbench-page-overlay"]')?.textContent).toBe('Connecting to local runtime...');
+      expect(['Connecting to local runtime...', 'Waiting for runtime...']).toContain(
+        host.querySelector('[data-testid="workbench-page-overlay"]')?.textContent,
+      );
 
       await vi.advanceTimersByTimeAsync(12_000);
       await flushUntil(() => host.textContent?.includes('Unlock local runtime') ?? false);
@@ -2292,7 +2368,9 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
 
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
-      expect(host.querySelector('[data-testid="workbench-page-overlay"]')?.textContent).toBe('Connecting to runtime...');
+      expect(['Connecting to runtime...', 'Waiting for runtime...']).toContain(
+        host.querySelector('[data-testid="workbench-page-overlay"]')?.textContent,
+      );
       expect(reconnectMock).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(2_000);

@@ -104,7 +104,7 @@ describe('desktopSessionContext', () => {
   });
 
   it('notifies Desktop when the environment app becomes interactive', () => {
-    const readyStates: string[] = [];
+    const readyPayloads: Array<{ state: string; timings?: { shell_painted_ms?: number } }> = [];
     const parentWindow = {
       location: { origin: window.location.origin },
       redevenDesktopSessionContext: {
@@ -112,8 +112,8 @@ describe('desktopSessionContext', () => {
           local_environment_id: 'local',
           renderer_storage_scope_id: 'local',
         }),
-        notifyAppReady: (payload: { state: string }) => {
-          readyStates.push(payload.state);
+        notifyAppReady: (payload: { state: string; timings?: { shell_painted_ms?: number } }) => {
+          readyPayloads.push(payload);
         },
       },
     } as unknown as Window;
@@ -121,7 +121,10 @@ describe('desktopSessionContext', () => {
     setWindowHierarchy(parentWindow);
 
     expect(notifyDesktopSessionAppReady('access_gate_interactive')).toBe(true);
-    expect(notifyDesktopSessionAppReady('runtime_connected')).toBe(true);
-    expect(readyStates).toEqual(['access_gate_interactive', 'runtime_connected']);
+    expect(notifyDesktopSessionAppReady('runtime_connected', { shell_painted_ms: 42 })).toBe(true);
+    expect(readyPayloads).toEqual([
+      { state: 'access_gate_interactive' },
+      { state: 'runtime_connected', timings: { shell_painted_ms: 42 } },
+    ]);
   });
 });

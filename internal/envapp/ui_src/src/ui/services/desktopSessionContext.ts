@@ -14,7 +14,15 @@ export interface DesktopSessionContextSnapshot {
 
 export interface DesktopSessionContextBridge {
   getSnapshot: () => DesktopSessionContextSnapshot | null;
-  notifyAppReady?: (payload: { state: 'access_gate_interactive' | 'runtime_connected' }) => void;
+  notifyAppReady?: (payload: {
+    state: 'access_gate_interactive' | 'runtime_connected';
+    timings?: Readonly<{
+      bootstrap_ms?: number;
+      access_ready_ms?: number;
+      protocol_connected_ms?: number;
+      shell_painted_ms?: number;
+    }>;
+  }) => void;
 }
 
 declare global {
@@ -85,13 +93,21 @@ export function resolveRendererStorageScopeID(fallback: string): string {
   return desktopRendererStorageScopeID() || compact(fallback);
 }
 
-export function notifyDesktopSessionAppReady(state: 'access_gate_interactive' | 'runtime_connected'): boolean {
+export function notifyDesktopSessionAppReady(
+  state: 'access_gate_interactive' | 'runtime_connected',
+  timings?: Readonly<{
+    bootstrap_ms?: number;
+    access_ready_ms?: number;
+    protocol_connected_ms?: number;
+    shell_painted_ms?: number;
+  }>,
+): boolean {
   const bridge = readDesktopHostBridge('redevenDesktopSessionContext', isDesktopSessionContextBridge);
   if (!bridge || typeof bridge.notifyAppReady !== 'function') {
     return false;
   }
   try {
-    bridge.notifyAppReady({ state });
+    bridge.notifyAppReady({ state, ...(timings ? { timings } : {}) });
     return true;
   } catch {
     return false;

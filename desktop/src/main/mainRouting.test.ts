@@ -519,8 +519,36 @@ describe('main routing', () => {
     const openSSHSrc = mainSrc.slice(openSSHStart, openSSHEnd);
     expect(openSSHSrc).toContain('let readyRecord: SSHRuntimeReadyRecord | null = null;');
     expect(openSSHSrc).toContain('let existingRuntimeRecord = await verifySSHEnvironmentRuntimeRecord(optimisticSessionKey);');
-    expect(openSSHSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(request.environment_id ?? optimisticSessionKey)');
+    expect(openSSHSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(preflightEnvironmentID)');
     expect(openSSHSrc).not.toContain('let readyRecord = sshRuntimeReadyByKey.get(optimisticSessionKey) ?? null');
+    expect(openSSHSrc).toContain('const reusedFreshPreflight = canReuseFreshSSHOpenPreflight(cachedHealth, readyRecord);');
+    expect(openSSHSrc).toContain('if (!reusedFreshPreflight) {');
+    expect(openSSHSrc).toContain('if (!reusedFreshPreflight || !cachedSSHOpenFailureAllowsRefreshRetry(error)) {');
+    expect(mainSrc).toContain("error.presentation.code === 'ssh_forward_unavailable'");
+    expect(mainSrc).toContain('if (!sessionRecord.env_app_ready || !sessionRecord.desktop_model_source_settled) {');
+    expect(mainSrc).toContain('resolveSessionInitialLoadWhenReady(sessionRecord);');
+    expect(mainSrc).toContain("'environment_open_timing'");
+    expect(mainSrc).toContain('launcher_phases: operation?.open_timing?.completed_phases.map((phase) => ({');
+    const appReadyGateStart = mainSrc.indexOf('function markSessionAppReady(');
+    const appReadyGateEnd = mainSrc.indexOf('function markSessionDesktopModelSourceSettled(', appReadyGateStart);
+    const appReadyGateSrc = mainSrc.slice(appReadyGateStart, appReadyGateEnd);
+    expect(appReadyGateSrc).toContain('sessionRecord.env_app_ready = true;');
+    expect(appReadyGateSrc).toContain('resolveSessionInitialLoadWhenReady(sessionRecord);');
+    expect(appReadyGateSrc).not.toContain('presentAppWindow(');
+    const modelSourceGateStart = appReadyGateEnd;
+    const modelSourceGateEnd = mainSrc.indexOf('async function failOpeningSession(', modelSourceGateStart);
+    const modelSourceGateSrc = mainSrc.slice(modelSourceGateStart, modelSourceGateEnd);
+    expect(modelSourceGateSrc).toContain('sessionRecord.desktop_model_source_settled = true;');
+    expect(modelSourceGateSrc).toContain('resolveSessionInitialLoadWhenReady(sessionRecord);');
+    expect(modelSourceGateSrc).not.toContain('presentAppWindow(');
+    expect(openSSHSrc).toContain('desktopModelSourceSettled: desktopModelSourceTask === null');
+    expect(openSSHSrc).toContain('markSessionDesktopModelSourceSettled(sessionRecord);');
+    expect(openSSHSrc.indexOf('desktopModelSourceTask = (async () => {')).toBeLessThan(
+      openSSHSrc.indexOf('sessionRecord = await createSessionRecord(openTarget'),
+    );
+    expect(openSSHSrc.indexOf('sessionRecord = await createSessionRecord(openTarget')).toBeLessThan(
+      openSSHSrc.indexOf('await desktopModelSourceTask;'),
+    );
 
     const ensureRuntimeStart = mainSrc.indexOf('async function ensureRuntimePlacementReadyRecordFromLauncher(');
     const ensureRuntimeEnd = mainSrc.indexOf('async function openRuntimePlacementBridgeFromLauncher(', ensureRuntimeStart);
