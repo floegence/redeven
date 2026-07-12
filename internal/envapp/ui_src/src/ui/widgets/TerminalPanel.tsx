@@ -1057,6 +1057,8 @@ function TerminalSessionView(props: terminal_session_view_props) {
   let outputPipeline: TerminalOutputPipelineHandle | null = null;
   const appliedSequences = new Set<number>();
   const observedUnrenderedSequences = new Set<number>();
+  const activityInitialHistorySequences = new Set<number>();
+  const activityCatchupHistorySequences = new Set<number>();
 
   const liveRenderActive = () => props.viewActive() && props.active();
   const activityOutputPipelineEnabled = () => props.variant !== 'workbench';
@@ -1075,9 +1077,6 @@ function TerminalSessionView(props: terminal_session_view_props) {
     for (const applied of appliedSequences) {
       if (applied <= seq) appliedSequences.delete(applied);
     }
-    for (const observed of observedUnrenderedSequences) {
-      if (observed <= seq) observedUnrenderedSequences.delete(observed);
-    }
   };
 
   const establishActivitySequenceCoverage = (sequence: number) => {
@@ -1086,9 +1085,6 @@ function TerminalSessionView(props: terminal_session_view_props) {
     activitySequenceCoverage = seq;
     for (const applied of appliedSequences) {
       if (applied <= seq) appliedSequences.delete(applied);
-    }
-    for (const observed of observedUnrenderedSequences) {
-      if (observed <= seq) observedUnrenderedSequences.delete(observed);
     }
   };
 
@@ -1109,6 +1105,8 @@ function TerminalSessionView(props: terminal_session_view_props) {
   const markSequenceApplied = (sequence: number | undefined) => {
     const seq = normalizeLiveSequence(sequence);
     if (activityOutputPipelineEnabled()) {
+      if (!seq) return;
+      observedUnrenderedSequences.delete(seq);
       advanceActivitySequenceCoverage(seq);
       return;
     }
@@ -1129,13 +1127,22 @@ function TerminalSessionView(props: terminal_session_view_props) {
     return lastRenderedSeq > 0 ? lastRenderedSeq + 1 : 1;
   };
 
+  const nextCatchupResumeSequence = () => {
+    const coveredStart = nextLiveStartSequence();
+    let firstObserved: number | null = null;
+    for (const sequence of observedUnrenderedSequences) {
+      if (firstObserved === null || sequence < firstObserved) firstObserved = sequence;
+    }
+    return firstObserved === null ? coveredStart : Math.min(coveredStart, firstObserved);
+  };
+
   const resetOutputPipeline = (opts?: {
     resetStats?: boolean;
     resumeCatchUp?: boolean;
     allowSequenceSkipOnResume?: boolean;
   }) => {
     outputPipeline?.reset({
-      startSequence: nextLiveStartSequence(),
+      startSequence: opts?.resumeCatchUp ? nextCatchupResumeSequence() : nextLiveStartSequence(),
       resetStats: opts?.resetStats,
       resumeCatchUp: opts?.resumeCatchUp,
       allowSequenceSkipOnResume: opts?.allowSequenceSkipOnResume,
@@ -1175,6 +1182,8 @@ function TerminalSessionView(props: terminal_session_view_props) {
     historyMaxSeq = 0;
     appliedSequences.clear();
     observedUnrenderedSequences.clear();
+    activityInitialHistorySequences.clear();
+    activityCatchupHistorySequences.clear();
     resetOutputPipeline({ resetStats: true });
     if (opts?.resetParser) {
       shellIntegrationParser.reset();
@@ -1235,6 +1244,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
     if (deferredLive.length > 0 || queued.length > 0) return;
     if (flushScheduled || flushTimer || flushRaf !== null) return;
 
+    activityCatchupHistorySequences.clear();
     focusAfterCatchup = false;
     if (liveRenderActive()) {
       scheduleTerminalActivationRefresh();
@@ -1304,12 +1314,14 @@ function TerminalSessionView(props: terminal_session_view_props) {
     }
   };
 
-  const writeHistoryChunks = async (
+  const writeReplayChunks = async (
     chunks: terminal_history_chunk[],
     seq: number,
     opts?: {
       publishActivityForObservedLive?: boolean;
       isCurrent?: () => boolean;
+      replayedSequences?: Set<number>;
+      source?: 'history' | 'live';
     },
   ) => {
     const core = term;
@@ -1330,7 +1342,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
           TERMINAL_HISTORY_REPLAY_MAX_BYTES,
         );
         const displayChunks = batch
-          .map((chunk) => consumeTerminalChunk(chunk.data, 'history', {
+          .map((chunk) => consumeTerminalChunk(chunk.data, opts?.source ?? 'history', {
             publishActivity: opts?.publishActivityForObservedLive !== false
               || !observedUnrenderedSequences.has(chunk.sequence),
           }))
@@ -1338,6 +1350,12 @@ function TerminalSessionView(props: terminal_session_view_props) {
         const merged = mergeTerminalChunks(displayChunks);
         if (merged) {
           core.write(merged);
+        }
+        if (opts?.replayedSequences) {
+          for (const chunk of batch) {
+            const sequence = normalizeLiveSequence(chunk.sequence);
+            if (sequence) opts.replayedSequences.add(sequence);
+          }
         }
         markChunksApplied(batch);
         if (chunks.length > 0) {
@@ -1405,7 +1423,11 @@ function TerminalSessionView(props: terminal_session_view_props) {
         }
 
         const sorted = [...page.chunks].sort((a, b) => a.sequence - b.sequence);
-        await writeHistoryChunks(sorted, seq);
+        await writeReplayChunks(sorted, seq, {
+          replayedSequences: activityOutputPipelineEnabled()
+            ? activityInitialHistorySequences
+            : undefined,
+        });
         if (seq !== initSeq) return;
         advanceActivitySequenceCoverage(coveredThrough);
 
@@ -1466,10 +1488,13 @@ function TerminalSessionView(props: terminal_session_view_props) {
           resetForCoveredGap = true;
         }
 
-        await writeHistoryChunks(sorted, initSeq, {
+        await writeReplayChunks(sorted, initSeq, {
           publishActivityForObservedLive: false,
           isCurrent: activityOutputPipelineEnabled()
             ? () => seq === catchupRunSeq && catchupInProgress
+            : undefined,
+          replayedSequences: activityOutputPipelineEnabled()
+            ? activityCatchupHistorySequences
             : undefined,
         });
         if (seq !== catchupRunSeq || !catchupInProgress) return;
@@ -1504,6 +1529,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       catchupInProgress = true;
       needsHistoryCatchup = false;
       focusAfterCatchup = true;
+      activityCatchupHistorySequences.clear();
       clearDeferredLive();
       queued = [];
       cancelPendingLiveFlush();
@@ -1522,6 +1548,12 @@ function TerminalSessionView(props: terminal_session_view_props) {
             resumeCatchUp: catchupSucceeded,
             allowSequenceSkipOnResume: catchupSucceeded,
           });
+          if (catchupSucceeded && outputPipeline && activitySequenceCoverage !== null) {
+            outputPipeline.enqueue({
+              sequence: activitySequenceCoverage,
+              data: new Uint8Array(),
+            });
+          }
           if (deferredLive.length > 0 || needsHistoryCatchup) {
             flushDeferredOrCatchup();
           } else {
@@ -1778,7 +1810,18 @@ function TerminalSessionView(props: terminal_session_view_props) {
         onDrain: releaseFocusAfterCatchupIfSettled,
         startSequence: nextLiveStartSequence(),
         write: (payload, chunks) => {
-          term?.write(payload);
+          const visibleChunks = activityCatchupHistorySequences.size > 0
+            ? chunks.filter((chunk) => {
+              const sequence = normalizeLiveSequence(chunk.sequence);
+              return !sequence || !activityCatchupHistorySequences.has(sequence);
+            })
+            : chunks;
+          const visiblePayload = visibleChunks.length === chunks.length
+            ? payload
+            : mergeTerminalChunks(visibleChunks.map((chunk) => chunk.data));
+          if (visiblePayload && visiblePayload.byteLength > 0) {
+            term?.write(visiblePayload);
+          }
           markChunksApplied(chunks);
         },
       })
@@ -1797,6 +1840,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
       historyMaxSeq = 0;
       replaying = true;
       bufferedLive = [];
+      activityInitialHistorySequences.clear();
       unsubData = props.eventSource.onTerminalData(id, (ev) => {
         if (replaying) {
           bufferedLive.push({ sequence: ev.sequence, data: ev.data });
@@ -1822,14 +1866,50 @@ function TerminalSessionView(props: terminal_session_view_props) {
       if (seq !== initSeq) return;
 
       replaying = false;
-      resetOutputPipeline({ resetStats: true });
+      const bufferedSequences = new Set<number>();
       const liveSorted = [...bufferedLive]
-        .filter((c) => typeof c.sequence !== 'number' || c.sequence <= 0 || c.sequence > historyMaxSeq)
+        .filter((c) => {
+          const sequence = normalizeLiveSequence(c.sequence);
+          if (!activityOutputPipelineEnabled()) {
+            return !sequence || sequence > historyMaxSeq;
+          }
+          if (!sequence) return true;
+          if (activityInitialHistorySequences.has(sequence) || bufferedSequences.has(sequence)) return false;
+          bufferedSequences.add(sequence);
+          return true;
+        })
         .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
       bufferedLive = [];
-      for (const c of liveSorted) {
-        handleLiveTerminalData(c.data, c.sequence);
+      if (activityOutputPipelineEnabled()) {
+        const coveredBufferedLive = liveSorted.filter((chunk) => {
+          const sequence = normalizeLiveSequence(chunk.sequence);
+          return !sequence || (activitySequenceCoverage !== null && sequence <= activitySequenceCoverage);
+        });
+        const pipelineBufferedLive = liveSorted.filter((chunk) => {
+          const sequence = normalizeLiveSequence(chunk.sequence);
+          return sequence && (activitySequenceCoverage === null || sequence > activitySequenceCoverage);
+        });
+        await writeReplayChunks(
+          coveredBufferedLive.map((chunk) => ({
+            sequence: normalizeLiveSequence(chunk.sequence) ?? 0,
+            timestampMs: 0,
+            data: chunk.data,
+          })),
+          seq,
+          { source: 'live' },
+        );
+        if (seq !== initSeq) return;
+        resetOutputPipeline({ resetStats: true });
+        for (const c of pipelineBufferedLive) {
+          handleLiveTerminalData(c.data, c.sequence);
+        }
+      } else {
+        resetOutputPipeline({ resetStats: true });
+        for (const c of liveSorted) {
+          handleLiveTerminalData(c.data, c.sequence);
+        }
       }
+      activityInitialHistorySequences.clear();
       if (queued.length > 0) scheduleFlush();
       outputPipeline?.flush();
       flushDeferredOrCatchup();

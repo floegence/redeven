@@ -2263,6 +2263,63 @@ describe('TerminalPanel', () => {
     ]);
   });
 
+  it('keeps sparse live output below the history coverage high-water without replaying covered live chunks', async () => {
+    let releaseCatchupPage: (page: TestTerminalHistoryPage) => void = () => {};
+    const catchupPage = new Promise<TestTerminalHistoryPage>((resolve) => {
+      releaseCatchupPage = resolve;
+    });
+    transportMocks.historyPage.mockReset();
+    transportMocks.historyPage
+      .mockResolvedValueOnce(makeTerminalHistoryPage({
+        chunks: [
+          { sequence: 1, timestampMs: 5, data: textEncoder.encode('initial ') },
+        ],
+        firstSequence: 1,
+        lastSequence: 1,
+        coveredBytes: 8,
+        totalBytes: 8,
+      }))
+      .mockReturnValueOnce(catchupPage);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
+    });
+
+    const core = terminalCoreInstances[0];
+    core?.write.mockClear();
+    emitTerminalData('session-1', 'live-five', 5);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledTimes(2);
+    });
+
+    emitTerminalData('session-1', 'covered-live-six', 6);
+    releaseCatchupPage(makeTerminalHistoryPage({
+      chunks: [
+        { sequence: 2, timestampMs: 10, data: textEncoder.encode('history-two ') },
+        { sequence: 6, timestampMs: 20, data: textEncoder.encode('history-six') },
+      ],
+      firstSequence: 2,
+      lastSequence: 6,
+      coveredBytes: 23,
+      totalBytes: 23,
+    }));
+    await drainTerminalPanelAsyncWork();
+
+    emitTerminalData('session-1', 'live-seven', 7);
+    await drainTerminalPanelAsyncWork();
+
+    expect(transportMocks.historyPage).toHaveBeenCalledTimes(2);
+    expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual([
+      'history-two history-six',
+      'live-five',
+      'live-seven',
+    ]);
+  });
+
   it('deduplicates activity live output buffered during sparse history replay', async () => {
     let releaseHistoryPage: (page: TestTerminalHistoryPage) => void = () => {};
     const historyPage = new Promise<TestTerminalHistoryPage>((resolve) => {
@@ -2301,6 +2358,51 @@ describe('TerminalPanel', () => {
     expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual([
       'history-two duplicate-four',
       'fresh-five',
+    ]);
+  });
+
+  it('keeps buffered activity live output below the initial history high-water', async () => {
+    let releaseHistoryPage: (page: TestTerminalHistoryPage) => void = () => {};
+    const historyPage = new Promise<TestTerminalHistoryPage>((resolve) => {
+      releaseHistoryPage = resolve;
+    });
+    transportMocks.historyPage.mockReset();
+    transportMocks.historyPage.mockReturnValueOnce(historyPage);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
+    });
+
+    const core = terminalCoreInstances[0];
+    emitTerminalData('session-1', 'live-five', 5);
+    emitTerminalData('session-1', 'covered-live-six', 6);
+    releaseHistoryPage(makeTerminalHistoryPage({
+      chunks: [
+        { sequence: 2, timestampMs: 10, data: textEncoder.encode('history-two ') },
+        { sequence: 6, timestampMs: 20, data: textEncoder.encode('history-six') },
+      ],
+      firstSequence: 2,
+      lastSequence: 6,
+      coveredBytes: 23,
+      totalBytes: 23,
+    }));
+
+    await waitForTerminalPanelCondition(() => {
+      expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toContain('live-five');
+    });
+
+    emitTerminalData('session-1', 'live-seven', 7);
+    await drainTerminalPanelAsyncWork();
+
+    expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
+    expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual([
+      'history-two history-six',
+      'live-five',
+      'live-seven',
     ]);
   });
 
@@ -4117,6 +4219,55 @@ describe('TerminalPanel', () => {
     });
 
     expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['duplicate', 'fresh']);
+  });
+
+  it('keeps the Workbench buffered-live high-water filter unchanged for sparse history pages', async () => {
+    let releaseHistoryPage: (page: TestTerminalHistoryPage) => void = () => {};
+    const historyPage = new Promise<TestTerminalHistoryPage>((resolve) => {
+      releaseHistoryPage = resolve;
+    });
+    transportMocks.historyPage.mockReset();
+    transportMocks.historyPage.mockReturnValueOnce(historyPage);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await vi.waitFor(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
+    });
+
+    const core = terminalCoreInstances[0];
+    emitTerminalData('session-1', 'covered-by-high-water', 2);
+    emitTerminalData('session-1', 'unsequenced-live');
+
+    releaseHistoryPage(makeTerminalHistoryPage({
+      chunks: [
+        {
+          sequence: 1,
+          timestampMs: 10,
+          data: textEncoder.encode('history-one'),
+        },
+      ],
+      hasMore: false,
+      firstSequence: 1,
+      lastSequence: 2,
+      coveredBytes: 11,
+      totalBytes: 11,
+    }));
+
+    await vi.waitFor(() => {
+      expect(core?.endHistoryReplay).toHaveBeenCalled();
+    });
+    await waitForTerminalPanelCondition(() => {
+      expect(core?.write).toHaveBeenCalledTimes(2);
+    });
+
+    expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
+    expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual([
+      'history-one',
+      'unsequenced-live',
+    ]);
   });
 
   it('does not recreate a session when the same open-session request id is replayed', async () => {
