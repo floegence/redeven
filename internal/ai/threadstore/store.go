@@ -2838,6 +2838,21 @@ WHERE endpoint_id = ? AND thread_id = ?
 	return nil
 }
 
+func ensureRunExistsTx(ctx context.Context, tx *sql.Tx, runID string) error {
+	var exists int
+	if err := tx.QueryRowContext(ctx, `
+SELECT 1
+FROM ai_runs
+WHERE run_id = ?
+`, runID).Scan(&exists); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return sql.ErrNoRows
+		}
+		return err
+	}
+	return nil
+}
+
 func ensureThreadContextBoundaryTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, expected ThreadContextBoundary) error {
 	current, err := currentThreadContextBoundaryTx(ctx, tx, endpointID, threadID)
 	if err != nil {
@@ -2913,7 +2928,15 @@ func (s *Store) UpsertThreadState(ctx context.Context, st ThreadState) error {
 	if st.UpdatedAtUnixMs <= 0 {
 		st.UpdatedAtUnixMs = time.Now().UnixMilli()
 	}
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := ensureThreadExistsTx(ctx, tx, st.EndpointID, st.ThreadID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
 	INSERT INTO ai_thread_state(
 	  endpoint_id, thread_id, open_goal, last_assistant_summary,
 	  provider_continuation_state_json, provider_continuation_provider_id,
@@ -2933,8 +2956,10 @@ func (s *Store) UpsertThreadState(ctx context.Context, st ThreadState) error {
 	`, st.EndpointID, st.ThreadID, st.OpenGoal, st.LastAssistantSummary,
 		marshalProviderContinuationState(st.ProviderContinuation.State), st.ProviderContinuation.ProviderID,
 		st.ProviderContinuation.Model, st.ProviderContinuation.BaseURL, st.ProviderContinuation.UpdatedAtUnixMs,
-		st.UpdatedAtUnixMs)
-	return err
+		st.UpdatedAtUnixMs); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) GetThreadProviderContinuation(ctx context.Context, endpointID string, threadID string) (*ThreadProviderContinuation, error) {
@@ -2995,7 +3020,15 @@ func (s *Store) SetThreadProviderContinuation(ctx context.Context, endpointID st
 		cont.UpdatedAtUnixMs = time.Now().UnixMilli()
 	}
 	updatedAt := time.Now().UnixMilli()
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := ensureThreadExistsTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
 	INSERT INTO ai_thread_state(
 	  endpoint_id, thread_id, open_goal, last_assistant_summary,
 	  provider_continuation_state_json, provider_continuation_provider_id,
@@ -3010,8 +3043,10 @@ func (s *Store) SetThreadProviderContinuation(ctx context.Context, endpointID st
 	  provider_continuation_base_url=excluded.provider_continuation_base_url,
 	  provider_continuation_updated_at_unix_ms=excluded.provider_continuation_updated_at_unix_ms,
 	  updated_at_unix_ms=excluded.updated_at_unix_ms
-	`, endpointID, threadID, marshalProviderContinuationState(cont.State), cont.ProviderID, cont.Model, cont.BaseURL, cont.UpdatedAtUnixMs, updatedAt)
-	return err
+	`, endpointID, threadID, marshalProviderContinuationState(cont.State), cont.ProviderID, cont.Model, cont.BaseURL, cont.UpdatedAtUnixMs, updatedAt); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) SetThreadProviderContinuationIfBoundaryMatches(ctx context.Context, endpointID string, threadID string, expected ThreadContextBoundary, cont ThreadProviderContinuation) error {
@@ -3181,6 +3216,9 @@ func upsertRunTx(ctx context.Context, tx *sql.Tx, rec RunRecord) error {
 	if rec.RunID == "" || rec.EndpointID == "" || rec.ThreadID == "" {
 		return errors.New("invalid run record")
 	}
+	if err := ensureThreadExistsTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
+		return err
+	}
 	now := time.Now().UnixMilli()
 	if rec.UpdatedAtUnixMs <= 0 {
 		rec.UpdatedAtUnixMs = now
@@ -3238,7 +3276,15 @@ func (s *Store) UpsertToolCall(ctx context.Context, rec ToolCallRecord) error {
 	if rec.EndedAtUnixMs > 0 && rec.LatencyMS <= 0 && rec.EndedAtUnixMs >= rec.StartedAtUnixMs {
 		rec.LatencyMS = rec.EndedAtUnixMs - rec.StartedAtUnixMs
 	}
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := ensureRunExistsTx(ctx, tx, rec.RunID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
 INSERT INTO ai_tool_calls(
   run_id, tool_id, tool_name, status,
   args_json, result_json, error_code, error_message,
@@ -3256,8 +3302,10 @@ ON CONFLICT(run_id, tool_id) DO UPDATE SET
   started_at_unix_ms=excluded.started_at_unix_ms,
   ended_at_unix_ms=excluded.ended_at_unix_ms,
   latency_ms=excluded.latency_ms
-`, rec.RunID, rec.ToolID, rec.ToolName, rec.Status, rec.ArgsJSON, rec.ResultJSON, rec.ErrorCode, rec.ErrorMessage, boolToInt(rec.Retryable), rec.RecoveryAction, rec.StartedAtUnixMs, rec.EndedAtUnixMs, rec.LatencyMS)
-	return err
+`, rec.RunID, rec.ToolID, rec.ToolName, rec.Status, rec.ArgsJSON, rec.ResultJSON, rec.ErrorCode, rec.ErrorMessage, boolToInt(rec.Retryable), rec.RecoveryAction, rec.StartedAtUnixMs, rec.EndedAtUnixMs, rec.LatencyMS); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) ListRecentThreadToolCalls(ctx context.Context, endpointID string, threadID string, limit int) ([]ToolCallRecord, error) {
@@ -3410,6 +3458,9 @@ func (s *Store) AppendRunEvent(ctx context.Context, rec RunEventRecord) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := ensureThreadExistsTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
+		return err
+	}
 	_, err = tx.ExecContext(ctx, `
 INSERT INTO ai_run_events(endpoint_id, thread_id, run_id, stream_kind, event_type, payload_json, at_unix_ms)
 VALUES(?, ?, ?, ?, ?, ?, ?)

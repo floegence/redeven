@@ -1643,6 +1643,8 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 
 	ctx := context.Background()
 	childRunID := "child_run_identity"
+	ensureThreadstoreThreadForTest(t, store, "env_test", "thread_parent")
+	ensureThreadstoreThreadForTest(t, store, "env_test", "thread_child")
 	for _, rec := range []threadstore.RunRecord{
 		{RunID: "run_parent", EndpointID: "env_test", ThreadID: "thread_parent", MessageID: "msg_parent", State: "running"},
 		{RunID: childRunID, EndpointID: "env_test", ThreadID: "thread_child", MessageID: "turn_child", State: "running"},

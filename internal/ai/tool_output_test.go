@@ -22,6 +22,7 @@ func TestGetTerminalToolOutput(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
+	ensureThreadstoreThreadForTest(t, store, "env_1", "th_1")
 	if err := store.UpsertRun(ctx, threadstore.RunRecord{
 		RunID:      "run_1",
 		EndpointID: "env_1",
@@ -85,6 +86,7 @@ func TestGetTerminalToolOutput_RawFallbackForInvalidJSON(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
+	ensureThreadstoreThreadForTest(t, store, "env_1", "th_1")
 	if err := store.UpsertRun(ctx, threadstore.RunRecord{
 		RunID:      "run_1",
 		EndpointID: "env_1",
@@ -136,6 +138,7 @@ func TestGetTerminalToolOutput_UsesRunningProcessMetadata(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
+	ensureThreadstoreThreadForTest(t, store, "env_1", "th_1")
 	if err := store.UpsertRun(ctx, threadstore.RunRecord{
 		RunID:      "run_1",
 		EndpointID: "env_1",
@@ -199,6 +202,7 @@ func TestGetTerminalToolOutput_RejectsNonTerminalTool(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
+	ensureThreadstoreThreadForTest(t, store, "env_1", "th_1")
 	if err := store.UpsertRun(ctx, threadstore.RunRecord{
 		RunID:      "run_1",
 		EndpointID: "env_1",

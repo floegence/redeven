@@ -114,6 +114,7 @@ func TestPersistToolCallSnapshot_TerminalExecResult_NotTruncated(t *testing.T) {
 	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
+	ensureThreadstoreThreadForTest(t, store, "env_1", "th_1")
 	if err := store.UpsertRun(ctx, threadstore.RunRecord{
 		RunID:      "run_1",
 		EndpointID: "env_1",
@@ -182,6 +183,7 @@ func TestHandleToolCall_TerminalExecPending_PersistsProcessHandle(t *testing.T) 
 	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
+	ensureThreadstoreThreadForTest(t, store, "env_1", "th_1")
 	if err := store.UpsertRun(ctx, threadstore.RunRecord{
 		RunID:      "run_terminal_pending",
 		EndpointID: "env_1",

@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -82,14 +83,63 @@ func TestService_DeleteThreadForce_DoesNotWaitForRunExit(t *testing.T) {
 		t.Fatalf("invalid thread key")
 	}
 
-	// Simulate a stuck run: present in active maps, but it never closes doneCh.
+	// Keep a real run object blocked while force deletion removes its durable rows.
 	stuck := &run{
-		id:         runID,
-		channelID:  meta.ChannelID,
-		endpointID: meta.EndpointID,
-		threadID:   th.ThreadID,
-		doneCh:     make(chan struct{}),
+		id:               runID,
+		channelID:        meta.ChannelID,
+		endpointID:       meta.EndpointID,
+		threadID:         th.ThreadID,
+		messageID:        "message_force_delete_test",
+		threadsDB:        svc.threadsDB,
+		persistOpTimeout: time.Second,
+		doneCh:           make(chan struct{}),
 	}
+	stuck.persistRunRecord(RunStateRunning, "", "", time.Now().UnixMilli(), 0)
+	stuck.persistToolCall(threadstore.ToolCallRecord{RunID: runID, ToolID: "tool_force_delete_test", ToolName: "terminal.exec", Status: "running"})
+	stuck.persistRunEvent("run.start", RealtimeStreamKindLifecycle, nil)
+	stuck.persistExecutionSpan(threadstore.ExecutionSpanRecord{
+		SpanID:     "span_force_delete_test",
+		EndpointID: meta.EndpointID,
+		ThreadID:   th.ThreadID,
+		RunID:      runID,
+		Kind:       "run",
+		Name:       "run",
+		Status:     "running",
+	})
+	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, threadstore.Message{
+		MessageID:   "transcript_force_delete_test",
+		Role:        "user",
+		Status:      "complete",
+		MessageJSON: `{"id":"transcript_force_delete_test","role":"user","status":"complete","blocks":[]}`,
+	}, meta.UserPublicID, meta.UserEmail); err != nil {
+		t.Fatalf("AppendMessage before delete: %v", err)
+	}
+
+	releaseRun := make(chan struct{})
+	runExited := make(chan struct{})
+	go func() {
+		defer close(runExited)
+		<-releaseRun
+		stuck.persistRunRecord(RunStateSuccess, "", "", time.Now().Add(-time.Second).UnixMilli(), time.Now().UnixMilli())
+		stuck.persistToolCall(threadstore.ToolCallRecord{RunID: runID, ToolID: "tool_force_delete_late", ToolName: "terminal.exec", Status: "success"})
+		stuck.persistRunEvent("run.end", RealtimeStreamKindLifecycle, map[string]any{"state": "success"})
+		stuck.persistExecutionSpan(threadstore.ExecutionSpanRecord{
+			SpanID:     "span_force_delete_late",
+			EndpointID: meta.EndpointID,
+			ThreadID:   th.ThreadID,
+			RunID:      runID,
+			Kind:       "run",
+			Name:       "run",
+			Status:     "success",
+		})
+		_, _ = svc.threadsDB.AppendMessage(context.Background(), meta.EndpointID, th.ThreadID, threadstore.Message{
+			MessageID:   "transcript_force_delete_late",
+			Role:        "assistant",
+			Status:      "complete",
+			MessageJSON: `{"id":"transcript_force_delete_late","role":"assistant","status":"complete","blocks":[]}`,
+		}, meta.UserPublicID, meta.UserEmail)
+		stuck.markDone()
+	}()
 
 	svc.mu.Lock()
 	svc.activeRunByTh[thKey] = runID
@@ -113,6 +163,36 @@ func TestService_DeleteThreadForce_DoesNotWaitForRunExit(t *testing.T) {
 	svc.mu.Unlock()
 	if byTh {
 		t.Fatalf("active run mappings should be detached after force delete")
+	}
+
+	close(releaseRun)
+	select {
+	case <-runExited:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("blocked run did not exit after release")
+	}
+	if got, err := svc.threadsDB.GetRun(ctx, meta.EndpointID, runID); err != nil {
+		t.Fatalf("GetRun after released run: %v", err)
+	} else if got != nil {
+		t.Fatalf("run reappeared after delete: %+v", got)
+	}
+	if got, err := svc.threadsDB.GetToolCall(ctx, meta.EndpointID, runID, "tool_force_delete_late"); !errors.Is(err, sql.ErrNoRows) || got != nil {
+		t.Fatalf("late tool call got=%+v err=%v, want no row", got, err)
+	}
+	if events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, runID, 20); err != nil {
+		t.Fatalf("ListRunEvents after released run: %v", err)
+	} else if len(events) != 0 {
+		t.Fatalf("run events reappeared after delete: %+v", events)
+	}
+	if spans, err := svc.threadsDB.ListExecutionSpansByRun(ctx, meta.EndpointID, runID, 20); err != nil {
+		t.Fatalf("ListExecutionSpansByRun after released run: %v", err)
+	} else if len(spans) != 0 {
+		t.Fatalf("execution spans reappeared after delete: %+v", spans)
+	}
+	if messages, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 20, 0); err != nil {
+		t.Fatalf("ListMessages after released run: %v", err)
+	} else if len(messages) != 0 {
+		t.Fatalf("transcript messages reappeared after delete: %+v", messages)
 	}
 }
 
