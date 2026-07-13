@@ -11,7 +11,7 @@ import (
 )
 
 func (r *run) applyFloretThreadProjection(projection flruntime.ThreadTurnProjection) bool {
-	return r.applyFloretThreadProjectionInternal(projection, true, false, false)
+	return r.applyFloretThreadProjectionInternal(projection, true, false, true)
 }
 
 func (r *run) applyFloretTerminalThreadProjection(projection flruntime.ThreadTurnProjection) bool {
@@ -289,22 +289,10 @@ func (r *run) floretThreadProjectionMatchesRun(projection flruntime.ThreadTurnPr
 }
 
 func projectionIdentityMatchesRun(projectionRunID string, projectionThreadID string, projectionTurnID string, runID string, threadID string, turnID string) bool {
-	if projectionRunID == "" && projectionThreadID == "" && projectionTurnID == "" {
-		return true
-	}
-	if runID == "" && threadID == "" && turnID == "" {
+	if projectionRunID == "" || projectionThreadID == "" || projectionTurnID == "" || runID == "" || threadID == "" || turnID == "" {
 		return false
 	}
-	if projectionRunID != "" && projectionRunID != runID {
-		return false
-	}
-	if projectionThreadID != "" && projectionThreadID != threadID {
-		return false
-	}
-	if projectionTurnID != "" && projectionTurnID != turnID {
-		return false
-	}
-	return true
+	return projectionRunID == runID && projectionThreadID == threadID && projectionTurnID == turnID
 }
 
 func (r *run) flowerBlocksFromFloretThreadProjection(projection flruntime.ThreadTurnProjection) []any {

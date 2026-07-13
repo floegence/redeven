@@ -207,6 +207,8 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		Reasoning:         req.Options.ReasoningSelection,
 		ManualCompactions: r,
 	})
+	var projectionRetryErr error
+	result, err, projectionRetryErr = r.retryUnavailableFloretTurnProjection(host, result, err)
 	if reason := r.floretParentTerminalSubagentCloseReason(ctx, result, err); reason != "" {
 		if closeErr := r.closeParentTerminalSubagents(context.Background(), host, reason); closeErr != nil {
 			if r.log != nil {
@@ -253,6 +255,16 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 			cleanupChanged = true
 		}
 	}
+	if projectionRetryErr != nil {
+		if r.isDetached() {
+			return nil
+		}
+		if r.acceptsEngineResultProjection() {
+			r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), 0)
+			r.setProviderContinuationCandidate(providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState)))
+		}
+		return r.failRunWithCode(runErrorCodeFloretProjectionUnavailable, "", errors.Join(err, projectionRetryErr))
+	}
 	projectionReady := !(cleanupChanged && cleanupErr != nil)
 	if err != nil && result.Status == "" {
 		if cleanupChanged && cleanupErr == nil {
@@ -294,6 +306,32 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		r.setProviderContinuationCandidate(providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState)))
 	}
 	return r.projectFloretResult(ctx, result, req, sharedState.snapshot(), taskComplexity, permissionTypeString(r.permissionType))
+}
+
+func (r *run) retryUnavailableFloretTurnProjection(host floretTurnProjectionReader, result flruntime.TurnResult, runErr error) (flruntime.TurnResult, error, error) {
+	if !errors.Is(runErr, flruntime.ErrTurnProjectionUnavailable) {
+		return result, runErr, nil
+	}
+	retryCtx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
+	defer cancel()
+	projection, retryErr := r.readFloretTurnProjection(retryCtx, host)
+	if retryErr != nil {
+		if r.log != nil {
+			r.log.Warn("ai: retry terminal Floret projection failed", "run_id", r.id, "thread_id", r.threadID, "error", retryErr)
+		}
+		r.persistRunEvent("terminal.projection_retry_failed", RealtimeStreamKindLifecycle, map[string]any{"error": retryErr.Error()})
+		return result, runErr, retryErr
+	}
+	if !r.floretThreadProjectionMatchesRun(projection, true) {
+		retryErr = errors.New("retried Floret turn projection identity mismatch")
+		if r.log != nil {
+			r.log.Warn("ai: retried terminal Floret projection identity mismatch", "run_id", r.id, "thread_id", r.threadID)
+		}
+		r.persistRunEvent("terminal.projection_retry_failed", RealtimeStreamKindLifecycle, map[string]any{"error": retryErr.Error()})
+		return result, runErr, retryErr
+	}
+	result.Projection = projection
+	return result, nil, nil
 }
 
 func (r *run) floretParentTerminalSubagentCloseReason(ctx context.Context, result flruntime.TurnResult, runErr error) string {

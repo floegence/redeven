@@ -3,11 +3,13 @@ package ai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
 	"testing"
 
+	flruntime "github.com/floegence/floret/runtime"
 	openai "github.com/openai/openai-go"
 )
 
@@ -37,6 +39,7 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 		{name: "context timeout", err: context.DeadlineExceeded, want: runErrorCodeProviderUnreachable},
 		{name: "provider stream eof", err: errors.New("unexpected EOF"), want: runErrorCodeProviderStreamInterrupted},
 		{name: "floret active turn admission", err: errors.New("thread already has an active turn"), want: runErrorCodeFloretAdmissionBlocked},
+		{name: "floret projection unavailable", err: fmt.Errorf("%w: detail read failed", flruntime.ErrTurnProjectionUnavailable), want: runErrorCodeFloretProjectionUnavailable},
 		{name: "unknown preserves fallback", err: errors.New("other failure"), want: runErrorCodeFloretEngineFailed},
 	}
 
@@ -46,6 +49,16 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 				t.Fatalf("classifyRunFailureCode() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestUserFacingRunErrorPresentsFloretProjectionRecovery(t *testing.T) {
+	t.Parallel()
+
+	msg := userFacingRunError(runErrorCodeFloretProjectionUnavailable, "projection failed")
+	lower := strings.ToLower(msg)
+	if !strings.Contains(lower, "refresh this thread") || !strings.Contains(lower, "do not run the task again") {
+		t.Fatalf("msg=%q, want refresh without rerun guidance", msg)
 	}
 }
 
