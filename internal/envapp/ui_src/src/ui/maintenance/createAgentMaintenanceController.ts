@@ -42,6 +42,7 @@ type CreateAgentMaintenanceControllerArgs = Readonly<{
   rpc: MaintenanceRpc;
   startRestartRequest?: () => Promise<SysRestartResponse>;
   startUpgradeRequest?: (targetVersion: string) => Promise<SysUpgradeResponse>;
+  onMaintenanceStarted?: (kind: MaintenanceKind) => void | Promise<void>;
   upgradeRequiresTargetVersion?: Accessor<boolean>;
   refetchCurrentVersion: () => Promise<SysPingResponse | null>;
   refetchEnvironment?: () => Promise<EnvironmentDetail | null>;
@@ -261,6 +262,12 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
 		setKind(null);
 		return;
 	}
+
+    try {
+      await args.onMaintenanceStarted?.(nextKind);
+    } catch {
+      // Runtime maintenance already owns the lifecycle; Desktop notification is best-effort.
+    }
 
 	const startedAt = Date.now();
     const timeoutMs = nextKind === 'upgrade' ? 10 * 60 * 1000 : 5 * 60 * 1000;

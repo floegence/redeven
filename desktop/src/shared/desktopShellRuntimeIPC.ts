@@ -5,6 +5,13 @@ import {
 
 export const DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL = 'redeven-desktop:shell-runtime-action';
 export const DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL = 'redeven-desktop:shell-runtime-maintenance-context';
+export const DESKTOP_SHELL_RUNTIME_MAINTENANCE_STARTED_CHANNEL = 'redeven-desktop:shell-runtime-maintenance-started';
+
+export type DesktopShellRuntimeMaintenanceStartedKind = 'restart' | 'update';
+
+export type DesktopShellRuntimeMaintenanceStartedNotification = Readonly<{
+  kind: DesktopShellRuntimeMaintenanceStartedKind;
+}>;
 
 export type DesktopShellRuntimeAction =
   | 'restart_managed_runtime'
@@ -123,6 +130,19 @@ export function normalizeDesktopShellRuntimeActionRequest(value: unknown): Deskt
     action,
     ...(targetVersion ? { target_version: targetVersion } : {}),
   };
+}
+
+export function normalizeDesktopShellRuntimeMaintenanceStartedNotification(
+  value: unknown,
+): DesktopShellRuntimeMaintenanceStartedNotification | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const kind = compact((value as Partial<DesktopShellRuntimeMaintenanceStartedNotification>).kind);
+  if (kind !== 'restart' && kind !== 'update') {
+    return null;
+  }
+  return { kind };
 }
 
 export function normalizeDesktopShellRuntimeActionResponse(value: unknown): DesktopShellRuntimeActionResponse {

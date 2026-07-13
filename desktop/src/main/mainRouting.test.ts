@@ -642,6 +642,13 @@ describe('main routing', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL');
+    expect(mainSrc).toContain('DESKTOP_SHELL_RUNTIME_MAINTENANCE_STARTED_CHANNEL');
+    expect(mainSrc).toContain('async function closeEnvironmentSessionsForRuntimeLifecycle(');
+    expect(mainSrc).toContain("reason: `runtime_${input.operation}`");
+    expect(mainSrc).toContain('markRuntimeLifecycleAccepted(input.scope);');
+    expect(mainSrc).toContain('cancelLauncherOpensForRuntimeLifecycle(input.scope);');
+    expect(mainSrc).toContain('options.runtimeLifecycleGenerationIdentityKeys ?? runtimeLifecycleIdentityKeysForTarget(target)');
+    expect(mainSrc).toContain('async function handoffSessionToRuntimeLifecycle(');
     expect(mainSrc).toContain('function runtimeMaintenanceContextFromSession(');
     expect(mainSrc).toContain("authority: 'desktop_ssh'");
     expect(mainSrc).toContain("method: 'desktop_ssh_restart'");
@@ -656,6 +663,19 @@ describe('main routing', () => {
     expect(mainSrc).toContain("launcherActionSuccess('opened_desktop_update_handoff')");
     expect(mainSrc).toContain('forceRuntimeUpdate: options.forceRuntimeUpdate === true');
     expect(mainSrc).toContain('allowActiveWorkReplacement: true');
+
+    const managedRestartStart = mainSrc.indexOf('async function restartManagedRuntimeFromShell(');
+    const sshRestartStart = mainSrc.indexOf('async function restartSSHRuntimeFromShell(', managedRestartStart);
+    const sshRestartEnd = mainSrc.indexOf('async function showDesktopUpdateHandoffDialog(', sshRestartStart);
+    const managedRestartSrc = mainSrc.slice(managedRestartStart, sshRestartStart);
+    const sshRestartSrc = mainSrc.slice(sshRestartStart, sshRestartEnd);
+    expect(managedRestartSrc).toContain('await handoffSessionToRuntimeLifecycle({');
+    expect(managedRestartSrc).not.toContain('rootWindow.loadURL');
+    expect(managedRestartSrc).not.toContain('focusEnvironmentSession(');
+    expect(sshRestartSrc).toContain('await handoffSessionToRuntimeLifecycle({');
+    expect(sshRestartSrc).not.toContain('openSSHEnvironmentFromLauncher({');
+    expect(sshRestartSrc).not.toContain('rootWindow.loadURL');
+    expect(sshRestartSrc).not.toContain('focusEnvironmentSession(');
 
     const startEnvironmentRuntimeStart = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(');
     const updateEnvironmentRuntimeStart = mainSrc.indexOf('async function updateEnvironmentRuntimeFromLauncher(');
@@ -672,6 +692,15 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain("if (normalized.action === 'restart_runtime')");
     expect(mainSrc).toContain("if (normalized.action === 'upgrade_runtime')");
+    expect(mainSrc).toContain('normalizeDesktopShellRuntimeMaintenanceStartedNotification(notification)');
+
+    const gatewayLifecycleStart = mainSrc.indexOf('async function runGatewayEnvironmentLifecycleFromLauncher(');
+    const gatewayLifecycleEnd = mainSrc.indexOf('function gatewayStartRequiredFailure(', gatewayLifecycleStart);
+    const gatewayLifecycleSrc = mainSrc.slice(gatewayLifecycleStart, gatewayLifecycleEnd);
+    expect(gatewayLifecycleSrc).toContain("if (request.operation !== 'start')");
+    expect(gatewayLifecycleSrc.indexOf('await closeEnvironmentSessionsForRuntimeLifecycle({')).toBeLessThan(
+      gatewayLifecycleSrc.indexOf('gatewayLifecycleManager().runEnvironmentLifecycle(record'),
+    );
   });
 
   it('uses fresh provider health and SSH runtime-affecting settings for launcher routing', () => {
@@ -833,6 +862,8 @@ describe('main routing', () => {
     expect(startRuntimeSrc).toContain('ensureRuntimePlacementReadyRecordFromLauncher(request)');
     expect(startRuntimeSrc).not.toContain('startRuntimePlacementBridgeSession({');
     expect(startRuntimeSrc).toContain('const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);');
+    expect(startRuntimeSrc).toContain("if (lifecycleOperation === 'restart' || lifecycleOperation === 'update')");
+    expect(startRuntimeSrc).toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
 
     const stopRuntimeStart = mainSrc.indexOf('async function stopEnvironmentRuntimeFromLauncher(');
     const stopRuntimeEnd = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(', stopRuntimeStart);
@@ -851,6 +882,17 @@ describe('main routing', () => {
     expect(stopRuntimeSrc).toContain('sshRuntimeReadyByKey.delete(runtimeKey)');
     expect(stopRuntimeSrc).toContain('runtimeLifecycleFailureNextActions');
     expect(stopRuntimeSrc).toContain('const sshDetails = sshDetailsFromRuntimeTargetRequest(request);');
+    expect(stopRuntimeSrc.match(/await closeEnvironmentSessionsForRuntimeLifecycle\(\{/gu)).toHaveLength(3);
+    const sshStopStart = stopRuntimeSrc.indexOf('const sshDetails = sshDetailsFromRuntimeTargetRequest(request);');
+    const localStopStart = stopRuntimeSrc.indexOf('const preferences = await loadDesktopPreferencesCached();', sshStopStart);
+    const sshStopSrc = stopRuntimeSrc.slice(sshStopStart, localStopStart);
+    expect(sshStopSrc.indexOf('await closeEnvironmentSessionsForRuntimeLifecycle({')).toBeLessThan(
+      sshStopSrc.indexOf('await verifySSHEnvironmentRuntimeRecord(runtimeKey)'),
+    );
+    expect(sshStopSrc).toContain("decision: 'runtime_already_stopped'");
+    expect(stopRuntimeSrc).not.toContain('await finalizeSessionClosure(liveRuntimeSession.session_key)');
+    expect(stopRuntimeSrc).not.toContain('await finalizeSessionClosure(liveSessionRecord.session_key)');
+    expect(stopRuntimeSrc).not.toContain('await finalizeSessionClosure(liveLocalSession.session_key)');
 
     const refreshRuntimeStart = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(');
     const refreshRuntimeEnd = mainSrc.indexOf('async function refreshAllEnvironmentRuntimesFromLauncher(', refreshRuntimeStart);
@@ -1248,7 +1290,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('startup: rendererSafeStartupReport(session.startup)');
     expect(mainSrc).toContain('url.search = \'\';');
     expect(mainSrc).toContain('url.hash = \'\';');
-    expect(mainSrc).toContain('await rootWindow.loadURL(sessionRecord.entry_url);');
+    expect(mainSrc).not.toContain('await rootWindow.loadURL(sessionRecord.entry_url);');
   });
 
   it('saves Local Environment settings without exposing deletion or extra local records', () => {

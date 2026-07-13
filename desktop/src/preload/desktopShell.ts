@@ -13,6 +13,7 @@ import {
 } from '../shared/desktopShellWindowCommandIPC';
 import {
   DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL,
+  DESKTOP_SHELL_RUNTIME_MAINTENANCE_STARTED_CHANNEL,
   DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL,
   normalizeDesktopShellRuntimeActionRequest,
   normalizeDesktopShellRuntimeMaintenanceContext,
@@ -76,6 +77,12 @@ export function bootstrapDesktopShellBridge(): void {
     getRuntimeMaintenanceContext: async () => normalizeDesktopShellRuntimeMaintenanceContext(
       await ipcRenderer.invoke(DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL),
     ),
+    notifyRuntimeMaintenanceStarted: (kind: unknown): void => {
+      if (kind !== 'restart' && kind !== 'update') {
+        return;
+      }
+      ipcRenderer.send(DESKTOP_SHELL_RUNTIME_MAINTENANCE_STARTED_CHANNEL, { kind });
+    },
     performRuntimeMaintenanceAction: async (request: unknown) => {
       const normalized = normalizeDesktopShellRuntimeActionRequest(request);
       if (!normalized || (normalized.action !== 'restart_runtime' && normalized.action !== 'upgrade_runtime')) {

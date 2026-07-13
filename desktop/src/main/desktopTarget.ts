@@ -85,6 +85,40 @@ export type DesktopSessionSummary = Readonly<{
   runtime_launch_mode?: DesktopSessionRuntimeLaunchMode;
 }>;
 
+function matchingOptionalIdentity(left: string | undefined, right: string | undefined): boolean {
+  const cleanLeft = compact(left);
+  const cleanRight = compact(right);
+  return cleanLeft !== '' && cleanLeft === cleanRight;
+}
+
+export function desktopSessionTargetsReferToSameEnvironment(
+  left: DesktopSessionTarget,
+  right: DesktopSessionTarget,
+): boolean {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+  if (left.kind === 'local_environment' && right.kind === 'local_environment') {
+    return compact(left.environment_id) === compact(right.environment_id) || (
+      matchingOptionalIdentity(left.provider_origin, right.provider_origin)
+      && matchingOptionalIdentity(left.provider_id, right.provider_id)
+      && matchingOptionalIdentity(left.env_public_id, right.env_public_id)
+    );
+  }
+  if (left.kind === 'external_local_ui' && right.kind === 'external_local_ui') {
+    return compact(left.environment_id) === compact(right.environment_id)
+      || normalizeLocalUIBaseURL(left.external_local_ui_url) === normalizeLocalUIBaseURL(right.external_local_ui_url);
+  }
+  if (left.kind === 'ssh_environment' && right.kind === 'ssh_environment') {
+    return left.session_key === right.session_key;
+  }
+  if (left.kind === 'gateway_environment' && right.kind === 'gateway_environment') {
+    return compact(left.gateway_id) === compact(right.gateway_id)
+      && compact(left.gateway_env_id) === compact(right.gateway_env_id);
+  }
+  return false;
+}
+
 function compact(value: unknown): string {
   return String(value ?? '').trim();
 }

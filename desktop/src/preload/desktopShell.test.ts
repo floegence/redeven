@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const exposeInMainWorld = vi.fn();
 const ipcRendererInvoke = vi.fn();
+const ipcRendererSend = vi.fn();
 
 vi.mock('electron', () => ({
   contextBridge: {
@@ -9,6 +10,7 @@ vi.mock('electron', () => ({
   },
   ipcRenderer: {
     invoke: ipcRendererInvoke,
+    send: ipcRendererSend,
   },
 }));
 
@@ -18,6 +20,7 @@ describe('bootstrapDesktopShellBridge', () => {
     exposeInMainWorld.mockReset();
     ipcRendererInvoke.mockReset();
     ipcRendererInvoke.mockResolvedValue(undefined);
+    ipcRendererSend.mockReset();
   });
 
   it('forwards desktop shell actions to electron main through the canonical bridge', async () => {
@@ -38,6 +41,7 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(typeof bridge.openCodespaceWindow).toBe('function');
     expect(typeof bridge.openDashboard).toBe('function');
     expect(typeof bridge.getRuntimeMaintenanceContext).toBe('function');
+    expect(typeof bridge.notifyRuntimeMaintenanceStarted).toBe('function');
     expect(typeof bridge.performRuntimeMaintenanceAction).toBe('function');
     expect(typeof bridge.restartManagedRuntime).toBe('function');
 
@@ -57,6 +61,9 @@ describe('bootstrapDesktopShellBridge', () => {
     await bridge.openCodespaceWindow({ mode: 'navigate', url: 'http://127.0.0.1:43123/cs/demo/', code_space_id: 'demo' });
     await bridge.openDashboard();
     await bridge.getRuntimeMaintenanceContext();
+    bridge.notifyRuntimeMaintenanceStarted('restart');
+    bridge.notifyRuntimeMaintenanceStarted('update');
+    bridge.notifyRuntimeMaintenanceStarted('invalid');
     await bridge.performRuntimeMaintenanceAction({ action: 'restart' });
     await bridge.restartManagedRuntime();
 
@@ -77,6 +84,9 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(15, 'redeven-desktop:shell-runtime-action', { action: 'restart_runtime' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(16, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
     expect(ipcRendererInvoke).toHaveBeenCalledTimes(16);
+    expect(ipcRendererSend).toHaveBeenNthCalledWith(1, 'redeven-desktop:shell-runtime-maintenance-started', { kind: 'restart' });
+    expect(ipcRendererSend).toHaveBeenNthCalledWith(2, 'redeven-desktop:shell-runtime-maintenance-started', { kind: 'update' });
+    expect(ipcRendererSend).toHaveBeenCalledTimes(2);
   });
 
   it('normalizes codespace window open failures from electron main', async () => {

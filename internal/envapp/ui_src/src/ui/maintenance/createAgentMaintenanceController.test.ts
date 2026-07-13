@@ -53,6 +53,7 @@ describe('createAgentMaintenanceController', () => {
       lifecycle_status: 'running',
       status: 'online',
     }));
+    const onMaintenanceStarted = vi.fn();
 
     let controller!: ReturnType<typeof createAgentMaintenanceController>;
     const dispose = createRoot((disposeRoot) => {
@@ -72,6 +73,7 @@ describe('createAgentMaintenanceController', () => {
         },
         refetchCurrentVersion,
         refetchEnvironment,
+        onMaintenanceStarted,
         getEnvironment: getEnvironment as any,
       });
       return disposeRoot;
@@ -90,6 +92,8 @@ describe('createAgentMaintenanceController', () => {
       expect(getEnvironment).toHaveBeenCalledTimes(2);
       expect(refetchCurrentVersion).toHaveBeenCalledTimes(2);
       expect(refetchEnvironment).toHaveBeenCalledTimes(1);
+      expect(onMaintenanceStarted).toHaveBeenCalledOnce();
+      expect(onMaintenanceStarted).toHaveBeenCalledWith('upgrade');
       expect(controller.kind()).toBe(null);
       expect(controller.error()).toBe(null);
       expect(notify.success).toHaveBeenCalledWith('Updated', 'Redeven updated to v1.1.0.');
@@ -112,6 +116,7 @@ describe('createAgentMaintenanceController', () => {
     const [currentProcessStartedAtMs] = createSignal<number | null>(100);
     const [currentVersion] = createSignal('v1.0.0');
     const upgrade = vi.fn(async () => ({ ok: true }));
+    const onMaintenanceStarted = vi.fn();
 
     let controller!: ReturnType<typeof createAgentMaintenanceController>;
     const dispose = createRoot((disposeRoot) => {
@@ -130,6 +135,7 @@ describe('createAgentMaintenanceController', () => {
           },
         },
         refetchCurrentVersion: async () => null,
+        onMaintenanceStarted,
       });
       return disposeRoot;
     });
@@ -138,10 +144,63 @@ describe('createAgentMaintenanceController', () => {
       await controller.startUpgrade('main');
 
       expect(upgrade).not.toHaveBeenCalled();
+      expect(onMaintenanceStarted).not.toHaveBeenCalled();
       expect(controller.error()).toBe('Target version must be a valid release tag (for example: v1.2.3).');
       expect(notify.error).toHaveBeenCalledWith('Update failed', 'Target version must be a valid release tag (for example: v1.2.3).');
     } finally {
       dispose();
+    }
+  });
+
+  it('notifies once when the maintenance request disconnects before returning', async () => {
+    const notify = {
+      error: vi.fn(),
+      success: vi.fn(),
+      info: vi.fn(),
+    };
+    const [protocolStatus, setProtocolStatus] = createSignal('connected');
+    const onMaintenanceStarted = vi.fn();
+    let controller!: ReturnType<typeof createAgentMaintenanceController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createAgentMaintenanceController({
+        environmentDetailRequest: () => ({ source: 'controlplane', envId: 'env_disconnect' }),
+        canAdmin: () => true,
+        controlplaneStatus: () => 'online',
+        protocolStatus,
+        currentProcessStartedAtMs: () => 100,
+        currentVersion: () => 'v1.0.0',
+        notify,
+        rpc: {
+          sys: {
+            upgrade: vi.fn(async () => ({ ok: true })),
+            restart: vi.fn(async () => ({ ok: true })),
+          },
+        },
+        startUpgradeRequest: async () => {
+          setProtocolStatus('disconnected');
+          throw new Error('connection closed');
+        },
+        onMaintenanceStarted,
+        refetchCurrentVersion: async () => ({
+          serverTimeMs: Date.now(),
+          version: 'v1.0.0',
+          processStartedAtMs: 100,
+        }),
+        getEnvironment: vi.fn().mockResolvedValue({ status: 'offline' }) as any,
+      });
+      return disposeRoot;
+    });
+
+    const promise = controller.startUpgrade('v1.1.0');
+    try {
+      await flushAsync();
+      expect(onMaintenanceStarted).toHaveBeenCalledOnce();
+      expect(onMaintenanceStarted).toHaveBeenCalledWith('upgrade');
+      expect(notify.info).toHaveBeenCalledWith('Update started', 'Waiting for runtime restart...');
+    } finally {
+      dispose();
+      await vi.advanceTimersByTimeAsync(1_500);
+      await promise;
     }
   });
 
