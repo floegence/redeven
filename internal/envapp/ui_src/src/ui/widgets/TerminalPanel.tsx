@@ -54,7 +54,7 @@ import {
   TERMINAL_MOBILE_KEYBOARD_QUICK_INSERTS,
 } from '../services/terminalMobileKeyboard';
 import { useEnvContext } from '../pages/EnvContext';
-import { isPermissionDeniedError } from '../utils/permission';
+import { canLaunchProcess, isPermissionDeniedError } from '../utils/permission';
 import { createClientId } from '../utils/clientId';
 import { sortContextActionMenuItems } from '../contextActions/menu';
 import { PermissionEmptyState } from './PermissionEmptyState';
@@ -1018,7 +1018,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [workStateBySession, setWorkStateBySession] = createSignal<TerminalSessionWorkStateMap>({});
 
   const handleExecuteDenied = (e: unknown): boolean => {
-    if (!isPermissionDeniedError(e, 'execute')) return false;
+    if (!isPermissionDeniedError(e, 'process')) return false;
     props.onExecuteDenied?.();
     return true;
   };
@@ -3753,8 +3753,8 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
   const [executeDenied, setExecuteDenied] = createSignal(false);
 
   const permissionReady = () => ctx.env.state === 'ready';
-  const canExecute = () => Boolean(ctx.env()?.permissions?.can_execute);
-  const noExecute = createMemo(() => executeDenied() || (permissionReady() && !canExecute()));
+  const processLaunchAllowed = () => canLaunchProcess(ctx.env()?.permissions);
+  const noExecute = createMemo(() => executeDenied() || (permissionReady() && !processLaunchAllowed()));
 
   createEffect(() => {
     // Reset when disconnected so users can reconnect after policy changes.

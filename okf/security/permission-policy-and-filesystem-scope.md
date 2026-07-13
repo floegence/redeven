@@ -10,13 +10,13 @@ Redeven treats endpoint runtime policy as authoritative. Control-plane grants ca
 
 # Mechanism
 
-The local permission policy is a three-bit read/write/execute cap. It starts from `local_max`, optionally intersects by user and by floe app, and supports presets for read-only, execute+read, and full read/write/execute. Session startup intersects the control-plane grant with the local cap before the runtime stores effective permission flags. Filesystem scope validates explicit root ids, labels, paths, kinds, default root references, and the invariant that write implies read.
+The local permission policy is a three-bit read/write/execute cap. It starts from `local_max`, optionally intersects by user and by floe app, and supports presets for read-only, execute+read, and full read/write/execute. Session startup intersects the control-plane grant with the local cap before the runtime stores effective permission flags. The execute+read preset permits explicitly modeled execute-like operations, but general-purpose shell access and arbitrary process launch require both effective write and execute permission. Filesystem scope validates explicit root ids, labels, paths, kinds, default root references, and the invariant that write implies read.
 
 The reusable runtime filesystem service owns path context and directory listing over the configured filesystem scope. Code App Local API exposes read-only `GET /_redeven_proxy/api/fs/path_context` and `POST /_redeven_proxy/api/fs/list` for browser-facing directory pickers; both routes require read permission before calling the filesystem service, and list errors preserve scope, read-denied, missing, and not-directory distinctions without bypassing `filesystemscope.Registry`.
 
 # Boundaries
 
-Browser state, provider metadata, and UI affordances cannot widen runtime permissions. Local API filesystem list endpoints are not a write surface and do not grant access outside configured roots. Future file, Git, Flower, Code App, and terminal changes should update OKF only after the runtime code or typed policy changes.
+Browser state, provider metadata, and UI affordances cannot widen runtime permissions. A UI that still exposes a terminal under execute-only access is a product bug, but the Terminal RPC independently enforces the same write-and-execute process boundary. Local API filesystem list endpoints are not a write surface and do not grant access outside configured roots. Future file, Git, Flower, Code App, and terminal changes should update OKF only after the runtime code or typed policy changes.
 
 # Citations
 
@@ -35,3 +35,5 @@ Browser state, provider metadata, and UI affordances cannot widen runtime permis
 [13] redeven:internal/codeapp/appserver/server.go:1969 - The Local API path context route requires read permission.
 [14] redeven:internal/codeapp/appserver/server.go:1976 - The Local API directory list route requires read permission.
 [15] redeven:internal/codeapp/appserver/server.go:1906 - Directory list HTTP errors preserve scope, read, missing, and not-directory distinctions.
+[16] redeven:internal/session/types.go:29 - General process launch is derived from write and execute permission together.
+[17] redeven:internal/terminal/manager.go:169 - Every terminal RPC entry point uses the shared process-launch permission boundary.

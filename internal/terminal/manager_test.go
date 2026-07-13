@@ -17,7 +17,24 @@ import (
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/session"
 )
+
+func TestRequireProcessLaunchPermissionRejectsExecuteWithoutWrite(t *testing.T) {
+	t.Parallel()
+
+	err := requireProcessLaunchPermission(&session.Meta{CanRead: true, CanExecute: true})
+	rpcErr, ok := err.(*rpc.Error)
+	if !ok {
+		t.Fatalf("error = %#v, want rpc error", err)
+	}
+	if rpcErr.Code != 403 || !strings.Contains(rpcErr.Message, "write and execute permissions") {
+		t.Fatalf("error = (%d, %q), want process permission denial", rpcErr.Code, rpcErr.Message)
+	}
+	if err := requireProcessLaunchPermission(&session.Meta{CanWrite: true, CanExecute: true}); err != nil {
+		t.Fatalf("write+execute error = %v", err)
+	}
+}
 
 func mustEvalPath(t *testing.T, path string) string {
 	t.Helper()

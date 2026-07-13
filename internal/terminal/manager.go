@@ -171,14 +171,14 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 		return
 	}
 
-	if meta != nil && meta.CanExecute && streamServer != nil {
+	if session.AllowsProcessLaunch(meta) && streamServer != nil {
 		m.ensureWriter(streamServer)
 	}
 
 	// Create session
 	accessgate.RegisterTyped[terminalCreateReq, terminalCreateResp](r, TypeID_TERMINAL_SESSION_CREATE, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalCreateReq) (*terminalCreateResp, error) {
-		if meta == nil || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
+		if err := requireProcessLaunchPermission(meta); err != nil {
+			return nil, err
 		}
 		if req == nil {
 			req = &terminalCreateReq{}
@@ -194,8 +194,8 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 
 	// List sessions
 	accessgate.RegisterTyped[terminalListReq, terminalListResp](r, TypeID_TERMINAL_SESSION_LIST, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, _ *terminalListReq) (*terminalListResp, error) {
-		if meta == nil || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
+		if err := requireProcessLaunchPermission(meta); err != nil {
+			return nil, err
 		}
 
 		sessions := m.visibleSessionInfos()
@@ -208,8 +208,8 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 
 	// Attach session: bind terminal output notifications to this RPC stream and register a connection.
 	accessgate.RegisterTyped[terminalAttachReq, terminalAttachResp](r, TypeID_TERMINAL_SESSION_ATTACH, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalAttachReq) (*terminalAttachResp, error) {
-		if meta == nil || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
+		if err := requireProcessLaunchPermission(meta); err != nil {
+			return nil, err
 		}
 		if streamServer == nil {
 			return nil, &rpc.Error{Code: 500, Message: "internal error"}
@@ -242,8 +242,8 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 		if err := accessgate.RequireRPC(gate, meta, accessgate.RPCAccessProtected); err != nil {
 			return nil, rpc.ToWireError(err)
 		}
-		if meta == nil || !meta.CanExecute {
-			return nil, rpc.ToWireError(&rpc.Error{Code: 403, Message: "execute permission denied"})
+		if err := requireProcessLaunchPermission(meta); err != nil {
+			return nil, rpc.ToWireError(err)
 		}
 		var msg terminalInputPayload
 		if err := json.Unmarshal(payload, &msg); err != nil {
@@ -260,8 +260,8 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 		if err := accessgate.RequireRPC(gate, meta, accessgate.RPCAccessProtected); err != nil {
 			return nil, rpc.ToWireError(err)
 		}
-		if meta == nil || !meta.CanExecute {
-			return nil, rpc.ToWireError(&rpc.Error{Code: 403, Message: "execute permission denied"})
+		if err := requireProcessLaunchPermission(meta); err != nil {
+			return nil, rpc.ToWireError(err)
 		}
 		var msg terminalResizePayload
 		if err := json.Unmarshal(payload, &msg); err != nil {
@@ -275,8 +275,8 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 
 	// History
 	accessgate.RegisterTyped[terminalHistoryReq, terminalHistoryResp](r, TypeID_TERMINAL_HISTORY, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalHistoryReq) (*terminalHistoryResp, error) {
-		if meta == nil || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
+		if err := requireProcessLaunchPermission(meta); err != nil {
+			return nil, err
 		}
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
@@ -306,8 +306,8 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 
 	// Session stats (history buffer size, etc.)
 	accessgate.RegisterTyped[terminalStatsReq, terminalStatsResp](r, TypeID_TERMINAL_SESSION_STATS, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalStatsReq) (*terminalStatsResp, error) {
-		if meta == nil || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
+		if err := requireProcessLaunchPermission(meta); err != nil {
+			return nil, err
 		}
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
@@ -340,8 +340,8 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 
 	// Clear history
 	accessgate.RegisterTyped[terminalClearReq, terminalClearResp](r, TypeID_TERMINAL_CLEAR, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalClearReq) (*terminalClearResp, error) {
-		if meta == nil || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
+		if err := requireProcessLaunchPermission(meta); err != nil {
+			return nil, err
 		}
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
@@ -361,8 +361,8 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 
 	// Delete session
 	accessgate.RegisterTyped[terminalDeleteReq, terminalDeleteResp](r, TypeID_TERMINAL_SESSION_DELETE, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalDeleteReq) (*terminalDeleteResp, error) {
-		if meta == nil || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "execute permission denied"}
+		if err := requireProcessLaunchPermission(meta); err != nil {
+			return nil, err
 		}
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
@@ -379,6 +379,13 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 		}
 		return &terminalDeleteResp{OK: true}, nil
 	})
+}
+
+func requireProcessLaunchPermission(meta *session.Meta) error {
+	if !session.AllowsProcessLaunch(meta) {
+		return &rpc.Error{Code: 403, Message: "process permission denied: terminal requires write and execute permissions"}
+	}
+	return nil
 }
 
 // DetachSink removes all terminal attachments bound to the given RPC stream.

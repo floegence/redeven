@@ -27,6 +27,13 @@ type Meta struct {
 	CreatedAtUnixMs int64 `json:"created_at_unix_ms"`
 }
 
+// AllowsProcessLaunch reports whether the session may open a general-purpose
+// shell or launch an arbitrary process. Execute without write remains available
+// to explicitly modeled, non-mutating runtime capabilities.
+func AllowsProcessLaunch(meta *Meta) bool {
+	return meta != nil && meta.CanWrite && meta.CanExecute
+}
+
 // GrantServerNotify is a control-channel notification:
 // - grant_server: tunnel server grant for the agent
 // - session_meta: immutable permissions and routing info

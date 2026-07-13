@@ -10,11 +10,11 @@ Before any runtime session is accepted, Redeven validates `session_meta`, reject
 
 # Mechanism
 
-When `grant_server` arrives on the control channel, the runtime checks the channel id, endpoint id, and `floe_app`, resolves the local cap via `PermissionPolicy.ResolveCap`, intersects that cap with the declared read/write/execute grant, writes the clamped flags back into the session snapshot, and refuses Code App or Port Forward sessions that do not satisfy stricter runtime-side requirements.
+When `grant_server` arrives on the control channel, the runtime checks the channel id, endpoint id, and `floe_app`, resolves the local cap via `PermissionPolicy.ResolveCap`, intersects that cap with the declared read/write/execute grant, writes the clamped flags back into the session snapshot, and refuses Code App or Port Forward sessions that do not satisfy stricter runtime-side requirements. The raw execute bit remains available to explicitly modeled operations such as runtime monitoring or port forwarding, while a general terminal or arbitrary command process derives a separate effective process-launch capability from `write && execute`.
 
 # Boundaries
 
-Browser or UI-side permission claims remain non-authoritative. This concept only holds while the runtime continues enforcing local caps plus per-app validation before `runDataSession` starts.
+Browser or UI-side permission claims remain non-authoritative. Frontend terminal affordances mirror the write-and-execute rule for usability, but Terminal RPC and AI terminal process dispatch remain the authoritative enforcement points. This concept only holds while the runtime continues enforcing local caps plus per-app validation before `runDataSession` starts.
 
 # Citations
 
@@ -25,3 +25,5 @@ Browser or UI-side permission claims remain non-authoritative. This concept only
 [5] redeven:internal/agent/agent.go:502 - Effective permissions overwrite the session metadata snapshot used by the runtime.
 [6] redeven:internal/agent/agent.go:508 - Code App sessions require a valid codespace id and full read/write/execute access.
 [7] redeven:internal/agent/agent.go:531 - Port Forward sessions require a valid forward id and execute capability.
+[8] redeven:internal/session/types.go:29 - Process launch is allowed only when write and execute are both effective.
+[9] redeven:internal/ai/run.go:4325 - Hosted terminal command dispatch rechecks the process-launch capability before starting a process.

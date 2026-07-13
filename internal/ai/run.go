@@ -3065,8 +3065,8 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return nil, errors.New("terminal.exec must be executed through the hosted terminal process lifecycle")
 
 	case "terminal.read":
-		if meta == nil || !meta.CanExecute {
-			return nil, errors.New("execute permission denied")
+		if !session.AllowsProcessLaunch(meta) {
+			return nil, errors.New("process permission denied: write and execute permissions required")
 		}
 		var p struct {
 			ProcessID string `json:"process_id"`
@@ -3081,8 +3081,8 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolTerminalRead(p.ProcessID, p.AfterSeq, p.WaitMS, p.MaxBytes)
 
 	case "terminal.write":
-		if meta == nil || !meta.CanExecute {
-			return nil, errors.New("execute permission denied")
+		if !session.AllowsProcessLaunch(meta) {
+			return nil, errors.New("process permission denied: write and execute permissions required")
 		}
 		var p struct {
 			ProcessID string `json:"process_id"`
@@ -3095,8 +3095,8 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolTerminalWrite(p.ProcessID, p.Input)
 
 	case "terminal.terminate":
-		if meta == nil || !meta.CanExecute {
-			return nil, errors.New("execute permission denied")
+		if !session.AllowsProcessLaunch(meta) {
+			return nil, errors.New("process permission denied: write and execute permissions required")
 		}
 		var p struct {
 			ProcessID string `json:"process_id"`
@@ -4331,8 +4331,8 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	if err := r.authorizeToolExecutionFromSnapshot(ctx, toolID, "terminal.exec"); err != nil {
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
 	}
-	if meta == nil || !meta.CanExecute {
-		return outcome, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "execute permission denied", Retryable: false}
+	if !session.AllowsProcessLaunch(meta) {
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "process permission denied: write and execute permissions required", Retryable: false}
 	}
 	var parsed terminalExecProcessArgs
 	b, _ := json.Marshal(args)
