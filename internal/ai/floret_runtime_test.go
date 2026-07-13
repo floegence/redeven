@@ -25,6 +25,7 @@ import (
 type capturingTurnProvider struct {
 	mu       sync.Mutex
 	requests []ModelGatewayRequest
+	result   ModelGatewayResult
 }
 
 type recordingTurnProjectionReader struct {
@@ -45,8 +46,15 @@ func (r *recordingTurnProjectionReader) ReadTurnProjection(ctx context.Context, 
 func (p *capturingTurnProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
 	p.mu.Lock()
 	p.requests = append(p.requests, req)
+	result := p.result
 	p.mu.Unlock()
-	return ModelGatewayResult{FinishReason: "stop", Text: "done"}, nil
+	if strings.TrimSpace(result.FinishReason) == "" {
+		result.FinishReason = "stop"
+	}
+	if result.Text == "" {
+		result.Text = "done"
+	}
+	return result, nil
 }
 
 func (p *capturingTurnProvider) firstRequest() ModelGatewayRequest {
@@ -320,6 +328,63 @@ func TestRunFloretHostedTurnEmitsContextUsageFromPublishedHost(t *testing.T) {
 		first.ContextWindowTokens <= 0 ||
 		strings.TrimSpace(first.PressureStatus) == "" {
 		t.Fatalf("context usage=%#v", first)
+	}
+}
+
+func TestRunFloretHostedTurnKeepsInputAndOutputBudgetsIndependent(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		maxInput      int
+		maxOutput     int
+		usage         TurnUsage
+		wantErr       string
+		wantReqOutput int
+	}{
+		{name: "input only", maxInput: 10, usage: TurnUsage{InputTokens: 11, OutputTokens: 100}, wantErr: "input token budget exceeded"},
+		{name: "output only", maxOutput: 25, usage: TurnUsage{InputTokens: 100, OutputTokens: 100}, wantReqOutput: 25},
+		{name: "both", maxInput: 10, maxOutput: 25, usage: TurnUsage{InputTokens: 10, OutputTokens: 100}, wantReqOutput: 25},
+		{name: "neither", usage: TurnUsage{InputTokens: 100, OutputTokens: 100}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			provider := &capturingTurnProvider{result: ModelGatewayResult{FinishReason: "stop", Text: "done", Usage: tc.usage}}
+			r := newRun(runOptions{
+				Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+				StateDir:     t.TempDir(),
+				AgentHomeDir: t.TempDir(),
+				Shell:        "bash",
+				AIConfig:     &config.AIConfig{},
+				SessionMeta: &session.Meta{
+					CanRead:    true,
+					CanWrite:   true,
+					CanExecute: true,
+					CanAdmin:   true,
+				},
+				RunID:     "run_budget_" + strings.ReplaceAll(tc.name, " ", "_"),
+				ThreadID:  "thread_budget_" + strings.ReplaceAll(tc.name, " ", "_"),
+				MessageID: "msg_budget_" + strings.ReplaceAll(tc.name, " ", "_"),
+			})
+			err := r.runFloretHostedTurn(t.Context(), RunRequest{
+				Model: "compat/gpt-5-mini",
+				Input: RunInput{Text: "check independent budgets"},
+				Options: RunOptions{
+					PermissionType:  config.AIPermissionApprovalRequired,
+					MaxInputTokens:  tc.maxInput,
+					MaxOutputTokens: tc.maxOutput,
+				},
+				ModelCapability: contextmodel.ModelCapability{MaxContextTokens: 128000},
+			}, config.AIProvider{ID: "compat", Type: "openai_compatible", BaseURL: "https://example.test/v1"}, "sk-test", "budgets", provider)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("err=%v, want %q", err, tc.wantErr)
+				}
+			} else if err != nil {
+				t.Fatalf("runFloretHostedTurn: %v", err)
+			}
+			req := provider.firstRequest()
+			if req.Budgets.MaxOutputToken != tc.wantReqOutput {
+				t.Fatalf("provider budgets=%#v, want output=%d", req.Budgets, tc.wantReqOutput)
+			}
+		})
 	}
 }
 
