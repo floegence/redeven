@@ -722,7 +722,15 @@ func (s *Store) UpsertExecutionSpan(ctx context.Context, rec ExecutionSpanRecord
 	if rec.UpdatedAtUnixMs <= 0 {
 		rec.UpdatedAtUnixMs = time.Now().UnixMilli()
 	}
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := ensureThreadExistsTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
 INSERT INTO execution_spans(
   span_id, endpoint_id, thread_id, run_id,
   kind, name, status, payload_json,
@@ -739,8 +747,10 @@ ON CONFLICT(span_id) DO UPDATE SET
   started_at_unix_ms=excluded.started_at_unix_ms,
   ended_at_unix_ms=excluded.ended_at_unix_ms,
   updated_at_unix_ms=excluded.updated_at_unix_ms
-`, rec.SpanID, rec.EndpointID, rec.ThreadID, rec.RunID, rec.Kind, rec.Name, rec.Status, rec.PayloadJSON, rec.StartedAtUnixMs, rec.EndedAtUnixMs, rec.UpdatedAtUnixMs)
-	return err
+`, rec.SpanID, rec.EndpointID, rec.ThreadID, rec.RunID, rec.Kind, rec.Name, rec.Status, rec.PayloadJSON, rec.StartedAtUnixMs, rec.EndedAtUnixMs, rec.UpdatedAtUnixMs); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) ListExecutionSpansByRun(ctx context.Context, endpointID string, runID string, limit int) ([]ExecutionSpanRecord, error) {
@@ -891,7 +901,15 @@ func (s *Store) UpsertMemoryItem(ctx context.Context, rec MemoryItemRecord) erro
 	if rec.UpdatedAtUnixMs <= 0 {
 		rec.UpdatedAtUnixMs = now
 	}
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := ensureThreadExistsTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
 INSERT INTO memory_items(
   memory_id, endpoint_id, thread_id,
   scope, kind, content, source_refs_json,
@@ -910,8 +928,10 @@ ON CONFLICT(memory_id) DO UPDATE SET
   confidence=excluded.confidence,
   created_at_unix_ms=excluded.created_at_unix_ms,
   updated_at_unix_ms=excluded.updated_at_unix_ms
-`, rec.MemoryID, rec.EndpointID, rec.ThreadID, rec.Scope, rec.Kind, rec.Content, rec.SourceRefsJSON, rec.Importance, rec.Freshness, rec.Confidence, rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs)
-	return err
+`, rec.MemoryID, rec.EndpointID, rec.ThreadID, rec.Scope, rec.Kind, rec.Content, rec.SourceRefsJSON, rec.Importance, rec.Freshness, rec.Confidence, rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) ListRecentMemoryItems(ctx context.Context, endpointID string, threadID string, limit int) ([]MemoryItemRecord, error) {
@@ -1202,6 +1222,9 @@ func (s *Store) ReplaceThreadTodosSnapshot(ctx context.Context, rec ThreadTodosS
 		return ThreadTodosSnapshot{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := ensureThreadExistsTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
+		return ThreadTodosSnapshot{}, err
+	}
 
 	var currentVersion int64
 	rowErr := tx.QueryRowContext(ctx, `

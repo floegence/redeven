@@ -61,6 +61,51 @@ WHERE id IN (
 	return nil
 }
 
+func deleteThreadPermissionArtifactsTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) error {
+	steps := []struct {
+		name string
+		sql  string
+		args []any
+	}{
+		{
+			name: "ai_delegated_approval_idempotency",
+			sql:  `DELETE FROM ai_delegated_approval_idempotency WHERE endpoint_id = ? AND parent_thread_id = ?`,
+			args: []any{endpointID, threadID},
+		},
+		{
+			name: "ai_delegated_approval_outbox",
+			sql:  `DELETE FROM ai_delegated_approval_outbox WHERE endpoint_id = ? AND parent_thread_id = ?`,
+			args: []any{endpointID, threadID},
+		},
+		{
+			name: "ai_delegated_approval_events",
+			sql:  `DELETE FROM ai_delegated_approval_events WHERE endpoint_id = ? AND parent_thread_id = ?`,
+			args: []any{endpointID, threadID},
+		},
+		{
+			name: "ai_delegated_approval_requests",
+			sql:  `DELETE FROM ai_delegated_approval_requests WHERE endpoint_id = ? AND parent_thread_id = ?`,
+			args: []any{endpointID, threadID},
+		},
+		{
+			name: "ai_child_permission_snapshots",
+			sql:  `DELETE FROM ai_child_permission_snapshots WHERE endpoint_id = ? AND (parent_thread_id = ? OR child_thread_id = ?)`,
+			args: []any{endpointID, threadID, threadID},
+		},
+		{
+			name: "ai_permission_snapshots",
+			sql:  `DELETE FROM ai_permission_snapshots WHERE endpoint_id = ? AND owner_thread_id = ?`,
+			args: []any{endpointID, threadID},
+		},
+	}
+	for _, step := range steps {
+		if _, err := tx.ExecContext(ctx, step.sql, step.args...); err != nil {
+			return fmt.Errorf("delete thread %s rows failed: %w", step.name, err)
+		}
+	}
+	return nil
+}
+
 // deleteThreadScopedRowsTx owns all per-thread persistence cleanup. Global caches such as
 // provider_capabilities are intentionally excluded.
 func deleteThreadScopedRowsTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) error {
@@ -77,6 +122,9 @@ func deleteThreadScopedRowsTx(ctx context.Context, tx *sql.Tx, endpointID string
 		return err
 	}
 	if err := deleteThreadRunArtifactsTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	if err := deleteThreadPermissionArtifactsTx(ctx, tx, endpointID, threadID); err != nil {
 		return err
 	}
 	for _, q := range []string{

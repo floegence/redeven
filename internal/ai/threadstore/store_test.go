@@ -2733,6 +2733,11 @@ func TestStore_ListRecentThreadToolCalls(t *testing.T) {
 	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
+	for _, threadID := range []string{"th_1", "th_other"} {
+		if err := s.CreateThread(ctx, Thread{ThreadID: threadID, EndpointID: "env_1", Title: threadID}); err != nil {
+			t.Fatalf("CreateThread %s: %v", threadID, err)
+		}
+	}
 
 	if err := s.UpsertRun(ctx, RunRecord{
 		RunID:      "run_a",
@@ -2831,6 +2836,9 @@ func TestStore_GetToolCall(t *testing.T) {
 	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "th_1"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
 	if err := s.UpsertRun(ctx, RunRecord{
 		RunID:      "run_a",
 		EndpointID: "env_1",
