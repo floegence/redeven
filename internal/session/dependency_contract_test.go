@@ -175,7 +175,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	}
 }
 
-func TestFlowerLinkedContextDocumentationMatchesFloretSupplementalContextBoundary(t *testing.T) {
+func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
@@ -197,19 +197,25 @@ func TestFlowerLinkedContextDocumentationMatchesFloretSupplementalContextBoundar
 			"TurnSupplementalContextItem",
 			"attachment_metadata",
 		},
+		filepath.Join("okf", "ui", "flower-live-timeline.md"): {
+			"ErrTurnProjectionUnavailable",
+			"floret_projection_unavailable",
+			"RebuildActivitySummary",
+		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"flower-linked-context-supplemental-context",
-			"SupplementalContext",
-			"metadata-only",
-			"attachment_metadata",
-			"v0.3.89",
+			"flower-floret-runtime-contract-hardening",
+			"v0.3.90",
+			"projection recovery",
+			"independent token budgets",
+			"deletion fencing",
+			"shared activity summary rebuilding",
 		},
 	}
 	for rel, markers := range expectedMarkers {
 		content := readRepoFile(t, root, rel)
 		for _, marker := range markers {
 			if !strings.Contains(content, marker) {
-				t.Fatalf("%s must document Flower linked-context Floret boundary marker %q", rel, marker)
+				t.Fatalf("%s must document published Floret boundary marker %q", rel, marker)
 			}
 		}
 	}
