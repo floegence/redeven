@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/floegence/redeven/internal/accessgate"
@@ -17,6 +18,12 @@ var (
 type passwordPromptTTY struct {
 	file        *os.File
 	shouldClose bool
+}
+
+type terminalSecretReader struct {
+	isTerminal   func(int) bool
+	readPassword func(int) ([]byte, error)
+	promptWriter io.Writer
 }
 
 func newAccessGate(password string) *accessgate.Gate {
@@ -66,4 +73,39 @@ func openTTYForPasswordPrompt() (*passwordPromptTTY, error) {
 		return &passwordPromptTTY{file: f, shouldClose: true}, nil
 	}
 	return nil, errPasswordPromptRequiresTTY
+}
+
+func readBootstrapTicketFromStdin(reader io.Reader, terminalReader *terminalSecretReader) (string, error) {
+	file, isFile := reader.(*os.File)
+	if !isFile {
+		return readStartupSecret(reader, "bootstrap ticket")
+	}
+	if terminalReader == nil {
+		terminalReader = &terminalSecretReader{
+			isTerminal:   term.IsTerminal,
+			readPassword: term.ReadPassword,
+			promptWriter: os.Stderr,
+		}
+	}
+	if terminalReader.isTerminal == nil || !terminalReader.isTerminal(int(file.Fd())) {
+		return readStartupSecret(reader, "bootstrap ticket")
+	}
+	if terminalReader.readPassword == nil {
+		return "", &startupSecretError{kind: startupSecretErrorRead, source: "bootstrap ticket", cause: errors.New("terminal secret reader is unavailable")}
+	}
+	promptWriter := terminalReader.promptWriter
+	if promptWriter == nil {
+		promptWriter = io.Discard
+	}
+
+	_, _ = fmt.Fprint(promptWriter, "Enter bootstrap ticket: ")
+	raw, err := terminalReader.readPassword(int(file.Fd()))
+	_, _ = fmt.Fprintln(promptWriter)
+	if err != nil {
+		return "", &startupSecretError{kind: startupSecretErrorRead, source: "bootstrap ticket", cause: err}
+	}
+	if len(raw) > startupSecretsEnvelopeMaxLen {
+		return "", &startupSecretError{kind: startupSecretErrorTooLarge, source: "bootstrap ticket"}
+	}
+	return string(raw), nil
 }
