@@ -7,10 +7,12 @@ import { describe, expect, it } from 'vitest';
 import {
   MANAGED_SSH_RUNTIME_STAMP_FILENAME,
   MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION,
+  buildManagedSSHActivatePreparedRuntimeScript,
   buildManagedSSHRemoteInstallScript,
   buildManagedSSHRuntimeProbeScript,
+  buildManagedSSHRuntimeInventoryScript,
+  buildManagedSSHRuntimeInventoryStopScript,
   buildManagedSSHStartScript,
-  buildManagedSSHStopScript,
   buildManagedSSHUploadedInstallScript,
   buildManagedSSHReportReadScript,
   describeManagedSSHRuntimeProbeResult,
@@ -106,16 +108,17 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHRemoteInstallScript()).toContain('binary="${bin_dir}/redeven"');
     expect(buildManagedSSHRemoteInstallScript()).not.toContain('release_root="${runtime_root%/}/runtime/releases/${release_tag}"');
     expect(buildManagedSSHRemoteInstallScript()).not.toContain(['redeven', 'desktop', 'runtime'].join('-'));
-    expect(buildManagedSSHRemoteInstallScript()).toContain('force_install="${4:-0}"');
-    expect(buildManagedSSHRemoteInstallScript()).toContain('if [ "$force_install" = "1" ] || ! runtime_is_compatible; then');
     expect(buildManagedSSHRemoteInstallScript()).toContain('write_runtime_stamp "remote_install" "$target_release_tag"');
     expect(buildManagedSSHReportReadScript()).toContain('state_root_raw="${2:-}"');
     expect(buildManagedSSHReportReadScript()).toContain('session_token="$3"');
     expect(buildManagedSSHReportReadScript()).toContain('report_path="${state_root%/}/runtime/sessions/${session_token}/startup-report.json"');
-    expect(buildManagedSSHStopScript()).toContain('kill "$pid"');
-    expect(buildManagedSSHStopScript()).toContain('kill -KILL "$pid"');
-    expect(buildManagedSSHStopScript()).toContain('runtime process $pid is still running after stop');
-    expect(buildManagedSSHStopScript()).toContain('exit 1');
+    expect(buildManagedSSHRuntimeInventoryScript()).toContain('desktop-runtime-inventory');
+    expect(buildManagedSSHRuntimeInventoryScript()).toContain('--include-known-legacy');
+    expect(buildManagedSSHRuntimeInventoryScript()).toContain('--desktop-owner-id "$desktop_owner_id"');
+    expect(buildManagedSSHRuntimeInventoryStopScript()).toContain('desktop-runtime-stop');
+    expect(buildManagedSSHRuntimeInventoryStopScript()).toContain('--all-matching');
+    expect(buildManagedSSHRuntimeInventoryStopScript()).toContain('--expected-inventory-digest "$inventory_digest"');
+    expect(buildManagedSSHRuntimeInventoryStopScript()).not.toContain('kill "$pid"');
   });
 
   it('parses structured probe results and normalizes reported release tags', () => {
@@ -185,6 +188,7 @@ describe('sshRuntime', () => {
   it('writes schema v2 stamps and stages verified replacements before updating the managed slot', () => {
     const remoteInstallScript = buildManagedSSHRemoteInstallScript();
     const uploadedInstallScript = buildManagedSSHUploadedInstallScript();
+    const activateScript = buildManagedSSHActivatePreparedRuntimeScript();
     const probeScript = buildManagedSSHRuntimeProbeScript();
 
     for (const script of [remoteInstallScript, uploadedInstallScript, probeScript]) {
@@ -193,27 +197,29 @@ describe('sshRuntime', () => {
       expect(script).toContain('installed_at_unix_ms=');
     }
 
-    expect(remoteInstallScript).toContain('allow_legacy_migration=0');
     expect(remoteInstallScript).toContain('staging_root="$(mktemp -d "${managed_root}.staging.XXXXXX")"');
     expect(remoteInstallScript).toContain('REDEVEN_INSTALL_DIR="$staging_bin_dir"');
     expect(remoteInstallScript).toContain('staged_binary="${staging_bin_dir}/redeven"');
     expect(remoteInstallScript).toContain('if [ "$staged_release_tag" != "$target_release_tag" ]; then');
-    expect(remoteInstallScript).toContain('switch_staged_runtime');
-    expect(remoteInstallScript).toContain('staged_stamp="${staging_root}/managed-runtime.stamp"');
-    expect(remoteInstallScript).toContain('mv "$managed_root" "$previous_managed_root"');
-    expect(remoteInstallScript).toContain('if mv "$staging_root" "$managed_root"; then');
-    expect(remoteInstallScript).toContain('cleanup_legacy_releases');
+    expect(remoteInstallScript).toContain('printf "%s\\n" "$staging_root"');
+    expect(remoteInstallScript).not.toContain('switch_staged_runtime');
+    expect(remoteInstallScript).not.toContain('cleanup_legacy_releases');
     expect(remoteInstallScript).not.toContain('mv "$temp_binary" "$binary"');
 
-    expect(uploadedInstallScript).toContain('allow_legacy_migration=0');
     expect(uploadedInstallScript).toContain('staging_root="$(mktemp -d "${managed_root}.staging.XXXXXX")"');
     expect(uploadedInstallScript).toContain('mv "$binary_path" "${staging_root}/bin/redeven"');
     expect(uploadedInstallScript).toContain('if [ "$staged_release_tag" != "$target_release_tag" ]; then');
-    expect(uploadedInstallScript).toContain('switch_staged_runtime');
-    expect(uploadedInstallScript).toContain('staged_stamp="${staging_root}/managed-runtime.stamp"');
-    expect(uploadedInstallScript).toContain('if mv "$staging_root" "$managed_root"; then');
-    expect(uploadedInstallScript).toContain('cleanup_legacy_releases');
+    expect(uploadedInstallScript).toContain('printf "%s\\n" "$staging_root"');
+    expect(uploadedInstallScript).not.toContain('switch_staged_runtime');
+    expect(uploadedInstallScript).not.toContain('cleanup_legacy_releases');
     expect(uploadedInstallScript).not.toContain('mv "$temp_binary" "$binary"');
+
+    expect(activateScript).toContain('"${managed_root}.staging."*)');
+    expect(activateScript).toContain('staged_stamp="${staging_root}/managed-runtime.stamp"');
+    expect(activateScript).toContain('switch_staged_runtime');
+    expect(activateScript).toContain('mv "$managed_root" "$previous_managed_root"');
+    expect(activateScript).toContain('if mv "$staging_root" "$managed_root"; then');
+    expect(activateScript).toContain('cleanup_legacy_releases');
   });
 
   it('checks the SSH master socket, probes remote platform, and keeps auto fallback limited to local asset preparation failures', () => {
@@ -238,9 +244,8 @@ describe('sshRuntime', () => {
     expect(source).toContain("runtimeLifecycleStepID: 'preparing_runtime_package'");
     expect(source).toContain('fetchPolicy: releaseFetchPolicy,');
     expect(source).toContain("if (args.target.bootstrap_strategy === 'auto' && error instanceof DesktopSSHUploadAssetPreparationError)");
-    expect(source).toContain('const uploadProbe = await probeRemoteRuntimeCompatibility({');
     expect(source).toContain('allowLegacyMigration: false,');
-    expect(source).toMatch(/if \(args\.target\.bootstrap_strategy === 'auto'\) \{\s*break;\s*\}\s*continue;/);
+    expect(source).toContain('return prepared;');
     expect(source).toContain("from './runtimePackageCache'");
     expect(source).toContain('prepareDesktopRuntimeUploadAsset({');
     expect(source).toContain("asset.source === 'source_build_cache'");
@@ -273,8 +278,18 @@ describe('sshRuntime', () => {
     expect(source).toContain('const result = await runSSHOnce(');
     expect(source).toContain('parseLaunchReport(result.stdout)');
     expect(source).toContain('formatBlockedLaunchDiagnostics(launchReport)');
-    expect(source).toContain('async function stopRemoteRuntimeProcess(');
-    expect(source).toContain('remoteRuntimePID = remoteStartup.pid ?? null;');
+    expect(source).toContain('const replacementInventory = await inspectManagedSSHRuntimeProcesses(');
+    expect(source).toContain('await stopManagedSSHRuntimeProcesses(replacementProcessArgs, replacementInventory, stopTimeoutMs);');
+    expect(source).toContain('preparedRuntimePackage = await prepareRemoteRuntimePackage(packageArgs);');
+    expect(source).toContain('await stopManagedSSHRuntimeProcesses(processArgs, processInventory, stopTimeoutMs);');
+    expect(source).toContain('await activatePreparedRemoteRuntimePackage({');
+    expect(source.indexOf('preparedRuntimePackage = await prepareRemoteRuntimePackage(packageArgs);')).toBeLessThan(
+      source.indexOf('await stopManagedSSHRuntimeProcesses(processArgs, processInventory, stopTimeoutMs);'),
+    );
+    expect(source.indexOf('await stopManagedSSHRuntimeProcesses(processArgs, processInventory, stopTimeoutMs);')).toBeLessThan(
+      source.indexOf('await activatePreparedRemoteRuntimePackage({'),
+    );
+    expect(source).not.toContain('kill "$pid"');
     expect(source).toContain('Remote Redeven launcher failed before reporting readiness (${exitReason}).');
   });
 
@@ -289,7 +304,7 @@ describe('sshRuntime', () => {
     expect(source).toContain('reject(new DesktopSSHRuntimeCanceledError());');
     expect(source).toContain('async function waitForForwardedLocalUIOpenable(url: string, timeoutMs: number, signal?: AbortSignal)');
     expect(source).toContain('async function createRemoteTempDir(args: Readonly<{');
-    expect(source).toContain('async function installRemoteRuntimeViaDesktopUpload(args: Readonly<{');
+    expect(source).toContain('async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{');
     expect(source).toContain('const remoteTempDir = await createRemoteTempDir(args);');
     expect(source).toContain('await removeRemotePath({\n      ...args,\n      remotePath: remoteTempDir,\n    });');
     expect(source).toContain('await disconnect();');

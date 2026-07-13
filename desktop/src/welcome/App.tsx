@@ -8068,9 +8068,15 @@ function localizedRuntimeLifecyclePhaseLabel(i18n: DesktopI18n, phase: DesktopRu
       return i18n.t('progress.detectingPlatform');
     case 'checking_runtime_package':
       return i18n.t('progress.checkingRuntimePackage');
+    case 'discovering_runtime_instances':
+      return i18n.t('progress.checkingExistingRuntime');
+    case 'stopping_legacy_runtimes':
+      return i18n.t('progress.stoppingRuntimeProcess');
     case 'stopping_runtime_process':
       return i18n.t('progress.stoppingRuntimeProcess');
     case 'verifying_runtime_stopped':
+      return i18n.t('progress.verifyingRuntimeStopped');
+    case 'verifying_runtime_inventory':
       return i18n.t('progress.verifyingRuntimeStopped');
     case 'preparing_runtime_package':
       return i18n.t('progress.preparingRuntimePackage');

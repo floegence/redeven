@@ -15,8 +15,11 @@ export type DesktopRuntimeLifecyclePhase =
   | 'checking_container'
   | 'detecting_platform'
   | 'checking_runtime_package'
+  | 'discovering_runtime_instances'
+  | 'stopping_legacy_runtimes'
   | 'stopping_runtime_process'
   | 'verifying_runtime_stopped'
+  | 'verifying_runtime_inventory'
   | 'preparing_runtime_package'
   | 'installing_runtime_package'
   | 'starting_runtime_process'
@@ -107,8 +110,11 @@ export const RUNTIME_LIFECYCLE_PHASE_LABELS: Record<DesktopRuntimeLifecyclePhase
   checking_container: 'Checking container',
   detecting_platform: 'Detecting platform',
   checking_runtime_package: 'Checking runtime package',
+  discovering_runtime_instances: 'Discovering runtime processes',
+  stopping_legacy_runtimes: 'Stopping historical runtime processes',
   stopping_runtime_process: 'Stopping runtime process',
   verifying_runtime_stopped: 'Verifying runtime stopped',
+  verifying_runtime_inventory: 'Verifying runtime process inventory',
   preparing_runtime_package: 'Preparing runtime package',
   installing_runtime_package: 'Installing runtime package',
   starting_runtime_process: 'Starting runtime',

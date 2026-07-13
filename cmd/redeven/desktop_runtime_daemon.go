@@ -1,19 +1,80 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 )
 
 var errDesktopRuntimeStopOwnerExternal = errors.New("runtime is not Desktop-managed")
+
+type repeatedStringFlag []string
+
+func (f *repeatedStringFlag) String() string {
+	if f == nil {
+		return ""
+	}
+	return strings.Join(*f, ",")
+}
+
+func (f *repeatedStringFlag) Set(value string) error {
+	*f = append(*f, value)
+	return nil
+}
+
+type runtimeProcessCommandError struct {
+	SchemaVersion int `json:"schema_version"`
+	Error         struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+func writeRuntimeProcessJSONError(out io.Writer, err error) {
+	body := runtimeProcessCommandError{SchemaVersion: runtimemanagement.RuntimeProcessInventorySchemaVersion}
+	body.Error.Code = runtimemanagement.RuntimeProcessErrorCode(err)
+	if body.Error.Code == "" {
+		body.Error.Code = "runtime_process_operation_failed"
+	}
+	body.Error.Message = strings.TrimSpace(err.Error())
+	_ = json.NewEncoder(out).Encode(body)
+}
+
+func runtimeProcessInventoryOptions(
+	stateRoot string,
+	runtimeRoot string,
+	desktopOwnerID string,
+	currentExecutables []string,
+	includeKnownLegacy bool,
+	legacyRuntimeRoots []string,
+) (runtimemanagement.RuntimeProcessInventoryOptions, error) {
+	resolvedStateRoot, err := config.ResolveStateRoot(stateRoot)
+	if err != nil {
+		return runtimemanagement.RuntimeProcessInventoryOptions{}, err
+	}
+	resolvedRuntimeRoot := strings.TrimSpace(runtimeRoot)
+	if resolvedRuntimeRoot == "" {
+		resolvedRuntimeRoot = resolvedStateRoot
+	}
+	return runtimemanagement.RuntimeProcessInventoryOptions{
+		RuntimeRoot:        resolvedRuntimeRoot,
+		StateRoot:          resolvedStateRoot,
+		DesktopOwnerID:     strings.TrimSpace(desktopOwnerID),
+		CurrentExecutables: append([]string(nil), currentExecutables...),
+		IncludeKnownLegacy: includeKnownLegacy,
+		LegacyRuntimeRoots: append([]string(nil), legacyRuntimeRoots...),
+	}, nil
+}
 
 func (c *cli) desktopRuntimeStatusCmd(args []string) int {
 	fs := newCLIFlagSet("desktop-runtime-status")
@@ -51,11 +112,68 @@ func (c *cli) desktopRuntimeStatusCmd(args []string) int {
 	return 0
 }
 
+func (c *cli) desktopRuntimeInventoryCmd(args []string) int {
+	fs := newCLIFlagSet("desktop-runtime-inventory")
+	stateRoot := fs.String("state-root", "", "Current Runtime state root.")
+	runtimeRoot := fs.String("runtime-root", "", "Managed runtime package root.")
+	desktopOwnerID := fs.String("desktop-owner-id", "", "Expected Desktop owner identity.")
+	includeKnownLegacy := fs.Bool("include-known-legacy", false, "Include built-in historical Desktop layouts.")
+	var currentExecutables repeatedStringFlag
+	fs.Var(&currentExecutables, "current-executable", "Expected current runtime executable; repeatable.")
+	var legacyRuntimeRoots repeatedStringFlag
+	fs.Var(&legacyRuntimeRoots, "legacy-runtime-root", "Additional historical runtime root; repeatable.")
+	if err := parseCommandFlags(fs, args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			writeText(c.stdout, desktopRuntimeInventoryHelpText())
+			return 0
+		}
+		message, details := translateFlagParseError("desktop-runtime-inventory", err)
+		writeErrorWithHelp(c.stderr, message, details, desktopRuntimeInventoryHelpText())
+		return 2
+	}
+	if fs.NArg() != 0 {
+		writeErrorWithHelp(c.stderr, "`redeven desktop-runtime-inventory` does not accept positional arguments", nil, desktopRuntimeInventoryHelpText())
+		return 2
+	}
+	options, err := runtimeProcessInventoryOptions(
+		*stateRoot,
+		*runtimeRoot,
+		*desktopOwnerID,
+		currentExecutables,
+		*includeKnownLegacy,
+		legacyRuntimeRoots,
+	)
+	if err != nil {
+		writeRuntimeProcessJSONError(c.stdout, err)
+		return 1
+	}
+	inventory, err := runtimemanagement.InspectRuntimeProcesses(context.Background(), options)
+	if err != nil {
+		writeRuntimeProcessJSONError(c.stdout, err)
+		return 1
+	}
+	if err := json.NewEncoder(c.stdout).Encode(inventory); err != nil {
+		fmt.Fprintf(c.stderr, "desktop-runtime-inventory failed: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
 func (c *cli) desktopRuntimeStopCmd(args []string) int {
 	fs := newCLIFlagSet("desktop-runtime-stop")
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).")
 	probeTimeout := fs.Duration("probe-timeout", desktopRuntimeProbeTimeout, "Runtime health probe timeout.")
 	gracePeriod := fs.Duration("grace-period", 5*time.Second, "Time to wait after requesting runtime shutdown.")
+	allMatching := fs.Bool("all-matching", false, "Stop every safely matched current or legacy instance.")
+	runtimeRoot := fs.String("runtime-root", "", "Managed runtime package root.")
+	desktopOwnerID := fs.String("desktop-owner-id", "", "Expected Desktop owner identity.")
+	includeKnownLegacy := fs.Bool("include-known-legacy", false, "Include built-in historical Desktop layouts.")
+	var currentExecutables repeatedStringFlag
+	fs.Var(&currentExecutables, "current-executable", "Expected current runtime executable; repeatable.")
+	expectedDigest := fs.String("expected-inventory-digest", "", "Expected runtime process inventory digest.")
+	jsonOut := fs.Bool("json", false, "Write a versioned machine-readable result.")
+	var legacyRuntimeRoots repeatedStringFlag
+	fs.Var(&legacyRuntimeRoots, "legacy-runtime-root", "Additional historical runtime root; repeatable.")
 	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			writeText(c.stdout, desktopRuntimeStopHelpText())
@@ -68,6 +186,48 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 	if fs.NArg() != 0 {
 		writeErrorWithHelp(c.stderr, "`redeven desktop-runtime-stop` does not accept positional arguments", nil, desktopRuntimeStopHelpText())
 		return 2
+	}
+	if *allMatching {
+		options, err := runtimeProcessInventoryOptions(
+			*stateRoot,
+			*runtimeRoot,
+			*desktopOwnerID,
+			currentExecutables,
+			*includeKnownLegacy,
+			legacyRuntimeRoots,
+		)
+		if err == nil && strings.TrimSpace(*expectedDigest) == "" {
+			err = errors.New("--expected-inventory-digest is required with --all-matching")
+		}
+		if err != nil {
+			if *jsonOut {
+				writeRuntimeProcessJSONError(c.stdout, err)
+			} else {
+				fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", err)
+			}
+			return 1
+		}
+		result, stopErr := runtimemanagement.StopRuntimeProcesses(
+			context.Background(),
+			options,
+			*expectedDigest,
+			*gracePeriod,
+		)
+		if stopErr != nil {
+			if *jsonOut {
+				writeRuntimeProcessJSONError(c.stdout, stopErr)
+			} else {
+				fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", stopErr)
+			}
+			return 1
+		}
+		if *jsonOut {
+			if err := json.NewEncoder(c.stdout).Encode(result); err != nil {
+				fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", err)
+				return 1
+			}
+		}
+		return 0
 	}
 	if err := stopDesktopRuntime(*stateRoot, *probeTimeout, *gracePeriod); err != nil {
 		fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", err)

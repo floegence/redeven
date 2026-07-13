@@ -116,9 +116,21 @@ function startReadySteps(): readonly DesktopRuntimeLifecycleStepID[] {
 
 function stopSteps(terminal: DesktopRuntimeLifecycleStepID = 'runtime_stopped'): readonly DesktopRuntimeLifecycleStepID[] {
   return [
+    'discovering_runtime_instances',
+    'stopping_legacy_runtimes',
     'stopping_runtime_process',
+    'verifying_runtime_inventory',
     'verifying_runtime_stopped',
     terminal,
+  ];
+}
+
+function runtimeProcessReconciliationStepIDs(): readonly DesktopRuntimeLifecycleStepID[] {
+  return [
+    'discovering_runtime_instances',
+    'stopping_legacy_runtimes',
+    'stopping_runtime_process',
+    'verifying_runtime_inventory',
   ];
 }
 
@@ -210,10 +222,25 @@ function stopTailForOperation(
   step: DesktopRuntimeLifecycleStepID,
 ): readonly DesktopRuntimeLifecycleStepID[] {
   const terminal = operation === 'stop' ? 'runtime_stopped' : undefined;
-  if (step === 'stopping_runtime_process') {
+  if (step === 'discovering_runtime_instances') {
     return operation === 'stop'
       ? stopSteps()
-      : ['stopping_runtime_process', 'verifying_runtime_stopped'];
+      : ['discovering_runtime_instances', 'stopping_legacy_runtimes', 'stopping_runtime_process', 'verifying_runtime_inventory'];
+  }
+  if (step === 'stopping_legacy_runtimes') {
+    return operation === 'stop'
+      ? ['stopping_legacy_runtimes', 'stopping_runtime_process', 'verifying_runtime_inventory', 'runtime_stopped']
+      : ['stopping_legacy_runtimes', 'stopping_runtime_process', 'verifying_runtime_inventory'];
+  }
+  if (step === 'stopping_runtime_process') {
+    return operation === 'stop'
+      ? ['stopping_runtime_process', 'verifying_runtime_inventory', 'runtime_stopped']
+      : ['stopping_runtime_process', 'verifying_runtime_inventory'];
+  }
+  if (step === 'verifying_runtime_inventory') {
+    return terminal
+      ? ['verifying_runtime_inventory', terminal]
+      : ['verifying_runtime_inventory'];
   }
   if (step === 'verifying_runtime_stopped') {
     return terminal
@@ -359,8 +386,7 @@ export function runtimeLifecyclePlanAfterDecision(input: RuntimeLifecyclePlanInp
           ...openableReadySteps(),
         ]),
         omitted_steps: omitted([
-          'stopping_runtime_process',
-          'verifying_runtime_stopped',
+          ...runtimeProcessReconciliationStepIDs(),
           'detecting_platform',
           'preparing_runtime_package',
           'installing_runtime_package',
@@ -375,8 +401,7 @@ export function runtimeLifecyclePlanAfterDecision(input: RuntimeLifecyclePlanInp
           ...runtimeUpToDateSteps(),
         ]),
         omitted_steps: omitted([
-          'stopping_runtime_process',
-          'verifying_runtime_stopped',
+          ...runtimeProcessReconciliationStepIDs(),
           'detecting_platform',
           'preparing_runtime_package',
           'installing_runtime_package',
@@ -391,8 +416,7 @@ export function runtimeLifecyclePlanAfterDecision(input: RuntimeLifecyclePlanInp
           'runtime_already_stopped',
         ]),
         omitted_steps: omitted([
-          'stopping_runtime_process',
-          'verifying_runtime_stopped',
+          ...runtimeProcessReconciliationStepIDs(),
         ], 'runtime_already_stopped'),
       };
     case 'runtime_running':
@@ -401,7 +425,7 @@ export function runtimeLifecyclePlanAfterDecision(input: RuntimeLifecyclePlanInp
         state: 'executing',
         steps: stepStates([
           ...replacementPlanning,
-          ...stopSteps('verifying_runtime_stopped').slice(0, 2),
+          ...stopSteps('verifying_runtime_inventory').slice(0, 1),
         ]),
       };
     case 'runtime_stopped':
@@ -409,8 +433,7 @@ export function runtimeLifecyclePlanAfterDecision(input: RuntimeLifecyclePlanInp
         state: 'executing',
         steps: stepStates(planning),
         omitted_steps: omitted([
-          'stopping_runtime_process',
-          'verifying_runtime_stopped',
+          ...runtimeProcessReconciliationStepIDs(),
         ], 'runtime_process_absent'),
       };
     case 'runtime_missing':
@@ -423,7 +446,7 @@ export function runtimeLifecyclePlanAfterDecision(input: RuntimeLifecyclePlanInp
         state: 'executing',
         steps: stepStates([
           ...replacementPlanning,
-          ...stopSteps('verifying_runtime_stopped').slice(0, 2),
+          ...stopSteps('verifying_runtime_inventory').slice(0, 1),
         ]),
       };
     case 'runtime_update_required_stopped':
@@ -431,8 +454,7 @@ export function runtimeLifecyclePlanAfterDecision(input: RuntimeLifecyclePlanInp
         state: 'executing',
         steps: stepStates(planning),
         omitted_steps: omitted([
-          'stopping_runtime_process',
-          'verifying_runtime_stopped',
+          ...runtimeProcessReconciliationStepIDs(),
         ], 'runtime_process_absent'),
       };
   }

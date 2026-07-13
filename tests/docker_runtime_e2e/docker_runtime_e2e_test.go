@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/desktopbridge"
+	"github.com/floegence/redeven/internal/runtimemanagement"
 )
 
 const (
@@ -119,6 +120,7 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 	f.detectContainerArch(ctx)
 	f.buildBinaries(ctx)
 	f.assertRuntimeNotStarted(ctx)
+	f.assertInventoryReconcilesHistoricalRuntime(ctx)
 
 	f.startRuntime(ctx, containerRedeven)
 	initial := f.waitReady(ctx)
@@ -294,6 +296,88 @@ func (f *fixture) startRuntime(ctx context.Context, binaryPath string) {
 	}
 }
 
+func (f *fixture) startHistoricalRuntime(ctx context.Context) {
+	f.t.Helper()
+	legacyStateRoot := filepath.Join(containerStateRoot, "instances", "envinst_gzcom_fixture", "state")
+	args := []string{
+		"exec", "-d",
+		f.containerName,
+		upgradedRedeven,
+		"run",
+		"--mode", "desktop",
+		"--desktop-managed",
+		"--state-root", legacyStateRoot,
+		"--local-ui-bind", "127.0.0.1:0",
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", args...); err != nil {
+		f.t.Fatalf("start historical runtime: %v", err)
+	}
+}
+
+func (f *fixture) assertInventoryReconcilesHistoricalRuntime(ctx context.Context) {
+	f.t.Helper()
+	isolationContainer := f.containerName + "-isolation"
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "run", "-d", "--name", isolationContainer, ubuntuImage, "sleep", "infinity"); err != nil {
+		f.t.Fatalf("start isolation container: %v", err)
+	}
+	defer func() {
+		_, _ = f.runHost(context.Background(), f.repoRoot, nil, "docker", "rm", "-f", isolationContainer)
+	}()
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", filepath.Join(f.tempRoot, "redeven-linux"), isolationContainer+":"+containerRedeven); err != nil {
+		f.t.Fatalf("copy isolation runtime: %v", err)
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", isolationContainer, "chmod", "0755", containerRedeven); err != nil {
+		f.t.Fatalf("prepare isolation runtime: %v", err)
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil,
+		"docker", "exec", "-d",
+		"--env", "REDEVEN_DESKTOP_OWNER_ID="+desktopOwnerID,
+		isolationContainer,
+		containerRedeven, "run",
+		"--mode", "desktop",
+		"--desktop-managed",
+		"--state-root", containerStateRoot,
+		"--local-ui-bind", "127.0.0.1:0",
+	); err != nil {
+		f.t.Fatalf("start isolation runtime: %v", err)
+	}
+	isolationDeadline := time.Now().Add(20 * time.Second)
+	var isolationInventory runtimemanagement.RuntimeProcessInventory
+	for time.Now().Before(isolationDeadline) {
+		isolationInventory = f.runtimeInventoryInContainer(ctx, isolationContainer)
+		if isolationInventory.Summary.CurrentOwned == 1 {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	if isolationInventory.Summary.CurrentOwned != 1 {
+		f.t.Fatalf("isolation runtime inventory did not become ready: %#v", isolationInventory)
+	}
+
+	f.startRuntime(ctx, containerRedeven)
+	f.waitReady(ctx)
+	f.startHistoricalRuntime(ctx)
+	deadline := time.Now().Add(20 * time.Second)
+	var inventory runtimemanagement.RuntimeProcessInventory
+	for time.Now().Before(deadline) {
+		inventory = f.runtimeInventory(ctx)
+		if inventory.Summary.CurrentOwned == 1 && inventory.Summary.LegacyOwnerless == 1 {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	if inventory.Summary.CurrentOwned != 1 || inventory.Summary.LegacyOwnerless != 1 || len(inventory.Instances) != 2 {
+		f.dumpContainerDiagnostics(ctx)
+		f.t.Fatalf("runtime inventory did not find current and ownerless historical instances: %#v", inventory)
+	}
+	f.stopRuntime(ctx)
+	isolationAfter := f.runtimeInventoryInContainer(ctx, isolationContainer)
+	if isolationAfter.Summary.CurrentOwned != 1 || len(isolationAfter.Instances) != 1 {
+		f.t.Fatalf("stopping the target container affected the isolation container: %#v", isolationAfter)
+	}
+	f.stopRuntimeInventoryInContainer(ctx, isolationContainer, isolationAfter)
+}
+
 func (f *fixture) performDesktopOwnedUpgrade(ctx context.Context) {
 	f.t.Helper()
 	f.stopRuntime(ctx)
@@ -310,7 +394,32 @@ func (f *fixture) performDesktopOwnedUpgrade(ctx context.Context) {
 
 func (f *fixture) stopRuntime(ctx context.Context) launchReport {
 	f.t.Helper()
-	f.dockerExec(ctx, nil, containerRedeven, "desktop-runtime-stop", "--state-root", containerStateRoot, "--grace-period", "10s")
+	inventory := f.runtimeInventory(ctx)
+	if inventory.Summary.Blocking > 0 {
+		f.t.Fatalf("runtime inventory contains blocking instances: %#v", inventory)
+	}
+	if len(inventory.Instances) > 0 {
+		result := f.dockerExec(ctx, nil,
+			containerRedeven,
+			"desktop-runtime-stop",
+			"--runtime-root", containerStateRoot,
+			"--state-root", containerStateRoot,
+			"--desktop-owner-id", desktopOwnerID,
+			"--current-executable", containerRedeven,
+			"--include-known-legacy",
+			"--all-matching",
+			"--expected-inventory-digest", inventory.InventoryDigest,
+			"--grace-period", "10s",
+			"--json",
+		)
+		var stopped runtimemanagement.RuntimeProcessStopResult
+		if err := json.Unmarshal([]byte(result.Stdout), &stopped); err != nil {
+			f.t.Fatalf("decode desktop-runtime-stop result: %v; stdout=%q", err, result.Stdout)
+		}
+		if len(stopped.After.Instances) != 0 {
+			f.t.Fatalf("runtime stop left matching processes: %#v", stopped.After)
+		}
+	}
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		report, err := f.runtimeStatus(ctx)
@@ -323,6 +432,81 @@ func (f *fixture) stopRuntime(ctx context.Context) launchReport {
 	f.dumpContainerDiagnostics(ctx)
 	f.t.Fatalf("runtime did not stop")
 	return launchReport{}
+}
+
+func (f *fixture) runtimeInventory(ctx context.Context) runtimemanagement.RuntimeProcessInventory {
+	f.t.Helper()
+	result := f.dockerExec(ctx, nil,
+		containerRedeven,
+		"desktop-runtime-inventory",
+		"--runtime-root", containerStateRoot,
+		"--state-root", containerStateRoot,
+		"--desktop-owner-id", desktopOwnerID,
+		"--current-executable", containerRedeven,
+		"--include-known-legacy",
+	)
+	var inventory runtimemanagement.RuntimeProcessInventory
+	if err := json.Unmarshal([]byte(result.Stdout), &inventory); err != nil {
+		f.t.Fatalf("decode desktop-runtime-inventory: %v; stdout=%q", err, result.Stdout)
+	}
+	return inventory
+}
+
+func (f *fixture) runtimeInventoryInContainer(ctx context.Context, containerName string) runtimemanagement.RuntimeProcessInventory {
+	f.t.Helper()
+	result, err := f.runHost(ctx, f.repoRoot, nil,
+		"docker", "exec", "-i", containerName,
+		containerRedeven,
+		"desktop-runtime-inventory",
+		"--runtime-root", containerStateRoot,
+		"--state-root", containerStateRoot,
+		"--desktop-owner-id", desktopOwnerID,
+		"--current-executable", containerRedeven,
+		"--include-known-legacy",
+	)
+	if err != nil {
+		return runtimemanagement.RuntimeProcessInventory{}
+	}
+	var inventory runtimemanagement.RuntimeProcessInventory
+	if err := json.Unmarshal([]byte(result.Stdout), &inventory); err != nil {
+		f.t.Fatalf("decode container %s inventory: %v; stdout=%q", containerName, err, result.Stdout)
+	}
+	return inventory
+}
+
+func (f *fixture) stopRuntimeInventoryInContainer(
+	ctx context.Context,
+	containerName string,
+	inventory runtimemanagement.RuntimeProcessInventory,
+) {
+	f.t.Helper()
+	if len(inventory.Instances) == 0 {
+		return
+	}
+	result, err := f.runHost(ctx, f.repoRoot, nil,
+		"docker", "exec", "-i", containerName,
+		containerRedeven,
+		"desktop-runtime-stop",
+		"--runtime-root", containerStateRoot,
+		"--state-root", containerStateRoot,
+		"--desktop-owner-id", desktopOwnerID,
+		"--current-executable", containerRedeven,
+		"--include-known-legacy",
+		"--all-matching",
+		"--expected-inventory-digest", inventory.InventoryDigest,
+		"--grace-period", "10s",
+		"--json",
+	)
+	if err != nil {
+		f.t.Fatalf("stop isolation inventory: %v", err)
+	}
+	var stopped runtimemanagement.RuntimeProcessStopResult
+	if err := json.Unmarshal([]byte(result.Stdout), &stopped); err != nil {
+		f.t.Fatalf("decode isolation stop: %v; stdout=%q", err, result.Stdout)
+	}
+	if len(stopped.After.Instances) != 0 {
+		f.t.Fatalf("isolation runtime stop left processes: %#v", stopped.After)
+	}
 }
 
 func (f *fixture) recoverRuntimeAfterManagementSocketLoss(ctx context.Context, previousProcessStartedAtMs int64) pingSnapshot {

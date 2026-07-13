@@ -54,6 +54,49 @@ async function writeJSON(file: string, value: unknown): Promise<void> {
   await fs.writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
+function processInventoryPayload(input: Readonly<{
+  stateRoot: string;
+  executablePath: string;
+  classification: 'current_owned' | 'legacy_owned' | 'legacy_ownerless' | 'foreign_owner' | 'ambiguous';
+  ownerID?: string;
+  pid?: number;
+}>): Record<string, unknown> {
+  const stoppable = input.classification === 'current_owned'
+    || input.classification === 'legacy_owned'
+    || input.classification === 'legacy_ownerless';
+  return {
+    schema_version: 1,
+    scope: {
+      runtime_root: input.stateRoot,
+      state_root: input.stateRoot,
+      desktop_owner_id: 'desktop-owner-1',
+      user_identity: 'tester',
+    },
+    inventory_digest: 'a'.repeat(64),
+    instances: [{
+      pid: input.pid ?? 999_999,
+      process_started_at_unix_ms: 1000,
+      desktop_owner_id: input.ownerID,
+      state_root: input.stateRoot,
+      executable_path: input.executablePath,
+      executable_device: 1,
+      executable_inode: 2,
+      classification: input.classification,
+      stoppable,
+      ...(stoppable ? {} : { reason_code: 'runtime_owned_by_another_desktop' }),
+    }],
+    summary: {
+      current_owned: input.classification === 'current_owned' ? 1 : 0,
+      legacy_owned: input.classification === 'legacy_owned' ? 1 : 0,
+      legacy_ownerless: input.classification === 'legacy_ownerless' ? 1 : 0,
+      foreign_owner: input.classification === 'foreign_owner' ? 1 : 0,
+      ambiguous: input.classification === 'ambiguous' ? 1 : 0,
+      stoppable: stoppable ? 1 : 0,
+      blocking: stoppable ? 0 : 1,
+    },
+  };
+}
+
 async function writeFakeRuntimeExecutable(dir: string): Promise<string> {
   const scriptPath = path.join(dir, 'fake-runtime.cjs');
   await fs.writeFile(scriptPath, `#!/usr/bin/env node
@@ -77,6 +120,49 @@ function readJSON(file) {
 
 const statusFile = process.env.REDEVEN_TEST_STATUS_FILE;
 const counterFile = process.env.REDEVEN_TEST_STATUS_COUNTER_FILE;
+const inventoryFile = process.env.REDEVEN_TEST_PROCESS_INVENTORY_FILE;
+
+function emptyInventory() {
+  return {
+    schema_version: 1,
+    scope: {
+      runtime_root: argValue('--runtime-root') || argValue('--state-root') || process.cwd(),
+      state_root: argValue('--state-root') || process.cwd(),
+      desktop_owner_id: argValue('--desktop-owner-id') || undefined,
+      user_identity: process.env.USER || 'tester',
+    },
+    inventory_digest: 'b'.repeat(64),
+    instances: [],
+    summary: { current_owned: 0, legacy_owned: 0, legacy_ownerless: 0, foreign_owner: 0, ambiguous: 0, stoppable: 0, blocking: 0 },
+  };
+}
+
+function readInventory() {
+  if (!inventoryFile || !fs.existsSync(inventoryFile)) return emptyInventory();
+  return readJSON(inventoryFile);
+}
+
+if (process.argv[2] === 'desktop-runtime-inventory') {
+  process.stdout.write(JSON.stringify(readInventory()) + '\\n');
+  process.exit(0);
+}
+
+if (process.argv[2] === 'desktop-runtime-stop') {
+  const before = readInventory();
+  const expectedDigest = argValue('--expected-inventory-digest');
+  if (expectedDigest !== before.inventory_digest) {
+    process.stdout.write(JSON.stringify({ schema_version: 1, error: { code: 'runtime_inventory_changed', message: 'runtime process inventory changed before stop' } }) + '\\n');
+    process.exit(1);
+  }
+  for (const instance of before.instances || []) {
+    try { process.kill(Number(instance.pid), 'SIGINT'); } catch {}
+  }
+  if (inventoryFile) fs.rmSync(inventoryFile, { force: true });
+  if (statusFile) fs.rmSync(statusFile, { force: true });
+  const after = emptyInventory();
+  process.stdout.write(JSON.stringify({ schema_version: 1, before, after, stopped: before.instances || [] }) + '\\n');
+  process.exit(0);
+}
 
 if (process.argv[2] === 'desktop-runtime-status') {
   if (!statusFile || !fs.existsSync(statusFile)) {
@@ -152,12 +238,23 @@ server.listen(0, '127.0.0.1', () => {
   if (statusFile) {
     writeJSON(statusFile, payload);
   }
+  if (inventoryFile) {
+    writeJSON(inventoryFile, {
+      schema_version: 1,
+      scope: { runtime_root: argValue('--state-root') || process.cwd(), state_root: argValue('--state-root') || process.cwd(), desktop_owner_id: process.env.REDEVEN_DESKTOP_OWNER_ID || 'desktop-owner-1', user_identity: process.env.USER || 'tester' },
+      inventory_digest: 'a'.repeat(64),
+      instances: [{ pid: process.pid, process_started_at_unix_ms: Date.now(), desktop_owner_id: process.env.REDEVEN_DESKTOP_OWNER_ID || 'desktop-owner-1', state_root: argValue('--state-root') || process.cwd(), executable_path: process.argv[1], executable_device: 1, executable_inode: process.pid + 1000, classification: 'current_owned', stoppable: true }],
+      summary: { current_owned: 1, legacy_owned: 0, legacy_ownerless: 0, foreign_owner: 0, ambiguous: 0, stoppable: 1, blocking: 0 },
+    });
+  }
   writeJSON(reportFile, payload);
 });
 
-process.on('SIGTERM', () => {
+function stopRuntime() {
   server.close(() => process.exit(0));
-});
+}
+process.on('SIGINT', stopRuntime);
+process.on('SIGTERM', stopRuntime);
 `, 'utf8');
   await fs.chmod(scriptPath, 0o755);
   return scriptPath;
@@ -191,6 +288,111 @@ describe('runtimeProcess', () => {
       password_required: true,
       started_at_unix_ms: 1778751234567,
     });
+  });
+
+  it('blocks Start when a historical local runtime process is alive but status is unavailable', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const stateRoot = path.join(dir, 'state');
+    const inventoryFile = path.join(dir, 'inventory.json');
+    const statusFile = path.join(dir, 'status.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    await writeJSON(inventoryFile, processInventoryPayload({
+      stateRoot,
+      executablePath: path.join(stateRoot, 'runtime', 'releases', 'v0.5.0', 'bin', 'redeven'),
+      classification: 'legacy_ownerless',
+    }));
+    try {
+      await expect(startManagedRuntime({
+        executablePath,
+        runtimeArgs: ['--state-root', stateRoot],
+        stateRoot,
+        desktopOwnerID: 'desktop-owner-1',
+        runtimeProcessIntent: 'start',
+        env: {
+          REDEVEN_TEST_STATUS_FILE: statusFile,
+          REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile,
+        },
+        tempRoot: dir,
+      })).rejects.toThrow('historical process');
+      await expect(fs.stat(statusFile)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('reconciles historical local runtime processes before Restart even when status is unavailable', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const stateRoot = path.join(dir, 'state');
+    const inventoryFile = path.join(dir, 'inventory.json');
+    const statusFile = path.join(dir, 'status.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    const progressPhases: string[] = [];
+    await writeJSON(inventoryFile, processInventoryPayload({
+      stateRoot,
+      executablePath: path.join(stateRoot, 'local-environment', 'state', 'local-environment', 'redeven'),
+      classification: 'legacy_ownerless',
+    }));
+    let launch: Awaited<ReturnType<typeof startManagedRuntime>> | null = null;
+    try {
+      launch = await startManagedRuntime({
+        executablePath,
+        runtimeArgs: ['--state-root', stateRoot],
+        stateRoot,
+        desktopOwnerID: 'desktop-owner-1',
+        runtimeProcessIntent: 'restart',
+        env: {
+          REDEVEN_DESKTOP_OWNER_ID: 'desktop-owner-1',
+          REDEVEN_TEST_STATUS_FILE: statusFile,
+          REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile,
+        },
+        tempRoot: dir,
+        runtimeAttachTimeoutMs: 5_000,
+        runtimeStabilityWindowMs: 20,
+        runtimeStabilityPollMs: 10,
+        onProgress: (progress) => progressPhases.push(progress.phase),
+      });
+      expect(launch.kind).toBe('ready');
+      expect(progressPhases).toEqual(expect.arrayContaining([
+        'discovering_runtime_instances',
+        'stopping_legacy_runtimes',
+        'verifying_runtime_inventory',
+        'starting_runtime',
+      ]));
+      const inventory = JSON.parse(await fs.readFile(inventoryFile, 'utf8')) as { instances?: Array<{ pid?: number }> };
+      expect(inventory.instances?.[0]?.pid).not.toBe(999_999);
+    } finally {
+      if (launch?.kind === 'ready') {
+        await launch.managedRuntime.stop().catch(() => undefined);
+      }
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses Restart before signals when a local runtime belongs to another Desktop owner', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const stateRoot = path.join(dir, 'state');
+    const inventoryFile = path.join(dir, 'inventory.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    await writeJSON(inventoryFile, processInventoryPayload({
+      stateRoot,
+      executablePath,
+      classification: 'foreign_owner',
+      ownerID: 'another-owner',
+    }));
+    try {
+      await expect(startManagedRuntime({
+        executablePath,
+        runtimeArgs: ['--state-root', stateRoot],
+        stateRoot,
+        desktopOwnerID: 'desktop-owner-1',
+        runtimeProcessIntent: 'restart',
+        env: { REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile },
+        tempRoot: dir,
+      })).rejects.toThrow('cannot be safely reconciled');
+      await expect(fs.stat(inventoryFile)).resolves.toBeDefined();
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('writes one Desktop secrets envelope and strips secret environment variables', async () => {

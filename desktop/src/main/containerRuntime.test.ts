@@ -7,8 +7,10 @@ import {
   containerRuntimeProbeCommand,
   containerRuntimeDaemonStartCommand,
   containerRuntimeDaemonStatusCommand,
-  containerRuntimeDaemonStopCommand,
   containerRuntimeExecCommand,
+  containerRuntimeProcessInventoryCommand,
+  containerRuntimeProcessStopCommand,
+  containerRuntimeUploadedProcessHelperCommand,
   containerRuntimeUploadedInstallCommand,
   parseContainerListOutput,
   parseContainerInspectJSON,
@@ -246,24 +248,6 @@ describe('containerRuntime', () => {
       DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
       '/home/app/.redeven/runtime/managed/bin/redeven',
     ]);
-    expect(containerRuntimeDaemonStopCommand({
-      engine: 'docker',
-      container_id: 'dev',
-      runtime_binary_path: '/home/app/.redeven/runtime/managed/bin/redeven',
-      runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-    })).toEqual([
-      'docker',
-      'exec',
-      '-i',
-      'dev',
-      'sh',
-      '-c',
-      expect.stringContaining(`if [ "$state_root" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`),
-      'redeven-container-runtime-stop',
-      DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-      DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-      '/home/app/.redeven/runtime/managed/bin/redeven',
-    ]);
   });
 
   it('uses runtime state roots for container daemon lifecycle commands', () => {
@@ -316,69 +300,48 @@ describe('containerRuntime', () => {
       runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
       runtime_state_root: runtimeStateRoot,
     })[6]).toContain('runtime_binary_path="${runtime_root%/}/runtime/managed/bin/redeven"');
-    expect(containerRuntimeDaemonStopCommand({
-      engine: 'docker',
-      container_id: 'dev',
-      runtime_binary_path: '/home/app/.redeven/runtime/managed/bin/redeven',
-      runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-      runtime_state_root: runtimeStateRoot,
-    })).toEqual([
-      'docker',
-      'exec',
-      '-i',
-      'dev',
-      'sh',
-      '-c',
-      expect.stringContaining('desktop-runtime-stop --state-root "$state_root"'),
-      'redeven-container-runtime-stop',
-      runtimeStateRoot,
-      DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-      '/home/app/.redeven/runtime/managed/bin/redeven',
-    ]);
   });
 
-  it('keeps daemon stop scoped to the runtime process and pairs with status verification', () => {
-    const stopCommand = containerRuntimeDaemonStopCommand({
+  it('builds digest-bound container inventory and stop commands with an uploaded helper fallback', () => {
+    const inventoryCommand = containerRuntimeProcessInventoryCommand({
       engine: 'docker',
       container_id: 'dev',
       runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       runtime_root: '/root/.redeven',
+      desktop_owner_id: 'desktop-owner',
     });
-    const statusCommand = containerRuntimeDaemonStatusCommand({
+    const stopCommand = containerRuntimeProcessStopCommand({
       engine: 'docker',
       container_id: 'dev',
       runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       runtime_root: '/root/.redeven',
+      desktop_owner_id: 'desktop-owner',
+      inventory_digest: 'a'.repeat(64),
+    });
+    const helperCommand = containerRuntimeUploadedProcessHelperCommand({
+      engine: 'podman',
+      container_id: 'dev',
+      runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
+      runtime_root: '/root/.redeven',
+      desktop_owner_id: 'desktop-owner',
+      operation: 'stop',
+      inventory_digest: 'a'.repeat(64),
     });
 
-    expect(stopCommand).toEqual([
-      'docker',
-      'exec',
-      '-i',
-      'dev',
-      'sh',
-      '-c',
-      expect.stringContaining('desktop-runtime-stop --state-root "$state_root"'),
-      'redeven-container-runtime-stop',
-      '/root/.redeven',
-      '/root/.redeven',
-      '/root/.redeven/runtime/managed/bin/redeven',
-    ]);
-    expect(statusCommand).toEqual([
-      'docker',
-      'exec',
-      '-i',
-      'dev',
-      'sh',
-      '-c',
-      expect.stringContaining('desktop-runtime-status --state-root "$state_root"'),
-      'redeven-container-runtime-status',
-      '/root/.redeven',
-      '/root/.redeven',
-      '/root/.redeven/runtime/managed/bin/redeven',
-    ]);
+    expect(inventoryCommand.join('\n')).toContain('desktop-runtime-inventory');
+    expect(inventoryCommand.join('\n')).toContain('--include-known-legacy');
+    expect(inventoryCommand.join('\n')).toContain('--current-executable "$runtime_binary_path"');
+    expect(stopCommand.join('\n')).toContain('desktop-runtime-stop');
+    expect(stopCommand.join('\n')).toContain('--all-matching');
+    expect(stopCommand.join('\n')).toContain('--expected-inventory-digest "$inventory_digest"');
+    expect(stopCommand).toContain('a'.repeat(64));
+    expect(helperCommand.join('\n')).toContain('redeven-runtime-process-helper');
+    expect(helperCommand.join('\n')).toContain('tar -xzf "$archive_path"');
+    expect(helperCommand.join('\n')).toContain('rm -rf "$helper_root"');
+    expect(helperCommand.join('\n')).toContain('--current-executable "$managed_binary"');
     expect(stopCommand.join(' ')).not.toContain('docker stop');
     expect(stopCommand.join(' ')).not.toContain('podman stop');
+    expect(stopCommand.join(' ')).not.toContain('kill "$pid"');
   });
 
   it('rejects malformed command inputs instead of falling back', () => {

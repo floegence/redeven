@@ -47,6 +47,7 @@ describe('runtimePlacementManager', () => {
     daemonPidSequencePath: string;
     orphanPath: string;
     notRunningPath: string;
+    foreignPath: string;
     eventsPath: string;
   }>> {
     const dockerPath = path.join(tempDir, 'docker');
@@ -56,6 +57,7 @@ describe('runtimePlacementManager', () => {
     const daemonPidSequencePath = path.join(tempDir, 'daemon-pid-sequence');
     const orphanPath = path.join(tempDir, 'orphan');
     const notRunningPath = path.join(tempDir, 'not-running-status');
+    const foreignPath = path.join(tempDir, 'foreign-runtime');
     const eventsPath = path.join(tempDir, 'events');
     await fs.writeFile(dockerPath, [
       '#!/usr/bin/env node',
@@ -66,6 +68,7 @@ describe('runtimePlacementManager', () => {
       `const daemonPidSequence = ${JSON.stringify(daemonPidSequencePath)};`,
       `const orphan = ${JSON.stringify(orphanPath)};`,
       `const notRunning = ${JSON.stringify(notRunningPath)};`,
+      `const foreign = ${JSON.stringify(foreignPath)};`,
       `const events = ${JSON.stringify(eventsPath)};`,
       `const managedBinary = ${JSON.stringify(MANAGED_RUNTIME_BINARY_PATH)};`,
       `const managedStamp = ${JSON.stringify(MANAGED_RUNTIME_STAMP_PATH)};`,
@@ -83,6 +86,28 @@ describe('runtimePlacementManager', () => {
       '  const pid = Number(current);',
       '  return Number.isInteger(pid) && pid > 0 ? pid : undefined;',
       '}',
+      'function processInventory() {',
+      '  const instances = [];',
+      '  if (fs.existsSync(daemon)) {',
+      '    const storedPID = Number(fs.readFileSync(daemon, "utf8"));',
+      '    instances.push({ pid: Number.isInteger(storedPID) && storedPID > 0 ? storedPID : 4242, process_started_at_unix_ms: 1000, desktop_owner_id: "owner", state_root: "/root/.redeven", executable_path: managedBinary, executable_device: 1, executable_inode: 2, namespace_id: "mnt:[container]", runtime_version: fs.existsSync(marker) ? normalizedReleaseTag(fs.readFileSync(marker, "utf8")) : "v0.0.0-dev", classification: "current_owned", stoppable: true });',
+      '  }',
+      '  if (fs.existsSync(orphan)) {',
+      '    instances.push({ pid: 4343, process_started_at_unix_ms: 900, state_root: "/root/.redeven/local-environment/state/local-environment", executable_path: "/root/.cache/redeven-desktop/runtime/releases/v0.5.0/bin/redeven", executable_deleted: true, executable_device: 3, executable_inode: 4, namespace_id: "mnt:[container]", classification: "legacy_ownerless", stoppable: true });',
+      '  }',
+      '  if (fs.existsSync(foreign)) {',
+      '    instances.push({ pid: 4444, process_started_at_unix_ms: 800, desktop_owner_id: "another-owner", state_root: "/root/.redeven", executable_path: managedBinary, executable_device: 5, executable_inode: 6, namespace_id: "mnt:[container]", classification: "foreign_owner", stoppable: false, reason_code: "runtime_owned_by_another_desktop" });',
+      '  }',
+      '  const current = instances.filter((entry) => entry.classification === "current_owned").length;',
+      '  const legacyOwnerless = instances.filter((entry) => entry.classification === "legacy_ownerless").length;',
+      '  const foreignOwner = instances.filter((entry) => entry.classification === "foreign_owner").length;',
+      '  return { schema_version: 1, scope: { runtime_root: "/root/.redeven", state_root: "/root/.redeven", desktop_owner_id: "owner", user_identity: "root", namespace_id: "mnt:[container]" }, inventory_digest: instances.length > 0 ? "a".repeat(64) : "b".repeat(64), instances, summary: { current_owned: current, legacy_owned: 0, legacy_ownerless: legacyOwnerless, foreign_owner: foreignOwner, ambiguous: 0, stoppable: instances.length - foreignOwner, blocking: foreignOwner } };',
+      '}',
+      'function processCommandEnvelope(operation) {',
+      '  const before = processInventory();',
+      '  if (operation === "stop") { try { fs.unlinkSync(daemon); } catch {} try { fs.unlinkSync(orphan); } catch {} event("stop"); const after = processInventory(); return JSON.stringify({ schema_version: 1, before, after, stopped: before.instances }); }',
+      '  return JSON.stringify(before);',
+      '}',
       'const args = process.argv.slice(2);',
       'if (args[0] === "inspect") {',
       '  process.stdout.write(JSON.stringify([{ Id: args[1], Name: "/dev", State: { Running: true, Status: "running" } }]));',
@@ -91,6 +116,20 @@ describe('runtimePlacementManager', () => {
       'if (args[0] === "exec") {',
       '  const markerIndex = args.findIndex((value) => value.startsWith("redeven-container-"));',
       '  const execMarker = markerIndex >= 0 ? args[markerIndex] : "";',
+      '  if (execMarker === "redeven-container-runtime-inventory") {',
+      '    const exitCode = fs.existsSync(marker) ? 0 : 127;',
+      '    process.stdout.write(`__REDEVEN_RUNTIME_PROCESS_EXIT__=${exitCode}\\n`);',
+      '    if (exitCode === 0) process.stdout.write(processCommandEnvelope("inventory"));',
+      '    process.exit(0);',
+      '  }',
+      '  if (execMarker === "redeven-container-runtime-stop-all") { process.stdout.write("__REDEVEN_RUNTIME_PROCESS_EXIT__=0\\n" + processCommandEnvelope("stop")); process.exit(0); }',
+      '  if (execMarker === "redeven-container-runtime-process-helper") {',
+      '    event("helper");',
+      '    fs.readFileSync(0);',
+      '    const operation = args[markerIndex + 5];',
+      '    process.stdout.write("__REDEVEN_RUNTIME_PROCESS_EXIT__=0\\n" + processCommandEnvelope(operation));',
+      '    process.exit(0);',
+      '  }',
       '  if (execMarker === "redeven-container-runtime-start" || (args.includes("run") && args.includes("--desktop-managed"))) { event("run"); fs.writeFileSync(daemon, "running"); process.exit(0); }',
       '  if (execMarker === "redeven-container-runtime-status" || args.includes("desktop-runtime-status")) {',
       '    if (fs.existsSync(orphan)) { event("orphan_status"); fs.unlinkSync(orphan); process.stdout.write(JSON.stringify({ status: "blocked", code: "live_process_without_management_socket", message: "A Redeven runtime process is alive, but its management socket is not reachable.", lock_owner: { pid: 4242, desktop_managed: true, desktop_owner_id: "owner" }, diagnostics: { lock_pid: 4242, pid_alive: true, attach_state: "live_process_without_management_socket", failure_code: "management_socket_unreachable", socket_reachable: false } })); process.exit(0); }',
@@ -98,7 +137,7 @@ describe('runtimePlacementManager', () => {
       '    if (!fs.existsSync(daemon)) { process.stderr.write("runtime daemon is not running\\n"); process.exit(1); }',
       '    const pid = nextDaemonPID();',
       '    const report = { local_ui_url: "http://127.0.0.1:43210/", local_ui_urls: ["http://127.0.0.1:43210/"], password_required: false, desktop_managed: true, desktop_owner_id: "owner", runtime_control: { protocol_version: "runtime-control-v1", base_url: "http://127.0.0.1:43211/", token: "token", desktop_owner_id: "owner" }, runtime_service: { status: "online", desktop_managed: true, effective_run_mode: "local", remote_enabled: false } };',
-      '    if (pid) report.pid = pid;',
+      '    if (pid) { report.pid = pid; fs.writeFileSync(daemon, String(pid)); }',
       '    process.stdout.write(JSON.stringify(report));',
       '    process.exit(0);',
       '  }',
@@ -116,6 +155,7 @@ describe('runtimePlacementManager', () => {
       '    process.exit(0);',
       '  }',
       '  if (execMarker === "redeven-container-upload-driver") {',
+      '    event("install");',
       '    const installedReleaseTag = normalizedReleaseTag(args[markerIndex + 2]);',
       '    const chunks = [];',
       '    process.stdin.on("data", (chunk) => chunks.push(chunk));',
@@ -127,7 +167,7 @@ describe('runtimePlacementManager', () => {
       'process.exit(1);',
     ].join('\n'), { mode: 0o755 });
     process.env.PATH = `${tempDir}${path.delimiter}${originalPath}`;
-    return { markerPath, uploadedArchivePath, daemonPath, daemonPidSequencePath, orphanPath, notRunningPath, eventsPath };
+    return { markerPath, uploadedArchivePath, daemonPath, daemonPidSequencePath, orphanPath, notRunningPath, foreignPath, eventsPath };
   }
 
   async function installFakeSSH(tempDir: string): Promise<void> {
@@ -194,11 +234,13 @@ describe('runtimePlacementManager', () => {
     expect(progressPhases).toEqual([
       'checking_container',
       'detecting_platform',
+      'discovering_runtime_instances',
       'checking_runtime',
       'preparing_runtime_package',
       'installing_runtime',
       'starting_runtime_daemon',
       'waiting_runtime_daemon',
+      'verifying_runtime_inventory',
       'runtime_ready',
     ]);
   });
@@ -244,9 +286,11 @@ describe('runtimePlacementManager', () => {
     expect(progressPhases).toEqual([
       'checking_container',
       'detecting_platform',
+      'discovering_runtime_instances',
       'checking_runtime',
       'starting_runtime_daemon',
       'waiting_runtime_daemon',
+      'verifying_runtime_inventory',
       'runtime_ready',
     ]);
   });
@@ -326,14 +370,107 @@ describe('runtimePlacementManager', () => {
     }));
   });
 
-  it('waits through a transient live process without a reachable management socket', async () => {
+  it('stops the verified container inventory before switching the staged update and starting a new process', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
+    const { markerPath, daemonPath, daemonPidSequencePath, eventsPath } = await installFakeDocker(tempDir);
+    await fs.writeFile(markerPath, 'v0.6.10');
+    await fs.writeFile(daemonPath, '1111');
+    await fs.writeFile(daemonPidSequencePath, '2222');
+
+    const ready = await ensureRuntimePlacementReady({
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'dev',
+        container_ref: 'dev',
+        container_label: 'dev',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      runtime_release_tag: 'v1.2.3',
+      release_base_url: 'https://example.invalid/releases',
+      source_runtime_root: tempDir,
+      asset_cache_root: tempDir,
+      runtime_process_intent: 'update',
+      force_runtime_update: true,
+      previous_runtime_pid: 1111,
+      require_new_daemon: true,
+      desktop_owner_id: 'owner',
+    });
+
+    expect(ready.startup?.pid).toBe(2222);
+    expect(await fs.readFile(eventsPath, 'utf8')).toBe('stop\ninstall\nrun\n');
+  });
+
+  it('keeps container Restart version-stable when the installed runtime package is missing', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
+    const { eventsPath, uploadedArchivePath } = await installFakeDocker(tempDir);
+
+    await expect(ensureRuntimePlacementReady({
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'dev',
+        container_ref: 'dev',
+        container_label: 'dev',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      runtime_release_tag: 'v1.2.3',
+      release_base_url: 'https://example.invalid/releases',
+      source_runtime_root: tempDir,
+      asset_cache_root: tempDir,
+      runtime_process_intent: 'restart',
+      desktop_owner_id: 'owner',
+    })).rejects.toMatchObject({
+      name: 'RuntimePlacementMaintenanceRequiredError',
+      message: expect.stringContaining('Update this container runtime'),
+    });
+
+    expect(await fs.readFile(eventsPath, 'utf8')).toBe('helper\n');
+    await expect(fs.stat(uploadedArchivePath)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('does not stop, switch, or start when container inventory contains a foreign owner', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
+    const { markerPath, foreignPath, eventsPath } = await installFakeDocker(tempDir);
+    await fs.writeFile(markerPath, 'v0.6.10');
+    await fs.writeFile(foreignPath, 'another-owner');
+
+    await expect(ensureRuntimePlacementReady({
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'dev',
+        container_ref: 'dev',
+        container_label: 'dev',
+        runtime_root: '/root/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+      runtime_release_tag: 'v1.2.3',
+      release_base_url: 'https://example.invalid/releases',
+      source_runtime_root: tempDir,
+      asset_cache_root: tempDir,
+      runtime_process_intent: 'update',
+      force_runtime_update: true,
+      desktop_owner_id: 'owner',
+    })).rejects.toThrow('cannot be safely reconciled');
+
+    expect(await fs.readFile(markerPath, 'utf8')).toBe('v0.6.10');
+    expect(await fs.readFile(eventsPath, 'utf8').catch(() => '')).toBe('');
+  });
+
+  it('blocks Start when inventory finds a live historical process without a reachable management socket', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
     const { markerPath, orphanPath, eventsPath } = await installFakeDocker(tempDir);
     await fs.writeFile(markerPath, 'v0.6.10');
     await fs.writeFile(orphanPath, 'old-daemon-without-management-socket');
     const progressPhases: RuntimePlacementProgressPhase[] = [];
 
-    const ready = await ensureRuntimePlacementReady({
+    await expect(ensureRuntimePlacementReady({
       host_access: { kind: 'local_host' },
       placement: {
         kind: 'container_process',
@@ -351,18 +488,16 @@ describe('runtimePlacementManager', () => {
       on_progress: (progress) => {
         progressPhases.push(progress.phase);
       },
+    })).rejects.toMatchObject({
+      name: 'RuntimePlacementMaintenanceRequiredError',
+      message: expect.stringContaining('historical process'),
     });
 
-    expect(ready.runtime_binary_path).toBe(MANAGED_RUNTIME_BINARY_PATH);
-    expect(ready.probe.reported_release_tag).toBe('v0.6.10');
-    expect(await fs.readFile(eventsPath, 'utf8')).toBe('run\norphan_status\n');
+    expect(await fs.readFile(eventsPath, 'utf8').catch(() => '')).toBe('');
     expect(progressPhases).toEqual([
       'checking_container',
       'detecting_platform',
-      'checking_runtime',
-      'starting_runtime_daemon',
-      'waiting_runtime_daemon',
-      'runtime_ready',
+      'discovering_runtime_instances',
     ]);
   });
 
@@ -549,11 +684,13 @@ describe('runtimePlacementManager', () => {
       'checking_host',
       'checking_container',
       'detecting_platform',
+      'discovering_runtime_instances',
       'checking_runtime',
       'preparing_runtime_package',
       'installing_runtime',
       'starting_runtime_daemon',
       'waiting_runtime_daemon',
+      'verifying_runtime_inventory',
       'runtime_ready',
     ]);
   }, 15_000);

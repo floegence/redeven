@@ -26,6 +26,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 ## Desktop
 
 - [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Desktop-managed Local UI launches, runtime-control, and startup probing.
+- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Scoped inventory, historical process reconciliation, package activation ordering, and lifecycle success conditions.
 
 ## Gateway
 
