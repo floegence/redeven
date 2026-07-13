@@ -12,9 +12,11 @@ timestamp: 2026-06-17T00:00:00Z
 
 The run command parses `--mode`, `--local-ui-bind`, `--desktop-managed`, `--startup-report-file`, and `--presentation`, rejects Desktop-managed startup unless the presentation contract is machine-compatible, initializes a `runtimepresentation.Reporter`, emits phase events as state, lock, bootstrap, config, control, and Local UI phases progress, and writes a Desktop launch report when a Desktop-managed Local UI becomes ready.
 
+Startup secrets never use literal command-line values. Ordinary CLI startup accepts hidden password prompting, stdin, protected files, or the fixed `REDEVEN_LOCAL_UI_PASSWORD` and `REDEVEN_BOOTSTRAP_TICKET` environment fallbacks. Explicit sources override fixed environment values, empty environment values are ignored, and both fixed variables plus the legacy Desktop ticket variable are removed from the process environment before any command can start a child process. Diagnostics record only the source category. Desktop-managed machine startup instead sends one version 1 JSON envelope through private stdin, with a 64 KiB limit and a hard conflict against every other secret source.
+
 # Boundaries
 
-Desktop readiness must come from the machine presentation and startup-report contract, not from scraping rich terminal output. The compact character mark remains a rich renderer concern rather than command startup logic.
+Desktop readiness must come from the machine presentation and startup-report contract, not from scraping rich terminal output. The compact character mark remains a rich renderer concern rather than command startup logic. The Desktop startup envelope is a one-shot process handoff, not a public automation format or a reason to reintroduce command-line secret flags.
 
 # Citations
 

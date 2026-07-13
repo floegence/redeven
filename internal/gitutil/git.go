@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/floegence/redeven/internal/processenv"
 )
 
 // CommandContext builds a git command with stable non-interactive output settings.
@@ -18,7 +20,7 @@ func CommandContext(ctx context.Context, repoRoot string, env []string, args ...
 	cmdArgs := append([]string{"-C", repoRoot, "--no-pager", "-c", "color.ui=never", "-c", "core.quotepath=false"}, args...)
 	cmd := exec.CommandContext(ctx, "git", cmdArgs...)
 	if len(env) > 0 {
-		cmd.Env = append([]string(nil), env...)
+		cmd.Env = processenv.Filter(env)
 	}
 	return cmd, nil
 }

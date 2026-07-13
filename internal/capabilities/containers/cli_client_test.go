@@ -212,6 +212,33 @@ func TestExecRunnerReturnsContextErrorAfterCommandCancellation(t *testing.T) {
 	}
 }
 
+func TestExecRunnerFiltersRuntimeStartupSecrets(t *testing.T) {
+	t.Setenv("REDEVEN_LOCAL_UI_PASSWORD", "password-secret")
+	t.Setenv("REDEVEN_BOOTSTRAP_TICKET", "ticket-secret")
+	t.Setenv("REDEVEN_DESKTOP_BOOTSTRAP_TICKET", "legacy-ticket")
+
+	const verifyCleanEnvironment = `if [ -n "${REDEVEN_LOCAL_UI_PASSWORD+x}${REDEVEN_BOOTSTRAP_TICKET+x}${REDEVEN_DESKTOP_BOOTSTRAP_TICKET+x}" ]; then exit 97; fi`
+	out, err := execRunner{}.Run(context.Background(), "sh", "-c", verifyCleanEnvironment+`; printf clean`)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if string(out) != "clean" {
+		t.Fatalf("Run() output = %q, want clean", out)
+	}
+
+	var streamed []string
+	err = execRunner{}.Stream(context.Background(), "sh", []string{"-c", verifyCleanEnvironment + `; printf 'clean\n'`}, func(line []byte) error {
+		streamed = append(streamed, string(line))
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Stream() error = %v", err)
+	}
+	if !reflect.DeepEqual(streamed, []string{"clean"}) {
+		t.Fatalf("Stream() lines = %#v, want clean", streamed)
+	}
+}
+
 func TestCLIClientTailLogsParsesBoundedBatch(t *testing.T) {
 	t.Parallel()
 

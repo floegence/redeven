@@ -106,6 +106,23 @@ if (process.env.REDEVEN_TEST_RUNTIME_MODE === 'attach_existing_update_required')
   process.exit(0);
 }
 
+const startupInputFile = process.env.REDEVEN_TEST_STARTUP_INPUT_FILE;
+let startupInput = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { startupInput += chunk; });
+process.stdin.on('end', () => {
+  if (startupInputFile) {
+    writeJSON(startupInputFile, {
+      stdin: startupInput,
+      secret_env: {
+        local_ui_password: process.env.REDEVEN_LOCAL_UI_PASSWORD || '',
+        bootstrap_ticket: process.env.REDEVEN_BOOTSTRAP_TICKET || '',
+        legacy_desktop_ticket: process.env.REDEVEN_DESKTOP_BOOTSTRAP_TICKET || '',
+      },
+    });
+  }
+});
+
 const reportFile = argValue('--startup-report-file');
 const mode = process.env.REDEVEN_TEST_RUNTIME_MODE || 'openable';
 if (mode === 'stderr_exit') {
@@ -174,6 +191,59 @@ describe('runtimeProcess', () => {
       password_required: true,
       started_at_unix_ms: 1778751234567,
     });
+  });
+
+  it('writes one Desktop secrets envelope and strips secret environment variables', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const statusFile = path.join(dir, 'status.json');
+    const startupInputFile = path.join(dir, 'startup-input.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    const envelope = JSON.stringify({
+      version: 1,
+      local_ui_password: 'password-secret',
+      bootstrap_ticket: 'ticket-secret',
+    });
+    try {
+      const launch = await startManagedRuntime({
+        executablePath,
+        runtimeArgs: ['--startup-secrets-stdin'],
+        env: {
+          REDEVEN_TEST_STATUS_FILE: statusFile,
+          REDEVEN_TEST_STARTUP_INPUT_FILE: startupInputFile,
+          REDEVEN_LOCAL_UI_PASSWORD: 'inherited-password',
+          REDEVEN_BOOTSTRAP_TICKET: 'inherited-ticket',
+          REDEVEN_DESKTOP_BOOTSTRAP_TICKET: 'legacy-ticket',
+        },
+        startupSecretsStdin: envelope,
+        tempRoot: dir,
+        runtimeAttachTimeoutMs: 5_000,
+        runtimeStabilityWindowMs: 20,
+        runtimeStabilityPollMs: 10,
+      });
+      expect(launch.kind).toBe('ready');
+      const deadline = Date.now() + 2_000;
+      let captured: { stdin: string; secret_env: Record<string, string> } | null = null;
+      while (Date.now() < deadline && captured === null) {
+        try {
+          captured = JSON.parse(await fs.readFile(startupInputFile, 'utf8')) as typeof captured;
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      }
+      expect(captured).toEqual({
+        stdin: envelope,
+        secret_env: {
+          local_ui_password: '',
+          bootstrap_ticket: '',
+          legacy_desktop_ticket: '',
+        },
+      });
+      if (launch.kind === 'ready') {
+        await launch.managedRuntime.stop();
+      }
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('reuses an existing runtime reported by the runtime status command', async () => {

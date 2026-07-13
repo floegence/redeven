@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/floegence/redeven/internal/processenv"
 )
 
 type appServerProcess struct {
@@ -109,7 +111,7 @@ func buildAppServerLaunchPlan(shell string, binaryPath string) (*appServerLaunch
 
 func commandFromLaunchPlan(plan *appServerLaunchPlan) *exec.Cmd {
 	cmd := exec.Command(plan.BinaryPath, plan.Args[1:]...)
-	cmd.Env = plan.Env
+	cmd.Env = processenv.Filter(plan.Env)
 	return cmd
 }
 
@@ -445,7 +447,9 @@ func captureLoginShellEnvironment(shell string) (*loginShellEnvSnapshot, error) 
 	if err != nil {
 		return nil, err
 	}
-	out, err := exec.Command(shellPath, "-l", "-i", "-c", loginShellEnvCaptureCommand).Output()
+	cmd := exec.Command(shellPath, "-l", "-i", "-c", loginShellEnvCaptureCommand)
+	cmd.Env = processenv.Current()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("capture login shell environment: %w", err)
 	}

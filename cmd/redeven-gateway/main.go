@@ -19,6 +19,7 @@ import (
 
 	"github.com/floegence/redeven/internal/desktopbridge"
 	"github.com/floegence/redeven/internal/gatewayservice"
+	"github.com/floegence/redeven/internal/processenv"
 )
 
 var (
@@ -232,7 +233,7 @@ func (c *cli) serviceStartCmd(args []string) int {
 		cmdArgs = append(cmdArgs, "--enable-profile-write")
 	}
 	cmd := exec.Command(exe, cmdArgs...)
-	cmd.Env = append(os.Environ(), managedDesktopBridgeEnv+"=1")
+	cmd.Env = append(processenv.Current(), managedDesktopBridgeEnv+"=1")
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	_ = removePIDFile(stateRootValue)

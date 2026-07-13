@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/floegence/redeven/internal/processenv"
 )
 
 const (
@@ -277,6 +279,7 @@ func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 		return nil, err
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = processenv.Current()
 	configureCommandProcessGroup(cmd)
 	cmd.Cancel = func() error {
 		return terminateCommandProcessTree(cmd)
@@ -305,6 +308,7 @@ func (execRunner) Stream(ctx context.Context, name string, args []string, onStdo
 		return errors.New("stdout line handler is required")
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = processenv.Current()
 	configureCommandProcessGroup(cmd)
 	cmd.Cancel = func() error {
 		return terminateCommandProcessTree(cmd)

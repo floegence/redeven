@@ -12,9 +12,6 @@ const (
 	exampleProviderOrigin  = "https://redeven.test"
 	exampleControlplaneURL = "https://dev.redeven.test"
 	exampleEnvID           = "env_123"
-	exampleBootstrapTicket = "<bootstrap-ticket>"
-	examplePasswordEnv     = "REDEVEN_LOCAL_UI_PASSWORD"
-	exampleBootstrapEnv    = "REDEVEN_BOOTSTRAP_TICKET"
 )
 
 func rootHelpText() string {
@@ -47,7 +44,7 @@ Commands:
 
 Quick start:
   Bind the Local Environment once, then run:
-    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
+    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
     redeven run --mode hybrid
 
   Local-only mode on this device:
@@ -57,10 +54,10 @@ Quick start:
     Use Redeven Desktop, SSH port forwarding, or a Flowersec secure tunnel.
 
   One-shot Local Environment rebind without a separate bootstrap step:
-    redeven run --mode hybrid --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
+    redeven run --mode hybrid --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
 
-Run %[6]s for detailed usage.
-`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket, examplePasswordEnv, "`redeven help <command>`"), "\n")
+Run redeven help <command> for detailed usage.
+`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID), "\n")
 }
 
 func desktopBridgeHelpText() string {
@@ -161,9 +158,10 @@ Required flags:
   --provider-origin <url>           Provider authority origin.
   --controlplane <url>              Access point controlplane base URL.
   --env-id <env_public_id>          Environment public ID.
-  One bootstrap ticket:
-    --bootstrap-ticket <ticket>       One-time bootstrap ticket. "Bearer <ticket>" is also accepted.
-    --bootstrap-ticket-env <env_name> Read the bootstrap ticket from an environment variable.
+  One bootstrap ticket source:
+    --bootstrap-ticket-stdin        Read the one-time ticket from stdin.
+    --bootstrap-ticket-file <path>  Read the one-time ticket from a protected file.
+    REDEVEN_BOOTSTRAP_TICKET        Fixed environment fallback when no explicit source is selected.
 
 Optional flags:
   --state-root <path>              State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
@@ -183,21 +181,27 @@ Local Environment state:
 
 Writes by default:
   ~/.redeven/local-environment/config.json
+  ~/.redeven/local-environment/secrets.json
 
 Examples:
-  Minimal bootstrap:
-    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
+  Bootstrap through stdin from a protected secret source:
+    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-stdin < /run/secrets/redeven-bootstrap-ticket
 
-  Bootstrap from a one-time desktop handoff ticket:
-    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
+  Bootstrap from a protected file:
+    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
 
   Bootstrap with a stricter permission preset:
-    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s --permission-policy read_only
+    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket --permission-policy read_only
 
   Bootstrap, then start the runtime:
-    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
+    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
     redeven run --mode hybrid
-`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket), "\n")
+
+Environment fallback:
+  Secret managers, CI runners, and container orchestrators may inject
+  REDEVEN_BOOTSTRAP_TICKET directly. Environment variables can still be observed
+  by same-user processes, debuggers, and the host platform.
+`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID), "\n")
 }
 
 func runHelpText() string {
@@ -216,8 +220,8 @@ Modes:
   desktop   Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.
 
 Bootstrap rules:
-  - Recommended flow: run %[5]s once, then use %[6]s.
-  - One-shot flow: pass --provider-origin, --controlplane, --env-id, and a one-time bootstrap ticket to %[6]s.
+  - Recommended flow: run %[4]s once, then use %[5]s.
+  - One-shot flow: pass --provider-origin, --controlplane, --env-id, and a one-time bootstrap ticket to %[5]s.
 
 Local Environment state rules:
   - Redeven uses one Local Environment state at ~/.redeven/local-environment.
@@ -227,12 +231,13 @@ Local Environment state rules:
 Local UI bind rules:
   - Default bind: localhost:23998
   - Accepted examples: localhost:23998, 127.0.0.1:24000, 127.42.0.9:24000, 127.0.0.1:0, [::1]:24000
-	  - localhost:0 is rejected because dual-stack localhost listeners cannot share one dynamic port.
-	  - Local UI is permanently loopback-only. Use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel across devices.
+  - localhost:0 is rejected because dual-stack localhost listeners cannot share one dynamic port.
+  - Local UI is permanently loopback-only. Use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel across devices.
 
 Password rules:
-  - Set exactly one of --password, --password-stdin, --password-env, or --password-file.
-  - --password-env and --password-file trigger startup verification in an interactive terminal.
+  - Select at most one of --password-prompt, --password-stdin, or --password-file.
+  - If no explicit source is selected, REDEVEN_LOCAL_UI_PASSWORD is read automatically.
+  - Empty environment values are ignored. Explicit sources override the fixed environment fallback.
 
 Rich terminal controls:
   - Arrow keys move focus between Control plane, Sessions, and Logs.
@@ -248,13 +253,13 @@ Flags:
   --provider-origin <url>           Provider authority origin for one-shot bootstrap.
   --controlplane <url>              Access point controlplane base URL for one-shot bootstrap.
   --env-id <env_public_id>          Environment public ID for one-shot bootstrap.
-  --bootstrap-ticket <ticket>       One-time bootstrap ticket for one-shot bootstrap.
-  --bootstrap-ticket-env <env_name> Read the bootstrap ticket from an environment variable.
+  --bootstrap-ticket-stdin          Read the one-time bootstrap ticket from stdin.
+  --bootstrap-ticket-file <path>    Read the one-time bootstrap ticket from a protected file.
   --permission-policy <preset>      Local permission policy when bootstrapping inline.
-  --password <password>             Access password for the Local UI.
+  --password-prompt                 Prompt for the Local UI password without echo.
   --password-stdin                  Read the Local UI password from stdin.
-  --password-env <env_name>         Read the Local UI password from an environment variable.
   --password-file <path>            Read the Local UI password from a file.
+  --startup-secrets-stdin           Desktop-managed machine startup envelope (internal).
   --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --desktop-managed                 Disable CLI self-upgrade for desktop-managed Local UI runs.
   --startup-report-file <path>      Write structured Local UI readiness JSON.
@@ -271,6 +276,12 @@ Examples:
   Local-only mode:
     redeven run --mode local
 
+  Local-only mode with a hidden interactive password prompt:
+    redeven run --mode local --password-prompt
+
+  Local-only mode with stdin from a protected secret source:
+    redeven run --mode local --password-stdin < /run/secrets/redeven-local-ui-password
+
   Desktop shell mode:
     redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind 127.0.0.1:0
 
@@ -278,11 +289,13 @@ Examples:
     Keep Local UI on loopback and use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel.
 
   One-shot hybrid run without a separate bootstrap step:
-    redeven run --mode hybrid --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
+    redeven run --mode hybrid --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
 
-  One-shot desktop handoff run with a bootstrap ticket:
-    %[7]s=%[4]s redeven run --mode desktop --desktop-managed --presentation machine --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-env %[7]s
-`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket, "`redeven bootstrap`", "`redeven run`", exampleBootstrapEnv, examplePasswordEnv), "\n")
+Environment fallback:
+  Secret managers, CI runners, and container orchestrators may inject
+  REDEVEN_LOCAL_UI_PASSWORD or REDEVEN_BOOTSTRAP_TICKET directly. Environment
+  variables can still be observed by same-user processes, debuggers, and the host platform.
+`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, "`redeven bootstrap`", "`redeven run`"), "\n")
 }
 
 func searchHelpText() string {
@@ -816,6 +829,9 @@ func translateFlagParseError(commandPath string, err error) (string, []string) {
 	if name := unknownFlagName(msg); name != "" {
 		message := fmt.Sprintf("unknown flag for `redeven %s`: --%s", commandPath, name)
 		details := []string{}
+		if migration := removedSecretFlagMigration(name); len(migration) > 0 {
+			details = append(details, migration...)
+		}
 		if commandPath == "run" && name == "local-ui-port" {
 			details = append(details,
 				"Hint: `--local-ui-port` was replaced by `--local-ui-bind <host:port>`.",
@@ -877,72 +893,75 @@ func formatFlagList(names []string) string {
 	}
 }
 
-func translatePasswordOptionError(err error) (string, []string) {
-	var optErr *passwordOptionError
-	if errors.As(err, &optErr) {
-		switch optErr.kind {
-		case passwordOptionErrorMultipleSources:
-			return "invalid password flags: use only one of --password, --password-stdin, --password-env, or --password-file",
-				[]string{"Hint: choose a single password source for one startup command."}
-		case passwordOptionErrorStdinRead:
-			return "invalid password flags: could not read password from stdin",
-				[]string{
-					"Hint: pipe the full access password into `redeven run --password-stdin` and retry.",
-					fmt.Sprintf("Details: %v", optErr.cause),
-				}
-		case passwordOptionErrorStdinEmpty:
-			return "invalid password flags: stdin password is empty",
-				[]string{"Hint: pipe a non-empty access password into `redeven run --password-stdin` and retry."}
-		case passwordOptionErrorEnvNotSet:
-			return fmt.Sprintf("invalid password flags: password env var %q is not set", optErr.envName),
-				[]string{
-					fmt.Sprintf("Hint: export %s with a non-empty password before running `redeven run`.", optErr.envName),
-					fmt.Sprintf("Example: %s=replace-with-a-long-password redeven run --mode hybrid --password-env %s", optErr.envName, optErr.envName),
-				}
-		case passwordOptionErrorEnvEmpty:
-			return fmt.Sprintf("invalid password flags: password env var %q is empty", optErr.envName),
-				[]string{fmt.Sprintf("Hint: set %s to a non-empty password and retry.", optErr.envName)}
-		case passwordOptionErrorFileRead:
-			return fmt.Sprintf("invalid password flags: could not read password file %q", optErr.path),
-				[]string{
-					"Hint: check that the file exists and is readable by the current user.",
-					fmt.Sprintf("Details: %v", optErr.cause),
-				}
-		case passwordOptionErrorFileEmpty:
-			return fmt.Sprintf("invalid password flags: password file %q is empty", optErr.path),
-				[]string{"Hint: write the full access password to the file and retry."}
+func removedSecretFlagMigration(name string) []string {
+	switch strings.TrimSpace(name) {
+	case "password":
+		return []string{
+			"Migration: use --password-prompt, --password-stdin, --password-file, or the fixed REDEVEN_LOCAL_UI_PASSWORD environment fallback.",
+			"The removed flag is not accepted because command-line values can enter shell history and process listings.",
 		}
-	}
-	return fmt.Sprintf("invalid password flags: %v", err), nil
-}
-
-func translateBootstrapTicketOptionError(err error, command string) (string, []string) {
-	var optErr *bootstrapTicketOptionError
-	if errors.As(err, &optErr) {
-		switch optErr.kind {
-		case bootstrapTicketOptionErrorMultipleSources:
-			return "invalid bootstrap ticket flags: use only one of --bootstrap-ticket or --bootstrap-ticket-env",
-				[]string{fmt.Sprintf("Hint: choose a single bootstrap ticket source for `%s`.", command)}
-		case bootstrapTicketOptionErrorEnvNotSet:
-			return fmt.Sprintf("invalid bootstrap ticket flags: bootstrap ticket env var %q is not set", optErr.envName),
-				[]string{fmt.Sprintf("Hint: export %s with a non-empty ticket before running `%s`.", optErr.envName, command)}
-		case bootstrapTicketOptionErrorEnvEmpty:
-			return fmt.Sprintf("invalid bootstrap ticket flags: bootstrap ticket env var %q is empty", optErr.envName),
-				[]string{fmt.Sprintf("Hint: set %s to a non-empty ticket and retry.", optErr.envName)}
+	case "password-env":
+		return []string{
+			"Migration: inject the fixed REDEVEN_LOCAL_UI_PASSWORD variable, or use --password-prompt, --password-stdin, or --password-file.",
+			"Redeven no longer accepts caller-selected environment variable names for Local UI passwords.",
 		}
-	}
-	return fmt.Sprintf("invalid bootstrap ticket flags: %v", err), nil
-}
-
-func translatePasswordVerificationError(err error) (string, []string) {
-	switch {
-	case errors.Is(err, errPasswordPromptRequiresTTY):
-		return "password verification requires an interactive terminal",
-			[]string{"Hint: rerun in an interactive terminal, or use --password or --password-stdin for non-interactive startup."}
-	case errors.Is(err, errAccessPasswordVerificationFailed):
-		return "password verification failed: access password verification failed",
-			[]string{"Hint: enter the same password configured in --password-env or --password-file."}
+	case "bootstrap-ticket":
+		return []string{
+			"Migration: use --bootstrap-ticket-stdin, --bootstrap-ticket-file, or the fixed REDEVEN_BOOTSTRAP_TICKET environment fallback.",
+			"The removed flag is not accepted because command-line values can enter shell history and process listings.",
+		}
+	case "bootstrap-ticket-env":
+		return []string{
+			"Migration: inject the fixed REDEVEN_BOOTSTRAP_TICKET variable, or use --bootstrap-ticket-stdin or --bootstrap-ticket-file.",
+			"Redeven no longer accepts caller-selected environment variable names for bootstrap tickets.",
+		}
 	default:
-		return fmt.Sprintf("password verification failed: %v", err), nil
+		return nil
 	}
+}
+
+func translateStartupSecretError(err error, command string) (string, []string) {
+	var secretErr *startupSecretError
+	if !errors.As(err, &secretErr) {
+		return fmt.Sprintf("invalid startup secrets: %v", err), nil
+	}
+	switch secretErr.kind {
+	case startupSecretErrorPasswordSources, startupSecretErrorTicketSources:
+		return fmt.Sprintf("invalid startup secret options: %s", secretErr.Error()),
+			[]string{fmt.Sprintf("Hint: choose one explicit source for `%s`; an explicit source overrides the fixed environment fallback.", command)}
+	case startupSecretErrorStdinConflict:
+		return "invalid startup secret options: password and bootstrap ticket cannot both read stdin",
+			[]string{"Hint: put one secret in a protected file, or let Redeven Desktop send both through its private startup envelope."}
+	case startupSecretErrorEnvelopeConflict:
+		return "invalid Desktop startup secrets: --startup-secrets-stdin conflicts with another secret source",
+			[]string{"Hint: remove password/ticket flags and fixed secret environment variables from Desktop-managed startup."}
+	case startupSecretErrorEnvelopeMode:
+		return "invalid Desktop startup secrets: --startup-secrets-stdin requires desktop-managed machine startup",
+			[]string{"Hint: this private envelope is reserved for Redeven Desktop; ordinary CLI startup should use prompt, stdin, file, or fixed environment sources."}
+	case startupSecretErrorPrompt:
+		switch {
+		case errors.Is(secretErr.cause, errPasswordPromptRequiresTTY):
+			return "Local UI password prompt requires an interactive terminal",
+				[]string{"Hint: run from a terminal, or use --password-stdin, --password-file, or secret-manager injection."}
+		case errors.Is(secretErr.cause, errPasswordPromptMismatch):
+			return "Local UI password confirmation did not match",
+				[]string{"Hint: retry --password-prompt and enter the same password both times."}
+		}
+	case startupSecretErrorRead:
+		details := []string{"Hint: verify that the selected input is readable by the current user and retry."}
+		if secretErr.cause != nil {
+			details = append(details, fmt.Sprintf("Details: %v", secretErr.cause))
+		}
+		return fmt.Sprintf("invalid startup secrets: could not read %s", secretErr.source), details
+	case startupSecretErrorEmpty:
+		return fmt.Sprintf("invalid startup secrets: %s is empty", secretErr.source),
+			[]string{"Hint: provide a non-empty secret; empty fixed environment variables are treated as unset."}
+	case startupSecretErrorTooLarge:
+		return fmt.Sprintf("invalid startup secrets: %s exceeds 64 KiB", secretErr.source),
+			[]string{"Hint: provide the secret directly rather than a large document or command output."}
+	case startupSecretErrorEnvelope:
+		return "invalid Desktop startup secrets envelope",
+			[]string{"Hint: Desktop must send one version 1 JSON object no larger than 64 KiB.", fmt.Sprintf("Details: %v", secretErr.cause)}
+	}
+	return fmt.Sprintf("invalid startup secrets: %v", err), nil
 }

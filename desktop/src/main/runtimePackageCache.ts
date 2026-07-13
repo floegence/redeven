@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
 
+import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 import {
   DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS,
   buildDesktopSSHReleaseSourceCacheKey,
@@ -191,10 +192,10 @@ async function runLocalCommand(
   return new Promise<LocalCommandResult>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: options.cwd,
-      env: {
+      env: sanitizeDesktopChildEnvironment({
         ...process.env,
         ...options.env,
-      },
+      }),
       stdio: ['ignore', 'pipe', 'pipe'],
       signal: options.signal,
     });
