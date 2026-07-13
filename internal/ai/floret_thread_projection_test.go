@@ -766,58 +766,76 @@ func TestApplyFloretThreadProjectionRejectsMissingOrMismatchedIdentityWithoutCle
 func TestApplyFloretThreadProjectionDoesNotDowngradeSettledTerminalItem(t *testing.T) {
 	t.Parallel()
 
-	r := newRun(runOptions{})
-	r.id = "run_terminal_floor"
-	r.threadID = "thread_terminal_floor"
-	r.messageID = "msg_terminal_floor"
+	for _, runStatus := range []observation.ActivityStatus{
+		observation.ActivityStatusSuccess,
+		observation.ActivityStatusError,
+		observation.ActivityStatusCanceled,
+	} {
+		runStatus := runStatus
+		t.Run(string(runStatus), func(t *testing.T) {
+			t.Parallel()
 
-	successTimeline := floretProjectionTimeline("run_terminal_floor", "thread_terminal_floor", "msg_terminal_floor", "exec-1", "terminal.exec")
-	successTimeline.Items[0].Label = "printf done"
-	successTimeline.Items[0].Renderer = observation.ActivityRendererTerminal
-	successTimeline.Items[0].Payload = map[string]any{"command": "printf done", "output": "done"}
-	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
-		ThreadID: "thread_terminal_floor",
-		TurnID:   "msg_terminal_floor",
-		RunID:    "run_terminal_floor",
-		TraceID:  "run_terminal_floor",
-		Segments: []flruntime.ThreadTurnProjectionSegment{{
-			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
-			ActivityTimeline: successTimeline,
-		}},
-	}) {
-		t.Fatalf("success projection was not applied")
-	}
+			r := newRun(runOptions{})
+			r.id = "run_terminal_floor"
+			r.threadID = "thread_terminal_floor"
+			r.messageID = "msg_terminal_floor"
 
-	runningTimeline := floretRunningProjectionTimeline("run_terminal_floor", "thread_terminal_floor", "msg_terminal_floor", "exec-1")
-	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
-		ThreadID: "thread_terminal_floor",
-		TurnID:   "msg_terminal_floor",
-		RunID:    "run_terminal_floor",
-		TraceID:  "run_terminal_floor",
-		Segments: []flruntime.ThreadTurnProjectionSegment{{
-			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
-			ActivityTimeline: runningTimeline,
-		}},
-	}) {
-		t.Fatalf("running projection was not applied")
-	}
+			settledTimeline := floretProjectionTimeline("run_terminal_floor", "thread_terminal_floor", "msg_terminal_floor", "exec-1", "terminal.exec")
+			settledTimeline.Summary.Status = runStatus
+			settledTimeline.Summary.DurationMS = 987
+			settledTimeline.Items[0].Label = "printf done"
+			settledTimeline.Items[0].Renderer = observation.ActivityRendererTerminal
+			settledTimeline.Items[0].Payload = map[string]any{"command": "printf done", "output": "done"}
+			if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+				ThreadID: "thread_terminal_floor",
+				TurnID:   "msg_terminal_floor",
+				RunID:    "run_terminal_floor",
+				TraceID:  "run_terminal_floor",
+				Segments: []flruntime.ThreadTurnProjectionSegment{{
+					Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+					ActivityTimeline: settledTimeline,
+				}},
+			}) {
+				t.Fatalf("settled projection was not applied")
+			}
 
-	if len(r.assistantBlocks) != 1 {
-		t.Fatalf("assistantBlocks=%#v, want one activity block", r.assistantBlocks)
-	}
-	block, ok := r.assistantBlocks[0].(ActivityTimelineBlock)
-	if !ok {
-		t.Fatalf("assistant block=%T, want activity timeline", r.assistantBlocks[0])
-	}
-	item := activityBlockItemByToolID(t, block, "exec-1")
-	if item.Status != observation.ActivityStatusSuccess {
-		t.Fatalf("terminal item status=%q, want success", item.Status)
-	}
-	if block.Summary.Status != observation.ActivityStatusSuccess || block.Summary.Counts.Running != 0 || block.Summary.Counts.Success != 1 {
-		t.Fatalf("summary=%#v, want success without running count", block.Summary)
-	}
-	if got := anyToString(item.Payload["output"]); got != "done" {
-		t.Fatalf("terminal payload output=%q, want preserved success payload", got)
+			runningTimeline := floretRunningProjectionTimeline("run_terminal_floor", "thread_terminal_floor", "msg_terminal_floor", "exec-1")
+			runningTimeline.Summary.Status = runStatus
+			runningTimeline.Summary.DurationMS = 987
+			if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+				ThreadID: "thread_terminal_floor",
+				TurnID:   "msg_terminal_floor",
+				RunID:    "run_terminal_floor",
+				TraceID:  "run_terminal_floor",
+				Segments: []flruntime.ThreadTurnProjectionSegment{{
+					Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+					ActivityTimeline: runningTimeline,
+				}},
+			}) {
+				t.Fatalf("running projection was not applied")
+			}
+
+			if len(r.assistantBlocks) != 1 {
+				t.Fatalf("assistantBlocks=%#v, want one activity block", r.assistantBlocks)
+			}
+			block, ok := r.assistantBlocks[0].(ActivityTimelineBlock)
+			if !ok {
+				t.Fatalf("assistant block=%T, want activity timeline", r.assistantBlocks[0])
+			}
+			item := activityBlockItemByToolID(t, block, "exec-1")
+			if item.Status != observation.ActivityStatusSuccess {
+				t.Fatalf("terminal item status=%q, want success", item.Status)
+			}
+			if block.Summary.Status != runStatus || block.Summary.Counts.Running != 0 || block.Summary.Counts.Success != 1 {
+				t.Fatalf("summary=%#v, want status %q with one success", block.Summary, runStatus)
+			}
+			if block.Summary.DurationMS != 987 {
+				t.Fatalf("summary duration=%d, want 987", block.Summary.DurationMS)
+			}
+			if got := anyToString(item.Payload["output"]); got != "done" {
+				t.Fatalf("terminal payload output=%q, want preserved success payload", got)
+			}
+		})
 	}
 }
 
