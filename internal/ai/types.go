@@ -423,7 +423,8 @@ type RunOptions struct {
 	Temperature        *float64                    `json:"temperature,omitempty"`
 	TopP               *float64                    `json:"top_p,omitempty"`
 
-	// Optional hard budgets (0 means unset).
+	// Optional hard budgets (0 means unset). Input is cumulative across one run;
+	// output is the maximum for each provider request.
 	MaxInputTokens  int     `json:"max_input_tokens,omitempty"`
 	MaxOutputTokens int     `json:"max_output_tokens,omitempty"`
 	MaxCostUSD      float64 `json:"max_cost_usd,omitempty"`

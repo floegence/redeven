@@ -135,7 +135,6 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 			TopP:                req.Options.TopP,
 		},
 		TurnBudgets{
-			MaxInputTokens: req.Options.MaxInputTokens,
 			MaxOutputToken: req.Options.MaxOutputTokens,
 			MaxCostUSD:     req.Options.MaxCostUSD,
 		},
@@ -147,10 +146,6 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		return r.failRun("Failed to initialize Floret control tools", err)
 	}
 	labels := flruntime.RunLabels{Correlation: map[string]string{"thread_id": strings.TrimSpace(r.threadID), "message_id": strings.TrimSpace(r.messageID)}, Host: initialSurface.HostContext}
-	maxTotalTokens := int64(req.Options.MaxInputTokens + req.Options.MaxOutputTokens)
-	if maxTotalTokens <= 0 {
-		maxTotalTokens = 0
-	}
 	floretCfg := redevenFloretAdapterConfig(initialSurface.SystemPrompt, floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens), req.Options.ReasoningSelection)
 	store, err := r.openFloretThreadStore()
 	if err != nil {
@@ -200,7 +195,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		Signals:               controlSpec,
 		Limits: flruntime.TurnLimits{
 			MaxToolCalls:           modelGatewayHardMaxToolCalls,
-			MaxTotalTokens:         maxTotalTokens,
+			MaxInputTokens:         int64(req.Options.MaxInputTokens),
 			MaxCostUSD:             req.Options.MaxCostUSD,
 			MaxLengthContinuations: 2,
 		},
