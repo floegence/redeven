@@ -2,13 +2,13 @@ package agent
 
 import (
 	"context"
-	"os"
 	"runtime"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
+	"github.com/floegence/redeven/internal/processenv"
 	"github.com/floegence/redeven/internal/session"
 	syssvc "github.com/floegence/redeven/internal/sys"
 )
@@ -93,7 +93,7 @@ func (a *Agent) runSelfRestart(plan selfExecPlan, userPublicID string, channelID
 		"local_ui_bind", plan.localUIBind,
 	)
 
-	if err := syscall.Exec(plan.exePath, plan.argv, os.Environ()); err != nil {
+	if err := syscall.Exec(plan.exePath, plan.argv, processenv.Current()); err != nil {
 		failureMessage := summarizeExecFailure("Runtime restart failed", err)
 		a.log.Error("sys_restart: exec failed",
 			"user_public_id", userPublicID,

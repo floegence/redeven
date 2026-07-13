@@ -33,9 +33,10 @@ var (
 const desktopOwnerIDEnvName = "REDEVEN_DESKTOP_OWNER_ID"
 
 type cli struct {
-	stdin  io.Reader
-	stdout io.Writer
-	stderr io.Writer
+	stdin            io.Reader
+	stdout           io.Writer
+	stderr           io.Writer
+	startupSecretEnv startupSecretEnvironment
 }
 
 func main() {
@@ -43,7 +44,12 @@ func main() {
 }
 
 func runCLI(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	return (&cli{stdin: stdin, stdout: stdout, stderr: stderr}).run(args)
+	return (&cli{
+		stdin:            stdin,
+		stdout:           stdout,
+		stderr:           stderr,
+		startupSecretEnv: captureAndUnsetStartupSecretEnvironment(),
+	}).run(args)
 }
 
 func (c *cli) run(args []string) int {
@@ -123,8 +129,8 @@ func (c *cli) bootstrapCmd(args []string) int {
 	providerOrigin := fs.String("provider-origin", "", "Provider origin (e.g. https://redeven.test)")
 	controlplane := fs.String("controlplane", "", "Access point controlplane base URL (e.g. https://dev.redeven.test)")
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
-	bootstrapTicket := fs.String("bootstrap-ticket", "", "One-time bootstrap ticket (raw ticket; 'Bearer <ticket>' is also accepted)")
-	bootstrapTicketEnv := fs.String("bootstrap-ticket-env", "", "Environment variable name holding the bootstrap ticket")
+	bootstrapTicketStdin := fs.Bool("bootstrap-ticket-stdin", false, "Read the one-time bootstrap ticket from stdin")
+	bootstrapTicketFile := fs.String("bootstrap-ticket-file", "", "File path holding the one-time bootstrap ticket")
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")
 
 	agentHomeDir := fs.String("agent-home-dir", "", "Runtime home dir used for filesystem-facing features (default: user home dir)")
@@ -147,33 +153,31 @@ func (c *cli) bootstrapCmd(args []string) int {
 		return 2
 	}
 
-	resolvedBootstrapTicket, err := resolveBootstrapTicket(bootstrapTicketOptions{
-		ticket:    *bootstrapTicket,
-		ticketEnv: *bootstrapTicketEnv,
+	startupSecrets, err := resolveStartupSecrets(startupSecretsOptions{
+		bootstrapTicketStdin:  *bootstrapTicketStdin,
+		bootstrapTicketFile:   *bootstrapTicketFile,
+		stdin:                 c.stdin,
+		environment:           &c.startupSecretEnv,
+		useBootstrapTicketEnv: true,
 	})
 	if err != nil {
-		message, details := translateBootstrapTicketOptionError(err, "redeven bootstrap")
+		message, details := translateStartupSecretError(err, "redeven bootstrap")
 		writeErrorWithHelp(c.stderr, message, details, bootstrapHelpText())
 		return 2
 	}
+	resolvedBootstrapTicket := startupSecrets.bootstrapTicket.value
 	missing := findMissingFlags(
 		requiredFlag{name: "--provider-origin", value: *providerOrigin},
 		requiredFlag{name: "--controlplane", value: *controlplane},
 		requiredFlag{name: "--env-id", value: *envID},
-		requiredFlag{name: "one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)", value: resolvedBootstrapTicket},
+		requiredFlag{name: "one bootstrap ticket (--bootstrap-ticket-stdin, --bootstrap-ticket-file, or REDEVEN_BOOTSTRAP_TICKET)", value: resolvedBootstrapTicket},
 	)
 	if len(missing) > 0 {
 		writeErrorWithHelp(
 			c.stderr,
 			fmt.Sprintf("missing required flags for `redeven bootstrap`: %s", formatFlagList(missing)),
 			[]string{
-				fmt.Sprintf(
-					"Example: redeven bootstrap --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket %s",
-					exampleProviderOrigin,
-					exampleControlplaneURL,
-					exampleEnvID,
-					exampleBootstrapTicket,
-				),
+				fmt.Sprintf("Example: redeven bootstrap --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket", exampleProviderOrigin, exampleControlplaneURL, exampleEnvID),
 			},
 			bootstrapHelpText(),
 		)
@@ -187,6 +191,7 @@ func (c *cli) bootstrapCmd(args []string) int {
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
+	recordStartupSecretSources(stateLayout.StateDir, startupSecrets)
 
 	_, err = config.BootstrapConfig(ctx, config.BootstrapArgs{
 		ProviderOrigin:         *providerOrigin,
@@ -217,16 +222,16 @@ func (c *cli) runCmd(args []string) int {
 	providerOrigin := fs.String("provider-origin", "", "Provider origin for one-shot Local Environment rebind")
 	controlplane := fs.String("controlplane", "", "Access point controlplane base URL for one-shot Local Environment rebind")
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
-	bootstrapTicket := fs.String("bootstrap-ticket", "", "One-time bootstrap ticket")
-	bootstrapTicketEnv := fs.String("bootstrap-ticket-env", "", "Environment variable name holding the bootstrap ticket")
+	bootstrapTicketStdin := fs.Bool("bootstrap-ticket-stdin", false, "Read the one-time bootstrap ticket from stdin")
+	bootstrapTicketFile := fs.String("bootstrap-ticket-file", "", "File path holding the one-time bootstrap ticket")
 	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read (no general shell/process)|read_only|execute_read_write (optional; applies when bootstrapping)")
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")
 	modeRaw := fs.String("mode", "remote", "Run mode: remote|hybrid|local|desktop")
 	localUIBindRaw := fs.String("local-ui-bind", localui.DefaultBind, "Local UI bind address (default: localhost:23998)")
-	password := fs.String("password", "", "Access password (not recommended; prefer --password-env or --password-file)")
+	passwordPrompt := fs.Bool("password-prompt", false, "Prompt for the Local UI access password without echo")
 	passwordStdin := fs.Bool("password-stdin", false, "Read the access password from stdin")
-	passwordEnv := fs.String("password-env", "", "Environment variable name holding the access password")
 	passwordFile := fs.String("password-file", "", "File path holding the access password")
+	startupSecretsStdin := fs.Bool("startup-secrets-stdin", false, "Read the Desktop startup secrets envelope from stdin")
 	desktopManaged := fs.Bool("desktop-managed", false, "Disable CLI self-upgrade semantics for desktop-managed Local UI runs")
 	startupReportFile := fs.String("startup-report-file", "", "Write Local UI readiness JSON to the given file (advanced)")
 	presentationRaw := fs.String("presentation", string(runtimepresentation.ModeAuto), "Startup presentation: auto|rich|plain|machine")
@@ -284,16 +289,6 @@ func (c *cli) runCmd(args []string) int {
 		return 2
 	}
 
-	resolvedBootstrapTicket, err := resolveBootstrapTicket(bootstrapTicketOptions{
-		ticket:    *bootstrapTicket,
-		ticketEnv: *bootstrapTicketEnv,
-	})
-	if err != nil {
-		message, details := translateBootstrapTicketOptionError(err, "redeven run")
-		writeErrorWithHelp(c.stderr, message, details, runHelpText())
-		return 2
-	}
-
 	if *desktopManaged && mode == runModeRemote {
 		writeErrorWithHelp(
 			c.stderr,
@@ -323,6 +318,40 @@ func (c *cli) runCmd(args []string) int {
 		)
 		return 2
 	}
+	if mode == runModeRemote && (*passwordPrompt || *passwordStdin || strings.TrimSpace(*passwordFile) != "") {
+		writeErrorWithHelp(
+			c.stderr,
+			"Local UI password options require a Local UI run mode",
+			[]string{"Hint: use --mode hybrid, --mode local, or --mode desktop when enabling Local UI password protection."},
+			runHelpText(),
+		)
+		return 2
+	}
+
+	inlineBootstrapRequested := strings.TrimSpace(*providerOrigin) != "" ||
+		strings.TrimSpace(*controlplane) != "" ||
+		strings.TrimSpace(*envID) != "" ||
+		*bootstrapTicketStdin || strings.TrimSpace(*bootstrapTicketFile) != ""
+	startupSecrets, err := resolveStartupSecrets(startupSecretsOptions{
+		passwordPrompt:        *passwordPrompt,
+		passwordStdin:         *passwordStdin,
+		passwordFile:          *passwordFile,
+		bootstrapTicketStdin:  *bootstrapTicketStdin,
+		bootstrapTicketFile:   *bootstrapTicketFile,
+		startupSecretsStdin:   *startupSecretsStdin,
+		stdin:                 c.stdin,
+		environment:           &c.startupSecretEnv,
+		usePasswordEnv:        mode != runModeRemote,
+		useBootstrapTicketEnv: inlineBootstrapRequested,
+		desktopEnvelopeAllowed: mode == runModeDesktop && *desktopManaged &&
+			(requestedPresentation == runtimepresentation.ModeAuto || requestedPresentation == runtimepresentation.ModeMachine),
+	})
+	if err != nil {
+		message, details := translateStartupSecretError(err, "redeven run")
+		writeErrorWithHelp(c.stderr, message, details, runHelpText())
+		return 2
+	}
+	resolvedBootstrapTicket := startupSecrets.bootstrapTicket.value
 
 	presentationConfig := runtimepresentation.ResolveConfig(requestedPresentation, runtimepresentation.ResolveInput{
 		Stdin:             c.stdin,
@@ -406,7 +435,7 @@ func (c *cli) runCmd(args []string) int {
 			requiredFlag{name: "--provider-origin", value: *providerOrigin},
 			requiredFlag{name: "--controlplane", value: *controlplane},
 			requiredFlag{name: "--env-id", value: *envID},
-			requiredFlag{name: "one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)", value: resolvedBootstrapTicket},
+			requiredFlag{name: "one bootstrap ticket (--bootstrap-ticket-stdin, --bootstrap-ticket-file, or REDEVEN_BOOTSTRAP_TICKET)", value: resolvedBootstrapTicket},
 		)
 		if len(missing) > 0 {
 			label := "flags"
@@ -418,23 +447,8 @@ func (c *cli) runCmd(args []string) int {
 				c.stderr,
 				message,
 				[]string{
-					"Hint: provide --provider-origin, --controlplane, --env-id, and exactly one bootstrap ticket together, or run `redeven bootstrap` first.",
-					fmt.Sprintf(
-						"Example: redeven run --mode hybrid --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket %s",
-						exampleProviderOrigin,
-						exampleControlplaneURL,
-						exampleEnvID,
-						exampleBootstrapTicket,
-					),
-					fmt.Sprintf(
-						"Example: %s=%s redeven run --mode desktop --desktop-managed --presentation machine --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket-env %s",
-						exampleBootstrapEnv,
-						exampleBootstrapTicket,
-						exampleProviderOrigin,
-						exampleControlplaneURL,
-						exampleEnvID,
-						exampleBootstrapEnv,
-					),
+					"Hint: provide --provider-origin, --controlplane, --env-id, and one bootstrap ticket source together, or run `redeven bootstrap` first.",
+					fmt.Sprintf("Example: redeven run --mode hybrid --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket", exampleProviderOrigin, exampleControlplaneURL, exampleEnvID),
 				},
 				runHelpText(),
 			)
@@ -455,6 +469,7 @@ func (c *cli) runCmd(args []string) int {
 	if err := os.MkdirAll(stateLayout.StateDir, 0o700); err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to init state dir: %v", err))
 	}
+	recordStartupSecretSources(stateLayout.StateDir, startupSecrets)
 
 	// Prevent multiple runtime processes from managing the same local state directory.
 	// This avoids control-plane flapping and data-plane races when users start the runtime twice.
@@ -496,28 +511,7 @@ func (c *cli) runCmd(args []string) int {
 		Detail: lockPath,
 	})
 
-	runPassword, err := resolveRunPassword(runPasswordOptions{
-		password:      *password,
-		passwordStdin: *passwordStdin,
-		passwordEnv:   *passwordEnv,
-		passwordFile:  *passwordFile,
-		stdin:         c.stdin,
-	})
-	if err != nil {
-		message, details := translatePasswordOptionError(err)
-		writeErrorWithHelp(c.stderr, message, details, runHelpText())
-		return 2
-	}
-
-	accessGate := newAccessGate(runPassword.password)
-	if err := verifyStartupAccessPassword(accessGate, runPassword.requireStartupVerification); err != nil {
-		message, details := translatePasswordVerificationError(err)
-		writeErrorWithHelp(c.stderr, message, details, "")
-		if desktopLaunchFailure != nil {
-			return desktopLaunchFailure(desktopLaunchCodeStartupInvalid, message, stateLayout, 1)
-		}
-		return 1
-	}
+	accessGate := newAccessGate(startupSecrets.localUIPassword.value)
 	if bootstrapViaFlags {
 		_ = startupReporter.Emit(runtimepresentation.Event{
 			Kind:  runtimepresentation.EventPhaseStarted,
@@ -919,9 +913,8 @@ func (c *cli) printNotBootstrappedGuidance(reason error) int {
 		[]string{
 			"Hint: run `redeven bootstrap` first, or pass --provider-origin, --controlplane, --env-id, and a one-time bootstrap ticket directly to `redeven run`.",
 			"Examples:",
-			fmt.Sprintf("  redeven bootstrap --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket %s", exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket),
-			fmt.Sprintf("  redeven run --mode hybrid --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket %s", exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket),
-			fmt.Sprintf("  %s=%s redeven run --mode desktop --desktop-managed --presentation machine --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket-env %s", exampleBootstrapEnv, exampleBootstrapTicket, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, exampleBootstrapEnv),
+			fmt.Sprintf("  redeven bootstrap --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket", exampleProviderOrigin, exampleControlplaneURL, exampleEnvID),
+			fmt.Sprintf("  redeven run --mode hybrid --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket", exampleProviderOrigin, exampleControlplaneURL, exampleEnvID),
 		},
 		"",
 	)

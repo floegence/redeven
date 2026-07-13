@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -34,9 +35,15 @@ func TestTerminalProcessManagerQuickCompletionCapturesPTYOutput(t *testing.T) {
 		SettlementTurnID:   "turn_test",
 		ToolID:             "tool_test",
 		ToolName:           "terminal.exec",
-		Command:            "printf quick-output",
+		Command:            `if [ -n "${REDEVEN_LOCAL_UI_PASSWORD+x}${REDEVEN_BOOTSTRAP_TICKET+x}${REDEVEN_DESKTOP_BOOTSTRAP_TICKET+x}" ]; then printf secret-leaked; else printf quick-output; fi`,
 		CwdAbs:             workspace,
 		Shell:              "/bin/bash",
+		Env: []string{
+			"PATH=" + os.Getenv("PATH"),
+			"REDEVEN_LOCAL_UI_PASSWORD=password-secret",
+			"REDEVEN_BOOTSTRAP_TICKET=ticket-secret",
+			"REDEVEN_DESKTOP_BOOTSTRAP_TICKET=legacy-ticket",
+		},
 	})
 	if err != nil {
 		t.Fatalf("Start: %v", err)

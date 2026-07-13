@@ -19,6 +19,7 @@ import {
   isDesktopHostCommandNotFoundError,
   resolveDesktopHostCommand,
 } from './desktopHostCommand';
+import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 
 export type RuntimeHostCommandResult = Readonly<{
   stdout: string;
@@ -175,10 +176,10 @@ async function createSSHPasswordAskPassScript(): Promise<Readonly<{
 }
 
 function mergedProcessEnvironment(options: RuntimeHostCommandOptions): NodeJS.ProcessEnv {
-  return {
+  return sanitizeDesktopChildEnvironment({
     ...process.env,
     ...options.env,
-  };
+  });
 }
 
 function prepareSpawnCommand(

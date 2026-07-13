@@ -55,11 +55,12 @@ For remote machines: Desktop can auto-install the matching Redeven release over 
 # 1. Install
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Bootstrap (one-time, requires a ticket from your provider)
+# 2. Bootstrap (one-time, read the ticket from a protected secret file)
 redeven bootstrap \
-  --controlplane https://<your-provider> \
+  --provider-origin https://<your-provider> \
+  --controlplane https://<your-access-point> \
   --env-id <env_public_id> \
-  --bootstrap-ticket <bootstrap_ticket>
+  --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
 
 # 3. Run
 redeven run --mode hybrid
@@ -67,7 +68,9 @@ redeven run --mode hybrid
 # 4. Open http://localhost:23998 in your browser.
 ```
 
-Bootstrap writes your Local Environment config to `~/.redeven/local-environment/config.json`. Each OS user has one Local Environment identity, bound to one provider Environment at a time. Desktop and browser flows use the same one-time ticket contract.
+Bootstrap writes non-secret Local Environment metadata to `~/.redeven/local-environment/config.json` and runtime credentials to the permission-restricted `~/.redeven/local-environment/secrets.json`. Each OS user has one Local Environment identity, bound to one provider Environment at a time. Desktop and browser flows use the same one-time ticket contract.
+
+For automation, secret managers, CI runners, and container orchestrators may inject `REDEVEN_BOOTSTRAP_TICKET` and `REDEVEN_LOCAL_UI_PASSWORD` directly. Environment variables remain observable to same-user processes, debuggers, and the host platform, so prefer hidden prompts, stdin, or protected secret files for interactive use.
 
 Interactive terminals use Redeven's rich runtime presentation by default: a compact animated character mark, runtime version/protocol details, active session/workload counts, Local UI and Environment URLs, real runtime log tailing, and actionable warning/error panels. Use the arrow keys to move between Control plane, Sessions, and Logs. Press Enter on Sessions to open a filterable active-session view, Enter on Logs to expand the full runtime log view, Enter on Control plane to connect, disconnect, or open the bootstrap setup fields, Esc to return, and Ctrl+C to stop the runtime. Non-interactive shells fall back to plain text, and Desktop-managed launches use the machine presentation contract with structured startup reports instead of terminal UI.
 

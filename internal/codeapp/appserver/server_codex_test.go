@@ -12,6 +12,7 @@ import (
 	"testing/fstest"
 
 	"github.com/floegence/redeven/internal/codexbridge"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -143,6 +144,9 @@ func TestServer_SettingsUpdate_RejectsHostManagedCodexConfig(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := writeTestConfig(t)
+	if _, err := config.Load(cfgPath); err != nil {
+		t.Fatalf("config.Load(migrate): %v", err)
+	}
 	before, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatalf("ReadFile(before): %v", err)

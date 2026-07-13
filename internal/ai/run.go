@@ -28,6 +28,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/okf"
+	"github.com/floegence/redeven/internal/processenv"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/websearch"
 )
@@ -4390,7 +4391,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		Stdin:              parsed.Stdin,
 		CwdAbs:             cwdAbs,
 		Shell:              shell,
-		Env:                prependRedevenBinToEnv(os.Environ()),
+		Env:                prependRedevenBinToEnv(processenv.Current()),
 	})
 	if err != nil {
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)

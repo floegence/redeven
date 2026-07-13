@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/floegence/redeven/internal/processenv"
 )
 
 const (
@@ -745,6 +747,7 @@ func probeRuntimeBinaryVersionWithTimeout(ctx context.Context, binaryPath string
 	}
 	args := append(prefixArgs, "--version")
 	cmd := exec.CommandContext(probeCtx, execPath, args...)
+	cmd.Env = processenv.Current()
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out

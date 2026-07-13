@@ -6,9 +6,12 @@ import {
   defaultLocalEnvironmentStateLayout,
   type DesktopLocalEnvironmentStateLayout,
 } from './statePaths';
+import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 
-export const BOOTSTRAP_TICKET_ENV_NAME = 'REDEVEN_DESKTOP_BOOTSTRAP_TICKET';
 export const DESKTOP_OWNER_ID_ENV_NAME = 'REDEVEN_DESKTOP_OWNER_ID';
+export { RUNTIME_SECRET_ENV_NAMES } from './desktopProcessEnvironment';
+
+const STARTUP_SECRETS_MAX_BYTES = 64 * 1024;
 
 export type DesktopRuntimeBootstrap = Readonly<
   {
@@ -23,7 +26,7 @@ export type DesktopRuntimeBootstrap = Readonly<
 export type DesktopRuntimeSpawnPlan = Readonly<{
   args: string[];
   env: NodeJS.ProcessEnv;
-  password_stdin: string;
+  startup_secrets_stdin: string;
   state_layout: DesktopLocalEnvironmentStateLayout;
 }>;
 
@@ -62,16 +65,15 @@ export function buildDesktopRuntimeArgs(
     args.push('--state-root', stateRoot);
   }
 
-  if (access.local_ui_password_configured) {
-    args.push('--password-stdin');
-  }
+  args.push('--startup-secrets-stdin');
 
   const bootstrap = resolvedRuntimeBootstrap(options.bootstrap);
   if (bootstrap) {
     const providerOrigin = String(bootstrap.provider_origin ?? '').trim();
     const controlPlaneURL = String(bootstrap.controlplane_url ?? '').trim();
     const envID = String(bootstrap.env_id ?? '').trim();
-    if (providerOrigin !== '' && controlPlaneURL !== '' && envID !== '') {
+    const bootstrapTicket = String(bootstrap.bootstrap_ticket ?? '').trim();
+    if (providerOrigin !== '' && controlPlaneURL !== '' && envID !== '' && bootstrapTicket !== '') {
       args.push(
         '--provider-origin',
         providerOrigin,
@@ -79,8 +81,6 @@ export function buildDesktopRuntimeArgs(
         controlPlaneURL,
         '--env-id',
         envID,
-        '--bootstrap-ticket-env',
-        BOOTSTRAP_TICKET_ENV_NAME,
       );
     }
   }
@@ -92,20 +92,12 @@ export function buildDesktopRuntimeEnvironment(
   _environment: DesktopLocalEnvironmentState,
   baseEnv: NodeJS.ProcessEnv = process.env,
   options?: Readonly<{
-    bootstrap?: DesktopRuntimeBootstrap | null;
     desktopOwnerID?: string;
   }>,
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {
+  const env = sanitizeDesktopChildEnvironment({
     ...baseEnv,
-  };
-
-  const bootstrap = resolvedRuntimeBootstrap(options?.bootstrap);
-  if (bootstrap) {
-    env[BOOTSTRAP_TICKET_ENV_NAME] = bootstrap.bootstrap_ticket;
-  } else {
-    delete env[BOOTSTRAP_TICKET_ENV_NAME];
-  }
+  });
   const desktopOwnerID = String(options?.desktopOwnerID ?? '').trim();
   if (desktopOwnerID !== '') {
     env[DESKTOP_OWNER_ID_ENV_NAME] = desktopOwnerID;
@@ -127,7 +119,6 @@ function buildDesktopRuntimePlan(
 ): DesktopRuntimeLaunchPlan {
   const stateLayout = resolveDesktopLocalEnvironmentStateLayout(environment, baseEnv);
   const env = buildDesktopRuntimeEnvironment(environment, baseEnv, {
-    bootstrap: options?.bootstrap,
     desktopOwnerID: options?.desktopOwnerID,
   });
   const args = buildDesktopRuntimeArgs(environment, {
@@ -136,13 +127,26 @@ function buildDesktopRuntimePlan(
     stateRoot: stateLayout.stateRoot,
   });
   const access = localEnvironmentAccess(environment);
-  const passwordStdin = access.local_ui_password_configured
-    ? String(access.local_ui_password ?? '')
-    : '';
+  const bootstrap = resolvedRuntimeBootstrap(options?.bootstrap);
+  const envelope: {
+    version: 1;
+    local_ui_password?: string;
+    bootstrap_ticket?: string;
+  } = { version: 1 };
+  if (access.local_ui_password_configured) {
+    envelope.local_ui_password = String(access.local_ui_password ?? '');
+  }
+  if (bootstrap && String(bootstrap.bootstrap_ticket ?? '').trim() !== '') {
+    envelope.bootstrap_ticket = String(bootstrap.bootstrap_ticket);
+  }
+  const startupSecretsStdin = JSON.stringify(envelope);
+  if (Buffer.byteLength(startupSecretsStdin, 'utf8') > STARTUP_SECRETS_MAX_BYTES) {
+    throw new Error('Desktop startup secrets exceed the 64 KiB runtime envelope limit.');
+  }
   return {
     args,
     env,
-    password_stdin: passwordStdin,
+    startup_secrets_stdin: startupSecretsStdin,
     state_layout: stateLayout,
   };
 }

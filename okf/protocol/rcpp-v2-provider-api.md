@@ -14,9 +14,11 @@ The OpenAPI contract defines provider discovery under `/.well-known/redeven-prov
 
 Runtime provider and access-point origins are normalized as HTTPS origins only. Userinfo, query, fragment, and non-root paths are rejected rather than stripped into a different apparent authority. Bootstrap exchanges attach the bearer ticket only to the normalized HTTPS origin. Redirects may continue only when the destination remains on the same HTTPS hostname and effective port; cross-origin and HTTPS downgrade redirects fail before a redirected request is sent.
 
+Bootstrap tickets remain memory-only and are used only for the one-time exchange. The returned direct E2EE PSK is persisted in the permission-restricted `secrets.json`, keyed by direct channel id; `config.json` retains only direct transport metadata and `e2ee_psk_set`. Legacy configs are migrated by atomically writing and reading back the PSK before atomically rewriting `config.json`. Credential renewal and provider relinking retain the previous channel secret until the new config metadata commits, so a failed cross-file update preserves a restart path through the previous credentials.
+
 # Boundaries
 
-Human protocol Markdown is not the source of truth. Provider-facing changes must update the OpenAPI contract and corresponding runtime/Desktop code together.
+Human protocol Markdown is not the source of truth. Provider-facing changes must update the OpenAPI contract and corresponding runtime/Desktop code together. Neither bootstrap tickets nor direct PSKs may appear in command arguments, startup reports, diagnostics, or non-secret config metadata.
 
 RCPP providers are external control-plane and access-point authorities, not plugin capability providers. Provider IDs, access point IDs, environment public IDs, Desktop authorization tokens, bootstrap tickets, and direct connection fields must not be reused as plugin installation identities, plugin capability names, plugin broker grants, or plugin runtime leases. Plugins hosted inside Redeven should reach environment and business resources through Local UI session context, released ReDevPlugin brokers, and Redeven-registered adapters rather than by speaking RCPP provider endpoints directly.
 

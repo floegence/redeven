@@ -20,6 +20,7 @@ import {
 import { loadExternalLocalUIHealth, validateExternalLocalUIShell } from './runtimeState';
 import type { DesktopSessionRuntimeHandle, DesktopSessionRuntimeLaunchMode } from './sessionRuntime';
 import type { StartupReport } from './startup';
+import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import { formatBlockedLaunchDiagnostics, parseLaunchReport, type LaunchBlockedReport } from './launchReport';
 import {
@@ -492,13 +493,14 @@ function sshStandaloneArgs(connectTimeoutSeconds: number, authMode: DesktopSSHAu
 }
 
 function sshSpawnOptions(auth: SSHCommandAuthContext): SpawnOptions {
+  const baseEnvironment = sanitizeDesktopChildEnvironment(process.env);
   if (auth.mode !== 'password' || !auth.askPassScriptPath) {
-    return {};
+    return { env: baseEnvironment };
   }
   const password = compact(auth.password);
   return {
     env: {
-      ...process.env,
+      ...baseEnvironment,
       DISPLAY: process.env.DISPLAY || ':0',
       SSH_ASKPASS: auth.askPassScriptPath,
       SSH_ASKPASS_REQUIRE: 'force',

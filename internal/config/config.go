@@ -5,16 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 
 	directv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/direct/v1"
 )
 
-// Config is the on-disk configuration for the Redeven runtime.
-//
-// NOTE: This file contains secrets (PSK). Always keep it chmod 0600.
+// Config is the runtime configuration for Redeven. Secret material is loaded
+// from secrets.json and is never serialized back into config.json.
 type Config struct {
 	ProviderOrigin           string                      `json:"provider_origin"`
 	ControlplaneBaseURL      string                      `json:"controlplane_base_url"`
@@ -56,7 +53,9 @@ type Config struct {
 	CodeServerPortMin int `json:"code_server_port_min,omitempty"`
 	CodeServerPortMax int `json:"code_server_port_max,omitempty"`
 
-	extra map[string]json.RawMessage
+	directPSKSet bool
+	directPSKErr error
+	extra        map[string]json.RawMessage
 }
 
 // ValidateLocalMinimal validates config fields required to start the runtime in local-only mode.
@@ -119,6 +118,9 @@ func (c *Config) ValidateRemoteStrict() error {
 	if strings.TrimSpace(c.AgentInstanceID) == "" {
 		return errors.New("missing agent_instance_id")
 	}
+	if c.directPSKErr != nil {
+		return fmt.Errorf("load direct psk: %w", c.directPSKErr)
+	}
 	if c.Direct == nil ||
 		strings.TrimSpace(c.Direct.WsUrl) == "" ||
 		strings.TrimSpace(c.Direct.ChannelId) == "" ||
@@ -134,43 +136,9 @@ func (c *Config) ValidateRemoteStrict() error {
 }
 
 func Load(path string) (*Config, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var cfg Config
-	if err := json.Unmarshal(b, &cfg); err != nil {
-		return nil, err
-	}
-	if err := cfg.ValidateLocalMinimal(); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
-	}
-	return &cfg, nil
+	return loadConfig(path, defaultConfigPersistence())
 }
 
 func Save(path string, cfg *Config) error {
-	if cfg == nil {
-		return errors.New("nil config")
-	}
-	if err := cfg.ValidateLocalMinimal(); err != nil {
-		return err
-	}
-
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-
-	// Write atomically.
-	tmp := path + ".tmp"
-	b, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-	b = append(b, '\n')
-
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return saveConfig(path, cfg, defaultConfigPersistence())
 }

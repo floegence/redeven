@@ -30,7 +30,7 @@ func TestRunCLIHelp(t *testing.T) {
 			"Quick start:",
 			"env         Inspect and plan Redeven environment lifecycle operations.",
 			"targets     Inspect Redeven targets for local automation.",
-			"redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
+			"redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket",
 			"redeven run --mode local",
 		)
 	})
@@ -69,10 +69,11 @@ func TestRunCLIHelp(t *testing.T) {
 			"--provider-origin <url>",
 			"--controlplane <url>",
 			"--env-id <env_public_id>",
-			"--bootstrap-ticket <ticket>",
-			"--bootstrap-ticket-env <env_name>",
+			"--bootstrap-ticket-stdin",
+			"--bootstrap-ticket-file <path>",
+			"REDEVEN_BOOTSTRAP_TICKET",
 			"--state-root <path>",
-			"redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
+			"redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket-stdin < /run/secrets/redeven-bootstrap-ticket",
 		)
 	})
 
@@ -162,8 +163,8 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"missing required flags for `redeven bootstrap`: --provider-origin, --controlplane, --env-id, one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)",
-			"Example: redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
+			"missing required flags for `redeven bootstrap`: --provider-origin, --controlplane, --env-id, one bootstrap ticket (--bootstrap-ticket-stdin, --bootstrap-ticket-file, or REDEVEN_BOOTSTRAP_TICKET)",
+			"Example: redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket",
 		)
 	})
 
@@ -173,8 +174,8 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)",
-			"Hint: provide --provider-origin, --controlplane, --env-id, and exactly one bootstrap ticket together, or run `redeven bootstrap` first.",
+			"incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket-stdin, --bootstrap-ticket-file, or REDEVEN_BOOTSTRAP_TICKET)",
+			"Hint: provide --provider-origin, --controlplane, --env-id, and one bootstrap ticket source together, or run `redeven bootstrap` first.",
 		)
 	})
 
@@ -196,7 +197,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)",
+			"incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket-stdin, --bootstrap-ticket-file, or REDEVEN_BOOTSTRAP_TICKET)",
 		)
 
 		body, err := os.ReadFile(reportPath)
@@ -313,25 +314,38 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 	})
 
 	t.Run("multiple password sources explain the conflict", func(t *testing.T) {
-		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--password", "a", "--password-env", "TEST_PASSWORD")
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--password-prompt", "--password-file", filepath.Join(t.TempDir(), "password"))
 		if code != 2 {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"invalid password flags: use only one of --password, --password-stdin, --password-env, or --password-file",
-			"Hint: choose a single password source for one startup command.",
+			"invalid startup secret options: use only one of --password-prompt, --password-stdin, or --password-file",
+			"Hint: choose one explicit source for `redeven run`",
 		)
 	})
 
-	t.Run("missing password env gives export example", func(t *testing.T) {
-		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--password-env", "MISSING_PASSWORD")
+	t.Run("removed password flag gives a safe migration without echoing its value", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--password=do-not-echo")
 		if code != 2 {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"invalid password flags: password env var \"MISSING_PASSWORD\" is not set",
-			"Hint: export MISSING_PASSWORD with a non-empty password before running `redeven run`.",
-			"MISSING_PASSWORD=replace-with-a-long-password redeven run --mode hybrid --password-env MISSING_PASSWORD",
+			"unknown flag for `redeven run`: --password",
+			"Migration: use --password-prompt, --password-stdin, --password-file, or the fixed REDEVEN_LOCAL_UI_PASSWORD environment fallback.",
+		)
+		if strings.Contains(stderr, "do-not-echo") {
+			t.Fatalf("removed flag value leaked in stderr: %s", stderr)
+		}
+	})
+
+	t.Run("removed password env flag points to the fixed fallback", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--password-env", "OLD_PASSWORD_VAR")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr,
+			"unknown flag for `redeven run`: --password-env",
+			"Migration: inject the fixed REDEVEN_LOCAL_UI_PASSWORD variable, or use --password-prompt, --password-stdin, or --password-file.",
 		)
 	})
 
@@ -341,8 +355,8 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"invalid password flags: stdin password is empty",
-			"Hint: pipe a non-empty access password into `redeven run --password-stdin` and retry.",
+			"invalid startup secrets: stdin Local UI password is empty",
+			"Hint: provide a non-empty secret",
 		)
 	})
 
@@ -357,25 +371,39 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 	})
 
 	t.Run("multiple bootstrap ticket sources explain the conflict", func(t *testing.T) {
-		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--bootstrap-ticket", "ticket-1", "--bootstrap-ticket-env", "REDEVEN_BOOTSTRAP_TICKET")
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--bootstrap-ticket-stdin", "--bootstrap-ticket-file", filepath.Join(t.TempDir(), "ticket"))
 		if code != 2 {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"invalid bootstrap ticket flags: use only one of --bootstrap-ticket or --bootstrap-ticket-env",
-			"Hint: choose a single bootstrap ticket source for `redeven run`.",
+			"invalid startup secret options: use only one of --bootstrap-ticket-stdin or --bootstrap-ticket-file",
+			"Hint: choose one explicit source for `redeven run`",
 		)
 	})
 
-	t.Run("missing bootstrap ticket env gives export guidance", func(t *testing.T) {
-		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--bootstrap-ticket-env", "REDEVEN_BOOTSTRAP_TICKET")
+	t.Run("removed bootstrap ticket env flag gives fixed-variable migration", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--bootstrap-ticket-env", "OLD_TICKET_VAR")
 		if code != 2 {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"invalid bootstrap ticket flags: bootstrap ticket env var \"REDEVEN_BOOTSTRAP_TICKET\" is not set",
-			"Hint: export REDEVEN_BOOTSTRAP_TICKET with a non-empty ticket before running `redeven run`.",
+			"unknown flag for `redeven run`: --bootstrap-ticket-env",
+			"Migration: inject the fixed REDEVEN_BOOTSTRAP_TICKET variable, or use --bootstrap-ticket-stdin or --bootstrap-ticket-file.",
 		)
+	})
+
+	t.Run("removed bootstrap ticket flag does not echo its value", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "bootstrap", "--bootstrap-ticket=do-not-echo")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr,
+			"unknown flag for `redeven bootstrap`: --bootstrap-ticket",
+			"Migration: use --bootstrap-ticket-stdin, --bootstrap-ticket-file, or the fixed REDEVEN_BOOTSTRAP_TICKET environment fallback.",
+		)
+		if strings.Contains(stderr, "do-not-echo") {
+			t.Fatalf("removed flag value leaked in stderr: %s", stderr)
+		}
 	})
 
 	t.Run("empty password file explains how to fix it", func(t *testing.T) {
@@ -389,9 +417,8 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"invalid password flags: password file",
-			"is empty",
-			"Hint: write the full access password to the file and retry.",
+			"invalid startup secrets: Local UI password file is empty",
+			"Hint: provide a non-empty secret",
 		)
 	})
 
@@ -403,9 +430,8 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		assertContainsAll(t, stderr,
 			"runtime is not bootstrapped for remote or hybrid mode:",
 			"Hint: run `redeven bootstrap` first, or pass --provider-origin, --controlplane, --env-id, and a one-time bootstrap ticket directly to `redeven run`.",
-			"redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
-			"redeven run --mode hybrid --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
-			"REDEVEN_BOOTSTRAP_TICKET=<bootstrap-ticket> redeven run --mode desktop --desktop-managed --presentation machine --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket-env REDEVEN_BOOTSTRAP_TICKET",
+			"redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket",
+			"redeven run --mode hybrid --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket",
 		)
 	})
 }

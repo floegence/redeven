@@ -13,6 +13,9 @@ func TestBuildAppServerCommand_ExecutesResolvedBinaryDirectly(t *testing.T) {
 	shellPath := writeEnvCaptureShell(t, []string{
 		"PATH=/usr/bin:/bin",
 		"CUSTOM_PROVIDER_API_KEY=from-login-shell",
+		"REDEVEN_LOCAL_UI_PASSWORD=password-secret",
+		"REDEVEN_BOOTSTRAP_TICKET=ticket-secret",
+		"REDEVEN_DESKTOP_BOOTSTRAP_TICKET=legacy-ticket",
 	}, "")
 	fallbackShell := writeEnvCaptureShell(t, []string{
 		"PATH=/fallback/bin",
@@ -39,17 +42,25 @@ func TestBuildAppServerCommand_ExecutesResolvedBinaryDirectly(t *testing.T) {
 	if got := envValue(cmd.Env, "CUSTOM_PROVIDER_API_KEY"); got != "from-login-shell" {
 		t.Fatalf("CUSTOM_PROVIDER_API_KEY=%q want login shell value", got)
 	}
+	for _, name := range []string{"REDEVEN_LOCAL_UI_PASSWORD", "REDEVEN_BOOTSTRAP_TICKET", "REDEVEN_DESKTOP_BOOTSTRAP_TICKET"} {
+		if got := envValue(cmd.Env, name); got != "" {
+			t.Fatalf("%s leaked into app-server environment", name)
+		}
+	}
 }
 
 func TestLookPathFromLoginShell_UsesConfiguredShell(t *testing.T) {
 	dir := t.TempDir()
 	codexPath := writeExecutableAt(t, dir, "codex")
 	shellPath := filepath.Join(t.TempDir(), "shell")
-	script := "#!/bin/sh\nif [ \"$1\" = \"-l\" ] && [ \"$2\" = \"-i\" ] && [ \"$3\" = \"-c\" ]; then\n  PATH=\"" + dir + ":$PATH\" /bin/sh -c \"$4\" \"$5\"\n  exit $?\nfi\nexit 64\n"
+	script := "#!/bin/sh\nif [ -n \"${REDEVEN_LOCAL_UI_PASSWORD+x}${REDEVEN_BOOTSTRAP_TICKET+x}${REDEVEN_DESKTOP_BOOTSTRAP_TICKET+x}\" ]; then\n  exit 65\nfi\nif [ \"$1\" = \"-l\" ] && [ \"$2\" = \"-i\" ] && [ \"$3\" = \"-c\" ]; then\n  PATH=\"" + dir + ":$PATH\" /bin/sh -c \"$4\" \"$5\"\n  exit $?\nfi\nexit 64\n"
 	if err := os.WriteFile(shellPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("write shell %q: %v", shellPath, err)
 	}
 	t.Setenv("SHELL", "")
+	t.Setenv("REDEVEN_LOCAL_UI_PASSWORD", "password-secret")
+	t.Setenv("REDEVEN_BOOTSTRAP_TICKET", "ticket-secret")
+	t.Setenv("REDEVEN_DESKTOP_BOOTSTRAP_TICKET", "legacy-ticket")
 
 	if got := lookPathFromLoginShell(shellPath, "codex"); got != codexPath {
 		t.Fatalf("lookPathFromLoginShell()=%q want %q", got, codexPath)

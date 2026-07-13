@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/floegence/redeven/internal/processenv"
 )
 
 type RunnerOptions struct {
@@ -293,7 +295,7 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 		cmd.Stderr = stderr
 	}
 
-	env := os.Environ()
+	env := processenv.Current()
 	env = append(env,
 		"XDG_CONFIG_HOME="+xdgConfigDir,
 		"XDG_CACHE_HOME="+xdgCacheDir,
@@ -697,7 +699,9 @@ func listCodeServerPIDsBySessionSocket(sessionSocketPath string) ([]int, error) 
 	if path == "" {
 		return nil, nil
 	}
-	out, err := exec.Command("ps", "-ax", "-o", "pid=,command=").Output()
+	cmd := exec.Command("ps", "-ax", "-o", "pid=,command=")
+	cmd.Env = processenv.Current()
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
 	}

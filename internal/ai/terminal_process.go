@@ -15,6 +15,7 @@ import (
 
 	"github.com/creack/pty"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
+	"github.com/floegence/redeven/internal/processenv"
 )
 
 const (
@@ -179,7 +180,7 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 
 	cmd := exec.Command(shell, "-lc", command)
 	cmd.Dir = cwd
-	cmd.Env = append([]string(nil), req.Env...)
+	cmd.Env = processenv.Filter(req.Env)
 	configureTerminalExecProcessGroup(cmd)
 	tty, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: 100, Rows: 30})
 	if err != nil {

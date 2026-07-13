@@ -5,10 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/floegence/redeven/internal/processenv"
 )
 
 const (
@@ -119,7 +120,7 @@ func ExecuteTargetCommand(ctx context.Context, opts TargetExecOptions) (TargetEx
 		SSHPort:                  route.SSHPort,
 		SSHAuthMode:              strings.TrimSpace(route.SSHAuthMode),
 		SSHConnectTimeoutSeconds: route.SSHConnectTimeoutSeconds,
-		Env:                      os.Environ(),
+		Env:                      processenv.Current(),
 	})
 	if err != nil {
 		return TargetExecResult{}, err
@@ -155,7 +156,7 @@ func defaultTargetExecRunner(ctx context.Context, inv TargetExecInvocation) (Tar
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	if len(inv.Env) > 0 {
-		cmd.Env = append([]string(nil), inv.Env...)
+		cmd.Env = processenv.Filter(inv.Env)
 	}
 	err = cmd.Run()
 	timedOut := ctx != nil && ctx.Err() != nil

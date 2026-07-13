@@ -33,6 +33,31 @@ func TestRuntimeManagerStatusDetectsSupportedOverride(t *testing.T) {
 	}
 }
 
+func TestProbeRuntimeBinaryVersionFiltersRuntimeStartupSecrets(t *testing.T) {
+	root := t.TempDir()
+	bin := filepath.Join(root, "code-server")
+	script := `#!/bin/sh
+if [ -n "${REDEVEN_LOCAL_UI_PASSWORD+x}${REDEVEN_BOOTSTRAP_TICKET+x}${REDEVEN_DESKTOP_BOOTSTRAP_TICKET+x}" ]; then
+  exit 97
+fi
+printf '4.108.2\n'
+`
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake code-server: %v", err)
+	}
+	t.Setenv("REDEVEN_LOCAL_UI_PASSWORD", "password-secret")
+	t.Setenv("REDEVEN_BOOTSTRAP_TICKET", "ticket-secret")
+	t.Setenv("REDEVEN_DESKTOP_BOOTSTRAP_TICKET", "legacy-ticket")
+
+	version, err := probeRuntimeBinaryVersionWithTimeout(context.Background(), bin, defaultRuntimeProbeTimeout)
+	if err != nil {
+		t.Fatalf("probeRuntimeBinaryVersionWithTimeout() error = %v", err)
+	}
+	if version != "4.108.2" {
+		t.Fatalf("version = %q, want 4.108.2", version)
+	}
+}
+
 func TestRuntimeManagerSelectedManagedVersionDoesNotSilentlyFallBackToSystem(t *testing.T) {
 	stateDir := t.TempDir()
 	stateRoot := t.TempDir()

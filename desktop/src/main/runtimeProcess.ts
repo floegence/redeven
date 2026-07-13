@@ -18,6 +18,7 @@ import {
   runtimeServiceOpenReadinessLabel,
   runtimeServiceIsOpenable,
 } from '../shared/runtimeService';
+import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 
 const STARTUP_REPORT_POLL_MS = 100;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
@@ -51,7 +52,7 @@ export type StartManagedRuntimeArgs = Readonly<{
   runtimeStabilityPollMs?: number;
   desktopOwnerID?: string;
   forceRuntimeUpdate?: boolean;
-  passwordStdin?: string;
+  startupSecretsStdin?: string;
   onProgress?: (progress: ManagedRuntimeProgress) => void;
   onLog?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }>;
@@ -618,14 +619,14 @@ function managedRuntimeAttachPolicy(
   return { action: 'replace' };
 }
 
-async function writePasswordToStdin(child: SpawnedRuntimeProcess, password: string): Promise<void> {
+async function writeStartupSecretsToStdin(child: SpawnedRuntimeProcess, envelope: string): Promise<void> {
   const stdin = child.stdin;
   if (!stdin || stdin.destroyed || !stdin.writable) {
-    throw new Error('redeven stdin pipe is unavailable for password-stdin startup');
+    throw new Error('redeven stdin pipe is unavailable for Desktop startup secrets');
   }
 
   await new Promise<void>((resolve, reject) => {
-    stdin.write(`${password}\n`, (error) => {
+    stdin.write(envelope, (error) => {
       if (error) {
         reject(error);
         return;
@@ -642,10 +643,10 @@ async function writePasswordToStdin(child: SpawnedRuntimeProcess, password: stri
 }
 
 export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promise<ManagedRuntimeLaunch> {
-  const mergedEnv = {
+  const mergedEnv = sanitizeDesktopChildEnvironment({
     ...process.env,
     ...args.env,
-  };
+  });
   const stateRoot = String(args.stateRoot ?? '').trim() || undefined;
   const runtimeAttachTimeoutMs = args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS;
   const runtimeStabilityWindowMs = args.runtimeStabilityWindowMs ?? DEFAULT_RUNTIME_STABILITY_WINDOW_MS;
@@ -733,15 +734,15 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     args.onLog?.('stderr', chunk);
   });
 
-  const passwordStdin = String(args.passwordStdin ?? '');
-  if (passwordStdin !== '') {
+  const startupSecretsStdin = String(args.startupSecretsStdin ?? '');
+  if (startupSecretsStdin !== '') {
     try {
-      await writePasswordToStdin(child, passwordStdin);
+      await writeStartupSecretsToStdin(child, startupSecretsStdin);
     } catch (error) {
       await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS).catch(() => undefined);
       await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
       const message = error instanceof Error ? error.message : String(error);
-      throw readinessFailure(`Failed to send redeven startup password: ${message}`, recentLogs);
+      throw readinessFailure(`Failed to send redeven Desktop startup secrets: ${message}`, recentLogs);
     }
   } else {
     child.stdin.end();
@@ -923,10 +924,10 @@ export async function attachManagedRuntimeFromStatus(args: Readonly<{
   const startup = await loadManagedRuntimeStartupFromStatus({
     executablePath: args.executablePath,
     stateRoot: args.stateRoot,
-    env: {
+    env: sanitizeDesktopChildEnvironment({
       ...process.env,
       ...args.env,
-    },
+    }),
     timeoutMs: args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS,
   });
   if (!startup) {

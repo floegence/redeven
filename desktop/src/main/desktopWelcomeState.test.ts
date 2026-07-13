@@ -2791,7 +2791,7 @@ describe('desktopWelcomeState', () => {
     const issue = buildBlockedLaunchIssue({
       status: 'blocked',
       code: 'startup_invalid',
-      message: 'incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)',
+      message: 'incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket-stdin, --bootstrap-ticket-file, or REDEVEN_BOOTSTRAP_TICKET)',
       diagnostics: {
         state_dir: '/Users/test/.redeven/local-environment',
         config_path: '/Users/test/.redeven/local-environment/config.json',

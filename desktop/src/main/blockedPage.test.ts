@@ -100,7 +100,7 @@ describe('blockedPage', () => {
     const html = buildBlockedPageHTML({
       status: 'blocked',
       code: 'startup_invalid',
-      message: 'incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)',
+      message: 'incomplete bootstrap flags for `redeven run`: missing flag one bootstrap ticket (--bootstrap-ticket-stdin, --bootstrap-ticket-file, or REDEVEN_BOOTSTRAP_TICKET)',
       diagnostics: {
         state_dir: '/Users/tester/.redeven/local-environment',
         config_path: '/Users/tester/.redeven/local-environment/config.json',

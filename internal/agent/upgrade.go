@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
+	"github.com/floegence/redeven/internal/processenv"
 	"github.com/floegence/redeven/internal/session"
 	syssvc "github.com/floegence/redeven/internal/sys"
 )
@@ -129,7 +130,7 @@ func (a *Agent) runSelfUpgrade(plan selfExecPlan, userPublicID string, channelID
 	// Run the official install.sh in upgrade mode, forcing the install directory to the
 	// currently running executable directory so we restart into the new binary path.
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", "curl -fsSL "+upgradeInstallScriptURL+" | sh")
-	env := append(os.Environ(),
+	env := append(processenv.Current(),
 		"REDEVEN_INSTALL_MODE=upgrade",
 		"REDEVEN_INSTALL_DIR="+plan.installDir,
 	)
@@ -185,7 +186,7 @@ func (a *Agent) runSelfUpgrade(plan selfExecPlan, userPublicID string, channelID
 		"local_ui_bind", plan.localUIBind,
 	)
 
-	if err := syscall.Exec(plan.exePath, plan.argv, os.Environ()); err != nil {
+	if err := syscall.Exec(plan.exePath, plan.argv, processenv.Current()); err != nil {
 		failureMessage := summarizeExecFailure("Upgrade restart failed", err)
 		a.log.Error("sys_upgrade: exec failed",
 			"user_public_id", userPublicID,

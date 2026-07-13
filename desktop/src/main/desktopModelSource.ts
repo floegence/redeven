@@ -6,6 +6,7 @@ import path from 'node:path';
 import type { Readable } from 'node:stream';
 
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
+import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 
 const STARTUP_REPORT_POLL_MS = 100;
 const DEFAULT_MODEL_SOURCE_STARTUP_TIMEOUT_MS = 8_000;
@@ -155,10 +156,10 @@ export async function startDesktopModelSource(args: StartDesktopModelSourceArgs)
   ], {
     stdio: ['ignore', 'pipe', 'pipe'],
     signal: args.signal,
-    env: {
+    env: sanitizeDesktopChildEnvironment({
       ...process.env,
       [TOKEN_ENV_NAME]: token,
-    },
+    }),
   }) as unknown as ModelSourceProcess;
 
   let spawnError: Error | null = null;

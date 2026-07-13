@@ -8020,7 +8020,7 @@ async function prepareManagedTarget(
     stateRoot: launchPlan.state_layout.stateRoot,
     desktopOwnerID,
     forceRuntimeUpdate: options.forceRuntimeUpdate === true,
-    passwordStdin: launchPlan.password_stdin,
+    startupSecretsStdin: launchPlan.startup_secrets_stdin,
     tempRoot: app.getPath('temp'),
     onProgress: options.onProgress,
     onLog: (stream, chunk) => {

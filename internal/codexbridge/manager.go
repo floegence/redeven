@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/processenv"
 )
 
 var (
@@ -1651,7 +1652,9 @@ func lookPathFromLoginShell(shell string, binaryName string) string {
 	if err != nil {
 		return ""
 	}
-	out, err := exec.Command(shellPath, "-l", "-i", "-c", `unalias "$0" >/dev/null 2>&1 || true; redeven_codex_path="$(command -v "$0")"; printf '__REDEVEN_CODEX_PATH__%s\n' "$redeven_codex_path"`, binaryName).Output()
+	cmd := exec.Command(shellPath, "-l", "-i", "-c", `unalias "$0" >/dev/null 2>&1 || true; redeven_codex_path="$(command -v "$0")"; printf '__REDEVEN_CODEX_PATH__%s\n' "$redeven_codex_path"`, binaryName)
+	cmd.Env = processenv.Current()
+	out, err := cmd.Output()
 	if err != nil {
 		return ""
 	}

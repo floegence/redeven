@@ -20,6 +20,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/floegence/redeven/internal/processenv"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1234,7 +1235,7 @@ func runGit(dir string, token string, args ...string) error {
 	cmdArgs = append(cmdArgs, args...)
 	cmd := exec.Command("git", cmdArgs...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = append(processenv.Current(), "GIT_TERMINAL_PROMPT=0")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
@@ -1255,7 +1256,7 @@ func runGitCapture(dir string, token string, args ...string) string {
 	cmdArgs = append(cmdArgs, args...)
 	cmd := exec.Command("git", cmdArgs...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	cmd.Env = append(processenv.Current(), "GIT_TERMINAL_PROMPT=0")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return ""
