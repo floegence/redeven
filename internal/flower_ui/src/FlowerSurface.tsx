@@ -51,6 +51,7 @@ import type {
   FlowerModelIOStatus,
   FlowerPermissionType,
   FlowerProviderType,
+  FlowerReasoningCapability,
   FlowerReasoningSelection,
   FlowerSubagentDetail,
   FlowerSubagentTimelineRow,
@@ -1800,22 +1801,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const providerID = current.split('/')[0] ?? '';
     return snapshot()?.config.providers.find((provider) => provider.id === providerID) ?? null;
   });
-  const currentModelLabel = createMemo(() => {
-    const current = snapshot();
-    return current ? formatFlowerCurrentModelLabel(current.config, copy().chat.noModelSelected) : copy().chat.noModelSelected;
-  });
-  const reasoningControlLabel = createMemo(() => trimString(copy().chat.reasoningLabel) || DEFAULT_FLOWER_SURFACE_COPY.chat.reasoningLabel);
-  const selectedThreadModelLabel = createMemo(() => {
-    const threadModelID = selectedComposerModelID();
-    if (!threadModelID) return currentModelLabel();
-    const current = snapshot();
-    if (!current) return threadModelID;
-    return formatFlowerCurrentModelLabel({ ...current.config, current_model_id: threadModelID }, copy().chat.noModelSelected);
-  });
-  type ComposerModelOption = Readonly<{ id: string; label: string; providerLabel: string; providerType?: FlowerProviderType; supportsImageInput: boolean; contextWindow?: number; maxOutputTokens?: number }>;
-  const modelSelectOptions = createMemo(() => {
-    const current = snapshot();
-    const options = current?.config.providers.flatMap((provider) => {
+  type ComposerModelOption = Readonly<{
+    id: string;
+    label: string;
+    providerLabel: string;
+    providerType?: FlowerProviderType;
+    supportsImageInput: boolean;
+    contextWindow?: number;
+    maxOutputTokens?: number;
+    reasoningCapability?: FlowerReasoningCapability;
+    defaultReasoningSelection?: FlowerReasoningSelection;
+  }>;
+  const configuredModelOptions = createMemo<readonly ComposerModelOption[]>(() => (
+    snapshot()?.config.providers.flatMap((provider) => {
       const providerID = trimString(provider.id);
       if (!providerID) return [];
       const providerLabel = trimString(provider.name) || providerID;
@@ -1830,9 +1828,52 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           supportsImageInput: flowerModelSupportsImage(model.input_modalities),
           ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
           ...(model.max_output_tokens != null ? { maxOutputTokens: model.max_output_tokens } : {}),
+          ...(model.reasoning_capability ? { reasoningCapability: model.reasoning_capability } : {}),
+          ...(model.default_reasoning_selection ? { defaultReasoningSelection: model.default_reasoning_selection } : {}),
         } as ComposerModelOption;
       }).filter((option): option is ComposerModelOption => option !== null);
-    }) ?? [];
+    }) ?? []
+  ));
+  const sourceModelOptions = createMemo<readonly ComposerModelOption[]>(() => {
+    const source = snapshot()?.model_source;
+    if (source?.kind !== 'desktop_model_source') return [];
+    const providerLabel = trimString(source.label) || 'Desktop';
+    return (source.models ?? []).map((model) => ({
+      id: trimString(model.id),
+      label: trimString(model.label) || trimString(model.id),
+      providerLabel,
+      supportsImageInput: flowerModelSupportsImage(model.input_modalities),
+      ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
+      ...(model.max_output_tokens != null ? { maxOutputTokens: model.max_output_tokens } : {}),
+      ...(model.reasoning_capability ? { reasoningCapability: model.reasoning_capability } : {}),
+    })).filter((option) => option.id);
+  });
+  const catalogModelOptions = createMemo<readonly ComposerModelOption[]>(() => {
+    const seen = new Set<string>();
+    return [...configuredModelOptions(), ...sourceModelOptions()].filter((option) => {
+      if (seen.has(option.id)) return false;
+      seen.add(option.id);
+      return true;
+    });
+  });
+  const currentModelLabel = createMemo(() => {
+    const catalogModel = catalogModelOptions().find((option) => option.id === currentModelID());
+    if (catalogModel) return catalogModel.label;
+    const current = snapshot();
+    return current ? formatFlowerCurrentModelLabel(current.config, copy().chat.noModelSelected) : copy().chat.noModelSelected;
+  });
+  const reasoningControlLabel = createMemo(() => trimString(copy().chat.reasoningLabel) || DEFAULT_FLOWER_SURFACE_COPY.chat.reasoningLabel);
+  const selectedThreadModelLabel = createMemo(() => {
+    const threadModelID = selectedComposerModelID();
+    if (!threadModelID) return currentModelLabel();
+    const catalogModel = catalogModelOptions().find((option) => option.id === threadModelID);
+    if (catalogModel) return catalogModel.label;
+    const current = snapshot();
+    if (!current) return threadModelID;
+    return formatFlowerCurrentModelLabel({ ...current.config, current_model_id: threadModelID }, copy().chat.noModelSelected);
+  });
+  const modelSelectOptions = createMemo(() => {
+    const options = catalogModelOptions();
     const selected = selectedComposerModelID();
     if (selected && !options.some((option) => option.id === selected)) {
       const label = selectedThreadModelLabel();
@@ -1840,24 +1881,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     return options;
   });
-  const configuredModelForID = (modelID: string) => {
-    const current = snapshot();
-    const [providerID, ...modelParts] = trimString(modelID).split('/');
-    const modelName = modelParts.join('/');
-    if (!current || !providerID || !modelName) return null;
-    return current.config.providers
-      .find((provider) => provider.id === providerID)
-      ?.models.find((model) => model.model_name === modelName) ?? null;
-  };
+  const selectedModelOption = createMemo(() => modelSelectOptions().find((option) => option.id === selectedComposerModelID()) ?? null);
   const selectedReasoningCapability = createMemo(() => {
     const thread = selectedThread();
-    const model = configuredModelForID(selectedComposerModelID());
-    if (model) return model.reasoning_capability ?? null;
+    const model = selectedModelOption();
+    if (model?.reasoningCapability) return model.reasoningCapability;
     return thread?.reasoning_capability ?? null;
   });
 	const selectedThreadReasoningSelection = createMemo(() => (
 		normalizeFlowerReasoningSelection(selectedThread()?.reasoning_selection)
-		?? normalizeFlowerReasoningSelection(configuredModelForID(selectedComposerModelID())?.default_reasoning_selection)
+		?? normalizeFlowerReasoningSelection(selectedModelOption()?.defaultReasoningSelection)
 		?? defaultReasoningSelectionForCapability(selectedReasoningCapability())
 	));
 	const selectedWaitingReasoningSelection = createMemo(() => normalizeFlowerReasoningSelection(selectedInputRequest()?.reasoning_selection));

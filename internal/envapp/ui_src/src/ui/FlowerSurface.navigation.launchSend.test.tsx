@@ -514,6 +514,112 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(launchInput).not.toHaveProperty('reasoning_selection');
   });
 
+  it('selects opaque Desktop models and reasoning before launching a new thread', async () => {
+    const deepSeekModelID = 'desktop:model_deepseek';
+    const plainModelID = 'desktop:model_plain';
+    let currentSnapshot: FlowerSettingsSnapshot = {
+      ...settingsSnapshot(false),
+      config: {
+        ...settingsSnapshot(false).config,
+        current_model_id: deepSeekModelID,
+        providers: [],
+      },
+      provider_secrets: [],
+      model_source: {
+        kind: 'desktop_model_source',
+        ready: true,
+        label: 'Local AI Profile',
+        model_count: 2,
+        models: [
+          {
+            id: deepSeekModelID,
+            label: 'Desktop / DeepSeek / deepseek-v4-pro',
+            context_window: 950000,
+            max_output_tokens: 384000,
+            input_modalities: ['text'],
+            reasoning_capability: {
+              kind: 'effort',
+              supported_levels: ['high', 'max'],
+              default_level: 'high',
+              wire_shape: 'deepseek_reasoning_effort',
+            },
+          },
+          {
+            id: plainModelID,
+            label: 'Desktop / Plain',
+            context_window: 128000,
+            max_output_tokens: 4096,
+            input_modalities: ['text'],
+          },
+        ],
+      },
+    };
+    const launchedThread = thread({
+      thread_id: 'thread-desktop-source-launch',
+      title: 'Desktop source launch',
+      model_id: deepSeekModelID,
+      reasoning_selection: { level: 'high' },
+    });
+    const launchTurn = vi.fn(async (_input: unknown) => liveBootstrap(launchedThread));
+    const setCurrentModel = vi.fn(async (modelID: string) => {
+      currentSnapshot = {
+        ...currentSnapshot,
+        config: {
+          ...currentSnapshot.config,
+          current_model_id: modelID,
+        },
+      };
+      return currentSnapshot;
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(false),
+      loadSettings: vi.fn(async () => currentSnapshot),
+      listThreads: vi.fn(async () => []),
+      setCurrentModel,
+      launchTurn,
+    });
+    const modelReasoningControl = () => runtime.querySelector('[data-flower-composer-control="model_reasoning"]') as HTMLElement | null;
+
+    await waitFor(() => modelReasoningControl()?.getAttribute('data-has-reasoning') === 'true');
+    expect(runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent).toContain('deepseek-v4-pro');
+    expect(runtime.querySelector('.flower-reasoning-segment-button')?.textContent).toContain('High');
+
+    (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('.flower-model-menu-item').length === 2);
+    expect(Array.from(runtime.querySelectorAll('.flower-model-menu-item')).map((item) => item.textContent)).toEqual([
+      expect.stringContaining('deepseek-v4-pro'),
+      expect.stringContaining('Desktop / Plain'),
+    ]);
+    const plainOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
+      .find((button) => button.textContent?.includes('Desktop / Plain')) as HTMLButtonElement | undefined;
+    plainOption?.click();
+    await waitFor(() => setCurrentModel.mock.calls.length === 1);
+    await waitFor(() => modelReasoningControl()?.getAttribute('data-has-reasoning') === 'false');
+    expect(setCurrentModel).toHaveBeenLastCalledWith(plainModelID);
+
+    (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-menu')));
+    const deepSeekOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
+      .find((button) => button.textContent?.includes('deepseek-v4-pro')) as HTMLButtonElement | undefined;
+    deepSeekOption?.click();
+    await waitFor(() => setCurrentModel.mock.calls.length === 2);
+    await waitFor(() => modelReasoningControl()?.getAttribute('data-has-reasoning') === 'true');
+    expect(setCurrentModel).toHaveBeenLastCalledWith(deepSeekModelID);
+    expect(runtime.querySelector('.flower-reasoning-segment-button')?.textContent).toContain('High');
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'launch through desktop source';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+
+    expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'launch through desktop source',
+      model_id: deepSeekModelID,
+      reasoning_selection: { level: 'high' },
+    }));
+  });
+
   it('writes a selected thread model as the next new-thread default', async () => {
     let selectedModelThread = thread({
       thread_id: 'thread-model-default',

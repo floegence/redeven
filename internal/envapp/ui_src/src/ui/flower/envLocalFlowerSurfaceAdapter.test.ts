@@ -218,6 +218,89 @@ describe('Env local Flower surface adapter', () => {
     expect(bootstrap.thread.status).toBe('running');
   });
 
+  it('maps connected Desktop models into the read-only Flower model source catalog', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({
+          ai: null,
+          ai_runtime: {
+            desktop_model_source: {
+              connected: true,
+              available: true,
+              model_source: 'desktop_local_environment',
+              model_count: 2,
+              missing_key_provider_ids: [],
+            },
+          },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+        return jsonResponse({
+          current_model: 'desktop:model_deepseek',
+          models: [
+            {
+              id: 'desktop:model_deepseek',
+              label: 'Desktop / DeepSeek / deepseek-v4-pro',
+              source: 'desktop_model_source',
+              context_window: 950000,
+              max_output_tokens: 384000,
+              input_modalities: ['text'],
+              reasoning_capability: {
+                kind: 'effort',
+                supported_levels: ['high', 'max'],
+                default_level: 'high',
+                wire_shape: 'deepseek_reasoning_effort',
+              },
+            },
+            {
+              id: 'desktop:model_plain',
+              label: 'Desktop / Plain',
+              source: 'desktop_model_source',
+              context_window: 128000,
+              max_output_tokens: 4096,
+              input_modalities: ['text', 'image'],
+            },
+            {
+              id: 'runtime/local-only',
+              label: 'Runtime only',
+              source: 'runtime_config',
+            },
+          ],
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+    });
+
+    const snapshot = await adapter.loadSettings();
+
+    expect(snapshot.config.current_model_id).toBe('desktop:model_deepseek');
+    expect(snapshot.config.providers).toEqual([]);
+    expect(snapshot.model_source).toMatchObject({
+      kind: 'desktop_model_source',
+      ready: true,
+      model_count: 2,
+    });
+    expect(snapshot.model_source?.models).toEqual([
+      expect.objectContaining({
+        id: 'desktop:model_deepseek',
+        context_window: 950000,
+        reasoning_capability: expect.objectContaining({
+          supported_levels: ['high', 'max'],
+          default_level: 'high',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'desktop:model_plain',
+        input_modalities: ['text', 'image'],
+      }),
+    ]);
+  });
+
   it('rejects invalid explicit context actions instead of dropping linked context', async () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/settings') {

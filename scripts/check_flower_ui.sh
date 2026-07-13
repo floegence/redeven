@@ -27,6 +27,7 @@ main() {
       src/ui/FlowerSurface.navigation.context.test.tsx \
       src/ui/FlowerSurface.navigation.activity.test.tsx \
       src/ui/FlowerSurface.navigation.launchSend.test.tsx \
+      src/ui/FlowerSurface.desktopModelSource.e2e.test.tsx \
       src/ui/FlowerSurface.navigation.threads.test.tsx \
       src/ui/FlowerSurface.navigation.structuredInput.test.tsx \
       src/ui/flower/FlowerChatContextChips.test.tsx \
