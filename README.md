@@ -78,7 +78,7 @@ Interactive terminals use Redeven's rich runtime presentation by default: a comp
 | Local UI only (this device) | `redeven run --mode local` |
 | Local UI + remote control channel | `redeven run --mode hybrid` |
 | Desktop-managed runtime | `redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind localhost:23998` |
-| Expose to another trusted device | `REDEVEN_LOCAL_UI_PASSWORD=<password> redeven run --mode hybrid --local-ui-bind 0.0.0.0:23998 --password-env REDEVEN_LOCAL_UI_PASSWORD` |
+| Access from another device | Keep Local UI on loopback and use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel. |
 
 ## What you can do
 

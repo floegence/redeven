@@ -51,7 +51,8 @@ func TestRunCLIHelp(t *testing.T) {
 			"Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.",
 			"--state-root <path>",
 			"--presentation <auto|rich|plain|machine>",
-			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000",
+			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.42.0.9:24000, 127.0.0.1:0, [::1]:24000",
+			"Local UI is permanently loopback-only.",
 		)
 	})
 
@@ -262,7 +263,8 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"invalid value for `--local-ui-bind`: host must be localhost or an IP literal",
-			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000",
+			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.42.0.9:24000, 127.0.0.1:0, [::1]:24000.",
+			"For access from another device, use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel.",
 		)
 	})
 
@@ -273,7 +275,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"invalid value for `--local-ui-bind`: localhost:0 is not supported; use 127.0.0.1:0 or [::1]:0",
-			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000",
+			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.42.0.9:24000, 127.0.0.1:0, [::1]:24000.",
 		)
 	})
 
@@ -299,15 +301,14 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		)
 	})
 
-	t.Run("non loopback bind without password gives exact next step", func(t *testing.T) {
+	t.Run("non loopback bind is rejected with secure access alternatives", func(t *testing.T) {
 		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--local-ui-bind", "0.0.0.0:12345")
 		if code != 2 {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"non-loopback `--local-ui-bind` requires an access password",
-			"Hint: set exactly one of --password, --password-stdin, --password-env, or --password-file.",
-			"REDEVEN_LOCAL_UI_PASSWORD=replace-with-a-long-password redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env REDEVEN_LOCAL_UI_PASSWORD",
+			"invalid value for `--local-ui-bind`: Local UI is loopback-only; use localhost, 127.0.0.0/8, or ::1",
+			"For access from another device, use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel.",
 		)
 	})
 
@@ -330,7 +331,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		assertContainsAll(t, stderr,
 			"invalid password flags: password env var \"MISSING_PASSWORD\" is not set",
 			"Hint: export MISSING_PASSWORD with a non-empty password before running `redeven run`.",
-			"MISSING_PASSWORD=replace-with-a-long-password redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env MISSING_PASSWORD",
+			"MISSING_PASSWORD=replace-with-a-long-password redeven run --mode hybrid --password-env MISSING_PASSWORD",
 		)
 	})
 

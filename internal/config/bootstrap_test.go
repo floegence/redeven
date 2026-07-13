@@ -11,7 +11,7 @@ import (
 )
 
 func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json":
 			w.Header().Set("Content-Type", "application/json")
@@ -31,7 +31,7 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
   "provider_id": "example_control_plane",
   "provider_origin": "https://redeven.test",
   "access_point_id": "dev",
-  "access_point_origin": "http://` + r.Host + `",
+	  "access_point_origin": "https://` + r.Host + `",
   "direct": {
     "ws_url": "wss://dev.redeven.test/control/ws",
     "channel_id": "ch_123",
@@ -74,6 +74,7 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 		BootstrapTicket:     "ticket-123",
 		StateRoot:           stateRoot,
 		LogLevel:            "info",
+		HTTPClient:          server.Client(),
 	})
 	if err != nil {
 		t.Fatalf("BootstrapConfig() error = %v", err)
@@ -154,7 +155,7 @@ func TestSavePreservesUnknownConfigFields(t *testing.T) {
 }
 
 func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json":
 			w.Header().Set("Content-Type", "application/json")
@@ -190,7 +191,7 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
   "provider_id": "example_control_plane",
   "provider_origin": "https://redeven.test",
   "access_point_id": "dev",
-  "access_point_origin": "http://` + r.Host + `",
+	  "access_point_origin": "https://` + r.Host + `",
   "direct": {
     "ws_url": "wss://dev.redeven.test/control/ws",
     "channel_id": "ch_ticket",
@@ -220,6 +221,7 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 		EnvironmentID:       "env_123",
 		BootstrapTicket:     "ticket-123",
 		StateRoot:           stateRoot,
+		HTTPClient:          server.Client(),
 	})
 	if err != nil {
 		t.Fatalf("BootstrapConfig() error = %v", err)

@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Local UI surface
 description: Local UI serves browser entrypoints, access-gated APIs, direct sessions, Env App proxying, codespaces, and port forwards.
 tags: [architecture, local-ui, runtime, security]
-timestamp: 2026-06-17T00:00:00Z
+timestamp: 2026-07-13T00:00:00Z
 ---
 
 Redeven Local UI is the browser-facing endpoint runtime surface. It exposes the Env App proxy, Local UI status APIs, direct Flowersec session handoff, Browser Editor codespace routes, and port-forward routes from the same runtime-managed HTTP server.
@@ -12,9 +12,15 @@ Redeven Local UI is the browser-facing endpoint runtime surface. It exposes the 
 
 `localui.Server` is built with an agent, Code App app server, bind spec, runtime-control socket path, Local Environment identity, diagnostics store, and optional access gate. The handler mounts `/api/local/*`, `/_redeven_direct/ws`, `/_redeven_proxy/*`, `/cs/*`, and `/pf/*`. Password mode protects non-public routes, direct sessions are minted as short-lived Flowersec connect artifacts, and runtime responses include the normalized Runtime Service snapshot.
 
+Local UI bind parsing accepts only `localhost`, IPv4 literals in `127.0.0.0/8`, and the `::1` literal. It never resolves arbitrary hostnames and cannot bind wildcard, LAN, or public addresses. After listeners open, the server records their exact loopback authorities. Every network request must pass the Host authority gate before route, cookie, WebSocket, or access-gate processing. Exact listener authorities pass directly; canonical loopback authorities on a different port also pass so Desktop, SSH, and container loopback forwarding remain usable. DNS names other than literal `localhost`, fake localhost suffixes, alternate IPv4 notation, userinfo, malformed ports, and non-loopback authorities are rejected.
+
+The network server bounds request headers, request bodies, header-read time, read time, write time, idle time, and WebSocket frames. Responses receive CSP frame ancestry, content-type sniffing, referrer, permissions, and same-origin frame headers. Browser WebSocket upgrades require an exact same-scheme, same-authority loopback Origin. Runtime-control keeps its Desktop owner, bearer token, and loopback peer checks; its non-browser WebSocket may omit Origin, but any supplied Origin must still match its loopback authority.
+
+Direct connect artifacts are one-time credentials, but resolution does not consume them. The Local UI resolver returns the E2EE PSK and an authenticated commit callback. Flowersec invokes that callback only after PSK authentication and before Yamux creation. The callback atomically removes the still-matching pending artifact, so a failed handshake does not exhaust a valid artifact and concurrent authenticated handshakes cannot both open sessions.
+
 # Boundaries
 
-Local UI route behavior is part of the runtime trust boundary. Public Env App shell GET/HEAD requests may pass before local unlock so the shell can load, but local APIs, direct sessions, codespaces, and port-forward routes stay access-gated when password mode is enabled.
+Local UI route behavior is part of the runtime trust boundary. Public Env App shell GET/HEAD requests may pass before local unlock so the shell can load, but local APIs, direct sessions, codespaces, and port-forward routes stay access-gated when password mode is enabled. A password does not make non-loopback exposure supported. Cross-device access must use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel while Local UI remains bound to loopback.
 
 # Citations
 
@@ -28,3 +34,10 @@ Local UI route behavior is part of the runtime trust boundary. Public Env App sh
 [8] redeven:internal/localui/localui.go:1019 - `/api/local/runtime` returns direct WebSocket, Desktop flags, and Runtime Service data.
 [9] redeven:internal/localui/localui.go:1089 - Direct sessions mint short-lived connect artifacts with channel id and E2EE PSK.
 [10] redeven:internal/localui/localui.go:1151 - Connect artifact creation requires local access and an empty request body.
+[11] redeven:internal/localui/bind.go:32 - Bind parsing accepts only localhost or canonical loopback IP literals.
+[12] redeven:internal/localui/http_security.go:24 - Listener addresses produce the exact network authority allowlist.
+[13] redeven:internal/localui/http_security.go:86 - The network middleware rejects requests whose Host is not an allowed startup authority.
+[14] redeven:internal/localui/http_security.go:196 - WebSocket Origin validation requires canonical loopback same-origin authority.
+[15] redeven:internal/localui/localui.go:1426 - Pending direct credentials are resolved without immediate deletion.
+[16] redeven:internal/localui/localui.go:1449 - Authenticated commit atomically consumes the still-matching pending credential.
+[17] redeven:internal/localui/localui.go:1500 - Flowersec `ResolveCredential` binds the commit to successful PSK authentication.

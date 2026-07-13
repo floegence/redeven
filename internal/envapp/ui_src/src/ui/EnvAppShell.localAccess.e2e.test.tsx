@@ -1585,7 +1585,10 @@ describe('EnvAppShell local access gate', () => {
       expect(localConnectConfig).toMatchObject({
         mode: 'direct',
         observer: expect.any(Object),
-        connect: { keepaliveIntervalMs: 15_000 },
+        connect: {
+          keepaliveIntervalMs: 15_000,
+          transportSecurityPolicy: 'allow_plaintext_for_loopback',
+        },
         getArtifact: expect.any(Function),
         autoReconnect: {
           enabled: true,
@@ -2194,9 +2197,10 @@ describe('EnvAppShell remote access gate', () => {
       expect(getEnvAppAccessStatusMock).toHaveBeenCalledTimes(2);
       expect(connectMock).toHaveBeenCalledTimes(1);
       const remoteConnectConfig = connectMock.mock.calls[0]?.[0];
-      expect(remoteConnectConfig).toMatchObject({
-        mode: 'tunnel',
-        observer: expect.any(Object),
+	      expect(remoteConnectConfig).toMatchObject({
+	        mode: 'tunnel',
+	        observer: expect.any(Object),
+	        connect: { transportSecurityPolicy: 'require_tls' },
         getArtifact: expect.any(Function),
         autoReconnect: {
           enabled: true,

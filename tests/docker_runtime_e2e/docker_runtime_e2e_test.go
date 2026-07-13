@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -558,12 +559,24 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 		f.t.Fatalf("unexpected runtime-control hello: %#v", hello.RuntimeControl)
 	}
 
-	localBody := bridgeHTTPRequest(f.t, reader, stdin, "local-ui-e2e", desktopbridge.StreamSurfaceLocalUI, "GET /api/local/runtime/health HTTP/1.1\r\nHost: runtime\r\nConnection: close\r\n\r\n")
+	localURL, err := url.Parse(status.LocalUIURL)
+	if err != nil || localURL.Host == "" {
+		f.t.Fatalf("parse Local UI URL %q: %v", status.LocalUIURL, err)
+	}
+	localBody := bridgeHTTPRequest(f.t, reader, stdin, "local-ui-e2e", desktopbridge.StreamSurfaceLocalUI, "GET /api/local/runtime/health HTTP/1.1\r\nHost: "+localURL.Host+"\r\nConnection: close\r\n\r\n")
 	assertContains(f.t, string(localBody), `"status":"online"`)
 	assertContains(f.t, string(localBody), `"desktop_managed":true`)
 
+	if status.RuntimeControl == nil {
+		f.t.Fatal("runtime status did not include runtime-control")
+	}
+	controlURL, err := url.Parse(status.RuntimeControl.BaseURL)
+	if err != nil || controlURL.Host == "" {
+		f.t.Fatalf("parse runtime-control URL %q: %v", status.RuntimeControl.BaseURL, err)
+	}
 	controlRequest := fmt.Sprintf(
-		"GET /v1/provider-link HTTP/1.1\r\nHost: runtime-control\r\nAuthorization: Bearer %s\r\nX-Redeven-Desktop-Owner-ID: %s\r\nConnection: close\r\n\r\n",
+		"GET /v1/provider-link HTTP/1.1\r\nHost: %s\r\nAuthorization: Bearer %s\r\nX-Redeven-Desktop-Owner-ID: %s\r\nConnection: close\r\n\r\n",
+		controlURL.Host,
 		hello.RuntimeControl.Token,
 		hello.RuntimeControl.DesktopOwnerID,
 	)
@@ -571,7 +584,7 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 	assertContains(f.t, string(controlBody), `"ok":true`)
 	assertContains(f.t, string(controlBody), `"runtime_service"`)
 
-	if status.RuntimeControl == nil || status.RuntimeControl.Token != hello.RuntimeControl.Token {
+	if status.RuntimeControl.Token != hello.RuntimeControl.Token {
 		f.t.Fatalf("bridge hello token does not match status endpoint")
 	}
 	return hello

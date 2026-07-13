@@ -1315,8 +1315,8 @@ func TestLocalPortForwardRoute(t *testing.T) {
 }
 
 func TestSameOriginWSRequest(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "http://192.168.1.11:12345/_redeven_direct/ws", nil)
-	req.Header.Set("Origin", "http://192.168.1.11:12345")
+	req := httptest.NewRequest(http.MethodGet, "http://127.42.0.9:12345/_redeven_direct/ws", nil)
+	req.Header.Set("Origin", "http://127.42.0.9:12345")
 	if !sameOriginWSRequest(req) {
 		t.Fatalf("expected same-origin websocket request to pass")
 	}

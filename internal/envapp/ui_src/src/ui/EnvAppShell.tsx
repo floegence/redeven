@@ -44,7 +44,11 @@ import {
   createArtifactSourceFromFactory,
   createProxyRuntimeTunnelReconnectConfig,
 } from '@floegence/floe-webapp-boot';
-import type { ClientObserverLike } from '@floegence/flowersec-core';
+import {
+  AllowPlaintextForLoopback,
+  RequireTLS,
+  type ClientObserverLike,
+} from '@floegence/flowersec-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import {
@@ -1426,7 +1430,10 @@ export function EnvAppShell() {
         await fn(createArtifactDirectReconnectConfig({
           artifactSource: createArtifactSourceFromFactory(mintLocalDirectConnectArtifact),
           observer,
-          connect: { keepaliveIntervalMs: 15_000 },
+          connect: {
+            keepaliveIntervalMs: 15_000,
+            transportSecurityPolicy: AllowPlaintextForLoopback,
+          },
           autoReconnect: LOCAL_FAST_RECONNECT_POLICY,
         }));
         if (accessRecoverySeq !== attemptKey) return;
@@ -1438,6 +1445,7 @@ export function EnvAppShell() {
         await fn(createProxyRuntimeTunnelReconnectConfig({
           artifactSource: createArtifactSourceFromFactory(createGetArtifact()),
           observer,
+          connect: { transportSecurityPolicy: RequireTLS },
           autoReconnect: REMOTE_FAST_RECONNECT_POLICY,
         }));
         if (accessRecoverySeq !== attemptKey) return;

@@ -55,7 +55,7 @@ func providerLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
 		BindingGeneration:        7,
 		AgentInstanceID:          "ai_existing",
 		Direct: &directv1.DirectConnectInfo{
-			WsUrl:                    "ws://127.0.0.1:1/control/ws",
+			WsUrl:                    "wss://127.0.0.1:1/control/ws",
 			ChannelId:                "ch_existing",
 			E2eePskB64u:              "cHNr",
 			ChannelInitExpireAtUnixS: 4102444800,
@@ -108,7 +108,7 @@ func newProviderLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) 
 
 func providerLinkTestServer(t *testing.T, handler func(http.ResponseWriter, *http.Request)) *httptest.Server {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json" {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{"provider_id":"example_control_plane"}`))
@@ -142,9 +142,9 @@ func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *
   "provider_id": "example_control_plane",
   "provider_origin": "` + payload.ProviderOrigin + `",
   "access_point_id": "dev",
-  "access_point_origin": "http://` + r.Host + `",
+	  "access_point_origin": "https://` + r.Host + `",
   "direct": {
-    "ws_url": "ws://127.0.0.1:1/control/ws",
+	    "ws_url": "wss://127.0.0.1:1/control/ws",
     "channel_id": "` + channelID + `",
     "e2ee_psk_b64u": "cHNr",
     "channel_init_expire_at_unix_s": 4102444800
@@ -166,11 +166,12 @@ func TestConnectProviderPersistsConfigOnlyAfterBootstrapSucceeds(t *testing.T) {
 	defer server.Close()
 
 	_, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-		ProviderOrigin:    "https://redeven.test",
-		ProviderID:        "example_control_plane",
-		EnvPublicID:       "env_demo",
-		AccessPointOrigin: server.URL,
-		BootstrapTicket:   "ticket-123",
+		ProviderOrigin:      "https://redeven.test",
+		ProviderID:          "example_control_plane",
+		EnvPublicID:         "env_demo",
+		AccessPointOrigin:   server.URL,
+		BootstrapTicket:     "ticket-123",
+		bootstrapHTTPClient: server.Client(),
 	})
 	if err == nil {
 		t.Fatalf("ConnectProvider() error = nil, want bootstrap failure")
@@ -198,7 +199,7 @@ func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 		BindingGeneration:        1,
 		AgentInstanceID:          "ai_existing",
 		Direct: &directv1.DirectConnectInfo{
-			WsUrl:                    "ws://127.0.0.1:1/control/ws",
+			WsUrl:                    "wss://127.0.0.1:1/control/ws",
 			ChannelId:                "ch_old",
 			E2eePskB64u:              "cHNr",
 			ChannelInitExpireAtUnixS: 4102444800,
@@ -232,6 +233,7 @@ func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 			ExpectedEnvPublicID:       initial.EnvironmentID,
 			ExpectedAccessPointOrigin: initial.ControlplaneBaseURL,
 			ExpectedGeneration:        initial.BindingGeneration,
+			bootstrapHTTPClient:       server.Client(),
 		})
 		errCh <- err
 	}()
@@ -290,7 +292,7 @@ func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(
 		BindingGeneration:        3,
 		AgentInstanceID:          "ai_existing",
 		Direct: &directv1.DirectConnectInfo{
-			WsUrl:                    "ws://127.0.0.1:1/control/ws",
+			WsUrl:                    "wss://127.0.0.1:1/control/ws",
 			ChannelId:                "ch_existing",
 			E2eePskB64u:              "cHNr",
 			ChannelInitExpireAtUnixS: 4102444800,
@@ -315,11 +317,12 @@ func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(
 	}
 
 	resp, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-		ProviderOrigin:    "https://redeven.test",
-		ProviderID:        "example_control_plane",
-		EnvPublicID:       "env_demo",
-		AccessPointOrigin: server.URL,
-		BootstrapTicket:   "ticket-123",
+		ProviderOrigin:      "https://redeven.test",
+		ProviderID:          "example_control_plane",
+		EnvPublicID:         "env_demo",
+		AccessPointOrigin:   server.URL,
+		BootstrapTicket:     "ticket-123",
+		bootstrapHTTPClient: server.Client(),
 	})
 	if err != nil {
 		t.Fatalf("ConnectProvider() error = %v", err)

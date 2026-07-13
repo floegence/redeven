@@ -34,6 +34,8 @@ type BootstrapArgs struct {
 	Shell        string
 	LogFormat    string
 	LogLevel     string
+	// HTTPClient optionally supplies custom TLS trust roots while HTTPS and redirect policy remain enforced.
+	HTTPClient *http.Client
 
 	// PermissionPolicyPreset is an optional preset used to write permission_policy into the config.
 	// If empty, bootstrap preserves the existing permission_policy when possible, otherwise uses defaults.
@@ -54,6 +56,8 @@ type ProviderLinkBootstrapArgs struct {
 	Shell                  string
 	LogFormat              string
 	LogLevel               string
+	// HTTPClient optionally supplies custom TLS trust roots while HTTPS and redirect policy remain enforced.
+	HTTPClient *http.Client
 
 	RuntimeHostname string
 	RuntimeGOOS     string
@@ -124,6 +128,7 @@ func providerLinkArgsFromBootstrapArgs(args BootstrapArgs) ProviderLinkBootstrap
 		Shell:                    args.Shell,
 		LogFormat:                args.LogFormat,
 		LogLevel:                 args.LogLevel,
+		HTTPClient:               args.HTTPClient,
 		RuntimeHostname:          hostnameBestEffort(),
 		RuntimeGOOS:              runtime.GOOS,
 		RuntimeGOARCH:            runtime.GOARCH,
@@ -195,7 +200,7 @@ func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapAr
 		}
 	}
 
-	bootstrap, err := exchangeBootstrapTicket(ctx, baseURL, envID, bootstrapTicket, bootstrapTicketExchangeRequest{
+	bootstrap, err := exchangeBootstrapTicket(ctx, args.HTTPClient, baseURL, envID, bootstrapTicket, bootstrapTicketExchangeRequest{
 		EnvPublicID:              envID,
 		ProviderOrigin:           providerOrigin,
 		LocalEnvironmentPublicID: localEnvironmentPublicID,
@@ -322,7 +327,7 @@ func resolveBootstrapStateLayout(args BootstrapArgs) (StateLayout, error) {
 	return LocalEnvironmentStateLayout(args.StateRoot)
 }
 
-func exchangeBootstrapTicket(ctx context.Context, baseURL string, envID string, bootstrapTicket string, exchange bootstrapTicketExchangeRequest) (*bootstrapResponse, error) {
+func exchangeBootstrapTicket(ctx context.Context, baseClient *http.Client, baseURL string, envID string, bootstrapTicket string, exchange bootstrapTicketExchangeRequest) (*bootstrapResponse, error) {
 	u, err := url.Parse(strings.TrimSpace(baseURL))
 	if err != nil {
 		return nil, fmt.Errorf("invalid controlplane url: %w", err)
@@ -344,7 +349,7 @@ func exchangeBootstrapTicket(ctx context.Context, baseURL string, envID string, 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: 20 * time.Second}
+	client := secureBootstrapHTTPClient(baseClient, u)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -364,6 +369,45 @@ func exchangeBootstrapTicket(ctx context.Context, baseURL string, envID string, 
 		return nil, errors.New("invalid bootstrap exchange response: missing direct")
 	}
 	return &out, nil
+}
+
+func secureBootstrapHTTPClient(base *http.Client, origin *url.URL) *http.Client {
+	client := &http.Client{}
+	if base != nil {
+		*client = *base
+	}
+	client.Timeout = 20 * time.Second
+	previousRedirect := client.CheckRedirect
+	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if req == nil || req.URL == nil || origin == nil || !sameHTTPSOrigin(req.URL, origin) {
+			return errors.New("bootstrap redirect changed origin")
+		}
+		if previousRedirect != nil {
+			return previousRedirect(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
+	}
+	return client
+}
+
+func sameHTTPSOrigin(a, b *url.URL) bool {
+	if a == nil || b == nil || !strings.EqualFold(a.Scheme, "https") || !strings.EqualFold(b.Scheme, "https") {
+		return false
+	}
+	return strings.EqualFold(a.Hostname(), b.Hostname()) && effectiveHTTPSPort(a) == effectiveHTTPSPort(b)
+}
+
+func effectiveHTTPSPort(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	if port := u.Port(); port != "" {
+		return port
+	}
+	return "443"
 }
 
 func newAgentInstanceID() (string, error) {

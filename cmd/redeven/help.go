@@ -53,9 +53,8 @@ Quick start:
   Local-only mode on this device:
     redeven run --mode local
 
-  Expose Local UI to another trusted device on your local network:
-    %[5]s=replace-with-a-long-password \
-    redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %[5]s
+  Access this Local Environment from another device:
+    Use Redeven Desktop, SSH port forwarding, or a Flowersec secure tunnel.
 
   One-shot Local Environment rebind without a separate bootstrap step:
     redeven run --mode hybrid --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
@@ -226,9 +225,9 @@ Local Environment state rules:
 
 Local UI bind rules:
   - Default bind: localhost:23998
-  - Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000
-  - localhost:0 is rejected because dual-stack localhost listeners cannot share one dynamic port.
-  - Non-loopback binds require an access password.
+  - Accepted examples: localhost:23998, 127.0.0.1:24000, 127.42.0.9:24000, 127.0.0.1:0, [::1]:24000
+	  - localhost:0 is rejected because dual-stack localhost listeners cannot share one dynamic port.
+	  - Local UI is permanently loopback-only. Use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel across devices.
 
 Password rules:
   - Set exactly one of --password, --password-stdin, --password-env, or --password-file.
@@ -274,9 +273,8 @@ Examples:
   Desktop shell mode:
     redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind 127.0.0.1:0
 
-  Hybrid mode exposed to another trusted device on your local network:
-    %[8]s=replace-with-a-long-password \
-    redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %[8]s
+  Cross-device access:
+    Keep Local UI on loopback and use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel.
 
   One-shot hybrid run without a separate bootstrap step:
     redeven run --mode hybrid --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
@@ -898,7 +896,7 @@ func translatePasswordOptionError(err error) (string, []string) {
 			return fmt.Sprintf("invalid password flags: password env var %q is not set", optErr.envName),
 				[]string{
 					fmt.Sprintf("Hint: export %s with a non-empty password before running `redeven run`.", optErr.envName),
-					fmt.Sprintf("Example: %s=replace-with-a-long-password redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %s", optErr.envName, optErr.envName),
+					fmt.Sprintf("Example: %s=replace-with-a-long-password redeven run --mode hybrid --password-env %s", optErr.envName, optErr.envName),
 				}
 		case passwordOptionErrorEnvEmpty:
 			return fmt.Sprintf("invalid password flags: password env var %q is empty", optErr.envName),
