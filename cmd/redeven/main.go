@@ -129,7 +129,7 @@ func (c *cli) bootstrapCmd(args []string) int {
 	providerOrigin := fs.String("provider-origin", "", "Provider origin (e.g. https://redeven.test)")
 	controlplane := fs.String("controlplane", "", "Access point controlplane base URL (e.g. https://dev.redeven.test)")
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
-	bootstrapTicketStdin := fs.Bool("bootstrap-ticket-stdin", false, "Read the one-time bootstrap ticket from stdin")
+	bootstrapTicketStdin := fs.Bool("bootstrap-ticket-stdin", false, "Read the one-time bootstrap ticket from stdin; hide input on an interactive terminal")
 	bootstrapTicketFile := fs.String("bootstrap-ticket-file", "", "File path holding the one-time bootstrap ticket")
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")
 
@@ -222,7 +222,7 @@ func (c *cli) runCmd(args []string) int {
 	providerOrigin := fs.String("provider-origin", "", "Provider origin for one-shot Local Environment rebind")
 	controlplane := fs.String("controlplane", "", "Access point controlplane base URL for one-shot Local Environment rebind")
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
-	bootstrapTicketStdin := fs.Bool("bootstrap-ticket-stdin", false, "Read the one-time bootstrap ticket from stdin")
+	bootstrapTicketStdin := fs.Bool("bootstrap-ticket-stdin", false, "Read the one-time bootstrap ticket from stdin; hide input on an interactive terminal")
 	bootstrapTicketFile := fs.String("bootstrap-ticket-file", "", "File path holding the one-time bootstrap ticket")
 	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read (no general shell/process)|read_only|execute_read_write (optional; applies when bootstrapping)")
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")

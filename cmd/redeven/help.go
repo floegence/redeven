@@ -159,7 +159,7 @@ Required flags:
   --controlplane <url>              Access point controlplane base URL.
   --env-id <env_public_id>          Environment public ID.
   One bootstrap ticket source:
-    --bootstrap-ticket-stdin        Read the one-time ticket from stdin.
+    --bootstrap-ticket-stdin        Read the one-time ticket from stdin; hide input on an interactive terminal.
     --bootstrap-ticket-file <path>  Read the one-time ticket from a protected file.
     REDEVEN_BOOTSTRAP_TICKET        Fixed environment fallback when no explicit source is selected.
 
@@ -253,7 +253,7 @@ Flags:
   --provider-origin <url>           Provider authority origin for one-shot bootstrap.
   --controlplane <url>              Access point controlplane base URL for one-shot bootstrap.
   --env-id <env_public_id>          Environment public ID for one-shot bootstrap.
-  --bootstrap-ticket-stdin          Read the one-time bootstrap ticket from stdin.
+  --bootstrap-ticket-stdin          Read the one-time bootstrap ticket from stdin; hide input on an interactive terminal.
   --bootstrap-ticket-file <path>    Read the one-time bootstrap ticket from a protected file.
   --permission-policy <preset>      Local permission policy when bootstrapping inline.
   --password-prompt                 Prompt for the Local UI password without echo.

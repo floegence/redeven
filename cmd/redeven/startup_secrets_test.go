@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
@@ -135,6 +136,77 @@ func TestResolveStartupSecrets(t *testing.T) {
 		if resolved.localUIPassword.value != "prompt-secret" || resolved.localUIPassword.source != startupSecretSourcePrompt {
 			t.Fatalf("localUIPassword = %#v", resolved.localUIPassword)
 		}
+	})
+}
+
+func TestReadBootstrapTicketFromStdin(t *testing.T) {
+	t.Run("keeps pipe and redirect input prompt free", func(t *testing.T) {
+		value, err := readBootstrapTicketFromStdin(strings.NewReader("Bearer piped-ticket\n"), nil)
+		if err != nil {
+			t.Fatalf("readBootstrapTicketFromStdin() error = %v", err)
+		}
+		if value != "Bearer piped-ticket\n" {
+			t.Fatalf("value = %q", value)
+		}
+	})
+
+	t.Run("hides interactive terminal input and writes a prompt", func(t *testing.T) {
+		terminal, err := os.CreateTemp(t.TempDir(), "terminal")
+		if err != nil {
+			t.Fatalf("CreateTemp() error = %v", err)
+		}
+		defer terminal.Close()
+
+		var prompt bytes.Buffer
+		value, err := readBootstrapTicketFromStdin(terminal, &terminalSecretReader{
+			isTerminal: func(int) bool { return true },
+			readPassword: func(int) ([]byte, error) {
+				return []byte("Bearer interactive-ticket"), nil
+			},
+			promptWriter: &prompt,
+		})
+		if err != nil {
+			t.Fatalf("readBootstrapTicketFromStdin() error = %v", err)
+		}
+		if value != "Bearer interactive-ticket" {
+			t.Fatalf("value = %q", value)
+		}
+		if prompt.String() != "Enter bootstrap ticket: \n" {
+			t.Fatalf("prompt = %q", prompt.String())
+		}
+		if strings.Contains(prompt.String(), "interactive-ticket") {
+			t.Fatalf("prompt leaked the ticket: %q", prompt.String())
+		}
+	})
+
+	t.Run("enforces the size limit for interactive input", func(t *testing.T) {
+		terminal, err := os.CreateTemp(t.TempDir(), "terminal")
+		if err != nil {
+			t.Fatalf("CreateTemp() error = %v", err)
+		}
+		defer terminal.Close()
+		_, err = readBootstrapTicketFromStdin(terminal, &terminalSecretReader{
+			isTerminal: func(int) bool { return true },
+			readPassword: func(int) ([]byte, error) {
+				return []byte(strings.Repeat("x", startupSecretsEnvelopeMaxLen+1)), nil
+			},
+		})
+		assertStartupSecretErrorKind(t, err, startupSecretErrorTooLarge)
+	})
+
+	t.Run("maps interactive read failures to a bootstrap ticket error", func(t *testing.T) {
+		terminal, err := os.CreateTemp(t.TempDir(), "terminal")
+		if err != nil {
+			t.Fatalf("CreateTemp() error = %v", err)
+		}
+		defer terminal.Close()
+		_, err = readBootstrapTicketFromStdin(terminal, &terminalSecretReader{
+			isTerminal: func(int) bool { return true },
+			readPassword: func(int) ([]byte, error) {
+				return nil, errors.New("boom")
+			},
+		})
+		assertStartupSecretErrorKind(t, err, startupSecretErrorRead)
 	})
 }
 

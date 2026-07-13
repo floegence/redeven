@@ -51,6 +51,7 @@ type startupSecretsOptions struct {
 	usePasswordEnv         bool
 	useBootstrapTicketEnv  bool
 	desktopEnvelopeAllowed bool
+	terminalSecretReader   *terminalSecretReader
 }
 
 type startupSecretEnvironment struct {
@@ -237,7 +238,7 @@ func resolveBootstrapTicket(opts startupSecretsOptions, envValue string, envSet 
 	var source startupSecretSource
 	switch {
 	case opts.bootstrapTicketStdin:
-		readValue, err := readStartupSecret(readerOrStdin(opts.stdin), "bootstrap ticket")
+		readValue, err := readBootstrapTicketFromStdin(readerOrStdin(opts.stdin), opts.terminalSecretReader)
 		if err != nil {
 			return resolvedStartupSecret{}, err
 		}
