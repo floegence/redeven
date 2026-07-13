@@ -179,8 +179,7 @@ const EnvFileBrowserPage = lazy(() => import('./pages/EnvFileBrowserPage').then(
 const EnvCodespacesPage = lazy(() => import('./pages/EnvCodespacesPage').then((module) => ({ default: module.EnvCodespacesPage })));
 const EnvPortForwardsPage = lazy(() => import('./pages/EnvPortForwardsPage').then((module) => ({ default: module.EnvPortForwardsPage })));
 const EnvAIPage = lazy(() => import('./pages/EnvAIPage').then((module) => ({ default: module.EnvAIPage })));
-const CodexPage = lazy(() => import('./codex/CodexPage').then((module) => ({ default: module.CodexPage })));
-const CodexSidebar = lazy(() => import('./codex/CodexSidebar').then((module) => ({ default: module.CodexSidebar })));
+const CodexActivitySurface = lazy(() => import('./codex/CodexActivitySurface').then((module) => ({ default: module.CodexActivitySurface })));
 const EnvSettingsPage = lazy(() => import('./pages/EnvSettingsPage').then((module) => ({ default: module.EnvSettingsPage })));
 const PluginPanel = lazy(() => import('./plugins/PluginPanel').then((module) => ({ default: module.PluginPanel })));
 const PluginCenterView = lazy(() => import('./plugins/PluginCenterView').then((module) => ({ default: module.PluginCenterView })));
@@ -191,9 +190,23 @@ const FlowerTurnLauncherWindow = lazy(() => import('./widgets/FlowerTurnLauncher
 const FilePreviewHost = lazy(() => import('./widgets/FilePreviewHost').then((module) => ({ default: module.FilePreviewHost })));
 const FileBrowserSurfaceHost = lazy(() => import('./widgets/FileBrowserSurfaceHost').then((module) => ({ default: module.FileBrowserSurfaceHost })));
 const EnvWorkbenchPage = lazy(() => import('./workbench/EnvWorkbenchPage').then((module) => ({ default: module.EnvWorkbenchPage })));
-const CodexFeatureProvider = lazy(() => import('./codex/CodexFeatureProvider').then((module) => ({ default: module.CodexFeatureProvider })));
 
 type EnvActivitySurfaceId = EnvSurfaceId | 'settings' | typeof PLUGIN_CENTER_ACTIVITY_ID | typeof PLUGIN_SURFACE_ACTIVITY_ID;
+
+function CodexActivitySidebarHost(props: Readonly<{
+  onHostChange: (host: HTMLElement | null) => void;
+}>) {
+  let host!: HTMLDivElement;
+
+  onMount(() => {
+    props.onHostChange(host);
+  });
+  onCleanup(() => {
+    props.onHostChange(null);
+  });
+
+  return <div ref={host} data-codex-activity-sidebar-host class="h-full min-h-0 w-full" />;
+}
 
 type EnvSessionSource =
   | 'local_runtime'
@@ -699,6 +712,7 @@ export function EnvAppShell() {
   const [notesOverlayOpen, setNotesOverlayOpen] = createSignal(false);
   const [notesViewportAnchor, setNotesViewportAnchor] = createSignal<HTMLElement | null>(null);
   const [notesViewportHosts, setNotesViewportHosts] = createSignal<readonly HTMLElement[]>([]);
+  const [codexSidebarHost, setCodexSidebarHost] = createSignal<HTMLElement | null>(null);
   let notesViewportHostsRevision = 0;
   const openNotesOverlay = () => setNotesOverlayOpen(true);
   const closeNotesOverlay = () => setNotesOverlayOpen(false);
@@ -2194,7 +2208,13 @@ export function EnvAppShell() {
       { id: 'ports', name: i18n.t('shell.nav.webServices'), icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 5, fullScreen: true } },
     ];
     list.push({ id: 'ai', name: i18n.t('shell.nav.flower'), icon: FlowerNavigationIcon, component: EnvAIPage, sidebar: { order: 6, fullScreen: false, renderIn: 'main' } });
-    list.push({ id: 'codex', name: i18n.t('shell.nav.codex'), icon: CodexNavigationIcon, component: CodexPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
+    list.push({
+      id: 'codex',
+      name: i18n.t('shell.nav.codex'),
+      icon: CodexNavigationIcon,
+      component: () => <CodexActivitySurface sidebarHost={codexSidebarHost} />,
+      sidebar: { order: 7, fullScreen: false, renderIn: 'main' },
+    });
     list.push({
       id: PLUGIN_CENTER_ACTIVITY_ID,
       name: 'Plugin Center',
@@ -3151,7 +3171,7 @@ export function EnvAppShell() {
         viewMode() !== 'activity'
           ? <></>
           : activeTab === 'codex' && canUseCodex()
-            ? <CodexSidebar />
+            ? <CodexActivitySidebarHost onHostChange={setCodexSidebarHost} />
             : <></>
       }
       logo={<ShellLogo />}
@@ -3293,13 +3313,6 @@ export function EnvAppShell() {
     return renderActivityShell();
   };
 
-  const renderMainShellWithFeatureProviders = () => {
-    const shell = renderMainShell();
-    return viewMode() === 'activity' && activeSurface() === 'codex'
-      ? <CodexFeatureProvider>{shell}</CodexFeatureProvider>
-      : shell;
-  };
-
   return (
     <EnvContext.Provider
       value={{
@@ -3367,7 +3380,7 @@ export function EnvAppShell() {
               }}
             >
               <FloeRegistryRuntime components={components()}>
-                {renderMainShellWithFeatureProviders()}
+                {renderMainShell()}
                   <Show when={viewMode() !== 'workbench' && filePreviewHostRequested()}>
                     <FilePreviewHost />
                   </Show>

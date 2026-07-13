@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Show, createContext, createEffect, createMemo, createSignal, useContext, type JSX } from 'solid-js';
+import { For, Show, createContext, createEffect, createSignal, onCleanup, onMount, useContext, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -36,6 +36,16 @@ const settingsPageState = vi.hoisted(() => ({
 }));
 const registeredComponentsState = vi.hoisted(() => ({
   components: [] as Array<{ id: string; component: () => JSX.Element }>,
+}));
+const activitySurfaceLifecycleState = vi.hoisted(() => ({
+  fileMounts: 0,
+  fileCleanups: 0,
+  codexProviderMounts: 0,
+  codexProviderCleanups: 0,
+  codexPageMounts: 0,
+  codexPageCleanups: 0,
+  codexSidebarMounts: 0,
+  codexSidebarCleanups: 0,
 }));
 const pluginApiMocks = vi.hoisted(() => ({
   executePluginLifecycleCommand: vi.fn(async (_command: any) => ({})),
@@ -134,21 +144,35 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 
 vi.mock('@floegence/floe-webapp-core/app', () => ({
   ActivityAppsMain: (props: any) => {
-    const activeComponent = createMemo(() => {
-      const activeId = typeof props.activeId === 'function' ? props.activeId() : props.activeId;
-      return registeredComponentsState.components.find((component) => component.id === activeId);
+    const activeId = () => (typeof props.activeId === 'function' ? props.activeId() : props.activeId);
+    const [mountedComponents, setMountedComponents] = createSignal<Array<{ id: string; component: () => JSX.Element }>>([]);
+
+    createEffect(() => {
+      const nextActiveId = activeId();
+      const match = registeredComponentsState.components.find((component) => component.id === nextActiveId);
+      if (!match) return;
+      setMountedComponents((current) => (
+        current.some((component) => component.id === match.id)
+          ? current
+          : [...current, match]
+      ));
     });
-    const renderedComponent = createMemo(() => {
-      const match = activeComponent();
-      if (!match) {
-        return <div>activity main</div>;
-      }
-      const Component = match.component;
-      return <Component />;
-    });
+
     return (
-      <div data-testid="activity-main" data-active-id={typeof props.activeId === 'function' ? props.activeId() : props.activeId}>
-        {renderedComponent()}
+      <div data-testid="activity-main" data-active-id={activeId()}>
+        <For each={mountedComponents()}>
+          {(match) => {
+            const Component = match.component;
+            return (
+              <div
+                data-testid={`activity-view-${match.id}`}
+                style={{ display: activeId() === match.id ? 'block' : 'none' }}
+              >
+                <Component />
+              </div>
+            );
+          }}
+        </For>
       </div>
     );
   },
@@ -258,7 +282,9 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
             Return From Settings
           </button>
         </div>
-        <div data-testid="shell-sidebar" data-floe-shell-slot="sidebar" class={props.slotClassNames?.sidebar} />
+        <div data-testid="shell-sidebar" data-floe-shell-slot="sidebar" class={props.slotClassNames?.sidebar}>
+          {props.sidebarContent?.(env?.activeSurface?.() ?? sidebarActiveTabValue)}
+        </div>
         <div data-floe-shell-slot="content-area">
           <main data-floe-shell-slot="main">{props.children}</main>
         </div>
@@ -473,7 +499,53 @@ vi.mock('./icons/CodexIcon', () => ({ CodexIcon: () => <span />, CodexNavigation
 vi.mock('./workbench/EnvWorkbenchPage', () => ({ EnvWorkbenchPage: () => <MockDisplayModeSurface testId="workbench-page" /> }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div>activity main</div> }));
-vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div>activity main</div> }));
+vi.mock('./pages/EnvFileBrowserPage', () => ({
+  EnvFileBrowserPage: () => {
+    const [loading, setLoading] = createSignal(true);
+    const [path, setPath] = createSignal('/workspace');
+    const [filter, setFilter] = createSignal('');
+    const [expanded, setExpanded] = createSignal(false);
+    const [viewMode, setViewMode] = createSignal<'list' | 'grid'>('list');
+    const [selection, setSelection] = createSignal('');
+
+    onMount(() => {
+      activitySurfaceLifecycleState.fileMounts += 1;
+      queueMicrotask(() => setLoading(false));
+    });
+    onCleanup(() => {
+      activitySurfaceLifecycleState.fileCleanups += 1;
+    });
+
+    return (
+      <div
+        data-testid="mock-file-browser"
+        data-expanded={String(expanded())}
+        data-view-mode={viewMode()}
+        data-selection={selection()}
+      >
+        <Show when={loading()}>
+          <div data-testid="mock-file-loading">Loading files</div>
+        </Show>
+        <input
+          data-testid="mock-file-path"
+          value={path()}
+          onInput={(event) => setPath(event.currentTarget.value)}
+        />
+        <input
+          data-testid="mock-file-filter"
+          value={filter()}
+          onInput={(event) => setFilter(event.currentTarget.value)}
+        />
+        <button type="button" data-testid="mock-file-expand" onClick={() => setExpanded(true)}>Expand</button>
+        <button type="button" data-testid="mock-file-grid" onClick={() => setViewMode('grid')}>Grid</button>
+        <button type="button" data-testid="mock-file-select" onClick={() => setSelection('/workspace/src/main.ts')}>Select</button>
+        <div data-testid="mock-file-scroll" style={{ height: '40px', overflow: 'auto' }}>
+          <div style={{ height: '400px' }}>Scrollable files</div>
+        </div>
+      </div>
+    );
+  },
+}));
 vi.mock('./pages/EnvCodespacesPage', () => ({ EnvCodespacesPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvPortForwardsPage', () => ({ EnvPortForwardsPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvAIPage', () => ({
@@ -494,9 +566,39 @@ vi.mock('./pages/EnvAIPage', () => ({
     );
   },
 }));
-vi.mock('./codex/CodexPage', () => ({ CodexPage: () => <div /> }));
-vi.mock('./codex/CodexProvider', () => ({ CodexProvider: (props: any) => <>{props.children}</> }));
-vi.mock('./codex/CodexSidebar', () => ({ CodexSidebar: () => <div /> }));
+vi.mock('./codex/CodexPage', () => ({
+  CodexPage: () => {
+    onMount(() => {
+      activitySurfaceLifecycleState.codexPageMounts += 1;
+    });
+    onCleanup(() => {
+      activitySurfaceLifecycleState.codexPageCleanups += 1;
+    });
+    return <div data-testid="mock-codex-page" />;
+  },
+}));
+vi.mock('./codex/CodexProvider', () => ({
+  CodexProvider: (props: any) => {
+    onMount(() => {
+      activitySurfaceLifecycleState.codexProviderMounts += 1;
+    });
+    onCleanup(() => {
+      activitySurfaceLifecycleState.codexProviderCleanups += 1;
+    });
+    return <>{props.children}</>;
+  },
+}));
+vi.mock('./codex/CodexSidebar', () => ({
+  CodexSidebar: () => {
+    onMount(() => {
+      activitySurfaceLifecycleState.codexSidebarMounts += 1;
+    });
+    onCleanup(() => {
+      activitySurfaceLifecycleState.codexSidebarCleanups += 1;
+    });
+    return <div data-testid="mock-codex-sidebar" />;
+  },
+}));
 vi.mock('./pages/EnvSettingsPage', async () => {
   const { EnvContext } = await import('./pages/EnvContext');
   return {
@@ -674,6 +776,14 @@ beforeEach(() => {
   settingsPageState.focusSeq = 0;
   settingsPageState.focusSection = null;
   registeredComponentsState.components = [];
+  activitySurfaceLifecycleState.fileMounts = 0;
+  activitySurfaceLifecycleState.fileCleanups = 0;
+  activitySurfaceLifecycleState.codexProviderMounts = 0;
+  activitySurfaceLifecycleState.codexProviderCleanups = 0;
+  activitySurfaceLifecycleState.codexPageMounts = 0;
+  activitySurfaceLifecycleState.codexPageCleanups = 0;
+  activitySurfaceLifecycleState.codexSidebarMounts = 0;
+  activitySurfaceLifecycleState.codexSidebarCleanups = 0;
   protocolStatus = 'disconnected';
   protocolClient = null;
   protocolError = null;
@@ -775,6 +885,80 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell environment entry affordances', () => {
+  it('keeps visited Activity surfaces mounted across Files, Terminal, Monitor, Flower, and Codex navigation', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="codex"]')));
+      expect(activitySurfaceLifecycleState.codexProviderMounts).toBe(0);
+      expect(activitySurfaceLifecycleState.codexPageMounts).toBe(0);
+      expect(activitySurfaceLifecycleState.codexSidebarMounts).toBe(0);
+
+      (host.querySelector('[data-activity-id="files"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="mock-file-browser"]')));
+      await flushUntil(() => !host.querySelector('[data-testid="mock-file-loading"]'));
+
+      const fileBrowser = host.querySelector('[data-testid="mock-file-browser"]') as HTMLElement;
+      const pathInput = host.querySelector('[data-testid="mock-file-path"]') as HTMLInputElement;
+      const filterInput = host.querySelector('[data-testid="mock-file-filter"]') as HTMLInputElement;
+      const scrollViewport = host.querySelector('[data-testid="mock-file-scroll"]') as HTMLElement;
+
+      pathInput.value = '/workspace/src';
+      pathInput.dispatchEvent(new Event('input', { bubbles: true }));
+      filterInput.value = 'main.ts';
+      filterInput.dispatchEvent(new Event('input', { bubbles: true }));
+      (host.querySelector('[data-testid="mock-file-expand"]') as HTMLButtonElement).click();
+      (host.querySelector('[data-testid="mock-file-grid"]') as HTMLButtonElement).click();
+      (host.querySelector('[data-testid="mock-file-select"]') as HTMLButtonElement).click();
+      scrollViewport.scrollTop = 176;
+
+      for (const target of ['terminal', 'monitor', 'ai', 'codex']) {
+        (host.querySelector(`[data-activity-id="${target}"]`) as HTMLButtonElement | null)?.click();
+        await flushUntil(() => sidebarActiveTabValue === target);
+
+        expect(host.querySelector('[data-testid="mock-file-browser"]')).toBe(fileBrowser);
+        expect(activitySurfaceLifecycleState.fileMounts).toBe(1);
+        expect(activitySurfaceLifecycleState.fileCleanups).toBe(0);
+
+        if (target === 'codex') {
+          await flushUntil(() => activitySurfaceLifecycleState.codexProviderMounts === 1, 60);
+          expect(activitySurfaceLifecycleState.codexPageMounts).toBe(1);
+          expect(activitySurfaceLifecycleState.codexSidebarMounts).toBe(1);
+          expect(host.querySelector('[data-testid="mock-codex-sidebar"]')).toBeTruthy();
+        }
+
+        (host.querySelector('[data-activity-id="files"]') as HTMLButtonElement | null)?.click();
+        expect(host.querySelector('[data-testid="mock-file-loading"]')).toBeNull();
+        await flushUntil(() => sidebarActiveTabValue === 'files');
+
+        expect(host.querySelector('[data-testid="mock-file-browser"]')).toBe(fileBrowser);
+        expect((host.querySelector('[data-testid="mock-file-path"]') as HTMLInputElement).value).toBe('/workspace/src');
+        expect((host.querySelector('[data-testid="mock-file-filter"]') as HTMLInputElement).value).toBe('main.ts');
+        expect(fileBrowser.dataset.expanded).toBe('true');
+        expect(fileBrowser.dataset.viewMode).toBe('grid');
+        expect(fileBrowser.dataset.selection).toBe('/workspace/src/main.ts');
+        expect((host.querySelector('[data-testid="mock-file-scroll"]') as HTMLElement).scrollTop).toBe(176);
+      }
+
+      expect(activitySurfaceLifecycleState.codexProviderMounts).toBe(1);
+      expect(activitySurfaceLifecycleState.codexProviderCleanups).toBe(0);
+      expect(activitySurfaceLifecycleState.codexPageMounts).toBe(1);
+      expect(activitySurfaceLifecycleState.codexPageCleanups).toBe(0);
+      expect(activitySurfaceLifecycleState.codexSidebarMounts).toBe(1);
+      expect(activitySurfaceLifecycleState.codexSidebarCleanups).toBe(0);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('returns Flower-origin runtime settings to Flower and clears the origin on normal settings entry', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -938,7 +1122,9 @@ describe('EnvAppShell environment entry affordances', () => {
       (host.querySelector('button[aria-label="Close Plugin Center"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => sidebarActiveTabValue === 'monitor');
 
-      expect(host.querySelector('[data-plugin-center-view]')).toBeNull();
+      const hiddenPluginCenter = host.querySelector('[data-plugin-center-view]');
+      expect(hiddenPluginCenter).toBeTruthy();
+      expect((hiddenPluginCenter?.closest('[data-testid="activity-view-plugin-center"]') as HTMLElement | null)?.style.display).toBe('none');
       expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
     } finally {
       dispose();
@@ -1104,7 +1290,9 @@ describe('EnvAppShell environment entry affordances', () => {
 
       (host.querySelector('[aria-label="Close Plugin Surface"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => sidebarActiveTabValue === 'terminal');
-      expect(host.querySelector('[data-plugin-surface-host]')).toBeNull();
+      const hiddenPluginSurface = host.querySelector('[data-plugin-surface-host]');
+      expect(hiddenPluginSurface).toBeTruthy();
+      expect((hiddenPluginSurface?.closest('[data-testid="activity-view-plugin-surface"]') as HTMLElement | null)?.style.display).toBe('none');
       expect(sidebarActiveTabValue).toBe('terminal');
     } finally {
       dispose();
