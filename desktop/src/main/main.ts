@@ -6,7 +6,13 @@ import https from 'node:https';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { attachManagedRuntimeFromStatus, loadManagedRuntimeStartupFromStatus, startManagedRuntime, type ManagedRuntimeProgress } from './runtimeProcess';
+import {
+  attachManagedRuntimeFromStatus,
+  inspectLocalManagedRuntimeProcesses,
+  startManagedRuntime,
+  stopLocalManagedRuntimeProcesses,
+  type ManagedRuntimeProgress,
+} from './runtimeProcess';
 import { buildAppMenuTemplate } from './appMenu';
 import {
   buildDesktopLastWindowCloseConfirmationModel,
@@ -173,17 +179,17 @@ import {
   DesktopSSHRuntimeCanceledError,
   DesktopSSHRuntimeMaintenanceRequiredError,
   ensureManagedSSHRuntimeReady,
+  inspectManagedSSHRuntimeProcesses,
   openManagedSSHRuntimeConnection,
   probeManagedSSHRuntimeStatus,
   parseManagedSSHRuntimeProbeResult,
-  stopManagedSSHRuntimeProcess,
+  stopManagedSSHRuntimeProcesses,
   type DesktopSSHRuntimeProgress,
 } from './sshRuntime';
 import {
   containerListCommand,
   containerInspectCommand,
   containerRuntimeDaemonStatusCommand,
-  containerRuntimeDaemonStopCommand,
   containerRuntimeProbeCommand,
   parseContainerListOutput,
   parseContainerInspectJSON,
@@ -191,7 +197,7 @@ import {
   type DesktopRuntimeContainerResolution,
   type DesktopRuntimeContainerResolver,
 } from './containerRuntime';
-import { parseLaunchReport, type LaunchReport } from './launchReport';
+import { parseLaunchReport } from './launchReport';
 import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
@@ -202,7 +208,9 @@ import {
 } from './runtimePlacementBridgeSession';
 import {
   ensureRuntimePlacementReady,
+  inspectContainerRuntimeProcesses,
   RuntimePlacementMaintenanceRequiredError,
+  stopContainerRuntimeProcesses,
   type RuntimePlacementProgress,
 } from './runtimePlacementManager';
 import { startDesktopModelSource, type ManagedDesktopModelSource } from './desktopModelSource';
@@ -8000,6 +8008,8 @@ type PrepareManagedTargetOptions = Readonly<{
   environment: DesktopLocalEnvironmentState;
   localUIBind?: string;
   forceRuntimeUpdate?: boolean;
+  runtimeProcessIntent?: 'start' | 'restart' | 'update';
+  beforeRuntimeReplacement?: () => Promise<void>;
   onProgress?: (progress: ManagedRuntimeProgress) => void;
 }>;
 
@@ -8020,6 +8030,8 @@ async function prepareManagedTarget(
     stateRoot: launchPlan.state_layout.stateRoot,
     desktopOwnerID,
     forceRuntimeUpdate: options.forceRuntimeUpdate === true,
+    runtimeProcessIntent: options.runtimeProcessIntent,
+    beforeRuntimeReplacement: options.beforeRuntimeReplacement,
     startupSecretsStdin: launchPlan.startup_secrets_stdin,
     tempRoot: app.getPath('temp'),
     onProgress: options.onProgress,
@@ -8056,6 +8068,7 @@ async function attachLocalEnvironmentRuntime(
     executablePath: bundledRuntimeExecutablePath(),
     stateRoot: localEnvironmentStateRoot(environment),
     runtimeAttachTimeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
+    desktopOwnerID: await desktopRuntimeOwnerID(),
   });
   if (!attachedRuntime) {
     return null;
@@ -8409,14 +8422,15 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
 async function assertLocalEnvironmentRuntimeStopped(
   environment: DesktopLocalEnvironmentState,
 ): Promise<void> {
-  const startup = await loadManagedRuntimeStartupFromStatus({
+  const inventory = await inspectLocalManagedRuntimeProcesses({
     executablePath: bundledRuntimeExecutablePath(),
     stateRoot: localEnvironmentStateRoot(environment),
+    desktopOwnerID: await desktopRuntimeOwnerID(),
     env: process.env,
     timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
   });
-  if (startup) {
-    throw new Error('Desktop could not stop the local runtime because it still reports a ready process.');
+  if (inventory.instances.length > 0) {
+    throw new Error('Desktop could not stop the local runtime because matching runtime processes remain.');
   }
 }
 
@@ -9019,6 +9033,14 @@ function runtimeLifecyclePhaseFromManagedRuntime(
   switch (phase) {
     case 'checking_existing_runtime':
       return 'checking_existing_runtime';
+    case 'discovering_runtime_instances':
+      return 'discovering_runtime_instances';
+    case 'stopping_legacy_runtimes':
+      return 'stopping_legacy_runtimes';
+    case 'stopping_runtime_process':
+      return 'stopping_runtime_process';
+    case 'verifying_runtime_inventory':
+      return 'verifying_runtime_inventory';
     case 'starting_runtime':
       return 'starting_runtime_process';
     case 'waiting_for_readiness':
@@ -9040,6 +9062,14 @@ function runtimeLifecyclePhaseFromPlacement(
       return 'detecting_platform';
     case 'checking_runtime':
       return 'checking_runtime_package';
+    case 'discovering_runtime_instances':
+      return 'discovering_runtime_instances';
+    case 'stopping_legacy_runtimes':
+      return 'stopping_legacy_runtimes';
+    case 'stopping_runtime_process':
+      return 'stopping_runtime_process';
+    case 'verifying_runtime_inventory':
+      return 'verifying_runtime_inventory';
     case 'preparing_runtime_package':
       return 'preparing_runtime_package';
     case 'installing_runtime':
@@ -9121,6 +9151,16 @@ function sshRuntimeLifecyclePhase(
     case 'ssh_creating_upload_dir':
     case 'ssh_uploading_archive':
     case 'ssh_installing_upload':
+      return 'installing_runtime_package';
+    case 'ssh_discovering_runtime_instances':
+      return 'discovering_runtime_instances';
+    case 'ssh_stopping_legacy_runtimes':
+      return 'stopping_legacy_runtimes';
+    case 'ssh_stopping_runtime_process':
+      return 'stopping_runtime_process';
+    case 'ssh_verifying_runtime_inventory':
+      return 'verifying_runtime_inventory';
+    case 'ssh_activating_runtime_package':
       return 'installing_runtime_package';
     case 'ssh_starting_runtime':
       return 'starting_runtime_process';
@@ -9312,65 +9352,6 @@ function runtimeOpenFailureRecoveryActions(input: Readonly<{
   };
 }
 
-function assertRuntimeStopVerifiedFromLaunchReport(report: LaunchReport): void {
-  if (report.status !== 'blocked') {
-    throw new Error('Desktop could not stop the runtime because it still reports a ready daemon.');
-  }
-  const classification = classifyDesktopRuntimeBlockedLaunchReport(report, {
-    target_runtime_version: resolveSSHRuntimeReleaseTag(),
-  });
-  if (classification.kind === 'stopped') {
-    return;
-  }
-  if (classification.kind === 'unverified') {
-    throw new Error(classification.message);
-  }
-  throw new Error(classification.maintenance.message);
-}
-
-async function assertContainerRuntimeStopped(input: Readonly<{
-  executor: ReturnType<typeof runtimeHostExecutor>;
-  placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
-  runtimeBinaryPath: string;
-  signal?: AbortSignal;
-}>): Promise<void> {
-  const statusResult = await input.executor.run(containerRuntimeDaemonStatusCommand({
-    engine: input.placement.container_engine,
-    container_id: input.placement.container_id,
-    runtime_root: input.placement.runtime_root,
-    runtime_state_root: desktopRuntimePlacementStateRoot(input.placement),
-    runtime_binary_path: input.runtimeBinaryPath,
-  }), { signal: input.signal });
-  assertRuntimeStopVerifiedFromLaunchReport(parseLaunchReport(statusResult.stdout));
-}
-
-async function assertSSHRuntimeStopped(input: Readonly<{
-  target: DesktopSSHEnvironmentDetails;
-  runtimeReleaseTag: string;
-  sshPassword?: string;
-  connectTimeoutSeconds?: number;
-  tempRoot: string;
-  signal?: AbortSignal;
-}>): Promise<void> {
-  const statusProbe = await probeManagedSSHRuntimeStatus({
-    target: input.target,
-    runtimeReleaseTag: input.runtimeReleaseTag,
-    sshPassword: input.sshPassword,
-    connectTimeoutSeconds: input.connectTimeoutSeconds,
-    tempRoot: input.tempRoot,
-    signal: input.signal,
-  });
-  if (statusProbe.status === 'ready') {
-    throw new Error('Desktop could not stop the SSH runtime because it still reports a ready daemon.');
-  }
-  if (statusProbe.status === 'failed') {
-    throw new DesktopOperationFailureError(statusProbe.failure);
-  }
-  if (statusProbe.status === 'blocked') {
-    assertRuntimeStopVerifiedFromLaunchReport(statusProbe.report);
-  }
-}
-
 function resolveManagedRestartBindOverride(environment: DesktopLocalEnvironmentState, startup: StartupReport): string | null {
   try {
     const configuredBind = parseLocalUIBind(localEnvironmentAccess(environment).local_ui_bind);
@@ -9532,18 +9513,62 @@ async function startSSHEnvironmentRuntimeRecord(
     || action === 'update_environment_runtime'
     || options.forceRuntimeUpdate === true;
   const existingRecord = sshRuntimeReadyByKey.get(runtimeKey) ?? null;
+  const replacementRequested = action === 'restart_environment_runtime'
+    || action === 'update_environment_runtime'
+    || options.forceRuntimeUpdate === true;
   if (existingRecord) {
     const canKeepExistingRecord = options.forceRuntimeUpdate !== true
       && !activeWorkReplacementAllowed
       && action === 'start_environment_runtime'
       && desktopSSHRuntimeAffectingSettingsMatch(existingRecord.details, sshDetails);
     if (canKeepExistingRecord) {
+      const preferences = await loadDesktopPreferencesCached();
+      const inventory = await inspectManagedSSHRuntimeProcesses({
+        target: sshDetails,
+        runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
+        desktopOwnerID: await desktopRuntimeOwnerID(),
+        sshPassword: savedSSHPasswordForDetails(preferences, sshDetails, environmentID),
+        sourceRuntimeRoot: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
+        assetCacheRoot: desktopRuntimePackageCacheRoot(),
+        tempRoot: app.getPath('temp'),
+        connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
+          ? sshDetails.connect_timeout_seconds
+          : undefined,
+      });
+      const legacyCount = inventory.summary.legacy_owned + inventory.summary.legacy_ownerless;
+      const instance = inventory.instances[0];
+      const expectedVersion = compact(existingRecord.startup.runtime_service?.runtime_version);
+      if (
+        inventory.summary.blocking > 0
+        || legacyCount > 0
+        || inventory.summary.current_owned !== 1
+        || inventory.instances.length !== 1
+        || !instance
+        || instance.pid !== existingRecord.startup.pid
+        || (expectedVersion !== '' && compact(instance.runtime_version) !== expectedVersion)
+      ) {
+        const maintenance = buildDesktopRuntimeMaintenanceRequirement({
+          kind: 'runtime_restart_required',
+          required_for: 'open',
+          recovery_action: 'restart_runtime',
+          can_desktop_start: false,
+          can_desktop_restart: inventory.summary.blocking === 0 && inventory.summary.stoppable > 0,
+          has_active_work: true,
+          active_work_label: 'Runtime process reconciliation required',
+          target_runtime_version: resolveSSHRuntimeReleaseTag(),
+          message: `Desktop found ${inventory.instances.length} SSH runtime process(es), including ${legacyCount} historical process(es). Restart or update this runtime before opening it.`,
+        });
+        sshRuntimeMaintenanceByKey.set(runtimeKey, maintenance);
+        throw new DesktopSSHRuntimeMaintenanceRequiredError(maintenance.message, maintenance);
+      }
       sshRuntimeMaintenanceByKey.delete(runtimeKey);
-    } else {
+      return existingRecord;
+    }
+    if (!replacementRequested) {
       const openRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
       await openRecord?.disconnect().catch(() => undefined);
       sshEnvironmentRuntimeByKey.delete(runtimeKey);
-      await existingRecord.stop().catch(() => undefined);
+      await existingRecord.disconnect().catch(() => undefined);
       sshRuntimeReadyByKey.delete(runtimeKey);
     }
   }
@@ -9594,262 +9619,31 @@ async function startSSHEnvironmentRuntimeRecord(
     try {
       const preferences = await loadDesktopPreferencesCached();
       const sshPassword = savedSSHPasswordForDetails(preferences, sshDetails, environmentID);
-      const statusProbe = await probeManagedSSHRuntimeStatus({
-        target: sshDetails,
-        runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
-        sshPassword,
-        tempRoot: app.getPath('temp'),
-        connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
-          ? sshDetails.connect_timeout_seconds
-          : undefined,
-        signal,
-      });
-      const workflowAfterProbe = runtimeLifecycleWorkflowForOperation(runtimeKey, lifecycleAttemptOwner, {
+      const processOwnerID = await desktopRuntimeOwnerID();
+      commitRuntimeLifecycleDecision(runtimeKey, lifecycleAttemptOwner, {
         hostAccess: { kind: 'ssh_host', ssh: sshDetails },
         placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
         operation: lifecycleOperation,
         targetID: runtimeKey,
         targetLabel: label,
+        decision: lifecycleOperation === 'update'
+          ? 'runtime_update_required_running'
+          : lifecycleOperation === 'restart'
+            ? 'runtime_running'
+            : 'runtime_missing',
       });
-      workflowAfterProbe.completeThrough('checking_runtime_package');
-      if (statusProbe.status === 'ready') {
-        if (!runtimeServiceIsOpenable(statusProbe.startup.runtime_service) && !runtimeServiceAllowsOpenAttempt(statusProbe.startup.runtime_service)) {
-          const maintenance = sshRuntimeMaintenanceFromStartup(
-            statusProbe.startup,
-            'This SSH runtime is running but cannot open with this Desktop yet.',
-          );
-          sshRuntimeMaintenanceByKey.set(runtimeKey, maintenance);
-          if (
-            action !== 'update_environment_runtime'
-            || options.forceRuntimeUpdate !== true
-            || !desktopRuntimeMaintenanceRequiresUpdate(maintenance)
-          ) {
-            throw new DesktopSSHRuntimeMaintenanceRequiredError(maintenance.message, maintenance);
-          }
-        }
-        const replacingReadySSHRuntime = action === 'restart_environment_runtime'
-          || action === 'update_environment_runtime'
-          || options.forceRuntimeUpdate === true;
-        if (replacingReadySSHRuntime) {
-          commitRuntimeLifecycleDecision(runtimeKey, lifecycleAttemptOwner, {
-            hostAccess: { kind: 'ssh_host', ssh: sshDetails },
-            placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
-            operation: lifecycleOperation,
-            targetID: runtimeKey,
-            targetLabel: label,
-            decision: lifecycleOperation === 'update' ? 'runtime_update_required_running' : 'runtime_running',
-          });
-          const pid = statusProbe.startup.pid ?? 0;
-          if (!Number.isInteger(pid) || pid <= 0) {
-            throw new Error('Desktop cannot replace this SSH runtime because it did not report a process id.');
-          }
-          updateRuntimeLifecycleOperation(runtimeKey, lifecycleAttemptOwner, {
-            hostAccess: { kind: 'ssh_host', ssh: sshDetails },
-            placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
-            operation: lifecycleOperation,
-            phase: 'stopping_runtime_process',
-            targetID: runtimeKey,
-            targetLabel: label,
-            title: 'Stopping SSH runtime',
-            detail: 'Desktop is stopping the current SSH runtime before continuing.',
-          });
-          await stopManagedSSHRuntimeProcess({
-            target: sshDetails,
-            pid,
-            sshPassword,
-            tempRoot: app.getPath('temp'),
-            connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
-              ? sshDetails.connect_timeout_seconds
-              : undefined,
-            signal,
-            onLog: (stream, chunk) => {
-              const text = String(chunk ?? '').trim();
-              if (text) {
-                console.log(`[redeven:${stream}] ${text}`);
-              }
-            },
-          });
-          updateRuntimeLifecycleOperation(runtimeKey, lifecycleAttemptOwner, {
-            hostAccess: { kind: 'ssh_host', ssh: sshDetails },
-            placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
-            operation: lifecycleOperation,
-            phase: 'verifying_runtime_stopped',
-            targetID: runtimeKey,
-            targetLabel: label,
-            title: 'Verifying runtime stopped',
-            detail: 'Desktop is confirming that the previous SSH runtime is no longer running.',
-          });
-          await assertSSHRuntimeStopped({
-            target: sshDetails,
-            runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
-            sshPassword,
-            tempRoot: app.getPath('temp'),
-            connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
-              ? sshDetails.connect_timeout_seconds
-              : undefined,
-            signal,
-          });
-          sshRuntimeReadyByKey.delete(runtimeKey);
-          sshRuntimeMaintenanceByKey.delete(runtimeKey);
-        } else {
-          const readyWorkflow = commitRuntimeLifecycleDecision(runtimeKey, lifecycleAttemptOwner, {
-            hostAccess: { kind: 'ssh_host', ssh: sshDetails },
-            placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
-            operation: lifecycleOperation,
-            targetID: runtimeKey,
-            targetLabel: label,
-            decision: lifecycleOperation === 'update' ? 'runtime_already_current' : 'existing_runtime_openable',
-          });
-          readyWorkflow.advanceToStep('checking_runtime_service', 'Desktop is verifying the existing SSH runtime service.');
-          readyWorkflow.completeStep('checking_runtime_service');
-          const attachedHandle: DesktopSessionRuntimeHandle = {
-            runtime_kind: 'ssh',
-            lifecycle_owner: 'external',
-            launch_mode: 'attached',
-            stop: async () => undefined,
-          };
-          const readyRecord: SSHRuntimeReadyRecord = {
-            runtime_key: runtimeKey,
-            environment_id: environmentID,
-            label,
-            details: sshDetails,
-            startup: statusProbe.startup,
-            runtime_handle: attachedHandle,
-            disconnect: async () => undefined,
-            stop: async () => undefined,
-          };
-          sshRuntimeReadyByKey.set(runtimeKey, readyRecord);
-          sshRuntimeMaintenanceByKey.delete(runtimeKey);
-          launcherOperations.finishCurrentAttempt(runtimeKey, lifecycleAttemptOwner, 'succeeded', {
-            phase: 'runtime_ready',
-            title: lifecycleOperation === 'update' ? 'Runtime up to date' : 'Runtime already running',
-            detail: lifecycleOperation === 'update'
-              ? 'Desktop verified that this SSH runtime already matches the current Desktop runtime package.'
-              : 'Desktop found an openable SSH runtime and did not start a new process.',
-            lifecycle_progress: completeRuntimeLifecycleWorkflowProgress(runtimeKey, lifecycleAttemptOwner, {
-              hostAccess: { kind: 'ssh_host', ssh: sshDetails },
-              placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
-              operation: lifecycleOperation,
-              phase: lifecycleOperation === 'update' ? 'runtime_up_to_date' : 'runtime_ready',
-              targetID: runtimeKey,
-              targetLabel: label,
-              detail: lifecycleOperation === 'update'
-                ? 'Desktop verified that this SSH runtime already matches the current Desktop runtime package.'
-                : 'Desktop found an openable SSH runtime and did not start a new process.',
-            }),
-          });
-          scheduleCurrentLauncherOperationRemoval(runtimeKey, lifecycleAttemptOwner);
-          clearRuntimeLifecycleWorkflow(runtimeKey, lifecycleAttemptOwner);
-          operationSettled = true;
-          return readyRecord;
-        }
-      }
-      if (statusProbe.status === 'blocked') {
-        const classification = classifyDesktopRuntimeBlockedLaunchReport(statusProbe.report, {
-          target_runtime_version: resolveSSHRuntimeReleaseTag(),
-        });
-        if (classification.kind === 'stopped') {
-          sshRuntimeMaintenanceByKey.delete(runtimeKey);
-        } else if (classification.kind === 'unverified') {
-          throw new Error(classification.message);
-        } else {
-          const maintenance = classification.maintenance;
-          sshRuntimeMaintenanceByKey.set(runtimeKey, maintenance);
-          if (
-            classification.kind === 'update_required'
-            && options.forceRuntimeUpdate === true
-          ) {
-            commitRuntimeLifecycleDecision(runtimeKey, lifecycleAttemptOwner, {
-              hostAccess: { kind: 'ssh_host', ssh: sshDetails },
-              placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
-              operation: lifecycleOperation,
-              targetID: runtimeKey,
-              targetLabel: label,
-              decision: 'runtime_update_required_running',
-            });
-            // Continue into the Desktop-owned package replacement path below.
-          } else if (!maintenance.can_desktop_restart) {
-            throw new DesktopSSHRuntimeMaintenanceRequiredError(maintenance.message, maintenance);
-          }
-          if (classification.kind === 'restart_required') {
-            commitRuntimeLifecycleDecision(runtimeKey, lifecycleAttemptOwner, {
-              hostAccess: { kind: 'ssh_host', ssh: sshDetails },
-              placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
-              operation: lifecycleOperation,
-              targetID: runtimeKey,
-              targetLabel: label,
-              decision: 'maintenance_restart_required',
-            });
-            const pid = maintenance.lock_pid ?? 0;
-            updateRuntimeLifecycleOperation(runtimeKey, lifecycleAttemptOwner, {
-              hostAccess: { kind: 'ssh_host', ssh: sshDetails },
-              placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
-              operation: lifecycleOperation,
-              phase: 'stopping_runtime_process',
-              targetID: runtimeKey,
-              targetLabel: label,
-              title: 'Restarting blocked SSH runtime',
-              detail: 'Desktop is stopping the live runtime process that no longer exposes its management socket.',
-            });
-            await stopManagedSSHRuntimeProcess({
-              target: sshDetails,
-              pid,
-              sshPassword,
-              tempRoot: app.getPath('temp'),
-              connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
-                ? sshDetails.connect_timeout_seconds
-                : undefined,
-              signal,
-              onLog: (stream, chunk) => {
-                const text = String(chunk ?? '').trim();
-                if (text) {
-                  console.log(`[redeven:${stream}] ${text}`);
-                }
-              },
-            });
-            updateRuntimeLifecycleOperation(runtimeKey, lifecycleAttemptOwner, {
-              hostAccess: { kind: 'ssh_host', ssh: sshDetails },
-              placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
-              operation: lifecycleOperation,
-              phase: 'verifying_runtime_stopped',
-              targetID: runtimeKey,
-              targetLabel: label,
-              title: 'Verifying runtime stopped',
-              detail: 'Desktop is confirming that the blocked SSH runtime is no longer running.',
-            });
-            await assertSSHRuntimeStopped({
-              target: sshDetails,
-              runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
-              sshPassword,
-              tempRoot: app.getPath('temp'),
-              connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
-                ? sshDetails.connect_timeout_seconds
-                : undefined,
-              signal,
-            });
-          }
-        }
-      }
-      if (statusProbe.status === 'failed') {
-        throw new DesktopOperationFailureError(statusProbe.failure);
-      }
-      if (statusProbe.status === 'not_running') {
-        commitRuntimeLifecycleDecision(runtimeKey, lifecycleAttemptOwner, {
-          hostAccess: { kind: 'ssh_host', ssh: sshDetails },
-          placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
-          operation: lifecycleOperation,
-          targetID: runtimeKey,
-          targetLabel: label,
-          decision: lifecycleOperation === 'update' ? 'runtime_update_required_stopped' : 'runtime_missing',
-        });
-      }
       const managedSSHRuntime = await ensureManagedSSHRuntimeReady({
         target: sshDetails,
         runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
-        desktopOwnerID: await desktopRuntimeOwnerID(),
+        desktopOwnerID: processOwnerID,
         sshPassword,
         sourceRuntimeRoot: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
         forceRuntimeUpdate: options.forceRuntimeUpdate,
+        runtimeProcessIntent: action === 'restart_environment_runtime'
+          ? 'restart'
+          : action === 'update_environment_runtime'
+            ? 'update'
+            : 'start',
         allowActiveWorkReplacement: activeWorkReplacementAllowed,
         connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
           ? sshDetails.connect_timeout_seconds
@@ -9857,6 +9651,18 @@ async function startSSHEnvironmentRuntimeRecord(
         tempRoot: app.getPath('temp'),
         assetCacheRoot: desktopRuntimePackageCacheRoot(),
         signal,
+        beforeRuntimeReplacement: replacementRequested ? async () => {
+          await closeEnvironmentSessionsForRuntimeLifecycle({
+            operation: lifecycleOperation === 'update' ? 'update' : 'restart',
+            scope: { kind: 'session_key', session_key: runtimeKey },
+          });
+          const openRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
+          await openRecord?.disconnect().catch(() => undefined);
+          sshEnvironmentRuntimeByKey.delete(runtimeKey);
+          await existingRecord?.disconnect().catch(() => undefined);
+          sshRuntimeReadyByKey.delete(runtimeKey);
+          sshRuntimeMaintenanceByKey.delete(runtimeKey);
+        } : undefined,
         onLog: (stream, chunk) => {
           const text = String(chunk ?? '').trim();
           if (!text) {
@@ -9865,6 +9671,13 @@ async function startSSHEnvironmentRuntimeRecord(
           console.log(`[redeven:${stream}] ${text}`);
         },
         onProgress: (progress) => {
+          if (progress.phase === 'ssh_stopping_legacy_runtimes' || progress.phase === 'ssh_stopping_runtime_process') {
+            launcherOperations.update(runtimeKey, {
+              cancelable: false,
+              interrupt_label: undefined,
+              interrupt_detail: undefined,
+            });
+          }
           updateRuntimeLifecycleOperation(runtimeKey, lifecycleAttemptOwner, {
             hostAccess: { kind: 'ssh_host', ssh: sshDetails },
             placement: { kind: 'host_process', runtime_root: sshDetails.runtime_root },
@@ -12832,16 +12645,12 @@ function runtimePlacementLiveDaemonFromInspection(input: Readonly<{
   return null;
 }
 
-async function stopRuntimePlacementLiveDaemonForReplacement(input: Readonly<{
+async function releaseRuntimePlacementLiveDaemonForReplacement(input: Readonly<{
   liveDaemon: RuntimePlacementLiveDaemon;
-  sshPassword?: string;
   lifecycleAttemptOwner: LauncherOperationAttemptIdentity;
   operation: DesktopRuntimeLifecycleOperation;
   decision: RuntimeLifecycleDecision;
-  stopDetail: string;
-  verifyDetail: string;
-  signal?: AbortSignal;
-}>): Promise<RuntimePlacementReplacementReadiness> {
+}>): Promise<void> {
   commitRuntimeLifecycleDecision(input.liveDaemon.target_id, input.lifecycleAttemptOwner, {
     hostAccess: input.liveDaemon.host_access,
     placement: input.liveDaemon.placement,
@@ -12850,17 +12659,6 @@ async function stopRuntimePlacementLiveDaemonForReplacement(input: Readonly<{
     targetLabel: input.liveDaemon.label,
     decision: input.decision,
   });
-  updateRuntimeLifecycleOperation(input.liveDaemon.target_id, input.lifecycleAttemptOwner, {
-    hostAccess: input.liveDaemon.host_access,
-    placement: input.liveDaemon.placement,
-    operation: input.operation,
-    phase: 'stopping_runtime_process',
-    targetID: input.liveDaemon.target_id,
-    targetLabel: input.liveDaemon.label,
-    title: 'Stopping runtime process',
-    detail: input.stopDetail,
-  });
-
   await closeEnvironmentSessionsForRuntimeLifecycle({
     operation: input.operation === 'update' ? 'update' : 'restart',
     scope: {
@@ -12872,37 +12670,8 @@ async function stopRuntimePlacementLiveDaemonForReplacement(input: Readonly<{
   runtimePlacementBridgeByTargetID.delete(input.liveDaemon.target_id);
   await bridgeRecord?.desktop_model_source?.stop().catch(() => undefined);
   await bridgeRecord?.session.disconnect().catch(() => undefined);
-
-  const executor = runtimeHostExecutor(input.liveDaemon.host_access, input.sshPassword || undefined);
-  await executor.run(containerRuntimeDaemonStopCommand({
-    engine: input.liveDaemon.placement.container_engine,
-    container_id: input.liveDaemon.placement.container_id,
-    runtime_root: input.liveDaemon.placement.runtime_root,
-    runtime_state_root: desktopRuntimePlacementStateRoot(input.liveDaemon.placement),
-    runtime_binary_path: input.liveDaemon.runtime_binary_path,
-  }), { signal: input.signal });
-  updateRuntimeLifecycleOperation(input.liveDaemon.target_id, input.lifecycleAttemptOwner, {
-    hostAccess: input.liveDaemon.host_access,
-    placement: input.liveDaemon.placement,
-    operation: input.operation,
-    phase: 'verifying_runtime_stopped',
-    targetID: input.liveDaemon.target_id,
-    targetLabel: input.liveDaemon.label,
-    title: 'Verifying runtime stopped',
-    detail: input.verifyDetail,
-  });
-  await assertContainerRuntimeStopped({
-    executor,
-    placement: input.liveDaemon.placement,
-    runtimeBinaryPath: input.liveDaemon.runtime_binary_path,
-    signal: input.signal,
-  });
   runtimePlacementReadyByTargetID.delete(input.liveDaemon.target_id);
   runtimePlacementMaintenanceByTargetID.delete(input.liveDaemon.target_id);
-  return {
-    previous_runtime_pid: input.liveDaemon.pid,
-    require_new_daemon: true,
-  };
 }
 
 async function assertRuntimeTargetContainerRunning(
@@ -13019,6 +12788,7 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
       }
       let inspectionMaintenance = runtimePlacementMaintenanceByTargetID.get(targetID) ?? inspection.maintenance;
       let replacementReadiness: RuntimePlacementReplacementReadiness | null = null;
+      let beforeRuntimeReplacement: (() => Promise<void>) | undefined;
       let replacementLiveDaemon = runtimePlacementLiveDaemonFromInspection({
         targetID,
         environmentID,
@@ -13027,39 +12797,46 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
         placement,
         inspection,
       });
-      if (inspectionMaintenance && desktopRuntimeMaintenanceRequiresRestart(inspectionMaintenance)) {
-        if (replacementLiveDaemon) {
-          replacementReadiness = await stopRuntimePlacementLiveDaemonForReplacement({
-            liveDaemon: replacementLiveDaemon,
-            sshPassword,
+      if (
+        inspectionMaintenance
+        && desktopRuntimeMaintenanceRequiresRestart(inspectionMaintenance)
+        && replacementLiveDaemon
+        && replacementRequested
+      ) {
+        const liveDaemon = replacementLiveDaemon;
+        replacementReadiness = {
+          previous_runtime_pid: liveDaemon.pid,
+          require_new_daemon: true,
+        };
+        beforeRuntimeReplacement = async () => {
+          await releaseRuntimePlacementLiveDaemonForReplacement({
+            liveDaemon,
             lifecycleAttemptOwner,
             operation: lifecycleOperation,
             decision: 'maintenance_restart_required',
-            stopDetail: 'Desktop is stopping the live runtime process before continuing.',
-            verifyDetail: 'Desktop is confirming that the live runtime is no longer running.',
-            signal,
           });
-          placement = replacementLiveDaemon.placement;
-          inspectionMaintenance = undefined;
-          replacementLiveDaemon = null;
-        }
+        };
+        placement = liveDaemon.placement;
+        inspectionMaintenance = undefined;
+        replacementLiveDaemon = null;
       }
       if (replacementLiveDaemon && replacementRequested) {
-        replacementReadiness = await stopRuntimePlacementLiveDaemonForReplacement({
-          liveDaemon: replacementLiveDaemon,
-          sshPassword,
-          lifecycleAttemptOwner,
-          operation: lifecycleOperation,
-          decision: lifecycleOperation === 'update' ? 'runtime_update_required_running' : 'runtime_running',
-          stopDetail: request.kind === 'update_environment_runtime'
-            ? 'Desktop is stopping the current runtime before updating it.'
-            : 'Desktop is stopping the current runtime before restarting it.',
-          verifyDetail: 'Desktop is confirming that the current runtime is no longer running.',
-          signal,
-        });
+        const liveDaemon = replacementLiveDaemon;
+        replacementReadiness = {
+          previous_runtime_pid: liveDaemon.pid,
+          require_new_daemon: true,
+        };
+        beforeRuntimeReplacement = async () => {
+          await releaseRuntimePlacementLiveDaemonForReplacement({
+            liveDaemon,
+            lifecycleAttemptOwner,
+            operation: lifecycleOperation,
+            decision: lifecycleOperation === 'update' ? 'runtime_update_required_running' : 'runtime_running',
+          });
+        };
         placement = replacementLiveDaemon.placement;
         inspectionMaintenance = undefined;
-      } else if (inspection.ready_record) {
+      } else if (inspection.ready_record && !replacementRequested) {
         const readyWorkflow = commitRuntimeLifecycleDecision(targetID, lifecycleAttemptOwner, {
           hostAccess,
           placement,
@@ -13129,12 +12906,26 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
           source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
           asset_cache_root: desktopRuntimePackageCacheRoot(),
           force_runtime_update: request.force_runtime_update === true,
+          runtime_process_intent: lifecycleOperation === 'update'
+            ? 'update'
+            : lifecycleOperation === 'restart'
+              ? 'restart'
+              : 'start',
+          runtime_binary_path: inspection.binary_path ?? undefined,
           previous_runtime_pid: replacementReadiness?.previous_runtime_pid,
           require_new_daemon: replacementReadiness?.require_new_daemon === true,
           timeout_ms: 45_000,
           desktop_owner_id: await desktopRuntimeOwnerID(),
           signal,
+          before_runtime_replacement: beforeRuntimeReplacement,
           on_progress: (progress: RuntimePlacementProgress) => {
+            if (progress.phase === 'stopping_legacy_runtimes' || progress.phase === 'stopping_runtime_process') {
+              launcherOperations.update(targetID, {
+                cancelable: false,
+                interrupt_label: undefined,
+                interrupt_detail: undefined,
+              });
+            }
             updateRuntimeLifecycleOperation(targetID, lifecycleAttemptOwner, {
               hostAccess,
               placement,
@@ -13577,15 +13368,6 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
   const requestedPlacement = runtimePlacementFromRequest(request);
   if (requestedPlacement.kind === 'container_process') {
     try {
-      if (lifecycleOperation === 'restart' || lifecycleOperation === 'update') {
-        await closeEnvironmentSessionsForRuntimeLifecycle({
-          operation: lifecycleOperation,
-          scope: {
-            kind: 'session_key',
-            session_key: desktopSessionKeyFromRuntimeTargetID(runtimeTargetIDFromRequest(request)),
-          },
-        });
-      }
       const runtimeRecord = await ensureRuntimePlacementReadyRecordFromLauncher(request);
       resetLauncherIssueState();
       await persistDesktopPreferences(markSavedRuntimeTargetUsed(preferences, {
@@ -13607,12 +13389,6 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
   const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);
   if (normalizedSSHTarget) {
     try {
-      if (lifecycleOperation === 'restart' || lifecycleOperation === 'update') {
-        await closeEnvironmentSessionsForRuntimeLifecycle({
-          operation: lifecycleOperation,
-          scope: { kind: 'session_key', session_key: sshDesktopSessionKey(normalizedSSHTarget) },
-        });
-      }
       const runtimeRecord = await startSSHEnvironmentRuntimeRecord(normalizedSSHTarget, {
         environmentID: request.environment_id,
         label: request.label,
@@ -13662,15 +13438,6 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
   }
 
   try {
-    if (lifecycleOperation === 'restart' || lifecycleOperation === 'update') {
-      await closeEnvironmentSessionsForRuntimeLifecycle({
-        operation: lifecycleOperation,
-        scope: {
-          kind: 'session_target',
-          target: buildLocalEnvironmentDesktopTarget(environment, { route: 'local_host' }),
-        },
-      });
-    }
     const record = await startLocalHostRuntimeWithLifecycleProgress({
       environment,
       action: request.kind,
@@ -13775,56 +13542,36 @@ async function startLocalHostRuntimeWithLifecycleProgress(input: Readonly<{
   const startTask = (async () => {
     try {
       if (input.action === 'restart_environment_runtime' || input.action === 'update_environment_runtime') {
-        const runtimeRecord = await verifyCurrentLocalEnvironmentRuntimeRecord(environment) ?? await attachLocalEnvironmentRuntime(environment);
-        if (runtimeRecord) {
-          commitRuntimeLifecycleDecision(operationKey, lifecycleAttemptOwner, {
-            hostAccess,
-            placement: localHostPlacement,
-            operation: lifecycleOperation,
-            targetID: operationKey,
-            targetLabel: environment.label,
-            decision: lifecycleOperation === 'update' ? 'runtime_update_required_running' : 'runtime_running',
-          });
-          updateRuntimeLifecycleOperation(operationKey, lifecycleAttemptOwner, {
-            hostAccess,
-            placement: localHostPlacement,
-            operation: lifecycleOperation,
-            phase: 'stopping_runtime_process',
-            targetID: operationKey,
-            targetLabel: environment.label,
-            title: 'Stopping runtime process',
-            detail: input.action === 'update_environment_runtime'
-              ? 'Desktop is stopping the current local runtime before updating it.'
-              : 'Desktop is stopping the current local runtime before restarting it.',
-          });
-          await runtimeRecord.runtime_handle.stop();
-          updateRuntimeLifecycleOperation(operationKey, lifecycleAttemptOwner, {
-            hostAccess,
-            placement: localHostPlacement,
-            operation: lifecycleOperation,
-            phase: 'verifying_runtime_stopped',
-            targetID: operationKey,
-            targetLabel: environment.label,
-            title: 'Verifying runtime stopped',
-            detail: 'Desktop is confirming that the previous local runtime is no longer running.',
-          });
-          await assertLocalEnvironmentRuntimeStopped(environment);
-          clearLocalEnvironmentRuntimeRecord(environment);
-        } else {
-          commitRuntimeLifecycleDecision(operationKey, lifecycleAttemptOwner, {
-            hostAccess,
-            placement: localHostPlacement,
-            operation: lifecycleOperation,
-            targetID: operationKey,
-            targetLabel: environment.label,
-            decision: lifecycleOperation === 'update' ? 'runtime_update_required_stopped' : 'runtime_stopped',
-          });
-        }
+        commitRuntimeLifecycleDecision(operationKey, lifecycleAttemptOwner, {
+          hostAccess,
+          placement: localHostPlacement,
+          operation: lifecycleOperation,
+          targetID: operationKey,
+          targetLabel: environment.label,
+          decision: lifecycleOperation === 'update' ? 'runtime_update_required_running' : 'runtime_running',
+        });
       }
       const prepared = await prepareManagedTarget({
         environment,
         localUIBind: input.localUIBind,
         forceRuntimeUpdate: input.forceRuntimeUpdate === true,
+        runtimeProcessIntent: input.action === 'restart_environment_runtime'
+          ? 'restart'
+          : input.action === 'update_environment_runtime'
+            ? 'update'
+            : 'start',
+        beforeRuntimeReplacement: lifecycleOperation === 'restart' || lifecycleOperation === 'update'
+          ? async () => {
+              await closeEnvironmentSessionsForRuntimeLifecycle({
+                operation: lifecycleOperation,
+                scope: {
+                  kind: 'session_target',
+                  target: buildLocalEnvironmentDesktopTarget(environment, { route: 'local_host' }),
+                },
+              });
+              clearLocalEnvironmentRuntimeRecord(environment);
+            }
+          : undefined,
         onProgress: (progress: ManagedRuntimeProgress) => {
           updateRuntimeLifecycleOperation(operationKey, lifecycleAttemptOwner, {
             hostAccess,
@@ -14395,11 +14142,11 @@ async function stopEnvironmentRuntimeFromLauncher(
         hostAccess,
         placement: runtimePlacement,
         operation: lifecycleOperation,
-        phase: 'stopping_runtime_process',
+        phase: 'discovering_runtime_instances',
         targetID,
         targetLabel: label,
-        title: 'Stopping runtime process',
-        detail: 'Desktop is stopping the runtime daemon inside this container.',
+        title: 'Discovering runtime processes',
+        detail: 'Desktop is identifying current and historical runtime processes inside this container.',
       });
       await runtimeRecord?.desktop_model_source?.stop().catch(() => undefined);
       await runtimeRecord?.session.disconnect().catch(() => undefined);
@@ -14410,28 +14157,55 @@ async function stopEnvironmentRuntimeFromLauncher(
         ? savedTarget.ssh_password ?? ''
         : compact(request.ssh_password);
       const executor = runtimeHostExecutor(hostAccess, sshPassword || undefined);
-      await executor.run(containerRuntimeDaemonStopCommand({
-        engine: runtimePlacement.container_engine,
-        container_id: runtimePlacement.container_id,
-        runtime_root: runtimePlacement.runtime_root,
-        runtime_state_root: desktopRuntimePlacementStateRoot(runtimePlacement),
+      const processArgs = {
+        executor,
+        placement: runtimePlacement,
         runtime_binary_path: binaryPath,
-      }), { signal });
+        desktop_owner_id: await desktopRuntimeOwnerID(),
+        runtime_release_tag: resolveSSHRuntimeReleaseTag(),
+        release_base_url: PUBLIC_REDEVEN_RELEASE_BASE_URL,
+        source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
+        asset_cache_root: desktopRuntimePackageCacheRoot(),
+        signal,
+      };
+      const inventory = await inspectContainerRuntimeProcesses(processArgs);
+      if (inventory.summary.blocking > 0) {
+        throw new Error(
+          `Desktop found ${inventory.summary.blocking} container runtime process(es) whose identity or owner cannot be safely stopped.`,
+        );
+      }
+      if (inventory.instances.length === 0) {
+        runtimePlacementBridgeByTargetID.delete(targetID);
+        runtimePlacementReadyByTargetID.delete(targetID);
+        runtimePlacementMaintenanceByTargetID.delete(targetID);
+      } else {
+        const legacyProcessCount = inventory.summary.legacy_owned + inventory.summary.legacy_ownerless;
+        updateRuntimeLifecycleOperation(targetID, lifecycleAttemptOwner, {
+          hostAccess,
+          placement: runtimePlacement,
+          operation: lifecycleOperation,
+          phase: legacyProcessCount > 0 ? 'stopping_legacy_runtimes' : 'stopping_runtime_process',
+          targetID,
+          targetLabel: label,
+          title: legacyProcessCount > 0 ? 'Stopping historical runtime processes' : 'Stopping runtime process',
+          detail: `Desktop is stopping ${inventory.summary.stoppable} verified runtime process(es) inside this container.`,
+        });
+        launcherOperations.update(operation.operation_key, {
+          cancelable: false,
+          interrupt_label: undefined,
+          interrupt_detail: undefined,
+        });
+        await stopContainerRuntimeProcesses(processArgs, inventory);
+      }
       updateRuntimeLifecycleOperation(targetID, lifecycleAttemptOwner, {
         hostAccess,
         placement: runtimePlacement,
         operation: lifecycleOperation,
-        phase: 'verifying_runtime_stopped',
+        phase: 'verifying_runtime_inventory',
         targetID,
         targetLabel: label,
-        title: 'Verifying runtime stopped',
-        detail: 'Desktop is confirming that the container runtime daemon is no longer running.',
-      });
-      await assertContainerRuntimeStopped({
-        executor,
-        placement: runtimePlacement,
-        runtimeBinaryPath: binaryPath,
-        signal,
+        title: 'Verifying runtime process inventory',
+        detail: 'Desktop is confirming that no matching container runtime process remains.',
       });
       runtimePlacementBridgeByTargetID.delete(targetID);
       runtimePlacementReadyByTargetID.delete(targetID);
@@ -14586,8 +14360,40 @@ async function stopEnvironmentRuntimeFromLauncher(
       if (!runtimeRecord) {
         await refreshWelcomeRuntimeHealthForEnvironment(request.environment_id ?? runtimeKey);
       }
-      const readyRecord = sshRuntimeReadyByKey.get(runtimeKey) ?? null;
-      if (!runtimeRecord && !readyRecord) {
+      await runtimeRecord?.desktop_model_source?.stop().catch(() => undefined);
+      await runtimeRecord?.disconnect().catch(() => undefined);
+      const preferences = await loadDesktopPreferencesCached();
+      const sshPassword = savedSSHPasswordForDetails(preferences, sshDetails, request.environment_id) || compact(request.ssh_password);
+      const processInventoryArgs = {
+        target: sshDetails,
+        runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
+        desktopOwnerID: await desktopRuntimeOwnerID(),
+        sshPassword,
+        sourceRuntimeRoot: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
+        assetCacheRoot: desktopRuntimePackageCacheRoot(),
+        connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
+          ? sshDetails.connect_timeout_seconds
+          : undefined,
+        tempRoot: app.getPath('temp'),
+        signal,
+      };
+      updateRuntimeLifecycleOperation(runtimeKey, lifecycleAttemptOwner, {
+        hostAccess,
+        placement: hostPlacement,
+        operation: lifecycleOperation,
+        phase: 'discovering_runtime_instances',
+        targetID: runtimeKey,
+        targetLabel: label,
+        title: 'Discovering runtime processes',
+        detail: 'Desktop is identifying current and historical runtime processes before stopping this environment.',
+      });
+      const processInventory = await inspectManagedSSHRuntimeProcesses(processInventoryArgs);
+      if (processInventory.summary.blocking > 0) {
+        throw new Error(
+          `Desktop found ${processInventory.summary.blocking} SSH runtime process(es) whose identity or owner cannot be safely stopped.`,
+        );
+      }
+      if (processInventory.instances.length === 0) {
         const readyWorkflow = commitRuntimeLifecycleDecision(runtimeKey, lifecycleAttemptOwner, {
           hostAccess,
           placement: hostPlacement,
@@ -14617,64 +14423,35 @@ async function stopEnvironmentRuntimeFromLauncher(
         broadcastDesktopWelcomeSnapshots();
         return launcherActionSuccess('stopped_environment_runtime');
       }
-      const preferences = await loadDesktopPreferencesCached();
-      const sshPassword = savedSSHPasswordForDetails(preferences, sshDetails, request.environment_id) || compact(request.ssh_password);
+      const legacyProcessCount = processInventory.summary.legacy_owned + processInventory.summary.legacy_ownerless;
       updateRuntimeLifecycleOperation(runtimeKey, lifecycleAttemptOwner, {
         hostAccess,
         placement: hostPlacement,
         operation: lifecycleOperation,
-        phase: 'stopping_runtime_process',
+        phase: legacyProcessCount > 0 ? 'stopping_legacy_runtimes' : 'stopping_runtime_process',
         targetID: runtimeKey,
         targetLabel: label,
-        title: 'Stopping runtime process',
-        detail: 'Desktop is stopping the runtime daemon on this SSH host.',
+        title: legacyProcessCount > 0 ? 'Stopping historical runtime processes' : 'Stopping runtime process',
+        detail: `Desktop is stopping ${processInventory.summary.stoppable} verified runtime process(es) on this SSH host.`,
       });
-      if (runtimeRecord) {
-        await runtimeRecord.stop();
-      } else {
-        const pid = Number(readyRecord?.startup.pid ?? Number.NaN);
-        if (!Number.isInteger(pid) || pid <= 0) {
-          throw new Error('Desktop could not resolve the SSH runtime process id to stop.');
-        }
-        await stopManagedSSHRuntimeProcess({
-          target: sshDetails,
-          pid,
-          sshPassword,
-          connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
-            ? sshDetails.connect_timeout_seconds
-            : undefined,
-          tempRoot: app.getPath('temp'),
-          signal,
-        });
-      }
+      launcherOperations.update(operation.operation_key, {
+        cancelable: false,
+        interrupt_label: undefined,
+        interrupt_detail: undefined,
+      });
+      const stopResult = await stopManagedSSHRuntimeProcesses(processInventoryArgs, processInventory);
       updateRuntimeLifecycleOperation(runtimeKey, lifecycleAttemptOwner, {
         hostAccess,
         placement: hostPlacement,
         operation: lifecycleOperation,
-        phase: 'verifying_runtime_stopped',
+        phase: 'verifying_runtime_inventory',
         targetID: runtimeKey,
         targetLabel: label,
-        title: 'Verifying runtime stopped',
-        detail: 'Desktop is confirming that the SSH runtime daemon is no longer running.',
+        title: 'Verifying runtime process inventory',
+        detail: 'Desktop is confirming that no matching SSH runtime process remains.',
       });
-      const statusProbe = await probeManagedSSHRuntimeStatus({
-        target: sshDetails,
-        runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
-        sshPassword,
-        connectTimeoutSeconds: typeof sshDetails.connect_timeout_seconds === 'number'
-          ? sshDetails.connect_timeout_seconds
-          : undefined,
-        tempRoot: app.getPath('temp'),
-        signal,
-      });
-      if (statusProbe.status === 'ready') {
-        throw new Error('Desktop could not stop the SSH runtime because it still reports a ready daemon.');
-      }
-      if (statusProbe.status === 'failed') {
-        throw new DesktopOperationFailureError(statusProbe.failure);
-      }
-      if (statusProbe.status === 'blocked') {
-        assertRuntimeStopVerifiedFromLaunchReport(statusProbe.report);
+      if (stopResult.after.instances.length > 0) {
+        throw new Error('Desktop could not stop the SSH runtime because matching runtime processes remain.');
       }
       sshEnvironmentRuntimeByKey.delete(runtimeKey);
       sshRuntimeReadyByKey.delete(runtimeKey);
@@ -14845,8 +14622,31 @@ async function stopEnvironmentRuntimeFromLauncher(
         target: buildLocalEnvironmentDesktopTarget(environment, { route: 'local_host' }),
       },
     });
-    const runtimeRecord = await verifyCurrentLocalEnvironmentRuntimeRecord(environment) ?? await attachLocalEnvironmentRuntime(environment);
-    if (!runtimeRecord) {
+    const processArgs = {
+      executablePath: bundledRuntimeExecutablePath(),
+      stateRoot: localEnvironmentStateRoot(environment),
+      desktopOwnerID: await desktopRuntimeOwnerID(),
+      env: process.env,
+      timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
+    };
+    updateRuntimeLifecycleOperation(operationKey, lifecycleAttemptOwner, {
+      hostAccess,
+      placement: localHostPlacement,
+      operation: lifecycleOperation,
+      phase: 'discovering_runtime_instances',
+      targetID: operationKey,
+      targetLabel: environment.label,
+      title: 'Discovering runtime processes',
+      detail: 'Desktop is identifying current and historical local runtime processes before stopping this environment.',
+    });
+    const inventory = await inspectLocalManagedRuntimeProcesses(processArgs);
+    if (inventory.summary.blocking > 0) {
+      throw new Error(
+        `Desktop found ${inventory.summary.blocking} local runtime process(es) whose identity or owner cannot be safely stopped.`,
+      );
+    }
+    if (inventory.instances.length === 0) {
+      clearLocalEnvironmentRuntimeRecord(environment);
       const readyWorkflow = commitRuntimeLifecycleDecision(operationKey, lifecycleAttemptOwner, {
         hostAccess,
         placement: localHostPlacement,
@@ -14880,25 +14680,38 @@ async function stopEnvironmentRuntimeFromLauncher(
       hostAccess,
       placement: localHostPlacement,
       operation: lifecycleOperation,
-      phase: 'stopping_runtime_process',
+      phase: inventory.summary.legacy_owned + inventory.summary.legacy_ownerless > 0
+        ? 'stopping_legacy_runtimes'
+        : 'stopping_runtime_process',
       targetID: operationKey,
       targetLabel: environment.label,
-      title: 'Stopping runtime process',
-      detail: 'Desktop is stopping the local runtime process.',
+      title: inventory.summary.legacy_owned + inventory.summary.legacy_ownerless > 0
+        ? 'Stopping historical runtime processes'
+        : 'Stopping runtime process',
+      detail: `Desktop is stopping ${inventory.summary.stoppable} verified local runtime process(es).`,
     });
     if (signal?.aborted === true) {
       throw new DesktopSSHRuntimeCanceledError('Local runtime stop was canceled.');
     }
-    await runtimeRecord.runtime_handle.stop();
+    launcherOperations.update(operation.operation_key, {
+      cancelable: false,
+      interrupt_label: undefined,
+      interrupt_detail: undefined,
+    });
+    await stopLocalManagedRuntimeProcesses({
+      ...processArgs,
+      inventory,
+      timeoutMs: 5_000,
+    });
     updateRuntimeLifecycleOperation(operationKey, lifecycleAttemptOwner, {
       hostAccess,
       placement: localHostPlacement,
       operation: lifecycleOperation,
-      phase: 'verifying_runtime_stopped',
+      phase: 'verifying_runtime_inventory',
       targetID: operationKey,
       targetLabel: environment.label,
-      title: 'Verifying runtime stopped',
-      detail: 'Desktop is confirming that the local runtime process is no longer running.',
+      title: 'Verifying runtime process inventory',
+      detail: 'Desktop is confirming that no matching local runtime process remains.',
     });
     await assertLocalEnvironmentRuntimeStopped(environment);
     clearLocalEnvironmentRuntimeRecord(environment);

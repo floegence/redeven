@@ -31,6 +31,8 @@ Commands:
               Run the Desktop runtime placement bridge over stdio.
   desktop-runtime-status
               Probe an already-running Desktop-managed runtime daemon.
+  desktop-runtime-inventory
+              Inspect Desktop-managed runtime process identities.
   desktop-runtime-stop
               Stop an already-running Desktop-managed runtime daemon.
   desktop-model-source
@@ -97,6 +99,26 @@ Flags:
 `, "\n")
 }
 
+func desktopRuntimeInventoryHelpText() string {
+	return strings.TrimLeft(`
+redeven desktop-runtime-inventory
+
+Inspect Desktop-managed runtime processes in the current execution namespace and
+print a sanitized, versioned JSON inventory.
+
+Usage:
+  redeven desktop-runtime-inventory [flags]
+
+Flags:
+  --runtime-root <path>             Managed runtime package root.
+  --state-root <path>               Current Runtime state root.
+  --desktop-owner-id <id>           Expected Desktop owner identity.
+  --current-executable <path>       Expected current runtime binary; repeatable.
+  --include-known-legacy            Include built-in historical Desktop layouts.
+  --legacy-runtime-root <path>      Additional historical root; repeatable.
+`, "\n")
+}
+
 func desktopRuntimeStopHelpText() string {
 	return strings.TrimLeft(`
 redeven desktop-runtime-stop
@@ -111,6 +133,14 @@ Flags:
   --state-root <path>              State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --probe-timeout <duration>       Runtime health probe timeout.
   --grace-period <duration>        Time to wait after requesting runtime shutdown.
+  --all-matching                   Stop every safely matched current or legacy instance.
+  --runtime-root <path>            Managed runtime package root.
+  --desktop-owner-id <id>          Expected Desktop owner identity.
+  --current-executable <path>      Expected current runtime binary; repeatable.
+  --include-known-legacy           Include built-in historical Desktop layouts.
+  --legacy-runtime-root <path>     Additional historical root; repeatable.
+  --expected-inventory-digest <d>  Inventory digest required by --all-matching.
+  --json                           Write a versioned machine-readable result.
 `, "\n")
 }
 
@@ -738,6 +768,8 @@ func lookupHelpText(args []string) (string, bool) {
 		return desktopBridgeHelpText(), true
 	case "desktop-runtime-status":
 		return desktopRuntimeStatusHelpText(), true
+	case "desktop-runtime-inventory":
+		return desktopRuntimeInventoryHelpText(), true
 	case "desktop-runtime-stop":
 		return desktopRuntimeStopHelpText(), true
 	case "desktop-model-source":

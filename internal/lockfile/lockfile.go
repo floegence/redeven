@@ -3,6 +3,7 @@ package lockfile
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -43,6 +44,66 @@ func ReadContent(path string) ([]byte, error) {
 		return nil, fmt.Errorf("lock path is empty")
 	}
 	return os.ReadFile(path)
+}
+
+// RetireIf takes the existing lock without changing its content, evaluates the
+// active lease while holding the lock, and clears it only when the callback
+// confirms that the lease is safe to retire.
+func RetireIf(path string, shouldRetire func([]byte) (bool, error)) (bool, error) {
+	if path == "" {
+		return false, fmt.Errorf("lock path is empty")
+	}
+	if shouldRetire == nil {
+		return false, fmt.Errorf("missing lock retirement predicate")
+	}
+	f, err := os.OpenFile(path, os.O_RDWR, 0o600)
+	if err != nil {
+		return false, err
+	}
+	if err := lockFile(f); err != nil {
+		_ = f.Close()
+		return false, err
+	}
+	unlockAndClose := func() error {
+		unlockErr := unlockFile(f)
+		closeErr := f.Close()
+		if unlockErr != nil {
+			return unlockErr
+		}
+		return closeErr
+	}
+	if _, err := f.Seek(0, 0); err != nil {
+		_ = unlockAndClose()
+		return false, err
+	}
+	body, err := io.ReadAll(f)
+	if err != nil {
+		_ = unlockAndClose()
+		return false, err
+	}
+	retire, err := shouldRetire(body)
+	if err != nil {
+		_ = unlockAndClose()
+		return false, err
+	}
+	if retire {
+		if err := f.Truncate(0); err != nil {
+			_ = unlockAndClose()
+			return false, err
+		}
+		if _, err := f.Seek(0, 0); err != nil {
+			_ = unlockAndClose()
+			return false, err
+		}
+		if err := f.Sync(); err != nil {
+			_ = unlockAndClose()
+			return false, err
+		}
+	}
+	if err := unlockAndClose(); err != nil {
+		return false, err
+	}
+	return retire, nil
 }
 
 func (l *Lock) Path() string {

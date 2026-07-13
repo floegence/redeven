@@ -50,14 +50,27 @@ describe('RuntimeLifecycleWorkflow', () => {
       steps: plan.steps.map((step) => step.id),
       omitted_steps: plan.omitted_steps,
     });
+    expect(subject.beginStep('discovering_runtime_instances', 'Discovering runtime processes').progress.active_step_id)
+      .toBe('discovering_runtime_instances');
+    subject.completeStep('discovering_runtime_instances');
+    const stopPlan = runtimeLifecyclePlanIncludingStep({
+      location: 'ssh_host',
+      operation: 'restart',
+      currentSteps: subject.currentStepIDs(),
+      step: 'stopping_runtime_process',
+    });
+    subject.ensureStepPlanned('stopping_runtime_process', {
+      state: stopPlan.state,
+      steps: stopPlan.steps.map((step) => step.id),
+    });
     expect(subject.beginStep('stopping_runtime_process', 'Stopping runtime').progress.active_step_id)
       .toBe('stopping_runtime_process');
     subject.completeStep('stopping_runtime_process');
-    expect(subject.beginStep('verifying_runtime_stopped', 'Verifying stop').progress.active_step_id)
-      .toBe('verifying_runtime_stopped');
+    expect(subject.beginStep('verifying_runtime_inventory', 'Verifying inventory').progress.active_step_id)
+      .toBe('verifying_runtime_inventory');
 
     expect(subject.observeStep('checking_host', 'Late helper reconnect')).toBeNull();
-    expect(subject.progress().active_step_id).toBe('verifying_runtime_stopped');
+    expect(subject.progress().active_step_id).toBe('verifying_runtime_inventory');
     expect(subject.progress().steps.map((step) => [step.id, step.status])).toContainEqual([
       'checking_runtime_package',
       'succeeded',
@@ -277,10 +290,22 @@ describe('RuntimeLifecycleWorkflow', () => {
       steps: runningPlan.steps.map((step) => step.id),
       omitted_steps: runningPlan.omitted_steps,
     });
+    subject.beginStep('discovering_runtime_instances', 'Discovering runtime processes');
+    subject.completeStep('discovering_runtime_instances');
+    const stopPlan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: subject.currentStepIDs(),
+      step: 'stopping_runtime_process',
+    });
+    subject.ensureStepPlanned('stopping_runtime_process', {
+      state: stopPlan.state,
+      steps: stopPlan.steps.map((step) => step.id),
+    });
     subject.beginStep('stopping_runtime_process', 'Stopping runtime');
     subject.completeStep('stopping_runtime_process');
-    subject.beginStep('verifying_runtime_stopped', 'Verifying stop');
-    subject.completeStep('verifying_runtime_stopped');
+    subject.beginStep('verifying_runtime_inventory', 'Verifying inventory');
+    subject.completeStep('verifying_runtime_inventory');
 
     const stoppedPlan = runtimeLifecyclePlanAfterDecision({
       location: 'local_container',
@@ -291,7 +316,7 @@ describe('RuntimeLifecycleWorkflow', () => {
       state: stoppedPlan.state,
       steps: stoppedPlan.steps.map((step) => step.id),
       omitted_steps: stoppedPlan.omitted_steps,
-    })).toThrow(/cannot remove active or completed step "stopping_runtime_process"/iu);
+    })).toThrow(/cannot remove active or completed step "discovering_runtime_instances"/iu);
 
     const stoppedPatch = runtimeLifecyclePlanPatchPreservingObservedHistory({
       currentSteps: subject.stepStates(),
@@ -305,12 +330,13 @@ describe('RuntimeLifecycleWorkflow', () => {
 
     expect(subject.progress().steps.map((step) => [step.id, step.status])).toEqual([
       ['checking_container', 'succeeded'],
+      ['discovering_runtime_instances', 'succeeded'],
       ['stopping_runtime_process', 'succeeded'],
-      ['verifying_runtime_stopped', 'succeeded'],
+      ['verifying_runtime_inventory', 'succeeded'],
     ]);
     const omittedStepIDs = subject.progress().diagnostics?.omitted_steps?.map((step) => step.id) ?? [];
     expect(omittedStepIDs).not.toContain('stopping_runtime_process');
-    expect(omittedStepIDs).not.toContain('verifying_runtime_stopped');
+    expect(omittedStepIDs).not.toContain('verifying_runtime_inventory');
 
     const platformPlan = runtimeLifecyclePlanIncludingStep({
       location: 'local_container',
@@ -340,8 +366,9 @@ describe('RuntimeLifecycleWorkflow', () => {
 
     expect(subject.progress().steps.map((step) => [step.id, step.status])).toEqual([
       ['checking_container', 'succeeded'],
+      ['discovering_runtime_instances', 'succeeded'],
       ['stopping_runtime_process', 'succeeded'],
-      ['verifying_runtime_stopped', 'succeeded'],
+      ['verifying_runtime_inventory', 'succeeded'],
       ['detecting_platform', 'succeeded'],
       ['checking_runtime_package', 'pending'],
       ['preparing_runtime_package', 'pending'],
@@ -367,10 +394,22 @@ describe('RuntimeLifecycleWorkflow', () => {
       steps: runningPlan.steps.map((step) => step.id),
       omitted_steps: runningPlan.omitted_steps,
     });
+    subject.beginStep('discovering_runtime_instances', 'Discovering runtime processes');
+    subject.completeStep('discovering_runtime_instances');
+    const stopPlan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_container',
+      operation: 'update',
+      currentSteps: subject.currentStepIDs(),
+      step: 'stopping_runtime_process',
+    });
+    subject.ensureStepPlanned('stopping_runtime_process', {
+      state: stopPlan.state,
+      steps: stopPlan.steps.map((step) => step.id),
+    });
     subject.beginStep('stopping_runtime_process', 'Stopping runtime');
     subject.completeStep('stopping_runtime_process');
-    subject.beginStep('verifying_runtime_stopped', 'Verifying stop');
-    subject.completeStep('verifying_runtime_stopped');
+    subject.beginStep('verifying_runtime_inventory', 'Verifying inventory');
+    subject.completeStep('verifying_runtime_inventory');
 
     const alreadyCurrentPlan = runtimeLifecyclePlanAfterDecision({
       location: 'local_container',
@@ -381,7 +420,7 @@ describe('RuntimeLifecycleWorkflow', () => {
       state: alreadyCurrentPlan.state,
       steps: alreadyCurrentPlan.steps.map((step) => step.id),
       omitted_steps: alreadyCurrentPlan.omitted_steps,
-    })).toThrow(/cannot remove active or completed step "stopping_runtime_process"/iu);
+    })).toThrow(/cannot remove active or completed step "discovering_runtime_instances"/iu);
 
     const alreadyCurrentPatch = runtimeLifecyclePlanPatchPreservingObservedHistory({
       currentSteps: subject.stepStates(),
@@ -393,8 +432,9 @@ describe('RuntimeLifecycleWorkflow', () => {
     });
     expect(alreadyCurrentPatch.steps).toEqual([
       'checking_container',
+      'discovering_runtime_instances',
       'stopping_runtime_process',
-      'verifying_runtime_stopped',
+      'verifying_runtime_inventory',
       'checking_runtime_service',
       'runtime_up_to_date',
     ]);
@@ -515,7 +555,7 @@ describe('RuntimeLifecycleWorkflow', () => {
       key: checkingHostKey,
       status: 'succeeded',
     }));
-    const unchangedProgress = subject.ensureStepPlanned('stopping_runtime_process', {
+    const unchangedProgress = subject.ensureStepPlanned('discovering_runtime_instances', {
       state: plan.state,
       steps: plan.steps.map((step) => step.id),
     });

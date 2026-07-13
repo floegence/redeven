@@ -12,10 +12,11 @@ vi.mock('./sshReleaseTrust', () => ({
 import {
   DesktopSSHRuntimeCanceledError,
   ensureManagedSSHRuntimeReady,
+  inspectManagedSSHRuntimeProcesses,
   openManagedSSHRuntimeConnection,
   probeManagedSSHRuntimeStatus,
   startManagedSSHRuntime,
-  stopManagedSSHRuntimeProcess,
+  stopManagedSSHRuntimeProcesses,
   type ManagedSSHRuntime,
   type ManagedSSHRuntimeReady,
 } from './sshRuntime';
@@ -37,7 +38,8 @@ type FakeSSHScenario =
   | 'quick_exit_report'
   | 'blocked_report'
   | 'transient_blocked_report'
-  | 'status_blocked_without_socket';
+  | 'status_blocked_without_socket'
+  | 'foreign_owner';
 
 type FakeSSHEvent = Readonly<{
   event: string;
@@ -197,13 +199,13 @@ function oldUnsupportedRuntimeService(active) {
 
 function runtimeServiceForScenario() {
   const state = readState();
-  if (scenario === 'attached_unsupported_idle' && !state.stopped) {
+  if (scenario === 'attached_unsupported_idle' && state.restarted !== true && state.stopped !== true) {
     return oldUnsupportedRuntimeService(false);
   }
-  if (scenario === 'attached_unsupported_active' && !state.stopped) {
+  if (scenario === 'attached_unsupported_active' && state.restarted !== true && state.stopped !== true) {
     return oldUnsupportedRuntimeService(true);
   }
-  if (scenario === 'missing_runtime_control_active' && !state.stopped) {
+  if (scenario === 'missing_runtime_control_active' && state.restarted !== true && state.stopped !== true) {
     return {
       ...currentRuntimeService(),
       active_workload: {
@@ -306,10 +308,15 @@ function marker() {
     'redeven-ssh-remote-install',
     'redeven-ssh-upload-archive',
     'redeven-ssh-upload-install',
+    'redeven-ssh-activate-runtime',
     'redeven-ssh-cleanup-path',
     'redeven-ssh-start',
     'redeven-ssh-read-report',
     'redeven-ssh-runtime-status',
+    'redeven-ssh-runtime-inventory',
+    'redeven-ssh-runtime-stop',
+    'redeven-ssh-runtime-prepared-helper',
+    'redeven-ssh-runtime-helper',
     'redeven-ssh-stop',
   ];
   const words = remoteCommandWords();
@@ -543,7 +550,8 @@ if (args.includes('-M') && args.includes('-N')) {
         install_script_url: remoteScriptArgs()[2] || args[args.length - 1] || '',
         release_tag: remoteInstallReleaseTag(),
       });
-      writeState({ ...readState(), installed: true, installed_version: remoteInstallReleaseTag() });
+      writeState({ ...readState(), staged_version: remoteInstallReleaseTag() });
+      process.stdout.write('/home/test/.redeven/runtime/managed.staging.remote\n');
       process.exit(0);
       break;
     case 'redeven-ssh-upload-archive':
@@ -558,15 +566,44 @@ if (args.includes('-M') && args.includes('-N')) {
         process.stderr.write('simulated upload install failure\n');
         process.exit(2);
       }
-      writeState({ ...readState(), installed: true, installed_version: remoteInstallReleaseTag() });
+      writeState({ ...readState(), staged_version: remoteInstallReleaseTag() });
+      process.stdout.write('/home/test/.redeven/runtime/managed.staging.upload\n');
       process.exit(0);
       break;
+    case 'redeven-ssh-activate-runtime': {
+      const state = readState();
+      appendLog('activate_runtime', {
+        staged_root: remoteScriptArgs()[2] || '',
+        release_tag: remoteInstallReleaseTag(),
+      });
+      writeState({
+        ...state,
+        installed: true,
+        installed_version: state.staged_version || remoteInstallReleaseTag(),
+        staged_version: undefined,
+      });
+      process.exit(0);
+      break;
+    }
     case 'redeven-ssh-cleanup-path':
       appendLog('cleanup_remote_path', { remote_path: remoteScriptArgs()[0] || args[args.length - 1] || '' });
       process.exit(0);
       break;
     case 'redeven-ssh-start':
       appendLog('start_runtime', { session_token: remoteStartSessionToken(), state_root: remoteRuntimeStateRoot() });
+      {
+        const state = readState();
+        const wasLive = state.runtime_live === true;
+        writeState({
+          ...state,
+          installed: true,
+          stopped: false,
+          runtime_live: true,
+          runtime_pid: wasLive || state.stopped !== true ? (state.runtime_pid || 4242) : (state.runtime_pid || 4242) + 1,
+          runtime_started_at: wasLive || state.stopped !== true ? (state.runtime_started_at || 1000) : (state.runtime_started_at || 1000) + 1000,
+          restarted: state.restarted === true || state.stopped === true,
+        });
+      }
       if (scenario === 'blocked_report') {
         process.exit(1);
       }
@@ -617,13 +654,18 @@ if (args.includes('-M') && args.includes('-N')) {
         }
       }
       const state = readState();
+      if (state.runtime_live !== true) {
+        process.exit(1);
+      }
       const attachedUnsupported = (
         (scenario === 'attached_unsupported_idle' || scenario === 'attached_unsupported_active')
-        && !state.stopped
+        && state.restarted !== true
+        && state.stopped !== true
       );
       const reportRuntimeControl = !(
         (scenario === 'missing_runtime_control_idle' || scenario === 'missing_runtime_control_active')
-        && !state.stopped
+        && state.restarted !== true
+        && state.stopped !== true
       );
       process.stdout.write(JSON.stringify({
         ...(attachedUnsupported ? { status: 'attached' } : {}),
@@ -641,16 +683,64 @@ if (args.includes('-M') && args.includes('-N')) {
         password_required: true,
         effective_run_mode: 'local',
         desktop_managed: true,
-        pid: 4242,
+        pid: Number(state.runtime_pid || 4242),
         runtime_service: runtimeServiceForScenario(),
       }));
       process.exit(0);
       break;
-    case 'redeven-ssh-stop':
-      appendLog('stop_runtime', { pid: remoteScriptArgs()[0] || args[args.length - 1] || '' });
-      writeState({ ...readState(), stopped: true });
+    case 'redeven-ssh-runtime-inventory':
+    case 'redeven-ssh-runtime-stop':
+    case 'redeven-ssh-runtime-prepared-helper':
+    case 'redeven-ssh-runtime-helper': {
+      const state = readState();
+      if (
+        marker() !== 'redeven-ssh-runtime-helper'
+        && marker() !== 'redeven-ssh-runtime-prepared-helper'
+        && state.installed !== true
+      ) {
+        process.exit(127);
+      }
+      const helperOperation = marker() === 'redeven-ssh-runtime-helper' || marker() === 'redeven-ssh-runtime-prepared-helper'
+        ? remoteScriptArgs()[2]
+        : 'inventory';
+      const stopOperation = marker() === 'redeven-ssh-runtime-stop' || helperOperation === 'stop';
+      const live = state.runtime_live === true;
+      const runtimePID = Number(state.runtime_pid || 4242);
+      const runtimeStartedAt = Number(state.runtime_started_at || 1000);
+      const foreignOwner = scenario === 'foreign_owner';
+      const inventoryRuntimeVersion = (
+        (scenario === 'attached_unsupported_idle' || scenario === 'attached_unsupported_active')
+        && state.restarted !== true
+      ) ? 'v0.5.9' : (state.installed_version || 'v1.2.3');
+      const before = {
+        schema_version: 1,
+        scope: { runtime_root: '/home/test/.redeven', state_root: '/home/test/.redeven', desktop_owner_id: 'desktop-owner-test', user_identity: 'test', namespace_id: 'mnt:[host]' },
+        inventory_digest: live ? 'a'.repeat(64) : 'b'.repeat(64),
+        instances: live ? [{ pid: runtimePID, process_started_at_unix_ms: runtimeStartedAt, desktop_owner_id: foreignOwner ? 'another-desktop' : 'desktop-owner-test', state_root: '/home/test/.redeven', executable_path: '/home/test/.redeven/runtime/managed/bin/redeven', executable_device: 1, executable_inode: 2, namespace_id: 'mnt:[host]', runtime_version: inventoryRuntimeVersion, classification: foreignOwner ? 'foreign_owner' : 'current_owned', stoppable: !foreignOwner }] : [],
+        summary: { current_owned: live && !foreignOwner ? 1 : 0, legacy_owned: 0, legacy_ownerless: 0, foreign_owner: live && foreignOwner ? 1 : 0, ambiguous: 0, stoppable: live && !foreignOwner ? 1 : 0, blocking: live && foreignOwner ? 1 : 0 },
+      };
+      if (stopOperation) {
+        appendLog('stop_runtime', { count: before.instances.length });
+        writeState({ ...state, stopped: true, runtime_live: false });
+        const after = { ...before, inventory_digest: 'b'.repeat(64), instances: [], summary: { current_owned: 0, legacy_owned: 0, legacy_ownerless: 0, foreign_owner: 0, ambiguous: 0, stoppable: 0, blocking: 0 } };
+        process.stdout.write(JSON.stringify({ schema_version: 1, before, after, stopped: before.instances }));
+      } else {
+        process.stdout.write(JSON.stringify(before));
+      }
       process.exit(0);
       break;
+    }
+    case 'redeven-ssh-stop': {
+      const state = readState();
+      const live = state.runtime_live === true;
+      const before = { schema_version: 1, scope: { runtime_root: '/home/test/.redeven', state_root: '/home/test/.redeven', desktop_owner_id: 'desktop-owner-test', user_identity: 'test', namespace_id: 'mnt:[host]' }, inventory_digest: live ? 'a'.repeat(64) : 'b'.repeat(64), instances: live ? [{ pid: 4242, process_started_at_unix_ms: 1000, desktop_owner_id: 'desktop-owner-test', state_root: '/home/test/.redeven', executable_path: '/home/test/.redeven/runtime/managed/bin/redeven', executable_device: 1, executable_inode: 2, namespace_id: 'mnt:[host]', classification: 'current_owned', stoppable: true }] : [], summary: { current_owned: live ? 1 : 0, legacy_owned: 0, legacy_ownerless: 0, foreign_owner: 0, ambiguous: 0, stoppable: live ? 1 : 0, blocking: 0 } };
+      appendLog('stop_runtime', { count: before.instances.length });
+      writeState({ ...state, stopped: true, runtime_live: false });
+      const after = { ...before, inventory_digest: 'b'.repeat(64), instances: [], summary: { current_owned: 0, legacy_owned: 0, legacy_ownerless: 0, foreign_owner: 0, ambiguous: 0, stoppable: 0, blocking: 0 } };
+      process.stdout.write(JSON.stringify({ schema_version: 1, before, after, stopped: before.instances }));
+      process.exit(0);
+      break;
+    }
     default:
       if (args.some((value) => String(value).includes('mktemp -d'))) {
         appendLog('create_remote_temp_dir');
@@ -685,8 +775,25 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
       || scenario === 'forwarded_invalid_env_shell'
       || scenario === 'no_report'
       || scenario === 'quick_exit_report'
-      || scenario === 'blocked_report',
+      || scenario === 'blocked_report'
+      || scenario === 'status_blocked_without_socket'
+      || scenario === 'foreign_owner',
     installed_version: 'v1.2.3',
+    runtime_live: scenario === 'ready'
+      || scenario === 'missing_runtime_control_idle'
+      || scenario === 'missing_runtime_control_active'
+      || scenario === 'attached_unsupported_idle'
+      || scenario === 'attached_unsupported_active'
+      || scenario === 'persistent_version_mismatch'
+      || scenario === 'forwarded_blocked_readiness'
+      || scenario === 'forwarded_invalid_env_shell'
+      || scenario === 'no_report'
+      || scenario === 'quick_exit_report'
+      || scenario === 'blocked_report'
+      || scenario === 'status_blocked_without_socket'
+      || scenario === 'foreign_owner',
+    runtime_pid: 4242,
+    runtime_started_at: 1000,
   }));
   return {
     root,
@@ -778,19 +885,21 @@ async function startWithFakeSSH(
     target?: DesktopSSHEnvironmentDetails;
     sourceRuntimeRoot?: string;
     forceRuntimeUpdate?: boolean;
+    runtimeProcessIntent?: 'start' | 'restart' | 'update';
     runtimeReleaseTag?: string;
     allowActiveWorkReplacement?: boolean;
     requireDesktopModelSource?: boolean;
     signal?: AbortSignal;
   }> = {},
 ): Promise<ManagedSSHRuntime> {
-  return withFakeSSHEnv(fixture, () => startManagedSSHRuntime({
+  const runtime = await withFakeSSHEnv(fixture, () => startManagedSSHRuntime({
     target: options.target ?? targetFor(strategy),
     runtimeReleaseTag: options.runtimeReleaseTag ?? 'v1.2.3',
     desktopOwnerID: 'desktop-owner-test',
     sshBinary: fixture.sshBinary,
     sourceRuntimeRoot: options.sourceRuntimeRoot,
     forceRuntimeUpdate: options.forceRuntimeUpdate,
+    runtimeProcessIntent: options.runtimeProcessIntent,
     allowActiveWorkReplacement: options.allowActiveWorkReplacement,
     tempRoot: fixture.root,
     assetCacheRoot: path.join(fixture.root, 'asset-cache'),
@@ -801,6 +910,15 @@ async function startWithFakeSSH(
     requireDesktopModelSource: options.requireDesktopModelSource === true,
     signal: options.signal,
   }));
+  const stop = async () => await withFakeSSHEnv(fixture, runtime.stop);
+  return {
+    ...runtime,
+    runtime_handle: {
+      ...runtime.runtime_handle,
+      stop,
+    },
+    stop,
+  };
 }
 
 async function ensureReadyWithFakeSSH(
@@ -894,7 +1012,7 @@ describe('sshRuntime integration', () => {
     }
   });
 
-  it('reports blocked SSH status with a stoppable process id and can stop that process explicitly', async () => {
+  it('reports blocked SSH status and stops the verified inventory instead of trusting its process id', async () => {
     const fixture = await createFakeSSHFixture('status_blocked_without_socket');
     try {
       const probe = await withFakeSSHEnv(fixture, () => probeManagedSSHRuntimeStatus({
@@ -919,16 +1037,24 @@ describe('sshRuntime integration', () => {
         },
       });
 
-      await withFakeSSHEnv(fixture, () => stopManagedSSHRuntimeProcess({
+      const processArgs = {
         target: targetFor('auto'),
-        pid: 4242,
+        runtimeReleaseTag: 'v1.2.3',
+        desktopOwnerID: 'desktop-owner-test',
         sshBinary: fixture.sshBinary,
         tempRoot: fixture.root,
+        assetCacheRoot: path.join(fixture.root, 'asset-cache'),
         connectTimeoutSeconds: 1,
-      }));
+      };
+      const inventory = await withFakeSSHEnv(fixture, () => inspectManagedSSHRuntimeProcesses(processArgs));
+      expect(inventory.instances).toEqual([
+        expect.objectContaining({ pid: 4242, classification: 'current_owned', stoppable: true }),
+      ]);
+      const stopped = await withFakeSSHEnv(fixture, () => stopManagedSSHRuntimeProcesses(processArgs, inventory));
+      expect(stopped.after.instances).toEqual([]);
 
       const events = await readFakeSSHEvents(fixture);
-      expect(events.find((event) => event.event === 'stop_runtime')?.data).toEqual({ pid: '4242' });
+      expect(events.find((event) => event.event === 'stop_runtime')?.data).toEqual({ count: 1 });
     } finally {
       await removeFakeSSHFixture(fixture);
     }
@@ -1110,7 +1236,7 @@ describe('sshRuntime integration', () => {
       'master_terminated',
     ]));
     expect(events.find((event) => event.event === 'stop_runtime')?.data).toEqual({
-      pid: '4242',
+      count: 1,
     });
     await removeFakeSSHFixture(fixture);
   });
@@ -1305,7 +1431,7 @@ describe('sshRuntime integration', () => {
       });
       expect(caught).toMatchObject({
         presentation: expect.objectContaining({
-          detail: expect.stringContaining('observed_pid=4242'),
+          detail: expect.stringContaining('observed_pid=4244'),
         }),
       });
     } finally {
@@ -1431,6 +1557,24 @@ describe('sshRuntime integration', () => {
     await removeFakeSSHFixture(fixture);
   });
 
+  it('keeps Restart version-stable when the installed SSH runtime package is missing', async () => {
+    const fixture = await createFakeSSHFixture('remote_install');
+    try {
+      await expect(startWithFakeSSH(fixture, 'remote_install', {
+        runtimeProcessIntent: 'restart',
+      })).rejects.toThrow('managed runtime binary is missing');
+
+      const events = await readFakeSSHEvents(fixture);
+      const eventNames = events.map((event) => event.event);
+      expect(eventNames).toContain('probe_runtime');
+      expect(eventNames).not.toContain('remote_install');
+      expect(eventNames).not.toContain('upload_install');
+      expect(eventNames).not.toContain('start_runtime');
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
+  });
+
   it('falls back to remote install only when local package preparation fails before upload', async () => {
     const fixture = await createFakeSSHFixture('remote_install');
     installReleaseFetchMock(new Map());
@@ -1487,7 +1631,37 @@ describe('sshRuntime integration', () => {
       'forward_start',
     ]));
     expect(eventNames.filter((event) => event === 'remote_install')).toHaveLength(1);
+    const prepareIndex = eventNames.indexOf('remote_install');
+    const stopIndex = eventNames.indexOf('stop_runtime');
+    const activateIndex = eventNames.indexOf('activate_runtime');
+    const startIndex = eventNames.indexOf('start_runtime');
+    expect(prepareIndex).toBeGreaterThanOrEqual(0);
+    expect(stopIndex).toBeGreaterThan(prepareIndex);
+    expect(activateIndex).toBeGreaterThan(stopIndex);
+    expect(startIndex).toBeGreaterThan(activateIndex);
     await removeFakeSSHFixture(fixture);
+  });
+
+  it('does not stop, activate, or start an SSH update when inventory reports a foreign owner', async () => {
+    const fixture = await createFakeSSHFixture('foreign_owner');
+    try {
+      await expect(startWithFakeSSH(fixture, 'remote_install', {
+        forceRuntimeUpdate: true,
+      })).rejects.toMatchObject({
+        name: 'DesktopSSHRuntimeMaintenanceRequiredError',
+      });
+
+      const events = await readFakeSSHEvents(fixture);
+      const eventNames = events.map((event) => event.event);
+      expect(eventNames).toContain('remote_install');
+      expect(eventNames).not.toContain('stop_runtime');
+      expect(eventNames).not.toContain('activate_runtime');
+      expect(eventNames).not.toContain('start_runtime');
+      const state = JSON.parse(await fs.readFile(fixture.statePath, 'utf8')) as { installed_version?: string };
+      expect(state.installed_version).toBe('v1.2.3');
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
   });
 
   it('replaces an active unsupported runtime after the user explicitly requests an update', async () => {
@@ -1510,7 +1684,7 @@ describe('sshRuntime integration', () => {
       'stop_runtime',
       'forward_start',
     ]));
-    expect(eventNames.filter((event) => event === 'start_runtime')).toHaveLength(2);
+    expect(eventNames.filter((event) => event === 'start_runtime')).toHaveLength(1);
     await removeFakeSSHFixture(fixture);
   }, 10_000);
 

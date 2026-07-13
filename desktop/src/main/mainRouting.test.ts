@@ -725,12 +725,17 @@ describe('main routing', () => {
 
     const sshStartTaskEnd = mainSrc.indexOf('const managedSSHRuntime = await ensureManagedSSHRuntimeReady', sshStartStart);
     expect(sshStartTaskEnd).toBeGreaterThan(sshStartStart);
-    const sshStartTaskSrc = mainSrc.slice(sshStartStart, sshStartTaskEnd);
-    expect(sshStartTaskSrc).toContain("if (statusProbe.status === 'blocked')");
-    expect(sshStartTaskSrc).toContain('const replacingReadySSHRuntime = action === \'restart_environment_runtime\'');
-    expect(sshStartTaskSrc).toContain('await stopManagedSSHRuntimeProcess({');
-    expect(sshStartTaskSrc).toContain('!maintenance.can_desktop_restart');
-    expect(sshStartTaskSrc).toContain('maintenance.can_desktop_restart');
+    const sshTaskBodyStart = mainSrc.indexOf('const task = (async () => {', sshStartStart);
+    const sshStartTaskSrc = mainSrc.slice(sshTaskBodyStart, sshStartTaskEnd);
+    expect(sshStartTaskSrc).toContain('commitRuntimeLifecycleDecision(runtimeKey, lifecycleAttemptOwner');
+    expect(sshStartTaskSrc).not.toContain('inspectManagedSSHRuntimeProcesses');
+    expect(sshStartTaskSrc).not.toContain('stopManagedSSHRuntimeProcesses');
+    expect(sshStartSrc).toContain('const inventory = await inspectManagedSSHRuntimeProcesses({');
+    const sshManagedStartEnd = mainSrc.indexOf('if (launcherOperations.isStale(runtimeKey))', sshStartTaskEnd);
+    const sshManagedStartSrc = mainSrc.slice(sshStartTaskEnd, sshManagedStartEnd);
+    expect(sshManagedStartSrc).toContain('beforeRuntimeReplacement: replacementRequested ? async () => {');
+    expect(sshManagedStartSrc).toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
+    expect(sshManagedStartSrc).toContain('await existingRecord?.disconnect().catch(() => undefined)');
 
     const openSSHStart = mainSrc.indexOf('async function openSSHEnvironmentFromLauncher(');
     const openSSHEnd = mainSrc.indexOf('const optimisticSessionKey = sshDesktopSessionKey(sshDetails);', openSSHStart);
@@ -808,11 +813,11 @@ describe('main routing', () => {
       ensureRuntimeSrc.indexOf('const inspection = await inspectRuntimePlacementTargetState({'),
     );
     expect(ensureRuntimeSrc).toContain('let replacementLiveDaemon = runtimePlacementLiveDaemonFromInspection({');
-    expect(ensureRuntimeSrc).toContain('await stopRuntimePlacementLiveDaemonForReplacement({');
+    expect(ensureRuntimeSrc).toContain('before_runtime_replacement: beforeRuntimeReplacement');
     expect(ensureRuntimeSrc).not.toContain('inspection.ready_record && replacementRequested');
 
     const liveDaemonHelperStart = mainSrc.indexOf('function runtimePlacementLiveDaemonFromInspection(');
-    const liveDaemonHelperEnd = mainSrc.indexOf('async function stopRuntimePlacementLiveDaemonForReplacement(', liveDaemonHelperStart);
+    const liveDaemonHelperEnd = mainSrc.indexOf('async function releaseRuntimePlacementLiveDaemonForReplacement(', liveDaemonHelperStart);
     expect(liveDaemonHelperStart).toBeGreaterThanOrEqual(0);
     expect(liveDaemonHelperEnd).toBeGreaterThan(liveDaemonHelperStart);
     const liveDaemonHelperSrc = mainSrc.slice(liveDaemonHelperStart, liveDaemonHelperEnd);
@@ -821,35 +826,29 @@ describe('main routing', () => {
     expect(liveDaemonHelperSrc).toContain("source: 'inspection'");
     expect(liveDaemonHelperSrc).toContain('input.inspection.running && input.inspection.placement?.kind === \'container_process\'');
 
-    const replacementStopHelperStart = liveDaemonHelperEnd;
-    const replacementStopHelperEnd = mainSrc.indexOf('async function assertRuntimeTargetContainerRunning(', replacementStopHelperStart);
-    expect(replacementStopHelperEnd).toBeGreaterThan(replacementStopHelperStart);
-    const replacementStopHelperSrc = mainSrc.slice(replacementStopHelperStart, replacementStopHelperEnd);
-    const stopIndex = replacementStopHelperSrc.indexOf('containerRuntimeDaemonStopCommand({');
-    const verifyIndex = replacementStopHelperSrc.indexOf("phase: 'verifying_runtime_stopped'");
-    const assertStoppedIndex = replacementStopHelperSrc.indexOf('await assertContainerRuntimeStopped({');
-    const readyCleanupIndex = replacementStopHelperSrc.indexOf('runtimePlacementReadyByTargetID.delete(input.liveDaemon.target_id)');
-    const maintenanceCleanupIndex = replacementStopHelperSrc.indexOf('runtimePlacementMaintenanceByTargetID.delete(input.liveDaemon.target_id)');
-    const returnReadinessIndex = replacementStopHelperSrc.indexOf('require_new_daemon: true');
-    expect(stopIndex).toBeGreaterThanOrEqual(0);
-    expect(verifyIndex).toBeGreaterThan(stopIndex);
-    expect(assertStoppedIndex).toBeGreaterThan(verifyIndex);
-    expect(readyCleanupIndex).toBeGreaterThan(assertStoppedIndex);
+    const replacementReleaseHelperStart = liveDaemonHelperEnd;
+    const replacementReleaseHelperEnd = mainSrc.indexOf('async function assertRuntimeTargetContainerRunning(', replacementReleaseHelperStart);
+    expect(replacementReleaseHelperEnd).toBeGreaterThan(replacementReleaseHelperStart);
+    const replacementReleaseHelperSrc = mainSrc.slice(replacementReleaseHelperStart, replacementReleaseHelperEnd);
+    const readyCleanupIndex = replacementReleaseHelperSrc.indexOf('runtimePlacementReadyByTargetID.delete(input.liveDaemon.target_id)');
+    const maintenanceCleanupIndex = replacementReleaseHelperSrc.indexOf('runtimePlacementMaintenanceByTargetID.delete(input.liveDaemon.target_id)');
+    expect(replacementReleaseHelperSrc).toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
+    expect(replacementReleaseHelperSrc).toContain('await bridgeRecord?.session.disconnect().catch(() => undefined)');
+    expect(replacementReleaseHelperSrc).not.toContain('inspectContainerRuntimeProcesses');
+    expect(replacementReleaseHelperSrc).not.toContain('stopContainerRuntimeProcesses');
+    expect(readyCleanupIndex).toBeGreaterThanOrEqual(0);
     expect(maintenanceCleanupIndex).toBeGreaterThan(readyCleanupIndex);
-    expect(returnReadinessIndex).toBeGreaterThan(maintenanceCleanupIndex);
-    expect(ensureRuntimeSrc.indexOf('await stopRuntimePlacementLiveDaemonForReplacement({')).toBeLessThan(
-      ensureRuntimeSrc.indexOf('readyPlacement = await ensureRuntimePlacementReady({'),
-    );
 
     const replacementBranchStart = ensureRuntimeSrc.indexOf('if (replacementLiveDaemon && replacementRequested)');
-    const replacementBranchEnd = ensureRuntimeSrc.indexOf('} else if (inspection.ready_record)', replacementBranchStart);
+    const replacementBranchEnd = ensureRuntimeSrc.indexOf('} else if (inspection.ready_record && !replacementRequested)', replacementBranchStart);
     expect(replacementBranchStart).toBeGreaterThanOrEqual(0);
     expect(replacementBranchEnd).toBeGreaterThan(replacementBranchStart);
     const replacementBranchSrc = ensureRuntimeSrc.slice(replacementBranchStart, replacementBranchEnd);
     expect(replacementBranchSrc).not.toContain('runtime_already_current');
     expect(replacementBranchSrc).not.toContain('runtime_up_to_date');
     expect(ensureRuntimeSrc).toContain('let replacementReadiness: RuntimePlacementReplacementReadiness | null = null');
-    expect(ensureRuntimeSrc).toContain('replacementReadiness = await stopRuntimePlacementLiveDaemonForReplacement({');
+    expect(ensureRuntimeSrc).toContain('beforeRuntimeReplacement = async () => {');
+    expect(ensureRuntimeSrc).toContain('await releaseRuntimePlacementLiveDaemonForReplacement({');
     expect(ensureRuntimeSrc).toContain('previous_runtime_pid: replacementReadiness?.previous_runtime_pid');
     expect(ensureRuntimeSrc).toContain('require_new_daemon: replacementReadiness?.require_new_daemon === true');
     expect(ensureRuntimeSrc).not.toContain('let previousRuntimePID');
@@ -861,9 +860,14 @@ describe('main routing', () => {
     expect(startRuntimeSrc).toContain("if (requestedPlacement.kind === 'container_process')");
     expect(startRuntimeSrc).toContain('ensureRuntimePlacementReadyRecordFromLauncher(request)');
     expect(startRuntimeSrc).not.toContain('startRuntimePlacementBridgeSession({');
+    const containerLifecycleSrc = startRuntimeSrc.slice(
+      startRuntimeSrc.indexOf("if (requestedPlacement.kind === 'container_process')"),
+      startRuntimeSrc.indexOf('const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);'),
+    );
+    expect(containerLifecycleSrc).not.toContain('closeEnvironmentSessionsForRuntimeLifecycle');
     expect(startRuntimeSrc).toContain('const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);');
-    expect(startRuntimeSrc).toContain("if (lifecycleOperation === 'restart' || lifecycleOperation === 'update')");
-    expect(startRuntimeSrc).toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
+    expect(startRuntimeSrc).not.toContain("if (lifecycleOperation === 'restart' || lifecycleOperation === 'update')");
+    expect(startRuntimeSrc).toContain('beforeRuntimeReplacement: lifecycleOperation === \'restart\' || lifecycleOperation === \'update\'');
 
     const stopRuntimeStart = mainSrc.indexOf('async function stopEnvironmentRuntimeFromLauncher(');
     const stopRuntimeEnd = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(', stopRuntimeStart);
@@ -871,11 +875,13 @@ describe('main routing', () => {
     expect(stopRuntimeSrc).toContain("if (placement.kind === 'container_process')");
     expect(stopRuntimeSrc).toContain("action: 'stop_environment_runtime'");
     expect(stopRuntimeSrc).toContain("operation: lifecycleOperation");
-    expect(stopRuntimeSrc).toContain("phase: 'stopping_runtime_process'");
-    expect(stopRuntimeSrc).toContain("phase: 'verifying_runtime_stopped'");
+    expect(stopRuntimeSrc).toContain("phase: 'discovering_runtime_instances'");
+    expect(stopRuntimeSrc).toContain("'stopping_runtime_process'");
+    expect(stopRuntimeSrc).toContain("phase: 'verifying_runtime_inventory'");
     expect(stopRuntimeSrc).toContain("phase: 'runtime_stopped'");
-    expect(stopRuntimeSrc).toContain('containerRuntimeDaemonStopCommand({');
-    expect(stopRuntimeSrc).toContain('assertContainerRuntimeStopped({');
+    expect(stopRuntimeSrc).toContain('const inventory = await inspectContainerRuntimeProcesses(processArgs);');
+    expect(stopRuntimeSrc).toContain('await stopContainerRuntimeProcesses(processArgs, inventory);');
+    expect(stopRuntimeSrc).not.toContain('containerRuntimeDaemonStopCommand({');
     expect(stopRuntimeSrc).toContain('await runtimeRecord?.session.disconnect().catch(() => undefined);');
     expect(stopRuntimeSrc).toContain('runtimePlacementBridgeByTargetID.delete(targetID)');
     expect(stopRuntimeSrc).toContain('runtimePlacementReadyByTargetID.delete(targetID)');
@@ -889,7 +895,7 @@ describe('main routing', () => {
     expect(sshStopSrc.indexOf('await closeEnvironmentSessionsForRuntimeLifecycle({')).toBeLessThan(
       sshStopSrc.indexOf('await verifySSHEnvironmentRuntimeRecord(runtimeKey)'),
     );
-    expect(sshStopSrc).toContain("decision: 'runtime_already_stopped'");
+    expect(stopRuntimeSrc).toContain("decision: 'runtime_already_stopped'");
     expect(stopRuntimeSrc).not.toContain('await finalizeSessionClosure(liveRuntimeSession.session_key)');
     expect(stopRuntimeSrc).not.toContain('await finalizeSessionClosure(liveSessionRecord.session_key)');
     expect(stopRuntimeSrc).not.toContain('await finalizeSessionClosure(liveLocalSession.session_key)');
@@ -904,26 +910,16 @@ describe('main routing', () => {
     expect(refreshRuntimeSrc).not.toContain('markSavedRuntimeTargetUsed(preferences');
   });
 
-  it('only accepts stopped runtime status verification after a container replacement stop', () => {
-    const mainSrc = readMainSource();
-    const assertStopStart = mainSrc.indexOf('function assertRuntimeStopVerifiedFromLaunchReport(');
-    const assertStopEnd = mainSrc.indexOf('async function assertContainerRuntimeStopped(', assertStopStart);
-    expect(assertStopStart).toBeGreaterThanOrEqual(0);
-    expect(assertStopEnd).toBeGreaterThan(assertStopStart);
-    const assertStopSrc = mainSrc.slice(assertStopStart, assertStopEnd);
-
-    expect(assertStopSrc).toContain("if (report.status !== 'blocked')");
-    expect(assertStopSrc).toContain('classifyDesktopRuntimeBlockedLaunchReport(report');
-    expect(assertStopSrc).toContain("if (classification.kind === 'stopped') {\n    return;\n  }");
-    expect(assertStopSrc).not.toContain("classification.kind === 'restart_required' &&");
-    expect(assertStopSrc).not.toContain("classification.kind === 'update_required' &&");
-
-    const assertContainerStart = assertStopEnd;
-    const assertContainerEnd = mainSrc.indexOf('async function assertSSHRuntimeStopped(', assertContainerStart);
-    expect(assertContainerEnd).toBeGreaterThan(assertContainerStart);
-    const assertContainerSrc = mainSrc.slice(assertContainerStart, assertContainerEnd);
-    expect(assertContainerSrc).toContain('containerRuntimeDaemonStatusCommand({');
-    expect(assertContainerSrc).toContain('assertRuntimeStopVerifiedFromLaunchReport(parseLaunchReport(statusResult.stdout));');
+  it('keeps container package preparation ahead of inventory stop and slot activation', () => {
+    const managerSrc = fs.readFileSync(path.join(__dirname, 'runtimePlacementManager.ts'), 'utf8');
+    const prepareIndex = managerSrc.indexOf('preparedRuntimeAsset = await prepareDesktopRuntimeUploadAsset({');
+    const inventoryIndex = managerSrc.indexOf('const processInventory = await inspectContainerRuntimeProcesses(processCommandArgs);');
+    const stopIndex = managerSrc.indexOf('await stopContainerRuntimeProcesses(processCommandArgs, processInventory);');
+    const installIndex = managerSrc.indexOf('await executor.run(containerRuntimeUploadedInstallCommand({');
+    expect(prepareIndex).toBeGreaterThanOrEqual(0);
+    expect(inventoryIndex).toBeGreaterThan(prepareIndex);
+    expect(stopIndex).toBeGreaterThan(inventoryIndex);
+    expect(installIndex).toBeGreaterThan(stopIndex);
   });
 
   it('keeps Local Host Open under the same Open-owned runtime preflight contract', () => {

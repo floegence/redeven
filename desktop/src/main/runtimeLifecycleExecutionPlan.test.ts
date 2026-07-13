@@ -65,8 +65,10 @@ describe('runtimeLifecycleExecutionPlan', () => {
       'checking_runtime_package',
     ]);
     expect(plan.omitted_steps).toEqual([
+      { id: 'discovering_runtime_instances', reason: 'runtime_process_absent' },
+      { id: 'stopping_legacy_runtimes', reason: 'runtime_process_absent' },
       { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
-      { id: 'verifying_runtime_stopped', reason: 'runtime_process_absent' },
+      { id: 'verifying_runtime_inventory', reason: 'runtime_process_absent' },
     ]);
   });
 
@@ -81,8 +83,10 @@ describe('runtimeLifecycleExecutionPlan', () => {
       'checking_container',
     ]);
     expect(plan.omitted_steps).toEqual([
+      { id: 'discovering_runtime_instances', reason: 'runtime_process_absent' },
+      { id: 'stopping_legacy_runtimes', reason: 'runtime_process_absent' },
       { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
-      { id: 'verifying_runtime_stopped', reason: 'runtime_process_absent' },
+      { id: 'verifying_runtime_inventory', reason: 'runtime_process_absent' },
     ]);
   });
 
@@ -98,8 +102,10 @@ describe('runtimeLifecycleExecutionPlan', () => {
       'checking_container',
     ]);
     expect(plan.omitted_steps).toEqual([
+      { id: 'discovering_runtime_instances', reason: 'runtime_process_absent' },
+      { id: 'stopping_legacy_runtimes', reason: 'runtime_process_absent' },
       { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
-      { id: 'verifying_runtime_stopped', reason: 'runtime_process_absent' },
+      { id: 'verifying_runtime_inventory', reason: 'runtime_process_absent' },
     ]);
   });
 
@@ -110,8 +116,7 @@ describe('runtimeLifecycleExecutionPlan', () => {
       decision: 'runtime_running',
     }).steps.map((step) => step.id)).toEqual([
       'checking_host',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
+      'discovering_runtime_instances',
     ]);
     expect(runtimeLifecyclePlanAfterDecision({
       location: 'local_container',
@@ -119,8 +124,7 @@ describe('runtimeLifecycleExecutionPlan', () => {
       decision: 'runtime_update_required_running',
     }).steps.map((step) => step.id)).toEqual([
       'checking_container',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
+      'discovering_runtime_instances',
     ]);
   });
 
@@ -133,8 +137,7 @@ describe('runtimeLifecycleExecutionPlan', () => {
 
     expect(plan.steps.map((step) => step.id)).toEqual([
       'checking_container',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
+      'discovering_runtime_instances',
     ]);
 
     const afterDetectingPlatform = runtimeLifecyclePlanIncludingStep({
@@ -145,8 +148,7 @@ describe('runtimeLifecycleExecutionPlan', () => {
     });
     expect(afterDetectingPlatform.steps.map((step) => step.id)).toEqual([
       'checking_container',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
+      'discovering_runtime_instances',
       'detecting_platform',
       'checking_runtime_package',
     ]);
@@ -159,8 +161,7 @@ describe('runtimeLifecycleExecutionPlan', () => {
     });
     expect(afterPackagePrepare.steps.map((step) => step.id)).toEqual([
       'checking_container',
-      'stopping_runtime_process',
-      'verifying_runtime_stopped',
+      'discovering_runtime_instances',
       'detecting_platform',
       'checking_runtime_package',
       'preparing_runtime_package',
@@ -184,8 +185,10 @@ describe('runtimeLifecycleExecutionPlan', () => {
       'runtime_already_stopped',
     ]);
     expect(plan.omitted_steps).toEqual([
+      { id: 'discovering_runtime_instances', reason: 'runtime_already_stopped' },
+      { id: 'stopping_legacy_runtimes', reason: 'runtime_already_stopped' },
       { id: 'stopping_runtime_process', reason: 'runtime_already_stopped' },
-      { id: 'verifying_runtime_stopped', reason: 'runtime_already_stopped' },
+      { id: 'verifying_runtime_inventory', reason: 'runtime_already_stopped' },
     ]);
   });
 
