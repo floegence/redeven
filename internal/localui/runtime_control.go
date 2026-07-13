@@ -82,6 +82,10 @@ func (s *runtimeControlServer) Start(ctx context.Context) error {
 	srv := &http.Server{
 		Handler:           s.routes(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    localUIMaxHeaderBytes,
 	}
 	s.ln = ln
 	s.srv = srv
@@ -113,6 +117,10 @@ func (s *runtimeControlServer) StartOnListener(ctx context.Context, ln net.Liste
 	srv := &http.Server{
 		Handler:           s.routes(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      5 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    localUIMaxHeaderBytes,
 	}
 	s.ln = ln
 	s.srv = srv
@@ -143,7 +151,20 @@ func (s *runtimeControlServer) routes() http.Handler {
 	mux.HandleFunc("/v1/desktop-model-source/connect", s.handleDesktopModelSourceConnect)
 	mux.HandleFunc("/v1/desktop-model-source/disconnect", s.handleDesktopModelSourceDisconnect)
 	mux.HandleFunc("/v1/desktop-model-source/rpc", s.handleDesktopModelSourceRPC)
-	return mux
+	return withLocalUISecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r == nil {
+			http.Error(w, "invalid request", http.StatusBadRequest)
+			return
+		}
+		if _, err := canonicalLoopbackAuthority(r.Host); err != nil {
+			writeRuntimeControlError(w, http.StatusMisdirectedRequest, "RUNTIME_CONTROL_INVALID_AUTHORITY", "Runtime control requires a loopback authority.")
+			return
+		}
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+		}
+		mux.ServeHTTP(w, r)
+	}))
 }
 
 func (s *runtimeControlServer) Close() error {
@@ -511,11 +532,16 @@ func (s *runtimeControlServer) handleDesktopModelSourceRPC(w http.ResponseWriter
 		writeRuntimeControlError(w, http.StatusBadRequest, "DESKTOP_MODEL_SOURCE_INVALID_REQUEST", "Missing desktop model source session id.")
 		return
 	}
-	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	upgrader := websocket.Upgrader{CheckOrigin: func(req *http.Request) bool {
+		return strictSameOriginWSRequest(req, false)
+	}}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
+	_ = conn.SetReadDeadline(time.Time{})
+	_ = conn.SetWriteDeadline(time.Time{})
+	conn.SetReadLimit(localUIWSReadLimit)
 	session := ai.DesktopModelSourceSession{
 		SessionID:       sessionID,
 		Source:          ai.DesktopModelSourceDefaultSource,

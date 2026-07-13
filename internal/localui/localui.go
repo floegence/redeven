@@ -111,6 +111,9 @@ type Server struct {
 	pendingMu sync.Mutex
 	pending   map[string]pendingDirect
 
+	authorityMu        sync.RWMutex
+	networkAuthorities map[string]struct{}
+
 	listeners []net.Listener
 	srv       *http.Server
 
@@ -149,10 +152,10 @@ func (s *Server) handler() http.Handler {
 	// Reuse the existing app server for Env App UI and management APIs.
 	mux.HandleFunc("/_redeven_proxy/", s.handleEnvAppProxy)
 	var handler http.Handler = mux
-	if s.diag == nil {
-		return handler
+	if s.diag != nil {
+		handler = s.withDiagnostics(handler)
 	}
-	return s.withDiagnostics(handler)
+	return withLocalUISecurityHeaders(handler)
 }
 
 func (s *Server) HandlerForDesktopBridge() http.Handler {
@@ -214,6 +217,7 @@ func New(opts Options) (*Server, error) {
 		diag:                   opts.Diagnostics,
 		accessGate:             opts.AccessGate,
 		pending:                make(map[string]pendingDirect),
+		networkAuthorities:     make(map[string]struct{}),
 	}, nil
 }
 
@@ -241,13 +245,23 @@ func (s *Server) Start(ctx context.Context) error {
 	if len(listeners) == 0 {
 		return fmt.Errorf("listen %s failed: %s", s.bind.ListenLabel(), strings.Join(errs, "; "))
 	}
+	if err := s.configureNetworkAuthorities(listeners); err != nil {
+		for _, listener := range listeners {
+			_ = listener.Close()
+		}
+		return err
+	}
 	for _, errText := range errs {
 		s.log.Warn("local ui listener unavailable", "bind", s.bind.ListenLabel(), "error", errText)
 	}
 
 	srv := &http.Server{
-		Handler:           s.handler(),
+		Handler:           s.networkHandler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       2 * time.Minute,
+		WriteTimeout:      30 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    localUIMaxHeaderBytes,
 	}
 	s.srv = srv
 	s.listeners = listeners
@@ -303,10 +317,17 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 	if len(listeners) == 0 {
 		return errors.New("missing Local UI listeners")
 	}
+	if err := s.configureNetworkAuthorities(listeners); err != nil {
+		return err
+	}
 
 	srv := &http.Server{
-		Handler:           s.handler(),
+		Handler:           s.networkHandler(),
 		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       2 * time.Minute,
+		WriteTimeout:      30 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    localUIMaxHeaderBytes,
 	}
 	s.srv = srv
 	s.listeners = append([]net.Listener(nil), listeners...)
@@ -861,10 +882,16 @@ func (s *Server) handleAccessUnlock(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"unlocked": true}})
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, localUIJSONBodyLimit)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	var req accessUnlockReq
 	if err := dec.Decode(&req); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			writeJSON(w, http.StatusRequestEntityTooLarge, apiResp{OK: false, Error: &apiError{Message: "request body too large"}})
+			return
+		}
 		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: &apiError{Message: "invalid json"}})
 		return
 	}
@@ -1086,9 +1113,9 @@ func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {
 	if r == nil {
 		return "", errors.New("nil request")
 	}
-	host := strings.TrimSpace(r.Host)
-	if host == "" {
-		return "", errors.New("missing host")
+	host, err := canonicalLoopbackAuthority(r.Host)
+	if err != nil {
+		return "", errors.New("invalid Local UI authority")
 	}
 	scheme := "ws"
 	if r.TLS != nil {
@@ -1185,10 +1212,16 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, localUIJSONBodyLimit)
 	// Only accept empty body to keep the endpoint stable; reject unknown inputs.
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&struct{}{}); err != nil && err != io.EOF {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
@@ -1402,7 +1435,7 @@ func (s *Server) resolveLocalCap() config.PermissionSet {
 	return *s.localPermissionCap
 }
 
-func (s *Server) consumePending(channelID string) (pendingDirect, bool) {
+func (s *Server) resolvePending(channelID string) (pendingDirect, bool) {
 	if s == nil {
 		return pendingDirect{}, false
 	}
@@ -1419,11 +1452,33 @@ func (s *Server) consumePending(channelID string) (pendingDirect, bool) {
 	if !ok {
 		return pendingDirect{}, false
 	}
-	delete(s.pending, id)
 	if p.initExpireAtUnixS <= 0 || now > p.initExpireAtUnixS {
+		delete(s.pending, id)
 		return pendingDirect{}, false
 	}
 	return p, true
+}
+
+func (s *Server) commitPending(channelID string, expected pendingDirect) error {
+	if s == nil {
+		return errors.New("server not ready")
+	}
+	id := strings.TrimSpace(channelID)
+	if id == "" {
+		return errors.New("missing channel")
+	}
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
+	current, ok := s.pending[id]
+	if !ok || current.psk != expected.psk || current.connectArtifactIssuedAtMs != expected.connectArtifactIssuedAtMs {
+		return errors.New("credential already consumed or replaced")
+	}
+	if current.initExpireAtUnixS <= 0 || time.Now().Unix() > current.initExpireAtUnixS {
+		delete(s.pending, id)
+		return errors.New("credential expired")
+	}
+	delete(s.pending, id)
+	return nil
 }
 
 func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
@@ -1434,13 +1489,13 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	if !s.requireLocalAccessHTTP(w, r) {
 		return
 	}
-	if !sameOriginWSRequest(r) {
+	if !s.sameOriginWSRequest(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 
 	startedAt := time.Now()
-	upgrader := websocket.Upgrader{CheckOrigin: sameOriginWSRequest}
+	upgrader := websocket.Upgrader{CheckOrigin: s.sameOriginWSRequest}
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		s.log.Warn("local direct ws upgrade failed", "error", err)
@@ -1450,23 +1505,31 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer c.Close()
+	_ = c.SetReadDeadline(time.Time{})
+	_ = c.SetWriteDeadline(time.Time{})
+	c.SetReadLimit(localUIWSReadLimit)
 
 	var resolved pendingDirect
 	var resolvedOK bool
 	var ch string
 	sess, err := endpoint.AcceptDirectWSResolved(r.Context(), c, endpoint.AcceptDirectResolverOptions{
 		ClockSkew: 60 * time.Second,
-		Resolve: func(_ctx context.Context, init endpoint.DirectHandshakeInit) (endpoint.DirectHandshakeSecrets, error) {
+		ResolveCredential: func(_ctx context.Context, init endpoint.DirectHandshakeInit) (endpoint.DirectHandshakeCredential, error) {
 			ch = strings.TrimSpace(init.ChannelID)
-			p, ok := s.consumePending(ch)
+			p, ok := s.resolvePending(ch)
 			if !ok {
-				return endpoint.DirectHandshakeSecrets{}, errors.New("unknown or expired channel")
+				return endpoint.DirectHandshakeCredential{}, errors.New("unknown or expired channel")
 			}
 			resolved = p
 			resolvedOK = true
-			return endpoint.DirectHandshakeSecrets{
-				PSK:               resolved.psk[:],
-				InitExpireAtUnixS: resolved.initExpireAtUnixS,
+			return endpoint.DirectHandshakeCredential{
+				Secrets: endpoint.DirectHandshakeSecrets{
+					PSK:               resolved.psk[:],
+					InitExpireAtUnixS: resolved.initExpireAtUnixS,
+				},
+				CommitAuthenticated: func(context.Context) error {
+					return s.commitPending(ch, resolved)
+				},
 			}, nil
 		},
 	})
@@ -1514,30 +1577,11 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func sameOriginWSRequest(r *http.Request) bool {
-	if r == nil {
-		return false
-	}
-	originRaw := strings.TrimSpace(r.Header.Get("Origin"))
-	if originRaw == "" {
-		return false
-	}
-	originURL, err := url.Parse(originRaw)
-	if err != nil || originURL == nil {
-		return false
-	}
-	expectedScheme := "http"
-	if r.TLS != nil {
-		expectedScheme = "https"
-	}
-	expectedHost := strings.ToLower(strings.TrimSpace(r.Host))
-	if expectedHost == "" {
-		expectedHost = strings.ToLower(strings.TrimSpace(r.Header.Get("Host")))
-	}
-	if expectedHost == "" {
-		return false
-	}
-	return strings.EqualFold(strings.TrimSpace(originURL.Scheme), expectedScheme) &&
-		strings.EqualFold(strings.TrimSpace(originURL.Host), expectedHost)
+	return strictSameOriginWSRequest(r, true)
+}
+
+func (s *Server) sameOriginWSRequest(r *http.Request) bool {
+	return s != nil && s.isTrustedOrAllowedAuthority(r.Host) && strictSameOriginWSRequest(r, true)
 }
 
 func firstNonEmptyString(values []string) string {

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,6 +101,12 @@ func (c *Config) ValidateRemoteStrict() error {
 	if strings.TrimSpace(c.ProviderOrigin) == "" {
 		return errors.New("missing provider_origin")
 	}
+	if _, err := normalizeControlplaneBaseURL(c.ProviderOrigin); err != nil {
+		return fmt.Errorf("invalid provider_origin: %w", err)
+	}
+	if _, err := normalizeControlplaneBaseURL(c.ControlplaneBaseURL); err != nil {
+		return fmt.Errorf("invalid controlplane_base_url: %w", err)
+	}
 	if strings.TrimSpace(c.EnvironmentID) == "" {
 		return errors.New("missing environment_id")
 	}
@@ -118,6 +125,10 @@ func (c *Config) ValidateRemoteStrict() error {
 		strings.TrimSpace(c.Direct.E2eePskB64u) == "" ||
 		c.Direct.ChannelInitExpireAtUnixS <= 0 {
 		return errors.New("missing direct connect info")
+	}
+	directURL, err := url.Parse(strings.TrimSpace(c.Direct.WsUrl))
+	if err != nil || directURL == nil || !strings.EqualFold(directURL.Scheme, "wss") || strings.TrimSpace(directURL.Host) == "" || directURL.User != nil {
+		return errors.New("invalid direct connect info: remote WebSocket URL must use wss")
 	}
 	return nil
 }

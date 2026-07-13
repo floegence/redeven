@@ -128,11 +128,20 @@ func normalizeControlplaneBaseURL(raw string) (string, error) {
 		return "", errors.New("invalid controlplane url: missing scheme or host")
 	}
 	parsedURL.Scheme = strings.ToLower(strings.TrimSpace(parsedURL.Scheme))
+	if parsedURL.Scheme != "https" {
+		return "", errors.New("remote provider and controlplane URLs must use https")
+	}
+	if parsedURL.User != nil || parsedURL.RawQuery != "" || parsedURL.Fragment != "" {
+		return "", errors.New("remote provider and controlplane URLs must not include user info, query, or fragment")
+	}
+	if parsedURL.Path != "" && parsedURL.Path != "/" {
+		return "", errors.New("remote provider and controlplane URLs must not include a path")
+	}
 	parsedURL.Host = strings.ToLower(strings.TrimSpace(parsedURL.Host))
 	parsedURL.Path = ""
 	parsedURL.RawPath = ""
 	parsedURL.RawQuery = ""
 	parsedURL.Fragment = ""
 	parsedURL.User = nil
-	return parsedURL.String(), nil
+	return strings.TrimSuffix(parsedURL.String(), "/"), nil
 }

@@ -4,29 +4,18 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 )
 
 const DefaultBind = "localhost:23998"
 
-type bindFamily int
-
-const (
-	bindFamilyIPv4 bindFamily = iota
-	bindFamilyIPv6
-)
-
 // BindSpec is the parsed Local UI listener configuration.
 type BindSpec struct {
 	host      string
 	port      int
 	localhost bool
-	wildcard  bool
 	loopback  bool
-	family    bindFamily
 }
 
 func ParseBind(raw string) (BindSpec, error) {
@@ -55,7 +44,6 @@ func ParseBind(raw string) (BindSpec, error) {
 			port:      port,
 			localhost: true,
 			loopback:  true,
-			family:    bindFamilyIPv4,
 		}, nil
 	}
 
@@ -63,17 +51,13 @@ func ParseBind(raw string) (BindSpec, error) {
 	if err != nil {
 		return BindSpec{}, fmt.Errorf("host must be localhost or an IP literal")
 	}
-	addr = addr.Unmap()
-	family := bindFamilyIPv6
-	if addr.Is4() {
-		family = bindFamilyIPv4
+	if addr.Zone() != "" || addr.Is4In6() || !addr.IsLoopback() {
+		return BindSpec{}, fmt.Errorf("Local UI is loopback-only; use localhost, 127.0.0.0/8, or ::1")
 	}
 	return BindSpec{
 		host:     addr.String(),
 		port:     port,
-		wildcard: addr.IsUnspecified(),
-		loopback: addr.IsLoopback(),
-		family:   family,
+		loopback: true,
 	}, nil
 }
 
@@ -87,10 +71,6 @@ func (b BindSpec) Host() string {
 
 func (b BindSpec) IsLoopbackOnly() bool {
 	return b.localhost || b.loopback
-}
-
-func (b BindSpec) IsWildcard() bool {
-	return b.wildcard
 }
 
 func (b BindSpec) ListenLabel() string {
@@ -146,94 +126,11 @@ func (b BindSpec) displayURLsForPort(port int) []string {
 	switch {
 	case b.localhost:
 		return []string{formatHTTPURL("localhost", port)}
-	case !b.wildcard:
-		return []string{formatHTTPURL(b.host, port)}
 	default:
-		return discoverWildcardURLs(b.family, port)
+		return []string{formatHTTPURL(b.host, port)}
 	}
-}
-
-func discoverWildcardURLs(family bindFamily, port int) []string {
-	var preferred []string
-	var discovered []string
-	addHost := func(dst *[]string, host string) {
-		host = strings.TrimSpace(host)
-		if host == "" {
-			return
-		}
-		*dst = append(*dst, host)
-	}
-
-	if family == bindFamilyIPv4 {
-		addHost(&preferred, "127.0.0.1")
-	} else {
-		addHost(&preferred, "::1")
-	}
-
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		out := make([]string, 0, len(preferred))
-		for _, host := range preferred {
-			out = append(out, formatHTTPURL(host, port))
-		}
-		return out
-	}
-	for _, iface := range ifaces {
-		if iface.Flags&net.FlagUp == 0 {
-			continue
-		}
-		addrs, err := iface.Addrs()
-		if err != nil {
-			continue
-		}
-		for _, addr := range addrs {
-			var ip net.IP
-			switch v := addr.(type) {
-			case *net.IPNet:
-				ip = v.IP
-			case *net.IPAddr:
-				ip = v.IP
-			default:
-				continue
-			}
-			if ip == nil {
-				continue
-			}
-			if family == bindFamilyIPv4 {
-				ip = ip.To4()
-				if ip == nil {
-					continue
-				}
-			} else {
-				ip = ip.To16()
-				if ip == nil || ip.To4() != nil {
-					continue
-				}
-			}
-			if ip.IsMulticast() || ip.IsInterfaceLocalMulticast() || ip.IsLinkLocalMulticast() || ip.IsLinkLocalUnicast() {
-				continue
-			}
-			discovered = append(discovered, ip.String())
-		}
-	}
-
-	sort.Strings(discovered)
-	seen := make(map[string]struct{}, len(preferred)+len(discovered))
-	out := make([]string, 0, len(preferred)+len(discovered))
-	for _, host := range append(preferred, discovered...) {
-		host = strings.TrimSpace(host)
-		if host == "" {
-			continue
-		}
-		if _, ok := seen[host]; ok {
-			continue
-		}
-		seen[host] = struct{}{}
-		out = append(out, formatHTTPURL(host, port))
-	}
-	return out
 }
 
 func formatHTTPURL(host string, port int) string {
-	return (&url.URL{Scheme: "http", Host: net.JoinHostPort(host, strconv.Itoa(port)), Path: "/"}).String()
+	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/"
 }

@@ -18,37 +18,44 @@ func TestParseBind_Localhost(t *testing.T) {
 	}
 }
 
-func TestParseBind_IPv4Specific(t *testing.T) {
+func TestParseBind_IPv4LoopbackRange(t *testing.T) {
 	t.Parallel()
 
-	bind, err := ParseBind("192.168.1.11:12345")
+	bind, err := ParseBind("127.42.0.9:12345")
 	if err != nil {
 		t.Fatalf("ParseBind() error = %v", err)
 	}
-	if bind.IsLoopbackOnly() {
-		t.Fatalf("expected non-loopback bind")
+	if !bind.IsLoopbackOnly() {
+		t.Fatalf("expected loopback bind")
 	}
-	if bind.ListenLabel() != "192.168.1.11:12345" {
-		t.Fatalf("ListenLabel() = %q, want %q", bind.ListenLabel(), "192.168.1.11:12345")
+	if bind.ListenLabel() != "127.42.0.9:12345" {
+		t.Fatalf("ListenLabel() = %q, want %q", bind.ListenLabel(), "127.42.0.9:12345")
 	}
 	urls := bind.DisplayURLs()
-	if len(urls) != 1 || urls[0] != "http://192.168.1.11:12345/" {
+	if len(urls) != 1 || urls[0] != "http://127.42.0.9:12345/" {
 		t.Fatalf("DisplayURLs() = %#v", urls)
 	}
 }
 
-func TestParseBind_Wildcard(t *testing.T) {
+func TestParseBind_RejectsNonLoopbackAndWildcard(t *testing.T) {
 	t.Parallel()
 
-	bind, err := ParseBind("0.0.0.0:12345")
+	for _, raw := range []string{"0.0.0.0:12345", "192.168.1.11:12345", "[::]:12345", "[2001:db8::1]:12345", "[::ffff:127.0.0.1]:12345"} {
+		if _, err := ParseBind(raw); err == nil {
+			t.Fatalf("ParseBind(%q) error = nil, want loopback-only rejection", raw)
+		}
+	}
+}
+
+func TestParseBind_IPv6Loopback(t *testing.T) {
+	t.Parallel()
+
+	bind, err := ParseBind("[::1]:12345")
 	if err != nil {
 		t.Fatalf("ParseBind() error = %v", err)
 	}
-	if !bind.IsWildcard() {
-		t.Fatalf("expected wildcard bind")
-	}
-	if bind.IsLoopbackOnly() {
-		t.Fatalf("expected wildcard bind to be non-loopback")
+	if !bind.IsLoopbackOnly() || bind.ListenLabel() != "[::1]:12345" {
+		t.Fatalf("unexpected IPv6 loopback bind: %#v", bind)
 	}
 }
 

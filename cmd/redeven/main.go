@@ -275,7 +275,10 @@ func (c *cli) runCmd(args []string) int {
 		writeErrorWithHelp(
 			c.stderr,
 			fmt.Sprintf("invalid value for `--local-ui-bind`: %v", err),
-			[]string{"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, 0.0.0.0:24000, 192.168.1.11:24000"},
+			[]string{
+				"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.42.0.9:24000, 127.0.0.1:0, [::1]:24000.",
+				"For access from another device, use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel.",
+			},
 			runHelpText(),
 		)
 		return 2
@@ -515,23 +518,6 @@ func (c *cli) runCmd(args []string) int {
 		}
 		return 1
 	}
-	if mode != runModeRemote && !localUIBind.IsLoopbackOnly() && !accessGate.Enabled() {
-		writeErrorWithHelp(
-			c.stderr,
-			"non-loopback `--local-ui-bind` requires an access password",
-			[]string{
-				"Hint: set exactly one of --password, --password-stdin, --password-env, or --password-file.",
-				fmt.Sprintf(
-					"Example: %s=replace-with-a-long-password redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %s",
-					examplePasswordEnv,
-					examplePasswordEnv,
-				),
-			},
-			runHelpText(),
-		)
-		return 2
-	}
-
 	if bootstrapViaFlags {
 		_ = startupReporter.Emit(runtimepresentation.Event{
 			Kind:  runtimepresentation.EventPhaseStarted,

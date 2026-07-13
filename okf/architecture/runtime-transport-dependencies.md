@@ -3,14 +3,16 @@ type: Runtime Contract
 title: Runtime transport dependencies
 description: Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.
 tags: [architecture, dependencies, terminal]
-timestamp: 2026-06-17T00:00:00Z
+timestamp: 2026-07-13T00:00:00Z
 ---
 
 Redeven runtime builds control and data sessions on Flowersec client and endpoint primitives, while terminal lifecycle inside the runtime is delegated to Floeterm's terminal-go manager.
 
 # Mechanism
 
-Redeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The agent connects the control channel through `fsclient.ConnectDirect`, opens data sessions through `endpoint.ConnectTunnel`, and wraps `termgo.NewManager` so terminal sessions, PTY activation, history accounting, and shell lifecycle setup stay inside Floeterm's manager abstraction. Redeven configures an 8 MiB history byte budget per session in addition to Floeterm's chunk bound, without configuring or enforcing a session-count limit. Redeven selects the shell and cache location, while released Floeterm providers generate Bash, Zsh, Fish, and POSIX initialization and OSC command lifecycle markers. Concurrent direct close, widget cleanup, and process-exit paths share one in-flight delete result per session. Closing sessions reject interaction immediately; successful cleanup removes the record, while a real cleanup failure restores an open, visible, retryable lifecycle with diagnostics.
+Redeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The agent connects the remote control channel through `fsclient.ConnectDirect` and opens remote data sessions through `endpoint.ConnectTunnel`; both calls explicitly select Flowersec `RequireTLS`. Env App tunnel reconnects select the matching TypeScript policy, while Local UI direct reconnects explicitly select `AllowPlaintextForLoopback`. Product code therefore does not depend on Flowersec's compatibility default and cannot silently accept remote `ws://` transport.
+
+The runtime wraps `termgo.NewManager` so terminal sessions, PTY activation, history accounting, and shell lifecycle setup stay inside Floeterm's manager abstraction. Redeven configures an 8 MiB history byte budget per session in addition to Floeterm's chunk bound, without configuring or enforcing a session-count limit. Redeven selects the shell and cache location, while released Floeterm providers generate Bash, Zsh, Fish, and POSIX initialization and OSC command lifecycle markers. Concurrent direct close, widget cleanup, and process-exit paths share one in-flight delete result per session. Closing sessions reject interaction immediately; successful cleanup removes the record, while a real cleanup failure restores an open, visible, retryable lifecycle with diagnostics.
 
 # Boundaries
 
@@ -29,3 +31,8 @@ Compatibility depends on these transport and terminal interfaces staying aligned
 [9] redeven:internal/terminal/manager.go:105 - Floeterm default providers own shell arguments, init files, and command lifecycle markers.
 [10] redeven:internal/terminal/lifecycle.go:190 - Concurrent delete callers join one session-scoped in-flight cleanup operation.
 [11] redeven:AGENTS.md:173 - Repository rules require published upstream releases instead of local sibling checkouts.
+[12] redeven:go.mod:10 - Redeven consumes published flowersec-go v0.19.11.
+[13] redeven:internal/agent/agent.go:536 - Remote direct control connections explicitly require TLS.
+[14] redeven:internal/agent/agent.go:999 - Remote tunnel sessions explicitly require TLS.
+[15] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1426 - Local direct reconnects explicitly allow plaintext only for loopback literals.
+[16] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1442 - Remote tunnel reconnects explicitly require TLS.

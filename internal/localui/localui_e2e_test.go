@@ -3,6 +3,7 @@ package localui
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -152,6 +153,18 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 	if err := json.NewDecoder(headerConnectResp.Body).Decode(&connectBody); err != nil {
 		t.Fatalf("decode header connect_artifact body error = %v", err)
 	}
+	badInfo := *connectBody.ConnectArtifact.DirectInfo
+	badInfo.E2eePskB64u = base64.RawURLEncoding.EncodeToString(make([]byte, 32))
+	badCtx, badCancel := context.WithTimeout(context.Background(), 2*time.Second)
+	_, badErr := fsclient.ConnectDirect(badCtx, &badInfo,
+		fsclient.WithOrigin(srv.URL),
+		fsclient.WithHeader(http.Header{localAccessResumeHeader: []string{unlockBody.Data.ResumeToken}}),
+		fsclient.WithTransportSecurityPolicy(fsclient.AllowPlaintextForLoopback),
+	)
+	badCancel()
+	if badErr == nil {
+		t.Fatal("ConnectDirect() with the wrong PSK unexpectedly succeeded")
+	}
 	connectLocalDirectSession(t, s, srv.URL, unlockBody.Data.ResumeToken, connectBody.ConnectArtifact)
 }
 
@@ -174,6 +187,7 @@ func connectLocalDirectSession(t *testing.T, s *Server, serverURL, resumeToken s
 	client, err := fsclient.ConnectDirect(ctx, artifact.DirectInfo,
 		fsclient.WithOrigin(origin),
 		fsclient.WithHeader(http.Header{localAccessResumeHeader: []string{resumeToken}}),
+		fsclient.WithTransportSecurityPolicy(fsclient.AllowPlaintextForLoopback),
 	)
 	if err != nil {
 		t.Fatalf("ConnectDirect() error = %v", err)

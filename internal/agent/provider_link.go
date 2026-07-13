@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
@@ -38,8 +39,8 @@ func normalizeProviderOrigin(raw string) (string, error) {
 		return "", err
 	}
 	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
-	if scheme != "http" && scheme != "https" {
-		return "", fmt.Errorf("unsupported provider origin scheme: %q", parsed.Scheme)
+	if scheme != "https" {
+		return "", fmt.Errorf("provider origin must use https, got %q", parsed.Scheme)
 	}
 	if strings.TrimSpace(parsed.Host) == "" || strings.TrimSpace(parsed.Hostname()) == "" {
 		return "", errors.New("provider origin host is required")
@@ -109,6 +110,7 @@ type ProviderLinkRequest struct {
 	ExpectedAccessPointOrigin string
 	ExpectedGeneration        int64
 	AllowRelinkWhenIdle       bool
+	bootstrapHTTPClient       *http.Client
 }
 
 type ProviderLinkResponse struct {
@@ -338,6 +340,7 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 		RuntimeGOARCH:            runtime.GOARCH,
 		RuntimeHostname:          hostnameBestEffort(),
 		PreservePermissionPolicy: true,
+		HTTPClient:               req.bootstrapHTTPClient,
 	})
 	if err != nil {
 		return nil, &ProviderLinkError{

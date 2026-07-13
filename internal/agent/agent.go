@@ -532,6 +532,7 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 	c, err := fsclient.ConnectDirect(ctx, cfg.Direct,
 		fsclient.WithOrigin(origin),
 		fsclient.WithKeepaliveInterval(15*time.Second),
+		fsclient.WithTransportSecurityPolicy(fsclient.RequireTLS),
 	)
 	if err != nil {
 		return err
@@ -993,6 +994,7 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 
 	sess, err := endpoint.ConnectTunnel(ctx, grant,
 		endpoint.WithOrigin(origin),
+		endpoint.WithTransportSecurityPolicy(endpoint.RequireTLS),
 	)
 	if err != nil {
 		return err
