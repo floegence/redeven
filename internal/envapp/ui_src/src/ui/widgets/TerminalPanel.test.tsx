@@ -100,6 +100,7 @@ const openFileBrowserAtPathSpy = vi.hoisted(() => vi.fn(async () => undefined));
 const openFlowerTurnLauncherSpy = vi.hoisted(() => vi.fn());
 const terminalEnvPermissionsState = vi.hoisted(() => ({
   canRead: true,
+  canWrite: true,
   canExecute: true,
 }));
 const envContextState = vi.hoisted(() => ({
@@ -1182,6 +1183,7 @@ vi.mock('../pages/EnvContext', () => {
     () => ({
       permissions: {
         can_read: terminalEnvPermissionsState.canRead,
+        can_write: terminalEnvPermissionsState.canWrite,
         can_execute: terminalEnvPermissionsState.canExecute,
       },
     }),
@@ -1223,6 +1225,9 @@ vi.mock('./FilePreviewContext', () => ({
 }));
 
 vi.mock('../utils/permission', () => ({
+  canLaunchProcess: (permissions: { can_write?: boolean; can_execute?: boolean } | null | undefined) => (
+    Boolean(permissions?.can_write && permissions?.can_execute)
+  ),
   isPermissionDeniedError: () => false,
 }));
 
@@ -1493,6 +1498,7 @@ describe('TerminalPanel', () => {
     terminalViewportRectState.bottom = 320;
     envContextState.viewMode = 'activity';
     terminalEnvPermissionsState.canRead = true;
+    terminalEnvPermissionsState.canWrite = true;
     terminalEnvPermissionsState.canExecute = true;
     terminalSelectionState.text = '';
     terminalConfigState.values = [];
@@ -1636,6 +1642,7 @@ describe('TerminalPanel', () => {
     document.body.innerHTML = '';
     layoutState.mobile = false;
     terminalEnvPermissionsState.canRead = true;
+    terminalEnvPermissionsState.canWrite = true;
     terminalEnvPermissionsState.canExecute = true;
     vi.useRealTimers();
     Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
@@ -1643,6 +1650,18 @@ describe('TerminalPanel', () => {
       value: originalGetBoundingClientRect,
     });
     vi.unstubAllGlobals();
+  });
+
+  it('does not expose a general terminal with execute-only permission', () => {
+    terminalEnvPermissionsState.canWrite = false;
+    terminalEnvPermissionsState.canExecute = true;
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+
+    expect(host.textContent).toContain('Permission denied');
+    expect(sessionsCoordinatorMocks.refresh).not.toHaveBeenCalled();
   });
 
   it('keeps an empty terminal panel on the system loading surface until sessions hydrate', async () => {

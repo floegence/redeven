@@ -54,6 +54,7 @@ import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/wor
 import { buildFilePathFlowerTurnLauncherIntent } from '../utils/filePathAskFlower';
 import { buildGitFlowerTurnLauncherIntent, type GitAskFlowerRequest, type GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from '../utils/openDirectoryInTerminal';
+import { canLaunchProcess } from '../utils/permission';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
@@ -4613,7 +4614,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const directory = resolveDirectoryContextTarget(event);
     return Boolean(
       directory
-      && ctx.env()?.permissions?.can_execute
+      && canLaunchProcess(ctx.env()?.permissions)
       && canOpenDirectoryPathInTerminal(directory.path)
     );
   };
@@ -5051,7 +5052,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onDiscardWorkspaceSection={handleBulkDiscardWorkspaceSection}
                       onOpenStash={openGitStashWindow}
                       onAskFlower={handleGitAskFlower}
-                      onOpenInTerminal={ctx.env()?.permissions?.can_execute ? handleGitOpenInTerminal : undefined}
+                      onOpenInTerminal={canLaunchProcess(ctx.env()?.permissions) ? handleGitOpenInTerminal : undefined}
                       onBrowseFiles={handleGitBrowseFiles}
                       busyWorkspaceKey={gitMutationKey()}
                       busyWorkspaceAction={busyWorkspaceAction()}

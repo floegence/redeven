@@ -14,7 +14,7 @@ const notificationMocks = vi.hoisted(() => ({
 
 const envContextMocks = vi.hoisted(() => ({
   env: Object.assign(
-    () => ({ permissions: { can_execute: true } }),
+    () => ({ permissions: { can_write: true, can_execute: true } }),
     { state: 'ready', loading: false, error: null },
   ),
   openFlowerTurnLauncher: vi.fn(),
@@ -285,7 +285,7 @@ describe('EnvCodespacesPage', () => {
     notificationMocks.success.mockReset();
     notificationMocks.error.mockReset();
     envContextMocks.env = Object.assign(
-      () => ({ permissions: { can_execute: true } }),
+      () => ({ permissions: { can_write: true, can_execute: true } }),
       { state: 'ready', loading: false, error: null },
     );
     envContextMocks.openFlowerTurnLauncher.mockReset();
@@ -1160,9 +1160,9 @@ describe('EnvCodespacesPage', () => {
     expect(askFlowerButton).toBeTruthy();
   });
 
-  it('hides Open in Terminal when execute permission is unavailable', async () => {
+  it('hides Open in Terminal when write permission is unavailable', async () => {
     envContextMocks.env = Object.assign(
-      () => ({ permissions: { can_execute: false } }),
+      () => ({ permissions: { can_write: false, can_execute: true } }),
       { state: 'ready', loading: false, error: null },
     );
 

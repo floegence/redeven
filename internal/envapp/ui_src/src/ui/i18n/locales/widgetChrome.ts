@@ -549,8 +549,8 @@ export const enUSWidgetChrome = defineDictionary({
     duplicateSession: 'Duplicate session',
     clearTerminalContent: 'Clear terminal content',
     deleteSession: 'Delete session',
-    executePermissionRequired: 'Execute permission required',
-    executePermissionDescription: 'Terminal is disabled because execute permission is not granted for this session.',
+    executePermissionRequired: 'Write and execute permissions required',
+    executePermissionDescription: 'Terminal is disabled because general shell access requires both write and execute permissions.',
     statusSession: 'Session',
     statusHistory: 'History',
     settings: {
@@ -1059,8 +1059,8 @@ export const zhCNWidgetChrome = {
     duplicateSession: '复制终端会话',
     clearTerminalContent: '清空终端内容',
     deleteSession: '删除会话',
-    executePermissionRequired: '需要执行权限',
-    executePermissionDescription: '由于此会话未授予执行权限，终端已禁用。',
+    executePermissionRequired: '需要写入与执行权限',
+    executePermissionDescription: '通用 Shell 访问同时需要写入与执行权限，因此终端已禁用。',
     statusSession: '会话',
     statusHistory: '历史',
     settings: {

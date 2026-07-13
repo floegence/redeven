@@ -1057,6 +1057,30 @@ func TestPermissionPolicy_ReadonlyDeniesTerminalExec(t *testing.T) {
 	}
 }
 
+func TestPermissionPolicy_ExecuteOnlyCannotLaunchTerminalProcess(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	target := filepath.Join(workspace, "execute-only.txt")
+	r := newPermissionPolicyTestRun(t, workspace, FlowerPermissionFullAccess, "msg_execute_only_terminal")
+	r.sessionMeta.CanWrite = false
+	r.sessionMeta.CanExecute = true
+
+	outcome := runTerminalToolCall(t, r, "tool_execute_only_terminal", map[string]any{
+		"command": "printf 'must not run' > execute-only.txt",
+	}, false, false)
+
+	if outcome.Success {
+		t.Fatalf("terminal.exec must be denied without write permission")
+	}
+	if outcome.ToolError == nil || outcome.ToolError.Code != aitools.ErrorCodePermissionDenied || !strings.Contains(outcome.ToolError.Message, "write and execute permissions") {
+		t.Fatalf("tool error=%+v, want process permission denied", outcome.ToolError)
+	}
+	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
+		t.Fatalf("target file should not be created, statErr=%v", statErr)
+	}
+}
+
 func TestPermissionPolicy_ReadonlyStandardHostToolsFailClosed(t *testing.T) {
 	t.Parallel()
 

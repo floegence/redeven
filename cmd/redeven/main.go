@@ -130,7 +130,7 @@ func (c *cli) bootstrapCmd(args []string) int {
 	agentHomeDir := fs.String("agent-home-dir", "", "Runtime home dir used for filesystem-facing features (default: user home dir)")
 	shell := fs.String("shell", "", "Shell command (default: $SHELL or /bin/bash)")
 
-	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read|read_only|execute_read_write (empty: keep existing; default: execute_read_write)")
+	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read (no general shell/process)|read_only|execute_read_write (empty: keep existing; default: execute_read_write)")
 
 	logFormat := fs.String("log-format", "", "Log format: json|text (empty: default json)")
 	logLevel := fs.String("log-level", "", "Log level: debug|info|warn|error (empty: default info)")
@@ -219,7 +219,7 @@ func (c *cli) runCmd(args []string) int {
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
 	bootstrapTicket := fs.String("bootstrap-ticket", "", "One-time bootstrap ticket")
 	bootstrapTicketEnv := fs.String("bootstrap-ticket-env", "", "Environment variable name holding the bootstrap ticket")
-	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read|read_only|execute_read_write (optional; applies when bootstrapping)")
+	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read (no general shell/process)|read_only|execute_read_write (optional; applies when bootstrapping)")
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")
 	modeRaw := fs.String("mode", "remote", "Run mode: remote|hybrid|local|desktop")
 	localUIBindRaw := fs.String("local-ui-bind", localui.DefaultBind, "Local UI bind address (default: localhost:23998)")

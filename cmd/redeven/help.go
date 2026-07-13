@@ -169,7 +169,8 @@ Optional flags:
   --state-root <path>              State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --agent-home-dir <path>           Runtime home dir for filesystem-facing features.
   --shell <command>                 Shell command (default: $SHELL or /bin/bash).
-  --permission-policy <preset>      Local permission policy: execute_read, read_only, or execute_read_write.
+  --permission-policy <preset>      Local permission policy: execute_read (modeled execute actions, no shell/process),
+                                    read_only, or execute_read_write.
   --log-format <json|text>          Log format override.
   --log-level <debug|info|warn|error>
                                     Log level override.

@@ -30,6 +30,10 @@ export function PermissionPolicySection() {
   const [saving, setSaving] = createSignal(false);
   const [savedAt, setSavedAt] = createSignal<number | null>(null);
   const [error, setError] = createSignal<string | null>(null);
+  const localMaxDescription = () => [
+    i18n.t('permissionPolicy.localMaxDescription'),
+    localExecute() && !localWrite() ? i18n.t('terminal.executePermissionDescription') : '',
+  ].filter(Boolean).join(' ');
 
   createEffect(() => {
     const s = ctx.settings();
@@ -100,7 +104,7 @@ export function PermissionPolicySection() {
       <SettingRow
         icon={ShieldCheck}
         title="local_max"
-        description={i18n.t('permissionPolicy.localMaxDescription')}
+        description={localMaxDescription()}
         tone="warning"
         control={
           <PermissionDot

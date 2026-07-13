@@ -1,4 +1,13 @@
-export type PermissionKind = 'read' | 'write' | 'execute' | 'admin';
+export type PermissionKind = 'read' | 'write' | 'execute' | 'admin' | 'process';
+
+type ProcessLaunchPermissions = Readonly<{
+  can_write?: boolean;
+  can_execute?: boolean;
+}>;
+
+export function canLaunchProcess(permissions: ProcessLaunchPermissions | null | undefined): boolean {
+  return Boolean(permissions?.can_write && permissions?.can_execute);
+}
 
 export function getErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;

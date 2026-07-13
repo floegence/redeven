@@ -1664,7 +1664,7 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 		Shell:            "bash",
 		Service:          &Service{terminalProcesses: manager},
 		ThreadsDB:        store,
-		SessionMeta:      &session.Meta{CanRead: true, CanExecute: true},
+		SessionMeta:      &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 		PersistOpTimeout: 5 * time.Second,
 	})
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{

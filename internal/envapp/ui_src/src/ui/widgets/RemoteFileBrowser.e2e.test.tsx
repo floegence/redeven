@@ -1143,15 +1143,16 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function createEnvContext(options?: { canExecute?: boolean; viewMode?: EnvViewMode; settingsSeq?: () => number; bumpSettingsSeq?: () => void }): EnvContextValue {
+function createEnvContext(options?: { canWrite?: boolean; canExecute?: boolean; viewMode?: EnvViewMode; settingsSeq?: () => number; bumpSettingsSeq?: () => void }): EnvContextValue {
   return createEnvContextWithIdAccessor(() => 'env-1', options);
 }
 
-function createEnvContextWithIdAccessor(envId: () => string, options?: { canExecute?: boolean; viewMode?: EnvViewMode; settingsSeq?: () => number; bumpSettingsSeq?: () => void }): EnvContextValue {
+function createEnvContextWithIdAccessor(envId: () => string, options?: { canWrite?: boolean; canExecute?: boolean; viewMode?: EnvViewMode; settingsSeq?: () => number; bumpSettingsSeq?: () => void }): EnvContextValue {
+  const canWrite = options?.canWrite ?? true;
   const canExecute = options?.canExecute ?? true;
   const viewMode = options?.viewMode ?? 'activity';
   const envResource = Object.assign(
-    () => ({ permissions: { can_execute: canExecute } } as any),
+    () => ({ permissions: { can_write: canWrite, can_execute: canExecute } } as any),
     { state: 'ready' as const },
   ) as unknown as EnvContextValue['env'];
   return {
@@ -4379,7 +4380,7 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
-  it('hides Open in Terminal when execute permission is unavailable', async () => {
+  it('hides Open in Terminal when write permission is unavailable', async () => {
     widgetStateStore.values['widget-1'] = {
       lastPathByEnv: { 'env-1': '/workspace/repo/src' },
       pageModeByEnv: { 'env-1': 'files' },
@@ -4391,7 +4392,7 @@ describe('RemoteFileBrowser persistence', () => {
 
     const dispose = render(() => (
       <LayoutProvider>
-        <EnvContext.Provider value={createEnvContext({ canExecute: false })}>
+        <EnvContext.Provider value={createEnvContext({ canWrite: false, canExecute: true })}>
           <RemoteFileBrowser widgetId="widget-1" />
         </EnvContext.Provider>
       </LayoutProvider>
