@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/settings"
@@ -79,6 +80,116 @@ func TestDesktopModelSourceModelSnapshotFiltersMissingKeysAndUsesOpaqueIDs(t *te
 	if entry.ProviderID != "openai" || entry.ModelName != "gpt-5-mini" {
 		t.Fatalf("registry entry=%#v", entry)
 	}
+	capability := snapshot.Models[0].Capability
+	if capability == nil {
+		t.Fatalf("Capability=nil, want sanitized Desktop capability")
+	}
+	if capability.ProviderID != DesktopModelSourceProviderType || capability.ProviderType != DesktopModelSourceProviderType {
+		t.Fatalf("capability provider identity=(%q,%q), want Desktop model source", capability.ProviderID, capability.ProviderType)
+	}
+	if capability.ModelName != modelID || capability.WireModelName != modelID {
+		t.Fatalf("capability model identity=(%q,%q), want opaque model id %q", capability.ModelName, capability.WireModelName, modelID)
+	}
+}
+
+func TestDesktopModelSourceModelSnapshotPublishesSanitizedDeepSeekCapability(t *testing.T) {
+	t.Parallel()
+
+	secretStore := settings.NewSecretsStore(filepath.Join(t.TempDir(), "secrets.json"))
+	providerID := "prov_private_deepseek"
+	if err := secretStore.SetAIProviderAPIKey(providerID, "sk-local"); err != nil {
+		t.Fatalf("SetAIProviderAPIKey: %v", err)
+	}
+	baseURL := "https://private.deepseek.example/v1"
+	internalWireModel := "private-routing/deepseek-v4-pro"
+	snapshot, _, err := buildDesktopModelSourceModelSnapshot(&config.AIConfig{
+		CurrentModelID: providerID + "/deepseek-v4-pro",
+		Providers: []config.AIProvider{{
+			ID:      providerID,
+			Name:    "DeepSeek",
+			Type:    "deepseek",
+			BaseURL: baseURL,
+			Models: []config.AIProviderModel{{
+				ModelName:           "deepseek-v4-pro",
+				WireModelName:       internalWireModel,
+				ContextWindow:       1_000_000,
+				MaxOutputTokens:     384_000,
+				InputModalities:     []string{config.AIInputModalityText},
+				ReasoningCapability: config.AIReasoningCapabilityForModel("deepseek", "deepseek-v4-pro"),
+			}},
+		}},
+	}, secretStore)
+	if err != nil {
+		t.Fatalf("buildDesktopModelSourceModelSnapshot: %v", err)
+	}
+	if len(snapshot.Models) != 1 || snapshot.Models[0].Capability == nil {
+		t.Fatalf("Models=%#v, want one model with capability", snapshot.Models)
+	}
+	model := snapshot.Models[0]
+	capability := contextmodel.NormalizeCapability(*model.Capability)
+	if capability.ProviderID != DesktopModelSourceProviderType || capability.ProviderType != DesktopModelSourceProviderType {
+		t.Fatalf("capability provider identity=(%q,%q), want sanitized Desktop identity", capability.ProviderID, capability.ProviderType)
+	}
+	if capability.ModelName != model.ID || capability.WireModelName != model.ID {
+		t.Fatalf("capability model identity=(%q,%q), want opaque model id %q", capability.ModelName, capability.WireModelName, model.ID)
+	}
+	if capability.MaxContextTokens != 950_000 || capability.MaxOutputTokens != 384_000 {
+		t.Fatalf("capability limits=(%d,%d), want (950000,384000)", capability.MaxContextTokens, capability.MaxOutputTokens)
+	}
+	if capability.SupportsStrictJSONSchema || capability.PreferredToolSchemaMode != "relaxed_json" {
+		t.Fatalf("capability tool schema=(strict=%v, mode=%q), want relaxed", capability.SupportsStrictJSONSchema, capability.PreferredToolSchemaMode)
+	}
+	if capability.ReasoningCapability.DefaultLevel != "high" || !capability.ReasoningCapability.SupportsLevel(config.AIReasoningLevelMax) {
+		t.Fatalf("ReasoningCapability=%+v, want DeepSeek high/max", capability.ReasoningCapability)
+	}
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("Marshal snapshot: %v", err)
+	}
+	if strings.Contains(string(raw), providerID) ||
+		strings.Contains(string(raw), baseURL) ||
+		strings.Contains(string(raw), internalWireModel) ||
+		strings.Contains(string(raw), "sk-local") {
+		t.Fatalf("sanitized capability leaked provider configuration: %s", raw)
+	}
+}
+
+func TestDesktopModelSourceModelCapabilityFallsBackToLegacyV1Fields(t *testing.T) {
+	t.Parallel()
+
+	modelID := "desktop:model_legacy"
+	reasoning := config.AIReasoningCapabilityForModel("deepseek", "deepseek-v4-pro")
+	raw, err := json.Marshal(DesktopModelSourceModel{
+		ID:                            modelID,
+		ContextWindow:                 1_000_000,
+		MaxOutputTokens:               384_000,
+		EffectiveContextWindowPercent: 80,
+		InputModalities:               []string{config.AIInputModalityText, config.AIInputModalityImage},
+		ReasoningCapability:           reasoning,
+	})
+	if err != nil {
+		t.Fatalf("Marshal legacy model: %v", err)
+	}
+	var legacyModel DesktopModelSourceModel
+	if err := json.Unmarshal(raw, &legacyModel); err != nil {
+		t.Fatalf("Unmarshal legacy model: %v", err)
+	}
+	if legacyModel.Capability != nil {
+		t.Fatalf("Capability=%+v, want omitted v1 field", legacyModel.Capability)
+	}
+	capability := desktopModelSourceModelCapability(legacyModel)
+	if capability.MaxContextTokens != 800_000 || capability.MaxOutputTokens != 384_000 {
+		t.Fatalf("capability limits=(%d,%d), want legacy values", capability.MaxContextTokens, capability.MaxOutputTokens)
+	}
+	if !capability.SupportsImageInput {
+		t.Fatalf("SupportsImageInput=false, want true from legacy modalities")
+	}
+	if capability.ReasoningCapability.WireShape != reasoning.WireShape {
+		t.Fatalf("ReasoningCapability=%+v, want legacy reasoning capability", capability.ReasoningCapability)
+	}
+	if capability.ProviderID != DesktopModelSourceProviderType || capability.ModelName != modelID {
+		t.Fatalf("capability identity=%+v, want sanitized Desktop identity", capability)
+	}
 }
 
 func TestDesktopModelSourceModelSnapshotDoesNotFallbackToFirstModel(t *testing.T) {
@@ -129,15 +240,20 @@ func TestServiceListModelsUsesDesktopModelSourceWithoutRemoteConfig(t *testing.T
 				ExpiresAtUnixMS: time.Now().Add(time.Hour).UnixMilli(),
 			})
 		case "ai.models.list":
+			reasoning := config.AIReasoningCapabilityForModel("deepseek", "deepseek-v4-pro")
 			return testDesktopModelSourceResult(t, frame.ID, DesktopModelSourceModelSnapshot{
 				Configured:   true,
 				CurrentModel: modelID,
 				Models: []DesktopModelSourceModel{{
-					ID:                 modelID,
-					Label:              "OpenAI / gpt-5-mini",
-					Provider:           "OpenAI",
-					InputModalities:    []string{config.AIInputModalityText, config.AIInputModalityImage},
-					SupportsImageInput: true,
+					ID:                            modelID,
+					Label:                         "DeepSeek / deepseek-v4-pro",
+					Provider:                      "DeepSeek",
+					ContextWindow:                 1_000_000,
+					MaxOutputTokens:               384_000,
+					EffectiveContextWindowPercent: 95,
+					InputModalities:               []string{config.AIInputModalityText, config.AIInputModalityImage},
+					SupportsImageInput:            true,
+					ReasoningCapability:           reasoning,
 				}},
 			})
 		default:
@@ -170,12 +286,41 @@ func TestServiceListModelsUsesDesktopModelSourceWithoutRemoteConfig(t *testing.T
 	if !model.SupportsImageInput {
 		t.Fatalf("model.SupportsImageInput=false, want true")
 	}
+	if model.ContextWindow != 950_000 || model.MaxOutputTokens != 384_000 {
+		t.Fatalf("model limits=(%d,%d), want effective Desktop limits", model.ContextWindow, model.MaxOutputTokens)
+	}
+	if model.ReasoningCapability.DefaultLevel != "high" || !model.ReasoningCapability.SupportsLevel(config.AIReasoningLevelMax) {
+		t.Fatalf("ReasoningCapability=%+v, want DeepSeek high/max", model.ReasoningCapability)
+	}
 	if out.Runtime == nil || out.Runtime.RemoteConfigured {
 		t.Fatalf("Runtime=%#v, want model-source-only runtime status", out.Runtime)
 	}
 	if out.Runtime.DesktopModelSource == nil || !out.Runtime.DesktopModelSource.Connected {
 		t.Fatalf("DesktopModelSource=%#v, want connected", out.Runtime.DesktopModelSource)
 	}
+}
+
+func testDesktopModelSourceCapability(modelID string) *contextmodel.ModelCapability {
+	capability := contextmodel.ModelCapability{
+		ProviderID:                     DesktopModelSourceProviderType,
+		ProviderType:                   DesktopModelSourceProviderType,
+		ResolverVersion:                3,
+		ModelName:                      modelID,
+		WireModelName:                  modelID,
+		SupportsTools:                  true,
+		SupportsParallelTools:          false,
+		SupportsStrictJSONSchema:       false,
+		SupportsImageInput:             false,
+		SupportsFileInput:              false,
+		SupportsReasoningTokens:        true,
+		ReasoningCapability:            config.AIReasoningCapabilityForModel("deepseek", "deepseek-v4-pro"),
+		SupportsAskUserQuestionBatches: false,
+		MaxContextTokens:               950_000,
+		MaxOutputTokens:                384_000,
+		PreferredToolSchemaMode:        "relaxed_json",
+	}
+	capability = sanitizeDesktopModelSourceCapability(modelID, capability)
+	return &capability
 }
 
 func TestServiceListModelsDoesNotFallbackToFirstDesktopModel(t *testing.T) {

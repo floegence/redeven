@@ -90,8 +90,18 @@ export type FlowerModelSourceStatus = Readonly<{
   ready: boolean;
   label?: string;
   model_count?: number;
+  models?: readonly FlowerModelSourceModel[];
   missing_key_provider_ids?: readonly string[];
   last_error?: string;
+}>;
+
+export type FlowerModelSourceModel = Readonly<{
+  id: string;
+  label: string;
+  context_window?: number;
+  max_output_tokens?: number;
+  input_modalities?: readonly string[];
+  reasoning_capability?: FlowerReasoningCapability;
 }>;
 
 export type FlowerSettingsSnapshot = Readonly<{

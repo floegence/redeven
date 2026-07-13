@@ -50,6 +50,7 @@ type ModelsResponse = Readonly<{
   models?: readonly Readonly<{
     id?: string;
     label?: string;
+    source?: string;
     context_window?: number;
     max_output_tokens?: number;
     input_modalities?: readonly string[];
@@ -142,11 +143,25 @@ function mapDesktopModelSource(settings: AgentSettingsResponse, models?: ModelsR
   if (!source?.connected) return undefined;
   const modelCount = Number(source.model_count ?? models?.models?.length ?? 0);
   const currentModel = trim(models?.current_model);
+  const sourceModels = (models?.models ?? []).map((model) => {
+    const id = trim(model.id);
+    if (!id || (trim(model.source) !== 'desktop_model_source' && !id.startsWith('desktop:model_'))) return null;
+    const reasoningCapability = normalizeFlowerReasoningCapability(model.reasoning_capability);
+    return {
+      id,
+      label: trim(model.label) || id,
+      ...(positiveInteger(model.context_window) ? { context_window: positiveInteger(model.context_window) } : {}),
+      ...(positiveInteger(model.max_output_tokens) ? { max_output_tokens: positiveInteger(model.max_output_tokens) } : {}),
+      ...(Array.isArray(model.input_modalities) ? { input_modalities: model.input_modalities.map(trim).filter(Boolean) } : {}),
+      ...(reasoningCapability ? { reasoning_capability: reasoningCapability } : {}),
+    };
+  }).filter((model): model is NonNullable<typeof model> => model !== null);
   return {
     kind: 'desktop_model_source',
     ready: Boolean(source.available && currentModel && modelCount > 0),
     label: trim(source.model_source) || 'Local AI Profile',
     model_count: Number.isFinite(modelCount) && modelCount > 0 ? Math.floor(modelCount) : 0,
+    models: sourceModels,
     missing_key_provider_ids: (source.missing_key_provider_ids ?? []).map(trim).filter(Boolean),
     ...(trim(source.last_error) ? { last_error: trim(source.last_error) } : {}),
   };

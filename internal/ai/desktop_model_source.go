@@ -20,6 +20,8 @@ import (
 	"sync"
 	"time"
 
+	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
+	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/settings"
@@ -60,15 +62,16 @@ type AIRuntimeStatus struct {
 }
 
 type DesktopModelSourceModel struct {
-	ID                            string                       `json:"id"`
-	Label                         string                       `json:"label,omitempty"`
-	Provider                      string                       `json:"provider,omitempty"`
-	ContextWindow                 int                          `json:"context_window,omitempty"`
-	MaxOutputTokens               int                          `json:"max_output_tokens,omitempty"`
-	EffectiveContextWindowPercent int                          `json:"effective_context_window_percent,omitempty"`
-	InputModalities               []string                     `json:"input_modalities,omitempty"`
-	SupportsImageInput            bool                         `json:"supports_image_input,omitempty"`
-	ReasoningCapability           config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
+	ID                            string                        `json:"id"`
+	Label                         string                        `json:"label,omitempty"`
+	Provider                      string                        `json:"provider,omitempty"`
+	ContextWindow                 int                           `json:"context_window,omitempty"`
+	MaxOutputTokens               int                           `json:"max_output_tokens,omitempty"`
+	EffectiveContextWindowPercent int                           `json:"effective_context_window_percent,omitempty"`
+	InputModalities               []string                      `json:"input_modalities,omitempty"`
+	SupportsImageInput            bool                          `json:"supports_image_input,omitempty"`
+	ReasoningCapability           config.AIReasoningCapability  `json:"reasoning_capability,omitempty"`
+	Capability                    *contextmodel.ModelCapability `json:"capability,omitempty"`
 }
 
 type DesktopModelSourceModelSnapshot struct {
@@ -1099,6 +1102,7 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 	missing := map[string]struct{}{}
 	seen := map[string]struct{}{}
 	currentLocal := strings.TrimSpace(cfg.CurrentModelID)
+	capabilityResolver := contextadapter.NewResolver(nil)
 	for _, p := range cfg.Providers {
 		providerID := strings.TrimSpace(p.ID)
 		if providerID == "" {
@@ -1128,6 +1132,11 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 			}
 			seen[localID] = struct{}{}
 			publicID := desktopModelSourcePublicModelID(p, m)
+			capability, err := capabilityResolver.Resolve(context.Background(), p, localID)
+			if err != nil {
+				return nil, nil, err
+			}
+			capability = sanitizeDesktopModelSourceCapability(publicID, capability)
 			model := DesktopModelSourceModel{
 				ID:                            publicID,
 				Label:                         providerName + " / " + modelName,
@@ -1138,6 +1147,7 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 				InputModalities:               m.NormalizedInputModalities(),
 				SupportsImageInput:            m.SupportsImageInput(),
 				ReasoningCapability:           m.EffectiveReasoningCapability(strings.TrimSpace(p.Type)),
+				Capability:                    &capability,
 			}
 			out.Models = append(out.Models, model)
 			registry[publicID] = desktopModelSourceRegistryEntry{
@@ -1158,6 +1168,41 @@ func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *set
 	return out, registry, nil
 }
 
+func sanitizeDesktopModelSourceCapability(modelID string, capability contextmodel.ModelCapability) contextmodel.ModelCapability {
+	modelID = strings.TrimSpace(modelID)
+	capability = contextmodel.NormalizeCapability(capability)
+	capability.ProviderID = DesktopModelSourceProviderType
+	capability.ProviderType = DesktopModelSourceProviderType
+	capability.ModelName = modelID
+	capability.WireModelName = modelID
+	return contextmodel.NormalizeCapability(capability)
+}
+
+func desktopModelSourceModelCapability(model DesktopModelSourceModel) contextmodel.ModelCapability {
+	modelID := strings.TrimSpace(model.ID)
+	if model.Capability != nil {
+		return sanitizeDesktopModelSourceCapability(modelID, *model.Capability)
+	}
+
+	capability := defaultModelCapability(DesktopModelSourceProviderType, modelID, modelID)
+	legacyModel := config.AIProviderModel{
+		ContextWindow:                 model.ContextWindow,
+		MaxOutputTokens:               model.MaxOutputTokens,
+		EffectiveContextWindowPercent: model.EffectiveContextWindowPercent,
+		InputModalities:               append([]string(nil), model.InputModalities...),
+		ReasoningCapability:           model.ReasoningCapability,
+	}
+	if contextWindow := legacyModel.EffectiveInputWindowTokens(); contextWindow > 0 {
+		capability.MaxContextTokens = contextWindow
+	}
+	if model.MaxOutputTokens > 0 {
+		capability.MaxOutputTokens = model.MaxOutputTokens
+	}
+	capability.SupportsImageInput = model.SupportsImageInput || legacyModel.SupportsImageInput()
+	capability.ReasoningCapability = model.ReasoningCapability.Normalize()
+	return sanitizeDesktopModelSourceCapability(modelID, capability)
+}
+
 func desktopModelSourcePublicModelID(p config.AIProvider, m config.AIProviderModel) string {
 	sum := sha256.Sum256([]byte(strings.Join([]string{
 		strings.TrimSpace(p.ID),
@@ -1169,16 +1214,21 @@ func desktopModelSourcePublicModelID(p config.AIProvider, m config.AIProviderMod
 }
 
 func desktopModelSourceSnapshotHasModel(snapshot *DesktopModelSourceModelSnapshot, modelID string) bool {
+	_, ok := desktopModelSourceSnapshotModel(snapshot, modelID)
+	return ok
+}
+
+func desktopModelSourceSnapshotModel(snapshot *DesktopModelSourceModelSnapshot, modelID string) (DesktopModelSourceModel, bool) {
 	if snapshot == nil {
-		return false
+		return DesktopModelSourceModel{}, false
 	}
 	modelID = strings.TrimSpace(modelID)
-	for _, m := range snapshot.Models {
-		if strings.TrimSpace(m.ID) == modelID {
-			return true
+	for _, model := range snapshot.Models {
+		if strings.TrimSpace(model.ID) == modelID {
+			return model, true
 		}
 	}
-	return false
+	return DesktopModelSourceModel{}, false
 }
 
 func isDesktopModelSourceModelID(modelID string) bool {

@@ -136,31 +136,21 @@ func (s *Service) threadReasoningDefaults(ctx context.Context, modelID string) (
 	}
 	s.mu.Lock()
 	cfg := s.cfg
-	modelSource := s.desktopModelSource
 	s.mu.Unlock()
 	if capability, selection, ok := modelReasoningDefaultsFromConfig(cfg, modelID); ok {
 		return capability, selection, true
 	}
-	if isDesktopModelSourceModelID(modelID) && modelSource != nil {
-		checkCtx := ctx
-		if checkCtx == nil {
-			checkCtx = context.Background()
-		}
-		snapshot, err := modelSource.ListModels(checkCtx)
-		if err == nil && snapshot != nil {
-			for _, model := range snapshot.Models {
-				if strings.TrimSpace(model.ID) != modelID {
-					continue
-				}
-				capability := model.ReasoningCapability.Normalize()
-				if capability.IsZero() {
-					return capability, config.AIReasoningSelection{}, true
-				}
-				if strings.TrimSpace(capability.DefaultLevel) != "" {
-					return capability, config.AIReasoningSelection{Level: config.AIReasoningLevel(capability.DefaultLevel)}, true
-				}
+	if isDesktopModelSourceModelID(modelID) {
+		model, ok, err := s.desktopModelSourceModel(ctx, modelID)
+		if err == nil && ok {
+			capability := desktopModelSourceModelCapability(model).ReasoningCapability
+			if capability.IsZero() {
 				return capability, config.AIReasoningSelection{}, true
 			}
+			if strings.TrimSpace(capability.DefaultLevel) != "" {
+				return capability, config.AIReasoningSelection{Level: config.AIReasoningLevel(capability.DefaultLevel)}, true
+			}
+			return capability, config.AIReasoningSelection{}, true
 		}
 	}
 	return config.AIReasoningCapability{}, config.AIReasoningSelection{}, false

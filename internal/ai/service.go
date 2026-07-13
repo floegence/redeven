@@ -1138,15 +1138,17 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 				if label != "" {
 					label = "Desktop / " + label
 				}
+				capability := desktopModelSourceModelCapability(m)
 				model := Model{
-					ID:                 modelID,
-					Label:              label,
-					Source:             modelSourceDesktopModelSource,
-					SourceLabel:        modelSourceDesktopModelSourceLabel,
-					ContextWindow:      m.ContextWindow,
-					MaxOutputTokens:    m.MaxOutputTokens,
-					InputModalities:    append([]string(nil), m.InputModalities...),
-					SupportsImageInput: m.SupportsImageInput,
+					ID:                  modelID,
+					Label:               label,
+					Source:              modelSourceDesktopModelSource,
+					SourceLabel:         modelSourceDesktopModelSourceLabel,
+					ContextWindow:       capability.MaxContextTokens,
+					MaxOutputTokens:     capability.MaxOutputTokens,
+					InputModalities:     append([]string(nil), m.InputModalities...),
+					SupportsImageInput:  capability.SupportsImageInput,
+					ReasoningCapability: capability.ReasoningCapability,
 				}
 				if modelID == sourceCurrent && out.CurrentModel == sourceCurrent {
 					out.Models = append([]Model{model}, out.Models...)
@@ -1237,17 +1239,22 @@ func configModelView(id string, label string, providerType string, m config.AIPr
 }
 
 func (s *Service) desktopModelSourceModelAllowed(ctx context.Context, modelID string) (bool, error) {
+	_, ok, err := s.desktopModelSourceModel(ctx, modelID)
+	return ok, err
+}
+
+func (s *Service) desktopModelSourceModel(ctx context.Context, modelID string) (DesktopModelSourceModel, bool, error) {
 	if s == nil {
-		return false, ErrNotConfigured
+		return DesktopModelSourceModel{}, false, ErrNotConfigured
 	}
 	if !isDesktopModelSourceModelID(modelID) {
-		return false, nil
+		return DesktopModelSourceModel{}, false, nil
 	}
 	s.mu.Lock()
 	modelSource := s.desktopModelSource
 	s.mu.Unlock()
 	if modelSource == nil {
-		return false, nil
+		return DesktopModelSourceModel{}, false, nil
 	}
 	checkCtx := ctx
 	cancel := func() {}
@@ -1260,9 +1267,10 @@ func (s *Service) desktopModelSourceModelAllowed(ctx context.Context, modelID st
 	defer cancel()
 	snapshot, err := modelSource.ListModels(checkCtx)
 	if err != nil {
-		return false, err
+		return DesktopModelSourceModel{}, false, err
 	}
-	return desktopModelSourceSnapshotHasModel(snapshot, modelID), nil
+	model, ok := desktopModelSourceSnapshotModel(snapshot, modelID)
+	return model, ok, nil
 }
 
 func (s *Service) skills() (*skillManager, error) {
@@ -2155,12 +2163,13 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	}
 	providerID, modelName := "", ""
 	desktopModelSourceModelID := ""
+	var desktopModelSourceModel *DesktopModelSourceModel
 	var providerCfg config.AIProvider
 	if isDesktopModelSourceModelID(model) {
 		if s == nil {
 			return resolvedRunModel{}, ErrNotConfigured
 		}
-		allowed, err := s.desktopModelSourceModelAllowed(ctx, model)
+		resolvedDesktopModel, allowed, err := s.desktopModelSourceModel(ctx, model)
 		if err != nil {
 			return resolvedRunModel{}, err
 		}
@@ -2170,6 +2179,7 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 		providerID = DesktopModelSourceProviderType
 		modelName = model
 		desktopModelSourceModelID = model
+		desktopModelSourceModel = &resolvedDesktopModel
 		providerCfg = config.AIProvider{ID: providerID, Name: "Desktop", Type: DesktopModelSourceProviderType}
 	} else {
 		var ok bool
@@ -2199,7 +2209,9 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 	}
 
 	modelCapability := r.resolveRunModelCapability(model)
-	if s != nil && s.capabilityResolver != nil {
+	if desktopModelSourceModel != nil {
+		modelCapability = desktopModelSourceModelCapability(*desktopModelSourceModel)
+	} else if s != nil && s.capabilityResolver != nil {
 		if capability, capErr := s.capabilityResolver.Resolve(ctx, providerCfg, model); capErr == nil {
 			modelCapability = capability
 		} else if r != nil && r.log != nil {
