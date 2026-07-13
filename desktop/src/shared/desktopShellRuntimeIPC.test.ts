@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   desktopShellRuntimeMaintenanceMethodUsesDesktop,
   normalizeDesktopShellRuntimeMaintenanceContext,
+  normalizeDesktopShellRuntimeMaintenanceStartedNotification,
   normalizeDesktopShellRuntimeAction,
   normalizeDesktopShellRuntimeActionRequest,
   normalizeDesktopShellRuntimeActionResponse,
@@ -58,6 +59,13 @@ describe('desktopShellRuntimeIPC', () => {
         }],
       },
     });
+  });
+
+  it('normalizes runtime maintenance started notifications', () => {
+    expect(normalizeDesktopShellRuntimeMaintenanceStartedNotification({ kind: ' restart ' })).toEqual({ kind: 'restart' });
+    expect(normalizeDesktopShellRuntimeMaintenanceStartedNotification({ kind: 'UPDATE' })).toEqual({ kind: 'update' });
+    expect(normalizeDesktopShellRuntimeMaintenanceStartedNotification({ kind: 'start' })).toBeNull();
+    expect(normalizeDesktopShellRuntimeMaintenanceStartedNotification(null)).toBeNull();
   });
 
   it('rejects unsupported actions', () => {

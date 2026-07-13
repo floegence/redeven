@@ -108,6 +108,7 @@ import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellC
 import {
   desktopShellBridgeAvailable,
   getRuntimeMaintenanceContextFromDesktopShell,
+  notifyRuntimeMaintenanceStartedInDesktopShell,
   openConnectionCenter,
   openDashboardInDesktopShell,
   performRuntimeMaintenanceActionInDesktopShell,
@@ -1630,6 +1631,9 @@ export function EnvAppShell() {
     rpc,
     startRestartRequest: startRuntimeRestart,
     startUpgradeRequest: startRuntimeUpgrade,
+    onMaintenanceStarted: (kind) => {
+      notifyRuntimeMaintenanceStartedInDesktopShell(kind === 'upgrade' ? 'update' : 'restart');
+    },
     upgradeRequiresTargetVersion,
     refetchCurrentVersion: agentVersionModel.refetchCurrentVersion,
     refetchEnvironment: async () => {

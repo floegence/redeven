@@ -7,6 +7,7 @@ import {
   buildProviderEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
   controlPlaneDesktopSessionKey,
+  desktopSessionTargetsReferToSameEnvironment,
   desktopSessionStateKeyFragment,
   externalLocalUIDesktopSessionKey,
   gatewayDesktopSessionKey,
@@ -14,6 +15,7 @@ import {
 } from './desktopTarget';
 import {
   testLocalEnvironment,
+  testProviderBoundLocalEnvironment,
   testProviderEnvironment,
 } from '../testSupport/desktopTestHelpers';
 import { desktopSSHEnvironmentID } from '../shared/desktopSSH';
@@ -149,5 +151,35 @@ describe('desktopTarget', () => {
       gateway_env_id: 'env/demo',
       gateway_session_id: 'gws_123',
     });
+  });
+
+  it('matches every Desktop session that represents the same Environment', () => {
+    const providerEnvironment = testProviderEnvironment('https://redeven.test', 'env_demo');
+    const providerTarget = buildProviderEnvironmentDesktopTarget(providerEnvironment);
+    const linkedLocalTarget = buildLocalEnvironmentDesktopTarget(testProviderBoundLocalEnvironment(
+      'https://redeven.test',
+      'env_demo',
+    ), { route: 'local_host' });
+    expect(desktopSessionTargetsReferToSameEnvironment(providerTarget, linkedLocalTarget)).toBe(true);
+
+    const gatewayTargetA = buildGatewayDesktopTarget({
+      gatewayID: 'gateway-a',
+      gatewayEnvID: 'env-a',
+      gatewaySessionID: 'session-a',
+    });
+    const gatewayTargetB = buildGatewayDesktopTarget({
+      gatewayID: 'gateway-a',
+      gatewayEnvID: 'env-a',
+      gatewaySessionID: 'session-b',
+    });
+    expect(desktopSessionTargetsReferToSameEnvironment(gatewayTargetA, gatewayTargetB)).toBe(true);
+    expect(desktopSessionTargetsReferToSameEnvironment(
+      gatewayTargetA,
+      buildGatewayDesktopTarget({
+        gatewayID: 'gateway-a',
+        gatewayEnvID: 'env-b',
+        gatewaySessionID: 'session-c',
+      }),
+    )).toBe(false);
   });
 });

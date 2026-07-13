@@ -9,6 +9,7 @@ import {
   desktopShellBridgeAvailable,
   getRuntimeMaintenanceContextFromDesktopShell,
   minimizeDesktopWindow,
+  notifyRuntimeMaintenanceStartedInDesktopShell,
   openAdvancedSettings,
   openConnectionCenter,
   openCodespaceWindowInDesktopShell,
@@ -220,6 +221,19 @@ describe('desktopShellBridge', () => {
       message: 'Desktop restarted the SSH runtime.',
     });
     expect(performRuntimeMaintenanceActionBridge).toHaveBeenCalledWith({ action: 'restart' });
+  });
+
+  it('notifies Desktop when Runtime-owned maintenance has started', () => {
+    const notifyRuntimeMaintenanceStarted = vi.fn();
+    window.redevenDesktopShell = {
+      notifyRuntimeMaintenanceStarted,
+    };
+
+    notifyRuntimeMaintenanceStartedInDesktopShell('restart');
+    notifyRuntimeMaintenanceStartedInDesktopShell('update');
+
+    expect(notifyRuntimeMaintenanceStarted).toHaveBeenNthCalledWith(1, 'restart');
+    expect(notifyRuntimeMaintenanceStarted).toHaveBeenNthCalledWith(2, 'update');
   });
 
   it('forwards external browser requests when the desktop bridge exposes them', async () => {

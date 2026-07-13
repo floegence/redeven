@@ -47,6 +47,7 @@ export interface DesktopShellBridge {
   openCodespaceWindow?: (request: DesktopShellCodespaceWindowOpenRequest) => Promise<DesktopShellCodespaceWindowOpenResult>;
   openDashboard?: () => Promise<DesktopShellExternalURLOpenResult>;
   getRuntimeMaintenanceContext?: () => Promise<DesktopShellRuntimeMaintenanceContext>;
+  notifyRuntimeMaintenanceStarted?: (kind: 'restart' | 'update') => void;
   performRuntimeMaintenanceAction?: (request: unknown) => Promise<DesktopManagedRuntimeRestartResult>;
   restartManagedRuntime?: () => Promise<DesktopManagedRuntimeRestartResult>;
   manageDesktopUpdate?: () => Promise<DesktopManagedRuntimeRestartResult>;
@@ -79,6 +80,7 @@ function desktopShellBridge(): DesktopShellBridge | null {
       && typeof candidate.openCodespaceWindow !== 'function'
       && typeof candidate.openDashboard !== 'function'
       && typeof candidate.getRuntimeMaintenanceContext !== 'function'
+      && typeof candidate.notifyRuntimeMaintenanceStarted !== 'function'
       && typeof candidate.performRuntimeMaintenanceAction !== 'function'
       && typeof candidate.restartManagedRuntime !== 'function'
       && typeof candidate.manageDesktopUpdate !== 'function'
@@ -230,6 +232,11 @@ export async function getRuntimeMaintenanceContextFromDesktopShell(): Promise<De
     return null;
   }
   return normalizeDesktopShellRuntimeMaintenanceContext(await bridge.getRuntimeMaintenanceContext());
+}
+
+export function notifyRuntimeMaintenanceStartedInDesktopShell(kind: 'restart' | 'update'): void {
+  const bridge = desktopShellBridge();
+  bridge?.notifyRuntimeMaintenanceStarted?.(kind);
 }
 
 export async function performRuntimeMaintenanceActionInDesktopShell(

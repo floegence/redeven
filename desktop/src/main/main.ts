@@ -63,6 +63,7 @@ import {
   buildExternalLocalUIDesktopTarget,
   buildProviderEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
+  desktopSessionTargetsReferToSameEnvironment,
   desktopSessionStateKeyFragment,
   externalLocalUIDesktopSessionKey,
   sshDesktopSessionKey,
@@ -319,7 +320,9 @@ import {
 } from '../shared/desktopShellWindowCommandIPC';
 import {
   DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL,
+  DESKTOP_SHELL_RUNTIME_MAINTENANCE_STARTED_CHANNEL,
   DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL,
+  normalizeDesktopShellRuntimeMaintenanceStartedNotification,
   normalizeDesktopShellRuntimeActionRequest,
   type DesktopShellRuntimeMaintenanceActionPlan,
   type DesktopShellRuntimeMaintenanceContext,
@@ -4840,6 +4843,16 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
   });
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
   try {
+    if (request.operation !== 'start') {
+      await closeEnvironmentSessionsForRuntimeLifecycle({
+        operation: request.operation === 'update_runtime' ? 'update' : request.operation,
+        scope: {
+          kind: 'gateway_environment',
+          gateway_id: record.gateway_id,
+          gateway_env_id: request.gateway_env_id,
+        },
+      });
+    }
     const response = await gatewayLifecycleManager().runEnvironmentLifecycle(record, {
       gateway_env_id: request.gateway_env_id,
       operation: request.operation,
@@ -6454,6 +6467,185 @@ function liveGatewayEnvironmentSessions(gatewayID: string, gatewayEnvID: string)
   return matches;
 }
 
+type RuntimeLifecycleWindowOperation = 'stop' | 'restart' | 'update';
+
+type RuntimeLifecycleSessionScope = Readonly<
+  | { kind: 'session_key'; session_key: DesktopSessionKey }
+  | { kind: 'session_target'; target: DesktopSessionTarget }
+  | { kind: 'gateway_environment'; gateway_id: string; gateway_env_id: string }
+>;
+
+const runtimeLifecycleGenerationByIdentity = new Map<string, number>();
+
+function runtimeLifecycleIdentityKey(parts: readonly string[]): string {
+  return JSON.stringify(parts.map((part) => compact(part)));
+}
+
+function runtimeLifecycleIdentityKeysForTarget(target: DesktopSessionTarget): readonly string[] {
+  const keys = [runtimeLifecycleIdentityKey(['session', target.session_key])];
+  switch (target.kind) {
+    case 'local_environment':
+      keys.push(runtimeLifecycleIdentityKey(['local_environment', target.environment_id]));
+      if (target.provider_origin && target.provider_id && target.env_public_id) {
+        keys.push(runtimeLifecycleIdentityKey([
+          'provider_environment',
+          target.provider_origin,
+          target.provider_id,
+          target.env_public_id,
+        ]));
+      }
+      break;
+    case 'external_local_ui':
+      keys.push(runtimeLifecycleIdentityKey(['external_local_ui', target.environment_id]));
+      break;
+    case 'gateway_environment':
+      keys.push(runtimeLifecycleIdentityKey(['gateway_environment', target.gateway_id, target.gateway_env_id]));
+      break;
+    case 'ssh_environment':
+      break;
+  }
+  return keys;
+}
+
+function runtimeLifecycleIdentityKeysForScope(scope: RuntimeLifecycleSessionScope): readonly string[] {
+  switch (scope.kind) {
+    case 'session_key':
+      return [runtimeLifecycleIdentityKey(['session', scope.session_key])];
+    case 'session_target':
+      return runtimeLifecycleIdentityKeysForTarget(scope.target);
+    case 'gateway_environment':
+      return [runtimeLifecycleIdentityKey(['gateway_environment', scope.gateway_id, scope.gateway_env_id])];
+  }
+}
+
+function runtimeLifecycleGenerationSnapshot(identityKeys: readonly string[]): string {
+  return [...new Set(identityKeys)]
+    .sort()
+    .map((identityKey) => `${identityKey}:${runtimeLifecycleGenerationByIdentity.get(identityKey) ?? 0}`)
+    .join('|');
+}
+
+function runtimeLifecycleGenerationSnapshotForTarget(target: DesktopSessionTarget): string {
+  return runtimeLifecycleGenerationSnapshot(runtimeLifecycleIdentityKeysForTarget(target));
+}
+
+function markRuntimeLifecycleAccepted(scope: RuntimeLifecycleSessionScope): void {
+  for (const identityKey of new Set(runtimeLifecycleIdentityKeysForScope(scope))) {
+    runtimeLifecycleGenerationByIdentity.set(
+      identityKey,
+      (runtimeLifecycleGenerationByIdentity.get(identityKey) ?? 0) + 1,
+    );
+  }
+}
+
+function runtimeLifecycleSessionMatchesScope(
+  sessionRecord: DesktopSessionRecord,
+  scope: RuntimeLifecycleSessionScope,
+): boolean {
+  switch (scope.kind) {
+    case 'session_key':
+      return sessionRecord.session_key === scope.session_key;
+    case 'session_target':
+      return desktopSessionTargetsReferToSameEnvironment(sessionRecord.target, scope.target);
+    case 'gateway_environment':
+      return sessionRecord.target.kind === 'gateway_environment'
+        && sessionRecord.target.gateway_id === compact(scope.gateway_id)
+        && sessionRecord.target.gateway_env_id === compact(scope.gateway_env_id);
+  }
+}
+
+function runtimeLifecycleScopeMatchesLauncherOpen(
+  snapshot: DesktopLauncherOperationSnapshot,
+  scope: RuntimeLifecycleSessionScope,
+): boolean {
+  if (
+    !snapshot.open_progress
+    || (snapshot.status !== 'running' && snapshot.status !== 'canceling')
+  ) {
+    return false;
+  }
+  const targetID = compact(snapshot.open_progress.target_id);
+  const environmentID = compact(snapshot.environment_id ?? snapshot.open_progress.environment_id);
+  switch (scope.kind) {
+    case 'session_key':
+      return targetID === scope.session_key
+        || compact(snapshot.subject_id) === scope.session_key
+        || snapshot.operation_key.startsWith(`${scope.session_key}:open`);
+    case 'gateway_environment': {
+      const gatewayTargetID = `gateway:${encodeURIComponent(compact(scope.gateway_id))}:env:${encodeURIComponent(compact(scope.gateway_env_id))}`;
+      return targetID === gatewayTargetID || targetID.startsWith(`${gatewayTargetID}:session:`);
+    }
+    case 'session_target':
+      if (targetID === scope.target.session_key || compact(snapshot.subject_id) === scope.target.session_key) {
+        return true;
+      }
+      switch (scope.target.kind) {
+        case 'local_environment':
+          return environmentID === compact(scope.target.environment_id) || (
+            !!scope.target.provider_origin
+            && !!scope.target.env_public_id
+            && environmentID === desktopProviderEnvironmentID(
+              scope.target.provider_origin,
+              scope.target.env_public_id,
+            )
+          );
+        case 'external_local_ui':
+          return environmentID === compact(scope.target.environment_id);
+        case 'ssh_environment':
+          return targetID === scope.target.session_key;
+        case 'gateway_environment': {
+          const gatewayTargetID = `gateway:${encodeURIComponent(scope.target.gateway_id)}:env:${encodeURIComponent(scope.target.gateway_env_id)}`;
+          return targetID === gatewayTargetID || targetID.startsWith(`${gatewayTargetID}:session:`);
+        }
+      }
+  }
+}
+
+function cancelLauncherOpensForRuntimeLifecycle(scope: RuntimeLifecycleSessionScope): void {
+  for (const snapshot of launcherOperations.operations()) {
+    if (runtimeLifecycleScopeMatchesLauncherOpen(snapshot, scope)) {
+      launcherOperations.cancel(
+        snapshot.operation_key,
+        'Desktop is canceling this Environment Open because Runtime maintenance has started.',
+      );
+    }
+  }
+}
+
+async function closeEnvironmentSessionsForRuntimeLifecycle(input: Readonly<{
+  operation: RuntimeLifecycleWindowOperation;
+  scope: RuntimeLifecycleSessionScope;
+}>): Promise<void> {
+  markRuntimeLifecycleAccepted(input.scope);
+  cancelLauncherOpensForRuntimeLifecycle(input.scope);
+  const closeMatchingSessions = async (): Promise<void> => {
+    const sessionKeys = [...sessionsByKey.values()]
+      .filter((sessionRecord) => !sessionRecord.closing && runtimeLifecycleSessionMatchesScope(sessionRecord, input.scope))
+      .map((sessionRecord) => sessionRecord.session_key);
+    for (const sessionKey of sessionKeys) {
+      await finalizeSessionClosure(sessionKey, { reason: `runtime_${input.operation}` });
+    }
+  };
+  await closeMatchingSessions();
+  await Promise.resolve();
+  await closeMatchingSessions();
+}
+
+async function handoffSessionToRuntimeLifecycle(input: Readonly<{
+  operation: Exclude<RuntimeLifecycleWindowOperation, 'stop'>;
+  sessionTarget: DesktopSessionTarget;
+}>): Promise<void> {
+  await openDesktopWelcomeWindow({
+    entryReason: 'switch_environment',
+    selectedEnvironmentID: input.sessionTarget.environment_id,
+    stealAppFocus: true,
+  });
+  await closeEnvironmentSessionsForRuntimeLifecycle({
+    operation: input.operation,
+    scope: { kind: 'session_target', target: input.sessionTarget },
+  });
+}
+
 function focusUtilityWindow(kind: DesktopUtilityWindowKind, options?: Readonly<{ stealAppFocus?: boolean }>): boolean {
   const win = liveUtilityWindow(kind);
   if (!win) {
@@ -7440,8 +7632,21 @@ async function createSessionRecord(
     stealAppFocus?: boolean;
     desktopModelSourceSettled?: boolean;
     openStartedAtUnixMS?: number;
+    runtimeLifecycleGenerationIdentityKeys?: readonly string[];
+    runtimeLifecycleGenerationSnapshot?: string;
   }> = {},
 ): Promise<DesktopSessionRecord> {
+  const assertRuntimeLifecycleGenerationUnchanged = (): void => {
+    if (
+      options.runtimeLifecycleGenerationSnapshot !== undefined
+      && runtimeLifecycleGenerationSnapshot(
+        options.runtimeLifecycleGenerationIdentityKeys ?? runtimeLifecycleIdentityKeysForTarget(target),
+      ) !== options.runtimeLifecycleGenerationSnapshot
+    ) {
+      throw new Error('Desktop canceled this Environment Open because Runtime maintenance started.');
+    }
+  };
+  assertRuntimeLifecycleGenerationUnchanged();
   const diagnostics = new DesktopDiagnosticsRecorder();
   await diagnostics.configureRuntime(startup, startup.local_ui_url, {
     stateDirOverride: desktopDiagnosticsStateDirForTarget(target, startup),
@@ -7452,6 +7657,7 @@ async function createSessionRecord(
   const sessionPartition = desktopSessionPartitionForTarget(target);
   const initialLoad = createInitialLoadDeferred();
   let sessionRecord!: DesktopSessionRecord;
+  assertRuntimeLifecycleGenerationUnchanged();
   const rootWindow = createSessionRootWindow(target.session_key, entryURL, diagnostics, {
     stealAppFocus: options.stealAppFocus,
     sessionPartition,
@@ -7546,7 +7752,10 @@ async function createSessionRecord(
 
 async function finalizeSessionClosure(
   sessionKey: DesktopSessionKey,
-  options: Readonly<{ closeWindows?: boolean }> = {},
+  options: Readonly<{
+    closeWindows?: boolean;
+    reason?: 'runtime_stop' | 'runtime_restart' | 'runtime_update';
+  }> = {},
 ): Promise<void> {
   const existingTask = sessionCloseTasks.get(sessionKey);
   if (existingTask) {
@@ -7608,6 +7817,7 @@ async function finalizeSessionClosure(
       {
         session_key: sessionRecord.session_key,
         target_kind: sessionRecord.target.kind,
+        reason: options.reason ?? 'window_closed',
       },
     );
 
@@ -11049,6 +11259,7 @@ async function openLocalEnvironmentRecord(
   }> = {},
 ): Promise<DesktopLauncherActionResult> {
   const target = buildLocalEnvironmentDesktopTarget(environment, { route: 'local_host' });
+  const runtimeLifecycleGeneration = runtimeLifecycleGenerationSnapshotForTarget(target);
   const sessionKey = target.session_key;
   const existingSession = liveSession(sessionKey);
   if (existingSession) {
@@ -11180,6 +11391,7 @@ async function openLocalEnvironmentRecord(
       runtimeHandle: runtimeRecord.runtime_handle,
       attached: runtimeRecord.runtime_handle.launch_mode === 'attached',
       stealAppFocus: options.stealAppFocus !== false,
+      runtimeLifecycleGenerationSnapshot: runtimeLifecycleGeneration,
     });
     await waitForSessionInitialLoad(sessionRecord);
   } catch (error) {
@@ -11304,6 +11516,13 @@ async function openGatewayEnvironmentFromLauncher(
     );
   }
   const operationTargetID = `gateway:${encodeURIComponent(record.gateway_id)}:env:${encodeURIComponent(request.gateway_env_id)}`;
+  const runtimeLifecycleScope = {
+    kind: 'gateway_environment',
+    gateway_id: record.gateway_id,
+    gateway_env_id: request.gateway_env_id,
+  } as const;
+  const runtimeLifecycleGenerationIdentityKeys = runtimeLifecycleIdentityKeysForScope(runtimeLifecycleScope);
+  const runtimeLifecycleGeneration = runtimeLifecycleGenerationSnapshot(runtimeLifecycleGenerationIdentityKeys);
   const clientNonce = crypto.randomBytes(24).toString('base64url');
   const operationKey = `${operationTargetID}:open:${clientNonce}`;
   const operation = launcherOperations.create({
@@ -11411,6 +11630,8 @@ async function openGatewayEnvironmentFromLauncher(
     });
     const sessionRecord = await createSessionRecord(openTarget, startup, {
       stealAppFocus: true,
+      runtimeLifecycleGenerationIdentityKeys,
+      runtimeLifecycleGenerationSnapshot: runtimeLifecycleGeneration,
     });
     await waitForSessionInitialLoad(sessionRecord);
     resetLauncherIssueState();
@@ -11564,6 +11785,7 @@ async function openProviderRemoteEnvironmentRecord(
   }>,
 ): Promise<DesktopLauncherActionResult> {
   const target = buildProviderEnvironmentDesktopTarget(environment, { route: 'remote_desktop' });
+  const runtimeLifecycleGeneration = runtimeLifecycleGenerationSnapshotForTarget(target);
   const existingSession = liveSession(target.session_key);
   if (existingSession) {
     if (existingSession.lifecycle === 'opening') {
@@ -11633,7 +11855,10 @@ async function openProviderRemoteEnvironmentRecord(
     const sessionRecord = await createSessionRecord(
       target,
       remoteManagedSessionStartup(args.remoteSessionURL),
-      { stealAppFocus: args.stealAppFocus !== false },
+      {
+        stealAppFocus: args.stealAppFocus !== false,
+        runtimeLifecycleGenerationSnapshot: runtimeLifecycleGeneration,
+      },
     );
     await waitForSessionInitialLoad(sessionRecord);
   } catch (error) {
@@ -12026,6 +12251,12 @@ async function openSSHEnvironmentFromLauncher(
     connect_timeout_seconds: request.connect_timeout_seconds,
   });
   const optimisticSessionKey = sshDesktopSessionKey(sshDetails);
+  const runtimeLifecycleScope = {
+    kind: 'session_key',
+    session_key: optimisticSessionKey,
+  } as const;
+  const runtimeLifecycleGenerationIdentityKeys = runtimeLifecycleIdentityKeysForScope(runtimeLifecycleScope);
+  const runtimeLifecycleGeneration = runtimeLifecycleGenerationSnapshot(runtimeLifecycleGenerationIdentityKeys);
   const optimisticSession = liveSession(optimisticSessionKey);
   if (optimisticSession) {
     if (optimisticSession.lifecycle === 'opening') {
@@ -12307,6 +12538,8 @@ async function openSSHEnvironmentFromLauncher(
       stealAppFocus: true,
       desktopModelSourceSettled: desktopModelSourceTask === null,
       openStartedAtUnixMS: openRequestReceivedAtUnixMS,
+      runtimeLifecycleGenerationIdentityKeys,
+      runtimeLifecycleGenerationSnapshot: runtimeLifecycleGeneration,
     });
     if (desktopModelSourceTask) {
       await desktopModelSourceTask;
@@ -12628,10 +12861,13 @@ async function stopRuntimePlacementLiveDaemonForReplacement(input: Readonly<{
     detail: input.stopDetail,
   });
 
-  const liveRuntimeSession = liveSession(desktopSessionKeyFromRuntimeTargetID(input.liveDaemon.target_id));
-  if (liveRuntimeSession) {
-    await finalizeSessionClosure(liveRuntimeSession.session_key);
-  }
+  await closeEnvironmentSessionsForRuntimeLifecycle({
+    operation: input.operation === 'update' ? 'update' : 'restart',
+    scope: {
+      kind: 'session_key',
+      session_key: desktopSessionKeyFromRuntimeTargetID(input.liveDaemon.target_id),
+    },
+  });
   const bridgeRecord = runtimePlacementBridgeByTargetID.get(input.liveDaemon.target_id) ?? null;
   runtimePlacementBridgeByTargetID.delete(input.liveDaemon.target_id);
   await bridgeRecord?.desktop_model_source?.stop().catch(() => undefined);
@@ -12707,6 +12943,13 @@ async function ensureRuntimePlacementReadyRecordFromLauncher(
     if (pendingOpen) {
       launcherOperations.cancel(`${targetID}:open`, 'Desktop is canceling the open request before replacing the container runtime.');
       await pendingOpen.catch(() => undefined);
+      await closeEnvironmentSessionsForRuntimeLifecycle({
+        operation: lifecycleOperation === 'update' ? 'update' : 'restart',
+        scope: {
+          kind: 'session_key',
+          session_key: desktopSessionKeyFromRuntimeTargetID(targetID),
+        },
+      });
     }
   }
 
@@ -13034,6 +13277,12 @@ async function openRuntimePlacementBridgeFromLauncher(
     }
     const environmentID = runtimeTargetEnvironmentIDFromRequest(request);
     const label = runtimeTargetLabelFromRequest(request);
+    const runtimeLifecycleScope = {
+      kind: 'session_key',
+      session_key: desktopSessionKeyFromRuntimeTargetID(targetID),
+    } as const;
+    const runtimeLifecycleGenerationIdentityKeys = runtimeLifecycleIdentityKeysForScope(runtimeLifecycleScope);
+    const runtimeLifecycleGeneration = runtimeLifecycleGenerationSnapshot(runtimeLifecycleGenerationIdentityKeys);
     const activeRuntimeOperation = launcherOperations.get(targetID);
     if (
       activeRuntimeOperation
@@ -13243,6 +13492,8 @@ async function openRuntimePlacementBridgeFromLauncher(
       sessionRecord = await createSessionRecord(openTarget, record.startup, {
         runtimeHandle: record.runtime_handle,
         stealAppFocus: true,
+        runtimeLifecycleGenerationIdentityKeys,
+        runtimeLifecycleGenerationSnapshot: runtimeLifecycleGeneration,
       });
       await waitForSessionInitialLoad(sessionRecord);
     } catch (error) {
@@ -13326,6 +13577,15 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
   const requestedPlacement = runtimePlacementFromRequest(request);
   if (requestedPlacement.kind === 'container_process') {
     try {
+      if (lifecycleOperation === 'restart' || lifecycleOperation === 'update') {
+        await closeEnvironmentSessionsForRuntimeLifecycle({
+          operation: lifecycleOperation,
+          scope: {
+            kind: 'session_key',
+            session_key: desktopSessionKeyFromRuntimeTargetID(runtimeTargetIDFromRequest(request)),
+          },
+        });
+      }
       const runtimeRecord = await ensureRuntimePlacementReadyRecordFromLauncher(request);
       resetLauncherIssueState();
       await persistDesktopPreferences(markSavedRuntimeTargetUsed(preferences, {
@@ -13347,6 +13607,12 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
   const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);
   if (normalizedSSHTarget) {
     try {
+      if (lifecycleOperation === 'restart' || lifecycleOperation === 'update') {
+        await closeEnvironmentSessionsForRuntimeLifecycle({
+          operation: lifecycleOperation,
+          scope: { kind: 'session_key', session_key: sshDesktopSessionKey(normalizedSSHTarget) },
+        });
+      }
       const runtimeRecord = await startSSHEnvironmentRuntimeRecord(normalizedSSHTarget, {
         environmentID: request.environment_id,
         label: request.label,
@@ -13396,6 +13662,15 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
   }
 
   try {
+    if (lifecycleOperation === 'restart' || lifecycleOperation === 'update') {
+      await closeEnvironmentSessionsForRuntimeLifecycle({
+        operation: lifecycleOperation,
+        scope: {
+          kind: 'session_target',
+          target: buildLocalEnvironmentDesktopTarget(environment, { route: 'local_host' }),
+        },
+      });
+    }
     const record = await startLocalHostRuntimeWithLifecycleProgress({
       environment,
       action: request.kind,
@@ -13429,6 +13704,7 @@ async function startLocalHostRuntimeWithLifecycleProgress(input: Readonly<{
   environment: DesktopLocalEnvironmentState;
   action: Extract<DesktopLauncherActionKind, 'start_environment_runtime' | 'restart_environment_runtime' | 'update_environment_runtime'>;
   forceRuntimeUpdate?: boolean;
+  localUIBind?: string;
   presentationContext?: DesktopLauncherOperationSnapshot['presentation_context'];
 }>): Promise<LocalEnvironmentRuntimeRecord> {
   const environment = input.environment;
@@ -13547,6 +13823,7 @@ async function startLocalHostRuntimeWithLifecycleProgress(input: Readonly<{
       }
       const prepared = await prepareManagedTarget({
         environment,
+        localUIBind: input.localUIBind,
         forceRuntimeUpdate: input.forceRuntimeUpdate === true,
         onProgress: (progress: ManagedRuntimeProgress) => {
           updateRuntimeLifecycleOperation(operationKey, lifecycleAttemptOwner, {
@@ -14107,6 +14384,13 @@ async function stopEnvironmentRuntimeFromLauncher(
       lifecycleOperation,
     );
     try {
+      await closeEnvironmentSessionsForRuntimeLifecycle({
+        operation: 'stop',
+        scope: {
+          kind: 'session_key',
+          session_key: desktopSessionKeyFromRuntimeTargetID(targetID),
+        },
+      });
       updateRuntimeLifecycleOperation(targetID, lifecycleAttemptOwner, {
         hostAccess,
         placement: runtimePlacement,
@@ -14117,10 +14401,6 @@ async function stopEnvironmentRuntimeFromLauncher(
         title: 'Stopping runtime process',
         detail: 'Desktop is stopping the runtime daemon inside this container.',
       });
-      const liveRuntimeSession = liveSession(desktopSessionKeyFromRuntimeTargetID(targetID));
-      if (liveRuntimeSession) {
-        await finalizeSessionClosure(liveRuntimeSession.session_key);
-      }
       await runtimeRecord?.desktop_model_source?.stop().catch(() => undefined);
       await runtimeRecord?.session.disconnect().catch(() => undefined);
       const binaryPath = readyRecord?.runtime_binary_path ?? runtimeRecord?.runtime_binary_path ?? 'redeven';
@@ -14256,22 +14536,10 @@ async function stopEnvironmentRuntimeFromLauncher(
       broadcastDesktopWelcomeSnapshots();
       return launcherActionSuccess('canceled_launcher_operation');
     }
-    const runtimeRecord = await verifySSHEnvironmentRuntimeRecord(runtimeKey);
-    if (!runtimeRecord) {
-      await refreshWelcomeRuntimeHealthForEnvironment(request.environment_id ?? runtimeKey);
-    }
-    const readyRecord = sshRuntimeReadyByKey.get(runtimeKey) ?? null;
-    if (!runtimeRecord && !readyRecord) {
-      return launcherActionFailure(
-        'action_invalid',
-        'environment',
-        'The runtime is not currently running.',
-        {
-          environmentID: request.environment_id,
-        },
-      );
-    }
-    const label = runtimeRecord?.label ?? readyRecord?.label ?? request.label ?? defaultSavedSSHEnvironmentLabel(sshDetails);
+    const label = sshEnvironmentRuntimeByKey.get(runtimeKey)?.label
+      ?? sshRuntimeReadyByKey.get(runtimeKey)?.label
+      ?? request.label
+      ?? defaultSavedSSHEnvironmentLabel(sshDetails);
     const hostAccess: DesktopRuntimeHostAccess = { kind: 'ssh_host', ssh: sshDetails };
     const hostPlacement: DesktopRuntimePlacement = { kind: 'host_process', runtime_root: sshDetails.runtime_root };
     const operation = launcherOperations.create({
@@ -14310,6 +14578,45 @@ async function stopEnvironmentRuntimeFromLauncher(
     };
     const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
     try {
+      await closeEnvironmentSessionsForRuntimeLifecycle({
+        operation: 'stop',
+        scope: { kind: 'session_key', session_key: runtimeKey },
+      });
+      const runtimeRecord = await verifySSHEnvironmentRuntimeRecord(runtimeKey);
+      if (!runtimeRecord) {
+        await refreshWelcomeRuntimeHealthForEnvironment(request.environment_id ?? runtimeKey);
+      }
+      const readyRecord = sshRuntimeReadyByKey.get(runtimeKey) ?? null;
+      if (!runtimeRecord && !readyRecord) {
+        const readyWorkflow = commitRuntimeLifecycleDecision(runtimeKey, lifecycleAttemptOwner, {
+          hostAccess,
+          placement: hostPlacement,
+          operation: lifecycleOperation,
+          targetID: runtimeKey,
+          targetLabel: label,
+          decision: 'runtime_already_stopped',
+        });
+        readyWorkflow.completeThrough('checking_host');
+        resetLauncherIssueState();
+        launcherOperations.finishCurrentAttempt(runtimeKey, lifecycleAttemptOwner, 'succeeded', {
+          phase: 'runtime_already_stopped',
+          title: 'Runtime already stopped',
+          detail: 'Desktop confirmed that this SSH runtime is already stopped.',
+          lifecycle_progress: completeRuntimeLifecycleWorkflowProgress(runtimeKey, lifecycleAttemptOwner, {
+            hostAccess,
+            placement: hostPlacement,
+            operation: lifecycleOperation,
+            phase: 'runtime_already_stopped',
+            targetID: runtimeKey,
+            targetLabel: label,
+            detail: 'Desktop confirmed that this SSH runtime is already stopped.',
+          }),
+        });
+        scheduleCurrentLauncherOperationRemoval(operation.operation_key, lifecycleAttemptOwner);
+        clearRuntimeLifecycleWorkflow(runtimeKey, lifecycleAttemptOwner);
+        broadcastDesktopWelcomeSnapshots();
+        return launcherActionSuccess('stopped_environment_runtime');
+      }
       const preferences = await loadDesktopPreferencesCached();
       const sshPassword = savedSSHPasswordForDetails(preferences, sshDetails, request.environment_id) || compact(request.ssh_password);
       updateRuntimeLifecycleOperation(runtimeKey, lifecycleAttemptOwner, {
@@ -14322,10 +14629,6 @@ async function stopEnvironmentRuntimeFromLauncher(
         title: 'Stopping runtime process',
         detail: 'Desktop is stopping the runtime daemon on this SSH host.',
       });
-      const liveSessionRecord = liveSession(runtimeKey);
-      if (liveSessionRecord) {
-        await finalizeSessionClosure(liveSessionRecord.session_key);
-      }
       if (runtimeRecord) {
         await runtimeRecord.stop();
       } else {
@@ -14535,6 +14838,13 @@ async function stopEnvironmentRuntimeFromLauncher(
   };
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
   try {
+    await closeEnvironmentSessionsForRuntimeLifecycle({
+      operation: 'stop',
+      scope: {
+        kind: 'session_target',
+        target: buildLocalEnvironmentDesktopTarget(environment, { route: 'local_host' }),
+      },
+    });
     const runtimeRecord = await verifyCurrentLocalEnvironmentRuntimeRecord(environment) ?? await attachLocalEnvironmentRuntime(environment);
     if (!runtimeRecord) {
       const readyWorkflow = commitRuntimeLifecycleDecision(operationKey, lifecycleAttemptOwner, {
@@ -14576,15 +14886,6 @@ async function stopEnvironmentRuntimeFromLauncher(
       title: 'Stopping runtime process',
       detail: 'Desktop is stopping the local runtime process.',
     });
-    const liveLocalSession = [...sessionsByKey.values()].find((sessionRecord) => (
-      !sessionRecord.closing
-      && sessionRecord.target.kind === 'local_environment'
-      && sessionRecord.target.environment_id === environment.id
-      && sessionRecord.target.route === 'local_host'
-    )) ?? null;
-    if (liveLocalSession) {
-      await finalizeSessionClosure(liveLocalSession.session_key);
-    }
     if (signal?.aborted === true) {
       throw new DesktopSSHRuntimeCanceledError('Local runtime stop was canceled.');
     }
@@ -15181,7 +15482,6 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
     };
   }
   const sessionTarget = sessionRecord.target;
-  const previousRuntimeHandle = sessionRecord.runtime_handle;
   const preferences = await loadDesktopPreferencesCached();
   const providerEnvironment = (
     sessionTarget.provider_origin
@@ -15205,25 +15505,6 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
     };
   }
   const localUIBind = resolveManagedRestartBindOverride(environment, sessionRecord.startup) ?? undefined;
-
-  for (const childWindow of sessionRecord.child_windows.values()) {
-    sessionKeyByWebContentsID.delete(childWindow.webContentsID);
-    const browserWindow = liveTrackedBrowserWindow(childWindow);
-    if (browserWindow) {
-      browserWindow.close();
-    }
-  }
-  sessionRecord.child_windows.clear();
-
-  for (const codespaceWindow of sessionRecord.codespace_windows.values()) {
-    sessionKeyByWebContentsID.delete(codespaceWindow.webContentsID);
-    const browserWindow = liveTrackedBrowserWindow(codespaceWindow);
-    if (browserWindow) {
-      browserWindow.close();
-    }
-  }
-  sessionRecord.codespace_windows.clear();
-
   try {
     await sessionRecord.diagnostics.recordLifecycle(
       'target_restarting',
@@ -15233,66 +15514,29 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
         local_ui_bind_override: localUIBind ?? '',
       },
     );
-    await previousRuntimeHandle.stop();
+    await handoffSessionToRuntimeLifecycle({
+      operation: 'restart',
+      sessionTarget,
+    });
+    await startLocalHostRuntimeWithLifecycleProgress({
+      environment,
+      action: 'restart_environment_runtime',
+      localUIBind,
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return {
-      ok: false,
-      started: false,
-      message: message || 'Failed to stop the managed runtime.',
-    };
-  }
-
-  sessionRecord.runtime_handle = null;
-
-  const prepared = await prepareManagedTarget({
-    environment,
-    localUIBind,
-  });
-  if (!prepared.ok) {
-    await finalizeSessionClosure(sessionRecord.session_key);
-    await openUtilityWindow('launcher', {
-      entryReason: prepared.entryReason,
-      issue: prepared.issue,
-      selectedEnvironmentID: environment.id,
-      stealAppFocus: true,
+    const failure = desktopFailureFromError(error, {
+      code: 'local_runtime_launch_failed',
+      title: runtimeLifecycleFailurePresentationTitle('local_host', false, 'restart'),
+      summary: runtimeLifecycleFailureSummary('restart'),
+      targetLabel: environment.label,
     });
     return {
       ok: false,
       started: false,
-      message: prepared.issue.message,
+      message: failure.summary,
+      failure,
     };
   }
-
-  sessionRecord.runtime_handle = desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
-    persistedOwner: environment.local_hosting?.owner,
-    desktopOwnerID: await desktopRuntimeOwnerID(),
-  });
-  sessionRecord.startup = prepared.launch.managedRuntime.startup;
-  updateLocalEnvironmentRuntimeRecord(environment, sessionRecord.startup, sessionRecord.runtime_handle);
-  sessionRecord.allowed_base_url = stripSensitiveURLPayload(prepared.launch.managedRuntime.startup.local_ui_url) || prepared.launch.managedRuntime.startup.local_ui_url;
-  sessionRecord.target = buildLocalEnvironmentDesktopTarget(environment, { route: 'local_host' });
-  sessionRecord.entry_url = desktopSessionEntryURL(sessionRecord.target, sessionRecord.startup);
-  await sessionRecord.diagnostics.configureRuntime(sessionRecord.startup, sessionRecord.allowed_base_url);
-  await sessionRecord.diagnostics.recordLifecycle(
-    prepared.launch.managedRuntime.attached ? 'runtime_attached' : 'runtime_started',
-    prepared.launch.managedRuntime.attached ? 'desktop attached to an existing runtime' : 'desktop restarted a managed runtime',
-    {
-      attached: prepared.launch.managedRuntime.attached,
-      spawned: prepared.launch.spawned,
-      effective_run_mode: prepared.launch.managedRuntime.startup.effective_run_mode ?? '',
-    },
-  );
-  const rootWindow = liveTrackedBrowserWindow(sessionRecord.root_window);
-  if (!rootWindow) {
-    return {
-      ok: false,
-      started: false,
-      message: DESKTOP_STALE_WINDOW_MESSAGE,
-    };
-  }
-  await rootWindow.loadURL(sessionRecord.entry_url);
-  focusEnvironmentSession(sessionRecord.session_key, { stealAppFocus: true });
   broadcastDesktopWelcomeSnapshots();
 
   return {
@@ -15310,7 +15554,6 @@ async function restartSSHRuntimeFromShell(
     return desktopShellRuntimeActionUnavailable('SSH runtime maintenance is not active for this session.');
   }
 
-  const previousRuntimeHandle = sessionRecord.runtime_handle;
   const previousTarget = sessionRecord.target;
   const sshDetails = normalizeDesktopSSHEnvironmentDetails({
     ssh_destination: previousTarget.ssh_destination,
@@ -15321,27 +15564,6 @@ async function restartSSHRuntimeFromShell(
     release_base_url: previousTarget.release_base_url,
     connect_timeout_seconds: previousTarget.connect_timeout_seconds,
   });
-  const runtimeKey = sshDesktopSessionKey(sshDetails);
-  const existingRuntimeRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
-
-  for (const childWindow of sessionRecord.child_windows.values()) {
-    sessionKeyByWebContentsID.delete(childWindow.webContentsID);
-    const browserWindow = liveTrackedBrowserWindow(childWindow);
-    if (browserWindow) {
-      browserWindow.close();
-    }
-  }
-  sessionRecord.child_windows.clear();
-
-  for (const codespaceWindow of sessionRecord.codespace_windows.values()) {
-    sessionKeyByWebContentsID.delete(codespaceWindow.webContentsID);
-    const browserWindow = liveTrackedBrowserWindow(codespaceWindow);
-    if (browserWindow) {
-      browserWindow.close();
-    }
-  }
-  sessionRecord.codespace_windows.clear();
-
   try {
     await sessionRecord.diagnostics.recordLifecycle(
       options.forceRuntimeUpdate === true ? 'target_updating' : 'target_restarting',
@@ -15349,28 +15571,16 @@ async function restartSSHRuntimeFromShell(
         ? 'desktop requested an SSH runtime update'
         : 'desktop requested an SSH runtime restart',
       {
-        ssh_runtime_key: runtimeKey,
+        ssh_runtime_key: sshDesktopSessionKey(sshDetails),
       },
     );
-    sshEnvironmentRuntimeByKey.delete(runtimeKey);
-    sshRuntimeMaintenanceByKey.delete(runtimeKey);
-    if (existingRuntimeRecord) {
-      await existingRuntimeRecord.stop();
-    } else {
-      await previousRuntimeHandle.stop();
-    }
-  } catch (error) {
-    const failure = desktopFailureFromError(error, {
-      code: 'ssh_runtime_stop_failed',
-      title: 'SSH Runtime Stop Failed',
-      summary: 'Desktop could not stop the SSH runtime.',
-      targetLabel: desktopSSHAuthority(sshDetails),
+    await handoffSessionToRuntimeLifecycle({
+      operation: options.forceRuntimeUpdate === true ? 'update' : 'restart',
+      sessionTarget: previousTarget,
     });
-    return desktopShellRuntimeActionUnavailable(failure);
+  } catch (error) {
+    return desktopShellRuntimeActionUnavailable(error instanceof Error ? error.message : String(error));
   }
-
-  sessionRecord.runtime_handle = null;
-  sessionRecord.diagnostics.clearRuntime();
 
   const lifecycleOperation: DesktopRuntimeLifecycleOperation = options.forceRuntimeUpdate === true ? 'update' : 'restart';
   try {
@@ -15379,6 +15589,7 @@ async function restartSSHRuntimeFromShell(
       label: previousTarget.label,
       forceRuntimeUpdate: options.forceRuntimeUpdate === true,
       allowActiveWorkReplacement: true,
+      action: options.forceRuntimeUpdate === true ? 'update_environment_runtime' : 'restart_environment_runtime',
     });
   } catch (error) {
     const failure = desktopFailureFromError(error, {
@@ -15389,67 +15600,6 @@ async function restartSSHRuntimeFromShell(
     });
     return desktopShellRuntimeActionUnavailable(failure);
   }
-
-  let openRecord: SSHEnvironmentRuntimeRecord | null = null;
-  try {
-    await openSSHEnvironmentFromLauncher({
-      kind: 'open_ssh_environment',
-      environment_id: previousTarget.environment_id,
-      label: previousTarget.label,
-      ssh_destination: sshDetails.ssh_destination,
-      ssh_port: sshDetails.ssh_port,
-      auth_mode: sshDetails.auth_mode,
-      runtime_root: sshDetails.runtime_root,
-      bootstrap_strategy: sshDetails.bootstrap_strategy,
-      release_base_url: sshDetails.release_base_url,
-      connect_timeout_seconds: sshDetails.connect_timeout_seconds,
-    });
-    openRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null;
-  } catch (error) {
-    const failure = desktopFailureFromError(error, {
-      code: 'environment_open_failed',
-      title: 'SSH Runtime Open Failed',
-      summary: 'Desktop could not reopen the SSH runtime connection.',
-      targetLabel: desktopSSHAuthority(sshDetails),
-    });
-    return desktopShellRuntimeActionUnavailable(failure);
-  }
-  if (!openRecord) {
-    return desktopShellRuntimeActionUnavailable('Desktop restarted the SSH runtime, but could not prepare the SSH connection.');
-  }
-
-  sessionRecord.runtime_handle = openRecord.runtime_handle;
-  sessionRecord.startup = openRecord.startup;
-  sessionRecord.allowed_base_url = stripSensitiveURLPayload(openRecord.local_forward_url) || openRecord.local_forward_url;
-  const nextTarget = buildSSHDesktopTarget(openRecord.details, {
-    environmentID: openRecord.environment_id,
-    label: openRecord.label,
-    forwardedLocalUIURL: openRecord.local_forward_url,
-  });
-  if (nextTarget.session_key !== sessionRecord.session_key) {
-    return desktopShellRuntimeActionUnavailable('SSH runtime restart changed the session identity; close and reopen this Environment.');
-  }
-  sessionRecord.target = nextTarget;
-  sessionRecord.entry_url = desktopSessionEntryURL(sessionRecord.target, sessionRecord.startup);
-  await sessionRecord.diagnostics.configureRuntime(sessionRecord.startup, sessionRecord.allowed_base_url);
-  await sessionRecord.diagnostics.recordLifecycle(
-    options.forceRuntimeUpdate === true ? 'runtime_updated' : 'runtime_started',
-    options.forceRuntimeUpdate === true
-      ? 'desktop updated and reopened an SSH runtime'
-      : 'desktop restarted an SSH runtime',
-    {
-      ssh_runtime_key: runtimeKey,
-      runtime_launch_mode: openRecord.runtime_handle.launch_mode,
-      effective_run_mode: openRecord.startup.effective_run_mode ?? '',
-    },
-  );
-
-  const rootWindow = liveTrackedBrowserWindow(sessionRecord.root_window);
-  if (!rootWindow) {
-    return desktopShellRuntimeActionUnavailable(DESKTOP_STALE_WINDOW_MESSAGE);
-  }
-  await rootWindow.loadURL(sessionRecord.entry_url);
-  focusEnvironmentSession(sessionRecord.session_key, { stealAppFocus: true });
   broadcastDesktopWelcomeSnapshots();
 
   return {
@@ -15762,6 +15912,21 @@ async function performRuntimeMaintenanceFromShell(
     default:
       return desktopShellRuntimeActionUnavailable(plan.message);
   }
+}
+
+async function handleRuntimeMaintenanceStartedFromShell(
+  webContentsID: number,
+  operation: Exclude<RuntimeLifecycleWindowOperation, 'stop'>,
+): Promise<void> {
+  const sessionRecord = sessionRecordForWebContentsID(webContentsID);
+  if (!sessionRecord) {
+    return;
+  }
+  const sessionTarget = sessionRecord.target;
+  await handoffSessionToRuntimeLifecycle({
+    operation,
+    sessionTarget,
+  });
 }
 
 async function upsertSavedEnvironmentFromWelcome(
@@ -16955,6 +17120,15 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.handle(DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL, async (event): Promise<DesktopShellRuntimeMaintenanceContext> => {
     const sessionRecord = sessionRecordForWebContentsID(event.sender.id);
     return runtimeMaintenanceContextFromSession(sessionRecord);
+  });
+  ipcMain.on(DESKTOP_SHELL_RUNTIME_MAINTENANCE_STARTED_CHANNEL, (event, notification) => {
+    const normalized = normalizeDesktopShellRuntimeMaintenanceStartedNotification(notification);
+    if (!normalized) {
+      return;
+    }
+    void handleRuntimeMaintenanceStartedFromShell(event.sender.id, normalized.kind).catch((error) => {
+      console.warn('Redeven Desktop failed to close an Environment session after Runtime maintenance started.', error);
+    });
   });
   ipcMain.handle(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL, async (event, request): Promise<DesktopShellRuntimeActionResponse> => {
     const normalized = normalizeDesktopShellRuntimeActionRequest(request);
