@@ -8,18 +8,20 @@ import (
 	"net/url"
 	"strings"
 
+	flruntime "github.com/floegence/floret/runtime"
 	openai "github.com/openai/openai-go"
 )
 
 const (
-	runErrorCodeProviderAuthFailed        = "provider_auth_failed"
-	runErrorCodeProviderMissingKey        = "provider_missing_key"
-	runErrorCodeProviderRateLimited       = "provider_rate_limited"
-	runErrorCodeProviderUnreachable       = "provider_unreachable"
-	runErrorCodeProviderStreamInterrupted = "provider_stream_interrupted"
-	runErrorCodeProviderModelUnavailable  = "provider_model_unavailable"
-	runErrorCodeFloretEngineFailed        = "floret_engine_failed"
-	runErrorCodeFloretAdmissionBlocked    = "floret_thread_admission_blocked"
+	runErrorCodeProviderAuthFailed          = "provider_auth_failed"
+	runErrorCodeProviderMissingKey          = "provider_missing_key"
+	runErrorCodeProviderRateLimited         = "provider_rate_limited"
+	runErrorCodeProviderUnreachable         = "provider_unreachable"
+	runErrorCodeProviderStreamInterrupted   = "provider_stream_interrupted"
+	runErrorCodeProviderModelUnavailable    = "provider_model_unavailable"
+	runErrorCodeFloretEngineFailed          = "floret_engine_failed"
+	runErrorCodeFloretAdmissionBlocked      = "floret_thread_admission_blocked"
+	runErrorCodeFloretProjectionUnavailable = "floret_projection_unavailable"
 )
 
 func userFacingRunError(code string, fallback string) string {
@@ -41,6 +43,8 @@ func userFacingRunError(code string, fallback string) string {
 		return "Flower could not finish this turn because the orchestration engine failed."
 	case runErrorCodeFloretAdmissionBlocked:
 		return "Flower could not start the next turn because the runtime still reports an active turn. Restart recovery did not complete, so the turn was not admitted."
+	case runErrorCodeFloretProjectionUnavailable:
+		return "Flower finished the turn, but the final reply is temporarily unavailable. Refresh this thread to load it. Do not run the task again because it may have already performed changes."
 	default:
 		if fallback != "" {
 			return fallback
@@ -52,6 +56,9 @@ func userFacingRunError(code string, fallback string) string {
 func classifyRunFailureCode(err error, fallback string) string {
 	if err == nil {
 		return strings.TrimSpace(fallback)
+	}
+	if errors.Is(err, flruntime.ErrTurnProjectionUnavailable) {
+		return runErrorCodeFloretProjectionUnavailable
 	}
 	var openAIError *openai.Error
 	if errors.As(err, &openAIError) && openAIError != nil {

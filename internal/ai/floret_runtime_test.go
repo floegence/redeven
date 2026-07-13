@@ -3,6 +3,8 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -25,6 +27,21 @@ type capturingTurnProvider struct {
 	requests []ModelGatewayRequest
 }
 
+type recordingTurnProjectionReader struct {
+	projection  flruntime.ThreadTurnProjection
+	err         error
+	request     flruntime.ReadTurnProjectionRequest
+	calls       int
+	hadDeadline bool
+}
+
+func (r *recordingTurnProjectionReader) ReadTurnProjection(ctx context.Context, req flruntime.ReadTurnProjectionRequest) (flruntime.ThreadTurnProjection, error) {
+	r.calls++
+	r.request = req
+	_, r.hadDeadline = ctx.Deadline()
+	return r.projection, r.err
+}
+
 func (p *capturingTurnProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
 	p.mu.Lock()
 	p.requests = append(p.requests, req)
@@ -39,6 +56,83 @@ func (p *capturingTurnProvider) firstRequest() ModelGatewayRequest {
 		return ModelGatewayRequest{}
 	}
 	return p.requests[0]
+}
+
+func TestRetryUnavailableFloretTurnProjectionRecoversCanonicalProjection(t *testing.T) {
+	r := newRun(runOptions{})
+	r.id = "run_projection_retry"
+	r.threadID = "thread_projection_retry"
+	r.messageID = "msg_projection_retry"
+	r.persistOpTimeout = time.Second
+	reader := &recordingTurnProjectionReader{projection: flruntime.ThreadTurnProjection{
+		RunID:    "run_projection_retry",
+		ThreadID: "thread_projection_retry",
+		TurnID:   "msg_projection_retry",
+		TraceID:  "run_projection_retry",
+		Segments: []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "canonical reply"}},
+	}}
+	initialErr := fmt.Errorf("%w: injected detail read failure", flruntime.ErrTurnProjectionUnavailable)
+
+	result, runErr, retryErr := r.retryUnavailableFloretTurnProjection(reader, flruntime.TurnResult{
+		ID:     "msg_projection_retry",
+		RunID:  "run_projection_retry",
+		Status: flruntime.TurnStatusCompleted,
+	}, initialErr)
+	if runErr != nil || retryErr != nil {
+		t.Fatalf("runErr=%v retryErr=%v", runErr, retryErr)
+	}
+	if reader.calls != 1 || !reader.hadDeadline {
+		t.Fatalf("reader calls=%d deadline=%v", reader.calls, reader.hadDeadline)
+	}
+	if reader.request.ThreadID != "thread_projection_retry" || reader.request.TurnID != "msg_projection_retry" || reader.request.RunID != "run_projection_retry" {
+		t.Fatalf("request = %#v", reader.request)
+	}
+	if len(result.Projection.Segments) != 1 || result.Projection.Segments[0].Text != "canonical reply" {
+		t.Fatalf("projection = %#v", result.Projection)
+	}
+}
+
+func TestRetryUnavailableFloretTurnProjectionFailurePreservesStreamedMarkdown(t *testing.T) {
+	r := newRun(runOptions{})
+	r.id = "run_projection_retry_failure"
+	r.threadID = "thread_projection_retry_failure"
+	r.messageID = "msg_projection_retry_failure"
+	r.persistOpTimeout = time.Second
+	r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: "already streamed reply"}}
+	var events []any
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+	reader := &recordingTurnProjectionReader{err: errors.New("projection still unavailable")}
+	initialErr := fmt.Errorf("%w: injected detail read failure", flruntime.ErrTurnProjectionUnavailable)
+
+	_, runErr, retryErr := r.retryUnavailableFloretTurnProjection(reader, flruntime.TurnResult{
+		ID:     "msg_projection_retry_failure",
+		RunID:  "run_projection_retry_failure",
+		Status: flruntime.TurnStatusCompleted,
+	}, initialErr)
+	if !errors.Is(runErr, flruntime.ErrTurnProjectionUnavailable) || retryErr == nil || reader.calls != 1 {
+		t.Fatalf("runErr=%v retryErr=%v calls=%d", runErr, retryErr, reader.calls)
+	}
+	returned := r.failRunWithCode(runErrorCodeFloretProjectionUnavailable, "", errors.Join(runErr, retryErr))
+	if returned == nil || r.getRunErrorCode() != runErrorCodeFloretProjectionUnavailable {
+		t.Fatalf("returned=%v code=%q", returned, r.getRunErrorCode())
+	}
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistantBlocks = %#v", r.assistantBlocks)
+	}
+	block, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	if !ok || block.Content != "already streamed reply" {
+		t.Fatalf("assistant block = %T %#v", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+	var presented string
+	for _, ev := range events {
+		if failure, ok := ev.(streamEventError); ok {
+			presented = failure.Error
+		}
+	}
+	lower := strings.ToLower(presented)
+	if !strings.Contains(lower, "refresh this thread") || !strings.Contains(lower, "do not run the task again") {
+		t.Fatalf("presented error = %q", presented)
+	}
 }
 
 type streamedEmptyTaskCompleteProvider struct{}

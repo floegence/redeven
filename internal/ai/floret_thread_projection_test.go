@@ -687,6 +687,8 @@ func TestApplyFloretThreadProjectionClearsStreamedBlocksWhenEmpty(t *testing.T) 
 
 	events := make([]any, 0, 4)
 	r := newRun(runOptions{})
+	r.id = "run_empty_projection"
+	r.threadID = "thread_empty_projection"
 	r.messageID = "msg_empty_projection"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	r.assistantBlocks = []any{
@@ -695,7 +697,12 @@ func TestApplyFloretThreadProjectionClearsStreamedBlocksWhenEmpty(t *testing.T) 
 	}
 	r.nextBlockIndex = len(r.assistantBlocks)
 
-	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{}) {
+	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		RunID:    "run_empty_projection",
+		ThreadID: "thread_empty_projection",
+		TurnID:   "msg_empty_projection",
+		TraceID:  "run_empty_projection",
+	}) {
 		t.Fatalf("projection returned false")
 	}
 	if len(r.assistantBlocks) != 1 {
@@ -715,6 +722,44 @@ func TestApplyFloretThreadProjectionClearsStreamedBlocksWhenEmpty(t *testing.T) 
 	cleared, ok := events[1].(streamEventBlockSet)
 	if !ok || cleared.BlockIndex != 1 {
 		t.Fatalf("events[1]=%T %#v, want stale block clear at index 1", events[1], events[1])
+	}
+}
+
+func TestApplyFloretThreadProjectionRejectsMissingOrMismatchedIdentityWithoutClearingLiveBlocks(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name       string
+		projection flruntime.ThreadTurnProjection
+	}{
+		{name: "missing identity", projection: flruntime.ThreadTurnProjection{}},
+		{name: "wrong run", projection: flruntime.ThreadTurnProjection{RunID: "other", ThreadID: "thread_projection_identity", TurnID: "msg_projection_identity"}},
+		{name: "wrong thread", projection: flruntime.ThreadTurnProjection{RunID: "run_projection_identity", ThreadID: "other", TurnID: "msg_projection_identity"}},
+		{name: "wrong turn", projection: flruntime.ThreadTurnProjection{RunID: "run_projection_identity", ThreadID: "thread_projection_identity", TurnID: "other"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newRun(runOptions{})
+			r.id = "run_projection_identity"
+			r.threadID = "thread_projection_identity"
+			r.messageID = "msg_projection_identity"
+			r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: "streamed reply"}}
+			var events []any
+			r.onStreamEvent = func(ev any) { events = append(events, ev) }
+
+			if r.applyFloretThreadProjection(tc.projection) {
+				t.Fatalf("projection applied: %#v", tc.projection)
+			}
+			if len(r.assistantBlocks) != 1 {
+				t.Fatalf("assistant blocks mutated: %#v", r.assistantBlocks)
+			}
+			block, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
+			if !ok || block.Content != "streamed reply" {
+				t.Fatalf("assistant block = %T %#v", r.assistantBlocks[0], r.assistantBlocks[0])
+			}
+			if len(events) != 0 {
+				t.Fatalf("projection emitted events: %#v", events)
+			}
+		})
 	}
 }
 

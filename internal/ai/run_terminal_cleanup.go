@@ -8,6 +8,10 @@ import (
 	flruntime "github.com/floegence/floret/runtime"
 )
 
+type floretTurnProjectionReader interface {
+	ReadTurnProjection(context.Context, flruntime.ReadTurnProjectionRequest) (flruntime.ThreadTurnProjection, error)
+}
+
 func (r *run) cleanupRunTerminalProcesses(host flruntime.Host) (flruntime.ThreadTurnProjection, bool, error) {
 	if r == nil || r.service == nil {
 		return flruntime.ThreadTurnProjection{}, false, nil
@@ -47,7 +51,7 @@ func (r *run) cleanupRunTerminalProcesses(host flruntime.Host) (flruntime.Thread
 	return projection, true, nil
 }
 
-func (r *run) readFloretTurnProjection(ctx context.Context, host flruntime.Host) (flruntime.ThreadTurnProjection, error) {
+func (r *run) readFloretTurnProjection(ctx context.Context, host floretTurnProjectionReader) (flruntime.ThreadTurnProjection, error) {
 	if r == nil {
 		return flruntime.ThreadTurnProjection{}, errors.New("nil run")
 	}
