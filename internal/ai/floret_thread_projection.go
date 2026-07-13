@@ -113,7 +113,7 @@ func (r *run) blocksWithTerminalLifecycleFloorLocked(blocks []any) []any {
 		if !changed {
 			continue
 		}
-		timeline.Summary = redevenActivitySummaryForItems(timeline.Items)
+		timeline.Summary = observation.RebuildActivitySummary(*timeline)
 		block.ActivityTimeline = *timeline
 		if out == nil {
 			out = make([]any, len(blocks))
@@ -184,91 +184,6 @@ func terminalActivityStatusCanBeDowngraded(status observation.ActivityStatus) bo
 		return true
 	default:
 		return false
-	}
-}
-
-func redevenActivitySummaryForItems(items []observation.ActivityItem) observation.ActivitySummary {
-	summary := observation.ActivitySummary{
-		Status:     observation.ActivityStatusPending,
-		Severity:   observation.ActivitySeverityQuiet,
-		TotalItems: len(items),
-	}
-	attentionSeen := map[observation.ActivityAttentionReason]struct{}{}
-	for _, item := range items {
-		switch item.Status {
-		case observation.ActivityStatusPending:
-			summary.Counts.Pending++
-		case observation.ActivityStatusRunning:
-			summary.Counts.Running++
-		case observation.ActivityStatusWaiting:
-			summary.Counts.Waiting++
-		case observation.ActivityStatusSuccess:
-			summary.Counts.Success++
-		case observation.ActivityStatusError:
-			summary.Counts.Error++
-		case observation.ActivityStatusCanceled:
-			summary.Counts.Canceled++
-		}
-		if item.RequiresApproval {
-			summary.Counts.Approval++
-		}
-		if item.NeedsAttention {
-			summary.NeedsAttention = true
-		}
-		summary.Severity = redevenActivityMaxSeverity(summary.Severity, item.Severity)
-		for _, reason := range item.AttentionReasons {
-			if _, ok := attentionSeen[reason]; ok {
-				continue
-			}
-			attentionSeen[reason] = struct{}{}
-			summary.AttentionReasons = append(summary.AttentionReasons, reason)
-		}
-	}
-	if len(summary.AttentionReasons) > 0 {
-		summary.NeedsAttention = true
-	}
-	switch {
-	case summary.Counts.Waiting > 0:
-		summary.Status = observation.ActivityStatusWaiting
-	case summary.Counts.Running > 0:
-		summary.Status = observation.ActivityStatusRunning
-	case summary.Counts.Pending > 0:
-		summary.Status = observation.ActivityStatusPending
-	case summary.Counts.Error > 0:
-		summary.Status = observation.ActivityStatusError
-	case summary.Counts.Canceled > 0 && summary.Counts.Success == 0:
-		summary.Status = observation.ActivityStatusCanceled
-	default:
-		summary.Status = observation.ActivityStatusSuccess
-	}
-	if summary.Counts.Error > 0 && summary.Status != observation.ActivityStatusWaiting {
-		summary.Status = observation.ActivityStatusError
-	}
-	if summary.NeedsAttention && summary.Severity == observation.ActivitySeverityQuiet {
-		summary.Severity = observation.ActivitySeverityWarning
-	}
-	return summary
-}
-
-func redevenActivityMaxSeverity(left observation.ActivitySeverity, right observation.ActivitySeverity) observation.ActivitySeverity {
-	if redevenActivitySeverityRank(right) > redevenActivitySeverityRank(left) {
-		return right
-	}
-	return left
-}
-
-func redevenActivitySeverityRank(severity observation.ActivitySeverity) int {
-	switch severity {
-	case observation.ActivitySeverityBlocking:
-		return 4
-	case observation.ActivitySeverityError:
-		return 3
-	case observation.ActivitySeverityWarning:
-		return 2
-	case observation.ActivitySeverityNormal:
-		return 1
-	default:
-		return 0
 	}
 }
 
