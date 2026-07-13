@@ -253,9 +253,11 @@ func TestExecutePreparedRun_UsesDesktopModelSourceReasoningCapability(t *testing
 		t.Fatalf("executePreparedRun: %v", err)
 	}
 	var streamedRequest ModelGatewayRequest
+	streamDeadline := time.NewTimer(2 * time.Second)
+	defer streamDeadline.Stop()
 	select {
 	case streamedRequest = <-streamedRequests:
-	default:
+	case <-streamDeadline.C:
 		t.Fatalf("Desktop model source did not receive ai.turn.stream")
 	}
 	if streamedRequest.Model != modelID {
