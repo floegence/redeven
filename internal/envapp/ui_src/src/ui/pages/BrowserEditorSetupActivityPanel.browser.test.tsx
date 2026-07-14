@@ -176,7 +176,20 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     await settle();
     expect(detailsTrigger?.getAttribute('aria-expanded')).toBe('true');
     expect(host.textContent).toContain('unsupported_libc');
-    expect(host.querySelector<HTMLElement>('.browser-editor-setup__details-content')).toBeTruthy();
+    const detailsContent = host.querySelector<HTMLElement>('.browser-editor-setup__details-content');
+    const comparison = host.querySelector<HTMLElement>('.browser-editor-setup__comparison');
+    const comparisonLabel = host.querySelector<HTMLElement>('.browser-editor-setup__comparison-row dt');
+    const detailList = host.querySelector<HTMLElement>('.browser-editor-setup__detail-list');
+    const detailLabel = host.querySelector<HTMLElement>('.browser-editor-setup__detail-row dt');
+    expect(detailsContent).toBeTruthy();
+    expect(getComputedStyle(comparison!).borderTopWidth).toBe('1px');
+    expect(getComputedStyle(comparison!).borderRightWidth).toBe('1px');
+    expect(getComputedStyle(comparisonLabel!).borderRightWidth).toBe('1px');
+    expect(getComputedStyle(comparisonLabel!).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    expect(getComputedStyle(detailList!).borderTopWidth).toBe('1px');
+    expect(getComputedStyle(detailList!).borderLeftWidth).toBe('1px');
+    expect(getComputedStyle(detailLabel!).borderRightWidth).toBe('1px');
+    expect(getComputedStyle(detailLabel!).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
 
     const screenshot = await page.screenshot({ save: false });
     expect(screenshot.length).toBeGreaterThan(1_000);
