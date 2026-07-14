@@ -5,6 +5,7 @@ import type { Component } from 'solid-js';
 import { cn, deferAfterPaint } from '@floegence/floe-webapp-core';
 
 import { isLargeMermaidDiagram } from '../responsiveness';
+import { useI18n } from '../../i18n';
 
 export interface MermaidBlockProps {
   content: string;
@@ -104,6 +105,7 @@ function scheduleMermaidRender(task: () => void, preferIdle: boolean): () => voi
  * and the diagram renders, and an error message if rendering fails.
  */
 export const MermaidBlock: Component<MermaidBlockProps> = (props) => {
+  const i18n = useI18n();
   const [svg, setSvg] = createSignal<string>('');
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string>('');
@@ -180,7 +182,7 @@ export const MermaidBlock: Component<MermaidBlockProps> = (props) => {
     <div class={cn('chat-mermaid-block', props.class)}>
       <Show when={loading()}>
         <div class="chat-mermaid-loading">
-          <span class="chat-mermaid-loading-text">Rendering diagram...</span>
+          <span class="chat-mermaid-loading-text">{i18n.t('uiCopy.chat.renderingDiagram')}</span>
         </div>
       </Show>
 

@@ -4756,7 +4756,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const secondaryOverrideContextMenuItems: ContextMenuItem[] = [
     {
       id: 'duplicate',
-      label: i18n.t('files.menuDuplicate'),
+      label: i18n.t('files.createDuplicate'),
       type: 'duplicate',
       icon: (props) => <Copy class={props.class} />,
       shortcut: 'Cmd+D',

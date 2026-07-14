@@ -688,7 +688,7 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
   return (
     <div class={cn('chat-message-list-container', props.class)}>
       <Show when={isLoadingHistory()}>
-        <div class="chat-loading-more">Loading history...</div>
+        <div class="chat-loading-more">{i18n.t('uiCopy.chat.loadingHistory')}</div>
       </Show>
 
       <div

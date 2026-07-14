@@ -1,5 +1,5 @@
 import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage } from '../messageTypes';
-import { flowerSurfaceEnUS } from './flowerSurface';
+import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
   flowerSurface: flowerSurfaceEnUS,

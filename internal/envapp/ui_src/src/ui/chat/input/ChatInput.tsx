@@ -8,6 +8,7 @@ import { useAttachments } from '../hooks/useAttachments';
 import { AttachmentPreview } from './AttachmentPreview';
 import { readLiveTextValue, syncLiveTextValue } from '../../utils/liveTextValue';
 import { shouldSubmitOnEnterKeydown } from '../../utils/shouldSubmitOnEnterKeydown';
+import { useI18n } from '../../i18n';
 
 export interface ChatInputProps {
   disabled?: boolean;
@@ -16,6 +17,7 @@ export interface ChatInputProps {
 }
 
 export const ChatInput: Component<ChatInputProps> = (props) => {
+  const i18n = useI18n();
   const ctx = useChatContext();
   const config = ctx.config;
 
@@ -184,7 +186,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
             <polyline points="17 8 12 3 7 8" />
             <line x1="12" y1="3" x2="12" y2="15" />
           </svg>
-          <span>Drop files here</span>
+          <span>{i18n.t('flowerChat.composer.dropFilesHere')}</span>
         </div>
       </Show>
 
@@ -201,7 +203,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
           ref={textareaRef}
           class="chat-input-textarea"
           rows={2}
-          placeholder={props.placeholder ?? config().placeholder ?? 'Type a message...'}
+          placeholder={props.placeholder ?? config().placeholder ?? i18n.t('flowerChat.composer.typeMessagePlaceholder')}
           disabled={props.disabled}
           value={text()}
           onInput={handleInput}
@@ -230,7 +232,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
               class="chat-input-attachment-btn"
               type="button"
               onClick={handleFileSelect}
-              title="Attach files"
+              title={i18n.t('uiCopy.chat.attachFiles')}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
@@ -248,7 +250,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
         </div>
         <div class="chat-input-toolbar-right">
           <span class="chat-input-hint">
-            <kbd>Enter</kbd> send&nbsp;&nbsp;<kbd>Shift+Enter</kbd> newline
+            <kbd>Enter</kbd> {i18n.t('flowerChat.emptyChat.sendHint')}&nbsp;&nbsp;<kbd>Shift+Enter</kbd> {i18n.t('flowerChat.emptyChat.newlineHint')}
           </span>
           <button
             class={cn(
@@ -258,7 +260,7 @@ export const ChatInput: Component<ChatInputProps> = (props) => {
             type="button"
             disabled={!canSend() || props.disabled}
             onClick={handleSend}
-            title="Send message"
+            title={i18n.t('flowerChat.composer.launchTurn')}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="22" y1="2" x2="11" y2="13" />

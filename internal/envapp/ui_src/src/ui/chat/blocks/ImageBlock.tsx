@@ -3,6 +3,7 @@
 import { createSignal, createEffect, Show, onCleanup } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { useI18n } from '../../i18n';
 
 export interface ImageBlockProps {
   src: string;
@@ -15,6 +16,7 @@ export interface ImageBlockProps {
  * Opens a full-screen dialog overlay with zoom/pan controls.
  */
 export const ImageBlock: Component<ImageBlockProps> = (props) => {
+  const i18n = useI18n();
   const [isOpen, setIsOpen] = createSignal(false);
   const [zoom, setZoom] = createSignal(1);
 
@@ -103,32 +105,32 @@ export const ImageBlock: Component<ImageBlockProps> = (props) => {
             <button
               class="chat-image-zoom-btn"
               onClick={zoomOut}
-              title="Zoom out"
-              aria-label="Zoom out"
+              title={i18n.t('uiCopy.imageViewer.zoomOut')}
+              aria-label={i18n.t('uiCopy.imageViewer.zoomOut')}
             >
               -
             </button>
             <button
               class="chat-image-zoom-btn"
               onClick={resetZoom}
-              title="Reset zoom"
-              aria-label="Reset zoom"
+              title={i18n.t('uiCopy.imageViewer.resetZoom')}
+              aria-label={i18n.t('uiCopy.imageViewer.resetZoom')}
             >
               {Math.round(zoom() * 100)}%
             </button>
             <button
               class="chat-image-zoom-btn"
               onClick={zoomIn}
-              title="Zoom in"
-              aria-label="Zoom in"
+              title={i18n.t('uiCopy.imageViewer.zoomIn')}
+              aria-label={i18n.t('uiCopy.imageViewer.zoomIn')}
             >
               +
             </button>
             <button
               class="chat-image-zoom-btn"
               onClick={() => setIsOpen(false)}
-              title="Close"
-              aria-label="Close"
+              title={i18n.t('uiCopy.imageViewer.close')}
+              aria-label={i18n.t('uiCopy.imageViewer.close')}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"

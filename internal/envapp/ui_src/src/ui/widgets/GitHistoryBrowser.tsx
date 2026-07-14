@@ -22,12 +22,15 @@ import { FlowerIcon } from "../icons/FlowerIcon";
 import {
   changeSecondaryPath,
   describeGitHead,
-  gitCommitDiffPresentationBadge,
-  gitCommitDiffPresentationDetail,
   gitDiffEntryIdentity,
   shortGitHash,
   type GitDetachedSwitchTarget,
 } from "../utils/gitWorkbench";
+import {
+  localizedGitCommitDiffPresentationBadge,
+  localizedGitCommitDiffPresentationDetail,
+  localizedGitHeadDisplay,
+} from '../utils/localizedGitWorkbench';
 import type { GitAskFlowerRequest } from "../utils/gitBrowserShortcuts";
 import { redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
 import { gitChangePathClass } from "./GitChrome";
@@ -57,6 +60,7 @@ import {
   type GitBranchHeaderLayout,
 } from "./gitBranchHeaderLayout";
 import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from "./gitWorkbenchScrollRegion";
+import { useI18n } from "../i18n";
 
 const COMMIT_BODY_PREVIEW_LINES = 2;
 const COMMIT_BODY_PREVIEW_CHARS = 160;
@@ -105,6 +109,7 @@ interface CommitFilesCompactListProps {
 }
 
 function CommitFilesCompactList(props: CommitFilesCompactListProps) {
+  const i18n = useI18n();
   return (
     <div
       {...GIT_WORKBENCH_SCROLL_REGION_PROPS}
@@ -137,7 +142,7 @@ function CommitFilesCompactList(props: CommitFilesCompactListProps) {
                   </div>
                 </div>
                 <span class="shrink-0 rounded-md bg-background/70 px-2 py-1 text-[10px] font-medium text-muted-foreground">
-                  View
+                  {i18n.t('shell.commandPalette.categories.view')}
                 </span>
               </div>
               <div class="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -156,6 +161,7 @@ function CommitFilesCompactList(props: CommitFilesCompactListProps) {
 }
 
 export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
+  const i18n = useI18n();
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const outlineControlClass = redevenSurfaceRoleClass("control");
@@ -194,7 +200,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
     String(props.selectedCommitHash ?? "").trim(),
   );
   const headDisplay = createMemo(() =>
-    describeGitHead(props.repoSummary, props.repoInfo),
+    localizedGitHeadDisplay(describeGitHead(props.repoSummary, props.repoInfo), i18n),
   );
   const currentHeadCommit = createMemo(() =>
     String(
@@ -212,10 +218,10 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
     );
   });
   const commitPresentationBadge = createMemo(() =>
-    gitCommitDiffPresentationBadge(commitPresentation()),
+    localizedGitCommitDiffPresentationBadge(commitPresentation(), i18n),
   );
   const commitPresentationDetail = createMemo(() =>
-    gitCommitDiffPresentationDetail(commitPresentation()),
+    localizedGitCommitDiffPresentationDetail(commitPresentation(), i18n),
   );
   const commitOverviewLayout = createMemo<GitBranchHeaderLayout>(() =>
     resolveGitBranchHeaderLayout(commitOverviewWidth()),
@@ -321,13 +327,13 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
           <div class="flex h-full items-center justify-center rounded-lg bg-muted/[0.18] px-6 text-center">
             <div class="max-w-md space-y-2">
               <div class="text-sm font-medium text-foreground">
-                Git history is unavailable
+                {i18n.t('uiCopy.git.historyUnavailable')}
               </div>
               <div class="text-xs text-muted-foreground">
                 {props.repoInfoLoading
-                  ? "Checking repository context for the current path..."
+                  ? i18n.t('git.notifications.checkingRepositoryContext')
                   : repoUnavailableReason() ||
-                    `Current path ${props.currentPath || "/"} is outside a Git repository.`}
+                    i18n.t('uiCopy.git.currentPathOutsideRepository', { path: props.currentPath || '/' })}
               </div>
             </div>
           </div>
@@ -337,7 +343,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
           when={commitHash()}
           fallback={
             <div class="flex-1 px-3 py-4 text-xs text-muted-foreground">
-              Choose a commit from the left rail to load its details.
+              {i18n.t('uiCopy.git.chooseCommit')}
             </div>
           }
         >
@@ -359,13 +365,13 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                     when={detailLoading()}
                     fallback={
                       <div class="flex-1 px-3 py-4 text-xs text-muted-foreground">
-                        Commit details are unavailable.
+                        {i18n.t('uiCopy.git.commitDetailsUnavailable')}
                       </div>
                     }
                   >
                     <GitStatePane
                       loading
-                      message="Loading commit details..."
+                      message={i18n.t('uiCopy.git.loadingCommitDetails')}
                       class="px-4"
                     />
                   </Show>
@@ -375,9 +381,9 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                 headDisplay().detached &&
                 currentHeadCommit() === detail.hash;
               const switchDetachedLabel = () => {
-                if (props.switchDetachedBusy) return "Switching...";
-                if (alreadyDetachedHere()) return "Already detached here";
-                return "Detach here";
+                if (props.switchDetachedBusy) return i18n.t('uiCopy.git.switching');
+                if (alreadyDetachedHere()) return i18n.t('uiCopy.git.alreadyDetachedHere');
+                return i18n.t('uiCopy.git.switchDetachHere');
               };
               return (
                 <div class="relative flex-1 min-h-0">
@@ -396,7 +402,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                               class="space-y-3"
                             >
                               <div class="text-[15px] font-bold leading-6 tracking-tight text-foreground max-w-3xl break-words">
-                                {detail.subject || "(no subject)"}
+                                {detail.subject || i18n.t('uiCopy.git.noSubject')}
                               </div>
                               <div class="flex flex-wrap items-center text-[11px] leading-4 text-muted-foreground">
                                 <span class="inline-flex items-center gap-1 whitespace-nowrap">
@@ -406,7 +412,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 <span aria-hidden="true" class="mx-1.5 text-muted-foreground/25 select-none">—</span>
                                 <span class="inline-flex items-center gap-1 whitespace-nowrap">
                                   <User class="h-3 w-3 shrink-0 text-muted-foreground/45" />
-                                  <span>{detail.authorName || "Unknown author"}</span>
+                                  <span>{detail.authorName || i18n.t('uiCopy.git.unknownAuthor')}</span>
                                 </span>
                                 <span aria-hidden="true" class="mx-1.5 text-muted-foreground/25 select-none">—</span>
                                 <span class="inline-flex items-center gap-1 whitespace-nowrap">
@@ -416,10 +422,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 <span aria-hidden="true" class="mx-1.5 text-muted-foreground/25 select-none">—</span>
                                 <span class="inline-flex items-center gap-1 whitespace-nowrap">
                                   <FileText class="h-3 w-3 shrink-0 text-muted-foreground/45" />
-                                  <span>
-                                    {commitFiles().length} file
-                                    {commitFiles().length === 1 ? "" : "s"}
-                                  </span>
+                                  <span>{i18n.tn('git.common.fileCount', commitFiles().length)}</span>
                                 </span>
                                 <Show when={commitPresentationBadge()}>
                                   <span aria-hidden="true" class="mx-1.5 text-muted-foreground/25 select-none">—</span>
@@ -453,7 +456,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 </Show>
                                 <Show when={props.onAskFlower}>
                                   <GitShortcutOrbButton
-                                    label="Ask Flower"
+                                    label={i18n.t('git.changes.askFlower')}
                                     tone="flower"
                                     icon={FlowerIcon}
                                     size="sm"
@@ -512,8 +515,8 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                       }
                                     >
                                       {commitBodyExpanded()
-                                        ? "Show less"
-                                        : "Show more"}
+                                        ? i18n.t('git.patchViewer.showLess')
+                                        : i18n.t('uiCopy.git.showMore')}
                                     </button>
                                   </div>
                                 </Show>
@@ -525,7 +528,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                             }
                           >
                             <GitSubtleNote>
-                              Repository is already detached at this commit.
+                              {i18n.t('uiCopy.git.alreadyDetached')}
                             </GitSubtleNote>
                           </Show>
                         </GitPanelFrame>
@@ -534,7 +537,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                           <GitLabelBlock
                             class="min-w-0"
                             bodyClass="!pl-0"
-                            label="Files in Commit"
+                            label={i18n.t('uiCopy.git.filesInCommit')}
                             tone="info"
                             meta={
                               <GitMetaPill tone="neutral">
@@ -543,7 +546,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                             }
                           >
                             <div class="text-xs leading-relaxed text-muted-foreground">
-                              Click a file to inspect its diff in a dialog.
+                              {i18n.t('uiCopy.git.clickFileDiff')}
                             </div>
                           </GitLabelBlock>
                           <Show when={commitPresentationDetail()}>
@@ -555,7 +558,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                             when={commitFiles().length > 0}
                             fallback={
                               <GitSubtleNote>
-                                No changed files are available for this commit.
+                                {i18n.t('uiCopy.git.noCommitFiles')}
                               </GitSubtleNote>
                             }
                           >
@@ -575,28 +578,28 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                             GIT_CHANGED_FILES_HEADER_CELL_CLASS
                                           }
                                         >
-                                          Path
+                                          {i18n.t('git.common.path')}
                                         </th>
                                         <th
                                           class={
                                             GIT_CHANGED_FILES_HEADER_CELL_CLASS
                                           }
                                         >
-                                          Status
+                                          {i18n.t('git.common.status')}
                                         </th>
                                         <th
                                           class={
                                             GIT_CHANGED_FILES_HEADER_CELL_CLASS
                                           }
                                         >
-                                          Changes
+                                          {i18n.t('git.common.changes')}
                                         </th>
                                         <th
                                           class={
                                             GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS
                                           }
                                         >
-                                          Action
+                                          {i18n.t('git.common.action')}
                                         </th>
                                       </tr>
                                     }
@@ -653,7 +656,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                                 setDiffDialogOpen(true);
                                               }}
                                             >
-                                              View Diff
+                                              {i18n.t('files.menuViewDiff')}
                                             </GitChangedFilesActionButton>
                                           </td>
                                         </tr>
@@ -706,16 +709,16 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
               }
             : null
         }
-        title="Commit Diff"
+        title={i18n.t('uiCopy.git.commitDiff')}
         description={
           diffDialogItem()
             ? changeSecondaryPath(diffDialogItem())
-            : "Review the selected file diff."
+            : i18n.t('uiCopy.git.reviewSelectedFileDiff')
         }
-        emptyMessage="Select a changed file to inspect its diff."
+        emptyMessage={i18n.t('uiCopy.git.selectChangedFile')}
         unavailableMessage={(file) =>
           file.isBinary
-            ? "Binary file changed. Inline text diff is not available."
+            ? i18n.t('git.patchViewer.binaryDiffUnavailable')
             : undefined
         }
       />

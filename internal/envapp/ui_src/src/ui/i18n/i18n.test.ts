@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { createI18nHelpers } from './createI18n';
 import { findProtectedTermViolations, PROTECTED_TERMS } from './protectedTerms';
 import { desktopLanguageBridge } from './desktopLanguageBridge';
 import { resolveLocalePreference, type RedevenLanguageSnapshot } from './resolveLocale';
@@ -16,8 +15,18 @@ import {
   localeDisplayName,
   normalizeLocalePreference,
 } from './localeMeta';
-import { dictionaries, enUS } from './locales';
+import {
+  createTestI18nHelpers as createI18nHelpers,
+  dictionaries,
+  enUS,
+} from './locales/testDictionaries';
 import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from './storageKey';
+import {
+  FORBIDDEN_GENERIC_ENGLISH_TERMS,
+  LOCALE_TERMINOLOGY,
+  TECHNICAL_TERM_ALLOWLIST,
+  ZH_TW_FORBIDDEN_SIMPLIFIED_CHARACTERS,
+} from './terminology';
 import type { EnvAppTranslationShape } from './locales';
 
 type MessageLeaf = string | Readonly<Record<string, string>> | readonly unknown[];
@@ -82,6 +91,20 @@ function sameSet(left: Set<string>, right: Set<string>): boolean {
   }
   return true;
 }
+
+const EMPTY_LEAF_EXCEPTIONS = new Map<string, string>([
+  ['de-DE:notesOverlay.liveNotesSuffix', 'German count wording does not append a suffix to the singular noun.'],
+  ['ja-JP:notesOverlay.liveNotesSuffix', 'Japanese nouns do not take a count suffix here.'],
+  ['ja-JP:notesOverlay.deletedNotesSuffix', 'Japanese nouns do not take a count suffix here.'],
+  ['ko-KR:notesOverlay.liveNotesSuffix', 'Korean nouns do not take a count suffix here.'],
+  ['ko-KR:notesOverlay.deletedNotesSuffix', 'Korean nouns do not take a count suffix here.'],
+  ['ru-RU:notesOverlay.liveNotesSuffix', 'Russian count wording is complete without a concatenated suffix.'],
+  ['ru-RU:notesOverlay.deletedNotesSuffix', 'Russian count wording is complete without a concatenated suffix.'],
+  ['zh-CN:notesOverlay.liveNotesSuffix', 'Chinese nouns do not take a count suffix here.'],
+  ['zh-CN:notesOverlay.deletedNotesSuffix', 'Chinese nouns do not take a count suffix here.'],
+  ['zh-TW:notesOverlay.liveNotesSuffix', 'Chinese nouns do not take a count suffix here.'],
+  ['zh-TW:notesOverlay.deletedNotesSuffix', 'Chinese nouns do not take a count suffix here.'],
+]);
 
 function listSourceFiles(root: string): readonly string[] {
   const entries = fs.readdirSync(root, { withFileTypes: true });
@@ -320,10 +343,19 @@ describe('Env App Desktop language bridge', () => {
 });
 
 describe('Env App i18n dictionaries', () => {
-  it('preserves protected product terms across localized dictionaries', () => {
-    for (const locale of SUPPORTED_LOCALES) {
-      expect(findProtectedTermViolations(enUS, dictionaries[locale], locale)).toEqual([]);
+  it('assembles every non-English locale from an explicit JSON catalog', () => {
+    const source = fs.readFileSync(path.resolve(process.cwd(), 'src/ui/i18n/locales/index.ts'), 'utf8');
+    for (const locale of SUPPORTED_LOCALES.filter((candidate) => candidate !== 'en-US')) {
+      expect(source).toContain(`./catalogs/${locale}.json`);
     }
+    expect(source).not.toMatch(/from ['"]\.\/(?:zh-CN|zh-TW|ja-JP|ko-KR|de-DE|fr-FR|es-ES|pt-BR|ru-RU)['"]/);
+  });
+
+  it('preserves protected product terms across localized dictionaries', () => {
+    const violations = SUPPORTED_LOCALES.flatMap((locale) => (
+      findProtectedTermViolations(enUS, dictionaries[locale], locale)
+    ));
+    expect(violations).toEqual([]);
   });
 
   it('keeps every locale shape and placeholders aligned with en-US', () => {
@@ -341,6 +373,116 @@ describe('Env App i18n dictionaries', () => {
           placeholderSet(stringsForLeaf(target)),
         )).toBe(true);
       }
+    }
+  });
+
+  it('rejects empty translation leaves except for explicit grammatical suffixes', () => {
+    const observedExceptions = new Set<string>();
+    const violations: string[] = [];
+    for (const locale of SUPPORTED_LOCALES) {
+      for (const [key, leaf] of Object.entries(collectLeaves(dictionaries[locale]))) {
+        for (const message of stringsForLeaf(leaf)) {
+          if (message.trim().length > 0) continue;
+          const exceptionKey = `${locale}:${key}`;
+          if (EMPTY_LEAF_EXCEPTIONS.has(exceptionKey)) {
+            observedExceptions.add(exceptionKey);
+          } else {
+            violations.push(exceptionKey);
+          }
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+    expect([...observedExceptions].sort()).toEqual([...EMPTY_LEAF_EXCEPTIONS.keys()].sort());
+    expect([...EMPTY_LEAF_EXCEPTIONS.values()].every((reason) => reason.trim().length > 0)).toBe(true);
+  });
+
+  it('rejects generic English product concepts and translation-generator markers', () => {
+    for (const locale of SUPPORTED_LOCALES.filter((candidate) => candidate !== 'en-US')) {
+      const leaves = collectLeaves(dictionaries[locale]);
+      for (const [key, leaf] of Object.entries(leaves)) {
+        const value = stringsForLeaf(leaf)
+          .join('\n')
+          .replace(/\{[^}]+\}/g, '')
+          .replace(/`[^`]+`/g, '');
+        expect(value, `${locale}:${key}`).not.toMatch(/ZXQ(?:KEEP|SEG|GARDER)|QXZ/);
+        for (const term of FORBIDDEN_GENERIC_ENGLISH_TERMS) {
+          expect(value, `${locale}:${key}:${term}`).not.toMatch(new RegExp(`\\b${term.replaceAll(' ', '[\\s-]+')}\\b`, 'i'));
+        }
+      }
+    }
+  });
+
+  it('allows identical English copy only for short names, technical terms, or code literals', () => {
+    const sourceLeaves = collectLeaves(enUS);
+    const allowedTerms = [
+      ...PROTECTED_TERMS,
+      ...TECHNICAL_TERM_ALLOWLIST.map((entry) => entry.term),
+      'Desktop',
+      'Terminal',
+      'Shell',
+      'GitHub',
+      'localhost',
+    ].sort((left, right) => right.length - left.length);
+    const violations: string[] = [];
+
+    for (const locale of SUPPORTED_LOCALES.filter((candidate) => candidate !== 'en-US')) {
+      const targetLeaves = collectLeaves(dictionaries[locale]);
+      for (const [key, sourceLeaf] of Object.entries(sourceLeaves)) {
+        const sourceMessages = stringsForLeaf(sourceLeaf);
+        const targetMessages = stringsForLeaf(targetLeaves[key]);
+        sourceMessages.forEach((sourceMessage, index) => {
+          if (sourceMessage !== targetMessages[index] || /^(?:https?|wss?):\/\//.test(sourceMessage)) return;
+          let remainder = sourceMessage
+            .replace(/\{[A-Za-z_][A-Za-z0-9_]*\}/g, '')
+            .replace(/`[^`]+`/g, '');
+          for (const term of allowedTerms) remainder = remainder.replaceAll(term, '');
+          const words = remainder.match(/[A-Za-z]{2,}/g) ?? [];
+          if (words.length >= 3) violations.push(`${locale}:${key}=${sourceMessage}`);
+        });
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps Traditional Chinese free of common Simplified-only characters', () => {
+    const text = Object.values(collectLeaves(dictionaries['zh-TW']))
+      .flatMap(stringsForLeaf)
+      .join('\n');
+    const found = [...new Set([...text].filter((character) => ZH_TW_FORBIDDEN_SIMPLIFIED_CHARACTERS.includes(character)))];
+    expect(found).toEqual([]);
+  });
+
+  it('defines reviewed terminology and explained technical exceptions for every locale', () => {
+    expect(Object.keys(LOCALE_TERMINOLOGY).sort()).toEqual(SUPPORTED_LOCALES.filter((locale) => locale !== 'en-US').sort());
+    for (const terminology of Object.values(LOCALE_TERMINOLOGY)) {
+      expect(Object.values(terminology).every((value) => value.trim().length > 0)).toBe(true);
+    }
+    expect(new Set(TECHNICAL_TERM_ALLOWLIST.map((entry) => entry.term)).size).toBe(TECHNICAL_TERM_ALLOWLIST.length);
+    expect(TECHNICAL_TERM_ALLOWLIST.every((entry) => entry.reason.trim().length > 0)).toBe(true);
+  });
+
+  it('keeps file and terminal duplicate actions context-specific in every locale', () => {
+    const expected = {
+      'en-US': ['Files', 'Duplicate', 'Duplicate session'],
+      'zh-CN': ['文件', '创建副本', '复制会话'],
+      'zh-TW': ['檔案', '建立副本', '複製工作階段'],
+      'ja-JP': ['ファイル', '複製', 'セッションを複製'],
+      'ko-KR': ['파일', '사본 만들기', '세션 복제'],
+      'de-DE': ['Dateien', 'Duplizieren', 'Sitzung duplizieren'],
+      'fr-FR': ['Fichiers', 'Dupliquer', 'Dupliquer la session'],
+      'es-ES': ['Archivos', 'Duplicar', 'Duplicar sesión'],
+      'pt-BR': ['Arquivos', 'Duplicar', 'Duplicar sessão'],
+      'ru-RU': ['Файлы', 'Создать копию', 'Дублировать сеанс'],
+    } as const;
+
+    for (const locale of SUPPORTED_LOCALES) {
+      expect([
+        dictionaries[locale].files.title,
+        dictionaries[locale].files.createDuplicate,
+        dictionaries[locale].terminal.duplicateSession,
+      ]).toEqual(expected[locale]);
     }
   });
 
@@ -378,7 +520,7 @@ describe('Env App i18n dictionaries', () => {
     const zhCN = createI18nHelpers('zh-CN');
     expect(zhCN.t('language.updatedMessage', { language: '简体中文' })).toBe('Redeven 将使用 简体中文。');
     expect(zhCN.t('shell.commandPalette.changeLanguageTitle')).toBe('更改语言');
-    expect(zhCN.t('accessGate.notice')).toContain('Runtime');
+    expect(zhCN.t('accessGate.notice')).toContain('运行时');
     expect(zhCN.t('chatChrome.copyMessage')).toBe('复制消息');
     expect(zhCN.t('chatActivity.command')).toBe('命令');
     expect(zhCN.t('filePreview.saveFile')).toBe('保存文件');
@@ -393,10 +535,10 @@ describe('Env App i18n dictionaries', () => {
     expect(zhCN.t('codeRuntime.rows.managedEditorSource')).toBe('托管编辑器来源');
     expect(zhCN.t('codeRuntime.currentEditorSection')).toBe('当前编辑器');
     expect(zhCN.t('codeRuntime.useThisVersion')).toBe('使用此版本');
-    expect(zhCN.t('codeRuntime.notes.codespacesUsesSelectedManagedVersion')).toBe('Codespaces 使用已选择的托管 Browser Editor 版本。');
+    expect(zhCN.t('codeRuntime.notes.codespacesUsesSelectedManagedVersion')).toBe('Codespaces 使用选定的托管 Browser Editor 版本。');
     expect(zhCN.t('codeRuntime.activity.steps.cache')).toBe('下载到 Desktop');
     expect(zhCN.t('settings.connection.title')).toBe('连接');
-    expect(zhCN.t('settings.connection.connectedRuntime')).toBe('已连接 Runtime');
+    expect(zhCN.t('settings.connection.connectedRuntime')).toBe('已连接到运行时');
     expect(zhCN.t('settings.connection.coreInformation')).toBe('核心信息');
     expect(zhCN.t('settings.connection.technicalInformation')).toBe('技术信息');
 
@@ -485,8 +627,8 @@ describe('Env App i18n dictionaries', () => {
           workload: {
             ...enUS.runtimeStatus.workload,
             tasks: {
-              one: '{count} Runtime issue',
-              other: '{count} Runtime issues',
+              one: '{count} Flower issue',
+              other: '{count} Flower issues',
             },
           },
         },
@@ -508,7 +650,7 @@ describe('Env App i18n dictionaries', () => {
     )).toContainEqual({
       key: 'runtimeStatus.workload.tasks',
       locale: 'xx-TEST',
-      term: 'Runtime',
+      term: 'Flower',
     });
   });
 
@@ -551,6 +693,49 @@ describe('Env App i18n dictionaries', () => {
 });
 
 describe('Env App and Desktop i18n contract', () => {
+  it('keeps Activity and Workbench as fixed display-mode names without hardcoding them in the model', () => {
+    const shellSource = fs.readFileSync(path.resolve(process.cwd(), 'src/ui/EnvAppShell.tsx'), 'utf8');
+    const viewModeSource = fs.readFileSync(path.resolve(process.cwd(), 'src/ui/envViewMode.ts'), 'utf8');
+    expect(shellSource).toContain("i18n.t('uiCopy.shell.activityMode')");
+    expect(shellSource).toContain("i18n.t('uiCopy.shell.workbenchMode')");
+    expect(viewModeSource).not.toContain('ENV_VIEW_MODE_LABELS');
+    for (const locale of SUPPORTED_LOCALES) {
+      expect(dictionaries[locale].uiCopy.shell.activityMode, locale).toBe('Activity');
+      expect(dictionaries[locale].uiCopy.shell.workbenchMode, locale).toBe('Workbench');
+    }
+  });
+
+  it('localizes the stable missing-environment connection summary', () => {
+    const shellSource = fs.readFileSync(path.resolve(process.cwd(), 'src/ui/EnvAppShell.tsx'), 'utf8');
+    expect(shellSource).toContain("i18n.t('shell.status.missingEnvContext')");
+    expect(shellSource).not.toContain('Missing env context. Please reopen from the control plane.');
+    expect(dictionaries['zh-CN'].shell.status.missingEnvContext).toBe('缺少环境信息。请从控制平面重新打开此环境。');
+    expect(dictionaries['zh-TW'].shell.status.missingEnvContext).toBe('缺少環境資訊。請從控制平面重新開啟此環境。');
+  });
+
+  it('keeps Flower surface catalogs identical and avoids default-English production fallback', () => {
+    const envAIPage = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/ui/pages/EnvAIPage.tsx'),
+      'utf8',
+    );
+    expect(envAIPage).toContain('createLocalizedFlowerSurfaceCopy');
+    expect(envAIPage).not.toContain('DEFAULT_FLOWER_SURFACE_COPY');
+
+    const desktopEnglishFlower = JSON.parse(fs.readFileSync(
+      path.resolve(process.cwd(), '../../../desktop/src/shared/i18n/locales/catalogs/en-US-flower.json'),
+      'utf8',
+    ));
+    expect(enUS.flowerSurface).toEqual(desktopEnglishFlower);
+
+    for (const locale of SUPPORTED_LOCALES.filter((candidate) => candidate !== 'en-US')) {
+      const desktopCatalog = JSON.parse(fs.readFileSync(
+        path.resolve(process.cwd(), `../../../desktop/src/shared/i18n/locales/catalogs/${locale}.json`),
+        'utf8',
+      )) as { flowerSurface: unknown };
+      expect(dictionaries[locale].flowerSurface, locale).toEqual(desktopCatalog.flowerSurface);
+    }
+  });
+
   it('keeps storage keys and supported locale order aligned with Desktop', () => {
     const desktopLocaleMeta = fs.readFileSync(
       path.resolve(process.cwd(), '../../../desktop/src/shared/i18n/localeMeta.ts'),

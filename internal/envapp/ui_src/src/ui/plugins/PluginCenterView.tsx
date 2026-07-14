@@ -4,6 +4,7 @@ import { CheckCircle, Download, Grid3x3, RefreshIcon, Search, Settings, Trash, X
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
 import { executePluginLifecycleCommand, loadPluginInventoryProjection } from './pluginApi';
+import { useI18n, type I18nHelpers } from '../i18n';
 import type {
   PluginCenterTab,
   PluginInventoryItem,
@@ -26,6 +27,7 @@ export type PluginCenterViewProps = {
 };
 
 export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element {
+  const i18n = useI18n();
   const [activeTab, setActiveTab] = createSignal<PluginCenterTab>(initialTabForProjection(props.projection));
   const [initialTabResolved, setInitialTabResolved] = createSignal(Boolean(props.projection));
   const [query, setQuery] = createSignal('');
@@ -52,7 +54,7 @@ export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element
         return [];
     }
   });
-  const visibleItems = createMemo(() => filterItems(tabItems(), query()));
+  const visibleItems = createMemo(() => filterItems(tabItems(), query(), i18n));
   const loading = createMemo(() => props.loading ?? resource.loading);
   const errorMessage = createMemo(() => messageFromUnknown(props.error ?? resource.error ?? commandError()));
   const canManage = createMemo(() => props.canManagePlugins ?? true);
@@ -138,7 +140,7 @@ export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element
         <div class="flex min-h-0 w-full flex-col border-b lg:w-[min(430px,42vw)] lg:border-b-0 lg:border-r">
           <div data-plugin-center-list class="min-h-0 flex-1 overflow-y-auto">
             <Show when={loading()}>
-              <div class="border-b px-4 py-3 text-sm text-muted-foreground">Loading official plugins...</div>
+              <div class="border-b px-4 py-3 text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.loadingOfficial')}</div>
             </Show>
             <For each={visibleItems()}>
               {(item) => (
@@ -155,11 +157,11 @@ export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element
                   <span class="min-w-0 flex-1">
                     <span class="flex min-w-0 items-center gap-2">
                       <span class="truncate text-sm font-semibold text-foreground">{item.displayName}</span>
-                      <span class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">Official</span>
+                      <span class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">{i18n.t('uiCopy.plugin.official')}</span>
                     </span>
                     <span class="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.description}</span>
                     <span class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-                      <span class={statusPillClass(item)}>{statusLabel(item)}</span>
+                      <span class={statusPillClass(item)}>{statusLabel(item, i18n)}</span>
                       <Show when={item.version}>
                         <span class="text-muted-foreground">v{item.version}</span>
                       </Show>
@@ -169,7 +171,7 @@ export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element
               )}
             </For>
             <Show when={!loading() && visibleItems().length === 0}>
-              <div class="px-4 py-10 text-center text-sm text-muted-foreground">No official plugins in this view.</div>
+              <div class="px-4 py-10 text-center text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.emptyView')}</div>
             </Show>
           </div>
         </div>
@@ -199,16 +201,17 @@ export function PluginCenterShell(props: {
   onClose?: () => void;
   children: JSX.Element;
 }): JSX.Element {
+  const i18n = useI18n();
   return (
     <section data-plugin-center-view class="flex h-full min-h-0 flex-col bg-background text-foreground">
       <div class="shrink-0 border-b bg-background/95 px-4 py-3">
         <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div class="min-w-0">
             <div class="flex items-center gap-2">
-              <h1 class="truncate text-lg font-semibold tracking-tight">Plugin Center</h1>
-              <span class="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary">Official only</span>
+              <h1 class="truncate text-lg font-semibold tracking-tight">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
+              <span class="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary">{i18n.t('uiCopy.plugin.officialOnly')}</span>
             </div>
-            <p class="mt-1 text-sm text-muted-foreground">Redeven official catalog for this runtime.</p>
+            <p class="mt-1 text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.catalogDescription')}</p>
           </div>
           <div class="flex shrink-0 items-center gap-2">
             <label class="relative block w-[min(320px,52vw)]">
@@ -218,7 +221,7 @@ export function PluginCenterShell(props: {
                 type="search"
                 value={props.query}
                 onInput={(event) => props.onQueryInput(event.currentTarget.value)}
-                placeholder="Search official plugins"
+                placeholder={i18n.t('uiCopy.plugin.searchPlaceholder')}
                 class="h-8 w-full rounded-md border bg-background pl-8 pr-2 text-sm outline-none transition placeholder:text-muted-foreground/60 focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </label>
@@ -226,7 +229,7 @@ export function PluginCenterShell(props: {
               type="button"
               data-plugin-center-refresh
               class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Refresh official plugins"
+              aria-label={i18n.t('uiCopy.plugin.refreshOfficial')}
               disabled={props.loading}
               onClick={props.onRefresh}
             >
@@ -236,7 +239,7 @@ export function PluginCenterShell(props: {
               <button
                 type="button"
                 class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                aria-label="Close Plugin Center"
+                aria-label={i18n.t('uiCopy.plugin.closeCenter')}
                 onClick={() => props.onClose?.()}
               >
                 <X class="h-3.5 w-3.5" />
@@ -245,9 +248,9 @@ export function PluginCenterShell(props: {
           </div>
         </div>
         <div class="mt-3 flex flex-wrap gap-1">
-          <TabButton id="discover" active={props.activeTab} onSelect={props.onTabSelect} label={`Discover (${props.discoverCount})`} />
-          <TabButton id="installed" active={props.activeTab} onSelect={props.onTabSelect} label={`Installed (${props.installedCount})`} />
-          <TabButton id="updates" active={props.activeTab} onSelect={props.onTabSelect} label={`Updates (${props.updatesCount})`} />
+          <TabButton id="discover" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.discoverCount', { count: props.discoverCount })} />
+          <TabButton id="installed" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.installedCount', { count: props.installedCount })} />
+          <TabButton id="updates" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.updatesCount', { count: props.updatesCount })} />
         </div>
       </div>
       {props.children}
@@ -263,11 +266,12 @@ export function PluginCenterDetails(props: {
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
 }): JSX.Element {
+  const i18n = useI18n();
   return (
     <aside data-plugin-center-details class="min-h-0 flex-1 overflow-y-auto">
       <Show
         when={props.item}
-        fallback={<div class="px-5 py-10 text-sm text-muted-foreground">Select an official plugin.</div>}
+        fallback={<div class="px-5 py-10 text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.selectOfficial')}</div>}
       >
         {(item) => (
           <div class="space-y-5 px-5 py-5">
@@ -276,24 +280,24 @@ export function PluginCenterDetails(props: {
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
                   <h2 class="truncate text-xl font-semibold tracking-tight">{item().displayName}</h2>
-                  <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">Official</span>
-                  <span class={statusPillClass(item())}>{statusLabel(item())}</span>
+                  <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">{i18n.t('uiCopy.plugin.official')}</span>
+                  <span class={statusPillClass(item())}>{statusLabel(item(), i18n)}</span>
                 </div>
                 <p class="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{item().description}</p>
               </div>
             </div>
 
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <DetailStat label="Publisher" value={item().publisher} />
-              <DetailStat label="Installed version" value={item().version ?? 'Not installed'} />
-              <DetailStat label="Stable version" value={item().officialCatalog?.stableVersion ?? '-'} />
-              <DetailStat label="Minimum Redeven" value={item().officialCatalog?.minRedevenVersion ?? '-'} />
-              <DetailStat label="Minimum ReDevPlugin" value={item().officialCatalog?.minReDevPluginVersion ?? '-'} />
-              <DetailStat label="Trust" value={trustLabel(item())} />
+              <DetailStat label={i18n.t('uiCopy.plugin.publisher')} value={item().publisher} />
+              <DetailStat label={i18n.t('uiCopy.plugin.installedVersion')} value={item().version ?? i18n.t('uiCopy.plugin.notInstalled')} />
+              <DetailStat label={i18n.t('uiCopy.plugin.stableVersion')} value={item().officialCatalog?.stableVersion ?? '-'} />
+              <DetailStat label={i18n.t('uiCopy.plugin.minimumRedeven')} value={item().officialCatalog?.minRedevenVersion ?? '-'} />
+              <DetailStat label={i18n.t('uiCopy.plugin.minimumReDevPlugin')} value={item().officialCatalog?.minReDevPluginVersion ?? '-'} />
+              <DetailStat label={i18n.t('uiCopy.plugin.trust')} value={trustLabel(item(), i18n)} />
             </div>
 
             <div>
-              <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Lifecycle</h3>
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{i18n.t('uiCopy.plugin.lifecycle')}</h3>
               <div class="mt-2 flex flex-wrap gap-2">
                 <PluginActions
                   item={item()}
@@ -310,14 +314,14 @@ export function PluginCenterDetails(props: {
                     class="cursor-pointer rounded-md border px-2.5 py-1 text-xs hover:bg-muted"
                     onClick={() => props.onCommand({ type: 'uninstall', pluginInstanceID: item().pluginInstanceID!, dataRetention: 'keep_data' })}
                   >
-                    Keep data
+                    {i18n.t('uiCopy.plugin.keepData')}
                   </button>
                   <button
                     type="button"
                     class="cursor-pointer rounded-md border border-destructive/30 px-2.5 py-1 text-xs text-destructive hover:bg-destructive/10"
                     onClick={() => props.onCommand({ type: 'uninstall', pluginInstanceID: item().pluginInstanceID!, dataRetention: 'delete_data' })}
                   >
-                    Delete data
+                    {i18n.t('uiCopy.plugin.deleteData')}
                   </button>
                 </div>
               </Show>
@@ -357,6 +361,7 @@ function PluginActions(props: {
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
 }) {
+  const i18n = useI18n();
   const disabledManagement = () => !props.canManage;
   const item = () => props.item;
   return (
@@ -370,7 +375,7 @@ function PluginActions(props: {
           onClick={() => props.onCommand({ type: 'install', pluginID: item().pluginID, source: 'official_catalog' })}
         >
           <Download class="h-3.5 w-3.5" />
-          Install
+          {i18n.t('uiCopy.plugin.install')}
         </button>
       </Show>
       <Show when={item().lifecycleState === 'enabled' && item().defaultLaunchTarget}>
@@ -390,7 +395,7 @@ function PluginActions(props: {
           }}
         >
           <CheckCircle class="h-3.5 w-3.5" />
-          Open
+          {i18n.t('common.actions.open')}
         </button>
       </Show>
       <Show when={canEnablePlugin(item())}>
@@ -402,7 +407,7 @@ function PluginActions(props: {
           onClick={() => props.onCommand({ type: 'enable', pluginInstanceID: item().pluginInstanceID! })}
         >
           <Settings class="h-3.5 w-3.5" />
-          Enable
+          {i18n.t('uiCopy.plugin.enable')}
         </button>
       </Show>
       <Show when={item().pluginInstanceID && item().lifecycleState === 'enabled'}>
@@ -414,7 +419,7 @@ function PluginActions(props: {
           onClick={() => props.onCommand({ type: 'disable', pluginInstanceID: item().pluginInstanceID! })}
         >
           <Settings class="h-3.5 w-3.5" />
-          Disable
+          {i18n.t('uiCopy.plugin.disable')}
         </button>
       </Show>
       <Show when={item().lifecycleState === 'update_available' && item().pluginInstanceID}>
@@ -431,7 +436,7 @@ function PluginActions(props: {
           })}
         >
           <RefreshIcon class="h-3.5 w-3.5" />
-          Update
+          {i18n.t('uiCopy.plugin.update')}
         </button>
       </Show>
       <Show when={item().pluginInstanceID}>
@@ -443,7 +448,7 @@ function PluginActions(props: {
           onClick={() => props.onAskUninstall(item().pluginInstanceID!)}
         >
           <Trash class="h-3.5 w-3.5" />
-          Uninstall
+          {i18n.t('uiCopy.plugin.uninstall')}
         </button>
       </Show>
     </>
@@ -473,7 +478,7 @@ function PluginIcon(props: { item: PluginInventoryItem; class?: string; size?: '
   );
 }
 
-function filterItems(items: readonly PluginInventoryItem[], rawQuery: string): PluginInventoryItem[] {
+function filterItems(items: readonly PluginInventoryItem[], rawQuery: string, i18n: I18nHelpers): PluginInventoryItem[] {
   const query = rawQuery.trim().toLowerCase();
   if (!query) return [...items];
   return items.filter((item) => {
@@ -482,7 +487,7 @@ function filterItems(items: readonly PluginInventoryItem[], rawQuery: string): P
       item.description,
       item.publisher,
       item.pluginID,
-      statusLabel(item),
+      statusLabel(item, i18n),
       item.officialCatalog?.stableVersion,
       item.version,
     ];
@@ -507,22 +512,22 @@ function canEnablePlugin(item: PluginInventoryItem): boolean {
   return Boolean(item.pluginInstanceID) && (item.lifecycleState === 'disabled' || item.lifecycleState === 'installed');
 }
 
-function statusLabel(item: PluginInventoryItem): string {
+function statusLabel(item: PluginInventoryItem, i18n: I18nHelpers): string {
   switch (item.lifecycleState) {
     case 'not_installed':
-      return 'Available';
+      return i18n.t('uiCopy.plugin.available');
     case 'installed':
-      return 'Installed';
+      return i18n.t('uiCopy.plugin.installed');
     case 'enabled':
-      return 'Enabled';
+      return i18n.t('uiCopy.plugin.enabled');
     case 'disabled':
-      return 'Disabled';
+      return i18n.t('uiCopy.plugin.disabled');
     case 'update_available':
-      return 'Update available';
+      return i18n.t('uiCopy.plugin.updateAvailable');
     case 'needs_attention':
-      return 'Needs attention';
+      return i18n.t('uiCopy.plugin.needsAttention');
     default:
-      return 'Unavailable';
+      return i18n.t('uiCopy.plugin.unavailable');
   }
 }
 
@@ -533,18 +538,18 @@ function statusPillClass(item: PluginInventoryItem): string {
   return 'rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground';
 }
 
-function trustLabel(item: PluginInventoryItem): string {
+function trustLabel(item: PluginInventoryItem, i18n: I18nHelpers): string {
   switch (item.trustBadge) {
     case 'official':
-      return 'Official';
+      return i18n.t('uiCopy.plugin.official');
     case 'revoked':
-      return 'Revoked';
+      return i18n.t('uiCopy.plugin.revoked');
     case 'blocked':
-      return 'Blocked';
+      return i18n.t('uiCopy.plugin.blocked');
     case 'unavailable':
-      return 'Unavailable';
+      return i18n.t('uiCopy.plugin.unavailable');
     default:
-      return 'Unavailable';
+      return i18n.t('uiCopy.plugin.unavailable');
   }
 }
 

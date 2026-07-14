@@ -16,12 +16,14 @@ import {
   type GitGetDiffContentRequest,
 } from "../protocol/redeven_v1";
 import {
-  gitCommitDiffPresentationBadge,
-  gitCommitDiffPresentationDetail,
   seedGitDiffContent,
   type GitSeededCommitFileSummary,
   type GitSeededWorkspaceChange,
 } from "../utils/gitWorkbench";
+import {
+  localizedGitCommitDiffPresentationBadge,
+  localizedGitCommitDiffPresentationDetail,
+} from '../utils/localizedGitWorkbench';
 import {
   redevenSegmentedItemClass,
   redevenSurfaceRoleClass,
@@ -29,6 +31,7 @@ import {
 import { GitPatchViewer } from "./GitPatchViewer";
 import { PreviewWindow } from "./PreviewWindow";
 import { GitMetaPill, GitStatePane } from "./GitWorkbenchPrimitives";
+import { useI18n } from "../i18n";
 
 export type GitDiffDialogItem =
   | GitSeededCommitFileSummary
@@ -398,6 +401,7 @@ function createErrorGitDiffDialogLoadSlot(
 }
 
 export function GitDiffDialog(props: GitDiffDialogProps) {
+  const i18n = useI18n();
   const layout = useLayout();
   const rpc = useRedevenRpc();
   const [modeState, setModeState] = createSignal<GitDiffDialogModeState>({
@@ -487,7 +491,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
         kind: "unavailable",
         mode: "preview",
         item: session.directoryUnavailableItem,
-        message: "Diff preview is unavailable for directory entries.",
+        message: i18n.t('gitDiff.directoryUnavailable'),
       };
     }
     const readyItem = previewSlotMatchesSelection()
@@ -518,7 +522,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
         kind: "unavailable",
         mode: "preview",
         item: session.unavailableItem,
-        message: "Patch preview is unavailable for this file.",
+        message: i18n.t('gitDiff.patchUnavailable'),
       };
     }
     return { kind: "empty" };
@@ -537,7 +541,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
         kind: "unavailable",
         mode: "full",
         item: session.directoryUnavailableItem,
-        message: "Diff preview is unavailable for directory entries.",
+        message: i18n.t('gitDiff.directoryUnavailable'),
       };
     }
     if (fullSlotMatchesSelection() && full.item) {
@@ -572,7 +576,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
         kind: "unavailable",
         mode: "full",
         item: session.unavailableItem,
-        message: "Full-context diff is unavailable for this file.",
+        message: i18n.t('gitDiff.fullContextUnavailable'),
       };
     }
     return { kind: "empty" };
@@ -581,12 +585,12 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
     activeMode() === "full-context" ? fullBodyState() : previewBodyState(),
   );
   const commitPresentationBadge = createMemo(() =>
-    gitCommitDiffPresentationBadge(activeCommitPresentation()),
+    localizedGitCommitDiffPresentationBadge(activeCommitPresentation(), i18n),
   );
   const commitPresentationDetail = createMemo(() =>
-    gitCommitDiffPresentationDetail(activeCommitPresentation()),
+    localizedGitCommitDiffPresentationDetail(activeCommitPresentation(), i18n),
   );
-  const title = createMemo(() => props.title ?? "Diff");
+  const title = createMemo(() => props.title ?? i18n.t('gitDiff.title'));
   const useDesktopFloatingWindow = createMemo(
     () =>
       typeof props.desktopWindowZIndex === "number" &&
@@ -614,26 +618,26 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
   });
   const activeBodyLoadingMessage = createMemo(() =>
     activeMode() === "full-context"
-      ? "Loading full-context diff..."
-      : "Loading patch preview...",
+      ? i18n.t('gitDiff.loadingFullContext')
+      : i18n.t('gitDiff.loadingPatch'),
   );
   const headerHintMessage = createMemo(() => {
     if (selectionSession().directoryUnavailableItem) {
-      return "Directory entries do not expose a single-file diff preview.";
+      return i18n.t('gitDiff.directoryNoSingleFile');
     }
     if (activeMode() === "full-context") {
       return fullContextLoading()
-        ? "Loading full context..."
-        : "Includes unchanged lines for broader review context.";
+        ? i18n.t('gitDiff.loadingFullContextShort')
+        : i18n.t('gitDiff.fullContextDescription');
     }
     return previewBodyState().kind === "loading"
-      ? "Loading patch preview..."
-      : "Loads a single-file patch on demand.";
+      ? i18n.t('gitDiff.loadingPatch')
+      : i18n.t('gitDiff.patchDescription');
   });
   const activeBodyEmptyMessage = createMemo(() =>
     activeMode() === "patch"
       ? props.emptyMessage
-      : "Full-context diff is unavailable for this file.",
+      : i18n.t('gitDiff.fullContextUnavailable'),
   );
   const activeErrorState = createMemo(() => {
     const state = activeBodyState();
@@ -649,7 +653,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
   });
   const unavailableMessage = (item: GitDiffFileContent): string | undefined => {
     if (isDirectoryDiffPlaceholder(item))
-      return "Diff preview is unavailable for directory entries.";
+      return i18n.t('gitDiff.directoryUnavailable');
     if (typeof props.unavailableMessage === "function")
       return props.unavailableMessage(item);
     return props.unavailableMessage;
@@ -754,7 +758,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
                 previewRequestKey,
                 resolveDiffErrorState(
                   err,
-                  "Failed to load patch preview.",
+                  i18n.t('gitDiff.failedPatch'),
                   {
                     mode: "preview",
                     source: props.source,
@@ -867,7 +871,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
                 fullRequestKey,
                 resolveDiffErrorState(
                   err,
-                  "Failed to load full-context diff.",
+                  i18n.t('gitDiff.failedFullContext'),
                   {
                     mode: "full",
                     source: props.source,
@@ -911,7 +915,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
             aria-pressed={activeMode() === "patch"}
             onClick={() => setModeForCurrentSelection("patch")}
           >
-            Patch
+            {i18n.t('uiCopy.git.patch')}
           </button>
           <button
             type="button"
@@ -926,7 +930,7 @@ export function GitDiffDialog(props: GitDiffDialogProps) {
             disabled={!canLoadFullContext()}
             onClick={() => setModeForCurrentSelection("full-context")}
           >
-            Full Context
+            {i18n.t('uiCopy.git.fullContext')}
           </button>
         </div>
 

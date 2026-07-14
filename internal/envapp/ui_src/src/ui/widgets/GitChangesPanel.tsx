@@ -241,10 +241,10 @@ function WorkspaceTable(props: WorkspaceTableProps) {
           tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
           header={(
             <tr class="hidden">
-              <th>Path</th>
-              <th>Status</th>
-              <th>Changes</th>
-              <th>Actions</th>
+              <th>{i18n.t('git.common.path')}</th>
+              <th>{i18n.t('git.common.status')}</th>
+              <th>{i18n.t('git.common.changes')}</th>
+              <th>{i18n.t('settings.table.actions')}</th>
             </tr>
           )}
           renderRow={(item) => {
@@ -784,7 +784,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
     <div class="flex h-full min-h-0 flex-col">
       <div class="sr-only">
         <span class="git-tone-dot git-tone-dot--warning" aria-hidden="true" />
-        <div class="tracking-[0.16em]">Workspace</div>
+        <div class="tracking-[0.16em]">{i18n.t('git.changes.workspace')}</div>
       </div>
       <Show when={!visibleError()} fallback={<GitStatePane tone="error" message={visibleError()} />}>
         {(() => {
@@ -827,7 +827,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
               <div class="git-changes-toolbar-status-row mt-1.5 flex flex-wrap items-center justify-between gap-2">
                 <div class="flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
                   <Show when={headerPresentation().isCleanState}>
-                    <span>Clean</span>
+                    <span>{i18n.t('git.common.clean')}</span>
                     <span aria-hidden="true">·</span>
                   </Show>
                   <span>{countBadgeLabel()}</span>

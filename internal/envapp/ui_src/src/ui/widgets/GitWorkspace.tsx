@@ -10,7 +10,8 @@ import type {
   GitResolveRepoResponse,
   GitWorkspaceChange,
 } from '../protocol/redeven_v1';
-import { buildGitWorkbenchSubviewItems, type GitBranchDetailPresentationState, type GitBranchSubview, type GitDetachedSwitchTarget, type GitStashWindowRequest, type GitWorkbenchSubview, type GitWorkspaceViewPageState, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
+import { type GitBranchDetailPresentationState, type GitBranchSubview, type GitDetachedSwitchTarget, type GitStashWindowRequest, type GitWorkbenchSubview, type GitWorkspaceViewPageState, type GitWorkspaceViewSection } from '../utils/gitWorkbench';
+import { localizedGitWorkbenchSubviewItems } from '../utils/localizedGitWorkbench';
 import { BrowserWorkspaceShell } from './BrowserWorkspaceShell';
 import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitch';
 import { GitViewNav } from './GitViewNav';
@@ -133,18 +134,18 @@ export interface GitWorkspaceProps {
 
 export function GitWorkspace(props: GitWorkspaceProps) {
   const i18n = useI18n();
-  const subviewItems = () => buildGitWorkbenchSubviewItems({
+  const subviewItems = () => localizedGitWorkbenchSubviewItems({
     repoSummary: props.repoSummary,
     workspace: props.workspace,
     branchesCount: (props.branches?.local.length ?? 0) + (props.branches?.remote.length ?? 0),
-  });
+  }, i18n);
   const shellLoadingMessage = () => String(props.shellLoadingMessage ?? '').trim();
   const shellBlocking = () => shellLoadingMessage().length > 0;
   const shellSidebarNote = () => i18n.t('git.workspace.preparingActiveView');
 
   return (
     <BrowserWorkspaceShell
-      title="Browser"
+      title={i18n.t('files.title')}
       width={props.width}
       open={props.open}
       resizable={props.resizable}

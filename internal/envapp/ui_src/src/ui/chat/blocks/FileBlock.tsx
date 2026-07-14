@@ -3,6 +3,7 @@
 import type { Component } from 'solid-js';
 import { Show } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { useI18n } from '../../i18n';
 
 export interface FileBlockProps {
   name: string;
@@ -50,6 +51,7 @@ const DownloadIcon = () => (
  * download link. Clicking the card opens the file URL if available.
  */
 export const FileBlock: Component<FileBlockProps> = (props) => {
+  const i18n = useI18n();
   const handleClick = () => {
     if (props.url) {
       window.open(props.url, '_blank', 'noopener,noreferrer');
@@ -78,7 +80,7 @@ export const FileBlock: Component<FileBlockProps> = (props) => {
         </div>
       </div>
       <Show when={props.url}>
-        <span class="chat-file-download" aria-label="Download">
+        <span class="chat-file-download" aria-label={i18n.t('uiCopy.chat.download')}>
           <DownloadIcon />
         </span>
       </Show>

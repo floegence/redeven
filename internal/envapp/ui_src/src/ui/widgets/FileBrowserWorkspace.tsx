@@ -438,7 +438,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
 
   return (
     <BrowserWorkspaceShell
-      title={i18n.t('files.browserTitle')}
+      title={i18n.t('files.title')}
       width={props.width}
       open={props.open}
       resizable={props.resizable}

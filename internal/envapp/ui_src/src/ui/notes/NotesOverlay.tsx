@@ -5,11 +5,11 @@ import {
 import { createEffect, createMemo, onCleanup } from 'solid-js';
 import {
   createI18nHelpers,
-  SUPPORTED_LOCALES,
   useI18n,
   type I18nHelpers,
 } from '../i18n';
 import type { TranslationParams } from '../i18n/dictionaryTypes';
+import { getLoadedEnvAppDictionaries } from '../i18n/locales';
 import { useRedevenNotesController } from './createRedevenNotesController';
 import { createNotesOverlayViewportController } from './notesOverlayViewport';
 
@@ -303,21 +303,26 @@ function replaceTrailingTextNode(element: Element | undefined, value: string): v
   element.append(document.createTextNode(value));
 }
 
-const localizedNotesOverlayStringCache = new Map<Parameters<I18nHelpers['t']>[0], readonly string[]>();
+const localizedNotesOverlayStringCache = new Map<Parameters<I18nHelpers['t']>[0], Readonly<{
+  localeSignature: string;
+  values: readonly string[];
+}>>();
 
 function allLocalizedNotesOverlayStrings(
   key: Parameters<I18nHelpers['t']>[0],
   params?: TranslationParams,
 ): readonly string[] {
+  const loaded = getLoadedEnvAppDictionaries();
   if (params) {
-    return SUPPORTED_LOCALES.map((locale) => createI18nHelpers(locale).t(key, params));
+    return loaded.map(({ locale, dictionary }) => createI18nHelpers(locale, dictionary).t(key, params));
   }
+  const localeSignature = loaded.map(({ locale }) => locale).join('|');
   const cached = localizedNotesOverlayStringCache.get(key);
-  if (cached) {
-    return cached;
+  if (cached?.localeSignature === localeSignature) {
+    return cached.values;
   }
-  const values = SUPPORTED_LOCALES.map((locale) => createI18nHelpers(locale).t(key));
-  localizedNotesOverlayStringCache.set(key, values);
+  const values = loaded.map(({ locale, dictionary }) => createI18nHelpers(locale, dictionary).t(key));
+  localizedNotesOverlayStringCache.set(key, { localeSignature, values });
   return values;
 }
 

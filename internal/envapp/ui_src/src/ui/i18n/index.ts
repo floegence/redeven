@@ -1,4 +1,5 @@
 export { createI18nHelpers, type I18nHelpers } from './createI18n';
+export type { EnvAppTranslationKey } from './locales';
 export { I18nProvider, useI18n, type EnvAppI18nContext, type EnvAppLanguageSource } from './I18nProvider';
 export { LanguagePreferenceMenu, type LanguagePreferenceMenuProps, type LanguagePreferenceMenuVariant } from './LanguagePreferenceMenu';
 export {
@@ -15,3 +16,4 @@ export {
   type RedevenLocalePreference,
 } from './localeMeta';
 export { readBrowserLanguageCandidates, resolveLocalePreference, type RedevenLanguageSnapshot } from './resolveLocale';
+export * from './terminology';

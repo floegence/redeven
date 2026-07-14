@@ -4,6 +4,7 @@ import { Files as FilesIcon, History } from '@floegence/floe-webapp-core/icons';
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
+import { useI18n } from '../i18n';
 
 export type GitHistoryMode = 'files' | 'git';
 
@@ -17,6 +18,7 @@ export interface GitHistoryModeSwitchProps {
 }
 
 export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
+  const i18n = useI18n();
   const buttonBaseClass =
     'relative z-10 flex h-7 min-w-0 w-full flex-1 cursor-pointer items-center justify-center gap-1.5 rounded border border-transparent px-2 text-center text-xs font-medium transition-[color,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-55';
   const gitDisabledReason = () => String(props.gitHistoryDisabledReason ?? '').trim();
@@ -42,14 +44,14 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
       onClick={() => props.onChange('git')}
     >
       <History class="size-3.5 shrink-0" />
-      <span class="truncate">Git</span>
+      <span class="truncate">{i18n.t('shell.nav.git')}</span>
     </button>
   );
 
   return (
     <div
       role="radiogroup"
-      aria-label="Browser mode"
+      aria-label={i18n.t('uiCopy.git.browserMode')}
       data-browser-mode-switch=""
       data-mode={props.mode}
       class={cn('browser-mode-switch inline-grid w-full grid-cols-2 items-center rounded-md border p-0.5 shadow-[0_1px_0_rgba(0,0,0,0.03)_inset]', redevenSurfaceRoleClass('segmented'), props.class)}
@@ -69,7 +71,7 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
         onClick={() => props.onChange('files')}
       >
         <FilesIcon class="size-3.5 shrink-0" />
-        <span class="truncate">Files</span>
+        <span class="truncate">{i18n.t('files.title')}</span>
       </button>
 
       <Show

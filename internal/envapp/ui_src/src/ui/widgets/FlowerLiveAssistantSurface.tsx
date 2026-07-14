@@ -4,6 +4,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { MessageBubble, StreamingShimmer, type ChatAvatar, type Message } from '../chat';
 import { hasVisibleMessageContent } from '../chat/message/messageVisibility';
 import { MessageFrame } from '../chat/message/MessageFrame';
+import { useI18n } from '../i18n';
 
 
 export interface FlowerLiveAssistantSurfaceProps {
@@ -13,17 +14,20 @@ export interface FlowerLiveAssistantSurfaceProps {
   class?: string;
 }
 
-const LiveAssistantPlaceholderBubble: Component = () => (
-  <div class="chat-message-bubble chat-message-bubble-assistant chat-live-assistant-placeholder-bubble">
-    <div class="chat-message-block-slot">
-      <div class="chat-markdown-block">
-        <div class="chat-markdown-empty-streaming" aria-label="Assistant is responding">
-          <StreamingShimmer />
+const LiveAssistantPlaceholderBubble: Component = () => {
+  const i18n = useI18n();
+  return (
+    <div class="chat-message-bubble chat-message-bubble-assistant chat-live-assistant-placeholder-bubble">
+      <div class="chat-message-block-slot">
+        <div class="chat-markdown-block">
+          <div class="chat-markdown-empty-streaming" aria-label={i18n.t('uiCopy.chat.assistantResponding')}>
+            <StreamingShimmer />
+          </div>
         </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export const FlowerLiveAssistantSurface: Component<FlowerLiveAssistantSurfaceProps> = (props) => {
   const hasRenderableMessage = createMemo(() => !!props.message);

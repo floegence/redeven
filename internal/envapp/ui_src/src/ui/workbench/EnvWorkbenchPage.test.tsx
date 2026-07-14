@@ -503,15 +503,16 @@ vi.mock('../pages/EnvContext', () => ({
 
 vi.mock('../i18n', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../i18n')>();
+  const { createTestI18nHelpers } = await import('../i18n/locales/testDictionaries');
   return {
     ...actual,
     useI18n: () => ({
-      t: (key: any, params?: any) => actual.createI18nHelpers(testLocale() as any).t(key, params),
-      tn: (key: any, count: number, params?: any) => actual.createI18nHelpers(testLocale() as any).tn(key, count, params),
-      rich: (key: any, params?: any) => actual.createI18nHelpers(testLocale() as any).rich(key, params),
-      formatDateTime: (value: any, options?: any) => actual.createI18nHelpers(testLocale() as any).formatDateTime(value, options),
-      formatRelativeTime: (value: any) => actual.createI18nHelpers(testLocale() as any).formatRelativeTime(value),
-      formatNumber: (value: number, options?: any) => actual.createI18nHelpers(testLocale() as any).formatNumber(value, options),
+      t: (key: any, params?: any) => createTestI18nHelpers(testLocale() as any).t(key, params),
+      tn: (key: any, count: number, params?: any) => createTestI18nHelpers(testLocale() as any).tn(key, count, params),
+      rich: (key: any, params?: any) => createTestI18nHelpers(testLocale() as any).rich(key, params),
+      formatDateTime: (value: any, options?: any) => createTestI18nHelpers(testLocale() as any).formatDateTime(value, options),
+      formatRelativeTime: (value: any) => createTestI18nHelpers(testLocale() as any).formatRelativeTime(value),
+      formatNumber: (value: number, options?: any) => createTestI18nHelpers(testLocale() as any).formatNumber(value, options),
       snapshot: () => ({
         preference: testLocale(),
         resolved_locale: testLocale(),

@@ -6,7 +6,8 @@ import type {
   GitListWorkspaceChangesResponse,
   GitRepoSummaryResponse,
 } from '../protocol/redeven_v1';
-import { branchDisplayName, branchStatusSummary, describeGitHead, summarizeWorkspaceCount } from '../utils/gitWorkbench';
+import { branchDisplayName, describeGitHead, summarizeWorkspaceCount } from '../utils/gitWorkbench';
+import { localizedBranchStatusSummary, localizedGitHeadDisplay } from '../utils/localizedGitWorkbench';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { gitCompareTone } from './GitChrome';
 import { GitInlineLoadingStatus, GitSection, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
@@ -55,7 +56,7 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
               const localBranches = props.branches?.local?.length ?? 0;
               const remoteBranches = props.branches?.remote?.length ?? 0;
               const compareTone = () => gitCompareTone(props.compare?.targetAheadCount, props.compare?.targetBehindCount);
-              const headDisplay = describeGitHead(summary);
+              const headDisplay = localizedGitHeadDisplay(describeGitHead(summary), i18n);
               const repoSignals = () => [
                 { label: i18n.t('git.common.head'), value: headDisplay.label, tone: headDisplay.detached ? 'warning' as const : 'brand' as const },
                 headDisplay.detail ? { label: i18n.t('git.common.commit'), value: headDisplay.detail, tone: 'neutral' as const } : null,
@@ -99,7 +100,7 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
                   >
                     <div class="text-xs font-medium text-foreground">{props.selectedBranch ? branchDisplayName(props.selectedBranch) : i18n.t('git.overview.chooseBranch')}</div>
                     <div class="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                      {props.selectedBranch ? branchStatusSummary(props.selectedBranch) : i18n.t('git.overview.branchCompareAppears')}
+                      {props.selectedBranch ? localizedBranchStatusSummary(props.selectedBranch, i18n) : i18n.t('git.overview.branchCompareAppears')}
                     </div>
                     <Show when={props.selectedBranch?.subject}>
                       <GitSubtleNote class="mt-2 text-foreground">{props.selectedBranch?.subject}</GitSubtleNote>

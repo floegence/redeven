@@ -3,6 +3,7 @@ import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import { Button, Tag, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { Tooltip } from '../primitives/Tooltip';
+import { useI18n } from '../i18n';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitChangeLabel, gitChangeTone, gitToneBadgeClass, gitToneDotClass, gitToneInsetClass, gitToneSurfaceClass, type GitChromeTone } from './GitChrome';
 
@@ -213,9 +214,10 @@ export interface GitPagedTableFooterProps {
 }
 
 export function GitPagedTableFooter(props: GitPagedTableFooterProps) {
+  const i18n = useI18n();
   const loading = () => Boolean(props.loading);
-  const buttonLabel = () => (loading() ? (props.loadingLabel ?? 'Loading more...') : (props.buttonLabel ?? 'Load more'));
-  const loadingStatus = () => (loading() ? (props.loadingStatus ?? 'Loading next page') : '');
+  const buttonLabel = () => (loading() ? (props.loadingLabel ?? i18n.t('git.common.loadingMore')) : (props.buttonLabel ?? i18n.t('uiCopy.git.loadMore')));
+  const loadingStatus = () => (loading() ? (props.loadingStatus ?? i18n.t('git.common.loadingNextPage')) : '');
 
   return (
     <div
@@ -315,6 +317,7 @@ export interface GitStatePaneProps {
 }
 
 export function GitStatePane(props: GitStatePaneProps) {
+  const i18n = useI18n();
   const tone = () => props.tone ?? 'muted';
   const surfaceClass = () => {
     if (!props.surface) return '';
@@ -337,7 +340,7 @@ export function GitStatePane(props: GitStatePaneProps) {
         <Show when={props.loading}>
           <div class="git-state-pane__loading-stack">
             <div class={cn('git-state-pane__loading-eyebrow', tone() === 'error' && 'git-state-pane__loading-eyebrow--error')}>
-              {props.eyebrow ?? 'Loading'}
+              {props.eyebrow ?? i18n.t('common.status.loading')}
             </div>
             <GitLoadingIndicator tone={tone()} />
           </div>

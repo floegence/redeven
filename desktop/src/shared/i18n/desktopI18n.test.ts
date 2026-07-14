@@ -7,6 +7,11 @@ import {
   localePreferenceDisplayName,
   REDEVEN_LOCALE_META,
   REDEVEN_LOCALE_PREFERENCES,
+  REDEVEN_I18N_FORBIDDEN_GENERIC_ENGLISH_TERMS,
+  REDEVEN_I18N_LOCALE_TERMINOLOGY,
+  REDEVEN_I18N_PROTECTED_TERMS,
+  REDEVEN_I18N_TECHNICAL_TERM_ALLOWLIST,
+  REDEVEN_I18N_ZH_TW_FORBIDDEN_SIMPLIFIED_CHARACTERS,
   REDEVEN_SUPPORTED_LOCALES,
   resolveRedevenLocale,
   SYSTEM_LOCALE_PREFERENCE,
@@ -15,23 +20,16 @@ import {
   flattenDictionaryMessages,
   type DesktopTranslationShape,
 } from './index';
-import { isPluralMessage } from './messageTypes';
+import { isPluralMessage, type TranslationLeaf } from './messageTypes';
 import { enUS } from './locales/en-US';
 
 const DESKTOP_TRANSLATION_ROOTS = new Set(
   Object.keys(enUS).filter((key) => key !== 'plural'),
 );
 
-const FLOWER_SURFACE_ENGLISH_COPY_ALLOWLIST = new Set([
-  'runtime.localEnvironment',
-  'chat.entryLabel',
-  'chat.contextIndicatorUnknownPercent',
-  'settings.apiKey',
-  'settings.defaultPermissionBadge',
-  'settings.dialogAPIKey',
-  'settings.dialogBaseURL',
-  'settings.dialogBraveAPIKey',
-]);
+function desktopLeafStrings(value: TranslationLeaf): readonly string[] {
+  return typeof value === 'string' ? [value] : Object.values(value.forms);
+}
 
 function listSourceFiles(root: string): readonly string[] {
   const entries = fs.readdirSync(root, { withFileTypes: true });
@@ -214,10 +212,97 @@ describe('Desktop shared i18n resolver', () => {
 });
 
 describe('Desktop shared i18n dictionaries', () => {
+  it('assembles every non-English locale from an explicit JSON catalog', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, 'desktopI18n.ts'), 'utf8');
+    for (const locale of REDEVEN_SUPPORTED_LOCALES.filter((candidate) => candidate !== 'en-US')) {
+      expect(source).toContain(`./locales/catalogs/${locale}.json`);
+    }
+    expect(source).not.toMatch(/from ['"]\.\/locales\/(?:zh-CN|zh-TW|ja-JP|ko-KR|de-DE|fr-FR|es-ES|pt-BR|ru-RU)['"]/);
+  });
+
   it('keep every locale shape, placeholder, and protected term aligned with en-US', () => {
     for (const locale of REDEVEN_SUPPORTED_LOCALES) {
       expect(validateDesktopDictionary(locale, enUS, DESKTOP_I18N_DICTIONARIES[locale])).toEqual([]);
     }
+  });
+
+  it('rejects empty translation leaves in every Desktop catalog', () => {
+    const violations: string[] = [];
+    for (const locale of REDEVEN_SUPPORTED_LOCALES) {
+      for (const { path: key, value } of flattenDictionaryMessages(DESKTOP_I18N_DICTIONARIES[locale])) {
+        for (const message of desktopLeafStrings(value)) {
+          if (message.trim().length === 0) violations.push(`${locale}:${key}`);
+        }
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  it('rejects generic English product concepts and translation-generator markers', () => {
+    for (const locale of REDEVEN_SUPPORTED_LOCALES.filter((candidate) => candidate !== 'en-US')) {
+      for (const row of flattenDictionaryMessages(DESKTOP_I18N_DICTIONARIES[locale])) {
+        for (const rawValue of desktopLeafStrings(row.value)) {
+          const value = rawValue
+            .replace(/\{[^}]+\}/g, '')
+            .replace(/`[^`]+`/g, '');
+          expect(value, `${locale}:${row.path}`).not.toMatch(/ZXQ(?:KEEP|SEG|GARDER)|QXZ/);
+          for (const term of REDEVEN_I18N_FORBIDDEN_GENERIC_ENGLISH_TERMS) {
+            expect(value, `${locale}:${row.path}:${term}`).not.toMatch(new RegExp(`\\b${term.replaceAll(' ', '[\\s-]+')}\\b`, 'i'));
+          }
+        }
+      }
+    }
+  });
+
+  it('allows identical English copy only for short names, technical terms, or code literals', () => {
+    const sourceRows = new Map(flattenDictionaryMessages(enUS).map((row) => [row.path, row.value]));
+    const allowedTerms = [
+      ...REDEVEN_I18N_PROTECTED_TERMS,
+      ...REDEVEN_I18N_TECHNICAL_TERM_ALLOWLIST.map((entry) => entry.term),
+      'Desktop',
+      'Terminal',
+      'Shell',
+      'GitHub',
+      'localhost',
+    ].sort((left, right) => right.length - left.length);
+    const violations: string[] = [];
+
+    for (const locale of REDEVEN_SUPPORTED_LOCALES.filter((candidate) => candidate !== 'en-US')) {
+      for (const row of flattenDictionaryMessages(DESKTOP_I18N_DICTIONARIES[locale])) {
+        const sourceValue = sourceRows.get(row.path);
+        if (!sourceValue) continue;
+        const sourceMessages = desktopLeafStrings(sourceValue);
+        const targetMessages = desktopLeafStrings(row.value);
+        sourceMessages.forEach((sourceMessage, index) => {
+          if (sourceMessage !== targetMessages[index] || /^(?:https?|wss?):\/\//.test(sourceMessage)) return;
+          let remainder = sourceMessage
+            .replace(/\{[A-Za-z_][A-Za-z0-9_]*\}/g, '')
+            .replace(/`[^`]+`/g, '');
+          for (const term of allowedTerms) remainder = remainder.replaceAll(term, '');
+          const words = remainder.match(/[A-Za-z]{2,}/g) ?? [];
+          if (words.length >= 3) violations.push(`${locale}:${row.path}=${sourceMessage}`);
+        });
+      }
+    }
+
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps Traditional Chinese free of common Simplified-only characters', () => {
+    const text = flattenDictionaryMessages(DESKTOP_I18N_DICTIONARIES['zh-TW'])
+      .flatMap((row) => desktopLeafStrings(row.value))
+      .join('\n');
+    const found = [...new Set([...text].filter((character) => REDEVEN_I18N_ZH_TW_FORBIDDEN_SIMPLIFIED_CHARACTERS.includes(character)))];
+    expect(found).toEqual([]);
+  });
+
+  it('defines reviewed terminology and explained technical exceptions for every locale', () => {
+    expect(Object.keys(REDEVEN_I18N_LOCALE_TERMINOLOGY).sort()).toEqual(REDEVEN_SUPPORTED_LOCALES.filter((locale) => locale !== 'en-US').sort());
+    for (const terminology of Object.values(REDEVEN_I18N_LOCALE_TERMINOLOGY)) {
+      expect(Object.values(terminology).every((value) => value.trim().length > 0)).toBe(true);
+    }
+    expect(new Set(REDEVEN_I18N_TECHNICAL_TERM_ALLOWLIST.map((entry) => entry.term)).size).toBe(REDEVEN_I18N_TECHNICAL_TERM_ALLOWLIST.length);
+    expect(REDEVEN_I18N_TECHNICAL_TERM_ALLOWLIST.every((entry) => entry.reason.trim().length > 0)).toBe(true);
   });
 
   it('keeps non-English dictionaries assignable to a widened message shape', () => {
@@ -228,43 +313,39 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(zhCN.environmentFacts.sshHost).toBe('SSH主机');
     expect(zhCN.environmentFacts.startedAt).toBe('已启动 {time}');
     expect(zhCN.environmentAction.open).toBe('打开');
-    expect(zhCN.environmentAction.runtimeActions).toBe('Runtime 操作');
-    expect(zhCN.environmentAction.refreshRuntimeStatus).toBe('刷新 Runtime 状态');
-    expect(zhCN.environmentAction.startRuntime).toBe('启动 Runtime');
-    expect(zhCN.environmentAction.stopRuntime).toBe('停止 Runtime');
-    expect(zhCN.environmentAction.restartRuntime).toBe('重启 Runtime');
-    expect(zhCN.environmentAction.updateRuntime).toBe('更新 Runtime');
-    expect(zhCN.runtimeMessage.runtimeReadyOpenDetail).toBe('Runtime 已就绪。现在可以打开。');
-    expect(zhCN.runtimeMessage.restartRuntimeReady).toBe('Desktop 重启 Runtime 并且它报告就绪后，即可打开。');
-    expect(zhCN.shell.backToEnvironments).toBe('返回 Environments');
+    expect(zhCN.environmentAction.runtimeActions).toBe('运行时操作');
+    expect(zhCN.environmentAction.refreshRuntimeStatus).toBe('刷新运行时状态');
+    expect(zhCN.environmentAction.startRuntime).toBe('启动运行时');
+    expect(zhCN.environmentAction.stopRuntime).toBe('停止运行时');
+    expect(zhCN.environmentAction.restartRuntime).toBe('重新启动运行时');
+    expect(zhCN.environmentAction.updateRuntime).toBe('更新运行时');
+    expect(zhCN.runtimeMessage.runtimeReadyOpenDetail).toBe('运行时已就绪，现在可以打开。');
+    expect(zhCN.runtimeMessage.restartRuntimeReady).toBe('Redeven Desktop 重新启动运行时且运行时报告就绪后，即可打开。');
+    expect(zhCN.shell.backToEnvironments).toBe('返回环境');
     expect(zhCN.environmentCenter.askFlowerForLabel).toBe('询问 Flower：{label}');
     expect(zhCN.environmentCenter.askFlowerCardTitle).toBe('询问 Flower');
-    expect(zhCN.environmentCenter.askFlowerLauncherQuestion).toBe('想让我先看这个 Environment 的哪一部分？');
+    expect(zhCN.environmentCenter.askFlowerLauncherQuestion).toBe('想让我们先查看这个环境的哪一部分？');
     expect(zhCN.environmentCenter.askFlowerLauncherPlaceholder).toBe('告诉 Flower 要检查或协调什么...');
     expect(zhCN.environmentCenter.askFlowerCardContextLabel).toBe('已关联上下文');
     expect(zhCN.environmentCenter.askFlowerWorkingDirectoryUnavailable).toBe('未选择工作目录。');
     expect(zhCN.environmentCenter.askFlowerCardLaunchFailedTitle).toBe('Flower 无法发起这次对话。');
-    expect(zhCN.environmentCenter.gatewaysTitle).toBe('Gateways');
-    expect(zhCN.environmentCenter.gatewaySearchPlaceholder).toBe('搜索 Gateways...');
-    expect(zhCN.environmentCenter.addGateway).toBe('添加 Gateway');
+    expect(zhCN.environmentCenter.gatewaysTitle).toBe('网关');
+    expect(zhCN.environmentCenter.gatewaySearchPlaceholder).toBe('搜索网关...');
+    expect(zhCN.environmentCenter.addGateway).toBe('添加网关');
     expect(zhCN.environmentCenter.addGatewayShort).toBe('添加');
     expect(zhCN.environmentCenter.gatewayViewShort).toBe('查看');
     expect(zhCN.environmentCenter.moreActions).toBe('更多操作');
-    expect(zhCN.environmentCenter.gatewayGuidanceReadyTitle).toBe('Gateway 已就绪');
-    expect(zhCN.environmentCenter.gatewaySummaryMany).toBe('已同步 {count} 个 environments');
+    expect(zhCN.environmentCenter.gatewayGuidanceReadyTitle).toBe('网关已准备好');
+    expect(zhCN.environmentCenter.gatewaySummaryMany).toBe('已同步 {count} 个环境');
     expect(zhCN.environmentStatus.pairingRequired).toBe('需要配对');
     expect('askFlowerCardReadyHint' in zhCN.environmentCenter).toBe(false);
     expect(zhCN.toast.flowerPromptQueued).toBe('已发送给 Flower。');
     expect(zhCN.connectionDialog.sshHost).toBe('SSH主机');
     expect(zhCN.connectionDialog.sshContainer).toBe('SSH主机容器');
-    expect(zhCN.runtimeMessage.sshContainerRuntime).toBe('SSH主机容器 Runtime');
+    expect(zhCN.runtimeMessage.sshContainerRuntime).toBe('SSH 容器运行时');
   });
 
   it('keeps Flower surface copy localized for every supported Desktop locale', () => {
-    const enFlowerRows = new Map(
-      flattenDictionaryMessages(enUS.flowerSurface).map((row) => [row.path, row.value]),
-    );
-
     for (const locale of REDEVEN_SUPPORTED_LOCALES) {
       const copy = DESKTOP_I18N_DICTIONARIES[locale].flowerSurface;
       expect(copy.chat.newChat.length).toBeGreaterThan(0);
@@ -272,16 +353,7 @@ describe('Desktop shared i18n dictionaries', () => {
       expect(copy.emptyState.reviewPrompt.length).toBeGreaterThan(0);
       expect(copy.settings.addProvider.length).toBeGreaterThan(0);
       expect(copy.settings.backToChat.length).toBeGreaterThan(0);
-      if (locale !== 'en-US') {
-        expect(copy.chat.send, locale).not.toBe(enUS.flowerSurface.chat.send);
-        const englishMatches = flattenDictionaryMessages(copy)
-          .filter((row) => (
-            row.value === enFlowerRows.get(row.path)
-            && !FLOWER_SURFACE_ENGLISH_COPY_ALLOWLIST.has(row.path)
-          ))
-          .map((row) => row.path);
-        expect(englishMatches, locale).toEqual([]);
-      }
+      if (locale !== 'en-US') expect(copy.chat.send, locale).not.toBe(enUS.flowerSurface.chat.send);
     }
     expect({
       preparing: DESKTOP_I18N_DICTIONARIES['en-US'].flowerSurface.chat.modelStatusPreparing,
@@ -388,14 +460,14 @@ describe('Desktop shared i18n dictionaries', () => {
       ...enUS,
       desktop: {
         ...enUS.desktop,
-        openLocalEnvironment: 'Open local workspace',
+        localUI: '本地界面',
       },
     } satisfies DesktopTranslationShape;
 
     expect(validateDictionaryProtectedTerms('xx-TEST', enUS, unsafe)).toContainEqual({
       locale: 'xx-TEST',
-      path: 'desktop.openLocalEnvironment',
-      message: 'Protected term "Local Environment" must remain unchanged.',
+      path: 'desktop.localUI',
+      message: 'Protected term "Local UI" must remain unchanged.',
     });
   });
 

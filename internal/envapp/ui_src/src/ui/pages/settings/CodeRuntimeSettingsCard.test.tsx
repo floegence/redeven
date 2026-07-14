@@ -13,10 +13,11 @@ import { browserEditorLocalFailureFromError } from '../../services/browserEditor
 
 vi.mock('../../i18n', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../i18n')>();
+  const { createTestI18nHelpers } = await import('../../i18n/locales/testDictionaries');
   return {
     ...actual,
     useI18n: () => ({
-      ...actual.createI18nHelpers(i18nTestState.locale),
+      ...createTestI18nHelpers(i18nTestState.locale),
       snapshot: () => ({
         preference: i18nTestState.locale,
         resolved_locale: i18nTestState.locale,
@@ -214,8 +215,8 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(host.textContent).toContain('当前编辑器');
     expect(host.textContent).toContain('托管编辑器来源');
     expect(host.textContent).toContain('已选择托管版本');
-    expect(host.textContent).toContain('Codespaces 使用已选择的托管 Browser Editor 版本。');
-    expect(host.textContent).toContain('共享 Runtime 根目录');
+    expect(host.textContent).toContain('Codespaces 使用选定的托管 Browser Editor 版本。');
+    expect(host.textContent).toContain('共享运行时根');
     expect(host.textContent).toContain('已安装的编辑器版本');
     expect(host.textContent).toContain('二进制路径');
     expect(host.textContent).toContain('使用此版本');
@@ -224,8 +225,8 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(host.textContent).not.toContain('Use this version');
 
     const tooltipContents = Array.from(host.querySelectorAll('[data-testid="tooltip"]')).map((node) => node.getAttribute('data-content'));
-    expect(tooltipContents).toContain('重新扫描 Browser Editor 清单和当前 Runtime。');
-    expect(tooltipContents).toContain('下载并发送最新 Browser Editor package 到已连接环境。');
+    expect(tooltipContents).toContain('重新扫描 Browser Editor 库存和活动运行时。');
+    expect(tooltipContents).toContain('下载最新的 Browser Editor 软件包并发送到连接的环境。');
   });
 
   it('renders unsupported platform diagnostics in zh-CN without a retry action', () => {

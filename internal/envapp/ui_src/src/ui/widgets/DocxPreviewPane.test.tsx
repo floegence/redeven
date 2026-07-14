@@ -280,8 +280,8 @@ describe('DocxPreviewPane', () => {
     triggerResizeObservers();
     await waitFor(() => host.querySelector('.docx-preview-pane__content') instanceof HTMLDivElement, 'Docx preview content not rendered');
 
-    const zoomInButton = host.querySelector('button[aria-label="Zoom in docx preview"]') as HTMLButtonElement | null;
-    const fitButton = host.querySelector('button[aria-label="Fit docx preview to width"]') as HTMLButtonElement | null;
+    const zoomInButton = host.querySelector('button[aria-label="Zoom in DOCX preview"]') as HTMLButtonElement | null;
+    const fitButton = host.querySelector('button[aria-label="Fit DOCX preview to width"]') as HTMLButtonElement | null;
     const frame = host.querySelector('.docx-preview-pane__frame') as HTMLDivElement | null;
     const content = host.querySelector('.docx-preview-pane__content') as HTMLDivElement | null;
 

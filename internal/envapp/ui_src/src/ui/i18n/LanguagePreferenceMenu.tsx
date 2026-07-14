@@ -132,9 +132,9 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
     }
   });
 
-  const selectLanguage = (value: RedevenLocalePreference) => {
+  const selectLanguage = async (value: RedevenLocalePreference) => {
     const preference = normalizeLocalePreference(value);
-    i18n.setLocalePreference(preference);
+    await i18n.setLocalePreference(preference);
     closeMenu(true);
     props.notify?.success(
       i18n.t('language.updatedTitle'),
@@ -220,7 +220,7 @@ export function LanguagePreferenceMenu(props: LanguagePreferenceMenuProps): JSX.
                       'hover:bg-accent focus:bg-accent focus:outline-none',
                       selected() && 'font-medium text-foreground',
                     )}
-                    onClick={() => selectLanguage(option.value)}
+                  onClick={() => void selectLanguage(option.value)}
                   >
                     <span class="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
                       {selected() ? <Check class="h-3 w-3" /> : null}

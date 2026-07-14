@@ -4221,7 +4221,7 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
       const detachButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Switch --detach"),
+        (node) => node.textContent?.includes("Detach here"),
       ) as HTMLButtonElement | undefined;
       expect(detachButton).toBeTruthy();
 

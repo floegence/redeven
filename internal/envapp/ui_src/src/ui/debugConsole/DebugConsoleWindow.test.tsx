@@ -28,10 +28,11 @@ async function flushSelectionTransaction() {
 
 vi.mock('../i18n', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../i18n')>();
+  const { createTestI18nHelpers } = await import('../i18n/locales/testDictionaries');
   return {
     ...actual,
     useI18n: () => {
-      const helpers = actual.createI18nHelpers(i18nState.locale as any);
+      const helpers = createTestI18nHelpers(i18nState.locale as any);
       return {
         ...helpers,
         snapshot: () => ({

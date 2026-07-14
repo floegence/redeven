@@ -2,6 +2,7 @@ import { ErrorBoundary, For, Suspense, Show, createEffect, createMemo, createSig
 import type { CodeEditorApi, CodeEditorProps } from '@floegence/floe-webapp-core/editor';
 import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+import { useI18n } from '../i18n';
 
 const CodeEditor = lazy(async () => {
   const module = await import('@floegence/floe-webapp-core/editor');
@@ -44,13 +45,14 @@ function splitPreviewLines(text: string): string[] {
 }
 
 function StaticTextPreviewPane(props: StaticTextPreviewPaneProps) {
+  const i18n = useI18n();
   const lines = createMemo(() => splitPreviewLines(props.text));
 
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
       <Show when={props.showEditorUnavailableNotice}>
         <div class="shrink-0 border-b border-warning/20 bg-warning/10 px-3 py-2 text-xs text-warning">
-          Editor unavailable. Showing a plain-text fallback for this preview.
+          {i18n.t('uiCopy.editor.plainTextFallback')}
         </div>
       </Show>
 
@@ -102,6 +104,7 @@ export interface TextFilePreviewPaneProps {
 }
 
 export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
+  const i18n = useI18n();
   const [monacoFailed, setMonacoFailed] = createSignal(false);
   const resolvedLanguage = createMemo<string | undefined>(() => {
     return props.descriptor.language;
@@ -131,9 +134,9 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
   const editFailureFallback = () => (
     <div class="flex h-full items-center justify-center p-4">
       <div class="max-w-md rounded-md border border-warning/20 bg-warning/10 px-4 py-3 text-sm">
-        <div class="font-medium text-foreground">Editor unavailable</div>
+        <div class="font-medium text-foreground">{i18n.t('uiCopy.editor.unavailable')}</div>
         <div class="mt-1 text-xs text-muted-foreground">
-          The Monaco editor could not start for this file. Discard this edit session or try again later.
+          {i18n.t('uiCopy.editor.unavailableDescription')}
         </div>
       </div>
     </div>
@@ -190,7 +193,7 @@ export function TextFilePreviewPane(props: TextFilePreviewPaneProps) {
               return props.editing ? editFailureFallback() : previewFallback(true);
             }}
           >
-            <Suspense fallback={<div class="flex h-full items-center justify-center text-sm text-muted-foreground">Loading editor...</div>}>
+            <Suspense fallback={<div class="flex h-full items-center justify-center text-sm text-muted-foreground">{i18n.t('uiCopy.editor.loading')}</div>}>
               {/* Monaco must remount when switching between read-only preview and edit mode.
                   Reusing a preview instance can leak stale readOnly state and trigger
                   "Cannot edit in read-only editor" after the user clicks Edit. */}

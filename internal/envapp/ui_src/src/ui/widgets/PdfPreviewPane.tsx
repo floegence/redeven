@@ -14,6 +14,7 @@ import {
   type RenderTask,
 } from './pdfPreviewRuntime';
 import { FilePreviewErrorState } from './FilePreviewErrorState';
+import { useI18n } from '../i18n';
 
 const PDF_PREVIEW_INSET = 12;
 const PDF_ZOOM_STEP = 0.1;
@@ -110,6 +111,7 @@ function PdfPreviewPage(props: {
   status: PageRenderStatus;
   registerCanvas: (pageNumber: number, element: HTMLCanvasElement | null) => void;
 }) {
+  const i18n = useI18n();
   onCleanup(() => {
     props.registerCanvas(props.layout.pageNumber, null);
   });
@@ -122,7 +124,9 @@ function PdfPreviewPage(props: {
         width: `${props.layout.frameWidth}px`,
       }}
     >
-      <div class="h-4 text-[11px] leading-4 text-muted-foreground">Page {props.layout.pageNumber}</div>
+      <div class="h-4 text-[11px] leading-4 text-muted-foreground">
+        {i18n.t('uiCopy.preview.pageLabel', { number: props.layout.pageNumber })}
+      </div>
       <div
         class="pdf-preview-pane__page-frame overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm"
         style={{
@@ -151,7 +155,7 @@ function PdfPreviewPage(props: {
               <div class="absolute inset-0 flex h-full flex-col items-center justify-center gap-2 bg-muted/20 text-center">
                 <div class="h-8 w-8 animate-pulse rounded-full bg-primary/10" />
                 <div class="text-xs text-muted-foreground">
-                  {props.status === 'rendering' ? 'Rendering page...' : 'Preparing page...'}
+                  {props.status === 'rendering' ? i18n.t('uiCopy.preview.renderingPage') : i18n.t('uiCopy.preview.preparingPage')}
                 </div>
               </div>
             </Show>
@@ -167,6 +171,7 @@ export interface PdfPreviewPaneProps {
 }
 
 export function PdfPreviewPane(props: PdfPreviewPaneProps) {
+  const i18n = useI18n();
   const [renderError, setRenderError] = createSignal<string | null>(null);
   const [documentLoading, setDocumentLoading] = createSignal(false);
   const [viewportWidth, setViewportWidth] = createSignal(0);
@@ -190,8 +195,8 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
   const pageCount = createMemo(() => pageMetrics().length);
   const pageCountLabel = createMemo(() => {
     const count = pageCount();
-    if (count <= 0) return 'No pages';
-    return count === 1 ? '1 page' : `${count} pages`;
+    if (count <= 0) return i18n.t('uiCopy.preview.noPages');
+    return i18n.tn('uiCopy.preview.pageCount', count);
   });
 
   const maxPageWidth = createMemo(() => {
@@ -660,7 +665,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
             variant="outline"
             class="min-w-9"
             disabled={!canZoomOut()}
-            aria-label="Zoom out PDF preview"
+            aria-label={i18n.t('uiCopy.preview.zoomOutPdf')}
             onClick={handleZoomOut}
           >
             -
@@ -671,7 +676,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
             variant="outline"
             class="min-w-9"
             disabled={!canZoomIn()}
-            aria-label="Zoom in PDF preview"
+            aria-label={i18n.t('uiCopy.preview.zoomInPdf')}
             onClick={handleZoomIn}
           >
             +
@@ -680,10 +685,10 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
             size="sm"
             variant="outline"
             disabled={!pageCount()}
-            aria-label="Fit PDF preview to width"
+            aria-label={i18n.t('uiCopy.preview.fitPdfToWidth')}
             onClick={handleFitWidth}
           >
-            Fit
+            {i18n.t('uiCopy.preview.fit')}
           </Button>
         </div>
       </div>
@@ -722,7 +727,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
           </div>
         </Show>
 
-        <RedevenLoadingCurtain visible={documentLoading()} eyebrow="Preview" message="Loading PDF..." />
+        <RedevenLoadingCurtain visible={documentLoading()} eyebrow={i18n.t('uiCopy.preview.eyebrow')} message={i18n.t('uiCopy.preview.loadingPdf')} />
       </div>
     </div>
   );

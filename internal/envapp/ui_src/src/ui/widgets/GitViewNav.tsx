@@ -4,6 +4,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import type { GitWorkbenchSubview, GitWorkbenchSubviewItem } from '../utils/gitWorkbench';
 import { buildTabElementId, buildTabPanelElementId, resolveRovingTabTargetId } from '../utils/tabNavigation';
 import { gitSelectedChipClass } from './GitChrome';
+import { useI18n } from '../i18n';
 
 export interface GitViewNavProps {
   value: GitWorkbenchSubview;
@@ -15,6 +16,7 @@ export interface GitViewNavProps {
 const GIT_WORKBENCH_SUBVIEW_ID_PREFIX = 'git-workbench-subview';
 
 export function GitViewNav(props: GitViewNavProps) {
+  const i18n = useI18n();
   const buttonBaseClass =
     'cursor-pointer flex w-full items-center justify-between gap-2 rounded px-2.5 py-2.5 text-left text-xs transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 sm:py-1.5';
   const badgeBaseClass =
@@ -34,7 +36,7 @@ export function GitViewNav(props: GitViewNavProps) {
     <div
       class={cn('space-y-0.5 rounded-md bg-muted/[0.14] p-0.5', props.class)}
       role="tablist"
-      aria-label="Git views"
+      aria-label={i18n.t('uiCopy.git.views')}
       aria-orientation="vertical"
     >
       <For each={props.items}>

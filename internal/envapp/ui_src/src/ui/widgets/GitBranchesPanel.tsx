@@ -50,20 +50,12 @@ import {
   WORKSPACE_VIEW_SECTIONS,
   applyWorkspaceViewPageSnapshot,
   allGitBranches,
-  branchContextSummary,
   branchDisplayName,
   branchIdentity,
-  branchStatusSummary,
   branchSubviewLabel,
   changeSecondaryPath,
   createEmptyWorkspaceViewPageStateRecord,
   describeGitHead,
-  detachedHeadCheckoutActionLabel,
-  detachedHeadReattachSummary,
-  detachedHeadViewingSummary,
-  EMPTY_BRANCH_CONTEXT_SUMMARY,
-  gitCommitDiffPresentationBadge,
-  gitCommitDiffPresentationDetail,
   gitDiffEntryIdentity,
   isGitWorkspaceDirectoryEntry,
   pickDefaultWorkspaceViewSectionFromSummary,
@@ -76,13 +68,23 @@ import {
   type GitBranchDetailPresentationState,
   type GitWorkspaceViewPageState,
   workspaceViewSectionCount,
-  workspaceViewSectionLabel,
   resolveGitBranchWorktreePath,
   type GitStashWindowRequest,
   type GitBranchSubview,
   type GitDetachedSwitchTarget,
   type GitWorkspaceViewSection,
 } from "../utils/gitWorkbench";
+import {
+  localizedBranchContextSummary,
+  localizedBranchStatusSummary,
+  localizedDetachedHeadCheckoutActionLabel,
+  localizedDetachedHeadReattachSummary,
+  localizedDetachedHeadViewingSummary,
+  localizedGitCommitDiffPresentationBadge,
+  localizedGitCommitDiffPresentationDetail,
+  localizedGitHeadDisplay,
+  localizedWorkspaceViewSectionLabel,
+} from '../utils/localizedGitWorkbench';
 import { resolveRovingTabTargetId } from "../utils/tabNavigation";
 import {
   redevenDividerRoleClass,
@@ -151,12 +153,12 @@ import {
 import { useI18n } from "../i18n";
 
 const BRANCH_STATUS_PAGE_SIZE = 200;
-const BRANCH_STATUS_TABLE_COLUMNS = [
-  "Path",
-  "Section",
-  "Status",
-  "Changes",
-  "Action",
+const BRANCH_STATUS_TABLE_COLUMN_KEYS = [
+  "git.common.path",
+  "uiCopy.git.section",
+  "git.common.status",
+  "git.common.changes",
+  "git.common.action",
 ] as const;
 
 export interface GitBranchesPanelProps {
@@ -230,37 +232,38 @@ function formatAbsoluteTime(ms?: number): string {
   return new Date(ms).toLocaleString();
 }
 
-function compareFilePath(item: GitCommitFileSummary): string {
+function compareFilePath(item: GitCommitFileSummary, unknownPath: string): string {
   return (
     String(
       item.displayPath || item.path || item.newPath || item.oldPath || "",
-    ).trim() || "(unknown path)"
+    ).trim() || unknownPath
   );
 }
 
-function worktreeFilePath(item: GitWorkspaceChange): string {
+function worktreeFilePath(item: GitWorkspaceChange, unknownPath: string): string {
   return (
     String(
       item.displayPath || item.path || item.newPath || item.oldPath || "",
-    ).trim() || "(unknown path)"
+    ).trim() || unknownPath
   );
 }
 
-function branchStatusPrimaryLabel(item: GitWorkspaceChange): string {
+function branchStatusPrimaryLabel(item: GitWorkspaceChange, unknownPath: string): string {
   const pathValue = isGitWorkspaceDirectoryEntry(item)
     ? workspaceDirectoryPath(item)
-    : worktreeFilePath(item);
+    : worktreeFilePath(item, unknownPath);
   const parts = pathValue.split("/").filter(Boolean);
-  return parts[parts.length - 1] || pathValue || "(unknown path)";
+  return parts[parts.length - 1] || pathValue || unknownPath;
 }
 
-function branchStatusDirectorySummary(item: GitWorkspaceChange): string {
+function branchStatusDirectorySummary(item: GitWorkspaceChange, i18n: ReturnType<typeof useI18n>): string {
   const count = Number(item.descendantFileCount ?? 0);
-  return count === 1 ? "1 file" : `${count} files`;
+  return i18n.tn('git.common.fileCount', count);
 }
 
 function branchStatusEmptyPresentation(
   section: GitWorkspaceViewSection,
+  i18n: ReturnType<typeof useI18n>,
   directoryPath = "",
 ): {
   title: string;
@@ -268,37 +271,26 @@ function branchStatusEmptyPresentation(
 } {
   const scopedToDirectory = Boolean(directoryPath.trim());
   if (section === "changes") {
-    return scopedToDirectory
-      ? {
-          title: "No pending files",
-          detail: "This folder is clean.",
-        }
-      : {
-          title: "No pending files",
-          detail: "This worktree is clean.",
-        };
+    return {
+      title: i18n.t('git.branches.noPendingFiles'),
+      detail: i18n.t(scopedToDirectory ? 'git.branches.folderClean' : 'git.branches.worktreeClean'),
+    };
   }
   switch (section) {
     case "staged":
       return {
-        title: "Nothing staged",
-        detail: scopedToDirectory
-          ? "This folder has no staged files."
-          : "No files are staged for commit in this worktree.",
+        title: i18n.t('git.branches.nothingStaged'),
+        detail: i18n.t(scopedToDirectory ? 'git.branches.folderNoStagedFiles' : 'git.branches.worktreeNoStagedFiles'),
       };
     case "conflicted":
       return {
-        title: "No conflicts",
-        detail: scopedToDirectory
-          ? "This folder has no conflicted files."
-          : "This worktree has no conflicted files.",
+        title: i18n.t('git.branches.noConflicts'),
+        detail: i18n.t(scopedToDirectory ? 'git.branches.folderNoConflictedFiles' : 'git.branches.worktreeNoConflictedFiles'),
       };
     default:
       return {
-        title: "No files",
-        detail: scopedToDirectory
-          ? "This folder has no files in the selected section."
-          : "This worktree has no files in the selected section.",
+        title: i18n.t('git.branches.noFiles'),
+        detail: i18n.t(scopedToDirectory ? 'git.branches.folderNoFilesInSection' : 'git.branches.worktreeNoFilesInSection'),
       };
   }
 }
@@ -313,18 +305,6 @@ function branchStatusEmptyIcon(section: GitWorkspaceViewSection): Component<{ cl
     default:
       return FileText;
   }
-}
-
-function branchStatusSummaryLabel(section: GitWorkspaceViewSection): string {
-  if (section === "conflicted") return "Conflicts";
-  return workspaceViewSectionLabel(section);
-}
-
-function compareOptionLabel(branch: GitBranchSummary): string {
-  const name = branchDisplayName(branch);
-  if (branch.kind === "remote") return `${name} · remote`;
-  if (branch.current) return `${name} · current`;
-  return name;
 }
 
 function defaultCompareTarget(
@@ -419,36 +399,35 @@ function gitBranchSubviewPanelId(view: GitBranchSubview): string {
 function branchStatusEmptyState(
   branch: GitBranchSummary | null | undefined,
   statusRepoRootPath: string,
+  i18n: ReturnType<typeof useI18n>,
 ): BranchStatusUnavailablePresentation {
   if (!branch) {
     return {
-      title: "No branch selected",
-      detail:
-        "Choose a branch from the sidebar to inspect its status or history.",
+      title: i18n.t('git.branches.noBranchSelected'),
+      detail: i18n.t('git.branches.chooseBranchDetail'),
       tone: "neutral",
     };
   }
   if (branch.kind === "remote") {
     return {
-      title: "Status unavailable",
-      detail: "Remote branches are not checked out in the active worktree.",
-      hint: "Check out this branch locally to review workspace changes.",
+      title: i18n.t('uiCopy.git.statusUnavailable'),
+      detail: i18n.t('git.branches.remoteNotCheckedOut'),
+      hint: i18n.t('git.branches.checkoutRemoteHint'),
       tone: "violet",
     };
   }
   if (statusRepoRootPath) {
     return {
-      title: "Status unavailable",
-      detail:
-        "The checked-out workspace for this branch could not be resolved right now.",
-      hint: "Refresh the repository view or reopen the worktree to load the latest workspace status.",
+      title: i18n.t('uiCopy.git.statusUnavailable'),
+      detail: i18n.t('git.branches.worktreeUnavailable'),
+      hint: i18n.t('git.branches.refreshWorktreeHint'),
       tone: "info",
     };
   }
   return {
-    title: "Status unavailable",
-    detail: "This branch is not checked out in the active worktree.",
-    hint: "Use History or Compare to inspect commits and diffs.",
+    title: i18n.t('uiCopy.git.statusUnavailable'),
+    detail: i18n.t('git.branches.localNotCheckedOut'),
+    hint: i18n.t('git.branches.historyCompareHint'),
     tone: "info",
   };
 }
@@ -466,13 +445,14 @@ interface BranchCompareFilesTableProps {
 }
 
 function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
+  const i18n = useI18n();
   const content = () => (
       <Show
         when={props.items.length > 0}
         fallback={
           <div class={cn("px-4 py-8", props.surface === "inline" && "px-0 py-3")}>
             <GitSubtleNote>
-              No changed files were found in this comparison.
+              {i18n.t('uiCopy.git.noChangedComparison')}
             </GitSubtleNote>
           </div>
         }
@@ -487,10 +467,10 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
           )}
           header={
             <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
-              <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
+              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.path')}</th>
+              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.status')}</th>
+              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.changes')}</th>
+              <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>{i18n.t('git.common.action')}</th>
             </tr>
           }
           renderRow={(item) => {
@@ -509,10 +489,10 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
                       title={changeSecondaryPath(item)}
                       onClick={() => props.onOpenDiff?.(item)}
                     >
-                      {compareFilePath(item)}
+                      {compareFilePath(item, i18n.t('filePreview.unknownPath'))}
                     </button>
                     <Show
-                      when={changeSecondaryPath(item) !== compareFilePath(item)}
+                      when={changeSecondaryPath(item) !== compareFilePath(item, i18n.t('filePreview.unknownPath'))}
                     >
                       <div
                         class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS}
@@ -538,7 +518,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
                   <GitChangedFilesActionButton
                     onClick={() => props.onOpenDiff?.(item)}
                   >
-                    View Diff
+                    {i18n.t('files.menuViewDiff')}
                   </GitChangedFilesActionButton>
                 </td>
               </tr>
@@ -580,9 +560,11 @@ function BranchStatusEmptyState(props: {
   section: GitWorkspaceViewSection;
   directoryPath?: string;
 }) {
+  const i18n = useI18n();
   const presentation = () =>
     branchStatusEmptyPresentation(
       props.section,
+      i18n,
       String(props.directoryPath ?? "").trim(),
     );
   const Icon = () => branchStatusEmptyIcon(props.section);
@@ -615,6 +597,7 @@ function BranchStatusEmptyTable(props: {
   section: GitWorkspaceViewSection;
   directoryPath?: string;
 }) {
+  const i18n = useI18n();
   return (
     <div
       class="git-branch-status-empty-table"
@@ -623,8 +606,8 @@ function BranchStatusEmptyTable(props: {
     >
       <div class="git-branch-status-empty-table__content">
         <div class="git-branch-status-empty-table__header" aria-hidden="true">
-          <For each={BRANCH_STATUS_TABLE_COLUMNS}>
-            {(label) => <span>{label}</span>}
+          <For each={BRANCH_STATUS_TABLE_COLUMN_KEYS}>
+            {(key) => <span>{i18n.t(key)}</span>}
           </For>
         </div>
         <div class="git-branch-status-empty-table__body">
@@ -641,6 +624,7 @@ function BranchStatusEmptyTable(props: {
 function BranchStatusUnavailableTable(props: {
   state: BranchStatusUnavailablePresentation;
 }) {
+  const i18n = useI18n();
   return (
     <div
       class="git-branch-status-empty-table git-branch-status-unavailable"
@@ -649,8 +633,8 @@ function BranchStatusUnavailableTable(props: {
     >
       <div class="git-branch-status-empty-table__content">
         <div class="git-branch-status-empty-table__header" aria-hidden="true">
-          <For each={BRANCH_STATUS_TABLE_COLUMNS}>
-            {(label) => <span>{label}</span>}
+          <For each={BRANCH_STATUS_TABLE_COLUMN_KEYS}>
+            {(key) => <span>{i18n.t(key)}</span>}
           </For>
         </div>
         <div class="git-branch-status-empty-table__body">
@@ -683,6 +667,7 @@ function BranchStatusUnavailableTable(props: {
 }
 
 function BranchStatusTable(props: BranchStatusTableProps) {
+  const i18n = useI18n();
   const footerSummary = () => {
     const totalRows = Math.max(0, Number(props.totalCount ?? 0));
     const scopedFiles = Math.max(
@@ -690,37 +675,16 @@ function BranchStatusTable(props: BranchStatusTableProps) {
       Number(props.scopeFileCount ?? props.totalCount ?? 0),
     );
     if (props.section === "changes" && scopedFiles !== totalRows) {
-      return (
-        <>
-          Showing{" "}
-          <span class="font-semibold tabular-nums text-foreground/90">
-            {props.items.length}
-          </span>{" "}
-          of{" "}
-          <span class="font-semibold tabular-nums text-foreground/90">
-            {totalRows}
-          </span>{" "}
-          rows covering{" "}
-          <span class="font-semibold tabular-nums text-foreground/90">
-            {scopedFiles}
-          </span>{" "}
-          file{scopedFiles === 1 ? "" : "s"}.
-        </>
-      );
+      return i18n.t('uiCopy.git.showingRows', {
+        range: props.items.length,
+        total: totalRows,
+        count: scopedFiles,
+      });
     }
-    return (
-      <>
-        Showing{" "}
-        <span class="font-semibold tabular-nums text-foreground/90">
-          {props.items.length}
-        </span>{" "}
-        of{" "}
-        <span class="font-semibold tabular-nums text-foreground/90">
-          {scopedFiles}
-        </span>{" "}
-        file{scopedFiles === 1 ? "" : "s"}.
-      </>
-    );
+    return i18n.t('uiCopy.git.showingFiles', {
+      range: props.items.length,
+      total: scopedFiles,
+    });
   };
 
   return (
@@ -739,16 +703,16 @@ function BranchStatusTable(props: BranchStatusTableProps) {
           tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[36rem] sm:min-w-[52rem] md:min-w-0`}
           header={
             <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-              <For each={BRANCH_STATUS_TABLE_COLUMNS}>
-                {(label) => (
+              <For each={BRANCH_STATUS_TABLE_COLUMN_KEYS}>
+                {(key) => (
                   <th
                     class={
-                      label === "Action"
+                      key === "git.common.action"
                         ? GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS
                         : GIT_CHANGED_FILES_HEADER_CELL_CLASS
                     }
                   >
-                    {label}
+                    {i18n.t(key)}
                   </th>
                 )}
               </For>
@@ -795,12 +759,12 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                     >
                       <Show
                         when={isGitWorkspaceDirectoryEntry(item)}
-                        fallback={worktreeFilePath(item)}
+                        fallback={worktreeFilePath(item, i18n.t('filePreview.unknownPath'))}
                       >
                         <span class="inline-flex items-center gap-1.5">
                           <Folder class="size-3.5 shrink-0" />
                           <span class="truncate">
-                            {branchStatusPrimaryLabel(item)}
+                            {branchStatusPrimaryLabel(item, i18n.t('filePreview.unknownPath'))}
                           </span>
                         </span>
                       </Show>
@@ -816,7 +780,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                     <Show
                       when={
                         !isGitWorkspaceDirectoryEntry(item)
-                        && changeSecondaryPath(item) !== worktreeFilePath(item)
+                        && changeSecondaryPath(item) !== worktreeFilePath(item, i18n.t('filePreview.unknownPath'))
                       }
                     >
                       <div
@@ -836,7 +800,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                         "unstaged",
                     )}
                   >
-                    {workspaceViewSectionLabel(props.section)}
+                    {localizedWorkspaceViewSectionLabel(props.section, i18n)}
                   </Show>
                 </td>
                 <td class={GIT_CHANGED_FILES_CELL_MIDDLE_CLASS}>
@@ -849,12 +813,12 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                     }
                   >
                     <div class="flex flex-wrap items-center gap-1.5">
-                      <GitTableBadge tone="neutral">Folder</GitTableBadge>
+                      <GitTableBadge tone="neutral">{i18n.t('git.common.folder')}</GitTableBadge>
                       <Show when={item.containsUnstaged}>
-                        <GitTableBadge tone="warning">Unstaged</GitTableBadge>
+                        <GitTableBadge tone="warning">{i18n.t('git.common.unstaged')}</GitTableBadge>
                       </Show>
                       <Show when={item.containsUntracked}>
-                        <GitTableBadge tone="brand">Untracked</GitTableBadge>
+                        <GitTableBadge tone="brand">{i18n.t('git.common.untracked')}</GitTableBadge>
                       </Show>
                     </div>
                   </Show>
@@ -870,7 +834,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                     }
                   >
                     <div class="text-[11px] font-medium text-muted-foreground">
-                      {branchStatusDirectorySummary(item)}
+                      {branchStatusDirectorySummary(item, i18n)}
                     </div>
                   </Show>
                 </td>
@@ -889,8 +853,8 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                     }}
                   >
                     {isGitWorkspaceDirectoryEntry(item)
-                      ? "Open Folder"
-                      : "View Diff"}
+                      ? i18n.t('uiCopy.git.openFolder')
+                      : i18n.t('uiCopy.git.viewDiff')}
                   </GitChangedFilesActionButton>
                 </td>
               </tr>
@@ -905,7 +869,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
             onLoadMore={props.onLoadMore}
             hasMore={props.hasMore}
             loading={props.loadingMore}
-            loadingStatus="Loading next page"
+            loadingStatus={i18n.t('git.common.loadingNextPage')}
           />
         </Show>
       </Show>
@@ -1055,12 +1019,13 @@ interface BranchHistoryCommitDetailsProps {
 }
 
 function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
+  const i18n = useI18n();
   const presentationBadge = () =>
-    gitCommitDiffPresentationBadge(props.presentation);
+    localizedGitCommitDiffPresentationBadge(props.presentation, i18n);
   const presentationDetail = () =>
-    gitCommitDiffPresentationDetail(props.presentation);
+    localizedGitCommitDiffPresentationDetail(props.presentation, i18n);
   const fileCountLabel = () =>
-    `${props.files.length} file${props.files.length === 1 ? "" : "s"}`;
+    i18n.t('git.common.fileCount', { count: props.files.length });
 
   return (
     <div class="git-branch-history-details" data-git-branch-history-details>
@@ -1069,7 +1034,7 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
         fallback={
           <GitStatePane
             loading
-            message="Loading changed files..."
+            message={i18n.t('uiCopy.git.loadingChangedFiles')}
             class="git-branch-history-state min-h-[5rem] px-1 py-2"
           />
         }
@@ -1088,7 +1053,7 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
             when={props.files.length > 0}
             fallback={
               <div class="git-branch-history-note">
-                No changed files are available for this commit.
+                {i18n.t('uiCopy.git.noCommitFiles')}
               </div>
             }
           >
@@ -1104,7 +1069,7 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                   />
                   <div class="min-w-0">
                     <div class="git-branch-history-summary-title">
-                      Files in Commit
+                      {i18n.t('uiCopy.git.filesInCommit')}
                     </div>
                     <Show when={presentationDetail()}>
                       {(detail) => (
@@ -1157,10 +1122,10 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                       }
                     >
                       {props.switchDetachedBusy
-                        ? "Switching..."
+                        ? i18n.t('uiCopy.git.switching')
                         : props.alreadyDetachedHere
-                          ? "Already detached here"
-                          : "Switch --detach here"}
+                          ? i18n.t('uiCopy.git.alreadyDetachedHere')
+                          : i18n.t('uiCopy.git.switchDetachHere')}
                     </Button>
                   </Show>
                   <Show when={props.onAskFlower}>
@@ -1185,7 +1150,7 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                   </Show>
                 </div>
                 <div class="git-branch-history-hint">
-                  Select a file to inspect the diff.
+                  {i18n.t('uiCopy.git.selectFileDiff')}
                 </div>
               </div>
 
@@ -1193,7 +1158,7 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                 when={props.onSwitchDetached && props.alreadyDetachedHere}
               >
                 <div class="git-branch-history-note">
-                  Repository is already detached at this commit.
+                  {i18n.t('uiCopy.git.alreadyDetached')}
                 </div>
               </Show>
 
@@ -1251,7 +1216,7 @@ function HistoryList(
   const repoRootPath = createMemo(() =>
     String(props.repoRootPath ?? "").trim(),
   );
-  const headDisplay = createMemo(() => describeGitHead(props.repoSummary));
+  const headDisplay = createMemo(() => localizedGitHeadDisplay(describeGitHead(props.repoSummary), i18n));
   const currentHeadCommit = createMemo(() =>
     String(props.repoSummary?.headCommit ?? "").trim(),
   );
@@ -1343,7 +1308,7 @@ function HistoryList(
                 error:
                   err instanceof Error
                     ? err.message
-                    : String(err ?? "Failed to load commit detail"),
+                    : String(err ?? i18n.t('git.common.requestFailed')),
                 loaded: true,
               },
             },
@@ -1368,9 +1333,9 @@ function HistoryList(
               >
                 <div class="flex flex-wrap items-center justify-between gap-2">
                   <div class="text-[11px] text-muted-foreground">
-                    Refreshing branch history in the background.
+                    {i18n.t('uiCopy.git.refreshingHistory')}
                   </div>
-                  <GitMetaPill tone="neutral">Refreshing...</GitMetaPill>
+                  <GitMetaPill tone="neutral">{i18n.t('files.refreshing')}</GitMetaPill>
                 </div>
               </div>
             </Show>
@@ -1379,7 +1344,7 @@ function HistoryList(
               fallback={
                 <GitStatePane
                   loading
-                  message="Loading commit history..."
+                  message={i18n.t('uiCopy.git.loadingCommitHistory')}
                   class="px-1"
                 />
               }
@@ -1399,7 +1364,7 @@ function HistoryList(
                     when={(props.commits?.length ?? 0) > 0}
                     fallback={
                       <GitSubtleNote>
-                        No commit history is available for this branch.
+                        {i18n.t('uiCopy.git.noBranchHistory')}
                       </GitSubtleNote>
                     }
                   >
@@ -1414,12 +1379,12 @@ function HistoryList(
                                 "border-b",
                               )}
                             >
-                              <th class="px-3 py-2.5 font-medium">Commit</th>
+                              <th class="px-3 py-2.5 font-medium">{i18n.t('git.common.commit')}</th>
                               <th class="hidden px-3 py-2.5 font-medium xl:table-cell">
-                                Author
+                                {i18n.t('uiCopy.git.author')}
                               </th>
                               <th class="hidden px-3 py-2.5 font-medium xl:table-cell">
-                                When
+                                {i18n.t('debugConsole.fields.when')}
                               </th>
                             </tr>
                           </thead>
@@ -1458,8 +1423,8 @@ function HistoryList(
                                             type="button"
                                             aria-label={
                                               expanded()
-                                                ? "Collapse commit"
-                                                : "Expand commit"
+                                                ? i18n.t('uiCopy.git.collapseCommit')
+                                                : i18n.t('uiCopy.git.expandCommit')
                                             }
                                             aria-expanded={expanded()}
                                             class={cn(
@@ -1482,7 +1447,7 @@ function HistoryList(
                                           </button>
                                           <div class="min-w-0">
                                             <div class="truncate text-xs font-medium text-foreground">
-                                              {commit.subject || "(no subject)"}
+                                              {commit.subject || i18n.t('uiCopy.git.noSubject')}
                                             </div>
                                             <div class="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
                                               <GitMetaPill tone="neutral">
@@ -1492,8 +1457,7 @@ function HistoryList(
                                                 tone="info"
                                                 class="xl:hidden"
                                               >
-                                                {commit.authorName ||
-                                                  "Unknown author"}
+                                                {commit.authorName || i18n.t('uiCopy.git.unknownAuthor')}
                                               </GitMetaPill>
                                               <GitMetaPill
                                                 tone="neutral"
@@ -1510,8 +1474,7 @@ function HistoryList(
                                                 }
                                               >
                                                 <GitMetaPill tone="violet">
-                                                  Merge x
-                                                  {commit.parents?.length}
+                                                  {i18n.t('uiCopy.git.mergeCount', { count: commit.parents?.length ?? 0 })}
                                                 </GitMetaPill>
                                               </Show>
                                             </div>
@@ -1519,7 +1482,7 @@ function HistoryList(
                                         </div>
                                       </td>
                                       <td class="hidden px-3 py-2.5 align-top text-muted-foreground xl:table-cell">
-                                        {commit.authorName || "Unknown author"}
+                                        {commit.authorName || i18n.t('uiCopy.git.unknownAuthor')}
                                       </td>
                                       <td class="hidden px-3 py-2.5 align-top text-muted-foreground xl:table-cell">
                                         {formatAbsoluteTime(
@@ -1587,7 +1550,7 @@ function HistoryList(
                       loading={props.listLoadingMore}
                       disabled={props.listLoadingMore}
                     >
-                      Load More
+                      {i18n.t('uiCopy.git.loadMore')}
                     </Button>
                   </div>
                 </Show>
@@ -1617,13 +1580,13 @@ function HistoryList(
               }
             : null
         }
-        title="Commit Diff"
+        title={i18n.t('uiCopy.git.commitDiff')}
         description={
           diffDialogItem()
             ? changeSecondaryPath(diffDialogItem())
-            : "Review the selected file diff."
+            : i18n.t('uiCopy.git.reviewSelectedFileDiff')
         }
-        emptyMessage="Select a changed file to inspect its diff."
+        emptyMessage={i18n.t('uiCopy.git.selectChangedFile')}
       />
     </>
   );
@@ -1635,12 +1598,19 @@ function BranchSelect(props: {
   onChange: (name: string) => void;
   class?: string;
 }) {
+  const i18n = useI18n();
+  const optionLabel = (branch: GitBranchSummary): string => {
+    const name = branchDisplayName(branch);
+    if (branch.kind === 'remote') return `${name} · ${i18n.t('uiCopy.git.remote')}`;
+    if (branch.current) return `${name} · ${i18n.t('uiCopy.git.current')}`;
+    return name;
+  };
   const selected = () =>
     props.branches.find((b) => String(b.name ?? "").trim() === props.value);
   const items = (): DropdownItem[] =>
     props.branches.map((b) => ({
       id: String(b.name ?? "").trim(),
-      label: compareOptionLabel(b),
+      label: optionLabel(b),
       icon: () => <GitBranch class="h-3.5 w-3.5" />,
     }));
 
@@ -1658,7 +1628,7 @@ function BranchSelect(props: {
         >
           <GitBranch class="h-4 w-4 shrink-0 text-violet-500" />
           <span class="min-w-0 flex-1 truncate text-left">
-            {selected() ? compareOptionLabel(selected()!) : "Select branch"}
+            {selected() ? optionLabel(selected()!) : i18n.t('uiCopy.git.selectBranch')}
           </span>
           <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         </button>
@@ -1680,6 +1650,7 @@ interface BranchCompareDialogProps {
 }
 
 function BranchCompareDialog(props: BranchCompareDialogProps) {
+  const i18n = useI18n();
   const layout = useLayout();
   const rpc = useRedevenRpc();
 
@@ -1752,7 +1723,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
         setError(
           err instanceof Error
             ? err.message
-            : String(err ?? "Failed to load branch compare"),
+            : String(err ?? i18n.t('git.common.requestFailed')),
         );
       })
       .finally(() => {
@@ -1770,8 +1741,8 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
         onOpenChange={(open) => {
           if (!open) props.onClose();
         }}
-        title="Compare branches"
-        description="Pick the source and target branches, then review the changed files."
+        title={i18n.t('uiCopy.git.compareBranches')}
+        description={i18n.t('uiCopy.git.compareDescription')}
         class={cn(
           "flex max-w-none flex-col overflow-hidden rounded-md border border-border/60 p-0 shadow-xl",
           "[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2",
@@ -1785,7 +1756,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
           <div class="flex shrink-0 flex-col gap-2 px-4 pb-1">
             <div class="grid gap-3 md:grid-cols-2">
               <label class="block">
-                <GitLabelBlock class="min-w-0" label="Source" tone="violet">
+                <GitLabelBlock class="min-w-0" label={i18n.t('skillsSettings.table.source')} tone="violet">
                   <BranchSelect
                     value={sourceRef()}
                     branches={branchOptions()}
@@ -1795,7 +1766,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
               </label>
 
               <label class="block">
-                <GitLabelBlock class="min-w-0" label="Target" tone="violet">
+                <GitLabelBlock class="min-w-0" label={i18n.t('git.common.target')} tone="violet">
                   <BranchSelect
                     value={targetRef()}
                     branches={branchOptions()}
@@ -1810,7 +1781,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
             <Show
               when={!loading()}
               fallback={
-                <GitStatePane loading message="Loading branch compare..." />
+                <GitStatePane loading message={i18n.t('uiCopy.git.loadingBranchCompare')} />
               }
             >
               <Show
@@ -1820,7 +1791,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
                 <Show
                   when={compare()}
                   fallback={
-                    <GitStatePane message="Choose two branches to inspect file changes." />
+                    <GitStatePane message={i18n.t('uiCopy.git.chooseTwoBranches')} />
                   }
                 >
                   {(compareAccessor) => (
@@ -1829,7 +1800,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
                         <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                           <GitLabelBlock
                             class="min-w-0 flex-1"
-                            label="Changed Files"
+                            label={i18n.t('uiCopy.git.changedFiles')}
                             tone="warning"
                             meta={
                               <>
@@ -1837,17 +1808,16 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
                                   {compareAccessor().targetRef}
                                 </GitMetaPill>
                                 <GitMetaPill tone="neutral">
-                                  vs {compareAccessor().baseRef}
+                                  {i18n.t('uiCopy.git.versus')} {compareAccessor().baseRef}
                                 </GitMetaPill>
                                 <GitMetaPill tone="warning">
-                                  {compareFiles().length} file
-                                  {compareFiles().length === 1 ? "" : "s"}
+                                  {i18n.tn('git.common.fileCount', compareFiles().length)}
                                 </GitMetaPill>
                               </>
                             }
                           />
                           <div class="text-[11px] text-muted-foreground sm:text-right">
-                            Open any file to inspect the diff.
+                            {i18n.t('uiCopy.git.openFileDiff')}
                           </div>
                         </div>
 
@@ -1890,13 +1860,13 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
               }
             : null
         }
-        title="Branch Compare Diff"
+        title={i18n.t('uiCopy.git.branchCompareDiff')}
         description={
           diffDialogItem()
             ? changeSecondaryPath(diffDialogItem())
-            : "Review the selected compare diff."
+            : i18n.t('uiCopy.git.reviewSelectedCompareDiff')
         }
-        emptyMessage="Select a compared file to inspect its diff."
+        emptyMessage={i18n.t('uiCopy.git.selectComparedFile')}
       />
     </>
   );
@@ -1949,11 +1919,11 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const branchVerificationDisabledReason = () => {
     const state = branchDetailState();
     if (state.kind === "verifying") {
-      return "Checking whether this branch still exists.";
+      return i18n.t('common.status.checking');
     }
     if (state.kind === "missing") return state.detail;
     if (state.kind === "error") {
-      return state.message || "Branch verification failed.";
+      return state.message || i18n.t('common.status.failed');
     }
     return "";
   };
@@ -1966,7 +1936,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const historyTabActive = () => branchSubview() === "history";
   const activeRepoRootPath = () =>
     String(props.repoRootPath || props.repoSummary?.repoRootPath || "").trim();
-  const repoHeadDisplay = () => describeGitHead(props.repoSummary);
+  const repoHeadDisplay = () => localizedGitHeadDisplay(describeGitHead(props.repoSummary), i18n);
   const reattachBranch = () => reattachBranchFromRepoSummary(props.repoSummary);
   const statusRepoRootPath = () =>
     resolveGitBranchWorktreePath(interactiveBranch(), activeRepoRootPath());
@@ -2078,7 +2048,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       : "";
   const statusBreadcrumbSegments = createMemo(() =>
     (visibleStatusPageState().breadcrumbs ?? []).map((crumb) => ({
-      label: String(crumb.label ?? "").trim() || "Folder",
+      label: String(crumb.label ?? "").trim() || i18n.t('git.common.folder'),
       path: String(crumb.path ?? "").trim(),
     })),
   );
@@ -2104,7 +2074,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   };
   const visibleStatusKey = () => workspaceEntryKey(diffDialogItem());
   const statusEmptyState = () =>
-    branchStatusEmptyState(selectedBranch(), statusRepoRootPath());
+    branchStatusEmptyState(selectedBranch(), statusRepoRootPath(), i18n);
   const mergeReviewBranch = () =>
     props.mergeReviewBranch ?? interactiveBranch() ?? selectedBranch() ?? null;
   const mergePreview = () => props.mergePreview ?? null;
@@ -2128,7 +2098,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         props.repoSummary?.detached ||
         interactiveBranch()?.current,
     );
-  const mergeLabel = () => (props.mergeBusy ? "Merging..." : "Merge");
+  const mergeLabel = () => props.mergeBusy ? i18n.t('git.branches.merging') : i18n.t('git.branches.mergeAction');
   const linkedWorktreeDeleteDialog = () => {
     const branch = deleteReviewBranch();
     if (!props.deleteReviewOpen || !branch) return false;
@@ -2143,8 +2113,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         (interactiveBranch()?.kind === "local" &&
           interactiveBranch()?.worktreePath),
     );
-  const checkoutLabel = () =>
-    props.checkoutBusy ? "Checking Out..." : "Checkout";
+  const checkoutLabel = () => props.checkoutBusy ? i18n.t('gitPresentation.checkingOut') : i18n.t('git.common.checkout');
   const deleteAvailable = () =>
     Boolean(props.onDeleteBranch && selectedBranch()?.kind === "local");
   const deleteDisabled = () =>
@@ -2154,7 +2123,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         props.deleteBusy ||
         interactiveBranch()?.current,
     );
-  const deleteLabel = () => (props.deleteBusy ? "Deleting..." : "Delete");
+  const deleteLabel = () => props.deleteBusy ? i18n.t('uiCopy.git.deleting') : i18n.t('common.actions.delete');
   const canAskFlowerStatus = () =>
     Boolean(
       props.onAskFlower &&
@@ -2170,42 +2139,42 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const branchWorkspaceDisabledReason = () => {
     const branch = selectedBranch();
     const detailState = branchDetailState();
-    if (!branch) return "Select a branch first.";
+    if (!branch) return i18n.t('uiCopy.git.selectBranch');
     if (detailState.kind === "verifying")
-      return "Checking whether this branch still exists.";
+      return i18n.t('common.status.checking');
     if (detailState.kind === "missing") return detailState.detail;
     if (detailState.kind === "error")
-      return detailState.message || "Branch verification failed.";
-    if (branch.kind === "remote") return "Check out this branch locally first.";
+      return detailState.message || i18n.t('common.status.failed');
+    if (branch.kind === "remote") return i18n.t('git.branches.checkoutRemoteFirst');
     if (branch.current)
-      return activeRepoRootPath() ? "" : "Repository path is unavailable.";
-    return "Open this branch in a worktree first.";
+      return activeRepoRootPath() ? "" : i18n.t('git.notifications.repositoryPathUnavailable');
+    return i18n.t('git.branches.openBranchInWorktreeFirst');
   };
   const askFlowerStatusDisabledReason = () => {
     if (canAskFlowerStatus()) return "";
-    if (!selectedBranch()) return "Select a branch first.";
-    if (visibleStatusLoading()) return "Branch status is still loading.";
-    if (visibleStatusError()) return "Branch status is unavailable right now.";
+    if (!selectedBranch()) return i18n.t('uiCopy.git.selectBranch');
+    if (visibleStatusLoading()) return i18n.t('common.status.loading');
+    if (visibleStatusError()) return i18n.t('uiCopy.git.statusUnavailable');
     const workspaceReason = branchWorkspaceDisabledReason();
     if (workspaceReason) return workspaceReason;
-    if (visibleStatusItems().length === 0) return "No files in this section.";
-    return "Ask Flower is unavailable right now.";
+    if (visibleStatusItems().length === 0) return i18n.t('git.changes.noFilesInSection');
+    return i18n.t('git.notifications.askFlowerUnavailableTitle');
   };
   const branchWorkspaceShortcutDisabledReason = () => {
     if (branchDirectoryRequest()) return "";
-    return branchWorkspaceDisabledReason() || "Repository path is unavailable.";
+    return branchWorkspaceDisabledReason() || i18n.t('git.notifications.repositoryPathUnavailable');
   };
   const branchSummary = createMemo<BranchSummaryPresentation>(() => {
-    const text = branchContextSummary(selectedBranch());
+    const text = localizedBranchContextSummary(selectedBranch(), i18n);
     return {
       text,
-      title: branchStatusSummary(selectedBranch()),
-      visible: text !== EMPTY_BRANCH_CONTEXT_SUMMARY,
+      title: localizedBranchStatusSummary(selectedBranch(), i18n),
+      visible: text !== i18n.t('gitPresentation.noExtraStatus'),
     };
   });
   const branchHeaderPendingLabel = () => {
-    if (branchIsVerifying()) return "Checking";
-    if (props.branchesLoading && selectedBranch()) return "Refreshing";
+    if (branchIsVerifying()) return i18n.t('common.status.checking');
+    if (props.branchesLoading && selectedBranch()) return i18n.t('common.actions.refresh');
     return "";
   };
   const renderBranchHeaderVerificationSlot = () => {
@@ -2317,7 +2286,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       const items: BranchPrimaryActionPresentation[] = [
         {
           key: "compare",
-          label: "Compare",
+          label: i18n.t('git.branches.compareAction'),
           icon: ArrowRightLeft,
           emphasis: "neutral",
           disabled: !interactiveBranch(),
@@ -2330,7 +2299,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       if (props.onOpenStash) {
         items.push({
           key: "stash",
-          label: "Stash...",
+          label: i18n.t('git.changes.stashAction'),
           icon: Package,
           emphasis: "neutral",
           disabled: !canOpenStash(),
@@ -2356,7 +2325,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       if (!props.onAskFlower) return null;
       return {
         key: "ask-flower",
-        label: "Ask Flower",
+        label: i18n.t('git.changes.askFlower'),
         tone: "flower",
         icon: FlowerIcon,
         disabled: !canAskFlowerStatus(),
@@ -2380,20 +2349,20 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       const summary = visibleStatusSummary();
       return WORKSPACE_VIEW_SECTIONS.map((section) => {
         const count = workspaceViewSectionCount(summary, section);
-        const countLabel = `${count} file${count === 1 ? "" : "s"}`;
+        const countLabel = i18n.tn('git.common.fileCount', count);
+        const label = localizedWorkspaceViewSectionLabel(section, i18n);
         return {
           section,
-          label: workspaceViewSectionLabel(section),
-          compactLabel: branchStatusSummaryLabel(section),
-          shortLabel:
-            section === "conflicted"
-              ? "Conf."
-              : branchStatusSummaryLabel(section),
+          label,
+          compactLabel: label,
+          shortLabel: label,
           count,
           active: selectedStatusSection() === section,
-          compactCaption: count === 0 ? "No files" : countLabel,
+          compactCaption: count === 0 ? i18n.t('git.branches.noFiles') : countLabel,
           verboseCaption:
-            count === 0 ? "No files to review." : `${countLabel} ready.`,
+            count === 0
+              ? i18n.t('git.branches.noFilesToReview')
+              : i18n.t('git.branches.filesReady', { count: countLabel }),
         };
       });
     },
@@ -2585,16 +2554,16 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const branchDetailStateTitle = () => {
     const state = branchDetailState();
     if (state.kind === "missing") return state.title;
-    if (state.kind === "error") return "Unable to verify branch";
-    return "Checking branch";
+    if (state.kind === "error") return i18n.t('git.branches.unableToVerify');
+    return i18n.t('common.status.checking');
   };
   const branchDetailStateDetail = () => {
     const state = branchDetailState();
     if (state.kind === "missing") return state.detail;
     if (state.kind === "error") {
-      return state.message || "Branch verification failed.";
+      return state.message || i18n.t('common.status.failed');
     }
-    return "Refreshing branches to confirm that this selection still exists.";
+    return i18n.t('uiCopy.git.refreshingHistory');
   };
   const branchDetailStateTone = () => {
     const state = branchDetailState();
@@ -2613,7 +2582,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-1.5">
             <GitMetaPill tone={branchDetailStateTone()}>
-              {state.kind === "missing" ? "Missing" : "Retry needed"}
+              {state.kind === "missing" ? i18n.t('uiCopy.git.missing') : i18n.t('uiCopy.git.retryNeeded')}
             </GitMetaPill>
             <div class="text-xs font-semibold text-foreground">
               {branchDetailStateTitle()}
@@ -2631,7 +2600,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               class={secondaryActionButtonClass}
               onClick={() => props.onRefreshSelectedBranch?.()}
             >
-              Refresh branches
+              {i18n.t('uiCopy.git.refreshBranches')}
             </Button>
           </Show>
           <Show
@@ -2647,7 +2616,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               class={primaryActionButtonClass}
               onClick={() => props.onSelectCurrentBranch?.()}
             >
-              View current branch
+              {i18n.t('uiCopy.git.viewCurrentBranch')}
             </Button>
           </Show>
         </div>
@@ -2663,14 +2632,14 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         : "waiting";
     const accessibilityLabel = view === "status"
       ? checking
-        ? "Preparing branch status."
-        : "Branch status is not available yet."
+        ? i18n.t('common.status.checking')
+        : i18n.t('uiCopy.git.statusUnavailable')
       : checking
-        ? "Preparing commit history."
-        : "Commit history is not available yet.";
+        ? i18n.t('common.status.checking')
+        : i18n.t('uiCopy.git.historyUnavailable');
     const columnLabels = view === "status"
-      ? ["Path", "Section", "Status", "Changes", "Action"]
-      : ["Commit", "Author", "Time"];
+      ? [i18n.t('git.common.path'), i18n.t('uiCopy.git.section'), i18n.t('git.common.status'), i18n.t('git.common.changes'), i18n.t('git.common.action')]
+      : [i18n.t('git.common.commit'), i18n.t('uiCopy.git.author'), i18n.t('uiCopy.audit.time')];
     return (
       <GitTableFrame
         class="git-branch-stable-placeholder flex min-h-0 w-full flex-col"
@@ -2932,14 +2901,14 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     >
       <div class="min-w-0">
         <div class="git-branch-status-unavailable-summary__title">
-          No checked-out worktree
+          {i18n.t('uiCopy.git.noCheckedOutWorktree')}
         </div>
         <div class="git-branch-status-unavailable-summary__detail">
-          History and Compare remain available.
+          {i18n.t('uiCopy.git.historyCompareAvailable')}
         </div>
       </div>
       <GitMetaPill tone={statusEmptyState().tone}>
-        Status unavailable
+        {i18n.t('uiCopy.git.statusUnavailable')}
       </GitMetaPill>
     </div>
   );
@@ -3056,7 +3025,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
           hidden={!active()}
           tabIndex={active() ? 0 : -1}
         >
-          Choose a branch from the sidebar to inspect its status or history.
+          {i18n.t('uiCopy.git.chooseBranch')}
         </div>
       );
     }
@@ -3205,7 +3174,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
           hidden={!active()}
           tabIndex={active() ? 0 : -1}
         >
-          Choose a branch from the sidebar to inspect its status or history.
+          {i18n.t('uiCopy.git.chooseBranch')}
         </div>
       );
     }
@@ -3266,7 +3235,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         fallback={
           <GitStatePane
             loading
-            message="Loading branches..."
+            message={i18n.t('git.notifications.loadingBranches')}
             class="px-3 py-4"
           />
         }
@@ -3285,8 +3254,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             when={selectedBranch()}
             fallback={
               <div class="flex-1 px-3 py-4 text-xs text-muted-foreground">
-                Choose a branch from the sidebar to inspect its status or
-                history.
+                {i18n.t('uiCopy.git.chooseBranch')}
               </div>
             }
           >
@@ -3307,10 +3275,10 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                             {branchDisplayName(selectedBranch())}
                           </GitPrimaryTitle>
                           <Show when={selectedBranch()?.current}>
-                            <GitMetaPill tone="success">Current</GitMetaPill>
+                            <GitMetaPill tone="success">{i18n.t('uiCopy.git.current')}</GitMetaPill>
                           </Show>
                           <Show when={selectedBranch()?.kind === "remote"}>
-                            <GitMetaPill tone="violet">Remote</GitMetaPill>
+                            <GitMetaPill tone="violet">{i18n.t('uiCopy.git.remote')}</GitMetaPill>
                           </Show>
                           {renderBranchHeaderVerificationSlot()}
                         </div>
@@ -3377,7 +3345,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                             {selectedBranch()?.worktreePath}
                           </span>
                           <Show when={props.onBrowseFiles && selectedBranch()?.worktreePath}>
-                            <Tooltip content="Browse files" placement="top" delay={0}>
+                              <Tooltip content={i18n.t('git.changes.browseFiles')} placement="top" delay={0}>
                               <button
                                 type="button"
                                 class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
@@ -3393,7 +3361,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                             </Tooltip>
                           </Show>
                           <Show when={props.onOpenInTerminal && selectedBranch()?.worktreePath}>
-                            <Tooltip content="Open in terminal" placement="top" delay={0}>
+                              <Tooltip content={i18n.t('git.changes.openInTerminal')} placement="top" delay={0}>
                               <button
                                 type="button"
                                 class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
@@ -3418,7 +3386,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                 <div
                   class="grid grid-cols-2 rounded-md bg-muted/[0.10] p-0.5 w-full"
                   role="tablist"
-                  aria-label="Branch detail tabs"
+                  aria-label={i18n.t('git.overview.branchDetailTabs')}
                   aria-orientation="horizontal"
                 >
                   <For each={GIT_BRANCH_SUBVIEW_IDS}>
@@ -3458,7 +3426,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       <div class="git-branch-detached-context__copy">
                         <div class="git-branch-detached-context__heading">
                           <span class="git-branch-detached-context__title">
-                            Detached HEAD
+                            {i18n.t('git.notifications.detachedHeadTitle')}
                           </span>
                           <Show when={repoHeadDisplay().detail}>
                             <GitMetaPill tone="neutral">
@@ -3469,14 +3437,16 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                         <div class="git-branch-detached-context__summary">
                           <span>
                             {trimTerminalSentencePeriod(
-                              detachedHeadViewingSummary(
+                              localizedDetachedHeadViewingSummary(
                                 props.repoSummary?.headCommit,
+                                i18n,
                               ),
                             )}
                           </span>
                           <Show
-                            when={detachedHeadReattachSummary(
+                            when={localizedDetachedHeadReattachSummary(
                               reattachBranch(),
+                              i18n,
                               { compact: true },
                             )}
                           >
@@ -3507,9 +3477,10 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           if (branch) props.onCheckoutBranch?.(branch);
                         }}
                       >
-                        {detachedHeadCheckoutActionLabel(
+                        {localizedDetachedHeadCheckoutActionLabel(
                           reattachBranch(),
-                          props.checkoutBusy,
+                          Boolean(props.checkoutBusy),
+                          i18n,
                         )}
                       </Button>
                     </Show>
@@ -3550,13 +3521,13 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
               }
             : null
         }
-        title="Branch Status Diff"
+        title={i18n.t('uiCopy.git.branchStatusDiff')}
         description={
           diffDialogItem()
             ? changeSecondaryPath(diffDialogItem())
-            : "Review the selected branch status diff."
+            : i18n.t('uiCopy.git.reviewSelectedBranchStatusDiff')
         }
-        emptyMessage="Select a branch status file to inspect its diff."
+        emptyMessage={i18n.t('uiCopy.git.selectBranchStatusFile')}
       />
 
       <Show when={shouldRenderReviewDialogs()}>

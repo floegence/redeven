@@ -4,6 +4,7 @@ import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { listAgentAuditLogs, type AgentAuditEntry } from '../services/auditApi';
+import { useI18n } from '../i18n';
 
 function fmtTime(iso: string): string {
   const raw = String(iso ?? '').trim();
@@ -193,6 +194,7 @@ function shortError(s: string): string {
 }
 
 export function AuditLogDialog(props: { open: boolean; envId: string; onClose: () => void }) {
+  const i18n = useI18n();
   const notify = useNotification();
 
   const envId = createMemo(() => String(props.envId ?? '').trim());
@@ -218,9 +220,9 @@ export function AuditLogDialog(props: { open: boolean; envId: string; onClose: (
     if (!v) return;
     try {
       await navigator.clipboard.writeText(v);
-      notify.success('Copied', `${label} copied to clipboard`);
+      notify.success(i18n.t('uiCopy.audit.copiedTitle'), i18n.t('uiCopy.audit.copiedMessage', { label }));
     } catch {
-      notify.error('Copy failed', 'Clipboard permission denied');
+      notify.error(i18n.t('uiCopy.audit.copyFailedTitle'), i18n.t('uiCopy.audit.copyFailedMessage'));
     }
   };
 
@@ -230,40 +232,40 @@ export function AuditLogDialog(props: { open: boolean; envId: string; onClose: (
       onOpenChange={(open) => {
         if (!open) props.onClose();
       }}
-      title="Audit log"
+      title={i18n.t('uiCopy.audit.title')}
       footer={
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => void refetch()} disabled={entries.loading || !envId()}>
-            Refresh
+            {i18n.t('common.actions.refresh')}
           </Button>
           <Button size="sm" variant="default" onClick={props.onClose}>
-            Close
+            {i18n.t('common.actions.close')}
           </Button>
         </div>
       }
     >
       <div class="space-y-2">
-        <div class="text-xs text-muted-foreground">Recent events recorded by this runtime. Tunnel endpoint values are routing metadata only.</div>
+        <div class="text-xs text-muted-foreground">{i18n.t('uiCopy.audit.description')}</div>
 
         <Show when={errorText()}>
           <div class="text-xs text-error break-words">{errorText()}</div>
         </Show>
 
         <div class="relative" style={{ 'min-height': '160px' }}>
-          <RedevenLoadingCurtain visible={entries.loading} eyebrow="Audit" message="Loading audit log..." />
+          <RedevenLoadingCurtain visible={entries.loading} eyebrow={i18n.t('uiCopy.audit.title')} message={i18n.t('uiCopy.audit.loading')} />
 
           <Show when={!entries.loading}>
-            <Show when={(entries() ?? []).length > 0} fallback={<div class="text-xs text-muted-foreground">No audit entries.</div>}>
+            <Show when={(entries() ?? []).length > 0} fallback={<div class="text-xs text-muted-foreground">{i18n.t('uiCopy.audit.empty')}</div>}>
               <div class="max-h-[60vh] overflow-auto">
                 <table class="w-full text-xs">
                   <thead class="text-muted-foreground">
                     <tr class="text-left">
-                      <th class="py-2 pr-2 whitespace-nowrap">Time</th>
-                      <th class="py-2 pr-2 whitespace-nowrap">User</th>
-                      <th class="py-2 pr-2 whitespace-nowrap">Action</th>
-                      <th class="py-2 pr-2 whitespace-nowrap">Perm</th>
-                      <th class="py-2 pr-2 whitespace-nowrap">Status</th>
-                      <th class="py-2 whitespace-nowrap">Channel</th>
+                      <th class="py-2 pr-2 whitespace-nowrap">{i18n.t('uiCopy.audit.time')}</th>
+                      <th class="py-2 pr-2 whitespace-nowrap">{i18n.t('uiCopy.audit.user')}</th>
+                      <th class="py-2 pr-2 whitespace-nowrap">{i18n.t('git.common.action')}</th>
+                      <th class="py-2 pr-2 whitespace-nowrap">{i18n.t('uiCopy.audit.permission')}</th>
+                      <th class="py-2 pr-2 whitespace-nowrap">{i18n.t('git.common.status')}</th>
+                      <th class="py-2 whitespace-nowrap">{i18n.t('uiCopy.audit.channel')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -322,14 +324,14 @@ export function AuditLogDialog(props: { open: boolean; envId: string; onClose: (
                               </div>
                               <Show when={String(e.tunnel_url ?? '').trim()}>
                                 <div class="text-muted-foreground truncate" title={e.tunnel_url}>
-                                  <button type="button" class="hover:underline" onClick={() => void copy('Tunnel endpoint URL', e.tunnel_url ?? '')}>
-                                    {`Tunnel endpoint: ${formatTunnelHost(e.tunnel_url ?? '')}`}
+                                  <button type="button" class="hover:underline" onClick={() => void copy(i18n.t('uiCopy.audit.tunnelEndpointUrl'), e.tunnel_url ?? '')}>
+                                    {i18n.t('uiCopy.audit.tunnelEndpoint', { host: formatTunnelHost(e.tunnel_url ?? '') })}
                                   </button>
                                 </div>
                               </Show>
                               <Show when={String(e.session_kind ?? '').trim()}>
                                 <div class="text-muted-foreground truncate" title={e.session_kind}>
-                                  {`Session: ${kindLabel(e.session_kind ?? '')}`}
+                                  {i18n.t('uiCopy.audit.session', { kind: kindLabel(e.session_kind ?? '') })}
                                 </div>
                               </Show>
                             </div>

@@ -1,5 +1,5 @@
-import { DEFAULT_LOCALE, type RedevenLocale } from './localeMeta';
-import { dictionaries, enUS, type EnvAppTranslationKey, type EnvAppTranslationShape } from './locales';
+import type { RedevenLocale } from './localeMeta';
+import { enUS, type EnvAppTranslationKey, type EnvAppTranslationShape } from './locales';
 import type { PluralMessage, RichTextPart, TranslationParams } from './dictionaryTypes';
 
 export type I18nHelpers = Readonly<{
@@ -42,9 +42,11 @@ function coerceDate(value: Date | number | string): Date {
   return new Date(value);
 }
 
-export function createI18nHelpers(locale: RedevenLocale): I18nHelpers {
-  const dictionary = dictionaries[locale] ?? enUS;
-  const fallbackDictionary = dictionaries[DEFAULT_LOCALE];
+export function createI18nHelpers(
+  locale: RedevenLocale,
+  dictionary: EnvAppTranslationShape,
+  fallbackDictionary: EnvAppTranslationShape = enUS,
+): I18nHelpers {
   const pluralRules = new Intl.PluralRules(locale);
 
   const messageForKey = (key: EnvAppTranslationKey): unknown => {

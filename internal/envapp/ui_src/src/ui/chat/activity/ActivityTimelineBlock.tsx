@@ -25,6 +25,7 @@ import type {
   ActivityItem,
   ActivityTimelineBlock as ActivityTimelineBlockType,
 } from '../types';
+import { useI18n } from '../../i18n';
 
 export interface ActivityTimelineBlockProps {
   block: ActivityTimelineBlockType;
@@ -316,15 +317,16 @@ function FileActionButtons(props: {
   onPreviewFile?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
   onBrowseDirectory?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
 }) {
+  const i18n = useI18n();
   const canPreview = createMemo(() => props.action.can_preview && props.action.action_id.trim() !== '' && !!props.onPreviewFile);
   const canBrowse = createMemo(() => props.action.can_browse_directory && props.action.action_id.trim() !== '' && !!props.onBrowseDirectory);
   return (
-    <span class="chat-activity-file-actions" aria-label="File actions">
+    <span class="chat-activity-file-actions" aria-label={i18n.t('uiCopy.chat.fileActions')}>
       <button
         type="button"
         class="chat-activity-file-action-btn"
-        title="Preview file"
-        aria-label={`Preview ${props.action.display_name || 'file'}`}
+        title={i18n.t('uiCopy.chat.previewFile')}
+        aria-label={i18n.t('uiCopy.chat.previewTarget', { target: props.action.display_name || i18n.t('uiCopy.chat.fileFallback') })}
         disabled={!canPreview()}
         onClick={(event) => {
           event.stopPropagation();
@@ -336,8 +338,8 @@ function FileActionButtons(props: {
       <button
         type="button"
         class="chat-activity-file-action-btn"
-        title="Browse folder"
-        aria-label={`Browse folder for ${props.action.display_name || 'file'}`}
+        title={i18n.t('uiCopy.chat.browseFolder')}
+        aria-label={i18n.t('uiCopy.chat.browseFolderForTarget', { target: props.action.display_name || i18n.t('uiCopy.chat.fileFallback') })}
         disabled={!canBrowse()}
         onClick={(event) => {
           event.stopPropagation();
@@ -390,6 +392,7 @@ function FileReadBlock(props: {
   onPreviewFile?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
   onBrowseDirectory?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
 }) {
+  const i18n = useI18n();
   const lineSummary = createMemo(() => {
     const start = Math.max(1, Math.floor(Number(props.block.line_offset || 1)));
     const count = Math.max(0, Math.floor(Number(props.block.line_count || 0)));
@@ -405,7 +408,7 @@ function FileReadBlock(props: {
           <div class="chat-activity-detail-section-title">{props.block.action.display_name}</div>
           <div class="chat-activity-detail-section-meta">
             {lineSummary()}
-            <Show when={props.block.truncated}>{' · truncated'}</Show>
+            <Show when={props.block.truncated}>{` · ${i18n.t('uiCopy.chat.truncated')}`}</Show>
           </div>
         </div>
         <FileActionButtons
@@ -436,6 +439,7 @@ function FileDiffBlock(props: {
   onPreviewFile?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
   onBrowseDirectory?: (action: FlowerActivityFileAction, item: ActivityItem) => void;
 }) {
+  const i18n = useI18n();
   return (
     <div class="chat-activity-file-diff-list">
       <For each={props.block.files}>
@@ -451,7 +455,7 @@ function FileDiffBlock(props: {
                     <span class="chat-activity-file-stat-add">+{file.additions}</span>
                     {' '}
                     <span class="chat-activity-file-stat-del">-{file.deletions}</span>
-                    <Show when={file.truncated}>{' · truncated'}</Show>
+                    <Show when={file.truncated}>{` · ${i18n.t('uiCopy.chat.truncated')}`}</Show>
                   </div>
                 </div>
                 <FileActionButtons
@@ -463,7 +467,7 @@ function FileDiffBlock(props: {
               </div>
               <Show
                 when={snapshot().renderedLines.length > 0}
-                fallback={<div class="chat-activity-detail-empty">{file.diff_unavailable_reason || 'No textual diff'}</div>}
+                fallback={<div class="chat-activity-detail-empty">{file.diff_unavailable_reason || i18n.t('uiCopy.chat.noTextualDiff')}</div>}
               >
                 <div class="chat-activity-file-diff-unified">
                   <For each={snapshot().renderedLines}>
@@ -480,6 +484,7 @@ function FileDiffBlock(props: {
 }
 
 function WebSearchDetailBlock(props: { block: Extract<FlowerActivityDetailBlock, { kind: 'web_search' }> }) {
+  const i18n = useI18n();
   const entries = createMemo(() => [
     ...props.block.search.results,
     ...props.block.search.matches,
@@ -490,9 +495,9 @@ function WebSearchDetailBlock(props: { block: Extract<FlowerActivityDetailBlock,
     <section class="chat-activity-detail-section">
       <div class="chat-activity-detail-section-head">
         <div class="chat-activity-detail-section-copy">
-          <div class="chat-activity-detail-section-title">{props.block.search.query || 'Search results'}</div>
+          <div class="chat-activity-detail-section-title">{props.block.search.query || i18n.t('uiCopy.chat.searchResults')}</div>
           <div class="chat-activity-detail-section-meta">
-            {[props.block.search.provider, props.block.search.count !== undefined ? `${props.block.search.count} result${props.block.search.count === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')}
+            {[props.block.search.provider, props.block.search.count !== undefined ? i18n.t('uiCopy.chat.searchResultCount', { count: props.block.search.count }) : ''].filter(Boolean).join(' · ')}
           </div>
         </div>
       </div>
@@ -500,7 +505,7 @@ function WebSearchDetailBlock(props: { block: Extract<FlowerActivityDetailBlock,
         <For each={entries()}>
           {(entry) => (
             <div class="chat-activity-detail-line">
-              <span class="chat-activity-detail-key">{entry.source || entry.url || 'result'}</span>
+              <span class="chat-activity-detail-key">{entry.source || entry.url || i18n.t('uiCopy.chat.result')}</span>
               <span class="chat-activity-detail-value">{[entry.title, entry.snippet].filter(Boolean).join(' - ')}</span>
             </div>
           )}
@@ -566,8 +571,9 @@ function CompletionDetailBlock(props: { block: Extract<FlowerActivityDetailBlock
 }
 
 function ErrorDetailBlock(props: { block: Extract<FlowerActivityDetailBlock, { kind: 'error' }> }) {
+  const i18n = useI18n();
   return (
-    <section class="chat-activity-detail-section chat-activity-error-section" aria-label="Failure reason">
+    <section class="chat-activity-detail-section chat-activity-error-section" aria-label={i18n.t('uiCopy.chat.failureReason')}>
       <div class="chat-activity-error-message">{props.block.error.message}</div>
     </section>
   );
@@ -578,6 +584,7 @@ function SubagentsDetailBlock(props: {
   now: number;
   onOpenSubagentMessages?: (request: ActivitySubagentMessagesRequest) => void;
 }) {
+  const i18n = useI18n();
   const detail = props.block.subagents;
   const elapsedText = (agent: FlowerActivitySubagentDetailItem): string => {
     const startedAt = agent.started_at_ms || agent.created_at_ms || 0;
@@ -599,7 +606,7 @@ function SubagentsDetailBlock(props: {
     });
   };
   return (
-    <section class="chat-activity-detail-section chat-activity-subagents-section" aria-label="Subagents">
+    <section class="chat-activity-detail-section chat-activity-subagents-section" aria-label={i18n.t('uiCopy.chat.subagents')}>
       <Show when={detail.items.length > 0}>
         <div class="chat-activity-subagents-list" role="list">
           <For each={detail.items}>
@@ -613,8 +620,8 @@ function SubagentsDetailBlock(props: {
                         <button
                           type="button"
                           class="chat-activity-subagents-open"
-                          aria-label={`Open subagent messages for ${agent.name}`}
-                          title="Open subagent messages"
+                          aria-label={i18n.t('uiCopy.chat.openSubagentMessagesFor', { name: agent.name })}
+                          title={i18n.t('uiCopy.chat.openSubagentMessages')}
                           onClick={(event) => {
                             event.stopPropagation();
                             openMessages(agent);

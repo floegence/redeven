@@ -2,6 +2,7 @@ import { Show, type JSX } from 'solid-js';
 import { cn, useLayout } from '@floegence/floe-webapp-core';
 import { SidebarPane } from '@floegence/floe-webapp-core/layout';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { useI18n } from '../i18n';
 
 /**
  * Fixed mobile sidebar width in px.
@@ -28,6 +29,7 @@ export interface BrowserWorkspaceShellProps {
 }
 
 export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
+  const i18n = useI18n();
   const layout = useLayout();
   const isMobile = () => layout.isMobile();
 
@@ -44,7 +46,7 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
       </Show>
 
       <SidebarPane
-        title={props.title ?? 'Browser'}
+        title={props.title ?? i18n.t('files.title')}
         headerActions={
           <>
             <Show when={isMobile() && props.onClose}>
@@ -52,7 +54,7 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
                 type="button"
                 onClick={() => props.onClose?.()}
                 class="flex items-center justify-center w-5 h-5 rounded cursor-pointer hover:bg-sidebar-accent/80 transition-colors"
-                aria-label="Close sidebar"
+                aria-label={i18n.t('uiCopy.shell.closeSidebar')}
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -93,13 +95,13 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
         <div class="flex h-full min-h-0 flex-col bg-sidebar">
           <div class="sticky top-0 z-10 shrink-0 border-b border-sidebar-border bg-sidebar/95 px-2.5 py-2 backdrop-blur supports-[backdrop-filter]:bg-sidebar/90">
             <div>
-              <div class="px-0.5 pb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60">Mode</div>
+              <div class="px-0.5 pb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60">{i18n.t('uiCopy.shell.mode')}</div>
               {props.modeSwitcher}
             </div>
 
             <Show when={props.navigation}>
               <div class="mt-2 border-t border-sidebar-border pt-2">
-                <div class="px-0.5 pb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60">{props.navigationLabel || 'Navigate'}</div>
+                <div class="px-0.5 pb-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/60">{props.navigationLabel || i18n.t('shell.commandPalette.categories.navigation')}</div>
                 {props.navigation}
               </div>
             </Show>

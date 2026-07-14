@@ -51,11 +51,6 @@ export type EnvOpenSurfaceOptions = {
 
 export const ENV_DESKTOP_VIEW_MODES = ['activity', 'workbench'] as const satisfies readonly EnvViewMode[];
 
-export const ENV_VIEW_MODE_LABELS: Record<EnvViewMode, string> = {
-  activity: 'Activity',
-  workbench: 'Workbench',
-};
-
 export const ENV_SURFACE_IDS = [
   'terminal',
   'monitor',
