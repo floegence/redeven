@@ -666,9 +666,12 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-model-default"] button')));
     (runtime.querySelector('[data-thread-id="thread-model-default"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('gpt-5.2') ?? false);
+    await waitFor(() => {
+      const trigger = runtime.querySelector<HTMLButtonElement>('.flower-model-reasoning-model-trigger');
+      return Boolean(trigger && !trigger.disabled && trigger.textContent?.includes('gpt-5.2'));
+    });
 
-    (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
+    runtime.querySelector<HTMLButtonElement>('.flower-model-reasoning-model-trigger')!.click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-menu')));
     const nextModelOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
       .find((button) => button.textContent?.includes('gpt-5.4')) as HTMLButtonElement | undefined;
