@@ -531,7 +531,19 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 
 	c, err := fsclient.ConnectDirect(ctx, cfg.Direct,
 		fsclient.WithOrigin(origin),
-		fsclient.WithKeepaliveInterval(15*time.Second),
+		fsclient.WithOutboundRecordChunkBytes(64*1024),
+		fsclient.WithYamuxLimits(fsclient.YamuxLimits{
+			MaxActiveStreams:            64,
+			MaxInboundStreams:           32,
+			MaxFrameBytes:               256 * 1024,
+			PreferredOutboundFrameBytes: 64 * 1024,
+			MaxStreamReceiveBytes:       256 * 1024,
+			MaxSessionReceiveBytes:      16 * 1024 * 1024,
+		}),
+		fsclient.WithLiveness(fsclient.LivenessOptions{
+			Interval: 15 * time.Second,
+			Timeout:  10 * time.Second,
+		}),
 		fsclient.WithTransportSecurityPolicy(fsclient.RequireTLS),
 	)
 	if err != nil {
@@ -994,6 +1006,15 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 
 	sess, err := endpoint.ConnectTunnel(ctx, grant,
 		endpoint.WithOrigin(origin),
+		endpoint.WithOutboundRecordChunkBytes(64*1024),
+		endpoint.WithYamuxLimits(endpoint.YamuxLimits{
+			MaxActiveStreams:            64,
+			MaxInboundStreams:           32,
+			MaxFrameBytes:               256 * 1024,
+			PreferredOutboundFrameBytes: 64 * 1024,
+			MaxStreamReceiveBytes:       256 * 1024,
+			MaxSessionReceiveBytes:      16 * 1024 * 1024,
+		}),
 		endpoint.WithTransportSecurityPolicy(endpoint.RequireTLS),
 	)
 	if err != nil {
@@ -1240,7 +1261,16 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 
 func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta, fsSvc *fs.Service, gitRepoSvc *gitrepo.Service) {
 	router := rpc.NewRouter()
-	srv := rpc.NewServer(stream, router)
+	srv, err := rpc.NewServerWithOptions(stream, router, rpc.ServerOptions{
+		MaxConcurrentRequests:  32,
+		MaxQueuedRequests:      128,
+		MaxQueuedNotifications: 128,
+	})
+	if err != nil {
+		a.log.Warn("rpc server init failed", "error", err)
+		_ = stream.Close()
+		return
+	}
 	defer a.term.DetachSink(srv)
 
 	accessrpc.New(a.accessGate).Register(router, meta)

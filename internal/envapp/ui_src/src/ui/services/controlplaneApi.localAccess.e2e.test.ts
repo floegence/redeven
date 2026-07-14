@@ -134,10 +134,12 @@ describe('controlplaneApi local access flow', () => {
   it('uses same-origin credentials when minting local direct connect artifacts', async () => {
     const auth = await import('./localAccessAuth');
     auth.writeLocalAccessResumeToken('resume123');
+    const controller = new AbortController();
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe('/api/local/direct/connect_artifact');
       expect(init?.method).toBe('POST');
       expect(init?.credentials).toBe('same-origin');
+      expect(init?.signal).toBe(controller.signal);
       expect(new Headers(init?.headers).get(auth.getLocalAccessResumeHeaderName())).toBe('resume123');
       return jsonResponse({
         connect_artifact: {
@@ -156,7 +158,7 @@ describe('controlplaneApi local access flow', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const mod = await import('./controlplaneApi');
-    const out = await mod.mintLocalDirectConnectArtifact();
+    const out = await mod.mintLocalDirectConnectArtifact({ signal: controller.signal });
 
     expect(out.transport).toBe('direct');
     if (out.transport !== 'direct') {

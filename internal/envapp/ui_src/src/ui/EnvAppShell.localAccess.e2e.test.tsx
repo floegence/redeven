@@ -57,7 +57,7 @@ const connectMock = vi.fn(async (_config: Record<string, unknown>) => {
   protocolClient = { id: 'client-1' };
   protocolError = null;
 });
-const reconnectMock = vi.fn(async () => {
+const reconnectMock = vi.fn(async (_config?: Record<string, unknown>) => {
   protocolStatus = 'connected';
   protocolClient = { id: 'client-2' };
   protocolError = null;
@@ -1771,13 +1771,31 @@ describe('EnvAppShell local access gate', () => {
       expect(connectMock).toHaveBeenCalledTimes(1);
       const localConnectConfig = connectMock.mock.calls[0]?.[0];
       expect(localConnectConfig).toMatchObject({
-        mode: 'direct',
         observer: expect.any(Object),
-        connect: {
-          keepaliveIntervalMs: 15_000,
-          transportSecurityPolicy: 'allow_plaintext_for_loopback',
+        source: {
+          kind: 'refreshable',
+          acquire: expect.any(Function),
         },
-        getArtifact: expect.any(Function),
+        connect: {
+          outboundRecordChunkBytes: 64 * 1024,
+          liveness: { intervalMs: 15_000, timeoutMs: 10_000 },
+          transportSecurityPolicy: 'allow_plaintext_for_loopback',
+          webSocketLimits: {
+            maxInboundQueuedBytes: 4 * 1024 * 1024,
+            outboundLowWatermarkBytes: 256 * 1024,
+            outboundHighWatermarkBytes: 1024 * 1024,
+            outboundHardLimitBytes: 4 * 1024 * 1024,
+            outboundDrainTimeoutMs: 10_000,
+          },
+          yamuxLimits: {
+            maxActiveStreams: 64,
+            maxInboundStreams: 32,
+            maxFrameBytes: 256 * 1024,
+            preferredOutboundFrameBytes: 64 * 1024,
+            maxStreamReceiveBytes: 256 * 1024,
+            maxSessionReceiveBytes: 16 * 1024 * 1024,
+          },
+        },
         autoReconnect: {
           enabled: true,
           maxAttempts: 3,
@@ -2034,6 +2052,7 @@ describe('EnvAppShell local access gate', () => {
 
       expect(getLocalAccessStatusMock.mock.calls.length).toBeGreaterThanOrEqual(3);
       expect(reconnectMock).toHaveBeenCalledTimes(1);
+      expect(reconnectMock.mock.calls[0]?.[0]).toBe(connectMock.mock.calls[0]?.[0]);
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
       expect(protocolStatus).toBe('connected');
     } finally {
@@ -2385,11 +2404,31 @@ describe('EnvAppShell remote access gate', () => {
       expect(getEnvAppAccessStatusMock).toHaveBeenCalledTimes(2);
       expect(connectMock).toHaveBeenCalledTimes(1);
       const remoteConnectConfig = connectMock.mock.calls[0]?.[0];
-	      expect(remoteConnectConfig).toMatchObject({
-	        mode: 'tunnel',
-	        observer: expect.any(Object),
-	        connect: { transportSecurityPolicy: 'require_tls' },
-        getArtifact: expect.any(Function),
+      expect(remoteConnectConfig).toMatchObject({
+        observer: expect.any(Object),
+        source: {
+          kind: 'refreshable',
+          acquire: expect.any(Function),
+        },
+        connect: {
+          outboundRecordChunkBytes: 64 * 1024,
+          transportSecurityPolicy: 'require_tls',
+          webSocketLimits: {
+            maxInboundQueuedBytes: 4 * 1024 * 1024,
+            outboundLowWatermarkBytes: 256 * 1024,
+            outboundHighWatermarkBytes: 1024 * 1024,
+            outboundHardLimitBytes: 4 * 1024 * 1024,
+            outboundDrainTimeoutMs: 10_000,
+          },
+          yamuxLimits: {
+            maxActiveStreams: 64,
+            maxInboundStreams: 32,
+            maxFrameBytes: 256 * 1024,
+            preferredOutboundFrameBytes: 64 * 1024,
+            maxStreamReceiveBytes: 256 * 1024,
+            maxSessionReceiveBytes: 16 * 1024 * 1024,
+          },
+        },
         autoReconnect: {
           enabled: true,
           maxAttempts: 3,
@@ -2440,14 +2479,16 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      const remoteConnectConfig = connectMock.mock.calls[0]?.[0] as { getArtifact: () => Promise<unknown> };
-      expect(remoteConnectConfig?.getArtifact).toEqual(expect.any(Function));
+      const remoteConnectConfig = connectMock.mock.calls[0]?.[0] as {
+        source: { acquire: (context?: Readonly<{ traceId?: string; signal?: AbortSignal }>) => Promise<unknown> };
+      };
+      expect(remoteConnectConfig?.source.acquire).toEqual(expect.any(Function));
 
       getEnvironmentMock.mockClear();
       mintEnvProxyEntryTicketMock.mockClear();
       connectArtifactEntryMock.mockClear();
 
-      const artifact = await remoteConnectConfig.getArtifact();
+      const artifact = await remoteConnectConfig.source.acquire();
 
       expect(getEnvironmentMock).toHaveBeenCalledTimes(1);
       expect(getEnvironmentMock).toHaveBeenCalledWith({ source: 'controlplane', envId: 'env_demo' });
@@ -2502,14 +2543,16 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      const remoteConnectConfig = connectMock.mock.calls[0]?.[0] as { getArtifact: () => Promise<unknown> };
-      expect(remoteConnectConfig?.getArtifact).toEqual(expect.any(Function));
+      const remoteConnectConfig = connectMock.mock.calls[0]?.[0] as {
+        source: { acquire: (context?: Readonly<{ traceId?: string; signal?: AbortSignal }>) => Promise<unknown> };
+      };
+      expect(remoteConnectConfig?.source.acquire).toEqual(expect.any(Function));
 
       getEnvironmentMock.mockClear();
       mintEnvProxyEntryTicketMock.mockClear();
       connectArtifactEntryMock.mockClear();
 
-      await expect(remoteConnectConfig.getArtifact()).rejects.toThrow('Runtime is offline.');
+      await expect(remoteConnectConfig.source.acquire()).rejects.toThrow('Runtime is offline.');
       expect(getEnvironmentMock).toHaveBeenCalledTimes(1);
       expect(getEnvironmentMock).toHaveBeenCalledWith({ source: 'controlplane', envId: 'env_demo' });
       expect(mintEnvProxyEntryTicketMock).not.toHaveBeenCalled();

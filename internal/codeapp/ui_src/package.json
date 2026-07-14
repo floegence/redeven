@@ -13,7 +13,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@floegence/flowersec-core": "^0.19.11"
+    "@floegence/flowersec-core": "^0.20.0"
   },
   "overrides": {
     "js-yaml": "^4.2.0",

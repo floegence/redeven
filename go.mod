@@ -7,7 +7,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floeterm/terminal-go v0.4.22
 	github.com/floegence/floret v0.4.0
-	github.com/floegence/flowersec/flowersec-go v0.19.11
+	github.com/floegence/flowersec/flowersec-go v0.20.0
 	github.com/floegence/redevplugin v0.1.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/openai/openai-go v1.12.0
@@ -23,7 +23,8 @@ require (
 	github.com/ebitengine/purego v0.9.1 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hashicorp/yamux v0.1.2 // indirect
+	github.com/libp2p/go-buffer-pool v0.0.2 // indirect
+	github.com/libp2p/go-yamux/v5 v5.1.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
