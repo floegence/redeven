@@ -119,6 +119,10 @@ jobs:
       - name: Flower live protocol guard
         run: ./scripts/check_flower_live_protocol.sh
 
+      - name: Install Flower UI Chromium
+        working-directory: internal/envapp/ui_src
+        run: corepack pnpm exec playwright install --with-deps chromium
+
       - name: Flower UI behavior contracts
         run: ./scripts/check_flower_ui.sh
 

@@ -23,7 +23,10 @@ dependency boundary guard, Flower protocol checks, Flower UI behavior
 contracts, UI lint, Desktop checks, Go tests, and golangci-lint. Embedded asset
 builds intentionally precede focused Go gates that import Env App or Code App
 embed packages because fresh checkouts do not contain ignored UI `dist/`
-directories.
+directories. Before the Flower UI gate, CI installs the lockfile-selected
+Playwright Chromium runtime and its Linux dependencies so the committed browser
+contract runs on a fresh GitHub runner instead of depending on a pre-populated
+browser cache.
 
 ReDevPlugin consumption is a published dependency gate, not a source sync. The
 dependency boundary script rejects `../redevplugin`, `go.work`, Go `replace`,
@@ -123,18 +126,19 @@ Flower lifecycle fixes that belong to Floret must ship as a published
 [4] redeven:.github/workflows/ci-check.yml:106 - Embedded assets are built before focused Go gates that import UI embed packages.
 [5] redeven:.github/workflows/ci-check.yml:109 - CI runs the ReDevPlugin integration gate after embedded assets are generated.
 [6] redeven:.github/workflows/ci-check.yml:116 - CI runs the Floret dependency boundary guard before Flower protocol and UI checks.
-[7] redeven:AGENTS.md:689 - Repository local quality gates include OKF integrity, dist verification, assets, Go tests, and golangci-lint.
-[8] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The local boundary script rejects local ReDevPlugin wiring and copied platform-core paths.
-[9] redeven:scripts/check_floret_dependency_boundary.sh:1 - The Floret boundary script rejects local Floret wiring, internal imports, and direct schema access.
-[10] redeven:scripts/check_plugin_integration.sh:44 - The integration gate requires embedded UI asset directories before Go embed tests.
-[11] redeven:scripts/check_plugin_integration.sh:62 - The integration gate starts with the published dependency boundary guard.
-[12] redeven:scripts/check_plugin_integration.sh:74 - The integration gate runs AppServer and Local UI plugin route tests.
-[13] redeven:scripts/check_plugin_integration.sh:85 - The integration gate runs ReDevPlugin session, security, runtime, and route adapter tests.
-[14] redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.test.ts:1 - Projection tests cover official catalog merging and tile action decisions.
-[15] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.test.ts:1 - Plugin API tests cover proxy paths and bundled official install/update bodies.
-[16] redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.test.tsx:1 - Plugin Panel tests cover app-grid entry behavior and pointer affordance.
-[17] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.test.tsx:1 - Plugin Center tests cover the dedicated shell and lifecycle controls.
-[18] redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx:1 - Plugin surface frame tests cover bootstrap, bridge, RPC, and confirmation behavior.
-[19] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:807 - EnvAppShell tests bind plugin center and plugin surface Activity placement.
-[20] redeven:internal/codeapp/appserver/server_test.go:733 - AppServer tests bind Env App management delegation to the plugin handler.
-[21] redeven:internal/codeapp/appserver/server_test.go:833 - AppServer tests bind plugin sandbox route delegation to the plugin handler.
+[7] redeven:.github/workflows/ci-check.yml:122 - CI installs the lockfile-selected Playwright Chromium runtime before Flower UI browser contracts.
+[8] redeven:AGENTS.md:714 - Repository local quality gates include OKF integrity, dist verification, assets, Go tests, and golangci-lint.
+[9] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The local boundary script rejects local ReDevPlugin wiring and copied platform-core paths.
+[10] redeven:scripts/check_floret_dependency_boundary.sh:1 - The Floret boundary script rejects local Floret wiring, internal imports, and direct schema access.
+[11] redeven:scripts/check_plugin_integration.sh:44 - The integration gate requires embedded UI asset directories before Go embed tests.
+[12] redeven:scripts/check_plugin_integration.sh:62 - The integration gate starts with the published dependency boundary guard.
+[13] redeven:scripts/check_plugin_integration.sh:74 - The integration gate runs AppServer and Local UI plugin route tests.
+[14] redeven:scripts/check_plugin_integration.sh:85 - The integration gate runs ReDevPlugin session, security, runtime, and route adapter tests.
+[15] redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.test.ts:1 - Projection tests cover official catalog merging and tile action decisions.
+[16] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.test.ts:1 - Plugin API tests cover proxy paths and bundled official install/update bodies.
+[17] redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.test.tsx:1 - Plugin Panel tests cover app-grid entry behavior and pointer affordance.
+[18] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.test.tsx:1 - Plugin Center tests cover the dedicated shell and lifecycle controls.
+[19] redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx:1 - Plugin surface frame tests cover bootstrap, bridge, RPC, and confirmation behavior.
+[20] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:807 - EnvAppShell tests bind plugin center and plugin surface Activity placement.
+[21] redeven:internal/codeapp/appserver/server_test.go:733 - AppServer tests bind Env App management delegation to the plugin handler.
+[22] redeven:internal/codeapp/appserver/server_test.go:833 - AppServer tests bind plugin sandbox route delegation to the plugin handler.
