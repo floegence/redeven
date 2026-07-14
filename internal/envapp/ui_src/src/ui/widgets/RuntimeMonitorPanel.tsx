@@ -511,10 +511,12 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
     return { values: [s.netIn, s.netOut], label: formatTimeLabel(s.ts) };
   };
 
-  const cpuSeries = () => [{ name: i18n.t('runtimeMonitor.cpuUsage'), data: [] }];
+  const cpuSeries = () => [
+    { name: i18n.t('runtimeMonitor.cpuUsage'), data: [], color: 'var(--chart-4)' },
+  ];
   const networkSeries = () => [
-    { name: i18n.t('runtimeMonitor.download'), data: [] },
-    { name: i18n.t('runtimeMonitor.upload'), data: [] },
+    { name: i18n.t('runtimeMonitor.download'), data: [], color: 'var(--chart-4)' },
+    { name: i18n.t('runtimeMonitor.upload'), data: [], color: 'var(--chart-2)' },
   ];
 
   const formatPercent = (value: number) => `${Number(value ?? 0).toFixed(2).replace(/\.?0+$/, '')}%`;

@@ -64,7 +64,12 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     exiting: () => false,
     state: () => (options.open() ? 'entered' : 'exited'),
   }),
-  MonitoringChart: () => <div data-testid="chart" />,
+  MonitoringChart: (props: any) => (
+    <div
+      data-testid={props.showLegend ? 'network-chart' : 'cpu-chart'}
+      data-series-colors={props.series.map((series: { color?: string }) => series.color ?? '').join(',')}
+    />
+  ),
   SurfaceFloatingLayer: (props: any) => {
     const { children, layerRef, position, class: className, style, ...rest } = props;
     return (
@@ -177,6 +182,18 @@ describe('RuntimeMonitorPanel', () => {
     await flushPanel();
 
     expect(host.firstElementChild?.className).toContain('runtime-monitor-panel');
+  });
+
+  it('uses the green chart tone for CPU and download while keeping upload secondary', async () => {
+    rpcMocks.monitor.getSysMonitor.mockResolvedValue(makeSnapshot(1));
+
+    render(() => <RuntimeMonitorPanel variant="workbench" />, host);
+    await flushPanel();
+
+    expect(host.querySelector('[data-testid="cpu-chart"]')?.getAttribute('data-series-colors'))
+      .toBe('var(--chart-4)');
+    expect(host.querySelector('[data-testid="network-chart"]')?.getAttribute('data-series-colors'))
+      .toBe('var(--chart-4),var(--chart-2)');
   });
 
   it('prevents overlapping polling requests while coalescing a trailing refresh', async () => {
