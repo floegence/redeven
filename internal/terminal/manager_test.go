@@ -801,7 +801,7 @@ func TestActivationFailureRollbackSerializesSameConnectionReattach(t *testing.T)
 	m.DetachSink(server)
 }
 
-func TestDuplicateGenerationDoesNotSharePendingActivation(t *testing.T) {
+func TestDuplicateGenerationJoinsPendingActivationFailure(t *testing.T) {
 	m := newQuietTestManager(t, t.TempDir())
 	t.Cleanup(m.Cleanup)
 	sess, err := m.createSession("test", "")
@@ -837,24 +837,98 @@ func TestDuplicateGenerationDoesNotSharePendingActivation(t *testing.T) {
 	}()
 	<-activationStarted
 
-	_, duplicateErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
-	duplicateRPCError, ok := duplicateErr.(*rpc.Error)
-	if !ok || duplicateRPCError.Code != 409 || duplicateRPCError.Message != "terminal attach in progress" {
-		t.Fatalf("duplicate attach error = %#v, want 409 attach in progress", duplicateErr)
+	duplicateResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		duplicateResult <- attachErr
+	}()
+	select {
+	case duplicateErr := <-duplicateResult:
+		t.Fatalf("duplicate attach completed before activation result: %v", duplicateErr)
+	case <-time.After(25 * time.Millisecond):
 	}
 	if got := activationCalls.Load(); got != 1 {
-		t.Fatalf("activation calls while duplicate pending = %d, want 1", got)
+		t.Fatalf("activation calls while duplicate waits = %d, want 1", got)
 	}
 
 	close(releaseActivation)
-	if err := <-firstResult; err == nil {
-		t.Fatal("first attach succeeded after injected activation failure")
+	firstErr := <-firstResult
+	duplicateErr := <-duplicateResult
+	for label, attachErr := range map[string]error{"first": firstErr, "duplicate": duplicateErr} {
+		rpcErr, ok := attachErr.(*rpc.Error)
+		if !ok || rpcErr.Code != 500 || rpcErr.Message != "failed to attach terminal session" {
+			t.Fatalf("%s attach error = %#v, want shared activation failure", label, attachErr)
+		}
 	}
 	if _, err := m.attachSession(sess.ID, "conn-1", 80, 24, server, 2); err != nil {
 		t.Fatalf("new generation attach after failure = %v", err)
 	}
 	if got := activationCalls.Load(); got != 2 {
 		t.Fatalf("activation calls after new generation = %d, want 2", got)
+	}
+	m.DetachSink(server)
+}
+
+func TestDuplicateGenerationJoinsPendingActivationSuccess(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() { _ = client.Close() })
+
+	activationStarted := make(chan struct{})
+	releaseActivation := make(chan struct{})
+	var activationCalls atomic.Int32
+	m.activateSessionFunc = func(string, int, int) error {
+		activationCalls.Add(1)
+		close(activationStarted)
+		<-releaseActivation
+		return nil
+	}
+
+	type attachResult struct {
+		boundary int64
+		err      error
+	}
+	firstResult := make(chan attachResult, 1)
+	go func() {
+		boundary, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		firstResult <- attachResult{boundary: boundary, err: attachErr}
+	}()
+	<-activationStarted
+
+	duplicateResult := make(chan attachResult, 1)
+	go func() {
+		boundary, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		duplicateResult <- attachResult{boundary: boundary, err: attachErr}
+	}()
+	select {
+	case result := <-duplicateResult:
+		t.Fatalf("duplicate attach completed before activation result: %#v", result)
+	case <-time.After(25 * time.Millisecond):
+	}
+	if got := activationCalls.Load(); got != 1 {
+		t.Fatalf("activation calls while duplicate waits = %d, want 1", got)
+	}
+
+	close(releaseActivation)
+	first := <-firstResult
+	duplicate := <-duplicateResult
+	if first.err != nil || duplicate.err != nil {
+		t.Fatalf("joined attach errors = first:%v duplicate:%v", first.err, duplicate.err)
+	}
+	if duplicate.boundary != first.boundary {
+		t.Fatalf("duplicate boundary = %d, want %d", duplicate.boundary, first.boundary)
 	}
 	m.DetachSink(server)
 }
