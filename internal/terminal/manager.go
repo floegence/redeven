@@ -60,6 +60,7 @@ type Manager struct {
 	byServer          map[*rpc.Server]map[string]sinkAttachment
 	bySession         map[string]map[*rpc.Server]sinkAttachment
 	attachGenerations map[*rpc.Server]map[string]int64
+	attachAttempts    map[*rpc.Server]map[string]sinkAttachment
 	closedSinks       map[*rpc.Server]struct{} // best-effort marker to avoid repeated work
 	sessionLifecycle  map[string]SessionLifecycleRecord
 	deleteOperations  map[string]*sessionDeleteOperation
@@ -71,6 +72,35 @@ type sinkAttachment struct {
 	connID            string
 	liveAfterSequence int64
 	generation        int64
+	activation        *sessionAttachActivation
+}
+
+type sessionAttachActivation struct {
+	done chan struct{}
+	once sync.Once
+	err  error
+}
+
+func newSessionAttachActivation() *sessionAttachActivation {
+	return &sessionAttachActivation{done: make(chan struct{})}
+}
+
+func (a *sessionAttachActivation) complete(err error) {
+	if a == nil {
+		return
+	}
+	a.once.Do(func() {
+		a.err = err
+		close(a.done)
+	})
+}
+
+func (a *sessionAttachActivation) wait() error {
+	if a == nil {
+		return nil
+	}
+	<-a.done
+	return a.err
 }
 
 type SessionInfo struct {
@@ -146,6 +176,7 @@ func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slo
 		byServer:          make(map[*rpc.Server]map[string]sinkAttachment),
 		bySession:         make(map[string]map[*rpc.Server]sinkAttachment),
 		attachGenerations: make(map[*rpc.Server]map[string]int64),
+		attachAttempts:    make(map[*rpc.Server]map[string]sinkAttachment),
 		closedSinks:       make(map[*rpc.Server]struct{}),
 		sessionLifecycle:  make(map[string]SessionLifecycleRecord),
 		deleteOperations:  make(map[string]*sessionDeleteOperation),
@@ -441,6 +472,13 @@ func (m *Manager) DetachSink(streamServer *rpc.Server) {
 		delete(m.byServer, streamServer)
 	}
 	delete(m.attachGenerations, streamServer)
+	if attempts := m.attachAttempts[streamServer]; attempts != nil {
+		closedErr := &rpc.Error{Code: 410, Message: "terminal connection closed"}
+		for _, attempt := range attempts {
+			attempt.activation.complete(closedErr)
+		}
+		delete(m.attachAttempts, streamServer)
+	}
 	writer = m.writers[streamServer]
 	delete(m.writers, streamServer)
 	m.closedSinks[streamServer] = struct{}{}
@@ -518,6 +556,11 @@ func (m *Manager) attachSinkLocked(
 		return sinkAttachment{}, false, errTerminalAttachSuperseded
 	}
 	if generation == highWater {
+		if attempts := m.attachAttempts[sink]; attempts != nil {
+			if attempt, ok := attempts[sessionID]; ok && attempt.generation == generation && attempt.connID == connID {
+				return attempt, false, nil
+			}
+		}
 		if hasExisting && existing.generation == generation && existing.connID == connID {
 			return existing, false, nil
 		}
@@ -528,6 +571,7 @@ func (m *Manager) attachSinkLocked(
 		connID:            connID,
 		liveAfterSequence: captureHistoryBoundary(),
 		generation:        generation,
+		activation:        newSessionAttachActivation(),
 	}
 	if _, ok := m.writers[sink]; !ok {
 		m.writers[sink] = newSinkWriter(sink, m.log)
@@ -554,6 +598,15 @@ func (m *Manager) attachSinkLocked(
 		m.attachGenerations[sink] = generations
 	}
 	generations[sessionID] = generation
+	if m.attachAttempts == nil {
+		m.attachAttempts = make(map[*rpc.Server]map[string]sinkAttachment)
+	}
+	attempts := m.attachAttempts[sink]
+	if attempts == nil {
+		attempts = make(map[string]sinkAttachment)
+		m.attachAttempts[sink] = attempts
+	}
+	attempts[sessionID] = attachment
 	if hasExisting && existing.connID != connID && removePreviousConnection != nil && !m.sessionConnectionOwnedLocked(sessionID, existing.connID) {
 		removePreviousConnection(existing.connID)
 	}
@@ -610,20 +663,6 @@ func (m *Manager) rollbackSessionAttachment(
 	}
 	if removeConnection != nil && !m.sessionConnectionOwnedLocked(sessionID, attachment.connID) {
 		removeConnection(attachment.connID)
-	}
-}
-
-func (m *Manager) forgetSessionAttachGenerations(sessionID string) {
-	if m == nil || sessionID == "" {
-		return
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	for sink, generations := range m.attachGenerations {
-		delete(generations, sessionID)
-		if len(generations) == 0 {
-			delete(m.attachGenerations, sink)
-		}
 	}
 }
 
@@ -838,6 +877,11 @@ func (m *Manager) attachSession(
 		m.mu.Unlock()
 		return 0, &rpc.Error{Code: 404, Message: "terminal session not found"}
 	}
+	currentSession, sessionStillRegistered := m.term.GetSession(sessionID)
+	if !sessionStillRegistered || currentSession != sess {
+		m.mu.Unlock()
+		return 0, &rpc.Error{Code: 404, Message: "terminal session not found"}
+	}
 	var historyBoundarySequence int64
 	if streamServer != nil {
 		var attachErr error
@@ -868,11 +912,15 @@ func (m *Manager) attachSession(
 	}
 	m.mu.Unlock()
 
-	if streamServer != nil && !attachmentCreated && !sess.IsActive() {
-		return 0, &rpc.Error{Code: 409, Message: "terminal attach in progress"}
+	if streamServer != nil && !attachmentCreated && attachment.activation != nil {
+		if err := attachment.activation.wait(); err != nil {
+			return 0, err
+		}
+		return historyBoundarySequence, nil
 	}
 	if sess.IsActive() {
-		return historyBoundarySequence, nil
+		attachment.activation.complete(nil)
+		return historyBoundarySequence, attachment.activation.wait()
 	}
 
 	activateSession := m.activateSessionFunc
@@ -886,10 +934,13 @@ func (m *Manager) attachSession(
 			sess.RemoveConnection(connID)
 		}
 		m.log.Warn("terminal attach activation failed", "session_id", sessionID, "conn_id", connID, "error", err)
-		return 0, &rpc.Error{Code: 500, Message: "failed to attach terminal session"}
+		attachErr := &rpc.Error{Code: 500, Message: "failed to attach terminal session"}
+		attachment.activation.complete(attachErr)
+		return 0, attachment.activation.wait()
 	}
 
-	return historyBoundarySequence, nil
+	attachment.activation.complete(nil)
+	return historyBoundarySequence, attachment.activation.wait()
 }
 
 func (m *Manager) resize(sessionID string, connID string, cols int, rows int) error {
@@ -976,8 +1027,6 @@ func (h *eventHandler) OnTerminalSessionClosed(sessionID string) {
 		return
 	}
 
-	h.m.detachSessionViewers(sessionID)
-	h.m.forgetSessionAttachGenerations(sessionID)
 	reason := h.m.finalizeSessionClosed(sessionID)
 	payload := terminalSessionsChangedPayload{
 		Reason:      reason,
