@@ -1119,8 +1119,9 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess endpoint.Session, 
 	}
 
 	proxyOpts := runtimeproxy.ApplyOptions(fsproxy.Options{
-		Upstream:       up,
-		UpstreamOrigin: origin,
+		Upstream:        up,
+		UpstreamOrigin:  origin,
+		ContractOptions: fsproxy.ContractOptions{BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders()},
 	})
 	if err := fsproxy.Register(srv, proxyOpts); err != nil {
 		return err
@@ -1177,8 +1178,9 @@ func (a *Agent) servePortForwardSession(ctx context.Context, sess endpoint.Sessi
 	}
 
 	proxyOpts := runtimeproxy.ApplyOptions(fsproxy.Options{
-		Upstream:       up,
-		UpstreamOrigin: origin,
+		Upstream:        up,
+		UpstreamOrigin:  origin,
+		ContractOptions: fsproxy.ContractOptions{BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders()},
 	})
 	if err := fsproxy.Register(srv, proxyOpts); err != nil {
 		return err
@@ -1248,8 +1250,9 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 			return err
 		}
 		proxyOpts := runtimeproxy.ApplyOptions(fsproxy.Options{
-			Upstream:       up,
-			UpstreamOrigin: origin,
+			Upstream:        up,
+			UpstreamOrigin:  origin,
+			ContractOptions: fsproxy.ContractOptions{BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders()},
 		})
 		if err := fsproxy.Register(srv, proxyOpts); err != nil {
 			return err
