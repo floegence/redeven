@@ -1,22 +1,40 @@
 package runtimeproxy
 
 import (
-	"reflect"
+	"slices"
 	"testing"
 
 	fsproxy "github.com/floegence/flowersec/flowersec-go/proxy"
 )
 
-func TestProductBlockedResponseHeaders(t *testing.T) {
+func TestApplyOptionsBlocksOnlyEmbeddingPolicies(t *testing.T) {
 	t.Parallel()
 
-	want := []string{"Content-Security-Policy", "Content-Security-Policy-Report-Only", "X-Frame-Options"}
-	if got := ProductBlockedResponseHeaders(); !reflect.DeepEqual(got, want) {
-		t.Fatalf("ProductBlockedResponseHeaders() = %v, want %v", got, want)
-	}
+	opts := ApplyOptions(fsproxy.Options{
+		ContractOptions: fsproxy.ContractOptions{
+			BlockedResponseHeaders: []string{"x-product-secret"},
+		},
+	})
 
-	opts := ApplyOptions(fsproxy.Options{ContractOptions: fsproxy.ContractOptions{BlockedResponseHeaders: ProductBlockedResponseHeaders()}})
-	if !reflect.DeepEqual(opts.BlockedResponseHeaders, want) {
-		t.Fatalf("ApplyOptions blocked headers = %v, want %v", opts.BlockedResponseHeaders, want)
+	wantBlocked := []string{
+		"x-product-secret",
+		"content-security-policy",
+		"content-security-policy-report-only",
+		"x-frame-options",
+	}
+	if !slices.Equal(opts.BlockedResponseHeaders, wantBlocked) {
+		t.Fatalf("BlockedResponseHeaders = %#v, want %#v", opts.BlockedResponseHeaders, wantBlocked)
+	}
+	for _, preserved := range []string{
+		"x-content-type-options",
+		"referrer-policy",
+		"permissions-policy",
+		"cross-origin-opener-policy",
+		"cross-origin-embedder-policy",
+		"cross-origin-resource-policy",
+	} {
+		if slices.Contains(opts.BlockedResponseHeaders, preserved) {
+			t.Fatalf("BlockedResponseHeaders must preserve default security header %q", preserved)
+		}
 	}
 }

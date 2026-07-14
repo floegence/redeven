@@ -48,14 +48,17 @@ func TestFlowersecDependencyUsesPublishedRelease(t *testing.T) {
 	previousReleaseMarkers := map[string][]string{
 		"go.mod": {
 			"github.com/floegence/flowersec/flowersec-go v0.19.11",
+			"github.com/floegence/flowersec/flowersec-go v0.20.0",
 		},
 		"go.sum": {
 			"github.com/floegence/flowersec/flowersec-go v0.19.11 ",
-			"github.com/floegence/flowersec/flowersec-go v0.19.11/go.mod ",
+			"github.com/floegence/flowersec/flowersec-go v0.20.0 ",
 		},
 		"THIRD_PARTY_NOTICES.md": {
 			"github.com/floegence/flowersec/flowersec-go | v0.19.11",
 			"@floegence/flowersec-core | 0.19.11",
+			"github.com/floegence/flowersec/flowersec-go | v0.20.0",
+			"@floegence/flowersec-core | 0.20.0",
 		},
 	}
 	for file, markers := range previousReleaseMarkers {
@@ -184,6 +187,24 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		}
 		if strings.Contains(content, "0.36.74") {
 			t.Fatalf("%s must not retain previous @floegence/floe-webapp 0.36.74 release", file)
+		}
+		for _, previousMarker := range []string{
+			"@floegence/floe-webapp-boot@0.37.0",
+			"@floegence/floe-webapp-core@0.37.0",
+			"@floegence/floe-webapp-protocol@0.37.0",
+			"floe-webapp-boot-0.37.0.tgz",
+			"floe-webapp-core-0.37.0.tgz",
+			"floe-webapp-protocol-0.37.0.tgz",
+			"@floegence/floe-webapp-boot | 0.37.0",
+			"@floegence/floe-webapp-core | 0.37.0",
+			"@floegence/floe-webapp-protocol | 0.37.0",
+			"@floegence/flowersec-core@0.20.0",
+			"flowersec-core-0.20.0.tgz",
+			"@floegence/flowersec-core | 0.20.0",
+		} {
+			if strings.Contains(content, previousMarker) {
+				t.Fatalf("%s must not retain previous dependency marker %q", file, previousMarker)
+			}
 		}
 		if strings.Contains(content, "0.19.7") || strings.Contains(content, "0.19.8") {
 			t.Fatalf("%s must not retain old @floegence/flowersec-core versions", file)
