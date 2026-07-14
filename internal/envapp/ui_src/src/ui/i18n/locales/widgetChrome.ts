@@ -534,6 +534,8 @@ export const enUSWidgetChrome = defineDictionary({
     retryingOutputRecovery: 'Terminal output recovery paused. Retrying...',
     outputRecoveryFailed: 'Terminal output recovery failed.',
     retryingOlderOutput: 'Syncing earlier output...',
+    waitingForActivation: 'Select this terminal to continue.',
+    reconnecting: 'Reconnecting terminal...',
     olderOutputUnavailable: 'Some earlier output could not be restored.',
     terminalUnavailable: 'This terminal could not be restored.',
     outputSynchronized: 'Terminal output is synchronized.',

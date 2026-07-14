@@ -15,7 +15,10 @@ import {
   type TerminalRestorableSnapshot,
   type TerminalSessionInfo,
 } from '@floegence/floeterm-terminal-web';
-import type { RedevenTerminalTransport } from '../services/terminalTransport';
+import {
+  classifyTerminalAttachLifecycleExit,
+  type RedevenTerminalTransport,
+} from '../services/terminalTransport';
 import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
 import type { TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
 import {
@@ -39,14 +42,24 @@ import {
   type TerminalRecoveryTrace,
 } from '../services/terminalRecoveryDiagnostics';
 
-type SessionLoadingState = 'idle' | 'initializing' | 'attaching' | 'loading_history';
+type SessionLoadingState = 'idle' | 'initializing' | 'attaching' | 'loading_history' | 'waiting_for_ownership' | 'reconnecting';
+
+export function shouldPublishTerminalOutputCoverage(
+  previousAttachGeneration: number,
+  previousCoveredThroughSequence: number,
+  nextAttachGeneration: number,
+  nextCoveredThroughSequence: number,
+): boolean {
+  return previousAttachGeneration !== nextAttachGeneration
+    || nextCoveredThroughSequence > previousCoveredThroughSequence;
+}
 
 function buildLogger(): Logger {
   return {
-    debug: (message, meta) => (typeof meta === 'undefined' ? console.debug(message) : console.debug(message, meta)),
-    info: (message, meta) => (typeof meta === 'undefined' ? console.info(message) : console.info(message, meta)),
-    warn: (message, meta) => (typeof meta === 'undefined' ? console.warn(message) : console.warn(message, meta)),
-    error: (message, meta) => (typeof meta === 'undefined' ? console.error(message) : console.error(message, meta)),
+    debug: () => undefined,
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
   };
 }
 
@@ -73,7 +86,7 @@ export type TerminalSessionRuntimeActions = Readonly<{
 }>;
 
 export type TerminalSessionRuntimeStatus = Readonly<{
-  state: 'idle' | 'retrying' | 'degraded' | 'blocking';
+  state: 'idle' | 'waiting_for_ownership' | 'reconnecting' | 'retrying' | 'degraded' | 'blocking';
   failureCode?: PagedTerminalOutputFailureCode | 'terminal_unavailable';
   retryable?: boolean;
 }>;
@@ -91,6 +104,7 @@ export type TerminalSessionRuntimeProps = Readonly<{
   connected: () => boolean;
   protocolClient: () => unknown;
   viewActive: () => boolean;
+  ownsAttachment: () => boolean;
   autoFocus: () => boolean;
   themeColors: () => Record<string, string>;
   fontSize: () => number;
@@ -106,9 +120,15 @@ export type TerminalSessionRuntimeProps = Readonly<{
   registerActions: (sessionId: string, actions: TerminalSessionRuntimeActions | null) => void;
   registerWorkingSetRuntime: (sessionId: string, runtime: TerminalWorkingSetRuntime | null) => void;
   onRuntimeStatus?: (sessionId: string, status: TerminalSessionRuntimeStatus) => void;
+  onSessionGone?: (sessionId: string) => void;
   onInteractive?: (sessionId: string) => void;
   onLiveOutputObserved?: (sessionId: string, byteLength: number, sequence: number | undefined) => void;
   onOutputCommitted?: (sessionId: string, source: 'history' | 'live', sequence: number | undefined) => void;
+  onOutputCoverage?: (
+    sessionId: string,
+    update: { attachGeneration: number; coveredThroughSequence: number; rebased?: boolean },
+  ) => void;
+  onPendingOutputReset?: (sessionId: string) => void;
   setWorkingSetInteraction: (sessionId: string, interaction: TerminalWorkingSetInteraction, active: boolean) => void;
   onSurfaceClick?: (event: MouseEvent) => void;
   onBell?: (sessionId: string) => void;
@@ -137,6 +157,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const [recoveryFailureCode, setRecoveryFailureCode] = createSignal<PagedTerminalOutputFailureCode | null>(null);
   const [recoveryRetryable, setRecoveryRetryable] = createSignal<boolean | null>(null);
   const [blockingFailureCode, setBlockingFailureCode] = createSignal<'terminal_unavailable' | PagedTerminalOutputFailureCode | null>(null);
+  const [attachSuperseded, setAttachSuperseded] = createSignal(false);
   const [showRetryingStatus, setShowRetryingStatus] = createSignal(false);
   const [historyReplayProgress, setHistoryReplayProgress] = createSignal<{ loadedBytes: number; totalBytes: number } | null>(null);
 
@@ -146,6 +167,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const loadingMessage = createMemo(() => {
     if (loading() === 'initializing') return i18n.t('terminal.initializing');
     if (loading() === 'attaching') return i18n.t('terminal.attaching');
+    if (loading() === 'waiting_for_ownership') return i18n.t('terminal.waitingForActivation');
+    if (loading() === 'reconnecting') return i18n.t('terminal.reconnecting');
     if (loading() === 'loading_history') {
       const progress = historyReplayProgress();
       if (progress && progress.totalBytes > 0) {
@@ -164,6 +187,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (blocking) {
       return { state: 'blocking', failureCode: blocking, retryable: isTerminalRecoveryRetryable(blocking) };
     }
+    if (loading() === 'waiting_for_ownership') return { state: 'waiting_for_ownership' };
+    if (loading() === 'reconnecting') return { state: 'reconnecting' };
     if (baselineReady() && outputRecoveryState() === 'failed') {
       return {
         state: 'degraded',
@@ -236,6 +261,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let outputCoordinatorEpoch = 0;
   let observedLiveAttachGeneration = 0;
   let maxObservedLiveSequence = 0;
+  let activitySettledAttachGeneration = 0;
+  let activitySettledThroughSequence = 0;
 
   const transitionRecoveryPhase = (next: TerminalRecoveryPhase) => {
     const trace = recoveryTrace;
@@ -348,6 +375,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       props.onShellIntegrationEvent?.(sessionId(), event, source);
     },
     onChunkCommitted: (source, sequence) => {
+      const normalizedSequence = normalizeLiveSequence(sequence);
+      const snapshot = outputCoordinator?.getSnapshot();
+      if (snapshot && normalizedSequence !== undefined) {
+        if (activitySettledAttachGeneration !== snapshot.attachGeneration) {
+          activitySettledAttachGeneration = snapshot.attachGeneration;
+          activitySettledThroughSequence = snapshot.coveredThroughSequence;
+        }
+        activitySettledThroughSequence = Math.max(activitySettledThroughSequence, normalizedSequence);
+      }
       props.onOutputCommitted?.(sessionId(), source, sequence);
     },
     onVisibleOutput: (source, byteLength, sequence) => {
@@ -378,6 +414,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const focusTerminalIfInteractive = () => {
     const core = term;
     if (!core || terminalInputBlocked()) return 'not_interactive' as const;
+    if (!props.viewActive() || !props.active() || !props.autoFocus()) return 'not_interactive' as const;
     if (core.hasSelection()) return 'selection_active' as const;
     core.focus();
     return 'focused' as const;
@@ -433,7 +470,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       });
     }
     if (data.byteLength > 0) {
-      props.onLiveOutputObserved?.(sessionId(), data.byteLength, normalizedSequence);
+      const alreadySettledForActivity = normalizedSequence !== undefined
+        && activitySettledAttachGeneration === snapshot.attachGeneration
+        && normalizedSequence <= activitySettledThroughSequence;
+      if (!alreadySettledForActivity) {
+        props.onLiveOutputObserved?.(sessionId(), data.byteLength, normalizedSequence);
+      }
     }
     const liveChunk = tagTerminalOutputChunk({
       sequence: normalizedSequence,
@@ -464,8 +506,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     outputCoordinatorSnapshot = null;
     observedLiveAttachGeneration = 0;
     maxObservedLiveSequence = 0;
+    activitySettledAttachGeneration = 0;
+    activitySettledThroughSequence = 0;
+    props.onPendingOutputReset?.(sessionId());
     setBaselineReady(false);
     setRecoveryFailureCode(null);
+    setAttachSuperseded(false);
     disposeCore();
     outputProjection.reset();
     setReadyOnce(false);
@@ -476,34 +522,42 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   };
 
   let initSeq = 0;
+  let disposed = false;
+  let supersededAttachRetryAvailable = true;
+  let supersededAttachRetryScheduled = false;
+  let waitingForProtocolClient: unknown = null;
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-  const reload = async (opts?: { fadeOut?: boolean }): Promise<boolean> => {
+  const reload = async (opts?: { fadeOut?: boolean; resetSupersededRetry?: boolean }): Promise<boolean> => {
+    if (disposed) return false;
     const id = sessionId();
     if (!id) return false;
     if (!props.connected()) return false;
     if (!container) return false;
 
     const seq = ++reloadSeq;
+    if (opts?.resetSupersededRetry) supersededAttachRetryAvailable = true;
 
     // Keep the surface hidden until the new terminal is attached and history is replayed (same as page open).
     setBlockingFailureCode(null);
+    setAttachSuperseded(false);
+    waitingForProtocolClient = null;
     setLoading('initializing');
 
     if (opts?.fadeOut) {
       container.style.opacity = '0';
       await sleep(150);
-      if (seq !== reloadSeq) return false;
+      if (disposed || seq !== reloadSeq) return false;
     }
 
     // Invalidate the old init before waiting so a baseline waiter cannot publish stale state.
     initSeq += 1;
     const coordinator = outputCoordinator;
     if (coordinator) await coordinator.pause();
-    if (seq !== reloadSeq) return false;
+    if (disposed || seq !== reloadSeq) return false;
     disposeTerminal();
 
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    if (seq !== reloadSeq) return false;
+    if (disposed || seq !== reloadSeq) return false;
     if (!props.connected()) return false;
     if (!container) return false;
 
@@ -520,17 +574,45 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   };
 
   createEffect(() => {
+    const ownsInteraction = props.connected() && props.viewActive() && props.active() && props.ownsAttachment();
+    if (!ownsInteraction) {
+      supersededAttachRetryAvailable = true;
+      if (attachSuperseded()) setLoading('waiting_for_ownership');
+      return;
+    }
+    if (!attachSuperseded()) return;
+    if (!supersededAttachRetryAvailable) {
+      setAttachSuperseded(false);
+      transitionRecoveryPhase('failed');
+      reportBlockingFailure('terminal_unavailable');
+      return;
+    }
+    if (supersededAttachRetryScheduled) return;
+    supersededAttachRetryScheduled = true;
+    queueMicrotask(() => {
+      supersededAttachRetryScheduled = false;
+      if (disposed) return;
+      if (!props.connected() || !props.viewActive() || !props.active() || !props.ownsAttachment()) return;
+      if (!attachSuperseded()) return;
+      if (readyOnce() || (loading() !== 'idle' && loading() !== 'waiting_for_ownership')) return;
+      setAttachSuperseded(false);
+      supersededAttachRetryAvailable = false;
+      void reload();
+    });
+  });
+
+  createEffect(() => {
     const id = sessionId();
     if (!id) return;
     props.registerActions(id, {
       reload: async () => {
-        await reload();
+        await reload({ resetSupersededRetry: true });
       },
-      resetAfterClear: () => reload(),
+      resetAfterClear: () => reload({ resetSupersededRetry: true }),
       retryOutputRecovery: async () => {
         setRecoveryFailureCode(null);
         if (blockingFailureCode() || !readyOnce()) {
-          await reload();
+          await reload({ resetSupersededRetry: true });
           return;
         }
         outputCoordinator?.retry();
@@ -584,8 +666,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           if (!props.viewActive() || !props.active()) return;
           void props.transport.resize(id, size.cols, size.rows);
         },
-        onError: (e: Error) => {
-          buildLogger().error('[TerminalPanel] Terminal core failed', { sessionId: id, error: e });
+        onError: () => {
+          console.error('[TerminalPanel] Terminal core failed', { event: 'terminal_core_failed' });
           reportBlockingFailure('terminal_unavailable');
         },
         onBell: () => {
@@ -726,8 +808,21 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         outputProjection.reset();
       },
       onHistoryTruncated: (reason) => {
-        buildLogger().warn('[TerminalPanel] Rebased truncated terminal history', { sessionId: id, reason });
+        console.debug('[TerminalPanel] Rebased truncated terminal history', {
+          event: 'terminal_history_rebased',
+          reason,
+        });
         setOutputRecoveryState('catching-up');
+        const snapshot = outputCoordinator?.getSnapshot();
+        if (snapshot) {
+          activitySettledAttachGeneration = snapshot.attachGeneration;
+          activitySettledThroughSequence = snapshot.coveredThroughSequence;
+          props.onOutputCoverage?.(id, {
+            attachGeneration: snapshot.attachGeneration,
+            coveredThroughSequence: snapshot.coveredThroughSequence,
+            rebased: true,
+          });
+        }
       },
       onStateChange: (snapshot) => {
         outputCoordinatorSnapshot = snapshot;
@@ -736,6 +831,27 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           maxObservedLiveSequence = snapshot.coveredThroughSequence;
         } else {
           maxObservedLiveSequence = Math.max(maxObservedLiveSequence, snapshot.coveredThroughSequence);
+        }
+        const activityCoverageChanged = shouldPublishTerminalOutputCoverage(
+          activitySettledAttachGeneration,
+          activitySettledThroughSequence,
+          snapshot.attachGeneration,
+          snapshot.coveredThroughSequence,
+        );
+        if (activitySettledAttachGeneration !== snapshot.attachGeneration) {
+          activitySettledAttachGeneration = snapshot.attachGeneration;
+          activitySettledThroughSequence = snapshot.coveredThroughSequence;
+        } else {
+          activitySettledThroughSequence = Math.max(
+            activitySettledThroughSequence,
+            snapshot.coveredThroughSequence,
+          );
+        }
+        if (activityCoverageChanged) {
+          props.onOutputCoverage?.(id, {
+            attachGeneration: snapshot.attachGeneration,
+            coveredThroughSequence: snapshot.coveredThroughSequence,
+          });
         }
         setOutputRecoveryState(snapshot.state);
         setBaselineReady(snapshot.baselineReady);
@@ -805,7 +921,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
       // Begin retaining live output before subscription and before the server
       // captures the atomic history boundary for this attachment.
+      activitySettledAttachGeneration = 0;
+      activitySettledThroughSequence = 0;
       const coordinatorAttachGeneration = coordinator.beginAttach(0);
+      activitySettledAttachGeneration = coordinatorAttachGeneration;
 
       clearOutputSubscription();
       unsubData = props.eventSource.onTerminalData(id, (ev) => {
@@ -834,11 +953,13 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         throw new Error('Terminal attach response returned an invalid history boundary');
       }
       markTerminalRecoveryMilestone(trace, 'attach-ack', {
+        runtime_attach_generation: attachResult.runtimeAttachGeneration,
         cols: dims.cols,
         rows: dims.rows,
         snapshot_end_sequence: historyBoundarySequence,
       });
       publishTerminalRecoveryEvent(trace, 'attach_ack', {
+        runtime_attach_generation: attachResult.runtimeAttachGeneration,
         cols: dims.cols,
         rows: dims.rows,
         snapshot_end_sequence: historyBoundarySequence,
@@ -859,6 +980,9 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         markTerminalRecoveryMilestone(trace, 'baseline-parser-committed', {
           coordinator_attach_generation: baseline.attachGeneration,
           history_generation: lastHistoryGeneration,
+          history_page_count: historyPageCount,
+          history_chunk_count: historyChunkCount,
+          history_bytes: historyBytes,
           covered_through_sequence: baseline.coveredThroughSequence,
           snapshot_end_sequence: lastSnapshotEndSequence,
           first_retained_sequence: lastFirstRetainedSequence,
@@ -904,8 +1028,26 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         }
         props.onInteractive?.(id);
       });
-    } catch {
+    } catch (errorValue) {
       if (seq !== initSeq) return;
+      const lifecycleExit = classifyTerminalAttachLifecycleExit(errorValue);
+      if (lifecycleExit) {
+        const superseded = lifecycleExit === 'superseded';
+        setAttachSuperseded(superseded);
+        if (superseded) {
+          setLoading('waiting_for_ownership');
+        } else if (lifecycleExit === 'session_gone') {
+          setLoading('idle');
+          if (props.onSessionGone) props.onSessionGone(id);
+          else props.transport.forgetSession(id);
+        } else {
+          waitingForProtocolClient = props.protocolClient();
+          setLoading('reconnecting');
+        }
+        const el = container;
+        if (el) el.style.opacity = '1';
+        return;
+      }
       transitionRecoveryPhase('failed');
       setLoading('idle');
       if (!blockingFailureCode()) reportBlockingFailure('terminal_unavailable');
@@ -991,7 +1133,14 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
             markTerminalRecoveryMilestone(trace, 'baseline-parser-committed', {
               coordinator_attach_generation: baseline.attachGeneration,
               history_generation: lastHistoryGeneration,
+              history_page_count: historyPageCount,
+              history_chunk_count: historyChunkCount,
+              history_bytes: historyBytes,
               covered_through_sequence: baseline.coveredThroughSequence,
+              snapshot_end_sequence: lastSnapshotEndSequence,
+              first_retained_sequence: lastFirstRetainedSequence,
+              history_reset: historyReset,
+              history_truncated: historyTruncated,
             });
             publishTerminalRecoveryEvent(trace, 'baseline_ready', {
               coordinator_attach_generation: baseline.attachGeneration,
@@ -1069,6 +1218,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     const client = props.protocolClient();
     if (!client) return;
     if (!container) return;
+    if (untrack(loading) === 'reconnecting' && client === waitingForProtocolClient) return;
 
     // Untrack to avoid capturing theme/font reactivity as init dependencies.
     untrack(() => void reload());
@@ -1088,6 +1238,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   });
 
   onCleanup(() => {
+    disposed = true;
     initSeq += 1;
     reloadSeq += 1;
     disposeTerminal();

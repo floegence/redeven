@@ -33,6 +33,7 @@ export type TerminalRecoveryEventKind =
   | 'live';
 
 export type TerminalRecoveryEventDetail = Readonly<{
+  runtime_attach_generation?: number;
   coordinator_attach_generation?: number;
   history_generation?: number;
   phase_from?: TerminalRecoveryPhase;
@@ -87,6 +88,7 @@ function eventDetail(trace: TerminalRecoveryTrace, detail: TerminalRecoveryEvent
     variant: trace.variant,
     surface_generation: trace.surfaceGeneration,
     monotonic_ms: monotonicNow(),
+    runtime_attach_generation: finiteNonNegativeInteger(detail.runtime_attach_generation),
     coordinator_attach_generation: finiteNonNegativeInteger(detail.coordinator_attach_generation),
     history_generation: finiteNonNegativeInteger(detail.history_generation),
     phase_from: detail.phase_from,
@@ -152,8 +154,7 @@ export function markTerminalRecoveryMilestone(
   detail: TerminalRecoveryEventDetail = {},
 ): void {
   if (typeof performance === 'undefined' || typeof performance.mark !== 'function') return;
-  const name = `redeven:terminal:${milestone}`;
-  if (typeof performance.clearMarks === 'function') performance.clearMarks(name);
+  const name = `redeven:terminal:${milestone}:${trace.traceID}`;
   performance.mark(name, {
     detail: eventDetail(trace, detail),
   });

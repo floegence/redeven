@@ -2351,11 +2351,13 @@
       "fontSizeDescription": "Используйте удобочитаемый размер, при котором на экране сохраняется достаточно истории терминала."
     },
     "retryingOlderOutput": "Синхронизация предыдущего вывода...",
+    "waitingForActivation": "Выберите этот терминал, чтобы продолжить.",
+    "reconnecting": "Повторное подключение терминала...",
     "olderOutputUnavailable": "Не удалось восстановить часть предыдущего вывода.",
     "terminalUnavailable": "Не удалось восстановить этот терминал.",
     "outputSynchronized": "Вывод терминала синхронизирован.",
     "viewDiagnostics": "Диагностика",
-    "updateRuntime": "Обновить Runtime"
+    "updateRuntime": "Обновить среду выполнения"
   },
   "shellBlock": {
     "command": "Команда",

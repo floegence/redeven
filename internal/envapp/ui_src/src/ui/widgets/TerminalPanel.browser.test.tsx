@@ -1,13 +1,28 @@
-import { For, Show } from 'solid-js';
+import { For, Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
+import { RpcError } from '@floegence/floe-webapp-protocol';
 
 import { TerminalPanel } from './TerminalPanel';
 
 const layoutState = vi.hoisted(() => ({
   mobile: false,
 }));
+
+const browserWidgetState = vi.hoisted(() => ({
+  currentWidgetId: null as string | null,
+}));
+
+const browserProtocolState = vi.hoisted(() => ({
+  client: { id: 'protocol-client-1' } as object | null,
+  setClient: null as ((client: object | null) => void) | null,
+}));
+
+function setBrowserProtocolClient(client: object | null) {
+  browserProtocolState.client = client;
+  browserProtocolState.setClient?.(client);
+}
 
 const terminalPrefsState = vi.hoisted(() => ({
   userTheme: 'system',
@@ -52,6 +67,9 @@ const transportMocks = vi.hoisted(() => {
     }),
     getSessionStats: vi.fn().mockResolvedValue({ history: { totalBytes: 0 } }),
     clear: vi.fn().mockResolvedValue(undefined),
+    forgetSession: vi.fn(),
+    syncConnectionEpoch: vi.fn(),
+    dispose: vi.fn(),
   };
 });
 
@@ -127,7 +145,7 @@ vi.mock('@floegence/floe-webapp-core', async () => {
   return {
     ...actual,
     cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
-    useCurrentWidgetId: () => null,
+    useCurrentWidgetId: () => browserWidgetState.currentWidgetId,
     useLayout: () => ({
       isMobile: () => layoutState.mobile,
     }),
@@ -237,7 +255,9 @@ vi.mock('@floegence/floe-webapp-core/ui', async () => {
         onInput={(event) => props.onChange(Number((event.currentTarget as HTMLInputElement).value))}
       />
     ),
-    MobileKeyboard: (props: any) => <div ref={props.ref} aria-hidden={!props.visible} />,
+    MobileKeyboard: (props: any) => (
+      <div ref={props.ref} data-testid="mobile-keyboard" aria-hidden={!props.visible} />
+    ),
     Tabs: (props: any) => (
       <div role="tablist">
         {props.items.map((item: any) => (
@@ -263,11 +283,19 @@ vi.mock('@floegence/floe-webapp-core/ui', async () => {
   };
 });
 
-vi.mock('@floegence/floe-webapp-protocol', () => ({
-  useProtocol: () => ({
-    client: () => ({ id: 'protocol-client' }),
-    status: () => 'connected',
-  }),
+vi.mock('@floegence/floe-webapp-protocol', async () => ({
+  ...await vi.importActual<typeof import('@floegence/floe-webapp-protocol')>('@floegence/floe-webapp-protocol'),
+  useProtocol: () => {
+    const [client, setClient] = createSignal(browserProtocolState.client);
+    browserProtocolState.setClient = (nextClient) => {
+      browserProtocolState.client = nextClient;
+      setClient(nextClient);
+    };
+    return {
+      client,
+      status: () => client() ? 'connected' : 'disconnected',
+    };
+  },
 }));
 
 vi.mock('../protocol/redeven_v1', () => ({
@@ -351,7 +379,10 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
   };
 });
 
-vi.mock('../services/terminalTransport', () => ({
+vi.mock('../services/terminalTransport', async () => {
+  const actual = await vi.importActual<typeof import('../services/terminalTransport')>('../services/terminalTransport');
+  return {
+  ...actual,
   createRedevenTerminalTransport: () => transportMocks,
   createRedevenTerminalEventSource: () => ({
     onTerminalData: (sessionId: string, handler: any) => {
@@ -372,7 +403,8 @@ vi.mock('../services/terminalTransport', () => ({
     },
   }),
   getOrCreateTerminalConnId: () => 'conn-1',
-}));
+  };
+});
 
 vi.mock('../services/terminalSessions', () => ({
   disposeRedevenTerminalSessionsCoordinator: vi.fn(),
@@ -522,6 +554,9 @@ function findTerminalTabStatus(host: HTMLElement, label: string, status: 'runnin
 beforeEach(() => {
   sessionStorage.clear();
   layoutState.mobile = false;
+  browserWidgetState.currentWidgetId = null;
+  browserProtocolState.client = { id: 'protocol-client-1' };
+  browserProtocolState.setClient = null;
   terminalPrefsState.userTheme = 'system';
   terminalPrefsState.fontSize = 12;
   terminalPrefsState.fontFamilyId = 'iosevka';
@@ -551,6 +586,11 @@ beforeEach(() => {
   ];
   terminalSessionsState.subscribers = [];
   Object.values(transportMocks).forEach((mock) => mock.mockClear());
+  transportMocks.attach.mockReset();
+  transportMocks.attach.mockImplementation(async () => ({
+    historyBoundarySequence: transportAttachState.historyBoundarySequence,
+    runtimeAttachGeneration: 1,
+  }));
   transportMocks.historyPage.mockResolvedValue(withHistoryContract({
     chunks: [],
     nextStartSeq: 0,
@@ -571,6 +611,135 @@ afterEach(() => {
 });
 
 describe('TerminalPanel browser activity integration', () => {
+  it('recovers one real RPC 409 without exposing an empty error state', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportMocks.attach
+      .mockRejectedValueOnce(new RpcError({ typeId: 2003, code: 409, message: 'terminal attach superseded' }))
+      .mockResolvedValueOnce({ historyBoundarySequence: 0, runtimeAttachGeneration: 2 });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => expect(transportMocks.attach).toHaveBeenCalledTimes(2));
+    await settleTerminalPanel();
+
+    expect(host.textContent).not.toContain('This terminal could not be restored.');
+    expect(host.querySelector('button[aria-label="Retry"]')).toBeNull();
+  });
+
+  it('recovers one real RPC 409 on mobile with the Floe keyboard active', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportMocks.attach
+      .mockRejectedValueOnce(new RpcError({ typeId: 2003, code: 409, message: 'terminal attach superseded' }))
+      .mockResolvedValueOnce({ historyBoundarySequence: 0, runtimeAttachGeneration: 2 });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" workbenchSelected />, host);
+    await vi.waitFor(() => expect(transportMocks.attach).toHaveBeenCalledTimes(2));
+    await settleTerminalPanel();
+
+    expect(host.querySelector('[data-testid="mobile-keyboard"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="terminal-recovery-status-message"]')?.textContent).toBe('');
+    expect(host.querySelector('button[aria-label="Retry"]')).toBeNull();
+  });
+
+  it('offers Retry after a second real RPC 409 instead of leaving the terminal blank', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportMocks.attach
+      .mockRejectedValueOnce(new RpcError({ typeId: 2003, code: 409, message: 'terminal attach superseded' }))
+      .mockRejectedValueOnce(new RpcError({ typeId: 2003, code: 409, message: 'terminal attach superseded' }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => expect(host.querySelector('button[aria-label="Retry"]')).not.toBeNull());
+
+    expect(transportMocks.attach).toHaveBeenCalledTimes(2);
+    expect(host.textContent).toContain('This terminal could not be restored.');
+  });
+
+  it('reconciles a real RPC 404 immediately without waiting for the poll interval', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportMocks.attach.mockRejectedValueOnce(new RpcError({
+      typeId: 2003,
+      code: 404,
+      message: 'terminal session not found',
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => expect(findTerminalTab(host, 'Terminal 1')).toBeUndefined());
+
+    expect(transportMocks.forgetSession).toHaveBeenCalledWith('session-1');
+    expect(sessionsCoordinatorMocks.refresh).toHaveBeenCalled();
+  });
+
+  it('renders a reconnecting state for a real RPC 410 instead of an unlabelled terminal', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportMocks.attach.mockRejectedValueOnce(new RpcError({
+      typeId: 2003,
+      code: 410,
+      message: 'terminal connection closed',
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-testid="terminal-recovery-status-message"]')?.textContent)
+        .toContain('Reconnecting terminal');
+    });
+
+    expect(host.textContent).not.toContain('This terminal could not be restored.');
+  });
+
+  it('reloads after a real RPC 410 when the protocol client epoch advances', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportMocks.attach
+      .mockRejectedValueOnce(new RpcError({ typeId: 2003, code: 410, message: 'terminal connection closed' }))
+      .mockResolvedValueOnce({ historyBoundarySequence: 0, runtimeAttachGeneration: 2 });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-testid="terminal-recovery-status-message"]')?.textContent)
+        .toContain('Reconnecting terminal');
+    });
+
+    setBrowserProtocolClient({ id: 'protocol-client-2' });
+    await vi.waitFor(() => expect(transportMocks.attach).toHaveBeenCalledTimes(2));
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-testid="terminal-recovery-status-message"]')?.textContent).toBe('');
+  });
+
+  it('labels a superseded selected Workbench until it receives focus ownership', async () => {
+    browserWidgetState.currentWidgetId = 'terminal-widget';
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportMocks.attach
+      .mockRejectedValueOnce(new RpcError({ typeId: 2003, code: 409, message: 'terminal attach superseded' }))
+      .mockResolvedValueOnce({ historyBoundarySequence: 0, runtimeAttachGeneration: 2 });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" workbenchSelected />, host);
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-testid="terminal-recovery-status-message"]')?.textContent)
+        .toContain('Select this terminal to continue');
+    });
+    expect(transportMocks.attach).toHaveBeenCalledTimes(1);
+
+    host.querySelector('[data-testid="terminal-content"]')
+      ?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await vi.waitFor(() => expect(transportMocks.attach).toHaveBeenCalledTimes(2));
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-testid="terminal-recovery-status-message"]')?.textContent).toBe('');
+  });
+
   it('continues after sparse initial history without requesting a duplicate catchup', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
     transportAttachState.historyBoundarySequence = 4;

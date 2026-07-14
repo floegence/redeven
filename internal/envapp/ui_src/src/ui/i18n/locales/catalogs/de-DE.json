@@ -2273,11 +2273,13 @@
       "fontSizeDescription": "Verwenden Sie eine lesbare Größe, die dennoch genügend Terminalverlauf auf dem Bildschirm anzeigt."
     },
     "retryingOlderOutput": "Frühere Ausgabe wird synchronisiert...",
+    "waitingForActivation": "Dieses Terminal auswählen, um fortzufahren.",
+    "reconnecting": "Terminal wird erneut verbunden...",
     "olderOutputUnavailable": "Ein Teil der früheren Ausgabe konnte nicht wiederhergestellt werden.",
     "terminalUnavailable": "Dieses Terminal konnte nicht wiederhergestellt werden.",
     "outputSynchronized": "Die Terminalausgabe ist synchronisiert.",
     "viewDiagnostics": "Diagnose",
-    "updateRuntime": "Runtime aktualisieren"
+    "updateRuntime": "Laufzeitumgebung aktualisieren"
   },
   "shellBlock": {
     "command": "Befehl",

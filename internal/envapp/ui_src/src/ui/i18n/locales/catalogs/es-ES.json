@@ -2273,11 +2273,13 @@
       "fontSizeDescription": "Utilice un tamaño legible que aún mantenga suficiente historial del terminal en la pantalla."
     },
     "retryingOlderOutput": "Sincronizando la salida anterior...",
+    "waitingForActivation": "Selecciona este terminal para continuar.",
+    "reconnecting": "Reconectando el terminal...",
     "olderOutputUnavailable": "No se pudo restaurar parte de la salida anterior.",
     "terminalUnavailable": "No se pudo restaurar este terminal.",
     "outputSynchronized": "La salida del terminal está sincronizada.",
     "viewDiagnostics": "Diagnóstico",
-    "updateRuntime": "Actualizar Runtime"
+    "updateRuntime": "Actualizar entorno de ejecución"
   },
   "shellBlock": {
     "command": "Comando",

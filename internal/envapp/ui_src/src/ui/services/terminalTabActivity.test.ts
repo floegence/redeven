@@ -100,6 +100,24 @@ describe('createTerminalTabActivityTracker', () => {
     tracker.dispose();
   });
 
+  it('keeps visible-output activity independent from provisional output settlement', () => {
+    const workStates: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: () => undefined,
+      publishWorkState: (_sessionId, state) => workStates.push(state),
+      outputActivityQuietMs: 25,
+    });
+
+    tracker.handleVisibleOutput('session-1', { source: 'live', byteLength: 8, shouldMarkUnread: false });
+    tracker.handlePendingLiveOutput('session-1', { sequence: 4, shouldMarkUnread: false });
+    tracker.handleOutputCommitted('session-1', { source: 'live', sequence: 4 });
+
+    expect(workStates).toEqual(['active', 'running', 'active']);
+    vi.advanceTimersByTime(25);
+    expect(workStates).toEqual(['active', 'running', 'active', 'idle']);
+    tracker.dispose();
+  });
+
   it('shows pending background output as running until ordered output commits', () => {
     const published: string[] = [];
     const tracker = createTerminalTabActivityTracker({
@@ -145,6 +163,128 @@ describe('createTerminalTabActivityTracker', () => {
     tracker.handleOutputCommitted('session-1', { source: 'history', sequence: 4 });
     expect(published).toEqual(['running', 'unread', 'none']);
 
+    tracker.dispose();
+  });
+
+  it('settles provisional unread through a coverage-only history page', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+      outputActivityQuietMs: 25,
+    });
+
+    tracker.handlePendingLiveOutput('session-1', { sequence: 4, shouldMarkUnread: true });
+    tracker.handlePendingLiveOutput('session-1', { sequence: 5, shouldMarkUnread: true });
+    vi.advanceTimersByTime(25);
+    expect(published).toEqual(['running', 'unread']);
+
+    tracker.handleOutputCoverage('session-1', {
+      attachGeneration: 1,
+      coveredThroughSequence: 5,
+    });
+    expect(published).toEqual(['running', 'unread', 'none']);
+
+    tracker.dispose();
+  });
+
+  it('keeps running continuous when coverage settles before shell semantics commit', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+      outputActivityQuietMs: 25,
+    });
+
+    tracker.handlePendingLiveOutput('session-1', { sequence: 4, shouldMarkUnread: true });
+    tracker.handleOutputCoverage('session-1', {
+      attachGeneration: 1,
+      coveredThroughSequence: 4,
+    });
+    tracker.handleCommandStart('session-1');
+    tracker.handleOutputCommitted('session-1', { source: 'live', sequence: 4 });
+
+    expect(published).toEqual(['running']);
+    tracker.dispose();
+  });
+
+  it('clears pending output when the attach generation changes or history rebases', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+      outputActivityQuietMs: 25,
+    });
+
+    tracker.handlePendingLiveOutput('session-1', { sequence: 4, shouldMarkUnread: true });
+    tracker.handleOutputCoverage('session-1', { attachGeneration: 1, coveredThroughSequence: 0 });
+    tracker.handleOutputCoverage('session-1', { attachGeneration: 2, coveredThroughSequence: 0 });
+    expect(published).toEqual(['running']);
+    vi.advanceTimersByTime(25);
+    expect(published).toEqual(['running', 'none']);
+
+    tracker.handlePendingLiveOutput('session-1', { sequence: 8, shouldMarkUnread: true });
+    tracker.handleOutputCoverage('session-1', {
+      attachGeneration: 2,
+      coveredThroughSequence: 2,
+      rebased: true,
+    });
+    expect(published).toEqual(['running', 'none', 'running']);
+    vi.advanceTimersByTime(25);
+    expect(published).toEqual(['running', 'none', 'running', 'none']);
+
+    tracker.dispose();
+  });
+
+  it('does not recreate provisional unread for a sequence already committed before writer completion', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+      outputActivityQuietMs: 25,
+    });
+
+    tracker.handlePendingLiveOutput('session-1', { sequence: 4, shouldMarkUnread: true });
+    tracker.handleOutputCommitted('session-1', { source: 'live', sequence: 4 });
+    tracker.clearUnread('session-1');
+    tracker.handlePendingLiveOutput('session-1', { sequence: 4, shouldMarkUnread: true });
+    vi.advanceTimersByTime(25);
+
+    expect(published).toEqual(['running', 'unread', 'none']);
+    tracker.dispose();
+  });
+
+  it('resets sequenced and unsequenced provisional output without clearing confirmed unread', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+      outputActivityQuietMs: 25,
+    });
+
+    tracker.handleVisibleOutput('session-1', { source: 'live', byteLength: 1, shouldMarkUnread: true });
+    tracker.handlePendingLiveOutput('session-1', { shouldMarkUnread: true });
+    tracker.handlePendingLiveOutput('session-1', { sequence: 4, shouldMarkUnread: true });
+    tracker.resetPendingOutput('session-1');
+
+    expect(published).toEqual(['unread', 'running']);
+    vi.advanceTimersByTime(25);
+    expect(published).toEqual(['unread', 'running', 'unread']);
+    tracker.dispose();
+  });
+
+  it('keeps provisional sequence tracking bounded under retained output overflow', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+      outputActivityQuietMs: 25,
+    });
+
+    for (let sequence = 1; sequence <= 2_100; sequence += 1) {
+      tracker.handlePendingLiveOutput('session-1', { sequence, shouldMarkUnread: true });
+    }
+    tracker.handleOutputCoverage('session-1', {
+      attachGeneration: 1,
+      coveredThroughSequence: 2_100,
+    });
+    vi.advanceTimersByTime(25);
+
+    expect(published).toEqual(['running', 'none']);
     tracker.dispose();
   });
 
