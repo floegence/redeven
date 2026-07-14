@@ -4665,15 +4665,22 @@ html.dark .redeven-workbench-progress-curtain {
 /* Browser Editor setup status band. */
 
 .browser-editor-setup {
+  --browser-editor-frame-border: color-mix(in srgb, var(--border) 82%, transparent);
+  --browser-editor-section-divider: color-mix(in srgb, var(--border) 66%, transparent);
   --browser-editor-grid-border: color-mix(in srgb, var(--border) 76%, var(--foreground) 24%);
   --browser-editor-grid-divider: color-mix(in srgb, var(--border) 84%, var(--foreground) 16%);
   --browser-editor-grid-label-bg: color-mix(in srgb, var(--muted) 22%, transparent);
   min-width: 0;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border: 1px solid var(--browser-editor-frame-border);
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--card) 88%, var(--background) 12%);
   transition: border-color 180ms ease, background-color 180ms ease;
+}
+
+html.dark .browser-editor-setup {
+  --browser-editor-frame-border: var(--redeven-stroke-overlay);
+  --browser-editor-section-divider: color-mix(in srgb, var(--redeven-stroke-panel) 80%, var(--foreground) 20%);
 }
 
 .browser-editor-setup__body {
@@ -4705,12 +4712,12 @@ html.dark .redeven-workbench-progress-curtain {
 .browser-editor-setup__secondary {
   display: flex;
   align-items: center;
-  border-left: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
+  border-left: 1px solid var(--browser-editor-section-divider);
   background: color-mix(in srgb, var(--muted) 11%, transparent);
 }
 
 .browser-editor-setup[data-layout='compact'] .browser-editor-setup__secondary {
-  border-top: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-top: 1px solid var(--browser-editor-section-divider);
   border-left: 0;
   padding-top: 1rem;
   padding-bottom: 1rem;
@@ -5123,7 +5130,7 @@ html.dark .redeven-workbench-progress-curtain {
   }
 
   .browser-editor-setup[data-layout='wide'] .browser-editor-setup__secondary {
-    border-top: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+    border-top: 1px solid var(--browser-editor-section-divider);
     border-left: 0;
   }
 }
