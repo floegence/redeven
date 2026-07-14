@@ -23,29 +23,37 @@ const rpcFsMocks = vi.hoisted(() => ({
   readFile: vi.fn().mockResolvedValue({ content: '{"scripts":{}}' }),
 }));
 
-const transportMocks = vi.hoisted(() => ({
-  sendInput: vi.fn().mockResolvedValue(undefined),
-  resize: vi.fn().mockResolvedValue(undefined),
-  attach: vi.fn().mockResolvedValue(undefined),
-  history: vi.fn().mockResolvedValue([]),
-  historyPage: vi.fn().mockResolvedValue({
-    chunks: [],
-    nextStartSeq: 0,
-    hasMore: false,
-    firstSequence: 0,
-    lastSequence: 0,
-    coveredThroughSequence: 0,
-    snapshotEndSequence: 0,
-    firstRetainedSequence: 0,
-    historyGeneration: 1,
-    historyReset: false,
-    historyTruncated: false,
-    coveredBytes: 0,
-    totalBytes: 0,
-  }),
-  getSessionStats: vi.fn().mockResolvedValue({ history: { totalBytes: 0 } }),
-  clear: vi.fn().mockResolvedValue(undefined),
-}));
+const transportAttachState = vi.hoisted(() => ({ historyBoundarySequence: 0 }));
+
+const transportMocks = vi.hoisted(() => {
+  const attach = vi.fn().mockImplementation(async () => ({
+    historyBoundarySequence: transportAttachState.historyBoundarySequence,
+  }));
+  return {
+    sendInput: vi.fn().mockResolvedValue(undefined),
+    resize: vi.fn().mockResolvedValue(undefined),
+    attach,
+    attachWithHistoryBoundary: attach,
+    history: vi.fn().mockResolvedValue([]),
+    historyPage: vi.fn().mockResolvedValue({
+      chunks: [],
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 0,
+      lastSequence: 0,
+      coveredThroughSequence: 0,
+      snapshotEndSequence: 0,
+      firstRetainedSequence: 0,
+      historyGeneration: 1,
+      historyReset: false,
+      historyTruncated: false,
+      coveredBytes: 0,
+      totalBytes: 0,
+    }),
+    getSessionStats: vi.fn().mockResolvedValue({ history: { totalBytes: 0 } }),
+    clear: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
 const terminalEventSourceState = vi.hoisted(() => ({
   dataHandlers: new Map<string, Set<(event: {
@@ -495,7 +503,7 @@ function withHistoryContract<T extends Record<string, unknown>>(pageValue: T): T
   return {
     coveredThroughSequence: lastSequence,
     snapshotEndSequence: lastSequence,
-    firstRetainedSequence: Number(pageValue.firstSequence ?? 0),
+    firstRetainedSequence: 0,
     historyGeneration: 1,
     historyReset: false,
     historyTruncated: false,
@@ -521,6 +529,7 @@ beforeEach(() => {
   terminalPrefsState.workIndicatorEnabled = true;
   terminalEventSourceState.dataHandlers = new Map();
   terminalEventSourceState.nameHandlers = new Map();
+  transportAttachState.historyBoundarySequence = 0;
   terminalCoreState.instances = [];
   terminalSessionsState.sessions = [
     {
@@ -564,6 +573,7 @@ afterEach(() => {
 describe('TerminalPanel browser activity integration', () => {
   it('continues after sparse initial history without requesting a duplicate catchup', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportAttachState.historyBoundarySequence = 4;
     transportMocks.historyPage.mockResolvedValue(withHistoryContract({
       chunks: [
         { sequence: 2, timestampMs: 10, data: textEncoder.encode('history-a ') },
@@ -583,6 +593,12 @@ describe('TerminalPanel browser activity integration', () => {
     render(() => <TerminalPanel variant="panel" />, host);
     await settleTerminalPanel();
     expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
+    expect(transportMocks.historyPage).toHaveBeenCalledWith(
+      'session-1',
+      0,
+      -1,
+      { snapshotEndSequence: 4, historyGeneration: undefined },
+    );
 
     emitTerminalData('session-1', 'live-c', 5);
     await settleTerminalPanel();
@@ -594,8 +610,59 @@ describe('TerminalPanel browser activity integration', () => {
     ]);
   });
 
+  it('does not fetch unbounded history for a zero boundary and first live sequence', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanel();
+    expect(transportMocks.historyPage).not.toHaveBeenCalled();
+
+    emitTerminalData('session-1', 'first-live', 1);
+    await settleTerminalPanel();
+
+    expect(transportMocks.historyPage).not.toHaveBeenCalled();
+    expect(terminalCoreState.instances[0]?.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual([
+      'first-live',
+    ]);
+  });
+
+  it('retains live output received during a delayed zero-boundary attach round trip', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    let releaseAttach!: (result: { historyBoundarySequence: number }) => void;
+    const attachResult = new Promise<{ historyBoundarySequence: number }>((resolve) => {
+      releaseAttach = resolve;
+    });
+    transportMocks.attachWithHistoryBoundary.mockReturnValueOnce(attachResult);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await expect.poll(() => transportMocks.attachWithHistoryBoundary.mock.calls.length).toBe(1);
+
+    emitTerminalData('session-1', 'attach-rtt-live', 1);
+    releaseAttach({ historyBoundarySequence: 0 });
+
+    await expect.poll(() => (
+      terminalCoreState.instances[0]?.write.mock.calls.map((call) => decodeTerminalWrite(call[0])) ?? []
+    )).toEqual(['attach-rtt-live']);
+    expect(transportMocks.historyPage).not.toHaveBeenCalled();
+  });
+
   it('adopts the first live sequence after empty activity history', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportMocks.historyPage.mockResolvedValue(withHistoryContract({
+      chunks: [],
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 0,
+      lastSequence: 0,
+      coveredThroughSequence: 36,
+      snapshotEndSequence: 36,
+      coveredBytes: 0,
+      totalBytes: 0,
+    }));
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -603,16 +670,17 @@ describe('TerminalPanel browser activity integration', () => {
     await settleTerminalPanel();
 
     emitTerminalData('session-1', 'continued-session', 37);
-    await settleTerminalPanel();
-
-    expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
-    expect(terminalCoreState.instances[0]?.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual([
-      'continued-session',
-    ]);
+    await vi.waitFor(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
+      expect(terminalCoreState.instances[0]?.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual([
+        'continued-session',
+      ]);
+    });
   });
 
   it('deduplicates buffered live overlap after sparse activity history replay', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportAttachState.historyBoundarySequence = 4;
     let releaseHistoryPage: (page: Awaited<ReturnType<typeof transportMocks.historyPage>>) => void = () => {};
     const historyPage = new Promise<Awaited<ReturnType<typeof transportMocks.historyPage>>>((resolve) => {
       releaseHistoryPage = resolve;
@@ -626,12 +694,12 @@ describe('TerminalPanel browser activity integration', () => {
     await vi.waitFor(() => {
       expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
     });
-    emitTerminalData('session-1', 'duplicate-four', 4);
+    emitTerminalData('session-1', 'raw-live-four', 4);
     emitTerminalData('session-1', 'fresh-five', 5);
     releaseHistoryPage(withHistoryContract({
       chunks: [
         { sequence: 2, timestampMs: 10, data: textEncoder.encode('history-two ') },
-        { sequence: 4, timestampMs: 20, data: textEncoder.encode('duplicate-four') },
+        { sequence: 4, timestampMs: 20, data: textEncoder.encode('filtered-history-four') },
       ],
       nextStartSeq: 0,
       hasMore: false,
@@ -649,13 +717,15 @@ describe('TerminalPanel browser activity integration', () => {
 
     expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
     expect(terminalCoreState.instances[0]?.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual([
-      'history-two duplicate-four',
+      'history-two ',
+      'raw-live-four',
       'fresh-five',
     ]);
   });
 
-  it('keeps buffered live output below the initial sparse history high-water', async () => {
+  it('retains post-boundary live output while sparse initial history is pending', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportAttachState.historyBoundarySequence = 4;
     let releaseHistoryPage: (page: Awaited<ReturnType<typeof transportMocks.historyPage>>) => void = () => {};
     const historyPage = new Promise<Awaited<ReturnType<typeof transportMocks.historyPage>>>((resolve) => {
       releaseHistoryPage = resolve;
@@ -672,23 +742,23 @@ describe('TerminalPanel browser activity integration', () => {
 
     const core = terminalCoreState.instances[0];
     emitTerminalData('session-1', 'live-five', 5);
-    emitTerminalData('session-1', 'covered-live-six', 6);
+    emitTerminalData('session-1', 'live-six', 6);
     releaseHistoryPage(withHistoryContract({
       chunks: [
         { sequence: 2, timestampMs: 10, data: textEncoder.encode('history-two ') },
-        { sequence: 6, timestampMs: 20, data: textEncoder.encode('history-six') },
+        { sequence: 4, timestampMs: 20, data: textEncoder.encode('history-four') },
       ],
       nextStartSeq: 0,
       hasMore: false,
       firstSequence: 2,
-      lastSequence: 6,
+      lastSequence: 4,
       coveredBytes: 23,
       totalBytes: 23,
     }));
 
     await settleTerminalPanel();
     await vi.waitFor(() => {
-      expect(core?.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toContain('live-five');
+      expect(core?.write.mock.calls.map((call) => decodeTerminalWrite(call[0])).join('')).toContain('live-five');
     });
 
     emitTerminalData('session-1', 'live-seven', 7);
@@ -698,12 +768,13 @@ describe('TerminalPanel browser activity integration', () => {
 
     expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
     expect(core?.write.mock.calls.map((call) => decodeTerminalWrite(call[0])).join('')).toBe(
-      'history-two live-fivehistory-sixlive-seven',
+      'history-two history-fourlive-fivelive-sixlive-seven',
     );
   });
 
   it('resumes gap-triggering live output when catchup history remains sparse', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportAttachState.historyBoundarySequence = 1;
     transportMocks.historyPage
       .mockResolvedValueOnce(withHistoryContract({
         chunks: [
@@ -759,6 +830,7 @@ describe('TerminalPanel browser activity integration', () => {
 
   it('keeps sparse queued live output below a later history high-water', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportAttachState.historyBoundarySequence = 1;
     let releaseCatchupPage: (page: Awaited<ReturnType<typeof transportMocks.historyPage>>) => void = () => {};
     const catchupPage = new Promise<Awaited<ReturnType<typeof transportMocks.historyPage>>>((resolve) => {
       releaseCatchupPage = resolve;
@@ -796,14 +868,15 @@ describe('TerminalPanel browser activity integration', () => {
     releaseCatchupPage(withHistoryContract({
       chunks: [
         { sequence: 2, timestampMs: 10, data: textEncoder.encode('history-two ') },
-        { sequence: 6, timestampMs: 20, data: textEncoder.encode('history-six') },
       ],
       nextStartSeq: 0,
       hasMore: false,
       firstSequence: 2,
-      lastSequence: 6,
-      coveredBytes: 23,
-      totalBytes: 23,
+      lastSequence: 2,
+      coveredThroughSequence: 4,
+      snapshotEndSequence: 4,
+      coveredBytes: 12,
+      totalBytes: 12,
     }));
     await settleTerminalPanel();
 
@@ -812,12 +885,24 @@ describe('TerminalPanel browser activity integration', () => {
 
     expect(transportMocks.historyPage).toHaveBeenCalledTimes(2);
     expect(core?.write.mock.calls.map((call) => decodeTerminalWrite(call[0])).join('')).toBe(
-      'history-two live-fivehistory-sixlive-seven',
+      'history-two live-fivecovered-live-sixlive-seven',
     );
   });
 
   it('resets the real activity pipeline after clear before accepting a continued sequence', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    transportAttachState.historyBoundarySequence = 4;
+    transportMocks.historyPage.mockResolvedValue(withHistoryContract({
+      chunks: [],
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 0,
+      lastSequence: 0,
+      coveredThroughSequence: 4,
+      snapshotEndSequence: 4,
+      coveredBytes: 0,
+      totalBytes: 0,
+    }));
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -827,19 +912,33 @@ describe('TerminalPanel browser activity integration', () => {
     emitTerminalData('session-1', 'before-clear', 5);
     await settleTerminalPanel();
 
-    const core = terminalCoreState.instances[0];
-    core?.write.mockClear();
+    terminalCoreState.instances[0]?.write.mockClear();
+    transportAttachState.historyBoundarySequence = 36;
+    transportMocks.historyPage.mockResolvedValue(withHistoryContract({
+      chunks: [],
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 0,
+      lastSequence: 0,
+      coveredThroughSequence: 36,
+      snapshotEndSequence: 36,
+      historyGeneration: 2,
+      coveredBytes: 0,
+      totalBytes: 0,
+    }));
     host.querySelector<HTMLButtonElement>('button[title="Clear"]')?.click();
-    await settleTerminalPanel();
+    await vi.waitFor(() => expect(terminalCoreState.instances.length).toBeGreaterThan(1));
     expect(transportMocks.clear).toHaveBeenCalledWith('session-1');
 
+    const core = terminalCoreState.instances.at(-1);
+    core?.write.mockClear();
     emitTerminalData('session-1', 'after-clear', 37);
-    await settleTerminalPanel();
-
-    expect(core?.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual(['after-clear']);
+    await vi.waitFor(() => {
+      expect(core?.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual(['after-clear']);
+    });
   });
 
-  it('keeps a spinner for background interactive output while the command remains open', async () => {
+  it('bounds the tab spinner to unread after background command output becomes quiet', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -847,23 +946,25 @@ describe('TerminalPanel browser activity integration', () => {
     await settleTerminalPanel();
 
     findTerminalTab(host, 'Terminal 2')?.click();
-    await settleTerminalPanel();
+    await vi.waitFor(() => {
+      expect(transportMocks.attach.mock.calls.some((call) => call[0] === 'session-2')).toBe(true);
+    });
 
     findTerminalTab(host, 'Terminal 1')?.click();
     await settleTerminalPanel();
 
     emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
     emitTerminalData('session-2', 'working...\n', 2);
-    await settleTerminalPanel();
-
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    await vi.waitFor(() => {
+      expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    });
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
 
     await new Promise<void>((resolve) => setTimeout(resolve, 3_800));
     await settleTerminalPanel();
 
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
   });
 
   it('keeps session switching responsive while a background session is receiving heavy live output', async () => {

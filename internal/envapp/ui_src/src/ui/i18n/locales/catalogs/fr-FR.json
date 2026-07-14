@@ -2277,7 +2277,7 @@
     "terminalUnavailable": "Ce terminal n’a pas pu être restauré.",
     "outputSynchronized": "La sortie du terminal est synchronisée.",
     "viewDiagnostics": "Diagnostic",
-    "updateRuntime": "Mettre à jour le runtime"
+    "updateRuntime": "Mettre à jour le Runtime"
   },
   "shellBlock": {
     "command": "Commande",

@@ -2277,7 +2277,7 @@
     "terminalUnavailable": "無法恢復此終端。",
     "outputSynchronized": "終端輸出已同步。",
     "viewDiagnostics": "查看診斷",
-    "updateRuntime": "更新執行環境"
+    "updateRuntime": "更新 Runtime"
   },
   "shellBlock": {
     "command": "命令",

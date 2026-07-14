@@ -51,18 +51,26 @@ type Manager struct {
 	scope        *filesystemscope.Registry
 	log          *slog.Logger
 
-	term              *termgo.Manager
-	deleteSessionFunc func(sessionID string) error
+	term                *termgo.Manager
+	deleteSessionFunc   func(sessionID string) error
+	activateSessionFunc func(sessionID string, cols int, rows int) error
 
-	mu               sync.Mutex
-	writers          map[*rpc.Server]*sinkWriter
-	byServer         map[*rpc.Server]map[string]string // server -> session_id -> conn_id
-	bySession        map[string]map[*rpc.Server]string // session_id -> server -> conn_id
-	closedSinks      map[*rpc.Server]struct{}          // best-effort marker to avoid repeated work
-	sessionLifecycle map[string]SessionLifecycleRecord
-	deleteOperations map[string]*sessionDeleteOperation
-	lifecycleHooks   map[int]SessionLifecycleHook
-	nextLifecycleID  int
+	mu                sync.Mutex
+	writers           map[*rpc.Server]*sinkWriter
+	byServer          map[*rpc.Server]map[string]sinkAttachment
+	bySession         map[string]map[*rpc.Server]sinkAttachment
+	attachGenerations map[*rpc.Server]map[string]int64
+	closedSinks       map[*rpc.Server]struct{} // best-effort marker to avoid repeated work
+	sessionLifecycle  map[string]SessionLifecycleRecord
+	deleteOperations  map[string]*sessionDeleteOperation
+	lifecycleHooks    map[int]SessionLifecycleHook
+	nextLifecycleID   int
+}
+
+type sinkAttachment struct {
+	connID            string
+	liveAfterSequence int64
+	generation        int64
 }
 
 type SessionInfo struct {
@@ -131,21 +139,23 @@ func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slo
 	}
 
 	m := &Manager{
-		agentHomeAbs:     scope.HomePathAbs(),
-		scope:            scope,
-		log:              log,
-		writers:          make(map[*rpc.Server]*sinkWriter),
-		byServer:         make(map[*rpc.Server]map[string]string),
-		bySession:        make(map[string]map[*rpc.Server]string),
-		closedSinks:      make(map[*rpc.Server]struct{}),
-		sessionLifecycle: make(map[string]SessionLifecycleRecord),
-		deleteOperations: make(map[string]*sessionDeleteOperation),
-		lifecycleHooks:   make(map[int]SessionLifecycleHook),
+		agentHomeAbs:      scope.HomePathAbs(),
+		scope:             scope,
+		log:               log,
+		writers:           make(map[*rpc.Server]*sinkWriter),
+		byServer:          make(map[*rpc.Server]map[string]sinkAttachment),
+		bySession:         make(map[string]map[*rpc.Server]sinkAttachment),
+		attachGenerations: make(map[*rpc.Server]map[string]int64),
+		closedSinks:       make(map[*rpc.Server]struct{}),
+		sessionLifecycle:  make(map[string]SessionLifecycleRecord),
+		deleteOperations:  make(map[string]*sessionDeleteOperation),
+		lifecycleHooks:    make(map[int]SessionLifecycleHook),
 	}
 
 	m.term = termgo.NewManager(newTerminalGoManagerConfig(shell, log))
 	m.term.SetEventHandler(&eventHandler{m: m})
 	m.deleteSessionFunc = m.deleteSessionNow
+	m.activateSessionFunc = m.term.ActivateSession
 
 	return m
 }
@@ -229,12 +239,26 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 		if req.Cols <= 0 || req.Rows <= 0 {
 			return nil, &rpc.Error{Code: 400, Message: "cols and rows are required"}
 		}
+		if req.AttachGeneration <= 0 {
+			return nil, &rpc.Error{Code: 400, Message: "attach_generation is required"}
+		}
 
-		if err := m.attachSession(sessionID, connID, req.Cols, req.Rows, streamServer); err != nil {
+		historyBoundarySequence, err := m.attachSession(
+			sessionID,
+			connID,
+			req.Cols,
+			req.Rows,
+			streamServer,
+			req.AttachGeneration,
+		)
+		if err != nil {
 			return nil, err
 		}
 
-		return &terminalAttachResp{OK: true}, nil
+		return &terminalAttachResp{
+			OK:                      true,
+			HistoryBoundarySequence: historyBoundarySequence,
+		}, nil
 	})
 
 	// Terminal input (notify)
@@ -397,34 +421,30 @@ func (m *Manager) DetachSink(streamServer *rpc.Server) {
 		return
 	}
 
-	var toRemove []sinkDetach
 	var writer *sinkWriter
 
 	m.mu.Lock()
 	if sessions := m.byServer[streamServer]; len(sessions) > 0 {
-		for sessionID, connID := range sessions {
-			toRemove = append(toRemove, sinkDetach{sessionID: sessionID, connID: connID})
+		for sessionID, attachment := range sessions {
 			if bySess := m.bySession[sessionID]; bySess != nil {
 				delete(bySess, streamServer)
 				if len(bySess) == 0 {
 					delete(m.bySession, sessionID)
 				}
 			}
+			if !m.sessionConnectionOwnedLocked(sessionID, attachment.connID) {
+				if sess, ok := m.term.GetSession(sessionID); ok && sess != nil {
+					sess.RemoveConnection(attachment.connID)
+				}
+			}
 		}
 		delete(m.byServer, streamServer)
 	}
+	delete(m.attachGenerations, streamServer)
 	writer = m.writers[streamServer]
 	delete(m.writers, streamServer)
 	m.closedSinks[streamServer] = struct{}{}
 	m.mu.Unlock()
-
-	for _, item := range toRemove {
-		sess, ok := m.term.GetSession(item.sessionID)
-		if !ok || sess == nil {
-			continue
-		}
-		sess.RemoveConnection(item.connID)
-	}
 
 	if writer != nil {
 		writer.Close()
@@ -453,40 +473,115 @@ func (m *Manager) ensureWriter(sink *rpc.Server) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if _, closed := m.closedSinks[sink]; closed {
+		return
+	}
 	if _, ok := m.writers[sink]; ok {
 		return
 	}
 	m.writers[sink] = newSinkWriter(sink, m.log)
 }
 
-func (m *Manager) attachSink(sessionID string, connID string, sink *rpc.Server) {
-	if m == nil || sink == nil || sessionID == "" || connID == "" {
-		return
+var (
+	errTerminalAttachSinkClosed = errors.New("terminal attach sink closed")
+	errTerminalAttachSuperseded = errors.New("terminal attach superseded")
+)
+
+func (m *Manager) attachSinkLocked(
+	sessionID string,
+	connID string,
+	sink *rpc.Server,
+	generation int64,
+	captureHistoryBoundary func() int64,
+	removePreviousConnection func(connID string),
+) (sinkAttachment, bool, error) {
+	if m == nil || sink == nil || sessionID == "" || connID == "" || generation <= 0 || captureHistoryBoundary == nil {
+		return sinkAttachment{}, false, errTerminalAttachSuperseded
+	}
+	if _, closed := m.closedSinks[sink]; closed {
+		return sinkAttachment{}, false, errTerminalAttachSinkClosed
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	var existing sinkAttachment
+	hasExisting := false
+	if servers := m.bySession[sessionID]; servers != nil {
+		existing, hasExisting = servers[sink]
+	}
+	highWater := int64(0)
+	if generations := m.attachGenerations[sink]; generations != nil {
+		highWater = generations[sessionID]
+	}
+	if hasExisting && existing.generation > highWater {
+		highWater = existing.generation
+	}
+	if generation < highWater {
+		return sinkAttachment{}, false, errTerminalAttachSuperseded
+	}
+	if generation == highWater {
+		if hasExisting && existing.generation == generation && existing.connID == connID {
+			return existing, false, nil
+		}
+		return sinkAttachment{}, false, errTerminalAttachSuperseded
+	}
 
+	attachment := sinkAttachment{
+		connID:            connID,
+		liveAfterSequence: captureHistoryBoundary(),
+		generation:        generation,
+	}
 	if _, ok := m.writers[sink]; !ok {
 		m.writers[sink] = newSinkWriter(sink, m.log)
 	}
-
 	sessions := m.byServer[sink]
 	if sessions == nil {
-		sessions = make(map[string]string)
+		sessions = make(map[string]sinkAttachment)
 		m.byServer[sink] = sessions
 	}
-	sessions[sessionID] = connID
+	sessions[sessionID] = attachment
 
 	servers := m.bySession[sessionID]
 	if servers == nil {
-		servers = make(map[*rpc.Server]string)
+		servers = make(map[*rpc.Server]sinkAttachment)
 		m.bySession[sessionID] = servers
 	}
-	servers[sink] = connID
+	servers[sink] = attachment
+	if m.attachGenerations == nil {
+		m.attachGenerations = make(map[*rpc.Server]map[string]int64)
+	}
+	generations := m.attachGenerations[sink]
+	if generations == nil {
+		generations = make(map[string]int64)
+		m.attachGenerations[sink] = generations
+	}
+	generations[sessionID] = generation
+	if hasExisting && existing.connID != connID && removePreviousConnection != nil && !m.sessionConnectionOwnedLocked(sessionID, existing.connID) {
+		removePreviousConnection(existing.connID)
+	}
+	return attachment, true, nil
 }
 
-func (m *Manager) detachSessionSink(sessionID string, sink *rpc.Server) {
+func sameSinkAttachment(left sinkAttachment, right sinkAttachment) bool {
+	return left.connID == right.connID && left.generation == right.generation
+}
+
+func (m *Manager) sessionConnectionOwnedLocked(sessionID string, connID string) bool {
+	if m == nil || sessionID == "" || connID == "" {
+		return false
+	}
+	for _, attachment := range m.bySession[sessionID] {
+		if attachment.connID == connID {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) rollbackSessionAttachment(
+	sessionID string,
+	sink *rpc.Server,
+	attachment sinkAttachment,
+	removeConnection func(connID string),
+) {
 	if m == nil || sink == nil || sessionID == "" {
 		return
 	}
@@ -494,34 +589,61 @@ func (m *Manager) detachSessionSink(sessionID string, sink *rpc.Server) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if sessions := m.byServer[sink]; sessions != nil {
-		delete(sessions, sessionID)
-		if len(sessions) == 0 {
-			delete(m.byServer, sink)
-		}
+	servers := m.bySession[sessionID]
+	current, ok := servers[sink]
+	if ok && !sameSinkAttachment(current, attachment) {
+		return
 	}
-
-	if servers := m.bySession[sessionID]; servers != nil {
+	if ok {
 		delete(servers, sink)
 		if len(servers) == 0 {
 			delete(m.bySession, sessionID)
 		}
 	}
+	if sessions := m.byServer[sink]; sessions != nil {
+		if indexed, exists := sessions[sessionID]; exists && sameSinkAttachment(indexed, attachment) {
+			delete(sessions, sessionID)
+			if len(sessions) == 0 {
+				delete(m.byServer, sink)
+			}
+		}
+	}
+	if removeConnection != nil && !m.sessionConnectionOwnedLocked(sessionID, attachment.connID) {
+		removeConnection(attachment.connID)
+	}
 }
 
-func (m *Manager) broadcast(sessionID string, payload json.RawMessage) {
-	if m == nil || sessionID == "" || len(payload) == 0 {
+func (m *Manager) forgetSessionAttachGenerations(sessionID string) {
+	if m == nil || sessionID == "" {
 		return
 	}
-	if m.sessionHidden(sessionID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for sink, generations := range m.attachGenerations {
+		delete(generations, sessionID)
+		if len(generations) == 0 {
+			delete(m.attachGenerations, sink)
+		}
+	}
+}
+
+func (m *Manager) broadcast(sessionID string, sequence int64, payload json.RawMessage) {
+	if m == nil || sessionID == "" || sequence <= 0 || len(payload) == 0 {
 		return
 	}
 
 	var writers []*sinkWriter
 	m.mu.Lock()
+	if record, ok := m.sessionLifecycle[sessionID]; ok && record.hiddenFromUI() {
+		m.mu.Unlock()
+		return
+	}
 	if bySess := m.bySession[sessionID]; bySess != nil {
 		writers = make([]*sinkWriter, 0, len(bySess))
-		for srv := range bySess {
+		for srv, attachment := range bySess {
+			if sequence <= attachment.liveAfterSequence {
+				continue
+			}
 			if w := m.writers[srv]; w != nil {
 				writers = append(writers, w)
 			}
@@ -675,49 +797,99 @@ func (m *Manager) createSession(name string, workingDir string) (*termgo.Session
 	return sess, nil
 }
 
-func (m *Manager) attachSession(sessionID string, connID string, cols int, rows int, streamServer *rpc.Server) error {
+func (m *Manager) attachSession(
+	sessionID string,
+	connID string,
+	cols int,
+	rows int,
+	streamServer *rpc.Server,
+	attachGeneration int64,
+) (int64, error) {
 	if m == nil {
-		return &rpc.Error{Code: 500, Message: "internal error"}
+		return 0, &rpc.Error{Code: 500, Message: "internal error"}
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	connID = strings.TrimSpace(connID)
 	if sessionID == "" {
-		return &rpc.Error{Code: 400, Message: "session_id is required"}
+		return 0, &rpc.Error{Code: 400, Message: "session_id is required"}
 	}
 	if !m.sessionAvailableForInteraction(sessionID) {
-		return &rpc.Error{Code: 404, Message: "terminal session not found"}
+		return 0, &rpc.Error{Code: 404, Message: "terminal session not found"}
 	}
 	if connID == "" {
-		return &rpc.Error{Code: 400, Message: "conn_id is required"}
+		return 0, &rpc.Error{Code: 400, Message: "conn_id is required"}
 	}
 	if cols <= 0 || rows <= 0 {
-		return &rpc.Error{Code: 400, Message: "cols and rows are required"}
+		return 0, &rpc.Error{Code: 400, Message: "cols and rows are required"}
+	}
+	if streamServer != nil && attachGeneration <= 0 {
+		return 0, &rpc.Error{Code: 400, Message: "attach_generation is required"}
 	}
 
 	sess, ok := m.term.GetSession(sessionID)
 	if !ok || sess == nil {
-		return &rpc.Error{Code: 404, Message: "terminal session not found"}
+		return 0, &rpc.Error{Code: 404, Message: "terminal session not found"}
 	}
 
+	var attachment sinkAttachment
+	attachmentCreated := false
+	m.mu.Lock()
+	if record, exists := m.sessionLifecycle[sessionID]; exists && record.hiddenFromUI() {
+		m.mu.Unlock()
+		return 0, &rpc.Error{Code: 404, Message: "terminal session not found"}
+	}
+	var historyBoundarySequence int64
 	if streamServer != nil {
-		m.attachSink(sessionID, connID, streamServer)
+		var attachErr error
+		attachment, attachmentCreated, attachErr = m.attachSinkLocked(
+			sessionID,
+			connID,
+			streamServer,
+			attachGeneration,
+			func() int64 {
+				return sess.AddConnectionWithHistoryBoundary(connID, cols, rows)
+			},
+			sess.RemoveConnection,
+		)
+		if attachErr != nil {
+			m.mu.Unlock()
+			switch {
+			case errors.Is(attachErr, errTerminalAttachSinkClosed):
+				return 0, &rpc.Error{Code: 410, Message: "terminal connection closed"}
+			case errors.Is(attachErr, errTerminalAttachSuperseded):
+				return 0, &rpc.Error{Code: 409, Message: "terminal attach superseded"}
+			default:
+				return 0, &rpc.Error{Code: 500, Message: "failed to attach terminal session"}
+			}
+		}
+		historyBoundarySequence = attachment.liveAfterSequence
+	} else {
+		historyBoundarySequence = sess.AddConnectionWithHistoryBoundary(connID, cols, rows)
 	}
+	m.mu.Unlock()
 
-	sess.AddConnection(connID, cols, rows)
+	if streamServer != nil && !attachmentCreated && !sess.IsActive() {
+		return 0, &rpc.Error{Code: 409, Message: "terminal attach in progress"}
+	}
 	if sess.IsActive() {
-		return nil
+		return historyBoundarySequence, nil
 	}
 
-	if err := m.term.ActivateSession(sessionID, cols, rows); err != nil {
-		sess.RemoveConnection(connID)
-		if streamServer != nil {
-			m.detachSessionSink(sessionID, streamServer)
+	activateSession := m.activateSessionFunc
+	if activateSession == nil {
+		activateSession = m.term.ActivateSession
+	}
+	if err := activateSession(sessionID, cols, rows); err != nil {
+		if streamServer != nil && attachmentCreated {
+			m.rollbackSessionAttachment(sessionID, streamServer, attachment, sess.RemoveConnection)
+		} else if streamServer == nil {
+			sess.RemoveConnection(connID)
 		}
 		m.log.Warn("terminal attach activation failed", "session_id", sessionID, "conn_id", connID, "error", err)
-		return &rpc.Error{Code: 500, Message: "failed to attach terminal session"}
+		return 0, &rpc.Error{Code: 500, Message: "failed to attach terminal session"}
 	}
 
-	return nil
+	return historyBoundarySequence, nil
 }
 
 func (m *Manager) resize(sessionID string, connID string, cols int, rows int) error {
@@ -762,7 +934,7 @@ func (h *eventHandler) OnTerminalData(sessionID string, data []byte, sequenceNum
 		OriginalSource: originalSource,
 	}
 	b, _ := json.Marshal(msg)
-	h.m.broadcast(sessionID, b)
+	h.m.broadcast(sessionID, sequenceNumber, b)
 }
 
 func (h *eventHandler) OnTerminalNameChanged(sessionID string, oldName string, newName string, workingDir string) {
@@ -804,6 +976,8 @@ func (h *eventHandler) OnTerminalSessionClosed(sessionID string) {
 		return
 	}
 
+	h.m.detachSessionViewers(sessionID)
+	h.m.forgetSessionAttachGenerations(sessionID)
 	reason := h.m.finalizeSessionClosed(sessionID)
 	payload := terminalSessionsChangedPayload{
 		Reason:      reason,
@@ -871,14 +1045,16 @@ type terminalListResp struct {
 }
 
 type terminalAttachReq struct {
-	SessionID string `json:"session_id"`
-	ConnID    string `json:"conn_id"`
-	Cols      int    `json:"cols"`
-	Rows      int    `json:"rows"`
+	SessionID        string `json:"session_id"`
+	ConnID           string `json:"conn_id"`
+	Cols             int    `json:"cols"`
+	Rows             int    `json:"rows"`
+	AttachGeneration int64  `json:"attach_generation"`
 }
 
 type terminalAttachResp struct {
-	OK bool `json:"ok"`
+	OK                      bool  `json:"ok"`
+	HistoryBoundarySequence int64 `json:"history_boundary_sequence"`
 }
 
 type terminalInputPayload struct {
@@ -1062,6 +1238,7 @@ type sinkWriter struct {
 	log *slog.Logger
 
 	ch   chan sinkMsg
+	stop chan struct{}
 	once sync.Once
 	done chan struct{}
 }
@@ -1071,6 +1248,7 @@ func newSinkWriter(srv *rpc.Server, log *slog.Logger) *sinkWriter {
 		srv:  srv,
 		log:  log,
 		ch:   make(chan sinkMsg, 256),
+		stop: make(chan struct{}),
 		done: make(chan struct{}),
 	}
 	go w.loop()
@@ -1079,7 +1257,19 @@ func newSinkWriter(srv *rpc.Server, log *slog.Logger) *sinkWriter {
 
 func (w *sinkWriter) loop() {
 	defer close(w.done)
-	for msg := range w.ch {
+	for {
+		select {
+		case <-w.stop:
+			return
+		default:
+		}
+
+		var msg sinkMsg
+		select {
+		case <-w.stop:
+			return
+		case msg = <-w.ch:
+		}
 		if w.srv == nil {
 			return
 		}
@@ -1100,11 +1290,15 @@ func (w *sinkWriter) TrySend(msg sinkMsg) {
 	select {
 	case <-w.done:
 		return
+	case <-w.stop:
+		return
 	default:
 	}
 
 	// Best-effort: if the consumer is slow, drop messages. Clients can recover via history replay.
 	select {
+	case <-w.done:
+	case <-w.stop:
 	case w.ch <- msg:
 	default:
 	}
@@ -1115,7 +1309,7 @@ func (w *sinkWriter) Close() {
 		return
 	}
 	w.once.Do(func() {
-		close(w.ch)
+		close(w.stop)
 	})
 	<-w.done
 }

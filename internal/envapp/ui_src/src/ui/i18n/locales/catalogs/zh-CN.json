@@ -2277,7 +2277,7 @@
     "terminalUnavailable": "无法恢复此终端。",
     "outputSynchronized": "终端输出已同步。",
     "viewDiagnostics": "查看诊断",
-    "updateRuntime": "更新运行时"
+    "updateRuntime": "更新 Runtime"
   },
   "shellBlock": {
     "command": "命令",

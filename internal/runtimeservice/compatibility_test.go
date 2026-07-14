@@ -19,9 +19,9 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch != 6 {
 		t.Fatalf("CompatibilityEpoch = %d, want terminal history coverage epoch 6", contract.CompatibilityEpoch)
 	}
-	if contract.MinimumDesktopVersion != "v0.8.0" || contract.MinimumRuntimeVersion != "v0.8.0" {
+	if contract.MinimumDesktopVersion != "v0.8.1" || contract.MinimumRuntimeVersion != "v0.8.1" {
 		t.Fatalf(
-			"minimum versions = Desktop %q Runtime %q, want matched v0.8.0 pair",
+			"minimum versions = Desktop %q Runtime %q, want matched v0.8.1 pair",
 			contract.MinimumDesktopVersion,
 			contract.MinimumRuntimeVersion,
 		)

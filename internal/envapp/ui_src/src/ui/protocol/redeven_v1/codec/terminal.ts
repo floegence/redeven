@@ -88,11 +88,17 @@ export function toWireTerminalSessionAttachRequest(req: TerminalSessionAttachReq
     conn_id: req.connId,
     cols: req.cols,
     rows: req.rows,
+    attach_generation: req.attachGeneration,
   };
 }
 
 export function fromWireTerminalSessionAttachResponse(resp: wire_terminal_session_attach_resp): TerminalSessionAttachResponse {
-  return { ok: Boolean(resp?.ok ?? false) };
+  return {
+    ok: Boolean(resp?.ok ?? false),
+    ...(hasOwnField(resp, 'history_boundary_sequence')
+      ? { historyBoundarySequence: optionalHistorySequence(resp, 'history_boundary_sequence') }
+      : {}),
+  };
 }
 
 export function toWireTerminalHistoryRequest(req: TerminalHistoryRequest): wire_terminal_history_req {

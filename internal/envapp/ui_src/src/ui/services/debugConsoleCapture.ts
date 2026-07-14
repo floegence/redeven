@@ -500,6 +500,22 @@ function projectTerminalInputRequest(payload: unknown): Record<string, unknown> 
   };
 }
 
+function projectTerminalAttachRequest(payload: unknown): Record<string, unknown> {
+  const record = objectRecord(payload);
+  return {
+    cols: finiteNumber(record.cols),
+    rows: finiteNumber(record.rows),
+  };
+}
+
+function projectTerminalAttachResponse(response: unknown): Record<string, unknown> {
+  const record = objectRecord(response);
+  return {
+    ok: booleanValue(record.ok),
+    history_boundary_sequence: finiteNumber(record.history_boundary_sequence),
+  };
+}
+
 function projectTerminalHistoryRequest(payload: unknown): Record<string, unknown> {
   const record = objectRecord(payload);
   return {
@@ -533,6 +549,11 @@ function projectTerminalHistoryResponse(response: unknown): Record<string, unkno
 }
 
 function projectProtocolPayload(operation: string, direction: 'request' | 'response', value: unknown): unknown {
+  if (operation === 'terminal.sessionAttach') {
+    return direction === 'request'
+      ? projectTerminalAttachRequest(value)
+      : projectTerminalAttachResponse(value);
+  }
   if (operation === 'terminal.input') {
     return direction === 'request' ? projectTerminalInputRequest(value) : {};
   }
@@ -545,18 +566,36 @@ function projectProtocolPayload(operation: string, direction: 'request' | 'respo
 }
 
 function terminalProtocolFailureMessage(operation: string): string | undefined {
+  if (operation === 'terminal.sessionAttach') return 'Terminal attach request failed';
   if (operation === 'terminal.input') return 'Terminal input delivery failed';
   if (operation === 'terminal.history') return 'Terminal history request failed';
   return undefined;
 }
 
-function buildProtocolDetail(kind: 'call' | 'notify', typeID: number, payload: unknown, response: unknown, errorMessage?: string): DiagnosticsEvent {
+function protocolRPCErrorCode(error: unknown): number | undefined {
+  const code = objectRecord(error).code;
+  return typeof code === 'number' && Number.isInteger(code) && code > 0 ? code : undefined;
+}
+
+function protocolFailureMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error ?? '');
+}
+
+function buildProtocolDetail(
+  kind: 'call' | 'notify',
+  typeID: number,
+  payload: unknown,
+  response: unknown,
+  failure?: Readonly<{ error: unknown }>,
+): DiagnosticsEvent {
   const operation = protocolOperationByTypeID.get(typeID) ?? `unknown.${typeID}`;
   const startedAtUnixMs = Date.now();
   const traceID = nextClientTraceID(kind === 'call' ? 'rpc' : 'notify');
-  const hasError = compact(errorMessage).length > 0;
+  const hasError = failure !== undefined;
+  const rpcErrorCode = hasError ? protocolRPCErrorCode(failure.error) : undefined;
   const failureMessage = hasError
-    ? terminalProtocolFailureMessage(operation) ?? compact(errorMessage)
+    ? terminalProtocolFailureMessage(operation) ?? compact(protocolFailureMessage(failure.error))
     : undefined;
   return {
     created_at: new Date(startedAtUnixMs).toISOString(),
@@ -566,7 +605,7 @@ function buildProtocolDetail(kind: 'call' | 'notify', typeID: number, payload: u
     trace_id: traceID,
     method: kind === 'call' ? 'RPC' : 'NOTIFY',
     path: `rpc://redeven_v1/${operation}`,
-    status_code: hasError ? 500 : 200,
+    status_code: hasError ? rpcErrorCode ?? 500 : 200,
     duration_ms: 0,
     message: failureMessage ?? `${kind === 'call' ? 'RPC call' : 'RPC notify'} completed`,
     detail: {
@@ -579,6 +618,7 @@ function buildProtocolDetail(kind: 'call' | 'notify', typeID: number, payload: u
       response: hasError
         ? {
             error_message: failureMessage,
+            rpc_error_code: rpcErrorCode,
           }
         : {
             payload: projectProtocolPayload(operation, 'response', response),
@@ -688,7 +728,7 @@ export async function captureDebugConsoleProtocolCall<Req, Resp>(args: Readonly<
     });
     return response;
   } catch (error) {
-    const event = buildProtocolDetail('call', args.typeID, args.payload, null, error instanceof Error ? error.message : String(error));
+    const event = buildProtocolDetail('call', args.typeID, args.payload, null, { error });
     publishCapturedEvent({
       ...event,
       duration_ms: eventDurationMs(startedAtUnixMs),
@@ -717,7 +757,7 @@ export async function captureDebugConsoleProtocolNotify<Payload>(args: Readonly<
       slow: eventDurationMs(startedAtUnixMs) >= 1000,
     });
   } catch (error) {
-    const event = buildProtocolDetail('notify', args.typeID, args.payload, null, error instanceof Error ? error.message : String(error));
+    const event = buildProtocolDetail('notify', args.typeID, args.payload, null, { error });
     publishCapturedEvent({
       ...event,
       duration_ms: eventDurationMs(startedAtUnixMs),
