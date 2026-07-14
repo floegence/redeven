@@ -39,7 +39,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/felixge/httpsnoop | v1.0.4 | MIT | Runtime | https://pkg.go.dev/github.com/felixge/httpsnoop@v1.0.4 | Detected from LICENSE.txt. |
-| github.com/floegence/floeterm/terminal-go | v0.4.22 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.4.22 | Floegence first-party dependency. |
+| github.com/floegence/floeterm/terminal-go | v0.4.23 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.4.23 | Floegence first-party dependency. |
 | github.com/floegence/floret | v0.4.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret@v0.4.0 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go | v0.20.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go@v0.20.2 | Floegence first-party dependency. |
 | github.com/floegence/redevplugin | v0.1.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v0.1.1 | Floegence first-party dependency. |
@@ -223,7 +223,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @floegence/floe-webapp-boot | 0.37.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.37.1 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-core | 0.37.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.37.1 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-protocol | 0.37.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.37.1 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floeterm-terminal-web | 0.5.14 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.5.14 |  |
+| @floegence/floeterm-terminal-web | 0.5.17 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.5.17 |  |
 | @floegence/flowersec-core | 0.20.2 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.20.2 |  |
 | @floegence/redevplugin-ui | 0.1.5 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.1.5 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |

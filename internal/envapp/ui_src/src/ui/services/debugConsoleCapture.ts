@@ -5,6 +5,7 @@ const TRACE_HEADER = 'X-Redeven-Debug-Trace-ID';
 const MAX_CAPTURED_TEXT_CHARS = 20_000;
 const MAX_CAPTURED_ITEMS = 40;
 const MAX_CAPTURED_DEPTH = 5;
+const DEFAULT_CLIENT_EVENT_RING_CAPACITY = 160;
 
 type DebugConsoleCapturedBody = Readonly<{
   kind: 'json' | 'text' | 'form_data' | 'binary' | 'empty' | 'stream';
@@ -44,6 +45,16 @@ type DebugConsoleCapturedResponse = Readonly<{
 
 type DebugConsoleClientListener = (event: DiagnosticsEvent) => void;
 
+export type DebugConsoleClientEventSubscriptionOptions = Readonly<{
+  replayExisting?: boolean;
+}>;
+
+export type DebugConsoleClientEventRingSnapshot = Readonly<{
+  capacity: number;
+  droppedCount: number;
+  events: readonly DiagnosticsEvent[];
+}>;
+
 type DebugConsoleFetchCaptureContext = Readonly<{
   method: string;
   url: URL;
@@ -54,11 +65,13 @@ type DebugConsoleFetchCaptureContext = Readonly<{
 
 const protocolOperationByTypeID = new Map<number, string>();
 const clientListeners = new Set<DebugConsoleClientListener>();
+const clientEventRing: DiagnosticsEvent[] = [];
 
 let captureEnabled = false;
 let fetchPatched = false;
 let originalFetch: typeof fetch | null = null;
 let clientTraceSequence = 0;
+let clientEventDroppedCount = 0;
 
 function buildProtocolOperationMap(prefix: string, value: unknown): void {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -399,13 +412,36 @@ function eventDurationMs(startedAtUnixMs: number): number {
   return Math.max(0, Date.now() - startedAtUnixMs);
 }
 
-function publishEvent(event: DiagnosticsEvent): void {
-  if (!captureEnabled || clientListeners.size === 0) {
-    return;
+function appendClientEvent(event: DiagnosticsEvent): void {
+  clientEventRing.push(event);
+  while (clientEventRing.length > DEFAULT_CLIENT_EVENT_RING_CAPACITY) {
+    clientEventRing.shift();
+    clientEventDroppedCount += 1;
   }
+}
+
+function notifyClientEventListeners(event: DiagnosticsEvent): void {
   for (const listener of clientListeners) {
     listener(event);
   }
+}
+
+function publishCapturedEvent(event: DiagnosticsEvent): void {
+  if (!captureEnabled) return;
+  notifyClientEventListeners(event);
+}
+
+export function publishDebugConsoleStructuredEvent(event: DiagnosticsEvent): void {
+  appendClientEvent(event);
+  notifyClientEventListeners(event);
+}
+
+export function getDebugConsoleClientEventRingSnapshot(): DebugConsoleClientEventRingSnapshot {
+  return {
+    capacity: DEFAULT_CLIENT_EVENT_RING_CAPACITY,
+    droppedCount: clientEventDroppedCount,
+    events: [...clientEventRing],
+  };
 }
 
 function buildFetchCaptureContext(input: RequestInfo | URL, init?: RequestInit): Promise<DebugConsoleFetchCaptureContext | null> {
@@ -436,11 +472,92 @@ function buildFetchCaptureContext(input: RequestInfo | URL, init?: RequestInit):
   }));
 }
 
+function objectRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function booleanValue(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function base64ByteLength(value: unknown): number {
+  if (typeof value !== 'string') return 0;
+  const normalized = value.replace(/\s/gu, '');
+  if (!normalized) return 0;
+  const padding = normalized.endsWith('==') ? 2 : normalized.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((normalized.length * 3) / 4) - padding);
+}
+
+function projectTerminalInputRequest(payload: unknown): Record<string, unknown> {
+  return {
+    input_bytes: base64ByteLength(objectRecord(payload).data_b64),
+  };
+}
+
+function projectTerminalHistoryRequest(payload: unknown): Record<string, unknown> {
+  const record = objectRecord(payload);
+  return {
+    start_sequence: finiteNumber(record.start_seq),
+    end_sequence: finiteNumber(record.end_seq),
+    history_generation: finiteNumber(record.history_generation),
+    limit_chunks: finiteNumber(record.limit_chunks),
+    max_bytes: finiteNumber(record.max_bytes),
+  };
+}
+
+function projectTerminalHistoryResponse(response: unknown): Record<string, unknown> {
+  const record = objectRecord(response);
+  const chunks = Array.isArray(record.chunks) ? record.chunks : [];
+  return {
+    page_count: 1,
+    chunk_count: chunks.length,
+    next_start_sequence: finiteNumber(record.next_start_seq),
+    has_more: booleanValue(record.has_more),
+    first_sequence: finiteNumber(record.first_sequence),
+    last_sequence: finiteNumber(record.last_sequence),
+    covered_through_sequence: finiteNumber(record.covered_through_sequence),
+    snapshot_end_sequence: finiteNumber(record.snapshot_end_sequence),
+    first_retained_sequence: finiteNumber(record.first_retained_sequence),
+    history_generation: finiteNumber(record.history_generation),
+    history_reset: booleanValue(record.history_reset),
+    history_truncated: booleanValue(record.history_truncated),
+    covered_bytes: finiteNumber(record.covered_bytes),
+    total_bytes: finiteNumber(record.total_bytes),
+  };
+}
+
+function projectProtocolPayload(operation: string, direction: 'request' | 'response', value: unknown): unknown {
+  if (operation === 'terminal.input') {
+    return direction === 'request' ? projectTerminalInputRequest(value) : {};
+  }
+  if (operation === 'terminal.history') {
+    return direction === 'request'
+      ? projectTerminalHistoryRequest(value)
+      : projectTerminalHistoryResponse(value);
+  }
+  return sanitizeUnknown(value);
+}
+
+function terminalProtocolFailureMessage(operation: string): string | undefined {
+  if (operation === 'terminal.input') return 'Terminal input delivery failed';
+  if (operation === 'terminal.history') return 'Terminal history request failed';
+  return undefined;
+}
+
 function buildProtocolDetail(kind: 'call' | 'notify', typeID: number, payload: unknown, response: unknown, errorMessage?: string): DiagnosticsEvent {
   const operation = protocolOperationByTypeID.get(typeID) ?? `unknown.${typeID}`;
   const startedAtUnixMs = Date.now();
   const traceID = nextClientTraceID(kind === 'call' ? 'rpc' : 'notify');
   const hasError = compact(errorMessage).length > 0;
+  const failureMessage = hasError
+    ? terminalProtocolFailureMessage(operation) ?? compact(errorMessage)
+    : undefined;
   return {
     created_at: new Date(startedAtUnixMs).toISOString(),
     source: 'browser',
@@ -451,26 +568,32 @@ function buildProtocolDetail(kind: 'call' | 'notify', typeID: number, payload: u
     path: `rpc://redeven_v1/${operation}`,
     status_code: hasError ? 500 : 200,
     duration_ms: 0,
-    message: hasError ? compact(errorMessage) : `${kind === 'call' ? 'RPC call' : 'RPC notify'} completed`,
+    message: failureMessage ?? `${kind === 'call' ? 'RPC call' : 'RPC notify'} completed`,
     detail: {
       transport: kind === 'call' ? 'protocol_rpc' : 'protocol_notify',
       operation,
       type_id: typeID,
       request: {
-        payload: sanitizeUnknown(payload),
+        payload: projectProtocolPayload(operation, 'request', payload),
       },
       response: hasError
         ? {
-            error_message: compact(errorMessage),
+            error_message: failureMessage,
           }
         : {
-            payload: sanitizeUnknown(response),
+            payload: projectProtocolPayload(operation, 'response', response),
           },
     },
   };
 }
 
-export function subscribeDebugConsoleClientEvents(listener: DebugConsoleClientListener): () => void {
+export function subscribeDebugConsoleClientEvents(
+  listener: DebugConsoleClientListener,
+  options: DebugConsoleClientEventSubscriptionOptions = {},
+): () => void {
+  if (options.replayExisting !== false) {
+    for (const event of clientEventRing) listener(event);
+  }
   clientListeners.add(listener);
   return () => {
     clientListeners.delete(listener);
@@ -495,7 +618,7 @@ export function installDebugConsoleBrowserCapture(): void {
         void captureResponseBody(responseClone)
           .then((body) => {
             const traceID = compact(response.headers.get(TRACE_HEADER)) || nextClientTraceID('http');
-            publishEvent({
+            publishCapturedEvent({
               created_at: new Date().toISOString(),
               source: 'browser',
               scope: fetchScopeForPath(captureContext.url.pathname),
@@ -519,7 +642,7 @@ export function installDebugConsoleBrowserCapture(): void {
       return response;
     } catch (error) {
       if (captureContext) {
-        publishEvent({
+        publishCapturedEvent({
           created_at: new Date().toISOString(),
           source: 'browser',
           scope: fetchScopeForPath(captureContext.url.pathname),
@@ -558,7 +681,7 @@ export async function captureDebugConsoleProtocolCall<Req, Resp>(args: Readonly<
   try {
     const response = await args.execute();
     const event = buildProtocolDetail('call', args.typeID, args.payload, response);
-    publishEvent({
+    publishCapturedEvent({
       ...event,
       duration_ms: eventDurationMs(startedAtUnixMs),
       slow: eventDurationMs(startedAtUnixMs) >= 1000,
@@ -566,7 +689,7 @@ export async function captureDebugConsoleProtocolCall<Req, Resp>(args: Readonly<
     return response;
   } catch (error) {
     const event = buildProtocolDetail('call', args.typeID, args.payload, null, error instanceof Error ? error.message : String(error));
-    publishEvent({
+    publishCapturedEvent({
       ...event,
       duration_ms: eventDurationMs(startedAtUnixMs),
       slow: eventDurationMs(startedAtUnixMs) >= 1000,
@@ -588,14 +711,14 @@ export async function captureDebugConsoleProtocolNotify<Payload>(args: Readonly<
   try {
     await args.execute();
     const event = buildProtocolDetail('notify', args.typeID, args.payload, { delivered: true });
-    publishEvent({
+    publishCapturedEvent({
       ...event,
       duration_ms: eventDurationMs(startedAtUnixMs),
       slow: eventDurationMs(startedAtUnixMs) >= 1000,
     });
   } catch (error) {
     const event = buildProtocolDetail('notify', args.typeID, args.payload, null, error instanceof Error ? error.message : String(error));
-    publishEvent({
+    publishCapturedEvent({
       ...event,
       duration_ms: eventDurationMs(startedAtUnixMs),
       slow: eventDurationMs(startedAtUnixMs) >= 1000,
@@ -606,6 +729,8 @@ export async function captureDebugConsoleProtocolNotify<Payload>(args: Readonly<
 
 export function resetDebugConsoleCaptureForTests(): void {
   clientListeners.clear();
+  clientEventRing.length = 0;
+  clientEventDroppedCount = 0;
   captureEnabled = false;
   clientTraceSequence = 0;
   if (fetchPatched && originalFetch) {

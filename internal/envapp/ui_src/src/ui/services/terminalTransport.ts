@@ -7,6 +7,7 @@ import type {
 } from '@floegence/floeterm-terminal-web';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
+import { publishTerminalResizeDecision } from './terminalRecoveryDiagnostics';
 
 export function getOrCreateTerminalConnId(storageKey = 'redeven_terminal_conn_id'): string {
   const existing = sessionStorage.getItem(storageKey);
@@ -28,6 +29,12 @@ export type TerminalHistoryPage = Readonly<{
   hasMore: boolean;
   firstSequence: number;
   lastSequence: number;
+  coveredThroughSequence?: number;
+  snapshotEndSequence?: number;
+  firstRetainedSequence?: number;
+  historyGeneration?: number;
+  historyReset: boolean;
+  historyTruncated: boolean;
   coveredBytes: number;
   totalBytes: number;
 }>;
@@ -35,6 +42,8 @@ export type TerminalHistoryPage = Readonly<{
 export type TerminalHistoryPageOptions = Readonly<{
   limitChunks?: number;
   maxBytes?: number;
+  snapshotEndSequence?: number;
+  historyGeneration?: number;
 }>;
 
 export type RedevenTerminalTransport = TerminalTransport & {
@@ -70,6 +79,9 @@ type TerminalResizeDispatchState = {
 };
 
 type TerminalResizeSender = (sessionId: string, cols: number, rows: number) => Promise<void>;
+export type TerminalResizeDispatcher = TerminalResizeSender & {
+  markSent: (sessionId: string, cols: number, rows: number) => void;
+};
 
 function normalizeTerminalResizeDimensions(cols: number, rows: number): TerminalResizeDimensions | null {
   const normalizedCols = Math.floor(Number(cols));
@@ -100,7 +112,7 @@ function scheduleTerminalResizeFrame(callback: () => void): void {
   setTimeout(callback, 0);
 }
 
-export function createTerminalResizeDispatcher(sender: TerminalResizeSender): TerminalResizeSender {
+export function createTerminalResizeDispatcher(sender: TerminalResizeSender): TerminalResizeDispatcher {
   const states = new Map<string, TerminalResizeDispatchState>();
 
   const stateFor = (sessionId: string): TerminalResizeDispatchState => {
@@ -145,17 +157,21 @@ export function createTerminalResizeDispatcher(sender: TerminalResizeSender): Te
     state.pending = null;
 
     if (sameTerminalResizeDimensions(state.lastSent, pending)) {
+      publishTerminalResizeDecision(sessionId, 'no_op', pending.cols, pending.rows);
       settle(waiters);
       if (state.pending) schedule(sessionId, state);
       return;
     }
 
     state.inFlight = true;
+    publishTerminalResizeDecision(sessionId, 'requested', pending.cols, pending.rows);
     try {
       await sender(sessionId, pending.cols, pending.rows);
       state.lastSent = pending;
+      publishTerminalResizeDecision(sessionId, 'applied', pending.cols, pending.rows);
       settle(waiters);
     } catch (e) {
+      publishTerminalResizeDecision(sessionId, 'failed', pending.cols, pending.rows);
       settle(waiters, e);
     } finally {
       state.inFlight = false;
@@ -163,13 +179,14 @@ export function createTerminalResizeDispatcher(sender: TerminalResizeSender): Te
     }
   }
 
-  return (sessionId, cols, rows) => {
+  const dispatch: TerminalResizeDispatcher = (sessionId, cols, rows) => {
     const normalizedSessionId = String(sessionId ?? '').trim();
     const dimensions = normalizeTerminalResizeDimensions(cols, rows);
     if (!normalizedSessionId || !dimensions) return Promise.resolve();
 
     const state = stateFor(normalizedSessionId);
     if (!state.pending && !state.inFlight && sameTerminalResizeDimensions(state.lastSent, dimensions)) {
+      publishTerminalResizeDecision(normalizedSessionId, 'no_op', dimensions.cols, dimensions.rows);
       return Promise.resolve();
     }
 
@@ -180,6 +197,13 @@ export function createTerminalResizeDispatcher(sender: TerminalResizeSender): Te
     schedule(normalizedSessionId, state);
     return promise;
   };
+  dispatch.markSent = (sessionId, cols, rows) => {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    const dimensions = normalizeTerminalResizeDimensions(cols, rows);
+    if (!normalizedSessionId || !dimensions) return;
+    stateFor(normalizedSessionId).lastSent = dimensions;
+  };
+  return dispatch;
 }
 
 function terminalTransportErrorText(e: unknown): string {
@@ -255,25 +279,32 @@ export function createRedevenTerminalTransport(rpc: RedevenV1Rpc, connId: string
   ): Promise<TerminalHistoryPage> => {
     const limitChunks = normalizePositiveInteger(options?.limitChunks, TERMINAL_HISTORY_PAGE_LIMIT_CHUNKS);
     const maxBytes = normalizePositiveInteger(options?.maxBytes, TERMINAL_HISTORY_PAGE_MAX_BYTES);
-    const resp = await rpc.terminal.history({ sessionId, startSeq, endSeq, limitChunks, maxBytes });
+    const resp = await rpc.terminal.history({
+      sessionId,
+      startSeq,
+      endSeq: options?.snapshotEndSequence ?? endSeq,
+      historyGeneration: options?.historyGeneration,
+      limitChunks,
+      maxBytes,
+    });
     const chunks: TerminalDataChunk[] = Array.isArray(resp?.chunks) ? resp.chunks : [];
     const firstSequence = Number(resp?.firstSequence ?? 0);
     const lastSequence = Number(resp?.lastSequence ?? 0);
     const hasMore = Boolean(resp?.hasMore ?? false);
-    const fallbackNextStartSeq = lastSequence > 0
-      ? lastSequence + 1
-      : (chunks[chunks.length - 1]?.sequence ?? 0) + 1;
     const nextStartSeq = Number(resp?.nextStartSeq ?? 0);
-    const normalizedNextStartSeq = Number.isFinite(nextStartSeq) && nextStartSeq > startSeq
-      ? nextStartSeq
-      : fallbackNextStartSeq;
 
     return {
       chunks,
-      nextStartSeq: normalizedNextStartSeq,
-      hasMore: hasMore && normalizedNextStartSeq > startSeq,
+      nextStartSeq,
+      hasMore,
       firstSequence,
       lastSequence,
+      coveredThroughSequence: resp?.coveredThroughSequence,
+      snapshotEndSequence: resp?.snapshotEndSequence,
+      firstRetainedSequence: resp?.firstRetainedSequence,
+      historyGeneration: resp?.historyGeneration,
+      historyReset: Boolean(resp?.historyReset ?? false),
+      historyTruncated: Boolean(resp?.historyTruncated ?? false),
       coveredBytes: Number(resp?.coveredBytes ?? 0),
       totalBytes: Number(resp?.totalBytes ?? 0),
     };
@@ -282,6 +313,7 @@ export function createRedevenTerminalTransport(rpc: RedevenV1Rpc, connId: string
   return {
     attach: async (sessionId, cols, rows) => {
       await rpc.terminal.attach({ sessionId, connId, cols, rows });
+      dispatchResize.markSent(sessionId, cols, rows);
     },
     resize: async (sessionId, cols, rows) => {
       try {
@@ -315,6 +347,9 @@ export function createRedevenTerminalTransport(rpc: RedevenV1Rpc, connId: string
         const page = await requestHistoryPage(sessionId, cursor, endSeq);
         chunks.push(...page.chunks);
         if (!page.hasMore) return chunks;
+        if (!Number.isSafeInteger(page.nextStartSeq) || page.nextStartSeq <= cursor) {
+          throw new Error('terminal history pagination returned an invalid cursor');
+        }
         if (endSeq > 0 && page.nextStartSeq > endSeq) return chunks;
         cursor = page.nextStartSeq;
       }

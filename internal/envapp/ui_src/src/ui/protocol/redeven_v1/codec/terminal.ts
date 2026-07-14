@@ -55,6 +55,13 @@ function positiveInteger(value: unknown): number | undefined {
   return Math.floor(value);
 }
 
+function optionalHistorySequence(resp: object, field: string): number | undefined {
+  if (!Object.prototype.hasOwnProperty.call(resp, field)) return undefined;
+  const value = (resp as Record<string, unknown>)[field];
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) return Number.NaN;
+  return value;
+}
+
 export function toWireTerminalSessionCreateRequest(req: TerminalSessionCreateRequest): wire_terminal_session_create_req {
   return {
     name: req.name?.trim() ? req.name.trim() : undefined,
@@ -89,6 +96,7 @@ export function toWireTerminalHistoryRequest(req: TerminalHistoryRequest): wire_
     session_id: req.sessionId,
     start_seq: req.startSeq,
     end_seq: req.endSeq,
+    history_generation: positiveInteger(req.historyGeneration),
     limit_chunks: positiveInteger(req.limitChunks),
     max_bytes: positiveInteger(req.maxBytes),
   };
@@ -108,6 +116,12 @@ export function fromWireTerminalHistoryResponse(resp: wire_terminal_history_resp
     hasMore: Boolean(resp?.has_more ?? false),
     firstSequence: Number(resp?.first_sequence ?? 0),
     lastSequence: Number(resp?.last_sequence ?? 0),
+    coveredThroughSequence: optionalHistorySequence(resp, 'covered_through_sequence'),
+    snapshotEndSequence: optionalHistorySequence(resp, 'snapshot_end_sequence'),
+    firstRetainedSequence: optionalHistorySequence(resp, 'first_retained_sequence'),
+    historyGeneration: optionalHistorySequence(resp, 'history_generation'),
+    historyReset: Boolean(resp?.history_reset ?? false),
+    historyTruncated: Boolean(resp?.history_truncated ?? false),
     coveredBytes: Number(resp?.covered_bytes ?? 0),
     totalBytes: Number(resp?.total_bytes ?? 0),
   };

@@ -285,6 +285,9 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 		if sessionID == "" {
 			return nil, &rpc.Error{Code: 400, Message: "session_id is required"}
 		}
+		if req.HistoryGeneration < 0 {
+			return nil, &rpc.Error{Code: 400, Message: "history_generation must be non-negative"}
+		}
 
 		if !m.sessionAvailableForInteraction(sessionID) {
 			return nil, &rpc.Error{Code: 404, Message: "terminal session not found"}
@@ -918,11 +921,12 @@ type terminalSessionsChangedPayload struct {
 }
 
 type terminalHistoryReq struct {
-	SessionID   string `json:"session_id"`
-	StartSeq    int64  `json:"start_seq"`
-	EndSeq      int64  `json:"end_seq"`
-	LimitChunks int    `json:"limit_chunks,omitempty"`
-	MaxBytes    int    `json:"max_bytes,omitempty"`
+	SessionID         string `json:"session_id"`
+	StartSeq          int64  `json:"start_seq"`
+	EndSeq            int64  `json:"end_seq"`
+	HistoryGeneration int64  `json:"history_generation,omitempty"`
+	LimitChunks       int    `json:"limit_chunks,omitempty"`
+	MaxBytes          int    `json:"max_bytes,omitempty"`
 }
 
 type terminalHistoryChunk struct {
@@ -932,13 +936,19 @@ type terminalHistoryChunk struct {
 }
 
 type terminalHistoryResp struct {
-	Chunks        []terminalHistoryChunk `json:"chunks"`
-	NextStartSeq  int64                  `json:"next_start_seq,omitempty"`
-	HasMore       bool                   `json:"has_more,omitempty"`
-	FirstSequence int64                  `json:"first_sequence,omitempty"`
-	LastSequence  int64                  `json:"last_sequence,omitempty"`
-	CoveredBytes  int64                  `json:"covered_bytes,omitempty"`
-	TotalBytes    int64                  `json:"total_bytes,omitempty"`
+	Chunks                 []terminalHistoryChunk `json:"chunks"`
+	NextStartSeq           int64                  `json:"next_start_seq,omitempty"`
+	HasMore                bool                   `json:"has_more,omitempty"`
+	FirstSequence          int64                  `json:"first_sequence,omitempty"`
+	LastSequence           int64                  `json:"last_sequence,omitempty"`
+	FirstRetainedSequence  int64                  `json:"first_retained_sequence"`
+	CoveredThroughSequence int64                  `json:"covered_through_sequence"`
+	SnapshotEndSequence    int64                  `json:"snapshot_end_sequence"`
+	HistoryGeneration      int64                  `json:"history_generation"`
+	HistoryReset           bool                   `json:"history_reset"`
+	HistoryTruncated       bool                   `json:"history_truncated"`
+	CoveredBytes           int64                  `json:"covered_bytes,omitempty"`
+	TotalBytes             int64                  `json:"total_bytes,omitempty"`
 }
 
 func normalizeTerminalHistoryPageOptions(req *terminalHistoryReq) termgo.HistoryPageOptions {
@@ -966,10 +976,11 @@ func normalizeTerminalHistoryPageOptions(req *terminalHistoryReq) termgo.History
 	}
 
 	return termgo.HistoryPageOptions{
-		StartSeq:    req.StartSeq,
-		EndSeq:      req.EndSeq,
-		LimitChunks: limitChunks,
-		MaxBytes:    maxBytes,
+		StartSeq:          req.StartSeq,
+		EndSeq:            req.EndSeq,
+		HistoryGeneration: req.HistoryGeneration,
+		LimitChunks:       limitChunks,
+		MaxBytes:          maxBytes,
 	}
 }
 
@@ -984,13 +995,19 @@ func terminalHistoryRespFromPage(page termgo.HistoryPage) *terminalHistoryResp {
 	}
 
 	return &terminalHistoryResp{
-		Chunks:        out,
-		NextStartSeq:  page.NextStartSeq,
-		HasMore:       page.HasMore,
-		FirstSequence: page.FirstSequence,
-		LastSequence:  page.LastSequence,
-		CoveredBytes:  page.CoveredBytes,
-		TotalBytes:    page.TotalBytes,
+		Chunks:                 out,
+		NextStartSeq:           page.NextStartSeq,
+		HasMore:                page.HasMore,
+		FirstSequence:          page.FirstSequence,
+		LastSequence:           page.LastSequence,
+		FirstRetainedSequence:  page.FirstRetainedSequence,
+		CoveredThroughSequence: page.CoveredThroughSequence,
+		SnapshotEndSequence:    page.SnapshotEndSequence,
+		HistoryGeneration:      page.HistoryGeneration,
+		HistoryReset:           page.HistoryReset,
+		HistoryTruncated:       page.HistoryTruncated,
+		CoveredBytes:           page.CoveredBytes,
+		TotalBytes:             page.TotalBytes,
 	}
 }
 

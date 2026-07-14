@@ -229,8 +229,15 @@ function eventTitle(event: DiagnosticsEvent): string {
   return [method, path || kind || scope].filter(Boolean).join(' ');
 }
 
-function queryIncludes(haystack: string, needle: string): boolean {
-  return haystack.toLowerCase().includes(needle.toLowerCase());
+function queryTerms(query: string): string[] {
+  return compact(query).toLowerCase().split(/\s+/u).filter(Boolean);
+}
+
+function queryMatchesFields(query: string, fields: readonly string[]): boolean {
+  const terms = queryTerms(query);
+  if (terms.length === 0) return true;
+  const haystack = fields.join('\n').toLowerCase();
+  return terms.every((term) => haystack.includes(term));
 }
 
 function eventMatchesQuery(event: DiagnosticsEvent, query: string): boolean {
@@ -238,27 +245,28 @@ function eventMatchesQuery(event: DiagnosticsEvent, query: string): boolean {
     return true;
   }
   const detail = event.detail ? prettyJSON(event.detail) : '';
-  return [
+  return queryMatchesFields(query, [
     eventTitle(event),
     compact(event.source),
     compact(event.scope),
     compact(event.message),
     compact(event.trace_id),
     detail,
-  ].some((value) => queryIncludes(value, query));
+  ]);
 }
 
 function traceMatchesQuery(trace: DebugConsoleTrace, query: string): boolean {
   if (!query) {
     return true;
   }
-  return [
+  return queryMatchesFields(query, [
     trace.title,
     compact(trace.trace_id),
     trace.scopes.join(' '),
     trace.sources.join(' '),
     ...trace.events.map((event) => compact(event.message)),
-  ].some((value) => queryIncludes(value, query));
+    ...trace.events.map((event) => event.detail ? prettyJSON(event.detail) : ''),
+  ]);
 }
 
 function tabButtonClass(active: boolean): string {
@@ -641,6 +649,13 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
       surface: 'debug-console',
       source: 'tab',
     }),
+  });
+
+  createEffect(() => {
+    const request = props.controller.openRequest();
+    if (request.sequence <= 0 || !compact(request.query)) return;
+    setQuery(request.query ?? '');
+    setTab('traces');
   });
 
   const filteredEvents = createMemo(() => {

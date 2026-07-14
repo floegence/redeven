@@ -288,7 +288,11 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     getDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
     startHistoryReplay = vi.fn();
     endHistoryReplay = vi.fn();
-    write = vi.fn();
+    write = vi.fn((_data: Uint8Array, callback?: () => void) => callback?.());
+    writeHistory = vi.fn((data: Uint8Array, callback?: () => void) => {
+      this.write(data);
+      callback?.();
+    });
     focus = vi.fn();
     setFontSize = vi.fn();
     setFontFamily = vi.fn();
@@ -473,6 +477,26 @@ function decodeTerminalWrite(value: unknown): string {
   return value instanceof Uint8Array ? textDecoder.decode(value) : '';
 }
 
+function withHistoryContract<T extends Record<string, unknown>>(pageValue: T): T & {
+  coveredThroughSequence: number;
+  snapshotEndSequence: number;
+  firstRetainedSequence: number;
+  historyGeneration: number;
+  historyReset: boolean;
+  historyTruncated: boolean;
+} {
+  const lastSequence = Number(pageValue.lastSequence ?? 0);
+  return {
+    coveredThroughSequence: lastSequence,
+    snapshotEndSequence: lastSequence,
+    firstRetainedSequence: Number(pageValue.firstSequence ?? 0),
+    historyGeneration: 1,
+    historyReset: false,
+    historyTruncated: false,
+    ...pageValue,
+  };
+}
+
 function findTerminalTab(host: HTMLElement, label: string): HTMLElement | undefined {
   return Array.from(host.querySelectorAll<HTMLElement>('button[data-terminal-session-id]')).find((button) => button.textContent?.includes(label));
 }
@@ -512,7 +536,7 @@ beforeEach(() => {
   ];
   terminalSessionsState.subscribers = [];
   Object.values(transportMocks).forEach((mock) => mock.mockClear());
-  transportMocks.historyPage.mockResolvedValue({
+  transportMocks.historyPage.mockResolvedValue(withHistoryContract({
     chunks: [],
     nextStartSeq: 0,
     hasMore: false,
@@ -520,7 +544,7 @@ beforeEach(() => {
     lastSequence: 0,
     coveredBytes: 0,
     totalBytes: 0,
-  });
+  }));
   Object.values(rpcFsMocks).forEach((mock) => mock.mockClear());
   rpcFsMocks.getPathContext.mockResolvedValue({ agentHomePathAbs: '/workspace' });
   rpcFsMocks.list.mockResolvedValue({ entries: [] });
@@ -534,7 +558,7 @@ afterEach(() => {
 describe('TerminalPanel browser activity integration', () => {
   it('continues after sparse initial history without requesting a duplicate catchup', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
-    transportMocks.historyPage.mockResolvedValue({
+    transportMocks.historyPage.mockResolvedValue(withHistoryContract({
       chunks: [
         { sequence: 2, timestampMs: 10, data: textEncoder.encode('history-a ') },
         { sequence: 4, timestampMs: 20, data: textEncoder.encode('history-b') },
@@ -545,7 +569,7 @@ describe('TerminalPanel browser activity integration', () => {
       lastSequence: 4,
       coveredBytes: 19,
       totalBytes: 19,
-    });
+    }));
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -598,7 +622,7 @@ describe('TerminalPanel browser activity integration', () => {
     });
     emitTerminalData('session-1', 'duplicate-four', 4);
     emitTerminalData('session-1', 'fresh-five', 5);
-    releaseHistoryPage({
+    releaseHistoryPage(withHistoryContract({
       chunks: [
         { sequence: 2, timestampMs: 10, data: textEncoder.encode('history-two ') },
         { sequence: 4, timestampMs: 20, data: textEncoder.encode('duplicate-four') },
@@ -609,7 +633,7 @@ describe('TerminalPanel browser activity integration', () => {
       lastSequence: 4,
       coveredBytes: 26,
       totalBytes: 26,
-    });
+    }));
     await settleTerminalPanel();
     await vi.waitFor(() => {
       expect(terminalCoreState.instances[0]?.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toContain(
@@ -643,7 +667,7 @@ describe('TerminalPanel browser activity integration', () => {
     const core = terminalCoreState.instances[0];
     emitTerminalData('session-1', 'live-five', 5);
     emitTerminalData('session-1', 'covered-live-six', 6);
-    releaseHistoryPage({
+    releaseHistoryPage(withHistoryContract({
       chunks: [
         { sequence: 2, timestampMs: 10, data: textEncoder.encode('history-two ') },
         { sequence: 6, timestampMs: 20, data: textEncoder.encode('history-six') },
@@ -654,7 +678,7 @@ describe('TerminalPanel browser activity integration', () => {
       lastSequence: 6,
       coveredBytes: 23,
       totalBytes: 23,
-    });
+    }));
 
     await settleTerminalPanel();
     await vi.waitFor(() => {
@@ -667,17 +691,15 @@ describe('TerminalPanel browser activity integration', () => {
     });
 
     expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
-    expect(core?.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual([
-      'history-two history-six',
-      'live-five',
-      'live-seven',
-    ]);
+    expect(core?.write.mock.calls.map((call) => decodeTerminalWrite(call[0])).join('')).toBe(
+      'history-two live-fivehistory-sixlive-seven',
+    );
   });
 
   it('resumes gap-triggering live output when catchup history remains sparse', async () => {
     terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
     transportMocks.historyPage
-      .mockResolvedValueOnce({
+      .mockResolvedValueOnce(withHistoryContract({
         chunks: [
           { sequence: 1, timestampMs: 5, data: textEncoder.encode('initial ') },
         ],
@@ -687,8 +709,8 @@ describe('TerminalPanel browser activity integration', () => {
         lastSequence: 1,
         coveredBytes: 8,
         totalBytes: 8,
-      })
-      .mockResolvedValue({
+      }))
+      .mockResolvedValue(withHistoryContract({
         chunks: [
           { sequence: 2, timestampMs: 10, data: textEncoder.encode('missing') },
         ],
@@ -698,7 +720,7 @@ describe('TerminalPanel browser activity integration', () => {
         lastSequence: 4,
         coveredBytes: 7,
         totalBytes: 7,
-      });
+      }));
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -736,7 +758,7 @@ describe('TerminalPanel browser activity integration', () => {
       releaseCatchupPage = resolve;
     });
     transportMocks.historyPage
-      .mockResolvedValueOnce({
+      .mockResolvedValueOnce(withHistoryContract({
         chunks: [
           { sequence: 1, timestampMs: 5, data: textEncoder.encode('initial ') },
         ],
@@ -746,7 +768,7 @@ describe('TerminalPanel browser activity integration', () => {
         lastSequence: 1,
         coveredBytes: 8,
         totalBytes: 8,
-      })
+      }))
       .mockReturnValueOnce(catchupPage);
 
     const host = document.createElement('div');
@@ -765,7 +787,7 @@ describe('TerminalPanel browser activity integration', () => {
     });
 
     emitTerminalData('session-1', 'covered-live-six', 6);
-    releaseCatchupPage({
+    releaseCatchupPage(withHistoryContract({
       chunks: [
         { sequence: 2, timestampMs: 10, data: textEncoder.encode('history-two ') },
         { sequence: 6, timestampMs: 20, data: textEncoder.encode('history-six') },
@@ -776,18 +798,16 @@ describe('TerminalPanel browser activity integration', () => {
       lastSequence: 6,
       coveredBytes: 23,
       totalBytes: 23,
-    });
+    }));
     await settleTerminalPanel();
 
     emitTerminalData('session-1', 'live-seven', 7);
     await settleTerminalPanel();
 
     expect(transportMocks.historyPage).toHaveBeenCalledTimes(2);
-    expect(core?.write.mock.calls.map((call) => decodeTerminalWrite(call[0]))).toEqual([
-      'history-two history-six',
-      'live-five',
-      'live-seven',
-    ]);
+    expect(core?.write.mock.calls.map((call) => decodeTerminalWrite(call[0])).join('')).toBe(
+      'history-two live-fivehistory-sixlive-seven',
+    );
   });
 
   it('resets the real activity pipeline after clear before accepting a continued sequence', async () => {

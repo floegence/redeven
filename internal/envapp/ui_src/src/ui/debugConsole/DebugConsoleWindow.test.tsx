@@ -163,6 +163,7 @@ function createController(overrides: Record<string, unknown> = {}) {
     enabled: () => true,
     open: () => true,
     minimized: () => false,
+    openRequest: () => ({ sequence: 0 }),
     show: vi.fn(),
     restore: vi.fn(),
     minimize: vi.fn(),
@@ -209,6 +210,11 @@ function createController(overrides: Record<string, unknown> = {}) {
         },
         agent_events: [],
         desktop_events: [],
+      },
+      client_events: [],
+      client_event_ring: {
+        capacity: 160,
+        dropped_count: 0,
       },
       ui_performance: {
         collecting: true,
@@ -299,6 +305,56 @@ describe('DebugConsoleWindow', () => {
     await flushSelectionTransaction();
 
     expect(host.textContent).toContain('渲染器探针');
+  });
+
+  it('opens a terminal recovery deep link in traces and matches query tokens across fields', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const terminalEvent = {
+      created_at: '2026-03-27T10:00:04Z',
+      source: 'ui',
+      scope: 'terminal_recovery',
+      kind: 'degraded',
+      trace_id: 'terminal-recovery-terminal-007-3',
+      message: 'Terminal recovery degraded',
+      detail: {
+        schema_version: 1,
+        session_ref: 'terminal-007',
+        surface_generation: 3,
+        error_code: 'history_fetch_failed',
+      },
+    };
+    const [openRequest] = createSignal({
+      sequence: 1,
+      query: 'terminal-007 3 history_fetch_failed',
+    });
+    const { controller } = createController({
+      openRequest,
+      serverEvents: () => [terminalEvent],
+      traces: () => [{
+        key: terminalEvent.trace_id,
+        trace_id: terminalEvent.trace_id,
+        title: 'terminal recovery',
+        max_duration_ms: 20,
+        total_duration_ms: 20,
+        slow: false,
+        first_seen_at: terminalEvent.created_at,
+        last_seen_at: terminalEvent.created_at,
+        scopes: ['terminal_recovery'],
+        sources: ['ui'],
+        events: [terminalEvent],
+      }],
+    });
+
+    render(() => <DebugConsoleWindow controller={controller} />, host);
+    await Promise.resolve();
+
+    const tracesTab = [...host.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((candidate) => candidate.textContent?.includes('Traces'));
+    expect(tracesTab?.getAttribute('aria-selected')).toBe('true');
+    expect((host.querySelector('input[aria-label="Search diagnostics"]') as HTMLInputElement | null)?.value).toBe(
+      'terminal-007 3 history_fetch_failed',
+    );
+    expect(host.textContent).toContain('terminal-recovery-terminal-007-3');
   });
 
   it('invokes clear from the header action', () => {

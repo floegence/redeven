@@ -842,9 +842,9 @@ export function EnvAppShell() {
     }
   };
 
-  const openDebugConsole = () => {
+  const openDebugConsole = (options?: { query?: string }) => {
     setDebugConsoleMountRequested(true);
-    debugConsole.show();
+    debugConsole.show(options);
   };
 
   const [pluginInventoryProjection, { refetch: refetchPluginInventory }] = createResource(

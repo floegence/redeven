@@ -100,6 +100,36 @@ describe('createTerminalTabActivityTracker', () => {
     tracker.dispose();
   });
 
+  it('shows pending background output as running until ordered output commits', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+      outputActivityQuietMs: 25,
+    });
+
+    tracker.handlePendingLiveOutput('session-1', true);
+    expect(published).toEqual(['running']);
+
+    tracker.handleVisibleOutput('session-1', { source: 'live', byteLength: 8, shouldMarkUnread: true });
+    expect(published).toEqual(['running', 'unread']);
+
+    tracker.dispose();
+  });
+
+  it('falls back from pending background output to unread after the quiet window', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+      outputActivityQuietMs: 25,
+    });
+
+    tracker.handlePendingLiveOutput('session-1', true);
+    vi.advanceTimersByTime(25);
+
+    expect(published).toEqual(['running', 'unread']);
+    tracker.dispose();
+  });
+
   it('keeps explicit busy activity authoritative and falls back to unread on idle', () => {
     const published: string[] = [];
     const tracker = createTerminalTabActivityTracker({

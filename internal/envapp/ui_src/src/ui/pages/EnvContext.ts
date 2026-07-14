@@ -119,7 +119,7 @@ export type EnvContextValue = {
   returnFromSettingsOrigin: () => void;
   debugConsoleEnabled: () => boolean;
   setDebugConsoleEnabled: (enabled: boolean) => void;
-  openDebugConsole: () => void;
+  openDebugConsole: (options?: { query?: string }) => void;
   settingsFocusSeq: () => number;
   settingsFocusSection: () => EnvSettingsSection | null;
 

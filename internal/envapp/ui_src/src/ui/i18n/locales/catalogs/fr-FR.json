@@ -2271,7 +2271,12 @@
       "localFontDescription": "Choisissez la famille de polices du terminal et ajustez la taille de police globale.",
       "fontSize": "Taille de police",
       "fontSizeDescription": "Utilisez une taille lisible qui conserve suffisamment d'historique du terminal à l'écran. Commande"
-    }
+    },
+    "retryingOlderOutput": "Synchronisation de la sortie précédente...",
+    "olderOutputUnavailable": "Une partie de la sortie précédente n’a pas pu être restaurée.",
+    "terminalUnavailable": "Ce terminal n’a pas pu être restauré.",
+    "outputSynchronized": "La sortie du terminal est synchronisée.",
+    "viewDiagnostics": "Diagnostic"
   },
   "shellBlock": {
     "command": "Commande",

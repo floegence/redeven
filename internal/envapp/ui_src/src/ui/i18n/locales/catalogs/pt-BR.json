@@ -2271,7 +2271,12 @@
       "localFontDescription": "Escolha a família de fontes do terminal e ajuste o tamanho da fonte global.",
       "fontSize": "Tamanho da fonte",
       "fontSizeDescription": "Use um tamanho legível que ainda mantenha histórico de terminal suficiente na tela."
-    }
+    },
+    "retryingOlderOutput": "Sincronizando a saída anterior...",
+    "olderOutputUnavailable": "Não foi possível restaurar parte da saída anterior.",
+    "terminalUnavailable": "Não foi possível restaurar este terminal.",
+    "outputSynchronized": "A saída do terminal está sincronizada.",
+    "viewDiagnostics": "Diagnóstico"
   },
   "shellBlock": {
     "command": "Comando",

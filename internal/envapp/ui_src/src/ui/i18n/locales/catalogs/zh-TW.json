@@ -2271,7 +2271,12 @@
       "localFontDescription": "選擇終端字體族並調整全域字號。",
       "fontSize": "號碼",
       "fontSizeDescription": "使用可讀字號，同時在螢幕上保留足夠的終端歷史。"
-    }
+    },
+    "retryingOlderOutput": "正在同步較早的輸出...",
+    "olderOutputUnavailable": "部分較早的輸出暫未恢復。",
+    "terminalUnavailable": "無法恢復此終端。",
+    "outputSynchronized": "終端輸出已同步。",
+    "viewDiagnostics": "查看診斷"
   },
   "shellBlock": {
     "command": "命令",
