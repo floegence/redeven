@@ -270,6 +270,17 @@
       "downloads": "Téléchargements",
       "toggleTheme": "Changer de thème"
     },
+    "framework": {
+      "searchCommands": "Rechercher des commandes...",
+      "noMatchingCommands": "Aucune commande correspondante",
+      "escape": "Esc",
+      "cancel": "Annuler",
+      "confirm": "Confirmer",
+      "connected": "Connecté",
+      "disconnected": "Déconnecté",
+      "connecting": "Connexion...",
+      "error": "Erreur"
+    },
     "status": {
       "localRuntime": "Exécution locale",
       "environment": "Environnement",

@@ -613,6 +613,17 @@ export const enUS = defineDictionary({
       downloads: 'Downloads',
       toggleTheme: 'Toggle theme',
     },
+    framework: {
+      searchCommands: 'Search commands...',
+      noMatchingCommands: 'No matching commands',
+      escape: 'Esc',
+      cancel: 'Cancel',
+      confirm: 'Confirm',
+      connected: 'Connected',
+      disconnected: 'Disconnected',
+      connecting: 'Connecting',
+      error: 'Error',
+    },
     status: {
       localRuntime: 'Local runtime',
       environment: 'Environment',

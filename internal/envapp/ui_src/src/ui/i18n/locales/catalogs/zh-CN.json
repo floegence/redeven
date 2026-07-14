@@ -270,6 +270,17 @@
       "downloads": "下载",
       "toggleTheme": "切换主题"
     },
+    "framework": {
+      "searchCommands": "搜索命令...",
+      "noMatchingCommands": "没有匹配的命令",
+      "escape": "Esc",
+      "cancel": "取消",
+      "confirm": "确认",
+      "connected": "已连接",
+      "disconnected": "未连接",
+      "connecting": "正在连接",
+      "error": "错误"
+    },
     "status": {
       "localRuntime": "本地运行时",
       "environment": "环境",

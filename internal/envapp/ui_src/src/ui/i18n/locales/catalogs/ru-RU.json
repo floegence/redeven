@@ -270,6 +270,17 @@
       "downloads": "Загрузки",
       "toggleTheme": "Переключить тему"
     },
+    "framework": {
+      "searchCommands": "Поиск команд...",
+      "noMatchingCommands": "Подходящих команд нет",
+      "escape": "Esc",
+      "cancel": "Отмена",
+      "confirm": "Подтвердить",
+      "connected": "Подключено",
+      "disconnected": "Отключено",
+      "connecting": "Подключение...",
+      "error": "Ошибка"
+    },
     "status": {
       "localRuntime": "Локальная среда выполнения",
       "environment": "Среда",
