@@ -35,9 +35,11 @@ describe('terminal output projection with the published coordinator', () => {
       resolveObsolete = resolve;
     });
     const shellEvents: string[] = [];
+    const committedChunks: string[] = [];
     const writes: string[] = [];
     const transformedSequences: number[] = [];
     const projection = createTerminalOutputProjection({
+      onChunkCommitted: (source, sequence) => committedChunks.push(`${source}:${sequence}`),
       onShellIntegrationEvent: (event) => {
         if (event.kind === 'cwd-update') shellEvents.push(event.workingDir);
       },
@@ -70,6 +72,7 @@ describe('terminal output projection with the published coordinator', () => {
     await firstAttach;
 
     expect(transformedSequences).toEqual([2]);
+    expect(committedChunks).toEqual(['history:2']);
     expect(shellEvents).toEqual(['/current']);
     expect(writes).toEqual(['current']);
     coordinator.dispose();
@@ -223,6 +226,55 @@ describe('terminal output projection with the published coordinator', () => {
     await vi.waitFor(() => expect(writes).toEqual(['one', 'two']));
 
     expect(transformedSequences).toEqual([1, 2]);
+    coordinator.dispose();
+  });
+
+  it('stops multi-batch history recovery after the committed writer when paused', async () => {
+    let completeFirstWrite: (() => void) | undefined;
+    const firstWriteCompletion = new Promise<void>((resolve) => {
+      completeFirstWrite = resolve;
+    });
+    const writes: string[] = [];
+    const transformedSequences: number[] = [];
+    const projection = createTerminalOutputProjection({});
+    const coordinator = createPagedTerminalOutputCoordinator({
+      fetchPage: async () => page({
+        chunks: [chunk(1, 'one'), chunk(2, 'two')],
+        coveredThroughSequence: 2,
+      }),
+      transformChunk: (item) => {
+        transformedSequences.push(item.sequence ?? 0);
+        return projection.transformChunk(item);
+      },
+      write: () => {},
+      writeHistory: async (data) => {
+        writes.push(decoder.decode(data));
+        if (writes.length === 1) await firstWriteCompletion;
+      },
+      clear: projection.reset,
+      policy: { maxWriteBatchBytes: 3 },
+    });
+
+    void coordinator.attach(1);
+    await vi.waitFor(() => expect(writes).toEqual(['one']));
+    const pause = coordinator.pause();
+    await Promise.resolve();
+    expect(coordinator.getSnapshot().active).toBe(false);
+
+    completeFirstWrite?.();
+    await expect(pause).resolves.toMatchObject({
+      active: false,
+      coveredThroughSequence: 1,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(transformedSequences).toEqual([1]);
+    expect(writes).toEqual(['one']);
+
+    coordinator.setActive(true);
+    await vi.waitFor(() => expect(writes).toEqual(['one', 'two']));
+    expect(transformedSequences).toEqual([1, 2]);
+    expect(coordinator.getSnapshot().coveredThroughSequence).toBe(2);
     coordinator.dispose();
   });
 });

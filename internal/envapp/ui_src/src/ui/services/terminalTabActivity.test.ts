@@ -107,9 +107,10 @@ describe('createTerminalTabActivityTracker', () => {
       outputActivityQuietMs: 25,
     });
 
-    tracker.handlePendingLiveOutput('session-1', true);
+    tracker.handlePendingLiveOutput('session-1', { sequence: 4, shouldMarkUnread: true });
     expect(published).toEqual(['running']);
 
+    tracker.handleOutputCommitted('session-1', { source: 'live', sequence: 4 });
     tracker.handleVisibleOutput('session-1', { source: 'live', byteLength: 8, shouldMarkUnread: true });
     expect(published).toEqual(['running', 'unread']);
 
@@ -123,10 +124,27 @@ describe('createTerminalTabActivityTracker', () => {
       outputActivityQuietMs: 25,
     });
 
-    tracker.handlePendingLiveOutput('session-1', true);
+    tracker.handlePendingLiveOutput('session-1', { sequence: 4, shouldMarkUnread: true });
     vi.advanceTimersByTime(25);
 
     expect(published).toEqual(['running', 'unread']);
+    tracker.dispose();
+  });
+
+  it('removes provisional unread state when retained history wins the same sequence', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+      outputActivityQuietMs: 25,
+    });
+
+    tracker.handlePendingLiveOutput('session-1', { sequence: 4, shouldMarkUnread: true });
+    vi.advanceTimersByTime(25);
+    expect(published).toEqual(['running', 'unread']);
+
+    tracker.handleOutputCommitted('session-1', { source: 'history', sequence: 4 });
+    expect(published).toEqual(['running', 'unread', 'none']);
+
     tracker.dispose();
   });
 

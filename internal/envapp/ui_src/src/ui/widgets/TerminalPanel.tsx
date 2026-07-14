@@ -1655,7 +1655,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   };
 
-  const handleVisibleOutput = (sessionId: string, source: 'history' | 'live', byteLength: number) => {
+  const handleOutputCommitted = (
+    sessionId: string,
+    source: 'history' | 'live',
+    sequence: number | undefined,
+  ) => {
+    tabActivityTracker.handleOutputCommitted(sessionId, { source, sequence });
+  };
+
+  const handleVisibleOutput = (
+    sessionId: string,
+    source: 'history' | 'live',
+    byteLength: number,
+  ) => {
     tabActivityTracker.handleVisibleOutput(sessionId, {
       source,
       byteLength,
@@ -1664,9 +1676,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (source === 'live') terminalWorkingSet.evaluate();
   };
 
-  const handleLiveOutputObserved = (sessionId: string, byteLength: number) => {
+  const handleLiveOutputObserved = (
+    sessionId: string,
+    byteLength: number,
+    sequence: number | undefined,
+  ) => {
     if (byteLength <= 0) return;
-    tabActivityTracker.handlePendingLiveOutput(sessionId, shouldMarkSessionUnread(sessionId));
+    tabActivityTracker.handlePendingLiveOutput(sessionId, {
+      sequence,
+      shouldMarkUnread: shouldMarkSessionUnread(sessionId),
+    });
   };
 
   const handleSessionBell = (sessionId: string) => {
@@ -1773,7 +1792,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const showTerminalStatusBar = createMemo(() => {
     const hasSession = Boolean(activeSession() || activePendingSession());
-    return hasSession && (!useMobileRecoveryStatusBar() || activeRuntimeStatus().state !== 'idle');
+    return hasSession;
   });
 
   const activeRuntimeStatusMessage = createMemo(() => {
@@ -2297,10 +2316,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!sid) return;
     setError(null);
 
-    coreRegistry.get(sid)?.clear();
     try {
       await transport.clear(sid);
-      actionsRegistry.get(sid)?.resetAfterClear();
+      const actions = actionsRegistry.get(sid);
+      if (actions && !await actions.resetAfterClear()) return;
       await transport.sendInput(sid, '\r', connId);
     } catch (e) {
       if (handleExecuteDenied(e)) return;
@@ -3587,6 +3606,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               registerWorkingSetRuntime={registerWorkingSetRuntime}
                               onRuntimeStatus={handleRuntimeStatus}
                               onLiveOutputObserved={handleLiveOutputObserved}
+                              onOutputCommitted={handleOutputCommitted}
                               setWorkingSetInteraction={setWorkingSetInteraction}
                               onSurfaceClick={handleWorkbenchTerminalSurfaceClick}
                               onBell={handleSessionBell}
@@ -3729,16 +3749,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             <Show when={showTerminalStatusBar()}>
               <div
                 data-testid="terminal-status-bar"
-                class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden border-t border-border px-2 text-[10px] leading-none text-muted-foreground"
-                classList={{
-                  'h-11 min-h-11 max-h-11': useMobileRecoveryStatusBar(),
-                  'h-7 min-h-7 max-h-7': !useMobileRecoveryStatusBar(),
+                class="relative z-10 grid h-7 min-h-7 max-h-7 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden border-t border-border bg-background px-2 text-[10px] leading-none text-muted-foreground"
+                style={{
+                  transform: useMobileRecoveryStatusBar()
+                    ? `translateY(-${terminalViewportInsetPx()}px)`
+                    : undefined,
                 }}
               >
                 <div class="flex min-w-0 items-center gap-3 overflow-hidden whitespace-nowrap">
                   <span
                     class="min-w-0 max-w-[40%] truncate"
-                    classList={{ hidden: useMobileRecoveryStatusBar() && activeRuntimeStatus().state !== 'idle' }}
+                    classList={{ hidden: useMobileRecoveryStatusBar() }}
                   >
                     {i18n.t('terminal.statusSession')}: {statusBarSessionLabel()}
                   </span>

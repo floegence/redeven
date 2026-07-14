@@ -162,6 +162,12 @@ const transportMocks = vi.hoisted(() => ({
     hasMore: false,
     firstSequence: 0,
     lastSequence: 0,
+    coveredThroughSequence: 0,
+    snapshotEndSequence: 0,
+    firstRetainedSequence: 0,
+    historyGeneration: 1,
+    historyReset: false,
+    historyTruncated: false,
     coveredBytes: 0,
     totalBytes: 0,
   }),
@@ -1688,6 +1694,12 @@ describe('TerminalPanel', () => {
       hasMore: false,
       firstSequence: 0,
       lastSequence: 0,
+      coveredThroughSequence: 0,
+      snapshotEndSequence: 0,
+      firstRetainedSequence: 0,
+      historyGeneration: 1,
+      historyReset: false,
+      historyTruncated: false,
       coveredBytes: 0,
       totalBytes: 0,
     });
@@ -2303,7 +2315,9 @@ describe('TerminalPanel', () => {
 
     const clearMenu = await openSidebarContextMenu(host, 'Terminal 2');
     findContextMenuButton(clearMenu, 'Clear terminal content')?.click();
-    await settleTerminalPanel();
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.sendInput).toHaveBeenCalledWith('session-2', '\r', 'conn-1');
+    });
 
     expect(transportMocks.clear).toHaveBeenCalledWith('session-2');
     expect(transportMocks.sendInput).toHaveBeenCalledWith('session-2', '\r', 'conn-1');
@@ -2479,6 +2493,37 @@ describe('TerminalPanel', () => {
     expect(focusSpy).not.toHaveBeenCalled();
   });
 
+  it('does not steal focus from panel search when the baseline commits', async () => {
+    terminalWriteCompletionState.deferHistory = true;
+    transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
+      chunks: [{ sequence: 1, timestampMs: 10, data: textEncoder.encode('ready') }],
+      firstSequence: 1,
+      lastSequence: 1,
+      coveredBytes: 5,
+      totalBytes: 5,
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalCoreInstances[0]?.writeHistory).toHaveBeenCalledTimes(1);
+    });
+
+    host.querySelector<HTMLButtonElement>('[data-testid="dropdown-item-search"]')?.click();
+    await settleTerminalPanel();
+    const searchInput = host.querySelector<HTMLInputElement>('input[placeholder="Search..."]');
+    expect(searchInput).toBeTruthy();
+    searchInput?.focus();
+    focusSpy.mockClear();
+
+    terminalWriteCompletionState.historyCallbacks.shift()?.();
+    await settleTerminalPanelAfterPaint();
+
+    expect(document.activeElement).toBe(searchInput);
+    expect(focusSpy).not.toHaveBeenCalled();
+  });
+
   it('gates panel-level focus restoration on the committed history baseline', async () => {
     terminalWriteCompletionState.deferHistory = true;
     transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
@@ -2627,12 +2672,21 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanelAfterPaint();
 
+    const initialStatusBar = host.querySelector<HTMLElement>('[data-testid="terminal-status-bar"]');
+    expect(initialStatusBar).toBeTruthy();
+    expect(initialStatusBar?.classList.contains('h-7')).toBe(true);
+    expect(initialStatusBar?.style.transform).toBe('translateY(-80px)');
+    const initialDimensions = terminalCoreInstances[0]?.getDimensions();
+
     terminalCoreInstances[0]?.handlers?.onError?.(new Error('renderer failed'));
     await settleTerminalPanel();
 
     expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeTruthy();
-    const statusBar = host.querySelector('[data-testid="terminal-status-bar"]');
-    expect(statusBar?.classList.contains('h-11')).toBe(true);
+    const statusBar = host.querySelector<HTMLElement>('[data-testid="terminal-status-bar"]');
+    expect(statusBar).toBe(initialStatusBar);
+    expect(statusBar?.classList.contains('h-7')).toBe(true);
+    expect(statusBar?.style.transform).toBe('translateY(-80px)');
+    expect(terminalCoreInstances[0]?.getDimensions()).toEqual(initialDimensions);
     expect(statusBar?.textContent).toContain('This terminal could not be restored.');
     expect(host.querySelector('button[aria-label="Retry"]')?.classList.contains('size-7')).toBe(true);
     expect(host.querySelector('button[aria-label="Diagnostics"]')?.classList.contains('size-7')).toBe(true);
@@ -2661,6 +2715,28 @@ describe('TerminalPanel', () => {
       'echo __rdv_after_return__\r',
       'conn-1',
     );
+  });
+
+  it('does not publish synthetic recovery gaps for consecutive live output', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    for (let sequence = 1; sequence <= 100; sequence += 1) {
+      emitTerminalData('session-1', `live-${sequence}`, sequence);
+    }
+    await drainTerminalPanelAsyncWork();
+
+    const snapshot = getDebugConsoleClientEventRingSnapshot();
+    const syntheticGaps = snapshot.events.filter((event) => (
+      event.scope === 'terminal_recovery'
+      && event.kind === 'live'
+      && typeof event.detail?.catch_up_gap_sequences === 'number'
+    ));
+    expect(syntheticGaps).toEqual([]);
+    expect(snapshot.droppedCount).toBe(0);
   });
 
   it('keeps history pages independent from previously committed live output', async () => {
@@ -2698,6 +2774,37 @@ describe('TerminalPanel', () => {
     expect(page.chunks[0]?.data.byteLength).toBe(11);
     expect(textDecoder.decode(page.chunks[0]?.data)).toBe('history-one');
     expect(page.chunks[0]).not.toHaveProperty('pretransformed');
+  });
+
+  it('preserves an absent coverage field for the coordinator contract check', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const coordinatorOptions = createOutputCoordinatorSpy.mock.calls[0]?.[0];
+    expect(coordinatorOptions).toBeTruthy();
+
+    transportMocks.historyPage.mockResolvedValueOnce({
+      chunks: [],
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 0,
+      lastSequence: 0,
+      historyReset: false,
+      historyTruncated: false,
+      coveredBytes: 0,
+      totalBytes: 0,
+    });
+
+    const page = await coordinatorOptions.fetchPage({
+      startSequence: 1,
+      cursor: 1,
+      signal: new AbortController().signal,
+    });
+
+    expect(page).not.toHaveProperty('coveredThroughSequence');
   });
 
   it('does not replay sparse initial history again before the next activity output', async () => {
@@ -2832,14 +2939,23 @@ describe('TerminalPanel', () => {
     await drainTerminalPanelAsyncWork();
 
     core?.write.mockClear();
+    transportMocks.historyPage.mockResolvedValueOnce(makeTerminalHistoryPage({
+      coveredThroughSequence: 36,
+      snapshotEndSequence: 36,
+      historyGeneration: 2,
+    }));
     host.querySelector<HTMLButtonElement>('button[title="Clear"]')?.click();
-    await settleTerminalPanel();
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalCoreInstances).toHaveLength(2);
+    });
     expect(transportMocks.clear).toHaveBeenCalledWith('session-1');
 
+    const reloadedCore = terminalCoreInstances[1];
+    reloadedCore?.write.mockClear();
     emitTerminalData('session-1', 'after-clear', 37);
     await drainTerminalPanelAsyncWork();
 
-    expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['after-clear']);
+    expect(reloadedCore?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['after-clear']);
   });
 
   it('settles sparse activity catchup at the history coverage boundary', async () => {
@@ -4588,6 +4704,30 @@ describe('TerminalPanel', () => {
     expect(sleepingCore?.dispose).toHaveBeenCalledTimes(1);
   });
 
+  it('reactivates the coordinator when snapshot capture fails during hibernation', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalWorkingSetState.runtimes.get('session-1')).toBeTruthy();
+    });
+    const runtime = terminalWorkingSetState.runtimes.get('session-1');
+    const core = terminalCoreInstances[0];
+    core?.captureRestorableSnapshot.mockImplementationOnce(() => {
+      throw new Error('snapshot capture failed');
+    });
+
+    await expect(runtime.hibernate()).rejects.toThrow('snapshot capture failed');
+    expect(core?.dispose).not.toHaveBeenCalled();
+
+    core?.write.mockClear();
+    emitTerminalData('session-1', 'still-live', 1);
+    await drainTerminalPanelAsyncWork();
+    expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['still-live']);
+  });
+
   it('catches up inactive mounted sessions without reloading the terminal core', async () => {
     terminalSessionsState.sessions = [
       {
@@ -4970,14 +5110,41 @@ describe('TerminalPanel', () => {
     expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['before-clear']);
 
     core?.write.mockClear();
+    transportMocks.historyPage.mockResolvedValueOnce(makeTerminalHistoryPage({
+      historyGeneration: 2,
+    }));
     host.querySelector<HTMLButtonElement>('button[title="Clear"]')?.click();
-    await settleTerminalPanel();
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalCoreInstances).toHaveLength(2);
+    });
 
     expect(transportMocks.clear).toHaveBeenCalledWith('session-1');
+    const reloadedCore = terminalCoreInstances[1];
+    reloadedCore?.write.mockClear();
     emitTerminalData('session-1', 'after-clear', 1);
     await settleTerminalPanel();
 
-    expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['after-clear']);
+    expect(reloadedCore?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['after-clear']);
+  });
+
+  it('keeps clear failures blocking and retryable without sending a prompt probe', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    transportMocks.sendInput.mockClear();
+    transportMocks.attach.mockRejectedValueOnce(new Error('sensitive attach failure'));
+    host.querySelector<HTMLButtonElement>('button[title="Clear"]')?.click();
+
+    await waitForTerminalPanelCondition(() => {
+      expect(host.textContent).toContain('This terminal could not be restored.');
+    });
+
+    expect(host.textContent).not.toContain('sensitive attach failure');
+    expect(transportMocks.sendInput).not.toHaveBeenCalledWith('session-1', '\r', 'conn-1');
+    expect(host.querySelector<HTMLButtonElement>('button[aria-label="Retry"]')).toBeTruthy();
   });
 
   it('cancels remaining activity catchup history batches after clearing the terminal', async () => {
@@ -5596,8 +5763,11 @@ describe('TerminalPanel', () => {
 
     expect(host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]')).toBeNull();
-    expect(host.textContent).not.toContain('Session: session-1');
-    expect(host.textContent).not.toContain('History:');
+    const keyboardStatusBar = host.querySelector<HTMLElement>('[data-testid="terminal-status-bar"]');
+    expect(keyboardStatusBar?.classList.contains('h-7')).toBe(true);
+    expect(keyboardStatusBar?.style.transform).toBe('translateY(-80px)');
+    expect(Array.from(keyboardStatusBar?.querySelectorAll('span') ?? []).find((span) => span.textContent?.includes('Session:'))?.classList.contains('hidden')).toBe(true);
+    expect(Array.from(keyboardStatusBar?.querySelectorAll('span') ?? []).find((span) => span.textContent?.includes('History:'))?.classList.contains('hidden')).toBe(true);
 
     (host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]') as HTMLButtonElement | null)?.click();
     await Promise.resolve();
@@ -5605,6 +5775,7 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeNull();
     expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('0px');
     expect(host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]')).toBeTruthy();
+    expect(keyboardStatusBar?.style.transform).toBe('');
     expect(host.textContent).toContain('Session: session-1');
     expect(host.textContent).toContain('History:');
     expect(forceResizeSpy).toHaveBeenCalled();
@@ -5690,8 +5861,9 @@ describe('TerminalPanel', () => {
     expect(terminalContent?.style.paddingBottom).toBe('');
     expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('80px');
     expect(terminalSurface?.style.bottom).toBe('var(--terminal-bottom-inset)');
-    expect(host.textContent).not.toContain('Session: session-1');
-    expect(host.textContent).not.toContain('History:');
+    const statusBar = host.querySelector<HTMLElement>('[data-testid="terminal-status-bar"]');
+    expect(statusBar?.classList.contains('h-7')).toBe(true);
+    expect(statusBar?.style.transform).toBe('translateY(-80px)');
   });
 
   it('maps mobile touch drags on the terminal surface to terminal scrollback', async () => {

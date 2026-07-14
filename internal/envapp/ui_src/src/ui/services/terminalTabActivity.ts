@@ -10,6 +10,10 @@ export type TerminalSessionActivityRuntime = {
   unread: boolean;
   recentActivityPhase: TerminalRecentActivityPhase;
   pendingLiveOutput: boolean;
+  pendingLiveSequences: Map<number, boolean>;
+  pendingLiveUnreadCount: number;
+  pendingUnsequencedOutput: boolean;
+  pendingUnsequencedUnread: boolean;
   activityTimer: ReturnType<typeof setTimeout> | null;
   visualState: TerminalTabVisualState;
   workState: TerminalSessionWorkState;
@@ -31,7 +35,14 @@ export interface TerminalTabActivityTracker {
   handleCommandFinish: (sessionId: string, shouldMarkUnread: boolean) => void;
   handlePromptReady: (sessionId: string) => void;
   handleProgramActivity: (sessionId: string, phase: Exclude<TerminalProgramActivityPhase, 'unknown'>) => void;
-  handlePendingLiveOutput: (sessionId: string, shouldMarkUnread: boolean) => void;
+  handlePendingLiveOutput: (
+    sessionId: string,
+    opts: { sequence?: number; shouldMarkUnread: boolean },
+  ) => void;
+  handleOutputCommitted: (
+    sessionId: string,
+    opts: { source: 'history' | 'live'; sequence?: number },
+  ) => void;
   handleVisibleOutput: (sessionId: string, opts: { source: 'history' | 'live'; byteLength: number; shouldMarkUnread: boolean }) => void;
   pruneSessions: (activeSessionIds: Set<string>) => void;
   dispose: () => void;
@@ -47,6 +58,10 @@ function createEmptyRuntime(): TerminalSessionActivityRuntime {
     unread: false,
     recentActivityPhase: 'inactive',
     pendingLiveOutput: false,
+    pendingLiveSequences: new Map(),
+    pendingLiveUnreadCount: 0,
+    pendingUnsequencedOutput: false,
+    pendingUnsequencedUnread: false,
     activityTimer: null,
     visualState: 'none',
     workState: 'idle',
@@ -63,7 +78,7 @@ function computeVisualState(runtime: TerminalSessionActivityRuntime): TerminalTa
   if (runtime.commandPhase === 'running' && runtime.recentActivityPhase !== 'inactive') {
     return 'running';
   }
-  if (runtime.unread) {
+  if (runtime.unread || runtime.pendingLiveUnreadCount > 0 || runtime.pendingUnsequencedUnread) {
     return 'unread';
   }
   return 'none';
@@ -159,6 +174,42 @@ export function createTerminalTabActivityTracker(
     runtime.unread = true;
   };
 
+  const clearPendingUnread = (runtime: TerminalSessionActivityRuntime) => {
+    runtime.pendingLiveUnreadCount = 0;
+    for (const sequence of runtime.pendingLiveSequences.keys()) {
+      runtime.pendingLiveSequences.set(sequence, false);
+    }
+    runtime.pendingUnsequencedUnread = false;
+  };
+
+  const clearPendingOutput = (runtime: TerminalSessionActivityRuntime) => {
+    runtime.pendingLiveOutput = false;
+    runtime.pendingLiveSequences.clear();
+    runtime.pendingLiveUnreadCount = 0;
+    runtime.pendingUnsequencedOutput = false;
+    runtime.pendingUnsequencedUnread = false;
+  };
+
+  const settlePendingSequence = (
+    runtime: TerminalSessionActivityRuntime,
+    sequence: number | undefined,
+  ): boolean => {
+    if (sequence === undefined) {
+      const shouldMarkUnread = runtime.pendingUnsequencedUnread;
+      runtime.pendingUnsequencedOutput = false;
+      runtime.pendingUnsequencedUnread = false;
+      if (runtime.pendingLiveSequences.size === 0) runtime.pendingLiveOutput = false;
+      return shouldMarkUnread;
+    }
+    const shouldMarkUnread = runtime.pendingLiveSequences.get(sequence) === true;
+    if (shouldMarkUnread) runtime.pendingLiveUnreadCount = Math.max(0, runtime.pendingLiveUnreadCount - 1);
+    runtime.pendingLiveSequences.delete(sequence);
+    if (runtime.pendingLiveSequences.size === 0 && !runtime.pendingUnsequencedOutput) {
+      runtime.pendingLiveOutput = false;
+    }
+    return shouldMarkUnread;
+  };
+
   const normalizeSessionId = (sessionId: string): string => String(sessionId ?? '').trim();
 
   return {
@@ -172,9 +223,10 @@ export function createTerminalTabActivityTracker(
         return;
       }
       if (!runtime.unread) {
-        return;
+        if (runtime.pendingLiveUnreadCount === 0 && !runtime.pendingUnsequencedUnread) return;
       }
       runtime.unread = false;
+      clearPendingUnread(runtime);
       publishIfNeeded(normalizedSessionId, runtime);
     },
 
@@ -236,7 +288,7 @@ export function createTerminalTabActivityTracker(
       clearActivityTimer(runtime);
       runtime.commandPhase = 'idle';
       runtime.programActivityPhase = 'idle';
-      runtime.pendingLiveOutput = false;
+      clearPendingOutput(runtime);
       runtime.recentActivityPhase = 'inactive';
       publishIfNeeded(normalizedSessionId, runtime);
     },
@@ -259,7 +311,7 @@ export function createTerminalTabActivityTracker(
       publishIfNeeded(normalizedSessionId, runtime);
     },
 
-    handlePendingLiveOutput(sessionId: string, shouldMarkUnread: boolean) {
+    handlePendingLiveOutput(sessionId: string, opts: { sequence?: number; shouldMarkUnread: boolean }) {
       const normalizedSessionId = normalizeSessionId(sessionId);
       if (!normalizedSessionId) {
         return;
@@ -268,8 +320,19 @@ export function createTerminalTabActivityTracker(
       if (!runtime) {
         return;
       }
+      const sequence = Number.isSafeInteger(opts.sequence) && Number(opts.sequence) > 0
+        ? Number(opts.sequence)
+        : undefined;
       runtime.pendingLiveOutput = true;
-      markUnread(runtime, shouldMarkUnread);
+      if (sequence === undefined) {
+        runtime.pendingUnsequencedOutput = true;
+        runtime.pendingUnsequencedUnread ||= opts.shouldMarkUnread;
+      } else {
+        const wasUnread = runtime.pendingLiveSequences.get(sequence) === true;
+        const shouldMarkUnread = wasUnread || opts.shouldMarkUnread;
+        runtime.pendingLiveSequences.set(sequence, shouldMarkUnread);
+        if (!wasUnread && shouldMarkUnread) runtime.pendingLiveUnreadCount += 1;
+      }
       clearActivityTimer(runtime);
       publishIfNeeded(normalizedSessionId, runtime);
       runtime.activityTimer = scheduleTimeout(() => {
@@ -277,6 +340,19 @@ export function createTerminalTabActivityTracker(
         runtime.pendingLiveOutput = false;
         publishIfNeeded(normalizedSessionId, runtime);
       }, quietMs);
+    },
+
+    handleOutputCommitted(sessionId: string, opts: { source: 'history' | 'live'; sequence?: number }) {
+      const normalizedSessionId = normalizeSessionId(sessionId);
+      if (!normalizedSessionId) return;
+      const runtime = getRuntime(normalizedSessionId);
+      if (!runtime) return;
+      const sequence = Number.isSafeInteger(opts.sequence) && Number(opts.sequence) > 0
+        ? Number(opts.sequence)
+        : undefined;
+      const shouldMarkUnread = settlePendingSequence(runtime, sequence);
+      if (opts.source === 'live') markUnread(runtime, shouldMarkUnread);
+      publishIfNeeded(normalizedSessionId, runtime);
     },
 
     handleVisibleOutput(sessionId: string, opts: { source: 'history' | 'live'; byteLength: number; shouldMarkUnread: boolean }) {
@@ -291,7 +367,6 @@ export function createTerminalTabActivityTracker(
       if (!runtime) {
         return;
       }
-      runtime.pendingLiveOutput = false;
       markUnread(runtime, opts.shouldMarkUnread);
       if (runtime.commandPhase === 'running') {
         scheduleRecentActivity(normalizedSessionId, runtime, 'output', quietMs);
