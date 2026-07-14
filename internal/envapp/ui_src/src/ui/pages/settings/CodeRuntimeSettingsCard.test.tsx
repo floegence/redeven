@@ -32,6 +32,7 @@ vi.mock('../../i18n', async (importOriginal) => {
 });
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  AlertTriangle: (props: any) => <span class={props.class} data-testid="alert-triangle-icon" />,
   ChevronDown: (props: any) => <span class={props.class} data-testid="chevron-down-icon" />,
   ChevronRight: (props: any) => <span class={props.class} data-testid="chevron-right-icon" />,
   Check: (props: any) => <span class={props.class} data-testid="check-icon" />,
@@ -227,6 +228,44 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(tooltipContents).toContain('下载并发送最新 Browser Editor package 到已连接环境。');
   });
 
+  it('renders unsupported platform diagnostics in zh-CN without a retry action', () => {
+    i18nTestState.locale = 'zh-CN';
+    renderCard(host, {
+      status: makeStatus({
+        active_runtime: { detection_state: 'missing', present: false, source: 'none', binary_path: '' },
+        managed_runtime: { detection_state: 'missing', present: false, source: 'managed', binary_path: '' },
+        installed_versions: [],
+        managed_runtime_source: 'none',
+        managed_runtime_version: '',
+        platform: {
+          os: 'linux',
+          arch: 'amd64',
+          libc: 'musl',
+          platform_id: 'linux-amd64-musl',
+          supported: false,
+          unsupported_code: 'unsupported_libc',
+        },
+      }),
+    });
+
+    const activity = host.querySelector('[data-testid="browser-editor-setup-activity"]');
+    expect(activity?.getAttribute('data-layout')).toBe('compact');
+    expect(activity?.textContent).toContain('环境不受支持');
+    expect(activity?.textContent).toContain('此环境暂不支持托管 Browser Editor。');
+    expect(activity?.textContent).toContain('检测到');
+    expect(activity?.textContent).toContain('linux / amd64 / musl');
+    expect(activity?.textContent).toContain('Linux amd64/arm64 · glibc');
+    expect(activity?.textContent).not.toContain('重试设置');
+    expect(activity?.textContent).not.toContain('Detected');
+    expect(activity?.textContent).not.toContain('Required');
+    expect(host.textContent).not.toContain('设置 Browser Editor');
+
+    const dismiss = Array.from(activity?.querySelectorAll('button') ?? []).find((button) => button.textContent?.includes('关闭'));
+    expect(dismiss).toBeTruthy();
+    dismiss?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')).toBeNull();
+  });
+
   it('shows Browser Editor setup copy when no managed versions are installed', () => {
     renderCard(host, {
       status: makeStatus({
@@ -282,7 +321,8 @@ describe('CodeRuntimeSettingsCard', () => {
 
     expect(host.textContent).toContain('Retry setup');
     expect(host.textContent).toContain('Download failed.');
-    expect(host.textContent).toContain('Step');
+    expect(host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuetext')).toBe('Step 2 of 4');
+    expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')?.getAttribute('data-layout')).toBe('compact');
   });
 
   it('shows local Desktop preparation failures before the runtime records an operation failure', () => {

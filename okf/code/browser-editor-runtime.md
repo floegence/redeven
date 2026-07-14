@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Browser Editor runtime
 description: Code App serves Browser Editor codespaces through the local app server and managed code workspace engine APIs.
 tags: [code-app, browser-editor, local-ui, desktop]
-timestamp: 2026-07-06T00:00:00Z
+timestamp: 2026-07-14T00:00:00Z
 ---
 
 Browser Editor support is owned by the Code App app server. Codespaces are opened through Local UI `/cs/<id>/` routes or through remote `cs-*` sandbox hosts, while Desktop and Env App can prepare or update managed Browser Editor runtime versions through code workspace engine APIs.
@@ -13,6 +13,8 @@ Browser Editor support is owned by the Code App app server. Codespaces are opene
 The Code App app server backend owns codespace lifecycle, port resolution, managed runtime status, import sessions, chunk upload, completion, version selection, version removal, and operation cancellation. Local UI routes `/cs/*` to the app server. Runtime-control mirrors the code workspace engine import flow for Desktop-managed setup. Managed workspace engine imports validate package checksums, compressed archive size, and extracted regular file totals with a 2 GiB safety cap. The code-server runner starts the editor bound to loopback with no editor auth, an absolute proxy base path under `/cs/<code_space_id>`, disabled telemetry/update checks, scoped data directories, and a short stable session socket path.
 
 Env App chooses an explicit codespace open target before starting the space: `desktop_window` opens a dedicated Desktop codespace window through the shell bridge, while `system_browser` keeps using the existing external browser path. When the Desktop bridge exposes codespace-window support, a running codespace presents Desktop as the primary action with Browser in the adjacent menu; a stopped codespace keeps Start primary and offers both open targets from its menu. Start and Desktop-open actions enter an in-place busy state with the shared shimmer affordance so the card does not appear idle while runtime checks, start, ticket minting, or navigation are still pending.
+
+Browser Editor preparation uses one shared semantic activity model across Codespaces and Settings. Codespaces presents the activity as a full-width, balanced operational band with status and actions beside either the four setup steps or a detected-versus-required platform diagnosis; Settings uses the compact layout of the same component. Runtime platform results with `supported=false` and `unsupported_os`, `unsupported_arch`, or `unsupported_libc` are terminal, non-retryable setup results, while release lookup, download, transfer, import, and verification failures remain retryable. Technical paths, error codes, and logs stay collapsed under technical details by default. The Codespaces empty or populated content remains a separate page region below the preparation band.
 
 Desktop exposes a typed `redeven-desktop:shell-open-codespace-window` IPC request with `loading` and `navigate` modes. The trusted Env App renderer calls `loading` immediately for Desktop-open flows so Desktop can create or focus a native codespace window with a local, scriptless, CSP-bound loading document before the codespace URL exists. After start, local URL construction, or remote entry-ticket minting succeeds, Env App calls `navigate` with `{ url, code_space_id }`; legacy callers that omit `mode` but include `url` are normalized to `navigate`.
 
@@ -47,3 +49,7 @@ Opening or managing Browser Editor is not just a static file route. Version setu
 [21] redeven:desktop/src/main/main.ts:7061 - Codespace child windows use the session partition, native chrome, and no Desktop preload.
 [22] redeven:desktop/src/main/main.ts:7111 - Desktop shell codespace-window requests branch between loading and validated navigate modes.
 [23] redeven:desktop/src/main/main.ts:16734 - The Electron main process registers the shell-open-codespace-window IPC handler.
+[24] redeven:internal/envapp/ui_src/src/ui/services/browserEditorSetupActivity.ts:108 - Browser Editor activity derives structured, non-retryable platform diagnoses from Runtime status.
+[25] redeven:internal/envapp/ui_src/src/ui/pages/BrowserEditorSetupActivityPanel.tsx:80 - The shared setup component renders wide and compact layouts from the same activity contract.
+[26] redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.tsx:862 - Codespaces uses the wide operational layout while preserving the separate codespace content region.
+[27] redeven:internal/envapp/ui_src/src/ui/pages/settings/CodeRuntimeSettingsCard.tsx:401 - Settings uses the compact Browser Editor activity layout.

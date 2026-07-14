@@ -7,15 +7,17 @@ import {
   codeRuntimeOperationFailed,
   codeRuntimeOperationNeedsAttention,
   codeRuntimeOperationRunning,
-  codeRuntimePrepareCopy,
+  codeRuntimePrepareIntent,
   codeRuntimeReady,
   type CodeRuntimeInstalledVersion,
   type CodeRuntimeStatus,
 } from '../../services/codeRuntimeApi';
 import {
+  browserEditorPlatformLabel,
   buildBrowserEditorSetupActivity,
+  localizeBrowserEditorPrepareCopy,
+  localizeBrowserEditorSetupActivity,
   type BrowserEditorSetupLocalFailure,
-  type BrowserEditorSetupActivity,
 } from '../../services/browserEditorSetupActivity';
 import { Tooltip } from '../../primitives/Tooltip';
 import { BrowserEditorSetupActivityPanel } from '../BrowserEditorSetupActivityPanel';
@@ -27,14 +29,6 @@ type RuntimeDetailRow = Readonly<{
   value: JSX.Element | string;
   note?: JSX.Element | string;
   mono?: boolean;
-}>;
-
-type LocalizedPrepareCopy = Readonly<{
-  actionLabel: string;
-  confirmTitle: string;
-  runningLabel: string;
-  tooltip: string;
-  description: string;
 }>;
 
 function runtimeSourceLabel(source: string | null | undefined, i18n: I18nHelpers): string {
@@ -115,159 +109,6 @@ function operationLabel(status: CodeRuntimeStatus | null | undefined, i18n: I18n
   if (operation.state === 'cancelled') return operation.action === 'remove_local_environment_version' ? i18n.t('codeRuntime.operation.versionRemovalCancelled') : i18n.t('codeRuntime.operation.setupCancelled');
   if (operation.state === 'succeeded') return operation.action === 'remove_local_environment_version' ? i18n.t('codeRuntime.operation.versionRemoved') : i18n.t('codeRuntime.operation.ready');
   return i18n.t('codeRuntime.operation.idle');
-}
-
-function prepareCopyForI18n(intent: string, i18n: I18nHelpers): LocalizedPrepareCopy {
-  switch (intent) {
-    case 'retry':
-      return {
-        actionLabel: i18n.t('codeRuntime.prepare.retry.actionLabel'),
-        confirmTitle: i18n.t('codeRuntime.prepare.retry.confirmTitle'),
-        runningLabel: i18n.t('codeRuntime.prepare.retry.runningLabel'),
-        tooltip: i18n.t('codeRuntime.prepare.retry.tooltip'),
-        description: i18n.t('codeRuntime.prepare.description'),
-      };
-    case 'update':
-      return {
-        actionLabel: i18n.t('codeRuntime.prepare.update.actionLabel'),
-        confirmTitle: i18n.t('codeRuntime.prepare.update.confirmTitle'),
-        runningLabel: i18n.t('codeRuntime.prepare.update.runningLabel'),
-        tooltip: i18n.t('codeRuntime.prepare.update.tooltip'),
-        description: i18n.t('codeRuntime.prepare.description'),
-      };
-    case 'setup':
-    default:
-      return {
-        actionLabel: i18n.t('codeRuntime.prepare.setup.actionLabel'),
-        confirmTitle: i18n.t('codeRuntime.prepare.setup.confirmTitle'),
-        runningLabel: i18n.t('codeRuntime.prepare.setup.runningLabel'),
-        tooltip: i18n.t('codeRuntime.prepare.setup.tooltip'),
-        description: i18n.t('codeRuntime.prepare.description'),
-      };
-  }
-}
-
-function localizedActivityBadgeLabel(state: BrowserEditorSetupActivity['state'], i18n: I18nHelpers): string {
-  switch (state) {
-    case 'checking':
-      return i18n.t('common.status.checking');
-    case 'missing':
-      return i18n.t('codeRuntime.notReady');
-    case 'preparing':
-      return i18n.t('codeRuntime.preparing');
-    case 'ready':
-      return i18n.t('common.status.ready');
-    case 'failed':
-      return i18n.t('codeRuntime.setupFailed');
-    case 'cancelled':
-      return i18n.t('codeRuntime.cancelled');
-    case 'unusable':
-      return i18n.t('settings.autoSave.needsAttention');
-    case 'error':
-    default:
-      return i18n.t('common.status.failed');
-  }
-}
-
-function localizedActivityStepLabel(id: string, i18n: I18nHelpers): string {
-  switch (id) {
-    case 'lookup':
-      return i18n.t('codeRuntime.activity.steps.lookup');
-    case 'cache':
-      return i18n.t('codeRuntime.activity.steps.cache');
-    case 'upload':
-      return i18n.t('codeRuntime.activity.steps.upload');
-    case 'verify':
-      return i18n.t('codeRuntime.activity.steps.verify');
-    default:
-      return id;
-  }
-}
-
-function localizedLocalFailureSummary(failure: BrowserEditorSetupLocalFailure, i18n: I18nHelpers): string {
-  switch (failure.source) {
-    case 'desktop_release_lookup':
-      return i18n.t('codeRuntime.activity.failure.desktopReleaseLookup');
-    case 'desktop_package_cache':
-      return i18n.t('codeRuntime.activity.failure.desktopPackageCache');
-    case 'desktop_upload':
-      return i18n.t('codeRuntime.activity.failure.desktopUpload');
-    case 'runtime_import':
-      return i18n.t('codeRuntime.activity.failure.runtimeImport');
-    case 'runtime_status':
-      return i18n.t('codeRuntime.activity.failure.runtimeStatus');
-    case 'unknown':
-    default:
-      return i18n.t('codeRuntime.activity.failure.unknown');
-  }
-}
-
-function localizedLocalFailureDetail(failure: BrowserEditorSetupLocalFailure, i18n: I18nHelpers): string {
-  if (failure.source === 'desktop_release_lookup') {
-    return i18n.t('codeRuntime.activity.failure.desktopReleaseLookupDetail', { message: failure.message });
-  }
-  return failure.message;
-}
-
-function localizeBrowserEditorActivity(
-  activity: BrowserEditorSetupActivity,
-  args: Readonly<{
-    status: CodeRuntimeStatus | null | undefined;
-    loading: boolean;
-    localPending: boolean;
-    localFailure: BrowserEditorSetupLocalFailure | null | undefined;
-    prepareDescription: string;
-  }>,
-  i18n: I18nHelpers,
-): BrowserEditorSetupActivity {
-  const operation = args.status?.operation;
-  const setupOperation = String(operation?.action ?? '').trim() === 'prepare_workspace_engine';
-  const steps = activity.steps.map((step) => ({
-    ...step,
-    label: localizedActivityStepLabel(step.id, i18n),
-  }));
-  let summary = activity.summary;
-  let detail = activity.detail;
-  let pendingActionLabel = activity.pending_action_label;
-
-  if (args.localFailure) {
-    summary = localizedLocalFailureSummary(args.localFailure, i18n);
-    detail = localizedLocalFailureDetail(args.localFailure, i18n);
-  } else if (setupOperation && operation?.state === 'running') {
-    summary = codeRuntimeStageLabelLocalized(operation.stage, operation.action, i18n);
-    detail = i18n.t('codeRuntime.activity.explicitRequestDetail');
-  } else if (setupOperation && operation?.state === 'failed') {
-    summary = operation.last_error || i18n.t('codeRuntime.activity.failure.unknown');
-  } else if (setupOperation && operation?.state === 'cancelled') {
-    summary = i18n.t('codeRuntime.activity.cancelledSummary');
-  } else if (args.localPending) {
-    summary = i18n.t('codeRuntime.activity.desktopPreparing');
-    detail = i18n.t('codeRuntime.activity.explicitRequestDetail');
-  } else if (args.status?.active_runtime.detection_state === 'ready') {
-    summary = i18n.t('codeRuntime.activity.readyWithPath', { path: args.status?.active_runtime.binary_path ?? '-' });
-  } else if (args.loading) {
-    summary = i18n.t('codeRuntime.activity.checkingReadiness');
-  } else if (args.status?.active_runtime.detection_state === 'unusable') {
-    summary = args.status.active_runtime.error_message || i18n.t('codeRuntime.activity.unusableSummary');
-  } else if (activity.state === 'missing') {
-    summary = args.prepareDescription;
-  }
-
-  if (pendingActionLabel === 'Continue to open codespace') {
-    pendingActionLabel = i18n.t('codeRuntime.activity.continueToOpenCodespace');
-  } else if (pendingActionLabel === 'Continue to start codespace') {
-    pendingActionLabel = i18n.t('codeRuntime.activity.continueToStartCodespace');
-  }
-
-  return {
-    ...activity,
-    title: i18n.t('codeRuntime.title') as BrowserEditorSetupActivity['title'],
-    badge_label: localizedActivityBadgeLabel(activity.state, i18n),
-    summary,
-    ...(detail ? { detail } : {}),
-    steps,
-    ...(pendingActionLabel ? { pending_action_label: pendingActionLabel } : {}),
-  };
 }
 
 function RuntimeDetailsTableSection(props: { title: string; rows: readonly RuntimeDetailRow[] }) {
@@ -366,6 +207,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const i18n = useI18n();
   const [prepareConfirmOpen, setPrepareConfirmOpen] = createSignal(false);
   const [removeVersionConfirmOpen, setRemoveVersionConfirmOpen] = createSignal<string | null>(null);
+  const [dismissedSetupActivityKey, setDismissedSetupActivityKey] = createSignal<string | null>(null);
 
   const runtimeReady = createMemo(() => codeRuntimeReady(props.status));
   const operationRunning = createMemo(() => codeRuntimeOperationRunning(props.status));
@@ -374,8 +216,8 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const operationNeedsAttention = createMemo(() => codeRuntimeOperationNeedsAttention(props.status));
   const installedVersions = createMemo(() => props.status?.installed_versions ?? []);
   const activeRuntime = createMemo(() => props.status?.active_runtime);
-  const prepareCopy = createMemo(() => codeRuntimePrepareCopy(props.status));
-  const localizedPrepareCopy = createMemo(() => prepareCopyForI18n(prepareCopy().intent, i18n));
+  const prepareIntent = createMemo(() => codeRuntimePrepareIntent(props.status));
+  const localizedPrepareCopy = createMemo(() => localizeBrowserEditorPrepareCopy(prepareIntent(), i18n));
   const localPending = createMemo(() => props.actionLoading && !operationRunning());
   const setupActivity = createMemo(() => {
     const activity = buildBrowserEditorSetupActivity({
@@ -383,7 +225,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       localPending: localPending(),
       localFailure: props.localPrepareFailure,
     });
-    return localizeBrowserEditorActivity(activity, {
+    return localizeBrowserEditorSetupActivity(activity, {
       status: props.status,
       loading: props.loading,
       localPending: localPending(),
@@ -391,8 +233,23 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       prepareDescription: localizedPrepareCopy().description,
     }, i18n);
   });
+  const setupActivityKey = createMemo(() => [
+    setupActivity().state,
+    setupActivity().error_code ?? '',
+    props.status?.updated_at_unix_ms ?? 0,
+    props.localPrepareFailure?.occurred_at_unix_ms ?? 0,
+  ].join(':'));
+  const platformUnsupported = createMemo(() => Boolean(setupActivity().platform_diagnosis));
   const prepareOperationActive = createMemo(() => String(props.status?.operation.action ?? '').trim() === 'prepare_workspace_engine');
-  const showSetupActivity = createMemo(() => Boolean(props.localPrepareFailure) || props.actionLoading || (prepareOperationActive() && (operationRunning() || operationNeedsAttention())));
+  const showSetupActivity = createMemo(() => (
+    dismissedSetupActivityKey() !== setupActivityKey()
+    && (
+      platformUnsupported()
+      || Boolean(props.localPrepareFailure)
+      || props.actionLoading
+      || (prepareOperationActive() && (operationRunning() || operationNeedsAttention()))
+    )
+  ));
   const showRemovalOperation = createMemo(() => !prepareOperationActive() && (operationRunning() || operationNeedsAttention()));
   const operationLogTail = createMemo(() => props.status?.operation.log_tail ?? []);
   const refreshActionLabel = () => i18n.t('common.actions.refresh');
@@ -518,7 +375,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             <Show
               when={operationRunning()}
               fallback={
-                <>
+                <Show when={!platformUnsupported()}>
                   <ActionButtonTooltip
                     content={prepareActionTooltip()}
                     disabled={!props.canInteract || !props.canManage || props.actionLoading}
@@ -532,7 +389,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
                       {props.actionLoading ? localizedPrepareCopy().runningLabel : prepareActionLabel()}
                     </Button>
                   </ActionButtonTooltip>
-                </>
+                </Show>
               }
             >
               <ActionButtonTooltip
@@ -557,6 +414,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
           <Show when={showSetupActivity()}>
             <BrowserEditorSetupActivityPanel
               activity={setupActivity()}
+              layout="compact"
               loading={props.loading}
               prepareSubmitting={props.actionLoading}
               cancelSubmitting={props.cancelLoading}
@@ -565,14 +423,38 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
               onPrepare={props.canInteract && props.canManage ? () => void props.onPrepare() : undefined}
               onRefresh={props.onRefresh}
               onCancel={props.canInteract && props.canManage ? () => void props.onCancel() : undefined}
+              onDismiss={() => setDismissedSetupActivityKey(setupActivityKey())}
               extraDetails={setupActivity().state === 'missing' || setupActivity().state === 'checking' ? undefined : (
-                <div class="grid gap-2 rounded-md border border-border bg-background/70 p-3 text-[11px] leading-5 text-muted-foreground">
-                  <Show when={props.status?.operation.target_version}>
-                    <div>{i18n.t('codeRuntime.targetVersion')}: <span class="font-mono text-foreground">{props.status?.operation.target_version}</span></div>
+                <dl class="browser-editor-setup__detail-list">
+                  <div class="browser-editor-setup__detail-row">
+                    <dt>{i18n.t('codeRuntime.activity.platform.environmentPlatform')}</dt>
+                    <dd data-mono="true">{browserEditorPlatformLabel(props.status?.platform)}</dd>
+                  </div>
+                  <Show when={setupActivity().error_code}>
+                    {(errorCode) => (
+                      <div class="browser-editor-setup__detail-row">
+                        <dt>{i18n.t('codeRuntime.activity.platform.errorCode')}</dt>
+                        <dd data-mono="true">{errorCode()}</dd>
+                      </div>
+                    )}
                   </Show>
-                  <div>{i18n.t('codeRuntime.sharedEditorRoot')}: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
-                  <div>{i18n.t('codeRuntime.selectedEditorPath')}: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix || '-'}</span></div>
-                </div>
+                  <Show when={props.status?.operation.target_version}>
+                    {(targetVersion) => (
+                      <div class="browser-editor-setup__detail-row">
+                        <dt>{i18n.t('codeRuntime.targetVersion')}</dt>
+                        <dd data-mono="true">{targetVersion()}</dd>
+                      </div>
+                    )}
+                  </Show>
+                  <div class="browser-editor-setup__detail-row">
+                    <dt>{i18n.t('codeRuntime.sharedEditorRoot')}</dt>
+                    <dd data-mono="true">{props.status?.shared_runtime_root || '-'}</dd>
+                  </div>
+                  <div class="browser-editor-setup__detail-row">
+                    <dt>{i18n.t('codeRuntime.selectedEditorPath')}</dt>
+                    <dd data-mono="true">{props.status?.managed_prefix || '-'}</dd>
+                  </div>
+                </dl>
               )}
             />
           </Show>
@@ -608,12 +490,14 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
           <Show
             when={installedVersions().length > 0}
             fallback={
-              <HighlightBlock variant="warning" title={i18n.t('codeRuntime.setupRequiredTitle')}>
-                <div class="space-y-2 text-sm text-muted-foreground">
-                  <div>{i18n.t('codeRuntime.setupRequiredDescription')}</div>
-                  <div>{i18n.t('codeRuntime.setupRequiresConfirmation')}</div>
-                </div>
-              </HighlightBlock>
+              <Show when={!platformUnsupported()}>
+                <HighlightBlock variant="warning" title={i18n.t('codeRuntime.setupRequiredTitle')}>
+                  <div class="space-y-2 text-sm text-muted-foreground">
+                    <div>{i18n.t('codeRuntime.setupRequiredDescription')}</div>
+                    <div>{i18n.t('codeRuntime.setupRequiresConfirmation')}</div>
+                  </div>
+                </HighlightBlock>
+              </Show>
             }
           >
             <div class="space-y-3">
@@ -645,7 +529,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       >
         <div class="space-y-3">
           <p class="text-sm">
-            {prepareCopy().intent === 'update'
+            {prepareIntent() === 'update'
               ? i18n.t('codeRuntime.confirm.updateDescription')
               : localizedPrepareCopy().description}
           </p>

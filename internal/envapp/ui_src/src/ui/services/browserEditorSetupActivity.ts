@@ -5,9 +5,12 @@ import {
   codeRuntimePrepareCopy,
   codeRuntimeReady,
   codeRuntimeStageLabel,
+  type CodeRuntimePlatform,
+  type CodeRuntimePrepareIntent,
   type CodeRuntimeOperationStage,
   type CodeRuntimeStatus,
 } from './codeRuntimeApi';
+import { type I18nHelpers } from '../i18n';
 
 export type BrowserEditorSetupFailureSource =
   | 'desktop_release_lookup'
@@ -25,6 +28,7 @@ export type BrowserEditorSetupLocalFailure = Readonly<{
 
 export type BrowserEditorSetupStepID = 'lookup' | 'cache' | 'upload' | 'verify';
 export type BrowserEditorSetupStepState = 'done' | 'active' | 'pending' | 'error' | 'cancelled';
+export type BrowserEditorSetupPresentation = 'idle' | 'progress' | 'result';
 export type BrowserEditorSetupActivityState =
   | 'checking'
   | 'missing'
@@ -35,6 +39,16 @@ export type BrowserEditorSetupActivityState =
   | 'unusable'
   | 'error';
 
+export type BrowserEditorSetupPlatformRequirement = 'supported_os' | 'supported_arch' | 'linux_glibc';
+
+export type BrowserEditorSetupPlatformDiagnosis = Readonly<{
+  code: string;
+  detected: CodeRuntimePlatform;
+  requirement: BrowserEditorSetupPlatformRequirement;
+  detected_label?: string;
+  required_label?: string;
+}>;
+
 export type BrowserEditorSetupStep = Readonly<{
   id: BrowserEditorSetupStepID;
   label: string;
@@ -43,7 +57,8 @@ export type BrowserEditorSetupStep = Readonly<{
 
 export type BrowserEditorSetupActivity = Readonly<{
   state: BrowserEditorSetupActivityState;
-  title: 'Browser Editor';
+  presentation: BrowserEditorSetupPresentation;
+  title: string;
   badge_label: string;
   badge_variant: 'neutral' | 'info' | 'success' | 'warning' | 'error';
   summary: string;
@@ -57,7 +72,17 @@ export type BrowserEditorSetupActivity = Readonly<{
   can_continue: boolean;
   show_log: boolean;
   log_tail: readonly string[];
+  error_code?: string;
+  platform_diagnosis?: BrowserEditorSetupPlatformDiagnosis;
   pending_action_label?: string;
+}>;
+
+export type LocalizedBrowserEditorPrepareCopy = Readonly<{
+  actionLabel: string;
+  confirmTitle: string;
+  runningLabel: string;
+  tooltip: string;
+  description: string;
 }>;
 
 export type BrowserEditorPendingIntent = Readonly<{
@@ -73,6 +98,27 @@ const browserEditorStepDefs: readonly Readonly<{ id: BrowserEditorSetupStepID; l
 
 function clean(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+export function browserEditorPlatformLabel(platform: CodeRuntimePlatform | null | undefined): string {
+  if (!platform) return '-';
+  return [clean(platform.os), clean(platform.arch), clean(platform.libc)].filter(Boolean).join(' / ') || clean(platform.platform_id) || '-';
+}
+
+function platformDiagnosisFromStatus(status: CodeRuntimeStatus | null | undefined): BrowserEditorSetupPlatformDiagnosis | undefined {
+  const platform = status?.platform;
+  if (!platform || platform.supported !== false) return undefined;
+  const code = clean(platform.unsupported_code);
+  switch (code) {
+    case 'unsupported_libc':
+      return { code, detected: platform, requirement: 'linux_glibc' };
+    case 'unsupported_arch':
+      return { code, detected: platform, requirement: 'supported_arch' };
+    case 'unsupported_os':
+      return { code, detected: platform, requirement: 'supported_os' };
+    default:
+      return undefined;
+  }
 }
 
 export function classifyBrowserEditorLocalFailure(message: string): BrowserEditorSetupFailureSource {
@@ -246,6 +292,12 @@ function badgeForState(state: BrowserEditorSetupActivityState): Pick<BrowserEdit
   }
 }
 
+function presentationForState(state: BrowserEditorSetupActivityState): BrowserEditorSetupPresentation {
+  if (state === 'missing') return 'idle';
+  if (state === 'checking' || state === 'preparing') return 'progress';
+  return 'result';
+}
+
 function baseActivity(args: Readonly<{
   state: BrowserEditorSetupActivityState;
   summary: string;
@@ -257,12 +309,15 @@ function baseActivity(args: Readonly<{
   canContinue?: boolean;
   showLog?: boolean;
   logTail?: readonly string[];
+  errorCode?: string;
+  platformDiagnosis?: BrowserEditorSetupPlatformDiagnosis;
   pendingActionLabel?: string;
 }>): BrowserEditorSetupActivity {
   const badge = badgeForState(args.state);
   const activeIndex = stepIndexForID(args.activeStepID);
   return {
     state: args.state,
+    presentation: presentationForState(args.state),
     title: 'Browser Editor',
     ...badge,
     summary: args.summary,
@@ -276,6 +331,8 @@ function baseActivity(args: Readonly<{
     can_continue: Boolean(args.canContinue),
     show_log: Boolean(args.showLog),
     log_tail: args.logTail ?? [],
+    ...(args.errorCode ? { error_code: args.errorCode } : {}),
+    ...(args.platformDiagnosis ? { platform_diagnosis: args.platformDiagnosis } : {}),
     ...(args.pendingActionLabel ? { pending_action_label: args.pendingActionLabel } : {}),
   };
 }
@@ -293,6 +350,7 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
   const operation = status?.operation;
   const setupOperation = runtimeOperationBelongsToBrowserEditorSetup(operation?.action);
   const logTail = operation?.log_tail ?? [];
+  const platformDiagnosis = platformDiagnosisFromStatus(status);
 
   if (args.error) {
     return baseActivity({
@@ -301,6 +359,17 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
       detail: args.error,
       steps: stepsFor('lookup', 'pending'),
       activeStepID: 'lookup',
+    });
+  }
+
+  if (platformDiagnosis) {
+    return baseActivity({
+      state: 'failed',
+      summary: status?.platform?.message || 'This environment is not supported by the managed Browser Editor.',
+      steps: stepsFor('lookup', 'error'),
+      activeStepID: 'lookup',
+      errorCode: platformDiagnosis.code,
+      platformDiagnosis,
     });
   }
 
@@ -328,6 +397,7 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
       canRetry: true,
       showLog: true,
       logTail,
+      errorCode: operation?.last_error_code,
     });
   }
 
@@ -341,6 +411,7 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
       canRetry: true,
       showLog: true,
       logTail,
+      errorCode: operation?.last_error_code,
     });
   }
 
@@ -353,6 +424,7 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
       steps: stepsFor(stepID, 'error'),
       activeStepID: stepID,
       canRetry: true,
+      errorCode: args.localFailure.source === 'unknown' ? undefined : args.localFailure.source,
     });
   }
 
@@ -393,6 +465,7 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
       steps: stepsFor('verify', 'error'),
       activeStepID: 'verify',
       canRetry: true,
+      errorCode: status.active_runtime.error_code,
     });
   }
 
@@ -404,4 +477,199 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
     activeStepID: 'lookup',
     pendingActionLabel: pendingLabel,
   });
+}
+
+function localizedActivityBadgeLabel(activity: BrowserEditorSetupActivity, i18n: I18nHelpers): string {
+  if (activity.platform_diagnosis) return i18n.t('codeRuntime.activity.platform.unsupported');
+  switch (activity.state) {
+    case 'checking':
+      return i18n.t('common.status.checking');
+    case 'missing':
+      return i18n.t('codeRuntime.notReady');
+    case 'preparing':
+      return i18n.t('codeRuntime.preparing');
+    case 'ready':
+      return i18n.t('common.status.ready');
+    case 'failed':
+      return i18n.t('codeRuntime.setupFailed');
+    case 'cancelled':
+      return i18n.t('codeRuntime.cancelled');
+    case 'unusable':
+      return i18n.t('settings.autoSave.needsAttention');
+    case 'error':
+    default:
+      return i18n.t('common.status.failed');
+  }
+}
+
+function localizedActivityStepLabel(id: BrowserEditorSetupStepID, i18n: I18nHelpers): string {
+  return i18n.t(`codeRuntime.activity.steps.${id}`);
+}
+
+function localizedLocalFailureSummary(failure: BrowserEditorSetupLocalFailure, i18n: I18nHelpers): string {
+  switch (failure.source) {
+    case 'desktop_release_lookup':
+      return i18n.t('codeRuntime.activity.failure.desktopReleaseLookup');
+    case 'desktop_package_cache':
+      return i18n.t('codeRuntime.activity.failure.desktopPackageCache');
+    case 'desktop_upload':
+      return i18n.t('codeRuntime.activity.failure.desktopUpload');
+    case 'runtime_import':
+      return i18n.t('codeRuntime.activity.failure.runtimeImport');
+    case 'runtime_status':
+      return i18n.t('codeRuntime.activity.failure.runtimeStatus');
+    case 'unknown':
+    default:
+      return i18n.t('codeRuntime.activity.failure.unknown');
+  }
+}
+
+function localizedLocalFailureDetail(failure: BrowserEditorSetupLocalFailure, i18n: I18nHelpers): string {
+  if (failure.source === 'desktop_release_lookup') {
+    return i18n.t('codeRuntime.activity.failure.desktopReleaseLookupDetail', { message: failure.message });
+  }
+  return failure.message;
+}
+
+function localizedPlatformRequirement(requirement: BrowserEditorSetupPlatformRequirement, i18n: I18nHelpers): string {
+  switch (requirement) {
+    case 'linux_glibc':
+      return i18n.t('codeRuntime.activity.platform.linuxGlibc');
+    case 'supported_arch':
+      return i18n.t('codeRuntime.activity.platform.supportedArchitectures');
+    case 'supported_os':
+    default:
+      return i18n.t('codeRuntime.activity.platform.supportedOperatingSystems');
+  }
+}
+
+export function localizeBrowserEditorPrepareCopy(intent: CodeRuntimePrepareIntent, i18n: I18nHelpers): LocalizedBrowserEditorPrepareCopy {
+  const base = `codeRuntime.prepare.${intent}` as const;
+  return {
+    actionLabel: i18n.t(`${base}.actionLabel`),
+    confirmTitle: i18n.t(`${base}.confirmTitle`),
+    runningLabel: i18n.t(`${base}.runningLabel`),
+    tooltip: i18n.t(`${base}.tooltip`),
+    description: i18n.t('codeRuntime.prepare.description'),
+  };
+}
+
+export function localizeBrowserEditorSetupActivity(
+  activity: BrowserEditorSetupActivity,
+  args: Readonly<{
+    status: CodeRuntimeStatus | null | undefined;
+    loading: boolean;
+    error?: string | null;
+    localPending: boolean;
+    localFailure: BrowserEditorSetupLocalFailure | null | undefined;
+    prepareDescription: string;
+    pendingIntent?: BrowserEditorPendingIntent;
+  }>,
+  i18n: I18nHelpers,
+): BrowserEditorSetupActivity {
+  const operation = args.status?.operation;
+  const setupOperation = runtimeOperationBelongsToBrowserEditorSetup(operation?.action);
+  const steps = activity.steps.map((step) => ({
+    ...step,
+    label: localizedActivityStepLabel(step.id, i18n),
+  }));
+  let summary = activity.summary;
+  let detail = activity.detail;
+  let pendingActionLabel = activity.pending_action_label;
+  let platformDiagnosis = activity.platform_diagnosis;
+
+  if (platformDiagnosis) {
+    summary = i18n.t('codeRuntime.activity.platform.unsupportedSummary');
+    detail = undefined;
+    platformDiagnosis = {
+      ...platformDiagnosis,
+      detected_label: browserEditorPlatformLabel(platformDiagnosis.detected),
+      required_label: localizedPlatformRequirement(platformDiagnosis.requirement, i18n),
+    };
+  } else if (args.error) {
+    summary = i18n.t('codeRuntime.activity.readinessFailed');
+    detail = args.error;
+  } else if (args.localFailure) {
+    summary = localizedLocalFailureSummary(args.localFailure, i18n);
+    detail = localizedLocalFailureDetail(args.localFailure, i18n);
+  } else if (setupOperation && operation?.state === 'running') {
+    summary = codeRuntimeStageLabelLocalized(operation.stage, operation.action, i18n);
+    detail = i18n.t('codeRuntime.activity.explicitRequestDetail');
+  } else if (setupOperation && operation?.state === 'failed') {
+    summary = i18n.t('codeRuntime.activity.failure.unknown');
+    detail = operation.last_error || undefined;
+  } else if (setupOperation && operation?.state === 'cancelled') {
+    summary = i18n.t('codeRuntime.activity.cancelledSummary');
+    detail = operation.last_error || undefined;
+  } else if (args.localPending) {
+    summary = i18n.t('codeRuntime.activity.desktopPreparing');
+    detail = i18n.t('codeRuntime.activity.explicitRequestDetail');
+  } else if (args.status?.active_runtime.detection_state === 'ready') {
+    summary = i18n.t('codeRuntime.activity.readyWithPath', { path: args.status.active_runtime.binary_path ?? '-' });
+    detail = undefined;
+  } else if (args.loading) {
+    summary = i18n.t('codeRuntime.activity.checkingReadiness');
+    detail = undefined;
+  } else if (args.status?.active_runtime.detection_state === 'unusable') {
+    summary = args.status.active_runtime.error_message || i18n.t('codeRuntime.activity.unusableSummary');
+    detail = undefined;
+  } else if (activity.state === 'missing') {
+    summary = args.prepareDescription;
+    if (args.pendingIntent?.kind === 'open') summary += ` ${i18n.t('codeRuntime.activity.willOpenAfterSetup')}`;
+    if (args.pendingIntent?.kind === 'start') summary += ` ${i18n.t('codeRuntime.activity.willStartAfterSetup')}`;
+    detail = undefined;
+  }
+
+  if (pendingActionLabel === 'Continue to open codespace') {
+    pendingActionLabel = i18n.t('codeRuntime.activity.continueToOpenCodespace');
+  } else if (pendingActionLabel === 'Continue to start codespace') {
+    pendingActionLabel = i18n.t('codeRuntime.activity.continueToStartCodespace');
+  }
+
+  const { detail: _detail, pending_action_label: _pendingActionLabel, platform_diagnosis: _platformDiagnosis, ...rest } = activity;
+  return {
+    ...rest,
+    title: i18n.t('codeRuntime.title'),
+    badge_label: localizedActivityBadgeLabel(activity, i18n),
+    summary,
+    steps,
+    ...(detail ? { detail } : {}),
+    ...(pendingActionLabel ? { pending_action_label: pendingActionLabel } : {}),
+    ...(platformDiagnosis ? { platform_diagnosis: platformDiagnosis } : {}),
+  };
+}
+
+function codeRuntimeStageLabelLocalized(stage: string | null | undefined, action: string | null | undefined, i18n: I18nHelpers): string {
+  const normalizedStage = clean(stage);
+  if (clean(action) === 'remove_local_environment_version') {
+    switch (normalizedStage) {
+      case 'preparing':
+        return i18n.t('codeRuntime.stage.removalPreparing');
+      case 'removing':
+        return i18n.t('codeRuntime.stage.removing');
+      case 'validating':
+        return i18n.t('codeRuntime.stage.removalValidating');
+      case 'finalizing':
+        return i18n.t('codeRuntime.stage.removalFinalizing');
+      default:
+        return i18n.t('codeRuntime.stage.removalDefault');
+    }
+  }
+
+  switch (normalizedStage) {
+    case 'preparing':
+      return i18n.t('codeRuntime.stage.preparing');
+    case 'receiving':
+      return i18n.t('codeRuntime.stage.receiving');
+    case 'verifying':
+      return i18n.t('codeRuntime.stage.verifying');
+    case 'installing':
+      return i18n.t('codeRuntime.stage.installing');
+    case 'validating':
+      return i18n.t('codeRuntime.stage.validating');
+    case 'finalizing':
+      return i18n.t('codeRuntime.stage.finalizing');
+    default:
+      return i18n.t('codeRuntime.stage.default');
+  }
 }
