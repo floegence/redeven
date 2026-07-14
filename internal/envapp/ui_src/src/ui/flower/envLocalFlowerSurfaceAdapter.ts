@@ -2,6 +2,7 @@ import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import { fetchLocalApiJSON } from '../services/localApi';
 import type { AgentSettingsResponse, AIConfig } from '../pages/settings/types';
 import type {
+  FlowerApprovalDecisionReceipt,
   FlowerProvider,
   FlowerProviderDraft,
   FlowerProviderModel,
@@ -364,7 +365,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         method: 'POST',
         body: JSON.stringify({}),
       }),
-      submitApproval: (body) => fetchLocalApiJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, {
+      submitApproval: (body) => fetchLocalApiJSON<FlowerApprovalDecisionReceipt>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, {
         method: 'POST',
         body: JSON.stringify(body),
       }),

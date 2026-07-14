@@ -95,7 +95,7 @@ function adapterOptions(
     markThreadRead: vi.fn(async () => ({ read_status: readStatus() })),
     patchThread: vi.fn(async () => ({ thread: undefined })),
     forkThread: vi.fn(async () => ({ thread: undefined })),
-    submitApproval: vi.fn(async () => undefined),
+    submitApproval: vi.fn(async () => ({ ok: true, current_cursor: 1 })),
     ...transportOverrides,
   };
   return {
@@ -369,10 +369,10 @@ describe('runtime Flower surface adapter read state', () => {
   });
 
   it('submits main tool approvals with run and tool identity', async () => {
-    const submitApproval = vi.fn(async () => undefined);
+    const submitApproval = vi.fn(async () => ({ ok: true, current_cursor: 13 }));
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ submitApproval }));
 
-    await adapter.submitApproval({
+    const receipt = await adapter.submitApproval({
       thread_id: ' thread_1 ',
       origin: 'main_tool',
       run_id: ' run_1 ',
@@ -399,10 +399,11 @@ describe('runtime Flower surface adapter read state', () => {
       queue_generation: 4,
       queue_revision: 5,
     });
+    expect(receipt).toEqual({ ok: true, current_cursor: 13 });
   });
 
   it('submits delegated approvals without requiring run or tool identity', async () => {
-    const submitApproval = vi.fn(async () => undefined);
+    const submitApproval = vi.fn(async () => ({ ok: true, current_cursor: 14 }));
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ submitApproval }));
     const delegatedRef = {
       parent_thread_id: 'thread_1',
@@ -414,7 +415,7 @@ describe('runtime Flower surface adapter read state', () => {
       approval_id: 'approval_child',
     };
 
-    await adapter.submitApproval({
+    const receipt = await adapter.submitApproval({
       thread_id: ' thread_1 ',
       origin: 'delegated_subagent',
       action_id: ' action_delegated ',
@@ -441,6 +442,7 @@ describe('runtime Flower surface adapter read state', () => {
       idempotency_key: 'idem-1',
       delegated_ref: delegatedRef,
     });
+    expect(receipt).toEqual({ ok: true, current_cursor: 14 });
   });
 
   it('passes working directory picker requests through adapter options', async () => {

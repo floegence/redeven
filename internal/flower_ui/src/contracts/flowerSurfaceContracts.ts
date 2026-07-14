@@ -871,6 +871,11 @@ export type FlowerSubmitApprovalRequest =
       tool_id?: never;
     }>);
 
+export type FlowerApprovalDecisionReceipt = Readonly<{
+  ok: boolean;
+  current_cursor: number;
+}>;
+
 export type FlowerThreadListItem = Readonly<{
   thread_id: string;
   title: string;
@@ -1160,7 +1165,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;
-  submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<void>;
+  submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<FlowerApprovalDecisionReceipt>;
   readTerminalProcess?: (input: FlowerTerminalProcessReadRequest) => Promise<FlowerTerminalProcessSnapshot>;
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;

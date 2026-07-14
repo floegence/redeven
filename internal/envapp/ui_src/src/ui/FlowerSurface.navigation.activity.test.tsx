@@ -1948,7 +1948,7 @@ describe('FlowerSurface navigation activity', () => {
         },
       ],
     });
-    const submitApproval = vi.fn(async () => undefined);
+    const submitApproval = vi.fn(async () => ({ ok: true, current_cursor: 19 }));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [delegatedThread]),
@@ -2003,6 +2003,290 @@ describe('FlowerSurface navigation activity', () => {
       idempotency_key: 'dappr-terminal:approve:3:7',
       delegated_ref: delegatedAction.delegated_ref,
     }));
+  });
+
+  it('shows approval feedback in the click task and keeps the card until the receipt cursor is projected', async () => {
+    const approvalAction = {
+      action_id: 'appr-immediate-feedback',
+      origin: 'main_tool' as const,
+      run_id: 'run-immediate-feedback',
+      tool_id: 'tool-immediate-feedback',
+      tool_name: 'terminal.exec',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      revision: 1,
+      version: 1,
+      surface_epoch: 1,
+      surface_role: 'primary_action' as const,
+      requested_at_ms: 7_300,
+      can_approve: true,
+      expected_seq: 30,
+      queue_generation: 1,
+      queue_order: 1,
+      batch_index: 0,
+      batch_size: 1,
+      summary: {
+        label: 'terminal.exec',
+        description: 'Review this command before it runs.',
+        command: 'npm run test:unit',
+        effects: ['shell'],
+      },
+    };
+    const approvalThread = thread({
+      thread_id: 'thread-immediate-feedback',
+      title: 'Immediate approval feedback',
+      status: 'waiting_approval',
+      approval_actions: [approvalAction],
+      approval_queue: {
+        generation: 1,
+        revision: 1,
+        current_action_id: approvalAction.action_id,
+        current_position: 1,
+        total: 1,
+        unresolved_count: 1,
+      },
+    });
+    const receipt = deferred<{ ok: boolean; current_cursor: number }>();
+    let deliverResolution = false;
+    let resolutionDelivered = false;
+    const listThreadLiveEvents = vi.fn(async (_threadID: string, afterSeq: number): Promise<FlowerLiveEventsResponse> => {
+      if (deliverResolution && !resolutionDelivered) {
+        resolutionDelivered = true;
+        return {
+          stream_generation: 1,
+          events: [{
+            schema_version: 1,
+            seq: 31,
+            endpoint_id: 'test-runtime',
+            thread_id: approvalThread.thread_id,
+            run_id: approvalAction.run_id,
+            at_unix_ms: 7_310,
+            kind: 'approval.resolved',
+            payload: {
+              action: {
+                ...approvalAction,
+                state: 'approved',
+                status: 'resolved',
+                can_approve: false,
+                resolved_at_ms: 7_310,
+              },
+              approval_queue: {
+                generation: 1,
+                revision: 2,
+                current_action_id: '',
+                current_position: 0,
+                total: 1,
+                unresolved_count: 0,
+              },
+            },
+          }] satisfies FlowerLiveEvent[],
+          next_cursor: 31,
+          retained_from_seq: 1,
+        };
+      }
+      return { stream_generation: 1, events: [], next_cursor: afterSeq, retained_from_seq: 1 };
+    });
+    const submitApproval = vi.fn(() => receipt.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [approvalThread]),
+      loadThread: vi.fn(async () => liveBootstrap(approvalThread, 30)),
+      listThreadLiveEvents,
+      submitApproval,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-immediate-feedback"] button')));
+    (runtime.querySelector('[data-thread-id="thread-immediate-feedback"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-immediate-feedback"]')));
+    const card = runtime.querySelector('.flower-composer [data-flower-approval-action-id="appr-immediate-feedback"]') as HTMLElement;
+    const buttons = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'));
+    const approve = buttons.find((button) => button.textContent?.trim() === 'Approve');
+    expect(approve).toBeTruthy();
+
+    approve?.click();
+
+    expect(submitApproval).toHaveBeenCalledTimes(1);
+    expect(card.isConnected).toBe(true);
+    expect(runtime.querySelectorAll('.flower-composer [data-flower-approval-action-id="appr-immediate-feedback"]')).toHaveLength(1);
+    expect(runtime.querySelector('.flower-composer [data-flower-approval-action-id="appr-immediate-feedback"]')).toBe(card);
+    expect(runtime.querySelector('.flower-composer textarea')).toBeNull();
+    expect(buttons.every((button) => button.disabled)).toBe(true);
+    expect(approve?.getAttribute('data-loading')).toBe('true');
+    expect(approve?.getAttribute('aria-busy')).toBe('true');
+    expect(approve?.textContent?.trim()).toBe('Approve');
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('data-flower-approval-handoff-phase')).toBe('submitting');
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('aria-busy')).toBe('true');
+    approve?.click();
+    expect(submitApproval).toHaveBeenCalledTimes(1);
+
+    receipt.resolve({ ok: true, current_cursor: 31 });
+    await flushMicrotasks();
+    expect(runtime.querySelector('.flower-composer [data-flower-approval-action-id="appr-immediate-feedback"]')).toBe(card);
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('data-flower-approval-handoff-phase')).toBe('awaiting_projection');
+
+    deliverResolution = true;
+    await waitFor(() => runtime.querySelector('[data-flower-approval-action-id="appr-immediate-feedback"]') === null);
+    expect(runtime.querySelector('.flower-composer textarea')).not.toBeNull();
+  });
+
+  it('accepts a promoted live action that arrives before the approval receipt', async () => {
+    const first = {
+      action_id: 'appr-event-first',
+      origin: 'main_tool' as const,
+      run_id: 'run-event-first',
+      tool_id: 'tool-event-first',
+      tool_name: 'terminal.exec',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      revision: 1,
+      version: 1,
+      surface_epoch: 1,
+      surface_role: 'primary_action' as const,
+      requested_at_ms: 7_400,
+      can_approve: true,
+      expected_seq: 40,
+      queue_generation: 1,
+      queue_order: 1,
+      batch_index: 0,
+      batch_size: 2,
+      summary: { label: 'First command', command: 'npm run first', effects: ['shell'] },
+    };
+    const second = {
+      ...first,
+      action_id: 'appr-event-second',
+      tool_id: 'tool-event-second',
+      surface_role: 'locator' as const,
+      can_approve: false,
+      expected_seq: 41,
+      queue_order: 2,
+      batch_index: 1,
+      summary: { label: 'Second command', command: 'npm run second', effects: ['shell'] },
+    };
+    const approvalThread = thread({
+      thread_id: 'thread-event-before-receipt',
+      title: 'Event before receipt',
+      status: 'waiting_approval',
+      approval_actions: [first, second],
+      approval_queue: { generation: 1, revision: 2, current_action_id: first.action_id, current_position: 1, total: 2, unresolved_count: 2 },
+    });
+    const receipt = deferred<{ ok: boolean; current_cursor: number }>();
+    let deliverPromotion = false;
+    let promotionDelivered = false;
+    const listThreadLiveEvents = vi.fn(async (_threadID: string, afterSeq: number): Promise<FlowerLiveEventsResponse> => {
+      if (deliverPromotion && !promotionDelivered) {
+        promotionDelivered = true;
+        return {
+          stream_generation: 1,
+          events: [{
+            schema_version: 1,
+            seq: 42,
+            endpoint_id: 'test-runtime',
+            thread_id: approvalThread.thread_id,
+            run_id: first.run_id,
+            at_unix_ms: 7_410,
+            kind: 'approval.resolved',
+            payload: {
+              action: { ...first, state: 'approved', status: 'resolved', can_approve: false, resolved_at_ms: 7_410 },
+              approval_queue: { generation: 1, revision: 3, current_action_id: second.action_id, current_position: 2, total: 2, unresolved_count: 1 },
+            },
+          }, {
+            schema_version: 1,
+            seq: 43,
+            endpoint_id: 'test-runtime',
+            thread_id: approvalThread.thread_id,
+            run_id: second.run_id,
+            at_unix_ms: 7_411,
+            kind: 'approval.requested',
+            payload: {
+              action: { ...second, surface_role: 'primary_action', can_approve: true },
+              approval_queue: { generation: 1, revision: 3, current_action_id: second.action_id, current_position: 2, total: 2, unresolved_count: 1 },
+            },
+          }] satisfies FlowerLiveEvent[],
+          next_cursor: 43,
+          retained_from_seq: 1,
+        };
+      }
+      return { stream_generation: 1, events: [], next_cursor: afterSeq, retained_from_seq: 1 };
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [approvalThread]),
+      loadThread: vi.fn(async () => liveBootstrap(approvalThread, 41)),
+      listThreadLiveEvents,
+      submitApproval: vi.fn(() => receipt.promise),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-event-before-receipt"] button')));
+    (runtime.querySelector('[data-thread-id="thread-event-before-receipt"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-event-first"]')));
+    const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
+      .find((button) => button.textContent?.trim() === 'Approve')!;
+    approve.click();
+    deliverPromotion = true;
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-event-second"]')));
+    expect(runtime.querySelector('[data-flower-approval-action-id="appr-event-first"]')).toBeNull();
+    expect(runtime.querySelector('.flower-composer textarea')).toBeNull();
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('data-flower-approval-handoff-phase')).toBe('settling');
+    expect(Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision')).every((button) => !button.disabled)).toBe(true);
+
+    receipt.resolve({ ok: true, current_cursor: 42 });
+    await flushMicrotasks();
+    expect(runtime.querySelector('[data-flower-approval-action-id="appr-event-second"]')).not.toBeNull();
+  });
+
+  it('keeps the submitted approval disabled when fallback reload cannot confirm the decision', async () => {
+    const action = {
+      action_id: 'appr-fallback-failure',
+      origin: 'main_tool' as const,
+      run_id: 'run-fallback-failure',
+      tool_id: 'tool-fallback-failure',
+      tool_name: 'terminal.exec',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      revision: 1,
+      version: 1,
+      surface_epoch: 1,
+      surface_role: 'primary_action' as const,
+      requested_at_ms: 7_500,
+      can_approve: true,
+      expected_seq: 50,
+      queue_generation: 1,
+      queue_order: 1,
+      batch_index: 0,
+      batch_size: 1,
+      summary: { label: 'Fallback command', command: 'npm run fallback', effects: ['shell'] },
+    };
+    const approvalThread = thread({
+      thread_id: 'thread-fallback-failure',
+      title: 'Fallback failure',
+      status: 'waiting_approval',
+      approval_actions: [action],
+      approval_queue: { generation: 1, revision: 1, current_action_id: action.action_id, current_position: 1, total: 1, unresolved_count: 1 },
+    });
+    const loadThread = vi.fn(async () => {
+      if (loadThread.mock.calls.length === 1) return liveBootstrap(approvalThread, 50);
+      throw new Error('canonical reload unavailable');
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [approvalThread]),
+      loadThread,
+      submitApproval: vi.fn(async () => ({ ok: true, current_cursor: 51 })),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-fallback-failure"] button')));
+    (runtime.querySelector('[data-thread-id="thread-fallback-failure"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-fallback-failure"]')));
+    const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
+      .find((button) => button.textContent?.trim() === 'Approve')!;
+    approve.click();
+
+    await waitFor(() => loadThread.mock.calls.length >= 2, 2_500);
+    expect(runtime.querySelector('[data-flower-approval-action-id="appr-fallback-failure"]')).not.toBeNull();
+    expect(runtime.querySelector('.flower-composer textarea')).toBeNull();
+    expect(Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision')).every((button) => button.disabled)).toBe(true);
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('data-flower-approval-handoff-phase')).toBe('fallback_reload');
   });
 
   it('shows the backend-selected composer approval and focuses each promoted card', async () => {
@@ -2471,6 +2755,7 @@ describe('FlowerSurface navigation activity', () => {
           status: 409,
         });
       }
+      return { ok: true, current_cursor: 22 };
     });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -2488,7 +2773,7 @@ describe('FlowerSurface navigation activity', () => {
     approve?.click();
 
     await waitFor(() => submitApproval.mock.calls.length === 2);
-    await waitFor(() => loadThread.mock.calls.length >= 3);
+    await waitFor(() => loadThread.mock.calls.length >= 3, 2_500);
     expect(submitApproval).toHaveBeenNthCalledWith(1, expect.objectContaining({
       action_id: action.action_id,
       approved: true,

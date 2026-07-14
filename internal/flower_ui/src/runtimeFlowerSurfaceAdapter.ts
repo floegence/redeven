@@ -1,4 +1,5 @@
 import type {
+  FlowerApprovalDecisionReceipt,
   FlowerCompactThreadContextInput,
   FlowerFileOpenRequest,
   FlowerLinkedContextPathOpenRequest,
@@ -106,7 +107,7 @@ export type FlowerRuntimeTransport = Readonly<{
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<LoadThreadResponse>;
   forkThread(threadID: string): Promise<LoadThreadResponse>;
-  submitApproval(input: RuntimeApprovalSubmitInput): Promise<void>;
+  submitApproval(input: RuntimeApprovalSubmitInput): Promise<FlowerApprovalDecisionReceipt>;
 }>;
 
 export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
@@ -289,14 +290,13 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         ...(input.idempotency_key ? { idempotency_key: trim(input.idempotency_key) } : {}),
       };
       if (input.origin === 'delegated_subagent') {
-        await options.transport.submitApproval({
+        return options.transport.submitApproval({
           ...common,
           origin: 'delegated_subagent',
           delegated_ref: input.delegated_ref,
         });
-        return;
       }
-      await options.transport.submitApproval({
+      return options.transport.submitApproval({
         ...common,
         origin: input.origin,
         run_id: trim(input.run_id),
