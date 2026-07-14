@@ -2193,10 +2193,12 @@ describe('Flower live projection', () => {
 
   it('keeps existing approval actions when bootstrap live state has not sampled approvals', () => {
     const approval = approvalAction();
+    const approvalQueue = { generation: 1, revision: 1, current_action_id: 'appr-1', current_position: 1, total: 1, unresolved_count: 1 };
     const projected = projectFlowerLiveBootstrap(bootstrap({
       thread: thread({
         status: 'waiting_approval',
         approval_actions: [approval],
+        approval_queue: approvalQueue,
       }),
       live_state: {
         thread_patch: { run_status: 'running' },
@@ -2209,6 +2211,7 @@ describe('Flower live projection', () => {
 
     expect(projected.status).toBe('waiting_approval');
     expect(projected.approval_actions?.map((action) => action.action_id)).toEqual(['appr-1']);
+    expect(projected.approval_queue).toEqual(approvalQueue);
     expect(projected.active_run_id).toBe('run-1');
   });
 
@@ -2259,6 +2262,29 @@ describe('Flower live projection', () => {
 
     expect(projected.status).toBe('running');
     expect(projected.approval_actions).toEqual([]);
+    expect(projected.active_run_id).toBe('run-1');
+  });
+
+  it('clears existing approval actions when live state explicitly clears the queue', () => {
+    const projected = projectFlowerLiveBootstrap(bootstrap({
+      thread: thread({
+        status: 'waiting_approval',
+        approval_actions: [approvalAction()],
+        approval_queue: { generation: 1, revision: 1, current_action_id: 'appr-1', current_position: 1, total: 1, unresolved_count: 1 },
+      }),
+      live_state: {
+        thread_patch: { run_status: 'running' },
+        runs: {
+          'run-1': { run_id: 'run-1', status: 'running', message_id: 'assistant-live' },
+        },
+        approval_queue: null,
+        input_requests: {},
+      },
+    }));
+
+    expect(projected.status).toBe('running');
+    expect(projected.approval_actions).toEqual([]);
+    expect(projected.approval_queue).toBeNull();
     expect(projected.active_run_id).toBe('run-1');
   });
 

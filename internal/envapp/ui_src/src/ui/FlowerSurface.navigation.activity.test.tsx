@@ -2131,6 +2131,112 @@ describe('FlowerSurface navigation activity', () => {
     expect((document.activeElement as HTMLElement | null)?.tagName).toBe('SECTION');
   });
 
+  it('keeps the selected approval card mounted across stale list refreshes', async () => {
+    const approvals = Array.from({ length: 10 }, (_, index) => ({
+      action_id: `appr-refresh-${index + 1}`,
+      origin: 'main_tool' as const,
+      run_id: 'run-approval-refresh-stability',
+      tool_id: `tool-refresh-${index + 1}`,
+      tool_name: 'terminal.exec',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      revision: 1,
+      version: 1,
+      surface_epoch: 1,
+      surface_role: index === 0 ? 'primary_action' as const : 'locator' as const,
+      requested_at_ms: 8_000 + index,
+      can_approve: index === 0,
+      expected_seq: 30 + index,
+      queue_generation: 1,
+      queue_order: index + 1,
+      batch_index: index,
+      batch_size: 10,
+      summary: {
+        label: `Command ${index + 1}`,
+        command: `curl -fsS https://example.test/${index + 1}`,
+        effects: ['shell'],
+      },
+    }));
+    const approvalThread = thread({
+      thread_id: 'thread-approval-refresh-stability',
+      title: 'Approval refresh stability',
+      status: 'waiting_approval',
+      approval_actions: approvals,
+      approval_queue: {
+        generation: 1,
+        revision: 10,
+        current_action_id: approvals[0]!.action_id,
+        current_position: 1,
+        total: 10,
+        unresolved_count: 10,
+      },
+    });
+    const staleSummary = {
+      ...approvalThread,
+      status: 'running' as const,
+      messages: [],
+      approval_actions: undefined,
+      approval_queue: undefined,
+    };
+    const backgroundThread = thread({
+      thread_id: 'thread-background-running',
+      title: 'Background running',
+      status: 'running',
+      messages: [],
+    });
+    const listThreads = vi.fn(async () => [staleSummary, backgroundThread]);
+    const loadThread = vi.fn(async () => liveBootstrap(approvalThread, 39));
+    const listThreadLiveEvents = vi.fn(async (_threadID: string, afterSeq: number) => ({
+      stream_generation: 1,
+      events: [],
+      next_cursor: afterSeq,
+      retained_from_seq: 1,
+    }));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads,
+      loadThread,
+      listThreadLiveEvents,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-approval-refresh-stability"] button')));
+    vi.useFakeTimers();
+    (runtime.querySelector('[data-thread-id="thread-approval-refresh-stability"] button') as HTMLButtonElement).click();
+    for (let attempt = 0; attempt < 20 && !runtime.querySelector('[data-flower-approval-action-id="appr-refresh-1"]'); attempt += 1) {
+      await vi.advanceTimersByTimeAsync(10);
+      await flushMicrotasks();
+    }
+    expect(runtime.querySelector('[data-flower-approval-action-id="appr-refresh-1"]')).toBeTruthy();
+
+    const initialCard = runtime.querySelector('[data-flower-approval-action-id="appr-refresh-1"]') as HTMLElement;
+    let detachCount = 0;
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const removed of record.removedNodes) {
+          if (removed === initialCard || removed instanceof Element && removed.contains(initialCard)) {
+            detachCount += 1;
+          }
+        }
+      }
+    });
+    observer.observe(runtime, { childList: true, subtree: true });
+
+    for (let index = 0; index < 5; index += 1) {
+      await vi.advanceTimersByTimeAsync(1_800);
+      await flushMicrotasks();
+      expect(runtime.querySelector('[data-flower-approval-action-id="appr-refresh-1"]')).toBe(initialCard);
+      expect(runtime.querySelectorAll('.flower-composer [data-flower-composer-approval="true"]')).toHaveLength(1);
+      expect(runtime.querySelector('.flower-composer textarea')).toBeNull();
+      expect(initialCard.textContent).toContain('1 / 10');
+    }
+    observer.disconnect();
+
+    expect(detachCount).toBe(0);
+    expect(listThreads.mock.calls.length).toBeGreaterThanOrEqual(5);
+    expect(listThreadLiveEvents.mock.calls.length).toBeGreaterThanOrEqual(5);
+    expect(loadThread).toHaveBeenCalledTimes(1);
+  });
+
   it('silently advances when the submitted approval timed out before the decision arrived', async () => {
     const pendingThread = thread({
       thread_id: 'thread-stale-approval',

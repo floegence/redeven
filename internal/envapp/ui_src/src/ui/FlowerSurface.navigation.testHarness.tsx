@@ -29,6 +29,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = (props: any) => <span data-icon class={props.class} />;
   return {
+    Activity: Icon,
     AlertTriangle: Icon,
     ArrowUp: Icon,
     Bot: Icon,
@@ -46,6 +47,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     GitBranch: Icon,
     GripVertical: Icon,
     MoreHorizontal: Icon,
+    Paperclip: Icon,
     Pencil: Icon,
     Pin: Icon,
     Plus: Icon,

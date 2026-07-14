@@ -518,27 +518,38 @@ describe('mergeFlowerThreadListRefresh', () => {
     expect(merged?.error).toBe(summary.error);
   });
 
-  it('keeps approval actions only while the summary status is waiting for approval', () => {
+  it('keeps selected live approval detail when a list summary reports running', () => {
     const existing = thread({
       status: 'waiting_approval',
       approval_actions: [approvalAction()],
+      approval_queue: {
+        generation: 1,
+        revision: 1,
+        current_action_id: 'approval-1',
+        current_position: 1,
+        total: 1,
+        unresolved_count: 1,
+      },
     });
     const waitingSummary = thread({
       ...existing,
       messages: [],
       approval_actions: undefined,
+      approval_queue: undefined,
       status: 'waiting_approval',
     });
     const runningSummary = thread({
       ...existing,
       messages: [],
       approval_actions: undefined,
+      approval_queue: undefined,
       status: 'running',
     });
     const clearedSummary = thread({
       ...existing,
       messages: [],
       approval_actions: [],
+      approval_queue: undefined,
       status: 'waiting_approval',
     });
 
@@ -556,8 +567,109 @@ describe('mergeFlowerThreadListRefresh', () => {
     });
 
     expect(waiting?.approval_actions).toBe(existing.approval_actions);
-    expect(running?.approval_actions).toBeUndefined();
+    expect(waiting?.approval_queue).toBe(existing.approval_queue);
+    expect(running?.status).toBe('waiting_approval');
+    expect(running?.approval_actions).toBe(existing.approval_actions);
+    expect(running?.approval_queue).toBe(existing.approval_queue);
     expect(cleared?.approval_actions).toEqual([]);
+    expect(cleared?.approval_queue).toBeNull();
+  });
+
+  it('keeps a ten-item selected approval queue stable across repeated stale summaries', () => {
+    const approvals = Array.from({ length: 10 }, (_, index) => approvalAction({
+      action_id: `approval-${index + 1}`,
+      queue_generation: 1,
+      queue_order: index + 1,
+      batch_index: index,
+      batch_size: 10,
+      can_approve: index === 0,
+      surface_role: index === 0 ? 'primary_action' : 'locator',
+    }));
+    const existing = thread({
+      thread_id: 'thread-ten-approvals',
+      status: 'waiting_approval',
+      approval_actions: approvals,
+      approval_queue: {
+        generation: 1,
+        revision: 10,
+        current_action_id: 'approval-1',
+        current_position: 1,
+        total: 10,
+        unresolved_count: 10,
+      },
+    });
+    const summary = thread({
+      ...existing,
+      status: 'running',
+      messages: [],
+      approval_actions: undefined,
+      approval_queue: undefined,
+    });
+
+    const first = mergeFlowerThreadListRefresh([existing], [summary], {
+      selectedThreadID: existing.thread_id,
+      sameThreadSnapshot,
+    });
+    const second = mergeFlowerThreadListRefresh(first, [summary], {
+      selectedThreadID: existing.thread_id,
+      sameThreadSnapshot,
+    });
+
+    expect(first).toBe(second);
+    expect(first[0]).toBe(existing);
+    expect(first[0]?.status).toBe('waiting_approval');
+    expect(first[0]?.approval_actions).toHaveLength(10);
+    expect(first[0]?.approval_queue).toBe(existing.approval_queue);
+  });
+
+  it('lets non-selected summaries replace stale approval detail', () => {
+    const existing = thread({
+      thread_id: 'thread-background-approval',
+      status: 'waiting_approval',
+      approval_actions: [approvalAction()],
+      approval_queue: { generation: 1, revision: 1, current_action_id: 'approval-1', current_position: 1, total: 1, unresolved_count: 1 },
+    });
+    const summary = thread({
+      ...existing,
+      status: 'running',
+      messages: [],
+      approval_actions: undefined,
+      approval_queue: undefined,
+    });
+
+    const [merged] = mergeFlowerThreadListRefresh([existing], [summary], {
+      selectedThreadID: 'thread-other',
+      sameThreadSnapshot,
+    });
+
+    expect(merged?.status).toBe('running');
+    expect(merged?.approval_actions).toBeUndefined();
+    expect(merged?.approval_queue).toBeUndefined();
+  });
+
+  it('treats a zero-unresolved queue as an authoritative approval clear', () => {
+    const existing = thread({
+      status: 'waiting_approval',
+      approval_actions: [approvalAction()],
+      approval_queue: { generation: 1, revision: 1, current_action_id: 'approval-1', current_position: 1, total: 1, unresolved_count: 1 },
+    });
+    const clearedQueue = { generation: 1, revision: 2, current_position: 0, total: 1, unresolved_count: 0 };
+    const summary = thread({
+      ...existing,
+      status: 'running',
+      messages: [],
+      approval_actions: undefined,
+      approval_queue: clearedQueue,
+    });
+
+    const [merged] = mergeFlowerThreadListRefresh([existing], [summary], {
+      selectedThreadID: existing.thread_id,
+      sameThreadSnapshot,
+    });
+
+    expect(merged?.status).toBe('running');
+    expect(merged?.approval_actions).toEqual([]);
+    expect(merged?.approval_queue).toBe(clearedQueue);
   });
 
   it('retains an active selected thread that is missing from a transient list result', () => {
@@ -687,6 +799,23 @@ describe('sameThreadSnapshot', () => {
     expect(sameThreadSnapshot(base, {
       ...base,
       subagents: [],
+    })).toBe(false);
+  });
+
+  it('treats approval queue-only changes as distinct snapshots', () => {
+    const base = thread({
+      status: 'waiting_approval',
+      approval_actions: [approvalAction()],
+      approval_queue: { generation: 1, revision: 1, current_action_id: 'approval-1', current_position: 1, total: 2, unresolved_count: 2 },
+    });
+
+    expect(sameThreadSnapshot(base, {
+      ...base,
+      approval_queue: { ...base.approval_queue!, revision: 2, current_position: 2, unresolved_count: 1 },
+    })).toBe(false);
+    expect(sameThreadSnapshot(base, {
+      ...base,
+      approval_queue: null,
     })).toBe(false);
   });
 });

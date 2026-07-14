@@ -2623,6 +2623,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         });
         return mergedThreads;
       });
+      const mergedSelected = mergedThreads.find((thread) => thread.thread_id === selectedID) ?? null;
       setSelectedThreadID((current) => {
         if (current && !mergedThreads.some((thread) => thread.thread_id === current)) {
           cancelDeferredThreadSelection();
@@ -2637,11 +2638,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         selectedID
         && previousSelected
         && selectedSummary
+        && mergedSelected
         && selectedDetailCurrent
         && (
-          previousSelected.updated_at_ms !== selectedSummary.updated_at_ms
-          || previousSelected.status !== selectedSummary.status
-          || flowerThreadReadSnapshotKey(previousSelected.read_status.snapshot) !== flowerThreadReadSnapshotKey(selectedSummary.read_status.snapshot)
+          previousSelected.updated_at_ms !== mergedSelected.updated_at_ms
+          || previousSelected.status !== mergedSelected.status
+          || flowerThreadReadSnapshotKey(previousSelected.read_status.snapshot) !== flowerThreadReadSnapshotKey(mergedSelected.read_status.snapshot)
         )
       ) {
         void refreshSelectedThread(selectedID);

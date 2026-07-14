@@ -1,4 +1,5 @@
 import type {
+  FlowerApprovalQueue,
   FlowerContextCompaction,
   FlowerContextUsage,
   FlowerModelIOStatus,
@@ -23,8 +24,22 @@ function visibleInputRequest(thread: FlowerThreadSnapshot): boolean {
   return thread.status === 'waiting_user' && thread.input_request != null;
 }
 
-function visibleApprovalActions(thread: FlowerThreadSnapshot): boolean {
-  return thread.status === 'waiting_approval' && (thread.approval_actions?.length ?? 0) > 0;
+function hasApprovalDetail(thread: FlowerThreadSnapshot): boolean {
+  return thread.approval_actions !== undefined || thread.approval_queue !== undefined;
+}
+
+function hasPendingApprovalState(thread: FlowerThreadSnapshot): boolean {
+  if (Number(thread.approval_queue?.unresolved_count ?? 0) > 0) return true;
+  return thread.approval_actions?.some((action) => action.status === 'pending' && action.state === 'requested') === true;
+}
+
+function summaryExplicitlyClearsApprovalActions(summary: FlowerThreadSnapshot): boolean {
+  return summary.approval_actions !== undefined && summary.approval_actions.length === 0;
+}
+
+function summaryExplicitlyClearsApprovalQueue(summary: FlowerThreadSnapshot): boolean {
+  return summary.approval_queue === null
+    || summary.approval_queue !== undefined && summary.approval_queue.unresolved_count <= 0;
 }
 
 function threadHasLoadedDetail(thread: FlowerThreadSnapshot): boolean {
@@ -32,7 +47,7 @@ function threadHasLoadedDetail(thread: FlowerThreadSnapshot): boolean {
     || thread.queued_turns !== undefined
     || thread.subagents !== undefined
     || visibleInputRequest(thread)
-    || visibleApprovalActions(thread)
+    || hasApprovalDetail(thread)
     || thread.error != null;
 }
 
@@ -72,9 +87,20 @@ function summaryCanKeepLiveModelState(summary: FlowerThreadSnapshot): boolean {
 export function mergeFlowerThreadListSummary(
   summary: FlowerThreadSnapshot,
   existing: FlowerThreadSnapshot,
+  options: Readonly<{ preserveApprovalDetail?: boolean }> = {},
 ): FlowerThreadSnapshot {
+  const explicitApprovalActionsClear = summaryExplicitlyClearsApprovalActions(summary);
+  const explicitApprovalQueueClear = summaryExplicitlyClearsApprovalQueue(summary);
+  const explicitApprovalClear = explicitApprovalActionsClear || explicitApprovalQueueClear;
+  const preserveApprovalDetail = options.preserveApprovalDetail === true
+    && hasPendingApprovalState(existing)
+    && !explicitApprovalClear;
+  const status = preserveApprovalDetail && summary.status !== 'waiting_user'
+    ? 'waiting_approval'
+    : summary.status;
   return {
     ...summary,
+    status,
     messages: existing.messages,
     ...(summaryCanKeepLiveModelState(summary) && summary.active_run_id === undefined && existing.active_run_id !== undefined ? { active_run_id: existing.active_run_id } : {}),
     ...(summaryCanKeepLiveModelState(summary) && summary.model_io_status === undefined && existing.model_io_status !== undefined ? { model_io_status: existing.model_io_status } : {}),
@@ -83,7 +109,16 @@ export function mergeFlowerThreadListSummary(
     ...(summary.timeline_decorations === undefined && existing.timeline_decorations !== undefined ? { timeline_decorations: existing.timeline_decorations } : {}),
     ...(summary.subagents === undefined && existing.subagents !== undefined ? { subagents: existing.subagents } : {}),
     ...(summary.queued_turns === undefined && Number(summary.queued_turn_count ?? 0) > 0 && existing.queued_turns !== undefined ? { queued_turns: existing.queued_turns } : {}),
-    ...(summary.status === 'waiting_approval' && summary.approval_actions === undefined && existing.approval_actions !== undefined ? { approval_actions: existing.approval_actions } : {}),
+    ...(explicitApprovalActionsClear ? {
+      approval_actions: [],
+      approval_queue: null,
+    } : {}),
+    ...(!explicitApprovalActionsClear && explicitApprovalQueueClear ? {
+      approval_actions: [],
+      approval_queue: summary.approval_queue,
+    } : {}),
+    ...(preserveApprovalDetail && summary.approval_actions === undefined && existing.approval_actions !== undefined ? { approval_actions: existing.approval_actions } : {}),
+    ...(preserveApprovalDetail && summary.approval_queue === undefined && existing.approval_queue !== undefined ? { approval_queue: existing.approval_queue } : {}),
     ...(summaryOwnsExistingInputRequest(summary, existing) ? { input_request: existing.input_request } : {}),
     ...(summary.error === undefined && existing.error != null && summaryCanStillShowExistingError(summary) ? { error: existing.error } : {}),
   };
@@ -126,6 +161,17 @@ function sameOptionalString(left: string | undefined, right: string | undefined)
 
 function sameOptionalNumber(left: number | undefined, right: number | undefined): boolean {
   return Number(left ?? 0) === Number(right ?? 0);
+}
+
+function sameApprovalQueue(left: FlowerApprovalQueue | null | undefined, right: FlowerApprovalQueue | null | undefined): boolean {
+  if (left === right) return true;
+  if (left == null || right == null) return left === right;
+  return Number(left.generation) === Number(right.generation)
+    && Number(left.revision) === Number(right.revision)
+    && trimString(left.current_action_id) === trimString(right.current_action_id)
+    && Number(left.current_position) === Number(right.current_position)
+    && Number(left.total) === Number(right.total)
+    && Number(left.unresolved_count) === Number(right.unresolved_count);
 }
 
 function sameModelIOStatus(left: FlowerModelIOStatus | null | undefined, right: FlowerModelIOStatus | null | undefined): boolean {
@@ -277,6 +323,7 @@ export function sameThreadSnapshot(left: FlowerThreadSnapshot, right: FlowerThre
       && sameTimelineDecorations(left.timeline_decorations, right.timeline_decorations)
       && sameSubagentSummaries(left.subagents, right.subagents)
       && sameReferenceOrEmpty(left.approval_actions, right.approval_actions)
+      && sameApprovalQueue(left.approval_queue, right.approval_queue)
       && left.input_request === right.input_request
       && left.error === right.error
     );
@@ -295,7 +342,9 @@ export function mergeFlowerThreadListRefresh(
     const existing = byID.get(thread.thread_id);
     if (!existing) return thread;
     const preserveLoadedDetail = threadHasLoadedDetail(existing) && thread.messages.length === 0;
-    const candidate = preserveLoadedDetail ? mergeFlowerThreadListSummary(thread, existing) : thread;
+    const candidate = preserveLoadedDetail ? mergeFlowerThreadListSummary(thread, existing, {
+      preserveApprovalDetail: thread.thread_id === selectedID,
+    }) : thread;
     return options.sameThreadSnapshot(existing, candidate) ? existing : candidate;
   });
 
