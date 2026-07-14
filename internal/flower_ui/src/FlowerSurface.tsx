@@ -3,7 +3,7 @@ import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup
 import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Plus, Settings, Shield, Terminal } from '@floegence/floe-webapp-core/icons';
-import { Button, FloatingWindow, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
 import { FlowerChatContextChips } from './chat/FlowerChatContextChips';
@@ -95,6 +95,7 @@ import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { FlowerSettingsSurface } from './settings/FlowerSettingsSurface';
 import { FlowerShellCommandHighlight } from './shellCommandHighlight';
 import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerThreadList';
+import { SubagentDetailWindow } from './SubagentDetailWindow';
 import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
 import { flowerThreadReadSnapshotKey, mergeFlowerThreadListRefresh, sameThreadSnapshot } from './flowerThreadListRefresh';
 import { FlowerProviderBrandIcon, flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
@@ -3890,6 +3891,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
+  const retrySubagentDetailTail = () => {
+    const parentThreadID = trimString(selectedThread()?.thread_id);
+    const childThreadID = trimString(activeSubagentID());
+    const openedRevision = subagentDetailOpenedRevision();
+    if (!parentThreadID || !childThreadID || !openedRevision || subagentDetailTailInFlight) return;
+    if (subagentDetailTailTimer !== undefined) {
+      window.clearTimeout(subagentDetailTailTimer);
+      subagentDetailTailTimer = undefined;
+    }
+    const request: FlowerSubagentDetailTailRequest = {
+      parentThreadID,
+      childThreadID,
+      openedRevision,
+      afterOrdinal: latestSubagentDetailOrdinal(),
+    };
+    void runSubagentDetailTailRequest(request).finally(() => {
+      setSubagentDetailTailRevision((revision) => revision + 1);
+    });
+  };
+
   createEffect(() => {
     const parentID = trimString(selectedThread()?.thread_id);
     const childID = trimString(activeSubagentID());
@@ -6275,6 +6296,31 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const item = activeSubagentItem();
     return trimString(detail?.summary.task_description || item?.taskDescription || detail?.summary.task_name || item?.taskName || '');
   });
+  const subagentDetailAgentTypeLabel = createMemo(() => {
+    const raw = trimString(subagentDetail()?.summary.agent_type || activeSubagentItem()?.agentType).toLowerCase();
+    switch (raw) {
+      case 'explore':
+        return subagentsCopy().typeLabels.explore;
+      case 'worker':
+        return subagentsCopy().typeLabels.worker;
+      case 'reviewer':
+        return subagentsCopy().typeLabels.reviewer;
+      default:
+        return subagentsCopy().typeLabels.unknown;
+    }
+  });
+  const subagentDetailElapsedLabel = createMemo(() => {
+    const detail = subagentDetail();
+    const item = activeSubagentItem();
+    const startedAtMs = Math.max(0, Number(detail?.summary.created_at_ms || item?.startedAtMs || item?.createdAtMs || 0));
+    if (!startedAtMs) return '';
+    const status = subagentDetailActiveStatus();
+    const terminal = status === 'completed' || status === 'failed' || status === 'canceled' || status === 'timed_out';
+    const endedAtMs = terminal
+      ? Math.max(startedAtMs, Number(detail?.summary.updated_at_ms || item?.updatedAtMs || startedAtMs))
+      : activityClockNow();
+    return formatActivityDuration(Math.max(0, endedAtMs - startedAtMs));
+  });
   const subagentDetailModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => subagentDetail()?.model_io_status ?? null);
   const subagentDetailModelStatusLabel = createMemo(() => {
     const status = subagentDetailModelIOStatus();
@@ -6352,127 +6398,54 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const subagentDetailThread = createMemo(() => projectSubagentDetailThread(subagentDetail(), activeSubagentID(), activeSubagentTitle()));
   const subagentDetailTimelineEntries = createMemo(() => buildFlowerTimelineEntries(subagentDetailThread()));
-  const subagentDetailTimelineEntryKeys = createMemo(() => subagentDetailTimelineEntries().map((entry) => entry.key));
-  const subagentDetailTimelineEntriesByKey = createMemo(() => new Map(subagentDetailTimelineEntries().map((entry) => [entry.key, entry] as const)));
   const subagentDetailWindowTitle = createMemo(() => activeSubagentTitle());
   const showSubagentDetailScrollToLatestButton = createMemo(() => (
     Boolean(subagentDetailThread())
     && !subagentDetailScroll.nearBottom()
   ));
+  const retrySubagentDetailLoad = () => {
+    const item = activeSubagentItem();
+    if (item) void openSubagentDetail(item);
+  };
 
   const subagentDetailDialog = () => (
-    <FloatingWindow
+    <SubagentDetailWindow
       open={Boolean(activeSubagentID())}
       onOpenChange={(open) => {
         if (!open) closeSubagentOverlays();
       }}
       title={subagentDetailWindowTitle()}
-      class="flower-subagent-detail-window"
-      defaultSize={{ width: 760, height: 640 }}
-      minSize={{ width: 420, height: 320 }}
-      viewportInsets={{ top: 56, right: 12, bottom: 12, left: Math.max(12, threadRailWidth() + 12) }}
-      resizable
-      draggable
+      status={subagentDetailActiveStatus()}
+      statusLabel={subagentSummaryStatus()}
+      statusIndicator={subagentStatusIndicator(subagentDetailActiveStatus())}
+      agentTypeLabel={subagentDetailAgentTypeLabel()}
+      elapsedLabel={subagentDetailElapsedLabel()}
+      description={subagentDetailMeta()}
+      loading={subagentDetailLoading()}
+      error={subagentDetailError()}
+      detailAvailable={Boolean(subagentDetailThread())}
+      entries={subagentDetailTimelineEntries()}
+      renderEntry={(entry) => timelineEntry(() => entry)}
+      bindScroll={(node) => { subagentDetailScroll.bind(node); }}
+      onScroll={() => subagentDetailScroll.onScroll()}
+      showScrollToLatest={showSubagentDetailScrollToLatestButton()}
+      onScrollToLatest={() => subagentDetailScroll.scrollToBottom({ smooth: true })}
+      hasMore={Boolean(subagentDetail()?.has_more)}
+      loadingMore={subagentDetailLoadingMore()}
+      onLoadMore={() => void loadMoreSubagentDetail()}
+      onRetryLoad={retrySubagentDetailLoad}
+      modelStatus={subagentDetailModelIOStatus()
+        ? modelStatusIndicator(subagentDetailModelIOStatus(), subagentDetailModelStatusLabel())
+        : null}
+      tailLoading={subagentDetailTailLoading()}
+      tailError={subagentDetailTailError()}
+      onRetryTail={retrySubagentDetailTail}
+      viewportLeftInset={Math.max(12, threadRailWidth() + 12)}
       zIndex={FLOWER_SURFACE_LAYER.subagentWindow}
-    >
-      <div class="flower-subagent-detail-surface" data-flower-subagent-detail="open">
-        <div class="flower-subagent-detail-toolbar">
-          <span class={cn('flower-subagent-status-pill', `flower-subagent-status-${subagentDetailActiveStatus()}`)}>
-            {subagentStatusIndicator(subagentDetailActiveStatus())}
-            {subagentSummaryStatus()}
-          </span>
-          <Show when={subagentDetailMeta()}>
-            {(meta) => <span class="flower-subagent-detail-meta">{meta()}</span>}
-          </Show>
-        </div>
-        <Show when={subagentDetailLoading()}>
-          <div class="flower-subagent-detail-state" role="status">
-            <Clock class="h-4 w-4" />
-            <span>{copy().chat.threadLoading}</span>
-          </div>
-        </Show>
-        <Show when={subagentDetailError()}>
-          {(message) => (
-            <div class="flower-subagent-detail-state flower-subagent-detail-state-error" role="alert">
-              <AlertTriangle class="h-4 w-4" />
-              <span>{message()}</span>
-            </div>
-          )}
-        </Show>
-        <Show when={subagentDetailThread()}>
-          <div
-            ref={(node) => { subagentDetailScroll.bind(node); }}
-            class="flower-chat-transcript flower-subagent-detail-transcript"
-            role="list"
-            aria-label="Subagent timeline"
-            onScroll={() => subagentDetailScroll.onScroll()}
-          >
-            <div class="flower-transcript-stack flower-subagent-detail-transcript-stack">
-              <Show
-                when={subagentDetailTimelineEntryKeys().length > 0}
-                fallback={<div class="flower-subagent-detail-empty">{subagentsCopy().emptyDescription}</div>}
-              >
-                <For each={subagentDetailTimelineEntryKeys()}>
-                  {(entryKey) => {
-                    const entry = createMemo(() => subagentDetailTimelineEntriesByKey().get(entryKey) ?? null);
-                    return (
-                      <Show when={entry()}>
-                        {(value) => <div role="listitem">{timelineEntry(value)}</div>}
-                      </Show>
-                    );
-                  }}
-                </For>
-              </Show>
-            </div>
-            <Show when={showSubagentDetailScrollToLatestButton()}>
-              <div class="flower-subagent-detail-scroll-to-latest">
-                <button
-                  type="button"
-                  class="flower-scroll-to-latest-button"
-                  aria-label={copy().chat.scrollToLatest}
-                  title={copy().chat.scrollToLatest}
-                  onClick={() => subagentDetailScroll.scrollToBottom({ smooth: true })}
-                >
-                  <ChevronDown class="h-4 w-4" />
-                </button>
-              </div>
-            </Show>
-          </div>
-        </Show>
-        <div class="flower-subagent-detail-bottom-dock">
-          <Show when={subagentDetail()?.has_more}>
-            <button
-              type="button"
-              class="flower-subagent-detail-load-more-button"
-              disabled={subagentDetailLoadingMore() || subagentDetailTailLoading()}
-              onClick={() => void loadMoreSubagentDetail()}
-            >
-              {subagentDetailLoadingMore() ? (subagentsCopy().loadingMore ?? 'Loading...') : (subagentsCopy().loadMore ?? 'Load more')}
-            </button>
-          </Show>
-          <div class="flower-chat-bottom-dock-track flower-subagent-detail-bottom-track">
-            <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
-              <Show when={subagentDetailModelIOStatus()}>
-                {(status) => modelStatusIndicator(status(), subagentDetailModelStatusLabel())}
-              </Show>
-              <Show when={subagentDetailTailLoading()}>
-                <span class="flower-subagent-detail-tail-state">
-                  {activityInlineLoader('flower-subagent-detail-tail-loader')}
-                </span>
-              </Show>
-              <Show when={subagentDetailTailError()}>
-                {(message) => (
-                  <span class="flower-subagent-detail-tail-error">
-                    <AlertTriangle class="h-3.5 w-3.5" />
-                    <span>{message()}</span>
-                  </span>
-                )}
-              </Show>
-            </div>
-          </div>
-        </div>
-      </div>
-    </FloatingWindow>
+      threadLoadingLabel={copy().chat.threadLoading}
+      scrollToLatestLabel={copy().chat.scrollToLatest}
+      copy={subagentsCopy()}
+    />
   );
 
   const threadLoadingState = () => (
