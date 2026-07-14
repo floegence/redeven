@@ -7,6 +7,7 @@ import {
   localePreferenceDisplayName,
   REDEVEN_LOCALE_META,
   REDEVEN_LOCALE_PREFERENCES,
+  REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES,
   REDEVEN_I18N_FORBIDDEN_GENERIC_ENGLISH_TERMS,
   REDEVEN_I18N_LOCALE_TERMINOLOGY,
   REDEVEN_I18N_PROTECTED_TERMS,
@@ -16,11 +17,13 @@ import {
   resolveRedevenLocale,
   SYSTEM_LOCALE_PREFERENCE,
   validateDesktopDictionary,
+  validateDictionaryFixedEnglishTerms,
+  validateDictionaryLocalizedModelProviderTerms,
   validateDictionaryProtectedTerms,
   flattenDictionaryMessages,
   type DesktopTranslationShape,
 } from './index';
-import { isPluralMessage, type TranslationLeaf } from './messageTypes';
+import { isPluralMessage, type TranslationLeaf, type TranslationTree } from './messageTypes';
 import { enUS } from './locales/en-US';
 
 const DESKTOP_TRANSLATION_ROOTS = new Set(
@@ -226,6 +229,49 @@ describe('Desktop shared i18n dictionaries', () => {
     }
   });
 
+  it('rejects translated, recased, or renumbered fixed English terms while preserving code literals', () => {
+    const source: TranslationTree = {
+      environmentCenter: {
+        translated: 'Connect Provider',
+        plural: '{count} providers',
+        literal: 'Use `Provider`, provider_id, providers[], PROVIDER_AUTH_FAILED, and https://provider.example/providers for this Provider.',
+      },
+    };
+    const target: TranslationTree = {
+      environmentCenter: {
+        translated: '连接提供程序',
+        plural: '{count} Provider',
+        literal: '对此 Provider 使用 `Provider`、provider_id、providers[]、PROVIDER_AUTH_FAILED 和 https://provider.example/providers。',
+      },
+    };
+
+    expect(validateDictionaryFixedEnglishTerms('zh-CN', source, target)).toEqual([
+      expect.objectContaining({ path: 'environmentCenter.translated', message: expect.stringContaining('"Provider" count mismatch') }),
+      expect.objectContaining({ path: 'environmentCenter.plural', message: expect.stringContaining('"Provider" count mismatch') }),
+      expect.objectContaining({ path: 'environmentCenter.plural', message: expect.stringContaining('"providers" count mismatch') }),
+    ]);
+  });
+
+  it('requires Flower model-provider terminology to stay localized while ignoring code literals', () => {
+    const localized: TranslationTree = {
+      flowerSurface: {
+        label: '添加模型提供商',
+        literal: '检查 `provider_id` 和 providers[]。',
+      },
+    };
+    const untranslated: TranslationTree = {
+      flowerSurface: {
+        label: 'Add Provider',
+        literal: '检查 `provider_id` 和 providers[]。',
+      },
+    };
+
+    expect(validateDictionaryLocalizedModelProviderTerms('zh-CN', localized)).toEqual([]);
+    expect(validateDictionaryLocalizedModelProviderTerms('zh-CN', untranslated)).toEqual([
+      expect.objectContaining({ path: 'flowerSurface.label', message: expect.stringContaining('must be localized') }),
+    ]);
+  });
+
   it('rejects empty translation leaves in every Desktop catalog', () => {
     const violations: string[] = [];
     for (const locale of REDEVEN_SUPPORTED_LOCALES) {
@@ -258,6 +304,7 @@ describe('Desktop shared i18n dictionaries', () => {
     const sourceRows = new Map(flattenDictionaryMessages(enUS).map((row) => [row.path, row.value]));
     const allowedTerms = [
       ...REDEVEN_I18N_PROTECTED_TERMS,
+      ...REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES.flatMap((family) => family.forms),
       ...REDEVEN_I18N_TECHNICAL_TERM_ALLOWLIST.map((entry) => entry.term),
       'Desktop',
       'Terminal',
@@ -303,13 +350,22 @@ describe('Desktop shared i18n dictionaries', () => {
     }
     expect(new Set(REDEVEN_I18N_TECHNICAL_TERM_ALLOWLIST.map((entry) => entry.term)).size).toBe(REDEVEN_I18N_TECHNICAL_TERM_ALLOWLIST.length);
     expect(REDEVEN_I18N_TECHNICAL_TERM_ALLOWLIST.every((entry) => entry.reason.trim().length > 0)).toBe(true);
+    expect(REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES).toEqual([
+      expect.objectContaining({
+        canonical: 'Provider',
+        forms: ['Provider', 'Providers', 'provider', 'providers'],
+        pathPrefixes: expect.arrayContaining(['environmentCenter.']),
+      }),
+    ]);
+    expect(REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES.every((family) => family.reason.trim().length > 0)).toBe(true);
   });
 
   it('keeps non-English dictionaries assignable to a widened message shape', () => {
     const zhCN: DesktopTranslationShape = DESKTOP_I18N_DICTIONARIES['zh-CN'];
     expect(zhCN.common.open).toBe('打开');
     expect(zhCN.environmentFacts.runsOn).toBe('运行于');
-    expect(zhCN.environmentFacts.provider).toBe('提供方');
+    expect(zhCN.environmentFacts.provider).toBe('Provider');
+    expect(zhCN.flowerSurface.settings.addProvider).toBe('添加模型提供商');
     expect(zhCN.environmentFacts.sshHost).toBe('SSH主机');
     expect(zhCN.environmentFacts.startedAt).toBe('已启动 {time}');
     expect(zhCN.environmentAction.open).toBe('打开');

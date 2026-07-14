@@ -4,7 +4,12 @@ import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { findProtectedTermViolations, PROTECTED_TERMS } from './protectedTerms';
+import {
+  findFixedEnglishTermViolations,
+  findLocalizedModelProviderTermViolations,
+  findProtectedTermViolations,
+  PROTECTED_TERMS,
+} from './protectedTerms';
 import { desktopLanguageBridge } from './desktopLanguageBridge';
 import { resolveLocalePreference, type RedevenLanguageSnapshot } from './resolveLocale';
 import {
@@ -22,6 +27,7 @@ import {
 } from './locales/testDictionaries';
 import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from './storageKey';
 import {
+  FIXED_ENGLISH_TERM_FAMILIES,
   FORBIDDEN_GENERIC_ENGLISH_TERMS,
   LOCALE_TERMINOLOGY,
   TECHNICAL_TERM_ALLOWLIST,
@@ -358,6 +364,69 @@ describe('Env App i18n dictionaries', () => {
     expect(violations).toEqual([]);
   });
 
+  it('preserves every fixed English term form across localized dictionaries', () => {
+    const violations = SUPPORTED_LOCALES.flatMap((locale) => (
+      findFixedEnglishTermViolations(enUS, dictionaries[locale], locale)
+    ));
+    expect(violations).toEqual([]);
+  });
+
+  it('keeps Flower model-provider terminology localized', () => {
+    const violations = SUPPORTED_LOCALES
+      .filter((locale) => locale !== 'en-US')
+      .flatMap((locale) => findLocalizedModelProviderTermViolations(dictionaries[locale], locale));
+    expect(violations).toEqual([]);
+    expect(dictionaries['zh-CN'].flowerSettings.providersTitle).toBe('模型提供商');
+    expect(dictionaries['zh-CN'].flowerSurface.settings.addProvider).toBe('添加模型提供商');
+  });
+
+  it('rejects translated, recased, or renumbered fixed English terms while preserving code literals', () => {
+    const source = {
+      shell: {
+        status: {
+          envTypeProvider: [
+            { type: 'text', value: 'Provider' },
+            { type: 'code', value: 'Provider' },
+          ],
+        },
+      },
+    } as unknown as EnvAppTranslationShape;
+    const target = {
+      shell: {
+        status: {
+          envTypeProvider: [
+            { type: 'text', value: '提供程序' },
+            { type: 'code', value: 'Provider' },
+          ],
+        },
+      },
+    } as unknown as EnvAppTranslationShape;
+
+    expect(findFixedEnglishTermViolations(source, target, 'zh-CN')).toEqual([
+      expect.objectContaining({ key: 'shell.status.envTypeProvider', form: 'Provider', expectedCount: 1, actualCount: 0 }),
+    ]);
+  });
+
+  it('rejects English model-provider terms while preserving code literals', () => {
+    const localized = {
+      flowerSettings: {
+        addProvider: '添加模型提供商',
+        currentModelNotInProviders: 'current_model_id 不在 providers[].models[] 中。',
+      },
+    } as unknown as EnvAppTranslationShape;
+    const untranslated = {
+      flowerSettings: {
+        addProvider: 'Add Provider',
+        currentModelNotInProviders: 'current_model_id 不在 providers[].models[] 中。',
+      },
+    } as unknown as EnvAppTranslationShape;
+
+    expect(findLocalizedModelProviderTermViolations(localized, 'zh-CN')).toEqual([]);
+    expect(findLocalizedModelProviderTermViolations(untranslated, 'zh-CN')).toEqual([
+      expect.objectContaining({ key: 'flowerSettings.addProvider', form: 'Provider', actualCount: 1 }),
+    ]);
+  });
+
   it('keeps every locale shape and placeholders aligned with en-US', () => {
     const sourceLeaves = collectLeaves(enUS);
     const sourceKeys = Object.keys(sourceLeaves).sort();
@@ -417,6 +486,7 @@ describe('Env App i18n dictionaries', () => {
     const sourceLeaves = collectLeaves(enUS);
     const allowedTerms = [
       ...PROTECTED_TERMS,
+      ...FIXED_ENGLISH_TERM_FAMILIES.flatMap((family) => family.forms),
       ...TECHNICAL_TERM_ALLOWLIST.map((entry) => entry.term),
       'Desktop',
       'Terminal',
@@ -461,6 +531,14 @@ describe('Env App i18n dictionaries', () => {
     }
     expect(new Set(TECHNICAL_TERM_ALLOWLIST.map((entry) => entry.term)).size).toBe(TECHNICAL_TERM_ALLOWLIST.length);
     expect(TECHNICAL_TERM_ALLOWLIST.every((entry) => entry.reason.trim().length > 0)).toBe(true);
+    expect(FIXED_ENGLISH_TERM_FAMILIES).toEqual([
+      expect.objectContaining({
+        canonical: 'Provider',
+        forms: ['Provider', 'Providers', 'provider', 'providers'],
+        pathPrefixes: ['shell.status.envTypeProvider'],
+      }),
+    ]);
+    expect(FIXED_ENGLISH_TERM_FAMILIES.every((family) => family.reason.trim().length > 0)).toBe(true);
   });
 
   it('keeps file and terminal duplicate actions context-specific in every locale', () => {

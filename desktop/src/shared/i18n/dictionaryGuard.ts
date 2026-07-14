@@ -5,6 +5,11 @@ import {
   type RedevenI18nProtectedTermAllowlistEntry,
 } from './protectedTerms';
 import { isPluralMessage, type PluralMessage, type TranslationLeaf, type TranslationTree } from './messageTypes';
+import {
+  countRedevenI18nFixedEnglishTermForms,
+  REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES,
+  REDEVEN_I18N_MODEL_PROVIDER_LOCALIZED_PATH_PREFIXES,
+} from './terminology';
 
 export type DictionaryMessageRecord = Readonly<{
   path: string;
@@ -89,6 +94,10 @@ function allowedProtectedTerm(
     && entry.path === path
     && entry.term === term
   ));
+}
+
+function matchesPathPrefix(path: string, prefixes: readonly string[]): boolean {
+  return prefixes.some((prefix) => path === prefix || path.startsWith(prefix));
 }
 
 export function validateDictionaryShape(
@@ -199,6 +208,78 @@ export function validateDictionaryProtectedTerms(
   return issues;
 }
 
+export function validateDictionaryFixedEnglishTerms(
+  locale: string,
+  sourceDictionary: TranslationTree,
+  targetDictionary: TranslationTree,
+): readonly DictionaryGuardIssue[] {
+  const sourceRows = flattenDictionaryMessages(sourceDictionary);
+  const targetRows = new Map(flattenDictionaryMessages(targetDictionary).map((row) => [row.path, row.value]));
+  const issues: DictionaryGuardIssue[] = [];
+
+  for (const sourceRow of sourceRows) {
+    const targetValue = targetRows.get(sourceRow.path);
+    if (!targetRows.has(sourceRow.path) || targetValue === undefined) {
+      continue;
+    }
+
+    const sourceText = messageStrings(sourceRow.value).join('\n');
+    const targetText = messageStrings(targetValue).join('\n');
+    for (const family of REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES) {
+      if (!matchesPathPrefix(sourceRow.path, family.pathPrefixes)) {
+        continue;
+      }
+      const sourceCounts = countRedevenI18nFixedEnglishTermForms(sourceText, family);
+      const targetCounts = countRedevenI18nFixedEnglishTermForms(targetText, family);
+      for (const form of family.forms) {
+        const expected = sourceCounts[form] ?? 0;
+        const actual = targetCounts[form] ?? 0;
+        if (expected !== actual) {
+          issues.push({
+            locale,
+            path: sourceRow.path,
+            message: `Fixed English term form "${form}" count mismatch. Expected ${expected} but found ${actual}.`,
+          });
+        }
+      }
+    }
+  }
+
+  return issues;
+}
+
+export function validateDictionaryLocalizedModelProviderTerms(
+  locale: string,
+  targetDictionary: TranslationTree,
+): readonly DictionaryGuardIssue[] {
+  if (locale === 'en-US') {
+    return [];
+  }
+  const issues: DictionaryGuardIssue[] = [];
+
+  for (const targetRow of flattenDictionaryMessages(targetDictionary)) {
+    if (!matchesPathPrefix(targetRow.path, REDEVEN_I18N_MODEL_PROVIDER_LOCALIZED_PATH_PREFIXES)) {
+      continue;
+    }
+    const targetText = messageStrings(targetRow.value).join('\n');
+    for (const family of REDEVEN_I18N_FIXED_ENGLISH_TERM_FAMILIES) {
+      const targetCounts = countRedevenI18nFixedEnglishTermForms(targetText, family);
+      for (const form of family.forms) {
+        const actual = targetCounts[form] ?? 0;
+        if (actual > 0) {
+          issues.push({
+            locale,
+            path: targetRow.path,
+            message: `Model-provider term form "${form}" must be localized in this product surface.`,
+          });
+        }
+      }
+    }
+  }
+
+  return issues;
+}
+
 export function validateDesktopDictionary(
   locale: string,
   sourceDictionary: TranslationTree,
@@ -208,5 +289,7 @@ export function validateDesktopDictionary(
     ...validateDictionaryShape(locale, sourceDictionary, targetDictionary),
     ...validateDictionaryPlaceholders(locale, sourceDictionary, targetDictionary),
     ...validateDictionaryProtectedTerms(locale, sourceDictionary, targetDictionary),
+    ...validateDictionaryFixedEnglishTerms(locale, sourceDictionary, targetDictionary),
+    ...validateDictionaryLocalizedModelProviderTerms(locale, targetDictionary),
   ];
 }
