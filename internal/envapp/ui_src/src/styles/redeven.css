@@ -294,6 +294,7 @@
   --sidebar-border: #dad6d1;
   --info: #3b82f6;
   --warning: #f59e0b;
+  --redeven-runtime-monitor-chart-accent: oklch(0.6 0.16 163);
   --redeven-surface-main: #f4f1ed;
   --redeven-surface-panel: #f7f4f1;
   --redeven-surface-panel-soft: #f1efec;
@@ -357,6 +358,7 @@
 }
 
 html.dark {
+  --redeven-runtime-monitor-chart-accent: oklch(0.78 0.17 164);
   --redeven-surface-panel: rgb(41, 44, 51);
   --redeven-surface-main: var(--redeven-surface-panel);
   --redeven-surface-panel-soft: #353942;

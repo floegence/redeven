@@ -512,10 +512,10 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   };
 
   const cpuSeries = () => [
-    { name: i18n.t('runtimeMonitor.cpuUsage'), data: [], color: 'var(--chart-4)' },
+    { name: i18n.t('runtimeMonitor.cpuUsage'), data: [], color: 'var(--redeven-runtime-monitor-chart-accent)' },
   ];
   const networkSeries = () => [
-    { name: i18n.t('runtimeMonitor.download'), data: [], color: 'var(--chart-4)' },
+    { name: i18n.t('runtimeMonitor.download'), data: [], color: 'var(--redeven-runtime-monitor-chart-accent)' },
     { name: i18n.t('runtimeMonitor.upload'), data: [], color: 'var(--chart-2)' },
   ];
 

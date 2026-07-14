@@ -184,16 +184,16 @@ describe('RuntimeMonitorPanel', () => {
     expect(host.firstElementChild?.className).toContain('runtime-monitor-panel');
   });
 
-  it('uses the green chart tone for CPU and download while keeping upload secondary', async () => {
+  it('uses the monitor accent for CPU and download while keeping upload secondary', async () => {
     rpcMocks.monitor.getSysMonitor.mockResolvedValue(makeSnapshot(1));
 
     render(() => <RuntimeMonitorPanel variant="workbench" />, host);
     await flushPanel();
 
     expect(host.querySelector('[data-testid="cpu-chart"]')?.getAttribute('data-series-colors'))
-      .toBe('var(--chart-4)');
+      .toBe('var(--redeven-runtime-monitor-chart-accent)');
     expect(host.querySelector('[data-testid="network-chart"]')?.getAttribute('data-series-colors'))
-      .toBe('var(--chart-4),var(--chart-2)');
+      .toBe('var(--redeven-runtime-monitor-chart-accent),var(--chart-2)');
   });
 
   it('prevents overlapping polling requests while coalescing a trailing refresh', async () => {
