@@ -30,8 +30,8 @@ importers:
         specifier: ^9.39.4
         version: 9.39.4
       '@floegence/floe-webapp-core':
-        specifier: ^0.36.73
-        version: 0.36.73(solid-js@1.9.13)
+        specifier: ^0.36.74
+        version: 0.36.74(solid-js@1.9.13)
       '@fontsource-variable/inter':
         specifier: ^5.2.8
         version: 5.2.8
@@ -502,8 +502,8 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@floegence/floe-webapp-core@0.36.73':
-    resolution: {integrity: sha512-bvcvYpYlpbQoRTcSpz6JsYz2a0bKZjE6JSUAfCzWLXGdiIOdj76Lsqc+Z0rhQIKxKfDggo6RwBxc6X+INulguA==}
+  '@floegence/floe-webapp-core@0.36.74':
+    resolution: {integrity: sha512-4/X0Xt6pZM5TjZtrRTYzWZYBmtOrDq6hpg4+UKEr+oYktOl87HLEAHYGupaQqq4h541OADIYiM47S+QsuhHAhw==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       solid-js: ^1.8.0
@@ -568,8 +568,8 @@ packages:
     resolution: {integrity: sha512-9QOtNffcOF/c1seMCDnjckb3R9WHcG34tky+FHpNKKCW0wc/scYLwMtO+ptyGUfMW0/b/n4qRiALlaFHc9Oj7Q==}
     engines: {node: '>= 10.0.0'}
 
-  '@mermaid-js/parser@1.1.1':
-    resolution: {integrity: sha512-VuHdsYMK1bT6X2JbcAaWAhugTRvRBRyuZgd+c22swUeI9g/ntaxF7CY7dYarhZovofCbUNO0G7JesfmNtjYOCw==}
+  '@mermaid-js/parser@1.2.0':
+    resolution: {integrity: sha512-oYPyv8A4As1yH5Bx+04iQEQxXuIQDe0GKCNSRgao6z8AM9jixXIfP0vsppRLvGf+nKIOb9/LdpWA4YuJiVvESA==}
 
   '@motionone/animation@10.18.0':
     resolution: {integrity: sha512-9z2p5GFGCm0gBsZbi8rVMOAJCtw1WqBTIPw3ozk06gDvZInBPIsQcHgYogEJ4yuHJ+akuW8g1SEIOpTOvYs8hw==}
@@ -2261,8 +2261,8 @@ packages:
     resolution: {integrity: sha512-eRtbOb1N5iyH0tkQDAoQ4Ipsp/5qSR79Dzrz8hEPxRX10RWWR/iQXdoKmBSRCThY1Fh5EhISDtpSc93fpxUniQ==}
     engines: {node: '>=12.13'}
 
-  mermaid@11.15.0:
-    resolution: {integrity: sha512-pTMbcf3rWdtLiYGpmoTjHEpeY8seiy6sR+9nD7LOs8KfUbHE4lOUAprTRqRAcWSQ6MQpdX+YEsxShtGsINtPtw==}
+  mermaid@11.16.0:
+    resolution: {integrity: sha512-Zvm3kbstgdpvIJPPItlL7fppIZ3kibvc1oZIGxdvk9t6UFz6flv+Jw7FtRGKwfcI8OckmH04LqG6LlS6X4B1pA==}
 
   micromark-util-character@2.1.1:
     resolution: {integrity: sha512-wv8tdUTJ3thSFFFJKtpYKOYiGP2+v96Hvk4Tu8KpCAsTMs6yi+nVmGh1syvSCsaxz45J6Jbw+9DD6g97+NV67Q==}
@@ -3477,12 +3477,12 @@ snapshots:
 
   '@exodus/bytes@1.15.1': {}
 
-  '@floegence/floe-webapp-core@0.36.73(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.36.74(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4
       marked: 17.0.6
-      mermaid: 11.15.0
+      mermaid: 11.16.0
       monaco-editor: 0.55.1
       shiki: 3.23.0
       solid-js: 1.9.13
@@ -3553,7 +3553,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mermaid-js/parser@1.1.1':
+  '@mermaid-js/parser@1.2.0':
     dependencies:
       '@chevrotain/types': 11.1.2
 
@@ -5435,11 +5435,11 @@ snapshots:
     dependencies:
       is-what: 4.1.16
 
-  mermaid@11.15.0:
+  mermaid@11.16.0:
     dependencies:
       '@braintree/sanitize-url': 7.1.2
       '@iconify/utils': 3.1.3
-      '@mermaid-js/parser': 1.1.1
+      '@mermaid-js/parser': 1.2.0
       '@types/d3': 7.4.3
       '@upsetjs/venn.js': 2.0.0
       cytoscape: 3.33.4
