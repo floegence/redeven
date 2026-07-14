@@ -98,6 +98,10 @@ const contract = readJSON(contractPath);
 const protocolSource = fs.readFileSync(path.join(rootDir, 'internal/runtimeservice/snapshot.go'), 'utf8');
 const protocolMatch = protocolSource.match(/const\s+ProtocolVersion\s*=\s*"([^"]+)"/u);
 const sourceProtocol = protocolMatch?.[1] ?? '';
+const desktopContractSource = fs.readFileSync(path.join(rootDir, 'desktop/src/shared/runtimeService.ts'), 'utf8');
+const desktopEpochMatch = desktopContractSource.match(/RUNTIME_SERVICE_COMPATIBILITY_EPOCH\s*=\s*(\d+)/u);
+const desktopMinimumDesktopMatch = desktopContractSource.match(/RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION\s*=\s*'([^']+)'/u);
+const desktopMinimumRuntimeMatch = desktopContractSource.match(/RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION\s*=\s*'([^']+)'/u);
 
 if (contract.schema_version !== 1) {
   fail(`schema_version must be 1; got ${JSON.stringify(contract.schema_version)}`);
@@ -113,6 +117,15 @@ if (!Number.isInteger(contract.compatibility_epoch) || contract.compatibility_ep
 }
 requireReleaseTag(contract.minimum_desktop_version, 'minimum_desktop_version');
 requireReleaseTag(contract.minimum_runtime_version, 'minimum_runtime_version');
+if (Number(desktopEpochMatch?.[1] ?? 0) !== contract.compatibility_epoch) {
+  fail(`Desktop compatibility epoch must match ${contract.compatibility_epoch}`);
+}
+if (trim(desktopMinimumDesktopMatch?.[1]) !== trim(contract.minimum_desktop_version)) {
+  fail(`Desktop minimum Desktop version must match ${contract.minimum_desktop_version}`);
+}
+if (trim(desktopMinimumRuntimeMatch?.[1]) !== trim(contract.minimum_runtime_version)) {
+  fail(`Desktop minimum Runtime version must match ${contract.minimum_runtime_version}`);
+}
 
 const review = contract.release_review && typeof contract.release_review === 'object'
   ? contract.release_review

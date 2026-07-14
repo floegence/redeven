@@ -37,6 +37,7 @@ function runtimeStatusPayload(
     pid: process.pid,
     runtime_service: {
       protocol_version: 'redeven-runtime-v1',
+      compatibility_epoch: 6,
       service_owner: 'desktop',
       desktop_managed: true,
       effective_run_mode: 'local',

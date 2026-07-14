@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
+  RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION,
+  RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION,
   envAppShellUnavailableOpenReadiness,
-  normalizeRuntimeServiceSnapshot,
+  normalizeRuntimeServiceSnapshot as normalizeRawRuntimeServiceSnapshot,
   runtimeServiceAllowsOpenAttempt,
   runtimeServiceDesktopModelSourceBindingState,
   runtimeServiceHasActiveWork,
@@ -19,10 +22,112 @@ import {
   runtimeServiceSupportsRuntimeGateway,
 } from './runtimeService';
 
+function normalizeRuntimeServiceSnapshot(value: unknown) {
+  const record = value && typeof value === 'object'
+    ? value as Record<string, unknown>
+    : {};
+  return normalizeRawRuntimeServiceSnapshot({
+    compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
+    ...record,
+  });
+}
+
 describe('runtimeService', () => {
+  it('enforces the current compatibility epoch in both directions', () => {
+    const outdatedRuntime = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v0.7.1',
+      compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH - 1,
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      active_workload: {},
+    });
+    expect(outdatedRuntime).toMatchObject({
+      compatibility: 'update_required',
+      minimum_runtime_version: RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION,
+      open_readiness: {
+        state: 'blocked',
+        reason_code: 'runtime_update_required',
+      },
+    });
+    expect(outdatedRuntime.compatibility_message).toContain('update the runtime');
+
+    const newerRuntime = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v0.8.0',
+      compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH + 1,
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      active_workload: {},
+    });
+    expect(newerRuntime).toMatchObject({
+      compatibility: 'desktop_update_required',
+      minimum_desktop_version: RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION,
+      open_readiness: {
+        state: 'blocked',
+        reason_code: 'desktop_update_required',
+      },
+    });
+    expect(newerRuntime.compatibility_message).toContain('update Desktop');
+  });
+
+  it('preserves explicit compatibility only for the current positive integer epoch', () => {
+    const snapshot = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'dev',
+      compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      active_workload: {},
+    });
+    expect(snapshot.compatibility).toBe('compatible');
+    expect(snapshot.open_readiness).toEqual({ state: 'openable' });
+  });
+
+  it('fails closed for missing or malformed epochs, including development runtimes', () => {
+    for (const compatibilityEpoch of [undefined, null, 0, -1, 6.9, '6']) {
+      const snapshot = normalizeRuntimeServiceSnapshot({
+        runtime_version: 'v0.0.0-dev',
+        compatibility_epoch: compatibilityEpoch,
+        compatibility: 'compatible',
+        open_readiness: { state: 'openable' },
+        active_workload: {},
+      });
+      expect(snapshot).toMatchObject({
+        compatibility_epoch: undefined,
+        compatibility: 'update_required',
+        minimum_runtime_version: RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION,
+        open_readiness: {
+          state: 'blocked',
+          reason_code: 'runtime_update_required',
+        },
+      });
+      expect(snapshot.compatibility_message).toContain('does not report a valid compatibility epoch');
+    }
+  });
+
+  it('preserves managed-elsewhere ownership guidance when the epoch is absent', () => {
+    const snapshot = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v2.0.0',
+      compatibility_epoch: undefined,
+      compatibility: 'managed_elsewhere',
+      compatibility_message: 'Use the owning Desktop instance.',
+      active_workload: {},
+    });
+
+    expect(snapshot).toMatchObject({
+      compatibility: 'managed_elsewhere',
+      compatibility_message: 'Use the owning Desktop instance.',
+      minimum_runtime_version: undefined,
+      open_readiness: {
+        state: 'blocked',
+        reason_code: 'runtime_managed_elsewhere',
+        message: 'Use the owning Desktop instance.',
+      },
+    });
+  });
+
   it('treats missing open-readiness as openable for otherwise compatible runtimes', () => {
     const snapshot = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v0.5.9',
+      compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
       compatibility: 'compatible',
       active_workload: {},
     });
@@ -39,6 +144,7 @@ describe('runtimeService', () => {
   it('keeps explicit openable readiness openable', () => {
     const snapshot = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v0.5.11',
+      compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
       compatibility: 'compatible',
       open_readiness: { state: 'openable' },
       active_workload: {},

@@ -21,6 +21,7 @@ import {
   type ManagedSSHRuntimeReady,
 } from './sshRuntime';
 import type { DesktopSSHBootstrapStrategy, DesktopSSHEnvironmentDetails } from '../shared/desktopSSH';
+import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 
 type FakeSSHScenario =
   | 'ready'
@@ -103,6 +104,7 @@ const args = process.argv.slice(2);
 const logPath = process.env.REDEVEN_FAKE_SSH_LOG;
 const statePath = process.env.REDEVEN_FAKE_SSH_STATE;
 const scenario = process.env.REDEVEN_FAKE_SSH_SCENARIO || 'ready';
+const compatibilityEpoch = Number(process.env.REDEVEN_FAKE_SSH_COMPATIBILITY_EPOCH || 0);
 
 function appendLog(event, data) {
   if (!logPath) return;
@@ -137,6 +139,7 @@ function currentRuntimeService() {
   return {
     runtime_version: runtimeVersion,
     protocol_version: 'redeven-runtime-v1',
+    compatibility_epoch: compatibilityEpoch,
     service_owner: 'desktop',
     desktop_managed: true,
     effective_run_mode: 'desktop',
@@ -834,9 +837,11 @@ async function withFakeSSHEnv<T>(fixture: FakeSSHFixture, run: () => Promise<T>)
   const previousLog = process.env.REDEVEN_FAKE_SSH_LOG;
   const previousState = process.env.REDEVEN_FAKE_SSH_STATE;
   const previousScenario = process.env.REDEVEN_FAKE_SSH_SCENARIO;
+  const previousCompatibilityEpoch = process.env.REDEVEN_FAKE_SSH_COMPATIBILITY_EPOCH;
   process.env.REDEVEN_FAKE_SSH_LOG = fixture.logPath;
   process.env.REDEVEN_FAKE_SSH_STATE = fixture.statePath;
   process.env.REDEVEN_FAKE_SSH_SCENARIO = fixture.scenario;
+  process.env.REDEVEN_FAKE_SSH_COMPATIBILITY_EPOCH = String(RUNTIME_SERVICE_COMPATIBILITY_EPOCH);
   try {
     return await run();
   } finally {
@@ -854,6 +859,11 @@ async function withFakeSSHEnv<T>(fixture: FakeSSHFixture, run: () => Promise<T>)
       delete process.env.REDEVEN_FAKE_SSH_SCENARIO;
     } else {
       process.env.REDEVEN_FAKE_SSH_SCENARIO = previousScenario;
+    }
+    if (previousCompatibilityEpoch === undefined) {
+      delete process.env.REDEVEN_FAKE_SSH_COMPATIBILITY_EPOCH;
+    } else {
+      process.env.REDEVEN_FAKE_SSH_COMPATIBILITY_EPOCH = previousCompatibilityEpoch;
     }
   }
 }

@@ -21,6 +21,7 @@ import type {
   RuntimeServiceProviderLinkBinding,
   RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
+import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import type { DesktopManagedRuntimePresence } from '../shared/desktopRuntimePresence';
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
 import {
@@ -210,6 +211,7 @@ function providerRuntimeService(
   };
   return {
     protocol_version: 'redeven-runtime-v1',
+    compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
     service_owner: 'desktop',
     desktop_managed: true,
     effective_run_mode: 'desktop',

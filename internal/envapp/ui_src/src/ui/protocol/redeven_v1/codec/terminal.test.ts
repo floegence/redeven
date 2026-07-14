@@ -78,12 +78,11 @@ describe('terminal codec', () => {
       historyGeneration: 1,
     });
 
-    expect(fromWireTerminalHistoryResponse({ chunks: [] })).toMatchObject({
-      coveredThroughSequence: undefined,
-      snapshotEndSequence: undefined,
-      firstRetainedSequence: undefined,
-      historyGeneration: undefined,
-    });
+    const missing = fromWireTerminalHistoryResponse({ chunks: [] });
+    expect(Object.prototype.hasOwnProperty.call(missing, 'coveredThroughSequence')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(missing, 'snapshotEndSequence')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(missing, 'firstRetainedSequence')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(missing, 'historyGeneration')).toBe(false);
   });
 
   it.each([null, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(

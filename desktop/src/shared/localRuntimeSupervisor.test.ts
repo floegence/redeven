@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildDesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
-import { normalizeRuntimeServiceSnapshot } from './runtimeService';
+import { normalizeRuntimeServiceSnapshot, RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from './runtimeService';
 
 describe('localRuntimeSupervisor', () => {
   it('keeps Local Environment Open available when the running runtime reports a runtime update block', () => {
@@ -110,6 +110,7 @@ describe('localRuntimeSupervisor', () => {
   it('keeps Local Environment Open available when compatible runtimes omit open-readiness', () => {
     const runtimeService = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v0.5.8',
+      compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
       compatibility: 'compatible',
       active_workload: {},
     });
@@ -137,6 +138,7 @@ describe('localRuntimeSupervisor', () => {
   it('does not block Local Host reuse when the running runtime identity differs from the bundled runtime', () => {
     const runtimeService = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v0.5.9',
+      compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
       runtime_commit: 'old-runtime',
       runtime_build_time: '2026-01-01T00:00:00Z',
       compatibility: 'compatible',
@@ -169,6 +171,7 @@ describe('localRuntimeSupervisor', () => {
   it('keeps Local Environment Open available while Env App readiness is starting', () => {
     const runtimeService = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v0.5.11',
+      compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
       compatibility: 'compatible',
       open_readiness: {
         state: 'starting',
