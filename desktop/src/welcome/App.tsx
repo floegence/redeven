@@ -7781,7 +7781,11 @@ function EndpointsPopover(props: Readonly<{
           }
         }}
       >
-        <img src={ICON_ENDPOINTS} class="redeven-endpoint-trigger-icon" aria-hidden="true" />
+        <span
+          class="redeven-endpoint-trigger-icon"
+          style={cardFactIconMaskStyle(ICON_ENDPOINTS)}
+          aria-hidden="true"
+        />
       </span>
       <Show when={props.open}>
         <DesktopAnchoredOverlaySurface

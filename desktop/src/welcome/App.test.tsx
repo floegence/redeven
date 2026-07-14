@@ -1442,6 +1442,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('cardFactIconMaskStyle');
     expect(appSrc).not.toContain('<img src={icon()} class="redeven-card-fact-label-icon"');
     expect(appSrc).not.toContain('<img src={icon()} class="redeven-card-fact-leading-icon"');
+    expect(appSrc).toContain('style={cardFactIconMaskStyle(ICON_ENDPOINTS)}');
+    expect(appSrc).not.toContain('<img src={ICON_ENDPOINTS}');
     expect(appSrc).toContain('function EndpointsPopover');
     expect(appSrc).toContain("import { endpointDisplayValue } from './endpointDisplay';");
     expect(appSrc).toContain("openEnvironmentLibraryOverlayState('endpoints', environmentID)");
@@ -1458,6 +1460,10 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('mask: var(--redeven-card-fact-icon-mask) center / contain no-repeat');
     expect(styles).toContain('.redeven-card-fact-value--action');
     expect(styles).toContain('.redeven-card-fact-value__text');
+    const endpointTriggerIconStyles = styles.match(/\.redeven-endpoint-trigger-icon\s*\{([^}]*)\}/)?.[1] ?? '';
+    expect(endpointTriggerIconStyles).toContain('background-color: currentColor');
+    expect(endpointTriggerIconStyles).toContain('mask: var(--redeven-card-fact-icon-mask) center / contain no-repeat');
+    expect(endpointTriggerIconStyles).toContain('-webkit-mask: var(--redeven-card-fact-icon-mask) center / contain no-repeat');
     expect(styles).toContain('.redeven-endpoints-popover--expanded');
     expect(styles).toContain('grid-template-columns: minmax(0, 1fr) 8.35rem;');
     expect(styles).toContain('.redeven-endpoints-section');
