@@ -41,6 +41,7 @@ func ApplyOptions(opts fsproxy.Options) fsproxy.Options {
 		DefaultHTTPRequestTimeoutMS: opts.DefaultHTTPRequestTimeoutMS,
 		ExtraRequestHeaders:         append([]string(nil), opts.ExtraRequestHeaders...),
 		ExtraResponseHeaders:        append([]string(nil), opts.ExtraResponseHeaders...),
+		BlockedResponseHeaders:      append([]string(nil), opts.BlockedResponseHeaders...),
 		ExtraWSHeaders:              append([]string(nil), opts.ExtraWSHeaders...),
 		ForbiddenCookieNames:        append([]string(nil), opts.ForbiddenCookieNames...),
 		ForbiddenCookieNamePrefixes: append([]string(nil), opts.ForbiddenCookieNamePrefixes...),
@@ -48,6 +49,12 @@ func ApplyOptions(opts fsproxy.Options) fsproxy.Options {
 	bridge = fsproxypreset.ApplyBridgeOptions(bridge, Manifest())
 	opts.ContractOptions = fsproxy.ContractOptions(bridge)
 	return opts
+}
+
+// ProductBlockedResponseHeaders returns the narrow response-header policy for
+// Redeven's embedded UI surfaces.
+func ProductBlockedResponseHeaders() []string {
+	return []string{"Content-Security-Policy", "Content-Security-Policy-Report-Only", "X-Frame-Options"}
 }
 
 // Register wires the runtime proxy handlers with the Redeven runtime preset applied.
