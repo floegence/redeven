@@ -4665,6 +4665,9 @@ html.dark .redeven-workbench-progress-curtain {
 /* Browser Editor setup status band. */
 
 .browser-editor-setup {
+  --browser-editor-grid-border: color-mix(in srgb, var(--border) 76%, var(--foreground) 24%);
+  --browser-editor-grid-divider: color-mix(in srgb, var(--border) 84%, var(--foreground) 16%);
+  --browser-editor-grid-label-bg: color-mix(in srgb, var(--muted) 22%, transparent);
   min-width: 0;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
@@ -4962,19 +4965,31 @@ html.dark .redeven-workbench-progress-curtain {
 }
 
 .browser-editor-setup__comparison {
+  overflow: hidden;
   margin: 0;
-  border-top: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border: 1px solid var(--browser-editor-grid-border);
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--card) 94%, var(--muted) 6%);
 }
 
 .browser-editor-setup__comparison-row {
   display: grid;
   grid-template-columns: minmax(5.5rem, 0.34fr) minmax(0, 1fr);
-  gap: 1rem;
-  padding: 0.8rem 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 48%, transparent);
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--browser-editor-grid-divider);
+}
+
+.browser-editor-setup__comparison-row:last-child {
+  border-bottom: 0;
 }
 
 .browser-editor-setup__comparison-row dt {
+  display: flex;
+  align-items: center;
+  padding: 0.78rem 0.8rem;
+  border-right: 1px solid var(--browser-editor-grid-divider);
+  background: var(--browser-editor-grid-label-bg);
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--muted-foreground);
@@ -4983,6 +4998,7 @@ html.dark .redeven-workbench-progress-curtain {
 .browser-editor-setup__comparison-row dd {
   min-width: 0;
   margin: 0;
+  padding: 0.78rem 0.85rem;
   font-family: var(--font-mono);
   font-size: 0.72rem;
   font-weight: 600;
@@ -4996,7 +5012,7 @@ html.dark .redeven-workbench-progress-curtain {
 }
 
 .browser-editor-setup__details {
-  border-top: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-top: 1px solid var(--browser-editor-grid-border);
 }
 
 .browser-editor-setup__details-trigger {
@@ -5035,20 +5051,27 @@ html.dark .redeven-workbench-progress-curtain {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0;
-  border-top: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
+  overflow: hidden;
+  border: 1px solid var(--browser-editor-grid-border);
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--card) 94%, var(--muted) 6%);
 }
 
 .browser-editor-setup__detail-row {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(7.5rem, 0.36fr) minmax(0, 1fr);
-  gap: 0.75rem;
-  padding: 0.65rem 0.75rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 44%, transparent);
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid var(--browser-editor-grid-divider);
 }
 
 .browser-editor-setup__detail-row:nth-child(odd) {
-  border-right: 1px solid color-mix(in srgb, var(--border) 44%, transparent);
+  border-right: 1px solid var(--browser-editor-grid-border);
+}
+
+.browser-editor-setup__detail-row:nth-last-child(-n + 2) {
+  border-bottom: 0;
 }
 
 .browser-editor-setup__detail-row dt,
@@ -5060,10 +5083,14 @@ html.dark .redeven-workbench-progress-curtain {
 }
 
 .browser-editor-setup__detail-row dt {
+  padding: 0.68rem 0.75rem;
+  border-right: 1px solid var(--browser-editor-grid-divider);
+  background: var(--browser-editor-grid-label-bg);
   color: var(--muted-foreground);
 }
 
 .browser-editor-setup__detail-row dd {
+  padding: 0.68rem 0.75rem;
   color: var(--foreground);
   overflow-wrap: anywhere;
 }
@@ -5146,6 +5173,14 @@ html.dark .redeven-workbench-progress-curtain {
 
   .browser-editor-setup__detail-row:nth-child(odd) {
     border-right: 0;
+  }
+
+  .browser-editor-setup__detail-row:nth-last-child(-n + 2) {
+    border-bottom: 1px solid var(--browser-editor-grid-divider);
+  }
+
+  .browser-editor-setup__detail-row:last-child {
+    border-bottom: 0;
   }
 
   .browser-editor-setup__details-trigger,
