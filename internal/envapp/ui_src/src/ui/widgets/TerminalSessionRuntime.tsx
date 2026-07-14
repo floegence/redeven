@@ -38,6 +38,7 @@ import {
   markTerminalRecoveryMilestone,
   publishTerminalRecoveryEvent,
   startTerminalRecoveryTrace,
+  terminalRecoveryDiagnosticsQuery,
   type TerminalRecoveryPhase,
   type TerminalRecoveryTrace,
 } from '../services/terminalRecoveryDiagnostics';
@@ -89,6 +90,7 @@ export type TerminalSessionRuntimeStatus = Readonly<{
   state: 'idle' | 'waiting_for_ownership' | 'reconnecting' | 'retrying' | 'degraded' | 'blocking';
   failureCode?: PagedTerminalOutputFailureCode | 'terminal_unavailable';
   retryable?: boolean;
+  diagnosticsQuery?: string;
 }>;
 
 function isTerminalRecoveryRetryable(
@@ -128,7 +130,7 @@ export type TerminalSessionRuntimeProps = Readonly<{
     sessionId: string,
     update: { attachGeneration: number; coveredThroughSequence: number; rebased?: boolean },
   ) => void;
-  onPendingOutputReset?: (sessionId: string) => void;
+  onPendingOutputReset?: (sessionId: string, opts?: { preserveUnread?: boolean }) => void;
   setWorkingSetInteraction: (sessionId: string, interaction: TerminalWorkingSetInteraction, active: boolean) => void;
   onSurfaceClick?: (event: MouseEvent) => void;
   onBell?: (sessionId: string) => void;
@@ -185,7 +187,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const runtimeStatus = createMemo<TerminalSessionRuntimeStatus>(() => {
     const blocking = blockingFailureCode();
     if (blocking) {
-      return { state: 'blocking', failureCode: blocking, retryable: isTerminalRecoveryRetryable(blocking) };
+      return {
+        state: 'blocking',
+        failureCode: blocking,
+        retryable: isTerminalRecoveryRetryable(blocking),
+        diagnosticsQuery: terminalRecoveryDiagnosticsQuery(recoveryTrace, blocking),
+      };
     }
     if (loading() === 'waiting_for_ownership') return { state: 'waiting_for_ownership' };
     if (loading() === 'reconnecting') return { state: 'reconnecting' };
@@ -194,10 +201,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         state: 'degraded',
         failureCode: recoveryFailureCode() ?? undefined,
         retryable: recoveryRetryable() ?? undefined,
+        diagnosticsQuery: terminalRecoveryDiagnosticsQuery(recoveryTrace, recoveryFailureCode() ?? undefined),
       };
     }
     if (baselineReady() && outputRecoveryState() === 'retry-wait' && showRetryingStatus()) {
-      return { state: 'retrying', failureCode: recoveryFailureCode() ?? undefined };
+      return {
+        state: 'retrying',
+        failureCode: recoveryFailureCode() ?? undefined,
+        diagnosticsQuery: terminalRecoveryDiagnosticsQuery(recoveryTrace, recoveryFailureCode() ?? undefined),
+      };
     }
     return { state: 'idle' };
   });
@@ -493,7 +505,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     props.registerCore(sessionId(), null);
   };
 
-  const disposeTerminal = () => {
+  const disposeTerminal = (opts?: { preservePendingUnread?: boolean }) => {
     clearOutputSubscription();
     if (inputProtectionTimer) {
       clearTimeout(inputProtectionTimer);
@@ -508,7 +520,9 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     maxObservedLiveSequence = 0;
     activitySettledAttachGeneration = 0;
     activitySettledThroughSequence = 0;
-    props.onPendingOutputReset?.(sessionId());
+    props.onPendingOutputReset?.(sessionId(), {
+      preserveUnread: opts?.preservePendingUnread !== false,
+    });
     setBaselineReady(false);
     setRecoveryFailureCode(null);
     setAttachSuperseded(false);
@@ -527,7 +541,11 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let supersededAttachRetryScheduled = false;
   let waitingForProtocolClient: unknown = null;
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-  const reload = async (opts?: { fadeOut?: boolean; resetSupersededRetry?: boolean }): Promise<boolean> => {
+  const reload = async (opts?: {
+    fadeOut?: boolean;
+    resetSupersededRetry?: boolean;
+    preservePendingUnread?: boolean;
+  }): Promise<boolean> => {
     if (disposed) return false;
     const id = sessionId();
     if (!id) return false;
@@ -554,7 +572,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     const coordinator = outputCoordinator;
     if (coordinator) await coordinator.pause();
     if (disposed || seq !== reloadSeq) return false;
-    disposeTerminal();
+    disposeTerminal({ preservePendingUnread: opts?.preservePendingUnread });
 
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     if (disposed || seq !== reloadSeq) return false;
@@ -608,7 +626,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       reload: async () => {
         await reload({ resetSupersededRetry: true });
       },
-      resetAfterClear: () => reload({ resetSupersededRetry: true }),
+      resetAfterClear: () => reload({ resetSupersededRetry: true, preservePendingUnread: false }),
       retryOutputRecovery: async () => {
         setRecoveryFailureCode(null);
         if (blockingFailureCode() || !readyOnce()) {
@@ -1255,7 +1273,9 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   });
   return (
     <div
+      aria-busy={terminalInputBlocked()}
       class="h-full min-h-0 relative overflow-hidden"
+      data-terminal-runtime-session={stableSessionId}
       onCompositionStart={() => props.setWorkingSetInteraction(sessionId(), 'composition', true)}
       onCompositionEnd={() => props.setWorkingSetInteraction(sessionId(), 'composition', false)}
       style={{

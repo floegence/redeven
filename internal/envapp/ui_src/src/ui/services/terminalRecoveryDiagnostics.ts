@@ -180,10 +180,9 @@ export function getActiveTerminalRecoveryTrace(sessionID: string): TerminalRecov
 }
 
 export function terminalRecoveryDiagnosticsQuery(
-  sessionID: string,
+  trace: TerminalRecoveryTrace | null | undefined,
   errorCode?: PagedTerminalOutputFailureCode | 'terminal_unavailable',
 ): string {
-  const trace = activeTraces.get(sessionID);
   if (!trace) return 'terminal_recovery';
   return [trace.sessionRef, String(trace.surfaceGeneration), errorCode].filter(Boolean).join(' ');
 }

@@ -659,11 +659,12 @@ func TestAttachSinkRejectsClosedStreamBeforeRegisteringConnection(t *testing.T) 
 		_ = clientConn.Close()
 	})
 	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	lifecycle := m.ensureSinkLifecycle(server)
 	m.DetachSink(server)
 
 	boundaryCaptured := false
 	m.mu.Lock()
-	_, _, err := m.attachSinkLocked("session-closed", "conn-closed", server, 1, func() int64 {
+	_, _, err := m.attachSinkLifecycleLocked("session-closed", "conn-closed", lifecycle, 1, func() int64 {
 		boundaryCaptured = true
 		return 7
 	}, nil)
@@ -773,12 +774,13 @@ func TestDetachSinkWinsAfterInFlightAttachBoundaryCapture(t *testing.T) {
 		_ = clientConn.Close()
 	})
 	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	lifecycle := m.ensureSinkLifecycle(server)
 	captureStarted := make(chan struct{})
 	releaseCapture := make(chan struct{})
 	attachDone := make(chan error, 1)
 	go func() {
 		m.mu.Lock()
-		_, _, err := m.attachSinkLocked("session-detach-race", "conn-1", server, 1, func() int64 {
+		_, _, err := m.attachSinkLifecycleLocked("session-detach-race", "conn-1", lifecycle, 1, func() int64 {
 			close(captureStarted)
 			<-releaseCapture
 			return 4
@@ -800,18 +802,116 @@ func TestDetachSinkWinsAfterInFlightAttachBoundaryCapture(t *testing.T) {
 	<-detachDone
 
 	m.mu.Lock()
-	_, closed := m.closedSinks[server]
+	closed := lifecycle.closed
+	_, lifecycleRetained := m.sinkLifecycles[server]
 	_, serverRetained := m.byServer[server]
 	_, sessionRetained := m.bySession["session-detach-race"]
 	_, writerRetained := m.writers[server]
 	m.mu.Unlock()
-	if !closed || serverRetained || sessionRetained || writerRetained {
+	if !closed || lifecycleRetained || serverRetained || sessionRetained || writerRetained {
 		t.Fatalf(
-			"detach race state: closed=%v byServer=%v bySession=%v writer=%v",
+			"detach race state: closed=%v lifecycle=%v byServer=%v bySession=%v writer=%v",
 			closed,
+			lifecycleRetained,
 			serverRetained,
 			sessionRetained,
 			writerRetained,
+		)
+	}
+}
+
+func TestDetachSinkReleasesLifecycleIndexAcrossStreamChurn(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	meta := &session.Meta{CanWrite: true, CanExecute: true}
+
+	for range 128 {
+		serverConn, clientConn := net.Pipe()
+		router := rpc.NewRouter()
+		server := rpc.NewServer(serverConn, router)
+		m.Register(router, meta, server)
+		m.DetachSink(server)
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if got := len(m.sinkLifecycles); got != 0 {
+		t.Fatalf("active sink lifecycle count = %d, want 0", got)
+	}
+	if got := len(m.writers); got != 0 {
+		t.Fatalf("sink writer count = %d, want 0", got)
+	}
+	if got := len(m.byServer); got != 0 {
+		t.Fatalf("server route count = %d, want 0", got)
+	}
+	if got := len(m.attachStates); got != 0 {
+		t.Fatalf("attach state count = %d, want 0", got)
+	}
+}
+
+func TestLateDetachHandleDoesNotCloseReregisteredSinkLifecycle(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	meta := &session.Meta{CanWrite: true, CanExecute: true}
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+
+	detachOld := m.Register(rpc.NewRouter(), meta, server)
+	m.mu.Lock()
+	oldLifecycle := m.sinkLifecycles[server]
+	m.mu.Unlock()
+	detachOld()
+
+	detachCurrent := m.Register(rpc.NewRouter(), meta, server)
+	t.Cleanup(detachCurrent)
+	m.mu.Lock()
+	currentLifecycle := m.sinkLifecycles[server]
+	m.mu.Unlock()
+	if currentLifecycle == nil || currentLifecycle == oldLifecycle {
+		t.Fatal("re-register did not create a fresh sink lifecycle")
+	}
+
+	detachOld()
+
+	m.mu.Lock()
+	indexedLifecycle := m.sinkLifecycles[server]
+	_, writerRetained := m.writers[server]
+	_, _, oldAttachErr := m.attachSinkLifecycleLocked("session-old", "conn-old", oldLifecycle, 1, func() int64 {
+		return 3
+	}, nil)
+	currentAttachment, currentCreated, currentAttachErr := m.attachSinkLifecycleLocked(
+		"session-current",
+		"conn-current",
+		currentLifecycle,
+		1,
+		func() int64 { return 9 },
+		nil,
+	)
+	m.mu.Unlock()
+
+	if indexedLifecycle != currentLifecycle || currentLifecycle.closed || !writerRetained {
+		t.Fatalf(
+			"late detach state: indexed_current=%v current_closed=%v writer=%v",
+			indexedLifecycle == currentLifecycle,
+			currentLifecycle.closed,
+			writerRetained,
+		)
+	}
+	if !errors.Is(oldAttachErr, errTerminalAttachSinkClosed) {
+		t.Fatalf("old lifecycle attach error = %v, want sink closed", oldAttachErr)
+	}
+	if currentAttachErr != nil || !currentCreated || currentAttachment.liveAfterSequence != 9 {
+		t.Fatalf(
+			"current lifecycle attach = (%#v, %v, %v), want boundary 9 and created",
+			currentAttachment,
+			currentCreated,
+			currentAttachErr,
 		)
 	}
 }
@@ -970,6 +1070,7 @@ func TestAttachCallerCancellationDoesNotCancelSharedActivation(t *testing.T) {
 		_ = clientConn.Close()
 	})
 	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	lifecycle := m.ensureSinkLifecycle(server)
 
 	activationStarted := make(chan struct{})
 	releaseActivation := make(chan struct{})
@@ -984,7 +1085,7 @@ func TestAttachCallerCancellationDoesNotCancelSharedActivation(t *testing.T) {
 	ownerCtx, cancelOwner := context.WithCancel(context.Background())
 	ownerResult := make(chan error, 1)
 	go func() {
-		_, attachErr := m.attachSessionContext(ownerCtx, sess.ID, "conn-1", 80, 24, server, 1)
+		_, attachErr := m.attachSessionContext(ownerCtx, sess.ID, "conn-1", 80, 24, lifecycle, 1)
 		ownerResult <- attachErr
 	}()
 	<-activationStarted
@@ -1025,7 +1126,7 @@ func TestAttachCallerCancellationDoesNotCancelSharedActivation(t *testing.T) {
 	m.DetachSink(server)
 }
 
-func TestRPCServeCancellationUnblocksAttachBeforeDetach(t *testing.T) {
+func TestRPCServeCancellationUnblocksRedevenAttachWaiterBeforeDetach(t *testing.T) {
 	m := newQuietTestManager(t, t.TempDir())
 	t.Cleanup(m.Cleanup)
 	sess, err := m.createSession("test", "")
@@ -1088,7 +1189,7 @@ func TestRPCServeCancellationUnblocksAttachBeforeDetach(t *testing.T) {
 	select {
 	case <-activationCanceled:
 	case <-time.After(time.Second):
-		t.Fatal("DetachSink did not cancel the session-owned activation")
+		t.Fatal("DetachSink did not cancel the Redeven attach waiter")
 	}
 	select {
 	case <-callDone:
@@ -1319,9 +1420,12 @@ func TestDetachSinkCompletesPendingAttachOwnerAndJoiner(t *testing.T) {
 	server := rpc.NewServer(serverConn, rpc.NewRouter())
 	client := rpc.NewClient(clientConn)
 	t.Cleanup(func() { _ = client.Close() })
+	lifecycle := m.ensureSinkLifecycle(server)
 
 	activationStarted := make(chan struct{})
+	var activationCalls atomic.Int64
 	m.activateSessionFunc = func(ctx context.Context, _ string, _ int, _ int) error {
+		activationCalls.Add(1)
 		close(activationStarted)
 		<-ctx.Done()
 		return ctx.Err()
@@ -1329,13 +1433,13 @@ func TestDetachSinkCompletesPendingAttachOwnerAndJoiner(t *testing.T) {
 
 	ownerResult := make(chan error, 1)
 	go func() {
-		_, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		_, attachErr := m.attachSessionContext(context.Background(), sess.ID, "conn-1", 80, 24, lifecycle, 1)
 		ownerResult <- attachErr
 	}()
 	<-activationStarted
 	joinerResult := make(chan error, 1)
 	go func() {
-		_, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		_, attachErr := m.attachSessionContext(context.Background(), sess.ID, "conn-1", 80, 24, lifecycle, 1)
 		joinerResult <- attachErr
 	}()
 
@@ -1357,6 +1461,9 @@ func TestDetachSinkCompletesPendingAttachOwnerAndJoiner(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("owner remained blocked after activation returned")
+	}
+	if got := activationCalls.Load(); got != 1 {
+		t.Fatalf("activation calls = %d, want 1", got)
 	}
 
 	m.mu.Lock()

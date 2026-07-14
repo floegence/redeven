@@ -204,7 +204,7 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 		byServer:         make(map[*rpc.Server]map[string]sinkAttachment),
 		bySession:        make(map[string]map[*rpc.Server]sinkAttachment),
 		attachStates:     make(map[*rpc.Server]map[string]*sinkAttachState),
-		closedSinks:      make(map[*rpc.Server]struct{}),
+		sinkLifecycles:   make(map[*rpc.Server]*terminalSinkLifecycle),
 		sessionLifecycle: make(map[string]SessionLifecycleRecord),
 	}
 

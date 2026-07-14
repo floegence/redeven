@@ -2536,6 +2536,8 @@ describe('TerminalPanel', () => {
     });
 
     const core = terminalCoreInstances[0];
+    const runtime = host.querySelector('[data-terminal-runtime-session="session-1"]');
+    expect(runtime?.getAttribute('aria-busy')).toBe('true');
     transportMocks.sendInput.mockClear();
     core?.handlers?.onData?.('before-baseline\r');
     expect(transportMocks.sendInput).not.toHaveBeenCalled();
@@ -2544,6 +2546,7 @@ describe('TerminalPanel', () => {
     await waitForTerminalPanelCondition(() => {
       expect(host.querySelector('[data-testid="terminal-status-bar"]')).toBeTruthy();
     });
+    expect(runtime?.getAttribute('aria-busy')).toBe('false');
     expect(host.querySelector('[data-terminal-history-bytes]')?.getAttribute('data-terminal-history-bytes')).toBe('5');
     core?.handlers?.onData?.('after-baseline\r');
     expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', 'after-baseline\r', 'conn-1');
@@ -2865,6 +2868,7 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(host.textContent).toContain('Some earlier output could not be restored.');
+    expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
     expect(host.textContent).not.toContain('history temporarily unavailable');
     const recoveryMessage = host.querySelector('[data-testid="terminal-recovery-status-message"]');
     const recoveryActions = host.querySelector('[data-testid="terminal-recovery-status-actions"]');
@@ -2883,6 +2887,59 @@ describe('TerminalPanel', () => {
 
     retryButton?.click();
     expect(outputCoordinatorRetrySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps diagnostics bound to the originating surface for a shared session', async () => {
+    const panelHost = document.createElement('div');
+    const workbenchHost = document.createElement('div');
+    document.body.append(panelHost, workbenchHost);
+
+    const failRecovery = (coordinatorIndex: number) => {
+      const coordinatorOptions = createOutputCoordinatorSpy.mock.calls[coordinatorIndex]?.[0];
+      expect(coordinatorOptions).toBeTruthy();
+      coordinatorOptions.onStateChange?.({
+        active: true,
+        baselineReady: true,
+        coveredThroughSequence: 4,
+        retainedLiveChunks: 1,
+        retainedLiveBytes: 12,
+        retryAttempt: 3,
+        retryScheduled: false,
+        failure: {
+          code: 'history_fetch_failed',
+          phase: 'catch_up',
+          retryable: true,
+          attempt: 3,
+          coveredSequence: 4,
+          attachGeneration: 1,
+        },
+        lastError: null,
+        disposed: false,
+        state: 'failed',
+      });
+    };
+
+    render(() => <TerminalPanel variant="panel" />, panelHost);
+    await settleTerminalPanelAfterPaint();
+    failRecovery(0);
+    await settleTerminalPanel();
+
+    render(() => <TerminalPanel variant="workbench" />, workbenchHost);
+    await settleTerminalPanelAfterPaint();
+    failRecovery(1);
+    await settleTerminalPanel();
+
+    panelHost.querySelector<HTMLButtonElement>('button[aria-label="Diagnostics"]')?.click();
+    workbenchHost.querySelector<HTMLButtonElement>('button[aria-label="Diagnostics"]')?.click();
+
+    const panelQuery = openDebugConsoleSpy.mock.calls[0]?.[0]?.query as string;
+    const workbenchQuery = openDebugConsoleSpy.mock.calls[1]?.[0]?.query as string;
+    const [panelSessionRef, panelGeneration, panelErrorCode] = panelQuery.split(' ');
+    const [workbenchSessionRef, workbenchGeneration, workbenchErrorCode] = workbenchQuery.split(' ');
+    expect(panelSessionRef).toBe(workbenchSessionRef);
+    expect(panelGeneration).not.toBe(workbenchGeneration);
+    expect(panelErrorCode).toBe('history_fetch_failed');
+    expect(workbenchErrorCode).toBe('history_fetch_failed');
   });
 
   it('routes non-retryable recovery failures to Runtime settings', async () => {
