@@ -67,7 +67,20 @@ func threadPermissionTypeString(th *threadstore.Thread, modeFallback string) str
 }
 
 func activeThreadEffectiveRunState(status string, runErrorCode string, runError string) (string, string, string) {
-	runStatus, _, _ := normalizeThreadRunState(status, runErrorCode, runError)
+	return effectiveThreadRunState(status, runErrorCode, runError, true, false)
+}
+
+func effectiveThreadRunState(status string, runErrorCode string, runError string, active bool, waitingApproval bool) (string, string, string) {
+	runStatus, normalizedErrorCode, normalizedError := normalizeThreadRunState(status, runErrorCode, runError)
+	if runStatus == string(RunStateWaitingUser) {
+		return runStatus, "", ""
+	}
+	if waitingApproval {
+		return string(RunStateWaitingApproval), "", ""
+	}
+	if !active {
+		return runStatus, normalizedErrorCode, normalizedError
+	}
 	if IsActiveRunState(runStatus) {
 		return runStatus, "", ""
 	}
@@ -85,14 +98,11 @@ func applyFlowerThreadMetadataView(view *ThreadView, meta *threadstore.FlowerThr
 	}
 }
 
-func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thread, flowerMeta *threadstore.FlowerThreadMetadata, queuedTurnCount int, active bool) ThreadView {
+func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thread, flowerMeta *threadstore.FlowerThreadMetadata, queuedTurnCount int, active bool, waitingApproval bool) ThreadView {
 	if th == nil {
 		return ThreadView{}
 	}
-	runStatus, runErrorCode, runError := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
-	if active {
-		runStatus, runErrorCode, runError = activeThreadEffectiveRunState(th.RunStatus, th.RunErrorCode, th.RunError)
-	}
+	runStatus, runErrorCode, runError := effectiveThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError, active, waitingApproval)
 	workingDir := strings.TrimSpace(th.WorkingDir)
 	if workingDir == "" && s != nil {
 		workingDir = strings.TrimSpace(s.agentHomeDir)
@@ -169,13 +179,14 @@ func (s *Service) requireThreadMutable(ctx context.Context, db *threadstore.Stor
 	return nil
 }
 
-func (s *Service) activeThreadRunSet(endpointID string) map[string]struct{} {
+func (s *Service) threadRuntimeStateSets(endpointID string) (map[string]struct{}, map[string]struct{}) {
 	endpointID = strings.TrimSpace(endpointID)
 	if endpointID == "" || s == nil {
-		return map[string]struct{}{}
+		return map[string]struct{}{}, map[string]struct{}{}
 	}
 	prefix := endpointID + ":"
-	out := make(map[string]struct{})
+	active := make(map[string]struct{})
+	waitingApproval := make(map[string]struct{})
 	s.mu.Lock()
 	for key, runID := range s.activeRunByTh {
 		if strings.TrimSpace(runID) == "" {
@@ -189,10 +200,19 @@ func (s *Service) activeThreadRunSet(endpointID string) map[string]struct{} {
 		if tid == "" {
 			continue
 		}
-		out[tid] = struct{}{}
+		active[tid] = struct{}{}
+	}
+	for key, stream := range s.flowerLiveByThread {
+		if !strings.HasPrefix(key, prefix) || stream == nil || stream.State.ApprovalQueue == nil || stream.State.ApprovalQueue.UnresolvedCount <= 0 {
+			continue
+		}
+		tid := strings.TrimSpace(strings.TrimPrefix(key, prefix))
+		if tid != "" {
+			waitingApproval[tid] = struct{}{}
+		}
 	}
 	s.mu.Unlock()
-	return out
+	return active, waitingApproval
 }
 
 func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID string) (*ThreadView, error) {
@@ -230,7 +250,10 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 		return nil, err
 	}
 
-	view := s.threadViewFromRecord(ctx, th, flowerMeta, queuedTurnCount, s.HasActiveThreadForEndpoint(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(th.ThreadID)))
+	activeThreads, approvalThreads := s.threadRuntimeStateSets(endpointID)
+	_, active := activeThreads[threadID]
+	_, waitingApproval := approvalThreads[threadID]
+	view := s.threadViewFromRecord(ctx, th, flowerMeta, queuedTurnCount, active, waitingApproval)
 	if queuedTurnCount > 0 {
 		queued, listErr := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, queuedTurnCount)
 		if listErr != nil {
@@ -276,7 +299,7 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	if err != nil {
 		return nil, err
 	}
-	activeThreads := s.activeThreadRunSet(endpointID)
+	activeThreads, approvalThreads := s.threadRuntimeStateSets(endpointID)
 	flowerMetaByThread := make(map[string]*threadstore.FlowerThreadMetadata, len(threadIDs))
 	for _, threadID := range threadIDs {
 		meta, err := db.GetFlowerThreadMetadata(ctx, endpointID, threadID)
@@ -289,8 +312,10 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	}
 	out := &ListThreadsResponse{Threads: make([]ThreadView, 0, len(list)), NextCursor: strings.TrimSpace(next)}
 	for _, t := range list {
-		_, active := activeThreads[strings.TrimSpace(t.ThreadID)]
-		out.Threads = append(out.Threads, s.threadViewFromRecord(ctx, &t, flowerMetaByThread[strings.TrimSpace(t.ThreadID)], queuedTurnCounts[strings.TrimSpace(t.ThreadID)], active))
+		threadID := strings.TrimSpace(t.ThreadID)
+		_, active := activeThreads[threadID]
+		_, waitingApproval := approvalThreads[threadID]
+		out.Threads = append(out.Threads, s.threadViewFromRecord(ctx, &t, flowerMetaByThread[threadID], queuedTurnCounts[threadID], active, waitingApproval))
 	}
 	return out, nil
 }
@@ -414,7 +439,7 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		return nil, err
 	}
 
-	view := s.threadViewFromRecord(ctx, &t, nil, 0, false)
+	view := s.threadViewFromRecord(ctx, &t, nil, 0, false, false)
 	return &view, nil
 }
 

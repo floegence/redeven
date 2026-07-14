@@ -60,6 +60,10 @@ main() {
       internal/flower_ui/src/FlowerSurface.markdownRendering.test.ts \
       internal/flower_ui/src/FlowerSurface.markdownReadability.test.ts \
       internal/flower_ui/src/shellCommandHighlight.test.ts
+
+    ui_pkg_log ""
+    ui_pkg_log "Flower UI: Chromium approval refresh contract..."
+    ui_pkg_run_pnpm run test:browser -- src/ui/FlowerSurface.approvalRefresh.browser.test.tsx
   )
 
   ui_pkg_log "Flower UI behavior checks passed."

@@ -250,10 +250,24 @@ function applyLiveMaterializedState(thread: FlowerThreadSnapshot, liveState: Flo
     context_usage: liveState.context_usage ?? null,
     context_compactions: liveState.context_compactions ?? [],
     timeline_decorations: liveState.timeline_decorations ?? [],
-    approval_queue: liveState.approval_queue ?? null,
   };
-  if (liveState.approval_actions !== undefined) {
-    next = { ...next, approval_actions: approvalsFromRecord(liveState.approval_actions) };
+  const liveApprovalActions = liveState.approval_actions === undefined
+    ? undefined
+    : approvalsFromRecord(liveState.approval_actions);
+  const explicitlyClearsApprovalActions = liveApprovalActions !== undefined && liveApprovalActions.length === 0;
+  const explicitlyClearsApprovalQueue = liveState.approval_queue === null
+    || liveState.approval_queue !== undefined && liveState.approval_queue.unresolved_count <= 0;
+  if (explicitlyClearsApprovalActions) {
+    next = { ...next, approval_actions: [], approval_queue: null };
+  } else if (explicitlyClearsApprovalQueue) {
+    next = { ...next, approval_actions: [], approval_queue: liveState.approval_queue };
+  } else {
+    if (liveState.approval_queue !== undefined) {
+      next = { ...next, approval_queue: liveState.approval_queue };
+    }
+    if (liveApprovalActions !== undefined) {
+      next = { ...next, approval_actions: liveApprovalActions };
+    }
   }
   next = applyThreadPatch(next, liveState.thread_patch);
   const inputRequest = firstInputRequest(liveState.input_requests);
@@ -267,7 +281,7 @@ function applyLiveMaterializedState(thread: FlowerThreadSnapshot, liveState: Flo
     if (next.status !== 'waiting_user') {
       next = { ...next, input_request: null };
     }
-    if (liveState.approval_actions !== undefined && next.status === 'waiting_approval') {
+    if ((explicitlyClearsApprovalActions || explicitlyClearsApprovalQueue) && next.status === 'waiting_approval') {
       next = { ...next, status: 'idle' };
     }
   }
