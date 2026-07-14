@@ -83,7 +83,11 @@ import {
   type FlowerActivityTitle,
   type FlowerActivityTodoStatus,
 } from './flowerActivityPresentation';
-import { createFlowerActivityDisclosurePresence } from './activityDisclosure';
+import {
+  createFlowerActivityDisclosureController,
+  createFlowerActivityDisclosurePresence,
+  flowerActivityDisclosureIntent,
+} from './activityDisclosure';
 import {
   createTerminalVisibleOutputStore,
   terminalListeningPlaceholderVisible,
@@ -5022,15 +5026,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && item.status === 'waiting'
   );
 
-  const activityItemNeedsAttention = (item: Pick<FlowerActivityItem, 'status' | 'requires_approval' | 'approval_state' | 'severity' | 'needs_attention'>): boolean => (
-    item.needs_attention
-    ||
-    item.status === 'error'
-    || item.status === 'waiting'
-    || activityItemAwaitingApproval(item)
-    || item.severity === 'blocking'
-  );
-
   const formatActivityDuration = (durationMs: number | undefined): string => {
     const value = Number(durationMs ?? 0);
     if (!Number.isFinite(value) || value <= 0) return '';
@@ -5045,7 +5040,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     [selectedThreadID(), blockKey, timeline.run_id, timeline.turn_id, item.item_id, String(index)].map(trimString).filter(Boolean).join(':')
   );
 
-  const activityItemDefaultOpen = (item: FlowerActivityItem): boolean => activityItemNeedsAttention(item);
   const activityItemHasVisiblePayload = (item: FlowerActivityItem): boolean => {
     const label = trimString(item.label);
     const toolName = trimString(item.tool_name);
@@ -5059,18 +5053,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const activityItemVisible = (item: FlowerActivityItem): boolean => {
     if (activityItemAwaitingApproval(item) && !activityItemHasVisiblePayload(item)) return false;
     return true;
-  };
-
-  const activityItemOpen = (timeline: FlowerActivityTimelineBlock, item: FlowerActivityItem, blockKey: string, index: number): boolean => {
-    const key = activityItemKey(timeline, item, blockKey, index);
-    const local = openActivityRuns()[key];
-    if (typeof local === 'boolean') return local;
-    return activityItemDefaultOpen(item);
-  };
-
-  const toggleActivityItem = (timeline: FlowerActivityTimelineBlock, item: FlowerActivityItem, blockKey: string, index: number) => {
-    const key = activityItemKey(timeline, item, blockKey, index);
-    setOpenActivityRuns((current) => ({ ...current, [key]: !activityItemOpen(timeline, item, blockKey, index) }));
   };
 
   const activityItemAriaLabel = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock): string => (
@@ -5758,7 +5740,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     blockKey: Accessor<string>,
     index: Accessor<number>,
   ) => {
-    const open = createMemo(() => activityItemOpen(timeline(), item(), blockKey(), index()));
+    const disclosureKey = createMemo(() => activityItemKey(timeline(), item(), blockKey(), index()));
+    const disclosureControl = createFlowerActivityDisclosureController({
+      intent: () => flowerActivityDisclosureIntent(item()),
+      manualOpen: () => openActivityRuns()[disclosureKey()],
+      onManualOpenChange: (open) => {
+        const key = disclosureKey();
+        setOpenActivityRuns((current) => ({ ...current, [key]: open }));
+      },
+      reducedMotion: reducedMotionPreferred,
+    });
+    const open = disclosureControl.open;
     const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, { subagents: subagentsCopy() }));
     const subagentsDetail = createMemo(() => subagentsDetailForPresentation(presentation()));
     const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
@@ -5804,7 +5796,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             class={cn('flower-activity-inline-button', !expandable() && 'flower-activity-inline-button-static')}
             aria-expanded={expandable() ? open() : undefined}
             disabled={!expandable()}
-            onClick={expandable() ? () => toggleActivityItem(timeline(), item(), blockKey(), index()) : undefined}
+            onClick={expandable() ? disclosureControl.toggle : undefined}
           >
             <span class="flower-activity-inline-icon">{statusIcon(displayStatus())}</span>
             <span class="flower-activity-inline-copy">
@@ -5834,10 +5826,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             ref={detailPanelRef}
             class="flower-activity-inline-details"
             data-state={disclosure.state()}
+            onPointerDown={disclosureControl.retainOpen}
+            onFocusIn={disclosureControl.retainOpen}
           >
-            <For each={presentation().detailBlocks}>
-              {(block) => activityDetailBlock(messageID(), blockIndex(), item(), timeline(), block)}
-            </For>
+            <div class="flower-activity-inline-details-clip">
+              <div class="flower-activity-inline-details-content">
+                <For each={presentation().detailBlocks}>
+                  {(block) => activityDetailBlock(messageID(), blockIndex(), item(), timeline(), block)}
+                </For>
+              </div>
+            </div>
           </div>
         </Show>
       </div>

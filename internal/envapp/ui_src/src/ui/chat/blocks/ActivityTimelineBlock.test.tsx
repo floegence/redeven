@@ -276,6 +276,53 @@ describe('ActivityTimelineBlock', () => {
     expect(host.querySelector('.chat-activity-detail-panel')).toBeNull();
   });
 
+  it('delays active timeline expansion and holds the completed state before closing', async () => {
+    const runningBlock = baseBlock({
+      summary: {
+        ...baseSummary('running'),
+        severity: 'normal',
+      },
+      items: [baseItem({
+        status: 'running',
+        severity: 'normal',
+        needs_attention: true,
+      })],
+    });
+    const completedBlock = baseBlock({
+      summary: baseSummary('success'),
+      items: [baseItem({
+        status: 'success',
+        severity: 'quiet',
+        needs_attention: false,
+      })],
+    });
+    const [block, setBlock] = createSignal(runningBlock);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <ActivityTimelineBlock block={block()} messageId="msg_1" blockIndex={0} />
+    ), host);
+    renderDisposers.push(dispose);
+
+    const summary = host.querySelector('.chat-activity-timeline-summary') as HTMLButtonElement;
+    expect(summary.getAttribute('aria-expanded')).toBe('false');
+
+    await waitMs(340);
+    expect(summary.getAttribute('aria-expanded')).toBe('true');
+    expect(host.querySelector('.chat-activity-items-presence')?.getAttribute('data-state')).toMatch(/opening|open/);
+
+    setBlock(completedBlock);
+    await flushAsync();
+    expect(summary.getAttribute('aria-expanded')).toBe('true');
+
+    await waitMs(1050);
+    expect(summary.getAttribute('aria-expanded')).toBe('false');
+    expect(host.querySelector('.chat-activity-items-presence')?.getAttribute('data-state')).toBe('closing');
+
+    await waitMs(230);
+    expect(host.querySelector('.chat-activity-items-presence')).toBeNull();
+  });
+
   it('supports keyboard expansion without endpoint detail refs', async () => {
     const host = renderActivity();
     expandTimeline(host);

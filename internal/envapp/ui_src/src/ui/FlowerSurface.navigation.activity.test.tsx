@@ -27,6 +27,7 @@ import {
   subagentDetail,
   subagentSummary,
   thread,
+  wait,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
 
@@ -3186,15 +3187,27 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-refresh-block"] button')));
     (runtime.querySelector('[data-thread-id="thread-refresh-block"] button') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('.flower-activity-inline-row')?.getAttribute('data-flower-activity-status') === 'running');
+    const activityButton = runtime.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
+    expect(activityButton.getAttribute('aria-expanded')).toBe('false');
+
+    await wait(340);
+    expect(activityButton.getAttribute('aria-expanded')).toBe('true');
 
     listSnapshot = [completeThread];
     (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
 
     await waitFor(() => runtime.querySelector('.flower-activity-inline-row')?.getAttribute('data-flower-activity-status') === 'success');
+    expect(activityButton.getAttribute('aria-expanded')).toBe('true');
     expect(runtime.textContent).toContain('Done');
     expect(runtime.textContent).toContain('1s');
     expect(runtime.textContent).toContain('Tests passed.');
     expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
+
+    await wait(1050);
+    expect(activityButton.getAttribute('aria-expanded')).toBe('false');
+    expect(runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state')).toBe('closing');
+    await wait(230);
+    expect(runtime.querySelector('.flower-activity-inline-details')).toBeNull();
   });
 
   it('keeps waiting activity visible even if a timeline summary is marked digest', async () => {
