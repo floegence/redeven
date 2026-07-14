@@ -713,6 +713,35 @@ describe('Env App and Desktop i18n contract', () => {
     expect(dictionaries['zh-TW'].shell.status.missingEnvContext).toBe('缺少環境資訊。請從控制平面重新開啟此環境。');
   });
 
+  it('injects localized framework chrome and plugin navigation copy', () => {
+    const appSource = fs.readFileSync(path.resolve(process.cwd(), 'src/ui/App.tsx'), 'utf8');
+    const shellSource = fs.readFileSync(path.resolve(process.cwd(), 'src/ui/EnvAppShell.tsx'), 'utf8');
+    expect(appSource).toContain("searchPlaceholder: t('shell.framework.searchCommands')");
+    expect(appSource).toContain("error: t('shell.framework.error')");
+    expect(shellSource).toContain("label: i18n.t('uiCopy.plugin.panelTitle')");
+    expect(shellSource).not.toContain("label: 'Plugins'");
+    expect(dictionaries['zh-CN'].shell.framework).toMatchObject({
+      searchCommands: '搜索命令...',
+      disconnected: '未连接',
+      error: '错误',
+    });
+    expect(Object.fromEntries(SUPPORTED_LOCALES.map((locale) => [
+      locale,
+      dictionaries[locale].uiCopy.plugin.panelTitle,
+    ]))).toEqual({
+      'en-US': 'Plugins',
+      'zh-CN': '插件',
+      'zh-TW': '外掛程式',
+      'ja-JP': 'プラグイン',
+      'ko-KR': '플러그인',
+      'de-DE': 'Plugins',
+      'fr-FR': 'Plugins',
+      'es-ES': 'Plugins',
+      'pt-BR': 'Plugins',
+      'ru-RU': 'Плагины',
+    });
+  });
+
   it('keeps Flower surface catalogs identical and avoids default-English production fallback', () => {
     const envAIPage = fs.readFileSync(
       path.resolve(process.cwd(), 'src/ui/pages/EnvAIPage.tsx'),

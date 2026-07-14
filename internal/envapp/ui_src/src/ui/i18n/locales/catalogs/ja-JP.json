@@ -270,6 +270,17 @@
       "downloads": "ダウンロード",
       "toggleTheme": "テーマを切り替え"
     },
+    "framework": {
+      "searchCommands": "コマンドを検索...",
+      "noMatchingCommands": "一致するコマンドはありません",
+      "escape": "Esc",
+      "cancel": "キャンセル",
+      "confirm": "確認",
+      "connected": "接続済み",
+      "disconnected": "未接続",
+      "connecting": "接続中",
+      "error": "エラー"
+    },
     "status": {
       "localRuntime": "ローカルランタイム",
       "environment": "環境",

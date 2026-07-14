@@ -270,6 +270,17 @@
       "downloads": "下載",
       "toggleTheme": "切換主題"
     },
+    "framework": {
+      "searchCommands": "搜尋命令...",
+      "noMatchingCommands": "找不到符合的命令",
+      "escape": "Esc",
+      "cancel": "取消",
+      "confirm": "確認",
+      "connected": "已連線",
+      "disconnected": "未連線",
+      "connecting": "連線中",
+      "error": "錯誤"
+    },
     "status": {
       "localRuntime": "本地運行時",
       "environment": "環境",

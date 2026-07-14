@@ -73,6 +73,26 @@ function buildFloeConfig(t: I18nHelpers['t']) {
       sidebarLabel: t('shell.accessibility.sidebarLabel'),
       mainLabel: t('shell.accessibility.mainLabel'),
     },
+    strings: {
+      topBar: {
+        searchPlaceholder: t('shell.framework.searchCommands'),
+      },
+      commandPalette: {
+        placeholder: t('shell.framework.searchCommands'),
+        empty: t('shell.framework.noMatchingCommands'),
+        esc: t('shell.framework.escape'),
+      },
+      confirmDialog: {
+        cancel: t('shell.framework.cancel'),
+        confirm: t('shell.framework.confirm'),
+      },
+      statusIndicator: {
+        connected: t('shell.framework.connected'),
+        disconnected: t('shell.framework.disconnected'),
+        connecting: t('shell.framework.connecting'),
+        error: t('shell.framework.error'),
+      },
+    },
   } as const;
 }
 

@@ -270,6 +270,17 @@
       "downloads": "다운로드",
       "toggleTheme": "테마 전환"
     },
+    "framework": {
+      "searchCommands": "명령 검색...",
+      "noMatchingCommands": "일치하는 명령이 없습니다",
+      "escape": "Esc",
+      "cancel": "취소",
+      "confirm": "확인",
+      "connected": "연결됨",
+      "disconnected": "연결 끊김",
+      "connecting": "연결 중",
+      "error": "오류"
+    },
     "status": {
       "localRuntime": "로컬 런타임",
       "environment": "환경",

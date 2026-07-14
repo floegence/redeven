@@ -270,6 +270,17 @@
       "downloads": "Downloads",
       "toggleTheme": "Alternar tema"
     },
+    "framework": {
+      "searchCommands": "Buscar comandos...",
+      "noMatchingCommands": "Nenhum comando correspondente",
+      "escape": "Esc",
+      "cancel": "Cancelar",
+      "confirm": "Confirmar",
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "connecting": "Conectando...",
+      "error": "Erro"
+    },
     "status": {
       "localRuntime": "Tempo de execução local",
       "environment": "Ambiente",
@@ -3829,7 +3840,7 @@
       "unavailable": "Indisponível",
       "revoked": "Revogado",
       "blocked": "Plugins",
-      "panelTitle": "bloqueados",
+      "panelTitle": "Plugins",
       "panelDescription": "Plugins oficiais instalados neste tempo de execução.",
       "closePanel": "Fechar plug-ins",
       "addManage": "Adicionar/gerenciar",

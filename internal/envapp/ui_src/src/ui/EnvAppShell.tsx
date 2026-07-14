@@ -2509,7 +2509,7 @@ export function EnvAppShell() {
       {
         id: 'plugins',
         icon: Grid3x3,
-        label: 'Plugins',
+        label: i18n.t('uiCopy.plugin.panelTitle'),
         collapseBehavior: 'preserve',
         onClick: () => {
           setPluginsPanelOpen((open) => !open);
