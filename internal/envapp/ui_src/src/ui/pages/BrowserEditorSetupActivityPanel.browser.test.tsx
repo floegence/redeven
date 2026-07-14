@@ -68,7 +68,40 @@ async function settle(): Promise<void> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
-function mountPanel(activity: BrowserEditorSetupActivity, width: string) {
+function cssColorRgba(value: string): [number, number, number, number] {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('2D canvas context is unavailable');
+  context.clearRect(0, 0, 1, 1);
+  context.fillStyle = value;
+  context.fillRect(0, 0, 1, 1);
+  const [red, green, blue, alpha] = context.getImageData(0, 0, 1, 1).data;
+  return [red, green, blue, alpha];
+}
+
+function relativeLuminance([red, green, blue]: readonly number[]): number {
+  const linear = [red, green, blue].map((channel) => {
+    const normalized = channel / 255;
+    return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+  });
+  return (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2]);
+}
+
+function contrastRatio(foreground: readonly number[], background: readonly number[]): number {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function mountPanel(
+  activity: BrowserEditorSetupActivity,
+  width: string,
+  layout: 'wide' | 'compact' = 'wide',
+) {
   const host = document.createElement('div');
   host.style.width = width;
   host.style.margin = '24px auto';
@@ -77,7 +110,7 @@ function mountPanel(activity: BrowserEditorSetupActivity, width: string) {
     () => (
       <BrowserEditorSetupActivityPanel
         activity={activity}
-        layout="wide"
+        layout={layout}
         actionLabel="Set up Browser Editor"
         runningLabel="Setting up..."
         onPrepare={() => undefined}
@@ -108,6 +141,7 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     cleanup?.();
     cleanup = undefined;
     document.body.replaceChildren();
+    document.documentElement.classList.remove('dark', 'light');
     await page.viewport(1280, 720);
   });
 
@@ -190,6 +224,71 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     expect(getComputedStyle(detailList!).borderLeftWidth).toBe('1px');
     expect(getComputedStyle(detailLabel!).borderRightWidth).toBe('1px');
     expect(getComputedStyle(detailLabel!).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+
+    const screenshot = await page.screenshot({ save: false });
+    expect(screenshot.length).toBeGreaterThan(1_000);
+  });
+
+  it('keeps the dark frame and major section dividers distinct across layouts', async () => {
+    document.documentElement.classList.add('dark');
+    await page.viewport(1440, 900);
+
+    const wide = mountPanel(unsupportedActivity(), '1180px');
+    await settle();
+    const widePanel = wide.host.querySelector<HTMLElement>('[data-testid="browser-editor-setup-activity"]')!;
+    const wideSecondary = wide.host.querySelector<HTMLElement>('.browser-editor-setup__secondary')!;
+    const widePanelStyle = getComputedStyle(widePanel);
+    const wideSecondaryStyle = getComputedStyle(wideSecondary);
+    const panelBackground = cssColorRgba(widePanelStyle.backgroundColor);
+    const frameBorder = cssColorRgba(widePanelStyle.borderTopColor);
+    const wideDivider = cssColorRgba(wideSecondaryStyle.borderLeftColor);
+
+    expect(widePanelStyle.borderTopWidth).toBe('1px');
+    expect(wideSecondaryStyle.borderLeftWidth).toBe('1px');
+    expect(frameBorder[3]).toBe(255);
+    expect(wideDivider[3]).toBe(255);
+    expect(contrastRatio(frameBorder, panelBackground)).toBeGreaterThanOrEqual(2.2);
+    expect(contrastRatio(wideDivider, panelBackground)).toBeGreaterThanOrEqual(1.8);
+    expect(widePanel.scrollWidth).toBeLessThanOrEqual(widePanel.clientWidth + 1);
+    wide.dispose();
+    wide.host.remove();
+
+    await page.viewport(1023, 768);
+    const responsive = mountPanel(unsupportedActivity(), 'calc(100vw - 24px)');
+    await settle();
+    const responsivePanel = responsive.host.querySelector<HTMLElement>('[data-testid="browser-editor-setup-activity"]')!;
+    const responsiveBody = responsive.host.querySelector<HTMLElement>('.browser-editor-setup__body')!;
+    const responsiveSecondary = responsive.host.querySelector<HTMLElement>('.browser-editor-setup__secondary')!;
+    const responsiveSecondaryStyle = getComputedStyle(responsiveSecondary);
+    const responsiveDivider = cssColorRgba(responsiveSecondaryStyle.borderTopColor);
+
+    expect(getComputedStyle(responsiveBody).gridTemplateColumns.split(' ')).toHaveLength(1);
+    expect(responsiveSecondaryStyle.borderTopWidth).toBe('1px');
+    expect(responsiveSecondaryStyle.borderLeftWidth).toBe('0px');
+    expect(responsiveDivider[3]).toBe(255);
+    expect(contrastRatio(
+      responsiveDivider,
+      cssColorRgba(getComputedStyle(responsivePanel).backgroundColor),
+    )).toBeGreaterThanOrEqual(1.8);
+    expect(responsivePanel.scrollWidth).toBeLessThanOrEqual(responsivePanel.clientWidth + 1);
+    responsive.dispose();
+    responsive.host.remove();
+
+    const compact = mountPanel(unsupportedActivity(), '640px', 'compact');
+    cleanup = compact.dispose;
+    await settle();
+    const compactPanel = compact.host.querySelector<HTMLElement>('[data-testid="browser-editor-setup-activity"]')!;
+    const compactSecondary = compact.host.querySelector<HTMLElement>('.browser-editor-setup__secondary')!;
+    const compactSecondaryStyle = getComputedStyle(compactSecondary);
+    const compactDivider = cssColorRgba(compactSecondaryStyle.borderTopColor);
+
+    expect(compactPanel.dataset.layout).toBe('compact');
+    expect(compactSecondaryStyle.borderTopWidth).toBe('1px');
+    expect(compactSecondaryStyle.borderLeftWidth).toBe('0px');
+    expect(compactDivider[3]).toBe(255);
+    expect(contrastRatio(compactDivider, cssColorRgba(getComputedStyle(compactPanel).backgroundColor)))
+      .toBeGreaterThanOrEqual(1.8);
+    expect(compactPanel.scrollWidth).toBeLessThanOrEqual(compactPanel.clientWidth + 1);
 
     const screenshot = await page.screenshot({ save: false });
     expect(screenshot.length).toBeGreaterThan(1_000);
