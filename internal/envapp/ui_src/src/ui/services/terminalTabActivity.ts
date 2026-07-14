@@ -14,7 +14,10 @@ export type TerminalSessionActivityRuntime = {
   pendingLiveUnreadCount: number;
   pendingUnsequencedOutput: boolean;
   pendingUnsequencedUnread: boolean;
-  activityTimer: ReturnType<typeof setTimeout> | null;
+  outputAttachGeneration: number | undefined;
+  settledThroughSequence: number;
+  recentActivityTimer: ReturnType<typeof setTimeout> | null;
+  pendingOutputTimer: ReturnType<typeof setTimeout> | null;
   visualState: TerminalTabVisualState;
   workState: TerminalSessionWorkState;
 };
@@ -43,6 +46,11 @@ export interface TerminalTabActivityTracker {
     sessionId: string,
     opts: { source: 'history' | 'live'; sequence?: number },
   ) => void;
+  handleOutputCoverage: (
+    sessionId: string,
+    update: { attachGeneration: number; coveredThroughSequence: number; rebased?: boolean },
+  ) => void;
+  resetPendingOutput: (sessionId: string) => void;
   handleVisibleOutput: (sessionId: string, opts: { source: 'history' | 'live'; byteLength: number; shouldMarkUnread: boolean }) => void;
   pruneSessions: (activeSessionIds: Set<string>) => void;
   dispose: () => void;
@@ -50,6 +58,7 @@ export interface TerminalTabActivityTracker {
 
 const DEFAULT_OUTPUT_ACTIVITY_GRACE_MS = 1_500;
 const DEFAULT_OUTPUT_ACTIVITY_QUIET_MS = 3_500;
+const MAX_PENDING_LIVE_SEQUENCES = 2048;
 
 function createEmptyRuntime(): TerminalSessionActivityRuntime {
   return {
@@ -62,7 +71,10 @@ function createEmptyRuntime(): TerminalSessionActivityRuntime {
     pendingLiveUnreadCount: 0,
     pendingUnsequencedOutput: false,
     pendingUnsequencedUnread: false,
-    activityTimer: null,
+    outputAttachGeneration: undefined,
+    settledThroughSequence: 0,
+    recentActivityTimer: null,
+    pendingOutputTimer: null,
     visualState: 'none',
     workState: 'idle',
   };
@@ -123,12 +135,20 @@ export function createTerminalTabActivityTracker(
     }
   };
 
-  const clearActivityTimer = (runtime: TerminalSessionActivityRuntime) => {
-    if (runtime.activityTimer == null) {
+  const clearRecentActivityTimer = (runtime: TerminalSessionActivityRuntime) => {
+    if (runtime.recentActivityTimer == null) {
       return;
     }
-    cancelTimeout(runtime.activityTimer);
-    runtime.activityTimer = null;
+    cancelTimeout(runtime.recentActivityTimer);
+    runtime.recentActivityTimer = null;
+  };
+
+  const clearPendingOutputTimer = (runtime: TerminalSessionActivityRuntime) => {
+    if (runtime.pendingOutputTimer == null) {
+      return;
+    }
+    cancelTimeout(runtime.pendingOutputTimer);
+    runtime.pendingOutputTimer = null;
   };
 
   const getRuntime = (sessionId: string): TerminalSessionActivityRuntime | null => {
@@ -151,18 +171,15 @@ export function createTerminalTabActivityTracker(
     phase: Exclude<TerminalRecentActivityPhase, 'inactive'>,
     durationMs: number,
   ) => {
-    clearActivityTimer(runtime);
+    clearRecentActivityTimer(runtime);
     runtime.recentActivityPhase = phase;
     publishIfNeeded(sessionId, runtime);
-    runtime.activityTimer = scheduleTimeout(() => {
-      runtime.activityTimer = null;
+    runtime.recentActivityTimer = scheduleTimeout(() => {
+      runtime.recentActivityTimer = null;
       if (runtime.recentActivityPhase !== phase) {
         return;
       }
       runtime.recentActivityPhase = 'inactive';
-      if (phase === 'output') {
-        runtime.pendingLiveOutput = false;
-      }
       publishIfNeeded(sessionId, runtime);
     }, durationMs);
   };
@@ -190,6 +207,26 @@ export function createTerminalTabActivityTracker(
     runtime.pendingUnsequencedUnread = false;
   };
 
+  const resetOutputCoverage = (runtime: TerminalSessionActivityRuntime) => {
+    clearPendingOutput(runtime);
+    runtime.outputAttachGeneration = undefined;
+    runtime.settledThroughSequence = 0;
+  };
+
+  const settleThroughCoverage = (
+    runtime: TerminalSessionActivityRuntime,
+    coveredThroughSequence: number,
+  ) => {
+    for (const [sequence, shouldMarkUnread] of runtime.pendingLiveSequences) {
+      if (sequence > coveredThroughSequence) continue;
+      if (shouldMarkUnread) runtime.pendingLiveUnreadCount = Math.max(0, runtime.pendingLiveUnreadCount - 1);
+      runtime.pendingLiveSequences.delete(sequence);
+    }
+    if (runtime.pendingLiveSequences.size === 0 && !runtime.pendingUnsequencedOutput) {
+      runtime.pendingLiveOutput = false;
+    }
+  };
+
   const settlePendingSequence = (
     runtime: TerminalSessionActivityRuntime,
     sequence: number | undefined,
@@ -208,6 +245,18 @@ export function createTerminalTabActivityTracker(
       runtime.pendingLiveOutput = false;
     }
     return shouldMarkUnread;
+  };
+
+  const schedulePendingOutputQuiet = (
+    sessionId: string,
+    runtime: TerminalSessionActivityRuntime,
+  ) => {
+    clearPendingOutputTimer(runtime);
+    runtime.pendingOutputTimer = scheduleTimeout(() => {
+      runtime.pendingOutputTimer = null;
+      runtime.pendingLiveOutput = false;
+      publishIfNeeded(sessionId, runtime);
+    }, quietMs);
   };
 
   const normalizeSessionId = (sessionId: string): string => String(sessionId ?? '').trim();
@@ -255,6 +304,7 @@ export function createTerminalTabActivityTracker(
       runtime.commandPhase = 'running';
       runtime.programActivityPhase = 'unknown';
       runtime.pendingLiveOutput = false;
+      clearPendingOutputTimer(runtime);
       scheduleRecentActivity(normalizedSessionId, runtime, 'grace', graceMs);
     },
 
@@ -267,7 +317,8 @@ export function createTerminalTabActivityTracker(
       if (!runtime) {
         return;
       }
-      clearActivityTimer(runtime);
+      clearRecentActivityTimer(runtime);
+      clearPendingOutputTimer(runtime);
       runtime.commandPhase = 'idle';
       runtime.programActivityPhase = 'idle';
       runtime.pendingLiveOutput = false;
@@ -285,7 +336,8 @@ export function createTerminalTabActivityTracker(
       if (!runtime) {
         return;
       }
-      clearActivityTimer(runtime);
+      clearRecentActivityTimer(runtime);
+      clearPendingOutputTimer(runtime);
       runtime.commandPhase = 'idle';
       runtime.programActivityPhase = 'idle';
       clearPendingOutput(runtime);
@@ -304,8 +356,9 @@ export function createTerminalTabActivityTracker(
       }
       runtime.programActivityPhase = phase;
       runtime.pendingLiveOutput = false;
+      clearPendingOutputTimer(runtime);
       if (phase === 'idle') {
-        clearActivityTimer(runtime);
+        clearRecentActivityTimer(runtime);
         runtime.recentActivityPhase = 'inactive';
       }
       publishIfNeeded(normalizedSessionId, runtime);
@@ -323,6 +376,7 @@ export function createTerminalTabActivityTracker(
       const sequence = Number.isSafeInteger(opts.sequence) && Number(opts.sequence) > 0
         ? Number(opts.sequence)
         : undefined;
+      if (sequence !== undefined && sequence <= runtime.settledThroughSequence) return;
       runtime.pendingLiveOutput = true;
       if (sequence === undefined) {
         runtime.pendingUnsequencedOutput = true;
@@ -330,16 +384,20 @@ export function createTerminalTabActivityTracker(
       } else {
         const wasUnread = runtime.pendingLiveSequences.get(sequence) === true;
         const shouldMarkUnread = wasUnread || opts.shouldMarkUnread;
+        if (!runtime.pendingLiveSequences.has(sequence) && runtime.pendingLiveSequences.size >= MAX_PENDING_LIVE_SEQUENCES) {
+          const oldestSequence = runtime.pendingLiveSequences.keys().next().value as number | undefined;
+          if (oldestSequence !== undefined) {
+            if (runtime.pendingLiveSequences.get(oldestSequence) === true) {
+              runtime.pendingLiveUnreadCount = Math.max(0, runtime.pendingLiveUnreadCount - 1);
+            }
+            runtime.pendingLiveSequences.delete(oldestSequence);
+          }
+        }
         runtime.pendingLiveSequences.set(sequence, shouldMarkUnread);
         if (!wasUnread && shouldMarkUnread) runtime.pendingLiveUnreadCount += 1;
       }
-      clearActivityTimer(runtime);
       publishIfNeeded(normalizedSessionId, runtime);
-      runtime.activityTimer = scheduleTimeout(() => {
-        runtime.activityTimer = null;
-        runtime.pendingLiveOutput = false;
-        publishIfNeeded(normalizedSessionId, runtime);
-      }, quietMs);
+      schedulePendingOutputQuiet(normalizedSessionId, runtime);
     },
 
     handleOutputCommitted(sessionId: string, opts: { source: 'history' | 'live'; sequence?: number }) {
@@ -351,8 +409,55 @@ export function createTerminalTabActivityTracker(
         ? Number(opts.sequence)
         : undefined;
       const shouldMarkUnread = settlePendingSequence(runtime, sequence);
+      if (!runtime.pendingLiveOutput) clearPendingOutputTimer(runtime);
+      if (sequence !== undefined) {
+        runtime.settledThroughSequence = Math.max(runtime.settledThroughSequence, sequence);
+      }
       if (opts.source === 'live') markUnread(runtime, shouldMarkUnread);
       publishIfNeeded(normalizedSessionId, runtime);
+    },
+
+    handleOutputCoverage(sessionId, update) {
+      const normalizedSessionId = normalizeSessionId(sessionId);
+      if (!normalizedSessionId) return;
+      const runtime = runtimeBySession.get(normalizedSessionId);
+      if (!runtime) return;
+      const attachGeneration = Number.isSafeInteger(update.attachGeneration) && update.attachGeneration >= 0
+        ? update.attachGeneration
+        : 0;
+      const coveredThroughSequence = Number.isSafeInteger(update.coveredThroughSequence) && update.coveredThroughSequence >= 0
+        ? update.coveredThroughSequence
+        : 0;
+      const generationChanged = runtime.outputAttachGeneration !== undefined
+        && runtime.outputAttachGeneration !== attachGeneration;
+      const preserveRunning = runtime.pendingLiveOutput;
+      if (update.rebased || generationChanged) {
+        clearPendingOutputTimer(runtime);
+        clearPendingOutput(runtime);
+      }
+      runtime.outputAttachGeneration = attachGeneration;
+      runtime.settledThroughSequence = update.rebased || generationChanged
+        ? coveredThroughSequence
+        : Math.max(runtime.settledThroughSequence, coveredThroughSequence);
+      settleThroughCoverage(runtime, runtime.settledThroughSequence);
+      if (preserveRunning) runtime.pendingLiveOutput = true;
+      publishIfNeeded(normalizedSessionId, runtime);
+      if ((update.rebased || generationChanged) && runtime.pendingLiveOutput) {
+        schedulePendingOutputQuiet(normalizedSessionId, runtime);
+      }
+    },
+
+    resetPendingOutput(sessionId) {
+      const normalizedSessionId = normalizeSessionId(sessionId);
+      if (!normalizedSessionId) return;
+      const runtime = runtimeBySession.get(normalizedSessionId);
+      if (!runtime) return;
+      const preserveRunning = runtime.pendingLiveOutput;
+      clearPendingOutputTimer(runtime);
+      resetOutputCoverage(runtime);
+      if (preserveRunning) runtime.pendingLiveOutput = true;
+      publishIfNeeded(normalizedSessionId, runtime);
+      if (preserveRunning) schedulePendingOutputQuiet(normalizedSessionId, runtime);
     },
 
     handleVisibleOutput(sessionId: string, opts: { source: 'history' | 'live'; byteLength: number; shouldMarkUnread: boolean }) {
@@ -380,14 +485,16 @@ export function createTerminalTabActivityTracker(
         if (activeSessionIds.has(sessionId)) {
           continue;
         }
-        clearActivityTimer(runtime);
+        clearRecentActivityTimer(runtime);
+        clearPendingOutputTimer(runtime);
         runtimeBySession.delete(sessionId);
       }
     },
 
     dispose() {
       for (const runtime of runtimeBySession.values()) {
-        clearActivityTimer(runtime);
+        clearRecentActivityTimer(runtime);
+        clearPendingOutputTimer(runtime);
       }
       runtimeBySession.clear();
     },

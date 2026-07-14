@@ -4,8 +4,10 @@ import { For, Show, createEffect, createSignal } from 'solid-js';
 import { render as solidRender } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_INTERACTION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
+import { RpcError } from '@floegence/floe-webapp-protocol';
 
 import { TerminalPanel } from './TerminalPanel';
+import { shouldPublishTerminalOutputCoverage } from './TerminalSessionRuntime';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR } from '../workbench/surface/workbenchTextSelectionSurface';
 import {
   getDebugConsoleClientEventRingSnapshot,
@@ -17,6 +19,15 @@ const layoutState = vi.hoisted(() => ({
   mobile: false,
 }));
 
+describe('terminal output coverage publication', () => {
+  it('publishes only for a new attach generation or monotonic coverage progress', () => {
+    expect(shouldPublishTerminalOutputCoverage(1, 20, 2, 0)).toBe(true);
+    expect(shouldPublishTerminalOutputCoverage(2, 20, 2, 21)).toBe(true);
+    expect(shouldPublishTerminalOutputCoverage(2, 20, 2, 20)).toBe(false);
+    expect(shouldPublishTerminalOutputCoverage(2, 20, 2, 19)).toBe(false);
+  });
+});
+
 const widgetState = vi.hoisted(() => ({
   currentWidgetId: null as string | null,
 }));
@@ -24,7 +35,13 @@ const widgetState = vi.hoisted(() => ({
 const viewActivationState = vi.hoisted(() => ({
   missing: false,
   active: true,
+  setActive: null as ((active: boolean) => void) | null,
 }));
+
+function setViewActivationActive(active: boolean) {
+  viewActivationState.active = active;
+  viewActivationState.setActive?.(active);
+}
 
 const themeState = vi.hoisted(() => ({
   resolvedTheme: 'dark' as 'light' | 'dark',
@@ -179,6 +196,9 @@ const transportMocks = vi.hoisted(() => {
     }),
     getSessionStats: vi.fn().mockResolvedValue({ history: { totalBytes: 0 } }),
     clear: vi.fn().mockResolvedValue(undefined),
+    forgetSession: vi.fn(),
+    syncConnectionEpoch: vi.fn(),
+    dispose: vi.fn(),
   };
 });
 
@@ -348,9 +368,14 @@ vi.mock('@floegence/floe-webapp-core', () => ({
     if (viewActivationState.missing) {
       throw new Error('ViewActivationContext not found. Wrap your view with <ViewActivationProvider />.');
     }
+    const [active, setActive] = createSignal(viewActivationState.active);
+    viewActivationState.setActive = (nextActive) => {
+      viewActivationState.active = nextActive;
+      setActive(nextActive);
+    };
     return {
       id: 'test-view',
-      active: () => viewActivationState.active,
+      active,
       activationSeq: () => 0,
     };
   },
@@ -621,7 +646,8 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   ),
 }));
 
-vi.mock('@floegence/floe-webapp-protocol', () => ({
+vi.mock('@floegence/floe-webapp-protocol', async () => ({
+  ...await vi.importActual<typeof import('@floegence/floe-webapp-protocol')>('@floegence/floe-webapp-protocol'),
   useProtocol: () => ({
     client: () => ({ id: 'protocol-client' }),
     status: () => 'connected',
@@ -639,6 +665,7 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     container: HTMLDivElement;
     config: any;
     handlers: any;
+    logger: any;
     registeredLinkProviders: any[] = [];
     terminal = {
       options: {},
@@ -670,10 +697,11 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
       },
     };
 
-    constructor(container: HTMLDivElement, config?: any, handlers?: any) {
+    constructor(container: HTMLDivElement, config?: any, handlers?: any, logger?: any) {
       this.container = container;
       this.config = config ?? {};
       this.handlers = handlers ?? {};
+      this.logger = logger ?? null;
       terminalConfigState.values.push(config ?? null);
       terminalCoreInstances.push(this);
       const input = document.createElement('textarea');
@@ -1289,7 +1317,10 @@ vi.mock('../services/terminalAdaptiveWorkingSet', async (importOriginal) => {
   };
 });
 
-vi.mock('../services/terminalTransport', () => ({
+vi.mock('../services/terminalTransport', async () => {
+  const actual = await vi.importActual<typeof import('../services/terminalTransport')>('../services/terminalTransport');
+  return {
+  ...actual,
   createRedevenTerminalTransport: () => transportMocks,
   createRedevenTerminalEventSource: () => ({
     onTerminalData: (sessionId: string, handler: any) => {
@@ -1313,7 +1344,8 @@ vi.mock('../services/terminalTransport', () => ({
     },
   }),
   getOrCreateTerminalConnId: () => 'conn-1',
-}));
+  };
+});
 
 vi.mock('../services/terminalSessions', () => ({
   disposeRedevenTerminalSessionsCoordinator: vi.fn(),
@@ -1667,6 +1699,7 @@ describe('TerminalPanel', () => {
     widgetState.currentWidgetId = null;
     viewActivationState.missing = false;
     viewActivationState.active = true;
+    viewActivationState.setActive = null;
     sessionStorage.clear();
     focusSpy.mockClear();
     forceResizeSpy.mockClear();
@@ -2486,6 +2519,7 @@ describe('TerminalPanel', () => {
 
   it('blocks initial input until the terminal parser commits the history baseline', async () => {
     terminalWriteCompletionState.deferHistory = true;
+    transportMocks.getSessionStats.mockResolvedValue({ history: { totalBytes: 5 } });
     transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
       chunks: [{ sequence: 1, timestampMs: 10, data: textEncoder.encode('ready') }],
       firstSequence: 1,
@@ -2510,6 +2544,7 @@ describe('TerminalPanel', () => {
     await waitForTerminalPanelCondition(() => {
       expect(host.querySelector('[data-testid="terminal-status-bar"]')).toBeTruthy();
     });
+    expect(host.querySelector('[data-terminal-history-bytes]')?.getAttribute('data-terminal-history-bytes')).toBe('5');
     core?.handlers?.onData?.('after-baseline\r');
     expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', 'after-baseline\r', 'conn-1');
   });
@@ -2904,6 +2939,195 @@ describe('TerminalPanel', () => {
     expect(transportMocks.historyPage).not.toHaveBeenCalled();
   });
 
+  it('does not surface normal attach lifecycle exits as blocking recovery failures', async () => {
+    const lifecycleExit = new RpcError({
+      typeId: 2003,
+      code: 409,
+      message: 'terminal attach superseded',
+    });
+    transportMocks.attach.mockRejectedValueOnce(lifecycleExit);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    expect(transportMocks.attach).toHaveBeenCalledTimes(2);
+    expect(transportMocks.historyPage).toHaveBeenCalled();
+    expect(host.textContent).not.toContain('This terminal could not be restored.');
+    expect(host.querySelector('button[aria-label="Retry"]')).toBeNull();
+    expect(getDebugConsoleClientEventRingSnapshot().events).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        scope: 'terminal_recovery',
+        kind: 'blocking',
+      }),
+    ]));
+  });
+
+  it('recovers a superseded mobile Floe-keyboard terminal without focusing the system IME', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+    transportMocks.attach.mockRejectedValueOnce(new RpcError({
+      typeId: 2003,
+      code: 409,
+      message: 'terminal attach superseded',
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" workbenchSelected />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.attach).toHaveBeenCalledTimes(2);
+      expect(transportMocks.historyPage).toHaveBeenCalled();
+    });
+
+    expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeTruthy();
+    expect(focusSpy).not.toHaveBeenCalled();
+    expect(host.textContent).not.toContain('Select this terminal to continue');
+    expect(host.textContent).not.toContain('This terminal could not be restored.');
+  });
+
+  it('limits superseded attach recovery to one automatic retry per interaction ownership', async () => {
+    const lifecycleExit = () => new RpcError({
+      typeId: 2003,
+      code: 409,
+      message: 'terminal attach superseded',
+    });
+    transportMocks.attach
+      .mockRejectedValueOnce(lifecycleExit())
+      .mockRejectedValueOnce(lifecycleExit());
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(host.textContent).toContain('This terminal could not be restored.');
+    });
+
+    expect(transportMocks.attach).toHaveBeenCalledTimes(2);
+    await settleTerminalPanelAfterPaint();
+    expect(transportMocks.attach).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('button[aria-label="Retry"]')).toBeTruthy();
+  });
+
+  it('keeps a superseded attach pending when interaction ownership changes before retry starts', async () => {
+    let rejectAttach!: (error: Error) => void;
+    const pendingAttach = new Promise<never>((_resolve, reject) => {
+      rejectAttach = reject;
+    });
+    const lifecycleExit = new RpcError({
+      typeId: 2003,
+      code: 409,
+      message: 'terminal attach superseded',
+    });
+    transportMocks.attach
+      .mockReturnValueOnce(pendingAttach)
+      .mockResolvedValueOnce({ historyBoundarySequence: 0 });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.attach).toHaveBeenCalledTimes(1);
+    });
+
+    const originalQueueMicrotask = globalThis.queueMicrotask;
+    const scheduledMicrotasks: Array<() => void> = [];
+    vi.stubGlobal('queueMicrotask', (callback: () => void) => {
+      scheduledMicrotasks.push(callback);
+    });
+    rejectAttach(lifecycleExit);
+    await settleTerminalPanelMicrotasks();
+    expect(scheduledMicrotasks).not.toHaveLength(0);
+
+    setViewActivationActive(false);
+    for (const callback of scheduledMicrotasks.splice(0)) callback();
+    await settleTerminalPanelMicrotasks();
+    expect(transportMocks.attach).toHaveBeenCalledTimes(1);
+
+    vi.stubGlobal('queueMicrotask', originalQueueMicrotask);
+    setViewActivationActive(true);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.attach).toHaveBeenCalledTimes(2);
+      expect(transportMocks.historyPage).toHaveBeenCalled();
+    });
+    expect(host.textContent).not.toContain('This terminal could not be restored.');
+  });
+
+  it('does not retry a superseded attach after the terminal runtime is disposed', async () => {
+    let rejectAttach!: (error: Error) => void;
+    const pendingAttach = new Promise<never>((_resolve, reject) => {
+      rejectAttach = reject;
+    });
+    transportMocks.attach.mockReturnValueOnce(pendingAttach);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = solidRender(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.attach).toHaveBeenCalledTimes(1);
+    });
+
+    const originalQueueMicrotask = globalThis.queueMicrotask;
+    const scheduledMicrotasks: Array<() => void> = [];
+    vi.stubGlobal('queueMicrotask', (callback: () => void) => {
+      scheduledMicrotasks.push(callback);
+    });
+    try {
+      rejectAttach(new RpcError({
+        typeId: 2003,
+        code: 409,
+        message: 'terminal attach superseded',
+      }));
+      await settleTerminalPanelMicrotasks();
+      expect(scheduledMicrotasks).not.toHaveLength(0);
+      const coreCountBeforeDispose = terminalCoreInstances.length;
+
+      dispose();
+      for (const callback of scheduledMicrotasks.splice(0)) callback();
+      await settleTerminalPanelMicrotasks();
+
+      expect(transportMocks.attach).toHaveBeenCalledTimes(1);
+      expect(transportMocks.historyPage).not.toHaveBeenCalled();
+      expect(terminalCoreInstances).toHaveLength(coreCountBeforeDispose);
+    } finally {
+      vi.stubGlobal('queueMicrotask', originalQueueMicrotask);
+    }
+  });
+
+  it('removes a missing session immediately after a real RPC 404 attach exit', async () => {
+    transportMocks.attach.mockRejectedValueOnce(new RpcError({
+      typeId: 2003,
+      code: 404,
+      message: 'terminal session not found',
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(sessionsCoordinatorMocks.refresh).toHaveBeenCalled();
+      expect(transportMocks.forgetSession).toHaveBeenCalledWith('session-1');
+    });
+
+    expect(host.querySelector('[data-terminal-session-label="Terminal 1"]')).toBeNull();
+    expect(host.textContent).not.toContain('This terminal could not be restored.');
+  });
+
+  it('forgets shared resize ownership when an authoritative session disappears', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+    transportMocks.forgetSession.mockClear();
+
+    terminalSessionsState.sessions = [];
+    for (const subscriber of terminalSessionsState.subscribers) subscriber([]);
+    await settleTerminalPanelMicrotasks();
+
+    expect(transportMocks.forgetSession).toHaveBeenCalledTimes(1);
+    expect(transportMocks.forgetSession).toHaveBeenCalledWith('session-1');
+  });
+
   it('retains live output that arrives before the attach history boundary acknowledgement', async () => {
     let resolveAttach!: (value: { historyBoundarySequence: number }) => void;
     const attach = new Promise<{ historyBoundarySequence: number }>((resolve) => {
@@ -2984,6 +3208,120 @@ describe('TerminalPanel', () => {
     expect(transportMocks.historyPage).toHaveBeenCalledTimes(2);
   });
 
+  it('does not focus the system terminal input after a mobile Floe-keyboard Retry', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    terminalCoreInstances[0]?.handlers?.onError?.(new Error('renderer failed'));
+    await settleTerminalPanel();
+    focusSpy.mockClear();
+
+    host.querySelector<HTMLButtonElement>('button[aria-label="Retry"]')?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalCoreInstances.length).toBe(2);
+    });
+    await settleTerminalPanelAfterPaint();
+
+    expect(terminalCoreInstances[1]?.focus).not.toHaveBeenCalled();
+    expect(focusSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not focus a stale terminal when the active session changes during Retry', async () => {
+    terminalSessionsState.sessions = [
+      terminalSessionsState.sessions[0]!,
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/two',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 9,
+      },
+    ];
+    let resolveRetryAttach!: (value: { historyBoundarySequence: number }) => void;
+    const retryAttach = new Promise<{ historyBoundarySequence: number }>((resolve) => {
+      resolveRetryAttach = resolve;
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    transportMocks.attach.mockImplementationOnce(() => retryAttach);
+    terminalCoreInstances[0]?.handlers?.onError?.(new Error('renderer failed'));
+    await settleTerminalPanel();
+    host.querySelector<HTMLButtonElement>('button[aria-label="Retry"]')?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.attach).toHaveBeenCalledTimes(2);
+      expect(terminalCoreInstances.length).toBe(2);
+    });
+    const retriedSessionCore = terminalCoreInstances[1];
+
+    host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-2"]')?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(findActiveTerminalTab(host)?.getAttribute('data-terminal-session-id')).toBe('session-2');
+    });
+    resolveRetryAttach({ historyBoundarySequence: 0 });
+    await settleTerminalPanelAfterPaint();
+
+    expect(retriedSessionCore?.focus).not.toHaveBeenCalled();
+  });
+
+  it('keeps upstream terminal errors and session identity out of developer console logs', async () => {
+    const rawSecret = 'terminal-private-secret';
+    const encodedSecret = btoa(rawSecret);
+    const sessionID = 'session-1';
+    const consoleSpies = [
+      vi.spyOn(console, 'debug').mockImplementation(() => undefined),
+      vi.spyOn(console, 'info').mockImplementation(() => undefined),
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined),
+      vi.spyOn(console, 'error').mockImplementation(() => undefined),
+    ];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    try {
+      render(() => <TerminalPanel variant="panel" />, host);
+      await settleTerminalPanelAfterPaint();
+      const core = terminalCoreInstances[0];
+      const rawError = new Error(`raw ${rawSecret}`, { cause: new Error(`cause ${encodedSecret}`) });
+      rawError.name = `SecretError-${rawSecret}`;
+      core?.logger?.error?.(`upstream ${rawSecret} ${encodedSecret}`, {
+        error: rawError,
+        sessionId: sessionID,
+        cause: rawError.cause,
+      });
+      core?.handlers?.onError?.(rawError);
+      createOutputCoordinatorSpy.mock.calls[0]?.[0]?.onHistoryTruncated?.('history-evicted');
+      await settleTerminalPanel();
+
+      const logged = JSON.stringify(consoleSpies.flatMap((spy) => spy.mock.calls), (_key, value) => {
+        if (value instanceof Error) {
+          return { name: value.name, message: value.message, cause: value.cause };
+        }
+        return value;
+      });
+      expect(logged).not.toContain(rawSecret);
+      expect(logged).not.toContain(encodedSecret);
+      expect(logged).not.toContain(sessionID);
+      expect(logged).not.toContain('SecretError');
+      expect(console.error).toHaveBeenCalledWith(
+        '[TerminalPanel] Terminal core failed',
+        { event: 'terminal_core_failed' },
+      );
+      expect(console.debug).toHaveBeenCalledWith(
+        '[TerminalPanel] Rebased truncated terminal history',
+        { event: 'terminal_history_rebased', reason: 'history-evicted' },
+      );
+    } finally {
+      for (const spy of consoleSpies) spy.mockRestore();
+    }
+  });
+
   it('keeps blocking recovery actions visible above the Floe mobile keyboard', async () => {
     layoutState.mobile = true;
     terminalPrefsState.mobileInputMode = 'floe';
@@ -3022,11 +3360,11 @@ describe('TerminalPanel', () => {
     const core = terminalCoreInstances[0];
     expect(core).toBeDefined();
 
-    viewActivationState.active = false;
+    setViewActivationActive(false);
     emitTerminalData('session-1', 'background output', 1);
     await settleTerminalPanel();
 
-    viewActivationState.active = true;
+    setViewActivationActive(true);
     transportMocks.sendInput.mockClear();
     core?.handlers?.onData?.('echo __rdv_after_return__\r');
 
@@ -4128,6 +4466,7 @@ describe('TerminalPanel', () => {
 
     deletePromise.resolve?.();
     await settleTerminalPanel();
+    expect(transportMocks.forgetSession).toHaveBeenCalledWith('session-2');
   });
 
   it('closes an unmounted terminal tab without mounting it first', async () => {
@@ -4194,6 +4533,7 @@ describe('TerminalPanel', () => {
     expect(sessionOperations.deleteSession).toHaveBeenCalledWith('session-2');
     expect(terminalCoreInstances).toHaveLength(1);
     expect(transportMocks.attach.mock.calls.every((call) => call[0] !== 'session-2')).toBe(true);
+    expect(transportMocks.forgetSession).toHaveBeenCalledWith('session-2');
   });
 
   it('creates a new terminal session without sending a fixed 80x24 create size', async () => {

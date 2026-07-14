@@ -25,6 +25,7 @@ export type TerminalSessionStats = { history: { totalBytes: number } };
 
 export type RedevenTerminalAttachResult = Readonly<{
   historyBoundarySequence?: number;
+  runtimeAttachGeneration?: number;
 }>;
 
 export type TerminalHistoryPage = Readonly<{
@@ -63,10 +64,13 @@ export type RedevenTerminalTransport = TerminalTransport & {
     options?: TerminalHistoryPageOptions,
   ) => Promise<TerminalHistoryPage>;
   getSessionStats: (sessionId: string) => Promise<TerminalSessionStats>;
+  forgetSession: (sessionId: string) => void;
+  syncConnectionEpoch: (key: object | null) => void;
+  dispose: () => void;
 };
 
-const TERMINAL_HISTORY_PAGE_LIMIT_CHUNKS = 256;
-const TERMINAL_HISTORY_PAGE_MAX_BYTES = 384 * 1024;
+const TERMINAL_HISTORY_PAGE_LIMIT_CHUNKS = 2048;
+const TERMINAL_HISTORY_PAGE_MAX_BYTES = 512 * 1024;
 const TERMINAL_HISTORY_DRAIN_MAX_PAGES = 4096;
 const terminalAttachGenerationByScope = new WeakMap<object, number>();
 
@@ -75,23 +79,81 @@ type TerminalResizeDimensions = Readonly<{
   rows: number;
 }>;
 
-type TerminalResizeWaiter = Readonly<{
+type TerminalResizeSender = (sessionId: string, cols: number, rows: number) => Promise<void>;
+
+type TerminalResizeParticipant = Readonly<{
+  leaseId: number;
+  leaseEpoch: number;
+}>;
+
+type TerminalResizeWaiter = TerminalResizeParticipant & Readonly<{
   resolve: () => void;
   reject: (error: unknown) => void;
 }>;
 
-type TerminalResizeDispatchState = {
-  lastSent: TerminalResizeDimensions | null;
-  pending: TerminalResizeDimensions | null;
+type TerminalResizeDesired = Readonly<{
+  dimensions: TerminalResizeDimensions;
+  sender: TerminalResizeSender;
+  sequence: number;
+  connectionEpoch: number;
+  participant: TerminalResizeParticipant;
   waiters: TerminalResizeWaiter[];
-  scheduled: boolean;
-  inFlight: boolean;
+}>;
+
+type TerminalResizeInFlight = {
+  dimensions: TerminalResizeDimensions;
+  sequence: number;
+  connectionEpoch: number;
+  participants: TerminalResizeParticipant[];
+  waiters: TerminalResizeWaiter[];
 };
 
-type TerminalResizeSender = (sessionId: string, cols: number, rows: number) => Promise<void>;
+type TerminalResizeDispatchState = {
+  lastSent: Readonly<{
+    dimensions: TerminalResizeDimensions;
+    sender: TerminalResizeSender;
+    sequence: number;
+    connectionEpoch: number;
+    participant: TerminalResizeParticipant;
+  }> | null;
+  desiredByLease: Map<number, TerminalResizeDesired>;
+  scheduledCancel: (() => void) | null;
+  inFlight: TerminalResizeInFlight | null;
+  latestAttachGeneration: number;
+};
+
 export type TerminalResizeDispatcher = TerminalResizeSender & {
   markSent: (sessionId: string, cols: number, rows: number) => void;
+  dispose: () => void;
 };
+
+type TerminalResizeEpochToken = Readonly<{
+  leaseEpoch: number;
+  connectionEpoch: number;
+  resizeSequence: number;
+  attachGeneration: number;
+}>;
+
+type TerminalResizeLeaseState = {
+  id: number;
+  epoch: number;
+  disposed: boolean;
+  sender: TerminalResizeSender;
+};
+
+type TerminalResizeLease = Readonly<{
+  resize: TerminalResizeSender;
+  captureEpoch: (attachGeneration?: number) => TerminalResizeEpochToken;
+  acknowledgeAttach: (
+    sessionId: string,
+    cols: number,
+    rows: number,
+    token: TerminalResizeEpochToken,
+  ) => void;
+  forgetSession: (sessionId: string) => void;
+  syncConnectionEpoch: (key: object | null) => void;
+  dispose: () => void;
+}>;
 
 function normalizeTerminalResizeDimensions(cols: number, rows: number): TerminalResizeDimensions | null {
   const normalizedCols = Math.floor(Number(cols));
@@ -114,132 +176,436 @@ function sameTerminalResizeDimensions(
   return Boolean(left && right && left.cols === right.cols && left.rows === right.rows);
 }
 
-function scheduleTerminalResizeFrame(callback: () => void): void {
+function scheduleTerminalResizeFrame(callback: () => void): () => void {
+  let active = true;
+  const run = () => {
+    if (!active) return;
+    active = false;
+    callback();
+  };
   if (typeof requestAnimationFrame === 'function') {
-    requestAnimationFrame(callback);
-    return;
+    const handle = requestAnimationFrame(run);
+    return () => {
+      active = false;
+      if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(handle);
+    };
   }
-  setTimeout(callback, 0);
+  const handle = setTimeout(run, 0);
+  return () => {
+    active = false;
+    clearTimeout(handle);
+  };
 }
 
-export function createTerminalResizeDispatcher(sender: TerminalResizeSender): TerminalResizeDispatcher {
-  const states = new Map<string, TerminalResizeDispatchState>();
+class SharedTerminalResizeReconciler {
+  private readonly states = new Map<string, TerminalResizeDispatchState>();
+  private readonly leases = new Map<number, TerminalResizeLeaseState>();
+  private nextLeaseId = 0;
+  private nextSequence = 0;
+  private connectionEpoch = 1;
+  private connectionKey: object | null | undefined;
 
-  const stateFor = (sessionId: string): TerminalResizeDispatchState => {
-    const existing = states.get(sessionId);
+  constructor(private readonly onQuiescent: () => void) {}
+
+  private stateFor(sessionId: string): TerminalResizeDispatchState {
+    const existing = this.states.get(sessionId);
     if (existing) return existing;
     const next: TerminalResizeDispatchState = {
       lastSent: null,
-      pending: null,
-      waiters: [],
-      scheduled: false,
-      inFlight: false,
+      desiredByLease: new Map(),
+      scheduledCancel: null,
+      inFlight: null,
+      latestAttachGeneration: 0,
     };
-    states.set(sessionId, next);
+    this.states.set(sessionId, next);
     return next;
-  };
+  }
 
-  const settle = (waiters: TerminalResizeWaiter[], error?: unknown) => {
+  private participantActive(participant: TerminalResizeParticipant): boolean {
+    const lease = this.leases.get(participant.leaseId);
+    return Boolean(lease && !lease.disposed && lease.epoch === participant.leaseEpoch);
+  }
+
+  private settle(waiters: TerminalResizeWaiter[], error?: unknown): void {
     for (const waiter of waiters) {
+      if (!this.participantActive(waiter)) continue;
       if (error === undefined) {
         waiter.resolve();
       } else {
         waiter.reject(error);
       }
     }
-  };
+  }
 
-  function schedule(sessionId: string, state: TerminalResizeDispatchState): void {
-    if (state.scheduled) return;
-    state.scheduled = true;
-    scheduleTerminalResizeFrame(() => {
-      state.scheduled = false;
-      void flush(sessionId, state);
+  private schedule(sessionId: string, state: TerminalResizeDispatchState): void {
+    if (state.scheduledCancel) return;
+    state.scheduledCancel = scheduleTerminalResizeFrame(() => {
+      state.scheduledCancel = null;
+      void this.flush(sessionId, state);
     });
   }
 
-  async function flush(sessionId: string, state: TerminalResizeDispatchState): Promise<void> {
-    if (state.inFlight) return;
-    const pending = state.pending;
-    if (!pending) return;
-
-    const waiters = state.waiters.splice(0);
-    state.pending = null;
-
-    if (sameTerminalResizeDimensions(state.lastSent, pending)) {
-      publishTerminalResizeDecision(sessionId, 'no_op', pending.cols, pending.rows);
-      settle(waiters);
-      if (state.pending) schedule(sessionId, state);
-      return;
-    }
-
-    state.inFlight = true;
-    publishTerminalResizeDecision(sessionId, 'requested', pending.cols, pending.rows);
-    try {
-      await sender(sessionId, pending.cols, pending.rows);
-      state.lastSent = pending;
-      publishTerminalResizeDecision(sessionId, 'applied', pending.cols, pending.rows);
-      settle(waiters);
-    } catch (e) {
-      publishTerminalResizeDecision(sessionId, 'failed', pending.cols, pending.rows);
-      settle(waiters, e);
-    } finally {
-      state.inFlight = false;
-      if (state.pending) schedule(sessionId, state);
+  private pruneDesired(state: TerminalResizeDispatchState): void {
+    for (const [leaseId, desired] of state.desiredByLease) {
+      if (desired.connectionEpoch === this.connectionEpoch && this.participantActive(desired.participant)) continue;
+      state.desiredByLease.delete(leaseId);
+      this.settle(desired.waiters);
     }
   }
 
-  const dispatch: TerminalResizeDispatcher = (sessionId, cols, rows) => {
+  private async flush(sessionId: string, state: TerminalResizeDispatchState): Promise<void> {
+    if (state.inFlight) return;
+    this.pruneDesired(state);
+    if (state.desiredByLease.size === 0) {
+      this.onQuiescent();
+      return;
+    }
+
+    let latest: TerminalResizeDesired | null = null;
+    const participants: TerminalResizeParticipant[] = [];
+    const waiters: TerminalResizeWaiter[] = [];
+    for (const desired of state.desiredByLease.values()) {
+      if (!latest || desired.sequence > latest.sequence) latest = desired;
+      participants.push(desired.participant);
+      waiters.push(...desired.waiters);
+    }
+    state.desiredByLease.clear();
+    if (!latest) {
+      this.settle(waiters);
+      this.onQuiescent();
+      return;
+    }
+
+    if (
+      state.lastSent?.connectionEpoch === this.connectionEpoch
+      && sameTerminalResizeDimensions(state.lastSent.dimensions, latest.dimensions)
+    ) {
+      publishTerminalResizeDecision(sessionId, 'no_op', latest.dimensions.cols, latest.dimensions.rows);
+      this.settle(waiters);
+      if (state.desiredByLease.size > 0) this.schedule(sessionId, state);
+      this.onQuiescent();
+      return;
+    }
+
+    const inFlight: TerminalResizeInFlight = {
+      dimensions: latest.dimensions,
+      sequence: latest.sequence,
+      connectionEpoch: latest.connectionEpoch,
+      participants,
+      waiters,
+    };
+    state.inFlight = inFlight;
+    publishTerminalResizeDecision(sessionId, 'requested', latest.dimensions.cols, latest.dimensions.rows);
+    try {
+      await latest.sender(sessionId, latest.dimensions.cols, latest.dimensions.rows);
+      const current = inFlight.connectionEpoch === this.connectionEpoch
+        && inFlight.participants.some((participant) => this.participantActive(participant));
+      if (current) {
+        state.lastSent = {
+          dimensions: latest.dimensions,
+          sender: latest.sender,
+          sequence: latest.sequence,
+          connectionEpoch: this.connectionEpoch,
+          participant: latest.participant,
+        };
+        publishTerminalResizeDecision(sessionId, 'applied', latest.dimensions.cols, latest.dimensions.rows);
+      }
+      this.settle(inFlight.waiters);
+    } catch (e) {
+      const current = inFlight.connectionEpoch === this.connectionEpoch
+        && inFlight.participants.some((participant) => this.participantActive(participant));
+      if (current) {
+        publishTerminalResizeDecision(sessionId, 'failed', latest.dimensions.cols, latest.dimensions.rows);
+        this.settle(inFlight.waiters, e);
+      } else {
+        this.settle(inFlight.waiters);
+      }
+    } finally {
+      if (state.inFlight === inFlight) state.inFlight = null;
+      if (state.desiredByLease.size > 0) this.schedule(sessionId, state);
+      this.onQuiescent();
+    }
+  }
+
+  private queueResize(
+    lease: TerminalResizeLeaseState,
+    sessionId: string,
+    cols: number,
+    rows: number,
+  ): Promise<void> {
     const normalizedSessionId = String(sessionId ?? '').trim();
     const dimensions = normalizeTerminalResizeDimensions(cols, rows);
-    if (!normalizedSessionId || !dimensions) return Promise.resolve();
+    if (!normalizedSessionId || !dimensions || lease.disposed) return Promise.resolve();
 
-    const state = stateFor(normalizedSessionId);
-    if (!state.pending && !state.inFlight && sameTerminalResizeDimensions(state.lastSent, dimensions)) {
+    const state = this.stateFor(normalizedSessionId);
+    if (
+      !state.inFlight
+      && state.desiredByLease.size === 0
+      && state.lastSent?.connectionEpoch === this.connectionEpoch
+      && sameTerminalResizeDimensions(state.lastSent.dimensions, dimensions)
+    ) {
       publishTerminalResizeDecision(normalizedSessionId, 'no_op', dimensions.cols, dimensions.rows);
       return Promise.resolve();
     }
 
-    state.pending = dimensions;
+    const participant = { leaseId: lease.id, leaseEpoch: lease.epoch };
     const promise = new Promise<void>((resolve, reject) => {
-      state.waiters.push({ resolve, reject });
+      const existing = state.desiredByLease.get(lease.id);
+      state.desiredByLease.set(lease.id, {
+        dimensions,
+        sender: lease.sender,
+        sequence: ++this.nextSequence,
+        connectionEpoch: this.connectionEpoch,
+        participant,
+        waiters: [...(existing?.waiters ?? []), { ...participant, resolve, reject }],
+      });
     });
-    schedule(normalizedSessionId, state);
+    this.schedule(normalizedSessionId, state);
     return promise;
-  };
-  dispatch.markSent = (sessionId, cols, rows) => {
+  }
+
+  private acknowledgeAttach(
+    lease: TerminalResizeLeaseState,
+    sessionId: string,
+    cols: number,
+    rows: number,
+    token: TerminalResizeEpochToken,
+  ): void {
     const normalizedSessionId = String(sessionId ?? '').trim();
     const dimensions = normalizeTerminalResizeDimensions(cols, rows);
-    if (!normalizedSessionId || !dimensions) return;
-    stateFor(normalizedSessionId).lastSent = dimensions;
-  };
-  return dispatch;
+    if (
+      !normalizedSessionId
+      || !dimensions
+      || lease.disposed
+      || token.leaseEpoch !== lease.epoch
+      || token.connectionEpoch !== this.connectionEpoch
+    ) return;
+
+    const state = this.stateFor(normalizedSessionId);
+    if (token.attachGeneration < state.latestAttachGeneration) return;
+    state.latestAttachGeneration = Math.max(state.latestAttachGeneration, token.attachGeneration);
+    const completedAfterFence = state.lastSent?.connectionEpoch === this.connectionEpoch
+      && state.lastSent.sequence > token.resizeSequence
+      && !sameTerminalResizeDimensions(state.lastSent.dimensions, dimensions)
+      && this.participantActive(state.lastSent.participant)
+      ? state.lastSent
+      : null;
+    for (const [leaseId, desired] of state.desiredByLease) {
+      if (desired.sequence > token.resizeSequence) continue;
+      state.desiredByLease.delete(leaseId);
+      this.settle(desired.waiters);
+    }
+
+    let latestFutureSequence = token.resizeSequence;
+    if (state.inFlight && state.inFlight.sequence > token.resizeSequence) {
+      latestFutureSequence = state.inFlight.sequence;
+    }
+    for (const desired of state.desiredByLease.values()) {
+      latestFutureSequence = Math.max(latestFutureSequence, desired.sequence);
+    }
+    if (completedAfterFence && completedAfterFence.sequence > latestFutureSequence) {
+      const existing = state.desiredByLease.get(completedAfterFence.participant.leaseId);
+      if (!existing || existing.sequence < completedAfterFence.sequence) {
+        state.desiredByLease.set(completedAfterFence.participant.leaseId, {
+          dimensions: completedAfterFence.dimensions,
+          sender: completedAfterFence.sender,
+          sequence: completedAfterFence.sequence,
+          connectionEpoch: this.connectionEpoch,
+          participant: completedAfterFence.participant,
+          waiters: [],
+        });
+      }
+    }
+
+    const attachBaseline = {
+      dimensions,
+      sender: lease.sender,
+      sequence: token.resizeSequence,
+      connectionEpoch: this.connectionEpoch,
+      participant: { leaseId: lease.id, leaseEpoch: lease.epoch },
+    };
+    const inFlight = state.inFlight;
+    if (!inFlight) {
+      state.lastSent = attachBaseline;
+      if (state.desiredByLease.size > 0) this.schedule(normalizedSessionId, state);
+      return;
+    }
+
+    const inFlightBeforeAttach = inFlight.sequence <= token.resizeSequence;
+    const attachSatisfiesInFlight = sameTerminalResizeDimensions(inFlight.dimensions, dimensions);
+    if (inFlightBeforeAttach || attachSatisfiesInFlight) {
+      this.settle(inFlight.waiters);
+      inFlight.waiters = [];
+      inFlight.participants = [];
+    }
+    if (inFlightBeforeAttach && !attachSatisfiesInFlight) {
+      state.lastSent = null;
+      if (state.desiredByLease.size === 0) {
+        state.desiredByLease.set(lease.id, { ...attachBaseline, waiters: [] });
+      }
+      return;
+    }
+
+    state.lastSent = attachBaseline;
+    if (state.desiredByLease.size > 0) this.schedule(normalizedSessionId, state);
+  }
+
+  private syncConnectionEpoch(lease: TerminalResizeLeaseState, key: object | null): void {
+    if (lease.disposed) return;
+    if (this.connectionKey === undefined) {
+      this.connectionKey = key;
+      return;
+    }
+    if (this.connectionKey === key) return;
+    this.connectionKey = key;
+    this.connectionEpoch += 1;
+    for (const state of this.states.values()) {
+      state.lastSent = null;
+      for (const desired of state.desiredByLease.values()) this.settle(desired.waiters);
+      state.desiredByLease.clear();
+      if (state.inFlight) {
+        this.settle(state.inFlight.waiters);
+        state.inFlight.waiters = [];
+        state.inFlight.participants = [];
+      }
+      if (state.scheduledCancel && !state.inFlight) {
+        state.scheduledCancel();
+        state.scheduledCancel = null;
+      }
+    }
+    this.onQuiescent();
+  }
+
+  private forgetSession(sessionId: string): void {
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId) return;
+    const state = this.states.get(normalizedSessionId);
+    if (!state) return;
+    if (state.scheduledCancel) state.scheduledCancel();
+    for (const desired of state.desiredByLease.values()) this.settle(desired.waiters);
+    if (state.inFlight) {
+      this.settle(state.inFlight.waiters);
+      state.inFlight.waiters = [];
+      state.inFlight.participants = [];
+    }
+    this.states.delete(normalizedSessionId);
+    this.onQuiescent();
+  }
+
+  private releaseLease(lease: TerminalResizeLeaseState): void {
+    if (lease.disposed) return;
+    lease.disposed = true;
+    lease.epoch += 1;
+    this.leases.delete(lease.id);
+    for (const state of this.states.values()) {
+      const desired = state.desiredByLease.get(lease.id);
+      if (desired) {
+        state.desiredByLease.delete(lease.id);
+        for (const waiter of desired.waiters) waiter.resolve();
+      }
+      if (state.inFlight) {
+        const waiters = state.inFlight.waiters.filter((waiter) => {
+          if (waiter.leaseId !== lease.id) return true;
+          waiter.resolve();
+          return false;
+        });
+        const participants = state.inFlight.participants.filter((participant) => participant.leaseId !== lease.id);
+        state.inFlight.waiters = waiters;
+        state.inFlight.participants = participants;
+      }
+      if (state.scheduledCancel && state.desiredByLease.size === 0 && !state.inFlight) {
+        state.scheduledCancel();
+        state.scheduledCancel = null;
+      }
+    }
+    this.onQuiescent();
+  }
+
+  acquire(sender: TerminalResizeSender): TerminalResizeLease {
+    const lease: TerminalResizeLeaseState = {
+      id: ++this.nextLeaseId,
+      epoch: 1,
+      disposed: false,
+      sender,
+    };
+    this.leases.set(lease.id, lease);
+    return {
+      resize: (sessionId, cols, rows) => this.queueResize(lease, sessionId, cols, rows),
+      captureEpoch: (attachGeneration = 0) => ({
+        leaseEpoch: lease.epoch,
+        connectionEpoch: this.connectionEpoch,
+        resizeSequence: this.nextSequence,
+        attachGeneration,
+      }),
+      acknowledgeAttach: (sessionId, cols, rows, token) => this.acknowledgeAttach(lease, sessionId, cols, rows, token),
+      forgetSession: (sessionId) => this.forgetSession(sessionId),
+      syncConnectionEpoch: (key) => this.syncConnectionEpoch(lease, key),
+      dispose: () => this.releaseLease(lease),
+    };
+  }
+
+  hasLeases(): boolean {
+    return this.leases.size > 0;
+  }
+
+  hasWork(): boolean {
+    for (const state of this.states.values()) {
+      if (state.inFlight || state.desiredByLease.size > 0 || state.scheduledCancel) return true;
+    }
+    return false;
+  }
 }
 
-function terminalTransportErrorText(e: unknown): string {
-  if (e == null) return '';
-  if (typeof e === 'string') return e;
-  if (e instanceof Error) {
-    const causeText = terminalTransportErrorText(e.cause);
-    return `${e.name} ${e.message} ${causeText}`.toLowerCase();
+const terminalResizeReconcilersByScope = new WeakMap<object, Map<string, SharedTerminalResizeReconciler>>();
+
+function acquireSharedTerminalResizeLease(
+  scope: object,
+  connId: string,
+  sender: TerminalResizeSender,
+): TerminalResizeLease {
+  let byConnection = terminalResizeReconcilersByScope.get(scope);
+  if (!byConnection) {
+    byConnection = new Map();
+    terminalResizeReconcilersByScope.set(scope, byConnection);
   }
-  try {
-    return JSON.stringify(e).toLowerCase();
-  } catch {
-    return String(e).toLowerCase();
+  let reconciler = byConnection.get(connId);
+  if (!reconciler) {
+    const connectionRegistry = byConnection;
+    reconciler = new SharedTerminalResizeReconciler(() => {
+      if (reconciler?.hasLeases() || reconciler?.hasWork()) return;
+      connectionRegistry.delete(connId);
+    });
+    byConnection.set(connId, reconciler);
   }
+  return reconciler.acquire(sender);
+}
+
+export function createTerminalResizeDispatcher(sender: TerminalResizeSender): TerminalResizeDispatcher {
+  const reconciler = new SharedTerminalResizeReconciler(() => undefined);
+  const lease = reconciler.acquire(sender);
+  const dispatch: TerminalResizeDispatcher = (sessionId, cols, rows) => lease.resize(sessionId, cols, rows);
+  dispatch.markSent = (sessionId, cols, rows) => {
+    lease.acknowledgeAttach(sessionId, cols, rows, lease.captureEpoch());
+  };
+  dispatch.dispose = lease.dispose;
+  return dispatch;
 }
 
 export function isBestEffortTerminalDisconnectError(e: unknown): boolean {
   if (e instanceof ProtocolNotConnectedError) return true;
-  if (e instanceof RpcError && e.code === -1) {
-    const text = terminalTransportErrorText(e);
-    return text.includes('rpc client closed')
-      || text.includes('rpc closed')
-      || text.includes('websocket closed')
-      || text.includes('transport error');
-  }
-  return false;
+  if (e instanceof RpcError && e.code === -1) return true;
+  return e instanceof Error && e.name === 'AbortError';
+}
+
+export type TerminalAttachLifecycleExit = 'disconnected' | 'session_gone' | 'superseded' | 'connection_closed';
+
+export function classifyTerminalAttachLifecycleExit(e: unknown): TerminalAttachLifecycleExit | null {
+  if (isBestEffortTerminalDisconnectError(e)) return 'disconnected';
+  if (!(e instanceof RpcError)) return null;
+  if (e.code === 404) return 'session_gone';
+  if (e.code === 409) return 'superseded';
+  if (e.code === 410) return 'connection_closed';
+  return null;
 }
 
 export function createRedevenTerminalEventSource(rpc: RedevenV1Rpc): TerminalEventSource {
@@ -281,7 +647,7 @@ export function createRedevenTerminalTransport(
     if (isBestEffortTerminalDisconnectError(e)) return true;
     return false;
   };
-  const dispatchResize = createTerminalResizeDispatcher(async (sessionId, cols, rows) => {
+  const resizeLease = acquireSharedTerminalResizeLease(attachGenerationScope, connId, async (sessionId, cols, rows) => {
     await rpc.terminal.resize({ sessionId, connId, cols, rows });
   });
 
@@ -342,20 +708,25 @@ export function createRedevenTerminalTransport(
       throw new Error('terminal attach generation exhausted');
     }
     const attachGeneration = currentAttachGeneration + 1;
+    const resizeEpoch = resizeLease.captureEpoch(attachGeneration);
     terminalAttachGenerationByScope.set(attachGenerationScope, attachGeneration);
     const response = await rpc.terminal.attach({ sessionId, connId, cols, rows, attachGeneration });
     if (response?.ok !== true) {
       throw new Error('terminal attach was not acknowledged');
     }
     if (!Object.prototype.hasOwnProperty.call(response, 'historyBoundarySequence')) {
-      return {};
+      return { runtimeAttachGeneration: attachGeneration };
     }
     const historyBoundarySequence = response.historyBoundarySequence;
     if (!Number.isSafeInteger(historyBoundarySequence) || (historyBoundarySequence as number) < 0) {
-      return { historyBoundarySequence: Number.NaN };
+      return { historyBoundarySequence: Number.NaN, runtimeAttachGeneration: attachGeneration };
     }
-    dispatchResize.markSent(sessionId, cols, rows);
-    return { historyBoundarySequence };
+    resizeLease.acknowledgeAttach(sessionId, cols, rows, resizeEpoch);
+    return { historyBoundarySequence, runtimeAttachGeneration: attachGeneration };
+  };
+
+  const forgetSession = (sessionId: string) => {
+    resizeLease.forgetSession(sessionId);
   };
 
   return {
@@ -365,7 +736,7 @@ export function createRedevenTerminalTransport(
     attachWithHistoryBoundary,
     resize: async (sessionId, cols, rows) => {
       try {
-        await dispatchResize(sessionId, cols, rows);
+        await resizeLease.resize(sessionId, cols, rows);
       } catch (e) {
         if (ignoreIfNotConnected(e)) return;
         throw e;
@@ -423,6 +794,7 @@ export function createRedevenTerminalTransport(
 
     deleteSession: async (sessionId) => {
       await rpc.terminal.deleteSession({ sessionId });
+      forgetSession(sessionId);
     },
 
     getSessionStats: async (sessionId) => {
@@ -430,5 +802,8 @@ export function createRedevenTerminalTransport(
       const totalBytes = Number(resp?.history?.totalBytes ?? 0);
       return { history: { totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : 0 } };
     },
+    forgetSession,
+    syncConnectionEpoch: resizeLease.syncConnectionEpoch,
+    dispose: resizeLease.dispose,
   };
 }

@@ -2273,11 +2273,13 @@
       "fontSizeDescription": "使用可讀字號，同時在螢幕上保留足夠的終端歷史。"
     },
     "retryingOlderOutput": "正在同步較早的輸出...",
+    "waitingForActivation": "選取此終端以繼續。",
+    "reconnecting": "正在重新連線終端...",
     "olderOutputUnavailable": "部分較早的輸出暫未恢復。",
     "terminalUnavailable": "無法恢復此終端。",
     "outputSynchronized": "終端輸出已同步。",
     "viewDiagnostics": "查看診斷",
-    "updateRuntime": "更新 Runtime"
+    "updateRuntime": "更新執行環境"
   },
   "shellBlock": {
     "command": "命令",

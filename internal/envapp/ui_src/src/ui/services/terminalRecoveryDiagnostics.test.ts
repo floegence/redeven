@@ -20,11 +20,12 @@ afterEach(() => {
 });
 
 describe('terminalRecoveryDiagnostics', () => {
-  it('separates surface, coordinator, and history generations without exposing session identity', () => {
+  it('correlates runtime, surface, coordinator, and history generations without exposing session identity', () => {
     vi.spyOn(performance, 'now').mockReturnValue(125);
     const trace = startTerminalRecoveryTrace('private-session-id', 'panel');
 
     publishTerminalRecoveryEvent(trace, 'baseline_ready', {
+      runtime_attach_generation: 6,
       coordinator_attach_generation: 4,
       history_generation: 8,
       history_page_count: 2,
@@ -39,6 +40,7 @@ describe('terminalRecoveryDiagnostics', () => {
       schema_version: 1,
       session_ref: 'terminal-001',
       surface_generation: 1,
+      runtime_attach_generation: 6,
       coordinator_attach_generation: 4,
       history_generation: 8,
     });
@@ -52,21 +54,40 @@ describe('terminalRecoveryDiagnostics', () => {
 
   it('emits renderer-local performance marks with sanitized detail', () => {
     const mark = vi.spyOn(performance, 'mark').mockImplementation(() => ({}) as PerformanceMark);
+    const clearMarks = vi.spyOn(performance, 'clearMarks');
     const trace = startTerminalRecoveryTrace('private-session-id', 'panel');
 
     markTerminalRecoveryMilestone(trace, 'interactive', {
+      runtime_attach_generation: 5,
       coordinator_attach_generation: 3,
       history_generation: 7,
     });
 
-    expect(mark).toHaveBeenCalledWith('redeven:terminal:interactive', {
+    expect(mark).toHaveBeenCalledWith('redeven:terminal:interactive:terminal-recovery-terminal-001-1', {
       detail: expect.objectContaining({
         session_ref: 'terminal-001',
         surface_generation: 1,
+        runtime_attach_generation: 5,
         coordinator_attach_generation: 3,
         history_generation: 7,
       }),
     });
+    expect(clearMarks).not.toHaveBeenCalled();
     expect(JSON.stringify(mark.mock.calls)).not.toContain('private-session-id');
+  });
+
+  it('retains interleaved surface milestones for trace-scoped consumers', () => {
+    const mark = vi.spyOn(performance, 'mark').mockImplementation(() => ({}) as PerformanceMark);
+    const panelTrace = startTerminalRecoveryTrace('private-session-id', 'panel');
+    const workbenchTrace = startTerminalRecoveryTrace('private-session-id', 'workbench');
+
+    markTerminalRecoveryMilestone(panelTrace, 'baseline-parser-committed');
+    markTerminalRecoveryMilestone(workbenchTrace, 'baseline-parser-committed');
+
+    expect(mark).toHaveBeenCalledTimes(2);
+    expect(mark.mock.calls.map((call) => call[1]?.detail)).toEqual([
+      expect.objectContaining({ variant: 'panel', surface_generation: 1 }),
+      expect.objectContaining({ variant: 'workbench', surface_generation: 2 }),
+    ]);
   });
 });

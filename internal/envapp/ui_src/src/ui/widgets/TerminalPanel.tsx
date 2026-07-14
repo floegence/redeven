@@ -208,10 +208,10 @@ function resolveRequestedSessionName(
 
 function buildLogger(): Logger {
   return {
-    debug: (message, meta) => (typeof meta === 'undefined' ? console.debug(message) : console.debug(message, meta)),
-    info: (message, meta) => (typeof meta === 'undefined' ? console.info(message) : console.info(message, meta)),
-    warn: (message, meta) => (typeof meta === 'undefined' ? console.warn(message) : console.warn(message, meta)),
-    error: (message, meta) => (typeof meta === 'undefined' ? console.error(message) : console.error(message, meta)),
+    debug: () => undefined,
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
   };
 }
 
@@ -778,8 +778,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
   const workingSetRuntimeDisposers = new Map<string, () => void>();
   let disposed = false;
+  createEffect(() => {
+    transport.syncConnectionEpoch(protocol.client() ?? null);
+  });
   onCleanup(() => {
     disposed = true;
+    transport.dispose();
     terminalWorkingSet.dispose();
     workingSetRuntimeDisposers.clear();
     if (sidebarPathCopyResetTimer !== undefined) {
@@ -1636,9 +1640,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   let prevSessionsSnapshot: TerminalSessionInfo[] = [];
+  let prevAuthoritativeSessionIds = new Set<string>();
   const handleSessionsSnapshot = (next: TerminalSessionInfo[]) => {
     const prev = prevSessionsSnapshot;
     const nextSessionIds = new Set(next.map((session) => String(session.id ?? '').trim()).filter(Boolean));
+    for (const previousSessionId of prevAuthoritativeSessionIds) {
+      if (!nextSessionIds.has(previousSessionId)) transport.forgetSession(previousSessionId);
+    }
+    prevAuthoritativeSessionIds = nextSessionIds;
     const visibleNext = mergeTerminalSessionLists(next, optimisticTerminalSessions(), optimisticClosingSessionIds());
     prevSessionsSnapshot = visibleNext;
 
@@ -1767,6 +1776,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     sequence: number | undefined,
   ) => {
     tabActivityTracker.handleOutputCommitted(sessionId, { source, sequence });
+  };
+
+  const handleOutputCoverage = (
+    sessionId: string,
+    update: { attachGeneration: number; coveredThroughSequence: number; rebased?: boolean },
+  ) => {
+    tabActivityTracker.handleOutputCoverage(sessionId, update);
+  };
+
+  const resetPendingOutput = (sessionId: string) => {
+    tabActivityTracker.resetPendingOutput(sessionId);
   };
 
   const handleVisibleOutput = (
@@ -1903,6 +1923,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const activeRuntimeStatusMessage = createMemo(() => {
     switch (activeRuntimeStatus().state) {
+      case 'waiting_for_ownership':
+        return i18n.t('terminal.waitingForActivation');
+      case 'reconnecting':
+        return i18n.t('terminal.reconnecting');
       case 'retrying':
         return i18n.t('terminal.retryingOlderOutput');
       case 'degraded':
@@ -1919,6 +1943,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!sid) return;
     await actionsRegistry.get(sid)?.retryOutputRecovery();
     requestAnimationFrame(() => {
+      if (activeSessionId() !== sid || !shouldAutoFocus()) return;
       if (document.activeElement === trigger) return;
       if (document.activeElement && document.activeElement !== document.body) return;
       actionsRegistry.get(sid)?.focusIfInteractive();
@@ -1941,8 +1966,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return !isMobileLayout() || mobileInputMode() === 'system';
   };
 
+  const ownsTerminalAttachment = () => {
+    return workbenchSelected() && (!isEmbeddedWidget || panelHasFocus());
+  };
+
   const shouldAutoFocus = () => {
-    return workbenchSelected() && (!isEmbeddedWidget || panelHasFocus()) && shouldRestoreTerminalFocus();
+    return ownsTerminalAttachment() && shouldRestoreTerminalFocus();
   };
 
   const blurActiveElement = () => {
@@ -2204,6 +2233,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       setSessionsHydrated(true);
       setSessionsLoading(false);
     }
+  };
+
+  const handleTerminalSessionGone = (sessionId: string) => {
+    transport.forgetSession(sessionId);
+    prevAuthoritativeSessionIds.delete(sessionId);
+    handleSessionsSnapshot(allSessions().filter((session) => session.id !== sessionId));
+    setOptimisticClosingSessionIds((previous) => {
+      if (previous.has(sessionId)) return previous;
+      const next = new Set(previous);
+      next.add(sessionId);
+      return next;
+    });
+    void sessionsCoordinator.refresh().catch(() => undefined);
   };
 
   const activateSession = (sessionId: string) => {
@@ -2519,6 +2561,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         } else {
           await sessionsCoordinator.deleteSession(normalizedSessionId);
         }
+        transport.forgetSession(normalizedSessionId);
       } catch (e) {
         setOptimisticSessionClosing(normalizedSessionId, false);
         void sessionsCoordinator.refresh().catch(() => undefined);
@@ -3562,6 +3605,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const body = (
     <div
       ref={(n) => (rootEl = n)}
+      data-terminal-panel-variant={variant}
       class="h-full min-h-0 flex flex-col"
       onKeyDown={handleRootKeyDown}
       onFocusIn={() => setPanelHasFocus(true)}
@@ -3700,6 +3744,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               connected={connected}
                               protocolClient={() => protocol.client()}
                               viewActive={viewActive}
+                              ownsAttachment={ownsTerminalAttachment}
                               autoFocus={shouldAutoFocus}
                               themeColors={terminalThemeColors}
                               fontSize={fontSize}
@@ -3715,9 +3760,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               registerActions={registerActions}
                               registerWorkingSetRuntime={registerWorkingSetRuntime}
                               onRuntimeStatus={handleRuntimeStatus}
+                              onSessionGone={handleTerminalSessionGone}
                               onInteractive={handleTerminalInteractive}
                               onLiveOutputObserved={handleLiveOutputObserved}
                               onOutputCommitted={handleOutputCommitted}
+                              onOutputCoverage={handleOutputCoverage}
+                              onPendingOutputReset={resetPendingOutput}
                               setWorkingSetInteraction={setWorkingSetInteraction}
                               onSurfaceClick={handleWorkbenchTerminalSurfaceClick}
                               onBell={handleSessionBell}
@@ -3893,6 +3941,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                     {activeRuntimeStatusMessage()}
                   </span>
                   <span
+                    data-terminal-history-bytes={historyBytes() === null ? '' : String(historyBytes())}
                     class="ml-auto shrink-0"
                     classList={{ hidden: useMobileRecoveryStatusBar() }}
                   >
