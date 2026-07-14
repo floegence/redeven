@@ -62,11 +62,16 @@ type Manager struct {
 	byServer         map[*rpc.Server]map[string]sinkAttachment
 	bySession        map[string]map[*rpc.Server]sinkAttachment
 	attachStates     map[*rpc.Server]map[string]*sinkAttachState
-	closedSinks      map[*rpc.Server]struct{} // best-effort marker to avoid repeated work
+	sinkLifecycles   map[*rpc.Server]*terminalSinkLifecycle
 	sessionLifecycle map[string]SessionLifecycleRecord
 	deleteOperations map[string]*sessionDeleteOperation
 	lifecycleHooks   map[int]SessionLifecycleHook
 	nextLifecycleID  int
+}
+
+type terminalSinkLifecycle struct {
+	server *rpc.Server
+	closed bool
 }
 
 type sinkAttachment struct {
@@ -74,6 +79,7 @@ type sinkAttachment struct {
 	liveAfterSequence int64
 	generation        int64
 	activation        *sessionAttachActivation
+	sink              *terminalSinkLifecycle
 }
 
 type sinkAttachState struct {
@@ -239,7 +245,7 @@ func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slo
 		byServer:         make(map[*rpc.Server]map[string]sinkAttachment),
 		bySession:        make(map[string]map[*rpc.Server]sinkAttachment),
 		attachStates:     make(map[*rpc.Server]map[string]*sinkAttachState),
-		closedSinks:      make(map[*rpc.Server]struct{}),
+		sinkLifecycles:   make(map[*rpc.Server]*terminalSinkLifecycle),
 		sessionLifecycle: make(map[string]SessionLifecycleRecord),
 		deleteOperations: make(map[string]*sessionDeleteOperation),
 		lifecycleHooks:   make(map[int]SessionLifecycleHook),
@@ -265,17 +271,18 @@ func (m *Manager) DeleteSession(sessionID string) error {
 	return m.requestSessionDelete(sessionID, "", true)
 }
 
-func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server) {
-	m.RegisterWithAccessGate(r, meta, streamServer, nil)
+func (m *Manager) Register(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server) func() {
+	return m.RegisterWithAccessGate(r, meta, streamServer, nil)
 }
 
-func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server, gate *accessgate.Gate) {
+func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server, gate *accessgate.Gate) func() {
 	if m == nil || r == nil {
-		return
+		return func() {}
 	}
 
-	if session.AllowsProcessLaunch(meta) && streamServer != nil {
-		m.ensureWriter(streamServer)
+	sinkLifecycle := m.ensureSinkLifecycle(streamServer)
+	if session.AllowsProcessLaunch(meta) && sinkLifecycle != nil {
+		m.ensureWriter(sinkLifecycle)
 	}
 
 	// Create session
@@ -342,7 +349,7 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			connID,
 			req.Cols,
 			req.Rows,
-			streamServer,
+			sinkLifecycle,
 			req.AttachGeneration,
 		)
 		if err != nil {
@@ -500,6 +507,10 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 		}
 		return &terminalDeleteResp{OK: true}, nil
 	})
+
+	return func() {
+		m.detachSinkLifecycle(sinkLifecycle)
+	}
 }
 
 func requireProcessLaunchPermission(meta *session.Meta) error {
@@ -514,10 +525,27 @@ func (m *Manager) DetachSink(streamServer *rpc.Server) {
 	if m == nil || streamServer == nil {
 		return
 	}
+	m.mu.Lock()
+	lifecycle := m.sinkLifecycles[streamServer]
+	m.mu.Unlock()
+	m.detachSinkLifecycle(lifecycle)
+}
+
+func (m *Manager) detachSinkLifecycle(lifecycle *terminalSinkLifecycle) {
+	if m == nil || lifecycle == nil || lifecycle.server == nil {
+		return
+	}
+	streamServer := lifecycle.server
 
 	var writer *sinkWriter
 
 	m.mu.Lock()
+	lifecycle.closed = true
+	if m.sinkLifecycles[streamServer] != lifecycle {
+		m.mu.Unlock()
+		return
+	}
+	delete(m.sinkLifecycles, streamServer)
 	if sessions := m.byServer[streamServer]; len(sessions) > 0 {
 		for sessionID, attachment := range sessions {
 			if bySess := m.bySession[sessionID]; bySess != nil {
@@ -543,7 +571,6 @@ func (m *Manager) DetachSink(streamServer *rpc.Server) {
 	}
 	writer = m.writers[streamServer]
 	delete(m.writers, streamServer)
-	m.closedSinks[streamServer] = struct{}{}
 	m.mu.Unlock()
 
 	if writer != nil {
@@ -557,7 +584,7 @@ func (m *Manager) Cleanup() {
 		return
 	}
 	m.mu.Lock()
-	sinks := make(map[*rpc.Server]struct{}, len(m.byServer)+len(m.attachStates)+len(m.writers))
+	sinks := make(map[*rpc.Server]struct{}, len(m.byServer)+len(m.attachStates)+len(m.writers)+len(m.sinkLifecycles))
 	for sink := range m.byServer {
 		sinks[sink] = struct{}{}
 	}
@@ -565,6 +592,9 @@ func (m *Manager) Cleanup() {
 		sinks[sink] = struct{}{}
 	}
 	for sink := range m.writers {
+		sinks[sink] = struct{}{}
+	}
+	for sink := range m.sinkLifecycles {
 		sinks[sink] = struct{}{}
 	}
 	m.mu.Unlock()
@@ -591,15 +621,37 @@ type sinkDetach struct {
 	connID    string
 }
 
-func (m *Manager) ensureWriter(sink *rpc.Server) {
-	if m == nil || sink == nil {
+func (m *Manager) ensureSinkLifecycle(streamServer *rpc.Server) *terminalSinkLifecycle {
+	if m == nil || streamServer == nil {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.ensureSinkLifecycleLocked(streamServer)
+}
+
+func (m *Manager) ensureSinkLifecycleLocked(streamServer *rpc.Server) *terminalSinkLifecycle {
+	if m == nil || streamServer == nil {
+		return nil
+	}
+	if lifecycle := m.sinkLifecycles[streamServer]; lifecycle != nil {
+		return lifecycle
+	}
+	lifecycle := &terminalSinkLifecycle{server: streamServer}
+	m.sinkLifecycles[streamServer] = lifecycle
+	return lifecycle
+}
+
+func (m *Manager) ensureWriter(lifecycle *terminalSinkLifecycle) {
+	if m == nil || lifecycle == nil || lifecycle.server == nil {
 		return
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, closed := m.closedSinks[sink]; closed {
+	if lifecycle.closed {
 		return
 	}
+	sink := lifecycle.server
 	if _, ok := m.writers[sink]; ok {
 		return
 	}
@@ -631,12 +683,31 @@ func (m *Manager) attachSinkLocked(
 	captureHistoryBoundary func() int64,
 	removePreviousConnection func(connID string),
 ) (sinkAttachment, bool, error) {
-	if m == nil || sink == nil || sessionID == "" || connID == "" || generation <= 0 || captureHistoryBoundary == nil {
+	return m.attachSinkLifecycleLocked(
+		sessionID,
+		connID,
+		m.ensureSinkLifecycleLocked(sink),
+		generation,
+		captureHistoryBoundary,
+		removePreviousConnection,
+	)
+}
+
+func (m *Manager) attachSinkLifecycleLocked(
+	sessionID string,
+	connID string,
+	lifecycle *terminalSinkLifecycle,
+	generation int64,
+	captureHistoryBoundary func() int64,
+	removePreviousConnection func(connID string),
+) (sinkAttachment, bool, error) {
+	if m == nil || lifecycle == nil || lifecycle.server == nil || sessionID == "" || connID == "" || generation <= 0 || captureHistoryBoundary == nil {
 		return sinkAttachment{}, false, errTerminalAttachSuperseded
 	}
-	if _, closed := m.closedSinks[sink]; closed {
+	if lifecycle.closed {
 		return sinkAttachment{}, false, errTerminalAttachSinkClosed
 	}
+	sink := lifecycle.server
 
 	var existing sinkAttachment
 	hasExisting := false
@@ -672,6 +743,7 @@ func (m *Manager) attachSinkLocked(
 		liveAfterSequence: captureHistoryBoundary(),
 		generation:        generation,
 		activation:        newSessionAttachActivation(),
+		sink:              lifecycle,
 	}
 	if _, ok := m.writers[sink]; !ok {
 		m.writers[sink] = newSinkWriter(sink, m.log)
@@ -720,7 +792,7 @@ func (m *Manager) attachSinkLocked(
 }
 
 func sameSinkAttachment(left sinkAttachment, right sinkAttachment) bool {
-	return left.connID == right.connID && left.generation == right.generation
+	return left.connID == right.connID && left.generation == right.generation && left.sink == right.sink
 }
 
 func (m *Manager) finishAttachOperation(
@@ -754,7 +826,7 @@ func (m *Manager) currentAttachOperationErrorLocked(
 	sink *rpc.Server,
 	attachment sinkAttachment,
 ) error {
-	if _, closed := m.closedSinks[sink]; closed {
+	if attachment.sink != nil && attachment.sink.closed {
 		return terminalAttachClosedError()
 	}
 	if record, exists := m.sessionLifecycle[sessionID]; exists && record.hiddenFromUI() {
@@ -1007,13 +1079,17 @@ func (m *Manager) attachSession(
 	streamServer *rpc.Server,
 	attachGeneration int64,
 ) (int64, error) {
+	var lifecycle *terminalSinkLifecycle
+	if streamServer != nil {
+		lifecycle = m.ensureSinkLifecycle(streamServer)
+	}
 	return m.attachSessionContext(
 		context.Background(),
 		sessionID,
 		connID,
 		cols,
 		rows,
-		streamServer,
+		lifecycle,
 		attachGeneration,
 	)
 }
@@ -1024,7 +1100,7 @@ func (m *Manager) attachSessionContext(
 	connID string,
 	cols int,
 	rows int,
-	streamServer *rpc.Server,
+	sinkLifecycle *terminalSinkLifecycle,
 	attachGeneration int64,
 ) (int64, error) {
 	if m == nil {
@@ -1041,8 +1117,12 @@ func (m *Manager) attachSessionContext(
 	if cols <= 0 || rows <= 0 {
 		return 0, &rpc.Error{Code: 400, Message: "cols and rows are required"}
 	}
-	if streamServer != nil && attachGeneration <= 0 {
+	if sinkLifecycle != nil && attachGeneration <= 0 {
 		return 0, &rpc.Error{Code: 400, Message: "attach_generation is required"}
+	}
+	var streamServer *rpc.Server
+	if sinkLifecycle != nil {
+		streamServer = sinkLifecycle.server
 	}
 
 	sess, ok := m.term.GetSession(sessionID)
@@ -1065,10 +1145,10 @@ func (m *Manager) attachSessionContext(
 	var historyBoundarySequence int64
 	if streamServer != nil {
 		var attachErr error
-		attachment, attachmentCreated, attachErr = m.attachSinkLocked(
+		attachment, attachmentCreated, attachErr = m.attachSinkLifecycleLocked(
 			sessionID,
 			connID,
-			streamServer,
+			sinkLifecycle,
 			attachGeneration,
 			func() int64 {
 				return sess.AddConnectionWithHistoryBoundary(connID, cols, rows)

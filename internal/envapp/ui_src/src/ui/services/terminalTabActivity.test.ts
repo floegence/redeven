@@ -206,7 +206,7 @@ describe('createTerminalTabActivityTracker', () => {
     tracker.dispose();
   });
 
-  it('clears pending output when the attach generation changes or history rebases', () => {
+  it('preserves provisional unread when the attach generation changes or history rebases', () => {
     const published: string[] = [];
     const tracker = createTerminalTabActivityTracker({
       publishVisualState: (_sessionId, state) => published.push(state),
@@ -218,7 +218,7 @@ describe('createTerminalTabActivityTracker', () => {
     tracker.handleOutputCoverage('session-1', { attachGeneration: 2, coveredThroughSequence: 0 });
     expect(published).toEqual(['running']);
     vi.advanceTimersByTime(25);
-    expect(published).toEqual(['running', 'none']);
+    expect(published).toEqual(['running', 'unread']);
 
     tracker.handlePendingLiveOutput('session-1', { sequence: 8, shouldMarkUnread: true });
     tracker.handleOutputCoverage('session-1', {
@@ -226,9 +226,9 @@ describe('createTerminalTabActivityTracker', () => {
       coveredThroughSequence: 2,
       rebased: true,
     });
-    expect(published).toEqual(['running', 'none', 'running']);
+    expect(published).toEqual(['running', 'unread', 'running']);
     vi.advanceTimersByTime(25);
-    expect(published).toEqual(['running', 'none', 'running', 'none']);
+    expect(published).toEqual(['running', 'unread', 'running', 'unread']);
 
     tracker.dispose();
   });
@@ -268,6 +268,21 @@ describe('createTerminalTabActivityTracker', () => {
     tracker.dispose();
   });
 
+  it('drops provisional unread only for an explicit clear-history reset', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+      outputActivityQuietMs: 25,
+    });
+
+    tracker.handlePendingLiveOutput('session-1', { sequence: 4, shouldMarkUnread: true });
+    tracker.resetPendingOutput('session-1', { preserveUnread: false });
+    vi.advanceTimersByTime(25);
+
+    expect(published).toEqual(['running', 'none']);
+    tracker.dispose();
+  });
+
   it('keeps provisional sequence tracking bounded under retained output overflow', () => {
     const published: string[] = [];
     const tracker = createTerminalTabActivityTracker({
@@ -284,7 +299,7 @@ describe('createTerminalTabActivityTracker', () => {
     });
     vi.advanceTimersByTime(25);
 
-    expect(published).toEqual(['running', 'none']);
+    expect(published).toEqual(['running', 'unread']);
     tracker.dispose();
   });
 

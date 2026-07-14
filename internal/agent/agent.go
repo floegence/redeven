@@ -1274,8 +1274,6 @@ func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, m
 		_ = stream.Close()
 		return
 	}
-	defer a.term.DetachSink(srv)
-
 	accessrpc.New(a.accessGate).Register(router, meta)
 
 	// Sys domain (health checks).
@@ -1288,7 +1286,8 @@ func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, m
 	gitRepoSvc.RegisterWithAccessGate(router, meta, a.accessGate)
 
 	// Terminal domain
-	a.term.RegisterWithAccessGate(router, meta, srv, a.accessGate)
+	detachTerminalSink := a.term.RegisterWithAccessGate(router, meta, srv, a.accessGate)
+	defer detachTerminalSink()
 
 	// Monitor domain
 	a.mon.RegisterWithAccessGate(router, meta, a.accessGate)

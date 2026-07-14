@@ -11,6 +11,7 @@ import {
   publishTerminalRecoveryEvent,
   resetTerminalRecoveryDiagnosticsForTests,
   startTerminalRecoveryTrace,
+  terminalRecoveryDiagnosticsQuery,
 } from './terminalRecoveryDiagnostics';
 
 afterEach(() => {
@@ -89,5 +90,11 @@ describe('terminalRecoveryDiagnostics', () => {
       expect.objectContaining({ variant: 'panel', surface_generation: 1 }),
       expect.objectContaining({ variant: 'workbench', surface_generation: 2 }),
     ]);
+    expect(terminalRecoveryDiagnosticsQuery(panelTrace, 'history_fetch_failed')).toBe(
+      'terminal-001 1 history_fetch_failed',
+    );
+    expect(terminalRecoveryDiagnosticsQuery(workbenchTrace, 'history_contract_missing')).toBe(
+      'terminal-001 2 history_contract_missing',
+    );
   });
 });

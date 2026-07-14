@@ -79,7 +79,6 @@ import {
 } from '../services/terminalAdaptiveWorkingSet';
 import {
   releaseTerminalRecoveryDiagnostics,
-  terminalRecoveryDiagnosticsQuery,
 } from '../services/terminalRecoveryDiagnostics';
 import {
   TerminalSessionRuntime,
@@ -1618,6 +1617,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         current[id]?.state === status.state
         && current[id]?.failureCode === status.failureCode
         && current[id]?.retryable === status.retryable
+        && current[id]?.diagnosticsQuery === status.diagnosticsQuery
       ) return current;
       return { ...current, [id]: status };
     });
@@ -1785,8 +1785,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     tabActivityTracker.handleOutputCoverage(sessionId, update);
   };
 
-  const resetPendingOutput = (sessionId: string) => {
-    tabActivityTracker.resetPendingOutput(sessionId);
+  const resetPendingOutput = (sessionId: string, opts?: { preserveUnread?: boolean }) => {
+    tabActivityTracker.resetPendingOutput(sessionId, opts);
   };
 
   const handleVisibleOutput = (
@@ -1954,7 +1954,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const sid = activeSessionId();
     if (!sid) return;
     env.openDebugConsole({
-      query: terminalRecoveryDiagnosticsQuery(sid, activeRuntimeStatus().failureCode),
+      query: activeRuntimeStatus().diagnosticsQuery ?? 'terminal_recovery',
     });
   };
 

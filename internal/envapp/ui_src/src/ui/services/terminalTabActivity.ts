@@ -50,7 +50,7 @@ export interface TerminalTabActivityTracker {
     sessionId: string,
     update: { attachGeneration: number; coveredThroughSequence: number; rebased?: boolean },
   ) => void;
-  resetPendingOutput: (sessionId: string) => void;
+  resetPendingOutput: (sessionId: string, opts?: { preserveUnread?: boolean }) => void;
   handleVisibleOutput: (sessionId: string, opts: { source: 'history' | 'live'; byteLength: number; shouldMarkUnread: boolean }) => void;
   pruneSessions: (activeSessionIds: Set<string>) => void;
   dispose: () => void;
@@ -205,6 +205,12 @@ export function createTerminalTabActivityTracker(
     runtime.pendingLiveUnreadCount = 0;
     runtime.pendingUnsequencedOutput = false;
     runtime.pendingUnsequencedUnread = false;
+  };
+
+  const promotePendingUnread = (runtime: TerminalSessionActivityRuntime) => {
+    if (runtime.pendingLiveUnreadCount > 0 || runtime.pendingUnsequencedUnread) {
+      runtime.unread = true;
+    }
   };
 
   const resetOutputCoverage = (runtime: TerminalSessionActivityRuntime) => {
@@ -389,6 +395,7 @@ export function createTerminalTabActivityTracker(
           if (oldestSequence !== undefined) {
             if (runtime.pendingLiveSequences.get(oldestSequence) === true) {
               runtime.pendingLiveUnreadCount = Math.max(0, runtime.pendingLiveUnreadCount - 1);
+              runtime.unread = true;
             }
             runtime.pendingLiveSequences.delete(oldestSequence);
           }
@@ -433,6 +440,7 @@ export function createTerminalTabActivityTracker(
       const preserveRunning = runtime.pendingLiveOutput;
       if (update.rebased || generationChanged) {
         clearPendingOutputTimer(runtime);
+        promotePendingUnread(runtime);
         clearPendingOutput(runtime);
       }
       runtime.outputAttachGeneration = attachGeneration;
@@ -447,13 +455,14 @@ export function createTerminalTabActivityTracker(
       }
     },
 
-    resetPendingOutput(sessionId) {
+    resetPendingOutput(sessionId, opts) {
       const normalizedSessionId = normalizeSessionId(sessionId);
       if (!normalizedSessionId) return;
       const runtime = runtimeBySession.get(normalizedSessionId);
       if (!runtime) return;
       const preserveRunning = runtime.pendingLiveOutput;
       clearPendingOutputTimer(runtime);
+      if (opts?.preserveUnread !== false) promotePendingUnread(runtime);
       resetOutputCoverage(runtime);
       if (preserveRunning) runtime.pendingLiveOutput = true;
       publishIfNeeded(normalizedSessionId, runtime);
