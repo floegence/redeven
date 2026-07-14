@@ -538,6 +538,7 @@ export const enUSWidgetChrome = defineDictionary({
     terminalUnavailable: 'This terminal could not be restored.',
     outputSynchronized: 'Terminal output is synchronized.',
     viewDiagnostics: 'Diagnostics',
+    updateRuntime: 'Update Runtime',
     failedToOpenFilePreviewTitle: 'Failed to open file preview',
     couldNotOpenFileReference: 'Could not open the terminal file reference.',
     creationFailed: 'Terminal creation failed',

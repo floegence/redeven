@@ -2276,7 +2276,8 @@
     "olderOutputUnavailable": "No se pudo restaurar parte de la salida anterior.",
     "terminalUnavailable": "No se pudo restaurar este terminal.",
     "outputSynchronized": "La salida del terminal está sincronizada.",
-    "viewDiagnostics": "Diagnóstico"
+    "viewDiagnostics": "Diagnóstico",
+    "updateRuntime": "Actualizar Runtime"
   },
   "shellBlock": {
     "command": "Comando",

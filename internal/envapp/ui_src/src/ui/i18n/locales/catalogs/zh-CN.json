@@ -2276,7 +2276,8 @@
     "olderOutputUnavailable": "部分较早的输出暂未恢复。",
     "terminalUnavailable": "无法恢复此终端。",
     "outputSynchronized": "终端输出已同步。",
-    "viewDiagnostics": "查看诊断"
+    "viewDiagnostics": "查看诊断",
+    "updateRuntime": "更新运行时"
   },
   "shellBlock": {
     "command": "命令",

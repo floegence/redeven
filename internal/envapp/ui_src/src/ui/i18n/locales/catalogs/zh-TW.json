@@ -2276,7 +2276,8 @@
     "olderOutputUnavailable": "部分較早的輸出暫未恢復。",
     "terminalUnavailable": "無法恢復此終端。",
     "outputSynchronized": "終端輸出已同步。",
-    "viewDiagnostics": "查看診斷"
+    "viewDiagnostics": "查看診斷",
+    "updateRuntime": "更新執行環境"
   },
   "shellBlock": {
     "command": "命令",

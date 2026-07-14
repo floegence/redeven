@@ -75,7 +75,14 @@ export type TerminalSessionRuntimeActions = Readonly<{
 export type TerminalSessionRuntimeStatus = Readonly<{
   state: 'idle' | 'retrying' | 'degraded' | 'blocking';
   failureCode?: PagedTerminalOutputFailureCode | 'terminal_unavailable';
+  retryable?: boolean;
 }>;
+
+function isTerminalRecoveryRetryable(
+  code: PagedTerminalOutputFailureCode | 'terminal_unavailable' | null,
+): boolean {
+  return code !== 'history_contract_missing' && code !== 'history_contract_invalid';
+}
 
 export type TerminalSessionRuntimeProps = Readonly<{
   session: TerminalSessionInfo;
@@ -127,6 +134,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const [outputRecoveryState, setOutputRecoveryState] = createSignal<PagedTerminalOutputSnapshot['state']>('idle');
   const [baselineReady, setBaselineReady] = createSignal(false);
   const [recoveryFailureCode, setRecoveryFailureCode] = createSignal<PagedTerminalOutputFailureCode | null>(null);
+  const [recoveryRetryable, setRecoveryRetryable] = createSignal<boolean | null>(null);
   const [blockingFailureCode, setBlockingFailureCode] = createSignal<'terminal_unavailable' | PagedTerminalOutputFailureCode | null>(null);
   const [showRetryingStatus, setShowRetryingStatus] = createSignal(false);
   const [historyReplayProgress, setHistoryReplayProgress] = createSignal<{ loadedBytes: number; totalBytes: number } | null>(null);
@@ -152,9 +160,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   const runtimeStatus = createMemo<TerminalSessionRuntimeStatus>(() => {
     const blocking = blockingFailureCode();
-    if (blocking) return { state: 'blocking', failureCode: blocking };
+    if (blocking) {
+      return { state: 'blocking', failureCode: blocking, retryable: isTerminalRecoveryRetryable(blocking) };
+    }
     if (baselineReady() && outputRecoveryState() === 'failed') {
-      return { state: 'degraded', failureCode: recoveryFailureCode() ?? undefined };
+      return {
+        state: 'degraded',
+        failureCode: recoveryFailureCode() ?? undefined,
+        retryable: recoveryRetryable() ?? undefined,
+      };
     }
     if (baselineReady() && outputRecoveryState() === 'retry-wait' && showRetryingStatus()) {
       return { state: 'retrying', failureCode: recoveryFailureCode() ?? undefined };
@@ -246,6 +260,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     lastRetryEventKey = '';
     lastDegradedEventKey = '';
     lastBlockingEventKey = '';
+    setRecoveryRetryable(null);
     liveMilestoneMarked = false;
     transitionRecoveryPhase('initializing');
     return recoveryTrace;
@@ -259,7 +274,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         lastBlockingEventKey = eventKey;
         publishTerminalRecoveryEvent(trace, 'blocking', {
           error_code: code,
-          recovery_action: 'retry',
+          recovery_action: isTerminalRecoveryRetryable(code) ? 'retry' : 'update_runtime',
         });
       }
     }
@@ -723,6 +738,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         setOutputRecoveryState(snapshot.state);
         setBaselineReady(snapshot.baselineReady);
         setRecoveryFailureCode(snapshot.failure?.code ?? null);
+        setRecoveryRetryable(snapshot.failure?.retryable ?? null);
         const trace = recoveryTrace;
         if (trace && snapshot.state === 'retry-wait') {
           const retryKey = `${snapshot.attachGeneration}:${snapshot.retryAttempt}`;
