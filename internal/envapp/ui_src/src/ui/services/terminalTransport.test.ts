@@ -193,6 +193,27 @@ describe('terminalTransport', () => {
     });
   });
 
+  it('preserves a missing history coverage field for coordinator validation', async () => {
+    const rpc = createRpcMock({
+      history: vi.fn().mockResolvedValue({
+        chunks: [],
+        nextStartSeq: 0,
+        hasMore: false,
+        firstSequence: 0,
+        lastSequence: 0,
+        historyReset: false,
+        historyTruncated: false,
+        coveredBytes: 0,
+        totalBytes: 0,
+      }),
+    });
+    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
+
+    const page = await transport.historyPage('session-1', 0, -1);
+
+    expect(Object.prototype.hasOwnProperty.call(page, 'coveredThroughSequence')).toBe(false);
+  });
+
   it('does not infer a missing next cursor from retained chunks', async () => {
     const rpc = createRpcMock({
       history: vi.fn().mockResolvedValue({

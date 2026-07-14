@@ -114,6 +114,9 @@ export type RuntimeServiceIdentity = Readonly<{
 }>;
 
 export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v1';
+export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 6;
+export const RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION = 'v0.8.0';
+export const RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION = 'v0.8.0';
 export const RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON = 'env_app_shell_unavailable';
 
 function compact(value: unknown): string {
@@ -150,6 +153,42 @@ function normalizeCompatibility(value: unknown): RuntimeServiceCompatibility {
     default:
       return 'unknown';
   }
+}
+
+function compatibilityForEpoch(
+  declared: RuntimeServiceCompatibility,
+  observedEpoch: number | undefined,
+): RuntimeServiceCompatibility {
+  if (declared === 'managed_elsewhere') return declared;
+  if (observedEpoch === undefined || observedEpoch < RUNTIME_SERVICE_COMPATIBILITY_EPOCH) {
+    return 'update_required';
+  }
+  if (observedEpoch !== undefined && observedEpoch > RUNTIME_SERVICE_COMPATIBILITY_EPOCH) {
+    return 'desktop_update_required';
+  }
+  return declared;
+}
+
+function compatibilityMessageForEpoch(
+  declared: string | undefined,
+  observedEpoch: number | undefined,
+): string | undefined {
+  if (observedEpoch === undefined) {
+    return `This runtime does not report a valid compatibility epoch. Desktop requires epoch ${RUNTIME_SERVICE_COMPATIBILITY_EPOCH}; update the runtime before opening this environment.`;
+  }
+  if (observedEpoch < RUNTIME_SERVICE_COMPATIBILITY_EPOCH) {
+    return `This runtime uses compatibility epoch ${observedEpoch}. Desktop requires epoch ${RUNTIME_SERVICE_COMPATIBILITY_EPOCH}; update the runtime before opening this environment.`;
+  }
+  if (observedEpoch !== undefined && observedEpoch > RUNTIME_SERVICE_COMPATIBILITY_EPOCH) {
+    return `This runtime requires compatibility epoch ${observedEpoch}. Desktop supports epoch ${RUNTIME_SERVICE_COMPATIBILITY_EPOCH}; update Desktop before opening this environment.`;
+  }
+  return declared;
+}
+
+function normalizeCompatibilityEpoch(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
+    ? value
+    : undefined;
 }
 
 function openReadinessFromCompatibility(
@@ -315,14 +354,21 @@ export function normalizeRuntimeServiceSnapshot(
   const desktopManaged = typeof record.desktop_managed === 'boolean'
     ? record.desktop_managed
     : fallback.desktopManaged === true;
-  const compatibility = normalizeCompatibility(record.compatibility);
-  const compatibilityMessage = compact(record.compatibility_message) || undefined;
+  const observedCompatibilityEpoch = normalizeCompatibilityEpoch(record.compatibility_epoch);
+  const declaredCompatibility = normalizeCompatibility(record.compatibility);
+  const compatibility = compatibilityForEpoch(declaredCompatibility, observedCompatibilityEpoch);
+  const declaredCompatibilityMessage = compact(record.compatibility_message) || undefined;
+  const compatibilityMessage = compatibility === 'managed_elsewhere'
+    ? declaredCompatibilityMessage
+    : compatibilityMessageForEpoch(declaredCompatibilityMessage, observedCompatibilityEpoch);
+  const compatibilityEpochMismatch = observedCompatibilityEpoch === undefined
+    || compatibility !== declaredCompatibility;
   return {
     runtime_version: compact(record.runtime_version) || undefined,
     runtime_commit: compact(record.runtime_commit) || undefined,
     runtime_build_time: compact(record.runtime_build_time) || undefined,
     protocol_version: compact(record.protocol_version) || RUNTIME_SERVICE_PROTOCOL_VERSION,
-    compatibility_epoch: normalizeCount(record.compatibility_epoch) || undefined,
+    compatibility_epoch: observedCompatibilityEpoch,
     service_owner: normalizeOwner(record.service_owner, desktopManaged),
     desktop_managed: desktopManaged,
     effective_run_mode: compact(record.effective_run_mode) || compact(fallback.effectiveRunMode) || undefined,
@@ -331,10 +377,16 @@ export function normalizeRuntimeServiceSnapshot(
       : fallback.remoteEnabled === true,
     compatibility,
     compatibility_message: compatibilityMessage,
-    minimum_desktop_version: compact(record.minimum_desktop_version) || undefined,
-    minimum_runtime_version: compact(record.minimum_runtime_version) || undefined,
+    minimum_desktop_version: compatibility === 'desktop_update_required'
+      ? compact(record.minimum_desktop_version) || RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION
+      : compact(record.minimum_desktop_version) || undefined,
+    minimum_runtime_version: compatibility === 'update_required'
+      ? RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION
+      : compact(record.minimum_runtime_version) || undefined,
     compatibility_review_id: compact(record.compatibility_review_id) || undefined,
-    open_readiness: normalizeOpenReadiness(record.open_readiness, compatibility, compatibilityMessage),
+    open_readiness: compatibilityEpochMismatch
+      ? openReadinessFromCompatibility(compatibility, compatibilityMessage)
+      : normalizeOpenReadiness(record.open_readiness, compatibility, compatibilityMessage),
     active_workload: {
       terminal_count: normalizeCount(workload.terminal_count),
       session_count: normalizeCount(workload.session_count),

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
 import type { DesktopManagedRuntimePresence } from '../shared/desktopRuntimePresence';
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
+import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import {
   testDesktopPreferences,
   testLocalAccess,
@@ -674,6 +675,7 @@ describe('desktopWelcomeState', () => {
         effective_run_mode: 'local',
         runtime_service: {
           protocol_version: 'redeven-runtime-v1',
+          compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
           service_owner: 'external',
           desktop_managed: false,
           effective_run_mode: 'local',
@@ -742,6 +744,7 @@ describe('desktopWelcomeState', () => {
           runtime_service: {
             runtime_version: 'v1.7.0',
             protocol_version: 'redeven-runtime-v1',
+            compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
             service_owner: 'external',
             desktop_managed: false,
             remote_enabled: true,
@@ -795,6 +798,7 @@ describe('desktopWelcomeState', () => {
             runtime_service: {
               runtime_version: 'v1.9.0',
               protocol_version: 'redeven-runtime-v1',
+              compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
               service_owner: 'external',
               desktop_managed: false,
               remote_enabled: true,
@@ -995,6 +999,7 @@ describe('desktopWelcomeState', () => {
           runtime_service: {
             runtime_version: 'v1.8.0',
             protocol_version: 'redeven-runtime-v1',
+            compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
             service_owner: 'desktop',
             desktop_managed: true,
             remote_enabled: false,
@@ -2013,6 +2018,7 @@ describe('desktopWelcomeState', () => {
             runtime_service: {
               runtime_version: 'v1.9.0',
               protocol_version: 'redeven-runtime-v1',
+              compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
               service_owner: 'desktop',
               desktop_managed: true,
               remote_enabled: false,

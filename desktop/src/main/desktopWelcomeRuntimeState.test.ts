@@ -10,6 +10,7 @@ import {
   testLocalEnvironment,
   testLocalEnvironmentSession,
 } from '../testSupport/desktopTestHelpers';
+import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import { hydrateWelcomeLocalEnvironmentRuntimeState } from './desktopWelcomeRuntimeState';
 
 const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>';
@@ -63,6 +64,7 @@ async function startRuntimeServer(healthData: Record<string, unknown>) {
 function runtimeService(overrides: Record<string, unknown> = {}) {
   return {
     runtime_version: 'v1.4.0',
+    compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
     service_owner: 'desktop',
     desktop_managed: true,
     effective_run_mode: 'desktop',
@@ -92,6 +94,7 @@ describe('desktopWelcomeRuntimeState', () => {
             started_at_unix_ms: 1778751234567,
             runtime_service: {
               runtime_version: 'v1.4.0',
+              compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
               service_owner: 'external',
               desktop_managed: false,
               effective_run_mode: 'local',
@@ -341,6 +344,7 @@ describe('desktopWelcomeRuntimeState', () => {
             desktop_owner_id: 'desktop-owner-1',
             runtime_service: {
               runtime_version: 'v1.4.0',
+              compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
               service_owner: 'desktop',
               desktop_managed: true,
               effective_run_mode: 'desktop',
@@ -401,6 +405,7 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
           runtime_service: {
             runtime_version: 'v1.4.0',
             protocol_version: 'redeven-runtime-v1',
+            compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
             service_owner: 'desktop',
             desktop_managed: true,
             effective_run_mode: 'desktop',
@@ -449,7 +454,7 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
           runtime_commit: undefined,
           runtime_build_time: undefined,
           protocol_version: 'redeven-runtime-v1',
-          compatibility_epoch: undefined,
+          compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
           service_owner: 'desktop',
           desktop_managed: true,
           effective_run_mode: 'desktop',

@@ -7,6 +7,7 @@ import {
   loadExternalLocalUIStartup,
   validateExternalLocalUIShell,
 } from './runtimeState';
+import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 
 const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>';
 
@@ -19,6 +20,7 @@ function openableHealthPayload(startedAtUnixMS: number): string {
       started_at_unix_ms: startedAtUnixMS,
       runtime_service: {
         runtime_version: 'v0.0.0-dev',
+        compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
         runtime_commit: 'test-commit',
         runtime_build_time: 'test-build',
         service_owner: 'desktop',
@@ -139,6 +141,7 @@ describe('runtimeState', () => {
             password_required: false,
             runtime_service: {
               runtime_version: 'v0.0.0-dev',
+              compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
               service_owner: 'desktop',
               desktop_managed: true,
               remote_enabled: false,
@@ -210,6 +213,7 @@ describe('runtimeState', () => {
             password_required: false,
             runtime_service: {
               runtime_version: 'v0.0.0-dev',
+              compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
               service_owner: 'desktop',
               desktop_managed: true,
               remote_enabled: false,
