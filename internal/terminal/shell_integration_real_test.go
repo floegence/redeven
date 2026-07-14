@@ -197,15 +197,15 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 	shellInitBaseDir := filepath.Join(t.TempDir(), "shell-init")
 
 	manager := &Manager{
-		agentHomeAbs:      root,
-		scope:             mustTestFilesystemScope(t, root),
-		log:               logger,
-		writers:           make(map[*rpc.Server]*sinkWriter),
-		byServer:          make(map[*rpc.Server]map[string]sinkAttachment),
-		bySession:         make(map[string]map[*rpc.Server]sinkAttachment),
-		attachGenerations: make(map[*rpc.Server]map[string]int64),
-		closedSinks:       make(map[*rpc.Server]struct{}),
-		sessionLifecycle:  make(map[string]SessionLifecycleRecord),
+		agentHomeAbs:     root,
+		scope:            mustTestFilesystemScope(t, root),
+		log:              logger,
+		writers:          make(map[*rpc.Server]*sinkWriter),
+		byServer:         make(map[*rpc.Server]map[string]sinkAttachment),
+		bySession:        make(map[string]map[*rpc.Server]sinkAttachment),
+		attachStates:     make(map[*rpc.Server]map[string]*sinkAttachState),
+		closedSinks:      make(map[*rpc.Server]struct{}),
+		sessionLifecycle: make(map[string]SessionLifecycleRecord),
 	}
 
 	manager.term = termgo.NewManager(termgo.ManagerConfig{

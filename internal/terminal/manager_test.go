@@ -461,7 +461,7 @@ func TestAttachSinkRejectsGenerationOlderThanFailedAttachmentHighWater(t *testin
 		staleBoundaryCaptured = true
 		return 7
 	}, nil)
-	highWater := m.attachGenerations[server][sessionID]
+	highWater := m.attachStates[server][sessionID].latest.generation
 	_, retained := m.bySession[sessionID][server]
 	m.mu.Unlock()
 
@@ -860,6 +860,12 @@ func TestDuplicateGenerationJoinsPendingActivationFailure(t *testing.T) {
 			t.Fatalf("%s attach error = %#v, want shared activation failure", label, attachErr)
 		}
 	}
+	if _, replayErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1); replayErr != firstErr {
+		t.Fatalf("completed failure replay error = %#v, want original error %#v", replayErr, firstErr)
+	}
+	if got := activationCalls.Load(); got != 1 {
+		t.Fatalf("activation calls after completed failure replay = %d, want 1", got)
+	}
 	if _, err := m.attachSession(sess.ID, "conn-1", 80, 24, server, 2); err != nil {
 		t.Fatalf("new generation attach after failure = %v", err)
 	}
@@ -933,6 +939,436 @@ func TestDuplicateGenerationJoinsPendingActivationSuccess(t *testing.T) {
 	m.DetachSink(server)
 }
 
+func TestDetachSinkCompletesPendingAttachOwnerAndJoiner(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() { _ = client.Close() })
+
+	activationStarted := make(chan struct{})
+	releaseActivation := make(chan struct{})
+	m.activateSessionFunc = func(string, int, int) error {
+		close(activationStarted)
+		<-releaseActivation
+		return nil
+	}
+
+	ownerResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		ownerResult <- attachErr
+	}()
+	<-activationStarted
+	joinerResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		joinerResult <- attachErr
+	}()
+
+	m.DetachSink(server)
+	select {
+	case attachErr := <-joinerResult:
+		rpcErr, ok := attachErr.(*rpc.Error)
+		if !ok || rpcErr.Code != 410 {
+			t.Fatalf("joiner error after sink close = %#v, want 410", attachErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("joiner remained blocked after sink close")
+	}
+	close(releaseActivation)
+	select {
+	case attachErr := <-ownerResult:
+		rpcErr, ok := attachErr.(*rpc.Error)
+		if !ok || rpcErr.Code != 410 {
+			t.Fatalf("owner error after sink close = %#v, want 410", attachErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("owner remained blocked after activation returned")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.attachStates[server]; ok {
+		t.Fatal("sink close retained attach state")
+	}
+	if _, ok := m.byServer[server]; ok {
+		t.Fatal("sink close retained server routes")
+	}
+}
+
+func TestDetachSinkCompletesSupersededAndLatestPendingAttachOperations(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() { _ = client.Close() })
+
+	const sessionID = "session-multi-generation-pending"
+	m.mu.Lock()
+	oldAttachment, created, err := m.attachSinkLocked(sessionID, "conn-1", server, 1, func() int64 { return 3 }, nil)
+	if err != nil || !created {
+		m.mu.Unlock()
+		t.Fatalf("old attach = created:%v err:%v", created, err)
+	}
+	latestAttachment, created, err := m.attachSinkLocked(sessionID, "conn-1", server, 2, func() int64 { return 4 }, nil)
+	if err != nil || !created {
+		m.mu.Unlock()
+		t.Fatalf("latest attach = created:%v err:%v", created, err)
+	}
+	if got := len(m.attachStates[server][sessionID].pending); got != 2 {
+		m.mu.Unlock()
+		t.Fatalf("pending operation count = %d, want 2", got)
+	}
+	m.mu.Unlock()
+
+	results := make(chan error, 2)
+	go func() { results <- oldAttachment.activation.wait() }()
+	go func() { results <- latestAttachment.activation.wait() }()
+
+	m.DetachSink(server)
+	for range 2 {
+		select {
+		case result := <-results:
+			rpcErr, ok := result.(*rpc.Error)
+			if !ok || rpcErr.Code != 410 {
+				t.Fatalf("pending generation error after sink close = %#v, want 410", result)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("pending generation remained blocked after sink close")
+		}
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.attachStates[server]; ok {
+		t.Fatal("sink close retained multi-generation attach state")
+	}
+}
+
+func TestSessionCloseCompletesPendingAttachAndClearsState(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() { _ = client.Close() })
+
+	activationStarted := make(chan struct{})
+	releaseActivation := make(chan struct{})
+	m.activateSessionFunc = func(string, int, int) error {
+		close(activationStarted)
+		<-releaseActivation
+		return nil
+	}
+
+	ownerResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		ownerResult <- attachErr
+	}()
+	<-activationStarted
+	joinerResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		joinerResult <- attachErr
+	}()
+
+	if err := m.term.DeleteSession(sess.ID); err != nil {
+		t.Fatalf("DeleteSession() error = %v", err)
+	}
+	select {
+	case attachErr := <-joinerResult:
+		rpcErr, ok := attachErr.(*rpc.Error)
+		if !ok || rpcErr.Code != 404 {
+			t.Fatalf("joiner error after session close = %#v, want 404", attachErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("joiner remained blocked after session close")
+	}
+	close(releaseActivation)
+	select {
+	case attachErr := <-ownerResult:
+		rpcErr, ok := attachErr.(*rpc.Error)
+		if !ok || rpcErr.Code != 404 {
+			t.Fatalf("owner error after session close = %#v, want 404", attachErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("owner remained blocked after activation returned")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.bySession[sess.ID]; ok {
+		t.Fatal("session close retained session routes")
+	}
+	if states := m.attachStates[server]; states != nil {
+		if _, ok := states[sess.ID]; ok {
+			t.Fatal("session close retained attach state")
+		}
+	}
+}
+
+func TestDeleteSessionCompletesPendingAttachBeforeCleanupResult(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() { _ = client.Close() })
+
+	activationStarted := make(chan struct{})
+	releaseActivation := make(chan struct{})
+	m.activateSessionFunc = func(string, int, int) error {
+		close(activationStarted)
+		<-releaseActivation
+		return nil
+	}
+
+	ownerResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		ownerResult <- attachErr
+	}()
+	<-activationStarted
+	joinerResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		joinerResult <- attachErr
+	}()
+	select {
+	case attachErr := <-joinerResult:
+		t.Fatalf("joiner completed before delete: %v", attachErr)
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	deleteStarted := make(chan struct{})
+	releaseDelete := make(chan struct{})
+	deleteErr := errors.New("delete failed")
+	m.deleteSessionFunc = func(string) error {
+		close(deleteStarted)
+		<-releaseDelete
+		return deleteErr
+	}
+	deleteResult := make(chan error, 1)
+	go func() {
+		deleteResult <- m.DeleteSession(sess.ID)
+	}()
+	<-deleteStarted
+
+	select {
+	case attachErr := <-joinerResult:
+		rpcErr, ok := attachErr.(*rpc.Error)
+		if !ok || rpcErr.Code != 404 {
+			t.Fatalf("joiner error after delete admission = %#v, want 404", attachErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("joiner remained blocked after delete admission")
+	}
+	close(releaseActivation)
+	select {
+	case attachErr := <-ownerResult:
+		rpcErr, ok := attachErr.(*rpc.Error)
+		if !ok || rpcErr.Code != 404 {
+			t.Fatalf("owner error after delete admission = %#v, want 404", attachErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("owner remained blocked after activation returned")
+	}
+
+	close(releaseDelete)
+	if err := <-deleteResult; !errors.Is(err, deleteErr) {
+		t.Fatalf("DeleteSession() error = %v, want %v", err, deleteErr)
+	}
+	waitForLifecycle(t, m, sess.ID, SessionLifecycleOpen, time.Second)
+	if _, replayErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1); replayErr == nil {
+		t.Fatal("completed deleted generation replay succeeded without a live route")
+	} else if rpcErr, ok := replayErr.(*rpc.Error); !ok || rpcErr.Code != 404 {
+		t.Fatalf("completed deleted generation replay error = %#v, want 404", replayErr)
+	}
+	m.DetachSink(server)
+}
+
+func TestCleanupCompletesPendingAttachAndClearsSinkState(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() { _ = client.Close() })
+
+	activationStarted := make(chan struct{})
+	releaseActivation := make(chan struct{})
+	m.activateSessionFunc = func(string, int, int) error {
+		close(activationStarted)
+		<-releaseActivation
+		return nil
+	}
+
+	ownerResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		ownerResult <- attachErr
+	}()
+	<-activationStarted
+	joinerResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		joinerResult <- attachErr
+	}()
+	select {
+	case attachErr := <-joinerResult:
+		t.Fatalf("joiner completed before cleanup: %v", attachErr)
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	cleanupDone := make(chan struct{})
+	go func() {
+		m.Cleanup()
+		close(cleanupDone)
+	}()
+	select {
+	case attachErr := <-joinerResult:
+		rpcErr, ok := attachErr.(*rpc.Error)
+		if !ok || rpcErr.Code != 410 {
+			t.Fatalf("joiner error after cleanup = %#v, want 410", attachErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("joiner remained blocked after cleanup")
+	}
+	select {
+	case <-cleanupDone:
+	case <-time.After(time.Second):
+		t.Fatal("Cleanup() remained blocked by pending activation")
+	}
+	close(releaseActivation)
+	select {
+	case attachErr := <-ownerResult:
+		rpcErr, ok := attachErr.(*rpc.Error)
+		if !ok || rpcErr.Code != 410 {
+			t.Fatalf("owner error after cleanup = %#v, want 410", attachErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("owner remained blocked after activation returned")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.attachStates[server]; ok {
+		t.Fatal("cleanup retained attach state")
+	}
+	if _, ok := m.byServer[server]; ok {
+		t.Fatal("cleanup retained server routes")
+	}
+	if _, ok := m.writers[server]; ok {
+		t.Fatal("cleanup retained sink writer")
+	}
+}
+
+func TestAttachAdmissionRejectsSessionRemovedBeforeManagerLock(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() { _ = client.Close() })
+
+	m.mu.Lock()
+	attachResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "conn-late", 80, 24, server, 1)
+		attachResult <- attachErr
+	}()
+	deleteResult := make(chan error, 1)
+	go func() {
+		deleteResult <- m.term.DeleteSession(sess.ID)
+	}()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if _, exists := m.term.GetSession(sess.ID); !exists {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if _, exists := m.term.GetSession(sess.ID); exists {
+		m.mu.Unlock()
+		t.Fatal("session remained registered while delete awaited close callback")
+	}
+	m.mu.Unlock()
+
+	if err := <-deleteResult; err != nil {
+		t.Fatalf("DeleteSession() error = %v", err)
+	}
+	attachErr := <-attachResult
+	rpcErr, ok := attachErr.(*rpc.Error)
+	if !ok || rpcErr.Code != 404 {
+		t.Fatalf("late attach error = %#v, want 404", attachErr)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.bySession[sess.ID]; ok {
+		t.Fatal("late attach recreated session routes")
+	}
+	if states := m.attachStates[server]; states != nil {
+		if _, ok := states[sess.ID]; ok {
+			t.Fatal("late attach created attach state")
+		}
+	}
+}
+
 func TestTerminalSessionClosedClearsRoutingAndGenerationHighWater(t *testing.T) {
 	m := newQuietTestManager(t, t.TempDir())
 	t.Cleanup(m.Cleanup)
@@ -958,7 +1394,7 @@ func TestTerminalSessionClosedClearsRoutingAndGenerationHighWater(t *testing.T) 
 	m.mu.Lock()
 	_, sessionRetained := m.bySession[sessionID]
 	_, serverRetained := m.byServer[server][sessionID]
-	_, generationRetained := m.attachGenerations[server][sessionID]
+	_, generationRetained := m.attachStates[server][sessionID]
 	m.mu.Unlock()
 	if sessionRetained || serverRetained || generationRetained {
 		t.Fatalf(
