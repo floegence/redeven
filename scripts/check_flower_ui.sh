@@ -32,6 +32,7 @@ main() {
       src/ui/FlowerSurface.navigation.structuredInput.test.tsx \
       src/ui/flower/FlowerChatContextChips.test.tsx \
       src/ui/flower/activityDisclosure.test.ts \
+      src/ui/flower/SubagentDetailWindow.test.tsx \
       src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \
       src/ui/flower/linkedContextNavigation.test.ts \
       src/ui/chat/blocks/ActivityTimelineBlock.test.tsx \

@@ -6380,6 +6380,36 @@ html.dark .flower-component-shell {
   padding-left: 0;
 }
 
+.flower-subagent-ledger-activity-list {
+  display: grid;
+  min-width: 0;
+  gap: 0.12rem;
+}
+
+.flower-subagent-ledger-entry-single-activity {
+  padding-bottom: 0.58rem;
+}
+
+.flower-subagent-ledger-single-activity-body {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.55rem;
+  padding-top: 0;
+}
+
+.flower-subagent-ledger-single-activity-time {
+  display: inline-flex;
+  min-height: 1.9rem;
+  align-items: center;
+  padding-right: 1.35rem;
+}
+
+.flower-subagent-ledger-entry-single-activity::before {
+  top: 0.7rem;
+}
+
 .flower-subagent-ledger-entry-body .flower-activity-inline-button {
   min-height: 1.9rem;
   grid-template-columns: 1rem minmax(0, 1fr) auto auto 1rem;
@@ -6567,6 +6597,18 @@ html.dark .flower-component-shell {
 
   .flower-subagent-ledger-entry::before {
     left: 0;
+  }
+
+  .flower-subagent-ledger-single-activity-body {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .flower-subagent-ledger-single-activity-time {
+    min-height: 0;
+    justify-content: flex-end;
+    margin-top: -0.1rem;
+    padding-right: 1.35rem;
   }
 
   .flower-subagent-detail-bottom-dock {

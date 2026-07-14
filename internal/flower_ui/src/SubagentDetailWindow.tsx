@@ -1,11 +1,16 @@
 import type { JSX } from 'solid-js';
-import { For, Show, createMemo } from 'solid-js';
+import { For, Show, createMemo, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Bot, ChevronDown, Clock, Refresh } from '@floegence/floe-webapp-core/icons';
 import { FloatingWindow } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerSubagentsCopy } from './copy';
 import type { FlowerTimelineEntry } from './flowerTimelineProjection';
+import {
+  projectSubagentLedgerItems,
+  type SubagentLedgerActivityBatch,
+  type SubagentLedgerItem,
+} from './subagentLedgerProjection';
 import type { FlowerSubagentPanelStatus } from './flowerSubagentProjection';
 
 type SubagentLedgerKind = 'instruction' | 'constraints' | 'analysis' | 'activity' | 'outcome';
@@ -82,6 +87,28 @@ function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
+function timestampView(timestamp: number): JSX.Element {
+  const label = formatTime(timestamp);
+  return label
+    ? <time datetime={new Date(timestamp).toISOString()}>{label}</time>
+    : null;
+}
+
+function activityBatchTimestampView(batch: SubagentLedgerActivityBatch): JSX.Element {
+  const firstLabel = formatTime(batch.firstTimestamp);
+  const lastLabel = formatTime(batch.lastTimestamp);
+  if (!firstLabel) return null;
+  const sameMinute = Math.floor(batch.firstTimestamp / 60_000) === Math.floor(batch.lastTimestamp / 60_000);
+  if (!lastLabel || sameMinute) return timestampView(batch.firstTimestamp);
+  return (
+    <>
+      <time datetime={new Date(batch.firstTimestamp).toISOString()}>{firstLabel}</time>
+      <span aria-hidden="true">–</span>
+      <time datetime={new Date(batch.lastTimestamp).toISOString()}>{lastLabel}</time>
+    </>
+  );
+}
+
 function entryLabel(kind: SubagentLedgerKind, copy: FlowerSubagentsCopy, activityCount: number): string {
   switch (kind) {
     case 'instruction':
@@ -100,12 +127,11 @@ function entryLabel(kind: SubagentLedgerKind, copy: FlowerSubagentsCopy, activit
 
 function ledgerEntry(
   entry: FlowerTimelineEntry,
-  index: number,
-  entries: readonly FlowerTimelineEntry[],
+  last: boolean,
   props: SubagentDetailWindowProps,
 ): JSX.Element {
   const summary = entryActivitySummary(entry);
-  const kind = entryKind(entry, terminalStatus(props.status), index === entries.length - 1);
+  const kind = entryKind(entry, terminalStatus(props.status), last);
   const timestamp = formatTime(entryTimestamp(entry));
   const label = entryLabel(kind, props.copy, summary.count);
   const disclosure = kind === 'instruction' || kind === 'constraints' || kind === 'activity';
@@ -150,8 +176,70 @@ function ledgerEntry(
   );
 }
 
+function activityBatchBody(batch: SubagentLedgerActivityBatch, props: SubagentDetailWindowProps): JSX.Element {
+  return (
+    <div class="flower-subagent-ledger-activity-list">
+      <For each={batch.entries}>{(entry) => props.renderEntry(entry)}</For>
+    </div>
+  );
+}
+
 export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Element {
   const modelStatus = createMemo(() => props.modelStatus);
+  const ledgerItems = createMemo(() => projectSubagentLedgerItems(props.entries));
+  const initialBatchOpen = new Map<string, boolean>();
+  const [batchOpenState, setBatchOpenState] = createSignal<Readonly<Record<string, boolean>>>({});
+  const batchDefaultOpen = (batch: SubagentLedgerActivityBatch): boolean => !(batch.itemCount > 6 && batch.allSucceeded);
+  const batchOpen = (batch: SubagentLedgerActivityBatch): boolean => {
+    if (!initialBatchOpen.has(batch.key)) initialBatchOpen.set(batch.key, batchDefaultOpen(batch));
+    return batchOpenState()[batch.key] ?? initialBatchOpen.get(batch.key) ?? true;
+  };
+  const rememberBatchOpen = (key: string, open: boolean) => {
+    setBatchOpenState((current) => current[key] === open ? current : { ...current, [key]: open });
+  };
+  const ledgerItem = (item: SubagentLedgerItem, index: number, items: readonly SubagentLedgerItem[]): JSX.Element => {
+    if (item.type === 'entry') return ledgerEntry(item.entry, index === items.length - 1, props);
+    if (item.itemCount === 1) {
+      return (
+        <section
+          class="flower-subagent-ledger-entry flower-subagent-ledger-entry-activity flower-subagent-ledger-entry-single-activity"
+          data-flower-subagent-ledger-kind="activity"
+          data-flower-subagent-single-operation
+          data-flower-subagent-activity-status={item.status}
+          role="listitem"
+        >
+          <div class="flower-subagent-ledger-entry-body flower-subagent-ledger-single-activity-body">
+            {activityBatchBody(item, props)}
+            <span class="flower-subagent-ledger-entry-time flower-subagent-ledger-single-activity-time">
+              {timestampView(item.firstTimestamp)}
+            </span>
+          </div>
+        </section>
+      );
+    }
+    return (
+      <details
+        class="flower-subagent-ledger-entry flower-subagent-ledger-entry-activity"
+        data-flower-subagent-ledger-kind="activity"
+        data-flower-subagent-activity-status={item.status}
+        data-default-collapsed={batchDefaultOpen(item) ? undefined : 'true'}
+        open={batchOpen(item)}
+        role="listitem"
+        onToggle={(event) => rememberBatchOpen(item.key, event.currentTarget.open)}
+      >
+        <summary>
+          <div class="flower-subagent-ledger-entry-header">
+            <span class="flower-subagent-ledger-entry-label">{props.copy.detailActivityLabel(item.itemCount)}</span>
+            <span class="flower-subagent-ledger-entry-time flower-subagent-ledger-batch-time">
+              {activityBatchTimestampView(item)}
+            </span>
+            <ChevronDown class="flower-subagent-ledger-entry-chevron h-3.5 w-3.5" aria-hidden="true" />
+          </div>
+        </summary>
+        <div class="flower-subagent-ledger-entry-body">{activityBatchBody(item, props)}</div>
+      </details>
+    );
+  };
   const showStatusLane = createMemo(() => (
     Boolean(modelStatus())
     || props.tailLoading
@@ -249,11 +337,11 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
           >
             <div class="flower-subagent-ledger">
               <Show
-                when={props.entries.length > 0}
+                when={ledgerItems().length > 0}
                 fallback={<div class="flower-subagent-detail-empty">{props.copy.emptyDescription}</div>}
               >
-                <For each={props.entries}>
-                  {(entry, index) => ledgerEntry(entry, index(), props.entries, props)}
+                <For each={ledgerItems()}>
+                  {(item, index) => ledgerItem(item, index(), ledgerItems())}
                 </For>
               </Show>
             </div>
