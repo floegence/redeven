@@ -5,6 +5,7 @@ import {
   createPagedTerminalOutputCoordinator,
   getDefaultTerminalConfig,
   type Logger,
+  type PagedTerminalHistoryPage,
   type PagedTerminalOutputCoordinatorHandle,
   type PagedTerminalOutputFailureCode,
   type PagedTerminalOutputSnapshot,
@@ -66,7 +67,7 @@ function formatBytes(bytes: number): string {
 
 export type TerminalSessionRuntimeActions = Readonly<{
   reload: () => Promise<void>;
-  resetAfterClear: () => void;
+  resetAfterClear: () => Promise<boolean>;
   retryOutputRecovery: () => Promise<void>;
   focusIfInteractive: () => boolean;
 }>;
@@ -98,12 +99,18 @@ export type TerminalSessionRuntimeProps = Readonly<{
   registerActions: (sessionId: string, actions: TerminalSessionRuntimeActions | null) => void;
   registerWorkingSetRuntime: (sessionId: string, runtime: TerminalWorkingSetRuntime | null) => void;
   onRuntimeStatus?: (sessionId: string, status: TerminalSessionRuntimeStatus) => void;
-  onLiveOutputObserved?: (sessionId: string, byteLength: number) => void;
+  onLiveOutputObserved?: (sessionId: string, byteLength: number, sequence: number | undefined) => void;
+  onOutputCommitted?: (sessionId: string, source: 'history' | 'live', sequence: number | undefined) => void;
   setWorkingSetInteraction: (sessionId: string, interaction: TerminalWorkingSetInteraction, active: boolean) => void;
   onSurfaceClick?: (event: MouseEvent) => void;
   onBell?: (sessionId: string) => void;
   onShellIntegrationEvent?: (sessionId: string, event: TerminalShellIntegrationEvent, source: 'history' | 'live') => void;
-  onVisibleOutput?: (sessionId: string, source: 'history' | 'live', byteLength: number) => void;
+  onVisibleOutput?: (
+    sessionId: string,
+    source: 'history' | 'live',
+    byteLength: number,
+    sequence: number | undefined,
+  ) => void;
   onTerminalFileLinkOpen?: (target: TerminalResolvedLinkTarget) => Promise<void> | void;
   onNameUpdate?: (sessionId: string, newName: string, workingDir: string) => void;
 }>;
@@ -212,6 +219,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let lastBlockingEventKey = '';
   let liveMilestoneMarked = false;
   let outputCoordinatorEpoch = 0;
+  let observedLiveAttachGeneration = 0;
+  let maxObservedLiveSequence = 0;
 
   const transitionRecoveryPhase = (next: TerminalRecoveryPhase) => {
     const trace = recoveryTrace;
@@ -307,9 +316,13 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       activationRaf = null;
       const core = term;
       if (!core || terminalInputBlocked() || core.hasSelection()) return;
+      const activeElement = typeof document === 'undefined' ? null : document.activeElement;
+      const focusStillOwned = activeElement == null
+        || activeElement === document.body
+        || Boolean(container?.contains(activeElement));
       applyTerminalAppearance(core, buildTerminalAppearance(), {
         forceResize: true,
-        focus: true,
+        focus: focusStillOwned,
       });
     });
   };
@@ -318,8 +331,11 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     onShellIntegrationEvent: (event, source) => {
       props.onShellIntegrationEvent?.(sessionId(), event, source);
     },
-    onVisibleOutput: (source, byteLength) => {
-      props.onVisibleOutput?.(sessionId(), source, byteLength);
+    onChunkCommitted: (source, sequence) => {
+      props.onOutputCommitted?.(sessionId(), source, sequence);
+    },
+    onVisibleOutput: (source, byteLength, sequence) => {
+      props.onVisibleOutput?.(sessionId(), source, byteLength, sequence);
     },
   });
   let outputCoordinator: PagedTerminalOutputCoordinatorHandle | null = null;
@@ -362,37 +378,45 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (!coordinator) return;
 
     const normalizedSequence = normalizeLiveSequence(sequence);
+    const snapshot = coordinator.getSnapshot();
+    if (snapshot.attachGeneration !== observedLiveAttachGeneration) {
+      observedLiveAttachGeneration = snapshot.attachGeneration;
+      maxObservedLiveSequence = snapshot.coveredThroughSequence;
+    } else {
+      maxObservedLiveSequence = Math.max(maxObservedLiveSequence, snapshot.coveredThroughSequence);
+    }
     if (
       normalizedSequence
-      && outputCoordinatorSnapshot
-      && normalizedSequence <= outputCoordinatorSnapshot.coveredThroughSequence
+      && normalizedSequence <= snapshot.coveredThroughSequence
     ) {
       return;
     }
 
-    const snapshot = outputCoordinatorSnapshot;
-    const projectionFloor = snapshot?.coveredThroughSequence ?? 0;
+    const projectionFloor = maxObservedLiveSequence;
     const trace = recoveryTrace;
     if (trace && normalizedSequence !== undefined && normalizedSequence > projectionFloor + 1) {
       publishTerminalRecoveryEvent(trace, 'live', {
-        coordinator_attach_generation: snapshot?.attachGeneration,
+        coordinator_attach_generation: snapshot.attachGeneration,
         catch_up_gap_sequences: normalizedSequence - projectionFloor - 1,
-        covered_through_sequence: snapshot?.coveredThroughSequence,
+        covered_through_sequence: snapshot.coveredThroughSequence,
       });
+    }
+    if (normalizedSequence !== undefined) {
+      maxObservedLiveSequence = Math.max(maxObservedLiveSequence, normalizedSequence);
     }
     if (trace && !liveMilestoneMarked) {
       liveMilestoneMarked = true;
       markTerminalRecoveryMilestone(trace, 'live', {
-        coordinator_attach_generation: snapshot?.attachGeneration,
-        covered_through_sequence: snapshot?.coveredThroughSequence,
+        coordinator_attach_generation: snapshot.attachGeneration,
+        covered_through_sequence: snapshot.coveredThroughSequence,
       });
       publishTerminalRecoveryEvent(trace, 'live', {
-        coordinator_attach_generation: snapshot?.attachGeneration,
-        covered_through_sequence: snapshot?.coveredThroughSequence,
+        coordinator_attach_generation: snapshot.attachGeneration,
+        covered_through_sequence: snapshot.coveredThroughSequence,
       });
     }
     if (data.byteLength > 0) {
-      props.onLiveOutputObserved?.(sessionId(), data.byteLength);
+      props.onLiveOutputObserved?.(sessionId(), data.byteLength, normalizedSequence);
     }
     const liveChunk = tagTerminalOutputChunk({
       sequence: normalizedSequence,
@@ -421,6 +445,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     outputCoordinator?.dispose();
     outputCoordinator = null;
     outputCoordinatorSnapshot = null;
+    observedLiveAttachGeneration = 0;
+    maxObservedLiveSequence = 0;
     setBaselineReady(false);
     setRecoveryFailureCode(null);
     disposeCore();
@@ -434,11 +460,11 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   let initSeq = 0;
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-  const reload = async (opts?: { fadeOut?: boolean }) => {
+  const reload = async (opts?: { fadeOut?: boolean }): Promise<boolean> => {
     const id = sessionId();
-    if (!id) return;
-    if (!props.connected()) return;
-    if (!container) return;
+    if (!id) return false;
+    if (!props.connected()) return false;
+    if (!container) return false;
 
     const seq = ++reloadSeq;
 
@@ -449,25 +475,30 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (opts?.fadeOut) {
       container.style.opacity = '0';
       await sleep(150);
-      if (seq !== reloadSeq) return;
+      if (seq !== reloadSeq) return false;
     }
 
-    // Cancel any in-flight init and dispose the previous core before rebuilding.
+    // Invalidate the old init before waiting so a baseline waiter cannot publish stale state.
     initSeq += 1;
+    const coordinator = outputCoordinator;
+    if (coordinator) await coordinator.pause();
+    if (seq !== reloadSeq) return false;
     disposeTerminal();
 
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    if (seq !== reloadSeq) return;
-    if (!props.connected()) return;
-    if (!container) return;
+    if (seq !== reloadSeq) return false;
+    if (!props.connected()) return false;
+    if (!container) return false;
 
     try {
       await initOnce();
+      return baselineReady() && !blockingFailureCode();
     } catch {
       setLoading('idle');
       reportBlockingFailure('terminal_unavailable');
       const el = container;
       if (el) el.style.opacity = '1';
+      return false;
     }
   };
 
@@ -475,12 +506,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     const id = sessionId();
     if (!id) return;
     props.registerActions(id, {
-      reload: () => reload(),
-      resetAfterClear: () => {
-        outputProjection.reset();
-        outputCoordinator?.clear(1);
-        void outputCoordinator?.attach(0);
+      reload: async () => {
+        await reload();
       },
+      resetAfterClear: () => reload(),
       retryOutputRecovery: async () => {
         setRecoveryFailureCode(null);
         if (blockingFailureCode() || !readyOnce()) {
@@ -632,15 +661,23 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
             ? page.nextStartSeq
             : undefined,
           firstAvailableSequence: page.firstSequence > 0 ? page.firstSequence : undefined,
-          firstRetainedSequence: page.firstRetainedSequence,
-          coveredThroughSequence: page.coveredThroughSequence as number,
-          snapshotEndSequence: page.snapshotEndSequence,
-          historyGeneration: page.historyGeneration,
+          ...(Object.prototype.hasOwnProperty.call(page, 'firstRetainedSequence')
+            ? { firstRetainedSequence: page.firstRetainedSequence }
+            : {}),
+          ...(Object.prototype.hasOwnProperty.call(page, 'coveredThroughSequence')
+            ? { coveredThroughSequence: page.coveredThroughSequence as number }
+            : {}),
+          ...(Object.prototype.hasOwnProperty.call(page, 'snapshotEndSequence')
+            ? { snapshotEndSequence: page.snapshotEndSequence }
+            : {}),
+          ...(Object.prototype.hasOwnProperty.call(page, 'historyGeneration')
+            ? { historyGeneration: page.historyGeneration }
+            : {}),
           historyReset: page.historyReset,
           historyTruncated: page.historyTruncated,
           coveredBytes: page.coveredBytes,
           totalBytes: page.totalBytes,
-        };
+        } as PagedTerminalHistoryPage;
       },
       transformChunk: outputProjection.transformChunk,
       write: (payload) => new Promise<void>((resolve, reject) => {
@@ -677,6 +714,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       },
       onStateChange: (snapshot) => {
         outputCoordinatorSnapshot = snapshot;
+        if (snapshot.attachGeneration !== observedLiveAttachGeneration) {
+          observedLiveAttachGeneration = snapshot.attachGeneration;
+          maxObservedLiveSequence = snapshot.coveredThroughSequence;
+        } else {
+          maxObservedLiveSequence = Math.max(maxObservedLiveSequence, snapshot.coveredThroughSequence);
+        }
         setOutputRecoveryState(snapshot.state);
         setBaselineReady(snapshot.baselineReady);
         setRecoveryFailureCode(snapshot.failure?.code ?? null);
@@ -839,14 +882,25 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
     const coordinator = outputCoordinator;
     if (!coordinator) return null;
-    const coordinatorSnapshot = await coordinator.pause();
-    if (term !== core) return null;
+    const restoreCoordinatorActivity = () => {
+      if (outputCoordinator === coordinator) coordinator.setActive(liveRenderActive());
+    };
+    try {
+      const coordinatorSnapshot = await coordinator.pause();
+      if (term !== core) {
+        restoreCoordinatorActivity();
+        return null;
+      }
 
-    const snapshot = core.captureRestorableSnapshot({
-      coveredThroughSequence: coordinatorSnapshot.coveredThroughSequence,
-    });
-    disposeCore();
-    return snapshot;
+      const snapshot = core.captureRestorableSnapshot({
+        coveredThroughSequence: coordinatorSnapshot.coveredThroughSequence,
+      });
+      disposeCore();
+      return snapshot;
+    } catch (errorValue) {
+      restoreCoordinatorActivity();
+      throw errorValue;
+    }
   };
 
   const resumeFromWorkingSet = async (snapshot: TerminalRestorableSnapshot | null): Promise<void> => {

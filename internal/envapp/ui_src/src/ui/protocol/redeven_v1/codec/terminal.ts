@@ -62,6 +62,10 @@ function optionalHistorySequence(resp: object, field: string): number | undefine
   return value;
 }
 
+function hasOwnField(resp: object, field: string): boolean {
+  return Object.prototype.hasOwnProperty.call(resp, field);
+}
+
 export function toWireTerminalSessionCreateRequest(req: TerminalSessionCreateRequest): wire_terminal_session_create_req {
   return {
     name: req.name?.trim() ? req.name.trim() : undefined,
@@ -116,10 +120,18 @@ export function fromWireTerminalHistoryResponse(resp: wire_terminal_history_resp
     hasMore: Boolean(resp?.has_more ?? false),
     firstSequence: Number(resp?.first_sequence ?? 0),
     lastSequence: Number(resp?.last_sequence ?? 0),
-    coveredThroughSequence: optionalHistorySequence(resp, 'covered_through_sequence'),
-    snapshotEndSequence: optionalHistorySequence(resp, 'snapshot_end_sequence'),
-    firstRetainedSequence: optionalHistorySequence(resp, 'first_retained_sequence'),
-    historyGeneration: optionalHistorySequence(resp, 'history_generation'),
+    ...(hasOwnField(resp, 'covered_through_sequence')
+      ? { coveredThroughSequence: optionalHistorySequence(resp, 'covered_through_sequence') }
+      : {}),
+    ...(hasOwnField(resp, 'snapshot_end_sequence')
+      ? { snapshotEndSequence: optionalHistorySequence(resp, 'snapshot_end_sequence') }
+      : {}),
+    ...(hasOwnField(resp, 'first_retained_sequence')
+      ? { firstRetainedSequence: optionalHistorySequence(resp, 'first_retained_sequence') }
+      : {}),
+    ...(hasOwnField(resp, 'history_generation')
+      ? { historyGeneration: optionalHistorySequence(resp, 'history_generation') }
+      : {}),
     historyReset: Boolean(resp?.history_reset ?? false),
     historyTruncated: Boolean(resp?.history_truncated ?? false),
     coveredBytes: Number(resp?.covered_bytes ?? 0),

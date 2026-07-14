@@ -299,10 +299,18 @@ export function createRedevenTerminalTransport(rpc: RedevenV1Rpc, connId: string
       hasMore,
       firstSequence,
       lastSequence,
-      coveredThroughSequence: resp?.coveredThroughSequence,
-      snapshotEndSequence: resp?.snapshotEndSequence,
-      firstRetainedSequence: resp?.firstRetainedSequence,
-      historyGeneration: resp?.historyGeneration,
+      ...(Object.prototype.hasOwnProperty.call(resp, 'coveredThroughSequence')
+        ? { coveredThroughSequence: resp.coveredThroughSequence }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(resp, 'snapshotEndSequence')
+        ? { snapshotEndSequence: resp.snapshotEndSequence }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(resp, 'firstRetainedSequence')
+        ? { firstRetainedSequence: resp.firstRetainedSequence }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(resp, 'historyGeneration')
+        ? { historyGeneration: resp.historyGeneration }
+        : {}),
       historyReset: Boolean(resp?.historyReset ?? false),
       historyTruncated: Boolean(resp?.historyTruncated ?? false),
       coveredBytes: Number(resp?.coveredBytes ?? 0),

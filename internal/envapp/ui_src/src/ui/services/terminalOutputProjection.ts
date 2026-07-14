@@ -19,7 +19,8 @@ export function tagTerminalOutputChunk(
 
 export function createTerminalOutputProjection(options: Readonly<{
   onShellIntegrationEvent?: (event: TerminalShellIntegrationEvent, source: TerminalOutputSource) => void;
-  onVisibleOutput?: (source: TerminalOutputSource, byteLength: number) => void;
+  onChunkCommitted?: (source: TerminalOutputSource, sequence: number | undefined) => void;
+  onVisibleOutput?: (source: TerminalOutputSource, byteLength: number, sequence: number | undefined) => void;
 }>) {
   const parser = new TerminalShellIntegrationParser();
 
@@ -31,8 +32,9 @@ export function createTerminalOutputProjection(options: Readonly<{
         options.onShellIntegrationEvent?.(event, source);
       }
       if (result.displayData.byteLength > 0) {
-        options.onVisibleOutput?.(source, result.displayData.byteLength);
+        options.onVisibleOutput?.(source, result.displayData.byteLength, chunk.sequence);
       }
+      options.onChunkCommitted?.(source, chunk.sequence);
       return result.displayData;
     },
     reset(): void {
