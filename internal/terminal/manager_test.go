@@ -695,7 +695,7 @@ func TestStaleActivationFailureDoesNotDetachNewerAttachment(t *testing.T) {
 	firstActivationStarted := make(chan struct{})
 	releaseFirstActivation := make(chan struct{})
 	var activationCalls atomic.Int32
-	m.activateSessionFunc = func(string, int, int) error {
+	m.activateSessionFunc = func(context.Context, string, int, int) error {
 		if activationCalls.Add(1) == 1 {
 			close(firstActivationStarted)
 			<-releaseFirstActivation
@@ -731,6 +731,198 @@ func TestStaleActivationFailureDoesNotDetachNewerAttachment(t *testing.T) {
 	}
 
 	m.DetachSink(server)
+}
+
+func TestNewAttachGenerationCancelsPreviousOwnerWait(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+
+	firstActivationStarted := make(chan struct{})
+	var activationCalls atomic.Int32
+	m.activateSessionFunc = func(ctx context.Context, _ string, _ int, _ int) error {
+		if activationCalls.Add(1) == 1 {
+			close(firstActivationStarted)
+			<-ctx.Done()
+			return ctx.Err()
+		}
+		return nil
+	}
+
+	oldResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "old-conn", 80, 24, server, 1)
+		oldResult <- attachErr
+	}()
+	<-firstActivationStarted
+
+	if _, err := m.attachSession(sess.ID, "new-conn", 100, 30, server, 2); err != nil {
+		t.Fatalf("new attachSession() error = %v", err)
+	}
+	select {
+	case attachErr := <-oldResult:
+		rpcErr, ok := attachErr.(*rpc.Error)
+		if !ok || rpcErr.Code != 409 {
+			t.Fatalf("old attach error = %#v, want superseded 409", attachErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("old attach owner remained blocked after newer generation admission")
+	}
+	if got := activationCalls.Load(); got != 2 {
+		t.Fatalf("activation calls = %d, want 2", got)
+	}
+	m.DetachSink(server)
+}
+
+func TestAttachCallerCancellationDoesNotCancelSharedActivation(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+
+	activationStarted := make(chan struct{})
+	releaseActivation := make(chan struct{})
+	var activationCalls atomic.Int32
+	m.activateSessionFunc = func(context.Context, string, int, int) error {
+		activationCalls.Add(1)
+		close(activationStarted)
+		<-releaseActivation
+		return nil
+	}
+
+	ownerCtx, cancelOwner := context.WithCancel(context.Background())
+	ownerResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSessionContext(ownerCtx, sess.ID, "conn-1", 80, 24, server, 1)
+		ownerResult <- attachErr
+	}()
+	<-activationStarted
+	cancelOwner()
+
+	select {
+	case attachErr := <-ownerResult:
+		if !errors.Is(attachErr, context.Canceled) {
+			t.Fatalf("owner attach error = %v, want context canceled", attachErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("owner attach remained blocked after caller cancellation")
+	}
+
+	joinerResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		joinerResult <- attachErr
+	}()
+	select {
+	case attachErr := <-joinerResult:
+		t.Fatalf("joiner completed before shared activation: %v", attachErr)
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	close(releaseActivation)
+	select {
+	case attachErr := <-joinerResult:
+		if attachErr != nil {
+			t.Fatalf("joiner attach error = %v", attachErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("joiner remained blocked after shared activation completed")
+	}
+	if got := activationCalls.Load(); got != 1 {
+		t.Fatalf("activation calls = %d, want 1", got)
+	}
+	m.DetachSink(server)
+}
+
+func TestRPCServeCancellationUnblocksAttachBeforeDetach(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	router := rpc.NewRouter()
+	server := rpc.NewServer(serverConn, router)
+	m.RegisterWithAccessGate(router, &session.Meta{CanWrite: true, CanExecute: true}, server, nil)
+
+	activationStarted := make(chan struct{})
+	activationCanceled := make(chan struct{})
+	m.activateSessionFunc = func(ctx context.Context, _ string, _ int, _ int) error {
+		close(activationStarted)
+		<-ctx.Done()
+		close(activationCanceled)
+		return ctx.Err()
+	}
+
+	serveCtx, cancelServe := context.WithCancel(context.Background())
+	serveDone := make(chan error, 1)
+	go func() {
+		serveErr := server.Serve(serveCtx)
+		m.DetachSink(server)
+		serveDone <- serveErr
+	}()
+
+	request, err := json.Marshal(terminalAttachReq{
+		SessionID:        sess.ID,
+		ConnID:           "conn-1",
+		Cols:             80,
+		Rows:             24,
+		AttachGeneration: 1,
+	})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	callDone := make(chan error, 1)
+	go func() {
+		_, _, callErr := rpc.NewClient(clientConn).Call(context.Background(), TypeID_TERMINAL_SESSION_ATTACH, request)
+		callDone <- callErr
+	}()
+
+	<-activationStarted
+	cancelServe()
+	select {
+	case serveErr := <-serveDone:
+		if !errors.Is(serveErr, context.Canceled) {
+			t.Fatalf("Serve() error = %v, want context canceled", serveErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Serve() remained blocked by terminal attach handler")
+	}
+	select {
+	case <-activationCanceled:
+	case <-time.After(time.Second):
+		t.Fatal("DetachSink did not cancel the session-owned activation")
+	}
+	select {
+	case <-callDone:
+	case <-time.After(time.Second):
+		t.Fatal("terminal attach client remained blocked after stream cancellation")
+	}
 }
 
 func TestActivationFailureRollbackSerializesSameConnectionReattach(t *testing.T) {
@@ -821,7 +1013,7 @@ func TestDuplicateGenerationJoinsPendingActivationFailure(t *testing.T) {
 	activationStarted := make(chan struct{})
 	releaseActivation := make(chan struct{})
 	var activationCalls atomic.Int32
-	m.activateSessionFunc = func(string, int, int) error {
+	m.activateSessionFunc = func(context.Context, string, int, int) error {
 		if activationCalls.Add(1) == 1 {
 			close(activationStarted)
 			<-releaseActivation
@@ -895,7 +1087,7 @@ func TestDuplicateGenerationJoinsPendingActivationSuccess(t *testing.T) {
 	activationStarted := make(chan struct{})
 	releaseActivation := make(chan struct{})
 	var activationCalls atomic.Int32
-	m.activateSessionFunc = func(string, int, int) error {
+	m.activateSessionFunc = func(context.Context, string, int, int) error {
 		activationCalls.Add(1)
 		close(activationStarted)
 		<-releaseActivation
@@ -957,11 +1149,10 @@ func TestDetachSinkCompletesPendingAttachOwnerAndJoiner(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	activationStarted := make(chan struct{})
-	releaseActivation := make(chan struct{})
-	m.activateSessionFunc = func(string, int, int) error {
+	m.activateSessionFunc = func(ctx context.Context, _ string, _ int, _ int) error {
 		close(activationStarted)
-		<-releaseActivation
-		return nil
+		<-ctx.Done()
+		return ctx.Err()
 	}
 
 	ownerResult := make(chan error, 1)
@@ -986,7 +1177,6 @@ func TestDetachSinkCompletesPendingAttachOwnerAndJoiner(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("joiner remained blocked after sink close")
 	}
-	close(releaseActivation)
 	select {
 	case attachErr := <-ownerResult:
 		rpcErr, ok := attachErr.(*rpc.Error)
@@ -1032,27 +1222,28 @@ func TestDetachSinkCompletesSupersededAndLatestPendingAttachOperations(t *testin
 		m.mu.Unlock()
 		t.Fatalf("latest attach = created:%v err:%v", created, err)
 	}
-	if got := len(m.attachStates[server][sessionID].pending); got != 2 {
+	if got := len(m.attachStates[server][sessionID].pending); got != 1 {
 		m.mu.Unlock()
-		t.Fatalf("pending operation count = %d, want 2", got)
+		t.Fatalf("pending operation count = %d, want 1", got)
 	}
 	m.mu.Unlock()
 
-	results := make(chan error, 2)
-	go func() { results <- oldAttachment.activation.wait() }()
-	go func() { results <- latestAttachment.activation.wait() }()
+	result := oldAttachment.activation.wait()
+	if rpcErr, ok := result.(*rpc.Error); !ok || rpcErr.Code != 409 {
+		t.Fatalf("superseded operation error = %#v, want 409", result)
+	}
+	latestResult := make(chan error, 1)
+	go func() { latestResult <- latestAttachment.activation.wait() }()
 
 	m.DetachSink(server)
-	for range 2 {
-		select {
-		case result := <-results:
-			rpcErr, ok := result.(*rpc.Error)
-			if !ok || rpcErr.Code != 410 {
-				t.Fatalf("pending generation error after sink close = %#v, want 410", result)
-			}
-		case <-time.After(time.Second):
-			t.Fatal("pending generation remained blocked after sink close")
+	select {
+	case result := <-latestResult:
+		rpcErr, ok := result.(*rpc.Error)
+		if !ok || rpcErr.Code != 410 {
+			t.Fatalf("latest generation error after sink close = %#v, want 410", result)
 		}
+	case <-time.After(time.Second):
+		t.Fatal("latest generation remained blocked after sink close")
 	}
 
 	m.mu.Lock()
@@ -1080,11 +1271,10 @@ func TestSessionCloseCompletesPendingAttachAndClearsState(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	activationStarted := make(chan struct{})
-	releaseActivation := make(chan struct{})
-	m.activateSessionFunc = func(string, int, int) error {
+	m.activateSessionFunc = func(ctx context.Context, _ string, _ int, _ int) error {
 		close(activationStarted)
-		<-releaseActivation
-		return nil
+		<-ctx.Done()
+		return ctx.Err()
 	}
 
 	ownerResult := make(chan error, 1)
@@ -1111,7 +1301,6 @@ func TestSessionCloseCompletesPendingAttachAndClearsState(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("joiner remained blocked after session close")
 	}
-	close(releaseActivation)
 	select {
 	case attachErr := <-ownerResult:
 		rpcErr, ok := attachErr.(*rpc.Error)
@@ -1152,11 +1341,10 @@ func TestDeleteSessionCompletesPendingAttachBeforeCleanupResult(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	activationStarted := make(chan struct{})
-	releaseActivation := make(chan struct{})
-	m.activateSessionFunc = func(string, int, int) error {
+	m.activateSessionFunc = func(ctx context.Context, _ string, _ int, _ int) error {
 		close(activationStarted)
-		<-releaseActivation
-		return nil
+		<-ctx.Done()
+		return ctx.Err()
 	}
 
 	ownerResult := make(chan error, 1)
@@ -1199,7 +1387,6 @@ func TestDeleteSessionCompletesPendingAttachBeforeCleanupResult(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("joiner remained blocked after delete admission")
 	}
-	close(releaseActivation)
 	select {
 	case attachErr := <-ownerResult:
 		rpcErr, ok := attachErr.(*rpc.Error)
@@ -1241,11 +1428,10 @@ func TestCleanupCompletesPendingAttachAndClearsSinkState(t *testing.T) {
 	t.Cleanup(func() { _ = client.Close() })
 
 	activationStarted := make(chan struct{})
-	releaseActivation := make(chan struct{})
-	m.activateSessionFunc = func(string, int, int) error {
+	m.activateSessionFunc = func(ctx context.Context, _ string, _ int, _ int) error {
 		close(activationStarted)
-		<-releaseActivation
-		return nil
+		<-ctx.Done()
+		return ctx.Err()
 	}
 
 	ownerResult := make(chan error, 1)
@@ -1284,7 +1470,6 @@ func TestCleanupCompletesPendingAttachAndClearsSinkState(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("Cleanup() remained blocked by pending activation")
 	}
-	close(releaseActivation)
 	select {
 	case attachErr := <-ownerResult:
 		rpcErr, ok := attachErr.(*rpc.Error)
@@ -1467,7 +1652,7 @@ func TestStaleActivationFailurePreservesSameConnectionOwnedByNewerGeneration(t *
 	firstActivationStarted := make(chan struct{})
 	releaseFirstActivation := make(chan struct{})
 	var activationCalls atomic.Int32
-	m.activateSessionFunc = func(string, int, int) error {
+	m.activateSessionFunc = func(context.Context, string, int, int) error {
 		if activationCalls.Add(1) == 1 {
 			close(firstActivationStarted)
 			<-releaseFirstActivation

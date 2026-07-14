@@ -53,7 +53,7 @@ type Manager struct {
 
 	term                *termgo.Manager
 	deleteSessionFunc   func(sessionID string) error
-	activateSessionFunc func(sessionID string, cols int, rows int) error
+	activateSessionFunc func(ctx context.Context, sessionID string, cols int, rows int) error
 
 	mu               sync.Mutex
 	writers          map[*rpc.Server]*sinkWriter
@@ -80,13 +80,16 @@ type sinkAttachState struct {
 }
 
 type sessionAttachActivation struct {
-	done chan struct{}
-	once sync.Once
-	err  error
+	ctx    context.Context
+	cancel context.CancelFunc
+	done   chan struct{}
+	once   sync.Once
+	err    error
 }
 
 func newSessionAttachActivation() *sessionAttachActivation {
-	return &sessionAttachActivation{done: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &sessionAttachActivation{ctx: ctx, cancel: cancel, done: make(chan struct{})}
 }
 
 func (a *sessionAttachActivation) complete(err error) {
@@ -96,15 +99,51 @@ func (a *sessionAttachActivation) complete(err error) {
 	a.once.Do(func() {
 		a.err = err
 		close(a.done)
+		a.cancel()
 	})
 }
 
-func (a *sessionAttachActivation) wait() error {
+func (a *sessionAttachActivation) waitContext(ctx context.Context) error {
 	if a == nil {
 		return nil
 	}
-	<-a.done
-	return a.err
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-a.done:
+		return a.err
+	case <-ctx.Done():
+		select {
+		case <-a.done:
+			return a.err
+		default:
+			return ctx.Err()
+		}
+	}
+}
+
+func (a *sessionAttachActivation) wait() error {
+	return a.waitContext(context.Background())
+}
+
+func (a *sessionAttachActivation) context() context.Context {
+	if a == nil || a.ctx == nil {
+		return context.Background()
+	}
+	return a.ctx
+}
+
+func (a *sessionAttachActivation) completedResult() (error, bool) {
+	if a == nil {
+		return nil, false
+	}
+	select {
+	case <-a.done:
+		return a.err, true
+	default:
+		return nil, false
+	}
 }
 
 func completePendingAttachState(state *sinkAttachState, result error) {
@@ -145,6 +184,13 @@ func (r fixedShellResolver) ResolveShell(logger termgo.Logger) string {
 		logger.Warn("configured shell missing; falling back", "shell", shell)
 	}
 	return termgo.DefaultShellResolver{}.ResolveShell(logger)
+}
+
+func (r fixedShellResolver) ResolveShellContext(ctx context.Context, logger termgo.Logger) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	return r.ResolveShell(logger), nil
 }
 
 func newTerminalGoManagerConfig(shell string, log *slog.Logger) termgo.ManagerConfig {
@@ -198,7 +244,7 @@ func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slo
 	m.term = termgo.NewManager(newTerminalGoManagerConfig(shell, log))
 	m.term.SetEventHandler(&eventHandler{m: m})
 	m.deleteSessionFunc = m.deleteSessionNow
-	m.activateSessionFunc = m.term.ActivateSession
+	m.activateSessionFunc = m.term.ActivateSessionContext
 
 	return m
 }
@@ -260,7 +306,7 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 	})
 
 	// Attach session: bind terminal output notifications to this RPC stream and register a connection.
-	accessgate.RegisterTyped[terminalAttachReq, terminalAttachResp](r, TypeID_TERMINAL_SESSION_ATTACH, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalAttachReq) (*terminalAttachResp, error) {
+	accessgate.RegisterTyped[terminalAttachReq, terminalAttachResp](r, TypeID_TERMINAL_SESSION_ATTACH, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *terminalAttachReq) (*terminalAttachResp, error) {
 		if err := requireProcessLaunchPermission(meta); err != nil {
 			return nil, err
 		}
@@ -286,7 +332,8 @@ func (m *Manager) RegisterWithAccessGate(r *rpc.Router, meta *session.Meta, stre
 			return nil, &rpc.Error{Code: 400, Message: "attach_generation is required"}
 		}
 
-		historyBoundarySequence, err := m.attachSession(
+		historyBoundarySequence, err := m.attachSessionContext(
+			ctx,
 			sessionID,
 			connID,
 			req.Cols,
@@ -560,6 +607,18 @@ var (
 	errTerminalAttachSuperseded = errors.New("terminal attach superseded")
 )
 
+func terminalAttachClosedError() error {
+	return &rpc.Error{Code: 410, Message: "terminal connection closed"}
+}
+
+func terminalAttachSupersededError() error {
+	return &rpc.Error{Code: 409, Message: "terminal attach superseded"}
+}
+
+func terminalAttachSessionNotFoundError() error {
+	return &rpc.Error{Code: 404, Message: "terminal session not found"}
+}
+
 func (m *Manager) attachSinkLocked(
 	sessionID string,
 	connID string,
@@ -642,6 +701,12 @@ func (m *Manager) attachSinkLocked(
 	if state.pending == nil {
 		state.pending = make(map[int64]*sessionAttachActivation)
 	}
+	for pendingGeneration, pendingActivation := range state.pending {
+		if pendingGeneration < generation {
+			pendingActivation.complete(terminalAttachSupersededError())
+			delete(state.pending, pendingGeneration)
+		}
+	}
 	state.latest = attachment
 	state.pending[generation] = attachment.activation
 	if hasExisting && existing.connID != connID && removePreviousConnection != nil && !m.sessionConnectionOwnedLocked(sessionID, existing.connID) {
@@ -665,6 +730,9 @@ func (m *Manager) finishAttachOperation(
 	}
 
 	m.mu.Lock()
+	if result == nil {
+		result = m.currentAttachOperationErrorLocked(sessionID, sink, attachment)
+	}
 	attachment.activation.complete(result)
 	if states := m.attachStates[sink]; states != nil {
 		if state := states[sessionID]; state != nil {
@@ -674,7 +742,38 @@ func (m *Manager) finishAttachOperation(
 		}
 	}
 	m.mu.Unlock()
-	return attachment.activation.wait()
+	return attachment.activation.waitContext(context.Background())
+}
+
+func (m *Manager) currentAttachOperationErrorLocked(
+	sessionID string,
+	sink *rpc.Server,
+	attachment sinkAttachment,
+) error {
+	if _, closed := m.closedSinks[sink]; closed {
+		return terminalAttachClosedError()
+	}
+	if record, exists := m.sessionLifecycle[sessionID]; exists && record.hiddenFromUI() {
+		return terminalAttachSessionNotFoundError()
+	}
+	if sess, ok := m.term.GetSession(sessionID); !ok || sess == nil {
+		return terminalAttachSessionNotFoundError()
+	}
+	if current, ok := m.bySession[sessionID][sink]; !ok || !sameSinkAttachment(current, attachment) {
+		return terminalAttachSupersededError()
+	}
+	if current, ok := m.byServer[sink][sessionID]; !ok || !sameSinkAttachment(current, attachment) {
+		return terminalAttachSupersededError()
+	}
+	states := m.attachStates[sink]
+	if states == nil {
+		return terminalAttachSupersededError()
+	}
+	state := states[sessionID]
+	if state == nil || !sameSinkAttachment(state.latest, attachment) {
+		return terminalAttachSupersededError()
+	}
+	return nil
 }
 
 func (m *Manager) sessionConnectionOwnedLocked(sessionID string, connID string) bool {
@@ -904,6 +1003,26 @@ func (m *Manager) attachSession(
 	streamServer *rpc.Server,
 	attachGeneration int64,
 ) (int64, error) {
+	return m.attachSessionContext(
+		context.Background(),
+		sessionID,
+		connID,
+		cols,
+		rows,
+		streamServer,
+		attachGeneration,
+	)
+}
+
+func (m *Manager) attachSessionContext(
+	callerCtx context.Context,
+	sessionID string,
+	connID string,
+	cols int,
+	rows int,
+	streamServer *rpc.Server,
+	attachGeneration int64,
+) (int64, error) {
 	if m == nil {
 		return 0, &rpc.Error{Code: 500, Message: "internal error"}
 	}
@@ -970,7 +1089,7 @@ func (m *Manager) attachSession(
 	m.mu.Unlock()
 
 	if streamServer != nil && !attachmentCreated && attachment.activation != nil {
-		if err := attachment.activation.wait(); err != nil {
+		if err := attachment.activation.waitContext(callerCtx); err != nil {
 			return 0, err
 		}
 		return historyBoundarySequence, nil
@@ -978,12 +1097,22 @@ func (m *Manager) attachSession(
 	if sess.IsActive() {
 		return historyBoundarySequence, m.finishAttachOperation(sessionID, streamServer, attachment, nil)
 	}
+	if streamServer != nil {
+		go m.runAttachActivation(sessionID, connID, cols, rows, streamServer, attachment, sess)
+		if err := attachment.activation.waitContext(callerCtx); err != nil {
+			return 0, err
+		}
+		return historyBoundarySequence, nil
+	}
 
 	activateSession := m.activateSessionFunc
 	if activateSession == nil {
-		activateSession = m.term.ActivateSession
+		activateSession = m.term.ActivateSessionContext
 	}
-	if err := activateSession(sessionID, cols, rows); err != nil {
+	if err := activateSession(attachment.activation.context(), sessionID, cols, rows); err != nil {
+		if completedResult, completed := attachment.activation.completedResult(); completed {
+			return 0, m.finishAttachOperation(sessionID, streamServer, attachment, completedResult)
+		}
 		if streamServer != nil && attachmentCreated {
 			m.rollbackSessionAttachment(sessionID, streamServer, attachment, sess.RemoveConnection)
 		} else if streamServer == nil {
@@ -995,6 +1124,38 @@ func (m *Manager) attachSession(
 	}
 
 	return historyBoundarySequence, m.finishAttachOperation(sessionID, streamServer, attachment, nil)
+}
+
+func (m *Manager) runAttachActivation(
+	sessionID string,
+	connID string,
+	cols int,
+	rows int,
+	streamServer *rpc.Server,
+	attachment sinkAttachment,
+	sess *termgo.Session,
+) {
+	activateSession := m.activateSessionFunc
+	if activateSession == nil {
+		activateSession = m.term.ActivateSessionContext
+	}
+	if err := activateSession(attachment.activation.context(), sessionID, cols, rows); err != nil {
+		if completedResult, completed := attachment.activation.completedResult(); completed {
+			_ = m.finishAttachOperation(sessionID, streamServer, attachment, completedResult)
+			return
+		}
+		m.rollbackSessionAttachment(sessionID, streamServer, attachment, sess.RemoveConnection)
+		m.log.Warn("terminal attach activation failed", "session_id", sessionID, "conn_id", connID, "error", err)
+		_ = m.finishAttachOperation(
+			sessionID,
+			streamServer,
+			attachment,
+			&rpc.Error{Code: 500, Message: "failed to attach terminal session"},
+		)
+		return
+	}
+
+	_ = m.finishAttachOperation(sessionID, streamServer, attachment, nil)
 }
 
 func (m *Manager) resize(sessionID string, connID string, cols int, rows int) error {

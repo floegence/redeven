@@ -217,7 +217,7 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 		InitialResizeSuppressDuration: 10 * time.Millisecond,
 		ResizeSuppressDuration:        10 * time.Millisecond,
 	})
-	manager.activateSessionFunc = manager.term.ActivateSession
+	manager.activateSessionFunc = manager.term.ActivateSessionContext
 	manager.deleteSessionFunc = manager.deleteSessionNow
 	recorder := &shellEventRecorder{delegate: &eventHandler{m: manager}}
 	manager.term.SetEventHandler(recorder)
