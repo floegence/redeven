@@ -5,11 +5,13 @@ import { ChevronUp, Terminal } from '@floegence/floe-webapp-core/icons';
 
 import { resolveAnchoredOverlayPosition, type AnchoredOverlayPosition } from '../primitives/anchoredOverlay';
 import type { ContextCompactionEventView, ContextUsageView } from './aiDataNormalizers';
+import { useI18n } from '../i18n';
 
 export function CompactContextSummary(props: {
   usage: ContextUsageView | null;
   compactions: ContextCompactionEventView[];
 }) {
+  const i18n = useI18n();
   const [expanded, setExpanded] = createSignal(false);
   const [showDebug, setShowDebug] = createSignal(false);
   const [position, setPosition] = createSignal<AnchoredOverlayPosition | null>(null);
@@ -360,7 +362,7 @@ export function CompactContextSummary(props: {
               <div class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-2">
                   <Terminal class="w-3.5 h-3.5 text-blue-500/80" />
-                  <span class="text-[13px] font-semibold text-foreground tracking-tight">Context</span>
+                  <span class="text-[13px] font-semibold text-foreground tracking-tight">{i18n.t('flowerSurface.chat.contextIndicatorLabel')}</span>
                   <span class="text-[10px] font-semibold tabular-nums text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-px leading-none">
                     {usagePercentLabel()}
                   </span>
@@ -378,7 +380,7 @@ export function CompactContextSummary(props: {
                           ? 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/15'
                           : 'bg-muted/40 text-muted-foreground border-border/60 hover:bg-muted/60 hover:text-foreground',
                       )}
-                      title="Show compaction debug events"
+                      title={i18n.t('uiCopy.aiContext.showDebugEvents')}
                       onClick={() => setShowDebug((value) => !value)}
                     >
                       {debugToggleLabel()}
@@ -390,26 +392,26 @@ export function CompactContextSummary(props: {
 
             <div class="px-3.5 py-2 border-b border-border/40 bg-muted/10">
               <Show when={props.usage} fallback={
-                <div class="text-[11px] text-muted-foreground">No context usage telemetry yet.</div>
+                <div class="text-[11px] text-muted-foreground">{i18n.t('uiCopy.aiContext.noUsage')}</div>
               }>
                 <div class="grid grid-cols-3 gap-1.5 text-[10px]">
                   <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
                     <div
                       class="font-medium text-muted-foreground/70 uppercase tracking-wider"
-                      title="One model request equals one round."
+                      title={i18n.t('uiCopy.aiContext.roundDescription')}
                     >
-                      Round
+                      {i18n.t('uiCopy.aiContext.round')}
                     </div>
                     <div class="font-semibold tabular-nums text-foreground/85">{props.usage?.stepIndex ?? 0}</div>
                   </div>
                   <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
-                    <div class="font-medium text-muted-foreground/70 uppercase tracking-wider" title="When compaction may trigger.">
-                      Threshold
+                    <div class="font-medium text-muted-foreground/70 uppercase tracking-wider" title={i18n.t('uiCopy.aiContext.thresholdDescription')}>
+                      {i18n.t('uiCopy.aiContext.threshold')}
                     </div>
                     <div class="font-semibold tabular-nums text-foreground/85">{thresholdLabel()}</div>
                   </div>
                   <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
-                    <div class="font-medium text-muted-foreground/70 uppercase tracking-wider">Msgs</div>
+                    <div class="font-medium text-muted-foreground/70 uppercase tracking-wider">{i18n.t('uiCopy.aiContext.messages')}</div>
                     <div class="font-semibold tabular-nums text-foreground/85">{turnMessagesLabel()}</div>
                   </div>
                 </div>
@@ -420,7 +422,7 @@ export function CompactContextSummary(props: {
 
                 <Show when={sortedSections().length > 0}>
                   <div class="mt-2">
-                    <div class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Sections</div>
+                    <div class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{i18n.t('uiCopy.aiContext.sections')}</div>
                     <div class="mt-1 flex flex-wrap gap-1">
                       <For each={sortedSections()}>
                         {([name, value]) => (
@@ -438,7 +440,7 @@ export function CompactContextSummary(props: {
 
             <div class="max-h-56 overflow-auto">
               <Show when={visibleCompactionAttempts().length > 0} fallback={
-                <div class="px-3.5 py-3 text-[11px] text-muted-foreground text-center">No compaction actions yet.</div>
+                <div class="px-3.5 py-3 text-[11px] text-muted-foreground text-center">{i18n.t('uiCopy.aiContext.noActions')}</div>
               }>
                 <div class="flex flex-col gap-1.5 p-2.5">
                   <For each={visibleCompactionAttempts()}>
@@ -492,7 +494,7 @@ export function CompactContextSummary(props: {
                         const before = Number(item.messagesBefore ?? NaN);
                         const after = Number(item.messagesAfter ?? NaN);
                         if (!Number.isFinite(before) || !Number.isFinite(after) || before <= 0 || after <= 0) return '';
-                        return `msgs ${Math.floor(before)} → ${Math.floor(after)}`;
+                        return `${i18n.t('uiCopy.aiContext.messages')} ${Math.floor(before)} → ${Math.floor(after)}`;
                       };
                       return (
                         <div class="rounded-lg border border-border/55 bg-background/80 px-2.5 py-1.5">
@@ -500,7 +502,7 @@ export function CompactContextSummary(props: {
                             <span class={cn('inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold', stageClass())}>
                               {stageLabel()}
                             </span>
-                            <span class="text-[10px] text-muted-foreground">round {item.stepIndex}</span>
+                            <span class="text-[10px] text-muted-foreground">{i18n.t('uiCopy.aiContext.round')} {item.stepIndex}</span>
                             <Show when={formatCompactionReason(item.reason)}>
                               <span
                                 class="ml-auto text-[10px] text-muted-foreground truncate max-w-[10rem]"
@@ -524,7 +526,7 @@ export function CompactContextSummary(props: {
                             </div>
                           </Show>
                           <Show when={item.strategy && showDebug()}>
-                            <div class="mt-1 text-[10px] text-muted-foreground/85">strategy: {item.strategy}</div>
+                            <div class="mt-1 text-[10px] text-muted-foreground/85">{i18n.t('uiCopy.aiContext.strategy')} {item.strategy}</div>
                           </Show>
                           <Show when={item.error}>
                             <div class="mt-1 text-[10px] text-error break-words">{item.error}</div>

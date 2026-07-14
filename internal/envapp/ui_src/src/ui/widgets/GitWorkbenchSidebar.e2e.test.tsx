@@ -314,7 +314,7 @@ describe('GitWorkbenchSidebar interactions', () => {
     ), host);
 
     try {
-      expect(host.textContent).toContain('Pick a branch to inspect its status or history in the main pane.');
+      expect(host.textContent).toContain('Choose a branch from the sidebar to load compare context.');
       expect(host.textContent).toContain('Local');
       expect(host.textContent).toContain('Remote');
       expect(host.textContent).not.toContain('Compare');

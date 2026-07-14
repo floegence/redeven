@@ -12,19 +12,22 @@ import type {
 } from '../protocol/redeven_v1';
 import {
   WORKSPACE_VIEW_SECTIONS,
-  branchContextSummary,
   branchDisplayName,
   branchIdentity,
-  branchStatusSummary,
   describeGitHead,
   summarizeWorkspaceCount,
-  workspaceHealthLabel,
   workspaceViewSectionCount,
-  workspaceViewSectionLabel,
   type GitWorkspaceViewPageState,
   type GitWorkspaceViewSection,
   type GitWorkbenchSubview,
 } from '../utils/gitWorkbench';
+import {
+  localizedBranchContextSummary,
+  localizedBranchStatusSummary,
+  localizedGitHeadDisplay,
+  localizedWorkspaceHealthLabel,
+  localizedWorkspaceViewSectionLabel,
+} from '../utils/localizedGitWorkbench';
 import {
   gitBranchTone,
   gitSelectedChipClass,
@@ -36,6 +39,7 @@ import {
 } from './GitChrome';
 import { GitCommitGraph } from './GitCommitGraph';
 import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from './gitWorkbenchScrollRegion';
+import { useI18n } from '../i18n';
 import { GitMetaPill, GitSection, GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
 
 export interface GitWorkbenchSidebarProps {
@@ -148,15 +152,15 @@ function normalizeSubview(view: GitWorkbenchSubview): GitWorkbenchSubview {
   return view === 'overview' ? 'changes' : view;
 }
 
-function selectorLabel(view: GitWorkbenchSubview): string {
+function selectorLabel(view: GitWorkbenchSubview, i18n: ReturnType<typeof useI18n>): string {
   switch (normalizeSubview(view)) {
     case 'branches':
-      return 'Branches';
+      return i18n.t('gitPresentation.branchesView');
     case 'history':
-      return 'Commit Graph';
+      return i18n.t('gitPresentation.graphView');
     case 'changes':
     default:
-      return 'Changes';
+      return i18n.t('git.common.changes');
   }
 }
 
@@ -172,22 +176,23 @@ function resolveWorkspaceSectionIcon(section: GitWorkspaceViewSection): import('
   }
 }
 
-function selectorDescription(view: GitWorkbenchSubview): string {
+function selectorDescription(view: GitWorkbenchSubview, i18n: ReturnType<typeof useI18n>): string {
   switch (normalizeSubview(view)) {
     case 'branches':
-      return 'Pick a branch to inspect its status or history in the main pane.';
+      return i18n.t('git.overview.chooseBranchToLoadCompare');
     case 'history':
-      return 'Pick a commit to inspect it on the right.';
+      return i18n.t('uiCopy.git.chooseCommit');
     case 'changes':
     default:
-      return 'Use section rows to open the matching file table in the main pane.';
+      return i18n.t('git.overview.reviewWorkspaceFromSidebar');
   }
 }
 
 export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
+  const i18n = useI18n();
   const closeAfterPick = () => props.onClose?.();
   const activeSubview = () => normalizeSubview(props.subview);
-  const headDisplay = () => describeGitHead(props.repoSummary);
+  const headDisplay = () => localizedGitHeadDisplay(describeGitHead(props.repoSummary), i18n);
   const workspaceSummary = () => props.workspace?.summary ?? props.repoSummary?.workspaceSummary ?? null;
   const workspaceCount = () => summarizeWorkspaceCount(workspaceSummary());
   const workspaceBlockingLoading = () => Boolean(props.workspaceLoading && !workspaceSummary());
@@ -376,25 +381,25 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
         <div class="space-y-2">
           <Show
               when={!props.repoInfoLoading}
-              fallback={<GitStatePane loading message="Checking repository..." class="min-h-[4.5rem] py-3" />}
+              fallback={<GitStatePane loading message={i18n.t('git.notifications.checkingRepository')} class="min-h-[4.5rem] py-3" />}
           >
             <Show when={!props.repoInfoError} fallback={<div class="py-3 text-xs break-words text-error">{props.repoInfoError}</div>}>
               <Show
                 when={props.repoAvailable}
-                fallback={<div class="py-3 text-xs text-muted-foreground">{props.repoUnavailableReason || 'Current path is not inside a Git repository.'}</div>}
+                fallback={<div class="py-3 text-xs text-muted-foreground">{props.repoUnavailableReason || i18n.t('git.notifications.currentPathNotGitRepo')}</div>}
               >
                 <div class="space-y-2">
                   <div class="px-1 pb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/65">
-                    {selectorLabel(activeSubview())}
+                    {selectorLabel(activeSubview(), i18n)}
                   </div>
                   <div class="px-1 text-[11px] text-muted-foreground">
-                    {selectorDescription(activeSubview())}
+                    {selectorDescription(activeSubview(), i18n)}
                   </div>
 
                   <Show when={activeSubview() === 'changes'}>
                     <Show
                       when={!workspaceBlockingLoading()}
-                      fallback={<GitStatePane loading message="Loading workspace changes..." class="min-h-[4.5rem] py-3" />}
+                      fallback={<GitStatePane loading message={i18n.t('git.changes.loadingWorkspaceChanges')} class="min-h-[4.5rem] py-3" />}
                     >
                       <Show when={!workspaceBlockingError()} fallback={<div class="py-3 text-xs break-words text-error">{props.workspaceError}</div>}>
                         <div class="rounded-md bg-muted/[0.08] px-2.5 py-2.5">
@@ -407,14 +412,14 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                 </Show>
                               </div>
                               <div class="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                                {workspaceHealthLabel(workspaceSummary())}
+                                {localizedWorkspaceHealthLabel(workspaceSummary(), i18n)}
                               </div>
                               <Show when={headDisplay().detached}>
-                                <div class="mt-0.5 text-[10px] leading-relaxed text-warning">Detached HEAD keeps history browsing read-only for pull and push.</div>
+                                <div class="mt-0.5 text-[10px] leading-relaxed text-warning">{i18n.t('uiCopy.git.detachedReadOnly')}</div>
                               </Show>
                             </div>
                             <GitMetaPill tone={workspaceCount() > 0 ? 'warning' : 'success'}>
-                              {workspaceCount() > 0 ? `${workspaceCount()} open` : 'Clean'}
+                              {workspaceCount() > 0 ? i18n.tn('git.overview.openCount', workspaceCount()) : i18n.t('git.common.clean')}
                             </GitMetaPill>
                           </div>
 
@@ -441,9 +446,9 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                       <div class="flex min-w-0 flex-1 items-start gap-2">
                                         <Dynamic component={resolveWorkspaceSectionIcon(section)} class="mt-0.5 h-3.5 w-3.5 shrink-0" />
                                         <div class="min-w-0 flex-1">
-                                        <div class="font-medium text-current">{workspaceViewSectionLabel(section)}</div>
+                                        <div class="font-medium text-current">{localizedWorkspaceViewSectionLabel(section, i18n)}</div>
                                         <div class={cn('mt-0.5 text-[10px] leading-relaxed', gitSelectedSecondaryTextClass(active()))}>
-                                          {sectionLoading() ? 'Loading files...' : count() === 0 ? 'No files in this section.' : `${count()} file${count() === 1 ? '' : 's'} available.`}
+                                          {sectionLoading() ? i18n.t('files.loadingFiles') : count() === 0 ? i18n.t('git.changes.noFilesInSection') : i18n.tn('git.common.fileCount', count())}
                                         </div>
                                         </div>
                                       </div>
@@ -469,11 +474,11 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                   <Show when={activeSubview() === 'branches'}>
                     <Show
                       when={!props.branchesLoading}
-                      fallback={<GitStatePane loading message="Loading branches..." class="min-h-[4.5rem] py-3" />}
+                      fallback={<GitStatePane loading message={i18n.t('git.notifications.loadingBranches')} class="min-h-[4.5rem] py-3" />}
                     >
                       <Show when={!props.branchesError} fallback={<div class="py-3 text-xs break-words text-error">{props.branchesError}</div>}>
-                        <GitSection label="Local" description="Branches in this checkout." aside={String(localBranchCount())} tone="brand">
-                          <Show when={localBranchCount() > 0} fallback={<GitSubtleNote>No local branches.</GitSubtleNote>}>
+                        <GitSection label={i18n.t('uiCopy.git.local')} description={i18n.t('uiCopy.git.localBranchesDescription')} aside={String(localBranchCount())} tone="brand">
+                          <Show when={localBranchCount() > 0} fallback={<GitSubtleNote>{i18n.t('uiCopy.git.noLocalBranches')}</GitSubtleNote>}>
                             <div class="space-y-px">
                               <For each={props.branches?.local ?? []}>
                                 {(branch) => {
@@ -497,10 +502,10 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                           <span class="truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</span>
                                         </span>
                                         <Show when={branch.current}>
-                                          <span class={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', active() ? gitSelectedChipClass(true) : 'bg-primary/[0.12] text-primary')}>Current</span>
+                                          <span class={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', active() ? gitSelectedChipClass(true) : 'bg-primary/[0.12] text-primary')}>{i18n.t('uiCopy.git.current')}</span>
                                         </Show>
                                       </div>
-                                      <div class={cn('mt-0.5 min-h-4 truncate text-[10px]', gitSelectedSecondaryTextClass(active()))} title={branchStatusSummary(branch)}>{branchContextSummary(branch)}</div>
+                                      <div class={cn('mt-0.5 min-h-4 truncate text-[10px]', gitSelectedSecondaryTextClass(active()))} title={localizedBranchStatusSummary(branch, i18n)}>{localizedBranchContextSummary(branch, i18n)}</div>
                                     </button>
                                   );
                                 }}
@@ -509,8 +514,8 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                           </Show>
                         </GitSection>
 
-                        <GitSection label="Remote" description="Tracking and shared refs." aside={String(remoteBranchCount())} tone="violet">
-                          <Show when={remoteBranchCount() > 0} fallback={<GitSubtleNote>No remote branches.</GitSubtleNote>}>
+                        <GitSection label={i18n.t('uiCopy.git.remote')} description={i18n.t('uiCopy.git.remoteBranchesDescription')} aside={String(remoteBranchCount())} tone="violet">
+                          <Show when={remoteBranchCount() > 0} fallback={<GitSubtleNote>{i18n.t('uiCopy.git.noRemoteBranches')}</GitSubtleNote>}>
                             <div class="space-y-px">
                               <For each={props.branches?.remote ?? []}>
                                 {(branch) => {
@@ -531,7 +536,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                         <GitBranch class="h-3.5 w-3.5 shrink-0" />
                                         <span class="truncate text-[11.5px] font-medium text-current">{branchDisplayName(branch)}</span>
                                       </div>
-                                      <div class={cn('mt-0.5 truncate text-[10px]', gitSelectedSecondaryTextClass(active()))}>{branch.subject || branchStatusSummary(branch)}</div>
+                                      <div class={cn('mt-0.5 truncate text-[10px]', gitSelectedSecondaryTextClass(active()))}>{branch.subject || localizedBranchStatusSummary(branch, i18n)}</div>
                                     </button>
                                   );
                                 }}
@@ -546,10 +551,10 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                   <Show when={activeSubview() === 'history'}>
                     <Show
                       when={!props.listLoading}
-                      fallback={<GitStatePane loading message="Loading commits..." class="min-h-[4.5rem] py-3" />}
+                      fallback={<GitStatePane loading message={i18n.t('git.notifications.loadingCommits')} class="min-h-[4.5rem] py-3" />}
                     >
                       <Show when={!props.listError} fallback={<div class="py-3 text-xs break-words text-error">{props.listError}</div>}>
-                        <Show when={(props.commits?.length ?? 0) > 0} fallback={<GitSubtleNote>This repository has no commits yet.</GitSubtleNote>}>
+                        <Show when={(props.commits?.length ?? 0) > 0} fallback={<GitSubtleNote>{i18n.t('uiCopy.git.noCommits')}</GitSubtleNote>}>
                           <GitCommitGraph
                             commits={props.commits ?? []}
                             selectedCommitHash={props.selectedCommitHash}
@@ -565,7 +570,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                     <Show when={props.hasMore}>
                       <div class="pt-1">
                         <Button size="sm" variant="ghost" class={cn('w-full', gitToneActionButtonClass())} onClick={props.onLoadMore} loading={props.listLoadingMore} disabled={props.listLoadingMore}>
-                          Load More
+                          {i18n.t('uiCopy.git.loadMore')}
                         </Button>
                       </div>
                     </Show>

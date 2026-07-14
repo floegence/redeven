@@ -136,12 +136,13 @@ vi.mock('../services/notesApi', () => ({
 
 vi.mock('../i18n', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../i18n')>();
+  const { createTestI18nHelpers } = await import('../i18n/locales/testDictionaries');
   return {
     ...actual,
     useI18n: () => {
-      const helpersForLocale = () => actual.createI18nHelpers((notesI18nState.localeAccessor?.() ?? notesI18nState.locale) as any);
+      const helpersForLocale = () => createTestI18nHelpers((notesI18nState.localeAccessor?.() ?? notesI18nState.locale) as any);
       return {
-        ...actual.createI18nHelpers('zh-CN'),
+        ...createTestI18nHelpers('zh-CN'),
         t: (key: any, params?: any) => helpersForLocale().t(key, params),
         tn: (key: any, count: number, params?: any) => helpersForLocale().tn(key, count, params),
         rich: (key: any, params?: any) => helpersForLocale().rich(key, params),

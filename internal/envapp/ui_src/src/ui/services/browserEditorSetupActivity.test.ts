@@ -8,7 +8,7 @@ import {
   type BrowserEditorSetupLocalFailure,
 } from './browserEditorSetupActivity';
 import { type CodeRuntimeStatus } from './codeRuntimeApi';
-import { createI18nHelpers } from '../i18n/createI18n';
+import { createTestI18nHelpers as createI18nHelpers } from '../i18n/locales/testDictionaries';
 
 function makeStatus(state: CodeRuntimeStatus['operation']['state']): CodeRuntimeStatus {
   return {

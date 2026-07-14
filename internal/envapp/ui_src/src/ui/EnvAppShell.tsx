@@ -156,7 +156,6 @@ import { readUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
 import {
   ENV_DEFAULT_SURFACE_ID,
-  ENV_VIEW_MODE_LABELS,
   isEnvSurfaceId,
   normalizePersistedEnvViewMode,
   type EnvOpenSurfaceOptions,
@@ -414,11 +413,12 @@ function EnvDisplayModeSwitcher(props: {
   mode: EnvViewMode;
   onChange: (mode: EnvViewMode) => void;
 }) {
+  const i18n = useI18n();
   return (
     <div
       class="inline-flex h-8 shrink-0 items-center gap-0.5 rounded-md border border-border bg-muted/40 p-0.5"
       role="tablist"
-      aria-label="Display mode"
+      aria-label={i18n.t('uiCopy.shell.displayMode')}
     >
       {ENV_DISPLAY_MODE_SWITCHER_OPTIONS.map((option) => {
         const Icon = option.icon;
@@ -436,7 +436,7 @@ function EnvDisplayModeSwitcher(props: {
             onClick={() => props.onChange(option.id)}
           >
             <Icon class="h-3.5 w-3.5" />
-            <span>{ENV_VIEW_MODE_LABELS[option.id]}</span>
+            <span>{option.id === 'activity' ? i18n.t('uiCopy.shell.activityMode') : i18n.t('uiCopy.shell.workbenchMode')}</span>
           </button>
         );
       })}
@@ -1411,7 +1411,7 @@ export function EnvAppShell() {
 
   const acquireRemoteArtifact = async (ctx: Readonly<{ traceId?: string; signal?: AbortSignal }> = {}) => {
     const id = envId();
-    if (!id) throw new Error('Missing env context. Please reopen from the control plane.');
+    if (!id) throw new Error(i18n.t('shell.status.missingEnvContext'));
 
     // Probe runtime status to avoid grant-audit spam while the runtime is clearly offline.
     let agentStatus: string | null = null;
@@ -1469,7 +1469,7 @@ export function EnvAppShell() {
 
     const id = envId();
     if (!id) {
-      setManualError('Missing env context. Please reopen from the control plane.');
+      setManualError(i18n.t('shell.status.missingEnvContext'));
       protocol.disconnect();
       return;
     }
@@ -2270,7 +2270,7 @@ export function EnvAppShell() {
           <PluginSurfaceFrame surface={surface} onClose={closePluginSurface} />
         ) : (
           <div data-plugin-surface-empty class="flex h-full items-center justify-center text-sm text-muted-foreground">
-            No plugin surface is open.
+                      {i18n.t('uiCopy.shell.noPluginSurface')}
           </div>
         );
       },

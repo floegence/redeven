@@ -33,6 +33,7 @@ import {
   type GitStashWindowSource,
   type GitStashWindowTab,
 } from '../utils/gitWorkbench';
+import { useI18n } from '../i18n';
 import { stashReviewMatchesTarget, type GitStashReviewState } from '../utils/gitStashReview';
 import { Tooltip } from '../primitives/Tooltip';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
@@ -67,14 +68,7 @@ type StashPatchErrorState = {
   detail?: string;
 };
 
-type StashActionTooltipKey = 'apply' | 'applyRemove' | 'delete';
-
 const STASH_DIFF_DIALOG_Z_INDEX = ENV_APP_FLOATING_LAYER.floatingWindowModal;
-const STASH_ACTION_TOOLTIP_COPY: Record<StashActionTooltipKey, string> = {
-  apply: 'Review and apply this stash to the current workspace. After confirmation, the stash entry stays available.',
-  applyRemove: 'Review and apply this stash to the current workspace. After a successful confirmation, the stash entry is removed.',
-  delete: 'Review deletion of this stash entry. After confirmation, it is permanently removed without applying its changes.',
-};
 
 export interface GitStashWindowProps {
   open: boolean;
@@ -117,22 +111,7 @@ export interface GitStashWindowProps {
 
 // -- helpers --
 
-function formatRelativeTime(ms?: number): string {
-  if (!ms || !Number.isFinite(ms)) return '-';
-  const diff = Date.now() - ms;
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-  if (days > 30) return new Date(ms).toLocaleDateString();
-  if (days > 0) return `${days}d ago`;
-  if (hours > 0) return `${hours}h ago`;
-  if (minutes > 0) return `${minutes}m ago`;
-  if (seconds > 5) return `${seconds}s ago`;
-  return 'now';
-}
-
-function buildStashPatchErrorState(error: unknown): StashPatchErrorState {
+function buildStashPatchErrorState(error: unknown, i18n: ReturnType<typeof useI18n>): StashPatchErrorState {
   const raw = typeof error === 'string'
     ? error.trim()
     : error instanceof Error
@@ -141,19 +120,19 @@ function buildStashPatchErrorState(error: unknown): StashPatchErrorState {
   const lower = raw.toLowerCase();
   if (lower.includes('stash not found')) {
     return {
-      message: 'The selected stash is no longer available.',
-      detail: 'Refresh the stash list to load the latest shared stash stack.',
+      message: i18n.t('git.notifications.stashNoLongerAvailableMessage'),
+      detail: i18n.t('common.actions.refresh'),
     };
   }
   if (lower.includes('file not found in diff')) {
     return {
-      message: 'This file is no longer available inside the selected stash.',
-      detail: 'Refresh the stash list and choose another file if needed.',
+      message: i18n.t('gitStash.fileUnavailable'),
+      detail: i18n.t('common.actions.refresh'),
     };
   }
   return {
-    message: 'Could not load the selected stash patch.',
-    detail: 'Refresh the stash list and try again.',
+    message: i18n.t('gitDiff.failedPatch'),
+    detail: i18n.t('common.actions.refresh'),
   };
 }
 
@@ -210,6 +189,7 @@ interface StashListItemCardProps {
 }
 
 function StashListItemCard(props: StashListItemCardProps) {
+  const i18n = useI18n();
   return (
     <button
       type="button"
@@ -233,30 +213,31 @@ function StashListItemCard(props: StashListItemCardProps) {
           'truncate text-xs font-medium',
           props.active ? 'text-foreground' : 'text-foreground',
         )}>
-          {props.stash.message || props.stash.ref || 'Unnamed stash'}
+          {props.stash.message || props.stash.ref || i18n.t('uiCopy.git.unnamedStash')}
         </div>
         <div class={cn(
           'mt-0.5 flex items-center gap-1.5 text-[10px]',
           props.active ? 'text-muted-foreground/90' : 'text-muted-foreground/70',
         )}>
           <GitBranch class="h-3 w-3 shrink-0" aria-hidden="true" />
-          <span class="truncate">{props.stash.branchName || 'unknown'}</span>
+          <span class="truncate">{props.stash.branchName || i18n.t('uiCopy.git.unknown')}</span>
           <span aria-hidden="true">·</span>
           <Clock class="h-3 w-3 shrink-0" aria-hidden="true" />
-          <span class="shrink-0">{formatRelativeTime(props.stash.createdAtUnixMs)}</span>
+          <span class="shrink-0">{props.stash.createdAtUnixMs ? i18n.formatRelativeTime(props.stash.createdAtUnixMs) : '–'}</span>
         </div>
       </div>
       <Show when={props.stash.hasUntracked}>
         <AlertTriangle class={cn(
           'h-3.5 w-3.5 shrink-0',
           props.active ? 'text-warning' : 'text-warning/60',
-        )} aria-label="Includes untracked files" />
+        )} aria-label={i18n.t('uiCopy.git.includesUntracked')} />
       </Show>
     </button>
   );
 }
 
 function StashDetailHeader(props: { stash: GitSeededStashDetail; stashes: GitStashSummary[] }) {
+  const i18n = useI18n();
   const stats = createMemo(() => computeStashStats(props.stash.files));
   return (
     <div class="space-y-4">
@@ -266,17 +247,17 @@ function StashDetailHeader(props: { stash: GitSeededStashDetail; stashes: GitSta
             {stashDisplayIndex(props.stash.id, props.stashes)}
           </span>
           <h3 class="text-sm font-semibold text-foreground truncate">
-            {props.stash.message || 'Unnamed stash'}
+            {props.stash.message || i18n.t('uiCopy.git.unnamedStash')}
           </h3>
         </div>
         <div class="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/70">
           <span class="inline-flex items-center gap-1">
             <GitBranch class="h-3 w-3" aria-hidden="true" />
-            {props.stash.branchName || 'unknown'}
+            {props.stash.branchName || i18n.t('uiCopy.git.unknown')}
           </span>
           <span class="inline-flex items-center gap-1">
             <Clock class="h-3 w-3" aria-hidden="true" />
-            {formatRelativeTime(props.stash.createdAtUnixMs)}
+            {props.stash.createdAtUnixMs ? i18n.formatRelativeTime(props.stash.createdAtUnixMs) : '–'}
           </span>
           <Show when={props.stash.headCommit}>
             <span class="font-mono text-[10px]">{shortGitHash(props.stash.headCommit)}</span>
@@ -287,8 +268,7 @@ function StashDetailHeader(props: { stash: GitSeededStashDetail; stashes: GitSta
       <div class="flex items-center gap-4 text-xs">
         <span class="inline-flex items-center gap-1.5">
           <Files class="h-3.5 w-3.5 text-muted-foreground/60" aria-hidden="true" />
-          <span class="font-medium tabular-nums">{stats().totalFiles}</span>
-          <span class="text-muted-foreground/60">files</span>
+          <span class="font-medium tabular-nums">{i18n.tn('git.common.fileCount', stats().totalFiles)}</span>
         </span>
         <span class="inline-flex items-center gap-1.5 text-success">
           <Plus class="h-3 w-3" aria-hidden="true" />
@@ -303,7 +283,7 @@ function StashDetailHeader(props: { stash: GitSeededStashDetail; stashes: GitSta
       <Show when={props.stash.hasUntracked}>
         <div class="flex items-center gap-1.5 text-[11px] text-warning/80">
           <AlertTriangle class="h-3.5 w-3.5" aria-hidden="true" />
-          Includes untracked files
+          {i18n.t('uiCopy.git.includesUntracked')}
         </div>
       </Show>
     </div>
@@ -313,6 +293,7 @@ function StashDetailHeader(props: { stash: GitSeededStashDetail; stashes: GitSta
 // -- main component --
 
 export function GitStashWindow(props: GitStashWindowProps) {
+  const i18n = useI18n();
   const layout = useLayout();
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitSeededCommitFileSummary | null>(null);
@@ -443,7 +424,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
       <PreviewWindow
         open={props.open}
         onOpenChange={props.onOpenChange}
-        title={`Stashes · ${repoName()}`}
+        title={`${i18n.t('git.common.stashes')} · ${repoName()}`}
         persistenceKey="git-stash-window"
         defaultSize={{ width: 1040, height: 760 }}
         minSize={{ width: 720, height: 520 }}
@@ -466,13 +447,13 @@ export function GitStashWindow(props: GitStashWindowProps) {
               </div>
               <div class="flex items-center gap-2 shrink-0">
                 <Show when={props.tab === 'stashes'}>
-                  <Button size="xs" variant="ghost" class="h-6 w-6 p-0" icon={Refresh} aria-label="Refresh stashes" onClick={() => props.onRefreshStashes?.()} />
+                  <Button size="xs" variant="ghost" class="h-6 w-6 p-0" icon={Refresh} aria-label={i18n.t('uiCopy.git.refreshStashes')} onClick={() => props.onRefreshStashes?.()} />
                 </Show>
                 <SegmentedControl
                   value={props.tab}
                   onChange={handleTabChange}
                   size="sm"
-                  aria-label="Stash tabs"
+                  aria-label={i18n.t('uiCopy.git.stashTabs')}
                   class="h-7 shrink-0 [&_button]:h-6 [&_button]:px-2 [&_button]:py-0"
                   options={stashTabOptions()}
                 />
@@ -488,11 +469,11 @@ export function GitStashWindow(props: GitStashWindowProps) {
                   {/* Left: stash list */}
                   <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 overflow-auto w-full @[640px]:shrink-0 @[640px]:border-r @[640px]:w-[var(--stash-left-panel-width)]" style={{ "--stash-left-panel-width": `${leftPanelWidth()}px` } as JSX.CSSProperties}>
 
-                    <Show when={!props.stashesLoading} fallback={<GitStatePane loading message="Loading..." surface class="min-h-[12rem]" />}>
-                      <Show when={!props.stashesError} fallback={<GitStatePane tone="error" message={props.stashesError ?? 'Failed to load stashes.'} surface class="min-h-[12rem]" />}>
+                    <Show when={!props.stashesLoading} fallback={<GitStatePane loading message={i18n.t('uiCopy.git.loadingStashes')} surface class="min-h-[12rem]" />}>
+                      <Show when={!props.stashesError} fallback={<GitStatePane tone="error" message={props.stashesError ?? i18n.t('uiCopy.git.failedToLoadStashes')} surface class="min-h-[12rem]" />}>
                         <Show
                           when={props.stashes.length > 0}
-                          fallback={<GitStatePane message="No stashes yet" detail="Save a snapshot from the Save Changes tab." surface class="min-h-[12rem]" />}
+                          fallback={<GitStatePane message={i18n.t('uiCopy.git.noStashes')} detail={i18n.t('uiCopy.git.noStashesDescription')} surface class="min-h-[12rem]" />}
                         >
                           <div class="space-y-px p-1.5">
                             <For each={props.stashes}>
@@ -525,10 +506,10 @@ export function GitStashWindow(props: GitStashWindowProps) {
                         <Show when={props.stashDetail || props.stashDetailLoading || props.stashDetailError}>
                           <div class="flex min-h-0 flex-1 flex-col">
                             <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="min-h-0 flex-1 overflow-auto p-3">
-                              <Show when={!props.stashDetailError} fallback={<GitStatePane tone="error" message={props.stashDetailError ?? 'Failed to load stash detail.'} surface class="h-full" />}>
+                              <Show when={!props.stashDetailError} fallback={<GitStatePane tone="error" message={props.stashDetailError ?? i18n.t('uiCopy.git.failedToLoadStashDetail')} surface class="h-full" />}>
                                 {(() => {
                                   if (!props.stashDetail && props.stashDetailLoading) {
-                                    return <GitStatePane loading message="Loading stash detail..." surface class="h-full" />;
+                                    return <GitStatePane loading message={i18n.t('uiCopy.git.loadingStashDetail')} surface class="h-full" />;
                                   }
                                   const detail = props.stashDetail;
                                   if (!detail) return null;
@@ -545,20 +526,20 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                         <div>
                                           <div class="flex items-center gap-2 mb-1.5">
                                             <FileText class="h-3.5 w-3.5 text-muted-foreground/70" aria-hidden="true" />
-                                            <span class="text-xs font-medium text-foreground">Changed files</span>
+                                            <span class="text-xs font-medium text-foreground">{i18n.t('uiCopy.git.changedFiles')}</span>
                                             <span class="inline-flex items-center rounded-full bg-muted px-1.5 py-px text-[10px] font-medium tabular-nums text-muted-foreground">{String(detailFiles().length)}</span>
                                           </div>
-                                          <Show when={detailFiles().length > 0} fallback={<GitSubtleNote>No changed files are available for this stash.</GitSubtleNote>}>
+                                          <Show when={detailFiles().length > 0} fallback={<GitSubtleNote>{i18n.t('uiCopy.git.noStashFiles')}</GitSubtleNote>}>
                                             <div class="overflow-hidden rounded-md border">
                                               <GitVirtualTable
                                                 items={detailFiles()}
                                                 tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
                                                 header={(
                                                   <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-                                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-                                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-                                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
-                                                    <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
+                                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.path')}</th>
+                                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.status')}</th>
+                                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.changes')}</th>
+                                                    <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>{i18n.t('git.common.action')}</th>
                                                   </tr>
                                                 )}
                                                 renderRow={(file) => {
@@ -602,7 +583,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                                             openDiffDialog(file);
                                                           }}
                                                         >
-                                                          View Diff
+                                                          {i18n.t('files.menuViewDiff')}
                                                         </GitChangedFilesActionButton>
                                                       </td>
                                                     </tr>
@@ -624,14 +605,14 @@ export function GitStashWindow(props: GitStashWindowProps) {
                               <div class="shrink-0 border-t px-3 py-2">
                                 <div data-git-stash-actions class="flex flex-wrap items-center gap-2">
                                   <div class="inline-flex flex-wrap items-center gap-2">
-                                    <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.apply} disabled={actionsDisabled()}>
+                                    <StashActionButton mobile={isMobile()} tooltip={i18n.t('gitStash.applyTooltip')} disabled={actionsDisabled()}>
                                       <Button size="sm" variant="default" class="rounded-md" icon={CheckCircle} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(false)}>
-                                        {props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? 'Applying...' : 'Apply'}
+                                        {props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? i18n.t('uiCopy.git.applying') : i18n.t('uiCopy.git.apply')}
                                       </Button>
                                     </StashActionButton>
-                                    <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.applyRemove} disabled={actionsDisabled()}>
+                                    <StashActionButton mobile={isMobile()} tooltip={i18n.t('gitStash.applyRemoveTooltip')} disabled={actionsDisabled()}>
                                       <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(true)}>
-                                        {props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? 'Applying...' : 'Apply & Remove'}
+                                        {props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? i18n.t('uiCopy.git.applying') : i18n.t('uiCopy.git.applyAndRemove')}
                                       </Button>
                                     </StashActionButton>
                                   </div>
@@ -642,9 +623,9 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                     class={cn('hidden h-5 w-px shrink-0 sm:block', redevenDividerRoleClass())}
                                   />
 
-                                  <StashActionButton mobile={isMobile()} tooltip={STASH_ACTION_TOOLTIP_COPY.delete} disabled={actionsDisabled()}>
+                                  <StashActionButton mobile={isMobile()} tooltip={i18n.t('gitStash.deleteTooltip')} disabled={actionsDisabled()}>
                                     <Button size="sm" variant="ghost" class="rounded-md text-destructive hover:text-destructive" icon={Trash} disabled={actionsDisabled()} onClick={() => props.onRequestDrop?.()}>
-                                      {props.dropBusy ? 'Deleting...' : 'Delete'}
+                                      {props.dropBusy ? i18n.t('uiCopy.git.deleting') : i18n.t('common.actions.delete')}
                                     </Button>
                                   </StashActionButton>
                                 </div>
@@ -652,10 +633,10 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                 <Show when={applyReview()}>
                                   <div class="mt-3">
                                     <GitChecklistItem
-                                      title={applyReview()?.removeAfterApply ? 'Apply and remove this stash' : 'Apply this stash'}
+                                      title={applyReview()?.removeAfterApply ? i18n.t('uiCopy.git.applyAndRemoveTitle') : i18n.t('uiCopy.git.applyTitle')}
                                       detail={reviewBlockingReason()
                                         ? reviewBlockingReason()
-                                        : 'Confirm the reviewed apply plan before mutating the current worktree.'}
+                                        : i18n.t('uiCopy.git.confirmApplyDescription')}
                                       tone={reviewBlockingReason() ? 'warning' : 'info'}
                                       complete={!reviewBlockingReason()}
                                       required
@@ -665,10 +646,10 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                       </Show>
                                       <div class="flex flex-wrap gap-2">
                                         <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} onClick={() => props.onCancelReview?.()}>
-                                          Cancel
+                                          {i18n.t('common.actions.cancel')}
                                         </Button>
                                         <Button size="sm" variant="default" class="rounded-md" icon={Check} disabled={!canConfirmReview()} loading={Boolean(props.reviewLoading || props.applyBusy || props.dropBusy)} onClick={() => props.onConfirmReview?.()}>
-                                          {applyReview()?.removeAfterApply ? 'Confirm Apply & Remove' : 'Confirm Apply'}
+                                          {applyReview()?.removeAfterApply ? i18n.t('uiCopy.git.confirmApplyAndRemove') : i18n.t('uiCopy.git.confirmApply')}
                                         </Button>
                                       </div>
                                     </GitChecklistItem>
@@ -683,8 +664,8 @@ export function GitStashWindow(props: GitStashWindowProps) {
             >
               {/* Save tab */}
               <div class="flex h-full min-h-0 flex-col overflow-hidden px-2.5 py-2">
-                <Show when={!props.contextLoading} fallback={<GitStatePane loading message="Loading stash save context..." class="h-full" />}>
-                  <Show when={!props.contextError} fallback={<GitStatePane tone="error" message={props.contextError ?? 'Failed to load stash context.'} class="h-full" />}>
+                <Show when={!props.contextLoading} fallback={<GitStatePane loading message={i18n.t('uiCopy.git.loadingStashSaveContext')} class="h-full" />}>
+                  <Show when={!props.contextError} fallback={<GitStatePane tone="error" message={props.contextError ?? i18n.t('uiCopy.git.failedToLoadStashContext')} class="h-full" />}>
                     <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-2">
                       <div class="w-full max-w-lg space-y-5">
                         {/* Heading */}
@@ -692,23 +673,23 @@ export function GitStashWindow(props: GitStashWindowProps) {
                           <div class="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
                             <Save class="h-5 w-5 text-primary" aria-hidden="true" />
                           </div>
-                          <h2 class="text-sm font-semibold text-foreground">Stash current workspace</h2>
+                          <h2 class="text-sm font-semibold text-foreground">{i18n.t('uiCopy.git.stashCurrentWorkspace')}</h2>
                           <p class="mt-1 text-[11px] text-muted-foreground">
-                            <span class="font-medium text-foreground">{workspaceTotal()}</span> changed file{workspaceTotal() === 1 ? '' : 's'} in <span class="font-medium text-foreground">{repoName()}</span>
+                            <span class="font-medium text-foreground">{i18n.tn('git.common.fileCount', workspaceTotal())}</span> · <span class="font-medium text-foreground">{repoName()}</span>
                             <Show when={(props.repoSummary?.stashCount ?? 0) > 0}>
-                              <span> · {props.repoSummary?.stashCount} stash{props.repoSummary?.stashCount === 1 ? '' : 'es'} already saved</span>
+                              <span> · {props.repoSummary?.stashCount} {i18n.t('git.common.stashes')}</span>
                             </Show>
                           </p>
                         </div>
 
                         {/* Message input */}
                         <div class="space-y-2">
-                          <label class="text-[11px] font-medium text-foreground">Stash message</label>
+                          <label class="text-[11px] font-medium text-foreground">{i18n.t('uiCopy.git.stashMessage')}</label>
                           <input
                             type="text"
                             class={cn('w-full rounded-lg border px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 outline-none transition-shadow focus:ring-2 focus:ring-ring/20', redevenSurfaceRoleClass('control'))}
                             value={props.saveMessage ?? ''}
-                            placeholder="e.g. WIP: fix login validation"
+                            placeholder={i18n.t('uiCopy.git.stashMessagePlaceholder')}
                             onInput={(event) => props.onSaveMessageChange?.(event.currentTarget.value)}
                           />
                         </div>
@@ -718,30 +699,30 @@ export function GitStashWindow(props: GitStashWindowProps) {
                           <label class={cn('flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-colors hover:bg-muted/[0.10]', redevenSurfaceRoleClass('controlMuted'))}>
                             <input type="checkbox" class="mt-px h-3.5 w-3.5" checked={Boolean(props.includeUntracked)} onChange={(event) => props.onIncludeUntrackedChange?.(event.currentTarget.checked)} />
                             <FileText class="h-4 w-4 shrink-0 text-muted-foreground/60" aria-hidden="true" />
-                            <span class="text-[12px] text-foreground">Include untracked files</span>
+                            <span class="text-[12px] text-foreground">{i18n.t('uiCopy.git.includeUntracked')}</span>
                           </label>
                           <label class={cn('flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 transition-colors hover:bg-muted/[0.10]', redevenSurfaceRoleClass('controlMuted'))}>
                             <input type="checkbox" class="mt-px h-3.5 w-3.5" checked={Boolean(props.keepIndex)} onChange={(event) => props.onKeepIndexChange?.(event.currentTarget.checked)} />
                             <CheckCircle class="h-4 w-4 shrink-0 text-muted-foreground/60" aria-hidden="true" />
-                            <span class="text-[12px] text-foreground">Keep staged changes in index</span>
+                            <span class="text-[12px] text-foreground">{i18n.t('uiCopy.git.keepStaged')}</span>
                           </label>
                         </div>
 
                         <Show when={workspaceTotal() <= 0}>
-                          <GitSubtleNote>No local changes are available to stash in this worktree.</GitSubtleNote>
+                          <GitSubtleNote>{i18n.t('uiCopy.git.noLocalChangesToStash')}</GitSubtleNote>
                         </Show>
 
                         {/* Action */}
                         <div class="flex flex-col gap-2 pt-1">
                           <Button variant="default" class="w-full rounded-lg py-2.5 text-sm font-semibold" icon={Save} disabled={!canSave()} loading={Boolean(props.saveBusy)} onClick={() => props.onSave?.()}>
-                            Stash Changes
+                            {i18n.t('uiCopy.git.stashChanges')}
                           </Button>
                           <button
                             type="button"
                             class="text-center text-[11px] text-muted-foreground/70 transition-colors hover:text-foreground"
                             onClick={() => props.onTabChange('stashes')}
                           >
-                            View {props.stashes.length} saved stash{props.stashes.length === 1 ? '' : 'es'}
+                            {i18n.t('uiCopy.git.viewSavedStash')} ({props.stashes.length})
                           </button>
                         </div>
                       </div>
@@ -768,11 +749,11 @@ export function GitStashWindow(props: GitStashWindowProps) {
             repoRootPath: repoPath(),
             stashId: diffDialogStashId(),
           } : null}
-          title="Stash Diff"
-          description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected stash file diff.'}
-          emptyMessage="Select a changed stash file to inspect its diff."
-          unavailableMessage={(item) => (item.isBinary ? 'Binary file changed. Inline text diff is not available.' : undefined)}
-          errorFormatter={(error) => buildStashPatchErrorState(error)}
+          title={i18n.t('uiCopy.git.stashDiff')}
+          description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : i18n.t('uiCopy.git.reviewSelectedStashDiff')}
+          emptyMessage={i18n.t('uiCopy.git.selectChangedFile')}
+          unavailableMessage={(item) => (item.isBinary ? i18n.t('git.patchViewer.binaryDiffUnavailable') : undefined)}
+          errorFormatter={(error) => buildStashPatchErrorState(error, i18n)}
           desktopWindowZIndex={STASH_DIFF_DIALOG_Z_INDEX}
         />
       </PreviewWindow>

@@ -187,6 +187,16 @@ Rules:
   - documented examples that explicitly validate Unicode, locale resolution, or translated UI behavior.
 - When non-English text is added for i18n, keep it scoped to the relevant locale, resource, or test file and document the reason in English when the purpose is not obvious.
 
+## UI Localization Quality
+
+- Write unambiguous English source copy that names the product surface and user intent. Do not use context-free labels such as `Browser` when the UI means files, or share one translation key across unrelated operations.
+- Every shipped non-English locale must provide a complete explicit catalog. Do not assemble localized production dictionaries by spreading `en-US` or another locale and silently inheriting leaf messages.
+- Preserve true product names, fixed surface names, and documented technical acronyms. In particular, keep the display-mode names `Activity` and `Workbench` unchanged in every locale, while localizing their surrounding generic UI copy. Localize generic concepts such as runtime, provider, local environment, and control plane according to the locale terminology matrix.
+- User-visible JSX text, titles, tooltips, placeholders, empty states, notifications, and accessibility labels must use i18n keys. User content, AI output, terminal output, filenames, commands, code, and protocol fields remain literal.
+- Any identical-English exception must be a named product, a documented technical term, a code literal, or a native same-spelling term. Broad module-level allowlists are not permitted.
+- Translation changes must keep dictionary shape, placeholders, rich text, and locale-specific plural forms aligned with `en-US`; Traditional Chinese must not inherit Simplified Chinese copy.
+- Each locale requires review by a native speaker familiar with developer tools before release. Automated checks are necessary but are not a substitute for linguistic sign-off.
+
 ## OKF Maintenance Contract
 
 - `okf/` is the only maintained repository knowledge corpus.

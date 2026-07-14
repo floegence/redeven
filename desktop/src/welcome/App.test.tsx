@@ -207,7 +207,7 @@ describe('DesktopWelcomeShell', () => {
     });
     expect(shellStatus(snapshot, createDesktopI18n('zh-CN'))).toEqual({
       tone: 'disconnected',
-      label: '没有打开的 Environment 窗口',
+      label: '没有打开环境窗口',
     });
   });
 

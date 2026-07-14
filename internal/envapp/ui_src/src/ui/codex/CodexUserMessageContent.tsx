@@ -7,6 +7,7 @@ import { basenameFromPath, fileItemFromPath } from '../utils/filePreviewItem';
 import { useFilePreviewContext } from '../widgets/FilePreviewContext';
 import { compactPathLabel } from './presentation';
 import type { CodexUserInputEntry } from './types';
+import { useI18n } from '../i18n';
 
 const LOCAL_IMAGE_MAX_PREVIEW_BYTES = 20 * 1024 * 1024;
 
@@ -213,14 +214,15 @@ function LocalFileButton(props: {
 function MentionInput(props: {
   entry: CodexUserInputEntry;
 }) {
+  const i18n = useI18n();
   const path = createMemo(() => String(props.entry.path ?? '').trim());
   if (isFileReferencePath(path())) {
-    return <LocalFileButton kicker="File" entry={props.entry} class="codex-chat-user-file-card-mention" />;
+    return <LocalFileButton kicker={i18n.t('filePreview.fileFallback')} entry={props.entry} class="codex-chat-user-file-card-mention" />;
   }
 
   const label = createMemo(() => {
     const name = String(props.entry.name ?? '').trim();
-    return name || path() || 'Mention';
+    return name || path() || i18n.t('uiCopy.chat.mention');
   });
   const subtitle = createMemo(() => path());
 
@@ -228,7 +230,7 @@ function MentionInput(props: {
 
   return (
     <div data-codex-user-input-type="mention" class="codex-chat-user-pill codex-chat-user-pill-mention" title={subtitle()}>
-      <span class="codex-chat-user-pill-kicker">Mention</span>
+      <span class="codex-chat-user-pill-kicker">{i18n.t('uiCopy.chat.mention')}</span>
       <span class="codex-chat-user-pill-title">{label()}</span>
       <Show when={subtitle() && subtitle() !== label()}>
         <span class="codex-chat-user-pill-detail">{subtitle()}</span>
@@ -240,6 +242,7 @@ function MentionInput(props: {
 function UnknownInput(props: {
   entry: CodexUserInputEntry;
 }) {
+  const i18n = useI18n();
   const summary = createMemo(() => {
     const text = inputText(props.entry);
     if (text) return text;
@@ -254,7 +257,7 @@ function UnknownInput(props: {
 
   return (
     <div data-codex-user-input-type={inputType(props.entry) || 'unknown'} class="codex-chat-user-pill codex-chat-user-pill-unknown">
-      <span class="codex-chat-user-pill-kicker">{inputType(props.entry) || 'Input'}</span>
+      <span class="codex-chat-user-pill-kicker">{inputType(props.entry) || i18n.t('uiCopy.chat.input')}</span>
       <span class="codex-chat-user-pill-title">{summary()}</span>
     </div>
   );

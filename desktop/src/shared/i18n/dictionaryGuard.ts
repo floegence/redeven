@@ -102,7 +102,7 @@ export function validateDictionaryShape(
 
   for (const sourceRow of sourceRows) {
     const targetValue = targetRows.get(sourceRow.path);
-    if (!targetValue) {
+    if (targetValue === undefined) {
       issues.push({
         locale,
         path: sourceRow.path,
@@ -143,7 +143,7 @@ export function validateDictionaryPlaceholders(
 
   for (const sourceRow of sourceRows) {
     const targetValue = targetRows.get(sourceRow.path);
-    if (!targetValue) {
+    if (!targetRows.has(sourceRow.path) || targetValue === undefined) {
       continue;
     }
 
@@ -175,7 +175,7 @@ export function validateDictionaryProtectedTerms(
 
   for (const sourceRow of sourceRows) {
     const targetValue = targetRows.get(sourceRow.path);
-    if (!targetValue) {
+    if (!targetRows.has(sourceRow.path) || targetValue === undefined) {
       continue;
     }
 

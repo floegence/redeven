@@ -15,12 +15,8 @@ import type {
 } from '../protocol/redeven_v1';
 import {
   describeGitHead,
-  detachedHeadCheckoutActionLabel,
-  detachedHeadReattachSummary,
-  detachedHeadViewingSummary,
   reattachBranchFromRepoSummary,
   repoDisplayName,
-  syncStatusLabel,
   type GitBranchDetailPresentationState,
   type GitStashWindowRequest,
   type GitBranchSubview,
@@ -29,6 +25,13 @@ import {
   type GitWorkspaceViewPageState,
   type GitWorkspaceViewSection,
 } from '../utils/gitWorkbench';
+import {
+  localizedDetachedHeadCheckoutActionLabel,
+  localizedDetachedHeadReattachSummary,
+  localizedDetachedHeadViewingSummary,
+  localizedGitHeadDisplay,
+  localizedSyncStatusLabel,
+} from '../utils/localizedGitWorkbench';
 import { GitChangesPanel } from './GitChangesPanel';
 import { GitBranchesPanel } from './GitBranchesPanel';
 import { GitHistoryBrowser } from './GitHistoryBrowser';
@@ -41,6 +44,7 @@ import { buildGitDirectoryShortcutRequest, type GitAskFlowerRequest, type GitDir
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { Tooltip } from '../primitives/Tooltip';
 import { UIFirstKeepAlivePanel } from '../primitives/UIFirstKeepAlivePanel';
+import { useI18n } from '../i18n';
 
 export interface GitWorkbenchProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -154,12 +158,13 @@ function normalizeSubview(view: GitWorkbenchSubview): GitWorkbenchSubview {
 const GIT_WORKBENCH_SUBVIEW_ID_PREFIX = 'git-workbench-subview';
 
 export function GitWorkbench(props: GitWorkbenchProps) {
+  const i18n = useI18n();
   const repoLabel = () => repoDisplayName(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath);
   const repoPath = () => String(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || props.currentPath || '/').trim() || '/';
   const repoDirRequest = (): GitDirectoryShortcutRequest | null =>
     buildGitDirectoryShortcutRequest({ rootPath: repoPath() });
   const headRef = () => String(props.repoSummary?.headRef || props.repoInfo?.headRef || '').trim();
-  const headDisplay = () => describeGitHead(props.repoSummary, props.repoInfo);
+  const headDisplay = () => localizedGitHeadDisplay(describeGitHead(props.repoSummary, props.repoInfo), i18n);
   const reattachBranch = () => reattachBranchFromRepoSummary(props.repoSummary);
   const activeSubview = () => normalizeSubview(props.subview);
   const loadingBusy = () => {
@@ -180,8 +185,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
     || !(props.repoInfo?.available ?? Boolean(props.repoSummary?.repoRootPath))
     || !(props.repoInfo?.repoRootPath || props.repoSummary?.repoRootPath)
   );
-  const detachedHeadSummary = () => detachedHeadViewingSummary(props.repoSummary?.headCommit || props.repoInfo?.headCommit);
-  const reattachSummary = () => detachedHeadReattachSummary(reattachBranch(), { compact: true });
+  const detachedHeadSummary = () => localizedDetachedHeadViewingSummary(props.repoSummary?.headCommit || props.repoInfo?.headCommit, i18n);
+  const reattachSummary = () => localizedDetachedHeadReattachSummary(reattachBranch(), i18n, { compact: true });
   const mergeReviewBranch = () => props.mergeReviewBranch ?? props.selectedBranch ?? null;
   const deleteReviewBranch = () => props.deleteReviewBranch ?? props.selectedBranch ?? null;
   const deleteReviewUsesWorktree = () => {
@@ -211,7 +216,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                   </>
                 </Show>
                 <Show when={loadingBusy()}>
-                  <GitMetaPill tone="neutral">Refreshing…</GitMetaPill>
+                  <GitMetaPill tone="neutral">{i18n.t('files.refreshing')}</GitMetaPill>
                 </Show>
               </>
             }
@@ -221,7 +226,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 {repoLabel()}
               </GitPrimaryTitle>
               <Show when={props.repoSummary && (props.repoSummary.aheadCount || props.repoSummary.behindCount)}>
-                <GitMetaPill tone="info">{syncStatusLabel(props.repoSummary?.aheadCount, props.repoSummary?.behindCount)}</GitMetaPill>
+                <GitMetaPill tone="info">{localizedSyncStatusLabel(props.repoSummary?.aheadCount, props.repoSummary?.behindCount, i18n)}</GitMetaPill>
               </Show>
             </div>
             <div class="flex items-center gap-1.5 min-w-0">
@@ -275,7 +280,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                   if (branch) props.onCheckoutBranch?.(branch);
                 }}
               >
-                {detachedHeadCheckoutActionLabel(reattachBranch(), props.checkoutBusy)}
+                {localizedDetachedHeadCheckoutActionLabel(reattachBranch(), Boolean(props.checkoutBusy), i18n)}
               </Button>
             </Show>
             <Show when={props.onOpenStash}>
@@ -305,7 +310,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 disabled={repoActionsDisabled() || props.fetchBusy}
                 onClick={props.onFetch}
               >
-                {props.fetchBusy ? 'Fetching...' : 'Fetch'}
+                {props.fetchBusy ? i18n.t('uiCopy.git.fetching') : i18n.t('uiCopy.git.fetch')}
               </Button>
             </Show>
             <Show when={props.onPull}>
@@ -316,7 +321,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 disabled={repoActionsDisabled() || detachedHead() || props.pullBusy}
                 onClick={props.onPull}
               >
-                {props.pullBusy ? 'Pulling...' : 'Pull'}
+                {props.pullBusy ? i18n.t('uiCopy.git.pulling') : i18n.t('uiCopy.git.pull')}
               </Button>
             </Show>
             <Show when={props.onPush}>
@@ -327,7 +332,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 disabled={repoActionsDisabled() || detachedHead() || props.pushBusy}
                 onClick={props.onPush}
               >
-                {props.pushBusy ? 'Pushing...' : 'Push'}
+                {props.pushBusy ? i18n.t('uiCopy.git.pushing') : i18n.t('uiCopy.git.push')}
               </Button>
             </Show>
             <Show when={props.showMobileSidebarButton && props.onToggleSidebar}>
@@ -336,15 +341,15 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                 variant="ghost"
                 icon={History}
                 class={cn('shrink-0', gitToneHeaderActionButtonClass())}
-                aria-label="Toggle browser sidebar"
+                aria-label={i18n.t('files.sidebarToggle')}
                 onClick={props.onToggleSidebar}
               >
-                Sidebar
+                {i18n.t('files.sidebar')}
               </Button>
             </Show>
             <Show when={props.onRefresh}>
               <Button size="xs" variant="ghost" class={cn('shrink-0', gitToneHeaderActionButtonClass())} icon={Refresh} onClick={props.onRefresh}>
-                Refresh
+                {i18n.t('common.actions.refresh')}
               </Button>
             </Show>
           </div>

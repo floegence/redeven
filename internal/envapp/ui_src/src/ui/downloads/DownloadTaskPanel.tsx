@@ -12,6 +12,7 @@ import {
 } from '@floegence/floe-webapp-core/icons';
 
 import type { DownloadManager, DownloadTask, DownloadTaskStatus } from './types';
+import { useI18n, type I18nHelpers } from '../i18n';
 
 const ACTIVE_STATUSES = new Set<DownloadTaskStatus>([
   'queued',
@@ -45,36 +46,38 @@ function taskName(task: DownloadTask): string {
     || 'download';
 }
 
-function statusLabel(task: DownloadTask): string {
+function statusLabel(task: DownloadTask, i18n: I18nHelpers): string {
   switch (task.status) {
     case 'queued':
-      return 'Queued';
+      return i18n.t('uiCopy.downloads.queued');
     case 'choosing_destination':
-      return 'Choosing destination';
+      return i18n.t('uiCopy.downloads.choosingDestination');
     case 'streaming':
       return typeof task.progressRatio === 'number'
         ? `${Math.round(task.progressRatio * 100)}%`
-        : 'Downloading';
+        : i18n.t('uiCopy.downloads.downloading');
     case 'finalizing':
-      return 'Finishing';
+      return i18n.t('uiCopy.downloads.finishing');
     case 'completed':
-      return task.platform === 'web_blob' ? 'Handed to browser' : 'Completed';
+      return task.platform === 'web_blob'
+        ? i18n.t('uiCopy.downloads.handedToBrowser')
+        : i18n.t('uiCopy.downloads.completed');
     case 'failed':
-      return 'Failed';
+      return i18n.t('common.status.failed');
     case 'canceled':
-      return 'Canceled';
+      return i18n.t('uiCopy.downloads.canceled');
   }
 }
 
-function taskMeta(task: DownloadTask): string {
+function taskMeta(task: DownloadTask, i18n: I18nHelpers): string {
   if (task.status === 'failed') {
-    return task.error?.detail || task.error?.title || 'Download failed.';
+    return task.error?.detail || task.error?.title || i18n.t('uiCopy.downloads.failedMessage');
   }
   if (task.destination?.detail) {
     return task.destination.detail;
   }
   const path = compact(task.command.source.path);
-  return path || task.destination?.label || 'Preparing destination';
+  return path || task.destination?.label || i18n.t('uiCopy.downloads.preparingDestination');
 }
 
 function progressWidth(task: DownloadTask): string {
@@ -114,21 +117,22 @@ function DownloadTaskAction(props: {
 }
 
 export function DownloadTaskPanel(props: { manager: DownloadManager }) {
+  const i18n = useI18n();
   const tasks = () => props.manager.tasks();
   const hasFinished = createMemo(() => tasks().some((task) => !ACTIVE_STATUSES.has(task.status)));
 
   return (
     <section
       role="dialog"
-      aria-label="Downloads"
+      aria-label={i18n.t('uiCopy.downloads.title')}
       class="w-[min(25rem,calc(100vw-1rem))] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-xl"
     >
       <div class="flex items-center justify-between gap-3 border-b border-border/70 px-3 py-2.5">
         <div class="min-w-0">
-          <h2 class="text-sm font-semibold leading-5">Downloads</h2>
+          <h2 class="text-sm font-semibold leading-5">{i18n.t('uiCopy.downloads.title')}</h2>
           <p class="text-[11px] text-muted-foreground">
-            <Show when={props.manager.activeCount() > 0} fallback="No active downloads">
-              {props.manager.activeCount()} active
+            <Show when={props.manager.activeCount() > 0} fallback={i18n.t('uiCopy.downloads.noActive')}>
+              {i18n.tn('uiCopy.downloads.activeCount', props.manager.activeCount())}
             </Show>
           </p>
         </div>
@@ -138,7 +142,7 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
             class="cursor-pointer rounded-md border border-transparent px-2.5 py-1 text-[11px] font-medium text-muted-foreground/70 transition-all duration-100 hover:border-border/70 hover:bg-accent hover:text-foreground active:scale-[0.97]"
             onClick={() => props.manager.clearFinished()}
           >
-            Clear finished
+            {i18n.t('uiCopy.downloads.clearFinished')}
           </button>
         </Show>
       </div>
@@ -150,9 +154,9 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
             <div class="flex size-10 items-center justify-center rounded-full bg-muted">
               <Download class="size-5 text-muted-foreground/60" />
             </div>
-            <div class="text-sm font-semibold">No downloads yet</div>
+            <div class="text-sm font-semibold">{i18n.t('uiCopy.downloads.emptyTitle')}</div>
             <div class="max-w-[18rem] text-xs leading-5 text-muted-foreground">
-              Downloads from Files and Preview will appear here.
+              {i18n.t('uiCopy.downloads.emptyDescription')}
             </div>
           </div>
         )}
@@ -173,7 +177,7 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                     <Show when={task.status === 'completed' && task.destination?.canReveal}>
                       <DownloadTaskAction
                         icon={FolderOpen}
-                        label="Reveal"
+                        label={i18n.t('uiCopy.downloads.reveal')}
                         onClick={() => {
                           void props.manager.reveal(task.id);
                         }}
@@ -182,7 +186,7 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                     <Show when={task.status === 'completed' && task.destination?.canOpen}>
                       <DownloadTaskAction
                         icon={ExternalLink}
-                        label="Open"
+                        label={i18n.t('common.actions.open')}
                         onClick={() => {
                           void props.manager.open(task.id);
                         }}
@@ -191,7 +195,7 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                     <Show when={task.cancelable && ACTIVE_STATUSES.has(task.status)}>
                       <DownloadTaskAction
                         icon={X}
-                        label="Cancel"
+                        label={i18n.t('common.actions.cancel')}
                         tone="danger"
                         onClick={() => props.manager.cancel(task.id)}
                       />
@@ -199,7 +203,7 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                     <Show when={task.status === 'failed' || task.status === 'canceled'}>
                       <DownloadTaskAction
                         icon={Refresh}
-                        label="Retry"
+                        label={i18n.t('common.actions.retry')}
                         onClick={() => props.manager.retry(task.id)}
                       />
                     </Show>
@@ -227,13 +231,13 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
                       <Show when={task.status === 'canceled'}>
                         <XCircle class="size-3" />
                       </Show>
-                      {statusLabel(task)}
+                      {statusLabel(task, i18n)}
                     </div>
                   </div>
                 </div>
 
-                <div class="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground/80" title={taskMeta(task)}>
-                  {taskMeta(task)}
+                <div class="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground/80" title={taskMeta(task, i18n)}>
+                  {taskMeta(task, i18n)}
                 </div>
 
                 <Show when={task.status === 'streaming' || task.status === 'finalizing'}>
@@ -272,7 +276,7 @@ export function DownloadTaskPanel(props: { manager: DownloadManager }) {
       <Show when={props.manager.activeCount() === 0 && tasks().some((task) => task.status === 'completed')}>
         <div class="flex items-center gap-2 border-t border-border/70 px-3 py-2.5 text-[11px] text-muted-foreground">
           <CheckCircle class="size-3.5 text-success" />
-          <span>All downloads are finished.</span>
+          <span>{i18n.t('uiCopy.downloads.allFinished')}</span>
         </div>
       </Show>
     </section>

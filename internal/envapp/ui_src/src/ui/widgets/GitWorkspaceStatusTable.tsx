@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js';
-import type { GitWorkspaceChange, GitWorkspaceSection } from '../protocol/redeven_v1';
-import { changeSecondaryPath, gitDiffEntryIdentity, workspaceSectionLabel } from '../utils/gitWorkbench';
+import type { GitWorkspaceChange } from '../protocol/redeven_v1';
+import { changeSecondaryPath, gitDiffEntryIdentity } from '../utils/gitWorkbench';
 import { gitChangePathClass } from './GitChrome';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
@@ -19,21 +19,21 @@ import {
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
 import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from './gitWorkbenchScrollRegion';
+import { useI18n } from '../i18n';
 
-function itemPath(item: GitWorkspaceChange): string {
-  return String(item.displayPath || item.path || item.newPath || item.oldPath || '').trim() || '(unknown path)';
+function itemPath(item: GitWorkspaceChange, i18n: ReturnType<typeof useI18n>): string {
+  return String(item.displayPath || item.path || item.newPath || item.oldPath || '').trim() || i18n.t('filePreview.unknownPath');
 }
 
-function itemSectionLabel(item: GitWorkspaceChange): string {
+function itemSectionLabel(item: GitWorkspaceChange, i18n: ReturnType<typeof useI18n>): string {
   const section = String(item.section ?? '').trim();
   switch (section) {
-    case 'staged':
-    case 'unstaged':
-    case 'untracked':
-    case 'conflicted':
-      return workspaceSectionLabel(section as GitWorkspaceSection);
+    case 'staged': return i18n.t('git.common.staged');
+    case 'unstaged': return i18n.t('git.common.unstaged');
+    case 'untracked': return i18n.t('git.common.untracked');
+    case 'conflicted': return i18n.t('git.common.conflicted');
     default:
-      return section || 'Unknown';
+      return section || i18n.t('uiCopy.git.unknown');
   }
 }
 
@@ -45,13 +45,14 @@ export interface GitWorkspaceStatusTableProps {
 }
 
 export function GitWorkspaceStatusTable(props: GitWorkspaceStatusTableProps) {
+  const i18n = useI18n();
   return (
     <GitTableFrame class="flex min-h-0 flex-1 flex-col">
       <Show
         when={props.items.length > 0}
         fallback={(
           <div class="px-4 py-8">
-            <GitSubtleNote>{props.emptyMessage ?? 'No files are available in this section.'}</GitSubtleNote>
+            <GitSubtleNote>{props.emptyMessage ?? i18n.t('git.changes.noFilesInSection')}</GitSubtleNote>
           </div>
         )}
       >
@@ -59,11 +60,11 @@ export function GitWorkspaceStatusTable(props: GitWorkspaceStatusTableProps) {
           <table class={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[52rem] md:min-w-0`}>
             <thead class={GIT_CHANGED_FILES_HEAD_CLASS}>
               <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Section</th>
-                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
-                <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
+                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.path')}</th>
+                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('uiCopy.git.section')}</th>
+                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.status')}</th>
+                <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.changes')}</th>
+                <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>{i18n.t('git.common.action')}</th>
               </tr>
             </thead>
             <tbody>
@@ -80,22 +81,22 @@ export function GitWorkspaceStatusTable(props: GitWorkspaceStatusTableProps) {
                             title={changeSecondaryPath(item)}
                             onClick={() => props.onOpenDiff?.(item)}
                           >
-                            {itemPath(item)}
+                            {itemPath(item, i18n)}
                           </button>
-                          <Show when={changeSecondaryPath(item) !== itemPath(item)}>
+                          <Show when={changeSecondaryPath(item) !== itemPath(item, i18n)}>
                             <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
                           </Show>
                         </div>
                       </td>
                       <td class={GIT_CHANGED_FILES_CELL_CLASS}>
-                        <div class="text-[11px] text-muted-foreground">{itemSectionLabel(item)}</div>
+                        <div class="text-[11px] text-muted-foreground">{itemSectionLabel(item, i18n)}</div>
                       </td>
                       <td class={GIT_CHANGED_FILES_CELL_CLASS}>
                         <GitChangeStatusPill change={item.changeType} />
                       </td>
                       <td class={GIT_CHANGED_FILES_CELL_CLASS}><GitChangeMetrics additions={item.additions} deletions={item.deletions} /></td>
                       <td class={gitChangedFilesStickyCellClass(active())}>
-                        <GitChangedFilesActionButton onClick={() => props.onOpenDiff?.(item)}>View Diff</GitChangedFilesActionButton>
+                        <GitChangedFilesActionButton onClick={() => props.onOpenDiff?.(item)}>{i18n.t('files.menuViewDiff')}</GitChangedFilesActionButton>
                       </td>
                     </tr>
                   );

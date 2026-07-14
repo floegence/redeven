@@ -4,6 +4,7 @@ import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { fileItemFromPath } from '../utils/filePreviewItem';
 import { FileMarkdown } from '../file-markdown/FileMarkdown';
 import { useFilePreviewContext } from './FilePreviewContext';
+import { useI18n } from '../i18n';
 
 const CodeEditor = lazy(async () => {
   const module = await import('@floegence/floe-webapp-core/editor');
@@ -42,6 +43,7 @@ export interface MarkdownPreviewPaneProps {
 }
 
 export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
+  const i18n = useI18n();
   const filePreview = useFilePreviewContext();
   const [monacoFailed, setMonacoFailed] = createSignal(false);
   const editorValue = createMemo(() => (props.editing ? props.draftText ?? props.text : props.text));
@@ -93,9 +95,9 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
   const renderEditFailureFallback = () => (
     <div class="flex h-full items-center justify-center p-4">
       <div class="max-w-md rounded-md border border-warning/20 bg-warning/10 px-4 py-3 text-sm">
-        <div class="font-medium text-foreground">Editor unavailable</div>
+        <div class="font-medium text-foreground">{i18n.t('uiCopy.editor.unavailable')}</div>
         <div class="mt-1 text-xs text-muted-foreground">
-          The Monaco editor could not start for this file. Discard this edit session or try again later.
+          {i18n.t('uiCopy.editor.unavailableDescription')}
         </div>
       </div>
     </div>
@@ -123,7 +125,7 @@ export function MarkdownPreviewPane(props: MarkdownPreviewPaneProps) {
             >
               <Suspense fallback={
                 <div class="flex h-full items-center justify-center text-sm text-muted-foreground">
-                  Loading editor...
+                  {i18n.t('uiCopy.editor.loading')}
                 </div>
               }>
                 <Show when={!monacoFailed()} fallback={renderEditFailureFallback()}>

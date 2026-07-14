@@ -175,7 +175,7 @@ describe('GitStashWindow', () => {
       await flush();
 
       expect(host.textContent).toContain('WIP linked worktree');
-      expect(host.textContent).toContain('Changed files');
+      expect(host.textContent).toContain('Changed Files');
       expect(host.textContent).toContain('Apply');
       expect(host.textContent).toContain('Apply & Remove');
       expect(host.textContent).toContain('Delete');
@@ -193,9 +193,9 @@ describe('GitStashWindow', () => {
       const applyButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Apply') as HTMLButtonElement | undefined;
       const applyRemoveButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Apply & Remove') as HTMLButtonElement | undefined;
       const deleteButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Delete') as HTMLButtonElement | undefined;
-      expect((await revealTooltipForButton(applyButton))?.textContent).toContain('Review and apply this stash to the current workspace. After confirmation, the stash entry stays available.');
-      expect((await revealTooltipForButton(applyRemoveButton))?.textContent).toContain('Review and apply this stash to the current workspace. After a successful confirmation, the stash entry is removed.');
-      expect((await revealTooltipForButton(deleteButton))?.textContent).toContain('Review deletion of this stash entry. After confirmation, it is permanently removed without applying its changes.');
+      expect((await revealTooltipForButton(applyButton))?.textContent).toContain('Review and apply this stash. The stash remains available after confirmation.');
+      expect((await revealTooltipForButton(applyRemoveButton))?.textContent).toContain('Review and apply this stash, then remove it after confirmation.');
+      expect((await revealTooltipForButton(deleteButton))?.textContent).toContain('Review permanent deletion without applying the stash changes.');
 
       const selectedFileButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'src/app.ts') as HTMLButtonElement | undefined;
       expect(selectedFileButton).toBeTruthy();

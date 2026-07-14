@@ -3,16 +3,16 @@ import {
   type RedevenLocale,
 } from './localeMeta';
 import { isPluralMessage, type PluralMessage, type TranslationParams, type TranslationTree } from './messageTypes';
-import { deDE } from './locales/de-DE';
 import { enUS, type DesktopPluralTranslationKey, type DesktopTranslationKey, type DesktopTranslationShape } from './locales/en-US';
-import { esES } from './locales/es-ES';
-import { frFR } from './locales/fr-FR';
-import { jaJP } from './locales/ja-JP';
-import { koKR } from './locales/ko-KR';
-import { ptBR } from './locales/pt-BR';
-import { ruRU } from './locales/ru-RU';
-import { zhCN } from './locales/zh-CN';
-import { zhTW } from './locales/zh-TW';
+import deDECatalog from './locales/catalogs/de-DE.json';
+import esESCatalog from './locales/catalogs/es-ES.json';
+import frFRCatalog from './locales/catalogs/fr-FR.json';
+import jaJPCatalog from './locales/catalogs/ja-JP.json';
+import koKRCatalog from './locales/catalogs/ko-KR.json';
+import ptBRCatalog from './locales/catalogs/pt-BR.json';
+import ruRUCatalog from './locales/catalogs/ru-RU.json';
+import zhCNCatalog from './locales/catalogs/zh-CN.json';
+import zhTWCatalog from './locales/catalogs/zh-TW.json';
 
 export type {
   DesktopPluralTranslationKey,
@@ -22,6 +22,20 @@ export type {
 };
 
 export type DesktopDictionaryMap = Readonly<Record<RedevenLocale, DesktopTranslationShape>>;
+
+function desktopCatalog(value: unknown): DesktopTranslationShape {
+  return value as DesktopTranslationShape;
+}
+
+const zhCN = desktopCatalog(zhCNCatalog);
+const zhTW = desktopCatalog(zhTWCatalog);
+const jaJP = desktopCatalog(jaJPCatalog);
+const koKR = desktopCatalog(koKRCatalog);
+const deDE = desktopCatalog(deDECatalog);
+const frFR = desktopCatalog(frFRCatalog);
+const esES = desktopCatalog(esESCatalog);
+const ptBR = desktopCatalog(ptBRCatalog);
+const ruRU = desktopCatalog(ruRUCatalog);
 
 export type DesktopI18n = Readonly<{
   locale: RedevenLocale;

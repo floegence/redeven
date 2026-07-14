@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { SUPPORTED_LOCALES } from './localeMeta';
-import { dictionaries, enUS } from './locales';
+import { dictionaries, enUS } from './locales/testDictionaries';
 import { PROTECTED_TERMS } from './protectedTerms';
 
 type StringLeaves = Readonly<Record<string, string>>;

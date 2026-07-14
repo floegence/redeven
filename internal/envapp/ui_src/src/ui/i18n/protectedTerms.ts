@@ -3,20 +3,18 @@ import type { EnvAppTranslationShape } from './locales';
 
 export const PROTECTED_TERMS = [
   'Redeven',
+  'Redeven Desktop',
   'Flower',
   'Codex',
-  'Desktop',
-  'Local Environment',
   'Env App',
-  'Workbench',
   'Codespaces',
   'Browser Editor',
-  'Runtime',
-  'Control Plane',
   'E2EE',
   'Flowersec',
   'Local UI',
-  'Provider',
+  'ReDevPlugin',
+  'Activity',
+  'Workbench',
 ] as const;
 
 export type ProtectedTerm = typeof PROTECTED_TERMS[number];

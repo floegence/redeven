@@ -5,6 +5,7 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { FilePreviewErrorState } from './FilePreviewErrorState';
+import { useI18n } from '../i18n';
 
 const DOCX_RENDER_CLASS_NAME = 'docx-preview-container';
 const DOCX_PREVIEW_INSET = 12;
@@ -80,6 +81,7 @@ export interface DocxPreviewPaneProps {
 }
 
 export function DocxPreviewPane(props: DocxPreviewPaneProps) {
+  const i18n = useI18n();
   const [renderError, setRenderError] = createSignal<string | null>(null);
   const [viewportWidth, setViewportWidth] = createSignal(0);
   const [layout, setLayout] = createSignal<DocxLayout | null>(null);
@@ -277,7 +279,7 @@ export function DocxPreviewPane(props: DocxPreviewPaneProps) {
                 variant="outline"
                 class="h-7 min-w-7 px-0 font-mono"
                 disabled={!canZoomOut()}
-                aria-label="Zoom out docx preview"
+                aria-label={i18n.t('uiCopy.preview.zoomOutDocx')}
                 onClick={handleZoomOut}
               >
                 -
@@ -292,7 +294,7 @@ export function DocxPreviewPane(props: DocxPreviewPaneProps) {
                 variant="outline"
                 class="h-7 min-w-7 px-0 font-mono"
                 disabled={!canZoomIn()}
-                aria-label="Zoom in docx preview"
+                aria-label={i18n.t('uiCopy.preview.zoomInDocx')}
                 onClick={handleZoomIn}
               >
                 +
@@ -303,10 +305,10 @@ export function DocxPreviewPane(props: DocxPreviewPaneProps) {
                 variant="outline"
                 class="h-7 px-2 text-[11px]"
                 disabled={!layout() || zoomMode() === 'fit-width'}
-                aria-label="Fit docx preview to width"
+                aria-label={i18n.t('uiCopy.preview.fitDocxToWidth')}
                 onClick={handleFitWidth}
               >
-                Fit
+                {i18n.t('uiCopy.preview.fit')}
               </Button>
             </div>
           </div>

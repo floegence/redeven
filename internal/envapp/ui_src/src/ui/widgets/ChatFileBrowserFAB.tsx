@@ -8,6 +8,7 @@ import {
   resolveFileBrowserFABContainerRef,
   type FileBrowserFABContainerRef,
 } from './createFileBrowserFABModel';
+import { useI18n } from '../i18n';
 
 export interface ChatFileBrowserFABProps {
   workingDir: string;
@@ -18,6 +19,7 @@ export interface ChatFileBrowserFABProps {
 }
 
 export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
+  const i18n = useI18n();
   const fab = createFileBrowserFABModel({
     workingDir: () => props.workingDir,
     homePath: () => props.homePath,
@@ -34,7 +36,7 @@ export function ChatFileBrowserFAB(props: ChatFileBrowserFABProps) {
         >
           <button
             class="redeven-fab-file-browser-btn"
-            title="Browse files"
+            title={i18n.t('uiCopy.chat.browseFiles')}
             onPointerDown={fab.onPointerDown}
             onPointerMove={fab.onPointerMove}
             onPointerUp={fab.onPointerUp}

@@ -104,7 +104,7 @@ describe('GitWorkspace interactions', () => {
       expect(scrollRegion).toBeTruthy();
       expect(scrollRegion?.querySelector('[role="tablist"][aria-label="Git views"]')).toBeNull();
 
-      const historyButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim().startsWith('Graph'));
+      const historyButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim().startsWith('Commit Graph'));
       expect(historyButton).toBeTruthy();
       historyButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
@@ -149,7 +149,7 @@ describe('GitWorkspace interactions', () => {
       expect(host.querySelectorAll('[role="tablist"][aria-label="Git views"]').length).toBe(1);
       expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Changes'))).toBe(true);
       expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Branches'))).toBe(true);
-      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Graph'))).toBe(true);
+      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Commit Graph'))).toBe(true);
       expect(host.querySelector('#git-workbench-subview-tab-branches')?.getAttribute('aria-selected')).toBe('true');
       expect(host.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toContain('Files');
     } finally {
@@ -377,7 +377,7 @@ describe('GitWorkspace interactions', () => {
       expect(host.querySelectorAll('[role="tablist"][aria-label="Git views"]').length).toBe(1);
       expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Changes'))).toBe(true);
       expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Branches'))).toBe(true);
-      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Graph'))).toBe(true);
+      expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Commit Graph'))).toBe(true);
       expect(host.textContent).toContain('Preparing the active Git view...');
       expect(host.textContent).toContain('Loading branches...');
       expect(host.querySelector('.git-loading-indicator')).toBeTruthy();

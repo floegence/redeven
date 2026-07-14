@@ -101,8 +101,8 @@ describe('desktopQuitImpact', () => {
 
     expect(model).toMatchObject({
       title: '退出 Redeven Desktop？',
-      message: '这将关闭 1 个 environment 窗口和取消 2 个后台任务。',
-      detail: '1 个 runtime process 会继续运行。',
+      message: '这将关闭 1 个环境窗口和取消 2 个后台任务。',
+      detail: '1 个运行时进程会继续运行。',
       confirm_label: '退出',
       cancel_label: '取消',
       platform_title: '退出 Redeven Desktop？',

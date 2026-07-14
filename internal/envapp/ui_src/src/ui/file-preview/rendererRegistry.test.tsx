@@ -3,7 +3,7 @@
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createI18nHelpers } from '../i18n';
+import { createTestI18nHelpers as createI18nHelpers } from '../i18n/locales/testDictionaries';
 import {
   renderRedevenFilePreviewBody,
   resolveRedevenFilePreviewRenderer,

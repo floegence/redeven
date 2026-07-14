@@ -4,6 +4,7 @@ import { X } from '@floegence/floe-webapp-core/icons';
 
 import { prepareLocalApiRequestInit } from '../services/localApi';
 import { trustedLauncherOriginFromSandboxLocation, type OriginLocationLike } from '../services/sandboxOrigins';
+import { useI18n } from '../i18n';
 import type { PluginOpenSurfaceResult } from './pluginTypes';
 
 export type PluginSurfaceFrameProps = {
@@ -12,12 +13,14 @@ export type PluginSurfaceFrameProps = {
 };
 
 type SurfaceLoadState = 'bootstrapping' | 'ready' | 'error';
+type PluginTranslator = ReturnType<typeof useI18n>['t'];
 
 const redevpluginAPIPath = '/_redevplugin/api/plugins';
 const redevenPluginAPIPath = '/_redeven_proxy/api/plugins';
 const redevenPluginSandboxPath = '/_redeven_plugin';
 
 export function PluginSurfaceFrame(props: PluginSurfaceFrameProps): JSX.Element {
+  const i18n = useI18n();
   let iframeRef!: HTMLIFrameElement;
   const [iframeSrc, setIframeSrc] = createSignal('about:blank');
   const [loadState, setLoadState] = createSignal<SurfaceLoadState>('bootstrapping');
@@ -28,7 +31,7 @@ export function PluginSurfaceFrame(props: PluginSurfaceFrameProps): JSX.Element 
     const iframeWindow = iframeRef?.contentWindow;
     if (!iframeWindow) {
       setLoadState('error');
-      setErrorMessage('Plugin iframe window is unavailable.');
+      setErrorMessage(i18n.t('uiCopy.plugin.iframeUnavailable'));
       return;
     }
 
@@ -38,7 +41,18 @@ export function PluginSurfaceFrame(props: PluginSurfaceFrameProps): JSX.Element 
     setErrorMessage('');
 
     const sandboxID = pluginSandboxID(surface);
-    const iframeOrigin = pluginSandboxOriginFromEnvLocation(window.location, sandboxID);
+    let iframeOrigin = '';
+    try {
+      iframeOrigin = pluginSandboxOriginFromEnvLocation(
+        window.location,
+        sandboxID,
+        i18n.t('uiCopy.pluginRuntime.sandboxOriginUnavailable'),
+      );
+    } catch (error) {
+      setLoadState('error');
+      setErrorMessage(error instanceof Error ? error.message : i18n.t('uiCopy.plugin.surfaceFailed'));
+      return;
+    }
     const host = new PluginSurfaceHost({
       bootstrap: {
         pluginId: surface.plugin_id,
@@ -56,16 +70,19 @@ export function PluginSurfaceFrame(props: PluginSurfaceFrameProps): JSX.Element 
       parentWindow: window,
       apiBaseURL: '',
       fetch: redevPluginPlatformFetch,
-      confirm: confirmPluginIntent,
+      confirm: (intent) => confirmPluginIntent(intent, (key, params) => i18n.t(key, params)),
       onError(error) {
         setLoadState('error');
-        setErrorMessage(error.message || error.errorCode || 'Plugin surface failed.');
+        setErrorMessage(error.message || error.errorCode || i18n.t('uiCopy.plugin.surfaceFailed'));
       },
     });
 
     void (async () => {
       try {
-        const assetSessionID = await openPluginAssetSession(surface, iframeOrigin);
+        const assetSessionID = await openPluginAssetSession(surface, iframeOrigin, {
+          bootstrapFailed: (status) => i18n.t('uiCopy.pluginRuntime.assetBootstrapFailed', { status }),
+          sessionMissing: i18n.t('uiCopy.pluginRuntime.assetSessionMissing'),
+        });
         if (disposed) return;
         const url = pluginAssetURL(surface, iframeOrigin, assetSessionID);
         setIframeSrc(url.href);
@@ -101,12 +118,12 @@ export function PluginSurfaceFrame(props: PluginSurfaceFrameProps): JSX.Element 
     >
       <header class="flex min-h-12 items-center justify-between gap-3 border-b px-4">
         <div class="min-w-0">
-          <h2 class="truncate text-sm font-semibold leading-tight">Plugin Surface</h2>
+          <h2 class="truncate text-sm font-semibold leading-tight">{i18n.t('uiCopy.plugin.surfaceTitle')}</h2>
           <p class="truncate text-[11px] text-muted-foreground">{props.surface.plugin_id} · {props.surface.surface_id}</p>
         </div>
         <button
           type="button"
-          aria-label="Close Plugin Surface"
+          aria-label={i18n.t('uiCopy.plugin.closeSurface')}
           class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
           onClick={props.onClose}
         >
@@ -123,7 +140,7 @@ export function PluginSurfaceFrame(props: PluginSurfaceFrameProps): JSX.Element 
       <div class="relative min-h-0 flex-1 bg-muted/20">
         <Show when={loadState() === 'bootstrapping'}>
           <div class="absolute inset-0 z-10 flex items-center justify-center bg-background/85 text-sm text-muted-foreground">
-            Opening plugin surface...
+            {i18n.t('uiCopy.plugin.openingSurface')}
           </div>
         </Show>
         <iframe
@@ -151,11 +168,15 @@ export function pluginSandboxID(surface: Pick<PluginOpenSurfaceResult, 'plugin_i
   return `${base.slice(0, 33).replace(/-+$/u, '')}-${suffix}`;
 }
 
-export function pluginSandboxOriginFromEnvLocation(loc: OriginLocationLike, sandboxID: string): string {
+export function pluginSandboxOriginFromEnvLocation(
+  loc: OriginLocationLike,
+  sandboxID: string,
+  unavailableMessage = 'Plugin sandbox origin is unavailable for the current Env App host.',
+): string {
   const hostname = normalizeHostname(loc.hostname);
   if (isLoopbackHost(hostname)) {
     const protocol = String(loc.protocol ?? '').trim();
-    if (!protocol) throw new Error('Plugin sandbox origin is unavailable for the current Env App host.');
+    if (!protocol) throw new Error(unavailableMessage);
     const port = String(loc.port ?? '').trim();
     return `${protocol}//plg-${sandboxID}.localhost${port ? `:${port}` : ''}`;
   }
@@ -163,7 +184,7 @@ export function pluginSandboxOriginFromEnvLocation(loc: OriginLocationLike, sand
   try {
     return trustedLauncherOriginFromSandboxLocation(loc, 'plg', sandboxID);
   } catch {
-    throw new Error('Plugin sandbox origin is unavailable for the current Env App host.');
+    throw new Error(unavailableMessage);
   }
 }
 
@@ -196,7 +217,11 @@ async function redevPluginPlatformFetch(input: string, init: FetchInitLike): Pro
   );
 }
 
-async function openPluginAssetSession(surface: PluginOpenSurfaceResult, iframeOrigin: string): Promise<string> {
+async function openPluginAssetSession(
+  surface: PluginOpenSurfaceResult,
+  iframeOrigin: string,
+  copy: Readonly<{ bootstrapFailed: (status: number) => string; sessionMissing: string }>,
+): Promise<string> {
   const url = new URL(`${redevenPluginSandboxPath}/bootstrap`, iframeOrigin);
   const response = await fetch(url.href, await prepareLocalApiRequestInit({
     method: 'POST',
@@ -211,12 +236,12 @@ async function openPluginAssetSession(surface: PluginOpenSurfaceResult, iframeOr
     credentials: 'include',
   }));
   if (!response.ok) {
-    throw new Error(`Plugin asset bootstrap failed with HTTP ${response.status}`);
+    throw new Error(copy.bootstrapFailed(response.status));
   }
   const envelope = await response.json();
   const assetSessionID = assetSessionIDFromEnvelope(envelope);
   if (!assetSessionID) {
-    throw new Error('Plugin asset bootstrap response omitted asset_session_id.');
+    throw new Error(copy.sessionMissing);
   }
   return assetSessionID;
 }
@@ -238,20 +263,26 @@ function assetSessionIDFromEnvelope(value: unknown): string {
   return String(data.asset_session_id ?? root.asset_session_id ?? '').trim();
 }
 
-function confirmPluginIntent(intent: PluginConfirmationIntent): { confirmed: boolean } {
-  return { confirmed: window.confirm(pluginConfirmationMessage(intent)) };
+function confirmPluginIntent(
+  intent: PluginConfirmationIntent,
+  t: PluginTranslator,
+): { confirmed: boolean } {
+  return { confirmed: window.confirm(pluginConfirmationMessage(intent, t)) };
 }
 
-function pluginConfirmationMessage(intent: PluginConfirmationIntent): string {
+function pluginConfirmationMessage(
+  intent: PluginConfirmationIntent,
+  t: PluginTranslator,
+): string {
   const plan = asRecord(intent.plan);
   const summary = String(plan.summary ?? '').trim();
   const target = String(plan.resource_display_name ?? plan.resource_ref ?? '').trim();
   return [
-    'Approve this plugin action?',
-    summary ? `Summary: ${summary}` : '',
-    target ? `Target: ${target}` : '',
-    `Method: ${intent.method}`,
-    `Request hash: ${intent.requestHash}`,
+    t('uiCopy.pluginRuntime.approveAction'),
+    summary ? t('uiCopy.pluginRuntime.summary', { value: summary }) : '',
+    target ? t('uiCopy.pluginRuntime.target', { value: target }) : '',
+    t('uiCopy.pluginRuntime.method', { value: intent.method }),
+    t('uiCopy.pluginRuntime.requestHash', { value: intent.requestHash }),
   ].filter(Boolean).join('\n');
 }
 

@@ -5,3 +5,4 @@ export * from './messageTypes';
 export * from './protectedTerms';
 export * from './resolveLocale';
 export * from './storageKey';
+export * from './terminology';

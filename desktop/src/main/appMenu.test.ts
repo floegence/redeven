@@ -90,7 +90,7 @@ describe('appMenu', () => {
       expect.objectContaining({ label: '窗口' }),
     ]));
     expect(template.flatMap((item) => Array.isArray(item.submenu) ? item.submenu : [])).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: '连接 Environment...' }),
+      expect.objectContaining({ label: '连接环境...' }),
       expect.objectContaining({ label: '退出 Redeven Desktop' }),
     ]));
   });

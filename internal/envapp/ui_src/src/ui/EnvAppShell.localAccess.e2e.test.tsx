@@ -1424,9 +1424,9 @@ describe('EnvAppShell environment entry affordances', () => {
     ), host);
 
     try {
-      await flushAsync();
-
-      expect(document.documentElement.lang).toBe('zh-CN');
+      await vi.waitFor(() => {
+        expect(document.documentElement.lang).toBe('zh-CN');
+      });
       expect(host.querySelector('[data-envapp-language-trigger]')).toBeNull();
       expect(commandState.commands.find((command) => command.id === 'redeven.env.changeLanguage')).toBeFalsy();
       expect(setPreference).not.toHaveBeenCalled();

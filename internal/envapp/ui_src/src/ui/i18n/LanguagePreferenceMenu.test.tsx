@@ -4,7 +4,7 @@ import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { I18nProvider } from './I18nProvider';
+import { I18nProvider, useI18n } from './I18nProvider';
 import { LOCALE_OPTIONS } from './localeMeta';
 import { LanguagePreferenceMenu } from './LanguagePreferenceMenu';
 import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from './storageKey';
@@ -19,8 +19,16 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Globe: (props: { class?: string }) => <span data-icon="globe" class={props.class} />,
 }));
 
-function flushAsync(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+async function flushAsync(): Promise<void> {
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function CurrentFilesTitle() {
+  const i18n = useI18n();
+  return <span data-testid="current-files-title">{i18n.t('files.title')}</span>;
 }
 
 describe('LanguagePreferenceMenu', () => {
@@ -68,7 +76,9 @@ describe('LanguagePreferenceMenu', () => {
     expect(host.querySelector('[data-envapp-language-option="system"]')?.getAttribute('aria-checked')).toBe('true');
 
     (host.querySelector('[data-envapp-language-option="zh-CN"]') as HTMLButtonElement | null)?.click();
-    await flushAsync();
+    await vi.waitFor(() => {
+      expect(document.documentElement.lang).toBe('zh-CN');
+    });
 
     expect(window.localStorage.getItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY)).toBe('zh-CN');
     expect(document.documentElement.lang).toBe('zh-CN');
@@ -114,6 +124,24 @@ describe('LanguagePreferenceMenu', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it('does not mount English UI while an initial non-English catalog is loading', async () => {
+    window.localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, 'zh-CN');
+
+    render(() => (
+      <I18nProvider>
+        <CurrentFilesTitle />
+      </I18nProvider>
+    ), host);
+
+    expect(host.querySelector('[data-testid="current-files-title"]')).toBeNull();
+    expect(host.textContent).not.toContain('Files');
+
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-testid="current-files-title"]')?.textContent).toBe('文件');
+      expect(document.documentElement.lang).toBe('zh-CN');
+    });
+  });
+
   it('does not render a browser language control when Desktop owns language preference', async () => {
     const snapshot: RedevenLanguageSnapshot = {
       preference: 'zh-TW',
@@ -133,11 +161,12 @@ describe('LanguagePreferenceMenu', () => {
         <LanguagePreferenceMenu variant="topbar" />
       </I18nProvider>
     ), host);
-    await flushAsync();
+    await vi.waitFor(() => {
+      expect(document.documentElement.lang).toBe('zh-TW');
+    });
 
     expect(host.querySelector('[data-envapp-language-trigger]')).toBeNull();
     expect(window.localStorage.getItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY)).toBeNull();
-    expect(document.documentElement.lang).toBe('zh-TW');
     expect(setPreference).not.toHaveBeenCalled();
   });
 });

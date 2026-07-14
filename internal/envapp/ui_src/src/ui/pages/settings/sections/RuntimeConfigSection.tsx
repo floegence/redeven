@@ -114,7 +114,7 @@ export function RuntimeConfigSection() {
           <SettingRow
             icon={Home}
             title="agent_home_dir"
-            description="Runtime home directory used for local state and shell defaults."
+            description={i18n.t('uiCopy.runtime.homeDirectoryDescription')}
             control={
               <Input value={agentHomeDir()} onInput={(e) => { setAgentHomeDir(e.currentTarget.value); setDirty(true); }}
                 placeholder="/home/user" size="sm" class="w-full min-w-[16rem] font-mono text-xs sm:w-[28rem]" disabled={!ctx.canInteract()} />
@@ -123,7 +123,7 @@ export function RuntimeConfigSection() {
           <SettingRow
             icon={Terminal}
             title="shell"
-            description="Default shell executable used for new runtime terminal sessions."
+            description={i18n.t('uiCopy.runtime.shellDescription')}
             control={
               <Input value={shell()} onInput={(e) => { setShell(e.currentTarget.value); setDirty(true); }}
                 placeholder="/bin/bash" size="sm" class="w-full min-w-[16rem] font-mono text-xs sm:w-[28rem]" disabled={!ctx.canInteract()} />

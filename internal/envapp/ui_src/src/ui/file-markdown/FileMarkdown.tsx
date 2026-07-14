@@ -649,12 +649,12 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   const renderToolbar = (placement: 'toc' | 'floating', inline = false): JSX.Element => (
     <div
       class={`fm-toolbar${placement === 'toc' ? ' fm-toolbar-toc' : ' fm-toolbar-floating'}${inline ? ' fm-toolbar-floating-inline' : ''}`}
-      aria-label="Markdown preview controls"
+      aria-label={i18n.t('uiCopy.preview.markdownControls')}
     >
       <button
         type="button"
         class={`fm-toolbar-btn${readingMode() ? ' fm-toolbar-active' : ''}`}
-        title="Reading mode"
+        title={i18n.t('uiCopy.preview.readingMode')}
         aria-pressed={readingMode()}
         onClick={() => setReadingMode(!readingMode())}
       >
@@ -666,7 +666,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
         <button
           type="button"
           class={`fm-toolbar-btn${tocVisible() ? ' fm-toolbar-active' : ''}`}
-          title="Toggle table of contents"
+          title={i18n.t('uiCopy.preview.toggleContents')}
           aria-pressed={tocVisible()}
           onClick={() => setTocVisible(!tocVisible())}
         >
@@ -801,7 +801,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
               style={{ width: '280px', 'flex-shrink': 0 }}
             >
               {renderToolbar('toc')}
-              <div class="fm-toc-title">Contents</div>
+              <div class="fm-toc-title">{i18n.t('uiCopy.preview.contents')}</div>
               <ul class="fm-toc-list">
                 <For each={tocItems()}>
                   {(item) => renderTocItem(item, 1)}

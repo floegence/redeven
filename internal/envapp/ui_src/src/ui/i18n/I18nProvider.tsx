@@ -1,7 +1,8 @@
-import { createContext, createEffect, createMemo, createSignal, onCleanup, onMount, useContext, type Accessor, type JSX } from 'solid-js';
+import { Show, createContext, createEffect, createMemo, createSignal, onCleanup, onMount, useContext, type Accessor, type JSX } from 'solid-js';
 
 import { createI18nHelpers, type I18nHelpers } from './createI18n';
 import { desktopLanguageBridge, fallbackLanguageSnapshot } from './desktopLanguageBridge';
+import { enUS, loadEnvAppDictionary, type EnvAppTranslationShape } from './locales';
 import {
   DEFAULT_LOCALE,
   LOCALE_META,
@@ -20,7 +21,7 @@ export type EnvAppI18nContext = I18nHelpers & Readonly<{
   locale: Accessor<RedevenLocale>;
   localePreference: Accessor<RedevenLocalePreference>;
   source: Accessor<EnvAppLanguageSource>;
-  setLocalePreference: (preference: RedevenLocalePreference) => void;
+  setLocalePreference: (preference: RedevenLocalePreference) => Promise<void>;
 }>;
 
 const EnvAppI18nSolidContext = createContext<EnvAppI18nContext>();
@@ -31,16 +32,21 @@ function standaloneSnapshot(preference: RedevenLocalePreference = readStoredLang
 
 function fallbackContext(): EnvAppI18nContext {
   const snapshot = () => standaloneSnapshot(SYSTEM_LOCALE_PREFERENCE);
-  const helpers = createI18nHelpers(DEFAULT_LOCALE);
+  const helpers = createI18nHelpers(DEFAULT_LOCALE, enUS);
   return {
     ...helpers,
     snapshot,
     locale: () => DEFAULT_LOCALE,
     localePreference: () => SYSTEM_LOCALE_PREFERENCE,
     source: () => 'browser',
-    setLocalePreference: () => undefined,
+    setLocalePreference: async () => undefined,
   };
 }
+
+type LoadedI18nState = Readonly<{
+  snapshot: RedevenLanguageSnapshot;
+  dictionary: EnvAppTranslationShape;
+}>;
 
 function applyDocumentLanguage(snapshot: RedevenLanguageSnapshot, helpers: I18nHelpers): void {
   if (typeof document === 'undefined') {
@@ -54,42 +60,82 @@ function applyDocumentLanguage(snapshot: RedevenLanguageSnapshot, helpers: I18nH
 
 export function I18nProvider(props: Readonly<{ children: JSX.Element }>) {
   const bridge = desktopLanguageBridge();
+  const initialSnapshot = bridge?.getSnapshot() ?? standaloneSnapshot();
   const [source, setSource] = createSignal<EnvAppLanguageSource>(bridge ? 'desktop' : 'browser');
-  const [snapshot, setSnapshot] = createSignal<RedevenLanguageSnapshot>(
-    bridge?.getSnapshot() ?? standaloneSnapshot(),
+  const [loadedState, setLoadedState] = createSignal<LoadedI18nState | null>(
+    initialSnapshot.resolved_locale === DEFAULT_LOCALE
+      ? { snapshot: initialSnapshot, dictionary: enUS }
+      : null,
   );
-  const helpers = createMemo(() => createI18nHelpers(snapshot().resolved_locale));
+  let activationRequest = 0;
+  const snapshot = (): RedevenLanguageSnapshot => loadedState()?.snapshot ?? initialSnapshot;
+  const helpers = createMemo(() => {
+    const state = loadedState();
+    return createI18nHelpers(
+      state?.snapshot.resolved_locale ?? DEFAULT_LOCALE,
+      state?.dictionary ?? enUS,
+    );
+  });
 
-  const setLocalePreference = (preference: RedevenLocalePreference): void => {
+  const activateSnapshot = async (
+    nextSnapshot: RedevenLanguageSnapshot,
+    nextSource: EnvAppLanguageSource,
+  ): Promise<void> => {
+    const request = ++activationRequest;
+    try {
+      const dictionary = await loadEnvAppDictionary(nextSnapshot.resolved_locale);
+      if (request !== activationRequest) {
+        return;
+      }
+      setSource(nextSource);
+      setLoadedState({ snapshot: nextSnapshot, dictionary });
+    } catch (error) {
+      if (request !== activationRequest) {
+        return;
+      }
+      console.error(`Failed to load Env App locale ${nextSnapshot.resolved_locale}; using en-US.`, error);
+      setSource(nextSource);
+      setLoadedState({
+        snapshot: {
+          ...nextSnapshot,
+          resolved_locale: DEFAULT_LOCALE,
+          source: 'fallback',
+        },
+        dictionary: enUS,
+      });
+    }
+  };
+
+  const setLocalePreference = async (preference: RedevenLocalePreference): Promise<void> => {
     const normalized = normalizeLocalePreference(preference);
     const activeBridge = desktopLanguageBridge();
     if (activeBridge) {
-      setSource('desktop');
-      setSnapshot(activeBridge.setPreference(normalized));
+      await activateSnapshot(activeBridge.setPreference(normalized), 'desktop');
       return;
     }
 
-    setSource('browser');
     writeStoredLanguagePreference(normalized);
-    setSnapshot(standaloneSnapshot(normalized));
+    await activateSnapshot(standaloneSnapshot(normalized), 'browser');
   };
 
   onMount(() => {
     const activeBridge = desktopLanguageBridge();
     if (activeBridge) {
-      setSource('desktop');
-      setSnapshot(activeBridge.getSnapshot());
+      void activateSnapshot(activeBridge.getSnapshot(), 'desktop');
       const unsubscribe = activeBridge.subscribe((next) => {
-        setSource('desktop');
-        setSnapshot(next);
+        void activateSnapshot(next, 'desktop');
       });
       onCleanup(unsubscribe);
       return;
     }
 
+    if (!loadedState()) {
+      void activateSnapshot(initialSnapshot, 'browser');
+    }
+
     const handleLanguageChange = () => {
       if (snapshot().preference === SYSTEM_LOCALE_PREFERENCE) {
-        setSnapshot(standaloneSnapshot(SYSTEM_LOCALE_PREFERENCE));
+        void activateSnapshot(standaloneSnapshot(SYSTEM_LOCALE_PREFERENCE), 'browser');
       }
     };
     window.addEventListener('languagechange', handleLanguageChange);
@@ -97,7 +143,10 @@ export function I18nProvider(props: Readonly<{ children: JSX.Element }>) {
   });
 
   createEffect(() => {
-    applyDocumentLanguage(snapshot(), helpers());
+    const state = loadedState();
+    if (state) {
+      applyDocumentLanguage(state.snapshot, helpers());
+    }
   });
 
   const value: EnvAppI18nContext = {
@@ -116,7 +165,7 @@ export function I18nProvider(props: Readonly<{ children: JSX.Element }>) {
 
   return (
     <EnvAppI18nSolidContext.Provider value={value}>
-      {props.children}
+      <Show when={loadedState()}>{props.children}</Show>
     </EnvAppI18nSolidContext.Provider>
   );
 }

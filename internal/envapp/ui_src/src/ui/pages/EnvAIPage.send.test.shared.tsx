@@ -272,7 +272,9 @@ vi.mock('./EnvContext', () => ({
   }),
 }));
 
-vi.mock('../i18n', () => {
+vi.mock('../i18n', async () => {
+  const { createTestI18nHelpers } = await import('../i18n/locales/testDictionaries');
+  const fallback = createTestI18nHelpers('en-US');
   const messages: Record<string, string> = {
     'common.actions.cancel': 'Cancel',
     'common.actions.refresh': 'Refresh',
@@ -280,6 +282,12 @@ vi.mock('../i18n', () => {
     'common.actions.settings': 'Settings',
     'common.actions.stop': 'Stop',
     'chatChrome.thinkingEllipsis': 'Mock thinking...',
+    'flowerSurface.chat.modelStatusStreaming': 'Mock thinking...',
+    'flowerSurface.threadList.copyThreadID': 'Mock copy thread ID',
+    'flowerSurface.threadList.copyWorkingDirectory': 'Mock copy working directory',
+    'flowerSurface.threadList.fork': 'Mock fork',
+    'flowerSurface.threadList.pin': 'Mock pin conversation',
+    'flowerSurface.threadList.rename': 'Mock rename',
     'flowerChat.composer.describePlaceholder': 'Describe what you need',
     'flowerChat.composer.launchTurn': 'Send message',
     'flowerChat.composer.typeMessagePlaceholder': 'Message Flower',
@@ -338,12 +346,19 @@ vi.mock('../i18n', () => {
   };
   return {
     useI18n: () => ({
-      t: (key: string) => messages[key] ?? key,
+      ...fallback,
+      t: (key: any, params?: any) => {
+        const message = messages[key];
+        if (!message) return fallback.t(key, params);
+        return message.replace(/\{([A-Za-z0-9_]+)\}/g, (token, name) => (
+          params?.[name] === undefined ? token : String(params[name])
+        ));
+      },
       snapshot: () => ({ preference: 'en-US', resolved_locale: 'en-US', source: 'system', system_candidates: ['en-US'] }),
       locale: () => 'en-US',
       localePreference: () => 'en-US',
       source: () => 'browser',
-      setLocalePreference: () => undefined,
+      setLocalePreference: async () => undefined,
     }),
   };
 });
@@ -407,10 +422,10 @@ export function registerEnvAIPageSendTests() {
         expect(host.querySelector('.flower-component-thread-rail')).toBeTruthy();
         expect(host.querySelector('button[aria-label="New chat"]')?.textContent).toContain('New chat');
         const chatHeader = host.querySelector('.flower-chat-header');
-        expect(chatHeader?.querySelector('.flower-chat-header-title')?.textContent).toContain('Describe what you need');
+        expect(chatHeader?.querySelector('.flower-chat-header-title')?.textContent).toContain('Ask Flower');
         expect(chatHeader?.textContent).not.toContain('Ready');
         expect(host.querySelector('.flower-model-reasoning-model-label')?.textContent).toContain('OpenAI / gpt-5.2');
-        expect(host.querySelector('button[aria-label="Settings"]')).toBeTruthy();
+        expect(host.querySelector('button[aria-label="Flower settings"]')).toBeTruthy();
       } finally {
         dispose();
       }
@@ -1160,7 +1175,7 @@ export function registerEnvAIPageSendTests() {
         textarea.value = '你好，Flower';
         textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
         await flush();
-        const sendButton = host.querySelector('button.flower-composer-submit[aria-label="Send message"]') as HTMLButtonElement | null;
+        const sendButton = host.querySelector('button.flower-composer-submit[aria-label="Send"]') as HTMLButtonElement | null;
         expect(sendButton).toBeTruthy();
         expect(sendButton?.disabled).toBe(false);
         sendButton?.click();

@@ -1,5 +1,6 @@
 import { createEffect, createSignal } from 'solid-js';
 import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
+import { useI18n } from '../i18n';
 
 export interface InputDialogProps {
   open: boolean;
@@ -15,6 +16,7 @@ export interface InputDialogProps {
 }
 
 export function InputDialog(props: InputDialogProps) {
+  const i18n = useI18n();
   const [inputValue, setInputValue] = createSignal(props.value);
 
   createEffect(() => {
@@ -33,10 +35,10 @@ export function InputDialog(props: InputDialogProps) {
       footer={(
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={props.onCancel} disabled={props.loading}>
-            {props.cancelText ?? 'Cancel'}
+            {props.cancelText ?? i18n.t('common.actions.cancel')}
           </Button>
           <Button size="sm" variant="default" onClick={() => props.onConfirm(inputValue())} loading={props.loading}>
-            {props.confirmText ?? 'Confirm'}
+            {props.confirmText ?? i18n.t('common.actions.confirm')}
           </Button>
         </div>
       )}

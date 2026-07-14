@@ -4,6 +4,7 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { useI18n } from '../../i18n';
 
 export interface SourcesBlockProps {
   sources: Array<{ title: string; url: string }>;
@@ -42,6 +43,7 @@ async function copyToClipboard(text: string): Promise<void> {
 }
 
 export const SourcesBlock: Component<SourcesBlockProps> = (props) => {
+  const i18n = useI18n();
   const [page, setPage] = createSignal(1);
   const [copiedRowKey, setCopiedRowKey] = createSignal<string | null>(null);
 
@@ -88,29 +90,29 @@ export const SourcesBlock: Component<SourcesBlockProps> = (props) => {
             <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
             <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
           </svg>
-          <span>Sources</span>
+          <span>{i18n.t('uiCopy.sources.title')}</span>
           <span class="chat-sources-count-badge">{total()}</span>
         </div>
-        <span class="chat-sources-page-hint">Page {page()} / {totalPages()}</span>
+        <span class="chat-sources-page-hint">{i18n.t('uiCopy.sources.page')} {page()} / {totalPages()}</span>
       </div>
 
-      <div class="chat-sources-table" role="table" aria-label="Sources table">
+      <div class="chat-sources-table" role="table" aria-label={i18n.t('uiCopy.sources.table')}>
         <div class="chat-sources-table-header" role="row">
           <span class="chat-sources-th chat-sources-th-index" role="columnheader">
             #
           </span>
           <span class="chat-sources-th chat-sources-th-title" role="columnheader">
-            Title
+            {i18n.t('uiCopy.sources.titleColumn')}
           </span>
           <span class="chat-sources-th chat-sources-th-url" role="columnheader">
-            URL
+            {i18n.t('uiCopy.sources.urlColumn')}
           </span>
           <span class="chat-sources-th chat-sources-th-actions" role="columnheader" />
         </div>
 
         <Show
           when={hasSources()}
-          fallback={<div class="chat-sources-empty-row">No sources available.</div>}
+          fallback={<div class="chat-sources-empty-row">{i18n.t('uiCopy.sources.empty')}</div>}
         >
           <For each={pageSources()}>
             {(src, index) => {
@@ -159,8 +161,8 @@ export const SourcesBlock: Component<SourcesBlockProps> = (props) => {
                     class="chat-sources-action-btn chat-sources-copy-btn"
                     type="button"
                     onClick={doCopy}
-                    aria-label={copied() ? 'Copied URL' : 'Copy URL'}
-                    title={copied() ? 'Copied!' : 'Copy URL'}
+                    aria-label={copied() ? i18n.t('uiCopy.sources.copiedURL') : i18n.t('uiCopy.sources.copyURL')}
+                    title={copied() ? i18n.t('uiCopy.sources.copiedBang') : i18n.t('uiCopy.sources.copyURL')}
                   >
                     <Show when={copied()} fallback={<CopyIcon />}>
                       <CheckIcon />
@@ -174,9 +176,9 @@ export const SourcesBlock: Component<SourcesBlockProps> = (props) => {
       </div>
 
       <Show when={totalPages() > 1}>
-        <div class="chat-sources-pagination" role="navigation" aria-label="Sources pagination">
+        <div class="chat-sources-pagination" role="navigation" aria-label={i18n.t('uiCopy.sources.pagination')}>
           <span class="chat-sources-pagination-meta">
-            Showing {showRange()} of {total()}
+            {i18n.t('uiCopy.sources.showingRange', { range: showRange(), total: total() })}
           </span>
 
           <div class="chat-sources-pagination-controls">
@@ -185,8 +187,8 @@ export const SourcesBlock: Component<SourcesBlockProps> = (props) => {
               type="button"
               onClick={() => goToPage(1)}
               disabled={!canGoPrev()}
-              aria-label="First page"
-              title="First page"
+              aria-label={i18n.t('uiCopy.sources.firstPage')}
+              title={i18n.t('uiCopy.sources.firstPage')}
             >
               <DoubleChevronLeftIcon />
             </button>
@@ -196,8 +198,8 @@ export const SourcesBlock: Component<SourcesBlockProps> = (props) => {
               type="button"
               onClick={() => goToPage(page() - 1)}
               disabled={!canGoPrev()}
-              aria-label="Previous page"
-              title="Previous page"
+              aria-label={i18n.t('uiCopy.sources.previousPage')}
+              title={i18n.t('uiCopy.sources.previousPage')}
             >
               <ChevronLeftIcon />
             </button>
@@ -211,8 +213,8 @@ export const SourcesBlock: Component<SourcesBlockProps> = (props) => {
               type="button"
               onClick={() => goToPage(page() + 1)}
               disabled={!canGoNext()}
-              aria-label="Next page"
-              title="Next page"
+              aria-label={i18n.t('uiCopy.sources.nextPage')}
+              title={i18n.t('uiCopy.sources.nextPage')}
             >
               <ChevronRightIcon />
             </button>
@@ -222,8 +224,8 @@ export const SourcesBlock: Component<SourcesBlockProps> = (props) => {
               type="button"
               onClick={() => goToPage(totalPages())}
               disabled={!canGoNext()}
-              aria-label="Last page"
-              title="Last page"
+              aria-label={i18n.t('uiCopy.sources.lastPage')}
+              title={i18n.t('uiCopy.sources.lastPage')}
             >
               <DoubleChevronRightIcon />
             </button>

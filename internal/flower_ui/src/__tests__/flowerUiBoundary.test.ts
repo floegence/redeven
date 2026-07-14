@@ -24,6 +24,12 @@ function listSourceFiles(dir: string): string[] {
 }
 
 describe('shared Flower UI boundary', () => {
+  it('keeps generated JavaScript artifacts out of the shared source tree', () => {
+    const generated = fs.readdirSync(path.join(flowerRoot, 'i18n'))
+      .filter((name) => name.endsWith('.js'));
+    expect(generated).toEqual([]);
+  });
+
   it('does not import Env runtime RPC, Desktop IPC, or runtime proxy endpoints', () => {
     const forbidden = [
       'useEnvContext',
@@ -258,7 +264,14 @@ describe('shared Flower UI boundary', () => {
   it('keeps Flower provider model notes locale-aware across simplified and traditional Chinese', () => {
     expect(localizedFlowerProviderModelNote('zh-CN', 'openai_gpt_55_frontier')).toContain('复杂推理');
     expect(localizedFlowerProviderModelNote('zh-TW', 'openai_gpt_55_frontier')).toContain('複雜推理');
-    expect(localizedFlowerProviderModelNote('zh-Hant', 'moonshot_kimi_k26')).toContain('內建 web search');
+    expect(localizedFlowerProviderModelNote('zh-Hant', 'moonshot_kimi_k26')).toContain('內建網頁搜尋');
+    expect(localizedFlowerProviderModelNote('ja-JP', 'moonshot_kimi_k26')).toContain('ウェブ検索');
+    expect(localizedFlowerProviderModelNote('ko-KR', 'moonshot_kimi_k26')).toContain('웹 검색');
+    expect(localizedFlowerProviderModelNote('de-DE', 'moonshot_kimi_k26')).toContain('Websuche');
+    expect(localizedFlowerProviderModelNote('fr-FR', 'moonshot_kimi_k26')).toContain('recherche web');
+    expect(localizedFlowerProviderModelNote('es-ES', 'moonshot_kimi_k26')).toContain('búsqueda web');
+    expect(localizedFlowerProviderModelNote('pt-BR', 'moonshot_kimi_k26')).toContain('pesquisa na web');
+    expect(localizedFlowerProviderModelNote('ru-RU', 'moonshot_kimi_k26')).toContain('веб-поиском');
   });
 
   it('keeps Flower chat markdown separate from file preview markdown renderers', () => {

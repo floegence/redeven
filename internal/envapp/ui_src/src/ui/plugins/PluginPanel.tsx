@@ -3,6 +3,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { Grid3x3, Plus, Settings, X } from '@floegence/floe-webapp-core/icons';
 
 import type { PluginInventoryItem, PluginPanelModel, PluginPanelTile, PluginSurfaceLaunchTarget } from './pluginTypes';
+import { useI18n, type I18nHelpers } from '../i18n';
 
 export type PluginPanelProps = {
   open: boolean;
@@ -14,6 +15,7 @@ export type PluginPanelProps = {
 };
 
 export function PluginPanel(props: PluginPanelProps): JSX.Element {
+  const i18n = useI18n();
   let panelRef: HTMLDivElement | undefined;
 
   createEffect(() => {
@@ -54,18 +56,18 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
       <div
         ref={panelRef}
         role="dialog"
-        aria-label="Plugins"
+        aria-label={i18n.t('uiCopy.plugin.panelTitle')}
         class="fixed left-14 top-28 z-50 w-[min(420px,calc(100vw-4.5rem))] rounded-lg border bg-popover/98 p-3 text-popover-foreground shadow-xl backdrop-blur"
       >
         <div class="mb-2 flex items-center justify-between gap-2">
           <div>
-            <h2 class="text-sm font-semibold leading-tight">Plugins</h2>
-            <p class="text-[11px] text-muted-foreground">Official plugins installed in this runtime.</p>
+            <h2 class="text-sm font-semibold leading-tight">{i18n.t('uiCopy.plugin.panelTitle')}</h2>
+            <p class="text-[11px] text-muted-foreground">{i18n.t('uiCopy.plugin.panelDescription')}</p>
           </div>
           <button
             type="button"
             class="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Close plugins"
+            aria-label={i18n.t('uiCopy.plugin.closePanel')}
             onClick={props.onClose}
           >
             <X class="h-3.5 w-3.5" />
@@ -88,14 +90,14 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                 {tile.kind === 'open_center' ? <CenterTileIcon /> : <PluginTileIcon item={tile.item} />}
                 <span class="max-w-full truncate text-xs font-medium">{tile.kind === 'open_center' ? tile.label : tile.item.displayName}</span>
                 <span class={cn('max-w-full truncate text-[10px]', tile.kind === 'open_center' ? 'text-muted-foreground' : statusClass(tile.item))}>
-                  {tile.kind === 'open_center' ? 'Add/manage' : statusLabel(tile.item)}
+                  {tile.kind === 'open_center' ? i18n.t('uiCopy.plugin.addManage') : statusLabel(tile.item, i18n)}
                 </span>
               </button>
             )}
           </For>
         </div>
         <Show when={!props.model.loading && props.model.tiles.length === 1}>
-          <p class="mt-3 text-xs text-muted-foreground">No installed plugins yet. Open Plugin Center to discover Redeven official plugins.</p>
+          <p class="mt-3 text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.noInstalled')}</p>
         </Show>
       </div>
     </Show>
@@ -118,22 +120,22 @@ function PluginTileIcon(props: { item: PluginInventoryItem }) {
   );
 }
 
-function statusLabel(item: PluginInventoryItem): string {
+function statusLabel(item: PluginInventoryItem, i18n: I18nHelpers): string {
   switch (item.lifecycleState) {
     case 'enabled':
-      return 'Ready';
+      return i18n.t('common.status.ready');
     case 'disabled':
-      return 'Disabled';
+      return i18n.t('uiCopy.plugin.disabled');
     case 'not_installed':
-      return 'Available';
+      return i18n.t('uiCopy.plugin.available');
     case 'update_available':
-      return 'Update';
+      return i18n.t('uiCopy.plugin.update');
     case 'needs_attention':
-      return 'Needs attention';
+      return i18n.t('uiCopy.plugin.needsAttention');
     case 'installed':
-      return 'Installed';
+      return i18n.t('uiCopy.plugin.installed');
     default:
-      return 'Unavailable';
+      return i18n.t('uiCopy.plugin.unavailable');
   }
 }
 

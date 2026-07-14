@@ -25,6 +25,7 @@ import {
   gitChangedFilesRowClass,
   gitChangedFilesStickyCellClass,
 } from './GitWorkbenchPrimitives';
+import { useI18n } from '../i18n';
 
 export type GitMergeBranchDialogState = 'idle' | 'previewing' | 'merging';
 
@@ -45,35 +46,35 @@ export interface GitMergeBranchDialogProps {
   onConfirm?: (branch: GitBranchSummary, options: GitMergeBranchDialogConfirmOptions) => void;
 }
 
-function mergePreviewFilePath(item: GitCommitFileSummary): string {
-  return String(item.displayPath || item.path || item.newPath || item.oldPath || '').trim() || '(unknown path)';
+function mergePreviewFilePath(item: GitCommitFileSummary, i18n: ReturnType<typeof useI18n>): string {
+  return String(item.displayPath || item.path || item.newPath || item.oldPath || '').trim() || i18n.t('filePreview.unknownPath');
 }
 
-function formatWorkspaceSummary(summary: GitWorkspaceSummary | null | undefined): string {
+function formatWorkspaceSummary(summary: GitWorkspaceSummary | null | undefined, i18n: ReturnType<typeof useI18n>): string {
   const parts: string[] = [];
   const staged = Number(summary?.stagedCount ?? 0);
   const unstaged = Number(summary?.unstagedCount ?? 0);
   const untracked = Number(summary?.untrackedCount ?? 0);
   const conflicted = Number(summary?.conflictedCount ?? 0);
-  if (staged > 0) parts.push(`${staged} staged`);
-  if (unstaged > 0) parts.push(`${unstaged} unstaged`);
-  if (untracked > 0) parts.push(`${untracked} untracked`);
-  if (conflicted > 0) parts.push(`${conflicted} conflicted`);
+  if (staged > 0) parts.push(`${i18n.t('git.common.staged')}: ${staged}`);
+  if (unstaged > 0) parts.push(`${i18n.t('git.common.unstaged')}: ${unstaged}`);
+  if (untracked > 0) parts.push(`${i18n.t('git.common.untracked')}: ${untracked}`);
+  if (conflicted > 0) parts.push(`${i18n.t('git.common.conflicted')}: ${conflicted}`);
   return parts.join(' · ');
 }
 
-function outcomeLabel(outcome: string | undefined): string {
+function outcomeLabel(outcome: string | undefined, i18n: ReturnType<typeof useI18n>): string {
   switch (outcome) {
     case 'up_to_date':
-      return 'Up to date';
+      return i18n.t('git.notifications.upToDateTitle');
     case 'fast_forward':
-      return 'Fast-forward';
+      return i18n.t('git.notifications.fastForwardedTitle');
     case 'merge_commit':
-      return 'Merge commit';
+      return i18n.t('gitPresentation.mergeCommit');
     case 'blocked':
-      return 'Blocked';
+      return i18n.t('uiCopy.plugin.blocked');
     default:
-      return 'Preview';
+      return i18n.t('uiCopy.preview.eyebrow');
   }
 }
 
@@ -92,22 +93,23 @@ function outcomeTone(outcome: string | undefined): 'neutral' | 'info' | 'success
   }
 }
 
-function outcomeDetail(outcome: string | undefined, currentRef: string, sourceName: string): string {
+function outcomeDetail(outcome: string | undefined, currentRef: string, sourceName: string, i18n: ReturnType<typeof useI18n>): string {
   switch (outcome) {
     case 'up_to_date':
-      return `${currentRef} already contains ${sourceName}.`;
+      return i18n.t('git.notifications.branchAlreadyIncluded', { target: currentRef, branch: sourceName });
     case 'fast_forward':
-      return `${currentRef} can advance without creating a merge commit.`;
+      return i18n.t('git.notifications.fastForwardedTitle');
     case 'merge_commit':
-      return `${sourceName} will be merged into ${currentRef} with a merge commit.`;
+      return i18n.t('uiCopy.git.mergeDescription', { branch: sourceName, target: currentRef });
     case 'blocked':
-      return 'This merge cannot run until the blocking issue is resolved.';
+      return i18n.t('common.status.failed');
     default:
-      return 'Review the merge plan before applying it.';
+      return i18n.t('uiCopy.git.reviewingMergePlan');
   }
 }
 
 export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
+  const i18n = useI18n();
   const layout = useLayout();
   const outlineControlClass = redevenSurfaceRoleClass('control');
 
@@ -119,7 +121,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
   const state = () => props.state ?? 'idle';
   const loading = () => state() === 'previewing';
   const merging = () => state() === 'merging';
-  const currentRef = () => String(preview()?.currentRef ?? '').trim() || 'current branch';
+  const currentRef = () => String(preview()?.currentRef ?? '').trim() || i18n.t('git.notifications.currentBranchFallback');
   const sourceName = () => String(preview()?.sourceName ?? '').trim() || branchName();
   const blockingReason = () => String(preview()?.blockingReason ?? preview()?.blocking?.reason ?? '').trim();
   const stashBlockerPath = () => String(preview()?.blocking?.workspacePath ?? '').trim();
@@ -143,21 +145,21 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
     );
   };
   const confirmLabel = () => {
-    if (merging()) return 'Merging...';
+    if (merging()) return i18n.t('uiCopy.git.mergeBranch');
     const outcome = preview()?.outcome;
-    if (outcome === 'up_to_date') return 'Already Up to Date';
-    if (outcome === 'fast_forward') return `Fast-Forward ${currentRef()}`;
-    return `Merge Into ${currentRef()}`;
+    if (outcome === 'up_to_date') return i18n.t('git.notifications.upToDateTitle');
+    if (outcome === 'fast_forward') return i18n.t('uiCopy.git.fastForwardTarget', { target: currentRef() });
+    return i18n.t('uiCopy.git.mergeIntoTarget', { target: currentRef() });
   };
   const linkedWorktreeNote = () => {
     const linkedWorktree = preview()?.linkedWorktree;
     if (!linkedWorktree?.worktreePath) return '';
-    if (!linkedWorktree.summary) return `A linked worktree exists at ${linkedWorktree.worktreePath}.`;
-    const summaryText = formatWorkspaceSummary(linkedWorktree.summary);
+    if (!linkedWorktree.summary) return `${i18n.t('git.overview.linkedWorktree')}: ${linkedWorktree.worktreePath}`;
+    const summaryText = formatWorkspaceSummary(linkedWorktree.summary, i18n);
     if (!summaryText) {
-      return `A linked worktree exists at ${linkedWorktree.worktreePath}. Its pending files are not part of this merge.`;
+      return `${i18n.t('git.overview.linkedWorktree')}: ${linkedWorktree.worktreePath}`;
     }
-    return `Pending files in ${linkedWorktree.worktreePath} stay outside this merge (${summaryText}).`;
+    return `${i18n.t('git.overview.linkedWorktree')}: ${linkedWorktree.worktreePath} · ${summaryText}`;
   };
 
   return (
@@ -167,13 +169,13 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
         onOpenChange={(open) => {
           if (!open) props.onClose();
         }}
-        title="Merge Branch"
-        description={`Merge ${branchName()} into ${currentRef()}.`}
+        title={i18n.t('uiCopy.git.mergeBranch')}
+        description={i18n.t('uiCopy.git.mergeDescription', { branch: branchName(), target: currentRef() })}
         footer={(
           <div class={cn('border-t px-4 pt-3 pb-4 backdrop-blur', redevenDividerRoleClass('strong'), redevenSurfaceRoleClass('inset'), 'supports-[backdrop-filter]:bg-background/78')}>
             <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
               <Button size="sm" variant="outline" class={cn('w-full sm:w-auto', outlineControlClass)} disabled={loading() || merging()} onClick={props.onClose}>
-                Close
+                {i18n.t('common.actions.close')}
               </Button>
               <Show when={props.previewError && props.branch}>
                 <Button
@@ -183,7 +185,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                   disabled={loading() || merging()}
                   onClick={() => props.branch && props.onRetryPreview?.(props.branch)}
                 >
-                  Retry
+                  {i18n.t('common.actions.retry')}
                 </Button>
               </Show>
               <Button
@@ -214,36 +216,36 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
         <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
           <Show
             when={!loading()}
-            fallback={<GitStatePane loading message="Reviewing merge plan..." class="m-4" surface />}
+            fallback={<GitStatePane loading message={i18n.t('uiCopy.git.reviewingMergePlan')} class="m-4" surface />}
           >
-            <Show when={!props.previewError} fallback={<GitStatePane tone="error" message={props.previewError ?? 'Merge preview failed.'} class="m-4" surface />}>
-              <Show when={props.branch && preview()} fallback={<GitStatePane message="Choose a branch to review its merge plan." class="m-4" surface />}>
+            <Show when={!props.previewError} fallback={<GitStatePane tone="error" message={props.previewError ?? i18n.t('uiCopy.git.mergePreviewFailed')} class="m-4" surface />}>
+              <Show when={props.branch && preview()} fallback={<GitStatePane message={i18n.t('uiCopy.git.chooseBranchMergePlan')} class="m-4" surface />}>
                 <div class="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-2 pb-4">
                   <div class="flex flex-col gap-3">
                     <GitSubtleNote class="text-foreground">
                       <div class="space-y-2">
                         <div class="flex flex-wrap items-center gap-2">
                           <div class="text-xs font-semibold text-foreground">{sourceName()}</div>
-                          <GitMetaPill tone={outcomeTone(preview()?.outcome)}>{outcomeLabel(preview()?.outcome)}</GitMetaPill>
+                          <GitMetaPill tone={outcomeTone(preview()?.outcome)}>{outcomeLabel(preview()?.outcome, i18n)}</GitMetaPill>
                         </div>
                         <div class="text-[11px] leading-relaxed text-muted-foreground">
-                          {outcomeDetail(preview()?.outcome, currentRef(), sourceName())}
+                          {outcomeDetail(preview()?.outcome, currentRef(), sourceName(), i18n)}
                         </div>
                         <div class="grid gap-1 rounded-md bg-muted/[0.12] p-1 text-[11px] sm:grid-cols-2 lg:grid-cols-4">
                           <div class={cn('rounded border px-2 py-1', redevenSurfaceRoleClass('controlMuted'))}>
-                            <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Target</div>
+                            <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{i18n.t('git.common.target')}</div>
                             <div class="mt-0.5 font-medium text-foreground">{currentRef()}</div>
                           </div>
                           <div class={cn('rounded border px-2 py-1', redevenSurfaceRoleClass('controlMuted'))}>
-                            <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Source</div>
+                            <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{i18n.t('skillsSettings.table.source')}</div>
                             <div class="mt-0.5 font-medium text-foreground">{sourceName()}</div>
                           </div>
                           <div class={cn('rounded border px-2 py-1', redevenSurfaceRoleClass('controlMuted'))}>
-                            <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Ahead / Behind</div>
+                            <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{i18n.t('git.common.aheadBehind')}</div>
                             <div class="mt-0.5 font-medium text-foreground">↑{preview()?.sourceAheadCount ?? 0} ↓{preview()?.sourceBehindCount ?? 0}</div>
                           </div>
                           <div class={cn('rounded border px-2 py-1', redevenSurfaceRoleClass('controlMuted'))}>
-                            <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Merge base</div>
+                            <div class="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{i18n.t('git.common.mergeBase')}</div>
                             <div class="mt-0.5 font-medium text-foreground">{preview()?.mergeBase ? preview()?.mergeBase?.slice(0, 7) : '—'}</div>
                           </div>
                         </div>
@@ -275,7 +277,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                                 });
                               }}
                             >
-                              Stash current changes
+                              {i18n.t('uiCopy.git.stashCurrentChanges')}
                             </Button>
                           </Show>
                         </div>
@@ -288,10 +290,10 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                     <div class="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
                       <div class="flex items-center justify-between gap-2">
                         <div>
-                          <div class="text-xs font-semibold text-foreground">Changed Files</div>
-                          <div class="text-[11px] text-muted-foreground">Open any file to inspect the merge diff.</div>
+                          <div class="text-xs font-semibold text-foreground">{i18n.t('uiCopy.git.changedFiles')}</div>
+                          <div class="text-[11px] text-muted-foreground">{i18n.t('uiCopy.git.openMergeFileDiff')}</div>
                         </div>
-                        <GitMetaPill tone="neutral">{files().length} file{files().length === 1 ? '' : 's'}</GitMetaPill>
+                        <GitMetaPill tone="neutral">{i18n.tn('git.common.fileCount', files().length)}</GitMetaPill>
                       </div>
 
                       <div class="flex min-h-0 flex-1 overflow-hidden">
@@ -300,7 +302,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                             when={files().length > 0}
                             fallback={(
                               <div class="px-4 py-8">
-                                <GitSubtleNote>No changed files were found in this merge preview.</GitSubtleNote>
+                                <GitSubtleNote>{i18n.t('uiCopy.git.noMergeFiles')}</GitSubtleNote>
                               </div>
                             )}
                           >
@@ -308,10 +310,10 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                               <table class={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[46rem] md:min-w-0`}>
                                 <thead class={GIT_CHANGED_FILES_HEAD_CLASS}>
                                   <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
-                                    <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
+                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.path')}</th>
+                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.status')}</th>
+                                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.changes')}</th>
+                                    <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>{i18n.t('git.common.action')}</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -331,9 +333,9 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                                                   setDiffDialogOpen(true);
                                                 }}
                                               >
-                                                {mergePreviewFilePath(item)}
+                                                {mergePreviewFilePath(item, i18n)}
                                               </button>
-                                              <Show when={changeSecondaryPath(item) !== mergePreviewFilePath(item)}>
+                                              <Show when={changeSecondaryPath(item) !== mergePreviewFilePath(item, i18n)}>
                                                 <div class={GIT_CHANGED_FILES_SECONDARY_PATH_CLASS} title={changeSecondaryPath(item)}>{changeSecondaryPath(item)}</div>
                                               </Show>
                                             </div>
@@ -351,7 +353,7 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
                                                 setDiffDialogOpen(true);
                                               }}
                                             >
-                                              View Diff
+                                              {i18n.t('files.menuViewDiff')}
                                             </GitChangedFilesActionButton>
                                           </td>
                                         </tr>
@@ -386,9 +388,9 @@ export function GitMergeBranchDialog(props: GitMergeBranchDialogProps) {
           baseRef: String(preview()?.currentRef ?? '').trim(),
           targetRef: String(preview()?.sourceName ?? '').trim() || branchName(),
         } : null}
-        title="Merge Preview Diff"
-        description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : 'Review the selected merge diff.'}
-        emptyMessage="Select a changed file to inspect its diff."
+        title={i18n.t('uiCopy.git.mergePreviewDiff')}
+        description={diffDialogItem() ? changeSecondaryPath(diffDialogItem()) : i18n.t('uiCopy.git.reviewSelectedMergeDiff')}
+        emptyMessage={i18n.t('uiCopy.git.selectChangedFile')}
       />
     </>
   );

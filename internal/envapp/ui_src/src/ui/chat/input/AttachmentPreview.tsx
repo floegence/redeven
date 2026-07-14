@@ -4,6 +4,7 @@ import { For, Show } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { Attachment } from '../types';
+import { useI18n } from '../../i18n';
 
 export interface AttachmentPreviewProps {
   attachments: Attachment[];
@@ -20,6 +21,7 @@ function formatSize(bytes: number): string {
 }
 
 export const AttachmentPreview: Component<AttachmentPreviewProps> = (props) => {
+  const i18n = useI18n();
   return (
     <div class="chat-attachment-preview">
       <For each={props.attachments}>
@@ -65,7 +67,7 @@ export const AttachmentPreview: Component<AttachmentPreviewProps> = (props) => {
               class="chat-attachment-remove-btn"
               type="button"
               onClick={() => props.onRemove(att.id)}
-              title="Remove attachment"
+              title={i18n.t('uiCopy.chat.removeAttachment')}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" />

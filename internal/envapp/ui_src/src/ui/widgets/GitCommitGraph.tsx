@@ -2,6 +2,7 @@ import { For, Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { GitCommitSummary } from '../protocol/redeven_v1';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { useI18n } from '../i18n';
 
 export type CommitGraphLane = {
   hash: string;
@@ -193,6 +194,7 @@ export interface GitCommitGraphProps {
 }
 
 export function GitCommitGraph(props: GitCommitGraphProps) {
+  const i18n = useI18n();
   const rows = createMemo(() => buildCommitGraphRows(props.commits ?? []));
   const rowCount = createMemo(() => rows().length);
   const columns = createMemo(() => rows()[0]?.columns ?? 1);
@@ -286,7 +288,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                         data-commit-graph-subject={row.commit.hash}
                         class={cn('min-w-0 flex-1 truncate text-[11px] font-medium', selected() ? 'text-sidebar-accent-foreground' : 'text-foreground')}
                       >
-                        {row.commit.subject || '(no subject)'}
+                        {row.commit.subject || i18n.t('uiCopy.git.noSubject')}
                       </span>
                       <span
                         class={cn(
@@ -305,7 +307,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                         selected() ? 'text-sidebar-accent-foreground/72' : 'text-muted-foreground',
                       )}
                     >
-                      <span class="truncate">{row.commit.authorName || 'Unknown author'}</span>
+                      <span class="truncate">{row.commit.authorName || i18n.t('uiCopy.git.unknownAuthor')}</span>
                       <span aria-hidden="true">·</span>
                       <span>{formatRelativeTime(row.commit.authorTimeMs)}</span>
                       <Show when={Boolean(mergeLabel())}>
@@ -317,7 +319,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                       <Show when={selected()}>
                         <>
                           <span aria-hidden="true">·</span>
-                          <span class="text-sidebar-accent-foreground">Selected</span>
+                          <span class="text-sidebar-accent-foreground">{i18n.t('flowerProviderDialog.selectedCapability')}</span>
                         </>
                       </Show>
                     </div>

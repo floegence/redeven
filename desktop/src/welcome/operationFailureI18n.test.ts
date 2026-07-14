@@ -19,7 +19,7 @@ describe('operationFailureI18n', () => {
 
     expect(localizedOperationFailureTitle(createDesktopI18n('en-US'), failure)).toBe('Gateway Package Preparation Failed');
     expect(localizedOperationFailureSummary(createDesktopI18n('en-US'), failure)).toBe('Prepare Gateway package did not complete.');
-    expect(localizedOperationFailureTitle(createDesktopI18n('zh-CN'), failure)).toBe('Gateway 包准备失败');
-    expect(localizedOperationFailureSummary(createDesktopI18n('zh-CN'), failure)).toBe('Gateway 包准备未完成。');
+    expect(localizedOperationFailureTitle(createDesktopI18n('zh-CN'), failure)).toBe('网关包准备失败');
+    expect(localizedOperationFailureSummary(createDesktopI18n('zh-CN'), failure)).toBe('准备网关包未完成。');
   });
 });

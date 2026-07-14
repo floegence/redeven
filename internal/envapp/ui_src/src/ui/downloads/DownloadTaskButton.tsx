@@ -2,6 +2,7 @@ import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-j
 import { Download, Refresh, X } from '@floegence/floe-webapp-core/icons';
 
 import { Tooltip } from '../primitives/Tooltip';
+import { useI18n } from '../i18n';
 import { useDownloadManager } from './DownloadContext';
 import { DownloadTaskPanel } from './DownloadTaskPanel';
 
@@ -10,6 +11,7 @@ function compact(value: unknown): string {
 }
 
 export function DownloadTaskButton(props: { tooltip?: string | false }) {
+  const i18n = useI18n();
   const manager = useDownloadManager();
   const [open, setOpen] = createSignal(false);
   let rootEl: HTMLDivElement | undefined;
@@ -17,7 +19,7 @@ export function DownloadTaskButton(props: { tooltip?: string | false }) {
   const failedCount = createMemo(() => manager.tasks().filter((task) => task.status === 'failed').length);
   const activeCount = () => manager.activeCount();
   const badgeLabel = createMemo(() => activeCount() > 0 ? String(activeCount()) : failedCount() > 0 ? '!' : '');
-  const tooltip = () => compact(props.tooltip) || 'Downloads';
+  const tooltip = () => compact(props.tooltip) || i18n.t('uiCopy.downloads.title');
 
   createEffect(() => {
     if (!open()) return;
@@ -49,7 +51,7 @@ export function DownloadTaskButton(props: { tooltip?: string | false }) {
       class={`relative inline-flex size-8 cursor-pointer items-center justify-center rounded-md border border-transparent text-muted-foreground transition-colors duration-150 hover:border-border/70 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         open() ? 'border-border/70 bg-accent text-foreground' : ''
       }`}
-      aria-label="Downloads"
+      aria-label={i18n.t('uiCopy.downloads.title')}
       aria-expanded={open()}
       aria-haspopup="dialog"
       onClick={() => setOpen((current) => !current)}
