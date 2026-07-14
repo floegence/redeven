@@ -162,6 +162,37 @@ VALUES(?, ?, ?, 'request_fingerprint_mismatch', ?, ?, ?)
 	return tx.Commit()
 }
 
+func (s *Store) UpdatePendingDelegatedApprovalPresentation(ctx context.Context, rec DelegatedApprovalRecord) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rec = normalizeDelegatedApprovalRecord(rec)
+	if rec.EndpointID == "" || rec.ParentThreadID == "" || rec.ActionID == "" || rec.ActionJSON == "" || rec.Version <= 0 || rec.SurfaceEpoch <= 0 {
+		return false, errors.New("invalid delegated approval presentation")
+	}
+	now := time.Now().UnixMilli()
+	result, err := s.db.ExecContext(ctx, `
+UPDATE ai_delegated_approval_requests
+SET action_json = ?,
+    expires_at_unix_ms = ?,
+    updated_at_unix_ms = ?
+WHERE endpoint_id = ?
+  AND parent_thread_id = ?
+  AND action_id = ?
+  AND status = 'pending'
+  AND version = ?
+  AND surface_epoch = ?
+`, rec.ActionJSON, rec.ExpiresAtUnixMs, now, rec.EndpointID, rec.ParentThreadID, rec.ActionID, rec.Version, rec.SurfaceEpoch)
+	if err != nil {
+		return false, err
+	}
+	changed, _ := result.RowsAffected()
+	return changed == 1, nil
+}
+
 func (s *Store) SubmitDelegatedApprovalDecisionCAS(ctx context.Context, req DelegatedApprovalDecisionRequest) (DelegatedApprovalDecisionResult, error) {
 	if s == nil || s.db == nil {
 		return DelegatedApprovalDecisionResult{}, errors.New("store not initialized")
@@ -390,6 +421,63 @@ SELECT endpoint_id, parent_thread_id, action_id, 'unavailable', version, ?, ?
 FROM ai_delegated_approval_requests
 WHERE endpoint_id = ? AND parent_thread_id = ? AND action_id = ?
 `, payloadJSON, nowUnixMs, endpointID, parentThreadID, actionID); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
+func (s *Store) MarkDelegatedApprovalCanceled(ctx context.Context, endpointID string, parentThreadID string, actionID string, nextVersion int64, nextActionJSON string, reason string, nowUnixMs int64) (bool, error) {
+	if s == nil || s.db == nil {
+		return false, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	parentThreadID = strings.TrimSpace(parentThreadID)
+	actionID = strings.TrimSpace(actionID)
+	nextActionJSON = strings.TrimSpace(nextActionJSON)
+	if endpointID == "" || parentThreadID == "" || actionID == "" || nextVersion <= 1 || nextActionJSON == "" {
+		return false, errors.New("invalid delegated approval cancellation")
+	}
+	if nowUnixMs <= 0 {
+		nowUnixMs = time.Now().UnixMilli()
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "run canceled"
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `
+UPDATE ai_delegated_approval_requests
+SET state = 'canceled',
+    status = 'resolved',
+    delivery_state = 'delivery_unavailable',
+    version = ?,
+    resolved_at_unix_ms = ?,
+    action_json = ?,
+    updated_at_unix_ms = ?
+WHERE endpoint_id = ?
+  AND parent_thread_id = ?
+  AND action_id = ?
+  AND status = 'pending'
+  AND version = ?
+`, nextVersion, nowUnixMs, nextActionJSON, nowUnixMs, endpointID, parentThreadID, actionID, nextVersion-1)
+	if err != nil {
+		return false, err
+	}
+	changed, _ := result.RowsAffected()
+	if changed == 0 {
+		return false, tx.Commit()
+	}
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO ai_delegated_approval_events(endpoint_id, parent_thread_id, action_id, event_type, version, payload_json, created_at_unix_ms)
+VALUES(?, ?, ?, 'canceled', ?, ?, ?)
+`, endpointID, parentThreadID, actionID, nextVersion, delegatedApprovalReasonPayload(reason), nowUnixMs); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()
@@ -794,6 +882,9 @@ func canonicalDelegatedApprovalRequestAction(raw string) any {
 		"delivery_state",
 		"child_execution_state",
 		"primary_wait_anchor",
+		"surface_role",
+		"queue_generation",
+		"queue_order",
 	} {
 		delete(payload, key)
 	}

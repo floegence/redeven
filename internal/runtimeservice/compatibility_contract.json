@@ -1,22 +1,21 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.7.2",
-    "previous_release": "v0.7.1",
+    "release_version": "unreleased",
+    "previous_release": "v0.7.2",
     "reviewed_at": "2026-07-14",
-    "review_id": "runtime-security-and-product-refresh-v0-7-2",
-    "summary": "Runtime security boundaries, published Flowersec and Floe Webapp dependencies, Flower and Floret integration, Desktop lifecycle handling, and Env App product behavior are refreshed without changing the Runtime Service compatibility window.",
+    "review_id": "flower-model-directed-tool-concurrency",
+    "summary": "Flower consumes published Floret v0.4.0 for model-directed concurrent tool batches and adds a serialized product approval queue without changing the Runtime Service compatibility window.",
     "checked_surfaces": [
       "Runtime Service protocol_version remains redeven-runtime-v1; the compatibility epoch remains 5 and minimum Desktop/Runtime versions remain v0.7.0",
-      "Remote Flowersec connections explicitly require TLS while direct Local UI transport is restricted to literal loopback authorities; Host and Origin validation, HTTP limits, WebSocket limits, and security headers do not alter Runtime Service request or response schemas",
-      "Startup passwords and bootstrap tickets use prompt, stdin, protected file, fixed environment, or Desktop envelope ingress; removed secret-bearing flags and encrypted runtime persistence change command security without changing Desktop attach/start or structured startup report fields",
-      "Shell and process launch now require both write and execute permission across terminal, Flower, Floret, Codex bridge, Desktop, Local UI, and remote sessions; execute_read remains limited to explicitly modeled non-mutating operations",
-      "Flowersec Go and TypeScript capabilities are consumed from published v0.19.11 artifacts and Floe Webapp packages from published v0.36.74 artifacts, with no replace, go.work, package-manager link, or local sibling path wiring",
-      "The published flower-floret-runtime-contract-hardening boundary remains intact: Floret v0.3.90 projection recovery, independent token budgets, deletion fencing, and shared activity summary rebuilding remain internal to Flower and thread persistence",
-      "Desktop managed-process reconciliation, Env App activity and terminal recovery, plugin surfaces, settings, and navigation behavior preserve the existing Runtime Service control methods and gateway lifecycle payloads",
-      "Desktop attach/start, Local UI health, structured startup reports, sys.ping, Env App maintenance UI, gateway lifecycle, SSH runtime bootstrap, and installer version discovery were reviewed against the existing v0.7.0 minimum compatibility window"
+      "Floret is consumed only from the published github.com/floegence/floret v0.4.0 module with GOWORK=off validation and no replace, go.work, package-manager link, or local sibling path wiring",
+      "Model tool calls emitted in one response execute concurrently inside the published Floret lifecycle while transcript ordering, cancellation, permission, approval, audit, and control-signal boundaries remain internal to Flower and Floret",
+      "Provider parallel_tool_calls wire enablement is limited to documented official endpoints and only affects model request generation; it does not participate in execution scheduling or Runtime Service request and response schemas",
+      "Flower serializes user approval interaction through thread live state with queue generation, revision, and action compare-and-swap fields while approved handlers may overlap; this product state does not change Runtime Service control methods",
+      "Permission snapshots use a current v2 view while preserving exact v1 integrity verification and historical records; no Runtime Service permission or persistence envelope changes",
+      "Desktop attach/start, Local UI health, structured startup reports, sys.ping, Env App maintenance UI, gateway lifecycle, SSH runtime bootstrap, and installer version discovery remain compatible with the existing v0.7.0 minimum window"
     ],
-    "same_window_rationale": "The compatibility window is unchanged because the release hardens local transport, credential ingress and persistence, process permission enforcement, and product lifecycle behavior without changing the redeven-runtime-v1 wire protocol. Published Flowersec v0.19.11, Floe Webapp v0.36.74, and Floret v0.3.90 integrations preserve Runtime Service request and response fields, control methods, attach/start handshakes, structured startup reports, sys.ping semantics, Local UI health, Env App maintenance routes, gateway lifecycle messages, SSH runtime bootstrap, and installer version discovery. Existing v0.7.0 Desktop and Runtime binaries therefore remain within the declared compatibility window."
+    "same_window_rationale": "The compatibility window is unchanged because Floret v0.4.0 batch execution, provider request shaping, Flower approval queue state, and permission snapshot migration are internal AI runtime and product live-state behavior. They do not change redeven-runtime-v1 requests, responses, control methods, attach/start handshakes, structured startup reports, sys.ping semantics, Local UI health, Env App maintenance routes, gateway lifecycle messages, SSH runtime bootstrap, or installer version discovery. Existing v0.7.0 Desktop and Runtime binaries remain compatible."
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 5,

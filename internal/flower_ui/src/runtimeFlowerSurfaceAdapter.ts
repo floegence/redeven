@@ -78,12 +78,14 @@ type RuntimeApprovalSubmitBase = Readonly<{
   revision?: number;
   version?: number;
   surface_epoch?: number;
+  queue_generation: number;
+  queue_revision: number;
   idempotency_key?: string;
 }>;
 
 type RuntimeApprovalSubmitInput =
   | (RuntimeApprovalSubmitBase & Readonly<{
-      origin?: 'main_tool';
+      origin?: 'main_tool' | 'control_confirm';
       run_id: string;
       tool_id: string;
       delegated_ref?: never;
@@ -282,6 +284,8 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         revision: Math.max(0, Math.floor(Number(input.revision ?? 0))) || undefined,
         version: Math.max(0, Math.floor(Number(input.version ?? 0))) || undefined,
         surface_epoch: Math.max(0, Math.floor(Number(input.surface_epoch ?? 0))) || undefined,
+        queue_generation: Math.max(0, Math.floor(Number(input.queue_generation ?? 0))),
+        queue_revision: Math.max(0, Math.floor(Number(input.queue_revision ?? 0))),
         ...(input.idempotency_key ? { idempotency_key: trim(input.idempotency_key) } : {}),
       };
       if (input.origin === 'delegated_subagent') {

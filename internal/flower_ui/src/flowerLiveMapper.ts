@@ -906,7 +906,8 @@ function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
   if (!record) return null;
   const actionID = trim(record.action_id);
   if (!actionID) return null;
-  const origin = trim(record.origin) === 'delegated_subagent' ? 'delegated_subagent' : 'main_tool';
+  const rawOrigin = trim(record.origin);
+  const origin = rawOrigin === 'delegated_subagent' || rawOrigin === 'control_confirm' ? rawOrigin : 'main_tool';
   const runID = trim(record.run_id);
   const toolID = trim(record.tool_id);
   const summary = recordValue(record.summary) ?? {};
@@ -952,6 +953,10 @@ function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
     ...(trim(record.delivery_state) ? { delivery_state: trim(record.delivery_state) as FlowerApprovalAction['delivery_state'] } : {}),
     ...(trim(record.child_execution_state) ? { child_execution_state: trim(record.child_execution_state) as FlowerApprovalAction['child_execution_state'] } : {}),
     ...(trim(record.primary_wait_anchor) ? { primary_wait_anchor: trim(record.primary_wait_anchor) } : {}),
+    queue_generation: Math.max(0, Math.floor(Number(record.queue_generation ?? 0))),
+    queue_order: Math.max(0, Math.floor(Number(record.queue_order ?? 0))),
+    batch_index: Math.max(0, Math.floor(Number(record.batch_index ?? 0))),
+    batch_size: Math.max(1, Math.floor(Number(record.batch_size ?? 1))),
     summary: {
       label: trim(summary.label) || toolName || 'Tool approval',
       ...(trim(summary.description) ? { description: trim(summary.description) } : {}),
@@ -982,9 +987,23 @@ function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
   }
   return {
     ...base,
-    origin: 'main_tool',
+    origin: origin === 'control_confirm' ? 'control_confirm' : 'main_tool',
     run_id: runID,
     tool_id: toolID,
+  };
+}
+
+function mapApprovalQueue(raw: unknown): FlowerLiveMaterializedState['approval_queue'] {
+  if (raw === null) return null;
+  const record = recordValue(raw);
+  if (!record) return undefined;
+  return {
+    generation: Math.max(0, Math.floor(Number(record.generation ?? 0))),
+    revision: Math.max(0, Math.floor(Number(record.revision ?? 0))),
+    ...(trim(record.current_action_id) ? { current_action_id: trim(record.current_action_id) } : {}),
+    current_position: Math.max(0, Math.floor(Number(record.current_position ?? 0))),
+    total: Math.max(0, Math.floor(Number(record.total ?? 0))),
+    unresolved_count: Math.max(0, Math.floor(Number(record.unresolved_count ?? 0))),
   };
 }
 
@@ -1062,6 +1081,7 @@ function mapLiveState(raw: unknown): FlowerLiveMaterializedState {
   const contextUsage = record.context_usage === null ? null : mapContextUsage(record.context_usage);
   const contextCompactions = mapContextCompactionsSnapshot(record.context_compactions);
   const timelineDecorations = mapTimelineDecorationsSnapshot(record.timeline_decorations);
+  const approvalQueue = mapApprovalQueue(record.approval_queue);
 
   return {
     thread_patch: mapThreadPatch(record.thread_patch) ?? {},
@@ -1071,6 +1091,7 @@ function mapLiveState(raw: unknown): FlowerLiveMaterializedState {
     ...(contextCompactions !== undefined ? { context_compactions: contextCompactions } : {}),
     ...(timelineDecorations !== undefined ? { timeline_decorations: timelineDecorations } : {}),
     ...(approvalsRecord !== undefined ? { approval_actions: approvals } : {}),
+    ...(record.approval_queue !== undefined ? { approval_queue: approvalQueue } : {}),
     input_requests: inputRequests,
   };
 }
@@ -1091,6 +1112,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   const timelineDecorations = mapTimelineDecorations(record.timeline_decorations);
   const subagents = mapFlowerSubagents(record.subagents, 'thread.subagents');
   const queuedTurns = mapFlowerQueuedTurns(record.queued_turns);
+  const approvalQueue = mapApprovalQueue(record.approval_queue);
   return {
     thread_id: threadID,
     title: trim(record.title) || trim(record.last_message_preview) || 'Ask Flower',
@@ -1120,6 +1142,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
     ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     ...(subagents !== undefined ? { subagents } : {}),
+    ...(approvalQueue ? { approval_queue: approvalQueue } : {}),
     ...(inputRequest ? { input_request: inputRequest } : {}),
     ...(errorMessage ? { error: { message: errorMessage, ...(errorCode ? { code: errorCode } : {}) } } : {}),
     read_status: mapFlowerReadStatus(readStatusRaw ?? record.read_status),
@@ -1192,7 +1215,10 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
       } as FlowerLiveMessageFailedPayload;
     case 'approval.requested':
     case 'approval.resolved':
-      return { action: mapApprovalAction(record.action) ?? undefined } as FlowerLiveApprovalPayload;
+      return {
+        action: mapApprovalAction(record.action) ?? undefined,
+        ...(mapApprovalQueue(record.approval_queue) ? { approval_queue: mapApprovalQueue(record.approval_queue) } : {}),
+      } as FlowerLiveApprovalPayload;
     case 'input.requested':
       return { request: mapInputRequest(record.request) ?? undefined } as FlowerLiveInputRequestedPayload;
     case 'input.resolved':

@@ -869,15 +869,27 @@ func waitDelegatedApprovalRequested(t *testing.T, svc *Service, endpointID strin
 	return FlowerApprovalAction{}
 }
 
+func approvalQueueRevisionForTest(svc *Service, endpointID string, threadID string) int64 {
+	if svc == nil {
+		return 0
+	}
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
+	stream := svc.flowerLiveByThread[runThreadKey(endpointID, threadID)]
+	if stream == nil || stream.State.ApprovalQueue == nil {
+		return 0
+	}
+	return stream.State.ApprovalQueue.Revision
+}
+
 func waitApprovalRequested(t *testing.T, r *run, toolID string) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		r.mu.Lock()
 		_, pending := r.toolApprovals[toolID]
-		waiting := r.waitingApproval
 		r.mu.Unlock()
-		if pending && waiting {
+		if pending {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -889,10 +901,9 @@ func assertNoApprovalWait(t *testing.T, r *run, toolID string) {
 	t.Helper()
 	r.mu.Lock()
 	_, pending := r.toolApprovals[toolID]
-	waiting := r.waitingApproval
 	r.mu.Unlock()
-	if pending || waiting {
-		t.Fatalf("unexpected approval wait state: tool_id=%s pending=%v waiting=%v", toolID, pending, waiting)
+	if pending {
+		t.Fatalf("unexpected approval wait state: tool_id=%s pending=%v", toolID, pending)
 	}
 }
 
@@ -935,9 +946,8 @@ func runBuiltinToolCall(t *testing.T, r *run, toolID string, toolName string, ar
 		if !expectApproval {
 			r.mu.Lock()
 			_, pending := r.toolApprovals[toolID]
-			waiting := r.waitingApproval
 			r.mu.Unlock()
-			if pending && waiting {
+			if pending {
 				_ = r.approveTool(toolID, false)
 				t.Fatalf("unexpected approval request for %s", toolID)
 			}
@@ -1700,16 +1710,18 @@ func TestPermissionPolicy_SubagentApprovalDelegatesToParentRun(t *testing.T) {
 	assertNoApprovalWait(t, parent, "tool_child_shell")
 	assertNoApprovalWait(t, child, "tool_child_shell")
 	approveReq := SubmitFlowerApprovalRequest{
-		ThreadID:       parent.threadID,
-		Origin:         FlowerApprovalOriginDelegatedSubagent,
-		ActionID:       action.ActionID,
-		Approved:       true,
-		ExpectedSeq:    action.ExpectedSeq,
-		Revision:       action.Revision,
-		Version:        action.Version,
-		SurfaceEpoch:   action.SurfaceEpoch,
-		IdempotencyKey: "idem-delegated-approve",
-		DelegatedRef:   action.DelegatedRef,
+		ThreadID:        parent.threadID,
+		Origin:          FlowerApprovalOriginDelegatedSubagent,
+		ActionID:        action.ActionID,
+		Approved:        true,
+		ExpectedSeq:     action.ExpectedSeq,
+		Revision:        action.Revision,
+		Version:         action.Version,
+		SurfaceEpoch:    action.SurfaceEpoch,
+		QueueGeneration: action.QueueGeneration,
+		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
+		IdempotencyKey:  "idem-delegated-approve",
+		DelegatedRef:    action.DelegatedRef,
 	}
 	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, approveReq); err != nil {
 		t.Fatalf("SubmitFlowerApproval delegated approve: %v", err)
@@ -1770,16 +1782,18 @@ func TestPermissionPolicy_SubagentDelegatedSubmitRequiresParentOwner(t *testing.
 
 	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
 	approveReq := SubmitFlowerApprovalRequest{
-		ThreadID:       parent.threadID,
-		Origin:         FlowerApprovalOriginDelegatedSubagent,
-		ActionID:       action.ActionID,
-		Approved:       true,
-		ExpectedSeq:    action.ExpectedSeq,
-		Revision:       action.Revision,
-		Version:        action.Version,
-		SurfaceEpoch:   action.SurfaceEpoch,
-		IdempotencyKey: "idem-delegated-owner-intruder",
-		DelegatedRef:   action.DelegatedRef,
+		ThreadID:        parent.threadID,
+		Origin:          FlowerApprovalOriginDelegatedSubagent,
+		ActionID:        action.ActionID,
+		Approved:        true,
+		ExpectedSeq:     action.ExpectedSeq,
+		Revision:        action.Revision,
+		Version:         action.Version,
+		SurfaceEpoch:    action.SurfaceEpoch,
+		QueueGeneration: action.QueueGeneration,
+		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
+		IdempotencyKey:  "idem-delegated-owner-intruder",
+		DelegatedRef:    action.DelegatedRef,
 	}
 	intruderMeta := *parent.sessionMeta
 	intruderMeta.UserPublicID = "user_intruder"
@@ -1847,14 +1861,16 @@ func TestPermissionPolicy_SubagentDelegatedConcurrentSubmitOnlyOneWins(t *testin
 
 	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
 	base := SubmitFlowerApprovalRequest{
-		ThreadID:     parent.threadID,
-		Origin:       FlowerApprovalOriginDelegatedSubagent,
-		ActionID:     action.ActionID,
-		ExpectedSeq:  action.ExpectedSeq,
-		Revision:     action.Revision,
-		Version:      action.Version,
-		SurfaceEpoch: action.SurfaceEpoch,
-		DelegatedRef: action.DelegatedRef,
+		ThreadID:        parent.threadID,
+		Origin:          FlowerApprovalOriginDelegatedSubagent,
+		ActionID:        action.ActionID,
+		ExpectedSeq:     action.ExpectedSeq,
+		Revision:        action.Revision,
+		Version:         action.Version,
+		SurfaceEpoch:    action.SurfaceEpoch,
+		QueueGeneration: action.QueueGeneration,
+		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
+		DelegatedRef:    action.DelegatedRef,
 	}
 	approveReq := base
 	approveReq.Approved = true
@@ -1946,14 +1962,16 @@ func TestPermissionPolicy_SubagentDelegatedStaleVersionAndSurfaceEpochDoNotDeliv
 
 	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
 	base := SubmitFlowerApprovalRequest{
-		ThreadID:       parent.threadID,
-		Origin:         FlowerApprovalOriginDelegatedSubagent,
-		ActionID:       action.ActionID,
-		Approved:       true,
-		Version:        action.Version,
-		SurfaceEpoch:   action.SurfaceEpoch,
-		IdempotencyKey: "idem-delegated-stale",
-		DelegatedRef:   action.DelegatedRef,
+		ThreadID:        parent.threadID,
+		Origin:          FlowerApprovalOriginDelegatedSubagent,
+		ActionID:        action.ActionID,
+		Approved:        true,
+		Version:         action.Version,
+		SurfaceEpoch:    action.SurfaceEpoch,
+		QueueGeneration: action.QueueGeneration,
+		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
+		IdempotencyKey:  "idem-delegated-stale",
+		DelegatedRef:    action.DelegatedRef,
 	}
 	staleVersion := base
 	staleVersion.Version++
@@ -2021,14 +2039,16 @@ func TestPermissionPolicy_SubagentDelegatedIdempotencyConflictDoesNotRedeliver(t
 
 	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
 	approveReq := SubmitFlowerApprovalRequest{
-		ThreadID:       parent.threadID,
-		Origin:         FlowerApprovalOriginDelegatedSubagent,
-		ActionID:       action.ActionID,
-		Approved:       true,
-		Version:        action.Version,
-		SurfaceEpoch:   action.SurfaceEpoch,
-		IdempotencyKey: "idem-delegated-conflict",
-		DelegatedRef:   action.DelegatedRef,
+		ThreadID:        parent.threadID,
+		Origin:          FlowerApprovalOriginDelegatedSubagent,
+		ActionID:        action.ActionID,
+		Approved:        true,
+		Version:         action.Version,
+		SurfaceEpoch:    action.SurfaceEpoch,
+		QueueGeneration: action.QueueGeneration,
+		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
+		IdempotencyKey:  "idem-delegated-conflict",
+		DelegatedRef:    action.DelegatedRef,
 	}
 	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, approveReq); err != nil {
 		t.Fatalf("approve delegated: %v", err)
@@ -2269,15 +2289,17 @@ func TestPermissionPolicy_SubagentDelegatedSubmitRequiresMatchingRef(t *testing.
 
 	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
 	base := SubmitFlowerApprovalRequest{
-		ThreadID:       parent.threadID,
-		Origin:         FlowerApprovalOriginDelegatedSubagent,
-		ActionID:       action.ActionID,
-		Approved:       true,
-		ExpectedSeq:    action.ExpectedSeq,
-		Revision:       action.Revision,
-		Version:        action.Version,
-		SurfaceEpoch:   action.SurfaceEpoch,
-		IdempotencyKey: "idem-delegated-ref",
+		ThreadID:        parent.threadID,
+		Origin:          FlowerApprovalOriginDelegatedSubagent,
+		ActionID:        action.ActionID,
+		Approved:        true,
+		ExpectedSeq:     action.ExpectedSeq,
+		Revision:        action.Revision,
+		Version:         action.Version,
+		SurfaceEpoch:    action.SurfaceEpoch,
+		QueueGeneration: action.QueueGeneration,
+		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
+		IdempotencyKey:  "idem-delegated-ref",
 	}
 	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, base); err == nil || !strings.Contains(err.Error(), "ref is required") {
 		t.Fatalf("missing delegated ref error=%v, want ref required", err)
@@ -2337,16 +2359,18 @@ func TestPermissionPolicy_SubagentDelegatedRejectPreventsExecution(t *testing.T)
 		t.Fatalf("delegated action ref=%#v, want child tool call tool_child_reject", action.DelegatedRef)
 	}
 	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, SubmitFlowerApprovalRequest{
-		ThreadID:       parent.threadID,
-		Origin:         FlowerApprovalOriginDelegatedSubagent,
-		ActionID:       action.ActionID,
-		Approved:       false,
-		ExpectedSeq:    action.ExpectedSeq,
-		Revision:       action.Revision,
-		Version:        action.Version,
-		SurfaceEpoch:   action.SurfaceEpoch,
-		IdempotencyKey: "idem-delegated-reject",
-		DelegatedRef:   action.DelegatedRef,
+		ThreadID:        parent.threadID,
+		Origin:          FlowerApprovalOriginDelegatedSubagent,
+		ActionID:        action.ActionID,
+		Approved:        false,
+		ExpectedSeq:     action.ExpectedSeq,
+		Revision:        action.Revision,
+		Version:         action.Version,
+		SurfaceEpoch:    action.SurfaceEpoch,
+		QueueGeneration: action.QueueGeneration,
+		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
+		IdempotencyKey:  "idem-delegated-reject",
+		DelegatedRef:    action.DelegatedRef,
 	}); err != nil {
 		t.Fatalf("SubmitFlowerApproval delegated reject: %v", err)
 	}

@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -238,14 +239,12 @@ func (r *run) waitForFloretToolApproval(ctx context.Context, req fltools.Approva
 	toolName := strings.TrimSpace(req.Name)
 	args := floretApprovalArgs(req)
 	ch := make(chan bool, 1)
+	promoted := make(chan struct{})
 	requestedAt := time.Now().UnixMilli()
-	expiresAt := int64(0)
-	if r.toolApprovalTO > 0 {
-		expiresAt = requestedAt + r.toolApprovalTO.Milliseconds()
-	}
 	r.mu.Lock()
 	r.toolApprovals[toolID] = &toolApprovalRequest{
 		decision:      ch,
+		promoted:      promoted,
 		toolName:      toolName,
 		argsHash:      strings.TrimSpace(req.ArgsHash),
 		command:       approvalCommandForTool(toolName, args),
@@ -254,17 +253,22 @@ func (r *run) waitForFloretToolApproval(ctx context.Context, req fltools.Approva
 		flags:         floretApprovalFlags(req),
 		targets:       floretApprovalTargets(req),
 		requestedAtMs: requestedAt,
-		expiresAtMs:   expiresAt,
 	}
-	r.waitingApproval = true
 	r.mu.Unlock()
+	if r.service == nil {
+		r.promoteToolApproval(toolID)
+	}
 	r.syncPendingFloretApprovals(ctx, "approver_registered")
 	defer func() {
 		r.mu.Lock()
 		delete(r.toolApprovals, toolID)
-		r.waitingApproval = false
 		r.mu.Unlock()
 	}()
+	select {
+	case <-promoted:
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
 
 	timeout := r.toolApprovalTO
 	if timeout <= 0 {
@@ -280,6 +284,18 @@ func (r *run) waitForFloretToolApproval(ctx context.Context, req fltools.Approva
 	case <-timer.C:
 		return false, context.DeadlineExceeded
 	}
+}
+
+func (r *run) promoteToolApproval(toolID string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	approval := r.toolApprovals[strings.TrimSpace(toolID)]
+	if approval != nil && approval.promoted != nil {
+		approval.promotedOnce.Do(func() { close(approval.promoted) })
+	}
+	r.mu.Unlock()
 }
 
 func (r *run) publishControlConfirmationRequested(toolID string) {
@@ -376,7 +392,29 @@ func (r *run) flowerApprovalActionsFromFloretPending(pending flruntime.PendingAp
 		}
 		out = append(out, action)
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		left, right := out[i], out[j]
+		if left.RunID != right.RunID {
+			return left.RunID < right.RunID
+		}
+		if left.StepID != right.StepID {
+			return flowerApprovalStepNumber(left.StepID) < flowerApprovalStepNumber(right.StepID)
+		}
+		if left.BatchIndex != right.BatchIndex {
+			return left.BatchIndex < right.BatchIndex
+		}
+		return left.ActionID < right.ActionID
+	})
 	return out
+}
+
+func flowerApprovalStepNumber(stepID string) int {
+	raw := strings.TrimPrefix(strings.TrimSpace(stepID), "step:")
+	step, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0
+	}
+	return step
 }
 
 func (r *run) pendingLiveToolApprovals() []FlowerApprovalAction {
@@ -410,6 +448,9 @@ func (r *run) pendingLiveToolApprovals() []FlowerApprovalAction {
 }
 
 func (r *run) publishRunningAfterApprovalIfNoPending(resolvedActionID string) {
+	if r != nil && r.service != nil && r.service.threadHasPendingApprovals(r.endpointID, r.threadID) {
+		return
+	}
 	resolvedActionID = strings.TrimSpace(resolvedActionID)
 	for _, action := range r.pendingLiveToolApprovals() {
 		if strings.TrimSpace(action.ActionID) == resolvedActionID {
@@ -500,6 +541,10 @@ func (r *run) flowerApprovalActionFromFloretPending(approval flruntime.PendingAp
 	if revision <= 0 {
 		revision = 1
 	}
+	surfaceEpoch := approval.Epoch
+	if surfaceEpoch <= 0 {
+		surfaceEpoch = 1
+	}
 	runID := strings.TrimSpace(r.id)
 	turnID := firstNonEmptyString(strings.TrimSpace(string(approval.TurnID)), strings.TrimSpace(string(approval.RunID)), strings.TrimSpace(r.messageID))
 	command := floretPendingApprovalCommand(approval)
@@ -517,7 +562,9 @@ func (r *run) flowerApprovalActionFromFloretPending(approval flruntime.PendingAp
 		Status:        status,
 		Revision:      revision,
 		Version:       revision,
-		SurfaceEpoch:  approval.Epoch,
+		SurfaceEpoch:  surfaceEpoch,
+		BatchIndex:    approval.BatchIndex,
+		BatchSize:     max(1, approval.BatchSize),
 		RequestedAtMs: requestedAt,
 		CanApprove:    true,
 		Summary: FlowerApprovalSummary{

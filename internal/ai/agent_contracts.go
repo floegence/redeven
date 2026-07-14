@@ -166,7 +166,6 @@ type ToolDef struct {
 	Name             string                       `json:"name"`
 	Description      string                       `json:"description,omitempty"`
 	InputSchema      json.RawMessage              `json:"input_schema,omitempty"`
-	ParallelSafe     bool                         `json:"parallel_safe,omitempty"`
 	Mutating         bool                         `json:"mutating,omitempty"`
 	RequiresApproval bool                         `json:"requires_approval,omitempty"`
 	Visibility       ToolVisibilityClass          `json:"visibility,omitempty"`

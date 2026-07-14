@@ -381,6 +381,8 @@ describe('runtime Flower surface adapter read state', () => {
       approved: true,
       expected_seq: 12.9,
       revision: 2.1,
+      queue_generation: 4,
+      queue_revision: 5,
     });
 
     expect(submitApproval).toHaveBeenCalledWith({
@@ -394,6 +396,8 @@ describe('runtime Flower surface adapter read state', () => {
       revision: 2,
       version: undefined,
       surface_epoch: undefined,
+      queue_generation: 4,
+      queue_revision: 5,
     });
   });
 
@@ -417,6 +421,8 @@ describe('runtime Flower surface adapter read state', () => {
       approved: false,
       version: 3,
       surface_epoch: 5,
+      queue_generation: 6,
+      queue_revision: 7,
       idempotency_key: ' idem-1 ',
       delegated_ref: delegatedRef,
     });
@@ -430,6 +436,8 @@ describe('runtime Flower surface adapter read state', () => {
       revision: undefined,
       version: 3,
       surface_epoch: 5,
+      queue_generation: 6,
+      queue_revision: 7,
       idempotency_key: 'idem-1',
       delegated_ref: delegatedRef,
     });

@@ -305,7 +305,12 @@ func buildPromptMandateSection(spec promptProfileSpec) promptSection {
 }
 
 func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
-	lines := []string{"# Tool Usage Strategy"}
+	lines := []string{
+		"# Tool Usage Strategy",
+		"- When the arguments are fully known and calls do not depend on one another, emit those calls together in the same response.",
+		"- When a call depends on a previous result, wait for that result and emit the dependent call in a later response.",
+		"- The runtime does not infer dependencies or conflicts between calls; express dependencies through response boundaries.",
+	}
 	if strings.TrimSpace(snapshot.PermissionType) == string(FlowerPermissionReadonly) {
 		lines = append(lines,
 			"Follow this workflow for every task:",

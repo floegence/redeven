@@ -311,8 +311,8 @@ func (r *run) bindStoredChildPermissionSnapshot(childThreadID string, childRunID
 		r.toolAllowlist = map[string]struct{}{}
 		return
 	}
-	var snapshot PermissionSnapshot
-	if err := json.Unmarshal([]byte(rec.SnapshotJSON), &snapshot); err != nil {
+	snapshot, err := decodePermissionSnapshot(rec.SnapshotJSON)
+	if err != nil {
 		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
 		r.toolAllowlist = map[string]struct{}{}
 		return
@@ -381,8 +381,8 @@ func (r *run) validateStoredChildPermissionSnapshot(ctx context.Context, rec thr
 	if !ok {
 		return errors.New("parent permission snapshot missing")
 	}
-	var parent PermissionSnapshot
-	if err := json.Unmarshal([]byte(parentRec.SnapshotJSON), &parent); err != nil {
+	parent, err := decodePermissionSnapshot(parentRec.SnapshotJSON)
+	if err != nil {
 		return err
 	}
 	if strings.TrimSpace(parent.SnapshotID) == "" {
@@ -455,7 +455,11 @@ func (r *run) validateCurrentChildPermissionSnapshotCompatibility(snapshot Permi
 	if err != nil {
 		return err
 	}
-	if got := stableToolRegistryHash(floretTools); got != strings.TrimSpace(snapshot.RegistryHash) {
+	registryHash := stableToolRegistryHash(floretTools)
+	if snapshot.Version == permissionSnapshotVersionLegacy {
+		registryHash = stableToolRegistryHashV1(floretTools, snapshot.legacyConcurrency)
+	}
+	if registryHash != strings.TrimSpace(snapshot.RegistryHash) {
 		return errors.New("child permission snapshot registry is incompatible with current tools")
 	}
 	if got := stableToolSchemaHash(floretTools); got != strings.TrimSpace(snapshot.SchemaHash) {
@@ -704,16 +708,15 @@ func floretToolDefinition(r *run, def ToolDef) (fltools.Definition, error) {
 		annotations[fltools.AnnotationRepeatPolicy] = fltools.RepeatPolicyPolling
 	}
 	return fltools.Definition{
-		Name:         toolName,
-		Title:        toolName,
-		Description:  strings.TrimSpace(def.Description),
-		InputSchema:  inputSchema,
-		Effects:      effects,
-		ReadOnly:     readOnly,
-		Destructive:  def.Mutating,
-		OpenWorld:    floretToolOpenWorld(def),
-		ParallelSafe: floretToolParallelSafe(def, effects),
-		Permission:   permission,
+		Name:        toolName,
+		Title:       toolName,
+		Description: strings.TrimSpace(def.Description),
+		InputSchema: inputSchema,
+		Effects:     effects,
+		ReadOnly:    readOnly,
+		Destructive: def.Mutating,
+		OpenWorld:   floretToolOpenWorld(def),
+		Permission:  permission,
 		PermissionFor: func(req fltools.PermissionRequest) (fltools.PermissionSpec, error) {
 			args, _ := req.Args.(map[string]any)
 			currentPermissionType := permissionType
@@ -960,21 +963,6 @@ func stripRedevenTargetFieldsFromFloretToolSchema(_ string, inputSchema map[stri
 	}
 	inputSchema["required"] = nextRequired
 	return inputSchema
-}
-
-func floretToolParallelSafe(def ToolDef, effects []fltools.Effect) bool {
-	if !def.ParallelSafe || def.Mutating {
-		return false
-	}
-	if len(effects) == 0 {
-		return false
-	}
-	for _, effect := range effects {
-		if effect != fltools.EffectRead {
-			return false
-		}
-	}
-	return true
 }
 
 func floretToolEffects(def ToolDef) []fltools.Effect {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -26,6 +27,77 @@ type capturingTurnProvider struct {
 	mu       sync.Mutex
 	requests []ModelGatewayRequest
 	result   ModelGatewayResult
+}
+
+type concurrentTerminalBatchProvider struct {
+	mu    sync.Mutex
+	calls int
+	cwd   string
+}
+
+func (p *concurrentTerminalBatchProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
+	p.mu.Lock()
+	p.calls++
+	call := p.calls
+	p.mu.Unlock()
+	if call > 1 {
+		toolResults := 0
+		for _, message := range req.Messages {
+			if message.Role == "tool" {
+				toolResults++
+			}
+		}
+		if toolResults < 2 {
+			return ModelGatewayResult{}, fmt.Errorf("received %d tool results, want 2", toolResults)
+		}
+		return ModelGatewayResult{FinishReason: "stop", Text: "both commands overlapped"}, nil
+	}
+	command := func(own string, peer string) string {
+		return fmt.Sprintf("touch %s; i=0; while [ ! -f %s ] && [ $i -lt 100 ]; do i=$((i+1)); sleep 0.02; done; test -f %s", own, peer, peer)
+	}
+	return ModelGatewayResult{
+		FinishReason: "tool_calls",
+		ToolCalls: []ToolCall{
+			{ID: "call_a", Name: "terminal.exec", Args: map[string]any{"command": command("a.started", "b.started"), "cwd": p.cwd, "yield_ms": 5000}},
+			{ID: "call_b", Name: "terminal.exec", Args: map[string]any{"command": command("b.started", "a.started"), "cwd": p.cwd, "yield_ms": 5000}},
+		},
+	}, nil
+}
+
+func TestRunFloretHostedTurnExecutesSameResponseTerminalCallsConcurrently(t *testing.T) {
+	t.Parallel()
+	workspace := t.TempDir()
+	manager := newTerminalProcessManager(nil)
+	t.Cleanup(manager.Close)
+	svc := &Service{terminalProcesses: manager}
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		WorkingDir:   workspace,
+		Shell:        "/bin/bash",
+		Service:      svc,
+		AIConfig:     &config.AIConfig{},
+		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
+		RunID:        "run_concurrent_terminal_batch",
+		EndpointID:   "env_concurrent_terminal_batch",
+		ThreadID:     "thread_concurrent_terminal_batch",
+		MessageID:    "msg_concurrent_terminal_batch",
+	})
+	provider := &concurrentTerminalBatchProvider{cwd: workspace}
+	err := r.runFloretHostedTurn(t.Context(), RunRequest{
+		Model:   "compat/gpt-5-mini",
+		Input:   RunInput{Text: "run both independent checks"},
+		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
+	}, config.AIProvider{ID: "compat", Type: "openai_compatible", BaseURL: "https://example.test/v1"}, "sk-test", "concurrency barrier", provider)
+	if err != nil {
+		t.Fatalf("runFloretHostedTurn: %v", err)
+	}
+	for _, name := range []string{"a.started", "b.started"} {
+		if _, err := os.Stat(filepath.Join(workspace, name)); err != nil {
+			t.Fatalf("missing barrier %s: %v", name, err)
+		}
+	}
 }
 
 type recordingTurnProjectionReader struct {

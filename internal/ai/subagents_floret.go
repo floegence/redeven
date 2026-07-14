@@ -3005,6 +3005,9 @@ func (r *run) buildSubagentHostSystemPrompt(activeTools []ToolDef, contract suba
 		"Complete only the mission given by the parent thread.",
 		"Do not delegate, spawn child work, or ask the user for input, and keep your final handoff complete but focused.",
 		"Use tools for evidence when needed, follow repository rules, and respect readonly constraints stated in the mission.",
+		"When the arguments are fully known and calls do not depend on one another, emit those calls together in the same response.",
+		"When a call depends on a previous result, wait for that result and emit the dependent call in a later response.",
+		"The runtime does not infer dependencies or conflicts between calls; express dependencies through response boundaries.",
 		"The visible tool list is the parent thread's maximum delegated surface; each mission may further restrict it through its profile and parent mode.",
 	}
 	if len(toolNames) > 0 {

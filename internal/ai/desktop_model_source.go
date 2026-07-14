@@ -1015,7 +1015,7 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 	if !ok || strings.TrimSpace(apiKey) == "" {
 		return ModelGatewayResult{}, errors.New("desktop provider is missing its local API key")
 	}
-	adapter, err := newProviderAdapter(strings.TrimSpace(entry.ProviderCfg.Type), strings.TrimSpace(entry.ProviderCfg.BaseURL), strings.TrimSpace(apiKey), entry.ProviderCfg.StrictToolSchema)
+	adapter, err := newProviderAdapter(strings.TrimSpace(entry.ProviderCfg.Type), strings.TrimSpace(entry.ProviderCfg.BaseURL), strings.TrimSpace(apiKey), entry.ProviderCfg.StrictToolSchema, parallelToolCallsWireOmit)
 	if err != nil {
 		return ModelGatewayResult{}, err
 	}

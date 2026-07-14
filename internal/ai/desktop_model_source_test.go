@@ -308,7 +308,6 @@ func testDesktopModelSourceCapability(modelID string) *contextmodel.ModelCapabil
 		ModelName:                      modelID,
 		WireModelName:                  modelID,
 		SupportsTools:                  true,
-		SupportsParallelTools:          false,
 		SupportsStrictJSONSchema:       false,
 		SupportsImageInput:             false,
 		SupportsFileInput:              false,

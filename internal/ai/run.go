@@ -140,10 +140,9 @@ type run struct {
 	w             http.ResponseWriter
 	stream        *ndjsonStream
 
-	mu              sync.Mutex
-	toolApprovals   map[string]*toolApprovalRequest
-	waitingApproval bool
-	floretHost      flruntime.Host
+	mu            sync.Mutex
+	toolApprovals map[string]*toolApprovalRequest
+	floretHost    flruntime.Host
 
 	muLifecycle         sync.Mutex
 	lastLifecyclePhase  string
@@ -230,6 +229,8 @@ type assistantMarkdownUpdate struct {
 
 type toolApprovalRequest struct {
 	decision      chan bool
+	promoted      chan struct{}
+	promotedOnce  sync.Once
 	toolName      string
 	argsHash      string
 	command       string
@@ -404,10 +405,17 @@ func (r *run) isWaitingApproval() bool {
 	if r == nil {
 		return false
 	}
+	if r.service != nil && r.service.threadHasPendingApprovals(r.endpointID, r.threadID) {
+		return true
+	}
 	r.mu.Lock()
-	v := r.waitingApproval
-	r.mu.Unlock()
-	return v
+	defer r.mu.Unlock()
+	for _, approval := range r.toolApprovals {
+		if approval != nil && !approval.resolved {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *run) runIdleWatchdog(ctx context.Context) {
@@ -1331,6 +1339,7 @@ func (r *run) approveTool(toolID string, approved bool) error {
 	if toolID == "" {
 		return errors.New("missing tool_id")
 	}
+	r.promoteToolApproval(toolID)
 
 	r.mu.Lock()
 	approval := r.toolApprovals[toolID]

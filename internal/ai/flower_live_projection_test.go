@@ -3,12 +3,14 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func appendFlowerTimelineTestMessage(t *testing.T, store *threadstore.Store, endpointID string, threadID string, messageID string, role string, text string, createdAtMs int64) {
@@ -571,24 +573,180 @@ func TestFlowerLiveProjectionKeepsSinglePrimaryDelegatedApprovalSurface(t *testi
 		Kind:    FlowerLiveApprovalRequested,
 		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: first}),
 	})
-	if got := state.ApprovalActions[first.ActionID]; got.SurfaceRole != FlowerApprovalSurfacePrimaryAction || got.PrimaryWaitAnchor != "thread:thread_parent" {
-		t.Fatalf("first surface=%q anchor=%q, want primary thread anchor", got.SurfaceRole, got.PrimaryWaitAnchor)
+	if got := state.ApprovalActions[second.ActionID]; got.SurfaceRole != FlowerApprovalSurfacePrimaryAction || got.PrimaryWaitAnchor != "thread:thread_parent" {
+		t.Fatalf("first registered surface=%q anchor=%q, want primary thread anchor", got.SurfaceRole, got.PrimaryWaitAnchor)
 	}
-	if got := state.ApprovalActions[second.ActionID]; got.SurfaceRole != FlowerApprovalSurfaceLocator || got.PrimaryWaitAnchor != "thread:thread_parent" || !got.CanApprove {
-		t.Fatalf("second action=%#v, want locator retaining approval capability for later promotion", got)
+	if got := state.ApprovalActions[first.ActionID]; got.SurfaceRole != FlowerApprovalSurfaceLocator || got.PrimaryWaitAnchor != "thread:thread_parent" || got.CanApprove {
+		t.Fatalf("later registered action=%#v, want read-only locator", got)
 	}
 
-	first.State = FlowerApprovalStateRejected
-	first.Status = FlowerApprovalStatusResolved
-	first.CanApprove = false
-	first.DeliveryState = FlowerApprovalDeliveryDelivered
+	second.State = FlowerApprovalStateRejected
+	second.Status = FlowerApprovalStatusResolved
+	second.CanApprove = false
+	second.DeliveryState = FlowerApprovalDeliveryDelivered
 	applyFlowerLiveEventToMaterializedState(&state, approvals, FlowerLiveEvent{
 		Seq:     12,
 		Kind:    FlowerLiveApprovalResolved,
-		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: first}),
+		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: second}),
 	})
-	if got := state.ApprovalActions[second.ActionID]; got.SurfaceRole != FlowerApprovalSurfacePrimaryAction || !got.CanApprove {
-		t.Fatalf("second action after first resolved=%#v, want promoted primary", got)
+	if got := state.ApprovalActions[first.ActionID]; got.SurfaceRole != FlowerApprovalSurfacePrimaryAction || !got.CanApprove {
+		t.Fatalf("next action after first registered resolved=%#v, want promoted primary", got)
+	}
+}
+
+func TestFlowerApprovalQueueSerializesDecisionsWithoutSerializingHandlers(t *testing.T) {
+	t.Parallel()
+	meta := &session.Meta{EndpointID: "env_queue", UserPublicID: "user_queue", CanRead: true, CanWrite: true, CanExecute: true}
+	svc := &Service{
+		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
+		runs:               map[string]*run{},
+	}
+	r := newRun(runOptions{Service: svc, RunID: "run_queue", EndpointID: meta.EndpointID, ThreadID: "thread_queue", UserPublicID: meta.UserPublicID, MessageID: "msg_queue"})
+	svc.runs[r.id] = r
+	firstDecision := make(chan bool, 1)
+	secondDecision := make(chan bool, 1)
+	r.toolApprovals["tool_first"] = &toolApprovalRequest{decision: firstDecision, promoted: make(chan struct{}), toolName: "task_complete", requestedAtMs: 1}
+	r.toolApprovals["tool_second"] = &toolApprovalRequest{decision: secondDecision, promoted: make(chan struct{}), toolName: "task_complete", requestedAtMs: 2}
+	for _, toolID := range []string{"tool_first", "tool_second"} {
+		action := r.controlConfirmationApprovalActionLocked(toolID, r.toolApprovals[toolID])
+		svc.appendFlowerLiveEvent(FlowerLiveEvent{EndpointID: meta.EndpointID, ThreadID: r.threadID, RunID: r.id, TurnID: r.messageID, Kind: FlowerLiveApprovalRequested, Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: action})})
+	}
+
+	current := func(actionID string) (FlowerApprovalAction, FlowerApprovalQueue) {
+		svc.mu.Lock()
+		defer svc.mu.Unlock()
+		stream := svc.flowerLiveByThread[runThreadKey(meta.EndpointID, r.threadID)]
+		return stream.State.ApprovalActions[actionID], *stream.State.ApprovalQueue
+	}
+	firstID := flowerApprovalActionID(r.id, "tool_first")
+	secondID := flowerApprovalActionID(r.id, "tool_second")
+	first, queue := current(firstID)
+	if queue.CurrentActionID != firstID || queue.UnresolvedCount != 2 || !first.CanApprove || first.ExpiresAtMs <= 0 {
+		t.Fatalf("initial queue=%#v first=%#v", queue, first)
+	}
+	second, _ := current(secondID)
+	if second.CanApprove || second.SurfaceRole != FlowerApprovalSurfaceLocator || second.ExpiresAtMs != 0 {
+		t.Fatalf("queued second action=%#v", second)
+	}
+	for name, mutate := range map[string]func(*SubmitFlowerApprovalRequest){
+		"stale_generation": func(req *SubmitFlowerApprovalRequest) { req.QueueGeneration++ },
+		"stale_revision":   func(req *SubmitFlowerApprovalRequest) { req.QueueRevision++ },
+		"stale_version":    func(req *SubmitFlowerApprovalRequest) { req.Version++ },
+		"stale_epoch":      func(req *SubmitFlowerApprovalRequest) { req.SurfaceEpoch++ },
+	} {
+		req := SubmitFlowerApprovalRequest{
+			ThreadID: r.threadID, Origin: FlowerApprovalOriginControlConfirm, RunID: r.id, ActionID: firstID, ToolID: "tool_first",
+			Approved: true, ExpectedSeq: first.ExpectedSeq, Revision: first.Revision, Version: first.Version, SurfaceEpoch: first.SurfaceEpoch,
+			QueueGeneration: queue.Generation, QueueRevision: queue.Revision,
+		}
+		mutate(&req)
+		if _, err := svc.SubmitFlowerApproval(meta, req); !errors.Is(err, ErrRunChanged) {
+			t.Fatalf("%s submit error=%v, want ErrRunChanged", name, err)
+		}
+		select {
+		case decision := <-firstDecision:
+			t.Fatalf("%s released handler with decision=%v", name, decision)
+		default:
+		}
+	}
+	if _, err := svc.SubmitFlowerApproval(meta, SubmitFlowerApprovalRequest{
+		ThreadID: r.threadID, Origin: FlowerApprovalOriginControlConfirm, RunID: r.id, ActionID: secondID, ToolID: "tool_second",
+		Approved: true, ExpectedSeq: second.ExpectedSeq, Revision: second.Revision, Version: second.Version, SurfaceEpoch: second.SurfaceEpoch,
+		QueueGeneration: queue.Generation, QueueRevision: queue.Revision,
+	}); err == nil || !strings.Contains(err.Error(), "not currently actionable") {
+		t.Fatalf("non-head submit error=%v", err)
+	}
+	if _, err := svc.SubmitFlowerApproval(meta, SubmitFlowerApprovalRequest{
+		ThreadID: r.threadID, Origin: FlowerApprovalOriginControlConfirm, RunID: r.id, ActionID: firstID, ToolID: "tool_first",
+		Approved: true, ExpectedSeq: first.ExpectedSeq, Revision: first.Revision, Version: first.Version, SurfaceEpoch: first.SurfaceEpoch,
+		QueueGeneration: queue.Generation, QueueRevision: queue.Revision,
+	}); err != nil {
+		t.Fatalf("approve head: %v", err)
+	}
+	select {
+	case approved := <-firstDecision:
+		if !approved {
+			t.Fatal("first decision was rejected")
+		}
+	default:
+		t.Fatal("first waiter was not released immediately")
+	}
+	select {
+	case <-secondDecision:
+		t.Fatal("second waiter released before its decision")
+	default:
+	}
+	second, queue = current(secondID)
+	if queue.CurrentActionID != secondID || queue.UnresolvedCount != 1 || !second.CanApprove || second.ExpiresAtMs <= 0 {
+		t.Fatalf("promoted queue=%#v second=%#v", queue, second)
+	}
+	if _, err := svc.SubmitFlowerApproval(meta, SubmitFlowerApprovalRequest{
+		ThreadID: r.threadID, Origin: FlowerApprovalOriginControlConfirm, RunID: r.id, ActionID: secondID, ToolID: "tool_second",
+		Approved: false, ExpectedSeq: second.ExpectedSeq, Revision: second.Revision, Version: second.Version, SurfaceEpoch: second.SurfaceEpoch,
+		QueueGeneration: queue.Generation, QueueRevision: queue.Revision,
+	}); err != nil {
+		t.Fatalf("reject promoted head: %v", err)
+	}
+	if approved := <-secondDecision; approved {
+		t.Fatal("second decision was approved")
+	}
+	_, queue = current(secondID)
+	if queue.UnresolvedCount != 0 || queue.CurrentActionID != "" {
+		t.Fatalf("settled queue=%#v", queue)
+	}
+}
+
+func TestCancelThreadApprovalQueueResolvesEveryPendingActionWithoutRevisionDrift(t *testing.T) {
+	t.Parallel()
+	endpointID := "env_cancel_queue"
+	threadID := "thread_cancel_queue"
+	svc := &Service{
+		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
+		delegatedApprovals: map[string]*delegatedApprovalHandle{},
+	}
+	for index, actionID := range []string{"action_first", "action_second"} {
+		svc.appendFlowerLiveEvent(FlowerLiveEvent{
+			EndpointID: endpointID,
+			ThreadID:   threadID,
+			RunID:      "run_cancel_queue",
+			Kind:       FlowerLiveApprovalRequested,
+			Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: FlowerApprovalAction{
+				ActionID: actionID, Origin: FlowerApprovalOriginControlConfirm, RunID: "run_cancel_queue", ToolID: actionID, ToolName: "task_complete",
+				State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending, Revision: 1, Version: 1, SurfaceEpoch: 1,
+				RequestedAtMs: int64(index + 1), CanApprove: true, BatchIndex: index, BatchSize: 2,
+			}}),
+		})
+	}
+	svc.mu.Lock()
+	stream := svc.flowerLiveByThread[runThreadKey(endpointID, threadID)]
+	beforeRevision := stream.State.ApprovalQueue.Revision
+	svc.cancelThreadApprovalQueueLocked(endpointID, threadID, "run canceled")
+	queue := *stream.State.ApprovalQueue
+	events := append([]FlowerLiveEvent(nil), stream.Events...)
+	svc.mu.Unlock()
+
+	if queue.CurrentActionID != "" || queue.CurrentPosition != 0 || queue.UnresolvedCount != 0 {
+		t.Fatalf("canceled queue=%#v, want empty", queue)
+	}
+	if queue.Revision != beforeRevision+2 {
+		t.Fatalf("queue revision=%d, want %d", queue.Revision, beforeRevision+2)
+	}
+	resolved := 0
+	for _, event := range events {
+		if event.Kind != FlowerLiveApprovalResolved {
+			continue
+		}
+		resolved++
+		var payload FlowerLiveApprovalPayload
+		if !decodeFlowerPayload(event.Payload, &payload) || payload.Action.State != FlowerApprovalStateCanceled {
+			t.Fatalf("cancel event payload=%s", event.Payload)
+		}
+		if payload.ApprovalQueue == nil || payload.ApprovalQueue.Revision > queue.Revision {
+			t.Fatalf("cancel event queue=%#v final=%#v", payload.ApprovalQueue, queue)
+		}
+	}
+	if resolved != 2 {
+		t.Fatalf("resolved cancel events=%d, want 2", resolved)
 	}
 }
 

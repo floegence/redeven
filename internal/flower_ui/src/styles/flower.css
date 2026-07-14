@@ -5364,6 +5364,31 @@ html.dark .flower-component-shell {
   gap: 0.5rem;
 }
 
+.flower-approval-queue-progress {
+  display: inline-flex;
+  min-width: 3rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.flower-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .flower-composer-approval-decision {
   min-height: 2.25rem;
   cursor: pointer;

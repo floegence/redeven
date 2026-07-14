@@ -73,7 +73,6 @@ func TestResolver_Resolve_RefreshesStaleCapability(t *testing.T) {
 		ResolverVersion:          0,
 		ModelName:                "kimi-k2.6",
 		SupportsTools:            true,
-		SupportsParallelTools:    false,
 		SupportsStrictJSONSchema: false,
 		SupportsImageInput:       true,
 		SupportsFileInput:        true,
@@ -235,7 +234,7 @@ func TestResolver_Resolve_UsesProviderModelWireNameForReasoningCatalog(t *testin
 			{
 				ModelName:     "gpt-oss-120b",
 				WireModelName: "openai/gpt-oss-120b",
-				ContextWindow:  131072,
+				ContextWindow: 131072,
 			},
 		},
 	}
