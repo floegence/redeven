@@ -81,9 +81,9 @@ function readBranchLayout(host: HTMLElement) {
       host.querySelector('[data-git-branch-header-layout]'),
       'branch header',
     ),
-    toolbar: rectMetrics(
-      host.querySelector('[data-git-branch-status-toolbar-layout]'),
-      'branch status toolbar',
+    summary: rectMetrics(
+      host.querySelector('[data-git-branch-status-summary-state]'),
+      'branch status summary',
     ),
     content: rectMetrics(
       host.querySelector('[data-git-branch-status-content-frame]'),
@@ -135,7 +135,7 @@ describe('GitBranchesPanel rendered branch verification stability', () => {
     host = null;
   });
 
-  it('keeps header, status toolbar, and content frame stable during branch verification', async () => {
+  it('keeps header, status summary, and content frame stable during branch verification', async () => {
     const branch: GitBranchSummary = {
       name: 'main',
       fullName: 'refs/heads/main',
@@ -206,7 +206,7 @@ describe('GitBranchesPanel rendered branch verification stability', () => {
     );
     const readyAfter = readBranchLayout(host!);
 
-    for (const key of ['header', 'toolbar', 'content'] as const) {
+    for (const key of ['header', 'summary', 'content'] as const) {
       expectStableMetric(readyBefore[key], verifying[key], `${key} during verification`);
       expectStableMetric(readyBefore[key], readyAfter[key], `${key} after verification`);
     }

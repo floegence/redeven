@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { For, Show, createSignal } from 'solid-js';
+import { For, Show, createEffect, createSignal } from 'solid-js';
 import { render as solidRender } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_INTERACTION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
@@ -234,6 +234,44 @@ const sessionsCoordinatorMocks = vi.hoisted(() => ({
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
+  createUIFirstSelection: (options: any) => {
+    const [visual, setVisual] = createSignal(options.committed());
+    const [pending, setPending] = createSignal(false);
+    let requestID = 0;
+    createEffect(() => {
+      const committed = options.committed();
+      if (!pending()) setVisual(committed);
+    });
+    return {
+      visual,
+      committed: options.committed,
+      pending,
+      preview: setVisual,
+      resetPreview: () => {
+        if (!pending()) setVisual(options.committed());
+      },
+      request: (value: unknown, metadata?: unknown) => {
+        const currentRequest = ++requestID;
+        setVisual(value);
+        setPending(true);
+        queueMicrotask(() => {
+          if (currentRequest !== requestID) return;
+          options.commit(value, metadata);
+          queueMicrotask(() => {
+            if (currentRequest !== requestID) return;
+            setPending(false);
+            setVisual(options.committed());
+          });
+        });
+      },
+      commitNow: (value: unknown, metadata?: unknown) => options.commit(value, metadata),
+      cancel: () => {
+        requestID += 1;
+        setPending(false);
+        setVisual(options.committed());
+      },
+    };
+  },
   deferAfterPaint: (fn: () => void) => {
     requestAnimationFrame(() => setTimeout(fn, 0));
   },
@@ -5936,12 +5974,16 @@ describe('TerminalPanel', () => {
     });
 
     expect(event.defaultPrevented).toBe(true);
+    expect(groupStateSpy).not.toHaveBeenCalled();
+    expect(findActiveTerminalTab(panelA!)?.textContent).toContain('Terminal 2');
+    expect(findActiveTerminalTab(panelB!)?.textContent).toContain('Terminal 3');
+
+    await settleTerminalPanelMicrotasks();
+
     expect(groupStateSpy).toHaveBeenLastCalledWith({
       sessionIds: ['session-1', 'session-2'],
       activeSessionId: 'session-2',
     });
-    expect(findActiveTerminalTab(panelA!)?.textContent).toContain('Terminal 2');
-    expect(findActiveTerminalTab(panelB!)?.textContent).toContain('Terminal 3');
 
     applyLatestPanelAState();
     await settleTerminalPanel();

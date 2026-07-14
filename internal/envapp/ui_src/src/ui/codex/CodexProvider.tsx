@@ -44,6 +44,7 @@ import { createCodexFollowupController } from './followupController';
 import { createCodexStreamCoordinator } from './streamCoordinator';
 import { createCodexThreadController } from './threadController';
 import { codexUserInputTextSummary, isWorkingStatus } from './presentation';
+import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import {
   resolveCodexApprovalPolicyValue,
   resolveCodexSandboxModeValue,
@@ -604,6 +605,7 @@ export type CodexContextValue = Readonly<{
   selectedThreadID: Accessor<string | null>;
   activeThreadID: Accessor<string | null>;
   displayedThreadID: Accessor<string | null>;
+  stagedThreadID: Accessor<string | null>;
   activeThread: Accessor<CodexThread | null>;
   activeTurn: Accessor<CodexTurn | null>;
   activeTurnCanSteer: Accessor<boolean | null>;
@@ -622,6 +624,8 @@ export type CodexContextValue = Readonly<{
   isThreadRunning: (threadID: string | null | undefined) => boolean;
   isThreadUnread: (threadID: string | null | undefined) => boolean;
   transcriptItems: Accessor<CodexTranscriptItem[]>;
+  stagedTranscriptItems: Accessor<CodexTranscriptItem[]>;
+  presentStagedThread: (threadID: string) => boolean;
   pendingRequests: Accessor<CodexPendingRequest[]>;
   workingDirDraft: Accessor<string>;
   setWorkingDirDraft: (value: string) => void;
@@ -689,7 +693,12 @@ export function CodexProvider(props: ParentProps) {
   const i18n = useI18n();
   const env = useEnvContext();
 
-  const threadController = createCodexThreadController();
+  const threadController = createCodexThreadController({
+    onSelectionEvent: createUIPresentationEventRecorder({
+      surface: 'codex',
+      source: (event) => event.metadata?.source ?? 'programmatic',
+    }),
+  });
   const draftController = createCodexDraftController();
   const followupController = createCodexFollowupController();
   const streamCoordinator = createCodexStreamCoordinator();
@@ -846,6 +855,11 @@ export function CodexProvider(props: ParentProps) {
   const selectedThreadID = createMemo(() => threadController.selectedThreadID());
   const foregroundThreadID = createMemo(() => threadController.foregroundThreadID());
   const displayedThreadID = createMemo(() => threadController.displayedThreadID());
+  const stagedThreadID = createMemo(() => threadController.stagedThreadID());
+  const threadPresentationPending = createMemo(() => {
+    const selectedID = String(selectedThreadID() ?? '').trim();
+    return Boolean(selectedID && selectedID !== String(displayedThreadID() ?? '').trim());
+  });
   const listedThreadsByID = createMemo(() => {
     const next = new Map<string, CodexThread>();
     for (const thread of threadsResource() ?? []) {
@@ -1462,6 +1476,14 @@ export function CodexProvider(props: ParentProps) {
       .filter(Boolean)
       .sort((a, b) => a.order - b.order);
   });
+  const stagedTranscriptItems = createMemo<CodexTranscriptItem[]>(() => {
+    const current = threadController.stagedSession();
+    if (!current) return [];
+    return current.item_order
+      .map((itemID) => current.items_by_id[itemID])
+      .filter(Boolean)
+      .sort((a, b) => a.order - b.order);
+  });
 
   const pendingRequests = createMemo<CodexPendingRequest[]>(() => {
     const current = displayedSession();
@@ -1618,7 +1640,7 @@ export function CodexProvider(props: ParentProps) {
   };
 
   const selectThread = (threadID: string) => {
-    threadController.selectThread(threadID);
+    threadController.selectThread(threadID, { source: 'thread-list' });
     requestScrollToBottom('thread_switch');
   };
 
@@ -1748,6 +1770,7 @@ export function CodexProvider(props: ParentProps) {
   };
 
   const queueTurn = async () => {
+    if (threadPresentationPending()) return;
     if (!hasHostBinary()) {
       notify.error(i18n.t('codex.notifications.hostNotDetectedTitle'), hostDisabledReason());
       return;
@@ -2021,6 +2044,7 @@ export function CodexProvider(props: ParentProps) {
   };
 
   const sendTurn = async () => {
+    if (threadPresentationPending()) return;
     const ownerID = activeOwnerID();
     const snapshot = captureComposerSnapshot();
     const prepared = prepareCodexSubmission(snapshot);
@@ -2172,10 +2196,12 @@ export function CodexProvider(props: ParentProps) {
   };
 
   const archiveActiveThread = async () => {
+    if (threadPresentationPending()) return;
     await archiveThread(String(foregroundThreadID() ?? '').trim());
   };
 
   const forkActiveThread = async () => {
+    if (threadPresentationPending()) return;
     const threadID = String(foregroundThreadID() ?? '').trim();
     if (!threadID) return;
     if (!hasHostBinary()) {
@@ -2216,6 +2242,7 @@ export function CodexProvider(props: ParentProps) {
   };
 
   const interruptActiveTurn = async () => {
+    if (threadPresentationPending()) return;
     const threadID = String(foregroundThreadID() ?? '').trim();
     const turnID = String(activeInterruptTurnID() ?? '').trim();
     if (!threadID || !turnID) return;
@@ -2241,6 +2268,7 @@ export function CodexProvider(props: ParentProps) {
   };
 
   const reviewActiveThread = async () => {
+    if (threadPresentationPending()) return;
     const threadID = String(foregroundThreadID() ?? '').trim();
     if (!threadID) return;
     if (!hasHostBinary()) {
@@ -2334,6 +2362,7 @@ export function CodexProvider(props: ParentProps) {
   });
 
   const answerRequest = async (request: CodexPendingRequest, decision?: string) => {
+    if (threadPresentationPending()) return;
     try {
       await respondToCodexRequest({
         threadID: request.thread_id,
@@ -2359,6 +2388,7 @@ export function CodexProvider(props: ParentProps) {
     selectedThreadID,
     activeThreadID: foregroundThreadID,
     displayedThreadID,
+    stagedThreadID,
     activeThread,
     activeTurn,
     activeTurnCanSteer,
@@ -2377,6 +2407,8 @@ export function CodexProvider(props: ParentProps) {
     isThreadRunning,
     isThreadUnread,
     transcriptItems,
+    stagedTranscriptItems,
+    presentStagedThread: threadController.presentStagedThread,
     pendingRequests,
     workingDirDraft,
     setWorkingDirDraft,

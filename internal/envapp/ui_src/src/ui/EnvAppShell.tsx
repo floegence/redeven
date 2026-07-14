@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount } from 'solid-js';
-import { deferAfterPaint, type FloeComponent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
+import { createUIFirstSelection, deferAfterPaint, type FloeComponent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
 import {
@@ -31,6 +31,7 @@ import { FlowerNavigationIcon } from './icons/FlowerSoftAuraIcon';
 import {
   BottomBarItem,
   DisplayModePageShell,
+  KeepAliveStack,
   Panel,
   PanelContent,
   Shell,
@@ -103,6 +104,7 @@ import { createClientId } from './utils/clientId';
 import { fileItemFromPath } from './utils/filePreviewItem';
 import { reloadCurrentPage } from './utils/windowNavigation';
 import { resolveEnvSidebarVisibilityMotion, shouldEnvTabOpenSidebar } from './envSidebarVisibilityMotion';
+import { createUIPresentationEventRecorder } from './services/uiPresentationTransactions';
 import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
 import {
   desktopShellBridgeAvailable,
@@ -727,7 +729,11 @@ export function EnvAppShell() {
   const [flowerTurnLauncherAnchor, setFlowerTurnLauncherAnchor] = createSignal<FlowerTurnLauncherAnchor | null>(null);
   const [flowerTurnLauncherHandoff, setFlowerTurnLauncherHandoff] = createSignal<EnvFlowerTurnHandoffContext | null>(null);
   const [notesOverlayOpen, setNotesOverlayOpen] = createSignal(false);
-  const [notesViewportAnchor, setNotesViewportAnchor] = createSignal<HTMLElement | null>(null);
+  const [activityNotesViewportAnchor, setActivityNotesViewportAnchor] = createSignal<HTMLElement | null>(null);
+  const [workbenchNotesViewportAnchor, setWorkbenchNotesViewportAnchor] = createSignal<HTMLElement | null>(null);
+  const notesViewportAnchor = createMemo(() => (
+    viewMode() === 'workbench' ? workbenchNotesViewportAnchor() : activityNotesViewportAnchor()
+  ));
   const [notesViewportHosts, setNotesViewportHosts] = createSignal<readonly HTMLElement[]>([]);
   const [codexSidebarHost, setCodexSidebarHost] = createSignal<HTMLElement | null>(null);
   let notesViewportHostsRevision = 0;
@@ -2396,6 +2402,21 @@ export function EnvAppShell() {
     }
   };
 
+  const viewModeSelection = createUIFirstSelection<EnvViewMode, {
+    surfaceId: EnvSurfaceId;
+    focusSurface: boolean;
+  }>({
+    committed: viewMode,
+    commit: (mode, options) => setViewMode(mode, {
+      surfaceId: options?.surfaceId ?? activeSurface(),
+      focusSurface: options?.focusSurface ?? mode !== 'activity',
+    }),
+    onEvent: createUIPresentationEventRecorder({
+      surface: 'env-display-mode',
+      source: 'mode-switch',
+    }),
+  });
+
   const openSurface = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => {
     const targetSurface = resolveOpenSurfaceTarget(surfaceId, options);
     setLastRequestedSurface(targetSurface);
@@ -3139,8 +3160,11 @@ export function EnvAppShell() {
     <div class="flex items-center gap-1">
       <Show when={!layout.isMobile()}>
         <EnvDisplayModeSwitcher
-          mode={viewMode()}
-          onChange={(mode) => setViewMode(mode, { surfaceId: activeSurface(), focusSurface: mode !== 'activity' })}
+          mode={viewModeSelection.visual()}
+          onChange={(mode) => viewModeSelection.request(mode, {
+            surfaceId: activeSurface(),
+            focusSurface: mode !== 'activity',
+          })}
         />
       </Show>
       <TopBarIconButton
@@ -3179,9 +3203,14 @@ export function EnvAppShell() {
 
   const renderActivityShell = () => (
     <Shell
-      sidebarMode={viewMode() === 'activity' && layout.sidebarActiveTab() !== 'ai' ? 'auto' : 'hidden'}
+      activitySelectionMode="ui-first"
+      onActivitySelectionEvent={createUIPresentationEventRecorder({
+        surface: 'activity',
+        source: (event) => event.metadata?.source ?? 'activity-bar',
+      })}
+      sidebarMode={layout.sidebarActiveTab() !== 'ai' ? 'auto' : 'hidden'}
       slotClassNames={{
-        sidebar: viewMode() === 'activity' && layout.sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
+        sidebar: layout.sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
         bottomBarHeight: 'h-7',
       }}
       resolveSidebarVisibilityMotion={({ currentActiveId, nextActiveId, isMobile }) => (
@@ -3192,14 +3221,12 @@ export function EnvAppShell() {
         })
       )}
       sidebarContent={(activeTab) =>
-        viewMode() !== 'activity'
-          ? <></>
-          : activeTab === 'codex' && canUseCodex()
+        activeTab === 'codex' && canUseCodex()
             ? <CodexActivitySidebarHost onHostChange={setCodexSidebarHost} />
             : <></>
       }
       logo={<ShellLogo />}
-      activityItems={viewMode() === 'activity' ? activityItems() : []}
+      activityItems={activityItems()}
       activityBottomItems={activityBottomItems()}
       topBarActions={<HeaderActions />}
       bottomBarItems={
@@ -3270,15 +3297,12 @@ export function EnvAppShell() {
           </Panel>
         </Show>
 
-        <div ref={setNotesViewportAnchor} class="flex-1 min-h-0 overflow-hidden relative">
+        <div ref={setActivityNotesViewportAnchor} class="flex-1 min-h-0 overflow-hidden relative">
           <Show
             when={accessGateVisible()}
             fallback={
               <>
-                <Show when={viewMode() === 'activity'}>
-                  <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} />
-                </Show>
-                {renderNotesOverlay()}
+                <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} activationMode="after-paint" />
               </>
             }
           >
@@ -3310,13 +3334,12 @@ export function EnvAppShell() {
   );
 
   const renderWorkbenchContent = () => (
-    <div ref={setNotesViewportAnchor} class="relative h-full min-h-0 overflow-hidden">
+    <div ref={setWorkbenchNotesViewportAnchor} class="relative h-full min-h-0 overflow-hidden">
       <Show
         when={accessGateVisible()}
         fallback={(
           <>
             <EnvWorkbenchPage />
-            {renderNotesOverlay()}
           </>
         )}
       >
@@ -3325,17 +3348,27 @@ export function EnvAppShell() {
     </div>
   );
 
-  const renderMainShell = () => {
-    if (viewMode() === 'workbench') {
-      return (
-        <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}>
-          {renderWorkbenchContent()}
-        </DisplayModePageShell>
-      );
-    }
-
-    return renderActivityShell();
-  };
+  const renderMainShell = () => (
+    <>
+      <KeepAliveStack
+        class="h-screen min-h-0"
+        activeId={viewMode()}
+        activationMode="after-paint"
+        views={[
+          { id: 'activity', render: renderActivityShell },
+          {
+            id: 'workbench',
+            render: () => (
+              <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}>
+                {renderWorkbenchContent()}
+              </DisplayModePageShell>
+            ),
+          },
+        ]}
+      />
+      {renderNotesOverlay()}
+    </>
+  );
 
   return (
     <EnvContext.Provider

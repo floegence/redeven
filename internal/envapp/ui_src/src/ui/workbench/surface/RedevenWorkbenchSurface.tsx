@@ -1,4 +1,5 @@
 import { createEffect, onCleanup } from 'solid-js';
+import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import {
   WorkbenchSurface,
   WORKBENCH_REGION_FILL_OPTIONS,
@@ -98,6 +99,8 @@ export interface RedevenWorkbenchSurfaceProps {
   onViewportInteractionPulse?: () => void;
   onViewportInteractionStart?: (kind: WorkbenchTerminalInteractionKind) => void;
   onViewportInteractionEnd?: (kind: WorkbenchTerminalInteractionKind) => void;
+  widgetActivationMode?: 'sync' | 'after-paint';
+  onWidgetActivationEvent?: (event: UIFirstSelectionEvent<string | null, { bringToFront: boolean }>) => void;
 }
 
 function createRedevenWorkbenchSurfaceApi(
@@ -545,6 +548,8 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
         onRequestDelete={props.onRequestDelete}
         onLayoutInteractionStart={props.onLayoutInteractionStart}
         onLayoutInteractionEnd={props.onLayoutInteractionEnd}
+        widgetActivationMode={props.widgetActivationMode}
+        onWidgetActivationEvent={props.onWidgetActivationEvent}
       />
     </div>
   );

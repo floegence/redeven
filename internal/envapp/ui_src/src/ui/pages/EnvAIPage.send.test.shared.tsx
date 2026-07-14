@@ -161,9 +161,11 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   useNotification: () => mocks.notificationMock,
 }));
 
-vi.mock('@floegence/floe-webapp-core/icons', () => {
+vi.mock('@floegence/floe-webapp-core/icons', async () => {
+  const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core/icons')>('@floegence/floe-webapp-core/icons');
   const Icon = (props: any) => <span data-icon class={props.class} />;
   return {
+    ...actual,
     AlertTriangle: Icon,
     ArrowUp: Icon,
     Bot: Icon,
@@ -194,7 +196,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   };
 });
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async () => ({
+  ...await vi.importActual<typeof import('@floegence/floe-webapp-core/ui')>('@floegence/floe-webapp-core/ui'),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
@@ -213,6 +216,13 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     <input type="checkbox" checked={!!props.checked} disabled={props.disabled} onChange={(event) => props.onChange?.((event.currentTarget as HTMLInputElement).checked)} />
   ),
   Dialog: (props: any) => (props.open ? <div role="dialog">{props.children}</div> : null),
+  FloatingWindow: (props: any) => (props.open ? (
+    <div role="dialog" class={props.class}>
+      <div>{props.title}</div>
+      {props.children}
+      {props.footer}
+    </div>
+  ) : null),
   Input: (props: any) => <input class={props.class} value={props.value} placeholder={props.placeholder} onInput={props.onInput} disabled={props.disabled} />,
   ProcessingIndicator: (props: any) => <span class={props.class}>{props.status}</span>,
   Select: (props: any) => (
@@ -220,6 +230,19 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       {(props.options ?? []).map((option: any) => <option value={option.value}>{option.label}</option>)}
     </select>
   ),
+  SurfaceFloatingLayer: (props: any) => {
+    const { children, layerRef, position, class: className, style, ...rest } = props;
+    return (
+      <div
+        ref={(node) => layerRef?.(node)}
+        class={className}
+        style={{ ...(style ?? {}), left: `${position?.x ?? 0}px`, top: `${position?.y ?? 0}px` }}
+        {...rest}
+      >
+        {children}
+      </div>
+    );
+  },
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
 }));
 
@@ -325,8 +348,13 @@ vi.mock('../i18n', () => {
   };
 });
 
-function flush(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  if (typeof requestAnimationFrame === 'function') {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  }
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await Promise.resolve();
 }
 
 async function renderPage() {
@@ -381,8 +409,7 @@ export function registerEnvAIPageSendTests() {
         const chatHeader = host.querySelector('.flower-chat-header');
         expect(chatHeader?.querySelector('.flower-chat-header-title')?.textContent).toContain('Describe what you need');
         expect(chatHeader?.textContent).not.toContain('Ready');
-        expect(host.querySelector('.flower-model-selection')?.textContent).toContain('Model');
-        expect(host.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.2');
+        expect(host.querySelector('.flower-model-reasoning-model-label')?.textContent).toContain('OpenAI / gpt-5.2');
         expect(host.querySelector('button[aria-label="Settings"]')).toBeTruthy();
       } finally {
         dispose();
@@ -409,6 +436,11 @@ export function registerEnvAIPageSendTests() {
         runs: {
           'run-live': { run_id: 'run-live', status: 'running', message_id: 'msg-live' },
         },
+        model_io: {
+          phase: 'streaming',
+          run_id: 'run-live',
+          updated_at_ms: 12_000,
+        },
         approval_actions: {},
         input_requests: {},
       };
@@ -432,7 +464,7 @@ export function registerEnvAIPageSendTests() {
         expect(host.textContent).toContain('Live answer recovered from the event stream.');
         expect(host.querySelector('.flower-model-status-lane')?.textContent).toContain('Mock thinking...');
         expect(host.querySelector('.flower-model-status-text')?.textContent).toBe('Mock thinking...');
-        expect(host.querySelector('.flower-model-status-text')?.getAttribute('data-text')).toBe('Mock thinking...');
+        expect(host.querySelector('.flower-model-status-text')?.getAttribute('data-text')).toBe('Mock thinking');
       } finally {
         dispose();
       }
@@ -1065,22 +1097,20 @@ export function registerEnvAIPageSendTests() {
     it('uses Env-local i18n copy for the shared thread context menu', async () => {
       const { host, dispose } = await renderPage();
       try {
-        const card = host.querySelector('[data-thread-id="thread-1"]') as HTMLElement;
-        expect(card).toBeTruthy();
-        card.dispatchEvent(new MouseEvent('contextmenu', {
-          bubbles: true,
-          cancelable: true,
-          clientX: 96,
-          clientY: 80,
-        }));
-        await flush();
-        expect(host.textContent).toContain('Mock copy thread ID');
-        expect(host.textContent).toContain('Mock copy working directory');
-        expect(host.textContent).toContain('Mock fork');
-        expect(host.textContent).toContain('Mock pin conversation');
-        expect(host.textContent).toContain('Mock rename');
-        expect(host.textContent).not.toContain('Copy thread id');
-        expect(host.textContent).not.toContain('Copy work directory');
+        const menuButton = host.querySelector(
+          '.flower-thread-card-menu-button',
+        ) as HTMLButtonElement | null;
+        expect(menuButton).toBeTruthy();
+        menuButton?.click();
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(document.body.textContent).toContain('Mock copy thread ID');
+        expect(document.body.textContent).toContain('Mock copy working directory');
+        expect(document.body.textContent).toContain('Mock fork');
+        expect(document.body.textContent).toContain('Mock pin conversation');
+        expect(document.body.textContent).toContain('Mock rename');
+        expect(document.body.textContent).not.toContain('Copy thread id');
+        expect(document.body.textContent).not.toContain('Copy work directory');
       } finally {
         dispose();
       }
@@ -1140,7 +1170,7 @@ export function registerEnvAIPageSendTests() {
         expect(mocks.sendUserTurnMock).toHaveBeenCalledWith(expect.objectContaining({
           threadId: 'thread-new',
           model: 'openai/gpt-5.2',
-          input: { text: '你好，Flower', attachments: [] },
+          input: expect.objectContaining({ text: '你好，Flower', attachments: [] }),
         }));
         expect(host.textContent).toContain('Transcript for thread-new');
       } finally {

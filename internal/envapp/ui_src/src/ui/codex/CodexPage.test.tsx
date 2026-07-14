@@ -4391,7 +4391,7 @@ describe('CodexPage', () => {
     }
   });
 
-  it('keeps a switched thread inside the loading shell until the hidden staging transcript settles', async () => {
+  it('keeps the revealed transcript visible until the hidden staging transcript settles', async () => {
     const rafHarness = createRafHarness();
     vi.stubGlobal('requestAnimationFrame', rafHarness.requestAnimationFrame);
     vi.stubGlobal('cancelAnimationFrame', rafHarness.cancelAnimationFrame);
@@ -4527,10 +4527,14 @@ describe('CodexPage', () => {
         const visibleTranscript = host.querySelector(
           '[data-codex-transcript-scroll-region="true"] [data-codex-surface="transcript"]',
         ) as HTMLDivElement | null;
+        const stagingTranscript = host.querySelector(
+          '[data-codex-staging-transcript="true"] [data-codex-surface="transcript"]',
+        ) as HTMLDivElement | null;
         if (
           scrollRegion?.getAttribute('data-codex-thread-switch-staging') === 'true' &&
-          scrollRegion.style.visibility === 'hidden' &&
-          visibleTranscript?.textContent?.includes('Loaded thread_2')
+          scrollRegion.style.visibility === '' &&
+          visibleTranscript?.textContent?.includes('Loaded thread_1') &&
+          stagingTranscript?.textContent?.includes('Loaded thread_2')
         ) {
           observedHiddenTargetGeometry = true;
           break;
@@ -4695,10 +4699,14 @@ describe('CodexPage', () => {
         const visibleTranscript = host.querySelector(
           '[data-codex-transcript-scroll-region="true"] [data-codex-surface="transcript"]',
         ) as HTMLDivElement | null;
+        const stagingTranscript = host.querySelector(
+          '[data-codex-staging-transcript="true"] [data-codex-surface="transcript"]',
+        ) as HTMLDivElement | null;
         if (
           scrollRegion?.getAttribute('data-codex-thread-switch-staging') === 'true' &&
-          scrollRegion.style.visibility === 'hidden' &&
-          visibleTranscript?.textContent?.includes('Loaded thread_2')
+          scrollRegion.style.visibility === '' &&
+          visibleTranscript?.textContent?.includes('Loaded thread_1') &&
+          stagingTranscript?.textContent?.includes('Loaded thread_2')
         ) {
           observedThread2Staging = true;
           break;

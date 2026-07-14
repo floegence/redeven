@@ -1,6 +1,7 @@
 import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Plus, Settings, Shield, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, FloatingWindow, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
@@ -696,6 +697,7 @@ export type FlowerSurfaceProps = Readonly<{
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   sidebarLeadingAction?: JSX.Element;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
+  onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   class?: string;
 }>;
 
@@ -875,10 +877,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let deferredThreadSelectionFrame = 0;
   let deferredThreadSelectionTimer: number | undefined;
   let deferredThreadSelectionToken = 0;
+  let nextThreadSelectionTransactionID = 1;
+  let threadSelectionTransaction: Readonly<{
+    id: number;
+    value: string;
+    startedAt: number;
+  }> | null = null;
+  let threadSelectionContentFrame = 0;
+  let threadSelectionContentTimer: number | undefined;
   let backgroundThreadsRefreshInFlight = false;
   let composerFocusToken = 0;
   const [composerFocusRevision, setComposerFocusRevision] = createSignal(0);
   const selectedThreadLiveRequests = new Map<string, SelectedThreadLiveRequest>();
+  const loadedThreadIDs = new Set<string>();
   let selectedThreadLiveUpdateToken = 0;
   const locallyReadSnapshots = new Map<string, string>();
   const persistingReadThreadIDs = new Set<string>();
@@ -913,6 +924,58 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return window.requestAnimationFrame(callback);
     }
     return window.setTimeout(() => callback(typeof performance !== 'undefined' ? performance.now() : Date.now()), 16);
+  };
+
+  const emitThreadSelectionEvent = (
+    transaction: NonNullable<typeof threadSelectionTransaction>,
+    phase: UIFirstSelectionEvent<string, { source: 'thread-list' }>['phase'],
+  ) => {
+    const timestamp = typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now();
+    props.onThreadSelectionEvent?.({
+      phase,
+      value: transaction.value,
+      metadata: { source: 'thread-list' },
+      transactionId: transaction.id,
+      startedAt: transaction.startedAt,
+      timestamp,
+      elapsedMs: Math.max(0, timestamp - transaction.startedAt),
+    });
+  };
+
+  const clearThreadSelectionContentSchedule = () => {
+    if (threadSelectionContentFrame) {
+      cancelTranscriptAnimationFrame(threadSelectionContentFrame);
+      threadSelectionContentFrame = 0;
+    }
+    if (threadSelectionContentTimer !== undefined) {
+      window.clearTimeout(threadSelectionContentTimer);
+      threadSelectionContentTimer = undefined;
+    }
+  };
+
+  const cancelThreadSelectionTransaction = () => {
+    clearThreadSelectionContentSchedule();
+    const transaction = threadSelectionTransaction;
+    threadSelectionTransaction = null;
+    if (transaction) emitThreadSelectionEvent(transaction, 'cancelled');
+  };
+
+  const scheduleThreadSelectionContentPresented = (threadID: string) => {
+    const transaction = threadSelectionTransaction;
+    if (!transaction || transaction.value !== trimString(threadID)) return;
+    clearThreadSelectionContentSchedule();
+    threadSelectionContentFrame = requestTranscriptAnimationFrame(() => {
+      threadSelectionContentFrame = 0;
+      threadSelectionContentTimer = window.setTimeout(() => {
+        threadSelectionContentTimer = undefined;
+        if (threadSelectionTransaction !== transaction) return;
+        if (selectedThreadDetailID() !== transaction.value) return;
+        emitThreadSelectionEvent(transaction, 'content_presented');
+        threadSelectionTransaction = null;
+      }, 0);
+    });
   };
 
   const cancelTranscriptAnimationFrame = (handle: number) => {
@@ -995,9 +1058,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const selectedThread = createMemo(() => {
-    const threadID = trimString(selectedThreadID());
     const detailID = trimString(selectedThreadDetailID());
-    if (threadID && detailID !== threadID) return null;
+    if (!detailID) return null;
     return threads().find((thread) => thread.thread_id === detailID) ?? null;
   });
   const selectedThreadLiveStatus = createMemo(() => selectedThread()?.status ?? 'idle');
@@ -2288,6 +2350,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!liveBootstrapIsCurrent(live, reason)) {
       return threads().find((item) => item.thread_id === thread.thread_id) ?? thread;
     }
+    loadedThreadIDs.add(thread.thread_id);
     const previous = threads().find((item) => item.thread_id === thread.thread_id);
     setLivePosition(thread.thread_id, live.stream_generation, live.cursor);
     upsertThread(thread);
@@ -2502,10 +2565,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     closeSubagentOverlays();
     const sequence = ++threadLoadSequence;
     const existing = threads().find((thread) => thread.thread_id === tid) ?? null;
+    const detailAvailable = Boolean(existing && (loadedThreadIDs.has(tid) || threadHasLoadedDetail(existing)));
+    const detailWarm = Boolean(existing && loadedThreadIDs.has(tid));
     transcriptScroll.startFollowing();
     beginSelectedThreadTailReveal(tid, sequence);
-    if (existing && threadHasLoadedDetail(existing)) {
+    if (detailAvailable) {
       setSelectedThreadWithDetail(tid);
+      scheduleThreadSelectionContentPresented(tid);
     } else {
       setSelectedThreadID(tid);
       setSidebarActiveThreadID(tid);
@@ -2515,6 +2581,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     returnToChat();
     if (existing?.read_status.is_unread) {
       persistThreadRead(tid, existing.read_status.snapshot, sequence);
+    }
+    if (detailWarm) {
+      requestComposerFocus();
+      return;
     }
     setLoadingThreadID(tid);
     try {
@@ -2528,6 +2598,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         persistThreadRead(tid, thread.read_status.snapshot, sequence);
       }
       setSelectedThreadWithDetail(thread.thread_id);
+      scheduleThreadSelectionContentPresented(thread.thread_id);
       setLoadingThreadID('');
       setTranscriptLayoutRevision((revision) => revision + 1);
       if (selectedThreadTailRevealIsCurrent(thread.thread_id, sequence)) {
@@ -2545,6 +2616,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (selectedThreadTailRevealIsCurrent(tid, sequence)) {
         cancelSelectedThreadTailReveal();
       }
+      cancelThreadSelectionTransaction();
       setThreadLoadError(getErrorMessage(error));
     }
   };
@@ -2562,7 +2634,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       deferredThreadSelectionTimer = window.setTimeout(() => {
         deferredThreadSelectionTimer = undefined;
         if (token !== deferredThreadSelectionToken) return;
+        const transaction = threadSelectionTransaction;
+        if (transaction?.value === tid) {
+          emitThreadSelectionEvent(transaction, 'intent_presented');
+          emitThreadSelectionEvent(transaction, 'commit_started');
+        }
         void loadAndSelectThread(tid);
+        if (transaction?.value === tid && threadSelectionTransaction === transaction) {
+          emitThreadSelectionEvent(transaction, 'committed');
+        }
       }, 0);
     });
   };
@@ -2573,6 +2653,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       props.onFocusThreadRequestConsumed?.(requestID);
       return;
     }
+    cancelThreadSelectionTransaction();
     props.onFocusThreadRequestConsumed?.(requestID);
     await loadAndSelectThread(tid);
   };
@@ -2605,6 +2686,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const pendingSelectedMissing = Boolean(selectedID && !selectedSummary && !selectedDetailCurrent);
       if (pendingSelectedMissing) {
         cancelDeferredThreadSelection();
+        cancelThreadSelectionTransaction();
         closeSubagentOverlays();
         setSelectedThreadID('');
         setSelectedThreadDetailID('');
@@ -2627,6 +2709,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setSelectedThreadID((current) => {
         if (current && !mergedThreads.some((thread) => thread.thread_id === current)) {
           cancelDeferredThreadSelection();
+          cancelThreadSelectionTransaction();
           closeSubagentOverlays();
           setSelectedThreadDetailID('');
           setSidebarActiveThreadID('');
@@ -3427,6 +3510,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const requestID = trimString(props.focusThreadRequest?.request_id);
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     cancelDeferredThreadSelection();
+    cancelThreadSelectionTransaction();
     threadLoadSequence += 1;
     transcriptScroll.startFollowing();
     cancelSelectedThreadTailReveal();
@@ -3471,6 +3555,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     const tid = trimString(threadID);
     if (!tid) return;
+    cancelThreadSelectionTransaction();
+    if (props.onThreadSelectionEvent) {
+      const startedAt = typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : Date.now();
+      const transaction = {
+        id: nextThreadSelectionTransactionID,
+        value: tid,
+        startedAt,
+      };
+      nextThreadSelectionTransactionID += 1;
+      threadSelectionTransaction = transaction;
+      emitThreadSelectionEvent(transaction, 'requested');
+    }
     transcriptScroll.startFollowing();
     closeSubagentOverlays();
     setSelectedThreadID(tid);
@@ -3500,6 +3598,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const scheduleTranscriptTailScroll = () => transcriptScroll.scheduleTailScroll();
   onCleanup(() => {
     cancelDeferredThreadSelection();
+    cancelThreadSelectionTransaction();
     clearSelectedThreadTailRevealSchedule();
     transcriptScroll.dispose();
     subagentDetailScroll.dispose();

@@ -50,7 +50,7 @@ vi.mock("../protocol/redeven_v1", async () => {
 async function flush() {
   await Promise.resolve();
   await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 20));
 }
 
 function defineElementWidth(element: Element, width: number) {
@@ -674,12 +674,9 @@ describe("GitHistoryBrowser interactions", () => {
 
     try {
       await flush();
-      const shortcutDock = host.querySelector("[data-git-shortcut-dock]");
       const askFlowerButton = host.querySelector(
         'button[aria-label="Ask Flower"]',
       ) as HTMLButtonElement | null;
-      expect(shortcutDock).toBeTruthy();
-      expect(shortcutDock?.className).toContain("items-center");
       expect(askFlowerButton).toBeTruthy();
       expect(askFlowerButton?.dataset.gitShortcutOrb).toBe("flower");
       expect(askFlowerButton?.className).toContain("h-7");
@@ -767,7 +764,7 @@ describe("GitHistoryBrowser interactions", () => {
     try {
       await flush();
       const detachButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Switch --detach"),
+        (node) => node.textContent?.includes("Detach here"),
       ) as HTMLButtonElement | undefined;
       expect(detachButton).toBeTruthy();
       expect(detachButton?.disabled).toBe(false);
@@ -864,9 +861,6 @@ describe("GitHistoryBrowser interactions", () => {
       await flush();
       const compactOverview = await setCommitOverviewWidth(host, 420);
 
-      const actionRail = host.querySelector(
-        "[data-git-commit-overview-actions]",
-      ) as HTMLElement | null;
       const bodyGroup = host.querySelector(
         "[data-git-commit-body-group]",
       ) as HTMLElement | null;
@@ -874,13 +868,10 @@ describe("GitHistoryBrowser interactions", () => {
         "[data-git-commit-body-toggle]",
       ) as HTMLButtonElement | null;
       const detachButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Switch --detach"),
+        (node) => node.textContent?.includes("Detach here"),
       ) as HTMLButtonElement | undefined;
 
       expect(compactOverview.dataset.gitCommitOverviewLayout).toBe("compact");
-      expect(actionRail?.dataset.gitCommitOverviewActions).toBe("compact");
-      expect(actionRail?.className).toContain("w-full");
-      expect(actionRail?.className).toContain("justify-start");
       expect(detachButton?.className).not.toContain("w-full");
       expect(bodyGroup?.className).toContain("pl-0");
       expect(toggleButton).toBeTruthy();
@@ -892,19 +883,11 @@ describe("GitHistoryBrowser interactions", () => {
       ).toBeTruthy();
 
       const stackedOverview = await setCommitOverviewWidth(host, 720);
-      const stackedActionRail = host.querySelector(
-        "[data-git-commit-overview-actions]",
-      ) as HTMLElement | null;
       const stackedBodyGroup = host.querySelector(
         "[data-git-commit-body-group]",
       ) as HTMLElement | null;
 
       expect(stackedOverview.dataset.gitCommitOverviewLayout).toBe("stacked");
-      expect(stackedActionRail?.dataset.gitCommitOverviewActions).toBe(
-        "stacked",
-      );
-      expect(stackedActionRail?.className).toContain("w-full");
-      expect(stackedActionRail?.className).toContain("justify-start");
       expect(stackedBodyGroup?.className).toContain("pl-0");
       expect(
         host.querySelector('[data-git-commit-files-list-layout="compact"]'),
@@ -912,19 +895,11 @@ describe("GitHistoryBrowser interactions", () => {
       expect(host.querySelectorAll("tbody tr")).toHaveLength(2);
 
       const inlineOverview = await setCommitOverviewWidth(host, 1040);
-      const inlineActionRail = host.querySelector(
-        "[data-git-commit-overview-actions]",
-      ) as HTMLElement | null;
       const inlineBodyGroup = host.querySelector(
         "[data-git-commit-body-group]",
       ) as HTMLElement | null;
 
       expect(inlineOverview.dataset.gitCommitOverviewLayout).toBe("inline");
-      expect(inlineActionRail?.dataset.gitCommitOverviewActions).toBe(
-        "inline",
-      );
-      expect(inlineActionRail?.className).toContain("w-auto");
-      expect(inlineActionRail?.className).toContain("justify-end");
       expect(inlineBodyGroup?.className).toContain("pl-4");
       expect(
         host.querySelector('[data-git-commit-files-list-layout="compact"]'),

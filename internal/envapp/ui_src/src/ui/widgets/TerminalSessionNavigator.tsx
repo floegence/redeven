@@ -45,6 +45,7 @@ export type TerminalSessionNavigatorProps = Readonly<{
   onRefresh: () => void;
   onFilterQueryChange: (value: string) => void;
   onPreviewSession: (event: PointerEvent, sessionId: string) => void;
+  onResetSessionPreview: () => void;
   onSelectSession: (sessionId: string) => void;
   onOpenKeyboardMenu: (event: KeyboardEvent, item: TerminalSessionNavigationItem) => void;
   onOpenContextMenu: (event: MouseEvent, item: TerminalSessionNavigationItem) => void;
@@ -237,6 +238,8 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             aria-current={committedActive() ? 'page' : undefined}
                             title={item().fullPath || item().title}
                             onPointerDown={(event) => props.onPreviewSession(event, sessionId)}
+                            onPointerUp={() => queueMicrotask(props.onResetSessionPreview)}
+                            onPointerCancel={props.onResetSessionPreview}
                             onClick={() => props.onSelectSession(sessionId)}
                             onKeyDown={(event) => props.onOpenKeyboardMenu(event, item())}
                           >

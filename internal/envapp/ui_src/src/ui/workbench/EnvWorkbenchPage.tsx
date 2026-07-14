@@ -18,6 +18,7 @@ import { envWidgetTypeForSurface, type EnvWorkbenchHandoffAnchor } from '../envV
 import { useI18n } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
 import { isDesktopStateStorageAvailable, readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
+import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { resolveEnvAppStorageBinding } from '../services/uiPersistence';
 import {
   DEFAULT_TERMINAL_FONT_FAMILY_ID,
@@ -2629,6 +2630,12 @@ export function EnvWorkbenchPage() {
           <RedevenWorkbenchSurface
             state={workbenchState}
             setState={setSurfaceWorkbenchState}
+            widgetActivationMode="after-paint"
+            onWidgetActivationEvent={createUIPresentationEventRecorder({
+              surface: 'workbench',
+              source: 'widget-activation',
+              target: (widgetId) => widgetId ?? 'none',
+            })}
             widgetDefinitions={localizedWorkbenchWidgetDefinitions()}
             filterBarWidgetTypes={redevenWorkbenchFilterBarWidgetTypes}
             resolveContextMenuItems={resolveWorkbenchContextMenuItems}

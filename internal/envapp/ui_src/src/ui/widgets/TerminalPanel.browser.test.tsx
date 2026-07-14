@@ -423,6 +423,7 @@ vi.mock('./FilePreviewContext', () => ({
 }));
 
 vi.mock('../utils/permission', () => ({
+  canLaunchProcess: () => true,
   isPermissionDeniedError: () => false,
 }));
 

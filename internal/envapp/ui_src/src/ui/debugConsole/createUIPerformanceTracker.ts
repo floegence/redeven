@@ -1,6 +1,7 @@
 import { createEffect, createSignal, onCleanup, type Accessor } from 'solid-js';
 
 import type { DiagnosticsEvent } from '../services/diagnosticsApi';
+import { subscribeUIPresentationTransactions } from '../services/uiPresentationTransactions';
 
 const FPS_SAMPLE_WINDOW_MS = 1000;
 const MEMORY_SAMPLE_INTERVAL_MS = 5000;
@@ -11,6 +12,21 @@ type PerformanceMemory = Readonly<{
   used_js_heap_size: number;
   total_js_heap_size: number;
   js_heap_size_limit: number;
+}>;
+
+type PresentationMetricSummary = Readonly<{
+  p50_ms: number;
+  p95_ms: number;
+  max_ms: number;
+}>;
+
+export type UIPresentationTransactionSummary = Readonly<{
+  surface: string;
+  source: string;
+  count: number;
+  intent_paint: PresentationMetricSummary;
+  commit: PresentationMetricSummary;
+  content_paint: PresentationMetricSummary;
 }>;
 
 export type UIPerformanceSnapshot = Readonly<{
@@ -40,6 +56,10 @@ export type UIPerformanceSnapshot = Readonly<{
     last_type?: string;
     last_paint_delay_ms?: number;
     max_paint_delay_ms: number;
+  }>;
+  presentation_transactions: Readonly<{
+    count: number;
+    summaries: readonly UIPresentationTransactionSummary[];
   }>;
   dom_activity: Readonly<{
     mutation_batches: number;
@@ -186,6 +206,10 @@ function buildInitialSnapshot(): UIPerformanceSnapshot {
       count: 0,
       max_paint_delay_ms: 0,
     },
+    presentation_transactions: {
+      count: 0,
+      summaries: [],
+    },
     dom_activity: {
       mutation_batches: 0,
       mutation_records: 0,
@@ -324,6 +348,118 @@ export function createUIPerformanceTracker(args: CreateUIPerformanceTrackerArgs)
     let fpsWindowStartedAt = 0;
     let fpsWindowFrames = 0;
     let previousFrameTimestamp = 0;
+    const afterPaintTimers = new Set<number>();
+    const pendingPresentationTransactions = new Map<string, {
+      surface: string;
+      source: string;
+      target: string;
+      intentPaintMs?: number;
+      commitStartedAt?: number;
+      commitMs?: number;
+    }>();
+    const presentationSamples = new Map<string, {
+      surface: string;
+      source: string;
+      intentPaint: number[];
+      commit: number[];
+      contentPaint: number[];
+    }>();
+
+    const summarizeMetric = (samples: readonly number[]): PresentationMetricSummary => {
+      if (samples.length === 0) return { p50_ms: 0, p95_ms: 0, max_ms: 0 };
+      const sorted = [...samples].sort((left, right) => left - right);
+      const percentile = (ratio: number) => sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1))] ?? 0;
+      return {
+        p50_ms: round2(percentile(0.5)),
+        p95_ms: round2(percentile(0.95)),
+        max_ms: round2(sorted[sorted.length - 1] ?? 0),
+      };
+    };
+
+    const publishPresentationSummaries = () => {
+      const summaries = Array.from(presentationSamples.values())
+        .map<UIPresentationTransactionSummary>((samples) => ({
+          surface: samples.surface,
+          source: samples.source,
+          count: samples.contentPaint.length,
+          intent_paint: summarizeMetric(samples.intentPaint),
+          commit: summarizeMetric(samples.commit),
+          content_paint: summarizeMetric(samples.contentPaint),
+        }))
+        .sort((left, right) => left.surface.localeCompare(right.surface) || left.source.localeCompare(right.source));
+      setSnapshot((current) => ({
+        ...current,
+        presentation_transactions: {
+          count: summaries.reduce((total, summary) => total + summary.count, 0),
+          summaries,
+        },
+      }));
+    };
+
+    const unsubscribePresentationTransactions = subscribeUIPresentationTransactions((event) => {
+      if (disposed) return;
+      if (event.phase === 'requested') {
+        pendingPresentationTransactions.set(event.transactionKey, {
+          surface: event.surface,
+          source: event.source,
+          target: event.target,
+        });
+        return;
+      }
+      const pending = pendingPresentationTransactions.get(event.transactionKey);
+      if (!pending) return;
+      if (event.phase === 'intent_presented') {
+        pending.intentPaintMs = event.elapsedMs;
+        return;
+      }
+      if (event.phase === 'commit_started') {
+        pending.commitStartedAt = event.timestamp;
+        return;
+      }
+      if (event.phase === 'committed') {
+        pending.commitMs = Math.max(0, event.timestamp - (pending.commitStartedAt ?? event.timestamp));
+        return;
+      }
+      if (event.phase === 'cancelled') {
+        pendingPresentationTransactions.delete(event.transactionKey);
+        return;
+      }
+      if (event.phase !== 'content_presented') return;
+
+      pendingPresentationTransactions.delete(event.transactionKey);
+      const sampleKey = `${pending.surface}\u0000${pending.source}`;
+      const samples = presentationSamples.get(sampleKey) ?? {
+        surface: pending.surface,
+        source: pending.source,
+        intentPaint: [],
+        commit: [],
+        contentPaint: [],
+      };
+      samples.intentPaint.push(Math.max(0, pending.intentPaintMs ?? 0));
+      samples.commit.push(Math.max(0, pending.commitMs ?? 0));
+      samples.contentPaint.push(Math.max(0, event.elapsedMs));
+      if (samples.intentPaint.length > 200) samples.intentPaint.shift();
+      if (samples.commit.length > 200) samples.commit.shift();
+      if (samples.contentPaint.length > 200) samples.contentPaint.shift();
+      presentationSamples.set(sampleKey, samples);
+      publishPresentationSummaries();
+
+      if ((pending.intentPaintMs ?? 0) >= 32 || event.elapsedMs >= 100) {
+        appendEvent(createUIEvent({
+          kind: 'ui_presentation_transaction',
+          message: `${pending.surface} selection presentation exceeded its interaction budget.`,
+          durationMs: event.elapsedMs,
+          detail: {
+            surface: pending.surface,
+            source: pending.source,
+            target: pending.target,
+            intent_paint_ms: round2(pending.intentPaintMs ?? 0),
+            commit_ms: round2(pending.commitMs ?? 0),
+            content_paint_ms: round2(event.elapsedMs),
+          },
+        }));
+      }
+    });
 
     const handleFPSFrame = (timestamp: number) => {
       if (disposed) {
@@ -408,30 +544,35 @@ export function createUIPerformanceTracker(args: CreateUIPerformanceTrackerArgs)
         ? performance.now()
         : Date.now();
       window.requestAnimationFrame(() => {
-        const finishedAt = typeof performance !== 'undefined' && typeof performance.now === 'function'
-          ? performance.now()
-          : Date.now();
-        const delayMs = Math.max(0, finishedAt - interactionStartedAt);
-        setSnapshot((current) => ({
-          ...current,
-          interactions: {
-            count: current.interactions.count + 1,
-            last_type: type,
-            last_paint_delay_ms: round2(delayMs),
-            max_paint_delay_ms: round2(Math.max(current.interactions.max_paint_delay_ms, delayMs)),
-          },
-        }));
-        if (delayMs >= 50) {
-          appendEvent(createUIEvent({
-            kind: 'interaction_delay',
-            message: `${type} interaction needed ${Math.round(delayMs)} ms to reach the next paint.`,
-            durationMs: delayMs,
-            detail: {
-              interaction_type: type,
-              delay_ms: round2(delayMs),
+        const timer = window.setTimeout(() => {
+          afterPaintTimers.delete(timer);
+          if (disposed) return;
+          const finishedAt = typeof performance !== 'undefined' && typeof performance.now === 'function'
+            ? performance.now()
+            : Date.now();
+          const delayMs = Math.max(0, finishedAt - interactionStartedAt);
+          setSnapshot((current) => ({
+            ...current,
+            interactions: {
+              count: current.interactions.count + 1,
+              last_type: type,
+              last_paint_delay_ms: round2(delayMs),
+              max_paint_delay_ms: round2(Math.max(current.interactions.max_paint_delay_ms, delayMs)),
             },
           }));
-        }
+          if (delayMs >= 50) {
+            appendEvent(createUIEvent({
+              kind: 'interaction_delay',
+              message: `${type} interaction needed ${Math.round(delayMs)} ms to finish an after-paint boundary.`,
+              durationMs: delayMs,
+              detail: {
+                interaction_type: type,
+                delay_ms: round2(delayMs),
+              },
+            }));
+          }
+        }, 0);
+        afterPaintTimers.add(timer);
       });
     };
 
@@ -580,6 +721,11 @@ export function createUIPerformanceTracker(args: CreateUIPerformanceTrackerArgs)
 
     onCleanup(() => {
       disposed = true;
+      unsubscribePresentationTransactions();
+      pendingPresentationTransactions.clear();
+      presentationSamples.clear();
+      for (const timer of afterPaintTimers) window.clearTimeout(timer);
+      afterPaintTimers.clear();
       if (animationFrame) {
         window.cancelAnimationFrame(animationFrame);
       }

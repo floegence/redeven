@@ -9,6 +9,7 @@ import { createEnvLocalFlowerSurfaceAdapter } from '../flower/envLocalFlowerSurf
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
 import '../flower-feature.css';
+import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
@@ -247,6 +248,10 @@ export function EnvAIPage() {
       copy={createEnvFlowerSurfaceCopy(i18n)}
       focusThreadRequest={env.aiThreadFocusRequest()}
       onFocusThreadRequestConsumed={env.consumeAIThreadFocusRequest}
+      onThreadSelectionEvent={createUIPresentationEventRecorder({
+        surface: 'flower',
+        source: (event) => event.metadata?.source ?? 'thread-list',
+      })}
       class="h-full min-h-0"
     />
   );

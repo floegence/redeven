@@ -1652,7 +1652,7 @@ describe('CodexSidebar', () => {
     );
   });
 
-  it('shows a loading state instead of stale transcript content when switching to an uncached thread', async () => {
+  it('keeps the previous transcript visible while an uncached thread loads in staging', async () => {
     const thread2Detail = deferred<any>();
 
     fetchCodexStatusMock.mockResolvedValue({
@@ -1771,9 +1771,8 @@ describe('CodexSidebar', () => {
     flushAnimationFrames();
     await flushAsync();
 
-    expect(host.querySelector('[data-codex-surface="loading-state"]')).not.toBeNull();
-    expect(host.textContent).toContain('Loading the selected Codex thread.');
-    expect(host.textContent).not.toContain('Local API note');
+    expect(host.querySelector('[data-codex-surface="loading-state"]')).toBeNull();
+    expect(host.textContent).toContain('Local API note');
 
     thread2Detail.resolve({
       thread: {
@@ -1986,6 +1985,7 @@ describe('CodexSidebar', () => {
     await flushAsync();
 
     expect(host.querySelector('[data-codex-surface="loading-state"]')).not.toBeNull();
+    expect(host.textContent).not.toContain('Local API note');
     expect(host.textContent).not.toContain('Polish note');
 
     thread3Detail.resolve({

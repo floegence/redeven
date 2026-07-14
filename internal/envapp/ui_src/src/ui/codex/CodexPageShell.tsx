@@ -95,14 +95,12 @@ export function CodexPageShell() {
   const [transcriptScrollRegionRef, setTranscriptScrollRegionRef] = createSignal<HTMLDivElement>();
   const [visibleTranscriptRootRef, setVisibleTranscriptRootRef] = createSignal<HTMLDivElement>();
   const [pendingThreadSwitchRequest, setPendingThreadSwitchRequest] = createSignal<FollowBottomRequest | null>(null);
-  const [pendingThreadSwitchOriginKey, setPendingThreadSwitchOriginKey] = createSignal('new-thread');
   const [pendingThreadSwitchTargetKey, setPendingThreadSwitchTargetKey] = createSignal('new-thread');
   const [stagingTranscriptThreadKey, setStagingTranscriptThreadKey] = createSignal<string | null>(null);
   const [stagingTranscriptMeasurementVersion, setStagingTranscriptMeasurementVersion] = createSignal(0);
   const [postRevealFollowRequest, setPostRevealFollowRequest] = createSignal<FollowBottomRequest | null>(null);
   let pendingRevealFrame: number | null = null;
   let postRevealFollowTimeout: ReturnType<typeof globalThis.setTimeout> | null = null;
-  let lastRevealedTranscriptThreadKey = String(codex.displayedThreadID() ?? codex.activeThreadID() ?? '').trim() || 'new-thread';
 
   followBottomController.setPausedContentAnchorRestoreEnabled(false);
 
@@ -126,10 +124,6 @@ export function CodexPageShell() {
     setStagingTranscriptMeasurementVersion(0);
   };
 
-  const commitRevealedTranscriptThread = (threadKey: string | null | undefined): void => {
-    lastRevealedTranscriptThreadKey = String(threadKey ?? '').trim() || 'new-thread';
-  };
-
   const armPostRevealFollowRequest = (request: FollowBottomRequest): void => {
     clearPostRevealFollowRequest();
     setPostRevealFollowRequest(request);
@@ -145,14 +139,14 @@ export function CodexPageShell() {
   ): void => {
     if (pendingThreadSwitchRequest()?.seq !== request.seq) return;
     if (pendingThreadSwitchTargetKey() !== threadKey) return;
-    if (displayedTranscriptThreadKey() !== threadKey) return;
+    if (codex.stagedThreadID() !== threadKey) return;
     const selectedThreadKey = String(codex.selectedThreadID() ?? '').trim();
     if (selectedThreadKey && selectedThreadKey !== threadKey) return;
+    if (!codex.presentStagedThread(threadKey)) return;
     const commitResult = followBottomController.commitFollowBottomNow(request);
     if (commitResult === 'no_container') {
       return;
     }
-    commitRevealedTranscriptThread(threadKey);
     setPendingThreadSwitchRequest(null);
     setPendingThreadSwitchTargetKey(threadKey);
     clearThreadSwitchStaging();
@@ -165,11 +159,15 @@ export function CodexPageShell() {
     String(codex.activeThreadID() ?? '').trim() ||
     'new-thread'
   ));
+  const threadPresentationPending = createMemo(() => {
+    const selectedThreadKey = String(codex.selectedThreadID() ?? '').trim();
+    return Boolean(selectedThreadKey && selectedThreadKey !== displayedTranscriptThreadKey());
+  });
   const threadSwitchStagingActive = createMemo(() => Boolean(stagingTranscriptThreadKey()));
   const stagingTranscriptReady = createMemo(() => {
     const threadKey = stagingTranscriptThreadKey();
     if (!threadKey) return false;
-    return !codex.threadLoading() && displayedTranscriptThreadKey() === threadKey;
+    return !codex.threadLoading() && codex.stagedThreadID() === threadKey;
   });
 
   const scheduleThreadSwitchReveal = (
@@ -267,7 +265,7 @@ export function CodexPageShell() {
   })));
   const workingDirValue = createMemo(() => toHomeDisplayPath(workingDirPath(), homePath()) || workingDirPath());
   const workingDirLocked = createMemo(() => Boolean(String(codex.activeThreadID() ?? '').trim()));
-  const workingDirDisabled = createMemo(() => !summary().hostReady || codex.submitting() || !homePath());
+  const workingDirDisabled = createMemo(() => threadPresentationPending() || !summary().hostReady || codex.submitting() || !homePath());
   const canPickWorkingDir = createMemo(() => !workingDirLocked() && !workingDirDisabled());
   const workingDirPickerInitialPath = createMemo(() => toPickerTreePath(workingDirPath(), homePath()));
   const workingDirPicker = createDirectoryPickerDataSource({
@@ -330,20 +328,14 @@ export function CodexPageShell() {
     isWorkingStatus(codex.activeStatus())
   ));
   const shouldShowWorkingState = createMemo(() => (
-    summary().hostReady && hasActiveRun()
+    !threadPresentationPending() && summary().hostReady && hasActiveRun()
   ));
-  const visibleTranscriptThreadKey = createMemo(() => stagingTranscriptThreadKey() ?? liveTranscriptThreadKey());
-  const visibleTranscriptItems = createMemo(() => (
-    threadSwitchStagingActive() && !stagingTranscriptReady() ? [] : codex.transcriptItems()
-  ));
-  const visibleOptimisticUserTurns = createMemo(() => (
-    threadSwitchStagingActive() && !stagingTranscriptReady() ? [] : codex.activeOptimisticUserTurns()
-  ));
-  const visibleShowWorkingState = createMemo(() => (
-    (!threadSwitchStagingActive() || stagingTranscriptReady()) && shouldShowWorkingState()
-  ));
+  const visibleTranscriptThreadKey = liveTranscriptThreadKey;
+  const visibleTranscriptItems = codex.transcriptItems;
+  const visibleOptimisticUserTurns = codex.activeOptimisticUserTurns;
+  const visibleShowWorkingState = shouldShowWorkingState;
   const visibleTranscriptLoading = createMemo(() => (
-    codex.threadLoading() || (threadSwitchStagingActive() && !stagingTranscriptReady())
+    codex.threadLoading() && !displayedTranscriptThreadKey()
   ));
   const visibleTranscriptLoadingBody = createMemo(() => (
     threadSwitchStagingActive()
@@ -370,7 +362,7 @@ export function CodexPageShell() {
       value: modelValue(),
       options: modelOptions(),
       placeholder: i18n.t('codex.common.default'),
-      disabled: !composerHostAvailable() || modelOptions().length === 0,
+      disabled: threadPresentationPending() || !composerHostAvailable() || modelOptions().length === 0,
       variant: 'value',
       onChange: codex.setModelDraft,
     },
@@ -380,7 +372,7 @@ export function CodexPageShell() {
       value: effortValue(),
       options: effortOptions(),
       placeholder: i18n.t('codex.common.default'),
-      disabled: !composerHostAvailable() || effortOptions().length === 0,
+      disabled: threadPresentationPending() || !composerHostAvailable() || effortOptions().length === 0,
       variant: 'value',
       onChange: codex.setEffortDraft,
     },
@@ -390,7 +382,7 @@ export function CodexPageShell() {
       value: approvalPolicyValue(),
       options: approvalPolicyOptions(),
       placeholder: i18n.t('codex.common.never'),
-      disabled: !composerHostAvailable() || approvalPolicyOptions().length === 0,
+      disabled: threadPresentationPending() || !composerHostAvailable() || approvalPolicyOptions().length === 0,
       variant: 'policy',
       onChange: codex.setApprovalPolicyDraft,
     },
@@ -400,7 +392,7 @@ export function CodexPageShell() {
       value: sandboxModeValue(),
       options: sandboxModeOptions(),
       placeholder: i18n.t('codex.common.fullAccess'),
-      disabled: !composerHostAvailable() || sandboxModeOptions().length === 0,
+      disabled: threadPresentationPending() || !composerHostAvailable() || sandboxModeOptions().length === 0,
       variant: 'policy',
       onChange: codex.setSandboxModeDraft,
     },
@@ -415,6 +407,9 @@ export function CodexPageShell() {
     return composerHasQueueableDraftContent() ? 'queue' : 'stop';
   });
   const composerPrimaryActionDisabledReason = createMemo(() => {
+    if (threadPresentationPending()) {
+      return i18n.t('codex.loadingState.preparingThread');
+    }
     if (!summary().hostReady) {
       return composerDisabledReason() || codex.hostDisabledReason();
     }
@@ -477,6 +472,7 @@ export function CodexPageShell() {
   const queuedGuideAvailable = createMemo(() => !queuedGuideDisabledReason());
   const composerGuidanceNote = createMemo(() => '');
   const headerActions = createMemo<CodexHeaderAction[]>(() => {
+    if (threadPresentationPending()) return [];
     const threadID = String(codex.activeThreadID() ?? '').trim();
     if (!threadID) return [];
     const actions: CodexHeaderAction[] = [];
@@ -561,7 +557,6 @@ export function CodexPageShell() {
     const request = codex.scrollToBottomRequest();
     if (!request) return;
     if (request.reason === 'thread_switch') {
-      const originThreadKey = lastRevealedTranscriptThreadKey;
       const targetThreadKey = (
         String(codex.selectedThreadID() ?? '').trim() ||
         String(codex.activeThreadID() ?? '').trim() ||
@@ -569,16 +564,13 @@ export function CodexPageShell() {
       );
       cancelPendingRevealFrame();
       clearPostRevealFollowRequest();
-      setPendingThreadSwitchOriginKey(originThreadKey);
       setPendingThreadSwitchTargetKey(targetThreadKey);
       setPendingThreadSwitchRequest(request);
       return;
     }
-    setPendingThreadSwitchOriginKey(lastRevealedTranscriptThreadKey);
     setPendingThreadSwitchRequest(null);
     clearPostRevealFollowRequest();
     if (threadSwitchStagingActive()) {
-      commitRevealedTranscriptThread(liveTranscriptThreadKey());
       clearThreadSwitchStaging();
     }
     setPendingThreadSwitchTargetKey(liveTranscriptThreadKey());
@@ -586,14 +578,8 @@ export function CodexPageShell() {
   });
 
   createEffect(() => {
-    if (threadSwitchStagingActive() || pendingThreadSwitchRequest()) return;
-    commitRevealedTranscriptThread(liveTranscriptThreadKey());
-  });
-
-  createEffect(() => {
     const request = pendingThreadSwitchRequest();
     if (!request) return;
-    const originThreadKey = pendingThreadSwitchOriginKey();
     const targetThreadKey = pendingThreadSwitchTargetKey();
     const threadKey = displayedTranscriptThreadKey();
     if (!targetThreadKey) {
@@ -610,17 +596,15 @@ export function CodexPageShell() {
       }
       return;
     }
-    if (threadKey !== targetThreadKey) {
-      return;
-    }
-    if (threadKey === originThreadKey && !threadSwitchStagingActive()) {
+    if (threadKey === targetThreadKey) {
       const commitResult = followBottomController.commitFollowBottomNow(request);
       if (commitResult === 'no_container') return;
-      commitRevealedTranscriptThread(threadKey);
       setPendingThreadSwitchRequest(null);
+      clearThreadSwitchStaging();
       armPostRevealFollowRequest(request);
       return;
     }
+    if (codex.stagedThreadID() !== targetThreadKey) return;
     if (stagingTranscriptThreadKey() === targetThreadKey) return;
     cancelPendingRevealFrame();
     setStagingTranscriptMeasurementVersion(0);
@@ -691,7 +675,6 @@ export function CodexPageShell() {
               class="codex-page-transcript-main"
               data-codex-transcript-scroll-region="true"
               data-codex-thread-switch-staging={threadSwitchStagingActive() ? 'true' : 'false'}
-              style={threadSwitchStagingActive() ? { visibility: 'hidden' } : undefined}
               onScroll={followBottomController.handleScroll}
             >
               <CodexTranscript
@@ -728,8 +711,8 @@ export function CodexPageShell() {
                   onMeasuredHeightsUpdated={() => {
                     setStagingTranscriptMeasurementVersion((value) => value + 1);
                   }}
-                  items={codex.transcriptItems()}
-                  optimisticUserTurns={codex.activeOptimisticUserTurns()}
+                  items={codex.stagedTranscriptItems()}
+                  optimisticUserTurns={[]}
                   showWorkingState={shouldShowWorkingState()}
                   workingLabel={codex.activeStatus() || summary().statusLabel || 'working'}
                   workingFlags={summary().statusFlags}
@@ -755,7 +738,7 @@ export function CodexPageShell() {
         </div>
         <div class="codex-page-bottom-dock">
           <div class="codex-page-bottom-support">
-            <Show when={codex.pendingRequests().length > 0}>
+            <Show when={!threadPresentationPending() && codex.pendingRequests().length > 0}>
               <div class="codex-page-bottom-support-lane">
                 <div class="codex-page-bottom-support-track codex-page-bottom-support-track-thread">
                   <div class="codex-page-bottom-support-content codex-page-bottom-support-content-thread">
@@ -770,7 +753,7 @@ export function CodexPageShell() {
               </div>
             </Show>
 
-            <Show when={codex.dispatchingInputs().length > 0 || codex.queuedFollowups().length > 0}>
+            <Show when={!threadPresentationPending() && (codex.dispatchingInputs().length > 0 || codex.queuedFollowups().length > 0)}>
               <div class="codex-page-bottom-support-lane">
                 <div class="codex-page-bottom-support-track codex-page-bottom-support-track-page">
                   <div class="codex-page-bottom-support-content codex-page-bottom-support-content-page">

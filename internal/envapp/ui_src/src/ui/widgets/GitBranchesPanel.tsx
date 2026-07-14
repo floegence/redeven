@@ -1907,7 +1907,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const notification = useNotification();
   const i18n = useI18n();
   const branchSubviewTabRefs = new Map<GitBranchSubview, HTMLButtonElement>();
-  const [branchHeaderTopRowElement, _setBranchHeaderTopRowElement] =
+  const [branchHeaderTopRowElement, setBranchHeaderTopRowElement] =
     createSignal<HTMLDivElement>();
   const [branchHeaderWidth, setBranchHeaderWidth] = createSignal(0);
 
@@ -3105,6 +3105,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                           <Tooltip content={action.label} delay={0}>
                             <button
                               type="button"
+                              aria-label={action.label}
+                              title={action.label}
                               class={cn(
                                 "inline-flex cursor-pointer items-center justify-center rounded-md p-1.5 transition-colors duration-150",
                                 "text-muted-foreground hover:bg-muted/[0.16] hover:text-foreground",
@@ -3123,6 +3125,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                         <Tooltip content={action.disabledReason || action.label} delay={0}>
                           <button
                             type="button"
+                            aria-label={action.label}
+                            title={action.disabledReason || action.label}
                             class={cn(
                               "inline-flex cursor-not-allowed items-center justify-center rounded-md p-1.5",
                               "text-muted-foreground/40",
@@ -3287,7 +3291,11 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             }
           >
             <div class="flex h-full min-h-0 flex-col overflow-hidden">
-              <div class="shrink-0 space-y-2 px-2.5 py-2">
+              <div
+                ref={setBranchHeaderTopRowElement}
+                class="shrink-0 space-y-2 px-2.5 py-2"
+                data-git-branch-header-layout={branchHeaderLayout()}
+              >
                 {/* Branch identity card */}
                 <GitPanelFrame>
                   <div class="flex items-start justify-between gap-3">
@@ -3309,7 +3317,10 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                       </div>
                     </div>
                     <Show when={shouldRenderBranchHeaderActions()}>
-                      <div class="flex shrink-0 items-center gap-1.5">
+                      <div
+                        class="flex shrink-0 items-center gap-1.5"
+                        data-git-branch-header-actions={branchHeaderUsesOverflow() ? "overflow" : "inline"}
+                      >
                         <Show when={!branchHeaderUsesOverflow()}>
                           <Show when={branchHeaderControls().secondaryShortcuts.length > 0}>
                             <GitShortcutOrbDock class="gap-1">
@@ -3404,7 +3415,12 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                 </GitPanelFrame>
 
                 {/* Tab bar with icons */}
-                <div class="grid grid-cols-2 rounded-md bg-muted/[0.10] p-0.5 w-full">
+                <div
+                  class="grid grid-cols-2 rounded-md bg-muted/[0.10] p-0.5 w-full"
+                  role="tablist"
+                  aria-label="Branch detail tabs"
+                  aria-orientation="horizontal"
+                >
                   <For each={GIT_BRANCH_SUBVIEW_IDS}>
                     {(view) => {
                       const active = () => branchSubview() === view;

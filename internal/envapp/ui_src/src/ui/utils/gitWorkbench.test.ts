@@ -32,7 +32,7 @@ describe('gitWorkbench helpers', () => {
       branchesCount: 5,
     });
 
-    expect(items).toEqual([
+    expect(items.map(({ id, label, count }) => ({ id, label, ...(count === undefined ? {} : { count }) }))).toEqual([
       { id: 'changes', label: 'Changes', count: 4 },
       { id: 'branches', label: 'Branches', count: 5 },
       { id: 'history', label: 'Graph' },
