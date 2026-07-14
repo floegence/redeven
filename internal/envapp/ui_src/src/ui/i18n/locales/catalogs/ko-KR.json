@@ -2276,7 +2276,8 @@
     "olderOutputUnavailable": "일부 이전 출력을 복원하지 못했습니다.",
     "terminalUnavailable": "이 터미널을 복원하지 못했습니다.",
     "outputSynchronized": "터미널 출력이 동기화되었습니다.",
-    "viewDiagnostics": "진단"
+    "viewDiagnostics": "진단",
+    "updateRuntime": "Runtime 업데이트"
   },
   "shellBlock": {
     "command": "명령",

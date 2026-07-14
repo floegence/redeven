@@ -2276,7 +2276,8 @@
     "olderOutputUnavailable": "Ein Teil der früheren Ausgabe konnte nicht wiederhergestellt werden.",
     "terminalUnavailable": "Dieses Terminal konnte nicht wiederhergestellt werden.",
     "outputSynchronized": "Die Terminalausgabe ist synchronisiert.",
-    "viewDiagnostics": "Diagnose"
+    "viewDiagnostics": "Diagnose",
+    "updateRuntime": "Runtime aktualisieren"
   },
   "shellBlock": {
     "command": "Befehl",

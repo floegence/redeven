@@ -2276,7 +2276,8 @@
     "olderOutputUnavailable": "一部の以前の出力を復元できませんでした。",
     "terminalUnavailable": "このターミナルを復元できませんでした。",
     "outputSynchronized": "ターミナル出力は同期済みです。",
-    "viewDiagnostics": "診断"
+    "viewDiagnostics": "診断",
+    "updateRuntime": "Runtime を更新"
   },
   "shellBlock": {
     "command": "コマンド",

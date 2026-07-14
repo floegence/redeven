@@ -110,6 +110,7 @@ const openPreviewSpy = vi.hoisted(() => vi.fn(async () => undefined));
 const openFileBrowserAtPathSpy = vi.hoisted(() => vi.fn(async () => undefined));
 const openFlowerTurnLauncherSpy = vi.hoisted(() => vi.fn());
 const openDebugConsoleSpy = vi.hoisted(() => vi.fn());
+const openSettingsSpy = vi.hoisted(() => vi.fn());
 const terminalEnvPermissionsState = vi.hoisted(() => ({
   canRead: true,
   canWrite: true,
@@ -349,6 +350,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     ChevronDown: Icon,
     ChevronUp: Icon,
     Copy: Icon,
+    Download: Icon,
     ExternalLink: Icon,
     Folder: Icon,
     Menu: Icon,
@@ -1328,6 +1330,7 @@ vi.mock('../pages/EnvContext', () => {
       openTerminalInDirectory: vi.fn(),
       openFileBrowserAtPath: openFileBrowserAtPathSpy,
       openDebugConsole: openDebugConsoleSpy,
+      openSettings: openSettingsSpy,
       consumeOpenTerminalInDirectoryRequest: vi.fn(),
     }),
   };
@@ -1671,6 +1674,7 @@ describe('TerminalPanel', () => {
     openFileBrowserAtPathSpy.mockClear();
     openFlowerTurnLauncherSpy.mockClear();
     openDebugConsoleSpy.mockClear();
+    openSettingsSpy.mockClear();
     openPreviewSpy.mockClear();
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
@@ -2637,6 +2641,43 @@ describe('TerminalPanel', () => {
     expect(outputCoordinatorRetrySpy).toHaveBeenCalledTimes(1);
   });
 
+  it('routes non-retryable recovery failures to Runtime settings', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const coordinatorOptions = createOutputCoordinatorSpy.mock.calls[0]?.[0];
+    coordinatorOptions.onStateChange?.({
+      active: true,
+      baselineReady: true,
+      coveredThroughSequence: 0,
+      retainedLiveChunks: 0,
+      retainedLiveBytes: 0,
+      retryAttempt: 0,
+      retryScheduled: false,
+      failure: {
+        code: 'history_contract_missing',
+        phase: 'catch_up',
+        retryable: false,
+        attempt: 0,
+        coveredSequence: 0,
+        attachGeneration: 1,
+      },
+      lastError: null,
+      disposed: false,
+      state: 'failed',
+    });
+    await settleTerminalPanel();
+
+    expect(host.querySelector('button[aria-label="Retry"]')).toBeNull();
+    const updateButton = host.querySelector<HTMLButtonElement>('button[aria-label="Update Runtime"]');
+    expect(updateButton).toBeTruthy();
+    updateButton?.click();
+    expect(openSettingsSpy).toHaveBeenCalledWith('runtime');
+    expect(host.querySelector('button[aria-label="Diagnostics"]')).toBeTruthy();
+  });
+
   it('rebuilds a ready terminal after a blocking core failure', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -2674,7 +2715,7 @@ describe('TerminalPanel', () => {
 
     const initialStatusBar = host.querySelector<HTMLElement>('[data-testid="terminal-status-bar"]');
     expect(initialStatusBar).toBeTruthy();
-    expect(initialStatusBar?.classList.contains('h-7')).toBe(true);
+    expect(initialStatusBar?.classList.contains('h-11')).toBe(true);
     expect(initialStatusBar?.style.transform).toBe('translateY(-80px)');
     const initialDimensions = terminalCoreInstances[0]?.getDimensions();
 
@@ -2684,12 +2725,12 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeTruthy();
     const statusBar = host.querySelector<HTMLElement>('[data-testid="terminal-status-bar"]');
     expect(statusBar).toBe(initialStatusBar);
-    expect(statusBar?.classList.contains('h-7')).toBe(true);
+    expect(statusBar?.classList.contains('h-11')).toBe(true);
     expect(statusBar?.style.transform).toBe('translateY(-80px)');
     expect(terminalCoreInstances[0]?.getDimensions()).toEqual(initialDimensions);
     expect(statusBar?.textContent).toContain('This terminal could not be restored.');
-    expect(host.querySelector('button[aria-label="Retry"]')?.classList.contains('size-7')).toBe(true);
-    expect(host.querySelector('button[aria-label="Diagnostics"]')?.classList.contains('size-7')).toBe(true);
+    expect(host.querySelector('button[aria-label="Retry"]')?.classList.contains('size-11')).toBe(true);
+    expect(host.querySelector('button[aria-label="Diagnostics"]')?.classList.contains('size-11')).toBe(true);
   });
 
   it('keeps activity input live while the upstream output pipeline has inactive backlog', async () => {
@@ -5764,7 +5805,7 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-testid="dropdown-item-hide_floe_keyboard"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="dropdown-item-show_floe_keyboard"]')).toBeNull();
     const keyboardStatusBar = host.querySelector<HTMLElement>('[data-testid="terminal-status-bar"]');
-    expect(keyboardStatusBar?.classList.contains('h-7')).toBe(true);
+    expect(keyboardStatusBar?.classList.contains('h-11')).toBe(true);
     expect(keyboardStatusBar?.style.transform).toBe('translateY(-80px)');
     expect(Array.from(keyboardStatusBar?.querySelectorAll('span') ?? []).find((span) => span.textContent?.includes('Session:'))?.classList.contains('hidden')).toBe(true);
     expect(Array.from(keyboardStatusBar?.querySelectorAll('span') ?? []).find((span) => span.textContent?.includes('History:'))?.classList.contains('hidden')).toBe(true);
@@ -5862,7 +5903,7 @@ describe('TerminalPanel', () => {
     expect(sessionViewport?.style.getPropertyValue('--terminal-bottom-inset')).toBe('80px');
     expect(terminalSurface?.style.bottom).toBe('var(--terminal-bottom-inset)');
     const statusBar = host.querySelector<HTMLElement>('[data-testid="terminal-status-bar"]');
-    expect(statusBar?.classList.contains('h-7')).toBe(true);
+    expect(statusBar?.classList.contains('h-11')).toBe(true);
     expect(statusBar?.style.transform).toBe('translateY(-80px)');
   });
 

@@ -1,6 +1,6 @@
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { BugIcon, Copy, Folder, Menu, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { BugIcon, Copy, Download, Folder, Menu, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import '@fontsource/iosevka/400.css';
 
 import {
@@ -1508,7 +1508,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const handleRuntimeStatus = (id: string, status: TerminalSessionRuntimeStatus) => {
     setRuntimeStatusBySession((current) => {
-      if (current[id]?.state === status.state && current[id]?.failureCode === status.failureCode) return current;
+      if (
+        current[id]?.state === status.state
+        && current[id]?.failureCode === status.failureCode
+        && current[id]?.retryable === status.retryable
+      ) return current;
       return { ...current, [id]: status };
     });
   };
@@ -1825,6 +1829,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     env.openDebugConsole({
       query: terminalRecoveryDiagnosticsQuery(sid, activeRuntimeStatus().failureCode),
     });
+  };
+
+  const openRuntimeUpdate = () => {
+    env.openSettings('runtime');
   };
 
   const shouldRestoreTerminalFocus = () => {
@@ -3749,7 +3757,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             <Show when={showTerminalStatusBar()}>
               <div
                 data-testid="terminal-status-bar"
-                class="relative z-10 grid h-7 min-h-7 max-h-7 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden border-t border-border bg-background px-2 text-[10px] leading-none text-muted-foreground"
+                class="relative z-10 grid shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden border-t border-border bg-background leading-none text-muted-foreground"
+                classList={{
+                  'h-11 min-h-11 max-h-11 px-1 text-[11px]': useMobileRecoveryStatusBar(),
+                  'h-7 min-h-7 max-h-7 px-2 text-[10px]': !useMobileRecoveryStatusBar(),
+                }}
                 style={{
                   transform: useMobileRecoveryStatusBar()
                     ? `translateY(-${terminalViewportInsetPx()}px)`
@@ -3789,18 +3801,45 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                     data-testid="terminal-recovery-status-actions"
                     class="flex min-w-max shrink-0 items-center gap-1 whitespace-nowrap"
                   >
-                      <button
-                        type="button"
-                        class="inline-flex size-7 cursor-pointer items-center justify-center text-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-                        aria-label={i18n.t('terminal.retry')}
-                        title={i18n.t('terminal.retry')}
-                        onClick={(event) => void retryActiveRuntime(event.currentTarget)}
+                      <Show
+                        when={activeRuntimeStatus().retryable !== false}
+                        fallback={(
+                          <button
+                            type="button"
+                            class="inline-flex cursor-pointer items-center justify-center text-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                            classList={{
+                              'size-11': useMobileRecoveryStatusBar(),
+                              'size-7': !useMobileRecoveryStatusBar(),
+                            }}
+                            aria-label={i18n.t('terminal.updateRuntime')}
+                            title={i18n.t('terminal.updateRuntime')}
+                            onClick={openRuntimeUpdate}
+                          >
+                            <Download class="size-3.5" aria-hidden="true" />
+                          </button>
+                        )}
                       >
-                        <Refresh class="size-3.5" aria-hidden="true" />
-                      </button>
+                        <button
+                          type="button"
+                          class="inline-flex cursor-pointer items-center justify-center text-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          classList={{
+                            'size-11': useMobileRecoveryStatusBar(),
+                            'size-7': !useMobileRecoveryStatusBar(),
+                          }}
+                          aria-label={i18n.t('terminal.retry')}
+                          title={i18n.t('terminal.retry')}
+                          onClick={(event) => void retryActiveRuntime(event.currentTarget)}
+                        >
+                          <Refresh class="size-3.5" aria-hidden="true" />
+                        </button>
+                      </Show>
                       <button
                         type="button"
-                        class="inline-flex size-7 cursor-pointer items-center justify-center text-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        class="inline-flex cursor-pointer items-center justify-center text-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        classList={{
+                          'size-11': useMobileRecoveryStatusBar(),
+                          'size-7': !useMobileRecoveryStatusBar(),
+                        }}
                         aria-label={i18n.t('terminal.viewDiagnostics')}
                         title={i18n.t('terminal.viewDiagnostics')}
                         onClick={openActiveRuntimeDiagnostics}

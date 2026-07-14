@@ -2354,7 +2354,8 @@
     "olderOutputUnavailable": "Не удалось восстановить часть предыдущего вывода.",
     "terminalUnavailable": "Не удалось восстановить этот терминал.",
     "outputSynchronized": "Вывод терминала синхронизирован.",
-    "viewDiagnostics": "Диагностика"
+    "viewDiagnostics": "Диагностика",
+    "updateRuntime": "Обновить Runtime"
   },
   "shellBlock": {
     "command": "Команда",
