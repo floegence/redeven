@@ -77,7 +77,8 @@ const setSidebarActiveTabMock = vi.fn((tab: string) => {
   desktopSidebarActiveTab = tab;
 });
 
-vi.mock('@floegence/floe-webapp-core', () => ({
+vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core')>(),
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
   deferAfterPaint: (fn: () => void) => setTimeout(fn, 0),
   useCommand: () => ({ open: vi.fn(), registerAll: () => () => {}, getKeybindDisplay: (keybind: string) => keybind }),
@@ -143,7 +144,8 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
   FloeRegistryRuntime: (props: any) => <>{props.children}</>,
 }));
 
-vi.mock('@floegence/floe-webapp-core/layout', () => ({
+vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/layout')>(),
   BottomBarItem: (props: any) => <div>{props.children}</div>,
   DisplayModePageShell: (props: any) => <div data-testid="display-mode-page-shell">{props.children}</div>,
   DisplayModeSwitcher: () => <div data-testid="display-mode-switcher" />,
@@ -671,7 +673,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
 
       expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(1);
-      expect(host.querySelector('[data-testid="workbench-flower-activation"]')).toBeNull();
+      expect(host.querySelector('[data-testid="workbench-flower-activation"]')?.textContent).toBe('|||||thread-launched');
       expect(setSidebarActiveTabMock).toHaveBeenLastCalledWith('ai', expect.objectContaining({ openSidebar: false }));
       expect(windowOpenMock).not.toHaveBeenCalled();
     } finally {

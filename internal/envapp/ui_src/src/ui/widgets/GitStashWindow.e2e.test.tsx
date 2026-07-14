@@ -70,7 +70,7 @@ import { GitStashWindow } from './GitStashWindow';
 async function flush() {
   await Promise.resolve();
   await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 20));
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
@@ -84,7 +84,7 @@ async function revealTooltipForButton(button: HTMLButtonElement | undefined): Pr
   expect(host).toBeTruthy();
   host!.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
   await flush();
-  return document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
+  return Array.from(document.body.querySelectorAll('[role="tooltip"]')).at(-1) as HTMLElement | null;
 }
 
 beforeEach(() => {
@@ -160,11 +160,11 @@ describe('GitStashWindow', () => {
     }, host);
 
     try {
-      expect(host.textContent).toContain('Target Workspace');
+      expect(host.textContent).toContain('Stash current workspace');
       expect(host.textContent).toContain('Stash Changes');
       const stashTabs = host.querySelector('[role="group"][aria-label="Stash tabs"]') as HTMLDivElement | null;
       expect(stashTabs).toBeTruthy();
-      expect(stashTabs?.className).toContain('redeven-surface-segmented');
+      expect(stashTabs?.className).toContain('floe-segmented-control');
       const activeRadio = host.querySelector('[role="radio"][aria-checked="true"]') as HTMLButtonElement | null;
       expect(activeRadio?.textContent).toContain('Save Changes');
       expect(activeRadio?.className).not.toContain('git-browser-selection-chip');
@@ -174,15 +174,14 @@ describe('GitStashWindow', () => {
       stashesTab!.click();
       await flush();
 
-      expect(host.textContent).toContain('Selected Stash');
       expect(host.textContent).toContain('WIP linked worktree');
-      expect(host.textContent).toContain('Changed Files');
+      expect(host.textContent).toContain('Changed files');
       expect(host.textContent).toContain('Apply');
       expect(host.textContent).toContain('Apply & Remove');
       expect(host.textContent).toContain('Delete');
       const selectedStashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('WIP linked worktree')) as HTMLButtonElement | undefined;
-      expect(selectedStashButton?.className).toContain('git-browser-selection-row');
-      expect(selectedStashButton?.className).not.toContain('git-browser-selection-surface');
+      expect(selectedStashButton?.className).toContain('border-l-sky-500/60');
+      expect(selectedStashButton?.className).toContain('bg-sky-500/[0.06]');
       const actionRow = host.querySelector('[data-git-stash-actions]') as HTMLDivElement | null;
       expect(actionRow).toBeTruthy();
       expect(actionRow?.className).toContain('flex');

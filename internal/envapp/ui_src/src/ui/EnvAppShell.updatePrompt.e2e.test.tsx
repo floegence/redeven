@@ -44,7 +44,8 @@ const disconnectMock = vi.fn(() => {
 const accessStatusMock = vi.fn(async () => ({ passwordRequired: false, unlocked: true }));
 const accessResumeMock = vi.fn(async () => undefined);
 
-vi.mock('@floegence/floe-webapp-core', () => ({
+vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core')>(),
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
   deferAfterPaint: (fn: () => void) => setTimeout(fn, 0),
   useCommand: () => ({ open: vi.fn(), registerAll: () => () => {}, getKeybindDisplay: (keybind: string) => keybind }),
@@ -69,7 +70,8 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
   FloeRegistryRuntime: (props: any) => <>{props.children}</>,
 }));
 
-vi.mock('@floegence/floe-webapp-core/layout', () => ({
+vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/layout')>(),
   BottomBarItem: (props: any) => <div>{props.children}</div>,
   DisplayModePageShell: (props: any) => (
     <div data-testid="display-mode-page-shell">

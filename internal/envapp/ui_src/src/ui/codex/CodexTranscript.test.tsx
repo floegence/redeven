@@ -1451,7 +1451,6 @@ describe('CodexTranscript', () => {
     expect(host.textContent).toContain('+export function Example() {');
     expect(host.textContent).toContain('+  return <div />;');
     expect(host.textContent).not.toContain('Copy Patch');
-    expect(host.querySelectorAll('.redeven-surface-panel').length).toBeGreaterThan(0);
 
     dispose();
   });

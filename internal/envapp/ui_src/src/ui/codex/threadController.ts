@@ -4,6 +4,7 @@ import {
   onCleanup,
   type Accessor,
 } from 'solid-js';
+import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 
 import {
   applyCodexEvent,
@@ -38,6 +39,17 @@ export type CodexThreadSessionEntry = Readonly<{
   lastTouchedAt: number;
   bootstrapStatus: CodexThreadBootstrapStatus;
   bootstrapError: string | null;
+}>;
+
+type CodexThreadSelectionMetadata = Readonly<{
+  source: 'thread-list' | 'programmatic';
+}>;
+
+type CodexThreadSelectionTransaction = Readonly<{
+  id: number;
+  value: string;
+  metadata: CodexThreadSelectionMetadata;
+  startedAt: number;
 }>;
 
 function createRequestID(): string {
@@ -166,6 +178,7 @@ function makeSessionEntry(
 
 export function createCodexThreadController(args?: {
   activationScheduler?: CodexThreadActivationScheduler;
+  onSelectionEvent?: (event: UIFirstSelectionEvent<string, CodexThreadSelectionMetadata>) => void;
 }) {
   const activationScheduler = args?.activationScheduler ?? defaultActivationScheduler();
   const [selectedThreadID, setSelectedThreadID] = createSignal<string | null>(null);
@@ -178,6 +191,49 @@ export function createCodexThreadController(args?: {
   const [loadToken, setLoadToken] = createSignal<CodexThreadLoadToken | null>(null);
   const [activationToken, setActivationToken] = createSignal<CodexThreadLoadToken | null>(null);
   let activationFrameHandle: number | ReturnType<typeof globalThis.setTimeout> | null = null;
+  let contentFrameHandle: number | ReturnType<typeof globalThis.setTimeout> | null = null;
+  let nextSelectionTransactionID = 1;
+  let selectionTransaction: CodexThreadSelectionTransaction | null = null;
+
+  const emitSelectionEvent = (
+    transaction: CodexThreadSelectionTransaction,
+    phase: UIFirstSelectionEvent<string, CodexThreadSelectionMetadata>['phase'],
+  ) => {
+    const timestamp = typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now();
+    args?.onSelectionEvent?.({
+      phase,
+      value: transaction.value,
+      metadata: transaction.metadata,
+      transactionId: transaction.id,
+      startedAt: transaction.startedAt,
+      timestamp,
+      elapsedMs: Math.max(0, timestamp - transaction.startedAt),
+    });
+  };
+
+  const cancelSelectionTransaction = () => {
+    if (contentFrameHandle !== null) {
+      activationScheduler.cancel(contentFrameHandle);
+      contentFrameHandle = null;
+    }
+    const transaction = selectionTransaction;
+    selectionTransaction = null;
+    if (transaction) emitSelectionEvent(transaction, 'cancelled');
+  };
+
+  const scheduleSelectionContentPresented = (threadID: string) => {
+    const transaction = selectionTransaction;
+    if (!transaction || transaction.value !== normalizeThreadID(threadID)) return;
+    if (contentFrameHandle !== null) activationScheduler.cancel(contentFrameHandle);
+    contentFrameHandle = activationScheduler.request(() => {
+      contentFrameHandle = null;
+      if (selectionTransaction !== transaction) return;
+      emitSelectionEvent(transaction, 'content_presented');
+      selectionTransaction = null;
+    });
+  };
 
   const displayedSessionEntry = createMemo<CodexThreadSessionEntry | null>(() => {
     const threadID = normalizeThreadID(displayedThreadID());
@@ -203,6 +259,7 @@ export function createCodexThreadController(args?: {
       activationFrameHandle = null;
     }
     setActivationToken(null);
+    cancelSelectionTransaction();
   };
 
   onCleanup(() => {
@@ -217,6 +274,17 @@ export function createCodexThreadController(args?: {
 
   const sessionForThread = (threadID: string | null | undefined): CodexThreadSession | null =>
     sessionEntryForThread(threadID)?.session ?? null;
+
+  const stagedThreadID = createMemo<string | null>(() => {
+    const foregroundID = normalizeThreadID(foregroundThreadID());
+    if (!foregroundID || foregroundID === normalizeThreadID(displayedThreadID())) return null;
+    if (normalizeThreadID(loadingThreadID()) === foregroundID) return null;
+    return sessionForThread(foregroundID) ? foregroundID : null;
+  });
+  const stagedSession = createMemo<CodexThreadSession | null>(() => {
+    const threadID = stagedThreadID();
+    return threadID ? sessionForThread(threadID) : null;
+  });
 
   const cacheSession = (
     session: CodexThreadSession,
@@ -306,10 +374,12 @@ export function createCodexThreadController(args?: {
     const existing = sessionEntryForThread(normalizedThreadID);
     setForegroundThreadID(normalizedThreadID);
     setLoadingThreadID(existing?.session ? null : normalizedThreadID);
-    setDisplayedThreadID(existing?.session ? normalizedThreadID : null);
+    if (existing?.session) {
+      setDisplayedThreadID(normalizedThreadID);
+    }
   };
 
-  const scheduleForegroundSelection = (threadID: string) => {
+  const scheduleForegroundSelection = (threadID: string, metadata: CodexThreadSelectionMetadata) => {
     const normalizedThreadID = normalizeThreadID(threadID);
     if (!normalizedThreadID) return;
     if (
@@ -324,6 +394,19 @@ export function createCodexThreadController(args?: {
       requestID: createRequestID(),
     };
     clearPendingForegroundActivation();
+    const transaction: CodexThreadSelectionTransaction | null = metadata.source === 'thread-list' && args?.onSelectionEvent
+      ? {
+          id: nextSelectionTransactionID,
+          value: normalizedThreadID,
+          metadata,
+          startedAt: typeof performance !== 'undefined' && typeof performance.now === 'function'
+            ? performance.now()
+            : Date.now(),
+        }
+      : null;
+    if (transaction) nextSelectionTransactionID += 1;
+    selectionTransaction = transaction;
+    if (transaction) emitSelectionEvent(transaction, 'requested');
     setActivationToken(token);
     activationFrameHandle = activationScheduler.request(() => {
       activationFrameHandle = null;
@@ -336,16 +419,22 @@ export function createCodexThreadController(args?: {
         return;
       }
       setActivationToken(null);
+      if (transaction) emitSelectionEvent(transaction, 'intent_presented');
+      if (transaction) emitSelectionEvent(transaction, 'commit_started');
       commitForegroundSelection(normalizedThreadID);
+      if (transaction) emitSelectionEvent(transaction, 'committed');
+      if (transaction && normalizeThreadID(displayedThreadID()) === normalizedThreadID) {
+        scheduleSelectionContentPresented(normalizedThreadID);
+      }
     });
   };
 
-  const selectThread = (threadID: string) => {
+  const selectThread = (threadID: string, metadata: CodexThreadSelectionMetadata = { source: 'programmatic' }) => {
     const normalizedThreadID = normalizeThreadID(threadID);
     if (!normalizedThreadID) return;
     setBlankDraftActive(false);
     setSelectedThreadID(normalizedThreadID);
-    scheduleForegroundSelection(normalizedThreadID);
+    scheduleForegroundSelection(normalizedThreadID, metadata);
   };
 
   const startNewThreadDraft = () => {
@@ -397,9 +486,6 @@ export function createCodexThreadController(args?: {
       };
     });
     setLoadingThreadID(existing?.session ? null : normalizedThreadID);
-    if (!existing?.session) {
-      setDisplayedThreadID(null);
-    }
     return token;
   };
 
@@ -422,14 +508,33 @@ export function createCodexThreadController(args?: {
     cacheSession(nextSession, 'ready', null, detail.last_applied_seq);
     setSelectedThreadID(threadID);
     setForegroundThreadID(threadID);
-    setDisplayedThreadID(threadID);
     setLoadingThreadID(null);
     setBlankDraftActive(false);
+    if (!normalizeThreadID(displayedThreadID())) {
+      setDisplayedThreadID(threadID);
+      scheduleSelectionContentPresented(threadID);
+    }
+    return true;
+  };
+
+  const presentStagedThread = (threadID: string): boolean => {
+    const normalizedThreadID = normalizeThreadID(threadID);
+    if (
+      !normalizedThreadID ||
+      normalizeThreadID(stagedThreadID()) !== normalizedThreadID ||
+      normalizeThreadID(selectedThreadID()) !== normalizedThreadID ||
+      normalizeThreadID(foregroundThreadID()) !== normalizedThreadID
+    ) {
+      return false;
+    }
+    setDisplayedThreadID(normalizedThreadID);
+    scheduleSelectionContentPresented(normalizedThreadID);
     return true;
   };
 
   const failThreadBootstrap = (token: CodexThreadLoadToken, errorMessage: string): boolean => {
     if (!isCurrentLoadToken(token)) return false;
+    cancelSelectionTransaction();
     const threadID = normalizeThreadID(token.threadID);
     const existing = sessionEntryForThread(threadID);
     if (existing?.session) {
@@ -529,6 +634,8 @@ export function createCodexThreadController(args?: {
     sessionEntriesByID: sessionEntriesByID as Accessor<Record<string, CodexThreadSessionEntry>>,
     displayedSession,
     displayedSessionEntry,
+    stagedThreadID,
+    stagedSession,
     activeThreadError,
     threadLoading,
     sessionEntryForThread,
@@ -542,6 +649,7 @@ export function createCodexThreadController(args?: {
     clearSelection,
     beginThreadBootstrap,
     resolveThreadBootstrap,
+    presentStagedThread,
     failThreadBootstrap,
     applyEventToThread,
     adoptThreadDetail,

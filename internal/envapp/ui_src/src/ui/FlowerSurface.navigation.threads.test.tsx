@@ -298,7 +298,99 @@ describe('FlowerSurface navigation threads', () => {
     }
   });
 
-  it('shows a safe loading detail while a newly selected thread is pending', async () => {
+  it('reports the UI-first thread selection phases around warm transcript presentation', async () => {
+    const frames = mockAnimationFrames();
+    const phases: string[] = [];
+    try {
+      const warmThread = thread({
+        thread_id: 'thread-warm-selection-events',
+        title: 'Warm selection events',
+        messages: [{
+          id: 'warm-selection-message',
+          role: 'assistant',
+          content: 'Already loaded transcript.',
+          status: 'complete',
+          created_at_ms: 1_000,
+        }],
+      });
+      const loadThread = vi.fn(async () => liveBootstrap(warmThread));
+      const runtime = renderSurfaceWithAdapterProps({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [warmThread]),
+        loadThread,
+      }, {
+        onThreadSelectionEvent: (event) => phases.push(event.phase),
+      });
+
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-warm-selection-events"] button')));
+      (runtime.querySelector('[data-thread-id="thread-warm-selection-events"] button') as HTMLButtonElement).click();
+      frames.runAll();
+      await flush();
+      await waitFor(() => runtime.textContent?.includes('Already loaded transcript.') ?? false);
+      frames.runAll();
+      await flush();
+      expect(loadThread).toHaveBeenCalledTimes(1);
+      expect(phases).toEqual(['requested', 'intent_presented', 'commit_started', 'committed', 'content_presented']);
+      phases.length = 0;
+
+      (runtime.querySelector('.flower-new-chat-button') as HTMLButtonElement).click();
+
+      (runtime.querySelector('[data-thread-id="thread-warm-selection-events"] button') as HTMLButtonElement).click();
+
+      expect(phases).toEqual(['requested']);
+      expect(runtime.querySelector('[data-thread-id="thread-warm-selection-events"]')?.getAttribute('data-flower-thread-active')).toBe('true');
+
+      frames.runAll();
+      await flush();
+
+      expect(phases).toEqual(['requested', 'intent_presented', 'commit_started', 'committed']);
+      expect(runtime.textContent).toContain('Already loaded transcript.');
+      expect(loadThread).toHaveBeenCalledTimes(1);
+
+      frames.runAll();
+      await flush();
+
+      expect(phases).toEqual(['requested', 'intent_presented', 'commit_started', 'committed', 'content_presented']);
+    } finally {
+      frames.restore();
+    }
+  });
+
+  it('cancels an uncommitted thread selection when compose mode takes ownership', async () => {
+    const frames = mockAnimationFrames();
+    const phases: string[] = [];
+    try {
+      const pendingThread = thread({
+        thread_id: 'thread-selection-cancelled-by-compose',
+        title: 'Cancelled by compose',
+      });
+      const loadThread = vi.fn(() => new Promise<FlowerLiveBootstrap>(() => undefined));
+      const runtime = renderSurfaceWithAdapterProps({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [pendingThread]),
+        loadThread,
+      }, {
+        onThreadSelectionEvent: (event) => phases.push(event.phase),
+      });
+
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-selection-cancelled-by-compose"] button')));
+      (runtime.querySelector('[data-thread-id="thread-selection-cancelled-by-compose"] button') as HTMLButtonElement).click();
+      (runtime.querySelector('.flower-new-chat-button') as HTMLButtonElement).click();
+
+      expect(phases).toEqual(['requested', 'cancelled']);
+      expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('');
+
+      frames.runAll();
+      await flush();
+
+      expect(loadThread).not.toHaveBeenCalled();
+      expect(phases).toEqual(['requested', 'cancelled']);
+    } finally {
+      frames.restore();
+    }
+  });
+
+  it('keeps the previous transcript visible but read-only while a newly selected thread is pending', async () => {
     const frames = mockAnimationFrames();
     const originalClipboard = navigator.clipboard;
     const writeText = vi.fn(async () => undefined);
@@ -367,8 +459,8 @@ describe('FlowerSurface navigation threads', () => {
 
       expect(runtime.querySelector('[data-thread-id="thread-pending-safe-detail"]')?.getAttribute('data-flower-thread-active')).toBe('true');
       expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('thread-pending-safe-detail');
-      expect(runtime.textContent).not.toContain('Old running detail body.');
-      expect(runtime.querySelector('.flower-thread-loading-panel')).toBeTruthy();
+      expect(runtime.textContent).toContain('Old running detail body.');
+      expect(runtime.querySelector('.flower-thread-loading-panel')).toBeNull();
       expect((runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled).toBe(true);
       expect(runtime.querySelector('button.flower-permission-trigger')).toBeNull();
       expect(loadThread).not.toHaveBeenCalled();
@@ -378,8 +470,8 @@ describe('FlowerSurface navigation threads', () => {
       await flush();
       await waitFor(() => loadThread.mock.calls.length === 1);
       expect(loadThread).toHaveBeenCalledWith('thread-pending-safe-detail');
-      expect(runtime.textContent).not.toContain('Old running detail body.');
-      expect(runtime.querySelector('.flower-thread-loading-panel')).toBeTruthy();
+      expect(runtime.textContent).toContain('Old running detail body.');
+      expect(runtime.querySelector('.flower-thread-loading-panel')).toBeNull();
       expect((runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled).toBe(true);
       expect(runtime.querySelector('button.flower-permission-trigger')).toBeNull();
       expect(listThreadLiveEvents).not.toHaveBeenCalled();
@@ -714,7 +806,7 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => document.activeElement === runtime.querySelector('textarea'));
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('draft for new chat');
 
-    expect(loadThread.mock.calls.map((call) => call[0])).toEqual(['thread-draft-a', 'thread-draft-b', 'thread-draft-a', 'thread-draft-b']);
+    expect(loadThread.mock.calls.map((call) => call[0])).toEqual(['thread-draft-a', 'thread-draft-b']);
   });
 
   it('does not let a slow focus request override a later manual selection', async () => {

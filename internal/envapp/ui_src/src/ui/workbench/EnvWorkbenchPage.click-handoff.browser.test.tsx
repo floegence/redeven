@@ -70,6 +70,7 @@ const layoutApiMocks = vi.hoisted(() => ({
   openWorkbenchPreview: vi.fn(),
   createWorkbenchTerminalSession: vi.fn(),
   deleteWorkbenchTerminalSession: vi.fn(),
+  closeWorkbenchTerminalWidgetSessions: vi.fn().mockResolvedValue({ closed_session_ids: [] }),
   connectWorkbenchLayoutEventStream: vi.fn(async (args: any) => {
     layoutApiState.lastStreamArgs = args;
     await new Promise<void>((resolve) => {
@@ -136,6 +137,7 @@ vi.mock('../services/workbenchLayoutApi', () => ({
   openWorkbenchPreview: layoutApiMocks.openWorkbenchPreview,
   createWorkbenchTerminalSession: layoutApiMocks.createWorkbenchTerminalSession,
   deleteWorkbenchTerminalSession: layoutApiMocks.deleteWorkbenchTerminalSession,
+  closeWorkbenchTerminalWidgetSessions: layoutApiMocks.closeWorkbenchTerminalWidgetSessions,
   connectWorkbenchLayoutEventStream: layoutApiMocks.connectWorkbenchLayoutEventStream,
   WorkbenchLayoutConflictError: class WorkbenchLayoutConflictError extends Error {},
   WorkbenchWidgetStateConflictError: class WorkbenchWidgetStateConflictError extends Error {},

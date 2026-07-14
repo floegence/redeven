@@ -101,10 +101,18 @@ function icon(name: string) {
   return (props: any) => <span data-icon={name} class={props.class} />;
 }
 
-vi.mock('@floegence/floe-webapp-core', () => ({
-  cn: (...values: any[]) => values.filter(Boolean).join(' '),
-  useNotification: () => notificationMocks,
-}));
+vi.mock('@floegence/floe-webapp-core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@floegence/floe-webapp-core')>();
+  return {
+    ...actual,
+    cn: (...values: any[]) => values.filter(Boolean).join(' '),
+    createUIFirstSelection: (options: any) => actual.createUIFirstSelection({
+      ...options,
+      scheduleAfterPaint: (callback: () => void) => queueMicrotask(callback),
+    }),
+    useNotification: () => notificationMocks,
+  };
+});
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Activity: icon('Activity'),

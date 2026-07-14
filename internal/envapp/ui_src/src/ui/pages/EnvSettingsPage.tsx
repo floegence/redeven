@@ -1,5 +1,5 @@
 import { For, Show, createMemo, type JSX } from 'solid-js';
-import { cn } from '@floegence/floe-webapp-core';
+import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { ChevronLeft, Search, X, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, Select } from '@floegence/floe-webapp-core/ui';
 
@@ -8,6 +8,8 @@ import { SETTINGS_NAV_ITEMS, SETTINGS_GROUPS, type SettingsGroupID, type Setting
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { useI18n } from '../i18n';
 import type { EnvSettingsSection } from './EnvContext';
+import { UIFirstKeepAlivePanel } from '../primitives/UIFirstKeepAlivePanel';
+import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 
 import { ConfigFileSection } from './settings/sections/ConfigFileSection';
 import { ConnectionSection } from './settings/sections/ConnectionSection';
@@ -116,7 +118,14 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
     }))
   ));
   const filteredItems = createMemo(() => filterNavItems(ctx.searchQuery(), localizedItems()));
-  const ActiveSection = createMemo(() => sectionComponents[ctx.activeSection()]);
+  const sectionSelection = createUIFirstSelection<EnvSettingsSection>({
+    committed: ctx.activeSection,
+    commit: ctx.setActiveSection,
+    onEvent: createUIPresentationEventRecorder({
+      surface: 'settings',
+      source: 'section-nav',
+    }),
+  });
   const returnToFlower = createMemo(() => ctx.env.settingsOrigin()?.kind === 'flower');
 
   return (
@@ -186,7 +195,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                       <For each={groupItems()}>
                         {(item) => {
                           const Icon = item.icon;
-                          const isActive = () => ctx.activeSection() === item.id;
+                          const isActive = () => sectionSelection.visual() === item.id;
                           return (
                             <button
                               type="button"
@@ -196,7 +205,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                                   ? 'bg-primary/10 text-primary font-medium border-r-2 border-primary'
                                   : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-r-2 border-transparent',
                               )}
-                              onClick={() => ctx.setActiveSection(item.id)}
+                              onClick={() => sectionSelection.request(item.id)}
                               data-settings-nav-item={item.id}
                             >
                               <Icon class={cn('h-3.5 w-3.5 shrink-0', isActive() ? 'text-primary' : 'text-muted-foreground')} />
@@ -215,25 +224,39 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
 
         <div class="redeven-settings-mobile-switch md:hidden border-b px-3 py-2 shrink-0">
           <Select
-            value={ctx.activeSection()}
-            onChange={(v) => v && ctx.setActiveSection(v as EnvSettingsSection)}
+            value={sectionSelection.visual()}
+            onChange={(v) => v && sectionSelection.request(v as EnvSettingsSection)}
             options={filteredItems().map((it) => ({ value: it.id, label: it.label }))}
             class="w-full"
           />
         </div>
 
-        <div class="redeven-settings-content flex-1 min-w-0 overflow-auto">
-          <div class="max-w-[1120px] mx-auto p-4 sm:p-8 pb-16">
-            <Show when={ctx.settings.error}>
-              <div class="flex items-start gap-2.5 p-4 rounded-lg bg-destructive/10 border border-destructive/20 mb-6">
-                <div class="w-1 h-full min-h-4 rounded-full bg-destructive/60 flex-shrink-0" />
-                <div class="text-sm text-destructive">
-                  {ctx.settings.error instanceof Error ? ctx.settings.error.message : String(ctx.settings.error)}
-                </div>
-              </div>
-            </Show>
-            {ActiveSection()()}
-          </div>
+        <div class="redeven-settings-content relative flex-1 min-w-0 overflow-hidden">
+          <For each={SETTINGS_NAV_ITEMS}>
+            {(item) => {
+              const Section = sectionComponents[item.id];
+              return (
+                <UIFirstKeepAlivePanel
+                  active={ctx.activeSection() === item.id}
+                  testId={`settings-section-${item.id}`}
+                  class="absolute inset-0 overflow-auto"
+                  render={() => (
+                    <div class="max-w-[1120px] mx-auto p-4 sm:p-8 pb-16">
+                      <Show when={ctx.settings.error}>
+                        <div class="flex items-start gap-2.5 p-4 rounded-lg bg-destructive/10 border border-destructive/20 mb-6">
+                          <div class="w-1 h-full min-h-4 rounded-full bg-destructive/60 flex-shrink-0" />
+                          <div class="text-sm text-destructive">
+                            {ctx.settings.error instanceof Error ? ctx.settings.error.message : String(ctx.settings.error)}
+                          </div>
+                        </div>
+                      </Show>
+                      <Section />
+                    </div>
+                  )}
+                />
+              );
+            }}
+          </For>
         </div>
       </div>
     </div>

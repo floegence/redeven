@@ -1,5 +1,5 @@
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
+import { createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Copy, Folder, Menu, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import '@fontsource/iosevka/400.css';
 
@@ -71,6 +71,7 @@ import type { TerminalShellIntegrationEvent } from '../services/terminalShellInt
 import { createTerminalTabActivityTracker, type TerminalSessionWorkState, type TerminalTabVisualState } from '../services/terminalTabActivity';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { useI18n } from '../i18n';
+import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import {
   createTerminalAdaptiveWorkingSetManager,
   type TerminalWorkingSetInteraction,
@@ -750,7 +751,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   let terminalSidebarMenuEl: HTMLDivElement | null = null;
   const [copiedSidebarPathSessionId, setCopiedSidebarPathSessionId] = createSignal<string | null>(null);
   let sidebarPathCopyResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
-  let sidebarVisualActiveResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   const [terminalContextMenuHostEl, setTerminalContextMenuHostEl] = createSignal<HTMLDivElement | null>(null);
 
   let searchLastAppliedKey = '';
@@ -776,10 +776,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (sidebarPathCopyResetTimer !== undefined) {
       globalThis.clearTimeout(sidebarPathCopyResetTimer);
       sidebarPathCopyResetTimer = undefined;
-    }
-    if (sidebarVisualActiveResetTimer !== undefined) {
-      globalThis.clearTimeout(sidebarVisualActiveResetTimer);
-      sidebarVisualActiveResetTimer = undefined;
     }
   });
 
@@ -999,7 +995,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [localActiveSessionId, setLocalActiveSessionId] = createSignal<string | null>(readActiveSessionId(activeSessionStorageKey));
   const [localActivePendingSessionId, setLocalActivePendingSessionId] = createSignal<string | null>(null);
   const [optimisticActiveDisplaySessionId, setOptimisticActiveDisplaySessionId] = createSignal<string | null>(null);
-  const [sidebarVisualActiveSessionId, setSidebarVisualActiveSessionId] = createSignal<string | null>(null);
   const [mountedSessionIds, setMountedSessionIds] = createSignal<Set<string>>(new Set());
   const [scheduledMountSessionIds, setScheduledMountSessionIds] = createSignal<Set<string>>(new Set());
   const [retainedClosingSessions, setRetainedClosingSessions] = createSignal<Record<string, TerminalSessionInfo>>({});
@@ -1209,51 +1204,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   });
 
-  const clearSidebarVisualActiveSession = () => {
-    if (sidebarVisualActiveResetTimer !== undefined) {
-      globalThis.clearTimeout(sidebarVisualActiveResetTimer);
-      sidebarVisualActiveResetTimer = undefined;
-    }
-    setSidebarVisualActiveSessionId(null);
-  };
-
-  const previewSidebarActiveSession = (sessionId: string | null) => {
-    const normalizedSessionId = String(sessionId ?? '').trim() || null;
-    if (!normalizedSessionId || !sessionDisplayIdExists(normalizedSessionId)) {
-      clearSidebarVisualActiveSession();
-      return;
-    }
-
-    if (sidebarVisualActiveResetTimer !== undefined) {
-      globalThis.clearTimeout(sidebarVisualActiveResetTimer);
-    }
-    setSidebarVisualActiveSessionId(normalizedSessionId);
-    sidebarVisualActiveResetTimer = globalThis.setTimeout(() => {
-      sidebarVisualActiveResetTimer = undefined;
-      setSidebarVisualActiveSessionId((current) => (
-        current === normalizedSessionId && activeDisplaySessionId() !== normalizedSessionId
-          ? null
-          : current
-      ));
-    }, 1200);
-  };
-
-  const sidebarActiveSessionId = createMemo<string | null>(() => {
-    const visualActiveId = sidebarVisualActiveSessionId();
-    if (visualActiveId && sessionDisplayIdExists(visualActiveId)) {
-      return visualActiveId;
-    }
-    return activeDisplaySessionId();
-  });
-
-  createEffect(() => {
-    const visualActiveId = sidebarVisualActiveSessionId();
-    if (!visualActiveId) return;
-    if (activeDisplaySessionId() === visualActiveId || !sessionDisplayIdExists(visualActiveId)) {
-      clearSidebarVisualActiveSession();
-    }
-  });
-
   const activeSessionId = createMemo<string | null>(() => {
     const activeId = activeDisplaySessionId();
     return activeId && !visiblePendingTerminalSessionById(activeId) ? activeId : null;
@@ -1456,7 +1406,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const setActiveSessionId = (value: string | null) => {
     const normalizedValue = String(value ?? '').trim() || null;
-    clearSidebarVisualActiveSession();
     selectOptimisticActiveDisplaySessionId(normalizedValue);
     if (normalizedValue && pendingTerminalSessionById(normalizedValue)) {
       const resolved = resolvedPendingTerminalSessionByPendingId(normalizedValue);
@@ -1470,6 +1419,26 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     setActiveRealSessionId(normalizedValue);
   };
+
+  const sessionSelection = createUIFirstSelection<string | null, { restoreFocus: boolean }>({
+    committed: activeDisplaySessionId,
+    commit: (sessionId, metadata) => {
+      setActiveSessionId(sessionId);
+      if (isMobileLayout()) {
+        setSessionDrawerOpen(false);
+      }
+      if (!metadata?.restoreFocus) return;
+      deferAfterPaint(() => {
+        if (!disposed) restoreActiveTerminalFocus();
+      });
+    },
+    onEvent: createUIPresentationEventRecorder({
+      surface: 'terminal',
+      source: 'session-nav',
+      target: (sessionId) => sessionId ?? 'none',
+    }),
+  });
+  const sidebarActiveSessionId = sessionSelection.visual;
 
   onCleanup(() => {
     tabActivityTracker.dispose();
@@ -1833,20 +1802,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const commitSidebarSessionSelection = (sessionId: string) => {
-    setActiveSessionId(sessionId);
-    if (isMobileLayout()) {
-      setSessionDrawerOpen(false);
-      void waitForTerminalUiPaint().then(() => {
-        if (!disposed) restoreActiveTerminalFocus();
-      });
-      return;
-    }
-    restoreActiveTerminalFocus();
+    sessionSelection.request(sessionId, { restoreFocus: true });
   };
 
   const previewSidebarSessionSelection = (event: PointerEvent, sessionId: string) => {
     if (event.button !== 0) return;
-    previewSidebarActiveSession(sessionId);
+    sessionSelection.preview(sessionId);
   };
 
   const activeTerminalHasSelection = () => {
@@ -3329,8 +3290,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const target = sessionListItems()[shortcutTabIndex] ?? null;
       if (target) {
         e.preventDefault();
-        setActiveSessionId(target.id);
-        restoreActiveTerminalFocus();
+        sessionSelection.request(target.id, { restoreFocus: true });
       }
       return;
     }
@@ -3431,6 +3391,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             onRefresh={handleRefresh}
             onFilterQueryChange={setSessionFilterQuery}
             onPreviewSession={previewSidebarSessionSelection}
+            onResetSessionPreview={sessionSelection.resetPreview}
             onSelectSession={commitSidebarSessionSelection}
             onOpenKeyboardMenu={openTerminalSidebarKeyboardMenu}
             onOpenContextMenu={openTerminalSidebarMenu}

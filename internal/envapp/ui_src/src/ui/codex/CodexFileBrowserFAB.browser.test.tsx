@@ -1,6 +1,7 @@
 import '../../index.css';
+import './codex.css';
 
-import { page } from '@vitest/browser/context';
+import { page } from 'vitest/browser';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,7 +18,8 @@ vi.mock('solid-motionone', () => ({
   },
 }));
 
-vi.mock('@floegence/floe-webapp-core/icons', () => ({
+vi.mock('@floegence/floe-webapp-core/icons', async () => ({
+  ...await vi.importActual<typeof import('@floegence/floe-webapp-core/icons')>('@floegence/floe-webapp-core/icons'),
   Folder: (props: any) => <svg data-testid="folder-icon" class={props.class} />,
 }));
 

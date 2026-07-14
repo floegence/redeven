@@ -1,5 +1,5 @@
 import { Show, batch, createEffect, createMemo, createSignal, untrack, type JSX } from 'solid-js';
-import { cn, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
+import { cn, createUIFirstSelection, useLayout, useNotification, useResolvedFloeConfig } from '@floegence/floe-webapp-core';
 import { Copy, Download, FileText, Folder, MoreHorizontal, Pencil, Plus, Refresh, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import {
   type ContextMenuCallbacks,
@@ -65,6 +65,7 @@ import { GitStashWindow } from './GitStashWindow';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { GitWorkspace } from './GitWorkspace';
 import { useI18n } from '../i18n';
+import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import {
   WORKSPACE_VIEW_SECTIONS,
   applyWorkspaceViewPageSnapshot,
@@ -287,11 +288,37 @@ type GitCommitListCacheEntry = {
 
 function BrowserModeTransitionStack(props: {
   activeId: BrowserPageMode;
+  prewarmGit: boolean;
   files: () => JSX.Element;
   git: () => JSX.Element;
   class?: string;
 }) {
   const isActive = (id: BrowserPageMode) => props.activeId === id;
+  const [mountedModes, setMountedModes] = createSignal<ReadonlySet<BrowserPageMode>>(
+    new Set([props.activeId]),
+  );
+
+  createEffect(() => {
+    const requestedModes: BrowserPageMode[] = [props.activeId];
+    if (props.prewarmGit) requestedModes.push('git');
+    setMountedModes((current) => {
+      if (requestedModes.every((mode) => current.has(mode))) return current;
+      return new Set([...current, ...requestedModes]);
+    });
+  });
+
+  const panel = (id: BrowserPageMode, render: () => JSX.Element) => (
+    <Show when={mountedModes().has(id)}>
+      <div
+        data-browser-mode-panel={id}
+        data-state={isActive(id) ? 'active' : 'inactive'}
+        aria-hidden={isActive(id) ? undefined : 'true'}
+        class="browser-mode-transition-panel h-full"
+      >
+        {render()}
+      </div>
+    </Show>
+  );
 
   return (
     <div
@@ -299,22 +326,8 @@ function BrowserModeTransitionStack(props: {
       data-active-mode={props.activeId}
       class={cn('browser-mode-transition-stack relative h-full min-h-0 overflow-hidden', props.class)}
     >
-      <div
-        data-browser-mode-panel="files"
-        data-state={isActive('files') ? 'active' : 'inactive'}
-        aria-hidden={isActive('files') ? undefined : 'true'}
-        class="browser-mode-transition-panel h-full"
-      >
-        {props.files()}
-      </div>
-      <div
-        data-browser-mode-panel="git"
-        data-state={isActive('git') ? 'active' : 'inactive'}
-        aria-hidden={isActive('git') ? undefined : 'true'}
-        class="browser-mode-transition-panel h-full"
-      >
-        {props.git()}
-      </div>
+      {panel('files', props.files)}
+      {panel('git', props.git)}
     </div>
   );
 }
@@ -554,6 +567,7 @@ function buildRemoteFileBrowserTitle(path: string, preferredTitle?: string, pref
 }
 
 export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
+  const [gitSurfacePrewarmed, setGitSurfacePrewarmed] = createSignal(false);
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const ctx = useEnvContext();
@@ -3229,8 +3243,32 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
+  const pageModeSelection = createUIFirstSelection<BrowserPageMode>({
+    committed: pageMode,
+    commit: setBrowserPageMode,
+    onEvent: createUIPresentationEventRecorder({
+      surface: 'files',
+      source: 'mode-switch',
+    }),
+  });
+
+  const gitSubviewSelection = createUIFirstSelection<GitWorkbenchSubview>({
+    committed: gitSubview,
+    commit: (view) => {
+      const next = normalizeGitSubview(view);
+      setGitSubview(next);
+      const id = envId();
+      if (id) writePersistedGitSubview(id, next);
+    },
+    onEvent: createUIPresentationEventRecorder({
+      surface: 'git',
+      source: 'subview-nav',
+    }),
+  });
+
   const prepareGitMode = async () => {
     if (pageMode() === 'git' || !canEnterGitHistory()) return;
+    setGitSurfacePrewarmed(true);
     const info = repoInfo();
     const repoRootPath = String(info?.repoRootPath ?? '').trim();
     if (!info?.available || !repoRootPath) return;
@@ -3287,16 +3325,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (mode === 'git' && !canEnterGitHistory()) {
       return;
     }
-    setBrowserPageMode(mode);
+    pageModeSelection.request(mode);
   };
 
   const handleGitSubviewChange = (view: GitWorkbenchSubview) => {
-    const next = normalizeGitSubview(view);
-    setGitSubview(next);
-    const id = envId();
-    if (id) {
-      writePersistedGitSubview(id, next);
-    }
+    gitSubviewSelection.request(normalizeGitSubview(view));
   };
 
   const fileBrowserMoreItems = createMemo<DropdownItem[]>(() => [
@@ -4554,8 +4587,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!item || item.type !== 'folder') return;
     const target = resolveFilesGitDirectoryTarget(item, changes);
     if (!target) return;
-    handleGitSubviewChange('changes');
-    handlePageModeChange('git');
+    gitSubviewSelection.commitNow('changes');
+    pageModeSelection.commitNow('git');
     if (target.kind === 'changes') {
       navigateGitChangesDirectory(target.directoryPath);
       return;
@@ -4938,10 +4971,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
             <BrowserModeTransitionStack
               class="h-full"
               activeId={pageMode()}
+              prewarmGit={gitSurfacePrewarmed()}
               files={() => (
                     <FileBrowserWorkspace
                       class="h-full"
-                      mode={pageMode()}
+                      mode={pageModeSelection.visual()}
                       onModeChange={handlePageModeChange}
                       onPreviewGitMode={() => { void prepareGitMode(); }}
                       gitHistoryDisabled={!canEnterGitHistory()}
@@ -5016,12 +5050,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
               git={() => (
                     <GitWorkspace
                       class="h-full"
-                      mode={pageMode()}
+                      mode={pageModeSelection.visual()}
                       onModeChange={handlePageModeChange}
                       onPreviewGitMode={() => { void prepareGitMode(); }}
                       gitHistoryDisabled={!canEnterGitHistory()}
                       gitHistoryDisabledReason={gitModeDisabledReason() || undefined}
                       subview={gitSubview()}
+                      navigationSubview={gitSubviewSelection.visual()}
                       onSubviewChange={handleGitSubviewChange}
                       width={browserSidebarWidth()}
                       open={pageSidebarOpen()}

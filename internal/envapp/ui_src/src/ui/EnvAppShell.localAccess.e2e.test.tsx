@@ -108,6 +108,42 @@ function MockDisplayModeSurface(props: Readonly<{ testId: string }>) {
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
+  createUIFirstSelection: (options: any) => {
+    const [visual, setVisual] = createSignal(options.committed());
+    const [pending, setPending] = createSignal(false);
+    let requestID = 0;
+    createEffect(() => {
+      const committed = options.committed();
+      if (!pending()) setVisual(committed);
+    });
+    return {
+      visual,
+      committed: options.committed,
+      pending,
+      preview: setVisual,
+      resetPreview: () => setVisual(options.committed()),
+      request: (value: unknown, metadata?: unknown) => {
+        const currentRequest = ++requestID;
+        setVisual(value);
+        setPending(true);
+        setTimeout(() => {
+          if (currentRequest !== requestID) return;
+          options.commit(value, metadata);
+          setTimeout(() => {
+            if (currentRequest !== requestID) return;
+            setPending(false);
+            setVisual(options.committed());
+          }, 0);
+        }, 0);
+      },
+      commitNow: (value: unknown, metadata?: unknown) => options.commit(value, metadata),
+      cancel: () => {
+        requestID += 1;
+        setPending(false);
+        setVisual(options.committed());
+      },
+    };
+  },
   deferAfterPaint: (fn: () => void) => setTimeout(fn, 0),
   useCommand: () => ({
     open: commandState.open,
@@ -205,6 +241,24 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
       ))}
     </div>
   ),
+  KeepAliveStack: (props: any) => {
+    const [mountedIDs, setMountedIDs] = createSignal<string[]>([props.activeId]);
+    createEffect(() => {
+      const activeID = props.activeId;
+      setMountedIDs((current) => current.includes(activeID) ? current : [...current, activeID]);
+    });
+    return (
+      <div data-testid="display-mode-keep-alive" data-active-id={props.activeId}>
+        <For each={props.views.filter((view: any) => mountedIDs().includes(view.id))}>
+          {(view: any) => (
+            <div data-testid={`display-mode-view-${view.id}`} style={{ display: view.id === props.activeId ? 'block' : 'none' }}>
+              {view.render()}
+            </div>
+          )}
+        </For>
+      </div>
+    );
+  },
   Panel: (props: any) => <div>{props.children}</div>,
   PanelContent: (props: any) => <div>{props.children}</div>,
   sanitizeDisplayMode: (value: unknown, fallback = 'activity') => (
@@ -889,6 +943,10 @@ describe('EnvAppShell environment entry affordances', () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    // Keep this lifecycle test independent of Vitest's dynamic-module transform timing.
+    // Importing the component module does not mount or initialize the Codex provider.
+    await import('./codex/CodexActivitySurface');
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -2639,19 +2697,30 @@ describe('EnvAppShell remote access gate', () => {
     try {
       await flushUntil(() => Boolean(host.querySelector('[data-testid="workbench-page"]')), 40);
 
-      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
+      const workbenchPage = host.querySelector('[data-testid="workbench-page"]');
+      const workbenchView = host.querySelector('[data-testid="display-mode-view-workbench"]') as HTMLElement | null;
+      expect(workbenchPage).toBeTruthy();
+      expect(workbenchView?.style.display).toBe('block');
       expect(storage.getItem('redeven_envapp_desktop_view_mode')).toBe('workbench');
 
       findButtonByText(host, 'Activity')?.click();
       await flushUntil(() => host.textContent?.includes('activity main') ?? false);
 
+      const activityMain = Array.from(host.querySelectorAll('div')).find((element) => element.textContent === 'activity main') ?? null;
+      const activityView = host.querySelector('[data-testid="display-mode-view-activity"]') as HTMLElement | null;
       expect(host.textContent).toContain('activity main');
-      expect(host.querySelector('[data-testid="workbench-page"]')).toBeNull();
+      expect(activityMain).toBeTruthy();
+      expect(activityView?.style.display).toBe('block');
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBe(workbenchPage);
+      expect(workbenchView?.style.display).toBe('none');
 
       findButtonByText(host, 'Workbench')?.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-testid="workbench-page"]')));
+      await flushUntil(() => workbenchView?.style.display === 'block');
 
-      expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
+      expect(host.querySelector('[data-testid="workbench-page"]')).toBe(workbenchPage);
+      expect(workbenchView?.style.display).toBe('block');
+      expect(activityView?.style.display).toBe('none');
+      expect(Array.from(host.querySelectorAll('div')).find((element) => element.textContent === 'activity main') ?? null).toBe(activityMain);
     } finally {
       dispose();
     }

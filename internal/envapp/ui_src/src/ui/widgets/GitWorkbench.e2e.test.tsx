@@ -126,8 +126,8 @@ describe('GitWorkbench interactions', () => {
       expect(host.textContent).toContain('Branches');
       expect(host.textContent).toContain('/workspace/repo');
       expect(host.textContent).toContain('Status');
-      expect(host.textContent).toContain('Branch is not checked out');
-      expect(host.textContent).toContain('Status is only available for checked-out local worktrees.');
+      expect(host.textContent).toContain('No checked-out worktree');
+      expect(host.textContent).toContain('This branch is not checked out in the active worktree.');
       const branchesDot = findGitTitleDot(host, 'Branches');
       expect(branchesDot?.className).toContain('git-tone-dot');
       expect(branchesDot?.className).toContain('git-tone-dot--violet');

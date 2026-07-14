@@ -1034,21 +1034,11 @@ export function CodexTranscript(props: {
   });
 
   const rowResizeTargets = new Map<Element, string>();
-  const rowResizeObserver = typeof ResizeObserver === 'undefined'
-    ? null
-    : new ResizeObserver((entries) => {
-      const updates = new Map<string, number>();
-      for (const entry of entries) {
-        const rowID = rowResizeTargets.get(entry.target);
-        if (!rowID) continue;
-        const borderBoxHeight = entry.borderBoxSize?.[0]?.blockSize;
-        const rectHeight = (entry.target as HTMLElement).getBoundingClientRect().height;
-        const rawHeight = borderBoxHeight ?? (rectHeight > 0 ? rectHeight : entry.contentRect.height);
-        const nextHeight = Math.max(1, Math.round(rawHeight));
-        if (nextHeight <= 0) continue;
-        updates.set(rowID, nextHeight);
-      }
-      if (updates.size === 0) return;
+  const pendingRowResizeHeights = new Map<string, number>();
+  let rowResizeFrame: number | ReturnType<typeof globalThis.setTimeout> | null = null;
+  let rowResizeFrameUsesAnimationFrame = false;
+
+  const applyRowResizeUpdates = (updates: ReadonlyMap<string, number>): void => {
       const currentRowHeights = rowHeightsByID();
       const pendingUpdates: Array<{
         rowID: string;
@@ -1130,6 +1120,45 @@ export function CodexTranscript(props: {
           captureTranscriptViewportAnchor(scrollContainer);
         }
       }
+  };
+
+  const flushPendingRowResizeUpdates = (): void => {
+    rowResizeFrame = null;
+    if (pendingRowResizeHeights.size === 0) return;
+    const updates = new Map(pendingRowResizeHeights);
+    pendingRowResizeHeights.clear();
+    applyRowResizeUpdates(updates);
+  };
+
+  const schedulePendingRowResizeUpdates = (): void => {
+    if (rowResizeFrame !== null) return;
+    if (typeof requestAnimationFrame === 'function') {
+      rowResizeFrameUsesAnimationFrame = true;
+      rowResizeFrame = -1;
+      const handle = requestAnimationFrame(flushPendingRowResizeUpdates);
+      if (rowResizeFrame !== null) rowResizeFrame = handle;
+      return;
+    }
+    rowResizeFrameUsesAnimationFrame = false;
+    rowResizeFrame = -1;
+    const handle = globalThis.setTimeout(flushPendingRowResizeUpdates, 0);
+    if (rowResizeFrame !== null) rowResizeFrame = handle;
+  };
+
+  const rowResizeObserver = typeof ResizeObserver === 'undefined'
+    ? null
+    : new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const rowID = rowResizeTargets.get(entry.target);
+        if (!rowID) continue;
+        const borderBoxHeight = entry.borderBoxSize?.[0]?.blockSize;
+        const rectHeight = (entry.target as HTMLElement).getBoundingClientRect().height;
+        const rawHeight = borderBoxHeight ?? (rectHeight > 0 ? rectHeight : entry.contentRect.height);
+        const nextHeight = Math.max(1, Math.round(rawHeight));
+        if (nextHeight <= 0) continue;
+        pendingRowResizeHeights.set(rowID, nextHeight);
+      }
+      if (pendingRowResizeHeights.size > 0) schedulePendingRowResizeUpdates();
     });
 
   const observeRow = (element: HTMLElement, rowID: string): void => {
@@ -1143,6 +1172,15 @@ export function CodexTranscript(props: {
   };
 
   onCleanup(() => {
+    if (rowResizeFrame !== null) {
+      if (rowResizeFrameUsesAnimationFrame && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(rowResizeFrame as number);
+      } else {
+        globalThis.clearTimeout(rowResizeFrame);
+      }
+      rowResizeFrame = null;
+    }
+    pendingRowResizeHeights.clear();
     rowResizeObserver?.disconnect();
   });
 

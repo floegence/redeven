@@ -47,7 +47,7 @@ const resizeObserverState = {
 async function flush() {
   await Promise.resolve();
   await Promise.resolve();
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => setTimeout(resolve, 20));
 }
 
 function defineElementWidth(element: Element, width: number) {
@@ -243,21 +243,6 @@ async function revealTooltipForButton(
   return document.body.querySelector('[role="tooltip"]') as HTMLElement | null;
 }
 
-function findGitTitleDot(
-  container: ParentNode,
-  label: string,
-): HTMLSpanElement | null {
-  const labelNode = Array.from(container.querySelectorAll("div")).find(
-    (node) =>
-      node.textContent?.trim() === label &&
-      node.className.includes("tracking-[0.16em]"),
-  ) as HTMLDivElement | undefined;
-  expect(labelNode).toBeTruthy();
-  return labelNode?.parentElement?.querySelector(
-    'span[aria-hidden="true"]',
-  ) as HTMLSpanElement | null;
-}
-
 describe("GitBranchesPanel interactions", () => {
   it("loads current branch status from the active worktree root", async () => {
     let checkoutCount = 0;
@@ -374,13 +359,13 @@ describe("GitBranchesPanel interactions", () => {
       });
       expect(host.textContent).toContain("Status");
       expect(host.textContent).toContain("History");
-      expect(host.textContent).toContain("Compare");
+      expect(host.querySelector('button[aria-label="Compare"]')).toBeTruthy();
       expect(host.textContent).toContain("Checkout");
       expect(host.textContent).toContain("Merge");
       expect(host.textContent).toContain("Delete");
       expect(host.textContent).toContain("src/linked.ts");
       expect(host.textContent).toContain("notes.txt");
-      expect(host.textContent).toContain("Upstream origin/feature/demo");
+      expect(host.textContent).toContain("origin/feature/demo");
       expect(host.textContent).not.toContain(
         "Current · Upstream origin/feature/demo",
       );
@@ -428,13 +413,7 @@ describe("GitBranchesPanel interactions", () => {
       );
       expect(changesButton?.className).toContain("cursor-pointer");
       expect(changesButton?.className).toContain("rounded-md");
-      expect(changesButton?.className).toContain(
-        "redeven-surface-segmented__item--active",
-      );
-      expect(changesButton?.className).toContain("text-foreground");
-      expect(changesButton?.className).not.toContain(
-        "git-browser-selection-surface",
-      );
+      expect(changesButton?.className).toContain("git-browser-selection-surface");
       expect(unstagedButton).toBeFalsy();
       expect(untrackedButton).toBeFalsy();
       expect(conflictedButton?.getAttribute("aria-pressed")).toBe("false");
@@ -559,7 +538,7 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
-  it("renders semantic title dots for the branch summary and status headers", async () => {
+  it("renders semantic branch identity and status summary surfaces", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
 
@@ -645,15 +624,10 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
 
-      const branchDot = findGitTitleDot(host, "Branch");
-      const statusDot = findGitTitleDot(host, "Status");
-
-      expect(branchDot?.className).toContain("git-tone-dot");
-      expect(branchDot?.className).toContain("git-tone-dot--brand");
-      expect(branchDot?.className).not.toContain("bg-blue-600/80");
-      expect(statusDot?.className).toContain("git-tone-dot");
-      expect(statusDot?.className).toContain("git-tone-dot--neutral");
-      expect(statusDot?.className).not.toContain("bg-muted-foreground/55");
+      expect(host.textContent).toContain("feature/demo");
+      expect(host.textContent).toContain("Current");
+      expect(host.querySelector('[data-git-branch-header-layout]')).toBeTruthy();
+      expect(host.querySelector('[data-git-branch-status-summary-state="ready"]')).toBeTruthy();
     } finally {
       dispose();
     }
@@ -1783,9 +1757,7 @@ describe("GitBranchesPanel interactions", () => {
     try {
       await flush();
 
-      const stashButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Stash..."),
-      ) as HTMLButtonElement | undefined;
+      const stashButton = host.querySelector('button[aria-label="Stash..."]') as HTMLButtonElement | null;
       expect(stashButton).toBeTruthy();
       stashButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
@@ -2592,8 +2564,9 @@ describe("GitBranchesPanel interactions", () => {
         '[aria-label="Branch detail tabs"]',
       ) as HTMLDivElement | null;
       const tablistRow = tablist?.parentElement as HTMLDivElement | null;
-      const branchHeaderTopRow =
-        tablistRow?.parentElement as HTMLDivElement | null;
+      const branchHeaderTopRow = host.querySelector(
+        "[data-git-branch-header-layout]",
+      ) as HTMLDivElement | null;
 
       expect(branchHeaderTopRow).toBeTruthy();
       await setBranchHeaderWidth(host, 420);
@@ -2603,7 +2576,7 @@ describe("GitBranchesPanel interactions", () => {
       expect(branchHeaderTopRow?.dataset.gitBranchHeaderLayout).toBe("compact");
       expect(commandRail?.className).not.toContain("border-t");
       expect(commandRail?.className).not.toContain("pt-2");
-      expect(commandRail?.className).toContain("flex-wrap");
+      expect(commandRail?.className).toContain("flex");
       expect(commandRail?.className).not.toContain("grid-cols-1");
       expect(commandRail?.className).not.toContain("bg-muted/[0.08]");
       expect(commandRail?.textContent).toContain("Merge");
@@ -2616,20 +2589,12 @@ describe("GitBranchesPanel interactions", () => {
       expect(moreButton).toBeTruthy();
       await clickDropdownMenuItem(moreButton, "Delete branch");
       expect(deletedBranch).toBe("feature/mobile");
-      expect(tablistRow?.className).toContain("flex");
-      expect(tablistRow?.className).toContain("w-full");
-      expect(tablistRow?.className).not.toContain("w-auto");
-      expect(tablistRow?.className).not.toContain("justify-end");
-      expect(branchHeaderTopRow?.className).toContain("grid");
-      expect(branchHeaderTopRow?.className).toContain("grid-cols-1");
-      expect(branchHeaderTopRow?.className).not.toContain(
-        "grid-cols-[minmax(0,1fr)_auto_auto]",
-      );
+      expect(tablistRow).toBe(branchHeaderTopRow);
+      expect(tablist?.className).toContain("w-full");
       expect(tablist?.className).toContain("grid");
       expect(tablist?.className).toContain("w-full");
       expect(tablist?.className).toContain("grid-cols-2");
       expect(tablist?.className).toContain("rounded-md");
-      expect(tablist?.className).toContain("redeven-surface-segmented");
       expect(tablist?.className).not.toContain("w-[12rem]");
       const activeTab = host.querySelector(
         "#git-branch-subview-tab-status",
@@ -2702,9 +2667,9 @@ describe("GitBranchesPanel interactions", () => {
       const tablist = host.querySelector(
         '[aria-label="Branch detail tabs"]',
       ) as HTMLDivElement | null;
-      const tablistRow = tablist?.parentElement as HTMLDivElement | null;
-      const branchHeaderTopRow =
-        tablistRow?.parentElement as HTMLDivElement | null;
+      const branchHeaderTopRow = host.querySelector(
+        "[data-git-branch-header-layout]",
+      ) as HTMLDivElement | null;
 
       expect(branchHeaderTopRow).toBeTruthy();
       defineElementWidth(branchHeaderTopRow!, 1040);
@@ -2712,22 +2677,13 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
 
       expect(branchHeaderTopRow?.dataset.gitBranchHeaderLayout).toBe("inline");
-      expect(branchHeaderTopRow?.className).toContain(
-        "grid-cols-[minmax(0,1fr)_auto_auto]",
-      );
-      expect(branchHeaderTopRow?.className).toContain("items-center");
-      expect(tablistRow?.className).toContain("w-auto");
-      expect(tablistRow?.className).toContain("justify-end");
-      expect(tablist?.className).toContain("w-[12rem]");
-      expect(tablist?.className).not.toContain("w-full");
+      expect(tablist?.className).toContain("w-full");
 
       defineElementWidth(branchHeaderTopRow!, 720);
       triggerResizeObservers();
       await flush();
 
       expect(branchHeaderTopRow?.dataset.gitBranchHeaderLayout).toBe("stacked");
-      expect(branchHeaderTopRow?.className).toContain("grid-cols-1");
-      expect(tablistRow?.className).not.toContain("col-span-2");
       expect(tablist?.className).toContain("w-full");
 
       defineElementWidth(branchHeaderTopRow!, 420);
@@ -2735,8 +2691,6 @@ describe("GitBranchesPanel interactions", () => {
       await flush();
 
       expect(branchHeaderTopRow?.dataset.gitBranchHeaderLayout).toBe("compact");
-      expect(branchHeaderTopRow?.className).toContain("grid-cols-1");
-      expect(tablistRow?.className).toContain("w-full");
       expect(tablist?.className).toContain("w-full");
     } finally {
       dispose();
@@ -4033,9 +3987,7 @@ describe("GitBranchesPanel interactions", () => {
     );
 
     try {
-      const compareButton = Array.from(host.querySelectorAll("button")).find(
-        (node) => node.textContent?.includes("Compare"),
-      ) as HTMLButtonElement | undefined;
+      const compareButton = host.querySelector('button[aria-label="Compare"]') as HTMLButtonElement | null;
       expect(compareButton).toBeTruthy();
       compareButton!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
@@ -4577,9 +4529,6 @@ describe("GitBranchesPanel interactions", () => {
       expect(host.textContent).not.toContain("Checking branch...");
       expect(host.textContent).not.toContain("Checking branch selection");
       expect(host.querySelector(".git-loading-indicator")).toBeTruthy();
-      expect(
-        host.querySelector("[data-git-branch-status-toolbar-layout]"),
-      ).toBeTruthy();
       expect(
         host.querySelector(
           '[data-git-branch-status-summary-state="loading"]',

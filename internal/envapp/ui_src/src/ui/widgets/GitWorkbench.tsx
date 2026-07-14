@@ -40,6 +40,7 @@ import { buildTabElementId, buildTabPanelElementId } from '../utils/tabNavigatio
 import { buildGitDirectoryShortcutRequest, type GitAskFlowerRequest, type GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { Tooltip } from '../primitives/Tooltip';
+import { UIFirstKeepAlivePanel } from '../primitives/UIFirstKeepAlivePanel';
 
 export interface GitWorkbenchProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -350,8 +351,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
         </div>
       </div>
 
-      <div class="flex-1 min-h-0 overflow-hidden">
-        <Show when={activeSubview() === 'changes'}>
+      <div class="relative flex-1 min-h-0 overflow-hidden">
+        <UIFirstKeepAlivePanel active={activeSubview() === 'changes'} class="absolute inset-0" testId="git-main-subview-changes" render={() => (
           <div
             role="tabpanel"
             id={buildTabPanelElementId(GIT_WORKBENCH_SUBVIEW_ID_PREFIX, 'changes')}
@@ -389,9 +390,9 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               onBrowseFiles={props.onBrowseFiles}
             />
           </div>
-        </Show>
+        )} />
 
-        <Show when={activeSubview() === 'branches'}>
+        <UIFirstKeepAlivePanel active={activeSubview() === 'branches'} class="absolute inset-0" testId="git-main-subview-branches" render={() => (
           <div
             role="tabpanel"
             id={buildTabPanelElementId(GIT_WORKBENCH_SUBVIEW_ID_PREFIX, 'branches')}
@@ -455,9 +456,9 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               renderReviewDialogs={false}
             />
           </div>
-        </Show>
+        )} />
 
-        <Show when={activeSubview() === 'history'}>
+        <UIFirstKeepAlivePanel active={activeSubview() === 'history'} class="absolute inset-0" testId="git-main-subview-history" render={() => (
           <div
             role="tabpanel"
             id={buildTabPanelElementId(GIT_WORKBENCH_SUBVIEW_ID_PREFIX, 'history')}
@@ -477,7 +478,7 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               onAskFlower={(request) => props.onAskFlower?.(request)}
             />
           </div>
-        </Show>
+        )} />
       </div>
 
       <GitMergeBranchDialog

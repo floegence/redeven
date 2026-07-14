@@ -47,7 +47,7 @@ describe('FlowerSurface navigation', () => {
     await flush();
 
     (runtime.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-    await flush();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-chat-shell')));
     (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
 
@@ -69,7 +69,7 @@ describe('FlowerSurface navigation', () => {
     await flush();
 
     (runtime.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-    await flush();
+    await waitFor(() => runtime.querySelector('.flower-chat-header-title')?.textContent === 'Deploy plan');
 
     expect(runtime.querySelector('.flower-chat-shell')).toBeTruthy();
     expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toBe('Deploy plan');
@@ -109,10 +109,10 @@ describe('FlowerSurface navigation', () => {
 
     expect(runtime.querySelector('.flower-settings-title-feedback')?.textContent).toBe('');
     expect(runtime.querySelector('.flower-settings-current-model')).toBeTruthy();
-    expect(runtime.textContent).toContain('Configure models and execution policy for the Local AI Profile.');
+    expect(runtime.textContent).toContain('Configure models and the default Flower permission for the Local AI Profile.');
 
     const approvalButton = Array.from(runtime.querySelectorAll('.flower-settings-policy-card'))
-      .find((button) => button.textContent?.includes('User approval')) as HTMLButtonElement | undefined;
+      .find((button) => button.textContent?.includes('Approval required')) as HTMLButtonElement | undefined;
     approvalButton?.click();
     await wait(850);
     await flush();
@@ -243,7 +243,6 @@ describe('FlowerSurface navigation', () => {
     });
     await flush();
 
-    expect(runtime.querySelector('.flower-model-selection')?.textContent).toContain('Model');
     expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('No model selected');
     expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
     expect(resolveHandler).not.toHaveBeenCalled();
@@ -259,17 +258,16 @@ describe('FlowerSurface navigation', () => {
       ...adapter(true),
       resolveHandler: vi.fn(() => handler.promise),
     });
-    await waitFor(() => Boolean(runtime.querySelector('.flower-model-chip')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-reasoning-model-label')));
 
-    expect(runtime.querySelector('.flower-model-selection')?.textContent).toContain('Model');
-    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.2');
+    expect(runtime.querySelector('.flower-model-reasoning-model-label')?.textContent).toContain('OpenAI / gpt-5.2');
     expect(runtime.querySelector('.flower-handler-error-card')).toBeNull();
     expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
 
     handler.resolve(decision());
     await flush();
     expect(runtime.textContent).not.toContain('Using Local AI Profile');
-    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.2');
+    expect(runtime.querySelector('.flower-model-reasoning-model-label')?.textContent).toContain('OpenAI / gpt-5.2');
   });
 
   it('shows the selected thread model in the composer footer', async () => {
@@ -299,10 +297,10 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-selected-model"] button')));
     (runtime.querySelector('[data-thread-id="thread-selected-model"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-model-chip')?.textContent?.includes('gpt-5.4-mini') ?? false);
+    await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-label')?.textContent?.includes('gpt-5.4-mini') ?? false);
 
-    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.4-mini');
-    expect(runtime.querySelector('.flower-model-chip')?.textContent).not.toContain('gpt-5.2');
+    expect(runtime.querySelector('.flower-model-reasoning-model-label')?.textContent).toContain('OpenAI / gpt-5.4-mini');
+    expect(runtime.querySelector('.flower-model-reasoning-model-label')?.textContent).not.toContain('gpt-5.2');
   });
 
   it('shows handler blockers near the composer without pretending a runtime is selected', async () => {
@@ -313,7 +311,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter(failingAdapter);
     await flush();
 
-    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.2');
+    expect(runtime.querySelector('.flower-model-reasoning-model-label')?.textContent).toContain('OpenAI / gpt-5.2');
     expect(runtime.querySelector('.flower-handler-error-card')?.textContent).toContain('Configure Flower before chatting.');
     expect(runtime.querySelector('.flower-handler-retry')?.textContent).toContain('Retry');
     expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
@@ -331,7 +329,7 @@ describe('FlowerSurface navigation', () => {
     });
     await flush();
 
-    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.2');
+    expect(runtime.querySelector('.flower-model-reasoning-model-label')?.textContent).toContain('OpenAI / gpt-5.2');
     expect(runtime.querySelector('.flower-handler-error-card')?.textContent).toContain('Timed out waiting for Flower readiness.');
     expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
   });
@@ -372,11 +370,10 @@ describe('FlowerSurface navigation', () => {
     });
     await flush();
 
-    expect(runtime.querySelector('.flower-model-selection')?.textContent).toContain('Model');
-    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.2');
+    expect(runtime.querySelector('.flower-model-reasoning-model-label')?.textContent).toContain('OpenAI / gpt-5.2');
 
     (runtime.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
-    await flush();
+    await waitFor(() => runtime.querySelector('.flower-chat-header-title')?.textContent === 'Deploy plan');
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'continue';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));

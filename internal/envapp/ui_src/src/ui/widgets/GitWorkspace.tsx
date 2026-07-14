@@ -29,6 +29,7 @@ export interface GitWorkspaceProps {
   gitHistoryDisabled?: boolean;
   gitHistoryDisabledReason?: string;
   subview: GitWorkbenchSubview;
+  navigationSubview?: GitWorkbenchSubview;
   onSubviewChange: (view: GitWorkbenchSubview) => void;
   width?: number;
   open?: boolean;
@@ -161,7 +162,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
         />
       )}
       navigationLabel="View"
-      navigation={<GitViewNav value={props.subview} items={subviewItems()} onChange={props.onSubviewChange} />}
+      navigation={<GitViewNav value={props.navigationSubview ?? props.subview} items={subviewItems()} onChange={props.onSubviewChange} />}
       sidebarBody={(
         <div class="flex h-full min-h-0 flex-col gap-2">
           <Show when={shellBlocking()}>

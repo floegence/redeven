@@ -128,7 +128,7 @@ describe('createCodexThreadController', () => {
       activation.flushAll();
 
       expect(controller.foregroundThreadID()).toBe('thread_2');
-      expect(controller.displayedThreadID()).toBeNull();
+      expect(controller.displayedThreadID()).toBe('thread_1');
       expect(controller.threadLoading()).toBe(true);
     }, {
       activationScheduler: activation.scheduler,
@@ -153,7 +153,7 @@ describe('createCodexThreadController', () => {
       activation.flushAll();
 
       expect(controller.foregroundThreadID()).toBe('thread_3');
-      expect(controller.displayedThreadID()).toBeNull();
+      expect(controller.displayedThreadID()).toBe('thread_1');
       expect(controller.threadLoading()).toBe(true);
     }, {
       activationScheduler: activation.scheduler,

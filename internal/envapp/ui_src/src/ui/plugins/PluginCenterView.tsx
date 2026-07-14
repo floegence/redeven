@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createResource, createSignal, type JSX } from 'solid-js';
-import { cn } from '@floegence/floe-webapp-core';
+import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { CheckCircle, Download, Grid3x3, RefreshIcon, Search, Settings, Trash, X } from '@floegence/floe-webapp-core/icons';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
@@ -10,6 +10,7 @@ import type {
   PluginInventoryProjection,
   PluginLifecycleCommand,
 } from './pluginTypes';
+import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 
 type PluginCenterResourceSource = PluginInventoryProjection | 'live';
 
@@ -56,6 +57,14 @@ export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element
   const errorMessage = createMemo(() => messageFromUnknown(props.error ?? resource.error ?? commandError()));
   const canManage = createMemo(() => props.canManagePlugins ?? true);
   const canOpenSurfaces = createMemo(() => props.canOpenPluginSurfaces ?? false);
+  const tabSelection = createUIFirstSelection<PluginCenterTab>({
+    committed: activeTab,
+    commit: setActiveTab,
+    onEvent: createUIPresentationEventRecorder({
+      surface: 'plugin-center',
+      source: 'tab',
+    }),
+  });
 
   createEffect(() => {
     const requestedID = props.selectedPluginID;
@@ -63,7 +72,7 @@ export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element
     setSelectedPluginID(requestedID);
     const requestedItem = allItems().find((item) => item.pluginID === requestedID);
     if (requestedItem) {
-      setActiveTab(tabForItem(requestedItem));
+      tabSelection.commitNow(tabForItem(requestedItem));
     }
   });
 
@@ -71,7 +80,7 @@ export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element
     if (initialTabResolved() || loading()) return;
     const next = model();
     if (next.installed.length === 0 && next.discover.length > 0) {
-      setActiveTab('discover');
+      tabSelection.commitNow('discover');
     }
     setInitialTabResolved(true);
   });
@@ -113,13 +122,13 @@ export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element
     <PluginCenterShell
       query={query()}
       loading={loading()}
-      activeTab={activeTab()}
+      activeTab={tabSelection.visual()}
       installedCount={model().installed.length}
       discoverCount={model().discover.length}
       updatesCount={model().updates.length}
       onQueryInput={setQuery}
       onRefresh={() => void refetch()}
-      onTabSelect={setActiveTab}
+      onTabSelect={tabSelection.request}
       onClose={props.onClose}
     >
       <Show when={errorMessage()}>

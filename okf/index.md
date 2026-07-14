@@ -38,6 +38,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## UI
 
+- [UI presentation transactions](ui/ui-presentation-transactions.md) - Visual intent, after-paint content commits, post-paint effects, keep-alive continuity, and performance budgets.
 - [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.
 - [Plugin surfaces](ui/plugin-surfaces.md) - Redeven placement rules for sandboxed ReDevPlugin surfaces in product chrome.
 - [Flower turn launcher](ui/flower-turn-launcher.md) - Contextual first-turn Ask Flower launchers and host handoff responsibilities.

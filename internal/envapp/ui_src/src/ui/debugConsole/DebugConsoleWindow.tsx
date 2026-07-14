@@ -1,5 +1,5 @@
 import { For, Index, Show, createEffect, createMemo, createSignal, type JSX } from 'solid-js';
-import { cn } from '@floegence/floe-webapp-core';
+import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { SettingsPill } from '../pages/settings/SettingsPrimitives';
@@ -14,6 +14,8 @@ import { ENV_APP_FLOATING_LAYER, ENV_APP_FLOATING_LAYER_CLASS } from '../utils/e
 import { useI18n, type I18nHelpers } from '../i18n';
 import type { EnvAppTranslationKey } from '../i18n/locales';
 import type { DebugConsoleController, DebugConsoleTrace } from './createDebugConsoleController';
+import { UIFirstKeepAlivePanel } from '../primitives/UIFirstKeepAlivePanel';
+import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 
 type DebugConsoleTab = 'requests' | 'traces' | 'ui' | 'runtime' | 'export';
 type SemanticTone = 'neutral' | 'primary' | 'success' | 'warning' | 'error' | 'info';
@@ -632,6 +634,14 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
   const [query, setQuery] = createSignal('');
   const [selectedEventKey, setSelectedEventKey] = createSignal('');
   const [selectedTraceKey, setSelectedTraceKey] = createSignal('');
+  const tabSelection = createUIFirstSelection<DebugConsoleTab>({
+    committed: tab,
+    commit: setTab,
+    onEvent: createUIPresentationEventRecorder({
+      surface: 'debug-console',
+      source: 'tab',
+    }),
+  });
 
   const filteredEvents = createMemo(() => {
     const normalizedQuery = compact(query());
@@ -770,18 +780,18 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                       <button
                         type="button"
                         role="tab"
-                        aria-selected={tab() === tabDescriptor.value}
-                        class={tabButtonClass(tab() === tabDescriptor.value)}
-                        onClick={() => setTab(tabDescriptor.value)}
-                        style={tab() === tabDescriptor.value ? semanticInteractiveStyle(tabDescriptor.tone ?? 'primary', 'strong') : undefined}
+                        aria-selected={tabSelection.visual() === tabDescriptor.value}
+                        class={tabButtonClass(tabSelection.visual() === tabDescriptor.value)}
+                        onClick={() => tabSelection.request(tabDescriptor.value)}
+                        style={tabSelection.visual() === tabDescriptor.value ? semanticInteractiveStyle(tabDescriptor.tone ?? 'primary', 'strong') : undefined}
                       >
                         <div class="flex items-start justify-between gap-3">
                           <div class="min-w-0">
-                            <div class={`text-[10px] font-semibold ${tab() === tabDescriptor.value ? 'text-foreground' : 'text-foreground/90'}`}>{i18n.t(tabDescriptor.labelKey)}</div>
+                            <div class={`text-[10px] font-semibold ${tabSelection.visual() === tabDescriptor.value ? 'text-foreground' : 'text-foreground/90'}`}>{i18n.t(tabDescriptor.labelKey)}</div>
                             <div class="mt-0.5 text-[9px] leading-[1rem] text-muted-foreground">{i18n.t(tabDescriptor.descriptionKey)}</div>
                           </div>
                           <Show when={tabDescriptor.hasCount}>
-                            <span class="rounded-md border px-1.5 py-0.5 text-[8px] font-semibold tabular-nums" style={semanticBadgeStyle(tabDescriptor.tone ?? 'neutral', tab() === tabDescriptor.value)}>
+                            <span class="rounded-md border px-1.5 py-0.5 text-[8px] font-semibold tabular-nums" style={semanticBadgeStyle(tabDescriptor.tone ?? 'neutral', tabSelection.visual() === tabDescriptor.value)}>
                               {tabCountLabel(tabDescriptor.value)}
                             </span>
                           </Show>
@@ -793,9 +803,9 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
               </div>
             </div>
 
-            <main class="min-h-0 flex-1">
+            <main class="relative min-h-0 flex-1">
                 <Show when={!props.controller.loading()} fallback={<EmptyState title={i18n.t('debugConsole.empty.loadingTitle')} message={i18n.t('debugConsole.empty.loadingMessage')} />}>
-                  <Show when={tab() === 'requests'}>
+                  <UIFirstKeepAlivePanel active={tab() === 'requests'} class="absolute inset-0" testId="debug-console-panel-requests" render={() => (
                     <div class="flex h-full min-h-0 flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_22rem] xl:grid-rows-1">
                       <section class="min-h-0 flex-1">
                         <TableShell>
@@ -927,9 +937,9 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                         </div>
                       </InspectorShell>
                     </div>
-                  </Show>
+                  )} />
 
-                  <Show when={tab() === 'traces'}>
+                  <UIFirstKeepAlivePanel active={tab() === 'traces'} class="absolute inset-0" testId="debug-console-panel-traces" render={() => (
                     <div class="flex h-full min-h-0 flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_24rem] xl:grid-rows-1">
                       <section class="min-h-0 flex-1">
                         <TableShell>
@@ -1037,9 +1047,9 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                         </div>
                       </InspectorShell>
                     </div>
-                  </Show>
+                  )} />
 
-                  <Show when={tab() === 'ui'}>
+                  <UIFirstKeepAlivePanel active={tab() === 'ui'} class="absolute inset-0" testId="debug-console-panel-ui" render={() => (
                     <div class="h-full overflow-auto px-4 py-4">
                       <div class="space-y-4">
                         <Show when={!props.controller.collectUIMetrics()}>
@@ -1171,9 +1181,9 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                         </div>
                       </div>
                     </div>
-                  </Show>
+                  )} />
 
-                  <Show when={tab() === 'runtime'}>
+                  <UIFirstKeepAlivePanel active={tab() === 'runtime'} class="absolute inset-0" testId="debug-console-panel-runtime" render={() => (
                     <div class="h-full overflow-auto px-4 py-4">
                       <div class="space-y-4">
                         <MetricStrip
@@ -1243,9 +1253,9 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                         </div>
                       </div>
                     </div>
-                  </Show>
+                  )} />
 
-                  <Show when={tab() === 'export'}>
+                  <UIFirstKeepAlivePanel active={tab() === 'export'} class="absolute inset-0" testId="debug-console-panel-export" render={() => (
                     <div class="h-full overflow-auto px-4 py-4">
                       <div class="space-y-4">
                         <div class="grid gap-4 xl:grid-cols-[minmax(0,0.72fr)_minmax(0,1fr)]">
@@ -1309,7 +1319,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                         </div>
                       </div>
                     </div>
-                  </Show>
+                  )} />
                 </Show>
               </main>
     </div>

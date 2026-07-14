@@ -64,6 +64,7 @@ function buildPerformanceSnapshot(overrides: Record<string, unknown> = {}) {
     fps: { current: 0, average: 0, low: 0, samples: 0 },
     frame_timing: { long_frame_count: 0, max_frame_ms: 0, last_frame_ms: 0 },
     interactions: { count: 0, max_paint_delay_ms: 0 },
+    presentation_transactions: { count: 0, summaries: [] },
     dom_activity: {
       mutation_batches: 0,
       mutation_records: 0,

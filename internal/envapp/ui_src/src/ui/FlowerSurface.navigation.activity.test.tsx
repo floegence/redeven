@@ -809,7 +809,7 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => Boolean(subagentDetailSurface(runtime)));
 
     listed = parentWithoutSubagents;
-    (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
     await waitFor(() => runtime.textContent?.includes('No active child work remains.') ?? false);
 
     expect(subagentDetailSurface(runtime)).toBeNull();

@@ -1,6 +1,6 @@
 import '../../index.css';
 
-import { page } from '@vitest/browser/context';
+import { page } from 'vitest/browser';
 import { createSignal, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

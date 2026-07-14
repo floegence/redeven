@@ -10,6 +10,22 @@ const i18nState = vi.hoisted(() => ({
   locale: 'en-US',
 }));
 
+vi.mock('@floegence/floe-webapp-core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@floegence/floe-webapp-core')>();
+  return {
+    ...actual,
+    createUIFirstSelection: (options: any) => actual.createUIFirstSelection({
+      ...options,
+      scheduleAfterPaint: (callback: () => void) => queueMicrotask(callback),
+    }),
+  };
+});
+
+async function flushSelectionTransaction() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 vi.mock('../i18n', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../i18n')>();
   return {
@@ -124,6 +140,7 @@ function createController(overrides: Record<string, unknown> = {}) {
     fps: { current: 60, average: 58, low: 48, samples: 3 },
     frame_timing: { long_frame_count: 2, max_frame_ms: 78, last_frame_ms: 22 },
     interactions: { count: 3, last_type: 'pointerdown', last_paint_delay_ms: 18, max_paint_delay_ms: 42 },
+    presentation_transactions: { count: 0, summaries: [] },
     dom_activity: {
       mutation_batches: 4,
       mutation_records: 27,
@@ -198,6 +215,7 @@ function createController(overrides: Record<string, unknown> = {}) {
         fps: { current: 60, average: 58, low: 48, samples: 3 },
         frame_timing: { long_frame_count: 2, max_frame_ms: 78, last_frame_ms: 22 },
         interactions: { count: 3, last_type: 'pointerdown', last_paint_delay_ms: 18, max_paint_delay_ms: 42 },
+        presentation_transactions: { count: 0, summaries: [] },
         dom_activity: {
           mutation_batches: 4,
           mutation_records: 27,
@@ -230,7 +248,7 @@ afterEach(() => {
 });
 
 describe('DebugConsoleWindow', () => {
-  it('renders the request details inside the floating window', () => {
+  it('renders the request details inside the floating window', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const { controller } = createController();
@@ -250,11 +268,13 @@ describe('DebugConsoleWindow', () => {
     const uiTab = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('UI Performance'));
     expect(uiTab).toBeTruthy();
     uiTab?.click();
+    expect(uiTab?.getAttribute('aria-selected')).toBe('true');
+    await flushSelectionTransaction();
 
     expect(host.textContent).toContain('Renderer probes');
   });
 
-  it('renders floating window chrome and diagnostics labels with the active locale', () => {
+  it('renders floating window chrome and diagnostics labels with the active locale', async () => {
     i18nState.locale = 'zh-CN';
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -274,6 +294,8 @@ describe('DebugConsoleWindow', () => {
     const uiTab = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('UI 性能'));
     expect(uiTab).toBeTruthy();
     uiTab?.click();
+    expect(uiTab?.getAttribute('aria-selected')).toBe('true');
+    await flushSelectionTransaction();
 
     expect(host.textContent).toContain('渲染器探针');
   });
@@ -333,6 +355,7 @@ describe('DebugConsoleWindow', () => {
 
     uiTab?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(uiTab?.getAttribute('aria-selected')).toBe('true');
+    await flushSelectionTransaction();
     expect(host.textContent).toContain('Renderer probes');
 
     const tracesTabBefore = tracesTab;

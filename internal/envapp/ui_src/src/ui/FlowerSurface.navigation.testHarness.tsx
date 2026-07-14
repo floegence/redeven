@@ -1,6 +1,7 @@
 import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
 import { Dynamic, render } from 'solid-js/web';
 import { afterEach, vi } from 'vitest';
+import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 
 import { FlowerSurface, type FlowerSurfaceNotification, type FlowerThreadFocusRequest } from '../../../../flower_ui/src';
 import type {
@@ -729,6 +730,7 @@ const mountFlowerSurface = (
   props: Readonly<{
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
+    onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   }> = {},
 ): HTMLDivElement => {
   const runtime = document.createElement('div');
@@ -741,6 +743,7 @@ const mountFlowerSurface = (
       }}
       focusThreadRequest={props.focusThreadRequest}
       onFocusThreadRequestConsumed={props.onFocusThreadRequestConsumed}
+      onThreadSelectionEvent={props.onThreadSelectionEvent}
     />
   ), runtime));
   return runtime;
@@ -759,6 +762,7 @@ export function renderSurfaceWithAdapterProps(
   props: Readonly<{
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
+    onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   }>,
 ): HTMLDivElement {
   return mountFlowerSurface(surfaceAdapter, props);

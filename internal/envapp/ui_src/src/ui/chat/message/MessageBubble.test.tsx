@@ -3,6 +3,7 @@
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
+import { ChatProvider } from '../ChatProvider';
 import type { Message } from '../types';
 import { MessageBubble } from './MessageBubble';
 
@@ -13,7 +14,11 @@ afterEach(() => {
 function renderMessageBubble(message: Message): HTMLDivElement {
   const host = document.createElement('div');
   document.body.appendChild(host);
-  render(() => <MessageBubble message={message} />, host);
+  render(() => (
+    <ChatProvider>
+      <MessageBubble message={message} />
+    </ChatProvider>
+  ), host);
   return host;
 }
 
@@ -72,7 +77,11 @@ describe('MessageBubble', () => {
 
     const host = document.createElement('div');
     document.body.appendChild(host);
-    render(() => <MessageBubble message={message()} />, host);
+    render(() => (
+      <ChatProvider>
+        <MessageBubble message={message()} />
+      </ChatProvider>
+    ), host);
 
     const slotBefore = host.querySelector('.chat-message-block-slot');
     const blockBefore = host.querySelector('.chat-markdown-block');
