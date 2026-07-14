@@ -51,6 +51,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--sidebar-border: #dad6d1;');
     expect(src).toContain('--info: #3b82f6;');
     expect(src).toContain('--warning: #f59e0b;');
+    expect(src).toContain('--redeven-runtime-monitor-chart-accent: oklch(0.6 0.16 163);');
     expect(src).toContain('--redeven-surface-main: #f4f1ed;');
     expect(src).toContain('--redeven-surface-panel: #f7f4f1;');
     expect(src).toContain('--redeven-surface-panel-soft: #f1efec;');
@@ -79,6 +80,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain(':root {\n  /* Keep the Env App light surface contract on the document scope so body portals inherit it too. */\n  --background:');
 
     expect(src).toContain('--redeven-surface-panel: rgb(41, 44, 51);');
+    expect(src).toContain('--redeven-runtime-monitor-chart-accent: oklch(0.78 0.17 164);');
     expect(src).toContain('--redeven-surface-main: var(--redeven-surface-panel);');
     expect(src).toContain('--redeven-surface-panel-soft: #353942;');
     expect(src).toContain('--redeven-surface-panel-elevated: #40454f;');
