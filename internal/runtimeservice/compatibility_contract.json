@@ -12,7 +12,7 @@
       "Startup passwords and bootstrap tickets use prompt, stdin, protected file, fixed environment, or Desktop envelope ingress; removed secret-bearing flags and encrypted runtime persistence change command security without changing Desktop attach/start or structured startup report fields",
       "Shell and process launch now require both write and execute permission across terminal, Flower, Floret, Codex bridge, Desktop, Local UI, and remote sessions; execute_read remains limited to explicitly modeled non-mutating operations",
       "Flowersec Go and TypeScript capabilities are consumed from published v0.19.11 artifacts and Floe Webapp packages from published v0.36.74 artifacts, with no replace, go.work, package-manager link, or local sibling path wiring",
-      "Floret is consumed only from the published github.com/floegence/floret v0.3.90 module; projection recovery, independent token budgets, deletion fencing, and shared activity rebuilding remain internal to Flower and thread persistence",
+      "The published flower-floret-runtime-contract-hardening boundary remains intact: Floret v0.3.90 projection recovery, independent token budgets, deletion fencing, and shared activity summary rebuilding remain internal to Flower and thread persistence",
       "Desktop managed-process reconciliation, Env App activity and terminal recovery, plugin surfaces, settings, and navigation behavior preserve the existing Runtime Service control methods and gateway lifecycle payloads",
       "Desktop attach/start, Local UI health, structured startup reports, sys.ping, Env App maintenance UI, gateway lifecycle, SSH runtime bootstrap, and installer version discovery were reviewed against the existing v0.7.0 minimum compatibility window"
     ],
