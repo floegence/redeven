@@ -8337,7 +8337,7 @@ function runtimeFlowerEnvelopeError(parsed: unknown, status: number): RuntimeFlo
     );
   }
   return runtimeFlowerError(
-    'runtime_flower_request_failed',
+    compact(record.error_code) || 'runtime_flower_request_failed',
     compact(rawError) || `Flower request failed with HTTP ${status}.`,
     status,
     runtimeFlowerRetryAfterMs(record.retry_after_ms),

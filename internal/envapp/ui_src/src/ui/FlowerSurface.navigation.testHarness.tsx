@@ -345,6 +345,7 @@ export function liveBootstrap(threadValue: FlowerThreadSnapshot, cursor = 0): Fl
       ...(threadValue.context_compactions ? { context_compactions: threadValue.context_compactions as readonly FlowerContextCompaction[] } : {}),
       ...(threadValue.timeline_decorations ? { timeline_decorations: threadValue.timeline_decorations as readonly FlowerTimelineDecoration[] } : {}),
       ...(hasApprovalActions ? { approval_actions: approvalActions } : {}),
+      ...(threadValue.approval_queue ? { approval_queue: threadValue.approval_queue } : {}),
       input_requests: inputRequests,
     },
     read_status: threadValue.read_status,

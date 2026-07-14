@@ -1108,6 +1108,7 @@ describe('main routing', () => {
     const errorSrc = mainSrc.slice(errorStart, errorEnd);
     expect(errorSrc).toContain('runtimeFlowerRetryAfterMs(error.retry_after_ms)');
     expect(errorSrc).toContain('runtimeFlowerRetryAfterMs(record.retry_after_ms)');
+    expect(errorSrc).toContain("compact(record.error_code) || 'runtime_flower_request_failed'");
 
     const unlockStart = mainSrc.indexOf('async function unlockRuntimeFlowerAccess(');
     const unlockEnd = mainSrc.indexOf('async function runtimeFlowerAccessHeaders(', unlockStart);

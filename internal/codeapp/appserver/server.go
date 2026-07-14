@@ -1180,6 +1180,16 @@ func writeAISkillError(w http.ResponseWriter, fallbackStatus int, err error) {
 	writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: code})
 }
 
+func writeAIApprovalError(w http.ResponseWriter, err error) {
+	status := http.StatusBadRequest
+	code := ""
+	if errors.Is(err, ai.ErrApprovalConflict) || errors.Is(err, ai.ErrRunChanged) {
+		status = http.StatusConflict
+		code = ai.ApprovalConflictErrorCode
+	}
+	writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: code})
+}
+
 func writeCodexError(w http.ResponseWriter, err error) {
 	var status int
 	errorCode := ""
@@ -4484,10 +4494,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			body.ThreadID = threadID
 			resp, err := g.ai.SubmitFlowerApproval(meta, body)
 			if err != nil {
-				status := http.StatusBadRequest
-				if errors.Is(err, ai.ErrRunChanged) {
-					status = http.StatusConflict
-				}
 				g.appendAudit(meta, "ai_tool_approval", "failure", map[string]any{
 					"thread_id":    threadID,
 					"run_id":       strings.TrimSpace(body.RunID),
@@ -4496,7 +4502,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					"approved":     body.Approved,
 					"expected_seq": body.ExpectedSeq,
 				}, err)
-				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				writeAIApprovalError(w, err)
 				return
 			}
 			g.appendAudit(meta, "ai_tool_approval", "success", map[string]any{

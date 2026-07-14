@@ -31,6 +31,7 @@ import type {
   FlowerInputRequestQuestion,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
+  FlowerSubmitApprovalRequest,
   FlowerSurfaceAdapter,
   FlowerTerminalProcessSnapshot,
   FlowerTurnLaunchFailure,
@@ -484,6 +485,68 @@ function createFlowerScrollTailController(options: Readonly<{
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+const FLOWER_APPROVAL_CONFLICT_ERROR_CODE = 'AI_APPROVAL_CONFLICT';
+
+function isFlowerApprovalConflict(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const record = error as Record<string, unknown>;
+  const code = typeof record.code === 'string' ? record.code : '';
+  return trimString(code) === FLOWER_APPROVAL_CONFLICT_ERROR_CODE || Number(record.status) === 409;
+}
+
+function flowerApprovalRequest(
+  thread: FlowerThreadSnapshot,
+  action: FlowerApprovalAction,
+  approved: boolean,
+): FlowerSubmitApprovalRequest {
+  const queueGeneration = thread.approval_queue?.generation ?? action.queue_generation ?? 0;
+  const queueRevision = thread.approval_queue?.revision ?? 0;
+  if (action.origin === 'delegated_subagent') {
+    return {
+      thread_id: thread.thread_id,
+      origin: 'delegated_subagent',
+      action_id: action.action_id,
+      approved,
+      ...(action.version ? { version: action.version } : {}),
+      ...(action.surface_epoch ? { surface_epoch: action.surface_epoch } : {}),
+      queue_generation: queueGeneration,
+      queue_revision: queueRevision,
+      idempotency_key: `${action.action_id}:${approved ? 'approve' : 'reject'}:${action.version}:${action.surface_epoch ?? 0}`,
+      delegated_ref: action.delegated_ref,
+    };
+  }
+  return {
+    thread_id: thread.thread_id,
+    origin: action.origin,
+    run_id: action.run_id,
+    action_id: action.action_id,
+    tool_id: action.tool_id,
+    approved,
+    ...(action.expected_seq ? { expected_seq: action.expected_seq } : {}),
+    ...(action.revision ? { revision: action.revision } : {}),
+    ...(action.version ? { version: action.version } : {}),
+    ...(action.surface_epoch ? { surface_epoch: action.surface_epoch } : {}),
+    queue_generation: queueGeneration,
+    queue_revision: queueRevision,
+  };
+}
+
+function retryableApprovalAction(
+  thread: FlowerThreadSnapshot | null,
+  actionID: string,
+): FlowerApprovalAction | null {
+  if (!thread) return null;
+  const pending = (thread.approval_actions ?? []).filter((action) => action.status === 'pending' && action.state === 'requested');
+  const action = pending.find((candidate) => candidate.action_id === actionID) ?? null;
+  if (!action || !action.can_approve) return null;
+  if (action.origin === 'delegated_subagent' && action.delivery_state && action.delivery_state !== 'waiting_decision') return null;
+  const currentActionID = trimString(thread.approval_queue?.current_action_id);
+  if (currentActionID) return currentActionID === actionID ? action : null;
+  const primary = action.surface_role === 'primary_action'
+    || (!action.surface_role && !thread.approval_queue && pending.length === 1);
+  return primary ? action : null;
 }
 
 function createClientMessageID(): string {
@@ -4186,45 +4249,60 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!thread || approvalSubmitting()[action.action_id]) return;
     const threadID = trimString(thread.thread_id);
     setApprovalSubmitting((current) => ({ ...current, [action.action_id]: approved ? 'approve' : 'reject' }));
+    const reloadCanonicalThread = async (): Promise<FlowerThreadSnapshot | null> => {
+      if (!selectedThreadDetailMatches(threadID)) return null;
+      return reloadSelectedThread(threadID);
+    };
+    const reloadAfterDecision = async () => {
+      try {
+        await reloadCanonicalThread();
+      } catch (error) {
+        if (selectedThreadDetailMatches(threadID)) {
+          notifyComposerError(getErrorMessage(error));
+        }
+      }
+    };
     try {
-      if (action.origin === 'delegated_subagent') {
-        await props.adapter.submitApproval({
-          thread_id: threadID,
-          origin: 'delegated_subagent',
-          action_id: action.action_id,
-          approved,
-          ...(action.version ? { version: action.version } : {}),
-          ...(action.surface_epoch ? { surface_epoch: action.surface_epoch } : {}),
-          queue_generation: action.queue_generation ?? 0,
-          queue_revision: thread.approval_queue?.revision ?? 0,
-          idempotency_key: `${action.action_id}:${approved ? 'approve' : 'reject'}:${action.version}:${action.surface_epoch ?? 0}`,
-          delegated_ref: action.delegated_ref,
-        });
-      } else {
-        await props.adapter.submitApproval({
-          thread_id: threadID,
-          origin: action.origin,
-          run_id: action.run_id,
-          action_id: action.action_id,
-          tool_id: action.tool_id,
-          approved,
-          ...(action.expected_seq ? { expected_seq: action.expected_seq } : {}),
-          ...(action.revision ? { revision: action.revision } : {}),
-          ...(action.version ? { version: action.version } : {}),
-          ...(action.surface_epoch ? { surface_epoch: action.surface_epoch } : {}),
-          queue_generation: action.queue_generation ?? 0,
-          queue_revision: thread.approval_queue?.revision ?? 0,
-        });
-      }
-      if (selectedThreadDetailMatches(threadID)) {
-        void applySelectedThreadLiveEvents(threadID, threadLoadSequence);
-      }
+      await props.adapter.submitApproval(flowerApprovalRequest(thread, action, approved));
+      await reloadAfterDecision();
+      return;
     } catch (error) {
-      const message = getErrorMessage(error);
-      if (selectedThreadDetailMatches(threadID)) {
-        notifyComposerError(message);
-        await reloadSelectedThread(threadID);
+      if (!isFlowerApprovalConflict(error)) {
+        if (selectedThreadDetailMatches(threadID)) {
+          notifyComposerError(getErrorMessage(error));
+        }
+        await reloadAfterDecision();
+        return;
       }
+
+      let refreshed: FlowerThreadSnapshot | null = null;
+      try {
+        refreshed = await reloadCanonicalThread();
+      } catch (reloadError) {
+        if (selectedThreadDetailMatches(threadID)) {
+          notifyComposerError(getErrorMessage(reloadError));
+        }
+        return;
+      }
+      if (!selectedThreadDetailMatches(threadID)) return;
+      const retryAction = retryableApprovalAction(refreshed, action.action_id);
+      if (!retryAction || !refreshed) return;
+
+      try {
+        await props.adapter.submitApproval(flowerApprovalRequest(refreshed, retryAction, approved));
+      } catch (retryError) {
+        if (isFlowerApprovalConflict(retryError)) {
+          await reloadAfterDecision();
+          return;
+        }
+        if (selectedThreadDetailMatches(threadID)) {
+          notifyComposerError(getErrorMessage(retryError));
+        }
+        await reloadAfterDecision();
+        return;
+      }
+      await reloadAfterDecision();
+      return;
     } finally {
       setApprovalSubmitting((current) => {
         const next = { ...current };

@@ -1975,13 +1975,13 @@ func TestPermissionPolicy_SubagentDelegatedStaleVersionAndSurfaceEpochDoNotDeliv
 	}
 	staleVersion := base
 	staleVersion.Version++
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, staleVersion); !errors.Is(err, ErrRunChanged) {
-		t.Fatalf("stale version submit error=%v, want ErrRunChanged", err)
+	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, staleVersion); !errors.Is(err, ErrApprovalConflict) {
+		t.Fatalf("stale version submit error=%v, want ErrApprovalConflict", err)
 	}
 	staleSurface := base
 	staleSurface.SurfaceEpoch++
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, staleSurface); !errors.Is(err, ErrRunChanged) {
-		t.Fatalf("stale surface submit error=%v, want ErrRunChanged", err)
+	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, staleSurface); !errors.Is(err, ErrApprovalConflict) {
+		t.Fatalf("stale surface submit error=%v, want ErrApprovalConflict", err)
 	}
 	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
 		t.Fatalf("target should not exist after stale decisions, statErr=%v", statErr)
@@ -2066,8 +2066,8 @@ func TestPermissionPolicy_SubagentDelegatedIdempotencyConflictDoesNotRedeliver(t
 	}
 	conflicting := approveReq
 	conflicting.Approved = false
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, conflicting); err == nil || !strings.Contains(err.Error(), "idempotency conflict") {
-		t.Fatalf("conflicting delegated replay error=%v, want idempotency conflict", err)
+	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, conflicting); !errors.Is(err, ErrApprovalConflict) {
+		t.Fatalf("conflicting delegated replay error=%v, want ErrApprovalConflict", err)
 	}
 	got, err := os.ReadFile(target)
 	if err != nil {
