@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { execFile } from 'node:child_process';
+import { execFile, type ExecFileException } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import electronPath from 'electron';
@@ -23,10 +23,12 @@ function getElectronRuntimeLaunch(
   electronBinary: string,
   runtimeScript: string,
   hasDisplayServer: boolean,
+  userDataDir: string,
 ): { command: string; args: string[] } {
+  const isolatedProfileArg = `--user-data-dir=${userDataDir}`;
   const electronArgs = platform === 'linux'
-    ? [...linuxElectronLaunchArgs, runtimeScript]
-    : [runtimeScript];
+    ? [...linuxElectronLaunchArgs, isolatedProfileArg, runtimeScript]
+    : [isolatedProfileArg, runtimeScript];
 
   if (platform === 'linux' && !hasDisplayServer) {
     // Headless Linux CI needs a virtual display before BrowserWindow can start.
@@ -75,23 +77,23 @@ afterEach(async () => {
 
 describe('desktop preload runtime', () => {
   it('adds Linux-only Electron launch flags for the spawned runtime process', () => {
-    expect(getElectronRuntimeLaunch('linux', 'electron', 'runtime.js', true)).toEqual({
+    expect(getElectronRuntimeLaunch('linux', 'electron', 'runtime.js', true, '/tmp/runtime-profile')).toEqual({
       command: 'electron',
-      args: ['--no-sandbox', '--disable-setuid-sandbox', 'runtime.js'],
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--user-data-dir=/tmp/runtime-profile', 'runtime.js'],
     });
   });
 
   it('wraps headless Linux launches in xvfb-run', () => {
-    expect(getElectronRuntimeLaunch('linux', 'electron', 'runtime.js', false)).toEqual({
+    expect(getElectronRuntimeLaunch('linux', 'electron', 'runtime.js', false, '/tmp/runtime-profile')).toEqual({
       command: 'xvfb-run',
-      args: ['-a', 'electron', '--no-sandbox', '--disable-setuid-sandbox', 'runtime.js'],
+      args: ['-a', 'electron', '--no-sandbox', '--disable-setuid-sandbox', '--user-data-dir=/tmp/runtime-profile', 'runtime.js'],
     });
   });
 
   it('keeps the default runtime launch on non-Linux platforms', () => {
-    expect(getElectronRuntimeLaunch('darwin', 'electron', 'runtime.js', false)).toEqual({
+    expect(getElectronRuntimeLaunch('darwin', 'electron', 'runtime.js', false, '/tmp/runtime-profile')).toEqual({
       command: 'electron',
-      args: ['runtime.js'],
+      args: ['--user-data-dir=/tmp/runtime-profile', 'runtime.js'],
     });
   });
 
@@ -119,7 +121,6 @@ describe('desktop preload runtime', () => {
 const { app, BrowserWindow, ipcMain } = require('electron');
 
 const preload = process.env.${electronRuntimePreloadEnvName};
-app.setPath('userData', ${JSON.stringify(path.join(tempDir, 'electron-user-data'))});
 
 if (!preload) {
   throw new Error('Missing ${electronRuntimePreloadEnvName}');
@@ -312,23 +313,36 @@ app.whenReady().then(async () => {
     };
 
     async function runSnapshot(preloadPath: string): Promise<RuntimeBridgeSnapshot> {
+      const profileName = path.basename(preloadPath, path.extname(preloadPath));
       const electronRuntimeLaunch = getElectronRuntimeLaunch(
         process.platform,
         String(electronPath),
         runtimeScript,
         Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY),
+        path.join(tempDir, `electron-user-data-${profileName}`),
       );
 
-      const { stdout } = await execFileAsync(electronRuntimeLaunch.command, electronRuntimeLaunch.args, {
-        cwd: process.cwd(),
-        env: {
-          ...process.env,
-          ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
-          [electronRuntimePreloadEnvName]: preloadPath,
-        },
-        timeout: electronRuntimeIntegrationTimeoutMs,
-        maxBuffer: 1024 * 1024,
-      });
+      let stdout: string;
+      try {
+        ({ stdout } = await execFileAsync(electronRuntimeLaunch.command, electronRuntimeLaunch.args, {
+          cwd: process.cwd(),
+          env: {
+            ...process.env,
+            ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
+            [electronRuntimePreloadEnvName]: preloadPath,
+          },
+          timeout: electronRuntimeIntegrationTimeoutMs,
+          maxBuffer: 1024 * 1024,
+        }));
+      } catch (error) {
+        const executionError = error as ExecFileException & { stdout?: string; stderr?: string };
+        throw new Error([
+          `Electron preload runtime failed for ${path.basename(preloadPath)}.`,
+          `exitCode=${String(executionError.code ?? 'unknown')} signal=${String(executionError.signal ?? 'none')}`,
+          `stdout:\n${String(executionError.stdout ?? '').trim() || '<empty>'}`,
+          `stderr:\n${String(executionError.stderr ?? '').trim() || '<empty>'}`,
+        ].join('\n'), { cause: error });
+      }
 
       return JSON.parse(extractElectronRuntimePayload(stdout)) as RuntimeBridgeSnapshot;
     }

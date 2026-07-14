@@ -123,6 +123,38 @@ jobs:
         working-directory: internal/envapp/ui_src
         run: corepack pnpm exec playwright install --with-deps chromium
 
+      - name: Built Env App dist shell smoke
+        working-directory: internal/envapp/ui_src
+        run: corepack pnpm run test:built-dist-shell -- --report "${RUNNER_TEMP}/redeven-built-dist-shell-smoke.json"
+
+      - name: Terminal recovery carrier E2E (64 KiB)
+        working-directory: internal/envapp/ui_src
+        run: corepack pnpm run test:terminal-carrier -- --fixture-bytes 65536 --report "${RUNNER_TEMP}/redeven-terminal-carrier-64KiB.json"
+
+      - name: Terminal recovery carrier E2E (448 KiB)
+        working-directory: internal/envapp/ui_src
+        run: corepack pnpm run test:terminal-carrier -- --fixture-bytes 458752 --report "${RUNNER_TEMP}/redeven-terminal-carrier-448KiB.json"
+
+      - name: Terminal recovery carrier E2E (8 MiB boundary)
+        working-directory: internal/envapp/ui_src
+        run: corepack pnpm run test:terminal-carrier -- --fixture-bytes 8388608 --report "${RUNNER_TEMP}/redeven-terminal-carrier-8MiB-boundary.json"
+
+      - name: Terminal history fixture matrix
+        env:
+          REDEVEN_TERMINAL_HISTORY_REPORT: ${{ runner.temp }}/redeven-terminal-history-fixtures.json
+        run: GOWORK=off go test ./internal/terminal -run TestTerminalHistoryDeterministicFixtureMatrix -count=1
+
+      - name: Upload renderer E2E reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: renderer-e2e-reports
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/redeven-built-dist-shell-smoke.json
+            ${{ runner.temp }}/redeven-terminal-carrier-*.json
+            ${{ runner.temp }}/redeven-terminal-history-fixtures.json
+
       - name: Flower UI behavior contracts
         run: ./scripts/check_flower_ui.sh
 

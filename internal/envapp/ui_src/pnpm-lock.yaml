@@ -141,6 +141,9 @@ importers:
       playwright:
         specifier: ^1.57.0
         version: 1.60.0
+      pngjs:
+        specifier: 7.0.0
+        version: 7.0.0
       react:
         specifier: ^18.2.0
         version: 18.3.1

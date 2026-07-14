@@ -317,7 +317,8 @@ func TestTerminalHistoryDeterministicFixtureMatrix(t *testing.T) {
 		ActualBytes            int64  `json:"actual_bytes"`
 		PageCount              int    `json:"page_count"`
 		ChunkCount             int    `json:"chunk_count"`
-		RetainedChunks         int    `json:"retained_chunks"`
+		AllocatedChunks        int    `json:"allocated_chunks"`
+		UsedChunks             int    `json:"used_chunks"`
 		ReplayedBytes          int64  `json:"replayed_bytes"`
 		SnapshotEndSequence    int64  `json:"snapshot_end_sequence"`
 		CoveredThroughSequence int64  `json:"covered_through_sequence"`
@@ -384,8 +385,8 @@ func TestTerminalHistoryDeterministicFixtureMatrix(t *testing.T) {
 					t.Fatalf("GetHistoryStats(after clear) error = %v", err)
 				}
 			}
-			if fixture.bytes > 0 && stats.TotalBytes < int64(fixture.bytes) {
-				t.Fatalf("fixture history bytes = %d, want at least %d", stats.TotalBytes, fixture.bytes)
+			if stats.TotalBytes != int64(fixture.bytes) {
+				t.Fatalf("fixture history bytes = %d, want exactly %d", stats.TotalBytes, fixture.bytes)
 			}
 
 			replayStarted := time.Now()
@@ -447,7 +448,8 @@ func TestTerminalHistoryDeterministicFixtureMatrix(t *testing.T) {
 				ActualBytes:            stats.TotalBytes,
 				PageCount:              pageCount,
 				ChunkCount:             chunkCount,
-				RetainedChunks:         stats.TotalChunks,
+				AllocatedChunks:        stats.TotalChunks,
+				UsedChunks:             stats.UsedChunks,
 				ReplayedBytes:          replayedBytes,
 				SnapshotEndSequence:    snapshotEnd,
 				CoveredThroughSequence: coveredThrough,
