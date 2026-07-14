@@ -37,10 +37,12 @@ const (
 )
 
 const (
-	defaultTerminalHistoryPageChunks = 256
-	maxTerminalHistoryPageChunks     = 512
+	defaultTerminalHistoryPageChunks = 2048
+	maxTerminalHistoryPageChunks     = 4096
 	defaultTerminalHistoryPageBytes  = 384 * 1024
 	maxTerminalHistoryPageBytes      = 512 * 1024
+	terminalHistoryBufferSize        = 2048
+	terminalHistoryBufferMaxChunks   = 65536
 	terminalHistoryBufferMaxBytes    = 8 * 1024 * 1024
 )
 
@@ -196,10 +198,12 @@ func (r fixedShellResolver) ResolveShellContext(ctx context.Context, logger term
 func newTerminalGoManagerConfig(shell string, log *slog.Logger) termgo.ManagerConfig {
 	shellInitBaseDir := defaultRedevenShellInitBaseDir()
 	return termgo.ManagerConfig{
-		Logger:                slogTerminalLogger{log: log},
-		EnvProvider:           termgo.DefaultEnvProvider{},
-		ShellResolver:         fixedShellResolver{shell: shell},
-		HistoryBufferMaxBytes: terminalHistoryBufferMaxBytes,
+		Logger:                 slogTerminalLogger{log: log},
+		EnvProvider:            termgo.DefaultEnvProvider{},
+		ShellResolver:          fixedShellResolver{shell: shell},
+		HistoryBufferSize:      terminalHistoryBufferSize,
+		HistoryBufferMaxChunks: terminalHistoryBufferMaxChunks,
+		HistoryBufferMaxBytes:  terminalHistoryBufferMaxBytes,
 		ShellArgsProvider: termgo.DefaultShellArgsProvider{
 			ShellInitBaseDir:       shellInitBaseDir,
 			EnableCommandLifecycle: true,

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
@@ -305,6 +307,174 @@ func TestAttachSessionReturnsCommittedHistoryBoundary(t *testing.T) {
 	}
 	if secondBoundary != expectedBoundary {
 		t.Fatalf("second boundary = %d, want committed history boundary %d", secondBoundary, expectedBoundary)
+	}
+}
+
+func TestTerminalHistoryDeterministicFixtureMatrix(t *testing.T) {
+	type fixtureReport struct {
+		FixtureID              string `json:"fixture_id"`
+		RequestedBytes         int    `json:"requested_bytes"`
+		ActualBytes            int64  `json:"actual_bytes"`
+		PageCount              int    `json:"page_count"`
+		ChunkCount             int    `json:"chunk_count"`
+		RetainedChunks         int    `json:"retained_chunks"`
+		ReplayedBytes          int64  `json:"replayed_bytes"`
+		SnapshotEndSequence    int64  `json:"snapshot_end_sequence"`
+		CoveredThroughSequence int64  `json:"covered_through_sequence"`
+		HistoryGeneration      int64  `json:"history_generation"`
+		AttachMilliseconds     int64  `json:"attach_ms"`
+		ReplayMilliseconds     int64  `json:"replay_ms"`
+	}
+
+	fixtures := []struct {
+		name       string
+		bytes      int
+		clearAfter bool
+	}{
+		{name: "0B", clearAfter: true},
+		{name: "64KiB", bytes: 64 * 1024},
+		{name: "512KiB", bytes: 512 * 1024},
+		{name: "8MiB", bytes: 8 * 1024 * 1024},
+	}
+	reports := make([]fixtureReport, 0, len(fixtures))
+
+	for _, fixture := range fixtures {
+		t.Run(fixture.name, func(t *testing.T) {
+			root := t.TempDir()
+			shellPath := filepath.Join(root, "fixture-shell.sh")
+			script := "#!/bin/sh\n"
+			if fixture.bytes > 0 {
+				script += fmt.Sprintf("dd if=/dev/zero bs=4096 count=%d 2>/dev/null\n", fixture.bytes/4096)
+			}
+			script += "trap 'exit 0' TERM INT\nwhile true; do sleep 1; done\n"
+			if err := os.WriteFile(shellPath, []byte(script), 0o755); err != nil {
+				t.Fatalf("WriteFile(%q): %v", shellPath, err)
+			}
+			logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
+			m := NewManager(shellPath, root, logger)
+			t.Cleanup(m.Cleanup)
+
+			sess, err := m.createSession("fixture", "")
+			if err != nil {
+				t.Fatalf("createSession() error = %v", err)
+			}
+			attachStarted := time.Now()
+			if _, err := m.attachSession(sess.ID, "fixture-conn", 80, 24, nil, 0); err != nil {
+				t.Fatalf("attachSession() error = %v", err)
+			}
+
+			deadline := time.Now().Add(8 * time.Second)
+			var stats termgo.RingBufferStats
+			for time.Now().Before(deadline) {
+				stats, err = sess.GetHistoryStats()
+				if err != nil {
+					t.Fatalf("GetHistoryStats() error = %v", err)
+				}
+				if fixture.bytes == 0 || stats.TotalBytes >= int64(fixture.bytes) {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			if fixture.bytes == 0 {
+				if err := sess.ClearHistory(); err != nil {
+					t.Fatalf("ClearHistory() error = %v", err)
+				}
+				stats, err = sess.GetHistoryStats()
+				if err != nil {
+					t.Fatalf("GetHistoryStats(after clear) error = %v", err)
+				}
+			}
+			if fixture.bytes > 0 && stats.TotalBytes < int64(fixture.bytes) {
+				t.Fatalf("fixture history bytes = %d, want at least %d", stats.TotalBytes, fixture.bytes)
+			}
+
+			replayStarted := time.Now()
+			startSeq := int64(1)
+			snapshotEnd := int64(0)
+			historyGeneration := int64(0)
+			coveredThrough := int64(0)
+			lastChunkSequence := int64(0)
+			pageCount := 0
+			chunkCount := 0
+			replayedBytes := int64(0)
+			for {
+				page, pageErr := sess.GetHistoryPage(termgo.HistoryPageOptions{
+					StartSeq:          startSeq,
+					EndSeq:            snapshotEnd,
+					HistoryGeneration: historyGeneration,
+					MaxBytes:          maxTerminalHistoryPageBytes,
+				})
+				if pageErr != nil {
+					t.Fatalf("GetHistoryPage(start=%d) error = %v", startSeq, pageErr)
+				}
+				pageCount++
+				if pageCount == 1 {
+					snapshotEnd = page.SnapshotEndSequence
+					historyGeneration = page.HistoryGeneration
+				} else if page.SnapshotEndSequence != snapshotEnd || page.HistoryGeneration != historyGeneration {
+					t.Fatalf("page snapshot changed: end=%d/%d generation=%d/%d", page.SnapshotEndSequence, snapshotEnd, page.HistoryGeneration, historyGeneration)
+				}
+				if page.HistoryReset || page.HistoryTruncated {
+					t.Fatalf("fixture replay unexpectedly rebased: reset=%v truncated=%v", page.HistoryReset, page.HistoryTruncated)
+				}
+				for _, chunk := range page.Chunks {
+					if chunk.Sequence <= lastChunkSequence {
+						t.Fatalf("chunk sequence = %d after %d", chunk.Sequence, lastChunkSequence)
+					}
+					lastChunkSequence = chunk.Sequence
+					chunkCount++
+					replayedBytes += int64(len(chunk.Data))
+				}
+				coveredThrough = page.CoveredThroughSequence
+				if !page.HasMore {
+					if coveredThrough != snapshotEnd {
+						t.Fatalf("terminal coverage = %d, want snapshot end %d", coveredThrough, snapshotEnd)
+					}
+					break
+				}
+				if page.NextStartSeq <= startSeq {
+					t.Fatalf("next start sequence = %d after %d", page.NextStartSeq, startSeq)
+				}
+				startSeq = page.NextStartSeq
+			}
+			if replayedBytes != stats.TotalBytes {
+				t.Fatalf("replayed bytes = %d, want retained bytes %d", replayedBytes, stats.TotalBytes)
+			}
+
+			report := fixtureReport{
+				FixtureID:              fixture.name,
+				RequestedBytes:         fixture.bytes,
+				ActualBytes:            stats.TotalBytes,
+				PageCount:              pageCount,
+				ChunkCount:             chunkCount,
+				RetainedChunks:         stats.TotalChunks,
+				ReplayedBytes:          replayedBytes,
+				SnapshotEndSequence:    snapshotEnd,
+				CoveredThroughSequence: coveredThrough,
+				HistoryGeneration:      historyGeneration,
+				AttachMilliseconds:     time.Since(attachStarted).Milliseconds(),
+				ReplayMilliseconds:     time.Since(replayStarted).Milliseconds(),
+			}
+			reports = append(reports, report)
+			t.Logf("fixture=%s total_bytes=%d pages=%d chunks=%d attach_ms=%d replay_ms=%d snapshot_end=%d covered_through=%d", fixture.name, report.ActualBytes, report.PageCount, report.ChunkCount, report.AttachMilliseconds, report.ReplayMilliseconds, report.SnapshotEndSequence, report.CoveredThroughSequence)
+		})
+	}
+
+	if reportPath := strings.TrimSpace(os.Getenv("REDEVEN_TERMINAL_HISTORY_REPORT")); reportPath != "" {
+		payload, err := json.MarshalIndent(map[string]any{
+			"schema_version": 1,
+			"status":         "passed",
+			"fixtures":       reports,
+		}, "", "  ")
+		if err != nil {
+			t.Fatalf("MarshalIndent(report): %v", err)
+		}
+		if err := os.MkdirAll(filepath.Dir(reportPath), 0o755); err != nil {
+			t.Fatalf("MkdirAll(report): %v", err)
+		}
+		if err := os.WriteFile(reportPath, append(payload, '\n'), 0o644); err != nil {
+			t.Fatalf("WriteFile(report): %v", err)
+		}
 	}
 }
 
@@ -2057,6 +2227,12 @@ func TestNewTerminalGoManagerConfigUsesRedevenShellIntegration(t *testing.T) {
 	}
 	if !writer.EnableCommandLifecycle {
 		t.Fatalf("expected writer command lifecycle integration to be enabled")
+	}
+	if cfg.HistoryBufferSize != terminalHistoryBufferSize {
+		t.Fatalf("HistoryBufferSize = %d, want %d", cfg.HistoryBufferSize, terminalHistoryBufferSize)
+	}
+	if cfg.HistoryBufferMaxChunks != terminalHistoryBufferMaxChunks {
+		t.Fatalf("HistoryBufferMaxChunks = %d, want %d", cfg.HistoryBufferMaxChunks, terminalHistoryBufferMaxChunks)
 	}
 	if cfg.HistoryBufferMaxBytes != terminalHistoryBufferMaxBytes {
 		t.Fatalf("HistoryBufferMaxBytes = %d, want %d", cfg.HistoryBufferMaxBytes, terminalHistoryBufferMaxBytes)
