@@ -1723,9 +1723,11 @@ func TestPermissionPolicy_SubagentApprovalDelegatesToParentRun(t *testing.T) {
 		IdempotencyKey:  "idem-delegated-approve",
 		DelegatedRef:    action.DelegatedRef,
 	}
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, approveReq); err != nil {
+	approvalReceipt, err := svc.SubmitFlowerApproval(parent.sessionMeta, approveReq)
+	if err != nil {
 		t.Fatalf("SubmitFlowerApproval delegated approve: %v", err)
 	}
+	assertFlowerApprovalReceiptCursor(t, svc, parent.endpointID, parent.threadID, action.ActionID, approvalReceipt)
 	select {
 	case res := <-done:
 		if res.err != nil {

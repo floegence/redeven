@@ -13,6 +13,33 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
+func assertFlowerApprovalReceiptCursor(t *testing.T, svc *Service, endpointID string, threadID string, actionID string, resp *SubmitFlowerApprovalResponse) {
+	t.Helper()
+	if resp == nil || !resp.OK || resp.CurrentCursor <= 0 {
+		t.Fatalf("approval receipt=%#v, want positive resolved cursor", resp)
+	}
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
+	stream := svc.flowerLiveByThread[runThreadKey(endpointID, threadID)]
+	if stream == nil {
+		t.Fatalf("missing Flower live stream for approval receipt")
+	}
+	for _, event := range stream.Events {
+		if event.Seq != resp.CurrentCursor {
+			continue
+		}
+		if event.Kind != FlowerLiveApprovalResolved {
+			t.Fatalf("receipt cursor event kind=%q, want %q", event.Kind, FlowerLiveApprovalResolved)
+		}
+		var payload FlowerLiveApprovalPayload
+		if !decodeFlowerPayload(event.Payload, &payload) || payload.Action.ActionID != actionID {
+			t.Fatalf("receipt cursor payload=%s, want action %q", string(event.Payload), actionID)
+		}
+		return
+	}
+	t.Fatalf("receipt cursor %d missing from Flower live stream", resp.CurrentCursor)
+}
+
 func appendFlowerTimelineTestMessage(t *testing.T, store *threadstore.Store, endpointID string, threadID string, messageID string, role string, text string, createdAtMs int64) {
 	t.Helper()
 	raw, err := json.Marshal(map[string]any{
@@ -656,13 +683,15 @@ func TestFlowerApprovalQueueSerializesDecisionsWithoutSerializingHandlers(t *tes
 	}); !errors.Is(err, ErrApprovalConflict) {
 		t.Fatalf("non-head submit error=%v, want ErrApprovalConflict", err)
 	}
-	if _, err := svc.SubmitFlowerApproval(meta, SubmitFlowerApprovalRequest{
+	firstReceipt, err := svc.SubmitFlowerApproval(meta, SubmitFlowerApprovalRequest{
 		ThreadID: r.threadID, Origin: FlowerApprovalOriginControlConfirm, RunID: r.id, ActionID: firstID, ToolID: "tool_first",
 		Approved: true, ExpectedSeq: first.ExpectedSeq, Revision: first.Revision, Version: first.Version, SurfaceEpoch: first.SurfaceEpoch,
 		QueueGeneration: queue.Generation, QueueRevision: queue.Revision,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("approve head: %v", err)
 	}
+	assertFlowerApprovalReceiptCursor(t, svc, meta.EndpointID, r.threadID, firstID, firstReceipt)
 	select {
 	case approved := <-firstDecision:
 		if !approved {

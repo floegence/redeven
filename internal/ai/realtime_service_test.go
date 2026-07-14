@@ -2062,7 +2062,7 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 	if len(advanced.Events) == 0 {
 		t.Fatalf("missing event after approval request")
 	}
-	if _, err := svc.SubmitFlowerApproval(&meta, SubmitFlowerApprovalRequest{
+	approvalReceipt, err := svc.SubmitFlowerApproval(&meta, SubmitFlowerApprovalRequest{
 		ThreadID:        th.ThreadID,
 		RunID:           runID,
 		ActionID:        payload.Action.ActionID,
@@ -2074,9 +2074,11 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 		SurfaceEpoch:    payload.Action.SurfaceEpoch,
 		QueueGeneration: payload.Action.QueueGeneration,
 		QueueRevision:   approvalQueueRevisionForTest(svc, meta.EndpointID, th.ThreadID),
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("SubmitFlowerApproval with event payload: %v", err)
 	}
+	assertFlowerApprovalReceiptCursor(t, svc, meta.EndpointID, th.ThreadID, payload.Action.ActionID, approvalReceipt)
 	if got := <-r.toolApprovals["tool_live_approval_seq"].decision; got {
 		t.Fatalf("approval decision=%v, want rejected", got)
 	}

@@ -5335,7 +5335,8 @@ html.dark .flower-component-shell {
   cursor: wait;
 }
 
-.flower-composer:focus-within {
+.flower-composer:focus-within,
+.flower-composer[data-flower-approval-handoff='true'] {
   border-color: color-mix(in srgb, var(--primary) 48%, transparent);
   box-shadow:
     0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent),
@@ -5357,10 +5358,9 @@ html.dark .flower-component-shell {
 }
 
 .flower-composer-approval-actions {
-  display: inline-flex;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(5.5rem, 1fr));
   min-width: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
   gap: 0.5rem;
 }
 
@@ -5390,12 +5390,20 @@ html.dark .flower-component-shell {
 }
 
 .flower-composer-approval-decision {
+  width: 100%;
   min-height: 2.25rem;
   cursor: pointer;
 }
 
 .flower-composer-approval-decision:disabled {
   cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flower-composer:focus-within,
+  .flower-composer[data-flower-approval-handoff='true'] {
+    transition: none;
+  }
 }
 
 .flower-composer-readonly-chip {

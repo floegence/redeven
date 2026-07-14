@@ -180,6 +180,42 @@ describe('Env local Flower surface adapter', () => {
     expect(bootstrap.thread.status).toBe('canceled');
   });
 
+  it('returns the approval decision receipt from the local API', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_receipt/approvals' && init?.method === 'POST') {
+        return jsonResponse({ ok: true, current_cursor: 42 });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+    });
+
+    const receipt = await adapter.submitApproval({
+      thread_id: 'thread_receipt',
+      origin: 'main_tool',
+      run_id: 'run_receipt',
+      action_id: 'approval_receipt',
+      tool_id: 'tool_receipt',
+      approved: true,
+      expected_seq: 40,
+      revision: 1,
+      version: 1,
+      surface_epoch: 1,
+      queue_generation: 1,
+      queue_revision: 1,
+    });
+
+    expect(receipt).toEqual({ ok: true, current_cursor: 42 });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      thread_id: 'thread_receipt',
+      action_id: 'approval_receipt',
+      approved: true,
+    });
+  });
+
   it('compacts a thread through RPC and reloads the live bootstrap', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/ai/threads/thread_compact/live/bootstrap' && init?.method === 'GET') {

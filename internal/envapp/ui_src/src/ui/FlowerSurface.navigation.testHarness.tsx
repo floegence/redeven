@@ -78,11 +78,14 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
         type="button"
         class={props.class}
         aria-label={props['aria-label']}
+        aria-busy={props['aria-busy']}
         title={props.title}
         disabled={props.disabled}
+        data-loading={props.loading ? 'true' : undefined}
         onClick={props.onClick}
       >
         {props.icon ? <Dynamic component={props.icon} /> : null}
+        <Show when={props.loading}><span data-floe-button-spinner="true" aria-hidden="true" /></Show>
         {props.children}
       </button>
     );
@@ -667,7 +670,7 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
     }))),
     stopThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, status: 'canceled' }))),
     submitInput: vi.fn(async () => liveBootstrap(thread({ status: 'running' }))),
-    submitApproval: vi.fn(async () => undefined),
+    submitApproval: vi.fn(async () => ({ ok: true, current_cursor: 1 })),
   };
 }
 
