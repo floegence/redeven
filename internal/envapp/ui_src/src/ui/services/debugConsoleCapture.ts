@@ -503,7 +503,6 @@ function projectTerminalInputRequest(payload: unknown): Record<string, unknown> 
 function projectTerminalAttachRequest(payload: unknown): Record<string, unknown> {
   const record = objectRecord(payload);
   return {
-    attach_generation: finiteNumber(record.attach_generation),
     cols: finiteNumber(record.cols),
     rows: finiteNumber(record.rows),
   };
