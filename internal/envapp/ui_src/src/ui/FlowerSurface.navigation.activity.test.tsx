@@ -11,6 +11,7 @@ vi.mock('../../../../flower_ui/src/clipboard', () => ({
 import type {
   FlowerActivityStatus,
   FlowerLiveEvent,
+  FlowerLiveEventsResponse,
   FlowerThreadSnapshot,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
@@ -1882,6 +1883,8 @@ describe('FlowerSurface navigation activity', () => {
       version: 3,
       surface_epoch: 7,
       surface_role: 'primary_action' as const,
+      queue_generation: 1,
+      queue_order: 1,
       scope: 'thread_delegated_wait',
       requested_at_ms: 7_250,
       can_approve: true,
@@ -1911,6 +1914,7 @@ describe('FlowerSurface navigation activity', () => {
       title: 'Delegated approval',
       status: 'waiting_approval',
       approval_actions: [delegatedAction],
+      approval_queue: { generation: 1, revision: 1, current_action_id: 'dappr-terminal', current_position: 1, total: 1, unresolved_count: 1 },
       messages: [
         {
           id: 'm-delegated-approval',
@@ -1958,6 +1962,7 @@ describe('FlowerSurface navigation activity', () => {
           approval_actions: {
             'dappr-terminal': delegatedAction,
           },
+          approval_queue: delegatedThread.approval_queue,
         },
       })),
       submitApproval,
@@ -1993,12 +1998,14 @@ describe('FlowerSurface navigation activity', () => {
       action_id: 'dappr-terminal',
       version: 3,
       surface_epoch: 7,
+      queue_generation: 1,
+      queue_revision: 1,
       idempotency_key: 'dappr-terminal:approve:3:7',
       delegated_ref: delegatedAction.delegated_ref,
     }));
   });
 
-  it('shows the oldest composer approval with a compact queue count', async () => {
+  it('shows the backend-selected composer approval and focuses each promoted card', async () => {
     const firstApproval = {
       action_id: 'appr-first',
       origin: 'main_tool' as const,
@@ -2012,6 +2019,11 @@ describe('FlowerSurface navigation activity', () => {
       requested_at_ms: 7_100,
       can_approve: true,
       expected_seq: 21,
+      surface_role: 'primary_action' as const,
+      queue_generation: 1,
+      queue_order: 1,
+      batch_index: 0,
+      batch_size: 2,
       summary: {
         label: 'First command',
         command: 'npm test',
@@ -2024,6 +2036,10 @@ describe('FlowerSurface navigation activity', () => {
       tool_id: 'tool-second',
       requested_at_ms: 7_200,
       expected_seq: 22,
+      surface_role: 'locator' as const,
+      can_approve: false,
+      queue_order: 2,
+      batch_index: 1,
       summary: {
         label: 'Second command',
         command: 'npm run lint',
@@ -2035,6 +2051,16 @@ describe('FlowerSurface navigation activity', () => {
       title: 'Approval queue',
       status: 'waiting_approval',
       approval_actions: [secondApproval, firstApproval],
+      approval_queue: { generation: 1, revision: 2, current_action_id: 'appr-first', current_position: 1, total: 2, unresolved_count: 2 },
+    });
+    const promotedEvents = deferred<FlowerLiveEventsResponse>();
+    let deliveredPromotion = false;
+    const listThreadLiveEvents = vi.fn(async (_threadID: string, afterSeq: number) => {
+      if (!deliveredPromotion && afterSeq === 22) {
+        deliveredPromotion = true;
+        return promotedEvents.promise;
+      }
+      return { stream_generation: 1, events: [], next_cursor: afterSeq, retained_from_seq: 1 };
     });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -2050,8 +2076,10 @@ describe('FlowerSurface navigation activity', () => {
             'appr-first': firstApproval,
             'appr-second': secondApproval,
           },
+          approval_queue: approvalThread.approval_queue,
         },
       })),
+      listThreadLiveEvents,
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-approval-queue"] button')));
@@ -2062,6 +2090,45 @@ describe('FlowerSurface navigation activity', () => {
     expect(composer.textContent).toContain('npm test');
     expect(composer.textContent).not.toContain('npm run lint');
     expect(composer.textContent).toContain('Flower wants to execute a shell command');
+    expect(composer.textContent).toContain('1 / 2');
+
+    promotedEvents.resolve({
+      stream_generation: 1,
+      events: [{
+        schema_version: 1,
+        seq: 23,
+        endpoint_id: 'test-runtime',
+        thread_id: approvalThread.thread_id,
+        run_id: firstApproval.run_id,
+        at_unix_ms: 7_300,
+        kind: 'approval.resolved',
+        payload: {
+          action: { ...firstApproval, state: 'approved', status: 'resolved', can_approve: false, resolved_at_ms: 7_300 },
+          approval_queue: { generation: 1, revision: 3, current_action_id: 'appr-second', current_position: 2, total: 2, unresolved_count: 1 },
+        },
+      }, {
+        schema_version: 1,
+        seq: 24,
+        endpoint_id: 'test-runtime',
+        thread_id: approvalThread.thread_id,
+        run_id: secondApproval.run_id,
+        at_unix_ms: 7_301,
+        kind: 'approval.requested',
+        payload: {
+          action: { ...secondApproval, surface_role: 'primary_action', can_approve: true, expires_at_ms: 67_301 },
+          approval_queue: { generation: 1, revision: 3, current_action_id: 'appr-second', current_position: 2, total: 2, unresolved_count: 1 },
+        },
+      }] satisfies FlowerLiveEvent[],
+      next_cursor: 24,
+      retained_from_seq: 1,
+    });
+    await waitFor(() => Boolean(composer.querySelector('[data-flower-approval-action-id="appr-second"]')));
+    await waitFor(() => document.activeElement?.getAttribute('data-flower-approval-action-id') === 'appr-second');
+    expect(composer.textContent).toContain('npm run lint');
+    expect(composer.textContent).not.toContain('npm test');
+    expect(composer.textContent).toContain('2 / 2');
+    expect(composer.querySelector('[role="status"][aria-live="polite"]')?.textContent).toBe('Approval 2 of 2');
+    expect((document.activeElement as HTMLElement | null)?.tagName).toBe('SECTION');
   });
 
   it('refreshes canonical thread state when an approval decision is stale', async () => {

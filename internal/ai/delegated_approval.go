@@ -21,18 +21,28 @@ const (
 )
 
 type delegatedApprovalHandle struct {
-	mu         sync.Mutex
-	done       chan struct{}
-	action     FlowerApprovalAction
-	endpointID string
-	parentUser string
-	decided    bool
-	allow      bool
+	mu           sync.Mutex
+	done         chan struct{}
+	promoted     chan struct{}
+	promotedOnce sync.Once
+	action       FlowerApprovalAction
+	endpointID   string
+	parentUser   string
+	decided      bool
+	canceled     bool
+	allow        bool
 }
 
 func (h *delegatedApprovalHandle) wait(ctx context.Context, timeout time.Duration) (bool, error) {
 	if h == nil {
 		return false, errors.New("delegated approval unavailable")
+	}
+	select {
+	case <-h.promoted:
+	case <-h.done:
+		return false, errors.New("delegated approval unavailable")
+	case <-ctx.Done():
+		return false, ctx.Err()
 	}
 	if timeout <= 0 {
 		timeout = 10 * time.Minute
@@ -44,8 +54,9 @@ func (h *delegatedApprovalHandle) wait(ctx context.Context, timeout time.Duratio
 		h.mu.Lock()
 		allow := h.allow
 		decided := h.decided
+		canceled := h.canceled
 		h.mu.Unlock()
-		if !decided {
+		if !decided || canceled {
 			return false, errors.New("delegated approval unavailable")
 		}
 		return allow, nil
@@ -54,6 +65,13 @@ func (h *delegatedApprovalHandle) wait(ctx context.Context, timeout time.Duratio
 	case <-timer.C:
 		return false, errors.New("Approval timed out")
 	}
+}
+
+func (h *delegatedApprovalHandle) promote() {
+	if h == nil || h.promoted == nil {
+		return
+	}
+	h.promotedOnce.Do(func() { close(h.promoted) })
 }
 
 func (h *delegatedApprovalHandle) resolve(allow bool) error {
@@ -69,6 +87,20 @@ func (h *delegatedApprovalHandle) resolve(allow bool) error {
 	h.decided = true
 	close(h.done)
 	return nil
+}
+
+func (h *delegatedApprovalHandle) cancel() {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.decided {
+		return
+	}
+	h.canceled = true
+	close(h.done)
+	h.decided = true
 }
 
 func (s *Service) registerDelegatedApproval(parent *run, child *run, req fltools.ApprovalRequest) (*delegatedApprovalHandle, bool, error) {
@@ -120,6 +152,7 @@ func (s *Service) registerDelegatedApproval(parent *run, child *run, req fltools
 	}
 	handle := &delegatedApprovalHandle{
 		done:       make(chan struct{}),
+		promoted:   make(chan struct{}),
 		action:     action,
 		endpointID: strings.TrimSpace(parent.endpointID),
 		parentUser: runUserPublicID(parent),
@@ -127,7 +160,7 @@ func (s *Service) registerDelegatedApproval(parent *run, child *run, req fltools
 	s.delegatedApprovals[actionID] = handle
 	s.mu.Unlock()
 
-	s.appendFlowerLiveEvent(FlowerLiveEvent{
+	event := s.appendFlowerLiveEvent(FlowerLiveEvent{
 		EndpointID: strings.TrimSpace(parent.endpointID),
 		ThreadID:   strings.TrimSpace(parent.threadID),
 		RunID:      strings.TrimSpace(parent.id),
@@ -135,6 +168,28 @@ func (s *Service) registerDelegatedApproval(parent *run, child *run, req fltools
 		Kind:       FlowerLiveApprovalRequested,
 		Payload:    mustFlowerPayload(FlowerLiveApprovalPayload{Action: action}),
 	})
+	var payload FlowerLiveApprovalPayload
+	if decodeFlowerPayload(event.Payload, &payload) && payload.Action.ActionID == actionID {
+		handle.mu.Lock()
+		handle.action = payload.Action
+		handle.mu.Unlock()
+		if s.threadsDB != nil {
+			ctx, cancel := s.delegatedApprovalPersistContext()
+			updated, err := s.threadsDB.UpdatePendingDelegatedApprovalPresentation(ctx, delegatedApprovalRecordFromAction(strings.TrimSpace(parent.endpointID), runUserPublicID(parent), payload.Action))
+			cancel()
+			if err != nil || !updated {
+				reason := "failed to persist delegated approval queue state"
+				if err != nil {
+					reason = err.Error()
+				}
+				s.markDelegatedApprovalUnavailable(actionID, reason)
+				if err != nil {
+					return nil, false, err
+				}
+				return nil, false, errors.New(reason)
+			}
+		}
+	}
 	return handle, true, nil
 }
 
@@ -185,6 +240,7 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 
 	s.mu.Lock()
 	cursor := s.flowerLiveCursorLocked(endpointID, threadID)
+	queueErr := s.validateApprovalQueueSubmissionLocked(endpointID, threadID, actionID, req.QueueGeneration, req.QueueRevision)
 	var liveAction FlowerApprovalAction
 	if stream := s.flowerLiveByThread[runThreadKey(endpointID, threadID)]; stream != nil && stream.State.ApprovalActions != nil {
 		liveAction = stream.State.ApprovalActions[actionID]
@@ -227,6 +283,9 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 			}
 			return nil, ErrRunChanged
 		}
+	}
+	if queueErr != nil {
+		return nil, queueErr
 	}
 	if handle == nil {
 		if s.threadsDB != nil {
@@ -428,6 +487,7 @@ func (s *Service) markDelegatedApprovalUnavailable(actionID string, reason strin
 	if handle == nil {
 		return
 	}
+	handle.cancel()
 	action := handle.action
 	action.Status = FlowerApprovalStatusUnavailable
 	action.State = FlowerApprovalStateUnavailable
@@ -706,8 +766,10 @@ func delegatedApprovalAction(parent *run, child *run, req fltools.ApprovalReques
 		SurfaceRole:         FlowerApprovalSurfacePrimaryAction,
 		Scope:               delegatedApprovalScopeThreadDelegatedWait,
 		RequestedAtMs:       requestedAt,
-		ExpiresAtMs:         expiresAt,
+		ExpiresAtMs:         0,
 		CanApprove:          true,
+		BatchIndex:          req.BatchIndex,
+		BatchSize:           max(1, req.BatchSize),
 		DelegatedRef:        &ref,
 		DeliveryState:       FlowerApprovalDeliveryWaiting,
 		ChildExecutionState: FlowerApprovalChildExecutionPending,

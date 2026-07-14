@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
@@ -56,6 +57,17 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 		r.applyFloretThreadProjection(*ev.Projection)
 	}
 	r.recordFloretActivityEvent(ev)
+	if ev.Type == observation.EventTypeToolCall || ev.Type == observation.EventTypeToolDispatchStarted || ev.Type == observation.EventTypeToolResult {
+		r.persistRunEvent("floret.tool.lifecycle", RealtimeStreamKindTool, map[string]any{
+			"event_type":          strings.TrimSpace(ev.Type),
+			"step_index":          ev.Step,
+			"tool_id":             strings.TrimSpace(ev.ToolID),
+			"tool_name":           strings.TrimSpace(ev.ToolName),
+			"batch_index":         ev.Metadata["batch_index"],
+			"batch_size":          ev.Metadata["batch_size"],
+			"recorded_at_unix_ms": time.Now().UnixMilli(),
+		})
+	}
 	switch ev.Type {
 	case floretEventProviderRequest:
 		r.updateModelIOStatus(FlowerModelIOPhaseWaitingResponse, ev.Step)

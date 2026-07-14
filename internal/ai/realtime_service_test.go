@@ -2063,13 +2063,17 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 		t.Fatalf("missing event after approval request")
 	}
 	if _, err := svc.SubmitFlowerApproval(&meta, SubmitFlowerApprovalRequest{
-		ThreadID:    th.ThreadID,
-		RunID:       runID,
-		ActionID:    payload.Action.ActionID,
-		ToolID:      payload.Action.ToolID,
-		Approved:    false,
-		ExpectedSeq: payload.Action.ExpectedSeq,
-		Revision:    payload.Action.Revision,
+		ThreadID:        th.ThreadID,
+		RunID:           runID,
+		ActionID:        payload.Action.ActionID,
+		ToolID:          payload.Action.ToolID,
+		Approved:        false,
+		ExpectedSeq:     payload.Action.ExpectedSeq,
+		Revision:        payload.Action.Revision,
+		Version:         payload.Action.Version,
+		SurfaceEpoch:    payload.Action.SurfaceEpoch,
+		QueueGeneration: payload.Action.QueueGeneration,
+		QueueRevision:   approvalQueueRevisionForTest(svc, meta.EndpointID, th.ThreadID),
 	}); err != nil {
 		t.Fatalf("SubmitFlowerApproval with event payload: %v", err)
 	}

@@ -12,7 +12,7 @@ import type {
 import { mapFlowerLiveBootstrap, mapFlowerLiveEvents } from './flowerLiveMapper';
 import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
 
-type FlowerMainToolApprovalAction = Extract<FlowerApprovalAction, { origin: 'main_tool' }>;
+type FlowerMainToolApprovalAction = Exclude<FlowerApprovalAction, { origin: 'delegated_subagent' }>;
 
 function readStatus(overrides: Record<string, unknown> = {}) {
   return {
@@ -1895,6 +1895,9 @@ describe('Flower live projection', () => {
       version: 1,
       surface_epoch: 1,
       surface_role: 'primary_action' as const,
+      primary_wait_anchor: 'thread:th-live',
+      queue_generation: 1,
+      queue_order: actionID === 'dappr-second' ? 1 : 2,
       requested_at_ms: requestedAtMs,
       can_approve: true,
       delivery_state: 'waiting_decision' as const,
@@ -1914,28 +1917,29 @@ describe('Flower live projection', () => {
     const second = action('dappr-second', 2000, 'second');
 
     const applied = applyEvents(initial, 0, [
-      event(1, 'approval.requested', { action: second }),
-      event(2, 'approval.requested', { action: first }),
+      event(1, 'approval.requested', { action: second, approval_queue: { generation: 1, revision: 1, current_action_id: 'dappr-second', current_position: 1, total: 1, unresolved_count: 1 } }),
+      event(2, 'approval.requested', { action: { ...first, surface_role: 'locator', can_approve: false }, approval_queue: { generation: 1, revision: 2, current_action_id: 'dappr-second', current_position: 1, total: 2, unresolved_count: 2 } }),
     ]);
 
     expect(applied.thread.approval_actions?.map((item) => [item.action_id, item.surface_role, item.primary_wait_anchor])).toEqual([
-      ['dappr-first', 'primary_action', 'thread:th-live'],
-      ['dappr-second', 'locator', 'thread:th-live'],
+      ['dappr-second', 'primary_action', 'thread:th-live'],
+      ['dappr-first', 'locator', 'thread:th-live'],
     ]);
 
     const afterResolve = applyEvents(applied.thread, applied.cursor, [
       event(3, 'approval.resolved', {
         action: {
-          ...first,
+          ...second,
           state: 'rejected',
           status: 'resolved',
           can_approve: false,
           delivery_state: 'delivery_delivered',
         },
+        approval_queue: { generation: 1, revision: 3, current_action_id: 'dappr-first', current_position: 2, total: 2, unresolved_count: 1 },
       }),
     ]);
 
-    expect(afterResolve.thread.approval_actions?.find((item) => item.action_id === 'dappr-second')).toMatchObject({
+    expect(afterResolve.thread.approval_actions?.find((item) => item.action_id === 'dappr-first')).toMatchObject({
       surface_role: 'primary_action',
       can_approve: true,
     });

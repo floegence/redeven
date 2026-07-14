@@ -9,7 +9,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 )
 
-const capabilityResolverVersion = 3
+const capabilityResolverVersion = 4
 
 type explicitCapabilityMetadata struct {
 	MaxContextTokens     int
@@ -107,7 +107,6 @@ func capabilitiesEquivalent(a model.ModelCapability, b model.ModelCapability) bo
 		a.ProviderType == b.ProviderType &&
 		a.ResolverVersion == b.ResolverVersion &&
 		a.SupportsTools == b.SupportsTools &&
-		a.SupportsParallelTools == b.SupportsParallelTools &&
 		a.SupportsStrictJSONSchema == b.SupportsStrictJSONSchema &&
 		a.SupportsImageInput == b.SupportsImageInput &&
 		a.SupportsFileInput == b.SupportsFileInput &&
@@ -141,7 +140,6 @@ func defaultCapability(provider config.AIProvider, modelName string, wireModelNa
 		ModelName:                      modelName,
 		WireModelName:                  wireModelName,
 		SupportsTools:                  true,
-		SupportsParallelTools:          false,
 		SupportsStrictJSONSchema:       true,
 		SupportsImageInput:             false,
 		SupportsFileInput:              false,
@@ -154,7 +152,6 @@ func defaultCapability(provider config.AIProvider, modelName string, wireModelNa
 
 	switch providerType {
 	case "anthropic":
-		cap.SupportsParallelTools = false
 		cap.SupportsStrictJSONSchema = false
 		cap.SupportsAskUserQuestionBatches = false
 		cap.PreferredToolSchemaMode = "relaxed_json"
@@ -191,7 +188,6 @@ func defaultCapability(provider config.AIProvider, modelName string, wireModelNa
 		cap.MaxContextTokens = 64000
 		cap.MaxOutputTokens = 4096
 	case "openai":
-		cap.SupportsParallelTools = false
 		cap.SupportsStrictJSONSchema = true
 		cap.PreferredToolSchemaMode = "json_schema"
 	}

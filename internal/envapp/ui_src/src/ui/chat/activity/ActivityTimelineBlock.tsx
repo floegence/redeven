@@ -293,37 +293,6 @@ function AskUserAudit(props: { item: ActivityItem }) {
   );
 }
 
-function ApprovalActions(props: { messageId: string; item: ActivityItem }) {
-  const ctx = useChatContext();
-  const canApprove = createMemo(() => props.item.requires_approval === true && props.item.approval_state === 'requested');
-  return (
-    <Show when={canApprove()}>
-      <span class="chat-activity-approval-actions">
-        <button
-          type="button"
-          class="chat-activity-approval-btn chat-activity-approval-btn-approve"
-          onClick={(event) => {
-            event.stopPropagation();
-            ctx.approveToolCall(props.messageId, String(props.item.tool_id ?? ''), true);
-          }}
-        >
-          Allow
-        </button>
-        <button
-          type="button"
-          class="chat-activity-approval-btn chat-activity-approval-btn-reject"
-          onClick={(event) => {
-            event.stopPropagation();
-            ctx.approveToolCall(props.messageId, String(props.item.tool_id ?? ''), false);
-          }}
-        >
-          Deny
-        </button>
-      </span>
-    </Show>
-  );
-}
-
 function DetailLines(props: { block: Extract<FlowerActivityDetailBlock, { kind: 'structured' }> }) {
   return (
     <div class="chat-activity-detail-section">
@@ -864,7 +833,6 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                         </Show>
                       </div>
                       <div class="chat-activity-item-actions">
-                        <ApprovalActions messageId={props.messageId} item={item()} />
                         <Show when={rowFileAction()}>
                           {(action) => (
                             <FileActionButtons

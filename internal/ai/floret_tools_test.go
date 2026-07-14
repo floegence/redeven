@@ -161,9 +161,8 @@ func TestFloretTerminalReadDefinitionDeclaresPollingRepeatPolicy(t *testing.T) {
 	t.Parallel()
 
 	def, err := floretToolDefinition(newRun(runOptions{}), ToolDef{
-		Name:         "terminal.read",
-		ParallelSafe: true,
-		Visibility:   ToolVisibilityStandard,
+		Name:       "terminal.read",
+		Visibility: ToolVisibilityStandard,
 	})
 	if err != nil {
 		t.Fatalf("floretToolDefinition: %v", err)
@@ -187,9 +186,8 @@ func TestFloretOpenWorldToolDefinitionUsesConservativeStaticPermission(t *testin
 	r := newRun(runOptions{})
 	r.permissionType = FlowerPermissionApprovalRequired
 	def, err := floretToolDefinition(r, ToolDef{
-		Name:         "web.search",
-		ParallelSafe: true,
-		Visibility:   ToolVisibilitySharedReadonly,
+		Name:       "web.search",
+		Visibility: ToolVisibilitySharedReadonly,
 	})
 	if err != nil {
 		t.Fatalf("floretToolDefinition: %v", err)
@@ -1812,7 +1810,6 @@ func TestSubagentsToolPermissionForDynamicActions(t *testing.T) {
 			def, err := floretToolDefinition(r, ToolDef{
 				Name:         "subagents",
 				Mutating:     false,
-				ParallelSafe: false,
 				Visibility:   ToolVisibilityDelegationControl,
 				Capabilities: []ToolCapabilityClass{ToolCapabilityDelegation},
 				InputSchema:  json.RawMessage(`{"type":"object","properties":{"action":{"type":"string"},"agent_type":{"type":"string"},"interrupt":{"type":"boolean"}},"additionalProperties":false}`),

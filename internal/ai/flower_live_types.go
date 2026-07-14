@@ -423,7 +423,20 @@ type FlowerApprovalAction struct {
 	DeliveryState       FlowerApprovalDeliveryState       `json:"delivery_state,omitempty"`
 	ChildExecutionState FlowerApprovalChildExecutionState `json:"child_execution_state,omitempty"`
 	PrimaryWaitAnchor   string                            `json:"primary_wait_anchor,omitempty"`
+	QueueGeneration     int64                             `json:"queue_generation"`
+	QueueOrder          int64                             `json:"queue_order"`
+	BatchIndex          int                               `json:"batch_index"`
+	BatchSize           int                               `json:"batch_size"`
 	Summary             FlowerApprovalSummary             `json:"summary"`
+}
+
+type FlowerApprovalQueue struct {
+	Generation      int64  `json:"generation"`
+	Revision        int64  `json:"revision"`
+	CurrentActionID string `json:"current_action_id,omitempty"`
+	CurrentPosition int    `json:"current_position"`
+	Total           int    `json:"total"`
+	UnresolvedCount int    `json:"unresolved_count"`
 }
 
 type FlowerApprovalSummary struct {
@@ -443,7 +456,8 @@ type FlowerSafeTarget struct {
 }
 
 type FlowerLiveApprovalPayload struct {
-	Action FlowerApprovalAction `json:"action"`
+	Action        FlowerApprovalAction `json:"action"`
+	ApprovalQueue *FlowerApprovalQueue `json:"approval_queue,omitempty"`
 }
 
 type FlowerLiveInputRequestedPayload struct {
@@ -573,6 +587,7 @@ type FlowerLiveMaterializedState struct {
 	TimelineDecorations []FlowerTimelineDecoration        `json:"timeline_decorations,omitempty"`
 	ApprovalActions     map[string]FlowerApprovalAction   `json:"approval_actions"`
 	ApprovalActionsSeen bool                              `json:"-"`
+	ApprovalQueue       *FlowerApprovalQueue              `json:"approval_queue,omitempty"`
 	InputRequests       map[string]RequestUserInputPrompt `json:"input_requests"`
 }
 
@@ -585,6 +600,7 @@ func (s FlowerLiveMaterializedState) MarshalJSON() ([]byte, error) {
 		ContextCompactions  []FlowerContextCompaction         `json:"context_compactions,omitempty"`
 		TimelineDecorations []FlowerTimelineDecoration        `json:"timeline_decorations,omitempty"`
 		ApprovalActions     *map[string]FlowerApprovalAction  `json:"approval_actions,omitempty"`
+		ApprovalQueue       *FlowerApprovalQueue              `json:"approval_queue,omitempty"`
 		InputRequests       map[string]RequestUserInputPrompt `json:"input_requests"`
 	}
 	var approvals *map[string]FlowerApprovalAction
@@ -603,6 +619,7 @@ func (s FlowerLiveMaterializedState) MarshalJSON() ([]byte, error) {
 		ContextCompactions:  s.ContextCompactions,
 		TimelineDecorations: s.TimelineDecorations,
 		ApprovalActions:     approvals,
+		ApprovalQueue:       cloneFlowerApprovalQueue(s.ApprovalQueue),
 		InputRequests:       s.InputRequests,
 	})
 }
@@ -616,6 +633,7 @@ func (s *FlowerLiveMaterializedState) UnmarshalJSON(data []byte) error {
 		ContextCompactions  []FlowerContextCompaction         `json:"context_compactions,omitempty"`
 		TimelineDecorations []FlowerTimelineDecoration        `json:"timeline_decorations,omitempty"`
 		ApprovalActions     *map[string]FlowerApprovalAction  `json:"approval_actions,omitempty"`
+		ApprovalQueue       *FlowerApprovalQueue              `json:"approval_queue,omitempty"`
 		InputRequests       map[string]RequestUserInputPrompt `json:"input_requests"`
 	}
 	var raw flowerLiveMaterializedStateJSON
@@ -629,6 +647,7 @@ func (s *FlowerLiveMaterializedState) UnmarshalJSON(data []byte) error {
 	s.ContextCompactions = raw.ContextCompactions
 	s.TimelineDecorations = raw.TimelineDecorations
 	s.ApprovalActionsSeen = raw.ApprovalActions != nil
+	s.ApprovalQueue = cloneFlowerApprovalQueue(raw.ApprovalQueue)
 	if raw.ApprovalActions != nil {
 		s.ApprovalActions = *raw.ApprovalActions
 	} else {
@@ -661,18 +680,20 @@ type FlowerLiveEventsResponse struct {
 }
 
 type SubmitFlowerApprovalRequest struct {
-	ThreadID       string                `json:"thread_id"`
-	Origin         FlowerApprovalOrigin  `json:"origin,omitempty"`
-	RunID          string                `json:"run_id"`
-	ActionID       string                `json:"action_id"`
-	ToolID         string                `json:"tool_id"`
-	Approved       bool                  `json:"approved"`
-	ExpectedSeq    int64                 `json:"expected_seq"`
-	Revision       int64                 `json:"revision"`
-	Version        int64                 `json:"version,omitempty"`
-	SurfaceEpoch   int64                 `json:"surface_epoch,omitempty"`
-	IdempotencyKey string                `json:"idempotency_key,omitempty"`
-	DelegatedRef   *DelegatedApprovalRef `json:"delegated_ref,omitempty"`
+	ThreadID        string                `json:"thread_id"`
+	Origin          FlowerApprovalOrigin  `json:"origin,omitempty"`
+	RunID           string                `json:"run_id"`
+	ActionID        string                `json:"action_id"`
+	ToolID          string                `json:"tool_id"`
+	Approved        bool                  `json:"approved"`
+	ExpectedSeq     int64                 `json:"expected_seq"`
+	Revision        int64                 `json:"revision"`
+	Version         int64                 `json:"version,omitempty"`
+	SurfaceEpoch    int64                 `json:"surface_epoch,omitempty"`
+	QueueGeneration int64                 `json:"queue_generation"`
+	QueueRevision   int64                 `json:"queue_revision"`
+	IdempotencyKey  string                `json:"idempotency_key,omitempty"`
+	DelegatedRef    *DelegatedApprovalRef `json:"delegated_ref,omitempty"`
 }
 
 type SubmitFlowerApprovalResponse struct {

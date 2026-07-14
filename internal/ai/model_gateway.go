@@ -159,6 +159,26 @@ type openAIProvider struct {
 	client           openai.Client
 	strictToolSchema bool
 	forceChat        bool
+	parallelTools    parallelToolCallsWireMode
+}
+
+type parallelToolCallsWireMode string
+
+const (
+	parallelToolCallsWireOmit   parallelToolCallsWireMode = "omit"
+	parallelToolCallsWireEnable parallelToolCallsWireMode = "enable"
+)
+
+func applyResponsesParallelToolCalls(params *oresponses.ResponseNewParams, mode parallelToolCallsWireMode) {
+	if params != nil && mode == parallelToolCallsWireEnable {
+		params.ParallelToolCalls = openai.Bool(true)
+	}
+}
+
+func applyChatParallelToolCalls(params *openai.ChatCompletionNewParams, mode parallelToolCallsWireMode) {
+	if params != nil && mode == parallelToolCallsWireEnable {
+		params.ParallelToolCalls = openai.Bool(true)
+	}
 }
 
 func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
@@ -173,10 +193,10 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	}
 
 	params := oresponses.ResponseNewParams{
-		Model:             oshared.ResponsesModel(strings.TrimSpace(req.Model)),
-		MaxOutputTokens:   openai.Int(modelGatewayDefaultMaxOutputTokens),
-		ParallelToolCalls: openai.Bool(false),
+		Model:           oshared.ResponsesModel(strings.TrimSpace(req.Model)),
+		MaxOutputTokens: openai.Int(modelGatewayDefaultMaxOutputTokens),
 	}
+	applyResponsesParallelToolCalls(&params, p.parallelTools)
 	if req.Budgets.MaxOutputToken > 0 {
 		params.MaxOutputTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
 	}
@@ -533,11 +553,11 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 	}
 
 	params := openai.ChatCompletionNewParams{
-		Model:             oshared.ChatModel(strings.TrimSpace(req.Model)),
-		Messages:          messages,
-		ParallelToolCalls: openai.Bool(false),
-		StreamOptions:     openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Bool(true)},
+		Model:         oshared.ChatModel(strings.TrimSpace(req.Model)),
+		Messages:      messages,
+		StreamOptions: openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Bool(true)},
 	}
+	applyChatParallelToolCalls(&params, p.parallelTools)
 	if req.Budgets.MaxOutputToken > 0 {
 		params.MaxTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
 	}
@@ -743,10 +763,9 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 	}
 
 	params := openai.ChatCompletionNewParams{
-		Model:             oshared.ChatModel(strings.TrimSpace(req.Model)),
-		Messages:          messages,
-		ParallelToolCalls: openai.Bool(false),
-		StreamOptions:     openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Bool(true)},
+		Model:         oshared.ChatModel(strings.TrimSpace(req.Model)),
+		Messages:      messages,
+		StreamOptions: openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Bool(true)},
 	}
 	if req.Budgets.MaxOutputToken > 0 {
 		params.MaxTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
@@ -988,9 +1007,8 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 	}
 
 	params := openai.ChatCompletionNewParams{
-		Model:             oshared.ChatModel(strings.TrimSpace(req.Model)),
-		Messages:          messages,
-		ParallelToolCalls: openai.Bool(false),
+		Model:    oshared.ChatModel(strings.TrimSpace(req.Model)),
+		Messages: messages,
 	}
 	if req.Budgets.MaxOutputToken > 0 {
 		params.MaxTokens = openai.Int(int64(req.Budgets.MaxOutputToken))
@@ -2074,7 +2092,7 @@ func (r *run) supportsModelGatewayProvider(provider *config.AIProvider) bool {
 	}
 }
 
-func newProviderAdapter(providerType string, baseURL string, apiKey string, strictToolSchemaOverride *bool) (ModelGateway, error) {
+func newProviderAdapter(providerType string, baseURL string, apiKey string, strictToolSchemaOverride *bool, parallelToolCallsOverride ...parallelToolCallsWireMode) (ModelGateway, error) {
 	providerType = strings.ToLower(strings.TrimSpace(providerType))
 	if strings.TrimSpace(apiKey) == "" && providerType != "ollama" {
 		return nil, errors.New("missing provider api key")
@@ -2083,6 +2101,10 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 		apiKey = "ollama"
 	}
 	strictToolSchema := resolveStrictToolSchema(providerType, baseURL, strictToolSchemaOverride)
+	parallelTools := resolveParallelToolCallsWireMode(providerType, baseURL)
+	if len(parallelToolCallsOverride) > 0 {
+		parallelTools = parallelToolCallsOverride[0]
+	}
 	switch providerType {
 	case "openai":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
@@ -2092,6 +2114,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 		return &openAIProvider{
 			client:           openai.NewClient(opts...),
 			strictToolSchema: strictToolSchema,
+			parallelTools:    parallelTools,
 		}, nil
 	case "openai_compatible", "openrouter", "xai", "groq", "ollama":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
@@ -2102,6 +2125,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			client:           openai.NewClient(opts...),
 			strictToolSchema: strictToolSchema,
 			forceChat:        true,
+			parallelTools:    parallelTools,
 		}, nil
 	case "chatglm", "deepseek":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
@@ -2112,6 +2136,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			client:           openai.NewClient(opts...),
 			strictToolSchema: strictToolSchema,
 			forceChat:        true,
+			parallelTools:    parallelTools,
 		}, nil
 	case "qwen":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
@@ -2122,6 +2147,7 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 			client:           openai.NewClient(opts...),
 			strictToolSchema: strictToolSchema,
 			forceChat:        true,
+			parallelTools:    parallelTools,
 		}, nil
 	case "moonshot":
 		opts := []ooption.RequestOption{ooption.WithAPIKey(strings.TrimSpace(apiKey))}
@@ -2141,6 +2167,33 @@ func newProviderAdapter(providerType string, baseURL string, apiKey string, stri
 	default:
 		return nil, fmt.Errorf("unsupported provider type %q", providerType)
 	}
+}
+
+func resolveParallelToolCallsWireMode(providerType string, baseURL string) parallelToolCallsWireMode {
+	providerType = strings.ToLower(strings.TrimSpace(providerType))
+	baseURL = strings.TrimSpace(baseURL)
+	if providerType == "openai" && baseURL == "" {
+		return parallelToolCallsWireEnable
+	}
+	if baseURL == "" {
+		return parallelToolCallsWireOmit
+	}
+	u, err := url.Parse(baseURL)
+	if err != nil || u == nil || !strings.EqualFold(strings.TrimSpace(u.Scheme), "https") {
+		return parallelToolCallsWireOmit
+	}
+	host := strings.ToLower(strings.TrimSpace(u.Hostname()))
+	officialHosts := map[string]map[string]struct{}{
+		"openai":     {"api.openai.com": {}},
+		"qwen":       {"dashscope.aliyuncs.com": {}, "dashscope-intl.aliyuncs.com": {}, "dashscope-us.aliyuncs.com": {}},
+		"openrouter": {"openrouter.ai": {}},
+		"xai":        {"api.x.ai": {}},
+		"groq":       {"api.groq.com": {}},
+	}
+	if _, ok := officialHosts[providerType][host]; ok {
+		return parallelToolCallsWireEnable
+	}
+	return parallelToolCallsWireOmit
 }
 
 func resolveStrictToolSchema(providerType string, baseURL string, override *bool) bool {
@@ -2967,21 +3020,30 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 	})
 
 	ch := make(chan bool, 1)
+	promoted := make(chan struct{})
 	r.mu.Lock()
 	r.toolApprovals[toolID] = &toolApprovalRequest{
 		decision:      ch,
+		promoted:      promoted,
 		toolName:      "task_complete",
 		requestedAtMs: time.Now().UnixMilli(),
 	}
-	r.waitingApproval = true
 	r.mu.Unlock()
+	if r.service == nil {
+		r.promoteToolApproval(toolID)
+	}
 	r.publishControlConfirmationRequested(toolID)
 	defer func() {
 		r.mu.Lock()
 		delete(r.toolApprovals, toolID)
-		r.waitingApproval = false
 		r.mu.Unlock()
 	}()
+	select {
+	case <-promoted:
+	case <-ctx.Done():
+		r.publishToolApprovalResolved(toolID, FlowerApprovalStateCanceled, ctx.Err().Error())
+		return false, ctx.Err()
+	}
 
 	timeout := r.toolApprovalTO
 	if timeout <= 0 {

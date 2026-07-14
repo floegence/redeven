@@ -84,11 +84,12 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		"model":             modelName,
 	})
 	r.persistRunEvent("floret.host_turn.start", RealtimeStreamKindLifecycle, map[string]any{
-		"engine":          "floret",
-		"provider_type":   providerType,
-		"model":           modelName,
-		"max_tool_calls":  modelGatewayHardMaxToolCalls,
-		"permission_type": permissionTypeString(permissionType),
+		"engine":                        "floret",
+		"provider_type":                 providerType,
+		"parallel_tool_calls_wire_mode": string(resolveParallelToolCallsWireMode(providerType, strings.TrimSpace(providerCfg.BaseURL))),
+		"model":                         modelName,
+		"max_tool_calls":                modelGatewayHardMaxToolCalls,
+		"permission_type":               permissionTypeString(permissionType),
 	})
 
 	state := newRuntimeState(taskObjective)

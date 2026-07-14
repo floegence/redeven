@@ -343,10 +343,9 @@ describe('ActivityTimelineBlock', () => {
     });
     const host = renderActivity(block);
 
-    const allow = [...host.querySelectorAll('button')].find((button) => button.textContent === 'Allow') as HTMLButtonElement | undefined;
-    allow?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-    expect(approveToolCallMock).toHaveBeenCalledWith('msg_1', 'tool_patch', true);
+    expect(host.textContent).not.toContain('Allow');
+    expect(host.textContent).not.toContain('Deny');
+    expect(approveToolCallMock).not.toHaveBeenCalled();
     expect(host.textContent).toContain('-old');
   });
 

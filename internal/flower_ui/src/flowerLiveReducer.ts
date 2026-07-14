@@ -6,6 +6,7 @@ import type {
   FlowerTimelineDecoration,
   FlowerInputRequest,
   FlowerLiveBootstrap,
+  FlowerApprovalQueue,
   FlowerLiveBlock,
   FlowerLiveEvent,
   FlowerLiveThreadPatch,
@@ -67,46 +68,28 @@ function visibleApprovalAction(action: FlowerApprovalAction): boolean {
     || action.status === 'unavailable';
 }
 
-function delegatedApprovalPendingDecision(action: FlowerApprovalAction): boolean {
-  return action.origin === 'delegated_subagent'
-    && action.status === 'pending'
-    && action.state === 'requested'
-    && (!action.delivery_state || action.delivery_state === 'waiting_decision');
-}
-
-function delegatedApprovalPrimaryWaitAnchor(action: FlowerApprovalAction): string {
-  return trim(action.primary_wait_anchor)
-    || (trim(action.delegated_ref?.parent_thread_id) ? `thread:${trim(action.delegated_ref?.parent_thread_id)}` : '')
-    || trim(action.scope)
-    || 'thread';
-}
-
-function normalizeDelegatedApprovalSurfaces(actions: readonly FlowerApprovalAction[]): readonly FlowerApprovalAction[] {
-  const pending = actions
-    .filter(delegatedApprovalPendingDecision)
-    .sort((left, right) => {
-      const requestedDelta = Number(left.requested_at_ms ?? 0) - Number(right.requested_at_ms ?? 0);
-      if (requestedDelta !== 0) return requestedDelta;
-      const seqDelta = Number(left.expected_seq ?? 0) - Number(right.expected_seq ?? 0);
-      if (seqDelta !== 0) return seqDelta;
-      return left.action_id.localeCompare(right.action_id);
-    });
-  if (pending.length === 0) return actions;
-  const primaryID = pending[0].action_id;
+function applyApprovalQueueProjection(
+  actions: readonly FlowerApprovalAction[],
+  queue: FlowerApprovalQueue | null | undefined,
+): readonly FlowerApprovalAction[] {
+  const currentActionID = trim(queue?.current_action_id);
+  if (!currentActionID) return actions;
   return actions.map((action) => {
-    if (!delegatedApprovalPendingDecision(action)) return action;
-    const surfaceRole = action.action_id === primaryID ? 'primary_action' : 'locator';
-    if (action.surface_role === surfaceRole && trim(action.primary_wait_anchor)) return action;
+    if (action.status !== 'pending' || action.state !== 'requested') return action;
+    const current = action.action_id === currentActionID;
     return {
       ...action,
-      surface_role: surfaceRole,
-      primary_wait_anchor: delegatedApprovalPrimaryWaitAnchor(action),
+      surface_role: current ? 'primary_action' : 'locator',
+      can_approve: current,
+      ...(current && action.read_only_reason === 'Queued for approval' ? { read_only_reason: undefined } : {}),
     };
   });
 }
 
 function pendingApprovalActions(actions: readonly FlowerApprovalAction[] | undefined): readonly FlowerApprovalAction[] {
-  return normalizeDelegatedApprovalSurfaces(actions ?? []).filter(visibleApprovalAction);
+  return (actions ?? [])
+    .filter(visibleApprovalAction)
+    .sort((left, right) => Number(left.queue_order ?? 0) - Number(right.queue_order ?? 0));
 }
 
 function blockFromLiveBlock(block: FlowerLiveBlock): FlowerChatMessageBlock | null {
@@ -162,9 +145,9 @@ function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadP
 }
 
 function approvalsFromRecord(actions: Readonly<Record<string, FlowerApprovalAction>> | undefined): readonly FlowerApprovalAction[] {
-  return normalizeDelegatedApprovalSurfaces(Object.values(actions ?? {}))
+  return Object.values(actions ?? {})
     .filter(visibleApprovalAction)
-    .sort((left, right) => left.action_id.localeCompare(right.action_id));
+    .sort((left, right) => Number(left.queue_order ?? 0) - Number(right.queue_order ?? 0));
 }
 
 function firstInputRequest(inputRequests: Readonly<Record<string, FlowerInputRequest>>): FlowerInputRequest | null {
@@ -267,6 +250,7 @@ function applyLiveMaterializedState(thread: FlowerThreadSnapshot, liveState: Flo
     context_usage: liveState.context_usage ?? null,
     context_compactions: liveState.context_compactions ?? [],
     timeline_decorations: liveState.timeline_decorations ?? [],
+    approval_queue: liveState.approval_queue ?? null,
   };
   if (liveState.approval_actions !== undefined) {
     next = { ...next, approval_actions: approvalsFromRecord(liveState.approval_actions) };
@@ -415,18 +399,19 @@ function updateMessageStrict(
   return { thread: replaceMessage(thread, updated), ok: true };
 }
 
-function withApprovalAction(thread: FlowerThreadSnapshot, action: FlowerApprovalAction): FlowerThreadSnapshot {
+function withApprovalAction(thread: FlowerThreadSnapshot, action: FlowerApprovalAction, approvalQueue?: FlowerLiveBootstrap['live_state']['approval_queue']): FlowerThreadSnapshot {
   const current = thread.approval_actions ?? [];
   const next = current.filter((item) => item.action_id !== action.action_id);
   if (visibleApprovalAction(action)) {
     next.push(action);
   }
-  const approvalActions = normalizeDelegatedApprovalSurfaces(next)
+  const approvalActions = applyApprovalQueueProjection(next, approvalQueue)
     .filter(visibleApprovalAction)
-    .sort((left, right) => left.action_id.localeCompare(right.action_id));
+    .sort((left, right) => Number(left.queue_order ?? 0) - Number(right.queue_order ?? 0));
   const updated = {
     ...thread,
     approval_actions: approvalActions,
+    ...(approvalQueue !== undefined ? { approval_queue: approvalQueue } : {}),
     status: action.status === 'pending' ? 'waiting_approval' : thread.status,
   };
   return action.status === 'pending' ? clearModelIOForRun(updated, action.run_id) : updated;
@@ -546,7 +531,7 @@ export function applyFlowerLiveEvent(
     case 'approval.requested':
     case 'approval.resolved':
       if (event.payload.action) {
-        next = withApprovalAction(next, event.payload.action);
+        next = withApprovalAction(next, event.payload.action, event.payload.approval_queue);
       }
       break;
     case 'input.requested':

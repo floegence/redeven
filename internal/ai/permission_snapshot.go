@@ -4,11 +4,70 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
+
+func marshalPermissionSnapshot(snapshot PermissionSnapshot) ([]byte, error) {
+	snapshot.Version = permissionSnapshotVersionCurrent
+	snapshot.legacyConcurrency = nil
+	return json.Marshal(snapshot)
+}
+
+func decodePermissionSnapshot(raw string) (PermissionSnapshot, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return PermissionSnapshot{}, errors.New("empty permission snapshot")
+	}
+	var header struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal([]byte(raw), &header); err != nil {
+		return PermissionSnapshot{}, err
+	}
+	switch header.Version {
+	case 0, permissionSnapshotVersionLegacy:
+		var legacy permissionSnapshotV1
+		if err := json.Unmarshal([]byte(raw), &legacy); err != nil {
+			return PermissionSnapshot{}, err
+		}
+		snapshot := PermissionSnapshot{
+			Version:               permissionSnapshotVersionLegacy,
+			SnapshotID:            legacy.SnapshotID,
+			PermissionType:        legacy.PermissionType,
+			VisibleToolNames:      append([]string(nil), legacy.VisibleToolNames...),
+			PromptCapabilityNames: append([]string(nil), legacy.PromptCapabilityNames...),
+			FloretToolNames:       append([]string(nil), legacy.FloretToolNames...),
+			ToolPolicies:          make(map[string]ToolPermissionPolicy, len(legacy.ToolPolicies)),
+			SnapshotHash:          legacy.SnapshotHash,
+			RegistryHash:          legacy.RegistryHash,
+			SchemaHash:            legacy.SchemaHash,
+			PresentationHash:      legacy.PresentationHash,
+			legacyConcurrency:     make(map[string]bool, len(legacy.ToolPolicies)),
+		}
+		for name, policy := range legacy.ToolPolicies {
+			snapshot.ToolPolicies[name] = ToolPermissionPolicy{
+				Visibility:       policy.Visibility,
+				Capabilities:     append([]ToolCapabilityClass(nil), policy.Capabilities...),
+				ResourceKinds:    append([]string(nil), policy.ResourceKinds...),
+				ApprovalDecision: policy.ApprovalDecision,
+			}
+			snapshot.legacyConcurrency[name] = policy.LegacyConcurrency
+		}
+		return snapshot, nil
+	case permissionSnapshotVersionCurrent:
+		var snapshot PermissionSnapshot
+		if err := json.Unmarshal([]byte(raw), &snapshot); err != nil {
+			return PermissionSnapshot{}, err
+		}
+		return snapshot, nil
+	default:
+		return PermissionSnapshot{}, fmt.Errorf("unsupported permission snapshot version %d", header.Version)
+	}
+}
 
 func (r *run) freezePermissionSnapshot(snapshot PermissionSnapshot) PermissionSnapshot {
 	if r == nil {
@@ -32,7 +91,7 @@ func (r *run) persistPermissionSnapshot(snapshot PermissionSnapshot) {
 	if r == nil || r.threadsDB == nil || strings.TrimSpace(snapshot.SnapshotID) == "" {
 		return
 	}
-	payload, err := json.Marshal(snapshot)
+	payload, err := marshalPermissionSnapshot(snapshot)
 	if err != nil {
 		return
 	}
@@ -79,7 +138,7 @@ func (r *run) persistChildPermissionSnapshot(childThreadID string, childRunID st
 	if state != "provisional" && state != "finalized" {
 		return errors.New("invalid child permission snapshot state")
 	}
-	payload, err := json.Marshal(child)
+	payload, err := marshalPermissionSnapshot(child)
 	if err != nil {
 		return err
 	}

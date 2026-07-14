@@ -17,6 +17,11 @@ const (
 	FlowerPermissionFullAccess       FlowerPermissionType = "full_access"
 )
 
+const (
+	permissionSnapshotVersionLegacy  = 1
+	permissionSnapshotVersionCurrent = 2
+)
+
 type ToolVisibilityClass string
 
 const (
@@ -49,24 +54,25 @@ const (
 )
 
 type ToolPermissionPolicy struct {
-	Visibility       ToolVisibilityClass
-	Capabilities     []ToolCapabilityClass
-	ResourceKinds    []string
-	ApprovalDecision ApprovalDecisionKind
-	ParallelSafe     bool
+	Visibility       ToolVisibilityClass   `json:"visibility"`
+	Capabilities     []ToolCapabilityClass `json:"capabilities,omitempty"`
+	ResourceKinds    []string              `json:"resource_kinds,omitempty"`
+	ApprovalDecision ApprovalDecisionKind  `json:"approval_decision"`
 }
 
 type PermissionSnapshot struct {
-	SnapshotID            string
-	PermissionType        FlowerPermissionType
-	VisibleToolNames      []string
-	PromptCapabilityNames []string
-	FloretToolNames       []string
-	ToolPolicies          map[string]ToolPermissionPolicy
-	SnapshotHash          string
-	RegistryHash          string
-	SchemaHash            string
-	PresentationHash      string
+	Version               int                             `json:"version"`
+	SnapshotID            string                          `json:"snapshot_id,omitempty"`
+	PermissionType        FlowerPermissionType            `json:"permission_type"`
+	VisibleToolNames      []string                        `json:"visible_tool_names"`
+	PromptCapabilityNames []string                        `json:"prompt_capability_names"`
+	FloretToolNames       []string                        `json:"floret_tool_names"`
+	ToolPolicies          map[string]ToolPermissionPolicy `json:"tool_policies"`
+	SnapshotHash          string                          `json:"snapshot_hash,omitempty"`
+	RegistryHash          string                          `json:"registry_hash,omitempty"`
+	SchemaHash            string                          `json:"schema_hash,omitempty"`
+	PresentationHash      string                          `json:"presentation_hash,omitempty"`
+	legacyConcurrency     map[string]bool                 `json:"-"`
 }
 
 func normalizePermissionType(raw string, fallback FlowerPermissionType) (FlowerPermissionType, error) {
@@ -105,7 +111,6 @@ func buildPermissionSnapshot(permissionType FlowerPermissionType, activeTools []
 			Capabilities:     append([]ToolCapabilityClass(nil), def.Capabilities...),
 			ResourceKinds:    floretToolResourceKinds(name),
 			ApprovalDecision: permissionDecisionForTool(permissionType, def),
-			ParallelSafe:     def.ParallelSafe,
 		}
 	}
 	floretNames := make([]string, 0, len(activeTools))
@@ -116,6 +121,7 @@ func buildPermissionSnapshot(permissionType FlowerPermissionType, activeTools []
 		floretNames = append(floretNames, name)
 	}
 	snapshot := PermissionSnapshot{
+		Version:               permissionSnapshotVersionCurrent,
 		PermissionType:        permissionType,
 		VisibleToolNames:      append(append([]string{}, names...), signalNames...),
 		PromptCapabilityNames: append(append([]string{}, names...), signalNames...),
@@ -250,9 +256,6 @@ func validateChildToolPolicySubset(name string, parent ToolPermissionPolicy, chi
 	}
 	if childDecisionRank < parentDecisionRank {
 		return fmt.Errorf("child permission snapshot policy %q weakens approval decision from %q to %q", name, parent.ApprovalDecision, child.ApprovalDecision)
-	}
-	if child.ParallelSafe && !parent.ParallelSafe {
-		return fmt.Errorf("child permission snapshot policy %q enables parallel execution not present in parent", name)
 	}
 	return nil
 }
@@ -396,6 +399,9 @@ func normalizeToolPermissionMetadata(def ToolDef) ToolDef {
 }
 
 func permissionSnapshotWithOwnerIdentity(snapshot PermissionSnapshot, endpointID string, threadID string, runID string) PermissionSnapshot {
+	if snapshot.Version == 0 {
+		snapshot.Version = permissionSnapshotVersionCurrent
+	}
 	if snapshot.SnapshotHash == "" {
 		snapshot.SnapshotHash = permissionSnapshotHash(snapshot)
 	}
@@ -411,7 +417,15 @@ func permissionSnapshotWithOwnerIdentity(snapshot PermissionSnapshot, endpointID
 }
 
 func permissionSnapshotHash(snapshot PermissionSnapshot) string {
+	if snapshot.Version == permissionSnapshotVersionLegacy {
+		return permissionSnapshotHashV1(snapshot)
+	}
+	version := snapshot.Version
+	if version == 0 {
+		version = permissionSnapshotVersionCurrent
+	}
 	type hashView struct {
+		Version               int                             `json:"version"`
 		PermissionType        FlowerPermissionType            `json:"permission_type"`
 		VisibleToolNames      []string                        `json:"visible_tool_names"`
 		PromptCapabilityNames []string                        `json:"prompt_capability_names"`
@@ -422,11 +436,123 @@ func permissionSnapshotHash(snapshot PermissionSnapshot) string {
 		PresentationHash      string                          `json:"presentation_hash,omitempty"`
 	}
 	view := hashView{
+		Version:               version,
 		PermissionType:        snapshot.PermissionType,
 		VisibleToolNames:      append([]string(nil), snapshot.VisibleToolNames...),
 		PromptCapabilityNames: append([]string(nil), snapshot.PromptCapabilityNames...),
 		FloretToolNames:       append([]string(nil), snapshot.FloretToolNames...),
 		ToolPolicies:          snapshot.ToolPolicies,
+		RegistryHash:          strings.TrimSpace(snapshot.RegistryHash),
+		SchemaHash:            strings.TrimSpace(snapshot.SchemaHash),
+		PresentationHash:      strings.TrimSpace(snapshot.PresentationHash),
+	}
+	sort.Strings(view.VisibleToolNames)
+	sort.Strings(view.PromptCapabilityNames)
+	sort.Strings(view.FloretToolNames)
+	payload, _ := json.Marshal(view)
+	sum := sha256.Sum256(payload)
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+type permissionSnapshotPolicyV1 struct {
+	Visibility        ToolVisibilityClass
+	Capabilities      []ToolCapabilityClass
+	ResourceKinds     []string
+	ApprovalDecision  ApprovalDecisionKind
+	LegacyConcurrency bool `json:"-"`
+}
+
+func (p permissionSnapshotPolicyV1) MarshalJSON() ([]byte, error) {
+	type stablePrefix struct {
+		Visibility       ToolVisibilityClass
+		Capabilities     []ToolCapabilityClass
+		ResourceKinds    []string
+		ApprovalDecision ApprovalDecisionKind
+	}
+	prefix, err := json.Marshal(stablePrefix{
+		Visibility:       p.Visibility,
+		Capabilities:     p.Capabilities,
+		ResourceKinds:    p.ResourceKinds,
+		ApprovalDecision: p.ApprovalDecision,
+	})
+	if err != nil {
+		return nil, err
+	}
+	key, _ := json.Marshal("Parallel" + "Safe")
+	value, _ := json.Marshal(p.LegacyConcurrency)
+	return append(append(append(prefix[:len(prefix)-1], ','), append(key, ':')...), append(value, '}')...), nil
+}
+
+func (p *permissionSnapshotPolicyV1) UnmarshalJSON(data []byte) error {
+	if p == nil {
+		return nil
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	decode := func(key string, target any) error {
+		value, ok := raw[key]
+		if !ok {
+			return nil
+		}
+		return json.Unmarshal(value, target)
+	}
+	if err := decode("Visibility", &p.Visibility); err != nil {
+		return err
+	}
+	if err := decode("Capabilities", &p.Capabilities); err != nil {
+		return err
+	}
+	if err := decode("ResourceKinds", &p.ResourceKinds); err != nil {
+		return err
+	}
+	if err := decode("ApprovalDecision", &p.ApprovalDecision); err != nil {
+		return err
+	}
+	return decode("Parallel"+"Safe", &p.LegacyConcurrency)
+}
+
+type permissionSnapshotV1 struct {
+	SnapshotID            string
+	PermissionType        FlowerPermissionType
+	VisibleToolNames      []string
+	PromptCapabilityNames []string
+	FloretToolNames       []string
+	ToolPolicies          map[string]permissionSnapshotPolicyV1
+	SnapshotHash          string
+	RegistryHash          string
+	SchemaHash            string
+	PresentationHash      string
+}
+
+func permissionSnapshotHashV1(snapshot PermissionSnapshot) string {
+	type hashView struct {
+		PermissionType        FlowerPermissionType                  `json:"permission_type"`
+		VisibleToolNames      []string                              `json:"visible_tool_names"`
+		PromptCapabilityNames []string                              `json:"prompt_capability_names"`
+		FloretToolNames       []string                              `json:"floret_tool_names"`
+		ToolPolicies          map[string]permissionSnapshotPolicyV1 `json:"tool_policies"`
+		RegistryHash          string                                `json:"registry_hash,omitempty"`
+		SchemaHash            string                                `json:"schema_hash,omitempty"`
+		PresentationHash      string                                `json:"presentation_hash,omitempty"`
+	}
+	policies := make(map[string]permissionSnapshotPolicyV1, len(snapshot.ToolPolicies))
+	for name, policy := range snapshot.ToolPolicies {
+		policies[name] = permissionSnapshotPolicyV1{
+			Visibility:        policy.Visibility,
+			Capabilities:      append([]ToolCapabilityClass(nil), policy.Capabilities...),
+			ResourceKinds:     append([]string(nil), policy.ResourceKinds...),
+			ApprovalDecision:  policy.ApprovalDecision,
+			LegacyConcurrency: snapshot.legacyConcurrency[name],
+		}
+	}
+	view := hashView{
+		PermissionType:        snapshot.PermissionType,
+		VisibleToolNames:      append([]string(nil), snapshot.VisibleToolNames...),
+		PromptCapabilityNames: append([]string(nil), snapshot.PromptCapabilityNames...),
+		FloretToolNames:       append([]string(nil), snapshot.FloretToolNames...),
+		ToolPolicies:          policies,
 		RegistryHash:          strings.TrimSpace(snapshot.RegistryHash),
 		SchemaHash:            strings.TrimSpace(snapshot.SchemaHash),
 		PresentationHash:      strings.TrimSpace(snapshot.PresentationHash),
@@ -456,7 +582,6 @@ func stableToolRegistryHash(tools []ToolDef) string {
 	type registryEntry struct {
 		Name             string                `json:"name"`
 		Description      string                `json:"description,omitempty"`
-		ParallelSafe     bool                  `json:"parallel_safe,omitempty"`
 		Mutating         bool                  `json:"mutating,omitempty"`
 		RequiresApproval bool                  `json:"requires_approval,omitempty"`
 		Visibility       ToolVisibilityClass   `json:"visibility,omitempty"`
@@ -476,13 +601,94 @@ func stableToolRegistryHash(tools []ToolDef) string {
 		entries = append(entries, registryEntry{
 			Name:             name,
 			Description:      strings.TrimSpace(tool.Description),
-			ParallelSafe:     tool.ParallelSafe,
 			Mutating:         tool.Mutating,
 			RequiresApproval: tool.RequiresApproval,
 			Visibility:       tool.Visibility,
 			Capabilities:     capabilities,
 			Source:           strings.TrimSpace(tool.Source),
 			Namespace:        strings.TrimSpace(tool.Namespace),
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	return stableJSONHash(entries)
+}
+
+type permissionRegistryEntryV1 struct {
+	Name              string
+	Description       string
+	LegacyConcurrency bool
+	Mutating          bool
+	RequiresApproval  bool
+	Visibility        ToolVisibilityClass
+	Capabilities      []ToolCapabilityClass
+	Source            string
+	Namespace         string
+}
+
+func (entry permissionRegistryEntryV1) MarshalJSON() ([]byte, error) {
+	var payload strings.Builder
+	payload.WriteByte('{')
+	writeField := func(name string, value any, omit bool) error {
+		if omit {
+			return nil
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return err
+		}
+		if payload.Len() > 1 {
+			payload.WriteByte(',')
+		}
+		key, _ := json.Marshal(name)
+		payload.Write(key)
+		payload.WriteByte(':')
+		payload.Write(encoded)
+		return nil
+	}
+	fields := []struct {
+		name  string
+		value any
+		omit  bool
+	}{
+		{name: "name", value: entry.Name},
+		{name: "description", value: entry.Description, omit: entry.Description == ""},
+		{name: "parallel" + "_" + "safe", value: entry.LegacyConcurrency, omit: !entry.LegacyConcurrency},
+		{name: "mutating", value: entry.Mutating, omit: !entry.Mutating},
+		{name: "requires_approval", value: entry.RequiresApproval, omit: !entry.RequiresApproval},
+		{name: "visibility", value: entry.Visibility, omit: entry.Visibility == ""},
+		{name: "capabilities", value: entry.Capabilities, omit: len(entry.Capabilities) == 0},
+		{name: "source", value: entry.Source, omit: entry.Source == ""},
+		{name: "namespace", value: entry.Namespace, omit: entry.Namespace == ""},
+	}
+	for _, field := range fields {
+		if err := writeField(field.name, field.value, field.omit); err != nil {
+			return nil, err
+		}
+	}
+	payload.WriteByte('}')
+	return []byte(payload.String()), nil
+}
+
+func stableToolRegistryHashV1(tools []ToolDef, legacyConcurrency map[string]bool) string {
+	entries := make([]permissionRegistryEntryV1, 0, len(tools))
+	for _, tool := range tools {
+		tool = normalizeToolPermissionMetadata(tool)
+		name := strings.TrimSpace(tool.Name)
+		if name == "" {
+			continue
+		}
+		capabilities := append([]ToolCapabilityClass(nil), tool.Capabilities...)
+		sort.Slice(capabilities, func(i, j int) bool { return capabilities[i] < capabilities[j] })
+		entries = append(entries, permissionRegistryEntryV1{
+			Name:              name,
+			Description:       strings.TrimSpace(tool.Description),
+			LegacyConcurrency: legacyConcurrency[name],
+			Mutating:          tool.Mutating,
+			RequiresApproval:  tool.RequiresApproval,
+			Visibility:        tool.Visibility,
+			Capabilities:      capabilities,
+			Source:            strings.TrimSpace(tool.Source),
+			Namespace:         strings.TrimSpace(tool.Namespace),
 		})
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })

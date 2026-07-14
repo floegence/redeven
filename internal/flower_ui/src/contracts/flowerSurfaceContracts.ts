@@ -419,6 +419,7 @@ export type FlowerThreadSnapshot = Readonly<{
   timeline_decorations?: readonly FlowerTimelineDecoration[];
   subagents?: readonly FlowerSubagentSummary[];
   approval_actions?: readonly FlowerApprovalAction[];
+  approval_queue?: FlowerApprovalQueue | null;
   input_request?: FlowerInputRequest | null;
   error?: FlowerThreadError | null;
   read_status: FlowerThreadReadStatus;
@@ -539,7 +540,16 @@ export type FlowerSafeTarget = Readonly<{
   uri?: string;
 }>;
 
-export type FlowerApprovalOrigin = 'main_tool' | 'delegated_subagent';
+export type FlowerApprovalOrigin = 'main_tool' | 'control_confirm' | 'delegated_subagent';
+
+export type FlowerApprovalQueue = Readonly<{
+  generation: number;
+  revision: number;
+  current_action_id?: string;
+  current_position: number;
+  total: number;
+  unresolved_count: number;
+}>;
 
 export type FlowerDelegatedApprovalRef = Readonly<{
   parent_thread_id: string;
@@ -574,6 +584,10 @@ type FlowerApprovalActionBase = Readonly<{
   delivery_state?: 'waiting_decision' | 'delivery_pending' | 'delivery_delivered' | 'delivery_failed' | 'delivery_ack_unknown' | 'delivery_unavailable';
   child_execution_state?: 'unknown' | 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled';
   primary_wait_anchor?: string;
+  queue_generation?: number;
+  queue_order?: number;
+  batch_index?: number;
+  batch_size?: number;
   summary: Readonly<{
     label: string;
     description?: string;
@@ -586,7 +600,7 @@ type FlowerApprovalActionBase = Readonly<{
 }>;
 
 export type FlowerMainToolApprovalAction = FlowerApprovalActionBase & Readonly<{
-  origin: 'main_tool';
+  origin: 'main_tool' | 'control_confirm';
   run_id: string;
   tool_id: string;
   delegated_ref?: never;
@@ -672,6 +686,7 @@ export type FlowerLiveMaterializedState = Readonly<{
   context_compactions?: readonly FlowerContextCompaction[];
   timeline_decorations?: readonly FlowerTimelineDecoration[];
   approval_actions?: Readonly<Record<string, FlowerApprovalAction>>;
+  approval_queue?: FlowerApprovalQueue | null;
   input_requests: Readonly<Record<string, FlowerInputRequest>>;
 }>;
 
@@ -726,6 +741,7 @@ export type FlowerLiveMessageFailedPayload = Readonly<{
 
 export type FlowerLiveApprovalPayload = Readonly<{
   action: FlowerApprovalAction;
+  approval_queue?: FlowerApprovalQueue;
 }>;
 
 export type FlowerLiveInputRequestedPayload = Readonly<{
@@ -836,12 +852,14 @@ type FlowerSubmitApprovalRequestBase = Readonly<{
   revision?: number;
   version?: number;
   surface_epoch?: number;
+  queue_generation: number;
+  queue_revision: number;
   idempotency_key?: string;
 }>;
 
 export type FlowerSubmitApprovalRequest =
   | (FlowerSubmitApprovalRequestBase & Readonly<{
-      origin?: 'main_tool';
+      origin?: 'main_tool' | 'control_confirm';
       run_id: string;
       tool_id: string;
       delegated_ref?: never;

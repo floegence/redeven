@@ -14,7 +14,6 @@ type ModelCapability struct {
 	ModelName                      string                       `json:"model_name"`
 	WireModelName                  string                       `json:"wire_model_name,omitempty"`
 	SupportsTools                  bool                         `json:"supports_tools"`
-	SupportsParallelTools          bool                         `json:"supports_parallel_tools"`
 	SupportsStrictJSONSchema       bool                         `json:"supports_strict_json_schema"`
 	SupportsImageInput             bool                         `json:"supports_image_input"`
 	SupportsFileInput              bool                         `json:"supports_file_input"`

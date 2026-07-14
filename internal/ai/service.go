@@ -2373,7 +2373,6 @@ func defaultModelCapability(providerID string, modelName string, wireModelName s
 		ModelName:                      modelName,
 		WireModelName:                  wireModelName,
 		SupportsTools:                  true,
-		SupportsParallelTools:          false,
 		SupportsStrictJSONSchema:       true,
 		SupportsImageInput:             false,
 		SupportsFileInput:              false,
@@ -2475,6 +2474,7 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 	var r *run
 	threadID := ""
 	finalizingThreadID := ""
+	var canceledDelegatedApprovals []FlowerApprovalAction
 	var finalizingDoneCh <-chan struct{}
 
 	s.mu.Lock()
@@ -2487,6 +2487,7 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 	if r != nil {
 		threadID = strings.TrimSpace(r.threadID)
 		r.markDetached()
+		canceledDelegatedApprovals = s.cancelThreadApprovalQueueLocked(endpointID, threadID, "run canceled")
 		finalizingThreadID = threadID
 		finalizingDoneCh = r.doneCh
 	}
@@ -2513,6 +2514,17 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 	db := s.threadsDB
 	persistTO := s.persistOpTO
 	s.mu.Unlock()
+	for _, action := range canceledDelegatedApprovals {
+		if db == nil || action.DelegatedRef == nil {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), persistTO)
+		_, err := db.MarkDelegatedApprovalCanceled(ctx, endpointID, threadID, action.ActionID, action.Version, string(mustFlowerPayload(action)), action.ReadOnlyReason, action.ResolvedAtMs)
+		cancel()
+		if err != nil && s.log != nil {
+			s.log.Warn("persist canceled delegated approval failed", "endpoint_id", endpointID, "thread_id", threadID, "action_id", action.ActionID, "error", err)
+		}
+	}
 
 	if finalizingKey != "" && finalizingDoneCh != nil {
 		go s.waitForStopFinalization(endpointID, finalizingThreadID, runID, finalizingDoneCh)

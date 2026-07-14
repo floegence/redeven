@@ -571,6 +571,8 @@ describe('Local Environment Flower surface adapter', () => {
       approved: true,
       expected_seq: 12,
       revision: 1,
+      queue_generation: 3,
+      queue_revision: 4,
     });
 
     expect(calls[0]).toMatchObject({
@@ -584,6 +586,8 @@ describe('Local Environment Flower surface adapter', () => {
         approved: true,
         expected_seq: 12,
         revision: 1,
+        queue_generation: 3,
+        queue_revision: 4,
       },
     });
   });

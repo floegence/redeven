@@ -764,6 +764,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
   const [activityClockNow, setActivityClockNow] = createSignal(Date.now());
   const [approvalSubmitting, setApprovalSubmitting] = createSignal<Record<string, FlowerApprovalSubmittingState>>({});
+  const [approvalQueueAnnouncement, setApprovalQueueAnnouncement] = createSignal('');
   const [copiedMessageAction, setCopiedMessageAction] = createSignal('');
   const [copiedApprovalAction, setCopiedApprovalAction] = createSignal('');
   const [transcriptLayoutRevision, setTranscriptLayoutRevision] = createSignal(0);
@@ -787,6 +788,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadsRefreshSequence = 0;
   let startedFocusThreadRequestID = '';
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
+  let composerApprovalCardRef: HTMLElement | undefined;
+  let previousComposerApprovalActionID = '';
   const [modelMenuOpen, setModelMenuOpen] = createSignal(false);
   const [modelMenuShiftX, setModelMenuShiftX] = createSignal(0);
   let modelTriggerRef: HTMLButtonElement | undefined;
@@ -983,7 +986,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ));
   const approvalActionIsDelegated = (action: FlowerApprovalAction): boolean => action.origin === 'delegated_subagent';
   const approvalActionIsPrimarySurface = (action: FlowerApprovalAction): boolean => (
-    !approvalActionIsDelegated(action) || action.surface_role === 'primary_action'
+    action.surface_role === 'primary_action'
+    || (!action.surface_role && !selectedThread()?.approval_queue && selectedApprovalActions().length === 1)
   );
   const approvalActionCanDecide = (action: FlowerApprovalAction): boolean => (
     action.can_approve
@@ -992,18 +996,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && action.state === 'requested'
     && (!approvalActionIsDelegated(action) || !action.delivery_state || action.delivery_state === 'waiting_decision')
   );
-  const selectedComposerApprovalActions = createMemo(() => (
-    selectedApprovalActions()
-      .filter((action) => approvalActionCanDecide(action))
-      .sort((left, right) => {
-        const requestedDelta = Number(left.requested_at_ms ?? 0) - Number(right.requested_at_ms ?? 0);
-        if (requestedDelta !== 0) return requestedDelta;
-        const seqDelta = Number(left.expected_seq ?? 0) - Number(right.expected_seq ?? 0);
-        if (seqDelta !== 0) return seqDelta;
-        return left.action_id.localeCompare(right.action_id);
-      })
-  ));
-  const selectedComposerApprovalAction = createMemo(() => selectedComposerApprovalActions()[0] ?? null);
+  const selectedComposerApprovalAction = createMemo(() => {
+    const currentActionID = trimString(selectedThread()?.approval_queue?.current_action_id);
+    const pendingActions = selectedApprovalActions();
+    const action = currentActionID
+      ? pendingActions.find((candidate) => candidate.action_id === currentActionID) ?? null
+      : pendingActions.find((candidate) => candidate.surface_role === 'primary_action') ?? (pendingActions.length === 1 ? pendingActions[0]! : null);
+    return action && approvalActionCanDecide(action) ? action : null;
+  });
+  createEffect(() => {
+    const actionID = trimString(selectedComposerApprovalAction()?.action_id);
+    const queue = selectedThread()?.approval_queue;
+    if (previousComposerApprovalActionID && actionID && actionID !== previousComposerApprovalActionID) {
+      setApprovalQueueAnnouncement(queue && queue.total > 0 ? `Approval ${queue.current_position} of ${queue.total}` : 'Next approval');
+      requestAnimationFrame(() => composerApprovalCardRef?.focus({ preventScroll: true }));
+    }
+    previousComposerApprovalActionID = actionID;
+  });
   const selectedThreadLevelApprovalActions = createMemo(() => {
     const composerActionID = trimString(selectedComposerApprovalAction()?.action_id);
     return selectedApprovalActions().filter((action) => (
@@ -4186,6 +4195,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           approved,
           ...(action.version ? { version: action.version } : {}),
           ...(action.surface_epoch ? { surface_epoch: action.surface_epoch } : {}),
+          queue_generation: action.queue_generation ?? 0,
+          queue_revision: thread.approval_queue?.revision ?? 0,
           idempotency_key: `${action.action_id}:${approved ? 'approve' : 'reject'}:${action.version}:${action.surface_epoch ?? 0}`,
           delegated_ref: action.delegated_ref,
         });
@@ -4201,6 +4212,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           ...(action.revision ? { revision: action.revision } : {}),
           ...(action.version ? { version: action.version } : {}),
           ...(action.surface_epoch ? { surface_epoch: action.surface_epoch } : {}),
+          queue_generation: action.queue_generation ?? 0,
+          queue_revision: thread.approval_queue?.revision ?? 0,
         });
       }
       if (selectedThreadDetailMatches(threadID)) {
@@ -4399,6 +4412,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const canDecide = approvalActionCanDecide(action);
     const disabled = busy !== undefined || !canDecide;
     const composerSurface = options.surface === 'composer';
+    const queue = selectedThread()?.approval_queue;
+    const queueProgress = composerSurface && queue && queue.total > 0
+      ? `${queue.current_position} / ${queue.total}`
+      : '';
     const descriptionID = `flower-approval-description-${action.action_id}`;
     const statusID = `flower-approval-status-${action.action_id}`;
     const actionLabel = action.summary.label || action.tool_name || copy().chat.toolApprovalRequired;
@@ -4453,6 +4470,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     return (
       <section
+        ref={composerSurface ? (element) => { composerApprovalCardRef = element; } : undefined}
+        tabIndex={composerSurface ? -1 : undefined}
         class={cn('flower-approval-card', composerSurface && 'flower-approval-card-composer')}
         data-flower-approval-action-id={action.action_id}
         data-flower-approval-origin={action.origin}
@@ -4462,6 +4481,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <div class="flower-approval-body">
           <div class="flower-approval-header">
             <p class="flower-approval-intro">{approvalIntroText}</p>
+            <Show when={queueProgress}>
+              {(progress) => <span class="flower-approval-queue-progress" aria-label={`Approval ${progress()}`}>{progress()}</span>}
+            </Show>
             <Show when={commandText}>
               <button
                 type="button"
@@ -6590,6 +6612,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 >
                   {(approvalAction) => (
                     <div class="flower-composer-approval-body">
+                      <span class="flower-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{approvalQueueAnnouncement()}</span>
                       {approvalActionCard(approvalAction(), { surface: 'composer' })}
                     </div>
                   )}
