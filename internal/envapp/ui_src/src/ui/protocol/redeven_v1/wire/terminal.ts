@@ -26,10 +26,12 @@ export type wire_terminal_session_attach_req = {
   conn_id: string;
   cols: number;
   rows: number;
+  attach_generation: number;
 };
 
 export type wire_terminal_session_attach_resp = {
   ok: boolean;
+  history_boundary_sequence?: number;
 };
 
 export type wire_terminal_input_notify = {

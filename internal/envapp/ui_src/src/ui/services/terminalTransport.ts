@@ -23,6 +23,10 @@ export function getOrCreateTerminalConnId(storageKey = 'redeven_terminal_conn_id
 
 export type TerminalSessionStats = { history: { totalBytes: number } };
 
+export type RedevenTerminalAttachResult = Readonly<{
+  historyBoundarySequence?: number;
+}>;
+
 export type TerminalHistoryPage = Readonly<{
   chunks: TerminalDataChunk[];
   nextStartSeq: number;
@@ -47,6 +51,11 @@ export type TerminalHistoryPageOptions = Readonly<{
 }>;
 
 export type RedevenTerminalTransport = TerminalTransport & {
+  attachWithHistoryBoundary: (
+    sessionId: string,
+    cols: number,
+    rows: number,
+  ) => Promise<RedevenTerminalAttachResult>;
   historyPage: (
     sessionId: string,
     startSeq: number,
@@ -59,6 +68,7 @@ export type RedevenTerminalTransport = TerminalTransport & {
 const TERMINAL_HISTORY_PAGE_LIMIT_CHUNKS = 256;
 const TERMINAL_HISTORY_PAGE_MAX_BYTES = 384 * 1024;
 const TERMINAL_HISTORY_DRAIN_MAX_PAGES = 4096;
+const terminalAttachGenerationByScope = new WeakMap<object, number>();
 
 type TerminalResizeDimensions = Readonly<{
   cols: number;
@@ -262,7 +272,11 @@ export function createRedevenTerminalEventSource(rpc: RedevenV1Rpc): TerminalEve
   };
 }
 
-export function createRedevenTerminalTransport(rpc: RedevenV1Rpc, connId: string): RedevenTerminalTransport {
+export function createRedevenTerminalTransport(
+  rpc: RedevenV1Rpc,
+  connId: string,
+  attachGenerationScope: object = rpc,
+): RedevenTerminalTransport {
   const ignoreIfNotConnected = (e: unknown) => {
     if (isBestEffortTerminalDisconnectError(e)) return true;
     return false;
@@ -318,11 +332,37 @@ export function createRedevenTerminalTransport(rpc: RedevenV1Rpc, connId: string
     };
   };
 
+  const attachWithHistoryBoundary = async (
+    sessionId: string,
+    cols: number,
+    rows: number,
+  ): Promise<RedevenTerminalAttachResult> => {
+    const currentAttachGeneration = terminalAttachGenerationByScope.get(attachGenerationScope) ?? 0;
+    if (currentAttachGeneration >= Number.MAX_SAFE_INTEGER) {
+      throw new Error('terminal attach generation exhausted');
+    }
+    const attachGeneration = currentAttachGeneration + 1;
+    terminalAttachGenerationByScope.set(attachGenerationScope, attachGeneration);
+    const response = await rpc.terminal.attach({ sessionId, connId, cols, rows, attachGeneration });
+    if (response?.ok !== true) {
+      throw new Error('terminal attach was not acknowledged');
+    }
+    if (!Object.prototype.hasOwnProperty.call(response, 'historyBoundarySequence')) {
+      return {};
+    }
+    const historyBoundarySequence = response.historyBoundarySequence;
+    if (!Number.isSafeInteger(historyBoundarySequence) || (historyBoundarySequence as number) < 0) {
+      return { historyBoundarySequence: Number.NaN };
+    }
+    dispatchResize.markSent(sessionId, cols, rows);
+    return { historyBoundarySequence };
+  };
+
   return {
     attach: async (sessionId, cols, rows) => {
-      await rpc.terminal.attach({ sessionId, connId, cols, rows });
-      dispatchResize.markSent(sessionId, cols, rows);
+      await attachWithHistoryBoundary(sessionId, cols, rows);
     },
+    attachWithHistoryBoundary,
     resize: async (sessionId, cols, rows) => {
       try {
         await dispatchResize(sessionId, cols, rows);

@@ -40,7 +40,7 @@ func TestRealShellIntegrationEmitsLifecycleMarkersForBashAndZsh(t *testing.T) {
 			if err != nil {
 				t.Fatalf("createSession() error = %v", err)
 			}
-			if err := manager.attachSession(session.ID, "conn-1", 80, 24, nil); err != nil {
+			if _, err := manager.attachSession(session.ID, "conn-1", 80, 24, nil, 0); err != nil {
 				t.Fatalf("attachSession() error = %v", err)
 			}
 
@@ -108,7 +108,7 @@ func TestRealPosixShellFallbackOmitsLifecycleMarkers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("createSession() error = %v", err)
 	}
-	if err := manager.attachSession(session.ID, "conn-1", 80, 24, nil); err != nil {
+	if _, err := manager.attachSession(session.ID, "conn-1", 80, 24, nil, 0); err != nil {
 		t.Fatalf("attachSession() error = %v", err)
 	}
 
@@ -151,7 +151,7 @@ func TestRealShellIntegrationEmitsCwdMarkersAndNameUpdatesForBashAndZsh(t *testi
 			if err != nil {
 				t.Fatalf("createSession() error = %v", err)
 			}
-			if err := manager.attachSession(session.ID, "conn-1", 80, 24, nil); err != nil {
+			if _, err := manager.attachSession(session.ID, "conn-1", 80, 24, nil, 0); err != nil {
 				t.Fatalf("attachSession() error = %v", err)
 			}
 
@@ -197,14 +197,15 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 	shellInitBaseDir := filepath.Join(t.TempDir(), "shell-init")
 
 	manager := &Manager{
-		agentHomeAbs:     root,
-		scope:            mustTestFilesystemScope(t, root),
-		log:              logger,
-		writers:          make(map[*rpc.Server]*sinkWriter),
-		byServer:         make(map[*rpc.Server]map[string]string),
-		bySession:        make(map[string]map[*rpc.Server]string),
-		closedSinks:      make(map[*rpc.Server]struct{}),
-		sessionLifecycle: make(map[string]SessionLifecycleRecord),
+		agentHomeAbs:      root,
+		scope:             mustTestFilesystemScope(t, root),
+		log:               logger,
+		writers:           make(map[*rpc.Server]*sinkWriter),
+		byServer:          make(map[*rpc.Server]map[string]sinkAttachment),
+		bySession:         make(map[string]map[*rpc.Server]sinkAttachment),
+		attachGenerations: make(map[*rpc.Server]map[string]int64),
+		closedSinks:       make(map[*rpc.Server]struct{}),
+		sessionLifecycle:  make(map[string]SessionLifecycleRecord),
 	}
 
 	manager.term = termgo.NewManager(termgo.ManagerConfig{
@@ -216,6 +217,7 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 		InitialResizeSuppressDuration: 10 * time.Millisecond,
 		ResizeSuppressDuration:        10 * time.Millisecond,
 	})
+	manager.activateSessionFunc = manager.term.ActivateSession
 	manager.deleteSessionFunc = manager.deleteSessionNow
 	recorder := &shellEventRecorder{delegate: &eventHandler{m: manager}}
 	manager.term.SetEventHandler(recorder)

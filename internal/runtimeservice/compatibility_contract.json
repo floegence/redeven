@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.8.0",
-    "previous_release": "v0.7.2",
+    "release_version": "v0.8.1",
+    "previous_release": "v0.8.0",
     "reviewed_at": "2026-07-14",
-    "review_id": "flowersec-v0-20-2+flower-concurrency+terminal-history-coverage-v0-8-0",
-    "summary": "Redeven v0.8.0 combines published Flowersec v0.20.2 and Floe Webapp v0.37.1 transport hardening, published Floret v0.4.0 model-directed concurrency, and Floeterm coverage snapshots. Terminal history requires a matched v0.8.0 Desktop and Runtime pair so local sessions become interactive after the committed baseline without weakening Flower, security, or process-lifecycle boundaries.",
+    "review_id": "terminal-atomic-attach-v0-8-1",
+    "summary": "Redeven v0.8.1 advances the Runtime compatibility window for Floeterm coverage snapshots and the atomic history/live attach boundary while preserving the Flowersec v0.20.2, Floe Webapp v0.37.1, and Floret v0.4.0 behavior released in v0.8.0. Terminal history requires a matched v0.8.1 Desktop and Runtime pair so local sessions become interactive after the committed baseline without losing output produced during the attach round trip or weakening Flower, security, or process-lifecycle boundaries.",
     "checked_surfaces": [
       "Remote Flowersec Direct and Tunnel connections explicitly require TLS, Local UI Direct connections explicitly allow plaintext only for canonical loopback authorities, and the Docker integration client uses the same loopback-only exception",
       "Flowersec Go and TypeScript v0.20.2 and Floe Webapp v0.37.1 are consumed only from published artifacts with GOWORK=off validation and no replace, go.work, package-manager link, workspace alias, or local sibling path wiring",
@@ -14,18 +14,21 @@
       "Redeven blocks only Content-Security-Policy, Content-Security-Policy-Report-Only, and X-Frame-Options on proxied product surfaces; X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP, COEP, and CORP continue through Flowersec's default response policy",
       "Env App reconnects use refreshable ArtifactSource acquire functions and stable reconnect config objects so credentials remain one-use and trace context survives hard reconnects without changing session metadata or Runtime Service envelopes",
       "Flower consumes only published Floret v0.4.0 for model-directed concurrent tool batches while transcript ordering, cancellation, permission, serialized user approval, audit, control-signal, projection recovery, token-budget, deletion-fencing, and activity-summary boundaries remain internal to Flower and Floret",
-      "Runtime Service protocol_version remains redeven-runtime-v1, while compatibility_epoch advances to 6 because terminal.history now requires explicit retained-floor, committed-coverage, snapshot-end, history-generation, reset, and truncation metadata",
-      "The Runtime consumes only the published github.com/floegence/floeterm/terminal-go v0.4.23 module with GOWORK=off validation and no replace, go.work, or local sibling path wiring",
-      "Env App consumes only the published @floegence/floeterm-terminal-web 0.5.18 package and maps the Redeven terminal.history response into the released coordinator contract without a product-local recovery state machine",
+      "Runtime Service protocol_version remains redeven-runtime-v1, while compatibility_epoch advances to 6 because terminal.attach now requires an ordered request generation plus an explicit atomic history boundary and terminal.history requires retained-floor, committed-coverage, snapshot-end, history-generation, reset, and truncation metadata",
+      "The Runtime consumes only the published github.com/floegence/floeterm/terminal-go v0.4.24 module with GOWORK=off validation and no replace, go.work, or local sibling path wiring",
+      "Env App consumes only the published @floegence/floeterm-terminal-web 0.5.19 package and maps the Redeven attach/history responses into the released two-phase coordinator contract without a product-local recovery state machine",
+      "Runtime registers each terminal sink and captures its committed history boundary under one manager/session lock order, returns zero explicitly, and routes only later source sequences to that sink",
+      "Env App assigns each attach RPC a transport-scoped monotonic generation; Runtime rejects stale generations before boundary capture, rejects closed sinks, and conditionally rolls activation failure back only when that attachment still owns the mapping",
+      "Env App begins coordinator attachment before subscribing to live output, completes it with the Runtime boundary, and retains output produced during the attach round trip; missing or malformed boundaries fail closed as update-required contract errors",
       "Initial terminal input becomes available only after the history baseline has crossed the terminal parser completion fence; retry and degraded recovery after that baseline remain non-blocking",
       "Missing, malformed, stale-generation, reset, and retention-truncated history contracts fail or rebase through structured coordinator states instead of inferring coverage from retained chunks or rendering raw internal errors",
-      "Desktop and Runtime minimum versions advance together to v0.8.0 so a new Env App cannot silently attach to an older Runtime that omits required coverage metadata",
+      "Desktop and Runtime minimum versions advance together to v0.8.1 so a new Env App cannot silently attach to an older Runtime that omits required coverage metadata; the published v0.8.0 epoch 5 window is not reused",
       "Local transport and credential boundaries, execute permission enforcement, managed Runtime process reconciliation, Activity surface lifecycle, and the Floret review boundary remain intact",
       "Desktop attach/start, structured startup reports, sys.ping, Local UI health, Env App maintenance routes, gateway lifecycle, SSH Runtime bootstrap, installer discovery, and provider request shaping remain otherwise unchanged"
     ]
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 6,
-  "minimum_desktop_version": "v0.8.0",
-  "minimum_runtime_version": "v0.8.0"
+  "minimum_desktop_version": "v0.8.1",
+  "minimum_runtime_version": "v0.8.1"
 }

@@ -767,7 +767,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   ensureTerminalPreferencesInitialized(floe.persist);
   const terminalPrefs = useTerminalPreferences();
 
-  const transport = createRedevenTerminalTransport(rpc, connId);
+  const attachGenerationScope = protocol.rpcTransport?.() ?? protocol;
+  const transport = createRedevenTerminalTransport(rpc, connId, attachGenerationScope);
   const eventSource = createRedevenTerminalEventSource(rpc);
   const sessionsCoordinator = getRedevenTerminalSessionsCoordinator({ connId, transport, logger: buildLogger() });
   const terminalWorkingSet = createTerminalAdaptiveWorkingSetManager({
@@ -1429,18 +1430,111 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setActiveRealSessionId(normalizedValue);
   };
 
-  const sessionSelection = createUIFirstSelection<string | null, { restoreFocus: boolean }>({
+  type PendingTerminalFocusIntent = Readonly<{
+    generation: number;
+    sessionId: string;
+    anchor: Element | null;
+    originSurface: HTMLDivElement | null;
+  }>;
+
+  type TerminalSessionSelectionMetadata = Readonly<{
+    restoreFocus: boolean;
+    focusIntent?: PendingTerminalFocusIntent;
+  }>;
+
+  let terminalFocusIntentGeneration = 0;
+  let pendingTerminalFocusIntent: PendingTerminalFocusIntent | null = null;
+
+  const clearPendingTerminalFocusIntent = (intent?: PendingTerminalFocusIntent) => {
+    if (intent && pendingTerminalFocusIntent !== intent) return;
+    pendingTerminalFocusIntent = null;
+  };
+
+  const focusOwnerMatchesIntent = (intent: PendingTerminalFocusIntent, owner: Element | null) => {
+    if (owner == null || (typeof document !== 'undefined' && owner === document.body)) return true;
+    if (owner === intent.anchor || intent.anchor?.contains(owner)) return true;
+    if (intent.originSurface?.contains(owner)) return true;
+    return Boolean(surfaceRegistry.get(intent.sessionId)?.contains(owner));
+  };
+
+  const tryPendingTerminalFocus = (intent: PendingTerminalFocusIntent) => {
+    if (disposed || pendingTerminalFocusIntent !== intent) return false;
+    if (!terminalFocusOwner() || !shouldAutoFocus()) {
+      clearPendingTerminalFocusIntent(intent);
+      return false;
+    }
+    if (intent.generation !== terminalFocusIntentGeneration || activeSessionId() !== intent.sessionId) {
+      clearPendingTerminalFocusIntent(intent);
+      return false;
+    }
+
+    const owner = typeof document === 'undefined' ? null : document.activeElement;
+    if (!focusOwnerMatchesIntent(intent, owner)) {
+      clearPendingTerminalFocusIntent(intent);
+      return false;
+    }
+    if (owner && surfaceRegistry.get(intent.sessionId)?.contains(owner)) {
+      clearPendingTerminalFocusIntent(intent);
+      return true;
+    }
+
+    const focusResult = actionsRegistry.get(intent.sessionId)?.focusIfInteractive() ?? 'not_interactive';
+    if (focusResult !== 'not_interactive') clearPendingTerminalFocusIntent(intent);
+    return focusResult === 'focused';
+  };
+
+  const beginPendingTerminalFocus = (sessionId: string | null) => {
+    terminalFocusIntentGeneration += 1;
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (!normalizedSessionId || !terminalFocusOwner() || !shouldAutoFocus()) {
+      pendingTerminalFocusIntent = null;
+      return null;
+    }
+
+    const originSessionId = activeSessionId();
+    const intent: PendingTerminalFocusIntent = {
+      generation: terminalFocusIntentGeneration,
+      sessionId: normalizedSessionId,
+      anchor: typeof document === 'undefined' ? null : document.activeElement,
+      originSurface: originSessionId ? surfaceRegistry.get(originSessionId) ?? null : null,
+    };
+    pendingTerminalFocusIntent = intent;
+    return intent;
+  };
+
+  const handleTerminalInteractive = (sessionId: string) => {
+    const intent = pendingTerminalFocusIntent;
+    if (!intent || intent.sessionId !== sessionId) return;
+    tryPendingTerminalFocus(intent);
+  };
+
+  const handlePendingTerminalFocusChange = (event: FocusEvent) => {
+    const intent = pendingTerminalFocusIntent;
+    if (!intent) return;
+    const owner = event.target instanceof Element ? event.target : null;
+    if (!focusOwnerMatchesIntent(intent, owner)) clearPendingTerminalFocusIntent(intent);
+  };
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('focusin', handlePendingTerminalFocusChange, true);
+    onCleanup(() => document.removeEventListener('focusin', handlePendingTerminalFocusChange, true));
+  }
+
+  const sessionSelection = createUIFirstSelection<string | null, TerminalSessionSelectionMetadata>({
     committed: activeDisplaySessionId,
     commit: (sessionId, metadata) => {
+      const focusIntent = metadata?.restoreFocus ? metadata.focusIntent ?? null : null;
+      if (!metadata?.restoreFocus) clearPendingTerminalFocusIntent();
       setActiveSessionId(sessionId);
       if (isMobileLayout()) {
         setSessionDrawerOpen(false);
       }
-      if (!metadata?.restoreFocus) return;
+      if (!focusIntent) return;
       deferAfterPaint(() => {
-        if (!disposed) restoreActiveTerminalFocus();
+        tryPendingTerminalFocus(focusIntent);
       });
     },
+    commitEqualRequests: true,
     onEvent: createUIPresentationEventRecorder({
       surface: 'terminal',
       source: 'session-nav',
@@ -1448,6 +1542,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }),
   });
   const sidebarActiveSessionId = sessionSelection.visual;
+
+  const requestSessionSelection = (sessionId: string, restoreFocus: boolean) => {
+    const focusIntent = restoreFocus ? beginPendingTerminalFocus(sessionId) : null;
+    sessionSelection.request(sessionId, {
+      restoreFocus,
+      ...(focusIntent ? { focusIntent } : {}),
+    });
+  };
 
   onCleanup(() => {
     tabActivityTracker.dispose();
@@ -1893,7 +1995,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const commitSidebarSessionSelection = (sessionId: string) => {
-    sessionSelection.request(sessionId, { restoreFocus: true });
+    requestSessionSelection(sessionId, true);
   };
 
   const previewSidebarSessionSelection = (event: PointerEvent, sessionId: string) => {
@@ -3395,7 +3497,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const target = sessionListItems()[shortcutTabIndex] ?? null;
       if (target) {
         e.preventDefault();
-        sessionSelection.request(target.id, { restoreFocus: true });
+        requestSessionSelection(target.id, true);
       }
       return;
     }
@@ -3613,6 +3715,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               registerActions={registerActions}
                               registerWorkingSetRuntime={registerWorkingSetRuntime}
                               onRuntimeStatus={handleRuntimeStatus}
+                              onInteractive={handleTerminalInteractive}
                               onLiveOutputObserved={handleLiveOutputObserved}
                               onOutputCommitted={handleOutputCommitted}
                               setWorkingSetInteraction={setWorkingSetInteraction}

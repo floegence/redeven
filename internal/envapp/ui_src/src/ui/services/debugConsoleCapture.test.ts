@@ -120,6 +120,45 @@ describe('debugConsoleCapture', () => {
     unsubscribe();
   });
 
+  it('projects terminal attach without retaining session or connection identity', async () => {
+    const attachGeneration = 987654323;
+    const events: any[] = [];
+    const unsubscribe = subscribeDebugConsoleClientEvents((event) => events.push(event));
+    setDebugConsoleCaptureEnabled(true);
+
+    await captureDebugConsoleProtocolCall({
+      typeID: redevenV1TypeIds.terminal.sessionAttach,
+      payload: {
+        session_id: 'session-sensitive-attach',
+        conn_id: 'connection-sensitive-attach',
+        attach_generation: attachGeneration,
+        cols: 120,
+        rows: 40,
+      },
+      execute: async () => ({
+        ok: true,
+        history_boundary_sequence: 42,
+      }),
+    });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.detail?.request?.payload).toEqual({
+      cols: 120,
+      rows: 40,
+    });
+    expect(events[0]?.detail?.response?.payload).toEqual({
+      ok: true,
+      history_boundary_sequence: 42,
+    });
+    const serialized = JSON.stringify(events[0]);
+    expect(serialized).not.toContain('session-sensitive-attach');
+    expect(serialized).not.toContain('connection-sensitive-attach');
+    expect(serialized).not.toContain('attach_generation');
+    expect(serialized).not.toContain(String(attachGeneration));
+
+    unsubscribe();
+  });
+
   it('projects terminal history to recovery metadata without retaining output chunks', async () => {
     const secret = 'terminal-history-secret-5e427';
     const encodedSecret = btoa(secret);
@@ -212,6 +251,47 @@ describe('debugConsoleCapture', () => {
     expect(serialized).not.toContain(secret);
     expect(serialized).not.toContain(encodedSecret);
     expect(serialized).not.toContain('session-sensitive');
+
+    unsubscribe();
+  });
+
+  it('retains the terminal attach RPC code without retaining identities or raw failure text', async () => {
+    const secret = 'terminal-attach-failure-secret';
+    const events: any[] = [];
+    const unsubscribe = subscribeDebugConsoleClientEvents((event) => events.push(event));
+    setDebugConsoleCaptureEnabled(true);
+
+    await expect(captureDebugConsoleProtocolCall({
+      typeID: redevenV1TypeIds.terminal.sessionAttach,
+      payload: {
+        session_id: 'session-sensitive-attach-failure',
+        conn_id: 'connection-sensitive-attach-failure',
+        attach_generation: 987654321,
+        cols: 100,
+        rows: 30,
+      },
+      execute: async () => {
+        throw Object.assign(new Error(`superseded after ${secret}`), { code: 409 });
+      },
+    })).rejects.toThrow(secret);
+
+    expect(events).toHaveLength(1);
+    expect(events[0]?.status_code).toBe(409);
+    expect(events[0]?.message).toBe('Terminal attach request failed');
+    expect(events[0]?.detail?.response).toEqual({
+      error_message: 'Terminal attach request failed',
+      rpc_error_code: 409,
+    });
+    expect(events[0]?.detail?.request?.payload).toEqual({
+      cols: 100,
+      rows: 30,
+    });
+    const serialized = JSON.stringify(events[0]);
+    expect(serialized).not.toContain(secret);
+    expect(serialized).not.toContain('session-sensitive-attach-failure');
+    expect(serialized).not.toContain('connection-sensitive-attach-failure');
+    expect(serialized).not.toContain('987654321');
+    expect(serialized).not.toContain('attach_generation');
 
     unsubscribe();
   });

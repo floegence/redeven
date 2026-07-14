@@ -94,6 +94,21 @@ function readPreviousContract(previousTag) {
   }
 }
 
+function assertExistingTagMatchesCurrentCheckout(releaseTag, contract) {
+  const taggedCommit = gitOutput(['rev-parse', '--verify', `refs/tags/${releaseTag}^{commit}`]);
+  if (!taggedCommit) {
+    return;
+  }
+  const headCommit = gitOutput(['rev-parse', 'HEAD']);
+  if (!headCommit || taggedCommit !== headCommit) {
+    fail(`release tag ${releaseTag} already exists at ${taggedCommit}; refusing to reuse it from ${headCommit || 'an unknown HEAD'}`);
+  }
+  const taggedContract = readPreviousContract(releaseTag);
+  if (taggedContract && JSON.stringify(taggedContract) !== JSON.stringify(contract)) {
+    fail(`compatibility contract differs from the contract already published at ${releaseTag}`);
+  }
+}
+
 const contract = readJSON(contractPath);
 const protocolSource = fs.readFileSync(path.join(rootDir, 'internal/runtimeservice/snapshot.go'), 'utf8');
 const protocolMatch = protocolSource.match(/const\s+ProtocolVersion\s*=\s*"([^"]+)"/u);
@@ -140,6 +155,7 @@ if (!Array.isArray(review.checked_surfaces) || review.checked_surfaces.map(trim)
 
 if (expectedRelease) {
   requireReleaseTag(expectedRelease, 'expected release');
+  assertExistingTagMatchesCurrentCheckout(expectedRelease, contract);
   if (releaseVersion !== expectedRelease) {
     fail(`release_review.release_version must be ${expectedRelease} for this tag; got ${releaseVersion}`);
   }

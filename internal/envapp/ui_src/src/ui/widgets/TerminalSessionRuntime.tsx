@@ -4,9 +4,9 @@ import {
   TerminalCore,
   createPagedTerminalOutputCoordinator,
   getDefaultTerminalConfig,
+  type AtomicPagedTerminalOutputCoordinatorHandle,
   type Logger,
   type PagedTerminalHistoryPage,
-  type PagedTerminalOutputCoordinatorHandle,
   type PagedTerminalOutputFailureCode,
   type PagedTerminalOutputSnapshot,
   type TerminalAppearance,
@@ -69,7 +69,7 @@ export type TerminalSessionRuntimeActions = Readonly<{
   reload: () => Promise<void>;
   resetAfterClear: () => Promise<boolean>;
   retryOutputRecovery: () => Promise<void>;
-  focusIfInteractive: () => boolean;
+  focusIfInteractive: () => 'focused' | 'not_interactive' | 'selection_active';
 }>;
 
 export type TerminalSessionRuntimeStatus = Readonly<{
@@ -106,6 +106,7 @@ export type TerminalSessionRuntimeProps = Readonly<{
   registerActions: (sessionId: string, actions: TerminalSessionRuntimeActions | null) => void;
   registerWorkingSetRuntime: (sessionId: string, runtime: TerminalWorkingSetRuntime | null) => void;
   onRuntimeStatus?: (sessionId: string, status: TerminalSessionRuntimeStatus) => void;
+  onInteractive?: (sessionId: string) => void;
   onLiveOutputObserved?: (sessionId: string, byteLength: number, sequence: number | undefined) => void;
   onOutputCommitted?: (sessionId: string, source: 'history' | 'live', sequence: number | undefined) => void;
   setWorkingSetInteraction: (sessionId: string, interaction: TerminalWorkingSetInteraction, active: boolean) => void;
@@ -353,7 +354,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       props.onVisibleOutput?.(sessionId(), source, byteLength, sequence);
     },
   });
-  let outputCoordinator: PagedTerminalOutputCoordinatorHandle | null = null;
+  let outputCoordinator: AtomicPagedTerminalOutputCoordinatorHandle | null = null;
   let outputCoordinatorSnapshot: PagedTerminalOutputSnapshot | null = null;
   let replayCoveredBytes = 0;
   let replayTotalBytes = 0;
@@ -376,9 +377,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   const focusTerminalIfInteractive = () => {
     const core = term;
-    if (!core || terminalInputBlocked() || core.hasSelection()) return false;
+    if (!core || terminalInputBlocked()) return 'not_interactive' as const;
+    if (core.hasSelection()) return 'selection_active' as const;
     core.focus();
-    return true;
+    return 'focused' as const;
   };
 
   const clearOutputSubscription = () => {
@@ -790,7 +792,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     setLoading('initializing');
 
     const core = createCore(id, target);
-    ensureOutputCoordinator(id);
+    const coordinator = ensureOutputCoordinator(id);
 
     try {
       await core.initialize();
@@ -800,6 +802,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       props.registerCore(id, core);
 
       applyTerminalAppearance(core, buildTerminalAppearance(), { forceResize: true });
+
+      // Begin retaining live output before subscription and before the server
+      // captures the atomic history boundary for this attachment.
+      const coordinatorAttachGeneration = coordinator.beginAttach(0);
 
       clearOutputSubscription();
       unsubData = props.eventSource.onTerminalData(id, (ev) => {
@@ -816,20 +822,35 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       transitionRecoveryPhase('attaching');
       const dims = core.getDimensions();
       markTerminalRecoveryMilestone(trace, 'attach-start', { cols: dims.cols, rows: dims.rows });
-      await props.transport.attach(id, dims.cols, dims.rows);
+      const attachResult = await props.transport.attachWithHistoryBoundary(id, dims.cols, dims.rows);
       if (seq !== initSeq) return;
-      markTerminalRecoveryMilestone(trace, 'attach-ack', { cols: dims.cols, rows: dims.rows });
-      publishTerminalRecoveryEvent(trace, 'attach_ack', { cols: dims.cols, rows: dims.rows });
+      if (!Object.prototype.hasOwnProperty.call(attachResult, 'historyBoundarySequence')) {
+        reportBlockingFailure('history_contract_missing');
+        throw new Error('Terminal attach response omitted the history boundary');
+      }
+      const historyBoundarySequence = attachResult.historyBoundarySequence;
+      if (!Number.isSafeInteger(historyBoundarySequence) || (historyBoundarySequence as number) < 0) {
+        reportBlockingFailure('history_contract_invalid');
+        throw new Error('Terminal attach response returned an invalid history boundary');
+      }
+      markTerminalRecoveryMilestone(trace, 'attach-ack', {
+        cols: dims.cols,
+        rows: dims.rows,
+        snapshot_end_sequence: historyBoundarySequence,
+      });
+      publishTerminalRecoveryEvent(trace, 'attach_ack', {
+        cols: dims.cols,
+        rows: dims.rows,
+        snapshot_end_sequence: historyBoundarySequence,
+      });
 
       setLoading('loading_history');
       transitionRecoveryPhase('replaying');
       core.clear();
       outputProjection.reset();
       try {
-        const coordinator = outputCoordinator;
-        if (!coordinator) throw new Error('Terminal output coordinator unavailable');
         markTerminalRecoveryMilestone(trace, 'baseline-queued');
-        void coordinator.attach(0);
+        void coordinator.completeAttach(coordinatorAttachGeneration, historyBoundarySequence);
         const baseline = await coordinator.waitForBaseline();
         if (!baseline.baselineReady) {
           reportBlockingFailure(baseline.failure?.code ?? 'terminal_unavailable');
@@ -881,6 +902,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         if (el && el.style.opacity !== '1') {
           el.style.opacity = '1';
         }
+        props.onInteractive?.(id);
       });
     } catch {
       if (seq !== initSeq) return;
@@ -1008,6 +1030,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           || activeElement === document.body
           || target.contains(activeElement));
         if (focusStillOwned && props.viewActive() && props.active() && props.autoFocus() && !core.hasSelection()) core.focus();
+        props.onInteractive?.(id);
       });
     } catch (errorValue) {
       if (seq !== initSeq) return;

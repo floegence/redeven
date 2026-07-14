@@ -352,8 +352,8 @@ func (m *Manager) detachSessionViewers(sessionID string) {
 
 	m.mu.Lock()
 	if servers := m.bySession[sessionID]; len(servers) > 0 {
-		for srv, connID := range servers {
-			toRemove = append(toRemove, sinkDetach{sessionID: sessionID, connID: connID})
+		for srv, attachment := range servers {
+			toRemove = append(toRemove, sinkDetach{sessionID: sessionID, connID: attachment.connID})
 			if sessions := m.byServer[srv]; sessions != nil {
 				delete(sessions, sessionID)
 				if len(sessions) == 0 {
@@ -363,19 +363,16 @@ func (m *Manager) detachSessionViewers(sessionID string) {
 		}
 		delete(m.bySession, sessionID)
 	}
+	if len(toRemove) > 0 {
+		if sess, ok := m.term.GetSession(sessionID); ok && sess != nil {
+			for _, item := range toRemove {
+				if !m.sessionConnectionOwnedLocked(sessionID, item.connID) {
+					sess.RemoveConnection(item.connID)
+				}
+			}
+		}
+	}
 	m.mu.Unlock()
-
-	if len(toRemove) == 0 {
-		return
-	}
-
-	sess, ok := m.term.GetSession(sessionID)
-	if !ok || sess == nil {
-		return
-	}
-	for _, item := range toRemove {
-		sess.RemoveConnection(item.connID)
-	}
 }
 
 func buildTerminalSessionsChangedPayload(

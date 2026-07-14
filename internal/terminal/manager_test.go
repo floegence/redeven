@@ -232,7 +232,7 @@ func TestAttachSessionActivatesDormantSessionAndKeepsResizeWorking(t *testing.T)
 		m.Cleanup()
 	})
 
-	if err := m.attachSession(sess.ID, "conn-1", 111, 33, nil); err != nil {
+	if _, err := m.attachSession(sess.ID, "conn-1", 111, 33, nil, 0); err != nil {
 		t.Fatalf("attachSession() error = %v", err)
 	}
 
@@ -243,6 +243,752 @@ func TestAttachSessionActivatesDormantSessionAndKeepsResizeWorking(t *testing.T)
 	}
 
 	waitForPTYSize(t, sess, 95, 29, 2*time.Second)
+}
+
+func TestTerminalAttachRespAlwaysSerializesZeroHistoryBoundary(t *testing.T) {
+	payload, err := json.Marshal(terminalAttachResp{OK: true})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if got, ok := fields["history_boundary_sequence"]; !ok || string(got) != "0" {
+		t.Fatalf("history_boundary_sequence = %s, present=%v, want explicit 0", got, ok)
+	}
+}
+
+func TestAttachSessionReturnsCommittedHistoryBoundary(t *testing.T) {
+	root := t.TempDir()
+	shellPath := filepath.Join(root, "history-shell.sh")
+	content := []byte("#!/bin/sh\nprintf 'history-before-second-attach\\n'\ntrap 'exit 0' TERM INT\nwhile true; do sleep 1; done\n")
+	if err := os.WriteFile(shellPath, content, 0o755); err != nil {
+		t.Fatalf("WriteFile(%q): %v", shellPath, err)
+	}
+	m := NewManager(shellPath, root, nil)
+	t.Cleanup(m.Cleanup)
+
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+	firstBoundary, err := m.attachSession(sess.ID, "conn-1", 80, 24, nil, 0)
+	if err != nil {
+		t.Fatalf("attachSession(first) error = %v", err)
+	}
+	if firstBoundary != 0 {
+		t.Fatalf("first boundary = %d, want 0 for dormant session", firstBoundary)
+	}
+
+	var expectedBoundary int64
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		page, pageErr := sess.GetHistoryPage(termgo.HistoryPageOptions{StartSeq: 1})
+		if pageErr != nil {
+			t.Fatalf("GetHistoryPage() error = %v", pageErr)
+		}
+		if page.SnapshotEndSequence > 0 {
+			expectedBoundary = page.SnapshotEndSequence
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if expectedBoundary == 0 {
+		t.Fatal("timeout waiting for committed terminal history")
+	}
+
+	secondBoundary, err := m.attachSession(sess.ID, "conn-2", 80, 24, nil, 0)
+	if err != nil {
+		t.Fatalf("attachSession(second) error = %v", err)
+	}
+	if secondBoundary != expectedBoundary {
+		t.Fatalf("second boundary = %d, want committed history boundary %d", secondBoundary, expectedBoundary)
+	}
+}
+
+func TestBroadcastUsesPerSinkHistoryBoundary(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	oldServerConn, oldClientConn := net.Pipe()
+	newServerConn, newClientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = oldServerConn.Close()
+		_ = oldClientConn.Close()
+		_ = newServerConn.Close()
+		_ = newClientConn.Close()
+	})
+	oldServer := rpc.NewServer(oldServerConn, rpc.NewRouter())
+	newServer := rpc.NewServer(newServerConn, rpc.NewRouter())
+	oldClient := rpc.NewClient(oldClientConn)
+	newClient := rpc.NewClient(newClientConn)
+	t.Cleanup(func() {
+		_ = oldClient.Close()
+		_ = newClient.Close()
+	})
+
+	oldSequences := make(chan int64, 4)
+	newSequences := make(chan int64, 4)
+	oldClient.OnNotify(TypeID_TERMINAL_OUTPUT, func(payload json.RawMessage) {
+		var output terminalOutputPayload
+		if json.Unmarshal(payload, &output) == nil {
+			oldSequences <- output.Sequence
+		}
+	})
+	newClient.OnNotify(TypeID_TERMINAL_OUTPUT, func(payload json.RawMessage) {
+		var output terminalOutputPayload
+		if json.Unmarshal(payload, &output) == nil {
+			newSequences <- output.Sequence
+		}
+	})
+
+	const sessionID = "session-boundaries"
+	m.mu.Lock()
+	if _, _, err := m.attachSinkLocked(sessionID, "old-conn", oldServer, 1, func() int64 { return 1 }, nil); err != nil {
+		m.mu.Unlock()
+		t.Fatalf("attachSinkLocked(old) error = %v", err)
+	}
+	if _, _, err := m.attachSinkLocked(sessionID, "new-conn", newServer, 1, func() int64 { return 3 }, nil); err != nil {
+		m.mu.Unlock()
+		t.Fatalf("attachSinkLocked(new) error = %v", err)
+	}
+	m.mu.Unlock()
+
+	for _, sequence := range []int64{1, 2, 4} {
+		payload, err := json.Marshal(terminalOutputPayload{SessionID: sessionID, Sequence: sequence})
+		if err != nil {
+			t.Fatalf("Marshal(sequence=%d) error = %v", sequence, err)
+		}
+		m.broadcast(sessionID, sequence, payload)
+	}
+
+	waitForTerminalOutputSequences(t, oldSequences, []int64{2, 4})
+	waitForTerminalOutputSequences(t, newSequences, []int64{4})
+	assertNoTerminalOutputSequence(t, oldSequences)
+	assertNoTerminalOutputSequence(t, newSequences)
+
+	m.DetachSink(oldServer)
+	m.DetachSink(newServer)
+	m.mu.Lock()
+	_, retained := m.bySession[sessionID]
+	m.mu.Unlock()
+	if retained {
+		t.Fatal("DetachSink retained per-sink history boundaries")
+	}
+}
+
+func TestAttachSinkRejectsSupersededGenerationWithoutRaisingLiveFloor(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() { _ = client.Close() })
+
+	sequences := make(chan int64, 2)
+	client.OnNotify(TypeID_TERMINAL_OUTPUT, func(payload json.RawMessage) {
+		var output terminalOutputPayload
+		if json.Unmarshal(payload, &output) == nil {
+			sequences <- output.Sequence
+		}
+	})
+
+	const sessionID = "session-generation-order"
+	m.mu.Lock()
+	if _, _, err := m.attachSinkLocked(sessionID, "new-conn", server, 2, func() int64 { return 3 }, nil); err != nil {
+		m.mu.Unlock()
+		t.Fatalf("attachSinkLocked(new) error = %v", err)
+	}
+	staleBoundaryCaptured := false
+	_, _, staleErr := m.attachSinkLocked(sessionID, "old-conn", server, 1, func() int64 {
+		staleBoundaryCaptured = true
+		return 5
+	}, nil)
+	attachment := m.bySession[sessionID][server]
+	m.mu.Unlock()
+
+	if !errors.Is(staleErr, errTerminalAttachSuperseded) {
+		t.Fatalf("stale attach error = %v, want superseded", staleErr)
+	}
+	if staleBoundaryCaptured {
+		t.Fatal("stale attach captured a newer history boundary")
+	}
+	if attachment.generation != 2 || attachment.connID != "new-conn" || attachment.liveAfterSequence != 3 {
+		t.Fatalf("attachment = %+v, want generation 2 at boundary 3", attachment)
+	}
+
+	payload, err := json.Marshal(terminalOutputPayload{SessionID: sessionID, Sequence: 4})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	m.broadcast(sessionID, 4, payload)
+	waitForTerminalOutputSequences(t, sequences, []int64{4})
+	m.DetachSink(server)
+}
+
+func TestAttachSinkRejectsGenerationOlderThanFailedAttachmentHighWater(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() { _ = client.Close() })
+
+	const sessionID = "session-failed-generation-high-water"
+	m.mu.Lock()
+	attachment, created, err := m.attachSinkLocked(sessionID, "conn-2", server, 2, func() int64 { return 4 }, nil)
+	m.mu.Unlock()
+	if err != nil || !created {
+		t.Fatalf("attachSinkLocked() = created:%v err:%v, want created attachment", created, err)
+	}
+	m.rollbackSessionAttachment(sessionID, server, attachment, nil)
+
+	staleBoundaryCaptured := false
+	m.mu.Lock()
+	_, _, staleErr := m.attachSinkLocked(sessionID, "conn-1", server, 1, func() int64 {
+		staleBoundaryCaptured = true
+		return 7
+	}, nil)
+	highWater := m.attachGenerations[server][sessionID]
+	_, retained := m.bySession[sessionID][server]
+	m.mu.Unlock()
+
+	if !errors.Is(staleErr, errTerminalAttachSuperseded) {
+		t.Fatalf("stale attach error = %v, want superseded", staleErr)
+	}
+	if staleBoundaryCaptured {
+		t.Fatal("stale attach captured a boundary after the newer attachment failed")
+	}
+	if highWater != 2 || retained {
+		t.Fatalf("failed attachment state = highWater:%d retained:%v, want tombstone 2 without active mapping", highWater, retained)
+	}
+	m.DetachSink(server)
+}
+
+func TestAttachSinkRejectsClosedStreamBeforeRegisteringConnection(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	m.DetachSink(server)
+
+	boundaryCaptured := false
+	m.mu.Lock()
+	_, _, err := m.attachSinkLocked("session-closed", "conn-closed", server, 1, func() int64 {
+		boundaryCaptured = true
+		return 7
+	}, nil)
+	_, serverRetained := m.byServer[server]
+	_, sessionRetained := m.bySession["session-closed"]
+	m.mu.Unlock()
+
+	if !errors.Is(err, errTerminalAttachSinkClosed) {
+		t.Fatalf("closed sink attach error = %v, want sink closed", err)
+	}
+	if boundaryCaptured {
+		t.Fatal("closed sink attach registered a terminal connection")
+	}
+	if serverRetained || sessionRetained {
+		t.Fatalf("closed sink attach retained mappings: byServer=%v bySession=%v", serverRetained, sessionRetained)
+	}
+}
+
+func TestAttachSinkReplacesAlternatingConnectionIDsUnderRoutingLock(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	connections := make(map[string]bool)
+
+	m.mu.Lock()
+	if _, _, err := m.attachSinkLocked("session-alternating", "conn-a", server, 1, func() int64 {
+		connections["conn-a"] = true
+		return 1
+	}, func(connID string) {
+		delete(connections, connID)
+	}); err != nil {
+		m.mu.Unlock()
+		t.Fatalf("initial attachSinkLocked() error = %v", err)
+	}
+	m.mu.Unlock()
+
+	removalStarted := make(chan struct{})
+	releaseRemoval := make(chan struct{})
+	secondDone := make(chan error, 1)
+	go func() {
+		m.mu.Lock()
+		_, _, err := m.attachSinkLocked("session-alternating", "conn-b", server, 2, func() int64 {
+			connections["conn-b"] = true
+			return 2
+		}, func(connID string) {
+			close(removalStarted)
+			<-releaseRemoval
+			delete(connections, connID)
+		})
+		m.mu.Unlock()
+		secondDone <- err
+	}()
+	<-removalStarted
+	if m.mu.TryLock() {
+		m.mu.Unlock()
+		t.Fatal("routing lock released before previous connection removal completed")
+	}
+
+	thirdDone := make(chan error, 1)
+	go func() {
+		m.mu.Lock()
+		_, _, err := m.attachSinkLocked("session-alternating", "conn-a", server, 3, func() int64 {
+			connections["conn-a"] = true
+			return 3
+		}, func(connID string) {
+			delete(connections, connID)
+		})
+		m.mu.Unlock()
+		thirdDone <- err
+	}()
+
+	close(releaseRemoval)
+	if err := <-secondDone; err != nil {
+		t.Fatalf("second attachSinkLocked() error = %v", err)
+	}
+	if err := <-thirdDone; err != nil {
+		t.Fatalf("third attachSinkLocked() error = %v", err)
+	}
+
+	m.mu.Lock()
+	attachment := m.bySession["session-alternating"][server]
+	connAExists := connections["conn-a"]
+	connBExists := connections["conn-b"]
+	m.mu.Unlock()
+	if attachment.generation != 3 || attachment.connID != "conn-a" {
+		t.Fatalf("final attachment = %+v, want generation 3 conn-a", attachment)
+	}
+	if !connAExists || connBExists {
+		t.Fatalf("connection ownership = conn-a:%v conn-b:%v, want only conn-a", connAExists, connBExists)
+	}
+	m.DetachSink(server)
+}
+
+func TestDetachSinkWinsAfterInFlightAttachBoundaryCapture(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	captureStarted := make(chan struct{})
+	releaseCapture := make(chan struct{})
+	attachDone := make(chan error, 1)
+	go func() {
+		m.mu.Lock()
+		_, _, err := m.attachSinkLocked("session-detach-race", "conn-1", server, 1, func() int64 {
+			close(captureStarted)
+			<-releaseCapture
+			return 4
+		}, nil)
+		m.mu.Unlock()
+		attachDone <- err
+	}()
+	<-captureStarted
+
+	detachDone := make(chan struct{})
+	go func() {
+		m.DetachSink(server)
+		close(detachDone)
+	}()
+	close(releaseCapture)
+	if err := <-attachDone; err != nil {
+		t.Fatalf("attachSinkLocked() error = %v", err)
+	}
+	<-detachDone
+
+	m.mu.Lock()
+	_, closed := m.closedSinks[server]
+	_, serverRetained := m.byServer[server]
+	_, sessionRetained := m.bySession["session-detach-race"]
+	_, writerRetained := m.writers[server]
+	m.mu.Unlock()
+	if !closed || serverRetained || sessionRetained || writerRetained {
+		t.Fatalf(
+			"detach race state: closed=%v byServer=%v bySession=%v writer=%v",
+			closed,
+			serverRetained,
+			sessionRetained,
+			writerRetained,
+		)
+	}
+}
+
+func TestAttachActivationFailureClearsSinkBoundary(t *testing.T) {
+	root := t.TempDir()
+	invalidShell := filepath.Join(root, "invalid-shell")
+	if err := os.WriteFile(invalidShell, []byte("not an executable format\n"), 0o755); err != nil {
+		t.Fatalf("WriteFile(%q): %v", invalidShell, err)
+	}
+	m := NewManager(invalidShell, root, nil)
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	if _, err := m.attachSession(sess.ID, "failed-conn", 80, 24, server, 1); err == nil {
+		t.Fatal("attachSession() succeeded with invalid shell executable")
+	}
+
+	m.mu.Lock()
+	_, sessionRetained := m.bySession[sess.ID]
+	_, serverRetained := m.byServer[server]
+	m.mu.Unlock()
+	if sessionRetained || serverRetained {
+		t.Fatalf("activation failure retained sink boundary: bySession=%v byServer=%v", sessionRetained, serverRetained)
+	}
+}
+
+func TestStaleActivationFailureDoesNotDetachNewerAttachment(t *testing.T) {
+	root := t.TempDir()
+	m := newQuietTestManager(t, root)
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+
+	firstActivationStarted := make(chan struct{})
+	releaseFirstActivation := make(chan struct{})
+	var activationCalls atomic.Int32
+	m.activateSessionFunc = func(string, int, int) error {
+		if activationCalls.Add(1) == 1 {
+			close(firstActivationStarted)
+			<-releaseFirstActivation
+			return errors.New("old activation failed")
+		}
+		return nil
+	}
+
+	oldResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "old-conn", 80, 24, server, 1)
+		oldResult <- attachErr
+	}()
+	<-firstActivationStarted
+
+	if _, err := m.attachSession(sess.ID, "new-conn", 100, 30, server, 2); err != nil {
+		t.Fatalf("new attachSession() error = %v", err)
+	}
+	close(releaseFirstActivation)
+	if err := <-oldResult; err == nil {
+		t.Fatal("old attachSession() succeeded after activation failure")
+	}
+
+	m.mu.Lock()
+	attachment, sessionRetained := m.bySession[sess.ID][server]
+	indexed, serverRetained := m.byServer[server][sess.ID]
+	m.mu.Unlock()
+	if !sessionRetained || !serverRetained {
+		t.Fatalf("new attachment removed by stale failure: bySession=%v byServer=%v", sessionRetained, serverRetained)
+	}
+	if attachment.generation != 2 || attachment.connID != "new-conn" || !sameSinkAttachment(indexed, attachment) {
+		t.Fatalf("retained attachment = %+v indexed=%+v, want newer generation", attachment, indexed)
+	}
+
+	m.DetachSink(server)
+}
+
+func TestActivationFailureRollbackSerializesSameConnectionReattach(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() { _ = client.Close() })
+
+	const sessionID = "session-same-connection-rollback"
+	connections := make(map[string]bool)
+	m.mu.Lock()
+	attachment, _, err := m.attachSinkLocked(sessionID, "shared-conn", server, 1, func() int64 {
+		connections["shared-conn"] = true
+		return 1
+	}, nil)
+	m.mu.Unlock()
+	if err != nil {
+		t.Fatalf("attachSinkLocked(initial) error = %v", err)
+	}
+
+	removalStarted := make(chan struct{})
+	releaseRemoval := make(chan struct{})
+	rollbackDone := make(chan struct{})
+	go func() {
+		m.rollbackSessionAttachment(sessionID, server, attachment, func(connID string) {
+			close(removalStarted)
+			<-releaseRemoval
+			delete(connections, connID)
+		})
+		close(rollbackDone)
+	}()
+	<-removalStarted
+
+	reattachDone := make(chan error, 1)
+	go func() {
+		m.mu.Lock()
+		_, _, attachErr := m.attachSinkLocked(sessionID, "shared-conn", server, 2, func() int64 {
+			connections["shared-conn"] = true
+			return 2
+		}, nil)
+		m.mu.Unlock()
+		reattachDone <- attachErr
+	}()
+	if m.mu.TryLock() {
+		m.mu.Unlock()
+		t.Fatal("routing lock released before failed attachment connection removal completed")
+	}
+
+	close(releaseRemoval)
+	<-rollbackDone
+	if err := <-reattachDone; err != nil {
+		t.Fatalf("reattach error = %v", err)
+	}
+	m.mu.Lock()
+	current := m.bySession[sessionID][server]
+	connectionRetained := connections["shared-conn"]
+	m.mu.Unlock()
+	if current.generation != 2 || !connectionRetained {
+		t.Fatalf("reattach state = attachment:%+v connection:%v, want generation 2 with connection", current, connectionRetained)
+	}
+	m.DetachSink(server)
+}
+
+func TestDuplicateGenerationDoesNotSharePendingActivation(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() { _ = client.Close() })
+
+	activationStarted := make(chan struct{})
+	releaseActivation := make(chan struct{})
+	var activationCalls atomic.Int32
+	m.activateSessionFunc = func(string, int, int) error {
+		if activationCalls.Add(1) == 1 {
+			close(activationStarted)
+			<-releaseActivation
+			return errors.New("transient activation failure")
+		}
+		return nil
+	}
+
+	firstResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+		firstResult <- attachErr
+	}()
+	<-activationStarted
+
+	_, duplicateErr := m.attachSession(sess.ID, "conn-1", 80, 24, server, 1)
+	duplicateRPCError, ok := duplicateErr.(*rpc.Error)
+	if !ok || duplicateRPCError.Code != 409 || duplicateRPCError.Message != "terminal attach in progress" {
+		t.Fatalf("duplicate attach error = %#v, want 409 attach in progress", duplicateErr)
+	}
+	if got := activationCalls.Load(); got != 1 {
+		t.Fatalf("activation calls while duplicate pending = %d, want 1", got)
+	}
+
+	close(releaseActivation)
+	if err := <-firstResult; err == nil {
+		t.Fatal("first attach succeeded after injected activation failure")
+	}
+	if _, err := m.attachSession(sess.ID, "conn-1", 80, 24, server, 2); err != nil {
+		t.Fatalf("new generation attach after failure = %v", err)
+	}
+	if got := activationCalls.Load(); got != 2 {
+		t.Fatalf("activation calls after new generation = %d, want 2", got)
+	}
+	m.DetachSink(server)
+}
+
+func TestTerminalSessionClosedClearsRoutingAndGenerationHighWater(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() { _ = client.Close() })
+
+	const sessionID = "session-natural-close"
+	m.mu.Lock()
+	if _, _, err := m.attachSinkLocked(sessionID, "conn-1", server, 3, func() int64 { return 5 }, nil); err != nil {
+		m.mu.Unlock()
+		t.Fatalf("attachSinkLocked() error = %v", err)
+	}
+	m.mu.Unlock()
+
+	(&eventHandler{m: m}).OnTerminalSessionClosed(sessionID)
+	m.mu.Lock()
+	_, sessionRetained := m.bySession[sessionID]
+	_, serverRetained := m.byServer[server][sessionID]
+	_, generationRetained := m.attachGenerations[server][sessionID]
+	m.mu.Unlock()
+	if sessionRetained || serverRetained || generationRetained {
+		t.Fatalf(
+			"closed session retained routing: bySession=%v byServer=%v generation=%v",
+			sessionRetained,
+			serverRetained,
+			generationRetained,
+		)
+	}
+	m.DetachSink(server)
+}
+
+func TestSinkWriterConcurrentTrySendAndClose(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() { _ = client.Close() })
+
+	writer := newSinkWriter(server, nil)
+	start := make(chan struct{})
+	stop := make(chan struct{})
+	var senders sync.WaitGroup
+	for range 8 {
+		senders.Add(1)
+		go func() {
+			defer senders.Done()
+			<-start
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					writer.TrySend(sinkMsg{TypeID: TypeID_TERMINAL_OUTPUT, Payload: json.RawMessage(`{}`)})
+				}
+			}
+		}()
+	}
+	close(start)
+
+	closeDone := make(chan struct{})
+	go func() {
+		writer.Close()
+		close(closeDone)
+	}()
+	<-closeDone
+	close(stop)
+	senders.Wait()
+}
+
+func TestStaleActivationFailurePreservesSameConnectionOwnedByNewerGeneration(t *testing.T) {
+	root := t.TempDir()
+	m := newQuietTestManager(t, root)
+	t.Cleanup(m.Cleanup)
+	sess, err := m.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+	server := rpc.NewServer(serverConn, rpc.NewRouter())
+
+	firstActivationStarted := make(chan struct{})
+	releaseFirstActivation := make(chan struct{})
+	var activationCalls atomic.Int32
+	m.activateSessionFunc = func(string, int, int) error {
+		if activationCalls.Add(1) == 1 {
+			close(firstActivationStarted)
+			<-releaseFirstActivation
+			return errors.New("old activation failed")
+		}
+		return nil
+	}
+
+	oldResult := make(chan error, 1)
+	go func() {
+		_, attachErr := m.attachSession(sess.ID, "shared-conn", 80, 24, server, 1)
+		oldResult <- attachErr
+	}()
+	<-firstActivationStarted
+
+	if _, err := m.attachSession(sess.ID, "shared-conn", 100, 30, server, 2); err != nil {
+		t.Fatalf("new attachSession() error = %v", err)
+	}
+	close(releaseFirstActivation)
+	if err := <-oldResult; err == nil {
+		t.Fatal("old attachSession() succeeded after activation failure")
+	}
+
+	if err := m.term.ActivateSession(sess.ID, 100, 30); err != nil {
+		t.Fatalf("ActivateSession() error = %v", err)
+	}
+	if err := m.resize(sess.ID, "shared-conn", 113, 37); err != nil {
+		t.Fatalf("resize() error = %v", err)
+	}
+	waitForPTYSize(t, sess, 113, 37, 2*time.Second)
+	m.DetachSink(server)
 }
 
 func TestNormalizeTerminalHistoryPageOptionsDefaultsAndClamps(t *testing.T) {
@@ -408,7 +1154,7 @@ func TestDeleteSessionHidesImmediatelyWhileCleanupRuns(t *testing.T) {
 	if got := m.visibleSessionInfos(); len(got) != 0 {
 		t.Fatalf("visibleSessionInfos() = %#v, want hidden closing session", got)
 	}
-	if err := m.attachSession(sess.ID, "conn-closed", 80, 24, nil); err == nil {
+	if _, err := m.attachSession(sess.ID, "conn-closed", 80, 24, nil, 0); err == nil {
 		t.Fatalf("attachSession() succeeded for hidden closing session")
 	}
 	if err := m.resize(sess.ID, "conn-closed", 80, 24); err == nil {
@@ -649,6 +1395,31 @@ func waitForPTYSize(t *testing.T, session *termgo.Session, expectedCols int, exp
 	}
 
 	t.Fatalf("timeout waiting for PTY size %dx%d", expectedCols, expectedRows)
+}
+
+func waitForTerminalOutputSequences(t *testing.T, sequences <-chan int64, expected []int64) {
+	t.Helper()
+
+	for index, want := range expected {
+		select {
+		case got := <-sequences:
+			if got != want {
+				t.Fatalf("output sequence[%d] = %d, want %d", index, got, want)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("timeout waiting for output sequence[%d] = %d", index, want)
+		}
+	}
+}
+
+func assertNoTerminalOutputSequence(t *testing.T, sequences <-chan int64) {
+	t.Helper()
+
+	select {
+	case got := <-sequences:
+		t.Fatalf("unexpected terminal output sequence %d", got)
+	case <-time.After(25 * time.Millisecond):
+	}
 }
 
 func waitForLifecycle(t *testing.T, m *Manager, sessionID string, lifecycle SessionLifecycle, timeout time.Duration) {

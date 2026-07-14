@@ -21,10 +21,12 @@ export type TerminalSessionAttachRequest = {
   connId: string;
   cols: number;
   rows: number;
+  attachGeneration: number;
 };
 
 export type TerminalSessionAttachResponse = {
   ok: boolean;
+  historyBoundarySequence?: number;
 };
 
 export type TerminalHistoryChunk = {
