@@ -2,19 +2,19 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const getArtifact = vi.fn();
-const createEntryControlplaneArtifactSource = vi.fn(() => ({ getArtifact }));
+const acquire = vi.fn();
+const createControlplaneArtifactSource = vi.fn(() => ({ kind: 'refreshable', acquire }));
 
 vi.mock('@floegence/floe-webapp-boot', () => ({
-  createEntryControlplaneArtifactSource,
+  createControlplaneArtifactSource,
 }));
 
 describe('controlplaneApi controlplane helper usage', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.restoreAllMocks();
-    getArtifact.mockReset();
-    createEntryControlplaneArtifactSource.mockClear();
+    acquire.mockReset();
+    createControlplaneArtifactSource.mockClear();
   });
 
   afterEach(() => {
@@ -37,17 +37,20 @@ describe('controlplaneApi controlplane helper usage', () => {
         default_suite: 1,
       },
     } as const;
-    getArtifact.mockResolvedValue(artifact);
+    acquire.mockResolvedValue(artifact);
+    const controller = new AbortController();
 
     const mod = await import('./controlplaneApi');
     const out = await mod.connectArtifactEntry({
       endpointId: 'env_demo',
       floeApp: 'com.floegence.redeven.agent',
       entryTicket: 'ticket-1',
+      traceId: 'trace-1',
+      signal: controller.signal,
     });
 
     expect(out).toBe(artifact);
-    expect(createEntryControlplaneArtifactSource).toHaveBeenCalledWith({
+    expect(createControlplaneArtifactSource).toHaveBeenCalledWith({
       endpointId: 'env_demo',
       entryTicket: 'ticket-1',
       credentials: 'omit',
@@ -55,6 +58,9 @@ describe('controlplaneApi controlplane helper usage', () => {
         floe_app: 'com.floegence.redeven.agent',
       },
     });
-    expect(getArtifact).toHaveBeenCalledWith({});
+    expect(acquire).toHaveBeenCalledWith({
+      traceId: 'trace-1',
+      signal: controller.signal,
+    });
   });
 });

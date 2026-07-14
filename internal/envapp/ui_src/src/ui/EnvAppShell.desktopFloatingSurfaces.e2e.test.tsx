@@ -187,7 +187,6 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
 
 vi.mock('@floegence/floe-webapp-boot', () => ({
   createArtifactDirectReconnectConfig: (config: unknown) => config,
-  createArtifactSourceFromFactory: (factory: unknown) => factory,
   createProxyRuntimeTunnelReconnectConfig: (config: unknown) => config,
 }));
 

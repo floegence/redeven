@@ -62,7 +62,10 @@ func run(baseURL string, action string, targetVersion string) error {
 	if err != nil {
 		return err
 	}
-	session, err := fsclient.Connect(ctx, artifact, fsclient.WithOrigin(origin))
+	session, err := fsclient.Connect(ctx, artifact,
+		fsclient.WithOrigin(origin),
+		fsclient.WithTransportSecurityPolicy(fsclient.AllowPlaintextForLoopback),
+	)
 	if err != nil {
 		return fmt.Errorf("connect direct session: %w", err)
 	}

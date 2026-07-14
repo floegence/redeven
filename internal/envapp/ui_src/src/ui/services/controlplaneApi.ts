@@ -1,4 +1,4 @@
-import { createEntryControlplaneArtifactSource } from '@floegence/floe-webapp-boot';
+import { createControlplaneArtifactSource, type ArtifactAcquireContext } from '@floegence/floe-webapp-boot';
 import { assertConnectArtifact, type ConnectArtifact } from '@floegence/flowersec-core';
 
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
@@ -395,8 +395,11 @@ export async function refreshLocalRuntime(): Promise<LocalRuntimeInfo | null> {
   return cachedLocalRuntime;
 }
 
-export async function mintLocalDirectConnectArtifact(): Promise<ConnectArtifact> {
-  const out = await fetchLocalJSON<{ connect_artifact?: unknown }>('/api/local/direct/connect_artifact', { method: 'POST' });
+export async function mintLocalDirectConnectArtifact(context: ArtifactAcquireContext = {}): Promise<ConnectArtifact> {
+  const out = await fetchLocalJSON<{ connect_artifact?: unknown }>('/api/local/direct/connect_artifact', {
+    method: 'POST',
+    ...(context.signal === undefined ? {} : { signal: context.signal }),
+  });
   const artifact = assertConnectArtifact(out?.connect_artifact);
   if (artifact.transport !== 'direct') {
     throw new Error('Invalid local direct connect artifact');
@@ -564,14 +567,18 @@ export async function connectArtifactEntry(args: {
   const entryTicket = args.entryTicket.trim();
   if (!endpointId || !floeApp || !entryTicket) throw new Error('Invalid request');
 
-  return createEntryControlplaneArtifactSource({
+  const source = createControlplaneArtifactSource({
     endpointId,
     entryTicket,
     credentials: 'omit',
     payload: {
       floe_app: floeApp,
     },
-  }).getArtifact({
+  });
+  if (source.kind !== 'refreshable') {
+    throw new Error('Invalid controlplane artifact source');
+  }
+  return source.acquire({
     ...(args.signal === undefined ? {} : { signal: args.signal }),
     ...(args.traceId === undefined ? {} : { traceId: args.traceId }),
   });

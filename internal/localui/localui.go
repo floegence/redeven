@@ -1513,7 +1513,16 @@ func (s *Server) handleDirectWS(w http.ResponseWriter, r *http.Request) {
 	var resolvedOK bool
 	var ch string
 	sess, err := endpoint.AcceptDirectWSResolved(r.Context(), c, endpoint.AcceptDirectResolverOptions{
-		ClockSkew: 60 * time.Second,
+		ClockSkew:                60 * time.Second,
+		OutboundRecordChunkBytes: 64 * 1024,
+		YamuxLimits: endpoint.YamuxLimits{
+			MaxActiveStreams:            64,
+			MaxInboundStreams:           32,
+			MaxFrameBytes:               256 * 1024,
+			PreferredOutboundFrameBytes: 64 * 1024,
+			MaxStreamReceiveBytes:       256 * 1024,
+			MaxSessionReceiveBytes:      16 * 1024 * 1024,
+		},
 		ResolveCredential: func(_ctx context.Context, init endpoint.DirectHandshakeInit) (endpoint.DirectHandshakeCredential, error) {
 			ch = strings.TrimSpace(init.ChannelID)
 			p, ok := s.resolvePending(ch)

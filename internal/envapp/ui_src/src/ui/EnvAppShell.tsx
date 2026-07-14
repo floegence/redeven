@@ -41,7 +41,6 @@ import {
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import {
   createArtifactDirectReconnectConfig,
-  createArtifactSourceFromFactory,
   createProxyRuntimeTunnelReconnectConfig,
 } from '@floegence/floe-webapp-boot';
 import {
@@ -172,6 +171,24 @@ const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
 const PLUGIN_CENTER_ACTIVITY_ID = 'plugin-center';
 const PLUGIN_SURFACE_ACTIVITY_ID = 'plugin-surface';
+const FLOWERSEC_CONNECT_RESOURCES = {
+  outboundRecordChunkBytes: 64 * 1024,
+  webSocketLimits: {
+    maxInboundQueuedBytes: 4 * 1024 * 1024,
+    outboundLowWatermarkBytes: 256 * 1024,
+    outboundHighWatermarkBytes: 1024 * 1024,
+    outboundHardLimitBytes: 4 * 1024 * 1024,
+    outboundDrainTimeoutMs: 10_000,
+  },
+  yamuxLimits: {
+    maxActiveStreams: 64,
+    maxInboundStreams: 32,
+    maxFrameBytes: 256 * 1024,
+    preferredOutboundFrameBytes: 64 * 1024,
+    maxStreamReceiveBytes: 256 * 1024,
+    maxSessionReceiveBytes: 16 * 1024 * 1024,
+  },
+} as const;
 
 const EnvTerminalPage = lazy(() => import('./pages/EnvTerminalPage').then((module) => ({ default: module.EnvTerminalPage })));
 const EnvMonitorPage = lazy(() => import('./pages/EnvMonitorPage').then((module) => ({ default: module.EnvMonitorPage })));
@@ -1386,7 +1403,7 @@ export function EnvAppShell() {
     }
   };
 
-  const createGetArtifact = () => async (ctx: Readonly<{ traceId?: string; signal?: AbortSignal }> = {}) => {
+  const acquireRemoteArtifact = async (ctx: Readonly<{ traceId?: string; signal?: AbortSignal }> = {}) => {
     const id = envId();
     if (!id) throw new Error('Missing env context. Please reopen from the control plane.');
 
@@ -1420,6 +1437,26 @@ export function EnvAppShell() {
     });
   };
 
+  const localProtocolConnectConfig: ProtocolConnectConfig = createArtifactDirectReconnectConfig({
+    source: { kind: 'refreshable', acquire: mintLocalDirectConnectArtifact },
+    observer,
+    connect: {
+      ...FLOWERSEC_CONNECT_RESOURCES,
+      liveness: { intervalMs: 15_000, timeoutMs: 10_000 },
+      transportSecurityPolicy: AllowPlaintextForLoopback,
+    },
+    autoReconnect: LOCAL_FAST_RECONNECT_POLICY,
+  });
+  const remoteProtocolConnectConfig: ProtocolConnectConfig = createProxyRuntimeTunnelReconnectConfig({
+    source: { kind: 'refreshable', acquire: acquireRemoteArtifact },
+    observer,
+    connect: {
+      ...FLOWERSEC_CONNECT_RESOURCES,
+      transportSecurityPolicy: RequireTLS,
+    },
+    autoReconnect: REMOTE_FAST_RECONNECT_POLICY,
+  });
+
   const runConnect = async (fn: (config: ProtocolConnectConfig) => Promise<void>) => {
     const protocolStatusValue = String(protocol.status() ?? '').trim();
     if (accessRecoveryBusy() || protocolStatusValue === 'connecting' || accessPending() || accessLocked()) return;
@@ -1442,27 +1479,14 @@ export function EnvAppShell() {
     try {
       if (isLocalMode()) {
         setLocalAccessChannelReady(false);
-        await fn(createArtifactDirectReconnectConfig({
-          artifactSource: createArtifactSourceFromFactory(mintLocalDirectConnectArtifact),
-          observer,
-          connect: {
-            keepaliveIntervalMs: 15_000,
-            transportSecurityPolicy: AllowPlaintextForLoopback,
-          },
-          autoReconnect: LOCAL_FAST_RECONNECT_POLICY,
-        }));
+        await fn(localProtocolConnectConfig);
         if (accessRecoverySeq !== attemptKey) return;
         accessResumeClient = protocol.client();
         setLocalAccessChannelReady(true);
         setCurrentAccessError(null);
         setManualError(null);
       } else {
-        await fn(createProxyRuntimeTunnelReconnectConfig({
-          artifactSource: createArtifactSourceFromFactory(createGetArtifact()),
-          observer,
-          connect: { transportSecurityPolicy: RequireTLS },
-          autoReconnect: REMOTE_FAST_RECONNECT_POLICY,
-        }));
+        await fn(remoteProtocolConnectConfig);
         if (accessRecoverySeq !== attemptKey) return;
         await ensureAccessResumed(attemptKey);
       }
