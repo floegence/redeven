@@ -313,7 +313,7 @@
       "adminRequired": "Требуется admin",
       "envTypeLocal": "Локальная",
       "envTypeSSH": "SSH",
-      "envTypeProvider": "Поставщик",
+      "envTypeProvider": "Provider",
       "envTypeRemote": "Удалённая"
     },
     "commandPalette": {

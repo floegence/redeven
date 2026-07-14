@@ -136,10 +136,10 @@ describe('launcherActionFeedback', () => {
       provider_origin: 'https://provider.example.invalid',
       env_public_id: 'env_demo',
     })).toMatchObject({
-      title: '提供商授权已过期',
-      message: 'Desktop 需要新的提供商授权才能打开或连接此提供商环境。',
+      title: 'Provider 授权已过期',
+      message: 'Desktop 需要新的 Provider 授权才能打开或连接此 Provider 环境。',
       action: {
-        label: '重新连接提供程序',
+        label: '重新连接 Provider',
       },
     });
 
@@ -169,7 +169,7 @@ describe('launcherActionFeedback', () => {
       scope: 'control_plane',
       message: 'This provider cannot be reached right now.',
     })).toMatchObject({
-      message: 'Desktop 无法将此运行时连接到提供者环境。',
+      message: 'Desktop 无法将此运行时连接到 Provider 环境。',
       tone: 'warning',
     });
   });

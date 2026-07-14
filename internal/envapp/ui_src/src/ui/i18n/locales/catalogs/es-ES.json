@@ -313,7 +313,7 @@
       "adminRequired": "Se requiere admin",
       "envTypeLocal": "Local",
       "envTypeSSH": "SSH",
-      "envTypeProvider": "Proveedor",
+      "envTypeProvider": "Provider",
       "envTypeRemote": "Remoto"
     },
     "commandPalette": {
