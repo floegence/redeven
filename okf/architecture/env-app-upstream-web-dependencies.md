@@ -77,4 +77,5 @@ This concept only holds while Env App continues to consume published upstream pa
 [41] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx:851 - The Runtime history boundary completes the same coordinator attach generation.
 [42] redeven:internal/envapp/ui_src/src/ui/services/debugConsoleCapture.ts:576 - Terminal RPC failures retain only numeric codes plus stable content-free messages.
 [43] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:770 - Terminal attach generations are scoped to the stable protocol transport proxy.
-[44] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:1432 - Session focus intent is captured before the UI-first commit and retried only under current focus ownership.
+[44] redeven:internal/envapp/ui_src/src/ui/services/terminalRecoveryDiagnostics.ts:149 - Terminal recovery milestones emit renderer performance marks with sanitized structured detail.
+[45] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:1432 - Session focus intent is captured before the UI-first commit and retried only under current focus ownership.

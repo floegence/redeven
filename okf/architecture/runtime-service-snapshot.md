@@ -30,5 +30,5 @@ Consumers should use normalized `open_readiness` and capability bindings rather 
 [10] redeven:internal/runtimeservice/compatibility.go:142 - Applying the compatibility contract stamps protocol, epoch, minimum versions, review id, and compatibility.
 [11] redeven:desktop/src/shared/runtimeService.ts:116 - Desktop declares the checked Runtime Service epoch and minimum version pair.
 [12] redeven:desktop/src/shared/runtimeService.ts:357 - Desktop normalization converts a missing, malformed, or mismatched epoch into a typed update-required readiness block.
-[13] redeven:scripts/check_runtime_compatibility_contract.sh:97 - The source check keeps Desktop constants aligned with the embedded contract.
+[13] redeven:scripts/check_runtime_compatibility_contract.sh:116 - The source check reads and validates the Desktop epoch and minimum-version constants against the embedded contract.
 [14] redeven:scripts/check_desktop.sh:60 - The lightweight Desktop gate always runs the focused Runtime compatibility behavior suite.

@@ -226,6 +226,10 @@ func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict
 	record.FailureCode = ""
 	record.FailureMessage = ""
 	m.sessionLifecycle[sessionID] = record
+	m.completePendingSessionAttachesLocked(
+		sessionID,
+		&rpc.Error{Code: 404, Message: "terminal session not found"},
+	)
 	operation := &sessionDeleteOperation{done: make(chan struct{}), participants: 1}
 	if m.deleteOperations == nil {
 		m.deleteOperations = make(map[string]*sessionDeleteOperation)
@@ -321,6 +325,27 @@ func (m *Manager) finalizeSessionClosed(sessionID string) string {
 	nowUnixMs := time.Now().UnixMilli()
 
 	m.mu.Lock()
+	if servers := m.bySession[sessionID]; len(servers) > 0 {
+		for server := range servers {
+			if sessions := m.byServer[server]; sessions != nil {
+				delete(sessions, sessionID)
+				if len(sessions) == 0 {
+					delete(m.byServer, server)
+				}
+			}
+		}
+		delete(m.bySession, sessionID)
+	}
+	closedErr := &rpc.Error{Code: 404, Message: "terminal session not found"}
+	for server, states := range m.attachStates {
+		if state := states[sessionID]; state != nil {
+			completePendingAttachState(state, closedErr)
+			delete(states, sessionID)
+			if len(states) == 0 {
+				delete(m.attachStates, server)
+			}
+		}
+	}
 	record, ok := m.sessionLifecycle[sessionID]
 	if !ok {
 		m.mu.Unlock()
