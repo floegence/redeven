@@ -4543,17 +4543,15 @@ html.dark .redeven-workbench-progress-curtain {
     transform: none;
   }
 
-  .redeven-environment-progress__step-dot[data-state='active'] {
+  .browser-editor-setup__step-dot[data-state='active'] {
     animation-duration: 1ms;
   }
 
-  .redeven-environment-progress__step,
-  .redeven-environment-progress__meter span {
+  .browser-editor-setup,
+  .browser-editor-setup__step,
+  .browser-editor-setup__step-dot,
+  .browser-editor-setup__step-line {
     transition-duration: 1ms;
-  }
-
-  .redeven-environment-progress__meter[data-plan-state='planning'] span {
-    animation: none;
   }
 }
 
@@ -4664,217 +4662,497 @@ html.dark .redeven-workbench-progress-curtain {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 14%, transparent);
 }
 
-/* ── Environment progress (shared step indicator + meter) ── */
+/* Browser Editor setup status band. */
 
-.redeven-environment-progress {
+.browser-editor-setup {
   min-width: 0;
-  gap: 0.55rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--card) 88%, var(--background) 12%);
+  transition: border-color 180ms ease, background-color 180ms ease;
 }
 
-.redeven-environment-progress__header {
+.browser-editor-setup__body {
+  display: grid;
+  min-width: 0;
+}
+
+.browser-editor-setup[data-layout='wide'] .browser-editor-setup__body {
+  grid-template-columns: minmax(0, 1.04fr) minmax(22rem, 0.96fr);
+  min-height: 13.25rem;
+}
+
+.browser-editor-setup[data-layout='compact'] .browser-editor-setup__body {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.browser-editor-setup__primary,
+.browser-editor-setup__secondary {
+  min-width: 0;
+  padding: 1.25rem 1.35rem;
+}
+
+.browser-editor-setup__primary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.browser-editor-setup__secondary {
+  display: flex;
+  align-items: center;
+  border-left: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
+  background: color-mix(in srgb, var(--muted) 11%, transparent);
+}
+
+.browser-editor-setup[data-layout='compact'] .browser-editor-setup__secondary {
+  border-top: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-left: 0;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+.browser-editor-setup__header,
+.browser-editor-setup__identity,
+.browser-editor-setup__title-row,
+.browser-editor-setup__actions,
+.browser-editor-setup__primary-actions {
   display: flex;
   min-width: 0;
-  align-items: flex-start;
+  align-items: center;
+}
+
+.browser-editor-setup__header,
+.browser-editor-setup__actions {
   justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.browser-editor-setup__identity {
   gap: 0.75rem;
 }
 
-.redeven-environment-progress__target {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 0.68rem;
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--muted-foreground);
-}
-
-.redeven-environment-progress__status {
-  flex: 0 0 auto;
-  border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--primary) 6%, transparent);
-  padding: 0.12rem 0.45rem;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--primary) 82%, white 18%);
-  transition:
-    border-color 200ms ease,
-    background-color 200ms ease,
-    color 200ms ease;
-}
-
-.redeven-environment-progress__status[data-phase='succeeded'] {
-  border-color: color-mix(in srgb, var(--success) 22%, transparent);
-  background: color-mix(in srgb, var(--success) 6%, transparent);
-  color: color-mix(in srgb, var(--success) 82%, white 18%);
-}
-
-.redeven-environment-progress__status[data-phase='failed'],
-.redeven-environment-progress__status[data-phase='canceled'] {
-  border-color: color-mix(in srgb, var(--error) 22%, transparent);
-  background: color-mix(in srgb, var(--error) 6%, transparent);
-  color: color-mix(in srgb, var(--error) 82%, white 18%);
-}
-
-/* ── Step indicator ── */
-
-.redeven-environment-progress__steps {
-  display: grid;
-  min-width: 0;
-  gap: 0;
-  margin: 0.15rem 0;
-  transition: min-height 180ms ease;
-}
-
-.redeven-environment-progress__step {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
+.browser-editor-setup__title-row,
+.browser-editor-setup__primary-actions {
+  flex-wrap: wrap;
   gap: 0.5rem;
-  transform-origin: top left;
-  transition:
-    opacity 180ms ease,
-    transform 180ms ease;
 }
 
-.redeven-environment-progress__step[data-entering='true'] {
-  opacity: 0;
-  transform: translateY(-0.25rem);
-}
-
-.redeven-environment-progress__step-connector {
+.browser-editor-setup__icon {
   display: flex;
-  flex-direction: column;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 2rem;
   align-items: center;
-  flex-shrink: 0;
-  width: 1rem;
-  padding-top: 0.15rem;
+  justify-content: center;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 50%;
 }
 
-.redeven-environment-progress__step-dot {
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 9999px;
-  flex-shrink: 0;
-  transition:
-    background-color 200ms ease,
-    box-shadow 200ms ease,
-    border-color 200ms ease,
-    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-
-.redeven-environment-progress__step-dot[data-state='done'] {
-  background: color-mix(in srgb, var(--success) 72%, white 28%);
-  border: 1.5px solid color-mix(in srgb, var(--success) 60%, transparent);
-  box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--success) 10%, transparent);
-}
-
-.redeven-environment-progress__step-dot[data-state='active'] {
-  background: color-mix(in srgb, var(--primary) 72%, white 28%);
-  border: 1.5px solid color-mix(in srgb, var(--primary) 56%, transparent);
-  box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--primary) 14%, transparent);
-  animation: redeven-step-pulse 2.2s ease-in-out infinite;
-}
-
-.redeven-environment-progress__step-dot[data-state='pending'] {
-  background: transparent;
-  border: 1.5px solid color-mix(in srgb, var(--border) 64%, transparent);
-}
-
-.redeven-environment-progress__step-dot[data-state='error'] {
-  background: color-mix(in srgb, var(--error) 72%, white 28%);
-  border: 1.5px solid color-mix(in srgb, var(--error) 56%, transparent);
-}
-
-.redeven-environment-progress__step-line {
-  width: 1.5px;
-  flex: 1;
-  min-height: 0.5rem;
-  background: color-mix(in srgb, var(--border) 48%, transparent);
-  transition: background-color 200ms ease;
-}
-
-.redeven-environment-progress__step-line[data-state='done'] {
-  background: color-mix(in srgb, var(--success) 36%, transparent);
-}
-
-.redeven-environment-progress__step-label {
-  min-width: 0;
-  padding-top: 0.06rem;
-  padding-bottom: 0.4rem;
-  font-size: 0.7rem;
-  font-weight: 500;
-  line-height: 1.4;
+.browser-editor-setup__icon--neutral {
+  border-color: color-mix(in srgb, var(--border) 82%, transparent);
+  background: color-mix(in srgb, var(--muted) 38%, transparent);
   color: var(--muted-foreground);
-  overflow-wrap: anywhere;
-  transition: color 200ms ease;
 }
 
-.redeven-environment-progress__step-label[data-state='done'] {
+.browser-editor-setup__icon--info {
+  border-color: color-mix(in srgb, var(--info) 28%, transparent);
+  background: color-mix(in srgb, var(--info) 8%, transparent);
+  color: color-mix(in srgb, var(--info) 78%, var(--foreground));
+}
+
+.browser-editor-setup__icon--success {
+  border-color: color-mix(in srgb, var(--success) 28%, transparent);
+  background: color-mix(in srgb, var(--success) 8%, transparent);
+  color: color-mix(in srgb, var(--success) 78%, var(--foreground));
+}
+
+.browser-editor-setup__icon--warning {
+  border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+  background: color-mix(in srgb, var(--warning) 9%, transparent);
+  color: color-mix(in srgb, var(--warning) 76%, var(--foreground));
+}
+
+.browser-editor-setup__icon--error {
+  border-color: color-mix(in srgb, var(--error) 28%, transparent);
+  background: color-mix(in srgb, var(--error) 8%, transparent);
+  color: color-mix(in srgb, var(--error) 76%, var(--foreground));
+}
+
+.browser-editor-setup__title {
+  min-width: 0;
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.35;
   color: var(--foreground);
 }
 
-.redeven-environment-progress__step-label[data-state='active'] {
-  font-weight: 600;
-  color: var(--popover-foreground);
+.browser-editor-setup__summary {
+  max-width: 46rem;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
 }
 
-.redeven-environment-progress__step:last-child .redeven-environment-progress__step-line {
-  background: transparent;
+.browser-editor-setup__callout {
+  max-width: 46rem;
+  border: 1px solid;
+  border-radius: 0.375rem;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.55;
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
 }
 
-.redeven-environment-progress__step:last-child .redeven-environment-progress__step-label {
-  padding-bottom: 0;
+.browser-editor-setup__callout--info {
+  border-color: color-mix(in srgb, var(--info) 18%, var(--border));
+  background: color-mix(in srgb, var(--info) 4%, transparent);
 }
 
-/* ── Progress meter (secondary, compact) ── */
+.browser-editor-setup__callout--warning {
+  border-color: color-mix(in srgb, var(--warning) 20%, var(--border));
+  background: color-mix(in srgb, var(--warning) 5%, transparent);
+}
 
-.redeven-environment-progress__meter {
-  position: relative;
-  overflow: hidden;
+.browser-editor-setup__callout--error {
+  border-color: color-mix(in srgb, var(--error) 18%, var(--border));
+  background: color-mix(in srgb, var(--error) 4%, transparent);
+}
+
+.browser-editor-setup__actions {
+  margin-top: auto;
+  padding-top: 0.25rem;
+}
+
+.browser-editor-setup__progress,
+.browser-editor-setup__diagnosis {
   width: 100%;
-  height: 0.28rem;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--border) 48%, transparent);
-}
-
-.redeven-environment-progress__meter span {
-  display: block;
-  height: 100%;
-  min-width: 0.28rem;
-  border-radius: inherit;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 76%, white 24%), color-mix(in srgb, var(--success) 58%, var(--primary)));
-  transition: width 250ms ease;
-}
-
-.redeven-environment-progress__meter[data-plan-state='planning'] span {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--primary) 28%, transparent),
-    color-mix(in srgb, var(--primary) 76%, white 24%),
-    color-mix(in srgb, var(--primary) 28%, transparent)
-  );
-  background-size: 180% 100%;
-  animation: redeven-runtime-planning-meter 1.2s ease-in-out infinite;
-}
-
-.redeven-environment-progress__meta {
-  display: flex;
   min-width: 0;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.75rem;
-  font-size: 0.68rem;
-  font-weight: 600;
+}
+
+.browser-editor-setup__secondary-heading {
+  margin-bottom: 1rem;
+  font-size: 0.7rem;
+  font-weight: 650;
   line-height: 1.35;
+  color: color-mix(in srgb, var(--foreground) 76%, var(--muted-foreground) 24%);
+}
+
+.browser-editor-setup__steps[data-layout='wide'] {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.browser-editor-setup__step {
+  min-width: 0;
+  transition: opacity 180ms ease, color 180ms ease;
+}
+
+.browser-editor-setup__steps[data-layout='wide'] .browser-editor-setup__step-connector {
+  display: flex;
+  height: 1rem;
+  align-items: center;
+}
+
+.browser-editor-setup__steps[data-layout='compact'] {
+  display: grid;
+}
+
+.browser-editor-setup__steps[data-layout='compact'] .browser-editor-setup__step {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  gap: 0.55rem;
+}
+
+.browser-editor-setup__steps[data-layout='compact'] .browser-editor-setup__step-connector {
+  display: flex;
+  width: 1rem;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 0.15rem;
+}
+
+.browser-editor-setup__step-dot {
+  width: 0.62rem;
+  height: 0.62rem;
+  flex: 0 0 0.62rem;
+  border: 1.5px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 50%;
+  background: transparent;
+  transition: background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.browser-editor-setup__step-dot[data-state='done'] {
+  border-color: color-mix(in srgb, var(--success) 58%, transparent);
+  background: color-mix(in srgb, var(--success) 70%, white 30%);
+  box-shadow: 0 0 0 0.16rem color-mix(in srgb, var(--success) 9%, transparent);
+}
+
+.browser-editor-setup__step-dot[data-state='active'] {
+  border-color: color-mix(in srgb, var(--primary) 58%, transparent);
+  background: color-mix(in srgb, var(--primary) 72%, white 28%);
+  box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--primary) 11%, transparent);
+}
+
+.browser-editor-setup[data-presentation='progress'] .browser-editor-setup__step-dot[data-state='active'] {
+  animation: redeven-step-pulse 2.2s ease-in-out infinite;
+}
+
+.browser-editor-setup__step-dot[data-state='error'] {
+  border-color: color-mix(in srgb, var(--error) 58%, transparent);
+  background: color-mix(in srgb, var(--error) 72%, white 28%);
+  box-shadow: 0 0 0 0.16rem color-mix(in srgb, var(--error) 9%, transparent);
+}
+
+.browser-editor-setup__step-dot[data-state='cancelled'] {
+  border-color: color-mix(in srgb, var(--warning) 60%, transparent);
+  background: color-mix(in srgb, var(--warning) 68%, white 32%);
+}
+
+.browser-editor-setup__step-line {
+  flex: 1;
+  background: color-mix(in srgb, var(--border) 55%, transparent);
+  transition: background-color 180ms ease;
+}
+
+.browser-editor-setup__steps[data-layout='wide'] .browser-editor-setup__step-line {
+  height: 1px;
+  margin: 0 0.45rem;
+}
+
+.browser-editor-setup__steps[data-layout='compact'] .browser-editor-setup__step-line {
+  width: 1px;
+  min-height: 0.7rem;
+}
+
+.browser-editor-setup__step-line[data-state='done'] {
+  background: color-mix(in srgb, var(--success) 38%, transparent);
+}
+
+.browser-editor-setup__step-label {
+  min-width: 0;
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
+
+.browser-editor-setup__steps[data-layout='wide'] .browser-editor-setup__step-label {
+  max-width: 7rem;
+  padding-top: 0.55rem;
+  padding-right: 0.35rem;
+}
+
+.browser-editor-setup__steps[data-layout='compact'] .browser-editor-setup__step-label {
+  padding-bottom: 0.6rem;
+}
+
+.browser-editor-setup__step-label[data-state='done'],
+.browser-editor-setup__step-label[data-state='active'] {
+  color: var(--foreground);
+}
+
+.browser-editor-setup__step-label[data-state='active'] {
+  font-weight: 650;
+}
+
+.browser-editor-setup__comparison {
+  margin: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+}
+
+.browser-editor-setup__comparison-row {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 0.34fr) minmax(0, 1fr);
+  gap: 1rem;
+  padding: 0.8rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 48%, transparent);
+}
+
+.browser-editor-setup__comparison-row dt {
+  font-size: 0.7rem;
+  font-weight: 600;
   color: var(--muted-foreground);
 }
 
-.redeven-environment-progress__meta span {
+.browser-editor-setup__comparison-row dd {
   min-width: 0;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--foreground);
   overflow-wrap: anywhere;
+}
+
+.browser-editor-setup__comparison-row[data-kind='required'] dd {
+  color: color-mix(in srgb, var(--success) 72%, var(--foreground) 28%);
+}
+
+.browser-editor-setup__details {
+  border-top: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+}
+
+.browser-editor-setup__details-trigger {
+  display: flex;
+  width: 100%;
+  min-height: 2.65rem;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.35rem;
+  border: 0;
+  background: transparent;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  text-align: left;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.browser-editor-setup__details-trigger:hover {
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  color: var(--foreground);
+}
+
+.browser-editor-setup__details-trigger:focus-visible {
+  outline: 1px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.browser-editor-setup__details-content {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0 1.35rem 1.15rem;
+}
+
+.browser-editor-setup__detail-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
+}
+
+.browser-editor-setup__detail-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(7.5rem, 0.36fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 44%, transparent);
+}
+
+.browser-editor-setup__detail-row:nth-child(odd) {
+  border-right: 1px solid color-mix(in srgb, var(--border) 44%, transparent);
+}
+
+.browser-editor-setup__detail-row dt,
+.browser-editor-setup__detail-row dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.browser-editor-setup__detail-row dt {
+  color: var(--muted-foreground);
+}
+
+.browser-editor-setup__detail-row dd {
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.browser-editor-setup__detail-row dd[data-mono='true'] {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+}
+
+.browser-editor-setup__log {
+  max-height: 12rem;
+  overflow: auto;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 64%, transparent);
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--terminal-background) 6%, var(--background));
+  padding: 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.65;
+  color: var(--muted-foreground);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1023px) {
+  .browser-editor-setup[data-layout='wide'] .browser-editor-setup__body {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+  }
+
+  .browser-editor-setup[data-layout='wide'] .browser-editor-setup__secondary {
+    border-top: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .browser-editor-setup__primary,
+  .browser-editor-setup__secondary {
+    padding: 1rem;
+  }
+
+  .browser-editor-setup__actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .browser-editor-setup__steps[data-layout='wide'] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .browser-editor-setup__steps[data-layout='wide'] .browser-editor-setup__step {
+    display: grid;
+    grid-template-columns: 1rem minmax(0, 1fr);
+    gap: 0.55rem;
+  }
+
+  .browser-editor-setup__steps[data-layout='wide'] .browser-editor-setup__step-connector {
+    width: 1rem;
+    height: auto;
+    flex-direction: column;
+    padding-top: 0.15rem;
+  }
+
+  .browser-editor-setup__steps[data-layout='wide'] .browser-editor-setup__step-line {
+    width: 1px;
+    min-height: 0.7rem;
+    margin: 0;
+  }
+
+  .browser-editor-setup__steps[data-layout='wide'] .browser-editor-setup__step-label {
+    max-width: none;
+    padding: 0 0 0.6rem;
+  }
+
+  .browser-editor-setup__detail-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .browser-editor-setup__detail-row:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .browser-editor-setup__details-trigger,
+  .browser-editor-setup__details-content {
+    padding-right: 1rem;
+    padding-left: 1rem;
+  }
 }
 
 /* ── Loading shimmer overlay ── */

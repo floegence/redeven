@@ -28,7 +28,7 @@ import {
   cancelCodeRuntimeOperation,
   codeRuntimeMissing,
   codeRuntimeOperationRunning,
-  codeRuntimePrepareCopy,
+  codeRuntimePrepareIntent,
   codeRuntimeReady,
   fetchCodeRuntimeStatus,
   type CodeRuntimeStatus,
@@ -40,7 +40,10 @@ import { fetchLocalApiJSON } from "../services/localApi";
 import { useI18n, type I18nHelpers } from "../i18n";
 import {
   browserEditorLocalFailureFromError,
+  browserEditorPlatformLabel,
   buildBrowserEditorSetupActivity,
+  localizeBrowserEditorPrepareCopy,
+  localizeBrowserEditorSetupActivity,
   type BrowserEditorSetupLocalFailure,
 } from "../services/browserEditorSetupActivity";
 import { appendLocalAccessResumeQuery } from "../services/localAccessAuth";
@@ -768,7 +771,6 @@ function CodeRuntimePreparePanel(props: {
   prepareSubmitting: boolean;
   cancelSubmitting: boolean;
   onPrepare: () => void;
-  onRefresh: () => void;
   onCancel: () => void;
   onContinue: () => void;
   onDismiss: () => void;
@@ -776,15 +778,26 @@ function CodeRuntimePreparePanel(props: {
   const [dismissed, setDismissed] = createSignal(false);
   const i18n = useI18n();
 
-  const activity = () => buildBrowserEditorSetupActivity({
+  const localPending = () => props.prepareSubmitting && !codeRuntimeOperationRunning(props.status);
+  const pendingActivityIntent = () => (props.pendingIntent ? { kind: props.pendingIntent.kind } as const : null);
+  const rawActivity = () => buildBrowserEditorSetupActivity({
     status: props.status,
     loading: props.loading,
     error: props.error,
-    localPending: props.prepareSubmitting && !codeRuntimeOperationRunning(props.status),
+    localPending: localPending(),
     localFailure: props.localFailure,
-    pendingIntent: props.pendingIntent ? { kind: props.pendingIntent.kind } : null,
+    pendingIntent: pendingActivityIntent(),
   });
-  const prepareCopy = () => codeRuntimePrepareCopy(props.status);
+  const prepareCopy = () => localizeBrowserEditorPrepareCopy(codeRuntimePrepareIntent(props.status), i18n);
+  const activity = () => localizeBrowserEditorSetupActivity(rawActivity(), {
+    status: props.status,
+    loading: props.loading,
+    error: props.error,
+    localPending: localPending(),
+    localFailure: props.localFailure,
+    prepareDescription: prepareCopy().description,
+    pendingIntent: pendingActivityIntent(),
+  }, i18n);
   const runtimeReady = () => codeRuntimeReady(props.status);
 
   createEffect(() => {
@@ -802,34 +815,57 @@ function CodeRuntimePreparePanel(props: {
   const visible = () => !dismissed() && !alreadyReadyAndIdle();
 
   const extraDetails = () => (
-    <div class="grid gap-2 rounded-md border border-border bg-background/70 p-3 text-[11px] leading-5 text-muted-foreground">
-      <div>{i18n.t("codespaces.prepare.sharedEditorRoot")}: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root ?? "-"}</span></div>
-      <div>{i18n.t("codespaces.prepare.selectedEditorPath")}: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix ?? "-"}</span></div>
+    <dl class="browser-editor-setup__detail-list">
+      <div class="browser-editor-setup__detail-row">
+        <dt>{i18n.t("codeRuntime.activity.platform.environmentPlatform")}</dt>
+        <dd data-mono="true">{browserEditorPlatformLabel(props.status?.platform)}</dd>
+      </div>
+      <Show when={activity().error_code}>
+        {(errorCode) => (
+          <div class="browser-editor-setup__detail-row">
+            <dt>{i18n.t("codeRuntime.activity.platform.errorCode")}</dt>
+            <dd data-mono="true">{errorCode()}</dd>
+          </div>
+        )}
+      </Show>
+      <div class="browser-editor-setup__detail-row">
+        <dt>{i18n.t("codespaces.prepare.sharedEditorRoot")}</dt>
+        <dd data-mono="true">{props.status?.shared_runtime_root ?? "-"}</dd>
+      </div>
+      <div class="browser-editor-setup__detail-row">
+        <dt>{i18n.t("codespaces.prepare.selectedEditorPath")}</dt>
+        <dd data-mono="true">{props.status?.managed_prefix ?? "-"}</dd>
+      </div>
       <Show when={props.status?.active_runtime.binary_path}>
-        <div>{i18n.t("codespaces.prepare.detectedPath")}: <span class="font-mono text-foreground break-all">{props.status?.active_runtime.binary_path}</span></div>
+        {(binaryPath) => (
+          <div class="browser-editor-setup__detail-row">
+            <dt>{i18n.t("codespaces.prepare.detectedPath")}</dt>
+            <dd data-mono="true">{binaryPath()}</dd>
+          </div>
+        )}
       </Show>
       <Show when={props.pendingIntent}>
-        <div>
-          {i18n.t("codespaces.prepare.nextAction")}:{' '}
-          <span class="text-foreground">
+        <div class="browser-editor-setup__detail-row">
+          <dt>{i18n.t("codespaces.prepare.nextAction")}</dt>
+          <dd>
             {props.pendingIntent?.kind === "open" ? i18n.t("codespaces.prepare.openCodespace") : i18n.t("codespaces.prepare.startCodespace")}
-          </span>
+          </dd>
         </div>
       </Show>
-    </div>
+    </dl>
   );
 
   return (
     <Show when={visible()}>
       <BrowserEditorSetupActivityPanel
         activity={activity()}
+        layout="wide"
         loading={props.loading}
         prepareSubmitting={props.prepareSubmitting}
         cancelSubmitting={props.cancelSubmitting}
-        actionLabel={activity().can_retry ? i18n.t("codespaces.prepare.retrySetup") : prepareCopy().action_label}
-        runningLabel={prepareCopy().running_label}
+        actionLabel={activity().can_retry ? i18n.t("codespaces.prepare.retrySetup") : prepareCopy().actionLabel}
+        runningLabel={prepareCopy().runningLabel}
         onPrepare={props.onPrepare}
-        onRefresh={props.onRefresh}
         onCancel={props.onCancel}
         onContinue={props.onContinue}
         onDismiss={() => {
@@ -1453,9 +1489,6 @@ export function EnvCodespacesPage() {
               cancelSubmitting={runtimeCancelSubmitting()}
               onPrepare={() => {
                 void startWorkspacePrepareFlow("retry");
-              }}
-              onRefresh={() => {
-                void refetchRuntimeStatus();
               }}
               onCancel={() => {
                 void cancelRuntimePrepareFlow();

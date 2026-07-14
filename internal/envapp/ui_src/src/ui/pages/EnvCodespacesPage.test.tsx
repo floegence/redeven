@@ -62,6 +62,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Check: (props: any) => <span class={props.class} data-testid="check-icon" />,
   ChevronDown: (props: any) => <span class={props.class} data-testid="chevron-down-icon" />,
   ChevronRight: (props: any) => <span class={props.class} data-testid="chevron-right-icon" />,
+  Code: (props: any) => <span class={props.class} data-testid="code-icon" />,
   ExternalLink: (props: any) => <span class={props.class} data-testid="external-link-icon" />,
   Maximize: (props: any) => <span class={props.class} data-testid="maximize-icon" />,
   Play: (props: any) => <span class={props.class} data-testid="play-icon" />,
@@ -506,8 +507,66 @@ describe('EnvCodespacesPage', () => {
     expect(wizard).toBeTruthy();
     expect(wizard?.textContent).toContain('Browser Editor');
     expect(wizard?.textContent).toContain('Not ready');
-    expect(wizard?.textContent).toContain('Set up browser editor');
+    expect(wizard?.textContent).toContain('Set up Browser Editor');
     expect(wizard?.textContent).toContain('send it to the connected environment');
+    expect(wizard?.getAttribute('data-layout')).toBe('wide');
+    expect(wizard?.querySelector('[role="progressbar"]')?.getAttribute('aria-valuetext')).toBe('Step 1 of 4');
+  });
+
+  it('shows unsupported Linux platforms as non-retryable diagnostics while keeping the empty state', async () => {
+    runtimeStatusResponse = makeRuntimeStatus({
+      active_runtime: {
+        detection_state: 'missing',
+        present: false,
+        source: 'none',
+        binary_path: '',
+      },
+      managed_runtime: {
+        detection_state: 'missing',
+        present: false,
+        source: 'managed',
+        binary_path: '',
+      },
+      installed_versions: [],
+      managed_runtime_version: '',
+      managed_runtime_source: 'none',
+      platform: {
+        os: 'linux',
+        arch: 'amd64',
+        libc: 'musl',
+        platform_id: 'linux-amd64-musl',
+        supported: false,
+        unsupported_code: 'unsupported_libc',
+        message: 'This Linux distribution is not supported by the managed code workspace engine.',
+      },
+      operation: { state: 'idle', log_tail: [] },
+    });
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/code-runtime/status') return runtimeStatusResponse;
+      if (url === '/_redeven_proxy/api/spaces') return { spaces: [] };
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;
+    expect(wizard).toBeTruthy();
+    expect(wizard?.getAttribute('data-presentation')).toBe('result');
+    expect(wizard?.textContent).toContain('This environment is not supported');
+    expect(wizard?.textContent).toContain('linux / amd64 / musl');
+    expect(wizard?.textContent).toContain('Linux amd64/arm64 · glibc');
+    expect(wizard?.textContent).not.toContain('Retry setup');
+    expect(wizard?.textContent).not.toContain('Set up Browser Editor');
+    expect(host.textContent).toContain('No codespaces yet');
+
+    const detailsButton = Array.from(wizard?.querySelectorAll('button') ?? []).find((button) => button.textContent?.includes('Technical details'));
+    expect(detailsButton?.getAttribute('aria-expanded')).toBe('false');
+    detailsButton?.click();
+    await flushPage();
+    expect(detailsButton?.getAttribute('aria-expanded')).toBe('true');
+    expect(wizard?.textContent).toContain('Environment platform');
+    expect(wizard?.textContent).toContain('unsupported_libc');
   });
 
   it('keeps the initial Browser Editor runtime check in the header while showing codespaces', async () => {

@@ -4,9 +4,11 @@ import {
   browserEditorLocalFailureFromError,
   buildBrowserEditorSetupActivity,
   classifyBrowserEditorLocalFailure,
+  localizeBrowserEditorSetupActivity,
   type BrowserEditorSetupLocalFailure,
 } from './browserEditorSetupActivity';
 import { type CodeRuntimeStatus } from './codeRuntimeApi';
+import { createI18nHelpers } from '../i18n/createI18n';
 
 function makeStatus(state: CodeRuntimeStatus['operation']['state']): CodeRuntimeStatus {
   return {
@@ -70,6 +72,19 @@ function localFailure(message: string): BrowserEditorSetupLocalFailure {
 }
 
 describe('browserEditorSetupActivity', () => {
+  it('models a missing editor as an idle setup result', () => {
+    const activity = buildBrowserEditorSetupActivity({ status: missingStatus() });
+
+    expect(activity).toMatchObject({
+      state: 'missing',
+      presentation: 'idle',
+      can_retry: false,
+      can_cancel: false,
+      active_step_index: 1,
+    });
+    expect(activity.steps.map((step) => step.state)).toEqual(['active', 'pending', 'pending', 'pending']);
+  });
+
   it('classifies Desktop-side release lookup failures for the first setup step', () => {
     expect(classifyBrowserEditorLocalFailure('Redeven Browser Editor catalog lookup failed with HTTP 503.')).toBe('desktop_release_lookup');
     expect(classifyBrowserEditorLocalFailure('Redeven Browser Editor catalog is not fully mirrored yet.')).toBe('desktop_release_lookup');
@@ -84,6 +99,7 @@ describe('browserEditorSetupActivity', () => {
 
     expect(activity).toMatchObject({
       state: 'failed',
+      presentation: 'result',
       badge_label: 'Setup failed',
       summary: 'Couldn’t check the latest Browser Editor.',
       can_retry: true,
@@ -100,6 +116,19 @@ describe('browserEditorSetupActivity', () => {
     ]);
   });
 
+  it.each([
+    ['Browser Editor package download failed.', 'cache'],
+    ['Browser Editor upload failed while sending chunk 2.', 'upload'],
+  ] as const)('maps retryable Desktop failure %s to the %s step', (message, expectedStep) => {
+    const activity = buildBrowserEditorSetupActivity({
+      status: missingStatus(),
+      localFailure: localFailure(message),
+    });
+
+    expect(activity.can_retry).toBe(true);
+    expect(activity.steps.find((step) => step.state === 'error')?.id).toBe(expectedStep);
+  });
+
   it('shows local Desktop pending work before Runtime import starts', () => {
     const activity = buildBrowserEditorSetupActivity({
       status: missingStatus(),
@@ -107,6 +136,7 @@ describe('browserEditorSetupActivity', () => {
     });
 
     expect(activity.state).toBe('preparing');
+    expect(activity.presentation).toBe('progress');
     expect(activity.summary).toBe('Desktop is preparing the Browser Editor.');
     expect(activity.can_cancel).toBe(false);
     expect(activity.steps[0]).toMatchObject({ id: 'lookup', state: 'active' });
@@ -126,6 +156,7 @@ describe('browserEditorSetupActivity', () => {
     });
 
     expect(activity.state).toBe('preparing');
+    expect(activity.presentation).toBe('progress');
     expect(activity.can_cancel).toBe(true);
     expect(activity.show_log).toBe(true);
     expect(activity.log_tail).toEqual(['Receiving Browser Editor package from Desktop.']);
@@ -167,6 +198,30 @@ describe('browserEditorSetupActivity', () => {
     ]);
   });
 
+  it('models cancelled Runtime setup as a retryable warning result', () => {
+    const activity = buildBrowserEditorSetupActivity({
+      status: {
+        ...missingStatus(),
+        operation: {
+          action: 'prepare_workspace_engine',
+          state: 'cancelled',
+          stage: 'receiving',
+          last_error_code: 'operation_cancelled',
+          log_tail: ['cancelled by user'],
+        },
+      },
+    });
+
+    expect(activity).toMatchObject({
+      state: 'cancelled',
+      presentation: 'result',
+      badge_variant: 'warning',
+      can_retry: true,
+      error_code: 'operation_cancelled',
+    });
+    expect(activity.steps.find((step) => step.state === 'cancelled')?.id).toBe('upload');
+  });
+
   it('prefers Runtime terminal setup failure over stale Desktop local failure', () => {
     const activity = buildBrowserEditorSetupActivity({
       status: {
@@ -199,6 +254,47 @@ describe('browserEditorSetupActivity', () => {
     expect(activity.state).toBe('ready');
     expect(activity.can_continue).toBe(true);
     expect(activity.pending_action_label).toBe('Continue to open codespace');
+  });
+
+  it('models unsupported musl platforms as localized non-retryable results', () => {
+    const status: CodeRuntimeStatus = {
+      ...missingStatus(),
+      platform: {
+        os: 'linux',
+        arch: 'amd64',
+        libc: 'musl',
+        platform_id: 'linux-amd64-musl',
+        supported: false,
+        unsupported_code: 'unsupported_libc',
+        message: 'This Linux distribution is not supported by the managed code workspace engine.',
+      },
+    };
+    const raw = buildBrowserEditorSetupActivity({
+      status,
+      localFailure: localFailure('This Linux Environment is not supported by the managed workspace engine.'),
+    });
+    const localized = localizeBrowserEditorSetupActivity(raw, {
+      status,
+      loading: false,
+      localPending: false,
+      localFailure: localFailure('This Linux Environment is not supported by the managed workspace engine.'),
+      prepareDescription: 'unused',
+    }, createI18nHelpers('zh-CN'));
+
+    expect(raw).toMatchObject({
+      state: 'failed',
+      presentation: 'result',
+      can_retry: false,
+      error_code: 'unsupported_libc',
+      platform_diagnosis: {
+        code: 'unsupported_libc',
+        requirement: 'linux_glibc',
+      },
+    });
+    expect(localized.summary).toBe('此环境暂不支持托管 Browser Editor。');
+    expect(localized.badge_label).toBe('环境不受支持');
+    expect(localized.platform_diagnosis?.detected_label).toBe('linux / amd64 / musl');
+    expect(localized.platform_diagnosis?.required_label).toBe('Linux amd64/arm64 · glibc');
   });
 
   it('does not turn version-removal failures into Browser Editor setup failures', () => {
