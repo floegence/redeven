@@ -1,9 +1,12 @@
 package terminal
 
 import (
+	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -259,12 +262,16 @@ func TestNormalizeTerminalHistoryPageOptionsDefaultsAndClamps(t *testing.T) {
 	}
 
 	clamped := normalizeTerminalHistoryPageOptions(&terminalHistoryReq{
-		SessionID:   "session-1",
-		StartSeq:    3,
-		EndSeq:      9,
-		LimitChunks: maxTerminalHistoryPageChunks + 100,
-		MaxBytes:    maxTerminalHistoryPageBytes + 1024,
+		SessionID:         "session-1",
+		StartSeq:          3,
+		EndSeq:            9,
+		HistoryGeneration: 12,
+		LimitChunks:       maxTerminalHistoryPageChunks + 100,
+		MaxBytes:          maxTerminalHistoryPageBytes + 1024,
 	})
+	if clamped.HistoryGeneration != 12 {
+		t.Fatalf("HistoryGeneration=%d, want 12", clamped.HistoryGeneration)
+	}
 	if clamped.LimitChunks != maxTerminalHistoryPageChunks {
 		t.Fatalf("LimitChunks=%d, want max %d", clamped.LimitChunks, maxTerminalHistoryPageChunks)
 	}
@@ -279,12 +286,18 @@ func TestTerminalHistoryRespFromPageIncludesCursorMetadata(t *testing.T) {
 			{Sequence: 4, Timestamp: 1000, Data: []byte("hello")},
 			{Sequence: 5, Timestamp: 1100, Data: []byte("world")},
 		},
-		FirstSequence: 4,
-		LastSequence:  5,
-		NextStartSeq:  6,
-		HasMore:       true,
-		CoveredBytes:  10,
-		TotalBytes:    32,
+		FirstSequence:          4,
+		LastSequence:           5,
+		FirstRetainedSequence:  3,
+		CoveredThroughSequence: 5,
+		SnapshotEndSequence:    8,
+		HistoryGeneration:      12,
+		HistoryReset:           true,
+		HistoryTruncated:       true,
+		NextStartSeq:           6,
+		HasMore:                true,
+		CoveredBytes:           10,
+		TotalBytes:             32,
 	})
 
 	if len(resp.Chunks) != 2 {
@@ -298,6 +311,75 @@ func TestTerminalHistoryRespFromPageIncludesCursorMetadata(t *testing.T) {
 	}
 	if resp.CoveredBytes != 10 || resp.TotalBytes != 32 {
 		t.Fatalf("unexpected byte metadata: %+v", resp)
+	}
+	if resp.FirstRetainedSequence != 3 || resp.CoveredThroughSequence != 5 || resp.SnapshotEndSequence != 8 || resp.HistoryGeneration != 12 {
+		t.Fatalf("unexpected history contract metadata: %+v", resp)
+	}
+	if !resp.HistoryReset || !resp.HistoryTruncated {
+		t.Fatalf("unexpected history reset/truncation metadata: %+v", resp)
+	}
+}
+
+func TestTerminalHistoryRespAlwaysSerializesHistoryContractZeroValues(t *testing.T) {
+	payload, err := json.Marshal(terminalHistoryRespFromPage(termgo.HistoryPage{}))
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	want := map[string]string{
+		"first_retained_sequence":  "0",
+		"covered_through_sequence": "0",
+		"snapshot_end_sequence":    "0",
+		"history_generation":       "0",
+		"history_reset":            "false",
+		"history_truncated":        "false",
+	}
+	for field, value := range want {
+		got, ok := fields[field]
+		if !ok {
+			t.Fatalf("serialized response is missing %q: %s", field, payload)
+		}
+		if string(got) != value {
+			t.Fatalf("serialized %s = %s, want %s", field, got, value)
+		}
+	}
+}
+
+func TestTerminalHistoryRPCRejectsNegativeGeneration(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() {
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+	router := rpc.NewRouter()
+	m.RegisterWithAccessGate(router, &session.Meta{CanWrite: true, CanExecute: true}, nil, nil)
+	server := rpc.NewServer(serverConn, router)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() {
+		_ = server.Serve(ctx)
+	}()
+
+	request, err := json.Marshal(terminalHistoryReq{
+		SessionID:         "session-does-not-need-to-exist",
+		HistoryGeneration: -1,
+	})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	_, rpcErr, err := rpc.NewClient(clientConn).Call(ctx, TypeID_TERMINAL_HISTORY, request)
+	if err != nil {
+		t.Fatalf("Call() transport error = %v", err)
+	}
+	if rpcErr == nil || rpcErr.Code != 400 || rpcErr.Message == nil || *rpcErr.Message != "history_generation must be non-negative" {
+		t.Fatalf("Call() rpc error = %#v, want code 400 negative generation rejection", rpcErr)
 	}
 }
 

@@ -9,6 +9,7 @@ export type TerminalSessionActivityRuntime = {
   programActivityPhase: TerminalProgramActivityPhase;
   unread: boolean;
   recentActivityPhase: TerminalRecentActivityPhase;
+  pendingLiveOutput: boolean;
   activityTimer: ReturnType<typeof setTimeout> | null;
   visualState: TerminalTabVisualState;
   workState: TerminalSessionWorkState;
@@ -30,6 +31,7 @@ export interface TerminalTabActivityTracker {
   handleCommandFinish: (sessionId: string, shouldMarkUnread: boolean) => void;
   handlePromptReady: (sessionId: string) => void;
   handleProgramActivity: (sessionId: string, phase: Exclude<TerminalProgramActivityPhase, 'unknown'>) => void;
+  handlePendingLiveOutput: (sessionId: string, shouldMarkUnread: boolean) => void;
   handleVisibleOutput: (sessionId: string, opts: { source: 'history' | 'live'; byteLength: number; shouldMarkUnread: boolean }) => void;
   pruneSessions: (activeSessionIds: Set<string>) => void;
   dispose: () => void;
@@ -44,6 +46,7 @@ function createEmptyRuntime(): TerminalSessionActivityRuntime {
     programActivityPhase: 'unknown',
     unread: false,
     recentActivityPhase: 'inactive',
+    pendingLiveOutput: false,
     activityTimer: null,
     visualState: 'none',
     workState: 'idle',
@@ -51,6 +54,9 @@ function createEmptyRuntime(): TerminalSessionActivityRuntime {
 }
 
 function computeVisualState(runtime: TerminalSessionActivityRuntime): TerminalTabVisualState {
+  if (runtime.pendingLiveOutput) {
+    return 'running';
+  }
   if (runtime.programActivityPhase === 'busy') {
     return 'running';
   }
@@ -69,6 +75,9 @@ function computeWorkState(runtime: TerminalSessionActivityRuntime): TerminalSess
   }
   if (runtime.commandPhase === 'running') {
     return runtime.recentActivityPhase === 'inactive' ? 'running' : 'active';
+  }
+  if (runtime.pendingLiveOutput) {
+    return 'running';
   }
   if (runtime.recentActivityPhase === 'output') {
     return 'active';
@@ -136,6 +145,9 @@ export function createTerminalTabActivityTracker(
         return;
       }
       runtime.recentActivityPhase = 'inactive';
+      if (phase === 'output') {
+        runtime.pendingLiveOutput = false;
+      }
       publishIfNeeded(sessionId, runtime);
     }, durationMs);
   };
@@ -190,6 +202,7 @@ export function createTerminalTabActivityTracker(
       }
       runtime.commandPhase = 'running';
       runtime.programActivityPhase = 'unknown';
+      runtime.pendingLiveOutput = false;
       scheduleRecentActivity(normalizedSessionId, runtime, 'grace', graceMs);
     },
 
@@ -205,6 +218,7 @@ export function createTerminalTabActivityTracker(
       clearActivityTimer(runtime);
       runtime.commandPhase = 'idle';
       runtime.programActivityPhase = 'idle';
+      runtime.pendingLiveOutput = false;
       runtime.recentActivityPhase = 'inactive';
       markUnread(runtime, shouldMarkUnread);
       publishIfNeeded(normalizedSessionId, runtime);
@@ -222,6 +236,7 @@ export function createTerminalTabActivityTracker(
       clearActivityTimer(runtime);
       runtime.commandPhase = 'idle';
       runtime.programActivityPhase = 'idle';
+      runtime.pendingLiveOutput = false;
       runtime.recentActivityPhase = 'inactive';
       publishIfNeeded(normalizedSessionId, runtime);
     },
@@ -236,11 +251,32 @@ export function createTerminalTabActivityTracker(
         return;
       }
       runtime.programActivityPhase = phase;
+      runtime.pendingLiveOutput = false;
       if (phase === 'idle') {
         clearActivityTimer(runtime);
         runtime.recentActivityPhase = 'inactive';
       }
       publishIfNeeded(normalizedSessionId, runtime);
+    },
+
+    handlePendingLiveOutput(sessionId: string, shouldMarkUnread: boolean) {
+      const normalizedSessionId = normalizeSessionId(sessionId);
+      if (!normalizedSessionId) {
+        return;
+      }
+      const runtime = getRuntime(normalizedSessionId);
+      if (!runtime) {
+        return;
+      }
+      runtime.pendingLiveOutput = true;
+      markUnread(runtime, shouldMarkUnread);
+      clearActivityTimer(runtime);
+      publishIfNeeded(normalizedSessionId, runtime);
+      runtime.activityTimer = scheduleTimeout(() => {
+        runtime.activityTimer = null;
+        runtime.pendingLiveOutput = false;
+        publishIfNeeded(normalizedSessionId, runtime);
+      }, quietMs);
     },
 
     handleVisibleOutput(sessionId: string, opts: { source: 'history' | 'live'; byteLength: number; shouldMarkUnread: boolean }) {
@@ -255,6 +291,7 @@ export function createTerminalTabActivityTracker(
       if (!runtime) {
         return;
       }
+      runtime.pendingLiveOutput = false;
       markUnread(runtime, opts.shouldMarkUnread);
       if (runtime.commandPhase === 'running') {
         scheduleRecentActivity(normalizedSessionId, runtime, 'output', quietMs);

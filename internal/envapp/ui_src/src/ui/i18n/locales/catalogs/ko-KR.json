@@ -2271,7 +2271,12 @@
       "localFontDescription": "터미널 글꼴 모음을 선택하고 전역 글꼴 크기를 조정합니다.",
       "fontSize": "글꼴 크기",
       "fontSizeDescription": "화면에 충분한 터미널 기록을 유지하면서 읽을 수 있는 크기를 사용하세요."
-    }
+    },
+    "retryingOlderOutput": "이전 출력을 동기화하는 중...",
+    "olderOutputUnavailable": "일부 이전 출력을 복원하지 못했습니다.",
+    "terminalUnavailable": "이 터미널을 복원하지 못했습니다.",
+    "outputSynchronized": "터미널 출력이 동기화되었습니다.",
+    "viewDiagnostics": "진단"
   },
   "shellBlock": {
     "command": "명령",

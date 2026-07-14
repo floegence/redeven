@@ -11,6 +11,7 @@ import {
   type DiagnosticsSummaryItem,
 } from '../services/diagnosticsApi';
 import {
+  getDebugConsoleClientEventRingSnapshot,
   installDebugConsoleBrowserCapture,
   setDebugConsoleCaptureEnabled,
   subscribeDebugConsoleClientEvents,
@@ -44,6 +45,11 @@ export type DebugConsoleUIState = Readonly<{
   minimized: boolean;
 }>;
 
+export type DebugConsoleOpenRequest = Readonly<{
+  sequence: number;
+  query?: string;
+}>;
+
 export type DebugConsoleExportBundle = Readonly<{
   exported_at: string;
   ui_state: DebugConsoleUIState;
@@ -57,6 +63,11 @@ export type DebugConsoleExportBundle = Readonly<{
     capture_window_started_at?: string;
   }>;
   diagnostics: DiagnosticsExportView;
+  client_events: readonly DiagnosticsEvent[];
+  client_event_ring: Readonly<{
+    capacity: number;
+    dropped_count: number;
+  }>;
   ui_performance: UIPerformanceSnapshot;
 }>;
 
@@ -78,6 +89,7 @@ type CreateDebugConsoleControllerArgs = Readonly<{
   installClientCapture?: () => void;
   setClientCaptureEnabled?: (enabled: boolean) => void;
   subscribeClientEvents?: (listener: (event: DiagnosticsEvent) => void) => () => void;
+  getClientEventRingSnapshot?: typeof getDebugConsoleClientEventRingSnapshot;
 }>;
 
 function compact(value: unknown): string {
@@ -303,6 +315,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   const installClientCapture = args.installClientCapture ?? installDebugConsoleBrowserCapture;
   const setClientCaptureEnabled = args.setClientCaptureEnabled ?? setDebugConsoleCaptureEnabled;
   const subscribeClientEvents = args.subscribeClientEvents ?? subscribeDebugConsoleClientEvents;
+  const getClientEventRingSnapshot = args.getClientEventRingSnapshot ?? getDebugConsoleClientEventRingSnapshot;
   const uiEnabled = args.uiEnabled ?? (() => true);
   const persistUIState = args.persistUIState !== false;
   const allowMinimize = args.allowMinimize !== false;
@@ -322,6 +335,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
   const [minimized, setMinimized] = createSignal(allowMinimize ? readStoredMinimized() : false);
   const [captureCutoffMs, setCaptureCutoffMs] = createSignal(0);
   const [captureCutoffAt, setCaptureCutoffAt] = createSignal('');
+  const [openRequest, setOpenRequest] = createSignal<DebugConsoleOpenRequest>({ sequence: 0 });
 
   const enabled = createMemo(() => visible() && uiEnabled());
   const open = createMemo(() => enabled() && (!allowMinimize || !minimized()));
@@ -350,9 +364,6 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
 
   createEffect(() => {
     const unsubscribe = subscribeClientEvents((event) => {
-      if (!open()) {
-        return;
-      }
       const cutoffMs = captureCutoffMs();
       if (cutoffMs > 0 && toUnixMs(event.created_at) < cutoffMs) {
         return;
@@ -376,7 +387,12 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     writeUIStorageItem(DEBUG_CONSOLE_MINIMIZED_STORAGE_KEY, minimized() ? 'true' : 'false');
   });
 
-  const show = () => {
+  const show = (options?: { query?: string }) => {
+    const query = compact(options?.query);
+    setOpenRequest((current) => ({
+      sequence: current.sequence + 1,
+      query: query || undefined,
+    }));
     setVisible(true);
     if (allowMinimize) {
       setMinimized(false);
@@ -569,6 +585,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     setExporting(true);
     try {
       const diagnostics = await exportSnapshot(1000);
+      const clientRing = getClientEventRingSnapshot();
       const cutoffMs = captureCutoffMs();
       const agentEvents = filterEventsSince(diagnostics.agent_events ?? [], cutoffMs);
       const desktopEvents = filterEventsSince(diagnostics.desktop_events ?? [], cutoffMs);
@@ -603,6 +620,11 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
           capture_window_started_at: compact(captureCutoffAt()) || undefined,
         },
         diagnostics: filteredDiagnostics,
+        client_events: filterEventsSince(clientRing.events, cutoffMs),
+        client_event_ring: {
+          capacity: clientRing.capacity,
+          dropped_count: clientRing.droppedCount,
+        },
         ui_performance: performanceTracker.snapshot(),
       };
     } finally {
@@ -616,6 +638,7 @@ export function createDebugConsoleController(args: CreateDebugConsoleControllerA
     uiMetricsCollecting,
     open,
     minimized,
+    openRequest,
     show,
     restore,
     minimize,

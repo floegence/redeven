@@ -7,6 +7,11 @@ import { LOCAL_INTERACTION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 
 import { TerminalPanel } from './TerminalPanel';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR } from '../workbench/surface/workbenchTextSelectionSurface';
+import {
+  getDebugConsoleClientEventRingSnapshot,
+  resetDebugConsoleCaptureForTests,
+} from '../services/debugConsoleCapture';
+import { resetTerminalRecoveryDiagnosticsForTests } from '../services/terminalRecoveryDiagnostics';
 
 const layoutState = vi.hoisted(() => ({
   mobile: false,
@@ -75,6 +80,12 @@ const terminalBufferLinesState = vi.hoisted(() => ({
 }));
 
 const terminalCoreInstances = vi.hoisted(() => [] as any[]);
+const terminalWriteCompletionState = vi.hoisted(() => ({
+  deferHistory: false,
+  deferLive: false,
+  historyCallbacks: [] as Array<() => void>,
+  liveCallbacks: [] as Array<() => void>,
+}));
 const createOutputPipelineSpy = vi.hoisted(() => vi.fn());
 const createOutputCoordinatorSpy = vi.hoisted(() => vi.fn());
 const outputCoordinatorRetrySpy = vi.hoisted(() => vi.fn());
@@ -98,6 +109,7 @@ const openBrowserSpy = vi.hoisted(() => vi.fn(async () => undefined));
 const openPreviewSpy = vi.hoisted(() => vi.fn(async () => undefined));
 const openFileBrowserAtPathSpy = vi.hoisted(() => vi.fn(async () => undefined));
 const openFlowerTurnLauncherSpy = vi.hoisted(() => vi.fn());
+const openDebugConsoleSpy = vi.hoisted(() => vi.fn());
 const terminalEnvPermissionsState = vi.hoisted(() => ({
   canRead: true,
   canWrite: true,
@@ -326,6 +338,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
+    BugIcon: Icon,
     Check: Icon,
     ChevronDown: Icon,
     ChevronUp: Icon,
@@ -673,7 +686,21 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     });
     startHistoryReplay = vi.fn();
     endHistoryReplay = vi.fn();
-    write = vi.fn();
+    write = vi.fn((_data: Uint8Array, callback?: () => void) => {
+      if (callback && terminalWriteCompletionState.deferLive) {
+        terminalWriteCompletionState.liveCallbacks.push(callback);
+      } else {
+        callback?.();
+      }
+    });
+    writeHistory = vi.fn((data: Uint8Array, callback?: () => void) => {
+      this.write(data);
+      if (callback && terminalWriteCompletionState.deferHistory) {
+        terminalWriteCompletionState.historyCallbacks.push(callback);
+      } else {
+        callback?.();
+      }
+    });
     focus = vi.fn(() => {
       focusSpy();
       const responsive = this.config?.responsive ?? {};
@@ -950,23 +977,37 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     let disposed = false;
     let generation = 0;
     let pipeline: any;
+    let baselineReady = false;
+    let failure: any = null;
+    let baselineWaiters: Array<(value: any) => void> = [];
+    let activeWriters = 0;
+    let writerQuiescenceWaiters: Array<() => void> = [];
 
     const snapshot = () => ({
       state,
       active,
+      baselineReady,
       coveredThroughSequence,
       retainedLiveChunks: retained.length,
       retainedLiveBytes: retained.reduce((sum, item) => sum + item.data.byteLength, 0),
       retryAttempt: 0,
       retryScheduled: false,
+      failure,
       lastError: null,
+      attachGeneration: generation,
       disposed,
     });
     const setState = (next: string) => {
       state = next;
       options.onStateChange?.(snapshot());
     };
-    const writeChunks = (chunks: any[]) => {
+    const resolveBaseline = () => {
+      const value = snapshot();
+      const waiters = baselineWaiters;
+      baselineWaiters = [];
+      for (const resolve of waiters) resolve(value);
+    };
+    const writeChunks = async (chunks: any[]) => {
       const accepted = chunks.flatMap((queuedItem) => {
         const item = queuedItem.coordinatorSequence
           ? { ...queuedItem, sequence: queuedItem.coordinatorSequence }
@@ -981,9 +1022,23 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
         for (const item of accepted) {
           payload.set(item.data, offset);
           offset += item.data.byteLength;
+        }
+        const source = accepted[0]?.source;
+        const writer = source === 'history' ? (options.writeHistory ?? options.write) : options.write;
+        activeWriters += 1;
+        try {
+          await writer(payload, accepted);
+        } finally {
+          activeWriters -= 1;
+          if (activeWriters === 0) {
+            const waiters = writerQuiescenceWaiters;
+            writerQuiescenceWaiters = [];
+            for (const resolve of waiters) resolve();
+          }
+        }
+        for (const item of accepted) {
           coveredThroughSequence = Math.max(coveredThroughSequence, item.sequence ?? 0);
         }
-        options.write(payload, accepted);
       }
     };
     const replay = async (startSequence: number, catchUp: boolean, run: number) => {
@@ -1008,7 +1063,7 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
         for (const item of replayChunks) {
           if (item.sequence) replayedSequences.add(item.sequence);
         }
-        writeChunks(replayChunks);
+        await writeChunks(replayChunks);
         coveredThroughSequence = Math.max(coveredThroughSequence, page.coveredThroughSequence ?? 0);
         if (!page.hasMore) break;
         cursor = page.nextCursor;
@@ -1023,8 +1078,20 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
       }
       if (catchUp && coveredThroughSequence <= coverageAtStart && pending.length > 0) {
         retained = pending;
+        failure = {
+          code: 'history_coverage_incomplete',
+          phase: 'catch_up',
+          retryable: true,
+          attempt: 0,
+          coveredSequence: coveredThroughSequence,
+          attachGeneration: run,
+        };
         setState('failed');
         return;
+      }
+      if (!catchUp) {
+        baselineReady = true;
+        resolveBaseline();
       }
       setState('live');
       for (let index = 0; index < pending.length; index += 1) {
@@ -1072,9 +1139,24 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     return {
       attach: async (startSequence = 1) => {
         const run = ++generation;
+        baselineReady = false;
+        failure = null;
         coveredThroughSequence = Math.max(0, startSequence - 1);
         pipeline.reset({ startSequence: coveredThroughSequence + 1 });
         await replay(startSequence, false, run);
+      },
+      waitForBaseline: () => {
+        const value = snapshot();
+        if (value.baselineReady || value.state === 'failed' || value.disposed) return Promise.resolve(value);
+        return new Promise((resolve) => baselineWaiters.push(resolve));
+      },
+      pause: async () => {
+        active = false;
+        options.onStateChange?.(snapshot());
+        if (activeWriters > 0) {
+          await new Promise<void>((resolve) => writerQuiescenceWaiters.push(resolve));
+        }
+        return snapshot();
       },
       pushLive: (item: any) => {
         if (state !== 'live' || !active || !(options.isInteractive?.() ?? true)) {
@@ -1095,6 +1177,8 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
       },
       clear: (startSequence = 1) => {
         generation += 1;
+        baselineReady = false;
+        failure = null;
         retained = [];
         coveredThroughSequence = Math.max(0, startSequence - 1);
         pipeline.reset({ startSequence: coveredThroughSequence + 1 });
@@ -1237,6 +1321,7 @@ vi.mock('../pages/EnvContext', () => {
       openTerminalInDirectoryRequest: () => null,
       openTerminalInDirectory: vi.fn(),
       openFileBrowserAtPath: openFileBrowserAtPathSpy,
+      openDebugConsole: openDebugConsoleSpy,
       consumeOpenTerminalInDirectoryRequest: vi.fn(),
     }),
   };
@@ -1310,17 +1395,30 @@ type TestTerminalHistoryPage = {
   hasMore: boolean;
   firstSequence: number;
   lastSequence: number;
+  coveredThroughSequence: number;
+  snapshotEndSequence: number;
+  firstRetainedSequence: number;
+  historyGeneration: number;
+  historyReset: boolean;
+  historyTruncated: boolean;
   coveredBytes: number;
   totalBytes: number;
 };
 
 function makeTerminalHistoryPage(overrides: Partial<TestTerminalHistoryPage> = {}): TestTerminalHistoryPage {
+  const lastSequence = overrides.lastSequence ?? 0;
   return {
     chunks: [],
     nextStartSeq: 0,
     hasMore: false,
     firstSequence: 0,
-    lastSequence: 0,
+    lastSequence,
+    coveredThroughSequence: overrides.coveredThroughSequence ?? lastSequence,
+    snapshotEndSequence: overrides.snapshotEndSequence ?? lastSequence,
+    firstRetainedSequence: overrides.firstRetainedSequence ?? overrides.firstSequence ?? 0,
+    historyGeneration: overrides.historyGeneration ?? 1,
+    historyReset: overrides.historyReset ?? false,
+    historyTruncated: overrides.historyTruncated ?? false,
     coveredBytes: 0,
     totalBytes: 0,
     ...overrides,
@@ -1507,6 +1605,8 @@ function installRequestAnimationFrameMock(mode: 'microtask' | 'timer' = 'microta
 
 describe('TerminalPanel', () => {
   beforeEach(() => {
+    resetDebugConsoleCaptureForTests();
+    resetTerminalRecoveryDiagnosticsForTests();
     terminalPrefsState.userTheme = 'system';
     themeState.resolvedTheme = 'dark';
     terminalPrefsState.fontSize = 12;
@@ -1542,6 +1642,10 @@ describe('TerminalPanel', () => {
     terminalConfigState.values = [];
     terminalBufferLinesState.lines = new Map();
     terminalCoreInstances.splice(0, terminalCoreInstances.length);
+    terminalWriteCompletionState.deferHistory = false;
+    terminalWriteCompletionState.deferLive = false;
+    terminalWriteCompletionState.historyCallbacks = [];
+    terminalWriteCompletionState.liveCallbacks = [];
     createOutputPipelineSpy.mockClear();
     createOutputCoordinatorSpy.mockClear();
     outputCoordinatorRetrySpy.mockClear();
@@ -1560,6 +1664,7 @@ describe('TerminalPanel', () => {
     openBrowserSpy.mockClear();
     openFileBrowserAtPathSpy.mockClear();
     openFlowerTurnLauncherSpy.mockClear();
+    openDebugConsoleSpy.mockClear();
     openPreviewSpy.mockClear();
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
@@ -2316,6 +2421,106 @@ describe('TerminalPanel', () => {
     }));
   });
 
+  it('blocks initial input until the terminal parser commits the history baseline', async () => {
+    terminalWriteCompletionState.deferHistory = true;
+    transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
+      chunks: [{ sequence: 1, timestampMs: 10, data: textEncoder.encode('ready') }],
+      firstSequence: 1,
+      lastSequence: 1,
+      coveredBytes: 5,
+      totalBytes: 5,
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalCoreInstances[0]?.writeHistory).toHaveBeenCalledTimes(1);
+    });
+
+    const core = terminalCoreInstances[0];
+    transportMocks.sendInput.mockClear();
+    core?.handlers?.onData?.('before-baseline\r');
+    expect(transportMocks.sendInput).not.toHaveBeenCalled();
+
+    terminalWriteCompletionState.historyCallbacks.shift()?.();
+    await waitForTerminalPanelCondition(() => {
+      expect(host.querySelector('[data-testid="terminal-status-bar"]')).toBeTruthy();
+    });
+    core?.handlers?.onData?.('after-baseline\r');
+    expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', 'after-baseline\r', 'conn-1');
+  });
+
+  it('does not steal focus when another control takes focus before baseline commit', async () => {
+    terminalWriteCompletionState.deferHistory = true;
+    transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
+      chunks: [{ sequence: 1, timestampMs: 10, data: textEncoder.encode('ready') }],
+      firstSequence: 1,
+      lastSequence: 1,
+      coveredBytes: 5,
+      totalBytes: 5,
+    }));
+    const host = document.createElement('div');
+    const otherControl = document.createElement('button');
+    otherControl.textContent = 'Other control';
+    document.body.append(host, otherControl);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalCoreInstances[0]?.writeHistory).toHaveBeenCalledTimes(1);
+    });
+
+    focusSpy.mockClear();
+    otherControl.focus();
+    terminalWriteCompletionState.historyCallbacks.shift()?.();
+    await settleTerminalPanelAfterPaint();
+
+    expect(document.activeElement).toBe(otherControl);
+    expect(focusSpy).not.toHaveBeenCalled();
+  });
+
+  it('gates panel-level focus restoration on the committed history baseline', async () => {
+    terminalWriteCompletionState.deferHistory = true;
+    transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
+      chunks: [{ sequence: 1, timestampMs: 10, data: textEncoder.encode('ready') }],
+      firstSequence: 1,
+      lastSequence: 1,
+      coveredBytes: 5,
+      totalBytes: 5,
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => {
+      const [activationSeq, setActivationSeq] = createSignal(0);
+      (host as HTMLElement & { bumpWorkbenchActivation?: () => void }).bumpWorkbenchActivation = () => {
+        setActivationSeq((value) => value + 1);
+      };
+      return (
+        <TerminalPanel
+          variant="workbench"
+          workbenchSelected
+          workbenchActivationSeq={activationSeq()}
+        />
+      );
+    }, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalCoreInstances[0]?.writeHistory).toHaveBeenCalledTimes(1);
+    });
+
+    focusSpy.mockClear();
+    (host as HTMLElement & { bumpWorkbenchActivation?: () => void }).bumpWorkbenchActivation?.();
+    await settleTerminalPanelAfterPaint();
+    expect(focusSpy).not.toHaveBeenCalled();
+
+    terminalWriteCompletionState.historyCallbacks.shift()?.();
+    await settleTerminalPanelAfterPaint();
+    focusSpy.mockClear();
+    (host as HTMLElement & { bumpWorkbenchActivation?: () => void }).bumpWorkbenchActivation?.();
+    await settleTerminalPanelAfterPaint();
+    expect(focusSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps input available during background recovery and exposes manual retry after failure', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -2327,18 +2532,25 @@ describe('TerminalPanel', () => {
     expect(coordinatorOptions).toBeTruthy();
     const baseSnapshot = {
       active: true,
+      baselineReady: true,
       coveredThroughSequence: 4,
       retainedLiveChunks: 1,
       retainedLiveBytes: 12,
       retryAttempt: 1,
       retryScheduled: true,
+      failure: {
+        code: 'history_fetch_failed',
+        phase: 'catch_up',
+        retryable: true,
+        attempt: 1,
+        coveredSequence: 4,
+        attachGeneration: 1,
+      },
       lastError: null,
       disposed: false,
     };
     coordinatorOptions.onStateChange?.({ ...baseSnapshot, state: 'retry-wait' });
-    await settleTerminalPanel();
-
-    expect(host.textContent).toContain('Terminal output recovery paused. Retrying...');
+    expect(host.textContent).not.toContain('Syncing earlier output...');
     transportMocks.sendInput.mockClear();
     terminalCoreInstances[0]?.handlers?.onData?.('echo still-live\r');
     expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', 'echo still-live\r', 'conn-1');
@@ -2347,17 +2559,83 @@ describe('TerminalPanel', () => {
       ...baseSnapshot,
       state: 'failed',
       retryScheduled: false,
+      failure: {
+        code: 'history_fetch_failed',
+        phase: 'catch_up',
+        retryable: true,
+        attempt: 3,
+        coveredSequence: 4,
+        attachGeneration: 1,
+      },
       lastError: new Error('history temporarily unavailable'),
     });
     await settleTerminalPanel();
 
-    expect(host.textContent).toContain('history temporarily unavailable');
-    const retryButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) => (
-      button.textContent?.trim() === 'Retry'
-    ));
+    expect(host.textContent).toContain('Some earlier output could not be restored.');
+    expect(host.textContent).not.toContain('history temporarily unavailable');
+    const recoveryMessage = host.querySelector('[data-testid="terminal-recovery-status-message"]');
+    const recoveryActions = host.querySelector('[data-testid="terminal-recovery-status-actions"]');
+    expect(recoveryMessage?.classList.contains('truncate')).toBe(true);
+    expect(recoveryActions?.classList.contains('min-w-max')).toBe(true);
+    expect(recoveryMessage?.contains(recoveryActions)).toBe(false);
+    const retryButton = host.querySelector<HTMLButtonElement>('button[aria-label="Retry"]');
     expect(retryButton).toBeTruthy();
+
+    const diagnosticsButton = host.querySelector<HTMLButtonElement>('button[aria-label="Diagnostics"]');
+    expect(diagnosticsButton).toBeTruthy();
+    diagnosticsButton?.click();
+    expect(openDebugConsoleSpy).toHaveBeenCalledWith({
+      query: expect.stringMatching(/^terminal-\d+ \d+ history_fetch_failed$/u),
+    });
+
     retryButton?.click();
     expect(outputCoordinatorRetrySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('rebuilds a ready terminal after a blocking core failure', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const failedCore = terminalCoreInstances[0];
+    failedCore?.handlers?.onError?.(new Error('renderer failed'));
+    await settleTerminalPanel();
+
+    expect(host.textContent).toContain('This terminal could not be restored.');
+    expect(getDebugConsoleClientEventRingSnapshot().events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        scope: 'terminal_recovery',
+        kind: 'blocking',
+        detail: expect.objectContaining({ error_code: 'terminal_unavailable' }),
+      }),
+    ]));
+
+    host.querySelector<HTMLButtonElement>('button[aria-label="Retry"]')?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalCoreInstances.length).toBe(2);
+    });
+    expect(failedCore?.dispose).toHaveBeenCalledTimes(1);
+    expect(transportMocks.historyPage).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps blocking recovery actions visible above the Floe mobile keyboard', async () => {
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    terminalCoreInstances[0]?.handlers?.onError?.(new Error('renderer failed'));
+    await settleTerminalPanel();
+
+    expect(host.querySelector('[data-testid="mobile-keyboard"]')).toBeTruthy();
+    const statusBar = host.querySelector('[data-testid="terminal-status-bar"]');
+    expect(statusBar?.classList.contains('h-11')).toBe(true);
+    expect(statusBar?.textContent).toContain('This terminal could not be restored.');
+    expect(host.querySelector('button[aria-label="Retry"]')?.classList.contains('size-7')).toBe(true);
+    expect(host.querySelector('button[aria-label="Diagnostics"]')?.classList.contains('size-7')).toBe(true);
   });
 
   it('keeps activity input live while the upstream output pipeline has inactive backlog', async () => {
@@ -2383,6 +2661,43 @@ describe('TerminalPanel', () => {
       'echo __rdv_after_return__\r',
       'conn-1',
     );
+  });
+
+  it('keeps history pages independent from previously committed live output', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const coordinatorOptions = createOutputCoordinatorSpy.mock.calls[0]?.[0];
+    const core = terminalCoreInstances[0];
+    expect(coordinatorOptions).toBeTruthy();
+    core?.write.mockClear();
+
+    for (let sequence = 1; sequence <= 256; sequence += 1) {
+      emitTerminalData('session-1', `live-${sequence}`, sequence);
+      await settleTerminalPanelAfterPaint();
+    }
+    expect(core?.write).toHaveBeenCalledTimes(256);
+
+    transportMocks.historyPage.mockResolvedValueOnce(makeTerminalHistoryPage({
+      chunks: [{ sequence: 1, timestampMs: 10, data: textEncoder.encode('history-one') }],
+      firstSequence: 1,
+      lastSequence: 1,
+      coveredBytes: 11,
+      totalBytes: 11,
+    }));
+    const page = await coordinatorOptions.fetchPage({
+      startSequence: 1,
+      cursor: 1,
+      signal: new AbortController().signal,
+    });
+
+    expect(page.chunks).toHaveLength(1);
+    expect(page.chunks[0]?.data.byteLength).toBe(11);
+    expect(textDecoder.decode(page.chunks[0]?.data)).toBe('history-one');
+    expect(page.chunks[0]).not.toHaveProperty('pretransformed');
   });
 
   it('does not replay sparse initial history again before the next activity output', async () => {
@@ -3508,6 +3823,10 @@ describe('TerminalPanel', () => {
     expect(pendingCurtain?.querySelector('[role="progressbar"]')?.getAttribute('aria-label')).toBe('Creating terminal');
     const statusBar = host.querySelector('[data-testid="terminal-status-bar"]') as HTMLElement | null;
     expect(statusBar).toBeTruthy();
+    expect(statusBar?.classList.contains('h-7')).toBe(true);
+    expect(statusBar?.classList.contains('min-h-7')).toBe(true);
+    expect(statusBar?.classList.contains('max-h-7')).toBe(true);
+    expect(statusBar?.classList.contains('overflow-hidden')).toBe(true);
     expect(statusBar?.textContent).toContain('Session: Creating terminal');
     expect(statusBar?.textContent).toContain('History: -');
     expect(pendingSurface?.contains(statusBar)).toBe(false);
@@ -3640,7 +3959,7 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
   });
 
-  it('attaches with measured dimensions and performs one final size confirmation after attach', async () => {
+  it('attaches with measured dimensions without a duplicate blocking resize', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -3651,9 +3970,8 @@ describe('TerminalPanel', () => {
     await vi.waitFor(() => {
       expect(transportMocks.attach).toHaveBeenCalledWith('session-1', 80, 24);
     });
-    await vi.waitFor(() => {
-      expect(transportMocks.resize).toHaveBeenCalledWith('session-1', 80, 24);
-    });
+    expect(transportMocks.resize).toHaveBeenCalledTimes(1);
+    expect(transportMocks.resize).toHaveBeenCalledWith('session-1', 80, 24);
   });
 
   it('opens the floating file preview from a modifier-click terminal file link', async () => {
@@ -3734,7 +4052,7 @@ describe('TerminalPanel', () => {
     expect(activeTerminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).toBeNull();
   });
 
-  it('shows a running spinner for a background command and switches to an unread dot when it finishes', async () => {
+  it('shows pending background command activity until ordered shell state commits on activation', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -3777,11 +4095,14 @@ describe('TerminalPanel', () => {
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
 
     emitTerminalData('session-2', '\x1b]633;D;0\u0007', 2);
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
 
     terminal2Tab = findTerminalTab(host, 'Terminal 2');
     expect(terminal2Tab?.querySelector('[data-terminal-tab-status="running"]')).toBeNull();
-    expect(terminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).not.toBeNull();
+    expect(terminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
   });
 
@@ -3848,7 +4169,7 @@ describe('TerminalPanel', () => {
     expect(findTerminalRunningSpinner(host, 'Terminal 2')).toBe(runningSpinner);
   });
 
-  it('keeps a background interactive session marked running after output goes quiet', async () => {
+  it('falls back to unread when uncommitted background output goes quiet', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -3890,8 +4211,8 @@ describe('TerminalPanel', () => {
     await new Promise<void>((resolve) => setTimeout(resolve, 3_800));
     await settleTerminalPanel();
 
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
   });
 
   it('keeps a quiet background command marked running after the start grace window', async () => {
@@ -3927,10 +4248,10 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
 
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
-    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('active');
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('running');
 
     await new Promise<void>((resolve) => setTimeout(resolve, 1_700));
     await settleTerminalPanel();
@@ -3942,10 +4263,13 @@ describe('TerminalPanel', () => {
     emitTerminalData('session-2', '\x1b]633;D;0\u0007', 2);
     await settleTerminalPanel();
 
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
+
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
   });
 
-  it('lets explicit program activity markers override the tab spinner and fall back to unread when the tool goes idle', async () => {
+  it('commits explicit program idle state only after the background session is activated', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -3985,10 +4309,13 @@ describe('TerminalPanel', () => {
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
 
     emitTerminalData('session-2', '\x1b]633;P;RedevenActivity=idle\u0007', 3);
-    await settleTerminalPanel();
+    await settleTerminalPanelAfterPaint();
+
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
 
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
   });
 
@@ -4165,6 +4492,9 @@ describe('TerminalPanel', () => {
     findTerminalTab(host, 'Terminal 1')?.click();
     await settleTerminalPanel();
 
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalWorkingSetState.runtimes.get('session-2')).toBeTruthy();
+    });
     const runtime = terminalWorkingSetState.runtimes.get('session-2');
     const sleepingCore = terminalCoreInstances[1];
     transportMocks.attach.mockClear();
@@ -4177,6 +4507,85 @@ describe('TerminalPanel', () => {
 
     expect(transportMocks.attach).not.toHaveBeenCalled();
     expect(transportMocks.historyPage).not.toHaveBeenCalled();
+  });
+
+  it('restores a working-set snapshot without resetting the interactive coordinator baseline', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalWorkingSetState.runtimes.get('session-2')).toBeTruthy();
+    });
+    const runtime = terminalWorkingSetState.runtimes.get('session-2');
+    const sleepingCore = terminalCoreInstances[1];
+    vi.useFakeTimers();
+    installRequestAnimationFrameMock('timer');
+    const hibernate = runtime.hibernate();
+    await vi.advanceTimersByTimeAsync(1);
+    const snapshot = await hibernate;
+
+    transportMocks.historyPage.mockClear();
+    createOutputCoordinatorSpy.mockClear();
+    await runtime.resume(snapshot);
+    await settleTerminalPanelAfterPaint();
+
+    const resumedCore = terminalCoreInstances.at(-1);
+    expect(resumedCore).not.toBe(sleepingCore);
+    expect(resumedCore?.restoreSnapshot).toHaveBeenCalledWith(snapshot);
+    expect(createOutputCoordinatorSpy).not.toHaveBeenCalled();
+    expect(transportMocks.historyPage).not.toHaveBeenCalled();
+  });
+
+  it('waits for the live writer before hibernating the terminal core', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalWorkingSetState.runtimes.get('session-1')).toBeTruthy();
+    });
+    const runtime = terminalWorkingSetState.runtimes.get('session-1');
+    const sleepingCore = terminalCoreInstances[0];
+    terminalWriteCompletionState.deferLive = true;
+    emitTerminalData('session-1', 'before-pause', 1);
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalWriteCompletionState.liveCallbacks).toHaveLength(1);
+    });
+
+    const hibernate = runtime.hibernate();
+    await settleTerminalPanelMicrotasks();
+    expect(sleepingCore?.dispose).not.toHaveBeenCalled();
+    expect(sleepingCore?.captureRestorableSnapshot).not.toHaveBeenCalled();
+
+    terminalWriteCompletionState.liveCallbacks.shift()?.();
+    const snapshot = await hibernate;
+    expect(snapshot).toMatchObject({ version: 1, coveredThroughSequence: 1 });
+    expect(sleepingCore?.dispose).toHaveBeenCalledTimes(1);
   });
 
   it('catches up inactive mounted sessions without reloading the terminal core', async () => {
@@ -4535,8 +4944,7 @@ describe('TerminalPanel', () => {
     emitTerminalData('session-2', '\x1b]633;P;Cwd=/workspace/repo\u0007three', 3);
     await settleTerminalPanel();
 
-    expect(sessionsCoordinatorMocks.updateSessionMeta).toHaveBeenCalledTimes(1);
-    expect(sessionsCoordinatorMocks.updateSessionMeta).toHaveBeenCalledWith('session-2', { workingDir: '/workspace/repo' });
+    expect(sessionsCoordinatorMocks.updateSessionMeta).not.toHaveBeenCalled();
 
     findTerminalTab(host, 'Terminal 2')?.click();
     await waitForTerminalPanelCondition(() => {
@@ -4544,6 +4952,7 @@ describe('TerminalPanel', () => {
     });
 
     expect(sessionsCoordinatorMocks.updateSessionMeta).toHaveBeenCalledTimes(1);
+    expect(sessionsCoordinatorMocks.updateSessionMeta).toHaveBeenCalledWith('session-2', { workingDir: '/workspace/repo' });
   });
 
   it('accepts fresh sequence-one output after clearing a terminal session', async () => {
@@ -4640,8 +5049,6 @@ describe('TerminalPanel', () => {
 
     expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
     expect(core?.write).toHaveBeenCalledTimes(1);
-    expect(frames.length).toBeGreaterThan(0);
-
     core?.write.mockClear();
     transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage());
     host.querySelector<HTMLButtonElement>('button[title="Clear"]')?.click();
@@ -4718,7 +5125,7 @@ describe('TerminalPanel', () => {
 
     const core = terminalCoreInstances.find((entry) => host.contains(entry.container));
     expect(core?.clear).toHaveBeenCalled();
-    expect(core?.startHistoryReplay).toHaveBeenCalledWith(120_000);
+    expect(core?.startHistoryReplay).not.toHaveBeenCalled();
 
     releaseSecondPage(makeTerminalHistoryPage({
       chunks: [
@@ -4736,11 +5143,9 @@ describe('TerminalPanel', () => {
     }));
 
     await waitForTerminalPanelCondition(() => {
-      expect(core?.endHistoryReplay).toHaveBeenCalled();
-    });
-    await waitForTerminalPanelCondition(() => {
       expect(core?.write).toHaveBeenCalledTimes(2);
     });
+    expect(core?.writeHistory).toHaveBeenCalledTimes(2);
 
     const historySessionCalls = transportMocks.historyPage.mock.calls.filter((call) => call[0] === sessionId);
     expect(historySessionCalls).toEqual([
@@ -4748,6 +5153,63 @@ describe('TerminalPanel', () => {
       [sessionId, 2, -1],
     ]);
     expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['alpha', 'omega']);
+  });
+
+  it('ignores diagnostics and progress from an obsolete history request after refresh', async () => {
+    let releaseObsoletePage: (page: TestTerminalHistoryPage) => void = () => {};
+    const obsoletePage = new Promise<TestTerminalHistoryPage>((resolve) => {
+      releaseObsoletePage = resolve;
+    });
+    transportMocks.historyPage.mockReset();
+    transportMocks.historyPage
+      .mockReturnValueOnce(obsoletePage)
+      .mockResolvedValue(makeTerminalHistoryPage({
+        chunks: [{ sequence: 1, timestampMs: 20, data: textEncoder.encode('current') }],
+        firstSequence: 1,
+        lastSequence: 1,
+        coveredBytes: 7,
+        totalBytes: 7,
+      }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await vi.waitFor(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
+    });
+
+    (host.querySelector('[data-testid="terminal-sidebar-refresh"]') as HTMLButtonElement)?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.historyPage).toHaveBeenCalledTimes(2);
+    });
+    await waitForTerminalPanelCondition(() => {
+      const historyEvents = getDebugConsoleClientEventRingSnapshot().events.filter((event) => (
+        event.scope === 'terminal_recovery' && event.kind === 'history_page'
+      ));
+      expect(historyEvents).toHaveLength(1);
+      expect(historyEvents[0]?.detail?.surface_generation).toBe(2);
+    });
+
+    releaseObsoletePage(makeTerminalHistoryPage({
+      chunks: [{ sequence: 99, timestampMs: 10, data: textEncoder.encode('obsolete') }],
+      firstSequence: 99,
+      lastSequence: 99,
+      coveredBytes: 8,
+      totalBytes: 100,
+    }));
+    await drainTerminalPanelAsyncWork();
+
+    const historyEvents = getDebugConsoleClientEventRingSnapshot().events.filter((event) => (
+      event.scope === 'terminal_recovery' && event.kind === 'history_page'
+    ));
+    expect(historyEvents).toHaveLength(1);
+    expect(historyEvents[0]?.detail).toMatchObject({
+      surface_generation: 2,
+      history_page_count: 1,
+      history_chunk_count: 1,
+      history_bytes: 7,
+    });
+    expect(host.textContent).not.toContain('Loading history 8 B / 100 B');
   });
 
   it('deduplicates live chunks buffered while terminal history pages replay', async () => {
@@ -4789,11 +5251,9 @@ describe('TerminalPanel', () => {
     }));
 
     await vi.waitFor(() => {
-      expect(core?.endHistoryReplay).toHaveBeenCalled();
-    });
-    await vi.waitFor(() => {
       expect(core?.write).toHaveBeenCalledTimes(2);
     });
+    expect(core?.writeHistory).toHaveBeenCalledTimes(1);
 
     expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['duplicate', 'fresh']);
   });
@@ -4833,12 +5293,10 @@ describe('TerminalPanel', () => {
       totalBytes: 11,
     }));
 
-    await vi.waitFor(() => {
-      expect(core?.endHistoryReplay).toHaveBeenCalled();
-    });
     await waitForTerminalPanelCondition(() => {
       expect(core?.write).toHaveBeenCalledTimes(2);
     });
+    expect(core?.writeHistory).toHaveBeenCalledTimes(1);
 
     expect(transportMocks.historyPage).toHaveBeenCalledTimes(1);
     expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0])).join('')).toBe(
@@ -4886,8 +5344,7 @@ describe('TerminalPanel', () => {
     document.body.appendChild(host);
 
     render(() => <TerminalPanel variant="workbench" />, host);
-    await Promise.resolve();
-    await Promise.resolve();
+    await settleTerminalPanelAfterPaint();
     focusSpy.mockClear();
 
     (host.querySelector('[data-testid="dropdown-item-settings"]') as HTMLButtonElement | null)?.click();
@@ -4895,7 +5352,7 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-testid="dialog"]')?.className).toContain('h-[calc(100dvh-0.5rem)]');
 
     Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Close'))?.click();
-    await Promise.resolve();
+    await settleTerminalPanelAfterPaint();
 
     expect(focusSpy).toHaveBeenCalled();
   });
@@ -4915,7 +5372,7 @@ describe('TerminalPanel', () => {
     (host.querySelector('[data-testid="dropdown-item-settings"]') as HTMLButtonElement | null)?.click();
     await Promise.resolve();
     Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Close'))?.click();
-    await Promise.resolve();
+    await settleTerminalPanelAfterPaint();
 
     expect(focusSpy).toHaveBeenCalled();
     expect(transportMocks.resize).toHaveBeenCalledWith('session-1', 80, 24);

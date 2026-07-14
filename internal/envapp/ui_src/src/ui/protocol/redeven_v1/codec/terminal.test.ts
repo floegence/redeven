@@ -12,12 +12,14 @@ describe('terminal codec', () => {
       sessionId: 'session-1',
       startSeq: 2,
       endSeq: -1,
+      historyGeneration: 7,
       limitChunks: 128.7,
       maxBytes: 4096,
     })).toEqual({
       session_id: 'session-1',
       start_seq: 2,
       end_seq: -1,
+      history_generation: 7,
       limit_chunks: 128,
       max_bytes: 4096,
     });
@@ -36,6 +38,11 @@ describe('terminal codec', () => {
       has_more: true,
       first_sequence: 9,
       last_sequence: 9,
+      covered_through_sequence: 12,
+      snapshot_end_sequence: 20,
+      first_retained_sequence: 4,
+      history_generation: 7,
+      history_truncated: true,
       covered_bytes: 5,
       total_bytes: 1024,
     });
@@ -47,9 +54,48 @@ describe('terminal codec', () => {
     expect(resp.hasMore).toBe(true);
     expect(resp.firstSequence).toBe(9);
     expect(resp.lastSequence).toBe(9);
+    expect(resp.coveredThroughSequence).toBe(12);
+    expect(resp.snapshotEndSequence).toBe(20);
+    expect(resp.firstRetainedSequence).toBe(4);
+    expect(resp.historyGeneration).toBe(7);
+    expect(resp.historyReset).toBe(false);
+    expect(resp.historyTruncated).toBe(true);
     expect(resp.coveredBytes).toBe(5);
     expect(resp.totalBytes).toBe(1024);
   });
+
+  it('distinguishes explicit zero history coverage from a missing contract', () => {
+    expect(fromWireTerminalHistoryResponse({
+      chunks: [],
+      covered_through_sequence: 0,
+      snapshot_end_sequence: 0,
+      first_retained_sequence: 0,
+      history_generation: 1,
+    })).toMatchObject({
+      coveredThroughSequence: 0,
+      snapshotEndSequence: 0,
+      firstRetainedSequence: 0,
+      historyGeneration: 1,
+    });
+
+    expect(fromWireTerminalHistoryResponse({ chunks: [] })).toMatchObject({
+      coveredThroughSequence: undefined,
+      snapshotEndSequence: undefined,
+      firstRetainedSequence: undefined,
+      historyGeneration: undefined,
+    });
+  });
+
+  it.each([null, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    'preserves invalid history coverage %s for the coordinator validator',
+    (coveredThroughSequence) => {
+      const result = fromWireTerminalHistoryResponse({
+        chunks: [],
+        covered_through_sequence: coveredThroughSequence as number,
+      });
+      expect(result.coveredThroughSequence).toBeNaN();
+    },
+  );
 
   it('decodes hidden terminal close lifecycle notifications', () => {
     expect(fromWireTerminalSessionsChangedNotify({

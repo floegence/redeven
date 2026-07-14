@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
 
 import {
@@ -28,6 +28,16 @@ function createRpcMock(overrides: Partial<Record<string, any>> = {}) {
 function nextTimer(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+beforeEach(() => {
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => (
+    setTimeout(() => callback(0), 0) as unknown as number
+  ));
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('terminalTransport', () => {
   it('classifies closed transport errors as best-effort terminal disconnects', () => {
@@ -84,6 +94,16 @@ describe('terminalTransport', () => {
     expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
   });
 
+  it('treats the attached terminal size as the resize baseline', async () => {
+    const rpc = createRpcMock({ attach: vi.fn().mockResolvedValue({ ok: true }) });
+    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
+
+    await transport.attach('session-1', 80, 24);
+    await transport.resize('session-1', 80, 24);
+
+    expect(rpc.terminal.resize).not.toHaveBeenCalled();
+  });
+
   it('serializes in-flight terminal resize notifications and keeps only the newest pending size', async () => {
     let releaseFirstResize!: () => void;
     const firstResize = new Promise<void>((resolve) => {
@@ -129,6 +149,12 @@ describe('terminalTransport', () => {
         hasMore: true,
         firstSequence: 2,
         lastSequence: 2,
+        coveredThroughSequence: 2,
+        snapshotEndSequence: 9,
+        firstRetainedSequence: 1,
+        historyGeneration: 4,
+        historyReset: false,
+        historyTruncated: false,
         coveredBytes: 3,
         totalBytes: 9,
       }),
@@ -138,12 +164,15 @@ describe('terminalTransport', () => {
     const page = await transport.historyPage('session-1', 2, -1, {
       limitChunks: 10,
       maxBytes: 1024,
+      snapshotEndSequence: 9,
+      historyGeneration: 4,
     });
 
     expect(rpc.terminal.history).toHaveBeenCalledWith({
       sessionId: 'session-1',
       startSeq: 2,
-      endSeq: -1,
+      endSeq: 9,
+      historyGeneration: 4,
       limitChunks: 10,
       maxBytes: 1024,
     });
@@ -153,9 +182,37 @@ describe('terminalTransport', () => {
       hasMore: true,
       firstSequence: 2,
       lastSequence: 2,
+      coveredThroughSequence: 2,
+      snapshotEndSequence: 9,
+      firstRetainedSequence: 1,
+      historyGeneration: 4,
+      historyReset: false,
+      historyTruncated: false,
       coveredBytes: 3,
       totalBytes: 9,
     });
+  });
+
+  it('does not infer a missing next cursor from retained chunks', async () => {
+    const rpc = createRpcMock({
+      history: vi.fn().mockResolvedValue({
+        chunks: [{ sequence: 8, timestampMs: 10, data: new Uint8Array([1]) }],
+        nextStartSeq: 0,
+        hasMore: true,
+        firstSequence: 8,
+        lastSequence: 8,
+        coveredThroughSequence: 8,
+      }),
+    });
+    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
+
+    await expect(transport.historyPage('session-1', 8, -1)).resolves.toMatchObject({
+      nextStartSeq: 0,
+      hasMore: true,
+    });
+    await expect(transport.history('session-1', 8, -1)).rejects.toThrow(
+      'terminal history pagination returned an invalid cursor',
+    );
   });
 
   it('drains legacy terminal history through bounded pages', async () => {

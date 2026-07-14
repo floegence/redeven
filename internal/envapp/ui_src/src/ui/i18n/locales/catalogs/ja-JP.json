@@ -2271,7 +2271,12 @@
       "localFontDescription": "端末フォント ファミリを選択し、グローバル フォント サイズを調整します。",
       "fontSize": "フォント サイズ",
       "fontSizeDescription": "端末の履歴が画面上に十分に残る、判読可能なサイズを使用します。"
-    }
+    },
+    "retryingOlderOutput": "以前の出力を同期しています...",
+    "olderOutputUnavailable": "一部の以前の出力を復元できませんでした。",
+    "terminalUnavailable": "このターミナルを復元できませんでした。",
+    "outputSynchronized": "ターミナル出力は同期済みです。",
+    "viewDiagnostics": "診断"
   },
   "shellBlock": {
     "command": "コマンド",

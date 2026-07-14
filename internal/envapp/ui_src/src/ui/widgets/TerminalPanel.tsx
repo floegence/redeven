@@ -1,6 +1,6 @@
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { createUIFirstSelection, deferAfterPaint, isMacLikePlatform, matchKeybind, useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
-import { Copy, Folder, Menu, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { BugIcon, Copy, Folder, Menu, Refresh, Terminal, Trash, X } from '@floegence/floe-webapp-core/icons';
 import '@fontsource/iosevka/400.css';
 
 import {
@@ -77,7 +77,15 @@ import {
   type TerminalWorkingSetInteraction,
   type TerminalWorkingSetRuntime,
 } from '../services/terminalAdaptiveWorkingSet';
-import { TerminalSessionRuntime, type TerminalSessionRuntimeActions } from './TerminalSessionRuntime';
+import {
+  releaseTerminalRecoveryDiagnostics,
+  terminalRecoveryDiagnosticsQuery,
+} from '../services/terminalRecoveryDiagnostics';
+import {
+  TerminalSessionRuntime,
+  type TerminalSessionRuntimeActions,
+  type TerminalSessionRuntimeStatus,
+} from './TerminalSessionRuntime';
 import {
   TerminalSessionNavigator,
   type TerminalSessionNavigationItem,
@@ -1011,6 +1019,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [mobileKeyboardPackageScripts, setMobileKeyboardPackageScripts] = createSignal<TerminalMobileKeyboardScript[]>([]);
   const [tabVisualStateBySession, setTabVisualStateBySession] = createSignal<TerminalSessionTabVisualStateMap>({});
   const [workStateBySession, setWorkStateBySession] = createSignal<TerminalSessionWorkStateMap>({});
+  const [runtimeStatusBySession, setRuntimeStatusBySession] = createSignal<Record<string, TerminalSessionRuntimeStatus>>({});
 
   const handleExecuteDenied = (e: unknown): boolean => {
     if (!isPermissionDeniedError(e, 'process')) return false;
@@ -1497,6 +1506,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     actionsRegistry.delete(id);
   };
 
+  const handleRuntimeStatus = (id: string, status: TerminalSessionRuntimeStatus) => {
+    setRuntimeStatusBySession((current) => {
+      if (current[id]?.state === status.state && current[id]?.failureCode === status.failureCode) return current;
+      return { ...current, [id]: status };
+    });
+  };
+
   const getActiveTerminalViewportElement = (): HTMLDivElement | null => {
     const sid = activeSessionId();
     if (!sid) return null;
@@ -1648,6 +1664,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (source === 'live') terminalWorkingSet.evaluate();
   };
 
+  const handleLiveOutputObserved = (sessionId: string, byteLength: number) => {
+    if (byteLength <= 0) return;
+    tabActivityTracker.handlePendingLiveOutput(sessionId, shouldMarkSessionUnread(sessionId));
+  };
+
   const handleSessionBell = (sessionId: string) => {
     tabActivityTracker.handleBell(sessionId, shouldMarkSessionUnread(sessionId));
   };
@@ -1732,9 +1753,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return TERMINAL_WORK_INDICATOR_BASE_THICKNESS_PX;
   });
 
-  const showTerminalStatusBar = createMemo(() => {
-    return Boolean(activeSession() || activePendingSession()) && !(shouldUseFloeMobileKeyboard() && mobileKeyboardVisible());
-  });
+  const useMobileRecoveryStatusBar = createMemo(() => (
+    shouldUseFloeMobileKeyboard() && mobileKeyboardVisible()
+  ));
 
   const statusBarSessionLabel = createMemo(() => {
     const sid = activeSessionId();
@@ -1744,6 +1765,48 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!pending) return '';
     return pending.status === 'failed' ? i18n.t('terminal.creationFailedStatus') : i18n.t('terminal.creatingStatus');
   });
+
+  const activeRuntimeStatus = createMemo<TerminalSessionRuntimeStatus>(() => {
+    const sid = activeSessionId();
+    return sid ? runtimeStatusBySession()[sid] ?? { state: 'idle' } : { state: 'idle' };
+  });
+
+  const showTerminalStatusBar = createMemo(() => {
+    const hasSession = Boolean(activeSession() || activePendingSession());
+    return hasSession && (!useMobileRecoveryStatusBar() || activeRuntimeStatus().state !== 'idle');
+  });
+
+  const activeRuntimeStatusMessage = createMemo(() => {
+    switch (activeRuntimeStatus().state) {
+      case 'retrying':
+        return i18n.t('terminal.retryingOlderOutput');
+      case 'degraded':
+        return i18n.t('terminal.olderOutputUnavailable');
+      case 'blocking':
+        return i18n.t('terminal.terminalUnavailable');
+      default:
+        return '';
+    }
+  });
+
+  const retryActiveRuntime = async (trigger: HTMLButtonElement) => {
+    const sid = activeSessionId();
+    if (!sid) return;
+    await actionsRegistry.get(sid)?.retryOutputRecovery();
+    requestAnimationFrame(() => {
+      if (document.activeElement === trigger) return;
+      if (document.activeElement && document.activeElement !== document.body) return;
+      actionsRegistry.get(sid)?.focusIfInteractive();
+    });
+  };
+
+  const openActiveRuntimeDiagnostics = () => {
+    const sid = activeSessionId();
+    if (!sid) return;
+    env.openDebugConsole({
+      query: terminalRecoveryDiagnosticsQuery(sid, activeRuntimeStatus().failureCode),
+    });
+  };
 
   const shouldRestoreTerminalFocus = () => {
     return !isMobileLayout() || mobileInputMode() === 'system';
@@ -1797,7 +1860,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const restoreActiveTerminalFocus = () => {
     if (!shouldRestoreTerminalFocus()) return;
     requestAnimationFrame(() => {
-      getActiveCore()?.focus();
+      const sid = activeSessionId();
+      if (sid) actionsRegistry.get(sid)?.focusIfInteractive();
     });
   };
 
@@ -2451,6 +2515,20 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           next[id] = state;
         } else {
           changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+
+    setRuntimeStatusBySession((prev) => {
+      let changed = false;
+      const next: Record<string, TerminalSessionRuntimeStatus> = {};
+      for (const [id, status] of Object.entries(prev)) {
+        if (ids.has(id)) {
+          next[id] = status;
+        } else {
+          changed = true;
+          releaseTerminalRecoveryDiagnostics(id);
         }
       }
       return changed ? next : prev;
@@ -3507,6 +3585,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               registerSurfaceElement={registerSurfaceElement}
                               registerActions={registerActions}
                               registerWorkingSetRuntime={registerWorkingSetRuntime}
+                              onRuntimeStatus={handleRuntimeStatus}
+                              onLiveOutputObserved={handleLiveOutputObserved}
                               setWorkingSetInteraction={setWorkingSetInteraction}
                               onSurfaceClick={handleWorkbenchTerminalSurfaceClick}
                               onBell={handleSessionBell}
@@ -3647,9 +3727,67 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               <div class="p-2 text-[11px] text-error border-t border-border bg-background/80 break-words">{error()}</div>
             </Show>
             <Show when={showTerminalStatusBar()}>
-              <div data-testid="terminal-status-bar" class="flex items-center justify-between px-3 py-1 border-t border-border text-[10px] text-muted-foreground">
-                <span>{i18n.t('terminal.statusSession')}: {statusBarSessionLabel()}</span>
-                <span>{i18n.t('terminal.statusHistory')}: {historyBytes() === null ? '-' : formatBytes(historyBytes() ?? 0)}</span>
+              <div
+                data-testid="terminal-status-bar"
+                class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden border-t border-border px-2 text-[10px] leading-none text-muted-foreground"
+                classList={{
+                  'h-11 min-h-11 max-h-11': useMobileRecoveryStatusBar(),
+                  'h-7 min-h-7 max-h-7': !useMobileRecoveryStatusBar(),
+                }}
+              >
+                <div class="flex min-w-0 items-center gap-3 overflow-hidden whitespace-nowrap">
+                  <span
+                    class="min-w-0 max-w-[40%] truncate"
+                    classList={{ hidden: useMobileRecoveryStatusBar() && activeRuntimeStatus().state !== 'idle' }}
+                  >
+                    {i18n.t('terminal.statusSession')}: {statusBarSessionLabel()}
+                  </span>
+                  <span
+                    data-testid="terminal-recovery-status-message"
+                    class="min-w-0 truncate"
+                    classList={{
+                      'text-error': activeRuntimeStatus().state === 'blocking',
+                      'text-foreground': activeRuntimeStatus().state === 'degraded',
+                      'invisible': activeRuntimeStatus().state === 'idle',
+                    }}
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                  >
+                    {activeRuntimeStatusMessage()}
+                  </span>
+                  <span
+                    class="ml-auto shrink-0"
+                    classList={{ hidden: useMobileRecoveryStatusBar() }}
+                  >
+                    {i18n.t('terminal.statusHistory')}: {historyBytes() === null ? '-' : formatBytes(historyBytes() ?? 0)}
+                  </span>
+                </div>
+                <Show when={activeRuntimeStatus().state === 'degraded' || activeRuntimeStatus().state === 'blocking'}>
+                  <div
+                    data-testid="terminal-recovery-status-actions"
+                    class="flex min-w-max shrink-0 items-center gap-1 whitespace-nowrap"
+                  >
+                      <button
+                        type="button"
+                        class="inline-flex size-7 cursor-pointer items-center justify-center text-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        aria-label={i18n.t('terminal.retry')}
+                        title={i18n.t('terminal.retry')}
+                        onClick={(event) => void retryActiveRuntime(event.currentTarget)}
+                      >
+                        <Refresh class="size-3.5" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        class="inline-flex size-7 cursor-pointer items-center justify-center text-primary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        aria-label={i18n.t('terminal.viewDiagnostics')}
+                        title={i18n.t('terminal.viewDiagnostics')}
+                        onClick={openActiveRuntimeDiagnostics}
+                      >
+                        <BugIcon class="size-3.5" aria-hidden="true" />
+                      </button>
+                  </div>
+                </Show>
               </div>
             </Show>
           </div>

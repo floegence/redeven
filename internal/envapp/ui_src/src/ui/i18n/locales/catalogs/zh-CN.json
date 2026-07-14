@@ -2271,7 +2271,12 @@
       "localFontDescription": "选择终端字体族并调整全局字号。",
       "fontSize": "字号",
       "fontSizeDescription": "使用可读字号，同时在屏幕上保留足够的终端历史。"
-    }
+    },
+    "retryingOlderOutput": "正在同步较早的输出...",
+    "olderOutputUnavailable": "部分较早的输出暂未恢复。",
+    "terminalUnavailable": "无法恢复此终端。",
+    "outputSynchronized": "终端输出已同步。",
+    "viewDiagnostics": "查看诊断"
   },
   "shellBlock": {
     "command": "命令",

@@ -2271,7 +2271,12 @@
       "localFontDescription": "Wählen Sie die Terminal-Schriftfamilie aus und passen Sie die globale Schriftgröße an.",
       "fontSize": "Schriftgröße",
       "fontSizeDescription": "Verwenden Sie eine lesbare Größe, die dennoch genügend Terminalverlauf auf dem Bildschirm anzeigt."
-    }
+    },
+    "retryingOlderOutput": "Frühere Ausgabe wird synchronisiert...",
+    "olderOutputUnavailable": "Ein Teil der früheren Ausgabe konnte nicht wiederhergestellt werden.",
+    "terminalUnavailable": "Dieses Terminal konnte nicht wiederhergestellt werden.",
+    "outputSynchronized": "Die Terminalausgabe ist synchronisiert.",
+    "viewDiagnostics": "Diagnose"
   },
   "shellBlock": {
     "command": "Befehl",

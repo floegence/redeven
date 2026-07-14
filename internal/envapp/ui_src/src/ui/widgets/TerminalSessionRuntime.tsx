@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 
 import {
   TerminalCore,
@@ -6,6 +6,7 @@ import {
   getDefaultTerminalConfig,
   type Logger,
   type PagedTerminalOutputCoordinatorHandle,
+  type PagedTerminalOutputFailureCode,
   type PagedTerminalOutputSnapshot,
   type TerminalAppearance,
   type TerminalEventSource,
@@ -15,7 +16,11 @@ import {
 } from '@floegence/floeterm-terminal-web';
 import type { RedevenTerminalTransport } from '../services/terminalTransport';
 import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
-import { TerminalShellIntegrationParser, type TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
+import type { TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
+import {
+  createTerminalOutputProjection,
+  tagTerminalOutputChunk,
+} from '../services/terminalOutputProjection';
 import {
   restoreTerminalSnapshotOrReplay,
   type TerminalWorkingSetInteraction,
@@ -25,10 +30,15 @@ import { normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../util
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { useI18n } from '../i18n';
+import {
+  markTerminalRecoveryMilestone,
+  publishTerminalRecoveryEvent,
+  startTerminalRecoveryTrace,
+  type TerminalRecoveryPhase,
+  type TerminalRecoveryTrace,
+} from '../services/terminalRecoveryDiagnostics';
 
 type SessionLoadingState = 'idle' | 'initializing' | 'attaching' | 'loading_history';
-
-const TERMINAL_HISTORY_REPLAY_MODE_MS = 120_000;
 
 function buildLogger(): Logger {
   return {
@@ -57,6 +67,13 @@ function formatBytes(bytes: number): string {
 export type TerminalSessionRuntimeActions = Readonly<{
   reload: () => Promise<void>;
   resetAfterClear: () => void;
+  retryOutputRecovery: () => Promise<void>;
+  focusIfInteractive: () => boolean;
+}>;
+
+export type TerminalSessionRuntimeStatus = Readonly<{
+  state: 'idle' | 'retrying' | 'degraded' | 'blocking';
+  failureCode?: PagedTerminalOutputFailureCode | 'terminal_unavailable';
 }>;
 
 export type TerminalSessionRuntimeProps = Readonly<{
@@ -80,6 +97,8 @@ export type TerminalSessionRuntimeProps = Readonly<{
   registerSurfaceElement: (sessionId: string, surface: HTMLDivElement | null) => void;
   registerActions: (sessionId: string, actions: TerminalSessionRuntimeActions | null) => void;
   registerWorkingSetRuntime: (sessionId: string, runtime: TerminalWorkingSetRuntime | null) => void;
+  onRuntimeStatus?: (sessionId: string, status: TerminalSessionRuntimeStatus) => void;
+  onLiveOutputObserved?: (sessionId: string, byteLength: number) => void;
   setWorkingSetInteraction: (sessionId: string, interaction: TerminalWorkingSetInteraction, active: boolean) => void;
   onSurfaceClick?: (event: MouseEvent) => void;
   onBell?: (sessionId: string) => void;
@@ -97,10 +116,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const fontSize = () => props.fontSize();
   const fontFamily = () => props.fontFamily();
   const [loading, setLoading] = createSignal<SessionLoadingState>('initializing');
-  const [error, setError] = createSignal<string | null>(null);
   const [readyOnce, setReadyOnce] = createSignal(false);
   const [outputRecoveryState, setOutputRecoveryState] = createSignal<PagedTerminalOutputSnapshot['state']>('idle');
-  const [outputRecoveryError, setOutputRecoveryError] = createSignal<string | null>(null);
+  const [baselineReady, setBaselineReady] = createSignal(false);
+  const [recoveryFailureCode, setRecoveryFailureCode] = createSignal<PagedTerminalOutputFailureCode | null>(null);
+  const [blockingFailureCode, setBlockingFailureCode] = createSignal<'terminal_unavailable' | PagedTerminalOutputFailureCode | null>(null);
+  const [showRetryingStatus, setShowRetryingStatus] = createSignal(false);
   const [historyReplayProgress, setHistoryReplayProgress] = createSignal<{ loadedBytes: number; totalBytes: number } | null>(null);
 
   const [showLoading, setShowLoading] = createSignal(false);
@@ -122,12 +143,29 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     return undefined;
   });
 
-  const outputRecoveryMessage = createMemo(() => {
-    const state = outputRecoveryState();
-    if (state === 'catching-up') return i18n.t('terminal.recoveringOutput');
-    if (state === 'retry-wait') return i18n.t('terminal.retryingOutputRecovery');
-    if (state === 'failed') return outputRecoveryError() ?? i18n.t('terminal.outputRecoveryFailed');
-    return error();
+  const runtimeStatus = createMemo<TerminalSessionRuntimeStatus>(() => {
+    const blocking = blockingFailureCode();
+    if (blocking) return { state: 'blocking', failureCode: blocking };
+    if (baselineReady() && outputRecoveryState() === 'failed') {
+      return { state: 'degraded', failureCode: recoveryFailureCode() ?? undefined };
+    }
+    if (baselineReady() && outputRecoveryState() === 'retry-wait' && showRetryingStatus()) {
+      return { state: 'retrying', failureCode: recoveryFailureCode() ?? undefined };
+    }
+    return { state: 'idle' };
+  });
+
+  createEffect(() => {
+    const status = runtimeStatus();
+    props.onRuntimeStatus?.(stableSessionId, status);
+  });
+
+  createEffect(() => {
+    const shouldDelay = baselineReady() && outputRecoveryState() === 'retry-wait';
+    setShowRetryingStatus(false);
+    if (!shouldDelay) return;
+    const timer = setTimeout(() => setShowRetryingStatus(true), 750);
+    onCleanup(() => clearTimeout(timer));
   });
 
   createEffect(() => {
@@ -159,6 +197,65 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let activationRaf: number | null = null;
   let inputProtectionTimer: ReturnType<typeof setTimeout> | null = null;
   let workingSetRegistered = false;
+  let recoveryTrace: TerminalRecoveryTrace | null = null;
+  let recoveryPhase: TerminalRecoveryPhase | null = null;
+  let historyPageCount = 0;
+  let historyChunkCount = 0;
+  let historyBytes = 0;
+  let lastHistoryGeneration: number | undefined;
+  let lastSnapshotEndSequence: number | undefined;
+  let lastFirstRetainedSequence: number | undefined;
+  let historyReset = false;
+  let historyTruncated = false;
+  let lastRetryEventKey = '';
+  let lastDegradedEventKey = '';
+  let lastBlockingEventKey = '';
+  let liveMilestoneMarked = false;
+  let outputCoordinatorEpoch = 0;
+
+  const transitionRecoveryPhase = (next: TerminalRecoveryPhase) => {
+    const trace = recoveryTrace;
+    if (!trace || recoveryPhase === next) return;
+    publishTerminalRecoveryEvent(trace, 'phase_transition', {
+      phase_from: recoveryPhase ?? undefined,
+      phase_to: next,
+    });
+    recoveryPhase = next;
+  };
+
+  const startRecoveryTrace = () => {
+    recoveryTrace = startTerminalRecoveryTrace(stableSessionId, props.variant);
+    recoveryPhase = null;
+    historyPageCount = 0;
+    historyChunkCount = 0;
+    historyBytes = 0;
+    lastHistoryGeneration = undefined;
+    lastSnapshotEndSequence = undefined;
+    lastFirstRetainedSequence = undefined;
+    historyReset = false;
+    historyTruncated = false;
+    lastRetryEventKey = '';
+    lastDegradedEventKey = '';
+    lastBlockingEventKey = '';
+    liveMilestoneMarked = false;
+    transitionRecoveryPhase('initializing');
+    return recoveryTrace;
+  };
+
+  const reportBlockingFailure = (code: 'terminal_unavailable' | PagedTerminalOutputFailureCode) => {
+    const trace = recoveryTrace;
+    if (trace) {
+      const eventKey = `${trace.surfaceGeneration}:${code}`;
+      if (lastBlockingEventKey !== eventKey) {
+        lastBlockingEventKey = eventKey;
+        publishTerminalRecoveryEvent(trace, 'blocking', {
+          error_code: code,
+          recovery_action: 'retry',
+        });
+      }
+    }
+    setBlockingFailureCode(code);
+  };
 
   const buildTerminalAppearance = (): TerminalAppearance => ({
     theme: colors(),
@@ -175,7 +272,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (opts?.forceResize) {
       core.forceResize();
     }
-    if (opts?.focus && props.viewActive() && props.active() && props.autoFocus()) {
+    if (opts?.focus && props.viewActive() && props.active() && props.autoFocus() && !core.hasSelection()) {
       core.focus();
     }
   };
@@ -209,7 +306,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     activationRaf = requestAnimationFrame(() => {
       activationRaf = null;
       const core = term;
-      if (!core) return;
+      if (!core || terminalInputBlocked() || core.hasSelection()) return;
       applyTerminalAppearance(core, buildTerminalAppearance(), {
         forceResize: true,
         focus: true,
@@ -217,13 +314,18 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     });
   };
 
-  let replaying = false;
-  const shellIntegrationParser = new TerminalShellIntegrationParser();
+  const outputProjection = createTerminalOutputProjection({
+    onShellIntegrationEvent: (event, source) => {
+      props.onShellIntegrationEvent?.(sessionId(), event, source);
+    },
+    onVisibleOutput: (source, byteLength) => {
+      props.onVisibleOutput?.(sessionId(), source, byteLength);
+    },
+  });
   let outputCoordinator: PagedTerminalOutputCoordinatorHandle | null = null;
   let outputCoordinatorSnapshot: PagedTerminalOutputSnapshot | null = null;
   let replayCoveredBytes = 0;
   let replayTotalBytes = 0;
-  const projectedLiveBySequence = new Map<number, Uint8Array>();
 
   const liveRenderActive = () => {
     const active = props.viewActive() && props.active();
@@ -236,23 +338,16 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       : undefined
   );
 
-  const historyPageCoveredThrough = (page: {
-    lastSequence: number;
-    chunks: readonly { sequence: number }[];
-  }): number | undefined => {
-    let coveredThrough = normalizeLiveSequence(page.lastSequence);
-    for (const chunk of page.chunks) {
-      const seq = normalizeLiveSequence(chunk.sequence);
-      if (seq && (!coveredThrough || seq > coveredThrough)) {
-        coveredThrough = seq;
-      }
-    }
-    return coveredThrough;
+  const terminalInputBlocked = () => {
+    if (loading() !== 'idle' || !baselineReady() || blockingFailureCode()) return true;
+    return false;
   };
 
-  const terminalInputBlocked = () => {
-    if (loading() !== 'idle' || replaying) return true;
-    return false;
+  const focusTerminalIfInteractive = () => {
+    const core = term;
+    if (!core || terminalInputBlocked() || core.hasSelection()) return false;
+    core.focus();
+    return true;
   };
 
   const clearOutputSubscription = () => {
@@ -260,23 +355,6 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     unsubData = null;
     unsubNameUpdate?.();
     unsubNameUpdate = null;
-  };
-
-  const consumeTerminalChunk = (
-    data: Uint8Array,
-    source: 'history' | 'live',
-    opts?: { publishActivity?: boolean },
-  ): Uint8Array => {
-    const result = shellIntegrationParser.parse(data);
-    if (opts?.publishActivity !== false) {
-      for (const event of result.events) {
-        props.onShellIntegrationEvent?.(sessionId(), event, source);
-      }
-      if (result.displayData.byteLength > 0) {
-        props.onVisibleOutput?.(sessionId(), source, result.displayData.byteLength);
-      }
-    }
-    return result.displayData;
   };
 
   const handleLiveTerminalData = (data: Uint8Array, sequence: number | undefined) => {
@@ -292,17 +370,35 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       return;
     }
 
-    const shouldProjectNow = outputCoordinatorSnapshot?.state !== 'initial-replay';
-    const projectedData = shouldProjectNow ? consumeTerminalChunk(data, 'live') : data;
-    if (shouldProjectNow && normalizedSequence) {
-      projectedLiveBySequence.set(normalizedSequence, projectedData);
+    const snapshot = outputCoordinatorSnapshot;
+    const projectionFloor = snapshot?.coveredThroughSequence ?? 0;
+    const trace = recoveryTrace;
+    if (trace && normalizedSequence !== undefined && normalizedSequence > projectionFloor + 1) {
+      publishTerminalRecoveryEvent(trace, 'live', {
+        coordinator_attach_generation: snapshot?.attachGeneration,
+        catch_up_gap_sequences: normalizedSequence - projectionFloor - 1,
+        covered_through_sequence: snapshot?.coveredThroughSequence,
+      });
     }
-    coordinator.pushLive({
+    if (trace && !liveMilestoneMarked) {
+      liveMilestoneMarked = true;
+      markTerminalRecoveryMilestone(trace, 'live', {
+        coordinator_attach_generation: snapshot?.attachGeneration,
+        covered_through_sequence: snapshot?.coveredThroughSequence,
+      });
+      publishTerminalRecoveryEvent(trace, 'live', {
+        coordinator_attach_generation: snapshot?.attachGeneration,
+        covered_through_sequence: snapshot?.coveredThroughSequence,
+      });
+    }
+    if (data.byteLength > 0) {
+      props.onLiveOutputObserved?.(sessionId(), data.byteLength);
+    }
+    const liveChunk = tagTerminalOutputChunk({
       sequence: normalizedSequence,
-      data: projectedData,
-      source: 'live',
-      pretransformed: shouldProjectNow,
-    } as { sequence?: number; data: Uint8Array; source: 'live'; pretransformed: boolean });
+      data,
+    }, 'live');
+    coordinator.pushLive(liveChunk);
   };
 
   let reloadSeq = 0;
@@ -325,10 +421,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     outputCoordinator?.dispose();
     outputCoordinator = null;
     outputCoordinatorSnapshot = null;
-    projectedLiveBySequence.clear();
+    setBaselineReady(false);
+    setRecoveryFailureCode(null);
     disposeCore();
-    replaying = false;
-    shellIntegrationParser.reset();
+    outputProjection.reset();
     setReadyOnce(false);
     if (workingSetRegistered) {
       workingSetRegistered = false;
@@ -338,22 +434,6 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   let initSeq = 0;
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-  const nextAnimationFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-
-  const confirmAttachedViewportSize = async (core: TerminalCore, id: string, seq: number) => {
-    await nextAnimationFrame();
-    if (seq !== initSeq) return;
-
-    core.forceResize();
-
-    await nextAnimationFrame();
-    if (seq !== initSeq) return;
-
-    const dims = core.getDimensions();
-    if (dims.cols <= 0 || dims.rows <= 0) return;
-    await props.transport.resize(id, dims.cols, dims.rows);
-  };
-
   const reload = async (opts?: { fadeOut?: boolean }) => {
     const id = sessionId();
     if (!id) return;
@@ -363,7 +443,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     const seq = ++reloadSeq;
 
     // Keep the surface hidden until the new terminal is attached and history is replayed (same as page open).
-    setError(null);
+    setBlockingFailureCode(null);
     setLoading('initializing');
 
     if (opts?.fadeOut) {
@@ -383,9 +463,9 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
     try {
       await initOnce();
-    } catch (e) {
+    } catch {
       setLoading('idle');
-      setError(e instanceof Error ? e.message : String(e));
+      reportBlockingFailure('terminal_unavailable');
       const el = container;
       if (el) el.style.opacity = '1';
     }
@@ -397,11 +477,19 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     props.registerActions(id, {
       reload: () => reload(),
       resetAfterClear: () => {
-        projectedLiveBySequence.clear();
-        shellIntegrationParser.reset();
+        outputProjection.reset();
         outputCoordinator?.clear(1);
         void outputCoordinator?.attach(0);
       },
+      retryOutputRecovery: async () => {
+        setRecoveryFailureCode(null);
+        if (blockingFailureCode() || !readyOnce()) {
+          await reload();
+          return;
+        }
+        outputCoordinator?.retry();
+      },
+      focusIfInteractive: focusTerminalIfInteractive,
     });
     onCleanup(() => {
       props.registerActions(id, null);
@@ -451,7 +539,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           void props.transport.resize(id, size.cols, size.rows);
         },
         onError: (e: Error) => {
-          setError(e.message);
+          buildLogger().error('[TerminalPanel] Terminal core failed', { sessionId: id, error: e });
+          reportBlockingFailure('terminal_unavailable');
         },
         onBell: () => {
           props.onBell?.(id);
@@ -479,6 +568,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   const ensureOutputCoordinator = (id: string) => {
     if (outputCoordinator) return outputCoordinator;
+    const coordinatorEpoch = ++outputCoordinatorEpoch;
     replayCoveredBytes = 0;
     replayTotalBytes = 0;
     outputCoordinator = createPagedTerminalOutputCoordinator({
@@ -488,55 +578,98 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         maxRetainedLiveBytes: 8 * 1024 * 1024,
         retryDelaysMs: [250, 1000, 4000],
       },
-      fetchPage: async ({ startSequence, cursor }) => {
+      fetchPage: async ({ startSequence, endSequence, historyGeneration, cursor, signal }) => {
+        const requestInitSequence = initSeq;
+        const requestTrace = recoveryTrace;
         const pageCursor = typeof cursor === 'number' ? cursor : startSequence;
-        const page = await props.transport.historyPage(id, pageCursor, -1);
-        replayCoveredBytes += Math.max(0, page.coveredBytes);
-        replayTotalBytes = page.totalBytes > 0 ? page.totalBytes : replayTotalBytes;
-        if (replayTotalBytes > 0) {
-          setHistoryReplayProgress({
-            loadedBytes: Math.min(replayCoveredBytes, replayTotalBytes),
-            totalBytes: replayTotalBytes,
-          });
+        const pageOptions = endSequence === undefined && historyGeneration === undefined
+          ? undefined
+          : { snapshotEndSequence: endSequence, historyGeneration };
+        const page = pageOptions === undefined
+          ? await props.transport.historyPage(id, pageCursor, -1)
+          : await props.transport.historyPage(id, pageCursor, -1, pageOptions);
+        const requestStillCurrent = !signal.aborted
+          && requestInitSequence === initSeq
+          && requestTrace === recoveryTrace
+          && coordinatorEpoch === outputCoordinatorEpoch;
+        if (requestStillCurrent) {
+          historyPageCount += 1;
+          historyChunkCount += page.chunks.length;
+          historyBytes += Math.max(0, page.coveredBytes);
+          lastHistoryGeneration = page.historyGeneration;
+          lastSnapshotEndSequence = page.snapshotEndSequence;
+          lastFirstRetainedSequence = page.firstRetainedSequence;
+          historyReset ||= page.historyReset;
+          historyTruncated ||= page.historyTruncated;
+          if (requestTrace) {
+            publishTerminalRecoveryEvent(requestTrace, 'history_page', {
+              history_page_count: historyPageCount,
+              history_chunk_count: historyChunkCount,
+              history_bytes: historyBytes,
+              covered_through_sequence: page.coveredThroughSequence,
+              snapshot_end_sequence: page.snapshotEndSequence,
+              first_retained_sequence: page.firstRetainedSequence,
+              history_generation: page.historyGeneration,
+              history_reset: page.historyReset,
+              history_truncated: page.historyTruncated,
+            });
+          }
+          replayCoveredBytes += Math.max(0, page.coveredBytes);
+          replayTotalBytes = page.totalBytes > 0 ? page.totalBytes : replayTotalBytes;
+          if (replayTotalBytes > 0) {
+            setHistoryReplayProgress({
+              loadedBytes: Math.min(replayCoveredBytes, replayTotalBytes),
+              totalBytes: replayTotalBytes,
+            });
+          }
         }
-        const coveredThroughSequence = historyPageCoveredThrough(page) ?? Math.max(0, pageCursor - 1);
         return {
-          chunks: page.chunks.map((chunk) => {
-            const projected = projectedLiveBySequence.get(chunk.sequence);
-            return {
-              ...chunk,
-              data: projected === undefined
-                ? chunk.data
-                : consumeTerminalChunk(chunk.data, 'history', { publishActivity: false }),
-              source: 'history' as const,
-              pretransformed: projected !== undefined,
-            };
-          }),
+          chunks: page.chunks.map((chunk) => tagTerminalOutputChunk(chunk, 'history')),
           hasMore: page.hasMore,
-          nextCursor: page.hasMore ? page.nextStartSeq : undefined,
+          nextCursor: page.hasMore
+            && Number.isSafeInteger(page.nextStartSeq)
+            && page.nextStartSeq > pageCursor
+            ? page.nextStartSeq
+            : undefined,
           firstAvailableSequence: page.firstSequence > 0 ? page.firstSequence : undefined,
-          coveredThroughSequence,
+          firstRetainedSequence: page.firstRetainedSequence,
+          coveredThroughSequence: page.coveredThroughSequence as number,
+          snapshotEndSequence: page.snapshotEndSequence,
+          historyGeneration: page.historyGeneration,
+          historyReset: page.historyReset,
+          historyTruncated: page.historyTruncated,
           coveredBytes: page.coveredBytes,
           totalBytes: page.totalBytes,
         };
       },
-      transformChunk: (chunk) => {
-        const metadata = chunk as {
-          sequence?: number;
-          data: Uint8Array;
-          source?: 'history' | 'live';
-          pretransformed?: boolean;
-        };
-        if (metadata.pretransformed) return chunk.data;
-        const source = metadata.source ?? 'live';
-        return consumeTerminalChunk(chunk.data, source);
-      },
-      write: (payload) => {
-        if (payload.byteLength > 0) term?.write(payload);
-      },
+      transformChunk: outputProjection.transformChunk,
+      write: (payload) => new Promise<void>((resolve, reject) => {
+        if (payload.byteLength === 0) {
+          resolve();
+          return;
+        }
+        const core = term;
+        if (!core) {
+          reject(new Error('Terminal output writer lost its active core'));
+          return;
+        }
+        core.write(payload, resolve);
+      }),
+      writeHistory: (payload) => new Promise<void>((resolve, reject) => {
+        if (payload.byteLength === 0) {
+          resolve();
+          return;
+        }
+        const core = term;
+        if (!core) {
+          reject(new Error('Terminal history writer lost its active core'));
+          return;
+        }
+        core.writeHistory(payload, resolve);
+      }),
       clear: () => {
         term?.clear();
-        shellIntegrationParser.reset();
+        outputProjection.reset();
       },
       onHistoryTruncated: (reason) => {
         buildLogger().warn('[TerminalPanel] Rebased truncated terminal history', { sessionId: id, reason });
@@ -545,21 +678,38 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       onStateChange: (snapshot) => {
         outputCoordinatorSnapshot = snapshot;
         setOutputRecoveryState(snapshot.state);
-        if (snapshot.state === 'failed') {
-          const message = snapshot.lastError instanceof Error
-            ? snapshot.lastError.message
-            : String(snapshot.lastError || 'Terminal output recovery failed');
-          setOutputRecoveryError(message);
-        } else if (snapshot.state !== 'disposed') {
-          setOutputRecoveryError(null);
+        setBaselineReady(snapshot.baselineReady);
+        setRecoveryFailureCode(snapshot.failure?.code ?? null);
+        const trace = recoveryTrace;
+        if (trace && snapshot.state === 'retry-wait') {
+          const retryKey = `${snapshot.attachGeneration}:${snapshot.retryAttempt}`;
+          if (lastRetryEventKey !== retryKey) {
+            lastRetryEventKey = retryKey;
+            publishTerminalRecoveryEvent(trace, 'retry_scheduled', {
+              coordinator_attach_generation: snapshot.attachGeneration,
+              retry_attempt: snapshot.retryAttempt,
+              retry_delay_ms: [250, 1000, 4000][Math.max(0, snapshot.retryAttempt - 1)],
+              error_code: snapshot.failure?.code,
+              covered_through_sequence: snapshot.coveredThroughSequence,
+              recovery_action: 'retry',
+            });
+          }
+        }
+        if (trace && snapshot.state === 'failed') {
+          const degradedKey = `${snapshot.attachGeneration}:${snapshot.failure?.code ?? 'unknown'}`;
+          if (lastDegradedEventKey !== degradedKey) {
+            lastDegradedEventKey = degradedKey;
+            publishTerminalRecoveryEvent(trace, 'degraded', {
+              coordinator_attach_generation: snapshot.attachGeneration,
+              retry_attempt: snapshot.retryAttempt,
+              error_code: snapshot.failure?.code,
+              covered_through_sequence: snapshot.coveredThroughSequence,
+              recovery_action: snapshot.failure?.retryable === false ? 'update_runtime' : 'retry',
+            });
+          }
         }
         if (snapshot.state === 'live') {
           setHistoryReplayProgress(null);
-          for (const sequence of projectedLiveBySequence.keys()) {
-            if (sequence <= snapshot.coveredThroughSequence) {
-              projectedLiveBySequence.delete(sequence);
-            }
-          }
         }
       },
     });
@@ -572,7 +722,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (!target) throw new Error('Terminal not mounted');
 
     const seq = ++initSeq;
-    setError(null);
+    const trace = startRecoveryTrace();
+    const focusOwnerAtStart = typeof document === 'undefined' ? null : document.activeElement;
+    const focusWasAvailableAtStart = focusOwnerAtStart == null
+      || focusOwnerAtStart === document.body
+      || target.contains(focusOwnerAtStart);
+    setBlockingFailureCode(null);
     setLoading('initializing');
 
     const core = createCore(id, target);
@@ -588,7 +743,6 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       applyTerminalAppearance(core, buildTerminalAppearance(), { forceResize: true });
 
       clearOutputSubscription();
-      replaying = true;
       unsubData = props.eventSource.onTerminalData(id, (ev) => {
         handleLiveTerminalData(ev.data, ev.sequence);
       });
@@ -600,57 +754,80 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       }
 
       setLoading('attaching');
+      transitionRecoveryPhase('attaching');
       const dims = core.getDimensions();
+      markTerminalRecoveryMilestone(trace, 'attach-start', { cols: dims.cols, rows: dims.rows });
       await props.transport.attach(id, dims.cols, dims.rows);
       if (seq !== initSeq) return;
+      markTerminalRecoveryMilestone(trace, 'attach-ack', { cols: dims.cols, rows: dims.rows });
+      publishTerminalRecoveryEvent(trace, 'attach_ack', { cols: dims.cols, rows: dims.rows });
 
       setLoading('loading_history');
+      transitionRecoveryPhase('replaying');
       core.clear();
-      shellIntegrationParser.reset();
-      core.startHistoryReplay(TERMINAL_HISTORY_REPLAY_MODE_MS);
+      outputProjection.reset();
       try {
-        await outputCoordinator?.attach(0);
-        while (
-          seq === initSeq
-          && outputCoordinatorSnapshot
-          && outputCoordinatorSnapshot.state !== 'live'
-          && outputCoordinatorSnapshot.state !== 'failed'
-        ) {
-          await sleep(25);
+        const coordinator = outputCoordinator;
+        if (!coordinator) throw new Error('Terminal output coordinator unavailable');
+        markTerminalRecoveryMilestone(trace, 'baseline-queued');
+        void coordinator.attach(0);
+        const baseline = await coordinator.waitForBaseline();
+        if (!baseline.baselineReady) {
+          reportBlockingFailure(baseline.failure?.code ?? 'terminal_unavailable');
+          throw new Error('Terminal history baseline unavailable');
         }
+        markTerminalRecoveryMilestone(trace, 'baseline-parser-committed', {
+          coordinator_attach_generation: baseline.attachGeneration,
+          history_generation: lastHistoryGeneration,
+          covered_through_sequence: baseline.coveredThroughSequence,
+          snapshot_end_sequence: lastSnapshotEndSequence,
+          first_retained_sequence: lastFirstRetainedSequence,
+          history_reset: historyReset,
+          history_truncated: historyTruncated,
+        });
+        publishTerminalRecoveryEvent(trace, 'baseline_ready', {
+          coordinator_attach_generation: baseline.attachGeneration,
+          history_generation: lastHistoryGeneration,
+          history_page_count: historyPageCount,
+          history_chunk_count: historyChunkCount,
+          history_bytes: historyBytes,
+          covered_through_sequence: baseline.coveredThroughSequence,
+          snapshot_end_sequence: lastSnapshotEndSequence,
+          first_retained_sequence: lastFirstRetainedSequence,
+          history_reset: historyReset,
+          history_truncated: historyTruncated,
+        });
       } finally {
-        core.endHistoryReplay();
         setHistoryReplayProgress(null);
       }
       if (seq !== initSeq) return;
-      if (outputCoordinatorSnapshot?.state === 'failed') {
-        throw outputCoordinatorSnapshot.lastError instanceof Error
-          ? outputCoordinatorSnapshot.lastError
-          : new Error(String(outputCoordinatorSnapshot.lastError || 'Terminal output recovery failed'));
-      }
-      replaying = false;
-
-      await confirmAttachedViewportSize(core, id, seq);
-      if (seq !== initSeq) return;
-
       setLoading('idle');
       setReadyOnce(true);
+      transitionRecoveryPhase('interactive');
+      markTerminalRecoveryMilestone(trace, 'interactive', {
+        coordinator_attach_generation: outputCoordinatorSnapshot?.attachGeneration,
+        history_generation: lastHistoryGeneration,
+        covered_through_sequence: outputCoordinatorSnapshot?.coveredThroughSequence,
+      });
 
       requestAnimationFrame(() => {
+        if (seq !== initSeq || recoveryTrace !== trace || term !== core) return;
         core.forceResize();
-        if (props.viewActive() && props.active() && props.autoFocus()) core.focus();
+        const activeElement = typeof document === 'undefined' ? null : document.activeElement;
+        const focusStillOwned = focusWasAvailableAtStart && (activeElement == null
+          || activeElement === document.body
+          || target.contains(activeElement));
+        if (focusStillOwned && props.viewActive() && props.active() && props.autoFocus() && !core.hasSelection()) core.focus();
         const el = container;
         if (el && el.style.opacity !== '1') {
           el.style.opacity = '1';
         }
       });
-    } catch (e) {
+    } catch {
       if (seq !== initSeq) return;
-      replaying = false;
+      transitionRecoveryPhase('failed');
       setLoading('idle');
-      if (outputCoordinatorSnapshot?.state !== 'failed') {
-        setError(e instanceof Error ? e.message : String(e));
-      }
+      if (!blockingFailureCode()) reportBlockingFailure('terminal_unavailable');
       const el = container;
       if (el) el.style.opacity = '1';
     }
@@ -660,12 +837,13 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     const core = term;
     if (!core) return null;
 
-    outputCoordinator?.setActive(false);
-    await nextAnimationFrame();
+    const coordinator = outputCoordinator;
+    if (!coordinator) return null;
+    const coordinatorSnapshot = await coordinator.pause();
     if (term !== core) return null;
 
     const snapshot = core.captureRestorableSnapshot({
-      coveredThroughSequence: outputCoordinator?.getSnapshot().coveredThroughSequence ?? 0,
+      coveredThroughSequence: coordinatorSnapshot.coveredThroughSequence,
     });
     disposeCore();
     return snapshot;
@@ -683,7 +861,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }
 
     const seq = ++initSeq;
-    setError(null);
+    const trace = startRecoveryTrace();
+    const focusOwnerAtStart = typeof document === 'undefined' ? null : document.activeElement;
+    const focusWasAvailableAtStart = focusOwnerAtStart == null
+      || focusOwnerAtStart === document.body
+      || target.contains(focusOwnerAtStart);
+    setBlockingFailureCode(null);
     setLoading('initializing');
     setShowLoading(true);
     const core = createCore(id, target);
@@ -695,38 +878,45 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       props.registerCore(id, core);
       applyTerminalAppearance(core, buildTerminalAppearance(), { forceResize: true });
 
-      const recoverySource = await restoreTerminalSnapshotOrReplay({
+      await restoreTerminalSnapshotOrReplay({
         snapshot,
         restoreSnapshot: (value) => core.restoreSnapshot(value),
         replayHistory: async () => {
-          replaying = true;
           replayCoveredBytes = 0;
           replayTotalBytes = 0;
           setLoading('loading_history');
+          transitionRecoveryPhase('replaying');
           core.clear();
-          shellIntegrationParser.reset();
-          core.startHistoryReplay(TERMINAL_HISTORY_REPLAY_MODE_MS);
+          outputProjection.reset();
           try {
-            await coordinator.attach(0);
-            while (
-              seq === initSeq
-              && outputCoordinatorSnapshot
-              && outputCoordinatorSnapshot.state !== 'live'
-              && outputCoordinatorSnapshot.state !== 'failed'
-            ) {
-              await sleep(25);
+            markTerminalRecoveryMilestone(trace, 'baseline-queued');
+            void coordinator.attach(0);
+            const baseline = await coordinator.waitForBaseline();
+            if (!baseline.baselineReady) {
+              reportBlockingFailure(baseline.failure?.code ?? 'terminal_unavailable');
+              throw new Error('Terminal history baseline unavailable');
             }
+            markTerminalRecoveryMilestone(trace, 'baseline-parser-committed', {
+              coordinator_attach_generation: baseline.attachGeneration,
+              history_generation: lastHistoryGeneration,
+              covered_through_sequence: baseline.coveredThroughSequence,
+            });
+            publishTerminalRecoveryEvent(trace, 'baseline_ready', {
+              coordinator_attach_generation: baseline.attachGeneration,
+              history_generation: lastHistoryGeneration,
+              history_page_count: historyPageCount,
+              history_chunk_count: historyChunkCount,
+              history_bytes: historyBytes,
+              covered_through_sequence: baseline.coveredThroughSequence,
+              snapshot_end_sequence: lastSnapshotEndSequence,
+              first_retained_sequence: lastFirstRetainedSequence,
+              history_reset: historyReset,
+              history_truncated: historyTruncated,
+            });
           } finally {
-            core.endHistoryReplay();
             setHistoryReplayProgress(null);
           }
           if (seq !== initSeq) return;
-          if (outputCoordinatorSnapshot?.state === 'failed') {
-            throw outputCoordinatorSnapshot.lastError instanceof Error
-              ? outputCoordinatorSnapshot.lastError
-              : new Error(String(outputCoordinatorSnapshot.lastError || 'Terminal output recovery failed'));
-          }
-          replaying = false;
         },
       });
       if (seq !== initSeq) return;
@@ -734,26 +924,27 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       setLoading('idle');
       setReadyOnce(true);
       setShowLoading(false);
-      if (recoverySource === 'snapshot' && snapshot) {
-        coordinator.setActive(false);
-        void coordinator.attach(snapshot.coveredThroughSequence + 1).then(() => {
-          if (seq === initSeq && term === core) coordinator.setActive(liveRenderActive());
-        });
-      } else {
-        coordinator.setActive(liveRenderActive());
-      }
-      requestAnimationFrame(() => {
-        if (term !== core) return;
-        core.forceResize();
-        if (props.viewActive() && props.active() && props.autoFocus()) core.focus();
+      transitionRecoveryPhase('interactive');
+      markTerminalRecoveryMilestone(trace, 'interactive', {
+        coordinator_attach_generation: coordinator.getSnapshot().attachGeneration,
+        covered_through_sequence: coordinator.getSnapshot().coveredThroughSequence,
       });
-      await confirmAttachedViewportSize(core, id, seq);
+      coordinator.setActive(liveRenderActive());
+      requestAnimationFrame(() => {
+        if (term !== core || seq !== initSeq || recoveryTrace !== trace) return;
+        core.forceResize();
+        const activeElement = typeof document === 'undefined' ? null : document.activeElement;
+        const focusStillOwned = focusWasAvailableAtStart && (activeElement == null
+          || activeElement === document.body
+          || target.contains(activeElement));
+        if (focusStillOwned && props.viewActive() && props.active() && props.autoFocus() && !core.hasSelection()) core.focus();
+      });
     } catch (errorValue) {
       if (seq !== initSeq) return;
-      replaying = false;
+      transitionRecoveryPhase('failed');
       setLoading('idle');
       setShowLoading(false);
-      setError(errorValue instanceof Error ? errorValue.message : String(errorValue));
+      if (!blockingFailureCode()) reportBlockingFailure('terminal_unavailable');
       throw errorValue;
     }
   };
@@ -799,7 +990,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   createEffect(() => {
     if (!props.viewActive() || !props.active()) return;
     if (!term) return;
-    if (replaying || loading() !== 'idle') return;
+    if (loading() !== 'idle') return;
     scheduleTerminalActivationRefresh();
   });
 
@@ -809,6 +1000,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     disposeTerminal();
     props.registerCore(sessionId(), null);
     props.registerSurfaceElement(sessionId(), null);
+    props.onRuntimeStatus?.(stableSessionId, { state: 'idle' });
   });
 
   const terminalBackground = () => colors().background ?? '#1e1e1e';
@@ -817,15 +1009,6 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     '--redeven-terminal-loading-background': terminalBackground(),
     '--redeven-terminal-loading-foreground': terminalForeground(),
   });
-  const retryOutputRecovery = () => {
-    setOutputRecoveryError(null);
-    if (!readyOnce()) {
-      void reload();
-      return;
-    }
-    outputCoordinator?.retry();
-  };
-
   return (
     <div
       class="h-full min-h-0 relative overflow-hidden"
@@ -863,31 +1046,6 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         message={loadingMessage()}
         class="redeven-terminal-loading-curtain"
       />
-
-      <Show when={outputRecoveryMessage()}>
-        <div
-          class="absolute left-3 right-3 bottom-3 flex min-h-8 items-center gap-2 rounded border border-border px-2 py-1 text-[11px] break-words"
-          classList={{
-            'text-error': outputRecoveryState() === 'failed' || Boolean(error()),
-            'text-foreground': outputRecoveryState() !== 'failed' && !error(),
-          }}
-          style={{
-            'background-color': `color-mix(in srgb, ${terminalBackground()} 80%, transparent)`,
-            bottom: 'calc(var(--terminal-bottom-inset) + 0.75rem)',
-          }}
-        >
-          <span class="min-w-0 flex-1">{outputRecoveryMessage()}</span>
-          <Show when={outputRecoveryState() === 'failed'}>
-            <button
-              type="button"
-              class="shrink-0 rounded border border-border px-2 py-1 text-foreground hover:bg-muted"
-              onClick={retryOutputRecovery}
-            >
-              {i18n.t('terminal.retry')}
-            </button>
-          </Show>
-        </div>
-      </Show>
     </div>
   );
 }

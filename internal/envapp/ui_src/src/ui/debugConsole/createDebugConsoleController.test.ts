@@ -537,6 +537,69 @@ describe('createDebugConsoleController', () => {
     expect(setClientCaptureEnabled).toHaveBeenLastCalledWith(false);
   });
 
+  it('replays structured terminal recovery events captured before the console opens and exports them', async () => {
+    installStorageBridge();
+    setConsoleVisible(false);
+
+    const [protocolStatus] = createSignal('connected');
+    const retainedEvent = {
+      created_at: '2026-03-27T10:00:04Z',
+      source: 'ui',
+      scope: 'terminal_recovery',
+      kind: 'degraded',
+      trace_id: 'terminal-recovery-terminal-001-2',
+      detail: {
+        schema_version: 1,
+        session_ref: 'terminal-001',
+        surface_generation: 2,
+        error_code: 'history_fetch_failed',
+      },
+    } as DiagnosticsEvent;
+
+    let controller!: ReturnType<typeof createDebugConsoleController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createDebugConsoleController({
+        protocolStatus,
+        fetchSnapshot: vi.fn(async () => buildSnapshot([])),
+        exportSnapshot: vi.fn(async () => ({
+          enabled: true,
+          exported_at: '2026-03-27T10:00:05Z',
+          snapshot: buildSnapshot([]),
+          agent_events: [],
+          desktop_events: [],
+        })),
+        connectStream: vi.fn(async ({ signal }) => {
+          await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+        }),
+        createPerformanceTracker: () => ({
+          snapshot: () => buildPerformanceSnapshot(),
+          clear: vi.fn(),
+        }),
+        subscribeClientEvents: (listener) => {
+          listener(retainedEvent);
+          return () => undefined;
+        },
+        getClientEventRingSnapshot: () => ({
+          capacity: 160,
+          droppedCount: 3,
+          events: [retainedEvent],
+        }),
+      });
+      return disposeRoot;
+    });
+
+    expect(controller.open()).toBe(false);
+    expect(controller.serverEvents()).toEqual([retainedEvent]);
+
+    controller.show();
+    await tick();
+    const bundle = await controller.exportBundle();
+    expect(bundle.client_events).toEqual([retainedEvent]);
+    expect(bundle.client_event_ring).toEqual({ capacity: 160, dropped_count: 3 });
+
+    dispose();
+  });
+
   it('clears the local capture window and resumes from later snapshots', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-27T10:00:00Z'));

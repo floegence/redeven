@@ -64,6 +64,7 @@ export type wire_terminal_history_req = {
   session_id: string;
   start_seq: number;
   end_seq: number;
+  history_generation?: number;
   limit_chunks?: number;
   max_bytes?: number;
 };
@@ -80,6 +81,12 @@ export type wire_terminal_history_resp = {
   has_more?: boolean;
   first_sequence?: number;
   last_sequence?: number;
+  covered_through_sequence?: number;
+  snapshot_end_sequence?: number;
+  first_retained_sequence?: number;
+  history_generation?: number;
+  history_reset?: boolean;
+  history_truncated?: boolean;
   covered_bytes?: number;
   total_bytes?: number;
 };
