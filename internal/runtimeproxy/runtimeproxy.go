@@ -10,6 +10,10 @@ import (
 const (
 	PresetID        = "redeven-runtime"
 	MaxWSFrameBytes = 32 * 1024 * 1024
+
+	contentSecurityPolicyHeader           = "content-security-policy"
+	contentSecurityPolicyReportOnlyHeader = "content-security-policy-report-only"
+	xFrameOptionsHeader                   = "x-frame-options"
 )
 
 // Manifest returns the stable Redeven-owned proxy preset manifest used for runtime flows.
@@ -41,7 +45,11 @@ func ApplyOptions(opts fsproxy.Options) fsproxy.Options {
 		DefaultHTTPRequestTimeoutMS: opts.DefaultHTTPRequestTimeoutMS,
 		ExtraRequestHeaders:         append([]string(nil), opts.ExtraRequestHeaders...),
 		ExtraResponseHeaders:        append([]string(nil), opts.ExtraResponseHeaders...),
-		BlockedResponseHeaders:      append([]string(nil), opts.BlockedResponseHeaders...),
+		BlockedResponseHeaders: append(append([]string(nil), opts.BlockedResponseHeaders...),
+			contentSecurityPolicyHeader,
+			contentSecurityPolicyReportOnlyHeader,
+			xFrameOptionsHeader,
+		),
 		ExtraWSHeaders:              append([]string(nil), opts.ExtraWSHeaders...),
 		ForbiddenCookieNames:        append([]string(nil), opts.ForbiddenCookieNames...),
 		ForbiddenCookieNamePrefixes: append([]string(nil), opts.ForbiddenCookieNamePrefixes...),
@@ -51,8 +59,7 @@ func ApplyOptions(opts fsproxy.Options) fsproxy.Options {
 	return opts
 }
 
-// ProductBlockedResponseHeaders returns the narrow response-header policy for
-// Redeven's embedded UI surfaces.
+// ProductBlockedResponseHeaders returns the product-owned response-header policy.
 func ProductBlockedResponseHeaders() []string {
 	return []string{"Content-Security-Policy", "Content-Security-Policy-Report-Only", "X-Frame-Options"}
 }
