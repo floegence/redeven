@@ -31,6 +31,7 @@ main() {
       src/ui/FlowerSurface.navigation.threads.test.tsx \
       src/ui/FlowerSurface.navigation.structuredInput.test.tsx \
       src/ui/flower/FlowerChatContextChips.test.tsx \
+      src/ui/flower/activityDisclosure.test.ts \
       src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \
       src/ui/flower/linkedContextNavigation.test.ts \
       src/ui/chat/blocks/ActivityTimelineBlock.test.tsx \
@@ -63,7 +64,9 @@ main() {
 
     ui_pkg_log ""
     ui_pkg_log "Flower UI: Chromium approval refresh contract..."
-    ui_pkg_run_pnpm run test:browser -- src/ui/FlowerSurface.approvalRefresh.browser.test.tsx
+    ui_pkg_run_pnpm run test:browser -- \
+      src/ui/FlowerSurface.approvalRefresh.browser.test.tsx \
+      src/ui/FlowerSurface.activityDisclosure.browser.test.tsx
   )
 
   ui_pkg_log "Flower UI behavior checks passed."

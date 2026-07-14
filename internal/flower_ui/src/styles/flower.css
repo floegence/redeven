@@ -3856,11 +3856,10 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-inline-details {
-  max-height: 0;
+  display: grid;
+  min-width: 0;
+  grid-template-rows: 0fr;
   margin: 0 0 0 1.375rem;
-  overflow: auto;
-  border-left: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
-  padding-left: 0.625rem;
   color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
   font-family: var(--font-sans, inherit);
   font-size: 0.6875rem;
@@ -3869,18 +3868,30 @@ html.dark .flower-component-shell {
   overflow-wrap: anywhere;
   transform: translateY(-0.125rem);
   transition:
-    max-height 180ms ease,
-    margin 180ms ease,
+    grid-template-rows 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    margin 220ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 160ms ease,
-    transform 180ms ease;
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .flower-activity-inline-details[data-state='opening'],
 .flower-activity-inline-details[data-state='open'] {
-  max-height: min(42rem, 72vh);
+  grid-template-rows: 1fr;
   margin: 0.125rem 0 0.25rem 1.375rem;
   opacity: 1;
   transform: translateY(0);
+}
+
+.flower-activity-inline-details-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.flower-activity-inline-details-content {
+  max-height: min(42rem, 72vh);
+  overflow: auto;
+  border-left: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
+  padding-left: 0.625rem;
 }
 
 .flower-activity-inline-detail-line + .flower-activity-inline-detail-line {
@@ -6399,11 +6410,13 @@ html.dark .flower-component-shell {
 }
 
 .flower-subagent-ledger-entry-body .flower-activity-inline-details {
+  margin: 0.2rem 0 0.45rem 1.45rem;
+}
+
+.flower-subagent-ledger-entry-body .flower-activity-inline-details-content {
   max-height: 18rem;
   border: 1px solid var(--flower-subagent-window-border-soft);
-  border-left-width: 1px;
   border-radius: 4px;
-  margin: 0.2rem 0 0.45rem 1.45rem;
   background: var(--flower-subagent-window-surface-raised);
   padding: 0.65rem;
   font-size: 0.6875rem;

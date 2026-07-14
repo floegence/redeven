@@ -13,7 +13,11 @@ import {
   type FlowerActivityTitle,
   type FlowerActivityTodoStatus,
 } from '../../../../../../flower_ui/src/flowerActivityPresentation';
-import { createFlowerActivityDisclosurePresence } from '../../../../../../flower_ui/src/activityDisclosure';
+import {
+  createFlowerActivityDisclosureController,
+  createFlowerActivityDisclosurePresence,
+  flowerActivityDisclosureIntent,
+} from '../../../../../../flower_ui/src/activityDisclosure';
 import type { FlowerActivityItem, FlowerActivityRenderer } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { formatGitPatchLineNumber, getGitPatchRenderSnapshot, type GitPatchRenderedLine } from '../../../../../../flower_ui/src/gitPatch';
 import type { TerminalVisibleOutputStore } from '../../../../../../flower_ui/src/flowerTerminalOutput';
@@ -83,14 +87,6 @@ function summaryLabel(block: ActivityTimelineBlockType): string {
   }
   const total = block.summary?.total_items || items.length;
   return total === 1 ? '1 activity' : `${total} activities`;
-}
-
-function defaultTimelineOpen(block: ActivityTimelineBlockType): boolean {
-  return block.summary?.needs_attention === true || block.summary?.status !== 'success';
-}
-
-function itemDefaultOpen(item: ActivityItem): boolean {
-  return isBlockingItem(item) || item.status === 'error' || item.status === 'waiting';
 }
 
 function flowerRenderer(value: unknown): FlowerActivityRenderer | undefined {
@@ -726,21 +722,16 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
   const hasItems = createMemo(() => items().length > 0);
   const summaryStatus = createMemo(() => toActivityStatus(props.block.summary?.status));
   const durationLabel = createMemo(() => formatActivityDuration(props.block.summary?.duration_ms));
-  const expanded = createMemo(() => open() ?? defaultTimelineOpen(props.block));
+  const timelineDisclosureControl = createFlowerActivityDisclosureController({
+    intent: () => flowerActivityDisclosureIntent(props.block.summary),
+    manualOpen: open,
+    onManualOpenChange: setOpen,
+  });
+  const expanded = timelineDisclosureControl.open;
+  const timelineDisclosure = createFlowerActivityDisclosurePresence(() => expanded() && hasItems());
   const fileActions = createMemo(() => props.block.file_actions as FlowerActivityFileActions | undefined);
   const itemKeys = createMemo(() => items().map((item, index) => itemKey(item, index)));
   const itemsByKey = createMemo(() => new Map(itemKeys().map((key, index) => [key, { item: items()[index], index }] as const)));
-
-  const itemOpen = (item: ActivityItem, id: string): boolean => {
-    const local = openByItem()[id];
-    if (typeof local === 'boolean') return local;
-    return itemDefaultOpen(item);
-  };
-
-  const toggleItem = (item: ActivityItem, id: string) => {
-    if (hasTextSelection()) return;
-    setOpenByItem((prev) => ({ ...prev, [id]: !itemOpen(item, id) }));
-  };
 
   return (
     <Show when={hasItems()}>
@@ -749,7 +740,7 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
           type="button"
           class="chat-activity-timeline-summary"
           aria-expanded={expanded()}
-          onClick={() => setOpen(!expanded())}
+          onClick={timelineDisclosureControl.toggle}
         >
           <span class={cn('chat-activity-timeline-chevron', expanded() && 'chat-activity-timeline-chevron-open')} aria-hidden="true">
             <svg viewBox="0 0 16 16"><path d="M5.5 3.75 9.75 8 5.5 12.25" /></svg>
@@ -761,133 +752,160 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
           </Show>
         </button>
 
-        <Show when={expanded()}>
-          <div class="chat-activity-items">
-            <For each={itemKeys()}>
-              {(itemKeyValue) => {
-                const itemRecord = createMemo(() => itemsByKey().get(itemKeyValue) ?? null);
-                return (
-                  <Show when={itemRecord()}>
-                    {(record) => {
-                      const item = createMemo(() => record().item);
-                      const id = createMemo(() => itemKey(item(), record().index));
-                      const presentation = createMemo(() => presentFlowerActivityItem(flowerItem(item()), fileActions()));
-                      const isOpen = createMemo(() => itemOpen(item(), id()));
-                const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
-                const itemMeta = createMemo(() => [presentation().meta, subagentElapsedText(presentation(), clockNow())].filter(Boolean).join(' · '));
-                const panelId = createMemo(() => `activity-detail-${props.blockIndex}-${id().replace(/[^a-zA-Z0-9_-]/g, '-')}`);
-                const rowFileAction = createMemo(() => {
-                  const primary = presentation().primaryAction;
-                  if (primary) return primary;
-                  const title = presentation().title;
-                  return title.kind === 'file' ? disabledFileAction(title.display_name) : null;
-                });
-                let itemButtonRef: HTMLDivElement | undefined;
-                let detailPanelRef: HTMLDivElement | undefined;
-                const disclosure = createFlowerActivityDisclosurePresence(
-                  () => isOpen() && hasDetails(),
-                  {
-                    onBeforeClose: () => {
-                      if (detailPanelRef && detailPanelRef.contains(document.activeElement)) {
-                        itemButtonRef?.focus();
-                      }
-                    },
-                  },
-                );
-                return (
-                  <div
-                    class={cn('chat-activity-item-shell', isOpen() && hasDetails() && 'chat-activity-item-shell-expanded', subagentsDetailForPresentation(presentation()) && 'chat-activity-item-shell-subagents')}
-                    data-item-id={id()}
-                    data-state={disclosure.state()}
-                  >
-                    <div
-                      ref={itemButtonRef}
-                      class={cn(
-                        'chat-activity-item',
-                        hasDetails() && 'chat-activity-item-clickable',
-                        isBlockingItem(item()) && 'chat-activity-item-blocking',
-                      )}
-                      role={hasDetails() ? 'button' : undefined}
-                      tabIndex={hasDetails() ? 0 : undefined}
-                      aria-expanded={hasDetails() ? isOpen() : undefined}
-                      aria-controls={hasDetails() ? panelId() : undefined}
-                      onClick={hasDetails() ? () => toggleItem(item(), id()) : undefined}
-                      onKeyDown={(event) => {
-                        if (!hasDetails()) return;
-                        if (event.key !== 'Enter' && event.key !== ' ') return;
-                        event.preventDefault();
-                        toggleItem(item(), id());
-                      }}
-                    >
-                      <Show
-                        when={hasDetails()}
-                        fallback={<span class="chat-activity-item-chevron-placeholder" aria-hidden="true" />}
-                      >
-                        <span class={cn('chat-activity-item-chevron', isOpen() && 'chat-activity-item-chevron-open')} aria-hidden="true">
-                          <svg viewBox="0 0 16 16"><path d="M5.5 3.75 9.75 8 5.5 12.25" /></svg>
-                        </span>
+        <Show when={timelineDisclosure.mounted()}>
+          <div class="chat-activity-items-presence" data-state={timelineDisclosure.state()}>
+            <div class="chat-activity-items-clip">
+              <div
+                class="chat-activity-items"
+                onPointerDown={timelineDisclosureControl.retainOpen}
+                onFocusIn={timelineDisclosureControl.retainOpen}
+              >
+                <For each={itemKeys()}>
+                  {(itemKeyValue) => {
+                    const itemRecord = createMemo(() => itemsByKey().get(itemKeyValue) ?? null);
+                    return (
+                      <Show when={itemRecord()}>
+                        {(record) => {
+                          const item = createMemo(() => record().item);
+                          const id = createMemo(() => itemKey(item(), record().index));
+                          const presentation = createMemo(() => presentFlowerActivityItem(flowerItem(item()), fileActions()));
+                          const itemDisclosureControl = createFlowerActivityDisclosureController({
+                            intent: () => {
+                              const intent = flowerActivityDisclosureIntent(item());
+                              return intent === 'active' ? 'settled' : intent;
+                            },
+                            manualOpen: () => openByItem()[id()],
+                            onManualOpenChange: (open) => {
+                              const key = id();
+                              setOpenByItem((prev) => ({ ...prev, [key]: open }));
+                            },
+                          });
+                          const isOpen = itemDisclosureControl.open;
+                          const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
+                          const itemMeta = createMemo(() => [presentation().meta, subagentElapsedText(presentation(), clockNow())].filter(Boolean).join(' · '));
+                          const panelId = createMemo(() => `activity-detail-${props.blockIndex}-${id().replace(/[^a-zA-Z0-9_-]/g, '-')}`);
+                          const rowFileAction = createMemo(() => {
+                            const primary = presentation().primaryAction;
+                            if (primary) return primary;
+                            const title = presentation().title;
+                            return title.kind === 'file' ? disabledFileAction(title.display_name) : null;
+                          });
+                          let itemButtonRef: HTMLDivElement | undefined;
+                          let detailPanelRef: HTMLDivElement | undefined;
+                          const disclosure = createFlowerActivityDisclosurePresence(
+                            () => isOpen() && hasDetails(),
+                            {
+                              onBeforeClose: () => {
+                                if (detailPanelRef && detailPanelRef.contains(document.activeElement)) {
+                                  itemButtonRef?.focus();
+                                }
+                              },
+                            },
+                          );
+                          return (
+                            <div
+                              class={cn('chat-activity-item-shell', isOpen() && hasDetails() && 'chat-activity-item-shell-expanded', subagentsDetailForPresentation(presentation()) && 'chat-activity-item-shell-subagents')}
+                              data-item-id={id()}
+                              data-state={disclosure.state()}
+                            >
+                              <div
+                                ref={itemButtonRef}
+                                class={cn(
+                                  'chat-activity-item',
+                                  hasDetails() && 'chat-activity-item-clickable',
+                                  isBlockingItem(item()) && 'chat-activity-item-blocking',
+                                )}
+                                role={hasDetails() ? 'button' : undefined}
+                                tabIndex={hasDetails() ? 0 : undefined}
+                                aria-expanded={hasDetails() ? isOpen() : undefined}
+                                aria-controls={hasDetails() ? panelId() : undefined}
+                                onClick={hasDetails() ? () => {
+                                  if (!hasTextSelection()) itemDisclosureControl.toggle();
+                                } : undefined}
+                                onKeyDown={(event) => {
+                                  if (!hasDetails()) return;
+                                  if (event.key !== 'Enter' && event.key !== ' ') return;
+                                  event.preventDefault();
+                                  if (!hasTextSelection()) itemDisclosureControl.toggle();
+                                }}
+                              >
+                                <Show
+                                  when={hasDetails()}
+                                  fallback={<span class="chat-activity-item-chevron-placeholder" aria-hidden="true" />}
+                                >
+                                  <span class={cn('chat-activity-item-chevron', isOpen() && 'chat-activity-item-chevron-open')} aria-hidden="true">
+                                    <svg viewBox="0 0 16 16"><path d="M5.5 3.75 9.75 8 5.5 12.25" /></svg>
+                                  </span>
+                                </Show>
+                                <ActivityStatusIcon status={toActivityStatus(item().status)} class="chat-activity-item-status" />
+                                <div class="chat-activity-item-main">
+                                  <div class="chat-activity-item-line">
+                                    <span class="chat-activity-item-label">{titleNode(presentation().title)}</span>
+                                    <Show when={itemMeta()}>
+                                      {(meta) => <span class="chat-activity-item-target">{meta()}</span>}
+                                    </Show>
+                                  </div>
+                                  <Show when={item().renderer === 'question' || item().tool_name === 'ask_user'}>
+                                    <AskUserAudit item={item()} />
+                                  </Show>
+                                </div>
+                                <div class="chat-activity-item-actions">
+                                  <Show when={rowFileAction()}>
+                                    {(action) => (
+                                      <FileActionButtons
+                                        action={action()}
+                                        item={item()}
+                                        onPreviewFile={props.onPreviewFile}
+                                        onBrowseDirectory={props.onBrowseDirectory}
+                                      />
+                                    )}
+                                  </Show>
+                                </div>
+                              </div>
+                              <Show when={disclosure.mounted() && hasDetails()}>
+                                <div
+                                  ref={detailPanelRef}
+                                  id={panelId()}
+                                  class="chat-activity-detail-panel"
+                                  data-state={disclosure.state()}
+                                  onPointerDown={itemDisclosureControl.retainOpen}
+                                  onFocusIn={itemDisclosureControl.retainOpen}
+                                >
+                                  <div class="chat-activity-detail-panel-clip">
+                                    <div class="chat-activity-detail-panel-content">
+                                      <div class="chat-activity-detail-sections">
+                                        <Index each={presentation().detailBlocks}>
+                                          {(block) => (
+                                            <DetailBlock
+                                              block={block()}
+                                              item={item()}
+                                              runID={props.block.run_id}
+                                              turnID={props.block.turn_id}
+                                              threadID={props.block.thread_id}
+                                              messageID={props.messageId}
+                                              blockIndex={props.blockIndex}
+                                              now={clockNow()}
+                                              outputStore={ctx.terminalVisibleOutputStore}
+                                              onPreviewFile={props.onPreviewFile}
+                                              onBrowseDirectory={props.onBrowseDirectory}
+                                              onOpenSubagentMessages={props.onOpenSubagentMessages}
+                                            />
+                                          )}
+                                        </Index>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </Show>
+                            </div>
+                          );
+                        }}
                       </Show>
-                      <ActivityStatusIcon status={toActivityStatus(item().status)} class="chat-activity-item-status" />
-                      <div class="chat-activity-item-main">
-                        <div class="chat-activity-item-line">
-                          <span class="chat-activity-item-label">{titleNode(presentation().title)}</span>
-                          <Show when={itemMeta()}>
-                            {(meta) => <span class="chat-activity-item-target">{meta()}</span>}
-                          </Show>
-                        </div>
-                        <Show when={item().renderer === 'question' || item().tool_name === 'ask_user'}>
-                          <AskUserAudit item={item()} />
-                        </Show>
-                      </div>
-                      <div class="chat-activity-item-actions">
-                        <Show when={rowFileAction()}>
-                          {(action) => (
-                            <FileActionButtons
-                              action={action()}
-                              item={item()}
-                              onPreviewFile={props.onPreviewFile}
-                              onBrowseDirectory={props.onBrowseDirectory}
-                            />
-                          )}
-                        </Show>
-                      </div>
-                    </div>
-                    <Show when={disclosure.mounted() && hasDetails()}>
-                      <div
-                        ref={detailPanelRef}
-                        id={panelId()}
-                        class="chat-activity-detail-panel"
-                        data-state={disclosure.state()}
-                      >
-                        <div class="chat-activity-detail-sections">
-                          <Index each={presentation().detailBlocks}>
-                            {(block) => (
-                              <DetailBlock
-                                block={block()}
-                                item={item()}
-                                runID={props.block.run_id}
-                                turnID={props.block.turn_id}
-                                threadID={props.block.thread_id}
-                                messageID={props.messageId}
-                                blockIndex={props.blockIndex}
-                                now={clockNow()}
-                                outputStore={ctx.terminalVisibleOutputStore}
-                                onPreviewFile={props.onPreviewFile}
-                                onBrowseDirectory={props.onBrowseDirectory}
-                                onOpenSubagentMessages={props.onOpenSubagentMessages}
-                              />
-                            )}
-                          </Index>
-                        </div>
-                      </div>
-                    </Show>
-                  </div>
-                );
-                    }}
-                  </Show>
-                );
-              }}
-            </For>
+                    );
+                  }}
+                </For>
+              </div>
+            </div>
           </div>
         </Show>
       </div>

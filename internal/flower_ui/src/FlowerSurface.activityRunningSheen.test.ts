@@ -122,6 +122,23 @@ describe('Flower activity running sheen', () => {
     expect(css).not.toContain('.flower-activity-inline-row-running::before');
   });
 
+  it('animates activity disclosure against its real content height', () => {
+    const css = flowerStyles();
+    const disclosureRule = cssRule(css, '.flower-activity-inline-details');
+    const clipRule = cssRule(css, '.flower-activity-inline-details-clip');
+    const contentRule = cssRule(css, '.flower-activity-inline-details-content');
+
+    expect(disclosureRule).toContain('grid-template-rows: 0fr');
+    expect(disclosureRule).toContain('grid-template-rows 220ms cubic-bezier(0.22, 1, 0.36, 1)');
+    expect(disclosureRule).not.toContain('max-height:');
+    expect(css).toContain(".flower-activity-inline-details[data-state='open'] {");
+    expect(css).toContain('grid-template-rows: 1fr;');
+    expect(clipRule).toContain('min-height: 0');
+    expect(clipRule).toContain('overflow: hidden');
+    expect(contentRule).toContain('max-height: min(42rem, 72vh)');
+    expect(contentRule).toContain('overflow: auto');
+  });
+
   it('animates only the subagent badge ring when a subagent is running', () => {
     const css = flowerStyles();
     const badgeRule = cssRule(css, '.flower-header-icon-badge');
