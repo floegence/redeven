@@ -640,8 +640,8 @@ func TestFlowerApprovalQueueSerializesDecisionsWithoutSerializingHandlers(t *tes
 			QueueGeneration: queue.Generation, QueueRevision: queue.Revision,
 		}
 		mutate(&req)
-		if _, err := svc.SubmitFlowerApproval(meta, req); !errors.Is(err, ErrRunChanged) {
-			t.Fatalf("%s submit error=%v, want ErrRunChanged", name, err)
+		if _, err := svc.SubmitFlowerApproval(meta, req); !errors.Is(err, ErrApprovalConflict) {
+			t.Fatalf("%s submit error=%v, want ErrApprovalConflict", name, err)
 		}
 		select {
 		case decision := <-firstDecision:
@@ -653,8 +653,8 @@ func TestFlowerApprovalQueueSerializesDecisionsWithoutSerializingHandlers(t *tes
 		ThreadID: r.threadID, Origin: FlowerApprovalOriginControlConfirm, RunID: r.id, ActionID: secondID, ToolID: "tool_second",
 		Approved: true, ExpectedSeq: second.ExpectedSeq, Revision: second.Revision, Version: second.Version, SurfaceEpoch: second.SurfaceEpoch,
 		QueueGeneration: queue.Generation, QueueRevision: queue.Revision,
-	}); err == nil || !strings.Contains(err.Error(), "not currently actionable") {
-		t.Fatalf("non-head submit error=%v", err)
+	}); !errors.Is(err, ErrApprovalConflict) {
+		t.Fatalf("non-head submit error=%v, want ErrApprovalConflict", err)
 	}
 	if _, err := svc.SubmitFlowerApproval(meta, SubmitFlowerApprovalRequest{
 		ThreadID: r.threadID, Origin: FlowerApprovalOriginControlConfirm, RunID: r.id, ActionID: firstID, ToolID: "tool_first",
@@ -693,6 +693,75 @@ func TestFlowerApprovalQueueSerializesDecisionsWithoutSerializingHandlers(t *tes
 	_, queue = current(secondID)
 	if queue.UnresolvedCount != 0 || queue.CurrentActionID != "" {
 		t.Fatalf("settled queue=%#v", queue)
+	}
+}
+
+func TestFlowerApprovalQueueRejectsTimedOutCardWithoutTouchingPromotedAction(t *testing.T) {
+	t.Parallel()
+	meta := &session.Meta{EndpointID: "env_queue_timeout", UserPublicID: "user_queue_timeout", CanRead: true, CanWrite: true, CanExecute: true}
+	svc := &Service{
+		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
+		runs:               map[string]*run{},
+	}
+	r := newRun(runOptions{Service: svc, RunID: "run_queue_timeout", EndpointID: meta.EndpointID, ThreadID: "thread_queue_timeout", UserPublicID: meta.UserPublicID, MessageID: "msg_queue_timeout"})
+	svc.runs[r.id] = r
+	firstDecision := make(chan bool, 1)
+	secondDecision := make(chan bool, 1)
+	r.toolApprovals["tool_first"] = &toolApprovalRequest{decision: firstDecision, promoted: make(chan struct{}), toolName: "task_complete", requestedAtMs: 1}
+	r.toolApprovals["tool_second"] = &toolApprovalRequest{decision: secondDecision, promoted: make(chan struct{}), toolName: "task_complete", requestedAtMs: 2}
+	for _, toolID := range []string{"tool_first", "tool_second"} {
+		action := r.controlConfirmationApprovalActionLocked(toolID, r.toolApprovals[toolID])
+		svc.appendFlowerLiveEvent(FlowerLiveEvent{EndpointID: meta.EndpointID, ThreadID: r.threadID, RunID: r.id, TurnID: r.messageID, Kind: FlowerLiveApprovalRequested, Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: action})})
+	}
+
+	current := func(actionID string) (FlowerApprovalAction, FlowerApprovalQueue) {
+		svc.mu.Lock()
+		defer svc.mu.Unlock()
+		stream := svc.flowerLiveByThread[runThreadKey(meta.EndpointID, r.threadID)]
+		return stream.State.ApprovalActions[actionID], *stream.State.ApprovalQueue
+	}
+	firstID := flowerApprovalActionID(r.id, "tool_first")
+	secondID := flowerApprovalActionID(r.id, "tool_second")
+	first, staleQueue := current(firstID)
+	timedOut := first
+	timedOut.State = FlowerApprovalStateTimedOut
+	timedOut.Status = FlowerApprovalStatusResolved
+	timedOut.CanApprove = false
+	timedOut.ResolvedAtMs = 10
+	svc.appendFlowerLiveEvent(FlowerLiveEvent{
+		EndpointID: meta.EndpointID,
+		ThreadID:   r.threadID,
+		RunID:      r.id,
+		TurnID:     r.messageID,
+		Kind:       FlowerLiveApprovalResolved,
+		Payload:    mustFlowerPayload(FlowerLiveApprovalPayload{Action: timedOut}),
+	})
+
+	secondBefore, promotedQueue := current(secondID)
+	if promotedQueue.CurrentActionID != secondID || promotedQueue.UnresolvedCount != 1 || !secondBefore.CanApprove {
+		t.Fatalf("promoted queue=%#v second=%#v", promotedQueue, secondBefore)
+	}
+	_, err := svc.SubmitFlowerApproval(meta, SubmitFlowerApprovalRequest{
+		ThreadID: r.threadID, Origin: FlowerApprovalOriginControlConfirm, RunID: r.id, ActionID: firstID, ToolID: "tool_first",
+		Approved: true, ExpectedSeq: first.ExpectedSeq, Revision: first.Revision, Version: first.Version, SurfaceEpoch: first.SurfaceEpoch,
+		QueueGeneration: staleQueue.Generation, QueueRevision: staleQueue.Revision,
+	})
+	if !errors.Is(err, ErrApprovalConflict) {
+		t.Fatalf("stale timed-out submit error=%v, want ErrApprovalConflict", err)
+	}
+	secondAfter, queueAfter := current(secondID)
+	if !reflect.DeepEqual(secondAfter, secondBefore) || !reflect.DeepEqual(queueAfter, promotedQueue) {
+		t.Fatalf("stale submit changed promoted action: before=%#v/%#v after=%#v/%#v", secondBefore, promotedQueue, secondAfter, queueAfter)
+	}
+	select {
+	case decision := <-firstDecision:
+		t.Fatalf("stale timed-out submit released first waiter with decision=%v", decision)
+	default:
+	}
+	select {
+	case decision := <-secondDecision:
+		t.Fatalf("stale timed-out submit released promoted waiter with decision=%v", decision)
+	default:
 	}
 }
 

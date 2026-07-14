@@ -206,6 +206,24 @@ describe('localApi access credentials', () => {
     });
   });
 
+  it('preserves the approval conflict contract for Flower resync handling', async () => {
+    vi.doMock('./controlplaneApi', () => ({
+      getLocalRuntime: vi.fn(async () => null),
+    }));
+    const fetchMock = vi.fn(async () => flatAppserverErrorResponse('approval state changed', 409, 'AI_APPROVAL_CONFLICT'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./localApi');
+    await expect(mod.fetchLocalApiJSON('/_redeven_proxy/api/ai/threads/thread-approval/approvals', {
+      method: 'POST',
+    })).rejects.toMatchObject({
+      name: 'LocalApiError',
+      message: 'approval state changed',
+      status: 409,
+      code: 'AI_APPROVAL_CONFLICT',
+    });
+  });
+
   it('preserves flat appserver error_code on ok false envelopes', async () => {
     vi.doMock('./controlplaneApi', () => ({
       getLocalRuntime: vi.fn(async () => null),

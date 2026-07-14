@@ -81,7 +81,7 @@ func (h *delegatedApprovalHandle) resolve(allow bool) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.decided {
-		return ErrRunChanged
+		return approvalConflict("approval decision was already resolved")
 	}
 	h.allow = allow
 	h.decided = true
@@ -249,7 +249,7 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 	s.mu.Unlock()
 
 	if req.ExpectedSeq > 0 && req.ExpectedSeq > cursor {
-		return nil, ErrRunChanged
+		return nil, approvalConflict("approval cursor changed")
 	}
 	var storedAction FlowerApprovalAction
 	var storedRec threadstore.DelegatedApprovalRecord
@@ -261,7 +261,7 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 			return nil, err
 		}
 		if !ok {
-			return nil, errors.New("delegated approval is no longer available")
+			return nil, approvalConflict("delegated approval is no longer available")
 		}
 		storedRec = rec
 		if !delegatedApprovalOwnerMatches(meta, rec.ParentUserPublicID) {
@@ -269,7 +269,7 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 		}
 		storedAction = delegatedApprovalActionFromRecord(rec)
 		if storedAction.ActionID == "" {
-			return nil, ErrRunChanged
+			return nil, approvalConflict("delegated approval changed")
 		}
 		if storedAction.DelegatedRef == nil || delegatedApprovalRefHash(*req.DelegatedRef) != delegatedApprovalRefHash(*storedAction.DelegatedRef) {
 			return nil, errors.New("delegated approval ref mismatch")
@@ -281,7 +281,7 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 			if resp, replayed, err := s.replayDelegatedApprovalDecision(meta, req, storedAction, cursor); err != nil || replayed {
 				return resp, err
 			}
-			return nil, ErrRunChanged
+			return nil, approvalConflict("delegated approval is no longer pending")
 		}
 	}
 	if queueErr != nil {
@@ -291,28 +291,28 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 		if s.threadsDB != nil {
 			s.markDelegatedApprovalRecordUnavailable(endpointID, threadID, actionID, "delegated approval channel is unavailable")
 		}
-		return nil, errors.New("delegated approval is no longer available")
+		return nil, approvalConflict("delegated approval is no longer available")
 	}
 	if s.threadsDB == nil && !delegatedApprovalOwnerMatches(meta, handle.parentUser) {
 		return nil, errors.New("run not found")
 	}
 	if liveAction.ActionID == "" {
-		return nil, ErrRunChanged
+		return nil, approvalConflict("delegated approval changed")
 	}
 	if liveAction.Origin != FlowerApprovalOriginDelegatedSubagent {
 		return nil, errors.New("approval action is not delegated")
 	}
 	if liveAction.Status != FlowerApprovalStatusPending || liveAction.State != FlowerApprovalStateRequested {
-		return nil, errors.New("approval no longer pending")
+		return nil, approvalConflict("approval is no longer pending")
 	}
 	if !liveAction.CanApprove {
-		return nil, errors.New(firstNonEmptyString(liveAction.ReadOnlyReason, "approval is not available"))
+		return nil, approvalConflict(firstNonEmptyString(liveAction.ReadOnlyReason, "approval is not available"))
 	}
 	if liveAction.Version != req.Version || liveAction.SurfaceEpoch != req.SurfaceEpoch {
-		return nil, ErrRunChanged
+		return nil, approvalConflict("approval version changed")
 	}
 	if liveAction.DelegatedRef == nil {
-		return nil, ErrRunChanged
+		return nil, approvalConflict("delegated approval changed")
 	}
 	if req.DelegatedRef == nil {
 		return nil, errors.New("delegated approval ref is required")
@@ -356,10 +356,10 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 			return nil, err
 		}
 		if result.Conflict {
-			return nil, errors.New("delegated approval idempotency conflict")
+			return nil, approvalConflict("delegated approval decision conflicts with an earlier submission")
 		}
 		if !result.Accepted {
-			return nil, ErrRunChanged
+			return nil, approvalConflict("delegated approval changed")
 		}
 		if result.Replayed {
 			deliveredAction := delegatedApprovalActionFromRecord(result.Record)
@@ -372,7 +372,7 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 		if s.threadsDB != nil {
 			s.markDelegatedApprovalRecordUnavailable(endpointID, threadID, actionID, err.Error())
 		}
-		return nil, err
+		return nil, normalizeApprovalDecisionError(err, "delegated approval decision was already resolved")
 	}
 	resolved.Status = FlowerApprovalStatusResolved
 	resolved.DeliveryState = FlowerApprovalDeliveryDelivered
@@ -402,7 +402,7 @@ func (s *Service) submitDelegatedFlowerApproval(meta *session.Meta, req SubmitFl
 				return nil, ackErr
 			}
 			if !ackChanged {
-				return nil, ErrRunChanged
+				return nil, approvalConflict("delegated approval delivery state changed")
 			}
 			event := s.appendFlowerLiveEvent(FlowerLiveEvent{
 				EndpointID: endpointID,
@@ -462,7 +462,7 @@ func (s *Service) replayDelegatedApprovalDecision(meta *session.Meta, req Submit
 		return nil, false, err
 	}
 	if result.Conflict {
-		return nil, true, errors.New("delegated approval idempotency conflict")
+		return nil, true, approvalConflict("delegated approval decision conflicts with an earlier submission")
 	}
 	if !result.Replayed {
 		return nil, false, nil

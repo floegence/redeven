@@ -2131,30 +2131,74 @@ describe('FlowerSurface navigation activity', () => {
     expect((document.activeElement as HTMLElement | null)?.tagName).toBe('SECTION');
   });
 
-  it('refreshes canonical thread state when an approval decision is stale', async () => {
+  it('silently advances when the submitted approval timed out before the decision arrived', async () => {
     const pendingThread = thread({
       thread_id: 'thread-stale-approval',
       title: 'Stale approval',
       status: 'waiting_approval',
-      approval_actions: [{
-        action_id: 'appr-stale',
-        origin: 'main_tool',
-        run_id: 'run-stale-approval',
-        tool_id: 'tool-stale-approval',
-        tool_name: 'terminal.exec',
-        state: 'requested',
-        status: 'pending',
+      approval_queue: {
+        generation: 1,
         revision: 1,
-        version: 1,
-        requested_at_ms: 7_100,
-        can_approve: true,
-        expected_seq: 12,
-        summary: {
-          label: 'terminal.exec',
-          description: 'Review this command before it runs.',
-          effects: ['shell'],
+        current_action_id: 'appr-stale',
+        current_position: 1,
+        total: 2,
+        unresolved_count: 2,
+      },
+      approval_actions: [
+        {
+          action_id: 'appr-stale',
+          origin: 'main_tool',
+          run_id: 'run-stale-approval',
+          tool_id: 'tool-stale-approval',
+          tool_name: 'terminal.exec',
+          state: 'requested',
+          status: 'pending',
+          revision: 1,
+          version: 1,
+          surface_epoch: 1,
+          surface_role: 'primary_action',
+          requested_at_ms: 7_100,
+          can_approve: true,
+          expected_seq: 12,
+          queue_generation: 1,
+          queue_order: 1,
+          batch_index: 0,
+          batch_size: 2,
+          summary: {
+            label: 'terminal.exec',
+            description: 'Review this command before it runs.',
+            command: 'npm test',
+            effects: ['shell'],
+          },
         },
-      }],
+        {
+          action_id: 'appr-next',
+          origin: 'main_tool',
+          run_id: 'run-stale-approval',
+          tool_id: 'tool-next-approval',
+          tool_name: 'terminal.exec',
+          state: 'requested',
+          status: 'pending',
+          revision: 1,
+          version: 1,
+          surface_epoch: 1,
+          surface_role: 'locator',
+          requested_at_ms: 7_101,
+          can_approve: false,
+          expected_seq: 13,
+          read_only_reason: 'Queued for approval',
+          queue_generation: 1,
+          queue_order: 2,
+          batch_index: 1,
+          batch_size: 2,
+          summary: {
+            label: 'terminal.exec',
+            description: 'Review this command before it runs.',
+            command: 'npm run lint',
+            effects: ['shell'],
+          },
+        },
+      ],
       messages: [
         {
           id: 'm-stale-approval',
@@ -2188,54 +2232,33 @@ describe('FlowerSurface navigation activity', () => {
         },
       ],
     });
-    const resolvedThread = {
+    const promotedThread = {
       ...pendingThread,
-      status: 'running' as const,
-      approval_actions: [],
-      messages: pendingThread.messages.map((message) => ({
-        ...message,
-        blocks: message.blocks?.map((block) => block.type === 'activity-timeline'
-          ? {
-              ...block,
-              summary: {
-                ...block.summary,
-                status: 'running' as const,
-                needs_attention: false,
-                attention_reasons: [],
-                counts: { running: 1, approval: 1 },
-              },
-              items: block.items.map((item) => ({
-                ...item,
-                status: 'running' as const,
-                needs_attention: false,
-                approval_state: 'approved' as const,
-              })),
-            }
-          : block),
-      })),
+      approval_queue: {
+        generation: 1,
+        revision: 2,
+        current_action_id: 'appr-next',
+        current_position: 2,
+        total: 2,
+        unresolved_count: 1,
+      },
+      approval_actions: [{
+        ...pendingThread.approval_actions![1]!,
+        surface_role: 'primary_action' as const,
+        can_approve: true,
+        read_only_reason: undefined,
+      }],
     };
+    const conflictRefresh = deferred<ReturnType<typeof liveBootstrap>>();
     const loadThread = vi.fn(async () => {
-      if (loadThread.mock.calls.length <= 1) {
-        return {
-          ...liveBootstrap({
-            ...pendingThread,
-            approval_actions: [],
-          }, 13),
-          live_state: {
-            ...liveBootstrap(pendingThread, 13).live_state,
-            approval_actions: {
-              'appr-stale': pendingThread.approval_actions![0]!,
-            },
-          },
-        };
-      }
-      return liveBootstrap({
-        ...resolvedThread,
-        approval_actions: [],
-      }, 13);
+      if (loadThread.mock.calls.length === 1) return liveBootstrap(pendingThread, 13);
+      return conflictRefresh.promise;
     });
     const submitApproval = vi.fn(async () => {
-      throw new Error('approval no longer pending');
+      throw Object.assign(new Error('approval state changed'), {
+        code: 'AI_APPROVAL_CONFLICT',
+        status: 409,
+      });
     });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -2254,13 +2277,126 @@ describe('FlowerSurface navigation activity', () => {
 
     await waitFor(() => submitApproval.mock.calls.length === 1);
     await waitFor(() => loadThread.mock.calls.length >= 2);
-    expect(flowerSurfaceNotifications()).toContainEqual(expect.objectContaining({
-      tone: 'error',
-      title: 'Flower could not send.',
-      message: 'approval no longer pending',
-    }));
-    expect(runtime.querySelector('.flower-composer-error')).toBeNull();
+    const pendingDecisionButtons = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'));
+    expect(pendingDecisionButtons).toHaveLength(2);
+    expect(pendingDecisionButtons.every((button) => button.disabled)).toBe(true);
+
+    conflictRefresh.resolve(liveBootstrap(promotedThread, 14));
     await waitFor(() => runtime.querySelector('[data-flower-approval-action-id="appr-stale"]') === null);
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-next"]')));
+    await waitFor(() => document.activeElement?.getAttribute('data-flower-approval-action-id') === 'appr-next');
+    expect(submitApproval).toHaveBeenCalledTimes(1);
+    expect(flowerSurfaceNotifications()).toEqual([]);
+    expect(runtime.textContent).toContain('npm run lint');
+    expect(runtime.textContent).toContain('2 / 2');
+    expect(Array.from(runtime.querySelectorAll('[role="status"][aria-live="polite"]'))
+      .some((status) => status.textContent === 'Approval 2 of 2')).toBe(true);
+  });
+
+  it('retries one stale approval with refreshed queue fields only when the same action remains current', async () => {
+    const action = {
+      action_id: 'appr-retry',
+      origin: 'main_tool' as const,
+      run_id: 'run-retry-approval',
+      tool_id: 'tool-retry-approval',
+      tool_name: 'terminal.exec',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      revision: 1,
+      version: 1,
+      surface_epoch: 1,
+      surface_role: 'primary_action' as const,
+      requested_at_ms: 7_200,
+      can_approve: true,
+      expected_seq: 20,
+      queue_generation: 1,
+      queue_order: 1,
+      batch_index: 0,
+      batch_size: 1,
+      summary: {
+        label: 'terminal.exec',
+        description: 'Review this command before it runs.',
+        command: 'npm test',
+        effects: ['shell'],
+      },
+    };
+    const pendingThread = thread({
+      thread_id: 'thread-retry-approval',
+      title: 'Retry approval',
+      status: 'waiting_approval',
+      approval_queue: {
+        generation: 1,
+        revision: 1,
+        current_action_id: action.action_id,
+        current_position: 1,
+        total: 1,
+        unresolved_count: 1,
+      },
+      approval_actions: [action],
+    });
+    const refreshedThread = {
+      ...pendingThread,
+      approval_queue: {
+        ...pendingThread.approval_queue!,
+        revision: 2,
+      },
+    };
+    const resolvedThread = {
+      ...pendingThread,
+      status: 'running' as const,
+      approval_queue: {
+        generation: 1,
+        revision: 3,
+        current_position: 0,
+        total: 1,
+        unresolved_count: 0,
+      },
+      approval_actions: [],
+    };
+    const loadThread = vi.fn(async () => {
+      if (loadThread.mock.calls.length === 1) return liveBootstrap(pendingThread, 20);
+      if (loadThread.mock.calls.length === 2) return liveBootstrap(refreshedThread, 21);
+      return liveBootstrap(resolvedThread, 22);
+    });
+    const submitApproval = vi.fn(async () => {
+      if (submitApproval.mock.calls.length === 1) {
+        throw Object.assign(new Error('approval state changed'), {
+          code: 'AI_APPROVAL_CONFLICT',
+          status: 409,
+        });
+      }
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [pendingThread]),
+      loadThread,
+      submitApproval,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-retry-approval"] button')));
+    (runtime.querySelector('[data-thread-id="thread-retry-approval"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-retry"]')));
+    const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.trim() === 'Approve');
+    expect(approve).toBeTruthy();
+    approve?.click();
+
+    await waitFor(() => submitApproval.mock.calls.length === 2);
+    await waitFor(() => loadThread.mock.calls.length >= 3);
+    expect(submitApproval).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      action_id: action.action_id,
+      approved: true,
+      queue_generation: 1,
+      queue_revision: 1,
+    }));
+    expect(submitApproval).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      action_id: action.action_id,
+      approved: true,
+      queue_generation: 1,
+      queue_revision: 2,
+    }));
+    expect(runtime.querySelector('[data-flower-approval-action-id="appr-retry"]')).toBeNull();
+    expect(flowerSurfaceNotifications()).toEqual([]);
   });
 
   it('renders terminal command and output details from tool activity items', async () => {

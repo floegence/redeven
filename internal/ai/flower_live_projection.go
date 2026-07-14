@@ -83,14 +83,14 @@ func (s *Service) promoteCurrentApprovalWaiterLocked(queue *FlowerApprovalQueue,
 func (s *Service) validateApprovalQueueSubmissionLocked(endpointID string, threadID string, actionID string, generation int64, revision int64) error {
 	stream := s.flowerLiveByThread[runThreadKey(strings.TrimSpace(endpointID), strings.TrimSpace(threadID))]
 	if stream == nil || stream.State.ApprovalQueue == nil {
-		return ErrRunChanged
+		return approvalConflict("approval queue is no longer available")
 	}
 	queue := stream.State.ApprovalQueue
 	if generation <= 0 || revision <= 0 || queue.Generation != generation || queue.Revision != revision {
-		return ErrRunChanged
+		return approvalConflict("approval queue changed")
 	}
 	if strings.TrimSpace(queue.CurrentActionID) != strings.TrimSpace(actionID) {
-		return errors.New("approval action is queued and is not currently actionable")
+		return approvalConflict("approval action is not the current queue item")
 	}
 	return nil
 }
@@ -772,7 +772,7 @@ func (s *Service) SubmitFlowerApproval(meta *session.Meta, req SubmitFlowerAppro
 		return nil, errors.New("run not found")
 	}
 	if req.ExpectedSeq > cursor {
-		return nil, ErrRunChanged
+		return nil, approvalConflict("approval cursor changed")
 	}
 	if liveAction.Origin == FlowerApprovalOriginControlConfirm || req.Origin == FlowerApprovalOriginControlConfirm {
 		return s.submitControlConfirmationApproval(r, endpointID, threadID, runID, toolID, actionID, liveAction, req)
@@ -783,38 +783,38 @@ func (s *Service) SubmitFlowerApproval(meta *session.Meta, req SubmitFlowerAppro
 		return nil, err
 	}
 	if !ok {
-		return nil, errors.New("approval no longer pending")
+		return nil, approvalConflict("approval is no longer pending")
 	}
 	approval, ok := r.flowerApprovalActionFromFloretPending(pending)
 	if !ok {
-		return nil, errors.New("approval no longer pending")
+		return nil, approvalConflict("approval is no longer pending")
 	}
 	if approval.ActionID != actionID {
-		return nil, errors.New("approval action mismatch")
+		return nil, approvalConflict("approval action changed")
 	}
 	if liveAction.ActionID == "" || liveAction.RunID != runID || liveAction.ToolID != toolID {
-		return nil, ErrRunChanged
+		return nil, approvalConflict("approval action changed")
 	}
 	if liveAction.Status != FlowerApprovalStatusPending || liveAction.State != FlowerApprovalStateRequested {
-		return nil, errors.New("approval no longer pending")
+		return nil, approvalConflict("approval is no longer pending")
 	}
 	if !liveAction.CanApprove {
-		return nil, errors.New(firstNonEmptyString(liveAction.ReadOnlyReason, "approval is not available"))
+		return nil, approvalConflict(firstNonEmptyString(liveAction.ReadOnlyReason, "approval is not available"))
 	}
 	if liveAction.Revision != req.Revision || liveAction.ExpectedSeq != req.ExpectedSeq {
-		return nil, ErrRunChanged
+		return nil, approvalConflict("approval revision changed")
 	}
 	if liveAction.Version != req.Version || liveAction.SurfaceEpoch != req.SurfaceEpoch {
-		return nil, ErrRunChanged
+		return nil, approvalConflict("approval version changed")
 	}
 	if approval.Revision != liveAction.Revision || approval.SurfaceEpoch != liveAction.SurfaceEpoch {
-		return nil, ErrRunChanged
+		return nil, approvalConflict("approval runtime state changed")
 	}
 	if !approval.CanApprove {
-		return nil, errors.New(firstNonEmptyString(approval.ReadOnlyReason, "approval is not available"))
+		return nil, approvalConflict(firstNonEmptyString(approval.ReadOnlyReason, "approval is not available"))
 	}
 	if err := r.approveTool(toolID, req.Approved); err != nil {
-		return nil, err
+		return nil, normalizeApprovalDecisionError(err, "approval decision was already resolved")
 	}
 
 	state := FlowerApprovalStateRejected
@@ -843,25 +843,25 @@ func (s *Service) submitControlConfirmationApproval(r *run, endpointID string, t
 		return nil, errors.New("run not found")
 	}
 	if liveAction.ActionID == "" || liveAction.RunID != runID || liveAction.ToolID != toolID || liveAction.ActionID != actionID {
-		return nil, ErrRunChanged
+		return nil, approvalConflict("approval action changed")
 	}
 	if liveAction.Origin != FlowerApprovalOriginControlConfirm {
-		return nil, ErrRunChanged
+		return nil, approvalConflict("approval action changed")
 	}
 	if liveAction.Status != FlowerApprovalStatusPending || liveAction.State != FlowerApprovalStateRequested {
-		return nil, errors.New("approval no longer pending")
+		return nil, approvalConflict("approval is no longer pending")
 	}
 	if !liveAction.CanApprove {
-		return nil, errors.New(firstNonEmptyString(liveAction.ReadOnlyReason, "approval is not available"))
+		return nil, approvalConflict(firstNonEmptyString(liveAction.ReadOnlyReason, "approval is not available"))
 	}
 	if liveAction.Revision != req.Revision || liveAction.ExpectedSeq != req.ExpectedSeq {
-		return nil, ErrRunChanged
+		return nil, approvalConflict("approval revision changed")
 	}
 	if liveAction.Version != req.Version || liveAction.SurfaceEpoch != req.SurfaceEpoch {
-		return nil, ErrRunChanged
+		return nil, approvalConflict("approval version changed")
 	}
 	if err := r.approveTool(toolID, req.Approved); err != nil {
-		return nil, err
+		return nil, normalizeApprovalDecisionError(err, "approval decision was already resolved")
 	}
 	state := FlowerApprovalStateRejected
 	if req.Approved {
