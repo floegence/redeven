@@ -143,6 +143,7 @@ describe('debugConsoleCapture', () => {
 
     expect(events).toHaveLength(1);
     expect(events[0]?.detail?.request?.payload).toEqual({
+      attach_generation: attachGeneration,
       cols: 120,
       rows: 40,
     });
@@ -153,8 +154,8 @@ describe('debugConsoleCapture', () => {
     const serialized = JSON.stringify(events[0]);
     expect(serialized).not.toContain('session-sensitive-attach');
     expect(serialized).not.toContain('connection-sensitive-attach');
-    expect(serialized).not.toContain('attach_generation');
-    expect(serialized).not.toContain(String(attachGeneration));
+    expect(serialized).toContain('attach_generation');
+    expect(serialized).toContain(String(attachGeneration));
 
     unsubscribe();
   });
@@ -283,6 +284,7 @@ describe('debugConsoleCapture', () => {
       rpc_error_code: 409,
     });
     expect(events[0]?.detail?.request?.payload).toEqual({
+      attach_generation: 987654321,
       cols: 100,
       rows: 30,
     });
@@ -290,8 +292,8 @@ describe('debugConsoleCapture', () => {
     expect(serialized).not.toContain(secret);
     expect(serialized).not.toContain('session-sensitive-attach-failure');
     expect(serialized).not.toContain('connection-sensitive-attach-failure');
-    expect(serialized).not.toContain('987654321');
-    expect(serialized).not.toContain('attach_generation');
+    expect(serialized).toContain('987654321');
+    expect(serialized).toContain('attach_generation');
 
     unsubscribe();
   });
