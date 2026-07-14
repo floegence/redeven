@@ -138,7 +138,7 @@ describe('Flower activity running sheen', () => {
     expect(css).toContain(".flower-header-icon-badge[data-running='true']::after {\n    animation: none !important;");
   });
 
-  it('uses the shared running loader and named layers for subagent overlays', () => {
+  it('uses named layers and dedicated ledger tokens for subagent overlays', () => {
     const css = flowerStyles();
     const shellRule = cssRule(css, '.flower-chat-shell');
     const mainRule = cssRule(css, '.flower-chat-main');
@@ -146,6 +146,7 @@ describe('Flower activity running sheen', () => {
     const dropdownLayerRule = cssRule(css, '.flower-subagents-dropdown-layer');
     const dropdownRule = cssRule(css, '.flower-subagents-dropdown');
     const indicatorRule = cssRule(css, '.flower-subagent-status-indicator-running');
+    const detailWindowRule = cssRule(css, '.flower-subagent-detail-window');
     const detailDockRule = cssRule(css, '.flower-subagent-detail-bottom-dock');
     const detailScrollRule = cssRule(css, '.flower-subagent-detail-scroll-to-latest');
 
@@ -160,15 +161,19 @@ describe('Flower activity running sheen', () => {
     expect(dropdownRule).toContain('background: color-mix(in srgb, var(--flower-subagents-panel)');
     expect(dropdownRule).toContain('box-shadow:');
     expect(indicatorRule).toContain('color: color-mix');
+    expect(detailWindowRule).toContain('--flower-subagent-window-border:');
+    expect(detailWindowRule).toContain('background: var(--flower-subagent-window-surface)');
     expect(detailDockRule).toContain('border-top:');
-    expect(detailDockRule).toContain('flex-direction: column');
-    expect(detailDockRule).toContain('justify-content: flex-start');
+    expect(detailDockRule).toContain('align-items: center');
+    expect(detailDockRule).toContain('background: var(--flower-subagent-window-surface-raised)');
     expect(detailDockRule).not.toContain('space-between');
     expect(detailScrollRule).toContain('position: sticky');
-    expect(cssRule(css, '.flower-subagent-detail-bottom-track')).toContain('width: 100%');
+    expect(cssRule(css, '.flower-subagent-detail-bottom-track')).toContain('flex: 1 1 auto');
     expect(cssRule(css, '.flower-subagent-detail-bottom-track')).not.toContain('flex-end');
     expect(css).toContain('.flower-subagent-status-loader');
     expect(css).toContain('.flower-subagent-status-loader .flower-activity-inline-loader-square');
+    expect(css).toContain('.flower-subagent-detail-tail-pulse');
+    expect(css).toContain('.flower-subagent-ledger-entry-body .flower-activity-inline-row-running .flower-activity-inline-button::before');
     expect(css).not.toContain('z-index: 50');
     expect(detailScrollRule).not.toContain('z-index: ');
     expect(dropdownRule).not.toContain('right: 0');

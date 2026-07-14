@@ -270,12 +270,19 @@ describe('FlowerSurface navigation activity', () => {
     const floatingWindow = runtime.querySelector('[data-floe-geometry-surface="floating-window"]');
     expect(floatingWindow).toBeTruthy();
     expect(floatingWindow?.classList.contains('flower-subagent-detail-window')).toBe(true);
-    expect(floatingWindow?.querySelector('.flower-chat-transcript')).toBeTruthy();
+    expect(floatingWindow?.querySelector('.flower-subagent-detail-overview')).toBeTruthy();
+    expect(floatingWindow?.querySelector('.flower-subagent-status-label')?.textContent).toContain('Running');
+    expect(floatingWindow?.querySelector('.flower-subagent-detail-agent-type')?.textContent).toBe('Reviewer');
+    expect(floatingWindow?.querySelector('.flower-subagent-detail-transcript')).toBeTruthy();
     expect(floatingWindow?.querySelector('[data-flower-message-role="user"]')).toBeTruthy();
     expect(floatingWindow?.querySelector('[data-flower-message-role="assistant"]')).toBeTruthy();
-    expect(floatingWindow?.querySelector('.flower-subagent-status-pill .flower-activity-inline-loader')).toBeTruthy();
+    expect(floatingWindow?.querySelector('.flower-subagent-status-label .flower-activity-inline-loader')).toBeTruthy();
+    const instructionEntry = floatingWindow?.querySelector('details[data-flower-subagent-ledger-kind="instruction"]') as HTMLDetailsElement | null;
+    expect(instructionEntry).toBeTruthy();
+    expect(instructionEntry?.open).toBe(false);
+    expect(floatingWindow?.querySelector('details[data-flower-subagent-ledger-kind="activity"]')).toBeTruthy();
     expect(floatingWindow?.querySelector('.flower-subagent-detail-bottom-dock')).toBeTruthy();
-    expect(floatingWindow?.querySelector('.flower-subagent-detail-bottom-track .flower-model-status-lane')).toBeTruthy();
+    expect(floatingWindow?.querySelector('.flower-subagent-detail-bottom-track .flower-model-status-lane')).toBeNull();
     expect(floatingWindow?.querySelector('.flower-subagent-detail-bottom-track .flower-model-status-text')).toBeNull();
     expect(floatingWindow?.querySelector('.flower-composer')).toBeNull();
     expect(floatingWindow?.querySelector('textarea')).toBeNull();
@@ -654,8 +661,99 @@ describe('FlowerSurface navigation activity', () => {
 
     expect(loadSubagentDetail).toHaveBeenCalledTimes(1);
     const floatingWindow = runtime.querySelector('[data-floe-geometry-surface="floating-window"]');
-    expect(floatingWindow?.querySelector('.flower-subagent-status-pill')?.textContent).toContain('Completed');
-    expect(floatingWindow?.querySelector('.flower-subagent-detail-bottom-track .flower-model-status-text')).toBeNull();
+    expect(floatingWindow?.querySelector('.flower-subagent-status-label')?.textContent).toContain('Completed');
+    expect(floatingWindow?.querySelector('.flower-subagent-detail-bottom-dock')).toBeNull();
+  });
+
+  it('collapses long successful operation groups but keeps failed groups expanded', async () => {
+    const parentThread = parentThreadWithRunningSubagent();
+    const operationItems = Array.from({ length: 7 }, (_, index) => activityItem({
+      item_id: `call-batch-${index}`,
+      tool_id: `call-batch-${index}`,
+      tool_name: 'web.fetch',
+      renderer: 'structured',
+      label: `Fetch source ${index + 1}`,
+      status: index === 6 ? 'error' : 'success',
+      payload: { summary: `Fetched source ${index + 1}` },
+    }));
+    const loadSubagentDetail = vi.fn(async () => subagentDetail({
+      timeline: [
+        subagentDetail().timeline[0]!,
+        subagentDetail().timeline[3]!,
+      ],
+      activity: activityTimeline({ items: operationItems.map((item) => ({ ...item, status: 'success' })) }),
+      has_more: false,
+    }));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [parentThread]),
+      loadThread: vi.fn(async () => liveBootstrap(parentThread)),
+      loadSubagentDetail,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-parent-subagents"] button')));
+    (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-subagents-spawn"]')));
+    (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(subagentDropdownRow(runtime)));
+    subagentDropdownRow(runtime)?.click();
+    await waitFor(() => Boolean(subagentDetailSurface(runtime)));
+
+    const successfulGroup = runtime.querySelector('details[data-flower-subagent-ledger-kind="activity"]') as HTMLDetailsElement;
+    expect(successfulGroup.open).toBe(false);
+    expect(successfulGroup.getAttribute('data-default-collapsed')).toBe('true');
+    expect(successfulGroup.textContent).toContain('7 operations');
+
+    successfulGroup.open = true;
+    expect(runtime.querySelectorAll('[data-flower-activity-item-id^="call-batch-"]').length).toBe(7);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await waitFor(() => !subagentDetailSurface(runtime));
+
+    loadSubagentDetail.mockResolvedValueOnce(subagentDetail({
+      timeline: [
+        subagentDetail().timeline[0]!,
+        subagentDetail().timeline[3]!,
+      ],
+      activity: activityTimeline({ items: operationItems }),
+      has_more: false,
+    }));
+    (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(subagentDropdownRow(runtime)));
+    subagentDropdownRow(runtime)?.click();
+    await waitFor(() => Boolean(subagentDetailSurface(runtime)));
+
+    const failedGroup = runtime.querySelector('details[data-flower-subagent-ledger-kind="activity"]') as HTMLDetailsElement;
+    expect(failedGroup.open).toBe(true);
+    expect(failedGroup.getAttribute('data-default-collapsed')).toBeNull();
+  });
+
+  it('shows a retry action when the initial subagent detail request fails', async () => {
+    const parentThread = parentThreadWithRunningSubagent();
+    const loadSubagentDetail = vi.fn()
+      .mockRejectedValueOnce(new Error('Subagent detail unavailable.'))
+      .mockResolvedValueOnce(subagentDetail({ has_more: false }));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [parentThread]),
+      loadThread: vi.fn(async () => liveBootstrap(parentThread)),
+      loadSubagentDetail,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-parent-subagents"] button')));
+    (runtime.querySelector('[data-thread-id="thread-parent-subagents"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-subagents-spawn"]')));
+    (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(subagentDropdownRow(runtime)));
+    subagentDropdownRow(runtime)?.click();
+    await waitFor(() => runtime.textContent?.includes('Subagent detail unavailable.') ?? false);
+
+    const retry = Array.from(runtime.querySelectorAll('.flower-subagent-detail-retry'))
+      .find((button) => button.textContent?.includes('Retry')) as HTMLButtonElement;
+    expect(retry).toBeTruthy();
+    retry.click();
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-subagent-ledger')));
+    expect(loadSubagentDetail).toHaveBeenCalledTimes(2);
   });
 
   it('shows subagent bottom model status only when backend provides model_io_status', async () => {

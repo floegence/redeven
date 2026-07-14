@@ -5819,212 +5819,642 @@ html.dark .flower-component-shell {
   opacity: 0.45;
 }
 
-.flower-subagent-status-pill {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 0.32rem;
-  border-radius: 9999px;
-  border: 1px solid color-mix(in srgb, var(--flower-subagents-border) 70%, transparent);
-  padding: 0.18rem 0.5rem;
-  font-size: 0.6875rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.flower-subagent-status-running {
-  border-color: color-mix(in srgb, #2563eb 38%, var(--flower-subagents-border));
-  background: color-mix(in srgb, #2563eb 10%, transparent);
-  color: #2563eb;
-}
-
-.flower-subagent-status-waiting_input,
-.flower-subagent-status-queued {
-  border-color: color-mix(in srgb, #f59e0b 34%, var(--flower-subagents-border));
-  background: color-mix(in srgb, #f59e0b 12%, transparent);
-  color: #b45309;
-}
-
-.flower-subagent-status-completed {
-  border-color: color-mix(in srgb, #16a34a 34%, var(--flower-subagents-border));
-  background: color-mix(in srgb, #16a34a 11%, transparent);
-  color: #15803d;
-}
-
-.flower-subagent-status-failed,
-.flower-subagent-status-timed_out {
-  border-color: color-mix(in srgb, var(--destructive) 36%, var(--flower-subagents-border));
-  background: color-mix(in srgb, var(--destructive) 10%, transparent);
-  color: var(--destructive);
-}
-
-.flower-subagent-status-canceled,
-.flower-subagent-status-unknown {
-  background: color-mix(in srgb, var(--muted) 50%, transparent);
-  color: var(--muted-foreground);
+.flower-subagent-detail-window {
+  --flower-subagent-window-surface: color-mix(in srgb, var(--redeven-surface-panel, var(--card)) 96%, black 4%);
+  --flower-subagent-window-surface-soft: color-mix(in srgb, var(--redeven-surface-panel-soft, var(--card)) 88%, transparent);
+  --flower-subagent-window-surface-raised: color-mix(in srgb, var(--redeven-surface-panel-elevated, var(--card)) 94%, black 6%);
+  --flower-subagent-window-border: color-mix(in srgb, var(--redeven-surface-panel-border, var(--border)) 78%, transparent);
+  --flower-subagent-window-border-soft: color-mix(in srgb, var(--redeven-surface-panel-border, var(--border)) 42%, transparent);
+  --flower-subagent-window-text: color-mix(in srgb, var(--foreground) 94%, white 6%);
+  --flower-subagent-window-muted: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
+  --flower-subagent-window-accent: #789d98;
+  --flower-subagent-window-success: #65a479;
+  --flower-subagent-window-warning: #c59a58;
+  --flower-subagent-window-danger: #cc746d;
+  border-color: var(--flower-subagent-window-border);
+  background: var(--flower-subagent-window-surface);
+  color: var(--flower-subagent-window-text);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, white 4%, transparent) inset,
+    0 18px 46px -22px color-mix(in srgb, black 60%, transparent),
+    0 38px 90px -42px color-mix(in srgb, black 72%, transparent);
 }
 
 .flower-subagent-detail-window [data-floe-floating-window-titlebar='true'] {
   min-width: 0;
+  height: 2.5rem;
+  border-color: var(--flower-subagent-window-border-soft);
+  background: var(--flower-subagent-window-surface-raised);
+  padding-inline: 0.875rem 0.625rem;
+}
+
+.flower-subagent-detail-window [data-floe-floating-window-titlebar='true'] h2 {
+  color: var(--flower-subagent-window-text);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.flower-subagent-detail-window > [data-floe-floating-window-titlebar='true'] + div {
+  min-height: 0;
+  overflow: hidden;
+  background: var(--flower-subagent-window-surface);
+  padding: 0;
 }
 
 .flower-subagent-detail-surface {
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  display: flex;
   min-height: 0;
   height: 100%;
+  flex-direction: column;
   overflow: hidden;
+  background: var(--flower-subagent-window-surface);
 }
 
-.flower-subagent-detail-toolbar {
+.flower-subagent-detail-overview {
+  display: grid;
+  min-width: 0;
+  flex: 0 0 auto;
+  grid-template-columns: 2.25rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--flower-subagent-window-border-soft);
+  background: var(--flower-subagent-window-surface-raised);
+  padding: 0.75rem 1rem 0.8rem;
+}
+
+.flower-subagent-detail-signal {
+  display: inline-flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--flower-subagent-window-border);
+  border-radius: 5px;
+  background: var(--flower-subagent-window-surface-soft);
+  color: var(--flower-subagent-window-muted);
+}
+
+.flower-subagent-detail-signal-running {
+  border-color: color-mix(in srgb, var(--flower-subagent-window-accent) 52%, var(--flower-subagent-window-border));
+  color: var(--flower-subagent-window-accent);
+}
+
+.flower-subagent-detail-signal-queued,
+.flower-subagent-detail-signal-waiting_input {
+  border-color: color-mix(in srgb, var(--flower-subagent-window-warning) 48%, var(--flower-subagent-window-border));
+  color: var(--flower-subagent-window-warning);
+}
+
+.flower-subagent-detail-signal-completed {
+  border-color: color-mix(in srgb, var(--flower-subagent-window-success) 48%, var(--flower-subagent-window-border));
+  color: var(--flower-subagent-window-success);
+}
+
+.flower-subagent-detail-signal-failed,
+.flower-subagent-detail-signal-canceled,
+.flower-subagent-detail-signal-timed_out {
+  border-color: color-mix(in srgb, var(--flower-subagent-window-danger) 48%, var(--flower-subagent-window-border));
+  color: var(--flower-subagent-window-danger);
+}
+
+.flower-subagent-detail-overview-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.38rem;
+}
+
+.flower-subagent-detail-overview-meta {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0 0.625rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--flower-subagents-border) 24%, transparent);
+  flex-wrap: wrap;
+  gap: 0.4rem 0.65rem;
+  color: var(--flower-subagent-window-muted);
+  font-size: 0.6875rem;
+  line-height: 1.2;
 }
 
-.flower-subagent-detail-meta {
+.flower-subagent-status-label,
+.flower-subagent-detail-agent-type,
+.flower-subagent-detail-elapsed {
+  display: inline-flex;
   min-width: 0;
-  color: var(--muted-foreground);
-  font-size: 0.6875rem;
-  line-height: 1.35;
+  align-items: center;
+  gap: 0.32rem;
+  white-space: nowrap;
+}
+
+.flower-subagent-status-label {
+  color: var(--flower-subagent-window-text);
+  font-weight: 680;
+}
+
+.flower-subagent-status-label-running {
+  color: var(--flower-subagent-window-accent);
+}
+
+.flower-subagent-status-label-queued,
+.flower-subagent-status-label-waiting_input {
+  color: var(--flower-subagent-window-warning);
+}
+
+.flower-subagent-status-label-completed {
+  color: var(--flower-subagent-window-success);
+}
+
+.flower-subagent-status-label-failed,
+.flower-subagent-status-label-canceled,
+.flower-subagent-status-label-timed_out {
+  color: var(--flower-subagent-window-danger);
+}
+
+.flower-subagent-detail-agent-type::before,
+.flower-subagent-detail-elapsed::before {
+  content: '';
+  width: 2px;
+  height: 2px;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--flower-subagent-window-muted) 70%, transparent);
+}
+
+.flower-subagent-detail-elapsed::before {
+  margin-right: 0.18rem;
+}
+
+.flower-subagent-detail-description {
+  display: -webkit-box;
+  min-width: 0;
+  margin: 0;
+  color: color-mix(in srgb, var(--flower-subagent-window-text) 84%, var(--flower-subagent-window-muted) 16%);
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 480;
+  line-height: 1.5;
   overflow-wrap: anywhere;
-  opacity: 0.65;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.flower-subagent-detail-loading {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.2rem 1.25rem;
+}
+
+.flower-subagent-detail-loading-row {
+  display: grid;
+  grid-template-columns: 0.55rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.85rem;
+  opacity: 0.55;
+  animation: flower-subagent-ledger-loading 1.5s ease-in-out infinite;
+}
+
+.flower-subagent-detail-loading-row:nth-child(2) {
+  animation-delay: 120ms;
+}
+
+.flower-subagent-detail-loading-row:nth-child(3) {
+  animation-delay: 240ms;
+}
+
+.flower-subagent-detail-loading-row:nth-child(4) {
+  animation-delay: 360ms;
+}
+
+.flower-subagent-detail-loading-row > span {
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-top: 0.22rem;
+  border: 1px solid var(--flower-subagent-window-border);
+  background: var(--flower-subagent-window-surface-raised);
+}
+
+.flower-subagent-detail-loading-row > div {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.flower-subagent-detail-loading-row i {
+  display: block;
+  width: min(80%, 31rem);
+  height: 0.42rem;
+  background: color-mix(in srgb, var(--flower-subagent-window-border) 60%, transparent);
+}
+
+.flower-subagent-detail-loading-row i + i {
+  width: min(56%, 22rem);
+  opacity: 0.7;
+}
+
+@keyframes flower-subagent-ledger-loading {
+  0%,
+  100% {
+    opacity: 0.34;
+  }
+
+  50% {
+    opacity: 0.72;
+  }
 }
 
 .flower-subagent-detail-state {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   align-items: center;
-  gap: 0.45rem;
-  color: var(--muted-foreground);
-  padding: 1rem;
+  justify-content: center;
+  gap: 0.65rem;
+  color: var(--flower-subagent-window-muted);
+  padding: 1.5rem;
   font-size: 0.8125rem;
 }
 
 .flower-subagent-detail-state-error {
-  color: var(--destructive);
+  color: var(--flower-subagent-window-danger);
+}
+
+.flower-subagent-detail-state-copy {
+  display: grid;
+  max-width: 34rem;
+  gap: 0.65rem;
+}
+
+.flower-subagent-detail-retry,
+.flower-subagent-detail-inline-error button,
+.flower-subagent-detail-tail-error button {
+  display: inline-flex;
+  width: max-content;
+  cursor: pointer;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--flower-subagent-window-border);
+  border-radius: 4px;
+  background: var(--flower-subagent-window-surface-raised);
+  color: inherit;
+  padding: 0.32rem 0.55rem;
+  font: inherit;
+  font-weight: 650;
+}
+
+.flower-subagent-detail-retry:hover,
+.flower-subagent-detail-retry:focus-visible,
+.flower-subagent-detail-inline-error button:hover,
+.flower-subagent-detail-inline-error button:focus-visible,
+.flower-subagent-detail-tail-error button:hover,
+.flower-subagent-detail-tail-error button:focus-visible {
+  border-color: color-mix(in srgb, currentColor 45%, var(--flower-subagent-window-border));
+  outline: 2px solid color-mix(in srgb, currentColor 18%, transparent);
+  outline-offset: 1px;
+}
+
+.flower-subagent-detail-inline-error {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--flower-subagent-window-danger) 28%, var(--flower-subagent-window-border-soft));
+  background: color-mix(in srgb, var(--flower-subagent-window-danger) 7%, var(--flower-subagent-window-surface));
+  color: var(--flower-subagent-window-danger);
+  padding: 0.55rem 1rem;
+  font-size: 0.75rem;
 }
 
 .flower-subagent-detail-transcript {
   position: relative;
   min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
-  padding: 0 0.25rem 0.75rem;
+  overscroll-behavior: contain;
+  scrollbar-color: color-mix(in srgb, var(--flower-subagent-window-border) 70%, transparent) transparent;
+  scrollbar-width: thin;
 }
 
-.flower-subagent-detail-transcript-stack {
+.flower-subagent-ledger {
+  position: relative;
+  width: min(100%, 58rem);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 1rem 1.15rem 1.75rem;
+}
+
+.flower-subagent-ledger::before {
+  content: '';
+  position: absolute;
+  top: 1.25rem;
+  bottom: 1.75rem;
+  left: 1.38rem;
+  width: 1px;
+  background: var(--flower-subagent-window-border-soft);
+}
+
+.flower-subagent-ledger-entry {
+  position: relative;
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 0 0 0.85rem 1.7rem;
+  color: var(--flower-subagent-window-text);
+}
+
+.flower-subagent-ledger-entry + .flower-subagent-ledger-entry {
+  padding-top: 0.25rem;
+}
+
+.flower-subagent-ledger-entry::before {
+  content: '';
+  position: absolute;
+  top: 0.42rem;
+  left: 0.03rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 1px solid var(--flower-subagent-window-border);
+  background: var(--flower-subagent-window-surface);
+}
+
+.flower-subagent-ledger-entry-instruction::before,
+.flower-subagent-ledger-entry-constraints::before {
+  border-color: color-mix(in srgb, var(--flower-subagent-window-warning) 62%, var(--flower-subagent-window-border));
+}
+
+.flower-subagent-ledger-entry-activity::before {
+  border-color: color-mix(in srgb, var(--flower-subagent-window-accent) 68%, var(--flower-subagent-window-border));
+  background: color-mix(in srgb, var(--flower-subagent-window-accent) 18%, var(--flower-subagent-window-surface));
+}
+
+.flower-subagent-ledger-entry-outcome::before {
+  border-color: color-mix(in srgb, var(--flower-subagent-window-success) 70%, var(--flower-subagent-window-border));
+  background: color-mix(in srgb, var(--flower-subagent-window-success) 16%, var(--flower-subagent-window-surface));
+}
+
+.flower-subagent-ledger-entry > summary {
+  display: block;
+  cursor: pointer;
+  list-style: none;
+}
+
+.flower-subagent-ledger-entry > summary::-webkit-details-marker {
+  display: none;
+}
+
+.flower-subagent-ledger-entry > summary:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--flower-subagent-window-accent) 34%, transparent);
+  outline-offset: 3px;
+}
+
+.flower-subagent-ledger-entry-header {
+  display: grid;
+  min-height: 1.25rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--flower-subagent-window-muted);
+}
+
+.flower-subagent-ledger-entry-label {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.6875rem;
+  font-weight: 690;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-subagent-ledger-entry-activity .flower-subagent-ledger-entry-label {
+  color: color-mix(in srgb, var(--flower-subagent-window-accent) 78%, var(--flower-subagent-window-text) 22%);
+}
+
+.flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-label {
+  color: color-mix(in srgb, var(--flower-subagent-window-success) 78%, var(--flower-subagent-window-text) 22%);
+}
+
+.flower-subagent-ledger-entry-time {
+  color: var(--flower-subagent-window-muted);
+  font-family: var(--font-mono, Iosevka, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.72;
+}
+
+.flower-subagent-ledger-entry-chevron {
+  color: var(--flower-subagent-window-muted);
+  transition: transform 160ms ease;
+}
+
+.flower-subagent-ledger-entry[open] > summary .flower-subagent-ledger-entry-chevron {
+  transform: rotate(180deg);
+}
+
+.flower-subagent-ledger-entry-body {
+  min-width: 0;
+  padding-top: 0.38rem;
+}
+
+.flower-subagent-ledger-entry-instruction .flower-subagent-ledger-entry-body,
+.flower-subagent-ledger-entry-constraints .flower-subagent-ledger-entry-body {
+  border-top: 1px solid var(--flower-subagent-window-border-soft);
+  margin-top: 0.35rem;
+  background: color-mix(in srgb, var(--flower-subagent-window-surface-soft) 54%, transparent);
+  padding: 0.65rem 0.75rem 0.7rem;
+}
+
+.flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-body {
+  border-left: 2px solid color-mix(in srgb, var(--flower-subagent-window-success) 66%, transparent);
+  background: color-mix(in srgb, var(--flower-subagent-window-success) 7%, transparent);
+  margin-top: 0.28rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.flower-subagent-detail-surface:is(
+  [data-flower-subagent-status='failed'],
+  [data-flower-subagent-status='canceled'],
+  [data-flower-subagent-status='timed_out']
+) .flower-subagent-ledger-entry-outcome::before {
+  border-color: color-mix(in srgb, var(--flower-subagent-window-danger) 70%, var(--flower-subagent-window-border));
+  background: color-mix(in srgb, var(--flower-subagent-window-danger) 16%, var(--flower-subagent-window-surface));
+}
+
+.flower-subagent-detail-surface:is(
+  [data-flower-subagent-status='failed'],
+  [data-flower-subagent-status='canceled'],
+  [data-flower-subagent-status='timed_out']
+) .flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-label {
+  color: color-mix(in srgb, var(--flower-subagent-window-danger) 78%, var(--flower-subagent-window-text) 22%);
+}
+
+.flower-subagent-detail-surface:is(
+  [data-flower-subagent-status='failed'],
+  [data-flower-subagent-status='canceled'],
+  [data-flower-subagent-status='timed_out']
+) .flower-subagent-ledger-entry-outcome .flower-subagent-ledger-entry-body {
+  border-left-color: color-mix(in srgb, var(--flower-subagent-window-danger) 70%, transparent);
+  background: color-mix(in srgb, var(--flower-subagent-window-danger) 7%, transparent);
+}
+
+.flower-subagent-ledger-entry-body .flower-message-row,
+.flower-subagent-ledger-entry-body .flower-message-block-stack,
+.flower-subagent-ledger-entry-body .flower-message-bubble,
+.flower-subagent-ledger-entry-body .flower-message-assistant-copy-line,
+.flower-subagent-ledger-entry-body .flower-message-assistant-copy-body {
+  width: 100%;
+  max-width: 100%;
+}
+
+.flower-subagent-ledger-entry-body .flower-message-row {
+  justify-content: flex-start;
+}
+
+.flower-subagent-ledger-entry-body .flower-message-block-stack {
+  align-items: stretch;
+  gap: 0.32rem;
+}
+
+.flower-subagent-ledger-entry-body .flower-message-bubble {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--flower-subagent-window-text);
   padding: 0;
-  gap: 0;
-}
-
-.flower-subagent-detail-transcript .flower-message-row + .flower-message-row {
-  margin-top: 0.125rem;
-}
-
-.flower-subagent-detail-transcript .flower-message-block-stack-assistant {
-  gap: 0.25rem;
-}
-
-.flower-subagent-detail-transcript .flower-activity-inline {
-  border-left-width: 1.5px;
-  border-left-color: color-mix(in srgb, var(--flower-chat-surface-border) 48%, transparent);
-  margin: 0 0 0 0.125rem;
-  padding-left: 0.5rem;
-  gap: 0.0625rem;
-}
-
-.flower-subagent-detail-transcript .flower-activity-inline-button {
-  min-height: 1.5rem;
-  padding: 0.0625rem 0.25rem;
-  border-radius: 4px;
-}
-
-.flower-subagent-detail-transcript .flower-activity-inline-title {
-  font-size: 0.7125rem;
-}
-
-.flower-subagent-detail-transcript .flower-activity-inline-detail {
-  font-size: 0.65rem;
-}
-
-.flower-subagent-detail-transcript .flower-activity-inline-details {
-  margin: 0.0625rem 0 0.125rem 0.75rem;
-  padding: 0.5rem;
-  font-size: 0.625rem;
-  border-left-width: 1px;
-  max-height: 16rem;
-}
-
-.flower-subagent-detail-transcript .flower-message-bubble-framed {
-  padding: 0.5rem 0.625rem;
-  border-radius: 0.375rem;
   font-size: 0.8125rem;
-  line-height: 1.5;
+  line-height: 1.62;
 }
 
-.flower-subagent-detail-transcript .flower-message-bubble-user {
-  max-width: min(88%, var(--flower-chat-user-bubble-width));
-  background: color-mix(in srgb, var(--primary) 12%, var(--flower-chat-surface-soft) 68%, var(--background) 20%);
-  border-color: color-mix(in srgb, var(--primary) 18%, var(--flower-chat-surface-border) 42%, transparent);
+.flower-subagent-ledger-entry-body .flower-message-bubble-error {
+  box-shadow: none;
 }
 
-.flower-subagent-detail-transcript .flower-message-bubble-user .flower-chat-md-block h1 {
-  font-size: 0.95rem;
-  font-weight: 660;
-  color: color-mix(in srgb, var(--primary) 60%, var(--foreground) 40%);
-  margin: 0 0 0.45rem;
-  letter-spacing: 0.005em;
+.flower-subagent-ledger-entry-body .flower-message-error-kicker,
+.flower-subagent-ledger-entry-body .flower-message-time {
+  display: none;
 }
 
-.flower-subagent-detail-transcript .flower-message-action-row {
-  margin-top: 0.125rem;
+.flower-subagent-ledger-entry-body .flower-message-action-row {
+  min-height: 1.5rem;
+  justify-content: flex-start;
+  margin: 0.1rem 0 0;
 }
 
-.flower-subagent-detail-transcript .flower-message-time {
-  font-size: 0.625rem;
+.flower-subagent-ledger-entry-body .flower-message-copy-button {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.flower-subagent-ledger-entry:hover .flower-message-copy-button,
+.flower-subagent-ledger-entry:focus-within .flower-message-copy-button,
+.flower-subagent-ledger-entry-body .flower-message-copy-button[data-copied='true'] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.flower-subagent-ledger-entry-body .flower-chat-md-block {
+  line-height: 1.66;
+}
+
+.flower-subagent-ledger-entry-body .flower-chat-md-block :is(p, ul, ol, blockquote, pre, table) {
+  margin-top: 0.58rem;
+}
+
+.flower-subagent-ledger-entry-body .flower-activity-inline {
+  width: 100%;
+  gap: 0.12rem;
+  border-left: 0;
+  margin: 0;
+  padding-left: 0;
+}
+
+.flower-subagent-ledger-entry-body .flower-activity-inline-button {
+  min-height: 1.9rem;
+  grid-template-columns: 1rem minmax(0, 1fr) auto auto 1rem;
+  border-radius: 4px;
+  padding: 0.18rem 0.35rem;
+}
+
+.flower-subagent-ledger-entry-body .flower-activity-inline-row-running .flower-activity-inline-button::before,
+.flower-subagent-ledger-entry-body .flower-activity-inline-row-waiting .flower-activity-inline-button::before {
+  display: none;
+}
+
+.flower-subagent-ledger-entry-body .flower-activity-inline-row-running .flower-activity-inline-button {
+  box-shadow: 2px 0 0 var(--flower-subagent-window-accent) inset;
+}
+
+.flower-subagent-ledger-entry-body .flower-activity-inline-title {
+  font-family: var(--font-mono, Iosevka, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.75rem;
+  font-weight: 560;
+}
+
+.flower-subagent-ledger-entry-body .flower-activity-inline-detail,
+.flower-subagent-ledger-entry-body .flower-activity-inline-duration,
+.flower-subagent-ledger-entry-body .flower-activity-inline-status {
+  font-family: var(--font-mono, Iosevka, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.6875rem;
+}
+
+.flower-subagent-ledger-entry-body .flower-activity-inline-details {
+  max-height: 18rem;
+  border: 1px solid var(--flower-subagent-window-border-soft);
+  border-left-width: 1px;
+  border-radius: 4px;
+  margin: 0.2rem 0 0.45rem 1.45rem;
+  background: var(--flower-subagent-window-surface-raised);
+  padding: 0.65rem;
+  font-size: 0.6875rem;
 }
 
 .flower-subagent-detail-bottom-dock {
   display: flex;
   min-width: 0;
+  min-height: 2.7rem;
   flex: 0 0 auto;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-start;
-  gap: 0.4rem;
-  border-top: 1px solid color-mix(in srgb, var(--flower-subagents-border) 32%, transparent);
-  padding: 0.4rem 0 0;
+  align-items: center;
+  gap: 0.65rem;
+  border-top: 1px solid var(--flower-subagent-window-border-soft);
+  background: var(--flower-subagent-window-surface-raised);
+  padding: 0.48rem 0.75rem;
 }
 
 .flower-subagent-detail-load-more-button {
+  flex: 0 0 auto;
   cursor: pointer;
-  border: 1px solid color-mix(in srgb, var(--flower-subagents-border) 72%, transparent);
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--flower-subagents-panel-elevated) 58%, transparent);
-  color: color-mix(in srgb, var(--primary) 72%, var(--foreground) 28%);
-  padding: 0.35rem 0.8rem;
-  font-size: 0.75rem;
-  font-weight: 740;
+  border: 1px solid var(--flower-subagent-window-border);
+  border-radius: 4px;
+  background: transparent;
+  color: color-mix(in srgb, var(--flower-subagent-window-accent) 72%, var(--flower-subagent-window-text) 28%);
+  padding: 0.34rem 0.62rem;
+  font-size: 0.6875rem;
+  font-weight: 690;
 }
 
 .flower-subagent-detail-load-more-button:hover,
 .flower-subagent-detail-load-more-button:focus-visible {
-  border-color: color-mix(in srgb, var(--primary) 32%, var(--flower-subagents-border));
-  background: color-mix(in srgb, var(--primary) 8%, var(--flower-subagents-panel-elevated));
-  outline: none;
+  border-color: color-mix(in srgb, var(--flower-subagent-window-accent) 52%, var(--flower-subagent-window-border));
+  background: color-mix(in srgb, var(--flower-subagent-window-accent) 8%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--flower-subagent-window-accent) 16%, transparent);
+  outline-offset: 1px;
 }
 
 .flower-subagent-detail-load-more-button:disabled {
   cursor: not-allowed;
-  color: var(--muted-foreground);
-  opacity: 0.7;
+  color: var(--flower-subagent-window-muted);
+  opacity: 0.58;
 }
 
 .flower-subagent-detail-bottom-track {
-  width: 100%;
-  margin: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.flower-subagent-detail-bottom-track .flower-model-status-lane {
+  min-height: 1.5rem;
+  justify-content: flex-start;
 }
 
 .flower-subagent-detail-tail-state,
@@ -6032,19 +6462,52 @@ html.dark .flower-component-shell {
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: 0.32rem;
-  color: var(--muted-foreground);
-  font-size: 0.72rem;
+  gap: 0.4rem;
+  color: var(--flower-subagent-window-muted);
+  font-size: 0.6875rem;
   font-weight: 620;
 }
 
+.flower-subagent-detail-tail-pulse {
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: 0 0 auto;
+  background: var(--flower-subagent-window-accent);
+  animation: flower-subagent-tail-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes flower-subagent-tail-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.78);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .flower-subagent-detail-tail-error {
-  color: var(--destructive);
+  color: var(--flower-subagent-window-danger);
+}
+
+.flower-subagent-detail-tail-error > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-subagent-detail-tail-error button {
+  flex: 0 0 auto;
+  padding-block: 0.2rem;
 }
 
 .flower-subagent-detail-scroll-to-latest {
   position: sticky;
-  bottom: 0.7rem;
+  bottom: 0.75rem;
   display: flex;
   height: 0;
   justify-content: center;
@@ -6052,15 +6515,75 @@ html.dark .flower-component-shell {
 }
 
 .flower-subagent-detail-scroll-to-latest .flower-scroll-to-latest-button {
+  border-color: var(--flower-subagent-window-border);
+  background: var(--flower-subagent-window-surface-raised);
   pointer-events: auto;
-  transform: translateY(-2.4rem);
+  transform: translateY(-2.5rem);
 }
 
 .flower-subagent-detail-empty {
-  color: var(--muted-foreground);
-  padding: 1.5rem 0;
+  color: var(--flower-subagent-window-muted);
+  padding: 2.5rem 1rem;
   text-align: center;
   font-size: 0.8125rem;
+}
+
+@media (max-width: 560px) {
+  .flower-subagent-detail-overview {
+    grid-template-columns: 1.9rem minmax(0, 1fr);
+    gap: 0.6rem;
+    padding: 0.65rem 0.7rem;
+  }
+
+  .flower-subagent-detail-signal {
+    width: 1.9rem;
+    height: 1.9rem;
+  }
+
+  .flower-subagent-ledger {
+    padding-inline: 0.7rem;
+  }
+
+  .flower-subagent-ledger::before {
+    left: 0.93rem;
+  }
+
+  .flower-subagent-ledger-entry {
+    padding-left: 1.35rem;
+  }
+
+  .flower-subagent-ledger-entry::before {
+    left: 0;
+  }
+
+  .flower-subagent-detail-bottom-dock {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .flower-subagent-detail-load-more-button {
+    width: 100%;
+  }
+}
+
+@media (hover: none) {
+  .flower-subagent-ledger-entry-body .flower-message-copy-button {
+    opacity: 0.55;
+    pointer-events: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flower-subagent-detail-loading-row,
+  .flower-subagent-detail-tail-pulse {
+    animation: none !important;
+  }
+
+  .flower-subagent-ledger-entry-chevron,
+  .flower-subagent-ledger-entry-body .flower-message-copy-button {
+    transition: none !important;
+  }
 }
 
 .flower-settings-current-model-icon {
