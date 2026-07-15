@@ -24,7 +24,12 @@ import {
   type DesktopRuntimeProcessInventory,
   type DesktopRuntimeProcessStopResult,
 } from './runtimeProcessInventory';
-import { loadExternalLocalUIHealth, validateExternalLocalUIShell } from './runtimeState';
+import {
+  DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
+  probeExternalLocalUIHealth,
+  validateExternalLocalUIShell,
+  type RuntimeProbeFailure,
+} from './runtimeState';
 import type { DesktopSessionRuntimeHandle, DesktopSessionRuntimeLaunchMode } from './sessionRuntime';
 import type { StartupReport } from './startup';
 import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
@@ -57,7 +62,10 @@ import {
   desktopRuntimeMaintenanceIsLiveManagementSocketUnreachable,
   type DesktopRuntimeMaintenanceRequirement,
 } from '../shared/desktopRuntimeHealth';
-import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
+import type {
+  DesktopFailureDiagnostic,
+  DesktopOperationFailurePresentation,
+} from '../shared/desktopOperationFailure';
 
 const PUBLIC_INSTALL_SCRIPT_URL = 'https://redeven.com/install.sh';
 const DEFAULT_SSH_STARTUP_TIMEOUT_MS = 45_000;
@@ -189,6 +197,21 @@ type SSHCommandResult = Readonly<{
   signal: NodeJS.Signals | null;
   stdout: string;
   stderr: string;
+}>;
+
+type SSHLocalForwardExitState = Readonly<{
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+}>;
+
+type SSHLocalForwardFailure = Readonly<
+  | { kind: 'spawn_error'; error: Error }
+  | { kind: 'exit'; exit: SSHLocalForwardExitState }
+>;
+
+type SSHForwardPairFailure = Readonly<{
+  role: 'local_ui' | 'runtime_control';
+  failure: SSHLocalForwardFailure;
 }>;
 
 class DesktopSSHUploadAssetPreparationError extends DesktopOperationFailureError {
@@ -447,6 +470,76 @@ function bindRecentLog(
     logs[key] = appendRecentLog(logs[key], chunk);
     onLog?.(key, chunk);
   });
+}
+
+class SSHLocalForwardHandle {
+  readonly child: SpawnedSSHProcess;
+  private spawnErrorValue: Error | null = null;
+  private exitStateValue: SSHLocalForwardExitState | null = null;
+  private stderrValue = '';
+  private failureValue: SSHLocalForwardFailure | null = null;
+  private readonly failurePromiseValue: Promise<SSHLocalForwardFailure>;
+  private resolveFailure!: (failure: SSHLocalForwardFailure) => void;
+
+  constructor(
+    child: SpawnedSSHProcess,
+    logKey: 'forward_stderr' | 'runtime_control_forward_stderr',
+    logs: MutableRecentLogs,
+    onLog: StartManagedSSHRuntimeArgs['onLog'],
+  ) {
+    this.child = child;
+    this.failurePromiseValue = new Promise((resolve) => {
+      this.resolveFailure = resolve;
+    });
+    child.once('error', (error) => {
+      this.spawnErrorValue = error instanceof Error ? error : new Error(String(error));
+      this.recordFailure({ kind: 'spawn_error', error: this.spawnErrorValue });
+    });
+    child.once('exit', (exitCode, signal) => {
+      this.exitStateValue = { exitCode, signal };
+      this.recordFailure({ kind: 'exit', exit: this.exitStateValue });
+    });
+    if (child.stderr) {
+      child.stderr.setEncoding('utf8');
+      child.stderr.on('data', (chunk: string) => {
+        this.stderrValue = appendRecentLog(this.stderrValue, chunk);
+        logs[logKey] = appendRecentLog(logs[logKey], chunk);
+        onLog?.(logKey, chunk);
+      });
+    }
+  }
+
+  get spawnError(): Error | null {
+    return this.spawnErrorValue;
+  }
+
+  get exitState(): SSHLocalForwardExitState | null {
+    return this.exitStateValue;
+  }
+
+  get stderr(): string {
+    return this.stderrValue;
+  }
+
+  get failure(): SSHLocalForwardFailure | null {
+    return this.failureValue;
+  }
+
+  waitForFailure(): Promise<SSHLocalForwardFailure> {
+    return this.failurePromiseValue;
+  }
+
+  async stop(timeoutMs: number): Promise<void> {
+    await stopChildProcess(this.child, timeoutMs);
+  }
+
+  private recordFailure(failure: SSHLocalForwardFailure): void {
+    if (this.failureValue) {
+      return;
+    }
+    this.failureValue = failure;
+    this.resolveFailure(failure);
+  }
 }
 
 function sshTargetArgs(target: DesktopSSHEnvironmentDetails): string[] {
@@ -1679,25 +1772,209 @@ function localForwardURL(port: number): string {
   return `http://127.0.0.1:${port}/`;
 }
 
-async function waitForForwardedLocalUIOpenable(url: string, timeoutMs: number, signal?: AbortSignal): Promise<StartupReport | null> {
-  const deadline = Date.now() + timeoutMs;
+type SSHLocalForwardPair = Readonly<{
+  localUI: SSHLocalForwardHandle;
+  runtimeControl: SSHLocalForwardHandle;
+}>;
+
+type SSHForwardReadinessResult = Readonly<
+  | {
+      ok: true;
+      startup: StartupReport;
+      attempts: number;
+      elapsedMs: number;
+    }
+  | {
+      ok: false;
+      reason: 'forward_unavailable';
+      forwardFailure: SSHForwardPairFailure;
+      attempts: number;
+      requestBudgetMs: number;
+      elapsedMs: number;
+    }
+  | {
+      ok: false;
+      reason: 'probe_failed';
+      failure: RuntimeProbeFailure;
+      attempts: number;
+      requestBudgetMs: number;
+      elapsedMs: number;
+    }
+>;
+
+function currentForwardPairFailure(pair: SSHLocalForwardPair): SSHForwardPairFailure | null {
+  if (pair.localUI.failure) {
+    return { role: 'local_ui', failure: pair.localUI.failure };
+  }
+  if (pair.runtimeControl.failure) {
+    return { role: 'runtime_control', failure: pair.runtimeControl.failure };
+  }
+  return null;
+}
+
+function waitForForwardPairFailure(pair: SSHLocalForwardPair): Promise<SSHForwardPairFailure> {
+  return Promise.race([
+    pair.localUI.waitForFailure().then((failure) => ({ role: 'local_ui' as const, failure })),
+    pair.runtimeControl.waitForFailure().then((failure) => ({ role: 'runtime_control' as const, failure })),
+  ]);
+}
+
+function abortError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException('This operation was aborted', 'AbortError');
+}
+
+function delayWithSignal(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.reject(abortError(signal));
+  }
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      signal.removeEventListener('abort', handleAbort);
+      resolve();
+    }, ms);
+    const handleAbort = () => {
+      clearTimeout(timeout);
+      reject(abortError(signal));
+    };
+    signal.addEventListener('abort', handleAbort, { once: true });
+  });
+}
+
+function forwardFailureResult(
+  forwardFailure: SSHForwardPairFailure,
+  attempts: number,
+  requestBudgetMs: number,
+  startedAt: number,
+): SSHForwardReadinessResult {
+  return {
+    ok: false,
+    reason: 'forward_unavailable',
+    forwardFailure,
+    attempts,
+    requestBudgetMs,
+    elapsedMs: Math.max(0, Date.now() - startedAt),
+  };
+}
+
+async function waitForForwardedLocalUIOpenable(args: Readonly<{
+  url: string;
+  timeoutMs: number;
+  forwards: SSHLocalForwardPair;
+  signal?: AbortSignal;
+}>): Promise<SSHForwardReadinessResult> {
+  const startedAt = Date.now();
+  const deadline = startedAt + args.timeoutMs;
+  const readinessController = new AbortController();
+  const cancelReadiness = () => readinessController.abort(args.signal?.reason);
+  args.signal?.addEventListener('abort', cancelReadiness, { once: true });
+  let forwardFailure = currentForwardPairFailure(args.forwards);
+  void waitForForwardPairFailure(args.forwards).then((failure) => {
+    forwardFailure = failure;
+    readinessController.abort();
+  });
   let latestStartup: StartupReport | null = null;
-  for (;;) {
-    throwIfSSHRuntimeCanceled(signal);
-    const startup = await loadExternalLocalUIHealth(url, Math.min(timeoutMs, DEFAULT_SSH_POLL_INTERVAL_MS));
-    if (startup) {
-      latestStartup = startup;
-      if (runtimeServiceIsOpenable(startup.runtime_service)) {
-        return await validateExternalLocalUIShell(startup, Math.max(1, deadline - Date.now()));
+  let latestFailure: RuntimeProbeFailure | null = null;
+  let attempts = 0;
+  let requestBudgetMs = 0;
+  try {
+    for (;;) {
+      throwIfSSHRuntimeCanceled(args.signal);
+      const currentForwardFailure = forwardFailure ?? currentForwardPairFailure(args.forwards);
+      if (currentForwardFailure) {
+        return forwardFailureResult(currentForwardFailure, attempts, requestBudgetMs, startedAt);
       }
-      if (startup.runtime_service?.open_readiness?.state === 'blocked') {
-        return startup;
+      const remainingDeadlineMs = deadline - Date.now();
+      if (remainingDeadlineMs <= 0) {
+        if (latestStartup) {
+          return {
+            ok: true,
+            startup: latestStartup,
+            attempts,
+            elapsedMs: Math.max(0, Date.now() - startedAt),
+          };
+        }
+        return {
+          ok: false,
+          reason: 'probe_failed',
+          failure: latestFailure ?? { kind: 'timeout' },
+          attempts,
+          requestBudgetMs,
+          elapsedMs: Math.max(0, Date.now() - startedAt),
+        };
+      }
+      requestBudgetMs = Math.max(1, Math.min(DEFAULT_RUNTIME_PROBE_TIMEOUT_MS, remainingDeadlineMs));
+      attempts += 1;
+      let result;
+      try {
+        result = await probeExternalLocalUIHealth(args.url, {
+          timeoutMs: requestBudgetMs,
+          signal: readinessController.signal,
+        });
+      } catch (error) {
+        const failedForward = forwardFailure ?? currentForwardPairFailure(args.forwards);
+        if (failedForward) {
+          return forwardFailureResult(failedForward, attempts, requestBudgetMs, startedAt);
+        }
+        throw error;
+      }
+      if (result.ok) {
+        latestStartup = result.value;
+        if (runtimeServiceIsOpenable(result.value.runtime_service)) {
+          let startup: StartupReport;
+          try {
+            startup = await validateExternalLocalUIShell(result.value, {
+              timeoutMs: Math.max(1, deadline - Date.now()),
+              signal: readinessController.signal,
+            });
+          } catch (error) {
+            const failedForward = forwardFailure ?? currentForwardPairFailure(args.forwards);
+            if (failedForward) {
+              return forwardFailureResult(failedForward, attempts, requestBudgetMs, startedAt);
+            }
+            throw error;
+          }
+          const failedForward = forwardFailure ?? currentForwardPairFailure(args.forwards);
+          if (failedForward) {
+            return forwardFailureResult(failedForward, attempts, requestBudgetMs, startedAt);
+          }
+          return {
+            ok: true,
+            startup,
+            attempts,
+            elapsedMs: Math.max(0, Date.now() - startedAt),
+          };
+        }
+        if (result.value.runtime_service?.open_readiness?.state === 'blocked') {
+          return {
+            ok: true,
+            startup: result.value,
+            attempts,
+            elapsedMs: Math.max(0, Date.now() - startedAt),
+          };
+        }
+      } else {
+        latestFailure = result.failure;
+      }
+      if (Date.now() >= deadline) {
+        continue;
+      }
+      try {
+        await delayWithSignal(
+          Math.min(DEFAULT_SSH_POLL_INTERVAL_MS, Math.max(1, deadline - Date.now())),
+          readinessController.signal,
+        );
+      } catch (error) {
+        const failedForward = forwardFailure ?? currentForwardPairFailure(args.forwards);
+        if (failedForward) {
+          return forwardFailureResult(failedForward, attempts, requestBudgetMs, startedAt);
+        }
+        throw error;
       }
     }
-    if (Date.now() >= deadline) {
-      return latestStartup;
-    }
-    await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
+  } finally {
+    args.signal?.removeEventListener('abort', cancelReadiness);
   }
 }
 
@@ -1735,6 +2012,215 @@ async function stopChildProcess(child: SpawnedSSHProcess | null, timeoutMs: numb
   if (result === 'timeout' && child.exitCode === null) {
     child.kill('SIGKILL');
     await exitPromise;
+  }
+}
+
+type OpenedSSHForwardedRuntime = Readonly<{
+  forwardedStartup: StartupReport;
+  localForwardURL: string;
+  runtimeControlForwardURL: string;
+  runtimeControlPort: number;
+  forwards: SSHLocalForwardPair;
+}>;
+
+function spawnSSHLocalForward(args: Readonly<{
+  sshBinary: string;
+  controlSocketPath: string;
+  connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
+  target: DesktopSSHEnvironmentDetails;
+  localPort: number;
+  remotePort: number;
+  logKey: 'forward_stderr' | 'runtime_control_forward_stderr';
+  logs: MutableRecentLogs;
+  onLog: StartManagedSSHRuntimeArgs['onLog'];
+  signal?: AbortSignal;
+}>): SSHLocalForwardHandle {
+  return new SSHLocalForwardHandle(
+    spawnSSHProcess(args.sshBinary, [
+      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
+      '-o', 'ExitOnForwardFailure=yes',
+      '-N',
+      '-L', `127.0.0.1:${args.localPort}:127.0.0.1:${args.remotePort}`,
+      ...sshTargetArgs(args.target),
+    ], args.auth, undefined, args.signal),
+    args.logKey,
+    args.logs,
+    args.onLog,
+  );
+}
+
+function forwardReadinessDiagnostic(result: Exclude<SSHForwardReadinessResult, { ok: true }>): DesktopFailureDiagnostic {
+  const values = result.reason === 'forward_unavailable'
+    ? (() => {
+        const failure = result.forwardFailure.failure;
+        const errorCode = failure.kind === 'spawn_error'
+          ? compact((failure.error as NodeJS.ErrnoException).code) || failure.error.name
+          : failure.exit.signal
+            ? `signal_${failure.exit.signal}`
+            : `exit_${failure.exit.exitCode ?? 'unknown'}`;
+        return {
+          failureType: 'forward_unavailable',
+          errorCode,
+          httpStatus: '',
+        };
+      })()
+    : {
+        failureType: result.failure.kind,
+        errorCode: compact(result.failure.code),
+        httpStatus: result.failure.status_code ? String(result.failure.status_code) : '',
+      };
+  return {
+    channel: 'forward_probe',
+    label: 'SSH forward probe',
+    text: [
+      `failure_type=${values.failureType}`,
+      ...(values.errorCode ? [`error_code=${values.errorCode}`] : []),
+      ...(values.httpStatus ? [`http_status=${values.httpStatus}`] : []),
+      `attempts=${result.attempts}`,
+      `request_budget_ms=${result.requestBudgetMs}`,
+      `elapsed_ms=${result.elapsedMs}`,
+    ].join('\n'),
+  };
+}
+
+function forwardReadinessFailure(
+  result: Exclude<SSHForwardReadinessResult, { ok: true }>,
+  target: DesktopSSHEnvironmentDetails,
+  logs: RecentLogs,
+): DesktopOperationFailureError {
+  const targetLabel = desktopSSHAuthority(target);
+  const base = {
+    severity: 'error' as const,
+    targetLabel,
+    diagnostics: [
+      forwardReadinessDiagnostic(result),
+      ...diagnosticsFromRecentLogs(logs, SSH_RECENT_LOG_LABELS),
+    ],
+  };
+  if (result.reason === 'forward_unavailable') {
+    return new DesktopOperationFailureError(desktopOperationFailurePresentation({
+      ...base,
+      code: 'ssh_forward_unavailable',
+      title: 'SSH Forward Unavailable',
+      titleKey: 'progress.sshForwardUnavailableTitle',
+      summary: `Desktop could not establish the local SSH tunnel for "${targetLabel}".`,
+      summaryKey: 'progress.sshForwardUnavailableSummary',
+      detail: 'The SSH process failed to start or exited before Desktop could verify the forwarded Runtime.',
+      detailKey: 'progress.sshForwardUnavailableDetail',
+      recoveryHint: 'Check SSH local forwarding permissions, the SSH connection, and whether the remote Runtime is still listening.',
+      recoveryHintKey: 'progress.sshForwardUnavailableRecoveryHint',
+    }));
+  }
+  if (result.failure.kind === 'timeout') {
+    return new DesktopOperationFailureError(desktopOperationFailurePresentation({
+      ...base,
+      code: 'ssh_forward_verification_timed_out',
+      title: 'SSH Tunnel Verification Timed Out',
+      titleKey: 'progress.sshForwardVerificationTimedOutTitle',
+      summary: `Desktop opened the SSH tunnel for "${targetLabel}", but the forwarded Runtime did not answer before the readiness deadline.`,
+      summaryKey: 'progress.sshForwardVerificationTimedOutSummary',
+      detail: 'The SSH forwards remained active, but the forwarded Runtime did not complete the health check within the readiness deadline.',
+      detailKey: 'progress.sshForwardVerificationTimedOutDetail',
+      recoveryHint: 'Confirm that the remote Runtime is responsive, then try opening the Environment again.',
+      recoveryHintKey: 'progress.sshForwardVerificationTimedOutRecoveryHint',
+    }));
+  }
+  if (result.failure.kind === 'network_error') {
+    return new DesktopOperationFailureError(desktopOperationFailurePresentation({
+      ...base,
+      code: 'ssh_forward_network_failed',
+      title: 'Forwarded Runtime Unreachable',
+      titleKey: 'progress.sshForwardNetworkFailedTitle',
+      summary: `Desktop opened the SSH tunnel for "${targetLabel}", but the forwarded Runtime connection failed.`,
+      summaryKey: 'progress.sshForwardNetworkFailedSummary',
+      detail: 'The SSH forwards remained active, but the forwarded Local UI connection was refused, reset, or otherwise failed.',
+      detailKey: 'progress.sshForwardNetworkFailedDetail',
+      recoveryHint: 'Check that the remote Runtime is still listening and that SSH local forwarding remains permitted.',
+      recoveryHintKey: 'progress.sshForwardNetworkFailedRecoveryHint',
+    }));
+  }
+  return new DesktopOperationFailureError(desktopOperationFailurePresentation({
+    ...base,
+    code: 'ssh_forward_invalid_response',
+    title: 'Forwarded Runtime Response Invalid',
+    titleKey: 'progress.sshForwardInvalidResponseTitle',
+    summary: `Desktop reached the forwarded service for "${targetLabel}", but it did not return valid Redeven Runtime health.`,
+    summaryKey: 'progress.sshForwardInvalidResponseSummary',
+    detail: 'The forwarded health endpoint returned an unexpected HTTP status or a payload that was not valid Redeven Runtime health.',
+    detailKey: 'progress.sshForwardInvalidResponseDetail',
+    recoveryHint: 'Confirm that the forwarded port belongs to the intended Redeven Runtime and that the Runtime version is current.',
+    recoveryHintKey: 'progress.sshForwardInvalidResponseRecoveryHint',
+  }));
+}
+
+async function openSSHForwardedRuntime(args: Readonly<{
+  sshBinary: string;
+  controlSocketPath: string;
+  connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
+  target: DesktopSSHEnvironmentDetails;
+  remoteStartup: StartupReport;
+  probeTimeoutMs: number;
+  stopTimeoutMs: number;
+  logs: MutableRecentLogs;
+  signal?: AbortSignal;
+  onLog: StartManagedSSHRuntimeArgs['onLog'];
+  onProgress: StartManagedSSHRuntimeArgs['onProgress'];
+}>): Promise<OpenedSSHForwardedRuntime> {
+  const localPort = await allocateLocalForwardPort();
+  const remotePort = remotePortFromStartup(args.remoteStartup);
+  const runtimeControlPort = await allocateLocalForwardPort();
+  const remoteRuntimeControlPort = remoteRuntimeControlPortFromStartup(args.remoteStartup);
+  emitSSHRuntimeProgress(
+    args.onProgress,
+    'ssh_opening_tunnel',
+    'Opening local tunnel',
+    `Forwarding 127.0.0.1:${localPort} to the remote Redeven port ${remotePort}.`,
+  );
+  let localUI: SSHLocalForwardHandle | null = null;
+  let runtimeControl: SSHLocalForwardHandle | null = null;
+  try {
+    localUI = spawnSSHLocalForward({
+      ...args,
+      localPort,
+      remotePort,
+      logKey: 'forward_stderr',
+    });
+    runtimeControl = spawnSSHLocalForward({
+      ...args,
+      localPort: runtimeControlPort,
+      remotePort: remoteRuntimeControlPort,
+      logKey: 'runtime_control_forward_stderr',
+    });
+    const forwards = { localUI, runtimeControl };
+    const forwardedURL = localForwardURL(localPort);
+    emitSSHRuntimeProgress(
+      args.onProgress,
+      'ssh_verifying_tunnel',
+      'Verifying forwarded Local UI',
+      `Checking ${forwardedURL} before opening the environment window.`,
+    );
+    const readiness = await waitForForwardedLocalUIOpenable({
+      url: forwardedURL,
+      timeoutMs: args.probeTimeoutMs,
+      forwards,
+      signal: args.signal,
+    });
+    if (!readiness.ok) {
+      throw forwardReadinessFailure(readiness, args.target, args.logs);
+    }
+    return {
+      forwardedStartup: readiness.startup,
+      localForwardURL: forwardedURL,
+      runtimeControlForwardURL: localForwardURL(runtimeControlPort),
+      runtimeControlPort,
+      forwards,
+    };
+  } catch (error) {
+    await localUI?.stop(args.stopTimeoutMs).catch(() => undefined);
+    await runtimeControl?.stop(args.stopTimeoutMs).catch(() => undefined);
+    throw error;
   }
 }
 
@@ -2916,8 +3402,7 @@ async function startManagedSSHRuntimeInternal(
   bindRecentLog(masterProcess.stderr, 'master_stderr', logs, args.onLog);
 
   let controlProcess: SpawnedSSHProcess | null = null;
-  let forwardProcess: SpawnedSSHProcess | null = null;
-  let runtimeControlForwardProcess: SpawnedSSHProcess | null = null;
+  let forwardPair: SSHLocalForwardPair | null = null;
   let remoteStopAttempted = false;
   let transportDisconnected = false;
   let preparedRuntimePackage: PreparedManagedSSHRuntimePackage | null = null;
@@ -2933,8 +3418,8 @@ async function startManagedSSHRuntimeInternal(
       'Cleaning SSH startup resources',
       'Desktop is closing local SSH tunnels and temporary startup files.',
     );
-    await stopChildProcess(forwardProcess, stopTimeoutMs).catch(() => undefined);
-    await stopChildProcess(runtimeControlForwardProcess, stopTimeoutMs).catch(() => undefined);
+    await forwardPair?.localUI.stop(stopTimeoutMs).catch(() => undefined);
+    await forwardPair?.runtimeControl.stop(stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(controlProcess, stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(masterProcess, stopTimeoutMs).catch(() => undefined);
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
@@ -3259,83 +3744,34 @@ async function startManagedSSHRuntimeInternal(
       };
     }
 
-    const localPort = await allocateLocalForwardPort();
-    const remotePort = remotePortFromStartup(remoteStartup);
-    const runtimeControlPort = await allocateLocalForwardPort();
-    const remoteRuntimeControlPort = remoteRuntimeControlPortFromStartup(remoteStartup);
-    emitSSHRuntimeProgress(
-      args.onProgress,
-      'ssh_opening_tunnel',
-      'Opening local tunnel',
-      `Forwarding 127.0.0.1:${localPort} to the remote Redeven port ${remotePort}.`,
-    );
-    forwardProcess = spawnSSHProcess(sshBinary, [
-      ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds, auth.mode),
-      '-o', 'ExitOnForwardFailure=yes',
-      '-N',
-      '-L', `127.0.0.1:${localPort}:127.0.0.1:${remotePort}`,
-      ...sshTargetArgs(target),
-    ], auth, undefined, args.signal);
-    let forwardSpawnError: Error | null = null;
-    forwardProcess.once('error', (error) => {
-      forwardSpawnError = error instanceof Error ? error : new Error(String(error));
+    const forwarded = await openSSHForwardedRuntime({
+      sshBinary,
+      controlSocketPath,
+      connectTimeoutSeconds,
+      auth,
+      target,
+      remoteStartup,
+      probeTimeoutMs: args.probeTimeoutMs ?? startupTimeoutMs,
+      stopTimeoutMs,
+      logs,
+      signal: args.signal,
+      onLog: args.onLog,
+      onProgress: args.onProgress,
     });
-    bindRecentLog(forwardProcess.stderr, 'forward_stderr', logs, args.onLog);
-    if (forwardSpawnError) {
-      throw forwardSpawnError;
-    }
-
-    runtimeControlForwardProcess = spawnSSHProcess(sshBinary, [
-      ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds, auth.mode),
-      '-o', 'ExitOnForwardFailure=yes',
-      '-N',
-      '-L', `127.0.0.1:${runtimeControlPort}:127.0.0.1:${remoteRuntimeControlPort}`,
-      ...sshTargetArgs(target),
-    ], auth, undefined, args.signal);
-    let runtimeControlForwardSpawnError: Error | null = null;
-    runtimeControlForwardProcess.once('error', (error) => {
-      runtimeControlForwardSpawnError = error instanceof Error ? error : new Error(String(error));
-    });
-    bindRecentLog(runtimeControlForwardProcess.stderr, 'runtime_control_forward_stderr', logs, args.onLog);
-    if (runtimeControlForwardSpawnError) {
-      throw runtimeControlForwardSpawnError;
-    }
-
-    const forwardedURL = localForwardURL(localPort);
-    const runtimeControlForwardURL = localForwardURL(runtimeControlPort);
-    emitSSHRuntimeProgress(
-      args.onProgress,
-      'ssh_verifying_tunnel',
-      'Verifying forwarded Local UI',
-      `Checking ${forwardedURL} before opening the environment window.`,
-    );
-    let forwardedStartup = await waitForForwardedLocalUIOpenable(
-      forwardedURL,
-      args.probeTimeoutMs ?? startupTimeoutMs,
-      args.signal,
-    );
-    if (!forwardedStartup) {
-      throw readinessFailure('Desktop created the SSH port forward but could not reach the forwarded Redeven Local UI.', logs, {
-        code: 'ssh_forward_unavailable',
-        title: 'SSH Tunnel Verification Failed',
-        summary: 'Desktop could not reach the forwarded Redeven Local UI.',
-        detail: 'The remote runtime started, but the local SSH tunnel did not expose an openable Local UI.',
-        recoveryHint: 'Check SSH local forwarding permissions and whether the remote runtime is still listening.',
-        targetLabel: desktopSSHAuthority(target),
-      });
-    }
+    forwardPair = forwarded.forwards;
+    const forwardedStartup = forwarded.forwardedStartup;
     const startup: StartupReport = {
       ...remoteStartup,
       local_ui_url: forwardedStartup.local_ui_url,
       local_ui_urls: forwardedStartup.local_ui_urls,
       password_required: forwardedStartup.password_required,
-      runtime_control: forwardedRuntimeControlEndpoint(remoteStartup.runtime_control!, runtimeControlPort),
+      runtime_control: forwardedRuntimeControlEndpoint(remoteStartup.runtime_control!, forwarded.runtimeControlPort),
       runtime_service: forwardedStartup.runtime_service ?? remoteStartup.runtime_service,
     };
     return {
       startup,
-      local_forward_url: forwardedURL,
-      runtime_control_forward_url: runtimeControlForwardURL,
+      local_forward_url: forwarded.localForwardURL,
+      runtime_control_forward_url: forwarded.runtimeControlForwardURL,
       runtime_handle: {
         runtime_kind: 'ssh',
         lifecycle_owner: 'external',
@@ -3450,8 +3886,7 @@ export async function openManagedSSHRuntimeConnection(
   });
   bindRecentLog(masterProcess.stderr, 'master_stderr', logs, args.onLog);
 
-  let forwardProcess: SpawnedSSHProcess | null = null;
-  let runtimeControlForwardProcess: SpawnedSSHProcess | null = null;
+  let forwardPair: SSHLocalForwardPair | null = null;
   let transportDisconnected = false;
   const disconnect = async () => {
     if (transportDisconnected) {
@@ -3464,8 +3899,8 @@ export async function openManagedSSHRuntimeConnection(
       'Cleaning SSH connection resources',
       'Desktop is closing local SSH tunnels for this open request.',
     );
-    await stopChildProcess(forwardProcess, stopTimeoutMs).catch(() => undefined);
-    await stopChildProcess(runtimeControlForwardProcess, stopTimeoutMs).catch(() => undefined);
+    await forwardPair?.localUI.stop(stopTimeoutMs).catch(() => undefined);
+    await forwardPair?.runtimeControl.stop(stopTimeoutMs).catch(() => undefined);
     await stopChildProcess(masterProcess, stopTimeoutMs).catch(() => undefined);
     await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
   };
@@ -3488,83 +3923,34 @@ export async function openManagedSSHRuntimeConnection(
       getMasterProcess: () => masterProcess,
     });
 
-    const localPort = await allocateLocalForwardPort();
-    const remotePort = remotePortFromStartup(remoteStartup);
-    const runtimeControlPort = await allocateLocalForwardPort();
-    const remoteRuntimeControlPort = remoteRuntimeControlPortFromStartup(remoteStartup);
-    emitSSHRuntimeProgress(
-      args.onProgress,
-      'ssh_opening_tunnel',
-      'Opening local tunnel',
-      `Forwarding 127.0.0.1:${localPort} to the remote Redeven port ${remotePort}.`,
-    );
-    forwardProcess = spawnSSHProcess(sshBinary, [
-      ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds, auth.mode),
-      '-o', 'ExitOnForwardFailure=yes',
-      '-N',
-      '-L', `127.0.0.1:${localPort}:127.0.0.1:${remotePort}`,
-      ...sshTargetArgs(target),
-    ], auth, undefined, args.signal);
-    let forwardSpawnError: Error | null = null;
-    forwardProcess.once('error', (error) => {
-      forwardSpawnError = error instanceof Error ? error : new Error(String(error));
+    const forwarded = await openSSHForwardedRuntime({
+      sshBinary,
+      controlSocketPath,
+      connectTimeoutSeconds,
+      auth,
+      target,
+      remoteStartup,
+      probeTimeoutMs: args.probeTimeoutMs ?? DEFAULT_SSH_STARTUP_TIMEOUT_MS,
+      stopTimeoutMs,
+      logs,
+      signal: args.signal,
+      onLog: args.onLog,
+      onProgress: args.onProgress,
     });
-    bindRecentLog(forwardProcess.stderr, 'forward_stderr', logs, args.onLog);
-    if (forwardSpawnError) {
-      throw forwardSpawnError;
-    }
-
-    runtimeControlForwardProcess = spawnSSHProcess(sshBinary, [
-      ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds, auth.mode),
-      '-o', 'ExitOnForwardFailure=yes',
-      '-N',
-      '-L', `127.0.0.1:${runtimeControlPort}:127.0.0.1:${remoteRuntimeControlPort}`,
-      ...sshTargetArgs(target),
-    ], auth, undefined, args.signal);
-    let runtimeControlForwardSpawnError: Error | null = null;
-    runtimeControlForwardProcess.once('error', (error) => {
-      runtimeControlForwardSpawnError = error instanceof Error ? error : new Error(String(error));
-    });
-    bindRecentLog(runtimeControlForwardProcess.stderr, 'runtime_control_forward_stderr', logs, args.onLog);
-    if (runtimeControlForwardSpawnError) {
-      throw runtimeControlForwardSpawnError;
-    }
-
-    const forwardedURL = localForwardURL(localPort);
-    const runtimeControlForwardURL = localForwardURL(runtimeControlPort);
-    emitSSHRuntimeProgress(
-      args.onProgress,
-      'ssh_verifying_tunnel',
-      'Verifying forwarded Local UI',
-      `Checking ${forwardedURL} before opening the environment window.`,
-    );
-    const forwardedStartup = await waitForForwardedLocalUIOpenable(
-      forwardedURL,
-      args.probeTimeoutMs ?? DEFAULT_SSH_STARTUP_TIMEOUT_MS,
-      args.signal,
-    );
-    if (!forwardedStartup) {
-      throw readinessFailure('Desktop created the SSH port forward but could not reach the forwarded Redeven Local UI.', logs, {
-        code: 'ssh_forward_unavailable',
-        title: 'SSH Tunnel Verification Failed',
-        summary: 'Desktop could not reach the forwarded Redeven Local UI.',
-        detail: 'The SSH runtime is running, but this open request could not verify the Local UI tunnel.',
-        recoveryHint: 'Check SSH local forwarding permissions and whether the remote runtime is still listening.',
-        targetLabel: desktopSSHAuthority(target),
-      });
-    }
+    forwardPair = forwarded.forwards;
+    const forwardedStartup = forwarded.forwardedStartup;
     const startup: StartupReport = {
       ...remoteStartup,
       local_ui_url: forwardedStartup.local_ui_url,
       local_ui_urls: forwardedStartup.local_ui_urls,
       password_required: forwardedStartup.password_required,
-      runtime_control: forwardedRuntimeControlEndpoint(remoteStartup.runtime_control!, runtimeControlPort),
+      runtime_control: forwardedRuntimeControlEndpoint(remoteStartup.runtime_control!, forwarded.runtimeControlPort),
       runtime_service: forwardedStartup.runtime_service ?? remoteStartup.runtime_service,
     };
     return {
       startup,
-      local_forward_url: forwardedURL,
-      runtime_control_forward_url: runtimeControlForwardURL,
+      local_forward_url: forwarded.localForwardURL,
+      runtime_control_forward_url: forwarded.runtimeControlForwardURL,
       runtime_handle: args.ready.runtime_handle,
       disconnect,
       stop: async () => {

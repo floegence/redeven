@@ -167,7 +167,8 @@ import { LauncherOperationRegistry, launcherOperationProgress, type LauncherOper
 import { buildLocalUIEnvAppEntryURL } from './localUIURL';
 import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation } from './navigation';
 import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWelcomeRendererPath } from './paths';
-import { loadExternalLocalUIHealth, loadExternalLocalUIStartup } from './runtimeState';
+import { probeExternalLocalUIHealth, probeExternalLocalUIStartup } from './runtimeState';
+import { sshOpenFailureAllowsCachedRefreshRetry } from './sshOpenRetryPolicy';
 import {
   RuntimeControlError,
   getCodeWorkspaceEngineStatus,
@@ -1010,10 +1011,13 @@ async function refreshStartupReportFromLocalUI(
   startup: StartupReport,
   localUIURL: string,
 ): Promise<StartupReport> {
-  const refreshed = await loadExternalLocalUIHealth(localUIURL, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS).catch(() => null);
-  if (!refreshed) {
+  const result = await probeExternalLocalUIHealth(localUIURL, {
+    timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
+  });
+  if (!result.ok) {
     return startup;
   }
+  const refreshed = result.value;
   return {
     ...startup,
     local_ui_url: refreshed.local_ui_url,
@@ -1614,8 +1618,11 @@ async function verifyCurrentLocalEnvironmentRuntimeRecord(
     return null;
   }
   try {
-    const startup = await loadExternalLocalUIHealth(currentRecord.startup.local_ui_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
-    if (startup) {
+    const result = await probeExternalLocalUIHealth(currentRecord.startup.local_ui_url, {
+      timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
+    });
+    if (result.ok) {
+      const startup = result.value;
       return updateLocalEnvironmentRuntimeRecordStartup(currentRecord, {
         provider_origin: startup.provider_origin ?? currentRecord.startup.provider_origin,
         controlplane_base_url: startup.controlplane_base_url ?? currentRecord.startup.controlplane_base_url,
@@ -1831,8 +1838,11 @@ async function verifyRuntimePlacementBridgeRecord(
     return null;
   }
   try {
-    const startup = await loadExternalLocalUIHealth(bridgeRecord.startup.local_ui_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
-    if (startup) {
+    const result = await probeExternalLocalUIHealth(bridgeRecord.startup.local_ui_url, {
+      timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
+    });
+    if (result.ok) {
+      const startup = result.value;
       const updatedRecord: RuntimePlacementBridgeRecord = {
         ...bridgeRecord,
         startup: {
@@ -1869,8 +1879,11 @@ async function verifySSHEnvironmentRuntimeRecord(
     return null;
   }
   try {
-    const startup = await loadExternalLocalUIHealth(runtimeRecord.local_forward_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
-    if (startup) {
+    const result = await probeExternalLocalUIHealth(runtimeRecord.local_forward_url, {
+      timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
+    });
+    if (result.ok) {
+      const startup = result.value;
       const updatedRecord: SSHEnvironmentRuntimeRecord = {
         ...runtimeRecord,
         startup: {
@@ -3053,12 +3066,15 @@ async function probeSavedExternalRuntimeHealth(
   environment: DesktopSavedEnvironment,
 ): Promise<DesktopWelcomeRuntimeHealthProbeResult> {
   try {
-    const startup = await loadExternalLocalUIStartup(environment.local_ui_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
-    if (!startup) {
+    const result = await probeExternalLocalUIStartup(environment.local_ui_url, {
+      timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
+    });
+    if (!result.ok) {
       return {
         health: offlineRuntimeHealth('external_local_ui_probe', 'unverified', 'Could not verify runtime health'),
       };
     }
+    const startup = result.value;
     return {
       health: {
         ...onlineRuntimeHealth('external_local_ui_probe', startup.local_ui_url, startup.runtime_service),
@@ -3430,7 +3446,10 @@ function canReuseFreshSSHOpenPreflight(
 }
 
 function cachedSSHOpenFailureAllowsRefreshRetry(error: unknown): boolean {
-  return isDesktopOperationFailureError(error) && error.presentation.code === 'ssh_forward_unavailable';
+  if (!isDesktopOperationFailureError(error)) {
+    return false;
+  }
+  return sshOpenFailureAllowsCachedRefreshRetry(error.presentation.code);
 }
 
 function launcherActionEnvironmentID(request: DesktopLauncherActionRequest): string {
@@ -7974,8 +7993,8 @@ async function openAdvancedSettingsWindow(): Promise<void> {
 
 async function prepareExternalTarget(targetURL: string): Promise<PreparedExternalTargetResult> {
   try {
-    const startup = await loadExternalLocalUIStartup(targetURL);
-    if (!startup) {
+    const result = await probeExternalLocalUIStartup(targetURL);
+    if (!result.ok) {
       return {
         ok: false,
         entryReason: 'connect_failed',
@@ -7986,6 +8005,7 @@ async function prepareExternalTarget(targetURL: string): Promise<PreparedExterna
         ),
       };
     }
+    const startup = result.value;
     return {
       ok: true,
       startup,

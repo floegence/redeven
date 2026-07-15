@@ -11,13 +11,29 @@ import {
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 
-const DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
+export const DEFAULT_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
 
-type RuntimeProbeResponse = Readonly<{
-  statusCode: number | null;
+export type RuntimeProbeOptions = Readonly<{
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}>;
+
+export type RuntimeProbeFailure = Readonly<{
+  kind: 'timeout' | 'network_error' | 'invalid_response';
+  code?: string;
+  status_code?: number;
+}>;
+
+export type RuntimeProbeResult<T> = Readonly<
+  | { ok: true; value: T }
+  | { ok: false; failure: RuntimeProbeFailure }
+>;
+
+type RuntimeProbeResponse = RuntimeProbeResult<Readonly<{
+  statusCode: number;
   headers: http.IncomingHttpHeaders;
   body: string;
-}>;
+}>>;
 
 type RuntimeProbeStatus = Readonly<{
   status: 'online';
@@ -48,31 +64,33 @@ type EnvAppShellProbeOutcome = Readonly<{
 const ENV_APP_ROOT_MOUNT_PATTERN = /<div\b[^>]*\bid\s*=\s*["']root["'][^>]*>/iu;
 const ENV_APP_ASSET_REF_PATTERN = /\b(?:src|href)\s*=\s*["'](\/_redeven_proxy\/env\/assets\/[^"']+)["']/giu;
 const envAppShellFingerprintByRuntimeIdentity = new Map<string, string>();
-const envAppShellSuccessCache = new Map<string, Promise<EnvAppShellProbeResult>>();
-const envAppShellProbeInFlight = new Map<string, Promise<EnvAppShellProbeResult>>();
+const envAppShellSuccessCache = new Set<string>();
 
 function request(
   url: URL,
-  timeoutMs: number,
   options: Readonly<{
+    timeoutMs: number;
+    signal?: AbortSignal;
     method?: 'GET' | 'HEAD';
     accept?: string;
-  }> = {},
+  }>,
 ): Promise<RuntimeProbeResponse> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const requestImpl = url.protocol === 'https:' ? https.request : http.request;
+    let timedOut = false;
     const request = requestImpl(url, {
       method: options.method ?? 'GET',
-      timeout: timeoutMs,
+      timeout: options.timeoutMs,
+      signal: options.signal,
       headers: {
         Accept: options.accept ?? 'application/json;q=1.0,text/html;q=0.8,*/*;q=0.5',
       },
     }, (response) => {
-      const statusCode = typeof response.statusCode === 'number' ? response.statusCode : null;
+      const statusCode = typeof response.statusCode === 'number' ? response.statusCode : 0;
       if (options.method === 'HEAD') {
         response.resume();
         response.on('end', () => {
-          resolve({ statusCode, headers: response.headers, body: '' });
+          resolve({ ok: true, value: { statusCode, headers: response.headers, body: '' } });
         });
         return;
       }
@@ -82,14 +100,32 @@ function request(
         body += chunk;
       });
       response.on('end', () => {
-        resolve({ statusCode, headers: response.headers, body });
+        resolve({ ok: true, value: { statusCode, headers: response.headers, body } });
       });
     });
 
     request.on('timeout', () => {
+      timedOut = true;
       request.destroy(new Error('request timed out'));
     });
-    request.on('error', () => resolve({ statusCode: null, headers: {}, body: '' }));
+    request.on('error', (error: NodeJS.ErrnoException) => {
+      if (options.signal?.aborted || error.name === 'AbortError' || error.code === 'ABORT_ERR') {
+        reject(error);
+        return;
+      }
+      if (timedOut) {
+        resolve({ ok: false, failure: { kind: 'timeout' } });
+        return;
+      }
+      const code = String(error.code ?? '').trim();
+      resolve({
+        ok: false,
+        failure: {
+          kind: 'network_error',
+          ...(code ? { code } : {}),
+        },
+      });
+    });
     request.end();
   });
 }
@@ -124,20 +160,32 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
   }
 }
 
-async function probeRedevenLocalUIHealth(baseURL: string, timeoutMs: number): Promise<RuntimeProbeStatus | null> {
+async function probeRedevenLocalUIHealth(
+  baseURL: string,
+  options: Required<Pick<RuntimeProbeOptions, 'timeoutMs'>> & Pick<RuntimeProbeOptions, 'signal'>,
+): Promise<RuntimeProbeResult<RuntimeProbeStatus>> {
   if (!isAllowedAppNavigation(baseURL, baseURL)) {
-    return null;
+    return { ok: false, failure: { kind: 'invalid_response' } };
   }
   const probeURL = new URL('/api/local/runtime/health', baseURL);
-  const response = await request(probeURL, timeoutMs);
-  if (response.statusCode !== 200) {
-    return null;
+  const response = await request(probeURL, options);
+  if (!response.ok) {
+    return response;
   }
-  const status = parseLocalRuntimeHealthResponse(response.body);
+  if (response.value.statusCode !== 200) {
+    return {
+      ok: false,
+      failure: {
+        kind: 'invalid_response',
+        status_code: response.value.statusCode,
+      },
+    };
+  }
+  const status = parseLocalRuntimeHealthResponse(response.value.body);
   if (!status) {
-    return null;
+    return { ok: false, failure: { kind: 'invalid_response' } };
   }
-  return status;
+  return { ok: true, value: status };
 }
 
 function validateEnvAppShellHTML(body: string): EnvAppShellValidation {
@@ -188,33 +236,40 @@ function startingEnvAppShellStatus(status: RuntimeProbeStatus): RuntimeProbeStat
   };
 }
 
-async function probeEnvAppShell(baseURL: string, timeoutMs: number): Promise<EnvAppShellProbeOutcome> {
-  const deadline = Date.now() + timeoutMs;
-  const shellResponse = await request(new URL('/_redeven_proxy/env/', baseURL), Math.max(1, deadline - Date.now()), {
+async function probeEnvAppShell(
+  baseURL: string,
+  options: Required<Pick<RuntimeProbeOptions, 'timeoutMs'>> & Pick<RuntimeProbeOptions, 'signal'>,
+): Promise<EnvAppShellProbeOutcome> {
+  const deadline = Date.now() + options.timeoutMs;
+  const shellResponse = await request(new URL('/_redeven_proxy/env/', baseURL), {
+    timeoutMs: Math.max(1, deadline - Date.now()),
+    signal: options.signal,
     accept: 'text/html;q=1.0,*/*;q=0.5',
   });
-  if (shellResponse.statusCode === null) {
+  if (!shellResponse.ok && shellResponse.failure.kind !== 'invalid_response') {
     return { result: 'unavailable' };
   }
-  if (shellResponse.statusCode !== 200 || !contentTypeAllowsHTML(shellResponse.headers)) {
+  if (!shellResponse.ok || shellResponse.value.statusCode !== 200 || !contentTypeAllowsHTML(shellResponse.value.headers)) {
     return { result: 'invalid' };
   }
-  const validation = validateEnvAppShellHTML(shellResponse.body);
+  const validation = validateEnvAppShellHTML(shellResponse.value.body);
   if (!validation.ok) {
     return { result: 'invalid' };
   }
   const assetFingerprint = validation.assetPaths.join('\n');
   const assetResponses = await Promise.all(validation.assetPaths.map((assetPath) => {
     const assetURL = new URL(assetPath, baseURL);
-    return request(assetURL, Math.max(1, deadline - Date.now()), {
+    return request(assetURL, {
+      timeoutMs: Math.max(1, deadline - Date.now()),
+      signal: options.signal,
       method: 'HEAD',
       accept: '*/*',
     });
   }));
-  if (assetResponses.some((response) => response.statusCode === null)) {
+  if (assetResponses.some((response) => !response.ok && response.failure.kind !== 'invalid_response')) {
     return { result: 'unavailable', assetFingerprint };
   }
-  if (assetResponses.some((response) => response.statusCode !== 200)) {
+  if (assetResponses.some((response) => !response.ok || response.value.statusCode !== 200)) {
     return { result: 'invalid', assetFingerprint };
   }
   return { result: 'ready', assetFingerprint };
@@ -247,51 +302,38 @@ function rememberEnvAppShellSuccess(
     }
   }
   envAppShellFingerprintByRuntimeIdentity.set(runtimeIdentity, assetFingerprint);
-  envAppShellSuccessCache.set(
-    envAppShellProbeCacheKey(runtimeIdentity, assetFingerprint),
-    Promise.resolve('ready'),
-  );
+  envAppShellSuccessCache.add(envAppShellProbeCacheKey(runtimeIdentity, assetFingerprint));
 }
 
 async function probeEnvAppShellCached(
   baseURL: string,
   status: RuntimeProbeStatus,
-  timeoutMs: number,
+  options: Required<Pick<RuntimeProbeOptions, 'timeoutMs'>> & Pick<RuntimeProbeOptions, 'signal'>,
 ): Promise<EnvAppShellProbeResult> {
   const runtimeIdentity = envAppShellRuntimeIdentity(baseURL, status);
   const cachedFingerprint = envAppShellFingerprintByRuntimeIdentity.get(runtimeIdentity);
   if (cachedFingerprint) {
-    const cached = envAppShellSuccessCache.get(envAppShellProbeCacheKey(runtimeIdentity, cachedFingerprint));
-    if (cached) {
-      return cached;
+    if (envAppShellSuccessCache.has(envAppShellProbeCacheKey(runtimeIdentity, cachedFingerprint))) {
+      return 'ready';
     }
     envAppShellFingerprintByRuntimeIdentity.delete(runtimeIdentity);
   }
-  const inFlight = envAppShellProbeInFlight.get(runtimeIdentity);
-  if (inFlight) {
-    return inFlight;
+  const outcome = await probeEnvAppShell(baseURL, options);
+  if (outcome.result === 'ready' && outcome.assetFingerprint) {
+    rememberEnvAppShellSuccess(baseURL, runtimeIdentity, outcome.assetFingerprint);
   }
-  const task = probeEnvAppShell(baseURL, timeoutMs).then((outcome) => {
-    if (outcome.result === 'ready' && outcome.assetFingerprint) {
-      rememberEnvAppShellSuccess(baseURL, runtimeIdentity, outcome.assetFingerprint);
-    }
-    return outcome.result;
-  }).finally(() => {
-    envAppShellProbeInFlight.delete(runtimeIdentity);
-  });
-  envAppShellProbeInFlight.set(runtimeIdentity, task);
-  return task;
+  return outcome.result;
 }
 
 async function applyEnvAppShellReadiness(
   baseURL: string,
   status: RuntimeProbeStatus,
-  timeoutMs: number,
+  options: Required<Pick<RuntimeProbeOptions, 'timeoutMs'>> & Pick<RuntimeProbeOptions, 'signal'>,
 ): Promise<RuntimeProbeStatus> {
   if (!runtimeServiceIsOpenable(status.runtime_service)) {
     return status;
   }
-  const shellProbe = await probeEnvAppShellCached(baseURL, status, timeoutMs);
+  const shellProbe = await probeEnvAppShellCached(baseURL, status, options);
   if (shellProbe === 'ready') {
     return status;
   }
@@ -323,27 +365,35 @@ function probeStatusFromStartup(startup: StartupReport): RuntimeProbeStatus {
   };
 }
 
-export async function loadExternalLocalUIHealth(
+function normalizedProbeOptions(options: RuntimeProbeOptions): Required<Pick<RuntimeProbeOptions, 'timeoutMs'>> & Pick<RuntimeProbeOptions, 'signal'> {
+  const timeoutMs = Number(options.timeoutMs ?? DEFAULT_RUNTIME_PROBE_TIMEOUT_MS);
+  return {
+    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
+    ...(options.signal ? { signal: options.signal } : {}),
+  };
+}
+
+export async function probeExternalLocalUIHealth(
   baseURL: string,
-  timeoutMs: number = DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
-): Promise<StartupReport | null> {
+  options: RuntimeProbeOptions = {},
+): Promise<RuntimeProbeResult<StartupReport>> {
   const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL);
-  const status = await probeRedevenLocalUIHealth(normalizedBaseURL, timeoutMs);
-  if (!status) {
-    return null;
+  const result = await probeRedevenLocalUIHealth(normalizedBaseURL, normalizedProbeOptions(options));
+  if (!result.ok) {
+    return result;
   }
-  return startupReportFromProbeStatus(normalizedBaseURL, status);
+  return { ok: true, value: startupReportFromProbeStatus(normalizedBaseURL, result.value) };
 }
 
 export async function validateExternalLocalUIShell(
   startup: StartupReport,
-  timeoutMs: number = DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
+  options: RuntimeProbeOptions = {},
 ): Promise<StartupReport> {
   const normalizedBaseURL = normalizeLocalUIBaseURL(startup.local_ui_url);
   const status = await applyEnvAppShellReadiness(
     normalizedBaseURL,
     probeStatusFromStartup(startup),
-    timeoutMs,
+    normalizedProbeOptions(options),
   );
   return {
     ...startup,
@@ -351,10 +401,16 @@ export async function validateExternalLocalUIShell(
   };
 }
 
-export async function loadExternalLocalUIStartup(
+export async function probeExternalLocalUIStartup(
   baseURL: string,
-  timeoutMs: number = DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
-): Promise<StartupReport | null> {
-  const startup = await loadExternalLocalUIHealth(baseURL, timeoutMs);
-  return startup ? validateExternalLocalUIShell(startup, timeoutMs) : null;
+  options: RuntimeProbeOptions = {},
+): Promise<RuntimeProbeResult<StartupReport>> {
+  const result = await probeExternalLocalUIHealth(baseURL, options);
+  if (!result.ok) {
+    return result;
+  }
+  return {
+    ok: true,
+    value: await validateExternalLocalUIShell(result.value, options),
+  };
 }

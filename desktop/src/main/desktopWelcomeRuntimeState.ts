@@ -1,7 +1,7 @@
 import path from 'node:path';
 
 import { loadManagedRuntimeStartupFromStatus } from './runtimeProcess';
-import { loadExternalLocalUIHealth } from './runtimeState';
+import { probeExternalLocalUIHealth } from './runtimeState';
 import type { StartupReport } from './startup';
 import type { DesktopPreferences } from './desktopPreferences';
 import type { DesktopSessionSummary } from './desktopTarget';
@@ -111,10 +111,11 @@ async function currentRuntimeFromLocalSession(
       continue;
     }
     seen.add(cleanURL);
-    const startup = await loadExternalLocalUIHealth(cleanURL, probeTimeoutMs).catch(() => null);
-    if (!startup) {
+    const result = await probeExternalLocalUIHealth(cleanURL, { timeoutMs: probeTimeoutMs });
+    if (!result.ok) {
       continue;
     }
+    const startup = result.value;
     return runtimeStateFromStartup(
       {
         ...session.startup,

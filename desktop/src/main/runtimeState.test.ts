@@ -3,10 +3,12 @@ import http from 'node:http';
 import { describe, expect, it } from 'vitest';
 
 import {
-  loadExternalLocalUIHealth,
-  loadExternalLocalUIStartup,
+  probeExternalLocalUIHealth,
+  probeExternalLocalUIStartup,
   validateExternalLocalUIShell,
+  type RuntimeProbeResult,
 } from './runtimeState';
+import type { StartupReport } from './startup';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 
 const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>';
@@ -36,6 +38,32 @@ function openableHealthPayload(startedAtUnixMS: number): string {
         },
       },
     },
+  });
+}
+
+function expectProbeSuccess(result: RuntimeProbeResult<StartupReport>): StartupReport {
+  expect(result.ok).toBe(true);
+  if (!result.ok) {
+    throw new Error(`expected probe success, received ${result.failure.kind}`);
+  }
+  return result.value;
+}
+
+async function listenOnLoopback(server: http.Server): Promise<string> {
+  await new Promise<void>((resolve, reject) => {
+    server.listen(0, '127.0.0.1', resolve);
+    server.once('error', reject);
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    throw new Error('expected a TCP server address');
+  }
+  return `http://127.0.0.1:${address.port}/`;
+}
+
+async function closeServer(server: http.Server): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
   });
 }
 
@@ -81,7 +109,8 @@ describe('runtimeState', () => {
         throw new Error('expected a TCP server address');
       }
 
-      await expect(loadExternalLocalUIStartup(`http://127.0.0.1:${address.port}/_redeven_proxy/env/`)).resolves.toMatchObject({
+      const startup = expectProbeSuccess(await probeExternalLocalUIStartup(`http://127.0.0.1:${address.port}/_redeven_proxy/env/`));
+      expect(startup).toMatchObject({
         local_ui_url: `http://127.0.0.1:${address.port}/`,
         local_ui_urls: [`http://127.0.0.1:${address.port}/`],
         password_required: false,
@@ -127,7 +156,92 @@ describe('runtimeState', () => {
   });
 
   it('rejects external Local UI startup for unsupported hosts', async () => {
-    await expect(loadExternalLocalUIStartup('https://example.com/')).rejects.toThrow('Redeven URL must use localhost or an IP literal.');
+    await expect(probeExternalLocalUIStartup('https://example.com/')).rejects.toThrow('Redeven URL must use localhost or an IP literal.');
+  });
+
+  it('allows a 350ms health response within the default probe budget', async () => {
+    const server = http.createServer((_request, response) => {
+      setTimeout(() => {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(openableHealthPayload(400));
+      }, 350);
+    });
+    const baseURL = await listenOnLoopback(server);
+
+    try {
+      const result = await probeExternalLocalUIHealth(baseURL);
+      expect(expectProbeSuccess(result).started_at_unix_ms).toBe(400);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('classifies an explicit short probe budget as timeout', async () => {
+    const server = http.createServer((_request, response) => {
+      setTimeout(() => {
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(openableHealthPayload(500));
+      }, 100);
+    });
+    const baseURL = await listenOnLoopback(server);
+
+    try {
+      await expect(probeExternalLocalUIHealth(baseURL, { timeoutMs: 20 })).resolves.toEqual({
+        ok: false,
+        failure: { kind: 'timeout' },
+      });
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('classifies a reset socket as a network error', async () => {
+    const server = http.createServer((request) => {
+      request.socket.destroy();
+    });
+    const baseURL = await listenOnLoopback(server);
+
+    try {
+      await expect(probeExternalLocalUIHealth(baseURL)).resolves.toMatchObject({
+        ok: false,
+        failure: { kind: 'network_error' },
+      });
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it.each([
+    { name: 'non-200 status', statusCode: 503, body: openableHealthPayload(600), expectedStatusCode: 503 },
+    { name: 'invalid JSON', statusCode: 200, body: '{invalid', expectedStatusCode: undefined },
+  ])('classifies $name as an invalid response', async ({ statusCode, body, expectedStatusCode }) => {
+    const server = http.createServer((_request, response) => {
+      response.writeHead(statusCode, { 'Content-Type': 'application/json' });
+      response.end(body);
+    });
+    const baseURL = await listenOnLoopback(server);
+
+    try {
+      const result = await probeExternalLocalUIHealth(baseURL);
+      expect(result).toMatchObject({
+        ok: false,
+        failure: {
+          kind: 'invalid_response',
+          ...(expectedStatusCode ? { status_code: expectedStatusCode } : {}),
+        },
+      });
+    } finally {
+      await closeServer(server);
+    }
+  });
+
+  it('propagates caller cancellation as AbortError', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(probeExternalLocalUIHealth('http://127.0.0.1:9/', {
+      signal: controller.signal,
+    })).rejects.toMatchObject({ name: 'AbortError' });
   });
 
   it('blocks open-readiness when an openable runtime serves an invalid Env App shell', async () => {
@@ -178,7 +292,8 @@ describe('runtimeState', () => {
         throw new Error('expected a TCP server address');
       }
 
-      await expect(loadExternalLocalUIStartup(`http://127.0.0.1:${address.port}/`)).resolves.toMatchObject({
+      const startup = expectProbeSuccess(await probeExternalLocalUIStartup(`http://127.0.0.1:${address.port}/`));
+      expect(startup).toMatchObject({
         local_ui_url: `http://127.0.0.1:${address.port}/`,
         password_required: false,
         runtime_service: {
@@ -250,7 +365,8 @@ describe('runtimeState', () => {
         throw new Error('expected a TCP server address');
       }
 
-      await expect(loadExternalLocalUIStartup(`http://127.0.0.1:${address.port}/`)).resolves.toMatchObject({
+      const startup = expectProbeSuccess(await probeExternalLocalUIStartup(`http://127.0.0.1:${address.port}/`));
+      expect(startup).toMatchObject({
         runtime_service: {
           open_readiness: {
             state: 'blocked',
@@ -293,7 +409,10 @@ describe('runtimeState', () => {
         throw new Error('expected a TCP server address');
       }
 
-      await expect(loadExternalLocalUIStartup(`http://127.0.0.1:${address.port}/`)).resolves.toBeNull();
+      await expect(probeExternalLocalUIStartup(`http://127.0.0.1:${address.port}/`)).resolves.toEqual({
+        ok: false,
+        failure: { kind: 'invalid_response' },
+      });
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
@@ -307,7 +426,7 @@ describe('runtimeState', () => {
     }
   });
 
-  it('keeps health probes lightweight and caches concurrent shell asset validation by runtime identity', async () => {
+  it('keeps health probes lightweight and caches successful shell asset validation by runtime identity', async () => {
     let startedAtUnixMS = 100;
     let shellRequests = 0;
     let assetRequests = 0;
@@ -358,25 +477,24 @@ describe('runtimeState', () => {
         throw new Error('expected a TCP server address');
       }
       const baseURL = `http://127.0.0.1:${address.port}/`;
-      const firstHealth = await loadExternalLocalUIHealth(baseURL);
-      expect(firstHealth).not.toBeNull();
+      const firstHealth = expectProbeSuccess(await probeExternalLocalUIHealth(baseURL));
       expect(shellRequests).toBe(0);
       expect(assetRequests).toBe(0);
 
-      await expect(validateExternalLocalUIShell(firstHealth!)).resolves.toMatchObject({
+      await expect(validateExternalLocalUIShell(firstHealth)).resolves.toMatchObject({
         runtime_service: { open_readiness: { state: 'openable' } },
       });
       expect(shellRequests).toBe(1);
       expect(assetRequests).toBe(3);
       expect(maximumActiveAssetRequests).toBe(3);
 
-      await validateExternalLocalUIShell(firstHealth!);
+      await validateExternalLocalUIShell(firstHealth);
       expect(shellRequests).toBe(1);
       expect(assetRequests).toBe(3);
 
       startedAtUnixMS = 200;
-      const restartedHealth = await loadExternalLocalUIHealth(baseURL);
-      await validateExternalLocalUIShell(restartedHealth!);
+      const restartedHealth = expectProbeSuccess(await probeExternalLocalUIHealth(baseURL));
+      await validateExternalLocalUIShell(restartedHealth);
       expect(shellRequests).toBe(2);
       expect(assetRequests).toBe(6);
     } finally {
@@ -420,12 +538,12 @@ describe('runtimeState', () => {
       if (!address || typeof address === 'string') {
         throw new Error('expected a TCP server address');
       }
-      const startup = await loadExternalLocalUIHealth(`http://127.0.0.1:${address.port}/`);
-      await expect(validateExternalLocalUIShell(startup!)).resolves.toMatchObject({
+      const startup = expectProbeSuccess(await probeExternalLocalUIHealth(`http://127.0.0.1:${address.port}/`));
+      await expect(validateExternalLocalUIShell(startup)).resolves.toMatchObject({
         runtime_service: { open_readiness: { state: 'blocked' } },
       });
       assetAvailable = true;
-      await expect(validateExternalLocalUIShell(startup!)).resolves.toMatchObject({
+      await expect(validateExternalLocalUIShell(startup)).resolves.toMatchObject({
         runtime_service: { open_readiness: { state: 'openable' } },
       });
       expect(shellRequests).toBe(2);

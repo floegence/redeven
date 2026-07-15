@@ -21,6 +21,7 @@ import {
   type ManagedSSHRuntimeReady,
 } from './sshRuntime';
 import type { DesktopSSHBootstrapStrategy, DesktopSSHEnvironmentDetails } from '../shared/desktopSSH';
+import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 
 type FakeSSHScenario =
@@ -32,6 +33,11 @@ type FakeSSHScenario =
   | 'persistent_version_mismatch'
   | 'forwarded_blocked_readiness'
   | 'forwarded_invalid_env_shell'
+  | 'forwarded_delayed_health'
+  | 'forwarded_health_timeout'
+  | 'forwarded_network_reset'
+  | 'forwarded_invalid_response'
+  | 'runtime_control_forward_early_exit'
   | 'remote_install'
   | 'desktop_upload'
   | 'upload_install_fail'
@@ -435,6 +441,13 @@ function startForward() {
   const localPort = Number(parts[1]);
   const remotePort = Number(parts[3]);
   const isRuntimeControlForward = remotePort === 39002;
+  if (scenario === 'runtime_control_forward_early_exit' && isRuntimeControlForward) {
+    appendLog('runtime_control_forward_early_exit', { local_port: localPort, remote_port: remotePort });
+    process.stderr.write('simulated runtime-control forward exit\n');
+    setTimeout(() => process.exit(255), 50);
+    setInterval(() => {}, 1000);
+    return;
+  }
   const server = http.createServer((request, response) => {
     if (isRuntimeControlForward && request.url === '/v1/runtime-control/health') {
       response.writeHead(200, { 'content-type': 'application/json' });
@@ -447,42 +460,62 @@ function startForward() {
       return;
     }
     if (request.url === '/api/local/runtime/health') {
-      response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({
-        success: true,
-        data: {
-          status: 'online',
-          password_required: false,
-          runtime_service: scenario === 'forwarded_blocked_readiness'
-            ? {
-                ...currentRuntimeService(),
-                open_readiness: {
-                  state: 'blocked',
-                  reason_code: 'runtime_open_readiness_unavailable',
-                  message: 'This running runtime is older than this Desktop. Install the update, then restart the runtime when it is safe to interrupt active work.',
-                },
-                active_workload: {
-                  terminal_count: 1,
-                  session_count: 1,
-                  task_count: 0,
-                  port_forward_count: 1,
-                },
-              }
-            : scenario === 'forwarded_invalid_env_shell'
-            ? {
-                ...runtimeServiceForScenario(),
-                open_readiness: {
-                  state: 'blocked',
-                  reason_code: 'env_app_shell_unavailable',
-                  message: 'The Environment App shell is not available in this runtime build. Install the update, then restart the runtime when it is safe to interrupt active work.',
-                },
-              }
-            : runtimeServiceForScenario(),
-        },
-      }));
+      appendLog('forward_health_probe');
+      if (scenario === 'forwarded_network_reset') {
+        request.socket.destroy();
+        return;
+      }
+      if (scenario === 'forwarded_invalid_response') {
+        response.writeHead(503, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: 'simulated invalid response' }));
+        return;
+      }
+      const writeHealth = () => {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          success: true,
+          data: {
+            status: 'online',
+            password_required: false,
+            runtime_service: scenario === 'forwarded_blocked_readiness'
+              ? {
+                  ...currentRuntimeService(),
+                  open_readiness: {
+                    state: 'blocked',
+                    reason_code: 'runtime_open_readiness_unavailable',
+                    message: 'This running runtime is older than this Desktop. Install the update, then restart the runtime when it is safe to interrupt active work.',
+                  },
+                  active_workload: {
+                    terminal_count: 1,
+                    session_count: 1,
+                    task_count: 0,
+                    port_forward_count: 1,
+                  },
+                }
+              : scenario === 'forwarded_invalid_env_shell'
+              ? {
+                  ...runtimeServiceForScenario(),
+                  open_readiness: {
+                    state: 'blocked',
+                    reason_code: 'env_app_shell_unavailable',
+                    message: 'The Environment App shell is not available in this runtime build. Install the update, then restart the runtime when it is safe to interrupt active work.',
+                  },
+                }
+              : runtimeServiceForScenario(),
+          },
+        }));
+      };
+      if (scenario === 'forwarded_delayed_health') {
+        setTimeout(writeHealth, 350);
+      } else if (scenario === 'forwarded_health_timeout') {
+        setTimeout(writeHealth, 1000);
+      } else {
+        writeHealth();
+      }
       return;
     }
     if (request.url === '/_redeven_proxy/env/') {
+      appendLog('forward_env_shell_probe');
       response.writeHead(200, { 'content-type': 'text/html' });
       response.end(scenario === 'forwarded_invalid_env_shell'
         ? '<pre><a href="favicon.svg">favicon.svg</a><a href="logo.png">logo.png</a></pre>'
@@ -490,6 +523,7 @@ function startForward() {
       return;
     }
     if (request.url === '/_redeven_proxy/env/assets/index.js') {
+      appendLog('forward_env_asset_probe');
       response.writeHead(200, { 'content-type': 'application/javascript' });
       response.end(request.method === 'HEAD' ? undefined : 'console.log("env");');
       return;
@@ -776,6 +810,11 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
       || scenario === 'persistent_version_mismatch'
       || scenario === 'forwarded_blocked_readiness'
       || scenario === 'forwarded_invalid_env_shell'
+      || scenario === 'forwarded_delayed_health'
+      || scenario === 'forwarded_health_timeout'
+      || scenario === 'forwarded_network_reset'
+      || scenario === 'forwarded_invalid_response'
+      || scenario === 'runtime_control_forward_early_exit'
       || scenario === 'no_report'
       || scenario === 'quick_exit_report'
       || scenario === 'blocked_report'
@@ -790,6 +829,11 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
       || scenario === 'persistent_version_mismatch'
       || scenario === 'forwarded_blocked_readiness'
       || scenario === 'forwarded_invalid_env_shell'
+      || scenario === 'forwarded_delayed_health'
+      || scenario === 'forwarded_health_timeout'
+      || scenario === 'forwarded_network_reset'
+      || scenario === 'forwarded_invalid_response'
+      || scenario === 'runtime_control_forward_early_exit'
       || scenario === 'no_report'
       || scenario === 'quick_exit_report'
       || scenario === 'blocked_report'
@@ -942,8 +986,8 @@ async function ensureReadyWithFakeSSH(
     sshBinary: fixture.sshBinary,
     tempRoot: fixture.root,
     assetCacheRoot: path.join(fixture.root, 'asset-cache'),
-    startupTimeoutMs: 5_000,
-    probeTimeoutMs: 5_000,
+    startupTimeoutMs: 10_000,
+    probeTimeoutMs: 10_000,
     stopTimeoutMs: 500,
     connectTimeoutSeconds: 1,
   }));
@@ -952,16 +996,30 @@ async function ensureReadyWithFakeSSH(
 async function openConnectionWithFakeSSH(
   fixture: FakeSSHFixture,
   ready: ManagedSSHRuntimeReady,
+  options: Readonly<{ probeTimeoutMs?: number }> = {},
 ): Promise<ManagedSSHRuntime> {
   return withFakeSSHEnv(fixture, () => openManagedSSHRuntimeConnection({
     target: targetFor('auto'),
     ready,
     sshBinary: fixture.sshBinary,
     tempRoot: fixture.root,
-    probeTimeoutMs: 5_000,
+    probeTimeoutMs: options.probeTimeoutMs ?? 5_000,
     stopTimeoutMs: 500,
     connectTimeoutSeconds: 1,
   }));
+}
+
+async function captureDesktopOperationFailure(run: () => Promise<unknown>): Promise<DesktopOperationFailurePresentation> {
+  try {
+    await run();
+  } catch (error) {
+    const presentation = (error as Readonly<{ presentation?: DesktopOperationFailurePresentation }>)?.presentation;
+    if (presentation) {
+      return presentation;
+    }
+    throw error;
+  }
+  throw new Error('expected Desktop operation failure');
 }
 
 async function createFakeSourceRuntimeRoot(root: string): Promise<Readonly<{
@@ -1134,6 +1192,90 @@ describe('sshRuntime integration', () => {
     }
 
     await removeFakeSSHFixture(fixture);
+  });
+
+  it('opens through a 350ms forwarded health response and validates the Env App shell once', async () => {
+    const fixture = await createFakeSSHFixture('forwarded_delayed_health');
+    let ready: ManagedSSHRuntimeReady | null = null;
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      ready = await ensureReadyWithFakeSSH(fixture, 'auto');
+      runtime = await openConnectionWithFakeSSH(fixture, ready, { probeTimeoutMs: 2_000 });
+
+      expect(runtime.startup.local_ui_url).toBe(runtime.local_forward_url);
+      const events = await readFakeSSHEvents(fixture);
+      expect(events.filter((event) => event.event === 'forward_health_probe')).toHaveLength(1);
+      expect(events.filter((event) => event.event === 'forward_env_shell_probe')).toHaveLength(1);
+      expect(events.filter((event) => event.event === 'forward_env_asset_probe')).toHaveLength(1);
+    } finally {
+      await runtime?.disconnect();
+      await ready?.disconnect();
+      await removeFakeSSHFixture(fixture);
+    }
+  });
+
+  it.each([
+    {
+      scenario: 'forwarded_health_timeout' as const,
+      probeTimeoutMs: 250,
+      code: 'ssh_forward_verification_timed_out',
+      failureType: 'timeout',
+    },
+    {
+      scenario: 'forwarded_network_reset' as const,
+      probeTimeoutMs: 450,
+      code: 'ssh_forward_network_failed',
+      failureType: 'network_error',
+    },
+    {
+      scenario: 'forwarded_invalid_response' as const,
+      probeTimeoutMs: 450,
+      code: 'ssh_forward_invalid_response',
+      failureType: 'invalid_response',
+    },
+    {
+      scenario: 'runtime_control_forward_early_exit' as const,
+      probeTimeoutMs: 2_000,
+      code: 'ssh_forward_unavailable',
+      failureType: 'forward_unavailable',
+    },
+  ])('classifies $scenario and cleans every SSH connection resource', async ({
+    scenario,
+    probeTimeoutMs,
+    code,
+    failureType,
+  }) => {
+    const fixture = await createFakeSSHFixture(scenario);
+    let ready: ManagedSSHRuntimeReady | null = null;
+    try {
+      ready = await ensureReadyWithFakeSSH(fixture, 'auto');
+      const failure = await captureDesktopOperationFailure(() => openConnectionWithFakeSSH(
+        fixture,
+        ready!,
+        { probeTimeoutMs },
+      ));
+
+      expect(failure.code).toBe(code);
+      const diagnostic = failure.diagnostics?.find((item) => item.channel === 'forward_probe');
+      expect(diagnostic?.text).toContain(`failure_type=${failureType}`);
+      expect(diagnostic?.text).toContain('attempts=');
+      expect(diagnostic?.text).toContain('request_budget_ms=');
+      expect(diagnostic?.text).toContain('elapsed_ms=');
+      expect(diagnostic?.text).not.toContain('runtime-control-token');
+      expect(diagnostic?.text).not.toContain('simulated invalid response');
+
+      await waitForFakeSSHEvent(fixture, 'forward_terminated');
+      await waitForFakeSSHEvent(fixture, 'master_terminated');
+      const eventNames = (await readFakeSSHEvents(fixture)).map((event) => event.event);
+      if (scenario === 'runtime_control_forward_early_exit') {
+        expect(eventNames).toContain('runtime_control_forward_early_exit');
+      } else {
+        expect(eventNames).toContain('runtime_control_forward_terminated');
+      }
+    } finally {
+      await ready?.disconnect();
+      await removeFakeSSHFixture(fixture);
+    }
   });
 
   it('starts an already-installed remote runtime through a fake SSH control socket and local forward', async () => {
