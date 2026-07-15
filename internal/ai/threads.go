@@ -949,20 +949,20 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 	return nil
 }
 
-func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID string, force bool) error {
+func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID string, force bool) (ThreadDeleteResult, error) {
 	if s == nil {
-		return errors.New("nil service")
+		return ThreadDeleteResult{}, errors.New("nil service")
 	}
 	if err := requireRWX(meta); err != nil {
-		return err
+		return ThreadDeleteResult{}, err
 	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
-		return errors.New("missing thread_id")
+		return ThreadDeleteResult{}, errors.New("missing thread_id")
 	}
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	if endpointID == "" {
-		return errors.New("invalid request")
+		return ThreadDeleteResult{}, errors.New("invalid request")
 	}
 
 	thKey := runThreadKey(endpointID, threadID)
@@ -976,29 +976,40 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	}
 	db := s.threadsDB
 	persistTO := s.persistOpTO
+	readStateRequired := s.flowerReadStateCleaner != nil
 	s.mu.Unlock()
 	if db == nil {
-		return errors.New("threads store not ready")
-	}
-	if err := s.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
-		return err
+		return ThreadDeleteResult{}, errors.New("threads store not ready")
 	}
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
+	}
+	existingCtx, existingCancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
+	existingOperation, err := db.GetThreadDeleteOperation(existingCtx, endpointID, threadID)
+	existingCancel()
+	if err != nil {
+		return ThreadDeleteResult{}, err
+	}
+	if existingOperation != nil {
+		operation, replayErr := s.replayThreadDeleteOperation(ctx, *existingOperation)
+		return threadDeleteResult(operation), replayErr
+	}
+	if err := s.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
+		return ThreadDeleteResult{}, err
 	}
 	loadCtx, loadCancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
 	th, err := db.GetThread(loadCtx, endpointID, threadID)
 	loadCancel()
 	if err != nil {
-		return err
+		return ThreadDeleteResult{}, err
 	}
 	if th == nil {
-		return sql.ErrNoRows
+		return ThreadDeleteResult{}, sql.ErrNoRows
 	}
 
 	if runID != "" {
 		if !force {
-			return ErrThreadBusy
+			return ThreadDeleteResult{}, ErrThreadBusy
 		}
 		// Force delete must be able to unblock a stuck run:
 		// - best-effort cancel the run
@@ -1017,7 +1028,7 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	}
 	if runID == "" && finalizingRunID != "" {
 		if !force {
-			return ErrThreadBusy
+			return ThreadDeleteResult{}, ErrThreadBusy
 		}
 		s.mu.Lock()
 		if strings.TrimSpace(s.stopFinalizingByTh[thKey]) == finalizingRunID {
@@ -1027,7 +1038,7 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	}
 	if idleCompaction != nil {
 		if !force {
-			return ErrThreadBusy
+			return ThreadDeleteResult{}, ErrThreadBusy
 		}
 		if compaction, ok := s.cancelIdleThreadCompactionWithBroadcast(endpointID, threadID); ok {
 			if compaction.isFinalizing() {
@@ -1035,27 +1046,26 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 				waitOK := s.waitIdleThreadCompaction(waitCtx, compaction)
 				waitCancel()
 				if !waitOK {
-					return context.DeadlineExceeded
+					return ThreadDeleteResult{}, context.DeadlineExceeded
 				}
 			}
 		}
 	}
 
-	if err := s.deleteFloretThreadTree(ctx, meta, *th, persistTO); err != nil {
-		return err
-	}
-
 	deleteCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-	result, err := db.DeleteThreadResources(deleteCtx, endpointID, threadID)
+	operation, err := db.PrepareThreadDeleteOperation(deleteCtx, endpointID, threadID, readStateRequired)
 	cancel()
 	if err != nil {
-		return err
+		return ThreadDeleteResult{}, err
 	}
-	if _, err := s.processUploadCleanupCandidates(ctx, result.UploadsToDelete); err != nil {
-		return err
+	if runtime := s.removeThreadSubagentRuntime(thKey); runtime != nil {
+		runtime.release()
 	}
-	s.scheduleThreadstoreCompaction("thread_delete")
-	return nil
+	operation, replayErr := s.replayThreadDeleteOperation(ctx, operation)
+	if operation.ProductDataDeletedAtUnixMs > 0 {
+		s.scheduleThreadstoreCompaction("thread_delete")
+	}
+	return threadDeleteResult(operation), replayErr
 }
 
 func (s *Service) ListThreadMessages(ctx context.Context, meta *session.Meta, threadID string, limit int, beforeID int64) (*ListThreadMessagesResponse, error) {

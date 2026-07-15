@@ -58,7 +58,7 @@ func TestService_DeleteThreadRemovesOwnedUploadArtifacts(t *testing.T) {
 		t.Fatalf("stat dataPath: %v", err)
 	}
 
-	if err := svc.DeleteThread(ctx, meta, thread.ThreadID, false); err != nil {
+	if _, err := svc.DeleteThread(ctx, meta, thread.ThreadID, false); err != nil {
 		t.Fatalf("DeleteThread: %v", err)
 	}
 	if _, err := os.Stat(dataPath); !os.IsNotExist(err) {
@@ -100,7 +100,7 @@ func TestService_DeleteThreadKeepsSharedUploadUntilLastThread(t *testing.T) {
 		}
 	}
 
-	if err := svc.DeleteThread(ctx, meta, threadA.ThreadID, false); err != nil {
+	if _, err := svc.DeleteThread(ctx, meta, threadA.ThreadID, false); err != nil {
 		t.Fatalf("DeleteThread first: %v", err)
 	}
 	if _, err := os.Stat(dataPath); err != nil {
@@ -110,7 +110,7 @@ func TestService_DeleteThreadKeepsSharedUploadUntilLastThread(t *testing.T) {
 		t.Fatalf("GetUpload after first delete: %v", err)
 	}
 
-	if err := svc.DeleteThread(ctx, meta, threadB.ThreadID, false); err != nil {
+	if _, err := svc.DeleteThread(ctx, meta, threadB.ThreadID, false); err != nil {
 		t.Fatalf("DeleteThread second: %v", err)
 	}
 	if _, err := os.Stat(dataPath); !os.IsNotExist(err) {

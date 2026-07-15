@@ -146,7 +146,7 @@ func TestService_DeleteThreadForce_DoesNotWaitForRunExit(t *testing.T) {
 	svc.runs[runID] = stuck
 	svc.mu.Unlock()
 
-	if err := svc.DeleteThread(ctx, meta, th.ThreadID, true); err != nil {
+	if _, err := svc.DeleteThread(ctx, meta, th.ThreadID, true); err != nil {
 		t.Fatalf("DeleteThread(force=true): %v", err)
 	}
 
@@ -228,7 +228,7 @@ func TestService_DeleteThreadHandlesIdleCompactionBusyAndForce(t *testing.T) {
 		t.Fatalf("beginIdleThreadCompaction result=%+v err=%v", begin, gateErr)
 	}
 
-	if err := svc.DeleteThread(ctx, meta, th.ThreadID, false); !errors.Is(err, ErrThreadBusy) {
+	if _, err := svc.DeleteThread(ctx, meta, th.ThreadID, false); !errors.Is(err, ErrThreadBusy) {
 		t.Fatalf("DeleteThread(force=false) err=%v, want %v", err, ErrThreadBusy)
 	}
 	if got, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, th.ThreadID); err != nil {
@@ -236,7 +236,7 @@ func TestService_DeleteThreadHandlesIdleCompactionBusyAndForce(t *testing.T) {
 	} else if got == nil {
 		t.Fatalf("thread should remain after busy delete")
 	}
-	if err := svc.DeleteThread(ctx, meta, th.ThreadID, true); err != nil {
+	if _, err := svc.DeleteThread(ctx, meta, th.ThreadID, true); err != nil {
 		t.Fatalf("DeleteThread(force=true): %v", err)
 	}
 	if !cancelCalled {

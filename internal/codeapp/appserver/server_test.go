@@ -31,6 +31,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redeven/internal/threadreadstate"
+	_ "modernc.org/sqlite"
 )
 
 type stubBackend struct {
@@ -232,6 +233,16 @@ func openTestThreadReadStateStore(t *testing.T) *threadreadstate.Store {
 	})
 	return store
 }
+
+type failingThreadMaintenanceHost struct {
+	err error
+}
+
+func (h *failingThreadMaintenanceHost) DeleteThread(context.Context, flruntime.ThreadID) error {
+	return h.err
+}
+
+func (h *failingThreadMaintenanceHost) Close() error { return nil }
 
 func performServerRequest(srv *Server, method string, path string, origin string, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
@@ -3014,9 +3025,10 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	store := openTestThreadReadStateStore(t)
 	aiSvc, err := ai.NewService(ai.Options{
-		StateDir:     t.TempDir(),
-		AgentHomeDir: t.TempDir(),
-		Shell:        "/bin/sh",
+		StateDir:               t.TempDir(),
+		AgentHomeDir:           t.TempDir(),
+		Shell:                  "/bin/sh",
+		FlowerReadStateCleaner: store,
 	})
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
@@ -3097,12 +3109,14 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 		t.Fatalf("DELETE /api/ai/threads/:id status=%d body=%s", rr.Code, rr.Body.String())
 	}
 
-	remaining, err := store.DeleteThread(context.Background(), creatorMeta.EndpointID, threadreadstate.SurfaceFlower, thread.ThreadID)
+	verified, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, creatorMeta.UserPublicID, map[string]threadreadstate.FlowerSnapshot{
+		thread.ThreadID: {ActivityRevision: 1, LastMessageAtUnixMs: 1, ActivitySignature: "deleted"},
+	})
 	if err != nil {
-		t.Fatalf("DeleteThread(read_state verify): %v", err)
+		t.Fatalf("EnsureFlower(read_state verify): %v", err)
 	}
-	if len(remaining) != 0 {
-		t.Fatalf("remaining read-state rows=%+v, want none", remaining)
+	if verified[thread.ThreadID].LastSeenActivityRevision != 1 {
+		t.Fatalf("read-state record=%+v, want newly seeded record after delete", verified[thread.ThreadID])
 	}
 
 	detailRR := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), originUser1, "")
@@ -3111,107 +3125,118 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	}
 }
 
-func TestServer_DeleteFlowerThreadWithReadStateCleanupRestoresSnapshotOnPrimaryDeleteFailure(t *testing.T) {
+func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
 		"env/index.html": {Data: []byte("<html>env</html>")},
 		"inject.js":      {Data: []byte("console.log('inject');")},
 	}
-
-	cfgPath := writeTestConfig(t)
 	store := openTestThreadReadStateStore(t)
-
-	metaByChannel := map[string]session.Meta{
-		"ch_test_ai_delete_restore_user_1": {
-			EndpointID:   "env_delete_restore",
-			UserPublicID: "user_1",
-			UserEmail:    "user1@example.com",
-			CanRead:      true,
-			CanWrite:     true,
-			CanExecute:   true,
+	stateDir := t.TempDir()
+	aiSvc, err := ai.NewService(ai.Options{
+		StateDir:               stateDir,
+		AgentHomeDir:           t.TempDir(),
+		Shell:                  "/bin/sh",
+		FlowerReadStateCleaner: store,
+		OpenThreadMaintenanceHost: func() (ai.ThreadMaintenanceHost, error) {
+			return &failingThreadMaintenanceHost{err: errors.New("temporary Floret delete failure")}, nil
 		},
-		"ch_test_ai_delete_restore_user_2": {
-			EndpointID:   "env_delete_restore",
-			UserPublicID: "user_2",
-			UserEmail:    "user2@example.com",
-			CanRead:      true,
-			CanWrite:     true,
-			CanExecute:   true,
-		},
+	})
+	if err != nil {
+		t.Fatalf("ai.NewService: %v", err)
 	}
-	resolveMeta := func(channelID string) (*session.Meta, bool) {
-		meta, ok := metaByChannel[strings.TrimSpace(channelID)]
-		if !ok {
-			return nil, false
-		}
-		meta.ChannelID = strings.TrimSpace(channelID)
-		return &meta, true
+	t.Cleanup(func() { _ = aiSvc.Close() })
+	meta := session.Meta{EndpointID: "env_delete_pending", UserPublicID: "user_1", CanRead: true, CanWrite: true, CanExecute: true}
+	thread, err := aiSvc.CreateThread(context.Background(), &meta, "Pending delete", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
 	}
-
-	threadID := "th_missing_restore"
-	if _, err := store.EnsureFlower(context.Background(), "env_delete_restore", "user_1", map[string]threadreadstate.FlowerSnapshot{
-		threadID: {
-			ActivityRevision:    200,
-			LastMessageAtUnixMs: 200,
-			ActivitySignature:   "status:waiting_user\u001factivity:200\u001fprompt:prompt_1",
-			WaitingPromptID:     "prompt_1",
-		},
-	}); err != nil {
-		t.Fatalf("EnsureFlower(user_1): %v", err)
-	}
-	if _, err := store.EnsureFlower(context.Background(), "env_delete_restore", "user_2", map[string]threadreadstate.FlowerSnapshot{
-		threadID: {
-			ActivityRevision:    210,
-			LastMessageAtUnixMs: 210,
-			ActivitySignature:   "status:waiting_user\u001factivity:210\u001fprompt:prompt_2",
-			WaitingPromptID:     "prompt_2",
-		},
-	}); err != nil {
-		t.Fatalf("EnsureFlower(user_2): %v", err)
-	}
-
+	const channelID = "ch_test_ai_delete_pending"
 	srv, err := New(Options{
 		Backend:              &stubBackend{},
 		DistFS:               dist,
 		ListenAddr:           "127.0.0.1:0",
-		ConfigPath:           cfgPath,
+		AI:                   aiSvc,
+		ConfigPath:           writeTestConfig(t),
 		ThreadReadStateStore: store,
-		ResolveSessionMeta:   resolveMeta,
+		ResolveSessionMeta: func(raw string) (*session.Meta, bool) {
+			if strings.TrimSpace(raw) != channelID {
+				return nil, false
+			}
+			resolved := meta
+			resolved.ChannelID = channelID
+			return &resolved, true
+		},
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 
-	meta := metaByChannel["ch_test_ai_delete_restore_user_1"]
-	called := false
-	err = srv.deleteFlowerThreadWithReadStateCleanup(context.Background(), &meta, threadID, func() error {
-		called = true
-		midDelete, err := store.DeleteThread(context.Background(), meta.EndpointID, threadreadstate.SurfaceFlower, threadID)
-		if err != nil {
-			t.Fatalf("midDelete verify: %v", err)
-		}
-		if len(midDelete) != 0 {
-			t.Fatalf("midDelete=%+v, want empty because snapshot should already be removed", midDelete)
-		}
-		return sql.ErrNoRows
-	})
-	if !called {
-		t.Fatalf("primary delete closure was not called")
+	deletePath := "/_redeven_proxy/api/ai/threads/" + url.PathEscape(thread.ThreadID)
+	first := performServerRequest(srv, http.MethodDelete, deletePath, envOriginWithChannel(channelID), "")
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("first DELETE status=%d body=%s", first.Code, first.Body.String())
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("deleteFlowerThreadWithReadStateCleanup err=%v, want %v", err, sql.ErrNoRows)
+	var firstBody struct {
+		Data ai.ThreadDeleteResult `json:"data"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &firstBody); err != nil {
+		t.Fatalf("decode first DELETE: %v", err)
+	}
+	if firstBody.Data.OperationID == "" || firstBody.Data.Status != ai.ThreadDeleteStatusPending {
+		t.Fatalf("first DELETE body=%s", first.Body.String())
 	}
 
-	restored, err := store.DeleteThread(context.Background(), meta.EndpointID, threadreadstate.SurfaceFlower, threadID)
+	second := performServerRequest(srv, http.MethodDelete, deletePath, envOriginWithChannel(channelID), "")
+	if second.Code != http.StatusAccepted {
+		t.Fatalf("second DELETE status=%d body=%s", second.Code, second.Body.String())
+	}
+	var secondBody struct {
+		Data ai.ThreadDeleteResult `json:"data"`
+	}
+	if err := json.Unmarshal(second.Body.Bytes(), &secondBody); err != nil {
+		t.Fatalf("decode second DELETE: %v", err)
+	}
+	if secondBody.Data.OperationID != firstBody.Data.OperationID || secondBody.Data.Status != ai.ThreadDeleteStatusPending {
+		t.Fatalf("second DELETE body=%s, want stable operation %s", second.Body.String(), firstBody.Data.OperationID)
+	}
+
+	raw, err := sql.Open("sqlite", filepath.Join(stateDir, "ai", "threads.sqlite"))
 	if err != nil {
-		t.Fatalf("DeleteThread(restored verify): %v", err)
+		t.Fatalf("open threadstore for snapshot corruption: %v", err)
 	}
-	if len(restored) != 2 {
-		t.Fatalf("len(restored)=%d, want 2", len(restored))
+	if _, err := raw.Exec(`UPDATE ai_thread_delete_operations SET snapshot_json = '{' WHERE operation_id = ?`, firstBody.Data.OperationID); err != nil {
+		_ = raw.Close()
+		t.Fatalf("corrupt delete snapshot: %v", err)
 	}
-	if restored[0].ScopeID != "user_1" || restored[1].ScopeID != "user_2" {
-		t.Fatalf("restored scopes=%+v, want user_1 and user_2", restored)
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close threadstore corruption handle: %v", err)
+	}
+
+	failedResponse := performServerRequest(srv, http.MethodDelete, deletePath, envOriginWithChannel(channelID), "")
+	if failedResponse.Code != http.StatusInternalServerError {
+		t.Fatalf("failed DELETE status=%d body=%s", failedResponse.Code, failedResponse.Body.String())
+	}
+	var failedBody struct {
+		OK   bool                  `json:"ok"`
+		Data ai.ThreadDeleteResult `json:"data"`
+	}
+	if err := json.Unmarshal(failedResponse.Body.Bytes(), &failedBody); err != nil {
+		t.Fatalf("decode failed DELETE: %v", err)
+	}
+	if failedBody.OK || failedBody.Data.OperationID != firstBody.Data.OperationID || failedBody.Data.Status != ai.ThreadDeleteStatusFailed {
+		t.Fatalf("failed DELETE body=%s, want failed operation %s", failedResponse.Body.String(), firstBody.Data.OperationID)
+	}
+
+	missing := performServerRequest(srv, http.MethodDelete, "/_redeven_proxy/api/ai/threads/thread_missing_delete_operation", envOriginWithChannel(channelID), "")
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("missing DELETE status=%d body=%s", missing.Code, missing.Body.String())
+	}
+
+	detail := performServerRequest(srv, http.MethodGet, deletePath, envOriginWithChannel(channelID), "")
+	if detail.Code != http.StatusNotFound {
+		t.Fatalf("GET deleted thread status=%d body=%s", detail.Code, detail.Body.String())
 	}
 }
 

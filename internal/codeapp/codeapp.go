@@ -207,14 +207,27 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	secrets := settings.NewSecretsStore(filepath.Join(stateAbs, "secrets.json"))
+	threadReadStatePath, err := appServerThreadReadStatePath(stateAbs)
+	if err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		return nil, err
+	}
+	threadReadStateStore, err := threadreadstate.OpenResettingInvalidSchema(threadReadStatePath)
+	if err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		return nil, err
+	}
 
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:          logger,
-		StateDir:        stateAbs,
-		AgentHomeDir:    agentHomeDir,
-		FilesystemScope: scope,
-		Shell:           strings.TrimSpace(opts.Shell),
-		Config:          opts.AIConfig,
+		Logger:                 logger,
+		StateDir:               stateAbs,
+		AgentHomeDir:           agentHomeDir,
+		FilesystemScope:        scope,
+		Shell:                  strings.TrimSpace(opts.Shell),
+		Config:                 opts.AIConfig,
+		FlowerReadStateCleaner: threadReadStateStore,
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			return secrets.GetAIProviderAPIKey(providerID)
 		},
@@ -225,6 +238,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	if err != nil {
 		_ = reg.Close()
 		_ = pfSvc.Close()
+		_ = threadReadStateStore.Close()
 		return nil, err
 	}
 
@@ -238,23 +252,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = reg.Close()
 		_ = pfSvc.Close()
 		_ = aiSvc.Close()
-		return nil, err
-	}
-
-	threadReadStatePath, err := appServerThreadReadStatePath(stateAbs)
-	if err != nil {
-		_ = reg.Close()
-		_ = pfSvc.Close()
-		_ = aiSvc.Close()
-		_ = codexSvc.Close()
-		return nil, err
-	}
-	threadReadStateStore, err := threadreadstate.OpenResettingInvalidSchema(threadReadStatePath)
-	if err != nil {
-		_ = reg.Close()
-		_ = pfSvc.Close()
-		_ = aiSvc.Close()
-		_ = codexSvc.Close()
+		_ = threadReadStateStore.Close()
 		return nil, err
 	}
 

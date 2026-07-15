@@ -292,7 +292,7 @@ func TestStoreMigratesV37ToV38ForkOperations(t *testing.T) {
 	if err := s.db.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 38 {
-		t.Fatalf("user_version=%d, want 38", version)
+	if version != CurrentSchemaVersion() {
+		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
 	}
 }

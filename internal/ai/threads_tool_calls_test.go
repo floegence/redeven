@@ -120,7 +120,7 @@ func TestService_DeleteThreadRemovesThreadScopedRunArtifacts(t *testing.T) {
 		t.Fatalf("UpsertProviderCapability: %v", err)
 	}
 
-	if err := svc.DeleteThread(ctx, meta, th.ThreadID, false); err != nil {
+	if _, err := svc.DeleteThread(ctx, meta, th.ThreadID, false); err != nil {
 		t.Fatalf("DeleteThread: %v", err)
 	}
 

@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 38
+	threadstoreCurrentSchemaVersion = 39
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -66,6 +66,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 35, ToVersion: 36, Apply: migrateThreadstoreToV36},
 			{FromVersion: 36, ToVersion: 37, Apply: migrateThreadstoreToV37},
 			{FromVersion: 37, ToVersion: 38, Apply: migrateThreadstoreToV38},
+			{FromVersion: 38, ToVersion: 39, Apply: migrateThreadstoreToV39},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -321,6 +322,43 @@ CREATE INDEX IF NOT EXISTS idx_ai_thread_fork_operations_status_updated
 ON ai_thread_fork_operations(status, updated_at_unix_ms ASC, operation_id ASC);
 CREATE INDEX IF NOT EXISTS idx_ai_thread_fork_operations_source
 ON ai_thread_fork_operations(endpoint_id, source_thread_id, created_at_unix_ms DESC);
+`)
+	return err
+}
+
+func migrateThreadstoreToV39(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS ai_thread_delete_operations (
+  operation_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('pending', 'committed', 'failed')),
+  snapshot_schema_version INTEGER NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  read_state_required INTEGER NOT NULL DEFAULT 0 CHECK(read_state_required IN (0, 1)),
+  product_data_deleted_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  files_cleaned_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  floret_deleted_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  read_state_deleted_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  retry_count INTEGER NOT NULL DEFAULT 0,
+  error_code TEXT NOT NULL DEFAULT '',
+  error_message TEXT NOT NULL DEFAULT '',
+  created_at_unix_ms INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL,
+  committed_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(endpoint_id, thread_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_thread_delete_operations_status_updated
+ON ai_thread_delete_operations(status, updated_at_unix_ms ASC, operation_id ASC);
+CREATE TRIGGER IF NOT EXISTS trg_ai_threads_reject_retired_id
+BEFORE INSERT ON ai_threads
+WHEN EXISTS (
+  SELECT 1 FROM ai_thread_delete_operations op
+  WHERE op.endpoint_id = NEW.endpoint_id AND op.thread_id = NEW.thread_id
+)
+BEGIN
+  SELECT RAISE(ABORT, 'thread id retired');
+END;
 `)
 	return err
 }
@@ -1174,6 +1212,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"ai_delegated_approval_outbox",
 		"ai_delegated_approval_idempotency",
 		"ai_thread_fork_operations",
+		"ai_thread_delete_operations",
 	}
 	for _, tableName := range requiredTables {
 		exists, err := sqliteutil.TableExistsTx(tx, tableName)
@@ -1338,6 +1377,12 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			"source_broadcasted_at_unix_ms", "destination_broadcasted_at_unix_ms",
 			"created_at_unix_ms", "updated_at_unix_ms",
 		},
+		"ai_thread_delete_operations": {
+			"operation_id", "endpoint_id", "thread_id", "status", "snapshot_schema_version", "snapshot_json",
+			"read_state_required", "product_data_deleted_at_unix_ms", "files_cleaned_at_unix_ms",
+			"floret_deleted_at_unix_ms", "read_state_deleted_at_unix_ms", "retry_count", "error_code",
+			"error_message", "created_at_unix_ms", "updated_at_unix_ms", "committed_at_unix_ms",
+		},
 	}
 	for tableName, columns := range requiredColumns {
 		for _, columnName := range columns {
@@ -1398,6 +1443,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"idx_ai_delegated_approval_idempotency_action",
 		"idx_ai_thread_fork_operations_status_updated",
 		"idx_ai_thread_fork_operations_source",
+		"idx_ai_thread_delete_operations_status_updated",
 	}
 	for _, indexName := range requiredIndexes {
 		exists, err := sqliteutil.IndexExistsTx(tx, indexName)

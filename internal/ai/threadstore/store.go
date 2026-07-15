@@ -570,6 +570,12 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	if t.ThreadID == "" || t.EndpointID == "" {
 		return errors.New("invalid thread")
 	}
+	var retired int
+	if err := s.db.QueryRowContext(ctx, `SELECT 1 FROM ai_thread_delete_operations WHERE endpoint_id = ? AND thread_id = ?`, t.EndpointID, t.ThreadID).Scan(&retired); err == nil {
+		return ErrThreadIDRetired
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
 
 	now := time.Now().UnixMilli()
 	if t.CreatedAtUnixMs <= 0 {
@@ -631,6 +637,9 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		t.LastMessagePreview,
 		nonNegativeInt64(t.PinnedAtUnixMs),
 	)
+	if err != nil && strings.Contains(strings.ToLower(err.Error()), "thread id retired") {
+		return ErrThreadIDRetired
+	}
 	return err
 }
 

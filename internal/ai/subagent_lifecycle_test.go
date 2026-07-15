@@ -958,8 +958,10 @@ func TestDeleteThreadClosesRuntimeWithoutChildThreadstoreProjection(t *testing.T
 			CanClose:       true,
 		}},
 	}
+	maintenanceHost := &recordingFloretHost{}
 	key := runThreadKey(meta.EndpointID, parent.ThreadID)
 	svc.mu.Lock()
+	svc.openDeleteMaintenanceHost = func() (ThreadMaintenanceHost, error) { return maintenanceHost, nil }
 	svc.subagentRuntimes[key] = &floretSubagentRuntime{
 		parent: newRun(runOptions{
 			Log:        slog.Default(),
@@ -971,26 +973,35 @@ func TestDeleteThreadClosesRuntimeWithoutChildThreadstoreProjection(t *testing.T
 	}
 	svc.mu.Unlock()
 
-	if err := svc.DeleteThread(ctx, meta, parent.ThreadID, false); err != nil {
+	if _, err := svc.DeleteThread(ctx, meta, parent.ThreadID, false); err != nil {
 		t.Fatalf("DeleteThread(parent): %v", err)
 	}
-	if got := host.closeSubagentsCount.Load(); got != 1 {
-		t.Fatalf("CloseSubAgents count=%d, want 1", got)
+	if got := host.closeSubagentsCount.Load(); got != 0 {
+		t.Fatalf("cached runtime CloseSubAgents count=%d, want 0", got)
 	}
 	if got := host.closeSubagentCount.Load(); got != 0 {
 		t.Fatalf("CloseSubAgent count=%d, want 0", got)
 	}
-	if got := host.deleteThreadCount.Load(); got != 1 {
-		t.Fatalf("DeleteThread count=%d, want 1", got)
+	if got := host.deleteThreadCount.Load(); got != 0 {
+		t.Fatalf("cached runtime DeleteThread count=%d, want 0", got)
 	}
-	host.mu.Lock()
-	deleteThreadIDs := append([]flruntime.ThreadID(nil), host.deleteThreadIDs...)
-	host.mu.Unlock()
+	if got := maintenanceHost.closeSubagentsCount.Load(); got != 0 {
+		t.Fatalf("maintenance CloseSubAgents count=%d, want 0", got)
+	}
+	if got := maintenanceHost.deleteThreadCount.Load(); got != 1 {
+		t.Fatalf("maintenance DeleteThread count=%d, want 1", got)
+	}
+	maintenanceHost.mu.Lock()
+	deleteThreadIDs := append([]flruntime.ThreadID(nil), maintenanceHost.deleteThreadIDs...)
+	maintenanceHost.mu.Unlock()
 	if len(deleteThreadIDs) != 1 || deleteThreadIDs[0] != flruntime.ThreadID(parent.ThreadID) {
 		t.Fatalf("DeleteThread ids=%v, want [%s]", deleteThreadIDs, parent.ThreadID)
 	}
 	if got := host.closeCount.Load(); got != 1 {
 		t.Fatalf("runtime host close count=%d, want 1", got)
+	}
+	if got := maintenanceHost.closeCount.Load(); got != 1 {
+		t.Fatalf("maintenance host close count=%d, want 1", got)
 	}
 	childAfterDelete, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, childID)
 	if err != nil {
@@ -1149,7 +1160,7 @@ func TestDeleteThreadDeletesFloretTreeWithoutCachedRuntime(t *testing.T) {
 	childID := "floret_child_without_cached_runtime"
 	storePath := seedTestFloretSubagentTree(t, ctx, svc, parent.ThreadID, childID)
 
-	if err := svc.DeleteThread(ctx, meta, parent.ThreadID, false); err != nil {
+	if _, err := svc.DeleteThread(ctx, meta, parent.ThreadID, false); err != nil {
 		t.Fatalf("DeleteThread(parent): %v", err)
 	}
 	assertLegacyFloretSubagentStoreNotCreated(t, svc)

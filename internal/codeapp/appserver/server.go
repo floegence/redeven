@@ -4617,24 +4617,41 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					force = true
 				}
 			}
-			if err := g.deleteFlowerThreadWithReadStateCleanup(r.Context(), meta, threadID, func() error {
-				return g.ai.DeleteThread(r.Context(), meta, threadID, force)
-			}); err != nil {
+			result, err := g.ai.DeleteThread(r.Context(), meta, threadID, force)
+			if err != nil {
 				status := http.StatusBadRequest
-				var cleanupErr flowerThreadDeleteCleanupError
-				if errors.As(err, &cleanupErr) {
-					status = http.StatusInternalServerError
-				} else if errors.Is(err, ai.ErrThreadBusy) {
+				if errors.Is(err, ai.ErrThreadBusy) {
 					status = http.StatusConflict
 				} else if errors.Is(err, sql.ErrNoRows) {
 					status = http.StatusNotFound
+				} else if errors.Is(err, ai.ErrThreadDeleteOperationFailed) {
+					status = http.StatusInternalServerError
 				}
-				g.appendAudit(meta, "ai_thread_delete", "failure", map[string]any{"thread_id": threadID}, err)
-				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				auditFields := map[string]any{"thread_id": threadID}
+				var responseData interface{}
+				if result.OperationID != "" {
+					auditFields["operation_id"] = result.OperationID
+					auditFields["status"] = result.Status
+					responseData = result
+				}
+				g.appendAudit(meta, "ai_thread_delete", "failure", auditFields, err)
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error(), Data: responseData})
 				return
 			}
-			g.appendAudit(meta, "ai_thread_delete", "success", map[string]any{"thread_id": threadID}, nil)
-			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			status := http.StatusInternalServerError
+			switch result.Status {
+			case ai.ThreadDeleteStatusCommitted:
+				status = http.StatusOK
+			case ai.ThreadDeleteStatusPending:
+				status = http.StatusAccepted
+			case ai.ThreadDeleteStatusFailed:
+			}
+			auditOutcome := "success"
+			if status >= http.StatusInternalServerError {
+				auditOutcome = "failure"
+			}
+			g.appendAudit(meta, "ai_thread_delete", auditOutcome, map[string]any{"thread_id": threadID, "operation_id": result.OperationID, "status": result.Status}, nil)
+			writeJSON(w, status, apiResp{OK: status < http.StatusInternalServerError, Data: result})
 			return
 
 		case action == "todos" && r.Method == http.MethodGet:
