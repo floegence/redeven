@@ -308,6 +308,36 @@ func TestFloretProjectionHistoryRejectsUnknownProjectionContract(t *testing.T) {
 	}
 }
 
+func TestFloretProjectionHistoryRejectsRunningProjection(t *testing.T) {
+	t.Parallel()
+
+	svc := newTestService(t, nil)
+	host := &recordingFloretHost{readProjection: flruntime.ThreadTurnProjection{
+		ThreadID:       "thread_history_running",
+		TurnID:         "turn_history_running",
+		RunID:          "run_history_running",
+		Status:         flruntime.TurnStatusRunning,
+		ThroughOrdinal: 1,
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind: flruntime.ThreadTurnProjectionSegmentAssistantText,
+			Text: "still running",
+		}},
+	}}
+	outcome, err := svc.floretProjectionMessage(t.Context(), host, "env_history_running", "thread_history_running", threadstore.ConversationTurn{
+		TurnID:             "turn_history_running",
+		RunID:              "run_history_running",
+		UserMessageID:      "user_history_running",
+		AssistantMessageID: "assistant_history_running",
+		CreatedAtUnixMs:    1000,
+	})
+	if err != nil {
+		t.Fatalf("floretProjectionMessage: %v", err)
+	}
+	if outcome.Status != floretProjectionOutcomeUnavailable || outcome.UnavailableReason != FlowerTurnProjectionUnavailableInvalidContract || len(outcome.MessageJSON) != 0 {
+		t.Fatalf("running projection outcome=%+v", outcome)
+	}
+}
+
 func assertProjectionUnavailableDecoration(t *testing.T, decorations []FlowerTimelineDecoration, userMessageID string, assistantMessageID string, runID string, reason FlowerTurnProjectionUnavailableReason) {
 	t.Helper()
 	if len(decorations) != 1 {

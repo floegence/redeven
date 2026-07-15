@@ -3049,14 +3049,14 @@ func (s floretSubagentEventSink) EmitEvent(ev flruntime.Event) {
 	if parent == nil {
 		return
 	}
-	if err := validateFloretRuntimeEventContract(ev); err != nil {
-		parent.rejectFloretContract("subagent_event", err)
-		return
-	}
 	parentThreadID := strings.TrimSpace(parent.threadID)
 	eventThreadID := strings.TrimSpace(string(ev.ThreadID))
 	if eventThreadID == "" || eventThreadID == parentThreadID {
 		floretEventSink{run: parent}.EmitEvent(ev)
+		return
+	}
+	if err := ev.Validate(); err != nil {
+		parent.rejectFloretContract("subagent_event", err)
 		return
 	}
 	if s.runtime != nil {

@@ -1779,6 +1779,63 @@ func TestServiceGetFlowerSubagentDetailRejectsWrongParentBeforeRuntime(t *testin
 	}
 }
 
+func TestSubagentEventSinkAcceptsValidRunningChildProjection(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+	meta := testSendTurnMeta()
+	parentView, err := svc.CreateThread(ctx, meta, "parent running projection", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	parent := newRun(runOptions{
+		Log:              svc.log,
+		Service:          svc,
+		ThreadsDB:        svc.threadsDB,
+		EndpointID:       meta.EndpointID,
+		ThreadID:         parentView.ThreadID,
+		RunID:            "parent-running-projection",
+		MessageID:        "parent-turn-running-projection",
+		PersistOpTimeout: time.Second,
+	})
+	runtime := &floretSubagentRuntime{parent: parent}
+	event := flruntime.Event{
+		Type:     observation.EventTypeStepStart,
+		RunID:    "child-run-running-projection",
+		ThreadID: "child-thread-running-projection",
+		TurnID:   "child-turn-running-projection",
+		Projection: &flruntime.ThreadTurnProjection{
+			ThreadID:       "child-thread-running-projection",
+			TurnID:         "child-turn-running-projection",
+			RunID:          "child-run-running-projection",
+			Status:         flruntime.TurnStatusRunning,
+			ThroughOrdinal: 1,
+		},
+	}
+	if err := event.Validate(); err != nil {
+		t.Fatalf("test event is invalid: %v", err)
+	}
+	floretSubagentEventSink{runtime: runtime}.EmitEvent(event)
+
+	runEvents, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, parent.id, 20)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	childEvents := 0
+	for _, recorded := range runEvents {
+		switch recorded.EventType {
+		case "floret.contract.rejected":
+			t.Fatalf("valid child projection was rejected: %#v", recorded)
+		case "delegation.child.event":
+			childEvents++
+		}
+	}
+	if childEvents != 1 {
+		t.Fatalf("delegation child events=%d, want one: %#v", childEvents, runEvents)
+	}
+}
+
 func TestSubagentChildEventPublishesParentSubagentsPatch(t *testing.T) {
 	t.Parallel()
 

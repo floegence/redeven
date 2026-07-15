@@ -205,7 +205,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		Reasoning:         req.Options.ReasoningSelection,
 		ManualCompactions: r,
 	})
-	projectionUnavailable := result.ProjectionStatus == flruntime.TurnProjectionStatusUnavailable
+	projectionUnavailable := result.ProjectionAvailability == flruntime.TurnProjectionAvailabilityUnavailable
 	if projectionErr := result.ValidateProjection(); projectionErr != nil {
 		r.rejectFloretContract("turn_projection_outcome", projectionErr)
 		projectionUnavailable = true
